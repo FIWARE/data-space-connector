@@ -69,6 +69,22 @@ Precisely, the connector bundles the following components:
 | Component       | Role            | Link |
 |-----------------|-----------------|------|
 | VCVerifier      | Verifier        | https://github.com/FIWARE/VCVerifier |
+| VCWaltid        | Backend for managing credentials and DIDs, supports the verifier and issuer | https://github.com/FIWARE/VCWaltid |
+| credentials-config-service | Credentials Config provider for the verifier | https://github.com/FIWARE/credentials-config-service |
+| Keycloak + keycloak-vc-issuer plugin | Issuer of VCs | https://www.keycloak.org / https://github.com/FIWARE/keycloak-vc-issuer |
+| Orion-LD        | Context Broker  | https://github.com/FIWARE/context.Orion-LD |
+| trusted-issuers-list | Acts as Trusted Issuers List by providing an [EBSI Trusted Issuers Registry](https://api-pilot.ebsi.eu/docs/apis/trusted-issuers-registry) API | https://github.com/FIWARE/trusted-issuers-list |
+| Kong + kong-plugins-fiware | Kong API-Gateway with the kong-pep-plugin serving as API-Gateway and PEP | https://konghq.com / https://github.com/FIWARE/kong-plugins-fiware |
+| dsba-pdp        | DSBA-compliant PDP | https://github.com/FIWARE/dsba-pdp |
+| Keyrock         | Authorization Registry (storing role / ABAC-policy mappings) | https://github.com/ging/fiware-idm |
+| tmforum-api     | [TMForum APIs](https://www.tmforum.org/oda/open-apis/) for contract management | https://github.com/FIWARE/tmforum-api |
+| MongoDB         | Database | https://www.mongodb.com |
+| MySQL           | Database | https://www.mysql.com |
+| PostgreSQL      | Database | https://www.postgresql.org |
 
 **Note,** that some of the components shown in the diagram above are not implemented yet.
+
+
+
+
 
