@@ -19,6 +19,15 @@ FIWARE-Ops [data-space-connector repository](https://github.com/FIWARE-Ops/data-
 
 - [Overview](#overview)
 - [Components](#components)
+- [Description of flows in a data space](#description-of-flows-in-a-data-space)
+  - [Onboarding of an organization in the data space](#onboarding-of-an-organization-in-the-data-space)
+  - [Consumer registration](#consumer-registration)
+  - [Contract management](#contract-management)
+  - [Service interaction](#service-interaction)
+    - [Service interaction (H2M)](#service-interaction-h2m)
+    - [Service interaction (M2M)](#service-interaction-m2m)
+- [Implementation](#implementation)
+  - [Examples](#examples)
 
 <!-- END doctoc generated TOC please keep comment here to allow auto update -->
 
@@ -227,6 +236,7 @@ The following displays the different steps for the two different types of intera
 * The Verifier will request to the user (via his/her wallet) for VCs that acredit 
   1. the user owns credentials connected to roles meaningful for the given product/application and 
   2. some other VCs (steps 4-5). 
+  
   The wallet will check that the verifier belongs to a participant in the data space (step 6) and return the 
   requested VCs (step 7)
 * Verifier verifies whether the VC was issued by an organization that 
@@ -252,6 +262,7 @@ The following displays the different steps for the two different types of intera
 * The Verifier will request to the application for VCs that acredit 
   1. the application owns credentials connected to roles meaningful for the given product/application and 
   2. some other VCs (steps 2-3). 
+  
   The wallet will check that the verifier belongs to a participant in the data space (step 4) and 
   returns the requested VCs (step 5)
 * Verifier verifies whether the VC was issued by an organization that is a trusted participant of the 
