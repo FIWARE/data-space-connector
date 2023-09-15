@@ -1,0 +1,50 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+
+  generate-version:
+    name: Generate version
+    runs-on: ubuntu-latest
+
+    outputs:
+      version: ${{ steps.out.outputs.version }}
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - id: pr
+        uses: actions-ecosystem/action-get-merged-pull-request@v1.0.1
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: zwaldowski/semver-release-action@v2
+        with:
+          dry_run: true
+          bump: ${{ steps.pr.outputs.labels }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set version output
+        id: out
+        run: echo "::set-output name=version::$(echo ${VERSION})"
+
+
+  git-release:
+    name: Git Release
+    needs: ["generate-version"]
+    runs-on: ubuntu-latest
+
+    steps:
+
+      - uses: actions/checkout@v2
+
+      - uses: "marvinpinto/action-automatic-releases@latest"
+        with:
+          repo_token: "${{ secrets.GITHUB_TOKEN }}"
+          automatic_release_tag: ${{ needs.generate-version.outputs.version }}
+          title: ${{ needs.generate-version.outputs.version }}
+          prerelease: false
