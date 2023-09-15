@@ -88,3 +88,54 @@ Precisely, the connector bundles the following components:
 
 
 
+## Description of flows in a data space
+
+This section provides a description of various flows and interactions in a data space involving the FIWARE 
+Data Space Connector.
+
+
+### Onboarding of an organization in the data space
+
+Before participating in a data space, an organization needs to be onboarded at the data space's 
+Participant List Service by registering it as trusted participant. The user invoking the onboarding 
+process needs to present a VC issued by the organization to the user itself, a VC containing the self 
+description of the organization and a VC issued by a trusted Compliancy Service for the organization 
+self description. 
+
+The following displays the different steps during the onboarding.
+
+![flows-onboarding](img/Flows_Onboarding.png)
+
+**Steps**
+
+* The organization validates that the VC containing its description as organization is compliant with 
+  Gaia-X specifications using the services of a Gaia-X Digital Clearing House (GXDCH) - as a result, a 
+  VC is issued by the GXDCH (steps 1-2). That VC will end stored in the wallet of the LEAR either as part 
+  of the same process (once the GXDCH implements the OIDC4VCI) or via an issuer of VCs that exists 
+  inside the organization (step 3)
+* The API for registering the organization is inspired in the DID-Registry API defined by EBSI but 
+  extending it to allow: 
+  - creation, update and deletion of entries beyond read(ing) of entries
+  - authentication with VCs (including the VC issued by a GXDCH)
+* Using an onboarding application (or a web portal) the organization’s LEAR requests the authentication 
+  into the Participant Lists service which ultimately translates into a request to the Verifier (step 4-6)
+  - a page is accessed where a QR for authentication is displayed (step 4)
+  - the QR code is scanned through the wallet (step 5) which translates 
+  - into a request to the verifier (step 6)
+* The verifier checks in the PRP/PAP what VCs it has to request to the wallet (step 7). In principle it will 
+  find the following VCs to be requested: a) the LEAR VC accrediting the user as LEAR of the organization, 
+  b) the VC containing the description of the organization, and c) the VC issued by some GXDCH acredditing 
+  that the previous VC is Gaia-X compliant
+* The verifier responds to the previous request sending a VP request to the wallet which responds with 
+  the requested VCs (steps 8-9)
+* The verifier checks that the LEAR VC has been signed using proper eIDAS certificates and that the GXDCH VC 
+  has been issued by a trusted GXDCH (step 10). It finally produces an access token (steps 11-12) which the 
+  onboarding application can then use to invoke the EBSI DID-Registry+ API in order to register the 
+  organization as data space participant (step 13)
+
+
+
+
+
+
+
