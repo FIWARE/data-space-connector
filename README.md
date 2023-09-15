@@ -109,7 +109,8 @@ The following displays the different steps during the onboarding.
 **Steps**
 
 * The organization validates that the VC containing its description as organization is compliant with 
-  Gaia-X specifications using the services of a Gaia-X Digital Clearing House (GXDCH) - as a result, a 
+  Gaia-X specifications using the services of a Gaia-X Digital Clearing House 
+  ([GXDCH](https://gaia-x.eu/gxdch/)) - as a result, a 
   VC is issued by the GXDCH (steps 1-2). That VC will end stored in the wallet of the LEAR either as part 
   of the same process (once the GXDCH implements the OIDC4VCI) or via an issuer of VCs that exists 
   inside the organization (step 3)
@@ -139,3 +140,19 @@ The following displays the different steps during the onboarding.
 
 
 
+## Implementation
+
+The implementation of the FIWARE Data Space Connector can be found at 
+the FIWARE-Ops [data-space-connector repository](https://github.com/FIWARE-Ops/data-space-connector), 
+which also provides instructions for the deployment.
+
+
+### Examples
+
+* Various examples for the deployment of the FIWARE Data Space Connector can be found in the 
+  [examples](https://github.com/FIWARE-Ops/data-space-connector/tree/main/examples) folder of the 
+  FIWARE-Ops [data-space-connector repository](https://github.com/FIWARE-Ops/data-space-connector)
+* A description and ArgoCD-based deployment of a full demo-setup of a DSBA-compliant data space, 
+  including a data service provider based on the FIWARE Data Space Connector, can be found at the 
+  FIWARE-Ops [fiware-gitops repository](https://github.com/FIWARE-Ops/fiware-gitops/tree/master/aws/dsba)
+  
