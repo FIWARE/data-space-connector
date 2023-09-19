@@ -112,6 +112,32 @@
 			"response": []
 		},
 		{
+			"name": "Get Product Offerings (by Consumer)",
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{buyer_token}}",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "{{tmf_url}}/tmf-api/productCatalogManagement/v4/productOffering",
+					"host": [
+						"{{tmf_url}}"
+					],
+					"path": [
+						"tmf-api",
+						"productCatalogManagement",
+						"v4",
+						"productOffering"
+					]
+				}
+			},
+			"response": []
+		},
+		{
 			"name": "Create Product Order (by consumer)",
 			"request": {
 				"method": "POST",
