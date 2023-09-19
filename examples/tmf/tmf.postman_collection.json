@@ -1,0 +1,192 @@
+{
+	"info": {
+		"_postman_id": "8b482050-d18e-418b-b2df-f2e2b082eb2a",
+		"name": "TMF-Demo",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "12955180"
+	},
+	"item": [
+		{
+			"name": "Create Product Spec (by provider)",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{provider_employee_token}}",
+						"type": "text"
+					},
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"name\": \"Packet Delivery Premium Service Spec\",\n    \"productSpecCharacteristic\": [\n        {\n            \"name\": \"Service Endpoint\",\n            \"valueType\": \"string\",\n            \"productSpecCharacteristicValue\": [\n                {\n                    \"valueType\": \"string\",\n                    \"value\": \"https://<provider_NGSI-LD_endpoint>\"\n                }\n            ]\n        }\n    ]\n}"
+				},
+				"url": {
+					"raw": "{{tmf_url}}/tmf-api/productCatalogManagement/v4/productSpecification",
+					"host": [
+						"{{tmf_url}}"
+					],
+					"path": [
+						"tmf-api",
+						"productCatalogManagement",
+						"v4",
+						"productSpecification"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Create Product Offering (by provider)",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{provider_employee_token}}",
+						"type": "text"
+					},
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"description\": \"My Offering description\",\n    \"isBundle\": false,\n    \"isSellable\": true,\n    \"lifecycleStatus\": \"Active\",\n    \"name\": \"Packet Delivery Premium Service\",\n    \"productSpecification\": {\n        \"id\": \"<prodSpecID>\",\n        \"name\": \"Packet Delivery Premium Service Spec\",\n    }\n}"
+				},
+				"url": {
+					"raw": "{{tmf_url}}/tmf-api/productCatalogManagement/v4/productOffering",
+					"host": [
+						"{{tmf_url}}"
+					],
+					"path": [
+						"tmf-api",
+						"productCatalogManagement",
+						"v4",
+						"productOffering"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Create Organization (by consumer)",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{lear_token}}",
+						"type": "text"
+					},
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"name\": \"HappyPets\",\n    \"tradingName\": \"HappyPets\",\n    \"partyCharacteristic\": [\n        {\n            \"name\": \"did\",\n            \"valueType\": \"string\",\n            \"value\": \"did:web:happypets.dsba.fiware.dev:did\"\n        }\n    ]\n}"
+				},
+				"url": {
+					"raw": "{{tmf_url}}/tmf-api/party/v4/organization",
+					"host": [
+						"{{tmf_url}}"
+					],
+					"path": [
+						"tmf-api",
+						"party",
+						"v4",
+						"organization"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Create Product Order (by consumer)",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{buyer_token}}",
+						"type": "text"
+					},
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"productOrderItem\": [\n        {\n            \"id\": \"<orderId>\",\n            \"action\": \"add\",\n            \"productOffering\": {\n                \"id\": \"<prodOfferingId>\",\n                \"name\": \"Packet Delivery Premium Service\"\n            }\n        }\n    ],\n    \"relatedParty\": [\n        {\n            \"id\": \"<HappyPets_OrgId>\",\n            \"name\": \"HappyPets\"\n        }\n    ]\n}"
+				},
+				"url": {
+					"raw": "{{tmf_url}}/tmf-api/productOrderingManagement/v4/productOrder",
+					"host": [
+						"{{tmf_url}}"
+					],
+					"path": [
+						"tmf-api",
+						"productOrderingManagement",
+						"v4",
+						"productOrder"
+					]
+				}
+			},
+			"response": []
+		}
+	],
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "tmf_url",
+			"value": "https://tmf-url.com",
+			"type": "string"
+		},
+		{
+			"key": "lear_token",
+			"value": "<my-lear-token>",
+			"type": "string"
+		},
+		{
+			"key": "buyer_token",
+			"value": "<my_buyer_token>",
+			"type": "string"
+		},
+		{
+			"key": "provider_employee_token",
+			"value": "<my_provider_employee_token>",
+			"type": "string"
+		}
+	]
+}
