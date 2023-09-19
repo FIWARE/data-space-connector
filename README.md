@@ -28,6 +28,7 @@ FIWARE-Ops [data-space-connector repository](https://github.com/FIWARE-Ops/data-
     - [Service interaction (M2M)](#service-interaction-m2m)
 - [Implementation](#implementation)
   - [Examples](#examples)
+    - [Contract Management via TMForum APIs](#contract-management-via-tmforum-apis)
 
 <!-- END doctoc generated TOC please keep comment here to allow auto update -->
 
@@ -90,6 +91,7 @@ Precisely, the connector bundles the following components:
 | dsba-pdp        | DSBA-compliant PDP | https://github.com/FIWARE/dsba-pdp |
 | Keyrock         | Authorization Registry (storing role / ABAC-policy mappings) | https://github.com/ging/fiware-idm |
 | tmforum-api     | [TMForum APIs](https://www.tmforum.org/oda/open-apis/) for contract management | https://github.com/FIWARE/tmforum-api |
+| contract-management | Notification listener for contract management events out of TMForum | https://github.com/FIWARE/contract-management |
 | MongoDB         | Database | https://www.mongodb.com |
 | MySQL           | Database | https://www.mysql.com |
 | PostgreSQL      | Database | https://www.postgresql.org |
@@ -293,3 +295,19 @@ which also provides instructions for the deployment.
   including a data service provider based on the FIWARE Data Space Connector, can be found at the 
   FIWARE-Ops [fiware-gitops repository](https://github.com/FIWARE-Ops/fiware-gitops/tree/master/aws/dsba)
   
+
+
+#### Contract Management via TMForum APIs
+
+With the [tmforum-api](https://github.com/FIWARE/tmforum-api) and the 
+[contract-management](https://github.com/FIWARE/contract-management) notification listener, the FIWARE 
+Data Space Connector provides components to perform contract management based on the TMForum APIs. 
+
+Via the TMForum APIs, providers can create product specifications and offerings. Consumer organisations 
+can register as a party and place product orders. In the case of a product order, the TMForum APIs will 
+send a notification to the contract-management notification listener, which will create an entry at the 
+Trusted Issuers List for the consumer organisation. Also compare to the flow descriptions 
+of [Consumer registration](#consumer-registration) and [Contract management](#contract-management). 
+
+A Postman collection providing example requests can be found [here](./examples/tmf/).
+
