@@ -1,8 +1,6 @@
 # FIWARE Data Space Connector
 
-This repository provides a description of 
-the [DSBA-compliant](https://data-spaces-business-alliance.eu/wp-content/uploads/dlm_uploads/Data-Spaces-Business-Alliance-Technical-Convergence-V2.pdf) 
-FIWARE Data Space Connector.
+This repository provides a description of the FIWARE Data Space Connector which has been developed implementing [DSBA Technical Convergence recommendations](https://data-spaces-business-alliance.eu/wp-content/uploads/dlm_uploads/Data-Spaces-Business-Alliance-Technical-Convergence-V2.pdf) as soon as they become enough mature.
 
 If you want to head over directly to the implementation, go to the 
 FIWARE-Ops [data-space-connector repository](https://github.com/FIWARE-Ops/data-space-connector).
@@ -51,7 +49,7 @@ allows to:
 * Implement authorization based on attribute-based access control (ABAC) following an 
   [XACML P*P architecture](https://www.oasis-open.org/committees/tc_home.php?wg_abbrev=xacml)
 * Provide compatibility with [ETSI NGSI-LD](https://www.etsi.org/committee/cim) as data exchange API
-* Supports the [TMForum APIs](https://www.tmforum.org/oda/open-apis/) for Contract Management
+* Supports the [TMForum APIs](https://www.tmforum.org/oda/open-apis/) for contract negotiation
 
 **Note:** Although the FIWARE Data Space Connector provides compatibility with NGSI-LD as data exchange 
 API, it could be also used for any other RESTful API by replacing or extending the PDP component of the 
@@ -292,7 +290,7 @@ which also provides instructions for the deployment.
 * Various examples for the deployment of the FIWARE Data Space Connector can be found in the 
   [examples](https://github.com/FIWARE-Ops/data-space-connector/tree/main/examples) folder of the 
   FIWARE-Ops [data-space-connector repository](https://github.com/FIWARE-Ops/data-space-connector)
-* A description and ArgoCD-based deployment of a full demo-setup of a DSBA-compliant data space, 
+* A description and ArgoCD-based deployment of a full demo-setup of a data space following the DSBA recommendations, 
   including a data service provider based on the FIWARE Data Space Connector, can be found at the 
   FIWARE-Ops [fiware-gitops repository](https://github.com/FIWARE-Ops/fiware-gitops/tree/master/aws/dsba)
   
@@ -360,4 +358,4 @@ It includes the following steps of the aquisition process:
 
 2.  Create a product order(e.g. buy the product) as the CONSUMER(use a JWT retrieved for user ```standard-user``` of [HappyPets](https://happypets-kc.dsba.fiware.dev/realms/fiware-server/account/#/))
 
-After the product was orderd, a notfication will be triggered towards the [Contract Management Service](https://github.com/FIWARE/contract-management). The service will use the information provided as part of the notfication, to add the ```CONSUMER``` Organization as a Trusted Issuer to the [Trusted Issuers List](https://github.com/FIWARE/trusted-issuers-list) of PacketDelivery and therefor allow Happy Pets(as the ```CONSUMER``` Organization) issue credentials to its customers to access Packet Deliveries(e.g. the ```PROVIDER```) Services(see [description of Service Usage in the DSBA-Data Space](https://github.com/FIWARE-Ops/fiware-gitops/tree/master/aws/dsba#service-usage)). 
+After the product was orderd, a notfication will be triggered towards the [Contract Management Service](https://github.com/FIWARE/contract-management). The service will use the information provided as part of the notfication, to add the ```CONSUMER``` Organization as a Trusted Issuer to the [Trusted Issuers List](https://github.com/FIWARE/trusted-issuers-list) of PacketDelivery and therefor allow Happy Pets(as the ```CONSUMER``` Organization) issue credentials to its customers to access Packet Deliveries(e.g. the ```PROVIDER```) Services(see [description of Service Usage in the -Data Space](https://github.com/FIWARE-Ops/fiware-gitops/tree/master/aws/#service-usage)). 
