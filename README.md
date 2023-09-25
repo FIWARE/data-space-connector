@@ -51,6 +51,7 @@ allows to:
 * Implement authorization based on attribute-based access control (ABAC) following an 
   [XACML P*P architecture](https://www.oasis-open.org/committees/tc_home.php?wg_abbrev=xacml)
 * Provide compatibility with [ETSI NGSI-LD](https://www.etsi.org/committee/cim) as data exchange API
+* Supports the [TMForum APIs](https://www.tmforum.org/oda/open-apis/) for Contract Management
 
 **Note:** Although the FIWARE Data Space Connector provides compatibility with NGSI-LD as data exchange 
 API, it could be also used for any other RESTful API by replacing or extending the PDP component of the 
