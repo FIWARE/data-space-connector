@@ -175,6 +175,20 @@
 		},
 		{
 			"name": "Create Product Order (by consumer)",
+			"event": [
+				{
+					"listen": "prerequest",
+					"script": {
+						"exec": [
+							"var uuid = require('uuid')",
+							"",
+							"pm.environment.set(\"PRODUCT_ORDER_ID\", uuid.v4());",
+							""
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
 			"request": {
 				"method": "POST",
 				"header": [
@@ -191,7 +205,7 @@
 				],
 				"body": {
 					"mode": "raw",
-					"raw": "{\n    \"productOrderItem\": [\n        {\n            \"action\": \"add\",\n            \"productOffering\": {\n                \"id\": \"{{PRODUCT_OFFERING_ID}}\",\n                \"name\": \"Packet Delivery Premium Service\"\n            }\n        }\n    ],\n    \"relatedParty\": [\n        {\n            \"id\": \"{{ORGANIZATION_ID}}\",\n            \"name\": \"HappyPets\"\n        }\n    ]\n}"
+					"raw": "{\n    \"productOrderItem\": [\n        {\n      \"id\": \"{{PRODUCT_ORDER_ID}}\",      \"action\": \"add\",\n            \"productOffering\": {\n                \"id\": \"{{PRODUCT_OFFERING_ID}}\",\n                \"name\": \"Packet Delivery Premium Service\"\n            }\n        }\n    ],\n    \"relatedParty\": [\n        {\n            \"id\": \"{{ORGANIZATION_ID}}\",\n            \"name\": \"HappyPets\"\n        }\n    ]\n}"
 				},
 				"url": {
 					"raw": "{{tmf_url}}/tmf-api/productOrderingManagement/v4/productOrder",
