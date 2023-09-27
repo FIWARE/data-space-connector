@@ -8,6 +8,18 @@
 	"item": [
 		{
 			"name": "Create Product Spec (by provider)",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"var jsonData = JSON.parse(responseBody);",
+							"postman.setEnvironmentVariable(\"PRODUCT_SPEC_ID\", jsonData.id)"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
 			"request": {
 				"method": "POST",
 				"header": [
@@ -43,6 +55,18 @@
 		},
 		{
 			"name": "Create Product Offering (by provider)",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"var jsonData = JSON.parse(responseBody);",
+							"postman.setEnvironmentVariable(\"PRODUCT_OFFERING_ID\", jsonData.id)"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
 			"request": {
 				"method": "POST",
 				"header": [
@@ -59,7 +83,7 @@
 				],
 				"body": {
 					"mode": "raw",
-					"raw": "{\n    \"description\": \"My Offering description\",\n    \"isBundle\": false,\n    \"isSellable\": true,\n    \"lifecycleStatus\": \"Active\",\n    \"name\": \"Packet Delivery Premium Service\",\n    \"productSpecification\": {\n        \"id\": \"<prodSpecID>\",\n        \"name\": \"Packet Delivery Premium Service Spec\",\n    }\n}"
+					"raw": "{\n    \"description\": \"My Offering description\",\n    \"isBundle\": false,\n    \"isSellable\": true,\n    \"lifecycleStatus\": \"Active\",\n    \"name\": \"Packet Delivery Premium Service\",\n    \"productSpecification\": {\n        \"id\": \"{{PRODUCT_SPEC_ID}}\",\n        \"name\": \"Packet Delivery Premium Service Spec\"\n    }\n}"
 				},
 				"url": {
 					"raw": "{{tmf_url}}/tmf-api/productCatalogManagement/v4/productOffering",
@@ -78,6 +102,18 @@
 		},
 		{
 			"name": "Create Organization (by consumer)",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"var jsonData = JSON.parse(responseBody);",
+							"postman.setEnvironmentVariable(\"ORGANIZATION_ID\", jsonData.id)"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
 			"request": {
 				"method": "POST",
 				"header": [
@@ -94,7 +130,7 @@
 				],
 				"body": {
 					"mode": "raw",
-					"raw": "{\n    \"name\": \"HappyPets\",\n    \"tradingName\": \"HappyPets\",\n    \"partyCharacteristic\": [\n        {\n            \"name\": \"did\",\n            \"valueType\": \"string\",\n            \"value\": \"did:web:happypets.dsba.fiware.dev:did\"\n        }\n    ]\n}"
+					"raw": "{\n    \"name\": \"HappyPets\",\n    \"tradingName\": \"HappyPets\",\n    \"partyCharacteristic\": [\n        {\n            \"name\": \"did\",\n            \"valueType\": \"string\",\n            \"value\": \"{{DID}}\"\n        }\n    ]\n}"
 				},
 				"url": {
 					"raw": "{{tmf_url}}/tmf-api/party/v4/organization",
@@ -155,7 +191,7 @@
 				],
 				"body": {
 					"mode": "raw",
-					"raw": "{\n    \"productOrderItem\": [\n        {\n            \"id\": \"<orderId>\",\n            \"action\": \"add\",\n            \"productOffering\": {\n                \"id\": \"<prodOfferingId>\",\n                \"name\": \"Packet Delivery Premium Service\"\n            }\n        }\n    ],\n    \"relatedParty\": [\n        {\n            \"id\": \"<HappyPets_OrgId>\",\n            \"name\": \"HappyPets\"\n        }\n    ]\n}"
+					"raw": "{\n    \"productOrderItem\": [\n        {\n            \"action\": \"add\",\n            \"productOffering\": {\n                \"id\": \"{{PRODUCT_OFFERING_ID}}\",\n                \"name\": \"Packet Delivery Premium Service\"\n            }\n        }\n    ],\n    \"relatedParty\": [\n        {\n            \"id\": \"{{ORGANIZATION_ID}}\",\n            \"name\": \"HappyPets\"\n        }\n    ]\n}"
 				},
 				"url": {
 					"raw": "{{tmf_url}}/tmf-api/productOrderingManagement/v4/productOrder",
@@ -212,6 +248,26 @@
 		{
 			"key": "provider_employee_token",
 			"value": "<my_provider_employee_token>",
+			"type": "string"
+		},
+		{
+			"key": "DID",
+			"value": "<my_buyer_organization_did>",
+			"type": "string"
+		},
+		{
+			"key": "ORGANIZATION_ID",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "PRODUCT_OFFERING_ID",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "PRODUCT_SPEC_ID",
+			"value": "",
 			"type": "string"
 		}
 	]
