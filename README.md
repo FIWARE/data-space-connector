@@ -169,12 +169,12 @@ The following displays the different steps for the consumer registration.
 * The Verifier will request from the user’s wallet a VC that acredits him/her as LEAR of the organization, 
   eventually other VCs (steps 4-5). The wallet will check whether the verifier belongs to a participant in the 
   data space (step 6) and return the requested VCs (step 7)
-* The Verifier checks whether the LEAR’s VC was issued by a trusted participant of the data space (step 8), 
-  and also checks whether other VCs required were issued by trusted issuers (step 9)
-* If verifications were ok, it issues a token (step 10) that is transmitted to the user (step 11)
+* The Verifier checks whether the LEAR’s VC was issued by a trusted participant of the data space (steps 8-9), 
+  and also checks whether other VCs required were issued by trusted issuers (step 10)
+* If verifications were ok, it issues a token (step 11) that is transmitted to the user (step 12)
 * Using the returned token, the user invokes [TM Forum API](https://www.tmforum.org/oda/open-apis/) to register 
   the consumer organization at the Connector 
-  (steps 12-17) establishing the necessary access control (steps 12-14)
+  (steps 13-17) establishing the necessary access control (steps 13-14)
 * Once the organization is registered and fulfills all the necessary information (which may take some time), 
   the organization is registered in the local trusted issuers list as trusted issuer of VCs which include claims 
   as buyer of products in the connector (step 18)
