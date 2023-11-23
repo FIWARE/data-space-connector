@@ -331,9 +331,9 @@ LEGAL_REPRESENTATIVE: "GET", "POST" and "PUT" on the Parties-API
 
 #### Credentials and Role-Assingment
 
-The VerifiableCredentials containing the ```PROVIDER```,```CONSUMER``` and ```LEGAL_REPRESENTATIVE``` roles are issued through the standard mechanisms of the framework, e.g. by each individual participant. The example-instance of the Data Space Connector is in the role of an ```PROVIDER```. Therefor, the user ```standard-employee```(see the [documentation](https://github.com/FIWARE-Ops/fiware-gitops/tree/master/aws/dsba#credentials) for credentials) can request a ```NaturalPersonCredential``` at [PacketDeliveries Keycloak](https://packetdelivery-kc.dsba.fiware.dev/realms/fiware-server/account/#/) with a compliant wallet(as of now, the [demo-wallet.fiware.dev](https://demo-wallet.fiware.dev) can be used).
+The VerifiableCredentials containing the ```PROVIDER```,```CONSUMER``` and ```LEGAL_REPRESENTATIVE``` roles are issued through the standard mechanisms of the framework, e.g. by each individual participant. The example-instance of the Data Space Connector is in the role of an ```PROVIDER```. Therefore, the user ```standard-employee```(see the [documentation](https://github.com/FIWARE-Ops/fiware-gitops/tree/master/aws/dsba#credentials) for credentials) can request a ```NaturalPersonCredential``` at [PacketDeliveries Keycloak](https://packetdelivery-kc.dsba.fiware.dev/realms/fiware-server/account/#/) with a compliant wallet (as of now, the [demo-wallet.fiware.dev](https://demo-wallet.fiware.dev) can be used).
 
-For the Consumer-Participant, two useres are provided:
+For the Consumer-Participant, two users are provided:
 - the ```legal-representative```(see the [documentation](https://github.com/FIWARE-Ops/fiware-gitops/tree/master/aws/dsba#credentials)) with the role ```LEGAL_REPRESENTATIVE```
 - the ```standard-user```(see the [documentation](https://github.com/FIWARE-Ops/fiware-gitops/tree/master/aws/dsba#credentials)) with the role ```CONSUMER```
 In order to get the credentials, use the [HappyPets Keycloak](https://happypets-kc.dsba.fiware.dev/realms/fiware-server/account/#/).
@@ -352,10 +352,10 @@ It includes the following steps of the aquisition process:
 
 0. In order to have the consumer registered, it has to be created as an ```Organization``` through the [TMForum Party-API](https://github.com/FIWARE/tmforum-api/tree/main/party-catalog). The registration needs to happen with a direct api-call to the Parties-API, with a token in Role ```LEGAL_REPRESENTATIVE```: [POST /organization](./examples/tmf/tmf.postman_collection.json#l80)
 
-1. Creating an offer as the PROVIDER(use a JWT retrieved for user ```standard-employee``` of [PacketDelivery](https://packetdelivery-kc.dsba.fiware.dev/realms/fiware-server/account/#/)):
+1. Creating an offer as the PROVIDER (use a JWT retrieved for user ```standard-employee``` of [PacketDelivery](https://packetdelivery-kc.dsba.fiware.dev/realms/fiware-server/account/#/)):
     1. Create the product specification
     2. Create the product offering
 
-2.  Create a product order(e.g. buy the product) as the CONSUMER(use a JWT retrieved for user ```standard-user``` of [HappyPets](https://happypets-kc.dsba.fiware.dev/realms/fiware-server/account/#/))
+2.  Create a product order (e.g. buy the product) as the CONSUMER (use a JWT retrieved for user ```standard-user``` of [HappyPets](https://happypets-kc.dsba.fiware.dev/realms/fiware-server/account/#/))
 
-After the product was orderd, a notfication will be triggered towards the [Contract Management Service](https://github.com/FIWARE/contract-management). The service will use the information provided as part of the notfication, to add the ```CONSUMER``` Organization as a Trusted Issuer to the [Trusted Issuers List](https://github.com/FIWARE/trusted-issuers-list) of PacketDelivery and therefor allow Happy Pets(as the ```CONSUMER``` Organization) issue credentials to its customers to access Packet Deliveries(e.g. the ```PROVIDER```) Services(see [description of Service Usage in the -Data Space](https://github.com/FIWARE-Ops/fiware-gitops/tree/master/aws/#service-usage)). 
+After the product was ordered, a notfication will be triggered towards the [Contract Management Service](https://github.com/FIWARE/contract-management). The service will use the information provided as part of the notification, to add the ```CONSUMER``` Organization as a Trusted Issuer to the [Trusted Issuers List](https://github.com/FIWARE/trusted-issuers-list) of PacketDelivery and therefore allow Happy Pets (as the ```CONSUMER``` Organization) issue credentials to its customers to access Packet Deliveries (e.g. the ```PROVIDER```) Services(see [description of Service Usage in the -Data Space](https://github.com/FIWARE-Ops/fiware-gitops/tree/master/aws/#service-usage)). 
