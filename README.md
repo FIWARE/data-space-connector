@@ -74,7 +74,7 @@ Thus, being provided as Helm chart, the FIWARE Data Space Connector can be deplo
 The following diagram shows a logical overview of the different components of the FIWARE Data Space 
 Connector.
 
-![connector-components](img/Connector_Components.png)
+![connector-components](doc/img/Connector_Components.png)
 
 Precisely, the connector bundles the following components:
 
@@ -117,7 +117,7 @@ self description.
 
 The following displays the different steps during the onboarding.
 
-![flows-onboarding](img/Flows_Onboarding.png)
+![flows-onboarding](doc/img/Flows_Onboarding.png)
 
 **Steps**
 
@@ -159,7 +159,7 @@ representing a buyer of products in the provider's connector.
 
 The following displays the different steps for the consumer registration.
 
-![flows-consumer-registration](img/Flows_Consumer-Registration.png)
+![flows-consumer-registration](doc/img/Flows_Consumer-Registration.png)
 
 **Steps**
 
@@ -188,7 +188,7 @@ procure access to a specific service linked to a product of the provider.
 
 The following displays the different steps for the contract negotiation.
 
-![flows-contract-management](img/Flows_Contract-Management.png)
+![flows-contract-management](doc/img/Flows_Contract-Management.png)
 
 **Steps**
 
@@ -227,7 +227,7 @@ The following displays the different steps for the two different types of intera
 
 #### Service interaction (H2M)
 
-![flows-interaction-h2m](img/Flows_Interaction-H2M.png)
+![flows-interaction-h2m](doc/img/Flows_Interaction-H2M.png)
 
 **Steps**
 
@@ -254,7 +254,7 @@ The following displays the different steps for the two different types of intera
 
 #### Service interaction (M2M)
 
-![flows-interaction-h2m](img/Flows_Interaction-M2M.png)
+![flows-interaction-h2m](doc/img/Flows_Interaction-M2M.png)
 
 **Steps**
 
