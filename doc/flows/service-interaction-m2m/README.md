@@ -192,5 +192,6 @@ URL: `https://<VERIFIER_HOST>/token`.
 Note that the `/token` endpoint in the VCVerifier is capable of handling both types of flows, H2M and M2M. It differentiates by the 
 `grant_type` parameter.  
 The implementation of the VCVerifier will return a JWT access token, containing the required VCs provided by the client 
-in the request.
+in the request. This allows the PDP to extract all necessary information when performing the authorization steps during 
+interaction with the service.
 
