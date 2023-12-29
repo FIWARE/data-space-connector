@@ -276,6 +276,9 @@ The following displays the different steps for the two different types of intera
   extracted from the token is authorized to perform the given request (steps 10-12)
 * If authorization is ok, the request is forwarded (step 13) and a response returned to the app (step 14)
 
+A detailed description of the steps to be performed by client applications and service providers can be found 
+in the [Service Interaction (M2M)](./doc/flows/service-interaction-m2m) documentation. 
+
 
 
 ## Implementation

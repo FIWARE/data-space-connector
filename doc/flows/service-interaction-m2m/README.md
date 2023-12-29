@@ -127,13 +127,21 @@ curl -X GET https://<SERVICE_HOST>/<SERVICE_ENDPOINT> \
 
 ## Server side
 
+In the following, the two endpoints are described, which need to be implemented by a service provider 
+in oder to be able to offer access to its services via the M2M flow.
+
+
+### EBSI OpenID Provider Metadata Endpoint
+
 On the server side, service providers need to implement 
 the [EBSI OpenID Provider Metadata endpoint](https://hub.ebsi.eu/apis/pilot/authorisation/v3/get-well-known-openid-config). 
 This is needed, so that consumers can obtain the actual `/token` endpoint needed to retrieve an access token before accessing 
-the service.  
+the service in M2M flows.
+
 Given a specific endpoint of the actual service provided, e.g., 
 `https://<SERVICE_HOST>/<SERVICE_ENDPOINT>`, the well-known metadata endpoint should be accessible 
-under `https://<SERVICE_HOST>/.well-known/openid-configuration`.  
+under `https://<SERVICE_HOST>/.well-known/openid-configuration`.
+
 It should return a JSON object that should contain (at least) the following content:
 ```json
 {
@@ -144,7 +152,8 @@ It should return a JSON object that should contain (at least) the following cont
 }
 ```
 One might also need to require specific entries in the field `"scopes_supported"`, but this depends on the actual 
-service.  
+service. Also check the API specification linked above.
+
 When using the [VCVerifier component](https://github.com/FIWARE/VCVerifier), this already implements 
 such [endpoint](https://github.com/FIWARE/VCVerifier/blob/4318d2afb9ef15f6feb2134557f2fa68d86d7253/api/api.yaml#L139), providing the necessary data for the 
 service endpoints configured in the [Credentials Config Service component](https://github.com/FIWARE/credentials-config-service), 
@@ -152,8 +161,31 @@ and just needs a corresponding routing for the actual service host. The VCVerifi
 OpenID configuration under following endpoint: `https://<VERIFIER_HOST>/services/<SERVICE_IDENTIFIER>/.well-known/openid-configuration`.
 
 
-* When receiving vp_token:
-  - check 1
-  - check 2
-  - check 3
-  
+### EBSI Token Endpoint
+
+In order to be able to issue the access tokens, the service provider needs to implement 
+the [EBSI Token endpoint](https://hub.ebsi.eu/apis/pilot/authorisation/v3/post-token). Consumer applications are sending 
+requests containing a `vp_token` to this endpoint, as described in the section [Client side](#client-side). 
+The `vp_token` is a Signed Verifiable Presentation (VP) which includes the Verifiable 
+Credential (VC) of the client/consumer.
+
+When receiving a request with a `vp_token`, the following steps need to be performed:
+1. Check that the contained VCs are of the required types for the provided scopes.
+2. Verification of the signature of each of the required credentials. This depends on the DID method.
+3. For each of the required credentials, check that these were issued by a trusted participant of the Data Space. 
+   This is done by a request against the Verifiable Data Registry of the Data Space which is implementing 
+   the [EBSI Trusted Issuers Registry "Get an issuer" endpoint](https://hub.ebsi.eu/apis/pilot/trusted-issuers-registry/v4/get-issuer).
+4. For each of the required credentials, check that these were issued by a trusted issuer stored at the provider's local 
+   Trusted Issuers List (meaning that the issuers have been granted rights to issue credentials of such type). 
+   The Trusted Issuers List also implements 
+   the [EBSI Trusted Issuers Registry "Get an issuer" endpoint](https://hub.ebsi.eu/apis/pilot/trusted-issuers-registry/v4/get-issuer). 
+   An implementation can be found [here](https://github.com/FIWARE/trusted-issuers-list).
+
+When using the [VCVerifier component](https://github.com/FIWARE/VCVerifier), this already implements 
+such [endpoint](https://github.com/FIWARE/VCVerifier/blob/4318d2afb9ef15f6feb2134557f2fa68d86d7253/api/api.yaml#L101), performing 
+all the necessary verifications and validations when receiving the `vp_token`, and issuing JWT access tokens containing the 
+VC which was included in the `vp_token`. The VCVerifier provides the `/token` endpoint under following 
+URL: `https://<VERIFIER_HOST>/token`.  
+Note that the `/token` endpoint in the VCVerifier is capable of handling both types of flows, H2M and M2M. It differentiates by the 
+`grant_type` parameter.
+
