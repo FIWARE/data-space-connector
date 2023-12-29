@@ -180,6 +180,9 @@ When receiving a request with a `vp_token`, the following steps need to be perfo
    The Trusted Issuers List also implements 
    the [EBSI Trusted Issuers Registry "Get an issuer" endpoint](https://hub.ebsi.eu/apis/pilot/trusted-issuers-registry/v4/get-issuer). 
    An implementation can be found [here](https://github.com/FIWARE/trusted-issuers-list).
+5. When all checks were successful, return the [response](https://hub.ebsi.eu/apis/pilot/authorisation/v3/post-token#responses) 
+   containing the access token. This access token should contain all the necessary information required by the actual service, 
+   especially the PDP component, to perform the authorization steps during interaction with the service.
 
 When using the [VCVerifier component](https://github.com/FIWARE/VCVerifier), this already implements 
 such [endpoint](https://github.com/FIWARE/VCVerifier/blob/4318d2afb9ef15f6feb2134557f2fa68d86d7253/api/api.yaml#L101), performing 
