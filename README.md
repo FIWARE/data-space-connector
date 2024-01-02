@@ -26,7 +26,7 @@ FIWARE-Ops [data-space-connector repository](https://github.com/FIWARE-Ops/data-
     - [Service interaction (M2M)](#service-interaction-m2m)
 - [Implementation](#implementation)
   - [Examples](#examples)
-    - [Contract Management via TMForum APIs](#contract-management-via-tmforum-apis)
+  - [Contract Management via TMForum APIs](#contract-management-via-tmforum-apis)
 
 <!-- END doctoc generated TOC please keep comment here to allow auto update -->
 
