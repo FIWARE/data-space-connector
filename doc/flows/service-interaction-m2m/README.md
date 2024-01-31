@@ -195,3 +195,6 @@ The implementation of the VCVerifier will return a JWT access token, containing 
 in the request. This allows the PDP to extract all necessary information when performing the authorization steps during 
 interaction with the service.
 
+## Implementation hints
+### Encoding and Padding
+Token send to the token endpoint require a base64url encoding without padding as described in Appendice C of [RFC 7515](https://www.rfc-editor.org/rfc/rfc7515.txt).
