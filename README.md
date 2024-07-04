@@ -290,7 +290,8 @@ which also provides instructions for the deployment.
 
 ### Examples
 
-* Various examples for the deployment of the FIWARE Data Space Connector can be found in the 
+* Various examples for the deployment of the FIWARE Data Space Connector, including an 
+entire "Minimal Viable Dataspace", can be found in the 
   [examples](https://github.com/FIWARE-Ops/data-space-connector/tree/main/examples) folder of the 
   FIWARE-Ops [data-space-connector repository](https://github.com/FIWARE-Ops/data-space-connector)
 * A description and ArgoCD-based deployment of a full demo-setup of a data space following the DSBA recommendations, 
