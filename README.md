@@ -47,7 +47,9 @@ allows to:
   [SIOPv2](https://openid.net/specs/openid-connect-self-issued-v2-1_0.html#name-cross-device-self-issued-op) / 
   [OIDC4VP](https://openid.net/specs/openid-4-verifiable-presentations-1_0.html#request_scope) protocols
 * Implement authorization based on attribute-based access control (ABAC) following an 
-  [XACML P*P architecture](https://www.oasis-open.org/committees/tc_home.php?wg_abbrev=xacml)
+  [XACML P*P architecture](https://www.oasis-open.org/committees/tc_home.php?wg_abbrev=xacml) using 
+  [Open Digital Rights Language (ODRL)](https://www.w3.org/TR/odrl-model/) and the 
+  [Open Policy Agent (OPA)](https://www.openpolicyagent.org/)
 * Provide compatibility with [ETSI NGSI-LD](https://www.etsi.org/committee/cim) as data exchange API
 * Supports the [TMForum APIs](https://www.tmforum.org/oda/open-apis/) for contract negotiation
 
@@ -81,19 +83,17 @@ Precisely, the connector bundles the following components:
 | Component       | Role            | Link |
 |-----------------|-----------------|------|
 | VCVerifier      | Verifier        | https://github.com/FIWARE/VCVerifier |
-| VCWaltid        | Backend for managing credentials and DIDs, supports the verifier and issuer | https://github.com/FIWARE/VCWaltid |
 | credentials-config-service | Credentials Config provider for the verifier | https://github.com/FIWARE/credentials-config-service |
-| Keycloak + keycloak-vc-issuer plugin | Issuer of VCs | https://www.keycloak.org / https://github.com/FIWARE/keycloak-vc-issuer |
-| Orion-LD        | Context Broker  | https://github.com/FIWARE/context.Orion-LD |
+| Keycloak | Issuer of VCs | https://www.keycloak.org |
+| Scorpio        | Context Broker  | https://github.com/ScorpioBroker/ScorpioBroker |
 | trusted-issuers-list | Acts as Trusted Issuers List by providing an [EBSI Trusted Issuers Registry](https://api-pilot.ebsi.eu/docs/apis/trusted-issuers-registry) API | https://github.com/FIWARE/trusted-issuers-list |
-| Kong + kong-plugins-fiware | Kong API-Gateway with the kong-pep-plugin serving as API-Gateway and PEP | https://konghq.com / https://github.com/FIWARE/kong-plugins-fiware |
-| dsba-pdp        | DSBA-compliant PDP | https://github.com/FIWARE/dsba-pdp |
-| Keyrock         | Authorization Registry (storing role / ABAC-policy mappings) | https://github.com/ging/fiware-idm |
+| APISIX | APISIX as API-Gateway with a sidecar OPA as PEP | https://apisix.apache.org/ / https://www.openpolicyagent.org/ |
+| odrl-pap        | PAP allowing to configure ODRL policies to be used by the OPA | https://github.com/wistefan/odrl-pap |
 | tmforum-api     | [TMForum APIs](https://www.tmforum.org/oda/open-apis/) for contract management | https://github.com/FIWARE/tmforum-api |
 | contract-management | Notification listener for contract management events out of TMForum | https://github.com/FIWARE/contract-management |
-| MongoDB         | Database | https://www.mongodb.com |
 | MySQL           | Database | https://www.mysql.com |
 | PostgreSQL      | Database | https://www.postgresql.org |
+| PostGIS         | PostgreSQL Database with PostGIS extensions | https://postgis.net/ |
 
 **Note,** that some of the components shown in the diagram above are not implemented yet.
 
@@ -290,7 +290,8 @@ which also provides instructions for the deployment.
 
 ### Examples
 
-* Various examples for the deployment of the FIWARE Data Space Connector can be found in the 
+* Various examples for the deployment of the FIWARE Data Space Connector, including an 
+entire "Minimal Viable Dataspace", can be found in the 
   [examples](https://github.com/FIWARE-Ops/data-space-connector/tree/main/examples) folder of the 
   FIWARE-Ops [data-space-connector repository](https://github.com/FIWARE-Ops/data-space-connector)
 * A description and ArgoCD-based deployment of a full demo-setup of a data space following the DSBA recommendations, 
