@@ -291,9 +291,13 @@ which also provides instructions for the deployment.
 entire "Minimal Viable Dataspace", can be found in the 
   [examples](https://github.com/FIWARE-Ops/data-space-connector/tree/main/examples) folder of the 
   FIWARE-Ops [data-space-connector repository](https://github.com/FIWARE-Ops/data-space-connector)
-* A description and ArgoCD-based deployment of a full demo-setup of a data space following the DSBA recommendations, 
+* A description and [ArgoCD](https://argo-cd.readthedocs.io/en/stable/)-based deployment of a full demo-setup of a data space following the DSBA recommendations, 
   including a data service provider based on the FIWARE Data Space Connector, can be found at the 
-  FIWARE-Ops [fiware-gitops repository](https://github.com/FIWARE-Ops/fiware-gitops/tree/master/aws/dsba)
+  FIWARE-Ops [fiware-gitops repository](https://github.com/FIWARE-Ops/fiware-gitops/tree/master/aws/dsba). This example follows the 
+  [app-of-apps pattern](https://argo-cd.readthedocs.io/en/stable/operator-manual/cluster-bootstrapping) and is using a 
+  [GitOps pattern]((https://www.gitops.tech/)) approach.  
+  **Note,** that this is currently being reworked and the repository does not contain the latest configuration.
+  
   
 
 
