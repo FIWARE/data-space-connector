@@ -60,11 +60,8 @@ connector.
 Above listed functionalities can be used by an organization to connect to the data space in its role 
 as data (processing) service provider, consumer of data (processing) services, or both.
 
-Technically, the FIWARE Data Space Connector is a [Helm](https://helm.sh/) chart following the 
-[app-of-apps pattern](https://argo-cd.readthedocs.io/en/stable/operator-manual/cluster-bootstrapping/) of 
-[ArgoCD](https://argo-cd.readthedocs.io/en/stable/), which bundles charts for all the necessary components 
-and simplifies the deployment of all these components. In addition, the connector is also provided 
-as an [Umbrella-Chart](https://helm.sh/docs/howto/charts_tips_and_tricks/#complex-charts-with-many-dependencies), 
+Technically, the FIWARE Data Space Connector is a 
+[Helm Umbrella-Chart](https://helm.sh/docs/howto/charts_tips_and_tricks/#complex-charts-with-many-dependencies), 
 containing all the sub-charts and their dependencies for deployment via Helm.  
 Thus, being provided as Helm chart, the FIWARE Data Space Connector can be deployed on 
 [Kubernetes](https://kubernetes.io/) environments.
@@ -294,9 +291,13 @@ which also provides instructions for the deployment.
 entire "Minimal Viable Dataspace", can be found in the 
   [examples](https://github.com/FIWARE-Ops/data-space-connector/tree/main/examples) folder of the 
   FIWARE-Ops [data-space-connector repository](https://github.com/FIWARE-Ops/data-space-connector)
-* A description and ArgoCD-based deployment of a full demo-setup of a data space following the DSBA recommendations, 
+* A description and [ArgoCD](https://argo-cd.readthedocs.io/en/stable/)-based deployment of a full demo-setup of a data space following the DSBA recommendations, 
   including a data service provider based on the FIWARE Data Space Connector, can be found at the 
-  FIWARE-Ops [fiware-gitops repository](https://github.com/FIWARE-Ops/fiware-gitops/tree/master/aws/dsba)
+  FIWARE-Ops [fiware-gitops repository](https://github.com/FIWARE-Ops/fiware-gitops/tree/master/aws/dsba). This example follows the 
+  [app-of-apps pattern](https://argo-cd.readthedocs.io/en/stable/operator-manual/cluster-bootstrapping) and is using a 
+  [GitOps pattern]((https://www.gitops.tech/)) approach.  
+  **Note,** that this is currently being reworked and the repository does not contain the latest configuration.
+  
   
 
 
