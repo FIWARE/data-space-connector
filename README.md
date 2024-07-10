@@ -33,8 +33,8 @@ recipes.
   - [Deployment with Helm](#deployment-with-helm)
 - [Testing](#testing)
 - [Additional documentation and resources](#additional-documentation-and-resources)
-- [Additional documentation](#additional-documentation)
-- [Additional Resources](#additional-resources)
+  - [Additional documentation](#additional-documentation)
+  - [Additional Resources](#additional-resources)
 
 <!-- END doctoc generated TOC please keep comment here to allow auto update -->
 
