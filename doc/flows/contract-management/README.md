@@ -1,5 +1,7 @@
 # Contract Management
 
+> :construction: Please note, that this document is currently being reworked for the usage of ODRL policies and does not contain the latest information
+
 With the [tmforum-api](https://github.com/FIWARE/tmforum-api) and the 
 [contract-management](https://github.com/FIWARE/contract-management) notification listener, the FIWARE 
 Data Space Connector provides components to perform contract management based on the TMForum APIs. 
@@ -47,7 +49,7 @@ In order to get the credentials, use the [HappyPets Keycloak](https://happypets-
 > :construction: The [Business API Ecosystem](https://github.com/FIWARE-TMForum/Business-API-Ecosystem) as a Marketplace solution build on top of the TMForum-APIs is currently beeing updated to the latest TMForum-APIs and the security framework. Once its finished, it can be used a Marketplace, including UI, for the Data Space Connector.
 
 
-To provide a working example for Contract Management, using the Data Space Connector, a [postman colletion is provided](../../../examples/tmf/).
+To provide a working example for Contract Management, using the Data Space Connector, a [postman colletion is provided](./tmf/).
 It includes the following steps of the aquisition process:
 
 > :bulb: Since frontend-solutions are still under construction, plain REST-calls are used for the flow. Since all calls require a valid JWT, the [demo-portal](https://packetdelivery-portal.dsba.fiware.dev/) for the provider has a link to get a plain token in exchange for the Verifiable Credential. Log-in either as CONSUMER or PROVIDER (see [Credentials and Role-Assignment](#credentials-and-role-assignment)) to get tokens. 

@@ -1,0 +1,19 @@
+trusted-issuers-list:
+  # -- it should work as the TrustedIssuersRegistry of the dataspace, thus we publish this api only
+  ingress:
+    tir:
+      enabled: true
+      hosts:
+        - host: tir.127.0.0.1.nip.io
+    til:
+      enabled: true
+      hosts:
+        - host: til.127.0.0.1.nip.io
+
+mysql:
+  primary:
+    persistence:
+      enabled: false
+  secondary:
+    persistence:
+      enabled: false

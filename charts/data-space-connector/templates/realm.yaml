@@ -1,0 +1,154 @@
+{{- if .Values.keycloak.realm.import }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Values.keycloak.realm.name }}-realm
+  namespace: {{ $.Release.Namespace | quote }}
+  labels:
+    {{ include "dsc.labels" . | nindent 4 }}
+data:
+  {{ .Values.keycloak.realm.name }}-realm.json: |-
+    {
+      "id": "{{ .Values.keycloak.realm.name }}",
+      "realm": "{{ .Values.keycloak.realm.name }}",
+      "displayName": "Keycloak",
+      "displayNameHtml": "<div class=\"kc-logo-text\"><span>Keycloak</span></div>",
+      "enabled": true,
+      "attributes": {
+        "frontendUrl": "{{ .Values.keycloak.realm.frontendUrl }}",
+        "issuerDid": "${DID}"
+      },
+      "sslRequired": "none",
+      "roles": {
+        "realm": [
+          {
+            "name": "user",
+            "description": "User privileges",
+            "composite": false,
+            "clientRole": false,
+            "containerId": "dome",
+            "attributes": {}
+          }
+        ],
+        "client": {
+          {{ .Values.keycloak.realm.clientRoles | nindent 10 }}
+        }
+      },
+      "groups": [
+      ],
+      "users": [
+        {{ .Values.keycloak.realm.users | nindent 8 }}
+      ],
+      "clients": [
+        {{ .Values.keycloak.realm.clients | nindent 8 }}
+      ],
+      "clientScopes": [
+        {
+          "name": "roles",
+          "description": "OpenID Connect scope for add user roles to the access token",
+          "protocol": "openid-connect",
+          "attributes": {
+            "include.in.token.scope": "false",
+            "display.on.consent.screen": "true",
+            "consent.screen.text": "${rolesScopeConsentText}"
+          },
+          "protocolMappers": [
+            {
+              "name": "audience resolve",
+              "protocol": "openid-connect",
+              "protocolMapper": "oidc-audience-resolve-mapper",
+              "consentRequired": false,
+              "config": {
+                "introspection.token.claim": "true",
+                "access.token.claim": "true"
+              }
+            },
+            {
+              "name": "realm roles",
+              "protocol": "openid-connect",
+              "protocolMapper": "oidc-usermodel-realm-role-mapper",
+              "consentRequired": false,
+              "config": {
+                "introspection.token.claim": "true",
+                "multivalued": "true",
+                "user.attribute": "foo",
+                "access.token.claim": "true",
+                "claim.name": "realm_access.roles",
+                "jsonType.label": "String"
+              }
+            },
+            {
+              "name": "client roles",
+              "protocol": "openid-connect",
+              "protocolMapper": "oidc-usermodel-client-role-mapper",
+              "consentRequired": false,
+              "config": {
+                "introspection.token.claim": "true",
+                "multivalued": "true",
+                "user.attribute": "foo",
+                "access.token.claim": "true",
+                "claim.name": "resource_access.${client_id}.roles",
+                "jsonType.label": "String"
+              }
+            }
+          ]
+        }
+      ],
+      "defaultDefaultClientScopes": [
+      ],
+      "defaultOptionalClientScopes": [
+      ],
+      "components": {
+        "org.keycloak.protocol.oid4vc.issuance.signing.VerifiableCredentialsSigningService": [
+          {
+            "id": "jwt-signing",
+            "name": "jwt-signing-service",
+            "providerId": "jwt_vc",
+            "subComponents": {},
+            "config": {
+              "keyId": [
+                "${DID}"
+              ],
+              "algorithmType": [
+                "ES256"
+              ],
+              "issuerDid": [
+                "${DID}"
+              ],
+              "tokenType": [
+                "JWT"
+              ]
+            }
+          }
+        ],
+        "org.keycloak.keys.KeyProvider": [
+          {
+            "id": "a4589e8f-7f82-4345-b2ea-ccc9d4366600",
+            "name": "test-key",
+            "providerId": "java-keystore",
+            "subComponents": {},
+            "config": {
+              "keystore": [ "/did-material/cert.pfx" ],
+              "keystorePassword": [ "${STORE_PASS}" ],
+              "keyAlias": [ "didPrivateKey" ],
+              "keyPassword": [ "${STORE_PASS}" ],
+              "kid": [ "${DID}"],
+              "active": [
+                "true"
+              ],
+              "priority": [
+                "0"
+              ],
+              "enabled": [
+                "true"
+              ],
+              "algorithm": [
+                "ES256"
+              ]
+            }
+          }
+        ]
+      }
+    }
+
+{{- end }}

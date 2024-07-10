@@ -1,0 +1,19 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: traefik
+  namespace: infra
+  labels:
+    app.kubernetes.io/name: traefik
+spec:
+  rules:
+    - host: traefik.127.0.0.1.nip.io
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: traefik
+                port:
+                  name: admin

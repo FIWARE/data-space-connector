@@ -1,0 +1,32 @@
+apiVersion: v1
+kind: ConfigMap
+metadata: 
+  name: opa-config
+  namespace: {{ $.Release.Namespace | quote }}
+  labels:
+    {{ include "dsc.labels" . | nindent 4 }}
+data:
+  opa.yaml: |-
+    services:
+      - name: bundle-server
+        url: {{ .Values.opa.resourceUrl }}
+    bundles:
+      policies:
+          service: bundle-server
+          resource: policies.tar.gz
+          polling:
+            min_delay_seconds: {{ .Values.opa.policies.minDelay }}
+            max_delay_seconds: {{ .Values.opa.policies.maxDelay }}
+      methods:
+          service: bundle-server
+          resource: methods.tar.gz
+          polling:
+            min_delay_seconds: {{ .Values.opa.methods.minDelay }}
+            max_delay_seconds: {{ .Values.opa.methods.maxDelay }}
+      data:
+          service: bundle-server
+          resource: data.tar.gz
+          polling:
+            min_delay_seconds: {{ .Values.opa.data.minDelay }}
+            max_delay_seconds: {{ .Values.opa.data.maxDelay }}
+    default_decision: /policy/main/allow

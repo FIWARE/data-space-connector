@@ -1,9 +1,12 @@
 # FIWARE Data Space Connector
 
-This repository provides a description of the FIWARE Data Space Connector which has been developed implementing [DSBA Technical Convergence recommendations](https://data-spaces-business-alliance.eu/wp-content/uploads/dlm_uploads/Data-Spaces-Business-Alliance-Technical-Convergence-V2.pdf) as soon as they become enough mature.
+The FIWARE Data Space Connector is an integrated suite of components 
+implementing [DSBA Technical Convergence recommendations](https://data-spaces-business-alliance.eu/wp-content/uploads/dlm_uploads/Data-Spaces-Business-Alliance-Technical-Convergence-V2.pdf), every organization participating 
+in a data space should deploy to “connect” to a data space. The implementation of these recommendations 
+is developed as soon as they become enough mature.
 
-If you want to head over directly to the implementation, go to the 
-FIWARE-Ops [data-space-connector repository](https://github.com/FIWARE-Ops/data-space-connector).
+This repository provides a description of the FIWARE Data Space Connector, its technical implementation and deployment 
+recipes. 
 
 
 <!-- ToC created with: https://github.com/thlorenz/doctoc -->
@@ -73,7 +76,7 @@ Thus, being provided as Helm chart, the FIWARE Data Space Connector can be deplo
 The following diagram shows a logical overview of the different components of the FIWARE Data Space 
 Connector.
 
-![connector-components](doc/img/Connector_Components.png)
+![connector-components](doc/img/flows/Connector_Components.png)
 
 Precisely, the connector bundles the following components:
 
@@ -114,7 +117,7 @@ self description.
 
 The following displays the different steps during the onboarding.
 
-![flows-onboarding](doc/img/Flows_Onboarding.png)
+![flows-onboarding](doc/img/flows/Flows_Onboarding.png)
 
 **Steps**
 
@@ -156,7 +159,7 @@ representing a buyer of products in the provider's connector.
 
 The following displays the different steps for the consumer registration.
 
-![flows-consumer-registration](doc/img/Flows_Consumer-Registration.png)
+![flows-consumer-registration](doc/img/flows/Flows_Consumer-Registration.png)
 
 **Steps**
 
@@ -185,7 +188,7 @@ procure access to a specific service linked to a product of the provider.
 
 The following displays the different steps for the contract negotiation.
 
-![flows-contract-management](doc/img/Flows_Contract-Management.png)
+![flows-contract-management](doc/img/flows/Flows_Contract-Management.png)
 
 **Steps**
 
@@ -224,7 +227,7 @@ The following displays the different steps for the two different types of intera
 
 #### Service interaction (H2M)
 
-![flows-interaction-h2m](doc/img/Flows_Interaction-H2M.png)
+![flows-interaction-h2m](doc/img/flows/Flows_Interaction-H2M.png)
 
 **Steps**
 
@@ -251,7 +254,7 @@ The following displays the different steps for the two different types of intera
 
 #### Service interaction (M2M)
 
-![flows-interaction-h2m](doc/img/Flows_Interaction-M2M.png)
+![flows-interaction-h2m](doc/img/flows/Flows_Interaction-M2M.png)
 
 **Steps**
 
@@ -278,31 +281,89 @@ in the [Service Interaction (M2M)](./doc/flows/service-interaction-m2m) document
 
 
 
-## Implementation
+## Deployment
 
-The implementation of the FIWARE Data Space Connector can be found at 
-the FIWARE-Ops [data-space-connector repository](https://github.com/FIWARE-Ops/data-space-connector), 
-which also provides instructions for the deployment.
+### Local Deployment
 
+The FIWARE Data Space Connector provides a local deployment of a Minimal Viable Dataspace. 
+* Find a detailed documentation here: [Local Deployment](./doc/LOCAL.MD)
 
-### Examples
-
-* Various examples for the deployment of the FIWARE Data Space Connector, including an 
-entire "Minimal Viable Dataspace", can be found in the 
-  [examples](https://github.com/FIWARE-Ops/data-space-connector/tree/main/examples) folder of the 
-  FIWARE-Ops [data-space-connector repository](https://github.com/FIWARE-Ops/data-space-connector)
-* A description and [ArgoCD](https://argo-cd.readthedocs.io/en/stable/)-based deployment of a full demo-setup of a data space following the DSBA recommendations, 
-  including a data service provider based on the FIWARE Data Space Connector, can be found at the 
-  FIWARE-Ops [fiware-gitops repository](https://github.com/FIWARE-Ops/fiware-gitops/tree/master/aws/dsba). This example follows the 
-  [app-of-apps pattern](https://argo-cd.readthedocs.io/en/stable/operator-manual/cluster-bootstrapping) and is using a 
-  [GitOps pattern]((https://www.gitops.tech/)) approach.  
-  **Note,** that this is currently being reworked and the repository does not contain the latest configuration.
-  
-  
+This deployment allows to easily spin up such minimal data space on a local machine, by just using 
+[Maven](https://maven.apache.org/) and [Docker](https://www.docker.com/) (with [k3s](https://k3s.io/)), and 
+can be used to try-out the connector, to get familiar with the different components and flows within the data space 
+or to perform 
+tests with the different APIs provided.
 
 
-### Contract Management via TMForum APIs
 
-A detailed description of the contract management via TMForum APIs can be found in 
-the [Contract Management](./doc/flows/contract-management) documentation.
+
+### Deployment with Helm
+
+The Data-Space-Connector is a [Helm Umbrella-Chart](https://helm.sh/docs/howto/charts_tips_and_tricks/#complex-charts-with-many-dependencies), containing all the sub-charts of the different components and their dependencies. Its sources can be found 
+[here](./charts/data-space-connector).
+
+The chart is available at the repository ```https://fiware.github.io/data-space-connector/```. You can install it via:
+
+```shell
+    # add the repo
+    helm repo add dsc https://fiware.github.io/data-space-connector/
+    # install the chart
+    helm install <DeploymentName> dsc/data-space-connector -n <Namespace> -f values.yaml
+```
+**Note,** that due to the app-of-apps structure of the connector and the different dependencies between the components, a deployment without providing any configuration values will not work. Make sure to provide a 
+`values.yaml` file for the deployment, specifying all necessary parameters. This includes setting parameters of the connected data space (e.g., trust anchor endpoints), DNS information (providing Ingress or OpenShift Route parameters), 
+structure and type of the required VCs, internal hostnames of the different connector components and providing the configuration of the DID and keys/certs.  
+Also have a look at the [examples](#examples).
+
+Configurations for all sub-charts (and sub-dependencies) can be managed through the top-level [values.yaml](./charts/data-space-connector/values.yaml) of the chart. It contains the default values of each component and additional parameter shared between the components. The configuration of the applications can be changed under the key ```<APPLICATION_NAME>```, please see the individual applications and there sub-charts for the available options.  
+Example:
+In order to change the image-tag of [Keycloak](./argocd/applications/keycloak/), the values.yaml looks as following:
+```yaml
+keycloak:
+    # configuration for the keycloak-sub-chart. Its used as a dependency to the application, thus all config is accessible under the dependency name
+    keycloak:
+        image:
+            tag: LATEST_GREATEST
+```
+
+The chart is [published and released](./github/workflows/release-helm.yaml) on each merge to master. 
+
+
+## Testing
+
+In order to test the [helm-charts](./charts/) provided for the FIWARE Data Space Connector, an integration-test 
+framework based on [Cucumber](https://cucumber.io/) and [Junit5](https://junit.org/junit5/) is provided: [it](./it).
+
+The tests can be executed via: 
+```shell
+    mvn clean integration-test -Ptest
+```
+They will spin up the [Local Data Space](./doc/deployment-integration/local-deployment/LOCAL.MD) and run 
+the [test-scenarios](./it/src/test/resources/it/mvds_basic.feature) against it.
+
+
+
+
+
+
+## Additional documentation and resources
+
+
+## Additional documentation
+
+Additional and more detailed documentation about the FIWARE Data Space Connector, 
+specific flows and its deployment and integration with other frameworks, can be found here:
+* [Additional documentation](./doc)
+
+
+
+
+
+## Additional Resources
+
+Following is a list with additional resources about the FIWARE Data Space Connector and Data Spaces in general:
+* [FIWARE Webinar about Data Spaces, its roles and components (by Stefan Wiedemann)](https://www.youtube.com/watch?v=hm5qMlhpK0g)
+
+
+
 

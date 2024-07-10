@@ -1,0 +1,20 @@
+name: Test
+on:
+  push
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - uses: actions/setup-java@v1
+        with:
+          java-version: '17'
+          java-package: jdk
+
+      - name: Execute tests
+        id: test
+        run: |
+          mvn clean integration-test -Ptest

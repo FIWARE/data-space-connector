@@ -1,0 +1,66 @@
+{{- if .Values.did.enabled }}
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: did-helper
+  namespace: {{ $.Release.Namespace | quote }}
+  labels:
+    {{ include "dsc.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: did-helper
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: did-helper
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+      serviceAccountName: default
+      initContainers:
+        - name: init-did
+          image: quay.io/wi_stefan/did-helper:0.1.1
+          env:
+            - name: COUNTRY
+              value: {{ .Values.did.cert.country }}
+            - name: STATE
+              value: {{ .Values.did.cert.state }}
+            - name: LOCALITY
+              value: {{ .Values.did.cert.locality }}
+            - name: ORGANIZATION
+              value: {{ .Values.did.cert.organization }}
+            - name: COMMON_NAME
+              value: {{ .Values.did.cert.commonName }}
+            - name: STORE_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.did.secret }}
+                  key: store-pass
+            - name: KEY_ALIAS
+              value: didPrivateKey
+            - name: OUTPUT_FORMAT
+              value: env
+            - name: OUTPUT_FILE
+              value: /cert/did.env
+          volumeMounts:
+            - name: did-material
+              mountPath: /cert
+
+      containers:
+        - name: did-material
+          imagePullPolicy: Always
+          image: "lipanski/docker-static-website:2.1.0"
+          ports:
+            - name: http
+              containerPort: 3000
+              protocol: TCP
+          volumeMounts:
+            - name: did-material
+              mountPath: /home/static/did-material
+      volumes:
+        - name: did-material
+          emptyDir: { }
+{{- end }}
