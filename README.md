@@ -354,7 +354,7 @@ the [test-scenarios](./it/src/test/resources/it/mvds_basic.feature) against it.
 ## Additional documentation and resources
 
 
-## Additional documentation
+### Additional documentation
 
 Additional and more detailed documentation about the FIWARE Data Space Connector, 
 specific flows and its deployment and integration with other frameworks, can be found here:
@@ -364,7 +364,7 @@ specific flows and its deployment and integration with other frameworks, can be 
 
 
 
-## Additional Resources
+### Additional Resources
 
 Following is a list with additional resources about the FIWARE Data Space Connector and Data Spaces in general:
 * [FIWARE Webinar about Data Spaces, its roles and components (by Stefan Wiedemann)](https://www.youtube.com/watch?v=hm5qMlhpK0g)
