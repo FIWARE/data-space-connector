@@ -7,7 +7,7 @@ on:
 
 jobs:
 
-  generate-version:
+    generate-version:
       name: "Generate version"
       runs-on: ubuntu-latest
 
