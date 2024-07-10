@@ -1,0 +1,19 @@
+{{- if .Values.did.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: did-helper
+  namespace: {{ $.Release.Namespace | quote }}
+  labels:
+    {{ include "dsc.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.did.serviceType }}
+  ports:
+    - port: {{ .Values.did.port }}
+      targetPort: 3000
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: did-helper
+    app.kubernetes.io/instance: {{ .Release.Name }}
+{{- end }}

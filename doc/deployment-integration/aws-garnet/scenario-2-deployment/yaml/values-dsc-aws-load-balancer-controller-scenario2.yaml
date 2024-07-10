@@ -1,0 +1,1777 @@
+# should argo-cd applications be created?
+argoApplications: false
+
+
+#Sub-Chart configuration
+
+activation-service:
+  # Enable the deployment of application: activation-service
+  deploymentEnabled: true
+
+  activation-service:
+    ## Configuration of activation service execution
+    activationService:
+      # -- Number of (gunicorn) workers that should be created
+      workers: 1
+      # -- Maximum header size in bytes
+      maxHeaderSize: 32768
+      # -- Log Level
+      logLevel: "debug"
+
+    ## Add Ingress or OpenShift Route
+    route:
+      enabled: false
+
+    ingress:
+      enabled: true
+      annotations:
+        cert-manager.io/cluster-issuer: letsencrypt-fiware-eks
+        kubernetes.io/ingress.class: nginx
+      hosts:
+        - host: ips-as.dsba.aws.fiware.io
+          paths:
+            - /
+      tls:
+        - hosts:
+            - ips-as.dsba.aws.fiware.io
+          secretName: as-ips-dsba-tls
+
+    ## CCS config
+    ccs:
+      endpoint: "http://ips-dsc-credentials-config-service:8080/"
+      id: "ips-activation-service"
+      defaultOidcScope: "default"
+      oidcScopes:
+        default:
+          - type: "VerifiableCredential"
+            trustedParticipantsLists: [
+              "https://tir.dsba.fiware.dev"
+            ]
+            trustedIssuersLists: [
+              "http://ips-dsc-trusted-issuers-list:8080"
+            ]
+          - type: "IpsActivationService"
+            trustedParticipantsLists: [
+              "https://tir.dsba.fiware.dev"
+            ]
+            trustedIssuersLists: [
+              "http://ips-dsc-trusted-issuers-list:8080"
+            ]
+
+    ## AS config
+    config:
+
+      # DB
+      db:
+        # -- Use sqlite in-memory database
+        useMemory: true
+        # -- Enable tracking of modifications
+        modTracking: false
+        # -- Enable SQL logging to stderr
+        echo: true
+
+      # Configuration for additional API keys to protect certain endpoints
+      apikeys:
+        # Config for Trusted-Issuers-List flow
+        issuer:
+          # Header name
+          headerName: "AS-API-KEY"
+          # API key (auto-generated if left empty)
+          apiKey: "77ab4a67-ea3c-4348-98bd-2e9f0304bfb8"
+          # Enable for /issuer endpoint (API key will be required)
+          enabledIssuer: true
+
+      issuer:
+        clientId: "ips-activation-service"
+        providerId: "did:web:ips.dsba.aws.fiware.io:did"
+        tilUri: "http://ips-dsc-trusted-issuers-list:8080"
+        verifierUri: "https://ips-verifier.dsba.aws.fiware.io"
+        samedevicePath: "/api/v1/samedevice"
+        jwksPath: "/.well-known/jwks"
+        algorithms:
+          - "ES256"
+        roles:
+          createRole: "CREATE_ISSUER"
+          updateRole: "UPDATE_ISSUER"
+          deleteRole: "DELETE_ISSUER"
+
+credentials-config-service:
+  # Enable the deployment of application: credentials-config-service
+  deploymentEnabled: true
+
+  credentials-config-service:
+
+    # Database config
+    database:
+      persistence: true
+      host: mysql-ips
+      name: ccs
+
+      # Should use Secret in production environment
+      username: root
+      password: "dbPassword"
+
+dsba-pdp:
+  # Enable the deployment of application: dsba-pdp
+  deploymentEnabled: true
+
+  dsba-pdp:
+
+    # DB
+    db:
+      enabled: false
+      migrate:
+        enabled: false
+
+    deployment:
+      # Log level
+      logLevel: DEBUG
+
+      # iSHARE config
+      ishare:
+        existingSecret: ips-dsc-vcwaltid-tls-sec
+
+        clientId: did:web:ips.dsba.aws.fiware.io:did
+
+        # Initial list of fingerprints for trusted CAs. This will be overwritten
+        # after the first update from the trust anchor.
+        trustedFingerprints:
+          - D2F62092F982CF783D4632BD86FA86C3FBFDB2D8C8A58BC6809163FCF5CD030B
+
+        ar:
+          id: "did:web:ips.dsba.aws.fiware.io:did"
+          delegationPath: "/ar/delegation"
+          tokenPath: "/oauth2/token"
+          url: "https://ar-ips.dsba.aws.fiware.io"
+
+        trustAnchor:
+          id: "EU.EORI.FIWARESATELLITE"
+          tokenPath: "/token"
+          trustedListPath: "/trusted_list"
+          url: "https://tir.dsba.fiware.dev"
+
+      # Verifier
+      trustedVerifiers:
+        - https://ips-verifier.dsba.aws.fiware.io/.well-known/jwks
+
+      # Provider DID
+      providerId: "did:web:ips.dsba.aws.fiware.io:did"
+
+    # ENVs
+    additionalEnvVars:
+      - name: ISHARE_CERTIFICATE_PATH
+        value: /iShare/tls.crt
+      - name: ISHARE_KEY_PATH
+        value: /iShare/tls.key
+
+kong:
+  # Enable the deployment of application: kong
+  deploymentEnabled: true
+
+  kong:
+    replicaCount: 1
+
+    proxy:
+      enabled: true
+      tls:
+        enabled: false
+
+      # Provide Ingress or Route config here
+      ingress:
+        enabled: true
+        annotations:
+          kubernetes.io/ingress.class: nginx
+          cert-manager.io/cluster-issuer: letsencrypt-fiware-eks
+        #ingressClassName: nginx
+        tls: kong-ips-dsba-tls
+        hostname: ips-kong.dsba.aws.fiware.io
+      route:
+        enabled: false
+
+    # Provide the kong.yml configuration (either as existing CM, secret or directly in the values.yaml)
+    dblessConfig:
+      configMap: ""
+      secret: ""
+      config: |
+        _format_version: "2.1"
+        _transform: true
+
+        consumers:
+        - username: token-consumer
+          keyauth_credentials:
+          - tags:
+            - token-key
+            - tir-key
+
+        services:
+          - host: "psr8tihlz1.execute-api.eu-west-1.amazonaws.com" 
+            name: "ips"
+            port: 443
+            protocol: http
+
+            routes:
+              - name: ips
+                paths:
+                  - /ips
+                strip_path: true
+
+            plugins:
+              - name: pep-plugin
+                config:
+                  pathprefix: "/ips"
+                  authorizationendpointtype: ExtAuthz
+                  authorizationendpointaddress: http://ips-dsc-dsba-pdp:8080/authz
+
+              - name: request-transformer
+                config:
+                  remove:
+                    headers:
+                      - Authorization
+                      - authorization
+
+mongodb:
+  # Enable the deployment of application: mongodb
+  deploymentEnabled: false
+
+  mongodb:
+
+    # DB Authorization
+    auth:
+      enabled: true
+      # Should use a Secret on production deployments
+      rootPassword: "dbPassword"
+
+    # Required for permissions to PVC
+    podSecurityContext:
+      enabled: true
+      fsGroup: 1001
+    containerSecurityContext:
+      enabled: true
+      runAsUser: 1001
+      runAsGroup: 0
+      runAsNonRoot: true
+
+    # Set resources
+    resources:
+      limits:
+        cpu: 200m
+        memory: 512Mi
+
+    persistence:
+      enabled: true
+      size: 8Gi
+
+mysql:
+  # Enable the deployment of application: mysql
+  deploymentEnabled: true
+
+  mysql:
+    fullnameOverride: mysql-ips
+    auth:
+      # Should use a Secret on production deployments
+      rootPassword: "dbPassword"
+      password: "dbPassword"
+
+orion-ld:
+  # Enable the deployment of application: orion-ld
+  deploymentEnabled: false
+
+  orion:
+
+    broker:
+      db:
+        auth:
+          user: root
+          password: "dbPassword"
+          mech: "SCRAM-SHA-1"
+        hosts:
+          - ips-dsc-mongodb
+
+    initData:
+      initEnabled: true
+      hook: post-install
+      backoffLimit: 6
+      entities:
+        - name: deliveryorder_happypets001.json
+          data: |
+            {
+              "id": "urn:ngsi-ld:DELIVERYORDER:HAPPYPETS001",
+              "type": "DELIVERYORDER",
+              "issuer": {
+                "type": "Property",
+                "value": "Happy Pets"
+              },
+              "destinee": {
+                "type": "Property",
+                "value": "Happy Pets customer via IPS"
+              },
+              "deliveryAddress": {
+                "type": "Property",
+                "value": {
+                  "addressCountry": "DE",
+                  "addressRegion": "Berlin",
+                  "addressLocality": "Berlin",
+                  "postalCode": "12345",
+                  "streetAddress": "Customer Strasse 23"
+                }
+              },
+              "originAddress": {
+                "type": "Property",
+                "value": {
+                  "addressCountry": "DE",
+                  "addressRegion": "Berlin",
+                  "addressLocality": "Berlin",
+                  "postalCode": "12345",
+                  "streetAddress": "HappyPets Strasse 15"
+                }
+              },
+              "pda": {
+                "type": "Property",
+                "value": "2021-10-03"
+              },
+              "pta": {
+                "type": "Property",
+                "value": "14:00:00"
+              },
+              "eda": {
+                "type": "Property",
+                "value": "2021-10-02"
+              },
+              "eta": {
+                "type": "Property",
+                "value": "14:00:00"
+              },
+              "@context": [
+                "https://schema.lab.fiware.org/ld/context"
+              ]
+            }
+                
+        - name: deliveryorder_happypets002.json
+          data: |
+            {
+              "id": "urn:ngsi-ld:DELIVERYORDER:HAPPYPETS002",
+              "type": "DELIVERYORDER",
+              "issuer": {
+                "type": "Property",
+                "value": "Happy Pets"
+              },
+              "destinee": {
+                "type": "Property",
+                "value": "Happy Pets 2nd customer via IPS"
+              },
+              "deliveryAddress": {
+                "type": "Property",
+                "value": {
+                  "addressCountry": "DE",
+                  "addressRegion": "Hamburg",
+                  "addressLocality": "Hamburg",
+                  "postalCode": "23456",
+                  "streetAddress": "Customer Str. 19"
+                }
+              },
+              "originAddress": {
+                "type": "Property",
+                "value": {
+                  "addressCountry": "DE",
+                  "addressRegion": "Berlin",
+                  "addressLocality": "Berlin",
+                  "postalCode": "12345",
+                  "streetAddress": "HappyPets Strasse 15"
+                }
+              },
+              "pda": {
+                "type": "Property",
+                "value": "2021-11-12"
+              },
+              "pta": {
+                "type": "Property",
+                "value": "11:00:00"
+              },
+              "eda": {
+                "type": "Property",
+                "value": "2021-11-12"
+              },
+              "eta": {
+                "type": "Property",
+                "value": "11:00:00"
+              },
+              "@context": [
+                "https://schema.lab.fiware.org/ld/context"
+              ]
+            }
+
+postgres:
+  # Enable the deployment of application: postgres
+  deploymentEnabled: true
+
+  postgresql:
+
+    fullnameOverride: postgresql-ips
+
+    auth:
+      # Should use a Secret for PWs on production deployments
+      # Credentials for Keycloak DB
+      username: keycloak
+      password: "dbPassword"
+      enablePostgresUser: true
+
+      # Credentials for postgres admin user
+      postgresPassword: "dbRootPassword"
+
+    # Init DB
+    primary:
+      initdb:
+        scripts:
+          create.sh: |
+            psql postgresql://postgres:${POSTGRES_POSTGRES_PASSWORD}@localhost:5432 -c "CREATE DATABASE keycloak_ips;"
+
+trusted-issuers-list:
+  # Enable the deployment of application: trusted-issuers-list
+  deploymentEnabled: true
+
+  trusted-issuers-list:
+
+    # Ingress
+    ingress:
+      til:
+        enabled: true
+        annotations:
+          cert-manager.io/cluster-issuer: letsencrypt-fiware-eks
+          kubernetes.io/ingress.class: nginx
+        hosts:
+          - host: til-ips.dsba.aws.fiware.io
+        tls:
+          - hosts:
+              - til-ips.dsba.aws.fiware.io
+            secretName: til-ips-dsba-til-tls
+      tir:
+        enabled: true
+        annotations:
+          cert-manager.io/cluster-issuer: letsencrypt-fiware-eks
+          kubernetes.io/ingress.class: nginx
+        hosts:
+          - host: tir-ips.dsba.aws.fiware.io
+        tls:
+          - hosts:
+              - tir-ips.dsba.aws.fiware.io
+            secretName: til-ips-dsba-tir-tls
+
+    # Database config
+    database:
+      persistence: true
+      host: mysql-ips
+      name: til
+
+      # Should use Secret in production environment
+      username: root
+      password: "dbPassword"
+
+    # Init data
+    initData:
+      initEnabled: true
+      hook: post-install
+      backoffLimit: 6
+      issuers:
+        - name: mp_create
+          issuer:
+            did: "did:web:marketplace.dsba.fiware.dev:did"
+            credentials:
+              - validFor:
+                  from: "2022-07-21T17:32:28Z"
+                  to: "2040-07-21T17:32:28Z"
+                credentialsType: "IpsActivationService"
+                claims:
+                  - name: "roles"
+                    allowedValues: 
+                      - - names:
+                          - "CREATE_ISSUER"
+                          target: "did:web:ips.dsba.aws.fiware.io:did"
+              - validFor:
+                  from: "2022-07-21T17:32:28Z"
+                  to: "2040-07-21T17:32:28Z"
+                credentialsType: "VerifiableCredential"
+
+vcwaltid:
+  # Enable the deployment of application: vcwaltid
+  deploymentEnabled: true
+
+  # Organisation DID
+  did: did:web:ips.dsba.aws.fiware.io:did
+  ingress:
+    enabled: true
+    host: ips.dsba.aws.fiware.io
+    annotations:
+      cert-manager.io/cluster-issuer: letsencrypt-fiware-eks
+    tls:
+      enabled: true
+  route:
+    enabled: false
+    
+  # Walt-id config
+  vcwaltid:
+
+    # Persistence
+    persistence:
+      enabled: true
+      pvc:
+        size: 1Gi
+
+    # List of templates to be created
+    templates:
+      GaiaXParticipantCredential.json: |
+        {
+          "@context": [
+            "https://www.w3.org/2018/credentials/v1",
+            "https://registry.lab.dsba.eu/development/api/trusted-shape-registry/v1/shapes/jsonld/trustframework#"
+          ],
+          "type": [
+            "VerifiableCredential"
+          ],
+          "id": "did:web:raw.githubusercontent.com:egavard:payload-sign:master",
+          "issuer": "did:web:raw.githubusercontent.com:egavard:payload-sign:master",
+          "issuanceDate": "2023-03-21T12:00:00.148Z",
+          "credentialSubject": {
+            "id": "did:web:raw.githubusercontent.com:egavard:payload-sign:master",
+            "type": "gx:LegalParticipant",
+            "gx:legalName": "dsba compliant participant",
+            "gx:legalRegistrationNumber": {
+              "gx:vatID": "MYVATID"
+            },
+            "gx:headquarterAddress": {
+              "gx:countrySubdivisionCode": "BE-BRU"
+            },
+            "gx:legalAddress": {
+              "gx:countrySubdivisionCode": "BE-BRU"
+            },
+            "gx-terms-and-conditions:gaiaxTermsAndConditions": "70c1d713215f95191a11d38fe2341faed27d19e083917bc8732ca4fea4976700"
+          }
+        }
+      NaturalPersonCredential.json: |
+        {
+          "@context": ["https://www.w3.org/2018/credentials/v1"],
+          "credentialSchema": {
+            "id": "https://raw.githubusercontent.com/FIWARE-Ops/tech-x-challenge/main/schema.json",
+            "type": "FullJsonSchemaValidator2021"
+          },
+          "credentialSubject": {
+            "type": "gx:NaturalParticipant",
+            "familyName": "Happy",
+            "firstName": "User",
+            "roles": [{
+              "names": ["LEGAL_REPRESENTATIVE"],
+              "target": "did:web:onboarding"
+             }]
+          },
+          "id": "urn:uuid:3add94f4-28ec-42a1-8704-4e4aa51006b4",
+          "issued": "2021-08-31T00:00:00Z",
+          "issuer": "did:ebsi:2A9BZ9SUe6BatacSpvs1V5CdjHvLpQ7bEsi2Jb6LdHKnQxaN",
+          "validFrom": "2021-08-31T00:00:00Z",
+          "issuanceDate": "2021-08-31T00:00:00Z",
+          "type": ["VerifiableCredential", "LegalPersonCredential"]
+        }
+      MarketplaceUserCredential.json: |
+        {
+          "@context": ["https://www.w3.org/2018/credentials/v1"],
+          "credentialSchema": {
+            "id": "https://raw.githubusercontent.com/FIWARE-Ops/tech-x-challenge/main/schema.json",
+            "type": "FullJsonSchemaValidator2021"
+          },
+          "credentialSubject": {
+            "type": "gx:NaturalParticipant",
+            "email": "normal-user@fiware.org",
+            "familyName": "IPS",
+            "firstName": "employee",
+            "lastName": "IPS",
+            "roles": [{
+              "names": ["LEGAL_REPRESENTATIVE"],
+              "target": "did:web:onboarding"
+            }]
+          },
+          "id": "urn:uuid:3add94f4-28ec-42a1-8704-4e4aa51006b4",
+          "issued": "2021-08-31T00:00:00Z",
+          "issuer": "did:ebsi:2A9BZ9SUe6BatacSpvs1V5CdjHvLpQ7bEsi2Jb6LdHKnQxaN",
+          "validFrom": "2021-08-31T00:00:00Z",
+          "issuanceDate": "2021-08-31T00:00:00Z",
+          "type": ["MarketplaceUserCredential"]
+        }
+      EmployeeCredential.json: |
+        {
+          "@context": ["https://www.w3.org/2018/credentials/v1"],
+          "credentialSchema": {
+            "id": "https://raw.githubusercontent.com/FIWARE-Ops/tech-x-challenge/main/schema.json",
+            "type": "FullJsonSchemaValidator2021"
+          },
+          "credentialSubject": {
+            "type": "gx:NaturalParticipant",
+            "email": "normal-user@fiware.org",
+            "familyName": "IPS",
+            "firstName": "employee",
+            "lastName": "IPS",
+            "roles": [{
+              "names": ["LEGAL_REPRESENTATIVE"],
+              "target": "did:web:onboarding"
+            }]
+          },
+          "id": "urn:uuid:3add94f4-28ec-42a1-8704-4e4aa51006b4",
+          "issued": "2021-08-31T00:00:00Z",
+          "issuer": "did:ebsi:2A9BZ9SUe6BatacSpvs1V5CdjHvLpQ7bEsi2Jb6LdHKnQxaN",
+          "validFrom": "2021-08-31T00:00:00Z",
+          "issuanceDate": "2021-08-31T00:00:00Z",
+          "type": ["EmployeeCredential"]
+        }
+
+verifier:
+  # Enable the deployment of application: verifier
+  deploymentEnabled: true
+
+  vcverifier:
+
+    ingress:
+      enabled: true
+      annotations:
+        cert-manager.io/cluster-issuer: letsencrypt-fiware-eks
+        kubernetes.io/ingress.class: nginx
+      hosts:
+        - host: ips-verifier.dsba.aws.fiware.io
+          paths:
+            - /
+      tls:
+        - hosts:
+            - ips-verifier.dsba.aws.fiware.io
+          secretName: verifier-ips-dsba-tls
+
+    deployment:
+
+      # Logging
+      logging:
+        level: DEBUG
+        pathsToSkip:
+          - "/health"
+
+      # Server config
+      server:
+        # Place external host here when publishing verifier with public URL
+        host: https://ips-verifier.dsba.aws.fiware.io
+
+      # Walt-id config
+      ssikit:
+        auditorUrl: http://ips-dsc-vcwaltid:7003
+
+      # Verifier config
+      verifier:
+        # URL endpoint of data space trusted issuers registry
+        tirAddress: https://tir.dsba.fiware.dev/v3/issuers
+        # DID of organisation
+        did: did:web:ips.dsba.aws.fiware.io:did
+
+      # Config service
+      configRepo:
+        configEndpoint: http://ips-dsc-credentials-config-service:8080/
+
+
+keyrock:
+  # Enable the deployment of application: keyrock
+  deploymentEnabled: true
+
+  keyrock:
+    fullnameOverride: keyrock-ips
+
+    # DB config
+    db:
+      user: root
+      password: "dbPassword"
+      host: mysql-ips
+
+    # Admin user to be created
+    admin:
+      user: admin
+      password: "admin"
+      email: admin@fiware.org
+
+    # External hostname of Keyrock
+    host: https://ar-ips.dsba.aws.fiware.io
+
+    # Ingress
+    ingress:
+      enabled: true
+      annotations:
+        cert-manager.io/cluster-issuer: letsencrypt-fiware-eks
+        kubernetes.io/ingress.class: nginx
+      hosts:
+        - host: ar-ips.dsba.aws.fiware.io
+          paths:
+            - /
+      tls:
+        - hosts:
+            - ar-ips.dsba.aws.fiware.io
+          secretName: ar-ips-dsba-tls
+
+    ## Theme configuration for Keyrock
+    theme:
+      ## -- Enable theme
+      enabled: false
+
+    ## Configuration of Authorisation Registry (AR)
+    authorisationRegistry:
+      # -- Enable usage of authorisation registry
+      enabled: true
+      # -- Identifier (EORI) of AR
+      identifier: "did:web:ips.dsba.aws.fiware.io:did"
+      # -- URL of AR
+      url: "internal"
+
+    ## Configuration of iSHARE Satellite
+    satellite:
+      # -- Enable usage of satellite
+      enabled: true
+      # -- Identifier (EORI) of satellite
+      identifier: "EU.EORI.FIWARESATELLITE"
+      # -- URL of satellite
+      url: "https://tir.dsba.fiware.dev"
+      # -- Token endpoint of satellite
+      tokenEndpoint: "https://tir.dsba.fiware.dev/token"
+      # -- Parties endpoint of satellite
+      partiesEndpoint: "https://tir.dsba.fiware.dev/parties"
+
+    ## -- Configuration of local key and certificate for validation and generation of tokens
+    token:
+      # -- Enable storage of local key and certificate
+      enabled: false
+
+    # ENV variables for Keyrock
+    additionalEnvVars:
+      - name: IDM_TITLE
+        value: "IPS AR"
+      - name: IDM_DEBUG
+        value: "true"
+      - name: DEBUG
+        value: "*"
+      - name: IDM_DB_NAME
+        value: ar_idm_ips
+      - name: IDM_DB_SEED
+        value: "true"
+      - name: IDM_SERVER_MAX_HEADER_SIZE
+        value: "32768"
+      - name: IDM_PR_CLIENT_ID
+        value: "did:web:ips.dsba.aws.fiware.io:did"
+      - name: IDM_PR_CLIENT_KEY
+        valueFrom:
+            secretKeyRef:
+              name: ips-dsc-vcwaltid-tls-sec
+              key: tls.key
+      - name: IDM_PR_CLIENT_CRT
+        valueFrom:
+            secretKeyRef:
+              name: ips-dsc-vcwaltid-tls-sec
+              key: tls.crt
+
+    # Init data
+    initData:
+      initEnabled: true
+      hook: post-install
+      backoffLimit: 6
+      command: 
+        - /bin/sh
+        - /scripts/create.sh
+      volumeMount:
+        name: scripts
+        mountPath: /scripts
+      env:
+        - name: DB_PASSWORD
+          value: "dbPassword"
+      scriptData:
+        create.sh: |-
+          mysql -h mysql-ips -u root -p$DB_PASSWORD ar_idm_ips <<EOF
+
+          -- Static objects
+          SET @rules := JSON_ARRAY(
+            JSON_OBJECT(
+              "effect", "Permit"
+            )
+          );
+
+          SET @subjectGold := "GOLD_CUSTOMER";
+          SET @subjectStandard := "STANDARD_CUSTOMER";
+
+          -- Policies Gold
+          SET @policiesGold := JSON_ARRAY(
+            JSON_OBJECT(
+              "rules", CAST(@rules as JSON),
+              "target", JSON_OBJECT(
+                "actions", JSON_ARRAY("PATCH"),
+                "resource", JSON_OBJECT(
+                  "type", "DELIVERYORDER",
+                  "attributes", JSON_ARRAY("pta","pda"),
+                  "identifiers", JSON_ARRAY("*")
+                )
+              )
+            ),
+            JSON_OBJECT(
+              "rules", CAST(@rules as JSON),
+              "target", JSON_OBJECT(
+                "actions", JSON_ARRAY("GET"),
+                "resource", JSON_OBJECT(
+                  "type", "DELIVERYORDER",
+                  "attributes", JSON_ARRAY("*"),
+                  "identifiers", JSON_ARRAY("*")
+                )
+              )
+            )
+          );
+
+          -- Policies Standard
+          SET @policiesStandard := JSON_ARRAY(
+            JSON_OBJECT(
+              "rules", CAST(@rules as JSON),
+              "target", JSON_OBJECT(
+                "actions", JSON_ARRAY("GET"),
+                "resource", JSON_OBJECT(
+                  "type", "DELIVERYORDER",
+                  "attributes", JSON_ARRAY("*"),
+                  "identifiers", JSON_ARRAY("*")
+                )
+              )
+            )
+          );
+
+          -- Insert Delegation Evidence Gold VC
+          SET @delegationGoldVC := JSON_OBJECT(
+            "target", JSON_OBJECT(
+              "accessSubject", @subjectGold
+            ),
+            "notBefore", 1616583866,
+            "notOnOrAfter", 1735817171,
+            "policyIssuer", "did:web:ips.dsba.aws.fiware.io:did",
+            "policySets", JSON_ARRAY(
+              JSON_OBJECT(
+                "target", JSON_OBJECT(
+                  "environment", JSON_OBJECT(
+                    "licenses", JSON_ARRAY("ISHARE.0001")
+                  )
+                ),
+                "policies", CAST(@policiesGold as JSON)
+              )
+            )
+          );
+          INSERT IGNORE INTO delegation_evidence (policy_issuer, access_subject,policy) VALUES ("did:web:ips.dsba.aws.fiware.io:did", @subjectGold, @delegationGoldVC);
+
+          -- Insert Delegation Evidence Standard VC
+          SET @delegationStandardVC := JSON_OBJECT(
+            "target", JSON_OBJECT(
+              "accessSubject", @subjectStandard
+            ),
+            "notBefore", 1616583866,
+            "notOnOrAfter", 1735817171,
+            "policyIssuer", "did:web:ips.dsba.aws.fiware.io:did",
+            "policySets", JSON_ARRAY(
+              JSON_OBJECT(
+                "target", JSON_OBJECT(
+                  "environment", JSON_OBJECT(
+                    "licenses", JSON_ARRAY("ISHARE.0001")
+                  )
+                ),
+                "policies", CAST(@policiesStandard as JSON)
+              )
+            )
+          );
+          INSERT IGNORE INTO delegation_evidence (policy_issuer, access_subject,policy) VALUES ("did:web:ips.dsba.aws.fiware.io:did", @subjectStandard, @delegationStandardVC);
+
+          COMMIT;
+          EOF
+
+
+keycloak:
+  # Enable the deployment of application: keycloak
+  deploymentEnabled: true
+
+  # Config to create DID
+  didConfig:
+    # Enable creation of ConfigMap for loading the DID into walt-id
+    # When disabling, also remove the load-did initContainer from the list above
+    loadDidWebEnabled: true
+
+    # Domain for DID web
+    domain: "ips.dsba.aws.fiware.io"
+
+    # x5u for DID web
+    x5u: "https://ips.dsba.aws.fiware.io/certs/tls.crt"
+
+    
+  keycloak:
+
+    # Logging
+    logging:
+      level: DEBUG
+
+    # Replica
+    replicaCount: 1
+
+    # Admin account
+    auth:
+      adminUser: fiwareAdmin
+      adminPassword: fiwareAdmin
+
+    # Ingress
+    ingress:
+      enabled: true
+      #ingressClassName: nginx
+      hostname: ips-kc.dsba.aws.fiware.io
+      tls: true
+      annotations:
+        kubernetes.io/ingress.class: nginx
+        cert-manager.io/cluster-issuer: letsencrypt-fiware-eks
+
+    # ENVs
+    extraEnvVars:
+    - name: KEYCLOAK_PROXY_ADDRESS_FORWARDING
+      value: "true"
+    - name: KEYCLOAK_LOG_LEVEL
+      value: DEBUG
+    - name: VCISSUER_ISSUER_DID
+      value: "did:web:ips.dsba.aws.fiware.io:did"
+    - name: VCISSUER_WALTID_ADDRESS
+      value: "http://ips-dsc-vcwaltid"
+
+    # Volumes
+    extraVolumes:
+      - name: data
+        emptyDir: {}
+      - name: profiles
+        configMap:
+          name: ips-dsc-keycloak-profile
+      - name: providers
+        emptyDir: {}
+      - name: did-config
+        configMap:
+          name: ips-dsc-keycloak-did-config
+      - name: did-secret
+        secret:
+          secretName: ips-dsc-vcwaltid-tls-sec
+
+    # Init containers for VC issuer and loading of DID
+    initContainers:
+      - name: add-vc-issuer
+        image: quay.io/fiware/keycloak-vc-issuer:0.5.0
+        imagePullPolicy: Always
+        volumeMounts:
+          - name: providers
+            mountPath: /target
+      - name: load-did
+        image: quay.io/opencloudio/curl:4.2.0-build.8
+        imagePullPolicy: Always
+        command:
+          - /bin/sh
+          - /opt/did/script/import.sh
+        env:
+          - name: WALTID_CORE_ADDRESS
+            value: "ips-dsc-vcwaltid:7000"
+        volumeMounts:
+          - name: did-config
+            mountPath: /opt/did/script
+          - name: did-secret
+            mountPath: /opt/did/secret
+
+    # Disable internal DB
+    postgresql:
+      enabled: false
+
+    # Config for external DB
+    externalDatabase:
+      host: postgresql-ips
+      user: postgres
+      password: "dbRootPassword"
+      database: keycloak_ips
+
+    # CLI config
+    keycloakConfigCli:
+      enabled: true
+      
+      # Realm config - either provide configuration or existing ConfigMap
+      configuration:
+        realm.json: |-
+          {
+            "id": "fiware-server",
+            "realm": "fiware-server",
+            "accountTheme": "siop-2",
+            "displayName": "IPS Keycloak",
+            "displayNameHtml": "<div class=\"kc-logo-text\"><span>IPS Keycloak</span></div>",
+            "enabled": true,
+            "attributes": {
+              "frontendUrl": "https://ips-kc.dsba.aws.fiware.io"
+            },
+            "sslRequired": "none",
+            "roles": {
+              "realm": [
+                {
+                  "name": "user",
+                  "description": "User privileges",
+                  "composite": false,
+                  "clientRole": false,
+                  "containerId": "fiware-server",
+                  "attributes": {}
+                }
+              ],
+              "client": {
+                "did:web:onboarding.dsba.fiware.dev:did": [
+                  {
+                    "name": "LEGAL_REPRESENTATIVE",
+                    "description": "Is allowed to register participants",
+                    "clientRole": true
+                  },
+                  {
+                    "name": "EMPLOYEE",
+                    "description": "Is allowed to see participants",
+                    "clientRole": true
+                  }
+                ],
+                "did:web:marketplace.dsba.fiware.dev:did": [
+                  {
+                    "name": "customer",
+                    "description": "Is allowed to buy.",
+                    "clientRole": true
+                  },
+                  {
+                    "name": "seller",
+                    "description": "Is allowed to offer.",
+                    "clientRole": true
+                  }
+                ],
+                "did:web:ips.dsba.aws.fiware.io:did": [
+                  {
+                    "name": "STANDARD_CUSTOMER",
+                    "description": "User to access IPS with read access",
+                    "clientRole": true
+                  },
+                  {
+                    "name": "GOLD_CUSTOMER",
+                    "description": "User to access IPS with read/write access",
+                    "clientRole": true
+                  }
+                ]
+              }
+            },
+            "groups": [
+              {
+                "name": "admin",
+                "path": "/admin",
+                "realmRoles": [
+                  "user"
+                ]
+              },
+              {
+                "name": "consumer",
+                "path": "/consumer",
+                "realmRoles": [
+                  "user"
+                ]
+              }
+            ],
+            "users": [
+              {
+                "username": "the-lear",
+                "enabled": true,
+                "email": "lear@ips.org",
+                "credentials": [
+                  {
+                    "type": "password",
+                    "value": "the-lear"
+                  }
+                ],
+                "clientRoles": {
+                  "did:web:onboarding.dsba.fiware.dev:did": [
+                    "LEGAL_REPRESENTATIVE",
+                    "EMPLOYEE"
+                  ],
+                  "account": [
+                    "view-profile",
+                    "manage-account"
+                  ]
+                },
+                "groups": [
+                  "/admin",
+                  "/consumer"
+                ]
+              },
+              {
+                "username": "legal-representative",
+                "enabled": true,
+                "email": "legal-representative@ips.org",
+                "firstName": "Legal",
+                "lastName": "IPSEmployee",
+                "credentials": [
+                  {
+                    "type": "password",
+                    "value": "legal-representative"
+                  }
+                ],
+                "clientRoles": {
+                  "did:web:marketplace.dsba.fiware.dev:did" : [
+                    "customer",
+                    "seller"
+                  ],
+                  "did:web:onboarding.dsba.fiware.dev:did": [
+                    "LEGAL_REPRESENTATIVE"
+                  ],
+                  "account": [
+                    "view-profile",
+                    "manage-account"
+                  ]
+                },
+                "groups": [
+                  "/admin",
+                  "/consumer"
+                ]
+              },
+              {
+                "username": "standard-employee",
+                "enabled": true,
+                "email": "standard-employee@ips.org",
+                "credentials": [
+                  {
+                    "type": "password",
+                    "value": "standard-employee"
+                  }
+                ],
+                "clientRoles": {
+                  "did:web:onboarding.dsba.fiware.dev:did": [
+                    "EMPLOYEE"
+                  ],
+                  "did:web:ips.dsba.aws.fiware.io:did": [
+                    "GOLD_CUSTOMER"
+                  ],
+                  "account": [
+                    "view-profile",
+                    "manage-account"
+                  ]
+                },
+                "groups": [
+                  "/consumer"
+                ]
+              }
+            ],
+            "clients": [
+              {
+                "clientId": "did:web:ips.dsba.aws.fiware.io:did",
+                "enabled": true,
+                "description": "Client for internal users",
+                "surrogateAuthRequired": false,
+                "alwaysDisplayInConsole": false,
+                "clientAuthenticatorType": "client-secret",
+                "defaultRoles": [],
+                "redirectUris": [],
+                "webOrigins": [],
+                "notBefore": 0,
+                "bearerOnly": false,
+                "consentRequired": false,
+                "standardFlowEnabled": true,
+                "implicitFlowEnabled": false,
+                "directAccessGrantsEnabled": false,
+                "serviceAccountsEnabled": false,
+                "publicClient": false,
+                "frontchannelLogout": false,
+                "protocol": "SIOP-2",
+                "attributes": {
+                    "client.secret.creation.time": "1675260539",
+                    "expiryInMin": "3600",
+                    "vctypes_EmployeeCredential": "ldp_vc,jwt_vc_json",
+                    "EmployeeCredential_claims": "email,firstName,familyName,roles"
+                },
+                "authenticationFlowBindingOverrides": {},
+                "fullScopeAllowed": true,
+                "nodeReRegistrationTimeout": -1,
+                "defaultClientScopes": [],
+                "optionalClientScopes": []
+              },
+              {
+                "clientId": "did:web:marketplace.dsba.fiware.dev:did",
+                "enabled": true,
+                "description": "Client to connect to the marketplace",
+                "surrogateAuthRequired": false,
+                "alwaysDisplayInConsole": false,
+                "clientAuthenticatorType": "client-secret",
+                "defaultRoles": [],
+                "redirectUris": [],
+                "webOrigins": [],
+                "notBefore": 0,
+                "bearerOnly": false,
+                "consentRequired": false,
+                "standardFlowEnabled": true,
+                "implicitFlowEnabled": false,
+                "directAccessGrantsEnabled": false,
+                "serviceAccountsEnabled": false,
+                "publicClient": false,
+                "frontchannelLogout": false,
+                "protocol": "SIOP-2",
+                "attributes": {
+                    "client.secret.creation.time": "1675260539",
+                    "expiryInMin": "3600",
+                    "vctypes_MarketplaceUserCredential": "ldp_vc,jwt_vc_json",
+                    "MarketplaceUserCredential_claims": "email,firstName,lastName,roles"
+                },
+                "authenticationFlowBindingOverrides": {},
+                "fullScopeAllowed": true,
+                "nodeReRegistrationTimeout": -1,
+                "defaultClientScopes": [],
+                "optionalClientScopes": []
+              },
+              {
+                "clientId": "did:web:onboarding.dsba.fiware.dev:did",
+                "enabled": true,
+                "description": "Client to connect the onboarding service at portal.dsba.fiware.dev",
+                "surrogateAuthRequired": false,
+                "alwaysDisplayInConsole": false,
+                "clientAuthenticatorType": "client-secret",
+                "defaultRoles": [],
+                "redirectUris": [],
+                "webOrigins": [],
+                "notBefore": 0,
+                "bearerOnly": false,
+                "consentRequired": false,
+                "standardFlowEnabled": true,
+                "implicitFlowEnabled": false,
+                "directAccessGrantsEnabled": false,
+                "serviceAccountsEnabled": false,
+                "publicClient": false,
+                "frontchannelLogout": false,
+                "protocol": "SIOP-2",
+                "attributes": {
+                    "client.secret.creation.time": "1675260539",
+                    "expiryInMin": "3600",
+                    "vctypes_NaturalPersonCredential": "ldp_vc,jwt_vc_json",
+                    "vctypes_GaiaXParticipantCredential": "ldp_vc,jwt_vc_json",
+                    "vc_subjectDid": "did:web:packetdelivery.dsba.fiware.dev:did",
+                    "vc_gx:legalName": "Packet Delivery Company Inc.",
+                    "GaiaXParticipantCredential_claims": "subjectDid,gx:legalName",
+                    "NaturalPersonCredential_claims": "email,firstName,familyName,roles"
+                },
+                "authenticationFlowBindingOverrides": {},
+                "fullScopeAllowed": true,
+                "nodeReRegistrationTimeout": -1,
+                "defaultClientScopes": [],
+                "optionalClientScopes": []
+              },
+              {
+                "clientId": "did:web:marketplace.dsba.fiware.dev:did",
+                "enabled": true,
+                "description": "Client to connect to the marketplace",
+                "surrogateAuthRequired": false,
+                "alwaysDisplayInConsole": false,
+                "clientAuthenticatorType": "client-secret",
+                "defaultRoles": [],
+                "redirectUris": [],
+                "webOrigins": [],
+                "notBefore": 0,
+                "bearerOnly": false,
+                "consentRequired": false,
+                "standardFlowEnabled": true,
+                "implicitFlowEnabled": false,
+                "directAccessGrantsEnabled": false,
+                "serviceAccountsEnabled": false,
+                "publicClient": false,
+                "frontchannelLogout": false,
+                "protocol": "SIOP-2",
+                "attributes": {
+                    "client.secret.creation.time": "1675260539",
+                    "expiryInMin": "3600",
+                    "vctypes_MarketplaceUserCredential": "ldp_vc,jwt_vc_json",
+                    "MarketplaceUserCredential_claims": "email,firstName,lastName,roles"
+                },
+                "authenticationFlowBindingOverrides": {},
+                "fullScopeAllowed": true,
+                "nodeReRegistrationTimeout": -1,
+                "defaultClientScopes": [],
+                "optionalClientScopes": []
+              }
+            ],
+            "clientScopes": [
+              {
+                "name": "fiware-scope",
+                "protocol": "openid-connect",
+                "attributes": {
+                  "include.in.token.scope": "true",
+                  "display.on.consent.screen": "false"
+                },
+                "protocolMappers": [
+                  {
+                    "name": "fiware-scope-object",
+                    "protocol": "openid-connect",
+                    "protocolMapper": "oidc-script-based-protocol-mapper",
+                    "consentRequired": false,
+                    "config": {
+                      "userinfo.token.claim": "true",
+                      "multivalued": "true",
+                      "id.token.claim": "true",
+                      "access.token.claim": "true",
+                      "claim.name": "fiware-scope-object",
+                      "script": "/**\n * Available variables: \n * user - the current user\n * realm - the current realm\n * token - the current token\n * userSession - the current userSession\n * keycloakSession - the current userSession\n */\n\nvar ArrayList = Java.type(\"java.util.ArrayList\");\nvar fiware_scope = new ArrayList();\n\nvar forEach = Array.prototype.forEach;\n\nvar fiware_service;\nvar fiware_servicepath;\nvar fiware_entry;\nvar roles = '';\n\nvar orion_client = realm.getClientByClientId('orion-pep');\n\nfiware_service = user.getFirstAttribute('fiware-service');\nfiware_servicepath = user.getFirstAttribute('fiware-servicepath');\nif (fiware_service !== null && fiware_servicepath !== null) {\n\n    fiware_entry = {\n        \"fiware-service\": fiware_service,\n        \"fiware-servicepath\": fiware_servicepath\n    };\n\n    var roleModels = user.getClientRoleMappings(orion_client);\n    if (roleModels.size() > 0) {\n        forEach.call(\n            user.getClientRoleMappings(orion_client).toArray(),\n            function (role) {\n                roles = roles + role.getName() + \",\";\n            }\n        );\n        roles = roles.substring(0, roles.length - 1);\n        fiware_entry[\"orion-roles\"] = roles;\n        roles = '';\n    }\n\n    fiware_scope.add(JSON.stringify(fiware_entry));\n    fiware_entry = {};\n}\n\nforEach.call(\n    user.getGroups().toArray(),\n    function (group) {\n\n        fiware_service = group.getFirstAttribute('fiware-service');\n        fiware_servicepath = group.getFirstAttribute('fiware-servicepath');\n        if (fiware_service !== null && fiware_servicepath !== null) {\n            fiware_entry = {\n                \"fiware-service\": fiware_service,\n                \"fiware-servicepath\": fiware_servicepath\n            };\n\n            var roleModels = group.getClientRoleMappings(orion_client);\n            if (roleModels.size() > 0) {\n                forEach.call(\n                    group.getClientRoleMappings(orion_client).toArray(),\n                    function (role) {\n                        roles = roles + role.getName() + \",\";\n                    }\n                );\n                roles = roles.substring(0, roles.length - 1);\n                fiware_entry[\"orion-roles\"] = roles;\n                roles = '';\n            }\n\n            fiware_scope.add(JSON.stringify(fiware_entry));\n            fiware_entry = {};\n        } else if (group.getParentId() !== null) {\n            fiware_service = group.getParent().getFirstAttribute('fiware-service');\n            fiware_servicepath = group.getParent().getFirstAttribute('fiware-servicepath');\n\n            if (fiware_service !== null && fiware_servicepath !== null) {\n                fiware_entry = {\n                    \"fiware-service\": fiware_service,\n                    \"fiware-servicepath\": fiware_servicepath\n                };\n                var subroleModels = group.getClientRoleMappings(orion_client);\n                if (subroleModels.size() > 0) {\n                    forEach.call(\n                        group.getClientRoleMappings(orion_client).toArray(),\n                        function (role) {\n                            roles = roles + role.getName() + \",\";\n                        }\n                    );\n                    roles = roles.substring(0, roles.length - 1);\n                    fiware_entry[\"orion-roles\"] = roles;\n                    roles = '';\n                }\n\n                fiware_scope.add(JSON.stringify(fiware_entry));\n                fiware_entry = '';\n            }\n        }\n    }\n);\n\nexports = fiware_scope;"
+                    }
+                  }
+                ]
+              },
+              {
+                "name": "offline_access",
+                "description": "OpenID Connect built-in scope: offline_access",
+                "protocol": "openid-connect",
+                "attributes": {
+                  "consent.screen.text": "${offlineAccessScopeConsentText}",
+                  "display.on.consent.screen": "true"
+                }
+              },
+              {
+                "name": "microprofile-jwt",
+                "description": "Microprofile - JWT built-in scope",
+                "protocol": "openid-connect",
+                "attributes": {
+                  "include.in.token.scope": "true",
+                  "display.on.consent.screen": "false"
+                },
+                "protocolMappers": [
+                  {
+                    "name": "upn",
+                    "protocol": "openid-connect",
+                    "protocolMapper": "oidc-usermodel-property-mapper",
+                    "consentRequired": false,
+                    "config": {
+                      "userinfo.token.claim": "true",
+                      "user.attribute": "username",
+                      "id.token.claim": "true",
+                      "access.token.claim": "true",
+                      "claim.name": "upn",
+                      "jsonType.label": "String"
+                    }
+                  },
+                  {
+                    "name": "groups",
+                    "protocol": "openid-connect",
+                    "protocolMapper": "oidc-usermodel-realm-role-mapper",
+                    "consentRequired": false,
+                    "config": {
+                      "multivalued": "true",
+                      "user.attribute": "foo",
+                      "id.token.claim": "true",
+                      "access.token.claim": "true",
+                      "claim.name": "groups",
+                      "jsonType.label": "String"
+                    }
+                  }
+                ]
+              },
+              {
+                "name": "roles",
+                "description": "OpenID Connect scope for add user roles to the access token",
+                "protocol": "openid-connect",
+                "attributes": {
+                  "include.in.token.scope": "false",
+                  "display.on.consent.screen": "true",
+                  "consent.screen.text": "${rolesScopeConsentText}"
+                },
+                "protocolMappers": [
+                  {
+                    "name": "audience resolve",
+                    "protocol": "openid-connect",
+                    "protocolMapper": "oidc-audience-resolve-mapper",
+                    "consentRequired": false,
+                    "config": {}
+                  },
+                  {
+                    "name": "client roles",
+                    "protocol": "openid-connect",
+                    "protocolMapper": "oidc-usermodel-client-role-mapper",
+                    "consentRequired": false,
+                    "config": {
+                      "user.attribute": "foo",
+                      "access.token.claim": "true",
+                      "claim.name": "resource_access.${client_id}.roles",
+                      "jsonType.label": "String",
+                      "multivalued": "true"
+                    }
+                  },
+                  {
+                    "name": "realm roles",
+                    "protocol": "openid-connect",
+                    "protocolMapper": "oidc-usermodel-realm-role-mapper",
+                    "consentRequired": false,
+                    "config": {
+                      "user.attribute": "foo",
+                      "access.token.claim": "true",
+                      "claim.name": "realm_access.roles",
+                      "jsonType.label": "String",
+                      "multivalued": "true"
+                    }
+                  }
+                ]
+              },
+              {
+                "name": "email",
+                "description": "OpenID Connect built-in scope: email",
+                "protocol": "openid-connect",
+                "attributes": {
+                  "include.in.token.scope": "true",
+                  "display.on.consent.screen": "true",
+                  "consent.screen.text": "${emailScopeConsentText}"
+                },
+                "protocolMappers": [
+                  {
+                    "name": "email",
+                    "protocol": "openid-connect",
+                    "protocolMapper": "oidc-usermodel-property-mapper",
+                    "consentRequired": false,
+                    "config": {
+                      "userinfo.token.claim": "true",
+                      "user.attribute": "email",
+                      "id.token.claim": "true",
+                      "access.token.claim": "true",
+                      "claim.name": "email",
+                      "jsonType.label": "String"
+                    }
+                  },
+                  {
+                    "name": "email verified",
+                    "protocol": "openid-connect",
+                    "protocolMapper": "oidc-usermodel-property-mapper",
+                    "consentRequired": false,
+                    "config": {
+                      "userinfo.token.claim": "true",
+                      "user.attribute": "emailVerified",
+                      "id.token.claim": "true",
+                      "access.token.claim": "true",
+                      "claim.name": "email_verified",
+                      "jsonType.label": "boolean"
+                    }
+                  }
+                ]
+              },
+              {
+                "name": "phone",
+                "description": "OpenID Connect built-in scope: phone",
+                "protocol": "openid-connect",
+                "attributes": {
+                  "include.in.token.scope": "true",
+                  "display.on.consent.screen": "true",
+                  "consent.screen.text": "${phoneScopeConsentText}"
+                },
+                "protocolMappers": [
+                  {
+                    "name": "phone number verified",
+                    "protocol": "openid-connect",
+                    "protocolMapper": "oidc-usermodel-attribute-mapper",
+                    "consentRequired": false,
+                    "config": {
+                      "userinfo.token.claim": "true",
+                      "user.attribute": "phoneNumberVerified",
+                      "id.token.claim": "true",
+                      "access.token.claim": "true",
+                      "claim.name": "phone_number_verified",
+                      "jsonType.label": "boolean"
+                    }
+                  },
+                  {
+                    "name": "phone number",
+                    "protocol": "openid-connect",
+                    "protocolMapper": "oidc-usermodel-attribute-mapper",
+                    "consentRequired": false,
+                    "config": {
+                      "userinfo.token.claim": "true",
+                      "user.attribute": "phoneNumber",
+                      "id.token.claim": "true",
+                      "access.token.claim": "true",
+                      "claim.name": "phone_number",
+                      "jsonType.label": "String"
+                    }
+                  }
+                ]
+              },
+              {
+                "name": "address",
+                "description": "OpenID Connect built-in scope: address",
+                "protocol": "openid-connect",
+                "attributes": {
+                  "include.in.token.scope": "true",
+                  "display.on.consent.screen": "true",
+                  "consent.screen.text": "${addressScopeConsentText}"
+                },
+                "protocolMappers": [
+                  {
+                    "name": "address",
+                    "protocol": "openid-connect",
+                    "protocolMapper": "oidc-address-mapper",
+                    "consentRequired": false,
+                    "config": {
+                      "user.attribute.formatted": "formatted",
+                      "user.attribute.country": "country",
+                      "user.attribute.postal_code": "postal_code",
+                      "userinfo.token.claim": "true",
+                      "user.attribute.street": "street",
+                      "id.token.claim": "true",
+                      "user.attribute.region": "region",
+                      "access.token.claim": "true",
+                      "user.attribute.locality": "locality"
+                    }
+                  }
+                ]
+              },
+              {
+                "name": "role_list",
+                "description": "SAML role list",
+                "protocol": "saml",
+                "attributes": {
+                  "consent.screen.text": "${samlRoleListScopeConsentText}",
+                  "display.on.consent.screen": "true"
+                },
+                "protocolMappers": [
+                  {
+                    "name": "role list",
+                    "protocol": "saml",
+                    "protocolMapper": "saml-role-list-mapper",
+                    "consentRequired": false,
+                    "config": {
+                      "single": "false",
+                      "attribute.nameformat": "Basic",
+                      "attribute.name": "Role"
+                    }
+                  }
+                ]
+              },
+              {
+                "name": "profile",
+                "description": "OpenID Connect built-in scope: profile",
+                "protocol": "openid-connect",
+                "attributes": {
+                  "include.in.token.scope": "true",
+                  "display.on.consent.screen": "true",
+                  "consent.screen.text": "${profileScopeConsentText}"
+                },
+                "protocolMappers": [
+                  {
+                    "name": "zoneinfo",
+                    "protocol": "openid-connect",
+                    "protocolMapper": "oidc-usermodel-attribute-mapper",
+                    "consentRequired": false,
+                    "config": {
+                      "userinfo.token.claim": "true",
+                      "user.attribute": "zoneinfo",
+                      "id.token.claim": "true",
+                      "access.token.claim": "true",
+                      "claim.name": "zoneinfo",
+                      "jsonType.label": "String"
+                    }
+                  },
+                  {
+                    "name": "nickname",
+                    "protocol": "openid-connect",
+                    "protocolMapper": "oidc-usermodel-attribute-mapper",
+                    "consentRequired": false,
+                    "config": {
+                      "userinfo.token.claim": "true",
+                      "user.attribute": "nickname",
+                      "id.token.claim": "true",
+                      "access.token.claim": "true",
+                      "claim.name": "nickname",
+                      "jsonType.label": "String"
+                    }
+                  },
+                  {
+                    "name": "profile",
+                    "protocol": "openid-connect",
+                    "protocolMapper": "oidc-usermodel-attribute-mapper",
+                    "consentRequired": false,
+                    "config": {
+                      "userinfo.token.claim": "true",
+                      "user.attribute": "profile",
+                      "id.token.claim": "true",
+                      "access.token.claim": "true",
+                      "claim.name": "profile",
+                      "jsonType.label": "String"
+                    }
+                  },
+                  {
+                    "name": "full name",
+                    "protocol": "openid-connect",
+                    "protocolMapper": "oidc-full-name-mapper",
+                    "consentRequired": false,
+                    "config": {
+                      "id.token.claim": "true",
+                      "access.token.claim": "true",
+                      "userinfo.token.claim": "true"
+                    }
+                  },
+                  {
+                    "name": "birthdate",
+                    "protocol": "openid-connect",
+                    "protocolMapper": "oidc-usermodel-attribute-mapper",
+                    "consentRequired": false,
+                    "config": {
+                      "userinfo.token.claim": "true",
+                      "user.attribute": "birthdate",
+                      "id.token.claim": "true",
+                      "access.token.claim": "true",
+                      "claim.name": "birthdate",
+                      "jsonType.label": "String"
+                    }
+                  },
+                  {
+                    "name": "family name",
+                    "protocol": "openid-connect",
+                    "protocolMapper": "oidc-usermodel-property-mapper",
+                    "consentRequired": false,
+                    "config": {
+                      "userinfo.token.claim": "true",
+                      "user.attribute": "lastName",
+                      "id.token.claim": "true",
+                      "access.token.claim": "true",
+                      "claim.name": "family_name",
+                      "jsonType.label": "String"
+                    }
+                  },
+                  {
+                    "name": "picture",
+                    "protocol": "openid-connect",
+                    "protocolMapper": "oidc-usermodel-attribute-mapper",
+                    "consentRequired": false,
+                    "config": {
+                      "userinfo.token.claim": "true",
+                      "user.attribute": "picture",
+                      "id.token.claim": "true",
+                      "access.token.claim": "true",
+                      "claim.name": "picture",
+                      "jsonType.label": "String"
+                    }
+                  },
+                  {
+                    "name": "website",
+                    "protocol": "openid-connect",
+                    "protocolMapper": "oidc-usermodel-attribute-mapper",
+                    "consentRequired": false,
+                    "config": {
+                      "userinfo.token.claim": "true",
+                      "user.attribute": "website",
+                      "id.token.claim": "true",
+                      "access.token.claim": "true",
+                      "claim.name": "website",
+                      "jsonType.label": "String"
+                    }
+                  },
+                  {
+                    "name": "locale",
+                    "protocol": "openid-connect",
+                    "protocolMapper": "oidc-usermodel-attribute-mapper",
+                    "consentRequired": false,
+                    "config": {
+                      "userinfo.token.claim": "true",
+                      "user.attribute": "locale",
+                      "id.token.claim": "true",
+                      "access.token.claim": "true",
+                      "claim.name": "locale",
+                      "jsonType.label": "String"
+                    }
+                  },
+                  {
+                    "name": "username",
+                    "protocol": "openid-connect",
+                    "protocolMapper": "oidc-usermodel-property-mapper",
+                    "consentRequired": false,
+                    "config": {
+                      "userinfo.token.claim": "true",
+                      "user.attribute": "username",
+                      "id.token.claim": "true",
+                      "access.token.claim": "true",
+                      "claim.name": "preferred_username",
+                      "jsonType.label": "String"
+                    }
+                  },
+                  {
+                    "name": "given name",
+                    "protocol": "openid-connect",
+                    "protocolMapper": "oidc-usermodel-property-mapper",
+                    "consentRequired": false,
+                    "config": {
+                      "userinfo.token.claim": "true",
+                      "user.attribute": "firstName",
+                      "id.token.claim": "true",
+                      "access.token.claim": "true",
+                      "claim.name": "given_name",
+                      "jsonType.label": "String"
+                    }
+                  },
+                  {
+                    "name": "updated at",
+                    "protocol": "openid-connect",
+                    "protocolMapper": "oidc-usermodel-attribute-mapper",
+                    "consentRequired": false,
+                    "config": {
+                      "userinfo.token.claim": "true",
+                      "user.attribute": "updatedAt",
+                      "id.token.claim": "true",
+                      "access.token.claim": "true",
+                      "claim.name": "updated_at",
+                      "jsonType.label": "String"
+                    }
+                  },
+                  {
+                    "name": "middle name",
+                    "protocol": "openid-connect",
+                    "protocolMapper": "oidc-usermodel-attribute-mapper",
+                    "consentRequired": false,
+                    "config": {
+                      "userinfo.token.claim": "true",
+                      "user.attribute": "middleName",
+                      "id.token.claim": "true",
+                      "access.token.claim": "true",
+                      "claim.name": "middle_name",
+                      "jsonType.label": "String"
+                    }
+                  },
+                  {
+                    "name": "gender",
+                    "protocol": "openid-connect",
+                    "protocolMapper": "oidc-usermodel-attribute-mapper",
+                    "consentRequired": false,
+                    "config": {
+                      "userinfo.token.claim": "true",
+                      "user.attribute": "gender",
+                      "id.token.claim": "true",
+                      "access.token.claim": "true",
+                      "claim.name": "gender",
+                      "jsonType.label": "String"
+                    }
+                  }
+                ]
+              },
+              {
+                "name": "web-origins",
+                "description": "OpenID Connect scope for add allowed web origins to the access token",
+                "protocol": "openid-connect",
+                "attributes": {
+                  "include.in.token.scope": "false",
+                  "display.on.consent.screen": "false",
+                  "consent.screen.text": ""
+                },
+                "protocolMappers": [
+                  {
+                    "name": "allowed web origins",
+                    "protocol": "openid-connect",
+                    "protocolMapper": "oidc-allowed-origins-mapper",
+                    "consentRequired": false,
+                    "config": {}
+                  }
+                ]
+              }
+            ],
+            "defaultDefaultClientScopes": [
+              "roles",
+              "role_list",
+              "email",
+              "web-origins",
+              "profile"
+            ],
+            "defaultOptionalClientScopes": [
+              "microprofile-jwt",
+              "phone",
+              "address",
+              "offline_access"
+            ]
+          }
+
+
+    
+  

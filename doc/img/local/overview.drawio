@@ -1,0 +1,31 @@
+<mxfile host="app.diagrams.net" modified="2024-05-30T12:58:50.881Z" agent="Mozilla/5.0 (X11; Linux x86_64; rv:124.0) Gecko/20100101 Firefox/124.0" etag="sOxzA_LlFOzhdpJA0E6I" version="24.4.9" type="device">
+  <diagram name="Page-1" id="rYzr1DH2yIFesMKslzU0">
+    <mxGraphModel dx="1434" dy="764" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="w16GQVXMl-_tRw7hFywQ-1" value="Trust Anchor" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="280" y="360" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="w16GQVXMl-_tRw7hFywQ-2" value="&lt;div&gt;M&amp;amp;P Operations Inc.&lt;/div&gt;&lt;div&gt;--- &lt;br&gt;&lt;/div&gt;&lt;div&gt;Data Provider&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="440" y="280" width="130" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="w16GQVXMl-_tRw7hFywQ-3" value="&lt;div&gt;Fancy Marketplace Co. &lt;br&gt;&lt;/div&gt;&lt;div&gt;--- &lt;br&gt;&lt;/div&gt;&lt;div&gt;Data Consumer&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="110" y="280" width="130" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="w16GQVXMl-_tRw7hFywQ-5" value="" style="endArrow=none;dashed=1;html=1;dashPattern=1 3;strokeWidth=2;rounded=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;exitX=0.5;exitY=1;exitDx=0;exitDy=0;" edge="1" parent="1" source="w16GQVXMl-_tRw7hFywQ-3" target="w16GQVXMl-_tRw7hFywQ-1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="100" y="450" as="sourcePoint" />
+            <mxPoint x="150" y="400" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="w16GQVXMl-_tRw7hFywQ-6" value="" style="endArrow=none;dashed=1;html=1;dashPattern=1 3;strokeWidth=2;rounded=0;entryX=0.5;entryY=1;entryDx=0;entryDy=0;exitX=1;exitY=0.5;exitDx=0;exitDy=0;" edge="1" parent="1" source="w16GQVXMl-_tRw7hFywQ-1" target="w16GQVXMl-_tRw7hFywQ-2">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="500" y="420" as="sourcePoint" />
+            <mxPoint x="550" y="370" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

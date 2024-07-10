@@ -7,44 +7,104 @@ on:
 
 jobs:
 
-  generate-version:
-    name: Generate version
-    runs-on: ubuntu-latest
+    generate-version:
+      name: "Generate version"
+      runs-on: ubuntu-latest
 
-    outputs:
-      version: ${{ steps.out.outputs.version }}
+      outputs:
+        version: ${{ steps.out.outputs.version }}
 
-    steps:
-      - uses: actions/checkout@v2
+      steps:
+        - uses: actions/checkout@v2
 
-      - id: pr
-        uses: actions-ecosystem/action-get-merged-pull-request@v1.0.1
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
+        - uses: actions/setup-java@v1
+          with:
+            java-version: '17'
+            java-package: jdk
 
-      - uses: zwaldowski/semver-release-action@v2
-        with:
-          dry_run: true
-          bump: ${{ steps.pr.outputs.labels }}
-          github_token: ${{ secrets.GITHUB_TOKEN }}
+        - id: pr
+          uses: actions-ecosystem/action-get-merged-pull-request@v1.0.1
+          with:
+            github_token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Set version output
-        id: out
-        run: echo "::set-output name=version::$(echo ${VERSION})"
+        - name: Match semver label via bash
+          id: match-label-bash
+          run: |
+            LABELS=$(cat <<-END
+            ${{ steps.pr.outputs.labels }}
+            END
+            )
+            IFS='\n' read -ra LABEL <<< "$LABELS"
+            for i in "${LABEL[@]}"; do
+                echo $i
+                case $i in
+                    # Will just use the first occurence
+                    'major'|'minor'|'patch')
+                        echo "RELEASE_LABEL=$i" >> $GITHUB_OUTPUT
+                        break
+                esac
+            done
+          
+        - uses: zwaldowski/semver-release-action@v2
+          with:
+            dry_run: true
+            bump: ${{ steps.match-label-bash.outputs.RELEASE_LABEL }}
+            github_token: ${{ secrets.GITHUB_TOKEN }}
 
+        - name: Set version output
+          id: out
+          run: echo "::set-output name=version::$(echo ${VERSION})"
 
-  git-release:
-    name: Git Release
-    needs: ["generate-version"]
-    runs-on: ubuntu-latest
+    deploy:
+      name: "Release charts"
+      needs:
+        - "generate-version"
+      runs-on: ubuntu-latest
 
-    steps:
+      steps:
+        - uses: actions/checkout@v2
 
-      - uses: actions/checkout@v2
+        - name: Fetch history
+          run: git fetch --prune --unshallow
 
-      - uses: "marvinpinto/action-automatic-releases@latest"
-        with:
-          repo_token: "${{ secrets.GITHUB_TOKEN }}"
-          automatic_release_tag: ${{ needs.generate-version.outputs.version }}
-          title: ${{ needs.generate-version.outputs.version }}
-          prerelease: false
+        - name: Configure Git
+          run: |
+            git config user.name "$GITHUB_ACTOR"
+            git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
+
+        - name: Install Helm
+          run: |
+            curl -fsSLo get_helm.sh https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3
+            chmod 700 get_helm.sh
+            ./get_helm.sh
+
+        - name: Run chart-releaser
+          uses: helm/chart-releaser-action@v1.5.0
+          env:
+            CR_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
+            CR_SKIP_EXISTING: true
+
+    git-release:
+      name: "Create Git Release"
+      needs: ["generate-version", "deploy"]
+      runs-on: ubuntu-latest
+
+      steps:
+
+        - uses: actions/checkout@v2
+
+        - name: Generate Table of contents
+          uses: technote-space/toc-generator@v4
+          with:
+            TARGET_PATHS: "./README.md,./doc/README.md"
+            COMMIT_MESSAGE: "Update ToC"
+
+        - uses: "marvinpinto/action-automatic-releases@latest"
+          with:
+            repo_token: "${{ secrets.GITHUB_TOKEN }}"
+            automatic_release_tag: ${{ needs.generate-version.outputs.version }}
+            prerelease: false
+            title: ${{ needs.generate-version.outputs.version }}
+            files: |
+              LICENSE
+

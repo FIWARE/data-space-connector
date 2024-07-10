@@ -1,0 +1,52 @@
+apiVersion: v2
+name: data-space-connector
+description: Umbrella Chart for the FIWARE Data Space Connector, combining all essential parts to be used by a participant.
+type: application
+version: 6.0.0
+dependencies:
+  - name: postgresql
+    condition: postgresql.enabled
+    repository: oci://registry-1.docker.io/bitnamicharts
+    version: 13.1.5
+  # authentication
+  - name: vcverifier
+    condition: vcverifier.enabled
+    version: 2.9.0
+    repository: https://fiware.github.io/helm-charts
+  - name: credentials-config-service
+    condition: credentials-config-service.enabled
+    version: 0.1.5
+    repository: https://fiware.github.io/helm-charts
+  - name: trusted-issuers-list
+    condition: trusted-issuers-list.enabled
+    version: 0.6.2
+    repository: https://fiware.github.io/helm-charts
+  - name: mysql
+    condition: mysql.enabled
+    version: 9.4.4
+    repository: https://charts.bitnami.com/bitnami
+  # authorization
+  - name: odrl-pap
+    condition: odrl-pap.enabled
+    version: 0.0.22
+    repository: https://fiware.github.io/helm-charts
+  - name: apisix
+    condition: apisix.enabled
+    version: 3.1.0
+    repository: oci://registry-1.docker.io/bitnamicharts
+  # data-service
+  - name: scorpio-broker-aaio
+    alias: scorpio
+    condition: scorpio.enabled
+    repository: https://fiware.github.io/helm-charts
+    version: 0.4.7
+  - name: postgresql
+    alias: postgis
+    condition: postgis.enabled
+    repository: oci://registry-1.docker.io/bitnamicharts
+    version: 13.1.5
+  # issuance
+  - name: keycloak
+    condition: keycloak.enabled
+    version: 21.1.1
+    repository: https://charts.bitnami.com/bitnami

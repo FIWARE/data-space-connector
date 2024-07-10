@@ -1,0 +1,19 @@
+{{- if .Values.dataSpaceConfig.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: dsconfig
+  namespace: {{ $.Release.Namespace | quote }}
+  labels:
+    {{ include "dsc.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.dataSpaceConfig.serviceType }}
+  ports:
+    - port: {{ .Values.dataSpaceConfig.port }}
+      targetPort: 3000
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: dsconfig
+    app.kubernetes.io/instance: {{ .Release.Name }}
+{{- end }}

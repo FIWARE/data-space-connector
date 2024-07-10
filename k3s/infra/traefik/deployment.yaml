@@ -1,0 +1,62 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: traefik
+  namespace: infra
+  labels:
+    app.kubernetes.io/name: traefik
+spec:
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: traefik
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: traefik
+    spec:
+      containers:
+        - name: traefik
+          image: traefik:v2.6.0
+          imagePullPolicy: IfNotPresent
+          args:
+            - --providers.kubernetesingress=true
+            - --entrypoints.traefik.address=:8090
+            - --entrypoints.http.address=:8080
+            - --accesslog=true
+            - --accesslog.fields.defaultmode=keep
+            - --accesslog.fields.headers.defaultmode=keep
+            - --ping=true
+            - --api.insecure=true
+            - --api.dashboard=true
+            - --api.debug=true
+            - --global.checknewversion=false
+            - --global.sendAnonymousUsage=false
+          ports:
+            - name: http
+              containerPort: 8080
+            - name: admin
+              containerPort: 8090
+          startupProbe:
+            httpGet:
+              path: /ping
+              port: admin
+            initialDelaySeconds: 1
+            periodSeconds: 1
+            successThreshold: 1
+            failureThreshold: 60
+          readinessProbe:
+            httpGet:
+              path: /ping
+              port: admin
+          livenessProbe:
+            httpGet:
+              path: /ping
+              port: admin
+          securityContext:
+            runAsUser: 10001
+            runAsGroup: 10001
+            readOnlyRootFilesystem: true
+      serviceAccountName: traefik
+      terminationGracePeriodSeconds: 0
