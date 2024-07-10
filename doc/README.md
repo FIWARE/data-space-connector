@@ -11,7 +11,7 @@ specific flows and its deployment and integration with other frameworks.
 
 <!-- START doctoc generated TOC please keep comment here to allow auto update -->
 <!-- DON'T EDIT THIS SECTION, INSTEAD RE-RUN doctoc TO UPDATE -->
-**Table of Contents**
+<!-- param::isNotitle::true:: -->
 
 - [Details about flows and interfaces](#details-about-flows-and-interfaces)
   - [Contract Management](#contract-management)
