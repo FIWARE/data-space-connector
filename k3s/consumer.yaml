@@ -1,0 +1,281 @@
+vcverifier:
+  enabled: false
+credentials-config-service:
+  enabled: false
+trusted-issuers-list:
+  enabled: false
+mysql:
+  enabled: false
+odrl-pap:
+  enabled: false
+apisix:
+  enabled: false
+scorpio:
+  enabled: false
+postgis:
+  enabled: false
+
+
+postgresql:
+  primary:
+    persistence:
+      enabled: false
+  readReplicas:
+    persistence:
+      enabled: false
+
+keycloak:
+  ingress:
+    enabled: true
+    hostname: keycloak-consumer.127.0.0.1.nip.io
+  args:
+    - -ec
+    - |
+      #!/bin/sh
+      export $(cat /did-material/did.env)
+      export KC_HOSTNAME=keycloak-consumer.127.0.0.1.nip.io
+      env | grep DID
+      /opt/keycloak/bin/kc.sh start --features oid4vc-vci --import-realm
+  initContainers:
+    - name: read-only-workaround
+      image: quay.io/wi_stefan/keycloak:25.0.0-PRE
+      command:
+        - /bin/bash
+      args:
+        - -ec
+        - |
+          #!/bin/bash
+          cp -r /opt/keycloak/lib/quarkus/* /quarkus
+      volumeMounts:
+        - name: empty-dir
+          mountPath: /quarkus
+          subPath: app-quarkus-dir
+
+    - name: get-did
+      image: ubuntu
+      command:
+        - /bin/bash
+      args:
+        - -ec
+        - |
+          #!/bin/bash
+          apt-get -y update; apt-get -y install wget; apt-get -y install sed;
+          
+          cd /did-material
+          wget http://did-helper:3001/did-material/cert.pfx
+          wget http://did-helper:3001/did-material/did.env
+          mkdir -p /did-material/client
+          cd /did-material/client
+          wget http://did-helper.provider.svc.cluster.local:3002/did-material/did.env
+          sed -i -e 's/DID/CLIENT_DID/g' /did-material/client/did.env
+          echo "" >> /did-material/did.env
+          echo $(cat /did-material/client/did.env) >> /did-material/did.env
+          echo $(cat /did-material/did.env)
+      volumeMounts:
+        - name: did-material
+          mountPath: /did-material
+
+    - name: register-at-tir
+      image: ubuntu
+      command:
+        - /bin/bash
+      args:
+        - -ec
+        - |
+          #!/bin/bash
+          source /did-material/did.env
+          apt-get -y update; apt-get -y install curl
+          curl -X 'POST' 'http://tir.trust-anchor.svc.cluster.local:8080/issuer' -H 'Content-Type: application/json' -d "{\"did\": \"${DID}\", \"credentials\": []}"
+      volumeMounts:
+        - name: did-material
+          mountPath: /did-material
+
+    - name: register-at-til
+      image: quay.io/curl/curl:8.1.2
+      command:
+        - /bin/sh
+      args:
+        - -ec
+        - |
+          #!/bin/sh
+          export $(cat /did-material/did.env)
+          /bin/init.sh
+      volumeMounts:
+        - name: consumer-til-registration
+          mountPath: /bin/init.sh
+          subPath: init.sh
+        - name: did-material
+          mountPath: /did-material
+
+  extraVolumes:
+    - name: did-material
+      emptyDir: { }
+    - name: qtm-temp
+      emptyDir: { }
+    - name: realms
+      configMap:
+        name: test-realm-realm
+    - name: consumer-til-registration
+      configMap:
+        name: consumer-til-registration
+        defaultMode: 0755
+  realm:
+    frontendUrl: http://keycloak-consumer.127.0.0.1.nip.io:8080
+    import: true
+    name: test-realm
+    clientRoles: |
+      "${CLIENT_DID}": [
+        {
+          "name": "READER",
+          "description": "Is allowed to register",
+          "clientRole": true
+        },
+        {
+          "name": "WRITER",
+          "description": "Is allowed to see",
+          "clientRole": true
+        }
+      ]
+
+    users: |
+      {
+        "username": "test-user",
+        "enabled": true,
+        "email": "test@user.org",
+        "firstName": "Test",
+        "lastName": "Reader",
+        "credentials": [
+          {
+            "type": "password",
+            "value": "test"
+          }
+        ],
+        "clientRoles": {
+          "${CLIENT_DID}": [
+            "READER"
+          ],
+          "account": [
+            "view-profile",
+            "manage-account"
+          ]
+        },
+        "groups": [
+        ]
+      }
+    clients: |
+      {
+        "clientId": "${CLIENT_DID}",
+        "enabled": true,
+        "description": "Client to connect test.org",
+        "surrogateAuthRequired": false,
+        "alwaysDisplayInConsole": false,
+        "clientAuthenticatorType": "client-secret",
+        "defaultRoles": [],
+        "redirectUris": [],
+        "webOrigins": [],
+        "notBefore": 0,
+        "bearerOnly": false,
+        "consentRequired": false,
+        "standardFlowEnabled": true,
+        "implicitFlowEnabled": false,
+        "directAccessGrantsEnabled": false,
+        "serviceAccountsEnabled": false,
+        "publicClient": false,
+        "frontchannelLogout": false,
+        "protocol": "oid4vc",
+        "attributes": {
+          "client.secret.creation.time": "1675260539",
+          "vc.user-credential.format": "jwt_vc",
+          "vc.user-credential.scope": "UserCredential",
+          "vc.verifiable-credential.format": "jwt_vc",
+          "vc.verifiable-credential.scope": "VerifiableCredential"
+        },
+        "protocolMappers": [
+          {
+            "name": "target-role-mapper",
+            "protocol": "oid4vc",
+            "protocolMapper": "oid4vc-target-role-mapper",
+            "config": {
+              "subjectProperty": "roles",
+              "clientId": "${CLIENT_DID}",
+              "supportedCredentialTypes": "VerifiableCredential"
+            }
+          },
+          {
+            "name": "target-vc-role-mapper",
+            "protocol": "oid4vc",
+            "protocolMapper": "oid4vc-target-role-mapper",
+            "config": {
+              "subjectProperty": "roles",
+              "clientId": "${CLIENT_DID}",
+              "supportedCredentialTypes": "UserCredential"
+            }
+          },
+          {
+            "name": "context-mapper",
+            "protocol": "oid4vc",
+            "protocolMapper": "oid4vc-context-mapper",
+            "config": {
+              "context": "https://www.w3.org/2018/credentials/v1",
+              "supportedCredentialTypes": "VerifiableCredential,UserCredential"
+            }
+          },
+          {
+            "name": "email-mapper",
+            "protocol": "oid4vc",
+            "protocolMapper": "oid4vc-user-attribute-mapper",
+            "config": {
+              "subjectProperty": "email",
+              "userAttribute": "email",
+              "supportedCredentialTypes": "UserCredential"
+            }
+          },
+          {
+            "name": "firstName-mapper",
+            "protocol": "oid4vc",
+            "protocolMapper": "oid4vc-user-attribute-mapper",
+            "config": {
+              "subjectProperty": "firstName",
+              "userAttribute": "firstName",
+              "supportedCredentialTypes": "UserCredential"
+            }
+          },
+          {
+            "name": "lastName-mapper",
+            "protocol": "oid4vc",
+            "protocolMapper": "oid4vc-user-attribute-mapper",
+            "config": {
+              "subjectProperty": "lastName",
+              "userAttribute": "lastName",
+              "supportedCredentialTypes": "UserCredential"
+            }
+          }
+        ],
+        "authenticationFlowBindingOverrides": {},
+        "fullScopeAllowed": true,
+        "nodeReRegistrationTimeout": -1,
+        "defaultClientScopes": [],
+        "optionalClientScopes": []
+      }
+did:
+  enabled: true
+  secret: issuance-secret
+  serviceType: ClusterIP
+  port: 3001
+  cert:
+    country: BE
+    state: BRUSSELS
+    locality: Brussels
+    organization: Fancy Marketplace Co.
+    commonName: www.fancy-marketplace.biz
+  ingress:
+    enabled: true
+    host: did-consumer.127.0.0.1.nip.io
+
+# register the consumer at the til. Only possible if it runs in the same environment and recommendable for demo deployments
+registration:
+  enabled: true
+  configMap: consumer-til-registration
+  til: http://trusted-issuers-list.provider.svc.cluster.local:8080
+  did: ${DID}
+  credentialsType: UserCredential

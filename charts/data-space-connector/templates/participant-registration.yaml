@@ -1,0 +1,23 @@
+{{- if .Values.registration.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Values.registration.configMap }}
+  namespace: {{ $.Release.Namespace | quote }}
+  labels:
+    {{- include "dsc.labels" . | nindent 4 }}
+data:
+  init.sh: |-
+    # credentials config service registration
+    curl -X 'POST' \
+      '{{ .Values.registration.til }}/issuer' \
+      -H 'accept: */*' \
+      -H 'Content-Type: application/json' \
+      -d "{
+      \"did\": \"{{ .Values.registration.did }}\",
+      \"credentials\": {
+        \"credentialsType\": \"{{ .Values.registration.credentialsType }}\"
+      }
+    }"
+
+{{- end }}

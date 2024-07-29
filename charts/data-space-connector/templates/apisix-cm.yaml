@@ -1,0 +1,31 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: apisix-routes
+  namespace: {{ $.Release.Namespace | quote }}
+  labels:
+    {{ include "dsc.labels" . | nindent 4 }}
+data:
+  apisix.yaml: |-
+    routes:
+    {{- if .Values.apisix.catchAllRoute.enabled }}
+      - uri: /*
+        upstream:
+            nodes:
+                {{ .Values.apisix.catchAllRoute.upstream.url}}: 1
+            type: roundrobin
+        plugins:
+          openid-connect:
+            client_id: {{ .Values.apisix.catchAllRoute.oidc.clientId }}
+            client_secret: the-secret
+            bearer_only: true
+            use_jwks: true
+            discovery: {{ .Values.apisix.catchAllRoute.oidc.discoveryEndpoint }}
+          opa:
+            host: "http://localhost:{{ .Values.opa.port }}"
+            policy: policy/main
+    {{- end }}
+    {{- if .Values.apisix.routes }}
+      {{ .Values.apisix.routes | nindent 6 }}
+    {{- end }}
+    #END

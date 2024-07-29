@@ -1,0 +1,173 @@
+name: Check PR
+
+on:
+  pull_request:
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - labeled
+      - unlabeled
+    branches:
+      - main
+
+jobs:
+
+  lint:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Lint
+        run: ./.github/scripts/lint.sh
+
+  eval:
+    runs-on: ubuntu-latest
+    needs:
+      - lint
+
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '>=1.17.0'
+        
+      - name: Eval
+        run: |
+          .github/build/install.sh
+          .github/scripts/eval.sh
+
+  check-labels:
+    runs-on: ubuntu-latest
+    needs:
+      - lint
+      - eval
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - uses: actions/setup-java@v1
+        with:
+          java-version: '11'
+          java-package: jdk
+
+      - id: match-label
+        name: Match semver labels
+        uses: zwaldowski/match-label-action@v1
+        with:
+          allowed: major, minor, patch
+
+      - uses: zwaldowski/semver-release-action@v2
+        name: Semver release
+        with:
+          dry_run: true
+          bump: ${{ steps.match-label.outputs.match }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
+  comment:
+    runs-on: ubuntu-latest
+    needs:
+      - "check-labels"
+      
+    if: always()
+    steps:
+      - uses: technote-space/workflow-conclusion-action@v2
+      - name: Checkout
+        uses: actions/checkout@v1
+
+      - name: Comment PR
+        if: env.WORKFLOW_CONCLUSION == 'failure'
+        uses: thollander/actions-comment-pull-request@1.0.2
+        with:
+          message: "Please apply one of the following labels to the PR: 'patch', 'minor', 'major'."
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  prepare-release:
+    needs: ["check-labels", "comment"]
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - id: bump
+        uses: zwaldowski/match-label-action@v4
+        with:
+          allowed: major,minor,patch
+
+      - name: Get changed files
+        id: changed-files
+        uses: tj-actions/changed-files@v14.6
+        
+
+      # prepare yaml parser
+      - uses: actions/setup-go@v4
+      - name: Install yq
+        run: |
+          go install github.com/mikefarah/yq/v4@latest
+          yq --version
+
+      - uses: actions/checkout@v3
+        with:
+          ref: ${{ github.head_ref }}
+
+      - name: Update versions
+        shell: bash
+        run: |
+          declare -A changedCharts
+
+          for file in ${{ steps.changed-files.outputs.all_changed_and_modified_files }}; do         
+
+              echo "$file was changed"
+              baseFolder=$(cut -d'/' -f1 <<< "$file")
+              if [ $baseFolder = "charts" ] && [ $file != "charts/README.md" ]; then
+                  chartName=$(cut -d'/' -f2 <<< "$file")
+                  changedCharts[$chartName]=$chartName
+              fi  
+          done    
+
+          for c in "${changedCharts[@]}"; do
+              # get version from chart yaml
+              version=$(yq e '.version' "charts/$c/Chart.yaml")
+              major=$(cut -d'.' -f1 <<< "$version")
+              minor=$(cut -d'.' -f2 <<< "$version")
+              patch=$(cut -d'.' -f3 <<< "$version")
+
+              prType=${{ steps.bump.outputs.match }}
+              echo Update version $version with type $prType
+              if [ $prType = "major" ]; then 
+                  echo Update major
+                  major=$((major+1))
+                  minor=0
+                  patch=0
+              elif [ $prType = "minor" ]; then
+                  echo Update minor
+                  minor=$((minor+1))
+                  patch=0
+              elif [ $prType = "patch" ]; then 
+                  echo Update patch
+                  patch=$((patch+1))
+              fi
+              echo Update version to $major.$minor.$patch for $c
+              yq e -i '.version = "'$major.$minor.$patch'"' charts/$c/Chart.yaml
+          done
+
+      - name: Commit files
+        continue-on-error: true
+        run: |
+          git config --local user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git status
+          echo commit
+          git commit -m "Update helm chart versions" -a
+          echo status update
+          git status
+
+      - name: Push changes
+        continue-on-error: true
+        uses: ad-m/github-push-action@master
+        with:
+          branch: ${{ github.head_ref }}

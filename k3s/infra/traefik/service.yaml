@@ -1,0 +1,30 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: traefik-admin
+  namespace: infra
+  labels:
+    app.kubernetes.io/name: traefik
+spec:
+  selector:
+    app.kubernetes.io/name: traefik
+  ports:
+    - name: admin
+      port: 80
+      targetPort: admin
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: traefik-loadbalancer
+  namespace: infra
+  labels:
+    app.kubernetes.io/name: traefik
+spec:
+  type: LoadBalancer
+  selector:
+    app.kubernetes.io/name: traefik
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http

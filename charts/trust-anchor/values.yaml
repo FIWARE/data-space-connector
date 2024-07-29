@@ -1,0 +1,43 @@
+# -- configuration to be shared between the trust-anchor components
+generatePasswords:
+  # -- should a password for the database connection of trust-anchor components be generated in the cluster
+  enabled: true
+  #-- name of the secret to put the generated password into
+  secretName: mysql-database-secret
+
+# -- configuration for the mysql to be deployed as part of the trust-anchor, see https://github.com/bitnami/charts/tree/main/bitnami/mysql for all options
+mysql:
+  # -- should it be enabled? set to false if one outside the chart is used.
+  enabled: true
+  # -- allows to set a fixed name for the services
+  fullnameOverride: trust-anchor-mysql
+  # -- configure authentication to mysql
+  auth:
+    # -- name of the secret to take the passowrds from
+    existingSecret: mysql-database-secret
+  # -- scripts to be executed on db startup
+  initdbScripts:
+    create.sql: |
+      CREATE DATABASE tirdb;
+
+# -- configuration for the trusted-issuers-list to be deployed as part of the trust-anchor, see https://github.com/FIWARE/helm-charts/tree/main/charts/trusted-issuers-list for all options
+trusted-issuers-list:
+  # -- should it be enabled? set to false if one outside the chart is used.
+  enabled: true
+  # -- allows to set a fixed name for the services
+  fullnameOverride: tir
+  # -- connection to the database
+  database:
+    # -- should persistence be used?
+    persistence: true
+    # -- name of the db user
+    username: root
+    # -- configuration for the existing secret to get the passwords from
+    existingSecret: 
+      enabled: true
+      name: mysql-database-secret
+      key: mysql-root-password
+    # -- host of the database
+    host:  trust-anchor-mysql
+    # -- name of the schema inside the db
+    name: tirdb

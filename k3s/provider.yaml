@@ -1,0 +1,218 @@
+keycloak:
+  enabled: false
+
+apisix:
+  image:
+      debug: true
+  dataPlane:
+    ingress:
+      enabled: true
+      hostname: mp-data-service.127.0.0.1.nip.io
+  catchAllRoute:
+    enabled: false
+  routes: |-
+    - uri: /.well-known/openid-configuration
+      upstream:
+        nodes:
+          verifier:3000: 1
+        type: roundrobin
+      plugins:
+        proxy-rewrite:
+          uri: /services/data-service/.well-known/openid-configuration
+    - uri: /.well-known/data-space-configuration
+      upstream:
+        nodes:
+          dsconfig:3002: 1
+        type: roundrobin
+      plugins:
+        proxy-rewrite:
+          uri: /.well-known/data-space-configuration/data-space-configuration.json
+        response-rewrite:
+          headers:
+            set:
+              content-type: application/json
+    - uri: /*
+      upstream:
+        nodes:
+          data-service-scorpio:9090: 1
+        type: roundrobin
+      plugins:
+        openid-connect:
+          bearer_only: true
+          use_jwks: true
+          client_id: data-service
+          client_secret: unused
+          ssl_verify: false
+          discovery: http://verifier:3000/services/data-service/.well-known/openid-configuration
+        opa:
+          host: "http://localhost:8181"
+          policy: policy/main
+
+vcverifier:
+  ingress:
+    enabled: true
+    hosts:
+      - host: provider-verifier.127.0.0.1.nip.io
+        paths:
+          - "/"
+  deployment:
+    logging:
+      level: DEBUG
+    verifier:
+      tirAddress: http://tir.127.0.0.1.nip.io:8080/
+      did: ${DID}
+    server:
+      host: http://provider-verifier.127.0.0.1.nip.io:8080
+    configRepo:
+      configEndpoint: http://credentials-config-service:8080
+    alternativeConfig: /alternative-conf/server.yaml
+    additionalVolumes:
+      - name: did-material
+        emptyDir: {}
+      - name: alternative-conf
+        emptyDir: {}
+    additionalVolumeMounts:
+      - name: alternative-conf
+        mountPath: /alternative-conf
+    initContainers:
+      - name: get-did
+        image: ubuntu
+        command:
+          - /bin/bash
+        args:
+          - -ec
+          - |
+            #!/bin/bash
+            apt-get -y update; apt-get -y install wget; apt-get -y install gettext-base
+            cd /did-material
+            wget http://did-helper:3002/did-material/did.env
+            export $(cat /did-material/did.env)
+            cp /original-conf/server.yaml /alternative-conf/server.yaml
+            envsubst < /alternative-conf/server.yaml
+        volumeMounts:
+          - name: did-material
+            mountPath: /did-material
+          - name: config-volume
+            mountPath: /original-conf
+          - name: alternative-conf
+            mountPath: /alternative-conf
+
+      - name: register-at-tir
+        image: ubuntu
+        command:
+          - /bin/bash
+        args:
+          - -ec
+          - |
+            #!/bin/bash
+            source /did-material/did.env
+            apt-get -y update; apt-get -y install curl
+            curl -X 'POST' 'http://tir.trust-anchor.svc.cluster.local:8080/issuer' -H 'Content-Type: application/json' -d "{\"did\": \"${DID}\", \"credentials\": []}"
+        volumeMounts:
+          - name: did-material
+            mountPath: /did-material
+
+mysql:
+  primary:
+    persistence:
+      enabled: false
+  secondary:
+    persistence:
+      enabled: false
+
+postgis:
+  primary:
+    persistence:
+      enabled: false
+  readReplicas:
+    persistence:
+      enabled: false
+
+postgresql:
+  primary:
+    persistence:
+      enabled: false
+  readReplicas:
+    persistence:
+      enabled: false
+
+did:
+  enabled: true
+  secret: issuance-secret
+  serviceType: ClusterIP
+  port: 3002
+  cert:
+    country: DE
+    state: SAXONY
+    locality: Dresden
+    organization: M&P Operations Inc.
+    commonName: www.mp-operation.org
+  ingress:
+    enabled: true
+    host: did-provider.127.0.0.1.nip.io
+
+dataSpaceConfig:
+  enabled: true
+  serviceType: ClusterIP
+  port: 3002
+  supportedModels:
+    - "https://raw.githubusercontent.com/smart-data-models/dataModel.Consumption/master/ConsumptionPoint/schema.json"
+    - "https://raw.githubusercontent.com/smart-data-models/dataModel.Consumption/master/ConsumptionCost/schema.json"
+  supportedProtocols:
+    - http
+    - https
+  authenticationProtocols:
+    - oid4vp
+
+scorpio:
+  ingress:
+    enabled: true
+    # only to make it available for the test initialization
+    hosts:
+    - host: scorpio-provider.127.0.0.1.nip.io
+      paths:
+        - "/"
+  ccs:
+    defaultOidcScope:
+      credentialType: UserCredential
+      trustedParticipantsLists: http://tir.trust-anchor.svc.cluster.local:8080
+
+odrl-pap:
+  deployment:
+    initContainers:
+      - name: get-did
+        image: ubuntu
+        command:
+          - /bin/bash
+        args:
+          - -ec
+          - |
+            #!/bin/bash
+            apt-get -y update; apt-get -y install wget
+            cd /did-material
+            wget http://did-helper:3002/did-material/did.env
+        volumeMounts:
+          - name: did-material
+            mountPath: /did-material
+    additionalVolumes:
+      - name: did-material
+        emptyDir: {}
+    additionalVolumeMounts:
+      - name: did-material
+        mountPath: /did-material
+    command:
+      - /bin/sh
+    args:
+      - -ec
+      - |
+        #!/bin/sh
+        source /did-material/did.env
+        export GENERAL_ORGANIZATION_DID=$DID
+        ./application -Dquarkus.http.host=0.0.0.0
+
+  ingress:
+    enabled: true
+    hosts:
+      - host: pap-provider.127.0.0.1.nip.io
+        paths:
+          - "/"
