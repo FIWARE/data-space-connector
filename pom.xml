@@ -17,7 +17,7 @@
         <release.version>17</release.version>
 
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <version.io.kokuwa.maven.k3s-plugin>1.2.4</version.io.kokuwa.maven.k3s-plugin>
+        <version.io.kokuwa.maven.k3s-plugin>1.3.0</version.io.kokuwa.maven.k3s-plugin>
         <version.io.kokuwa.helm-maven-plugin>6.13.0</version.io.kokuwa.helm-maven-plugin>
         <version.org.apache.maven.plugins.maven-install>3.1.1</version.org.apache.maven.plugins.maven-install>
         <version.org.apache.maven.plugins.maven-source>2.4</version.org.apache.maven.plugins.maven-source>
@@ -310,7 +310,15 @@
                     </plugin>
                     <plugin>
                         <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-compiler-plugin</artifactId>
+                        <configuration>
+                            <skip>true</skip>
+                        </configuration>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
                         <artifactId>maven-failsafe-plugin</artifactId>
+                        <version>${version.org.apache.maven.plugins.maven-failsafe}</version>
                         <configuration>
                             <skip>true</skip>
                         </configuration>

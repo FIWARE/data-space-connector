@@ -25,6 +25,11 @@
         <version.org.junit.bom>5.9.2</version.org.junit.bom>
         <version.io.cucumber>7.11.1</version.io.cucumber>
         <version.org.keycloak>24.0.4</version.org.keycloak>
+        <version.org.openapitools.generator-maven-plugin>6.3.0</version.org.openapitools.generator-maven-plugin>
+        <version.io.swagger>1.6.10</version.io.swagger>
+        <version.javax.annotation>1.3.2</version.javax.annotation>
+        <version.com.squareup.okhttp>2.7.5</version.com.squareup.okhttp>
+        <version.com.github.multiformat.multi-base>v1.1.1</version.com.github.multiformat.multi-base>
     </properties>
 
     <dependencyManagement>
@@ -77,14 +82,24 @@
         <dependency>
             <groupId>com.squareup.okhttp</groupId>
             <artifactId>okhttp</artifactId>
-            <version>2.7.5</version>
+            <version>${version.com.squareup.okhttp}</version>
+        </dependency>
+        <dependency>
+            <groupId>io.swagger</groupId>
+            <artifactId>swagger-annotations</artifactId>
+            <version>${version.io.swagger}</version>
+        </dependency>
+        <dependency>
+            <groupId>javax.annotation</groupId>
+            <artifactId>javax.annotation-api</artifactId>
+            <version>${version.javax.annotation}</version>
         </dependency>
 
         <!-- test -->
         <dependency>
             <groupId>com.github.multiformats</groupId>
             <artifactId>java-multibase</artifactId>
-            <version>v1.1.1</version>
+            <version>${version.com.github.multiformat.multi-base}</version>
             <scope>test</scope>
         </dependency>
         <dependency>
@@ -203,6 +218,116 @@
                         <configuration>
                             <skip>true</skip>
                         </configuration>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.openapitools</groupId>
+                        <artifactId>openapi-generator-maven-plugin</artifactId>
+                        <version>${version.org.openapitools.generator-maven-plugin}</version>
+                        <configuration>
+                            <strictSpec>true</strictSpec>
+                            <modelPackage>org.fiware.dataspace.tmf.model</modelPackage>
+                            <generateAliasAsModel>true</generateAliasAsModel>
+                            <generatorName>jaxrs-spec</generatorName>
+                            <generateApis>false</generateApis>
+                            <generateApiTests>false</generateApiTests>
+                            <generateSupportingFiles>false</generateSupportingFiles>
+                            <generateModels>true</generateModels>
+                            <modelNameSuffix>VO</modelNameSuffix>
+                        </configuration>
+                        <executions>
+                            <execution>
+                                <id>tmf-party-catalog</id>
+                                <phase>generate-sources</phase>
+                                <goals>
+                                    <goal>generate</goal>
+                                </goals>
+                                <configuration>
+                                    <inputSpec>
+                                        https://raw.githubusercontent.com/FIWARE/tmforum-api/main/api/tm-forum/party-catalog/api.json
+                                    </inputSpec>
+                                </configuration>
+                            </execution>
+                            <execution>
+                                <id>tmf-product-catalog</id>
+                                <phase>generate-sources</phase>
+                                <goals>
+                                    <goal>generate</goal>
+                                </goals>
+                                <configuration>
+                                    <inputSpec>
+                                        https://github.com/FIWARE/tmforum-api/raw/main/api/tm-forum/product-catalog/api.json
+                                    </inputSpec>
+                                </configuration>
+                            </execution>
+                            <execution>
+                                <id>tmf-product-inventory</id>
+                                <phase>generate-sources</phase>
+                                <goals>
+                                    <goal>generate</goal>
+                                </goals>
+                                <configuration>
+                                    <inputSpec>
+                                        https://github.com/FIWARE/tmforum-api/raw/main/api/tm-forum/product-inventory/api.json
+                                    </inputSpec>
+                                </configuration>
+                            </execution>
+                            <execution>
+                                <id>tmf-product-ordering-management</id>
+                                <phase>generate-sources</phase>
+                                <goals>
+                                    <goal>generate</goal>
+                                </goals>
+                                <configuration>
+                                    <inputSpec>
+                                        https://github.com/FIWARE/tmforum-api/raw/main/api/tm-forum/product-ordering-management/api.json
+                                    </inputSpec>
+                                </configuration>
+                            </execution>
+                            <execution>
+                                <id>tmf-service-catalog</id>
+                                <phase>generate-sources</phase>
+                                <goals>
+                                    <goal>generate</goal>
+                                </goals>
+                                <configuration>
+                                    <inputSpec>
+                                        https://github.com/FIWARE/tmforum-api/raw/main/api/tm-forum/service-catalog/api.json
+                                    </inputSpec>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <!-- add generated sources -->
+                    <plugin>
+                        <groupId>org.codehaus.mojo</groupId>
+                        <artifactId>build-helper-maven-plugin</artifactId>
+                        <version>3.3.0</version>
+                        <executions>
+                            <execution>
+                                <id>openapi-sources</id>
+                                <phase>generate-sources</phase>
+                                <goals>
+                                    <goal>add-source</goal>
+                                </goals>
+                                <configuration>
+                                    <sources>
+                                        <source>${project.build.directory}/generated-sources/openapi</source>
+                                    </sources>
+                                </configuration>
+                            </execution>
+                            <execution>
+                                <id>openapi-test-sources</id>
+                                <phase>generate-test-sources</phase>
+                                <goals>
+                                    <goal>add-test-source</goal>
+                                </goals>
+                                <configuration>
+                                    <sources>
+                                        <source>${project.build.directory}/generated-test-sources/openapi</source>
+                                    </sources>
+                                </configuration>
+                            </execution>
+                        </executions>
                     </plugin>
                     <plugin>
                         <artifactId>maven-resources-plugin</artifactId>

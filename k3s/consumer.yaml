@@ -14,7 +14,10 @@ scorpio:
   enabled: false
 postgis:
   enabled: false
-
+tm-forum-api:
+  enabled: false
+contract-management:
+  enabled: false
 
 postgresql:
   primary:
@@ -127,12 +130,12 @@ keycloak:
       "${CLIENT_DID}": [
         {
           "name": "READER",
-          "description": "Is allowed to register",
+          "description": "Is allowed to see offers etc.",
           "clientRole": true
         },
         {
-          "name": "WRITER",
-          "description": "Is allowed to see",
+          "name": "OPERATOR",
+          "description": "Is allowed to operate clusters.",
           "clientRole": true
         }
       ]
@@ -152,7 +155,7 @@ keycloak:
         ],
         "clientRoles": {
           "${CLIENT_DID}": [
-            "READER"
+            "OPERATOR"
           ],
           "account": [
             "view-profile",
@@ -188,7 +191,9 @@ keycloak:
           "vc.user-credential.format": "jwt_vc",
           "vc.user-credential.scope": "UserCredential",
           "vc.verifiable-credential.format": "jwt_vc",
-          "vc.verifiable-credential.scope": "VerifiableCredential"
+          "vc.verifiable-credential.scope": "VerifiableCredential",
+          "vc.operator-credential.format": "jwt_vc",
+          "vc.operator-credential.scope": "OperatorCredential"
         },
         "protocolMappers": [
           {
@@ -198,17 +203,7 @@ keycloak:
             "config": {
               "subjectProperty": "roles",
               "clientId": "${CLIENT_DID}",
-              "supportedCredentialTypes": "VerifiableCredential"
-            }
-          },
-          {
-            "name": "target-vc-role-mapper",
-            "protocol": "oid4vc",
-            "protocolMapper": "oid4vc-target-role-mapper",
-            "config": {
-              "subjectProperty": "roles",
-              "clientId": "${CLIENT_DID}",
-              "supportedCredentialTypes": "UserCredential"
+              "supportedCredentialTypes": "OperatorCredential"
             }
           },
           {
@@ -217,7 +212,7 @@ keycloak:
             "protocolMapper": "oid4vc-context-mapper",
             "config": {
               "context": "https://www.w3.org/2018/credentials/v1",
-              "supportedCredentialTypes": "VerifiableCredential,UserCredential"
+              "supportedCredentialTypes": "VerifiableCredential,UserCredential,OperatorCredential"
             }
           },
           {
@@ -227,7 +222,7 @@ keycloak:
             "config": {
               "subjectProperty": "email",
               "userAttribute": "email",
-              "supportedCredentialTypes": "UserCredential"
+              "supportedCredentialTypes": "UserCredential,OperatorCredential"
             }
           },
           {
@@ -237,7 +232,7 @@ keycloak:
             "config": {
               "subjectProperty": "firstName",
               "userAttribute": "firstName",
-              "supportedCredentialTypes": "UserCredential"
+              "supportedCredentialTypes": "UserCredential,OperatorCredential"
             }
           },
           {
@@ -247,7 +242,7 @@ keycloak:
             "config": {
               "subjectProperty": "lastName",
               "userAttribute": "lastName",
-              "supportedCredentialTypes": "UserCredential"
+              "supportedCredentialTypes": "UserCredential,OperatorCredential"
             }
           }
         ],
