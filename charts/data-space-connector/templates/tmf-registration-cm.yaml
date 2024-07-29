@@ -1,0 +1,40 @@
+{{- $tmf := index .Values "tm-forum-api" }}
+{{- if and (eq $tmf.registration.enabled true) (eq $tmf.enabled true) }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $tmf.registration.name  }}
+  namespace: {{ $.Release.Namespace | quote }}
+  labels:
+    {{- include "dsc.labels" . | nindent 4 }}
+data:
+  init.sh: |-
+    # credentials config service registration
+    curl -X 'POST' \
+      '{{ $tmf.registration.ccs.endpoint }}/service' \
+      -H 'accept: */*' \
+      -H 'Content-Type: application/json' \
+      -d '{
+      "id": {{ $tmf.registration.ccs.id | quote }},
+      "defaultOidcScope": {{ $tmf.registration.ccs.defaultOidcScope.name | quote }},
+      {{- if and ($tmf.registration.ccs.defaultOidcScope.credentialType) ($tmf.registration.ccs.defaultOidcScope.trustedParticipantsLists) ($tmf.registration.ccs.defaultOidcScope.trustedIssuersLists) -}}
+      "oidcScopes": {
+        {{ $tmf.registration.ccs.defaultOidcScope.name | quote }}: [
+          {
+            "type": {{ $tmf.registration.ccs.defaultOidcScope.credentialType | quote }},
+            "trustedParticipantsLists": [
+              {{ $tmf.registration.ccs.defaultOidcScope.trustedParticipantsLists | quote }}
+            ],
+            "trustedIssuersLists": [
+              {{ $tmf.registration.ccs.defaultOidcScope.trustedIssuersLists | quote }}
+            ]
+          }
+        ]
+      }
+      {{- end }}
+      {{- if $tmf.registration.ccs.oidcScopes -}}
+      "oidcScopes": {{- toJson $tmf.registration.ccs.oidcScopes }}
+      {{- end }}
+    }'
+
+{{- end }}

@@ -1,0 +1,29 @@
+{{- $tmf := index .Values "tm-forum-api" }}
+{{- if and (eq $tmf.registration.enabled true) (eq $tmf.enabled true) }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ $tmf.registration.name }}
+  namespace: {{ $.Release.Namespace | quote }}
+  labels:
+    {{- include "dsc.labels" . | nindent 4 }}
+spec:
+  template:
+    spec:
+      containers:
+        - name: register-credential-config
+          image: quay.io/curl/curl:8.1.2
+          command: [ "/bin/sh", "-c", "/bin/init.sh" ]
+          volumeMounts:
+            - name: tm-forum-registration
+              mountPath: /bin/init.sh
+              subPath: init.sh
+      volumes:
+        - name: tm-forum-registration
+          configMap:
+            name: {{ $tmf.registration.name }}
+            defaultMode: 0755
+
+      restartPolicy: Never
+  backoffLimit: 10
+{{- end }}
