@@ -10,10 +10,14 @@ apisix:
     ingress:
       enabled: true
       hostname: mp-data-service.127.0.0.1.nip.io
+      extraHosts:
+        - name: mp-tmf-api.127.0.0.1.nip.io
+          path: /
   catchAllRoute:
     enabled: false
   routes: |-
     - uri: /.well-known/openid-configuration
+      host: mp-data-service.127.0.0.1.nip.io
       upstream:
         nodes:
           verifier:3000: 1
@@ -34,6 +38,7 @@ apisix:
             set:
               content-type: application/json
     - uri: /*
+      host: mp-data-service.127.0.0.1.nip.io
       upstream:
         nodes:
           data-service-scorpio:9090: 1
@@ -49,6 +54,34 @@ apisix:
         opa:
           host: "http://localhost:8181"
           policy: policy/main
+          with_body: true
+    - uri: /.well-known/openid-configuration
+      host: mp-tmf-api.127.0.0.1.nip.io
+      upstream:
+        nodes:
+          verifier:3000: 1
+        type: roundrobin
+      plugins:
+        proxy-rewrite:
+          uri: /services/tmf-api/.well-known/openid-configuration
+    - uri: /*
+      host: mp-tmf-api.127.0.0.1.nip.io
+      upstream:
+        nodes:
+          tm-forum-api:8080: 1
+        type: roundrobin
+      plugins:
+        openid-connect:
+          bearer_only: true
+          use_jwks: true
+          client_id: contract-management
+          client_secret: unused
+          ssl_verify: false
+          discovery: http://verifier:3000/services/tmf-api/.well-known/openid-configuration
+        opa:
+          host: "http://localhost:8181"
+          policy: policy/main
+          with_body: true
 
 vcverifier:
   ingress:
@@ -176,8 +209,21 @@ scorpio:
         - "/"
   ccs:
     defaultOidcScope:
-      credentialType: UserCredential
-      trustedParticipantsLists: http://tir.trust-anchor.svc.cluster.local:8080
+      name: default
+    oidcScopes:
+      default:
+        - type: UserCredential
+          trustedParticipantsLists:
+            - http://tir.trust-anchor.svc.cluster.local:8080
+          trustedIssuersLists:
+            - http://trusted-issuers-list:8080
+      operator:
+        - type: OperatorCredential
+          trustedParticipantsLists:
+            - http://tir.trust-anchor.svc.cluster.local:8080
+          trustedIssuersLists:
+            - http://trusted-issuers-list:8080
+
 
 odrl-pap:
   deployment:
@@ -218,3 +264,31 @@ odrl-pap:
       - host: pap-provider.127.0.0.1.nip.io
         paths:
           - "/"
+
+tm-forum-api:
+  registration:
+    ccs:
+      defaultOidcScope:
+        credentialType: UserCredential
+        trustedParticipantsLists: http://tir.trust-anchor.svc.cluster.local:8080
+
+  ingress:
+    enabled: true
+    hosts:
+      - host: tm-forum-api.127.0.0.1.nip.io
+        paths:
+          - /
+
+contract-management:
+  til:
+    credentialType: OperatorCredential
+
+trusted-issuers-list:
+  # only open for clean up in the tests
+  ingress:
+    til:
+      enabled: true
+      hosts:
+        - host: til-provider.127.0.0.1.nip.io
+          paths:
+            - /

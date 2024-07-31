@@ -19,11 +19,11 @@
       "odrl:refinement": [
         {
           "@type": "odrl:Constraint",
-          "odrl:leftOperand": "ngsi-ld:entityType",
+          "odrl:leftOperand": "tmf:resource",
           "odrl:operator": {
             "@id": "odrl:eq"
           },
-          "odrl:rightOperand": "EnergyReport"
+          "odrl:rightOperand": "productOffering"
         }
       ]
     },

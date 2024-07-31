@@ -71,24 +71,24 @@ public class Wallet {
     }
 
 
-    public String exchangeCredentialForToken(OpenIdConfiguration openIdConfiguration, String credentialId) throws Exception {
+    public String exchangeCredentialForToken(OpenIdConfiguration openIdConfiguration, String credentialId, String scope) throws Exception {
         String vpToken = Base64.getUrlEncoder()
                 .withoutPadding()
                 .encodeToString(createVPToken(did, walletKey, credentialStorage.get(credentialId)).getBytes());
         RequestBody requestBody = new FormEncodingBuilder()
                 .add("grant_type", "vp_token")
                 .add("vp_token", vpToken)
-                .add("scope", "default")
+                .add("scope", scope)
                 .build();
         Request tokenRequest = new Request.Builder()
                 .post(requestBody)
                 .url(openIdConfiguration.getTokenEndpoint())
                 .build();
         Response tokenResponse = HTTP_CLIENT.newCall(tokenRequest).execute();
-
         assertEquals(HttpStatus.SC_OK, tokenResponse.code(), "A token should have been responded.");
 
         TokenResponse accessTokenResponse = OBJECT_MAPPER.readValue(tokenResponse.body().string(), TokenResponse.class);
+        tokenResponse.body().close();
         assertNotNull(accessTokenResponse.getAccessToken(), "The access token should have been returned.");
         return accessTokenResponse.getAccessToken();
     }
@@ -134,7 +134,9 @@ public class Wallet {
         Response configResponse = HTTP_CLIENT.newCall(configRequest).execute();
 
         assertEquals(HttpStatus.SC_OK, configResponse.code(), "An issuer config should have been returned.");
-        return OBJECT_MAPPER.readValue(configResponse.body().string(), IssuerConfiguration.class);
+        IssuerConfiguration issuerConfiguration = OBJECT_MAPPER.readValue(configResponse.body().string(), IssuerConfiguration.class);
+        configResponse.body().close();
+        return issuerConfiguration;
     }
 
     public OfferUri getCredentialOfferUri(String keycloakJwt, String issuerHost, String credentialConfigId) throws Exception {
@@ -148,7 +150,9 @@ public class Wallet {
         Response uriResponse = HTTP_CLIENT.newCall(request).execute();
 
         assertEquals(HttpStatus.SC_OK, uriResponse.code(), "An uri should have been returned.");
-        return OBJECT_MAPPER.readValue(uriResponse.body().string(), OfferUri.class);
+        OfferUri offerUri = OBJECT_MAPPER.readValue(uriResponse.body().string(), OfferUri.class);
+        uriResponse.body().close();
+        return offerUri;
     }
 
     public CredentialOffer getCredentialOffer(String keycloakJwt, OfferUri offerUri) throws Exception {
@@ -162,7 +166,9 @@ public class Wallet {
         Response offerResponse = HTTP_CLIENT.newCall(uriRequest).execute();
 
         assertEquals(HttpStatus.SC_OK, offerResponse.code(), "An offer should have been returned.");
-        return OBJECT_MAPPER.readValue(offerResponse.body().string(), CredentialOffer.class);
+        CredentialOffer credentialOffer = OBJECT_MAPPER.readValue(offerResponse.body().string(), CredentialOffer.class);
+        offerResponse.body().close();
+        return credentialOffer;
     }
 
     public String getTokenForOffer(IssuerConfiguration issuerConfiguration, CredentialOffer credentialOffer) throws Exception {
@@ -212,7 +218,9 @@ public class Wallet {
 
         Response credentialResponse = HTTP_CLIENT.newCall(credentialHttpRequest).execute();
         assertEquals(HttpStatus.SC_OK, credentialResponse.code(), "A credential should have been returned.");
-        return credentialResponse.body().string();
+        String offer = credentialResponse.body().string();
+        credentialResponse.body().close();
+        return offer;
     }
 
     public String getAccessToken(String tokenEndpoint, String preAuthorizedCode) throws Exception {
@@ -225,11 +233,12 @@ public class Wallet {
                 .post(requestBody)
                 .build();
 
-
         Response tokenResponse = HTTP_CLIENT.newCall(tokenRequest).execute();
         assertEquals(HttpStatus.SC_OK, tokenResponse.code(), "A valid token should have been returned.");
 
-        return OBJECT_MAPPER.readValue(tokenResponse.body().string(), TokenResponse.class).getAccessToken();
+        String accessToken = OBJECT_MAPPER.readValue(tokenResponse.body().string(), TokenResponse.class).getAccessToken();
+        tokenResponse.body().close();
+        return accessToken;
     }
 
     public OpenIdConfiguration getOpenIdConfiguration(String authorizationServer) throws Exception {
@@ -240,7 +249,9 @@ public class Wallet {
         Response openIdConfigResponse = HTTP_CLIENT.newCall(request).execute();
 
         assertEquals(HttpStatus.SC_OK, openIdConfigResponse.code(), "An openId config should have been returned.");
-        return OBJECT_MAPPER.readValue(openIdConfigResponse.body().string(), OpenIdConfiguration.class);
+        OpenIdConfiguration openIdConfiguration = OBJECT_MAPPER.readValue(openIdConfigResponse.body().string(), OpenIdConfiguration.class);
+        openIdConfigResponse.body().close();
+        return openIdConfiguration;
     }
 
 
