@@ -19,4 +19,5 @@ public abstract class FancyMarketplaceEnvironment {
         KeycloakHelper consumerKeycloak = new KeycloakHelper(TEST_REALM, CONSUMER_KEYCLOAK_ADDRESS);
         return consumerKeycloak.getUserToken(TEST_USER_NAME, TEST_USER_PASSWORD);
     }
+
 }
