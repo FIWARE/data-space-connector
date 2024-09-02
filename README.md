@@ -291,7 +291,7 @@ in the [Service Interaction (M2M)](./doc/flows/service-interaction-m2m) document
 ### Local Deployment
 
 The FIWARE Data Space Connector provides a local deployment of a Minimal Viable Dataspace. 
-* Find a detailed documentation here: [Local Deployment](./doc/LOCAL.MD)
+* Find a detailed documentation here: [Local Deployment](./doc/deployment-integration/local-deployment/LOCAL.MD)
 
 This deployment allows to easily spin up such minimal data space on a local machine, by just using 
 [Maven](https://maven.apache.org/) and [Docker](https://www.docker.com/) (with [k3s](https://k3s.io/)), and 
