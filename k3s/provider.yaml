@@ -4,8 +4,6 @@ keycloak:
 apisix:
   image:
     debug: true
-  dashboard:
-    enabled: false
   dataPlane:
     ingress:
       enabled: true
