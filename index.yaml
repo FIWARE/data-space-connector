@@ -2,6 +2,67 @@ apiVersion: v1
 entries:
   data-space-connector:
   - apiVersion: v2
+    created: "2024-10-15T13:43:17.277971789Z"
+    dependencies:
+    - condition: postgresql.enabled
+      name: postgresql
+      repository: oci://registry-1.docker.io/bitnamicharts
+      version: 13.1.5
+    - condition: vcverifier.enabled
+      name: vcverifier
+      repository: https://fiware.github.io/helm-charts
+      version: 2.9.2
+    - condition: credentials-config-service.enabled
+      name: credentials-config-service
+      repository: https://fiware.github.io/helm-charts
+      version: 0.1.5
+    - condition: trusted-issuers-list.enabled
+      name: trusted-issuers-list
+      repository: https://fiware.github.io/helm-charts
+      version: 0.7.0
+    - condition: mysql.enabled
+      name: mysql
+      repository: https://charts.bitnami.com/bitnami
+      version: 9.4.4
+    - condition: odrl-pap.enabled
+      name: odrl-pap
+      repository: https://fiware.github.io/helm-charts
+      version: 0.2.1
+    - condition: apisix.enabled
+      name: apisix
+      repository: oci://registry-1.docker.io/bitnamicharts
+      version: 3.5.1
+    - alias: scorpio
+      condition: scorpio.enabled
+      name: scorpio-broker-aaio
+      repository: https://fiware.github.io/helm-charts
+      version: 0.4.7
+    - alias: postgis
+      condition: postgis.enabled
+      name: postgresql
+      repository: oci://registry-1.docker.io/bitnamicharts
+      version: 13.1.5
+    - condition: keycloak.enabled
+      name: keycloak
+      repository: https://charts.bitnami.com/bitnami
+      version: 21.1.1
+    - condition: tm-forum-api.enabled
+      name: tm-forum-api
+      repository: https://fiware.github.io/helm-charts
+      version: 0.9.4
+    - condition: contract-management.enabled
+      name: contract-management
+      repository: https://fiware.github.io/helm-charts
+      version: 0.6.4
+    description: Umbrella Chart for the FIWARE Data Space Connector, combining all
+      essential parts to be used by a participant.
+    digest: 7462081a2ccbe504e2e914e101605da2b2e36e89b643a93860d8f250b9e55ed3
+    name: data-space-connector
+    type: application
+    urls:
+    - https://github.com/FIWARE/data-space-connector/releases/download/data-space-connector-7.3.4/data-space-connector-7.3.4.tgz
+    version: 7.3.4
+  - apiVersion: v2
     created: "2024-10-15T08:47:52.098726545Z"
     dependencies:
     - condition: postgresql.enabled
@@ -211,4 +272,4 @@ entries:
     urls:
     - https://github.com/FIWARE/data-space-connector/releases/download/trust-anchor-0.2.0/trust-anchor-0.2.0.tgz
     version: 0.2.0
-generated: "2024-10-15T08:47:52.098745861Z"
+generated: "2024-10-15T13:43:17.277992718Z"
