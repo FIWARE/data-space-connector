@@ -2,7 +2,7 @@ apiVersion: v2
 name: data-space-connector
 description: Umbrella Chart for the FIWARE Data Space Connector, combining all essential parts to be used by a participant.
 type: application
-version: 7.3.1
+version: 7.3.3
 dependencies:
   - name: postgresql
     condition: postgresql.enabled
@@ -32,7 +32,7 @@ dependencies:
     repository: https://fiware.github.io/helm-charts
   - name: apisix
     condition: apisix.enabled
-    version: 3.1.0
+    version: 3.5.1
     repository: oci://registry-1.docker.io/bitnamicharts
   # data-service
   - name: scorpio-broker-aaio
