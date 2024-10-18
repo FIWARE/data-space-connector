@@ -194,60 +194,60 @@ apisix:
           config_provider: yaml
       apisix:
         extra_lua_path: /extra/apisix/plugins/?.lua
-    # -- configuration in regard to the apisix dashboard
-    dashboard:
-      # -- should it be enabled
-      enabled: true
-      # -- resource preset to have sufficient memory
-      resourcesPreset: small
-    # -- extra volumes
-    # we need `routes` to declaratively configure the routes
-    # and the config for the opa sidecar
-    extraVolumes:
-      - name: routes
-        configMap:
-          name: apisix-routes
-      - name: opa-config
-        configMap:
-          name: opa-config
-      - name: opa-lua
-        configMap:
-          name: opa-lua
-    # -- extra volumes to be mounted
-    extraVolumeMounts:
-      - name: routes
-        mountPath: /usr/local/apisix/conf/apisix.yaml
-        subPath: apisix.yaml
-      - name: opa-lua
-        mountPath: /usr/local/apisix/apisix/plugins/opa/helper.lua
-        subPath: helper.lua
-      - name: opa-lua
-        mountPath: /usr/local/apisix/apisix/plugins/opa.lua
-        subPath: opa.lua
-    # -- sidecars to be deployed for apisix
-    sidecars:
-      # -- we want to deploy the open-policy-agent as a pdp
-      - name: open-policy-agent
-        image: openpolicyagent/opa:0.64.1
-        imagePullPolicy: IfNotPresent
-        ports:
-          - name: http
-            containerPort: 8181
-            protocol: TCP
-        # opa should be started to listen at 8181 and get its config from the mounted config yaml
-        args:
-          - "run"
-          - "--ignore=.*"  # exclude hidden dirs created by Kubernetes
-          - "--server"
-          - "-l"
-          - "debug"
-          - "-c"
-          - "/config/opa.yaml"
-          - "--addr"
-          - "0.0.0.0:8181"
-        volumeMounts:
-          - name: opa-config
-            mountPath: /config
+  # -- configuration in regard to the apisix dashboard
+  dashboard:
+    # -- should it be enabled
+    enabled: true
+    # -- resource preset to have sufficient memory
+    resourcesPreset: small
+  # -- extra volumes
+  # we need `routes` to declaratively configure the routes
+  # and the config for the opa sidecar
+  extraVolumes:
+    - name: routes
+      configMap:
+        name: apisix-routes
+    - name: opa-config
+      configMap:
+        name: opa-config
+    - name: opa-lua
+      configMap:
+        name: opa-lua
+  # -- extra volumes to be mounted
+  extraVolumeMounts:
+    - name: routes
+      mountPath: /usr/local/apisix/conf/apisix.yaml
+      subPath: apisix.yaml
+    - name: opa-lua
+      mountPath: /usr/local/apisix/apisix/plugins/opa/helper.lua
+      subPath: helper.lua
+    - name: opa-lua
+      mountPath: /usr/local/apisix/apisix/plugins/opa.lua
+      subPath: opa.lua
+  # -- sidecars to be deployed for apisix
+  sidecars:
+    # -- we want to deploy the open-policy-agent as a pdp
+    - name: open-policy-agent
+      image: openpolicyagent/opa:0.64.1
+      imagePullPolicy: IfNotPresent
+      ports:
+        - name: http
+          containerPort: 8181
+          protocol: TCP
+      # opa should be started to listen at 8181 and get its config from the mounted config yaml
+      args:
+        - "run"
+        - "--ignore=.*"  # exclude hidden dirs created by Kubernetes
+        - "--server"
+        - "-l"
+        - "debug"
+        - "-c"
+        - "/config/opa.yaml"
+        - "--addr"
+        - "0.0.0.0:8181"
+      volumeMounts:
+        - name: opa-config
+          mountPath: /config
   # -- configuration of a catchAll-route(e.g. /*)
   catchAllRoute:
     # -- should it be enabled
