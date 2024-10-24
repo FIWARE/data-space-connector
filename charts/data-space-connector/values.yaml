@@ -194,12 +194,6 @@ apisix:
           config_provider: yaml
       apisix:
         extra_lua_path: /extra/apisix/plugins/?.lua
-  # -- configuration in regard to the apisix dashboard
-  dashboard:
-    # -- should it be enabled
-    enabled: true
-      # -- resource preset to have sufficient memory
-      resourcesPreset: small
     # -- extra volumes
     # we need `routes` to declaratively configure the routes
     # and the config for the opa sidecar
