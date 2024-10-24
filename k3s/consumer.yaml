@@ -31,29 +31,17 @@ keycloak:
   ingress:
     enabled: true
     hostname: keycloak-consumer.127.0.0.1.nip.io
+  command:
+    - /bin/bash
   args:
     - -ec
     - |
       #!/bin/sh
       export $(cat /did-material/did.env)
       export KC_HOSTNAME=keycloak-consumer.127.0.0.1.nip.io
-      env | grep DID
-      /opt/keycloak/bin/kc.sh start --features oid4vc-vci --import-realm
+      /opt/bitnami/scripts/keycloak/entrypoint.sh
+      /opt/bitnami/scripts/keycloak/run.sh
   initContainers:
-    - name: read-only-workaround
-      image: quay.io/wi_stefan/keycloak:25.0.0-PRE
-      command:
-        - /bin/bash
-      args:
-        - -ec
-        - |
-          #!/bin/bash
-          cp -r /opt/keycloak/lib/quarkus/* /quarkus
-      volumeMounts:
-        - name: empty-dir
-          mountPath: /quarkus
-          subPath: app-quarkus-dir
-
     - name: get-did
       image: ubuntu
       command:
@@ -112,8 +100,6 @@ keycloak:
 
   extraVolumes:
     - name: did-material
-      emptyDir: { }
-    - name: qtm-temp
       emptyDir: { }
     - name: realms
       configMap:
