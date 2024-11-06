@@ -3,6 +3,17 @@
 In order to support development and exploration of the FIWARE Data Space Connector, a "Minimal Viable Dataspace" is
 provided as part of this repo.
 
+## Requirements
+
+The local deployment tries to be as decoupled from the host system as possible to reduce the amount of requirements but stills needs the following programs:
+
+- [Maven](https://maven.apache.org/)
+- Java Development Kit (at least v17)
+- [Docker](https://www.docker.com/)
+
+To check if the tools are installed, can run and are able to spin up minimal kubernetes cluster without further FIWARE components, you should execute the prepared [script](checkRequirements.sh).
+
+
 ## Quick Start
 
 > :warning: The local deployment uses [k3s](https://k3s.io/) and is currently only tested on linux.
