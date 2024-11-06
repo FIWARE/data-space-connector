@@ -1,6 +1,8 @@
 #!/bin/bash
 
 # Script to check if the basic requirements for a local deployment of the Data Space Connector are met
+
+# Command for starting a minimal k3s cluster
 k3s_command="docker run --privileged --volume=k3stest:/var/lib/rancher/k3s/agent --detach --publish=6443:6443 docker.io/rancher/k3s:latest server --node-name=k3s --https-listen-port=6443 --disable-cloud-controller --disable-network-policy --disable=metrics-server --disable-helm-controller --disable=local-storage --disable=traefik"
 
 check_tool() {
@@ -42,6 +44,12 @@ wait_till_running() {
     done
 }
 echo "Testing system for requirements running the FIWARE Data Space Connector Local Deployment"
+
+# Check if the script is running on Linux
+if [[ "$(uname)" != "Linux" ]]; then
+    echo "Local Deployment is currently only tested on Linux."
+    exit 1
+fi
 
 # Check Maven
 check_tool "mvn" "mvn --version"
