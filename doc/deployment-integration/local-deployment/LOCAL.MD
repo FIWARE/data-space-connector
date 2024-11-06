@@ -13,6 +13,8 @@ The local deployment tries to be as decoupled from the host system as possible t
 
 To check if the tools are installed, can run and are able to spin up minimal kubernetes cluster without further FIWARE components, you should execute the prepared [script](checkRequirements.sh).
 
+Issues revealed by the script are most likely due to incompatibility of your system or faulty installation of the required tools.
+
 
 ## Quick Start
 
