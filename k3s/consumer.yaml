@@ -98,6 +98,15 @@ keycloak:
         - name: did-material
           mountPath: /did-material
 
+  extraVolumeMounts:
+    - name: did-material
+      mountPath: /did-material
+    - name: did-material
+      mountPath: "/etc/env"
+      readOnly: true
+    - name: realms
+      mountPath: /opt/keycloak/data/import
+
   extraVolumes:
     - name: did-material
       emptyDir: { }
