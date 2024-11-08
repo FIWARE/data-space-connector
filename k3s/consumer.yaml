@@ -31,6 +31,8 @@ keycloak:
   ingress:
     enabled: true
     hostname: keycloak-consumer.127.0.0.1.nip.io
+    annotations:
+      traefik.ingress.kubernetes.io/router.tls: "true"
   command:
     - /bin/bash
   args:
@@ -109,7 +111,7 @@ keycloak:
         name: consumer-til-registration
         defaultMode: 0755
   realm:
-    frontendUrl: http://keycloak-consumer.127.0.0.1.nip.io:8080
+    frontendUrl: https://keycloak-consumer.127.0.0.1.nip.io:8443
     import: true
     name: test-realm
     clientRoles: |

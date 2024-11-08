@@ -429,6 +429,18 @@ keycloak:
       value: keycloak
     - name: KC_DB_USERNAME
       value: postgres
+    - name: KC_FRONTEND_URL
+      value: "https://keycloak-consumer.127.0.0.1.nip.io:8443"
+    - name: KC_HOSTNAME_STRICT
+      value: "false"
+    - name: KC_HOSTNAME_STRICT_HTTPS
+      value: "false"
+    - name: KC_HTTP_ENABLED
+      value: "true"
+    - name: KC_PROXY_HEADERS
+      value: xforwarded
+    - name: KC_PROXY_ADDRESS_FORWARDING
+      value: "true"
     - name: KC_DB_PASSWORD
       valueFrom:
         secretKeyRef:

@@ -23,19 +23,26 @@ spec:
           args:
             - --providers.kubernetesingress=true
             - --entrypoints.traefik.address=:8090
+            - --entrypoints.websecure.address=:8443
             - --entrypoints.http.address=:8080
             - --accesslog=true
             - --accesslog.fields.defaultmode=keep
             - --accesslog.fields.headers.defaultmode=keep
             - --ping=true
+            - --log=true
+            - --log.level=debug
             - --api.insecure=true
             - --api.dashboard=true
             - --api.debug=true
             - --global.checknewversion=false
             - --global.sendAnonymousUsage=false
+            - --providers.file.filename=/config/tls.yaml
+            - --providers.file.watch=true
           ports:
             - name: http
               containerPort: 8080
+            - name: https
+              containerPort: 8443
             - name: admin
               containerPort: 8090
           startupProbe:
@@ -58,5 +65,22 @@ spec:
             runAsUser: 10001
             runAsGroup: 10001
             readOnlyRootFilesystem: true
+          volumeMounts:
+            - mountPath: "/ssl-certs/tls.key"
+              name: tls-cert
+              subPath: tls.key
+            - mountPath: "/ssl-certs/tls.crt"
+              name: tls-cert
+              subPath: tls.crt
+            - mountPath: "/config/tls.yaml"
+              name: tls-config
+              subPath: tls.yaml
+      volumes:
+        - name: tls-cert
+          secret:
+            secretName: local-wildcard
+        - name: tls-config
+          configMap:
+            name: traefik-config
       serviceAccountName: traefik
       terminationGracePeriodSeconds: 0

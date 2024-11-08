@@ -137,6 +137,21 @@
                         </configuration>
                     </execution>
                     <execution>
+                        <id>copy-resources-wallet</id>
+                        <phase>prepare-package</phase>
+                        <goals>
+                            <goal>copy-resources</goal>
+                        </goals>
+                        <configuration>
+                            <outputDirectory>${project.build.directory}/charts/demo-wallet</outputDirectory>
+                            <resources>
+                                <resource>
+                                    <directory>${main.basedir}/charts/demo-wallet</directory>
+                                </resource>
+                            </resources>
+                        </configuration>
+                    </execution>
+                    <execution>
                         <id>copy-resources-dsc</id>
                         <phase>prepare-package</phase>
                         <goals>
@@ -177,6 +192,21 @@
                             <resources>
                                 <resource>
                                     <directory>${main.basedir}/k3s/infra</directory>
+                                </resource>
+                            </resources>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>copy-resources-certs</id>
+                        <phase>prepare-package</phase>
+                        <goals>
+                            <goal>copy-resources</goal>
+                        </goals>
+                        <configuration>
+                            <outputDirectory>${project.build.directory}/k3s/certs</outputDirectory>
+                            <resources>
+                                <resource>
+                                    <directory>${main.basedir}/k3s/certs</directory>
                                 </resource>
                             </resources>
                         </configuration>
@@ -243,6 +273,23 @@
                             </additionalArguments>
                         </configuration>
                     </execution>
+                    <execution>
+                        <id>template-wallet</id>
+                        <goals>
+                            <goal>init</goal>
+                            <goal>dependency-update</goal>
+                            <goal>template</goal>
+                        </goals>
+                        <phase>package</phase>
+                        <configuration>
+                            <chartDirectory>${project.build.directory}/charts/demo-wallet</chartDirectory>
+                            <skipTemplate>false</skipTemplate>
+                            <templateGenerateName>true</templateGenerateName>
+                            <templateOutputDir>${project.build.directory}/k3s/demo-wallet</templateOutputDir>
+                            <additionalArguments>--name-template=infra --namespace=infra
+                            </additionalArguments>
+                        </configuration>
+                    </execution>
                 </executions>
             </plugin>
             <plugin>
@@ -253,6 +300,8 @@
                     <skip>true</skip>
                     <portBindings>
                         <portBinding>8080:8080</portBinding>
+                        <portBinding>8888:8888</portBinding>
+                        <portBinding>8443:8443</portBinding>
                     </portBindings>
                 </configuration>
                 <executions>
@@ -266,6 +315,28 @@
                         <configuration>
                             <failIfExists>false</failIfExists>
                             <manifests>${project.build.directory}/k3s/namespaces</manifests>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>apply-certs</id>
+                        <phase>deploy</phase>
+                        <goals>
+                            <goal>apply</goal>
+                        </goals>
+                        <configuration>
+                            <manifests>${project.build.directory}/k3s/certs</manifests>
+                            <timeout>500</timeout>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>apply-infra</id>
+                        <phase>deploy</phase>
+                        <goals>
+                            <goal>apply</goal>
+                        </goals>
+                        <configuration>
+                            <manifests>${project.build.directory}/k3s/infra</manifests>
+                            <timeout>500</timeout>
                         </configuration>
                     </execution>
                     <execution>

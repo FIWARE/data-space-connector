@@ -1,0 +1,25 @@
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: demo-wallet
+  namespace: {{ $.Release.Namespace | quote }}
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: demo-wallet
+      app.kubernetes.io/name: demo-wallet
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/instance: demo-wallet
+        app.kubernetes.io/name: demo-wallet
+    spec:
+      containers:
+      - name: vcbackend
+        #image: 'quay.io/fiware/vcwallet:0.0.4'
+        image: 'quay.io/wi_stefan/vcwallet:0.0.1'
+        imagePullPolicy: Always
+        ports:
+          - containerPort: 3000
+            name: static
+            protocol: TCP

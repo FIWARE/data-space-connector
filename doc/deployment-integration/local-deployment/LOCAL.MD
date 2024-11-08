@@ -879,3 +879,40 @@ In order to build a concrete deployment, [maven](https://maven.apache.org/) exec
 4. Spin up the cluster
 5. Apply the infrastructure resources to the cluster, via `kubectl apply`
 6. Apply the charts to the cluster, via `kubectl apply`
+
+
+## Local Wallet
+
+
+- Android Emulator + v4l2loopback:
+
+1. Install v4l2loopback(virtual camera):
+```shell
+  sudo apt install v4l2loopback-dkms
+  sudo modprobe v4l2loopback
+```
+2. Find the virtual camera: 
+```shell
+  v4l2-ctl --list-devices
+```
+3. Stream screen to the virtual camera:
+```shell
+  # virtual camera is /dev/video4 and it will scan the upper left corner with a an 200-200 offset 1024x768 of screen0 
+  ffmpeg -f x11grab -video_size 1024x768 -i :0.0+200,200 -f v4l2 -pix_fmt yuv420p /dev/video4
+```
+
+4. Install Android Studio
+5. Create a Virtual Device(through the device-manager), rename it to an easy typable name(in the example, its 'p-xl')
+6. Close Android Studio and interact directly with the emulator, its located in the Android-SDK folder(most likely something like ~/Android/Sdk/emulator)
+7. Check the name your virtual camera is available to the emulator:
+```shell
+  # emulator executable in the sdk-folder, `p-xl`is the device created in android-studio
+  ./emulator -avd p-xl -webcam-list
+```
+8. Start the emulator with the virtual cam configured as the back-camera:
+```shell
+  # webcam2 is the virtual camera, webcam0 is any other cam in the system, p-xl is the device, hardware accelaration is on
+  # Vulkan is required for proper browser rendering an api >29
+  ./emulator -avd p-xl-4 -camera-back webcam2 -accel on -no-snapshot-load -feature -Vulkan
+```
+9. Access the services via *.10.0.2.2.nip.io (only works for those where the host is configured)
