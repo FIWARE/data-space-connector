@@ -51,6 +51,7 @@
             </dependency>
         </dependencies>
     </dependencyManagement>
+    <!-- workaround for https://github.com/java-json-tools/jackson-coreutils/issues/59 -->
     <repositories>
         <repository>
             <id>central</id>
