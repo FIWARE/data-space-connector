@@ -386,9 +386,9 @@ keycloak:
   externalDatabase:
     host: postgresql
     database: keycloak
+    user: postgres
     existingSecret: database-secret
     existingSecretPasswordKey: postgres-admin-password
-    existingSecretUserKey: postgres-user
 
   # -- extra volumes to be mounted
   extraVolumeMounts:
