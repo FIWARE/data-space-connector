@@ -48,7 +48,7 @@ jobs:
         - uses: zwaldowski/semver-release-action@v2
           with:
             dry_run: true
-            bump: ${{ steps.match-label-bash.outputs.RELEASE_LABEL }}
+            bump: minor
             github_token: ${{ secrets.GITHUB_TOKEN }}
 
         - name: Set version output
