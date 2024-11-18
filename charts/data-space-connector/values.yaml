@@ -385,6 +385,10 @@ keycloak:
   # -- host of the external db to be used
   externalDatabase:
     host: postgresql
+    database: keycloak
+    existingSecret: database-secret
+    existingSecretPasswordKey: postgres-admin-password
+    existingSecretUserKey: postgres-user
 
   # -- extra volumes to be mounted
   extraVolumeMounts:
@@ -400,18 +404,6 @@ keycloak:
     # indicates ssl is terminated at the edge
     - name: KC_PROXY
       value: "edge"
-    # config for the db connection
-    - name: KC_DB_URL_HOST
-      value: postgresql
-    - name: KC_DB_URL_DATABASE
-      value: keycloak
-    - name: KC_DB_USERNAME
-      value: postgres
-    - name: KC_DB_PASSWORD
-      valueFrom:
-        secretKeyRef:
-          name: database-secret
-          key: postgres-admin-password
     # password for reading the key store connected to the did
     - name: STORE_PASS
       valueFrom:
