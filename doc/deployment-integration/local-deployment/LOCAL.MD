@@ -155,7 +155,7 @@ Exchange the pre-authorized code from the offer with an AccessToken at the autho
       --header 'Accept: */*' \
       --header 'Content-Type: application/x-www-form-urlencoded' \
       --data grant_type=urn:ietf:params:oauth:grant-type:pre-authorized_code \
-      --data code=${PRE_AUTHORIZED_CODE} | jq '.access_token' -r); echo ${CREDENTIAL_ACCESS_TOKEN}
+      --data pre-authorized_code=${PRE_AUTHORIZED_CODE} | jq '.access_token' -r); echo ${CREDENTIAL_ACCESS_TOKEN}
 ```
 
 Use the returned access token to get the actual credential:
