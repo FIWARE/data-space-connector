@@ -194,12 +194,6 @@ apisix:
           config_provider: yaml
       apisix:
         extra_lua_path: /extra/apisix/plugins/?.lua
-    # -- configuration in regard to the apisix dashboard
-    dashboard:
-      # -- should it be enabled
-      enabled: true
-      # -- resource preset to have sufficient memory
-      resourcesPreset: small
     # -- extra volumes
     # we need `routes` to declaratively configure the routes
     # and the config for the opa sidecar
@@ -248,6 +242,13 @@ apisix:
         volumeMounts:
           - name: opa-config
             mountPath: /config
+  # -- configuration in regard to the apisix dashboard
+  dashboard:
+    # -- should it be enabled
+    enabled: false
+    # -- resource preset to have sufficient memory
+    resourcesPreset: small
+ 
   # -- configuration of a catchAll-route(e.g. /*)
   catchAllRoute:
     # -- should it be enabled
@@ -369,22 +370,7 @@ keycloak:
   # -- disable the security context, required by the current quarkus container, will be solved in the future chart versions of keycloak
   containerSecurityContext:
     enabled: false
-  # -- keycloak image to be used - set to preview version of 25.0.0, since no other is available yet
-  image:
-    registry: quay.io
-    # until 25 is released, we have to use a snapshot version
-    repository: wi_stefan/keycloak
-    tag: 25.0.0-PRE
-    pullPolicy: Always
-  command:
-    - /bin/bash
-  # -- we need the did of the participant here. when its generated with the did-helper, we have to get it first and replace inside the realm.json through env-vars
-  args:
-    - -ec
-    - |
-      #!/bin/sh
-      export $(cat /did-material/did.env)
-      /opt/keycloak/bin/kc.sh start --features oid4vc-vci --import-realm
+ 
   service:
     ports:
       http: 8080
@@ -400,41 +386,20 @@ keycloak:
   externalDatabase:
     host: postgresql
 
-  # -- the default init container is deactivated, since it conflicts with the non-bitnami image
-  enableDefaultInitContainers: false
-
   # -- extra volumes to be mounted
   extraVolumeMounts:
-    - name: empty-dir
-      mountPath: /opt/keycloak/lib/quarkus
-      subPath: app-quarkus-dir
-    - name: qtm-temp
-      mountPath: /qtm-tmp
-    - name: did-material
-      mountPath: /did-material
-    - name: did-material
-      mountPath: "/etc/env"
-      readOnly: true
     - name: realms
-      mountPath: /opt/keycloak/data/import
-
-  extraVolumes:
-    - name: did-material
-      emptyDir: { }
-    - name: qtm-temp
-      emptyDir: { }
-    - name: realms
-      configMap:
-        name: test-realm-realm
+      mountPath: /opt/bitnami/keycloak/data/import
 
   # -- extra env vars to be set. we require them at the moment, since some of the chart config mechanisms only work with the bitnami-image
   extraEnvVars:
+    - name: KEYCLOAK_EXTRA_ARGS
+      value: "--import-realm"
+    - name: KC_FEATURES
+      value: "oid4vc-vci"
     # indicates ssl is terminated at the edge
     - name: KC_PROXY
       value: "edge"
-    # point the transaction store to the (writeable!) empty volume
-    - name: QUARKUS_TRANSACTION_MANAGER_OBJECT_STORE_DIRECTORY
-      value: /qtm-tmp
     # config for the db connection
     - name: KC_DB_URL_HOST
       value: postgresql
@@ -459,56 +424,6 @@ keycloak:
         secretKeyRef:
           name: issuance-secret
           key: keycloak-admin
-
-  # -- init containers to be run with keycloak
-  initContainers:
-    # workaround required by the current quarkus distribution, to make keycloak working
-    - name: read-only-workaround
-      image: quay.io/wi_stefan/keycloak:25.0.0-PRE
-      command:
-        - /bin/bash
-      args:
-        - -ec
-        - |
-          #!/bin/bash
-          cp -r /opt/keycloak/lib/quarkus/* /quarkus
-      volumeMounts:
-        - name: empty-dir
-          mountPath: /quarkus
-          subPath: app-quarkus-dir
-
-    # retrieve all did material required for the realm and store it to a shared folder
-    - name: get-did
-      image: ubuntu
-      command:
-        - /bin/bash
-      args:
-        - -ec
-        - |
-          #!/bin/bash
-          apt-get -y update; apt-get -y install wget
-          cd /did-material
-          wget http://did-helper:3000/did-material/cert.pfx
-          wget http://did-helper:3000/did-material/did.env
-      volumeMounts:
-        - name: did-material
-          mountPath: /did-material
-
-    # register the issuer at the trusted issuers registry - will only work if that one is publicly accessible
-    - name: register-at-tir
-      image: ubuntu
-      command:
-        - /bin/bash
-      args:
-        - -ec
-        - |
-          #!/bin/bash
-          source /did-material/did.env
-          apt-get -y update; apt-get -y install curl
-          curl -X 'POST' 'http://tir.trust-anchor.svc.cluster.local:8080/issuer' -H 'Content-Type: application/json' -d "{\"did\": \"${DID}\", \"credentials\": []}"
-      volumeMounts:
-        - name: did-material
-          mountPath: /did-material
 
   # -- configuration of the realm to be imported
   realm:
