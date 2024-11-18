@@ -105,7 +105,7 @@ keycloak:
       mountPath: "/etc/env"
       readOnly: true
     - name: realms
-      mountPath: /opt/keycloak/data/import
+      mountPath: /opt/bitnami/keycloak/data/import
 
   extraVolumes:
     - name: did-material
