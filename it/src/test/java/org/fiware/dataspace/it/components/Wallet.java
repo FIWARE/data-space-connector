@@ -226,7 +226,7 @@ public class Wallet {
     public String getAccessToken(String tokenEndpoint, String preAuthorizedCode) throws Exception {
         RequestBody requestBody = new FormEncodingBuilder()
                 .add("grant_type", PRE_AUTHORIZED_GRANT_TYPE)
-                .add("code", preAuthorizedCode)
+                .add("pre-authorized_code", preAuthorizedCode)
                 .build();
         Request tokenRequest = new Request.Builder()
                 .url(tokenEndpoint)

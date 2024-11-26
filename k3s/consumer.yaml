@@ -18,6 +18,10 @@ tm-forum-api:
   enabled: false
 contract-management:
   enabled: false
+business-api-ecosystem:
+  enabled: false
+mongodb:
+  enabled: false
 
 postgresql:
   primary:
@@ -125,14 +129,19 @@ keycloak:
           "name": "OPERATOR",
           "description": "Is allowed to operate clusters.",
           "clientRole": true
+        },
+        {
+          "name": "REPRESENTATIVE",
+          "description": "Is allowed to register.",
+          "clientRole": true
         }
       ]
 
     users: |
       {
-        "username": "test-user",
+        "username": "employee",
         "enabled": true,
-        "email": "test@user.org",
+        "email": "employee@consumer.org",
         "firstName": "Test",
         "lastName": "Reader",
         "credentials": [
@@ -143,7 +152,55 @@ keycloak:
         ],
         "clientRoles": {
           "${CLIENT_DID}": [
+            "READER"
+          ],
+          "account": [
+            "view-profile",
+            "manage-account"
+          ]
+        },
+        "groups": [
+        ]
+      },
+      {
+        "username": "operator",
+        "enabled": true,
+        "email": "operator@consumer.org",
+        "firstName": "Test",
+        "lastName": "Operator",
+        "credentials": [
+          {
+            "type": "password",
+            "value": "test"
+          }
+        ],
+        "clientRoles": {
+          "${CLIENT_DID}": [
             "OPERATOR"
+          ],
+          "account": [
+            "view-profile",
+            "manage-account"
+          ]
+        },
+        "groups": [
+        ]
+      },
+      {
+        "username": "representative",
+        "enabled": true,
+        "email": "test@user.org",
+        "firstName": "Test",
+        "lastName": "Representative",
+        "credentials": [
+          {
+            "type": "password",
+            "value": "test"
+          }
+        ],
+        "clientRoles": {
+          "${CLIENT_DID}": [
+            "REPRESENTATIVE"
           ],
           "account": [
             "view-profile",
@@ -191,7 +248,7 @@ keycloak:
             "config": {
               "subjectProperty": "roles",
               "clientId": "${CLIENT_DID}",
-              "supportedCredentialTypes": "OperatorCredential"
+              "supportedCredentialTypes": "UserCredential,OperatorCredential"
             }
           },
           {
@@ -240,6 +297,7 @@ keycloak:
         "defaultClientScopes": [],
         "optionalClientScopes": []
       }
+
 did:
   enabled: true
   secret: issuance-secret

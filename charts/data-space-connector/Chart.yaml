@@ -59,3 +59,15 @@ dependencies:
     condition: contract-management.enabled
     version: 0.6.4
     repository: https://fiware.github.io/helm-charts
+  # marketplace
+  - name: business-api-ecosystem
+    condition: business-api-ecosystem.enabled
+    version: 0.11.5
+    repository: https://fiware.github.io/helm-charts
+  - name: mongodb
+    condition: mongodb.enabled
+    version: 16.3.0
+    repository: oci://registry-1.docker.io/bitnamicharts
+  
+
+

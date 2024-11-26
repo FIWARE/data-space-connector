@@ -84,6 +84,8 @@ apisix:
 vcverifier:
   ingress:
     enabled: true
+    annotations:
+      traefik.ingress.kubernetes.io/router.tls: "true"
     hosts:
       - host: provider-verifier.127.0.0.1.nip.io
         paths:
@@ -95,7 +97,7 @@ vcverifier:
       tirAddress: http://tir.127.0.0.1.nip.io:8080/
       did: ${DID}
     server:
-      host: http://provider-verifier.127.0.0.1.nip.io:8080
+      host: https://provider-verifier.127.0.0.1.nip.io:8443
     configRepo:
       configEndpoint: http://credentials-config-service:8080
     alternativeConfig: /alternative-conf/server.yaml
@@ -290,3 +292,25 @@ trusted-issuers-list:
         - host: til-provider.127.0.0.1.nip.io
           paths:
             - /
+
+business-api-ecosystem:
+  siop:
+    clientId: did:key:zDnaeypyWjzn54GuUP7PmDXiiggCyiG7ksMF7Unm7kjtEKBez
+    verifier:
+      host: https://provider-verifier.127.0.0.1.nip.io:8443
+      qrCodePath: /api/v1/loginQR
+      tokenPath: /token
+      jwksPath: /.well-known/jwks
+  externalUrl: https://marketplace.127.0.0.1.nip.io:8443
+
+
+  bizEcosystemLogicProxy:
+
+    ingress: 
+      enabled: true
+      annotations:
+        traefik.ingress.kubernetes.io/router.tls: "true"
+      hosts: 
+        - host: marketplace.127.0.0.1.nip.io
+          paths: 
+            - "/"

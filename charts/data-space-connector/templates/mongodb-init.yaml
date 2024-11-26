@@ -1,0 +1,43 @@
+{{- if .Values.mongodb.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mongodb-bae-configmap
+  namespace: {{ $.Release.Namespace | quote }}
+data:
+  init-db.sh: |
+    mongosh <<EOF
+
+    var rootUser = '$MONGODB_ROOT_USER';
+    var rootPassword = '$MONGODB_ROOT_PASSWORD';
+    var admin = db.getSiblingDB('admin');
+    admin.auth(rootUser, rootPassword);
+
+    use charging_db;
+    var passwd = '$MONGO_BAE_CHARGING_PW';
+    db.createUser(
+    {
+      user: 'charging',
+      pwd: passwd,
+      roles: [
+        {
+          role: 'readWrite',
+          db: 'charging_db'
+        }
+      ]
+    });
+
+    use belp_db;
+    var passwd = '$MONGO_BAE_BELP_PW';
+    db.createUser(
+    {
+      user: 'belp',
+      pwd: passwd,
+      roles: [
+        {
+          role: 'readWrite',
+          db: 'belp_db'
+        }
+      ]
+    });
+{{- end }}

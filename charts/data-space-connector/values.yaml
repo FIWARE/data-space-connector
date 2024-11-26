@@ -22,6 +22,15 @@ issuance:
     #-- name of the secret to put the generated password into
     secretName: issuance-secret
 
+# -- configuration to be shared between the marketplace components
+marketplace: 
+  generatePasswords:
+    # -- should a password for the database connection of marketplace components be generated in the cluster
+    enabled: true
+    #-- name of the secret to put the generated password into
+    secretName: marketplace-secret
+
+
 # -- configuration for the mysql to be deployed as part of the connector, see https://github.com/bitnami/charts/tree/main/bitnami/mysql for all options
 mysql:
   # -- should it be enabled? set to false if one outside the chart is used.
@@ -680,6 +689,10 @@ tm-forum-api:
       image: tmforum-service-catalog
       basePath: /tmf-api/serviceCatalogManagement/v4
 
+    - name: usage-management
+      image: tmforum-usage-management
+      basePath: /tmf-api/usageManagement/v4
+
   # redis caching
   redis:
     enabled: false
@@ -747,3 +760,166 @@ dataSpaceConfig:
 
   # -- Supported authentication protocols (e.g.: oid4vp)
   authenticationProtocols: []
+
+
+mongodb:
+  enabled: true
+  fullnameOverride: mongodb
+  persistence:
+    enabled: false
+  architecture: standalone
+  auth:
+    enabled: true
+    existingSecret: marketplace-secret
+  initdbScriptsConfigMap: mongodb-bae-configmap
+  extraEnvVarsSecret: marketplace-secret-env
+
+business-api-ecosystem:
+  bizEcosystemApis:
+    enabled: false
+
+    tmForum:
+      catalog:
+        host: mp-tmf-api.127.0.0.1.nip.io
+        port: 8080
+        path: /tmf-api/productCatalogManagement/v4
+      inventory:
+        host: mp-tmf-api.127.0.0.1.nip.io
+        port: 8080
+        path: /tmf-api/productInventory/v4
+      ordering:
+        host: mp-tmf-api.127.0.0.1.nip.io
+        port: 8080
+        path: /tmf-api/productOrderingManagement/v4
+      billing:
+        host: mp-tmf-api.127.0.0.1.nip.io
+        port: 8080
+        path: /tmf-api/customerBillManagement/v4
+      usage:
+        host: mp-tmf-api.127.0.0.1.nip.io
+        port: 8080
+        path: /tmf-api/usageManagement/v4
+      party:
+        host: mp-tmf-api.127.0.0.1.nip.io
+        port: 8080
+        path: /tmf-api/party/v4
+      customer:
+        host: mp-tmf-api.127.0.0.1.nip.io
+        port: 8080
+        path: /tmf-api/customerManagement/v4
+      resources:
+        host: mp-tmf-api.127.0.0.1.nip.io
+        port: 8080
+        path: /tmf-api/resourceCatalog/v4
+      services:
+        host: mp-tmf-api.127.0.0.1.nip.io
+        port: 8080
+        path: /tmf-api/serviceCatalogManagement/v4
+      resourceInventory:
+        host: mp-tmf-api.127.0.0.1.nip.io
+        port: 8080
+        path: /tmf-api/resourceInventoryManagement/v4
+  bizEcosystemRss:
+    enabled: false
+  siop:
+    enabled: true
+    verifier:
+      qrCodePath: /oidc/authorize
+      tokenPath: /oidc/token
+      jwksPath: /oidc/jwks
+    allowedRoles:
+      - seller
+      - customer
+      - admin
+  
+  bizEcosystemChargingBackend:
+
+    maxUploadSize: "5242880"
+
+    serviceAccount:
+      create: true
+
+    deployment:
+      image:
+        repository: fiware/biz-ecosystem-charging-backend
+        tag: 9.1.2
+        pullPolicy: Always
+    
+    plugins:
+      enabled: false
+
+    media:
+      enabled: false
+    
+    port: 8006
+
+    loglevel: debug
+
+    payment:
+      method: None
+
+
+    backup:
+      enabled: false
+
+    initContainers: false
+    propagateToken: true
+    basePath: /opt/business-ecosystem-charging-backend
+    token: 
+      enabled: false
+
+    db:
+      host: mongodb
+      database: charging_db
+      user: charging
+
+    extraEnvVars:
+      - name: BAE_CB_MONGO_PASS
+        valueFrom:
+          secretKeyRef:
+            name: marketplace-secret-env
+            key: MONGO_BAE_CHARGING_PW
+
+  oauth:
+    provider: "vc"
+
+  bizEcosystemLogicProxy:
+
+    serviceAccount:
+      create: true
+    
+    existingSecret: marketplace-secret
+
+    statefulset:
+      image:
+        repository: fiware/biz-ecosystem-logic-proxy
+        tag: "9.4.0"
+        pullPolicy: Always
+
+
+    port: 8004
+    nodeEnvironment: production
+
+    db:
+      host: mongodb
+      database: belp_db
+      user: belp
+      secretKey: mongodb-root-password
+    basePath: /opt/business-ecosystem-logic-proxy
+
+    externalIdp:
+      enabled: true
+    initContainers: false
+    propagateToken: true
+    additionalEnvVars:
+      - name: BAE_LP_SIOP_IS_REDIRECTION
+        value: "true"
+      - name: BAE_LP_SIOP_OPERATORS
+        value: VATES-B87798617
+      - name: BAE_LP_PURCHASE_ENABLED
+        value: "true"
+      - name: BAE_LP_MONGO_PASS
+        valueFrom:
+          secretKeyRef:
+            name: marketplace-secret-env
+            key: MONGO_BAE_BELP_PW
