@@ -88,13 +88,13 @@ Precisely, the connector bundles the following components:
 | Component       | Role            | Diagram field | Link |
 |-----------------|-----------------|---|------|
 | VCVerifier      | Validates VCs and exchanges them for tokens       |Verifier | https://github.com/FIWARE/VCVerifier |
-| credentials-config-service | Holds the information which VCs are required for accessing a service |PRP/PAP (authenication)| https://github.com/FIWARE/credentials-config-service |
+| credentials-config-service | Holds the information which VCs are required for accessing a service |PRP/PAP (authentication)| https://github.com/FIWARE/credentials-config-service |
 | Keycloak | Issuer of VCs on the Consumer side | | https://www.keycloak.org |
 | Scorpio        | Context Broker  | | https://github.com/ScorpioBroker/ScorpioBroker |
 | trusted-issuers-list | Acts as Trusted Issuers List by providing an [EBSI Trusted Issuers Registry](https://api-pilot.ebsi.eu/docs/apis/trusted-issuers-registry) API |Local Trusted Issuers List| https://github.com/FIWARE/trusted-issuers-list |
 | APISIX | APISIX as API-Gateway with a OPA plugin |PEP| https://apisix.apache.org/ / https://apisix.apache.org/docs/apisix/plugins/opa/ |
 | OPA | OpenPolicyAgent as the API Gateway's Sidecar |PDP | https://www.openpolicyagent.org/ |
-| odrl-pap        | Allowing to configure ODRL policies to be used by the OPA | PAP(authorization) | https://github.com/wistefan/odrl-pap |
+| odrl-pap        | Allowing to configure ODRL policies to be used by the OPA | PRP/PAP (authorization) | https://github.com/wistefan/odrl-pap |
 | tmforum-api     |  Implementation of the [TMForum APIs](https://www.tmforum.org/oda/open-apis/) for handling contracts|Contract Management| https://github.com/FIWARE/tmforum-api |
 | contract-management | Notification listener for contract management events out of TMForum |Contract Management | https://github.com/FIWARE/contract-management |
 | MySQL           | Database | | https://www.mysql.com |
