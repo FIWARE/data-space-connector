@@ -1,0 +1,39 @@
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: demo-sphereon
+  namespace: {{ $.Release.Namespace | quote }}
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: demo-sphereon
+      app.kubernetes.io/name: demo-sphereon
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/instance: demo-sphereon
+        app.kubernetes.io/name: demo-sphereon
+    spec:
+      containers:
+        - name: wallet-backend
+          image: quay.io/wi_stefan/sphereon-wallet
+          env:
+            - name: PORT
+              value: "5010"
+            - name: DB_TYPE
+              value: "postgres"
+            - name: DB_URL
+              value: "postgresql://postgres:password@postgresql:5432/postgres"
+           # - name: CONF_PATH
+          #    value: "/conf/docker/wallet"
+            - name: POSTGRES_HOST
+              value: "postgresql"
+            - name: POSTGRES_DB
+              value: "sphereon"
+            - name: POSTGRES_PORT
+              value: "5432"
+            - name: DB_ENCRYPTION_KEY
+              value: "29739248cad1bd1a0fc4d9b75cd4d2990de535baf5caadfdf8d8f86664aa830c"
+          ports:
+            - containerPort: 5010
+              name: http-api

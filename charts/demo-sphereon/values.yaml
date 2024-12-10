@@ -1,0 +1,31 @@
+postgresql:
+  # -- should it be enabled? set to false if one outside the chart is used.
+  enabled: true
+  # -- allows to set a fixed name for the services
+  fullnameOverride: postgresql
+  generatePasswords:
+    # -- should a password for the database be generated in the cluster
+    enabled: true
+    # -- name of the secret to store the password in
+    secretName: database-secret
+  # -- configure authentication to mysql
+  auth:
+    user: "user"
+    postgresPassword: "password"
+    password: "password"
+  replicationPassword: "password"
+  # -- configuration for the primary of the db
+  primary:
+    # -- scripts to be run on intialization
+    initdb:
+      scriptsConfigMap: demo-sphereon
+    extraEnvVars:
+      - name: JWT_SECRET
+        value: qynpg8j8imxrzitlipvax3rkwutivhqugnpsw32hfffff
+      - name: JWT_EXP
+        value: "3600"
+    persistence:
+      enabled: false
+  readReplicas:
+    persistence:
+      enabled: false

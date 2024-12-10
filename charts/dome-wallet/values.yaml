@@ -1,0 +1,232 @@
+vault:
+  fullnameOverride: wallet-vault-server
+  injector:
+    enabled: false
+  server:
+    persistence:
+      enabled: false
+    extraVolumes:
+      - name: data
+        emptyDir: {}
+    command: 
+      - /opt/bitnami/vault/bin/vault
+      - server
+      - -dev
+    extraEnvVars:
+      - name: VAULT_DEV_ROOT_TOKEN_ID
+        value: token
+      - name: LOG_LEVEL
+        value: debug
+wallet:
+  postgresql:
+    enabled: false
+  scorpio: 
+    enabled: false
+  postgis:
+    enabled: false
+  wallet-api:
+    image:
+      repository: quay.io/wi_stefan/in2-wallet
+      tag: latest
+    ingress:
+      enabled: false
+    app:
+      authServer:
+        external:
+          scheme: https
+          domain: wallet-keycloak.127.0.0.1.nip.io
+          port: 8443
+          path: /realms/test-realm
+        internal:
+          scheme: https
+          domain: wallet-keycloak.127.0.0.1.nip.io
+          port: 8443
+          path: /realms/test-realm
+    vault:
+      host: wallet-vault-server
+      token: token
+    broker:
+      provider: scorpio
+      internal:
+        scheme: http
+        domain: wallet-scorpio
+        port: 9090
+      pathsEntities: /ngsi-ld/v1/entities
+    vault:
+      host: wallet-vault-server
+      token: token
+    broker:
+      provider: scorpio
+      internal:
+        scheme: http
+        domain: wallet-scorpio
+        port: 9090
+      pathsEntities: /ngsi-ld/v1/entities
+  dome-wallet-ui:
+    image:
+      repository: in2workspace/in2-wallet-ui
+      tag: v1.3.5
+    fullnameOverride: wallet-ui
+    ingress:
+      enabled: false
+    app:
+      walletApi:
+        # for whatever idiotic reasons, the external address has to be used as the internal here...
+        internalDomain: https://wallet.127.0.0.1.nip.io:8443/wallet-api
+        websocketExternalDomain: wss://wallet.127.0.0.1.nip.io:8443/wallet-api
+      iam:
+        external_domain: https://wallet-keycloak.127.0.0.1.nip.io:8443
+        realm_path: /realms/test-realm
+
+  dome-wallet-keycloak:
+    enabled: false
+
+db:
+  generatePasswords: 
+    enabled: true
+    secretName: wallet-secret
+  
+
+## configuration of the context-broker - see https://github.com/FIWARE/helm-charts/tree/main/charts/scorpio-broker-aaio for details
+scorpio:
+  fullnameOverride: wallet-scorpio
+  # -- should scorpio be enabled
+  enabled: true
+  ## configuration of the image to be used
+  image:
+    # -- repository to be used - resource friendly all-in-one-runner without kafka
+    repository: scorpiobroker/all-in-one-runner
+    # -- tag of the image to be used - latest java image without kafka
+    tag: java-4.1.11
+  ## configuration of the database to be used by broker
+  db:
+    # -- host of the db
+    dbhost: wallet-scorpio-postgis
+    # -- username to be used
+    user: postgres
+    existingSecret:
+      enabled: true
+      name: wallet-secret
+      key: postgres-admin-password
+  ## configuration of the readiness probe
+  readinessProbe:
+    # -- path to be used for the readiness probe, older versions used /actuator/health
+    path: /q/health
+  ## configuration of the liveness probe
+  livenessProbe:
+    # -- path to be used for the readiness probe, older versions used /actuator/health
+    path: /q/health
+  ## configuration to be used for the service offered by scorpio
+  service:
+    # -- ClusterIP is the recommended type for most clusters
+    type: ClusterIP
+
+postgis:
+  # -- should it be enabled? set to false if one outside the chart is used.
+  enabled: true
+  # -- overrides the generated name, provides stable service names - this should be avoided if multiple instances are available in the same namespace
+  fullnameOverride: wallet-scorpio-postgis
+  # -- overrides the generated name, provides stable service names - this should be avoided if multiple instances are available in the same namespace
+  nameOverride: wallet-scorpio-postgis
+  ## auth configuration for the database
+  auth:
+    existingSecret: wallet-secret
+    secretKeys:
+      adminPasswordKey: postgres-admin-password
+      userPasswordKey: postgres-user-password
+  ## configuration of the postgres primary replicas
+  primary:
+    ## provide db initialization
+    initdb:
+      ## provide scripts for initialization
+      scripts:
+        # -- enable the postgis extension and create the database as expected by scorpio
+        enable.sh: |
+          psql postgresql://postgres:${POSTGRES_PASSWORD}@localhost:5432 -c "CREATE EXTENSION postgis;"
+          psql postgresql://postgres:${POSTGRES_PASSWORD}@localhost:5432 -c "CREATE DATABASE ngb;"
+          psql postgresql://postgres:${POSTGRES_PASSWORD}@localhost:5432 -c "CREATE DATABASE keycloak;"
+    persistence:
+      enabled: false
+  readReplicas:
+    persistence:
+      enabled: false
+
+keycloak:
+  # -- should it be enabled? set to false if one outside the chart is used.
+  enabled: true
+  # -- disable the security context, required by the current quarkus container, will be solved in the future chart versions of keycloak
+  containerSecurityContext:
+    enabled: false
+  proxy: edge
+  ingress:
+    enabled: true
+    hostname: wallet-keycloak.127.0.0.1.nip.io
+    annotations:
+      traefik.ingress.kubernetes.io/router.tls: "true"
+ 
+  service:
+    ports:
+      http: 8080
+  # -- authentication config for keycloak
+  auth:
+    existingSecret: wallet-secret
+    passwordSecretKey: keycloak-admin
+    adminUser: keycloak-admin
+  # -- should the db be deployed as part of the keycloak chart
+  postgresql:
+    enabled: false
+  # -- host of the external db to be used
+  externalDatabase:
+    host: wallet-scorpio-postgis
+    user: postgres
+    database: keycloak
+    existingSecret: wallet-secret
+    existingSecretPasswordKey: postgres-admin-password
+
+  # -- extra volumes to be mounted
+  extraVolumeMounts:
+    - name: realms
+      mountPath: /opt/bitnami/keycloak/data/import
+
+  extraVolumes:
+    - name: realms
+      configMap:
+        name: test-realm-realm
+
+  # -- extra env vars to be set. we require them at the moment, since some of the chart config mechanisms only work with the bitnami-image
+  extraEnvVars:
+    - name: KEYCLOAK_EXTRA_ARGS
+      value: "--import-realm"
+    # config for the db connection
+    - name: KC_DB_URL_HOST
+      value: wallet-scorpio-postgis
+    - name: KC_DB_URL_DATABASE
+      value: keycloak
+    - name: KC_DB_USERNAME
+      value: postgres
+    - name: KC_FRONTEND_URL
+      value: "https://wallet-keycloak.127.0.0.1.nip.io:8443"
+    - name: KEYCLOAK_HOSTNAME
+      value: "https://wallet-keycloak.127.0.0.1.nip.io:8443"
+    - name: KC_LOG_LEVEL
+      value: DEBUG
+    - name: KC_DB_PASSWORD
+      valueFrom:
+        secretKeyRef:
+          name: wallet-secret
+          key: postgres-admin-password
+    # keycloak admin password
+    - name: KC_ADMIN_PASSWORD
+      valueFrom:
+        secretKeyRef:
+          name: wallet-secret
+          key: keycloak-admin
+
+  # -- configuration of the realm to be imported
+  realm:
+    # -- should the realm be imported
+    import: true
+    # -- name of the realm
+    name: test-realm
+    # -- frontend url to be used for the realm
+    frontendURL: https://wallet-keycloak.127.0.0.1.nip.io:8443

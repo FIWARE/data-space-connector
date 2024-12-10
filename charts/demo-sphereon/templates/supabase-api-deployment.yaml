@@ -1,0 +1,43 @@
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: demo-sphereon-supabase
+  namespace: {{ $.Release.Namespace | quote }}
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: demo-supabase
+      app.kubernetes.io/name: demo-supabase
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/instance: demo-supabase
+        app.kubernetes.io/name: demo-supabase
+    spec:
+      containers:
+        - name: supabase
+          image: supabase/storage-api:v1.0.6
+          env:
+            - name: ANON_KEY
+              value: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.ewogICJyb2xlIjogImFub24iLAogICJpc3MiOiAic3VwYWJhc2UiLAogICJpYXQiOiAxNzEyNzAwMDAwLAogICJleHAiOiAxODcwNDY2NDAwCn0.GhRrVFUYPLOIcxwdSCEibEEQxjooJ8-ARghYlgX1u1U"
+            - name: SERVICE_KEY
+              value: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.ewogICJyb2xlIjogInNlcnZpY2Vfcm9sZSIsCiAgImlzcyI6ICJzdXBhYmFzZSIsCiAgImlhdCI6IDE3MTI3MDAwMDAsCiAgImV4cCI6IDE4NzA0NjY0MDAKfQ.O7XtSZwu68C7g-MBw0zlLBglmCnKj-7gbjsxbCCFGpU"
+            - name: POSTGREST_URL
+              value: "http://demo-postgres-rest:8080"
+            - name: PGRST_JWT_SECRET
+              value: "qynpg8j8imxrzitlipvax3rkwutivhqugnpsw32hfffff"
+            - name: DATABASE_URL
+              value: "postgres://postgres:password@postgresql:5432/postgres"
+            - name: FILE_SIZE_LIMIT
+              value: "52428800"
+            - name: STORAGE_BACKEND
+              value: "file"
+            - name: FILE_STORAGE_BACKEND_PATH
+              value: "/var/lib/storage"
+            - name: STORAGE_BACKEND
+              value: "file"
+            - name: STORAGE_BACKEND
+              value: "file"
+          ports:
+            - containerPort: 5000
+              name: http-api

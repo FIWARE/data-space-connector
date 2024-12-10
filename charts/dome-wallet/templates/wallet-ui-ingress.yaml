@@ -1,19 +1,19 @@
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: demo-wallet-ingress
+  name: wallet-ui
   namespace: {{ $.Release.Namespace | quote }}
   annotations:
     traefik.ingress.kubernetes.io/router.tls: "true"
 spec:
   rules:
-    - host: wallet.127.0.0.1.nip.io
+    - host: "wallet.127.0.0.1.nip.io"
       http:
         paths:
-          - path: /
-            pathType: Prefix
+          - path: "/"
+            pathType: "Prefix"
             backend:
               service:
-                name: demo-wallet
+                name: wallet-ui
                 port:
-                  name: static
+                  number: 8080

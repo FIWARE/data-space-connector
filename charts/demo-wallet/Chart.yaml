@@ -1,4 +1,0 @@
-apiVersion: v2
-name: demo-wallet
-description: Wallet deployment
-version: 0.0.1

@@ -143,10 +143,25 @@
                             <goal>copy-resources</goal>
                         </goals>
                         <configuration>
-                            <outputDirectory>${project.build.directory}/charts/demo-wallet</outputDirectory>
+                            <outputDirectory>${project.build.directory}/charts/dome-wallet</outputDirectory>
                             <resources>
                                 <resource>
-                                    <directory>${main.basedir}/charts/demo-wallet</directory>
+                                    <directory>${main.basedir}/charts/dome-wallet</directory>
+                                </resource>
+                            </resources>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>copy-resources-sphereon</id>
+                        <phase>prepare-package</phase>
+                        <goals>
+                            <goal>copy-resources</goal>
+                        </goals>
+                        <configuration>
+                            <outputDirectory>${project.build.directory}/charts/demo-sphereon</outputDirectory>
+                            <resources>
+                                <resource>
+                                    <directory>${main.basedir}/charts/demo-sphereon</directory>
                                 </resource>
                             </resources>
                         </configuration>
@@ -282,10 +297,10 @@
                         </goals>
                         <phase>package</phase>
                         <configuration>
-                            <chartDirectory>${project.build.directory}/charts/demo-wallet</chartDirectory>
+                            <chartDirectory>${project.build.directory}/charts/dome-wallet</chartDirectory>
                             <skipTemplate>false</skipTemplate>
                             <templateGenerateName>true</templateGenerateName>
-                            <templateOutputDir>${project.build.directory}/k3s/demo-wallet</templateOutputDir>
+                            <templateOutputDir>${project.build.directory}/k3s/dome-wallet</templateOutputDir>
                             <additionalArguments>--name-template=infra --namespace=infra
                             </additionalArguments>
                         </configuration>

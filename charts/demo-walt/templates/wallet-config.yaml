@@ -1,0 +1,90 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: demo-walt-backend
+  namespace: {{ $.Release.Namespace | quote }}
+data:
+  _features.conf: |
+    enabledFeatures = [
+      "trusted-ca"
+    ]
+
+  trusted-ca.conf: |
+    certificates = [
+      "-----BEGIN CERTIFICATE-----\n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\n-----END CERTIFICATE-----\n"
+    ]
+  walt.yaml: |
+    hikariDataSource:
+      jdbcUrl: jdbc:sqlite:/data-sqlite/data.db
+      maximumPoolSize: 5
+      autoCommit: false
+      dataSource:
+        journalMode: WAL
+        fullColumnNames: false
+  db.conf: |
+    dataSource {
+      jdbcUrl = "jdbc:sqlite:/data-sqlite/data.db"
+      driverClassName = "org.sqlite.JDBC"
+      username = "${DB_USERNAME}"
+      password = "${DB_PASSWORD}"
+      transactionIsolation = "TRANSACTION_SERIALIZABLE"
+
+      maximumPoolSize = 16
+      minimumIdle = 4
+      maxLifetime = 60000
+      autoCommit = false
+      dataSource {
+          journalMode = WAL
+          fullColumnNames = false
+      }
+    }
+  db.sqlite.conf: |
+    hikariDataSource {
+      jdbcUrl = "jdbc:sqlite:${SQLITE_DB_DATA}"
+      driverClassName = "org.sqlite.JDBC"
+      username = ""
+      password = ""
+      transactionIsolation = "TRANSACTION_SERIALIZABLE"
+
+      maximumPoolSize = 5
+      autoCommit = false
+      dataSource {
+          journalMode = WAL
+          fullColumnNames = false
+      }
+    }
+    recreateDatabaseOnStart = false
+  web.conf: |
+    webHost = "0.0.0.0"
+    webPort = ${WALLET_BACKEND_PORT}
+  logins.conf: |
+    enabledLoginMethods: [
+      "email"
+    ]
+  auth.conf: |
+    encryptionKey = "dncygwnvivxzlohc"
+    signKey = "jyjeylmidlylokzh"
+    tokenKey = "hjklwcptiniwjkdwwkigreumcayoyiso"
+    audTokenClaim = "https://walt.127.0.0.1.nip.io:8443"
+    issTokenClaim = "https://walt.127.0.0.1.nip.io:8443"
+    tokenLifetime = "30"
+  nitro.json: |
+    {
+      "date": "2024-11-28T13:22:09.485Z",
+      "preset": "node-server",
+      "framework": {
+        "name": "nuxt",
+        "version": "3.14.1592"
+      },
+      "versions": {
+        "nitro": "2.10.4"
+      },
+      "commands": {
+        "preview": "node ./server/index.mjs"
+      },
+      "config": {
+        "devProxy": {
+            "/wallet-api/": "https://walt.127.0.0.1.nip.io:8443/wallet-api"
+        }
+      }
+    }

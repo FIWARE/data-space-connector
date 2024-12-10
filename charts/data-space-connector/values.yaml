@@ -404,7 +404,7 @@ keycloak:
   # -- host of the external db to be used
   externalDatabase:
     host: postgresql
-
+    
   # -- extra volumes to be mounted
   extraVolumeMounts:
     - name: did-material
@@ -450,6 +450,8 @@ keycloak:
       value: xforwarded
     - name: KC_PROXY_ADDRESS_FORWARDING
       value: "true"
+    - name: KC_LOG_LEVEL
+      value: DEBUG
     - name: KC_DB_PASSWORD
       valueFrom:
         secretKeyRef:

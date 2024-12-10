@@ -1,0 +1,33 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: demo-walt-ingress
+  namespace: {{ $.Release.Namespace | quote }}
+  annotations:
+    traefik.ingress.kubernetes.io/router.tls: "true"
+spec:
+  rules:
+    - host: walt.127.0.0.1.nip.io
+      http:
+        paths:
+          - path: /wallet-api
+            pathType: Prefix
+            backend:
+              service:
+                name: demo-walt-backend
+                port:
+                  name: http
+          - path: /swagger
+            pathType: Prefix
+            backend:
+              service:
+                name: demo-walt-backend
+                port:
+                  name: http
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: demo-walt-frontend
+                port:
+                  name: http
