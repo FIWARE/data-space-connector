@@ -30,7 +30,7 @@ mysql:
   fullnameOverride: authentication-mysql
   # -- configure authentication to mysql
   auth:
-    # -- name of the secret to take the passowrds from
+    # -- name of the secret to take the passwords from
     existingSecret: authentication-database-secret
   # -- scripts to be executed on db startup
   initdbScripts:
@@ -106,7 +106,7 @@ postgresql:
     secretName: database-secret
   # -- configure authentication to mysql
   auth:
-    # -- name of the secret to take the passowrds from
+    # -- name of the secret to take the passwords from
     existingSecret: database-secret
     # -- key of the secrets inside the secret
     secretKeys:
@@ -114,7 +114,7 @@ postgresql:
       userPasswordKey: postgres-user-password
   # -- configuration for the primary of the db
   primary:
-    # -- scripts to be run on intialization
+    # -- scripts to be run on initialization
     initdb:
       scripts:
         create.sh: |
@@ -339,7 +339,7 @@ scorpio:
     type: ClusterIP
   # -- configuration to register the dataplane at the credentials-config-service
   ccs:
-    # -- endpoint of the ccs to regsiter at
+    # -- endpoint of the ccs to register at
     endpoint: http://credentials-config-service:8080
     # -- configmap to get the registration information from
     configMap: scorpio-registration
@@ -356,7 +356,7 @@ scorpio:
         - name: scorpio-registration
           mountPath: /bin/init.sh
           subPath: init.sh
-  # -- additonal volumes to be mounted for the dataplane
+  # -- additional volumes to be mounted for the dataplane
   additionalVolumes:
     - name: scorpio-registration
       configMap:
@@ -561,7 +561,7 @@ tm-forum-api:
 
   # -- list of apis to be deployed
   # -- every api needs to define a name and image. Basepath is required when routes or ingress will be enabled. Beside that, they can overwrite the default-config by using the same keys.
-  # -- be aware: when you change the image repositrory or the tag for an api, you have to provide both values for the changes to take effect
+  # -- be aware: when you change the image repository or the tag for an api, you have to provide both values for the changes to take effect
   apis:
     - name: party-catalog
       image: tmforum-party-catalog
@@ -613,7 +613,7 @@ tm-forum-api:
     name: tmf-api-registration
     # -- configuration to register the dataplane at the credentials-config-service
     ccs:
-      # -- endpoint of the ccs to regsiter at
+      # -- endpoint of the ccs to register at
       endpoint: http://credentials-config-service:8080
       # -- service id of the data-service to be used
       id: tmf-api
@@ -648,7 +648,7 @@ contract-management:
 did:
   enabled: false
 
-# -- configuration for registering a participant at the til, will most probably only be used in demonstrational enviornments
+# -- configuration for registering a participant at the til, will most probably only be used in demonstrational environments
 registration:
   enabled: false
 

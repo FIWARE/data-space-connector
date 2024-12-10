@@ -1,0 +1,6 @@
+# Local deployment k3s configuration
+/doc/deployment-integration/local-deployment/k3s.yaml
+
+# Geretated java classes
+/it/target
+/target
