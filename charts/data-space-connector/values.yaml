@@ -97,6 +97,9 @@ credentials-config-service:
 postgresql:
   # -- should it be enabled? set to false if one outside the chart is used.
   enabled: true
+  image:
+    # -- fixes the unpullable image referenced in the chart
+    tag: 13.18.0
   # -- allows to set a fixed name for the services
   fullnameOverride: postgresql
   generatePasswords:
@@ -283,6 +286,9 @@ apisix:
 postgis:
   # -- should it be enabled? set to false if one outside the chart is used.
   enabled: true
+  image:
+    # -- fixes the unpullable image referenced in the chart
+    tag: 13.18.0
   # -- overrides the generated name, provides stable service names - this should be avoided if multiple instances are available in the same namespace
   fullnameOverride: data-service-postgis
   # -- overrides the generated name, provides stable service names - this should be avoided if multiple instances are available in the same namespace
