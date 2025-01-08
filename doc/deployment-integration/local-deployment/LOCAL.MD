@@ -6,6 +6,7 @@ provided as part of this repo.
 ## Quick Start
 
 > :warning: The local deployment uses [k3s](https://k3s.io/) and is currently only tested on linux.
+> Its not recommended to use it on Windows or Mac Systems.
 
 To start the Data Space, just use:
 
