@@ -19,6 +19,7 @@ Issues revealed by the script are most likely due to incompatibility of your sys
 ## Quick Start
 
 > :warning: The local deployment uses [k3s](https://k3s.io/) and is currently only tested on linux.
+> Its not recommended to use it on Windows or Mac Systems.
 
 To start the Data Space, just use:
 
@@ -168,7 +169,7 @@ Exchange the pre-authorized code from the offer with an AccessToken at the autho
       --header 'Accept: */*' \
       --header 'Content-Type: application/x-www-form-urlencoded' \
       --data grant_type=urn:ietf:params:oauth:grant-type:pre-authorized_code \
-      --data code=${PRE_AUTHORIZED_CODE} | jq '.access_token' -r); echo ${CREDENTIAL_ACCESS_TOKEN}
+      --data pre-authorized_code=${PRE_AUTHORIZED_CODE} | jq '.access_token' -r); echo ${CREDENTIAL_ACCESS_TOKEN}
 ```
 
 Use the returned access token to get the actual credential:
