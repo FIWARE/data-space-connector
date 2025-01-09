@@ -2,6 +2,7 @@
 
 In order to support development and exploration of the FIWARE Data Space Connector, a "Minimal Viable Dataspace" is
 provided as part of this repo.
+An alternative deployment guide, based on [MicroK8s](https://microk8s.io/) can be found here: https://github.com/cgonzalezITA/DSFiware-hackathon?tab=readme-ov-file#quick-deployment-from-scratch
 
 ## Requirements
 
