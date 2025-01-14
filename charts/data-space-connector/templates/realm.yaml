@@ -16,7 +16,13 @@ data:
       "enabled": true,
       "attributes": {
         "frontendUrl": "{{ .Values.keycloak.realm.frontendUrl }}",
+        {{- if eq .Values.elsi.enabled  true }}
+        "issuerDid": {{ .Values.elsi.did | quote }}
+        {{- else if .Values.keycloak.signingKey }}
+        "issuerDid": {{ .Values.keycloak.signingKey.did | quote }}
+        {{- else }}
         "issuerDid": "${DID}"
+        {{- end }}
       },
       "sslRequired": "none",
       "roles": {
@@ -103,17 +109,35 @@ data:
           {
             "id": "jwt-signing",
             "name": "jwt-signing-service",
-            "providerId": "jwt_vc",
+            "providerId": "jades-jws-signing",
             "subComponents": {},
             "config": {
               "keyId": [
+                {{- if eq .Values.elsi.enabled  true }}
+                {{ .Values.elsi.did | quote }}
+                {{- else if .Values.keycloak.signingKey }}
+                {{ .Values.keycloak.signingKey.did | quote }}
+                {{- else }}
                 "${DID}"
+                {{- end }}
               ],
               "algorithmType": [
+                {{- if eq .Values.elsi.enabled  true }}
+                {{ .Values.elsi.keyAlgorithm | quote }}
+                {{- else if .Values.keycloak.signingKey }}
+                {{ .Values.keycloak.signingKey.keyAlgorithm | quote }}
+                {{- else }}
                 "ES256"
+                {{- end }}
               ],
               "issuerDid": [
+                {{- if eq .Values.elsi.enabled  true }}
+                {{ .Values.elsi.did | quote }}
+                {{- else if .Values.keycloak.signingKey }}
+                {{ .Values.keycloak.signingKey.did | quote }}
+                {{- else }}
                 "${DID}"
+                {{- end }}
               ],
               "tokenType": [
                 "JWT"
@@ -121,6 +145,67 @@ data:
             }
           }
         ],
+        {{- if eq .Values.elsi.enabled  true }}
+        "org.keycloak.keys.KeyProvider": [
+          {
+            "id": "a4589e8f-7f82-4345-b2ea-ccc9d4366600",
+            "name": {{ .Values.elsi.keyAlias | quote }},
+            "providerId": "java-keystore",
+            "subComponents": {},
+            "config": {
+              "keystore": [ {{ .Values.elsi.storePath | quote }} ],
+              "keystorePassword": [ {{ .Values.elsi.storePassword | quote }} ],
+              "keyAlias": [ {{ .Values.elsi.keyAlias | quote }} ],
+              "keyPassword": [ {{ .Values.elsi.keyPassword | quote }} ],
+              "kid": [ {{ .Values.elsi.did | quote }} ],
+              "active": [
+                "true"
+              ],
+              "priority": [
+                "0"
+              ],
+              "enabled": [
+                "true"
+              ],
+              "algorithm": [
+                {{ .Values.elsi.keyAlgorithm | quote }}
+              ]
+            }
+          }
+        ]
+        {{- else if .Values.keycloak.signingKey }}
+        "org.keycloak.keys.KeyProvider": [
+          {
+            "id": "a4589e8f-7f82-4345-b2ea-ccc9d4366600",
+            "name": "signing-key",
+            "providerId": "java-keystore",
+            "subComponents": {},
+            "config": {
+              "keystore": [ {{ .Values.keycloak.signingKey.storePath | quote }} ],
+              "keystorePassword": [ {{ .Values.keycloak.signingKey.storePassword | quote }} ],
+              "keyAlias": [ {{ .Values.keycloak.signingKey.keyAlias | quote }} ],
+              "keyPassword": [ {{ .Values.keycloak.signingKey.keyPassword | quote }} ],
+              {{- if .Values.keycloak.signingKey.did }}
+              "kid": [ {{ .Values.keycloak.signingKey.did | quote }} ],
+              {{- else }}
+              "kid": [ "${DID}" ],
+              {{- end }}
+              "active": [
+                "true"
+              ],
+              "priority": [
+                "0"
+              ],
+              "enabled": [
+                "true"
+              ],
+              "algorithm": [
+                {{ .Values.keycloak.signingKey.keyAlgorithm | quote }}
+              ]
+            }
+          }
+        ]
+        {{ else }}
         "org.keycloak.keys.KeyProvider": [
           {
             "id": "a4589e8f-7f82-4345-b2ea-ccc9d4366600",
@@ -148,6 +233,7 @@ data:
             }
           }
         ]
+        {{- end }}
       }
     }
 

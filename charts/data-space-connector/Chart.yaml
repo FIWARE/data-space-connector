@@ -2,7 +2,7 @@ apiVersion: v2
 name: data-space-connector
 description: Umbrella Chart for the FIWARE Data Space Connector, combining all essential parts to be used by a participant.
 type: application
-version: 7.17.2
+version: 7.22.0
 dependencies:
   - name: postgresql
     condition: postgresql.enabled
@@ -11,7 +11,7 @@ dependencies:
   # authentication
   - name: vcverifier
     condition: vcverifier.enabled
-    version: 2.9.2
+    version: 2.11.0
     repository: https://fiware.github.io/helm-charts
   - name: credentials-config-service
     condition: credentials-config-service.enabled
@@ -25,6 +25,11 @@ dependencies:
     condition: mysql.enabled
     version: 9.4.4
     repository: https://charts.bitnami.com/bitnami
+  - name: dss-validation-service
+    alias: dss
+    condition: dss.enabled
+    version: 0.0.14
+    repository: https://fiware.github.io/helm-charts
   # authorization
   - name: odrl-pap
     condition: odrl-pap.enabled
