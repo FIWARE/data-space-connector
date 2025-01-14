@@ -853,10 +853,12 @@ For that the configuration of provider and consumer needs to be extended:
 To test the usage of did:elsi in your local (or test) environment, a valid eIDAS Certificate Chain can be generated using [the FIWARE/eIDAS tool](https://github.com/FIWARE/eIDAS).
 
 To generate the required secrets:
+
 0. Create a working dir:
 ```shell
   mkdir output
 ```
+
 1. Create your config:
 ```shell
 echo "COUNTRY=\"DE\"
@@ -870,6 +872,7 @@ EMAIL=\"test@test.org\"
 # needs to be an actual available crl. localhost:3000 is valid for the local test env
 CRL_URI=http://localhost:3000/crl.pem" > output/config
 ```
+
 2. Create the key material:
 ```shell
   docker run -v $(pwd)/output:/out -v $(pwd)/output/config:/config/config quay.io/fiware/eidas:1.3.2
