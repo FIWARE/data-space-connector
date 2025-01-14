@@ -276,7 +276,7 @@
                         </goals>
                         <configuration>
                             <manifests>${project.build.directory}/k3s</manifests>
-                            <timeout>500</timeout>
+                            <timeout>1000</timeout>
                         </configuration>
                     </execution>
                 </executions>
