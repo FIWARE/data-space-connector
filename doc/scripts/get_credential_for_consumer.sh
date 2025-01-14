@@ -18,7 +18,7 @@ credential_access_token=$(curl -s -X POST "$1/realms/test-realm/protocol/openid-
   --header 'Accept: */*' \
   --header 'Content-Type: application/x-www-form-urlencoded' \
   --data grant_type=urn:ietf:params:oauth:grant-type:pre-authorized_code \
-  --data code=${pre_authorized_code} | jq '.access_token' -r)
+  --data pre-authorized_code=${pre_authorized_code} | jq '.access_token' -r)
 
 curl -s -X POST "$1/realms/test-realm/protocol/oid4vc/credential" \
   --header 'Accept: */*' \
