@@ -62,5 +62,5 @@ dependencies:
     repository: https://fiware.github.io/helm-charts
   - name: contract-management
     condition: contract-management.enabled
-    version: 0.6.4
+    version: 0.6.6
     repository: https://fiware.github.io/helm-charts

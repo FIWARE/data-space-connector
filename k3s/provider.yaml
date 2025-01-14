@@ -277,9 +277,59 @@ tm-forum-api:
         paths:
           - /
 
+# -- integration of rainbow
+rainbow:
+  enabled: true
+  db:
+    url: postgresql
+    user: postgres
+    existingSecret: database-secret
+    passwordKey: postgres-admin-password
+  ingress:
+    enabled: true
+    host: rainbow.127.0.0.1.nip.io
+
 contract-management:
-  til:
-    credentialType: OperatorCredential
+  config:
+    micronaut:
+      http:
+        services:
+          read-timeout: 30s
+          services:
+            trusted-issuers-list:
+              path: "/"
+              url: http://trusted-issuers-list:8080
+            product-catalog:
+              path: /tmf-api/productCatalogManagement/v4
+              url: http://tm-forum-api:8080
+            party:
+              path: /tmf-api/party/v4
+              url: http://tm-forum-api:8080
+            service-catalog:
+              path: /tmf-api/serviceCatalogManagement/v4
+              url: http://tm-forum-api:8080
+            rainbow:
+              path: "/"
+              url: http://rainbow:8080
+    general:
+      name: contract-management
+      basepath: "/callback"
+      port: 8080
+      til:
+        credentialType: OperatorCredential
+    notification:
+      entities:
+        - entityType: "ProductOrder"
+          eventTypes: [ "CREATE", "STATE_CHANGE", "DELETE" ]
+          apiAddress: "http://tm-forum-api:8080/tmf-api/productOrderingManagement/v4"
+        - entityType: "ProductOffering"
+          eventTypes: [ "CREATE", "STATE_CHANGE", "DELETE" ]
+          apiAddress: "http://tm-forum-api:8080/tmf-api/productCatalogManagement/v4"
+        - entityType: "Catalog"
+          eventTypes: [ "CREATE", "UPDATE", "DELETE", "STATE_CHANGE" ]
+          apiAddress: "http://tm-forum-api:8080/tmf-api/productCatalogManagement/v4"
+
+
 
 trusted-issuers-list:
   # only open for clean up in the tests

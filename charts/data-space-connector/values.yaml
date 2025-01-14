@@ -135,6 +135,7 @@ postgresql:
         create.sh: |
           psql postgresql://postgres:${POSTGRES_PASSWORD}@localhost:5432 -c "CREATE DATABASE pap;"
           psql postgresql://postgres:${POSTGRES_PASSWORD}@localhost:5432 -c "CREATE DATABASE keycloak;"
+          psql postgresql://postgres:${POSTGRES_PASSWORD}@localhost:5432 -c "CREATE DATABASE rainbow;"
 
 # -- configuration for the odrl-pap to be deployed as part of the connector, see https://github.com/FIWARE/helm-charts/tree/main/charts/odrl-pap for all options
 odrl-pap:
@@ -678,10 +679,28 @@ tm-forum-api:
         trustedParticipantsLists: http://tir.trust-anchor.org
         trustedIssuersLists: http://trusted-issuers-list:8080
 
+
+# -- integration of rainbow
+rainbow:
+  enabled: false
+  db:
+    url:
+    user: 
+    existingSecret:
+    passwordKey:
+  ingress:
+    enabled: false
+    host:
+  serviceType: ClusterIP
+  port: 8080
+
 ## configuration of the tm-forum-api - see https://github.com/FIWARE/helm-charts/tree/main/charts/contract-management for details
 contract-management:
   # -- should it be enabled? set to false if one outside the chart is used.
   enabled: true
+  deployment:
+    image:
+      tag: 2.0.0-PRE-3
   services:
     ## Config for Trusted Issuers List
     til:
