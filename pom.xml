@@ -326,7 +326,77 @@
                 </plugins>
             </build>
         </profile>
-
+        <profile>
+            <id>elsi</id>
+            <build>
+                <plugins>
+                    <!-- render the charts -->
+                    <plugin>
+                        <groupId>io.kokuwa.maven</groupId>
+                        <artifactId>helm-maven-plugin</artifactId>
+                        <version>${version.io.kokuwa.helm-maven-plugin}</version>
+                        <configuration>
+                            <skip>false</skip>
+                        </configuration>
+                        <executions>
+                            <execution>
+                                <id>template-dsc-provider</id>
+                                <goals>
+                                    <goal>init</goal>
+                                    <goal>dependency-update</goal>
+                                    <goal>template</goal>
+                                </goals>
+                                <phase>package</phase>
+                                <configuration>
+                                    <chartDirectory>${project.build.directory}/charts/data-space-connector
+                                    </chartDirectory>
+                                    <skipTemplate>false</skipTemplate>
+                                    <templateGenerateName>true</templateGenerateName>
+                                    <templateOutputDir>${project.build.directory}/k3s/dsc-provider</templateOutputDir>
+                                    <additionalArguments>--name-template=provider --namespace=provider -f ${main.basedir}/k3s/provider-elsi.yaml
+                                    </additionalArguments>
+                                </configuration>
+                            </execution>
+                            <execution>
+                                <id>template-dsc-consumer</id>
+                                <goals>
+                                    <goal>init</goal>
+                                    <goal>dependency-update</goal>
+                                    <goal>template</goal>
+                                </goals>
+                                <phase>package</phase>
+                                <configuration>
+                                    <chartDirectory>${project.build.directory}/charts/data-space-connector
+                                    </chartDirectory>
+                                    <skipTemplate>false</skipTemplate>
+                                    <templateGenerateName>true</templateGenerateName>
+                                    <templateOutputDir>${project.build.directory}/k3s/dsc-consumer</templateOutputDir>
+                                    <additionalArguments>--name-template=consumer --namespace=consumer -f ${main.basedir}/k3s/consumer-elsi.yaml
+                                    </additionalArguments>
+                                </configuration>
+                            </execution>
+                            <execution>
+                                <id>template-trust-anchor</id>
+                                <goals>
+                                    <goal>init</goal>
+                                    <goal>dependency-update</goal>
+                                    <goal>template</goal>
+                                </goals>
+                                <phase>package</phase>
+                                <configuration>
+                                    <chartDirectory>${project.build.directory}/charts/trust-anchor</chartDirectory>
+                                    <skipTemplate>false</skipTemplate>
+                                    <templateGenerateName>true</templateGenerateName>
+                                    <templateOutputDir>${project.build.directory}/k3s/trust-anchor</templateOutputDir>
+                                    <additionalArguments>--name-template=trust-anchor --namespace=trust-anchor -f ${main.basedir}/k3s/trust-anchor.yaml
+                                    </additionalArguments>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
     </profiles>
 
 </project>

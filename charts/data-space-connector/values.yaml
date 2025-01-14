@@ -71,6 +71,18 @@ vcverifier:
     # -- we do not need authentication here
     authEnabled: false
 
+# -- configuration for the digital-signature.service to be deployed as part of the connector in case of did:elsi support
+dss:
+  # -- should it be enabled?
+  enabled: false
+  # -- allows to set a fixed name for the services
+  fullnameOverride: dss
+  # -- can be used to provide the crl for ca's provided as truststore to the dss
+  crl:
+    # -- should it be enabled?
+    enabled: false
+
+
 # -- configuration for the credentials-config-service to be deployed as part of the connector, see https://github.com/FIWARE/helm-charts/tree/main/charts/credentials-config-service for all options
 credentials-config-service:
   # -- should it be enabled? set to false if one outside the chart is used.
@@ -162,7 +174,7 @@ opa:
   data:
     minDelay: 1
     maxDelay: 15
-
+  
 # -- configuration for apisix to be deployed as part of the connector, see https://github.com/bitnami/charts/tree/main/bitnami/apisix for all options
 apisix:
   # -- should it be enabled? set to false if one outside the chart is used.
@@ -369,6 +381,26 @@ scorpio:
         name: scorpio-registration
         defaultMode: 0755
 
+# -- configuration to issue credentials, using a did:elsi
+elsi:
+  # -- should a did:elsi be used
+  enabled: false
+  # -- keystore to be used for signing the credentials 
+  # keystore: 
+    # store.p12: <THE_ENCODED_CONTENT>
+  # -- the did to be used
+  did:
+  # -- algorithm of the signing key
+  keyAlgorithm:
+  # -- path to the keystore 
+  storePath:
+  # -- password for the keystore
+  storePassword:
+  # -- alias of the key
+  keyAlias: 
+  # -- password of the key
+  keyPassword:
+
 ## configuration of the keycloak - see https://github.com/bitnami/charts/tree/main/bitnami/keycloak for details
 keycloak:
   # -- should it be enabled? set to false if one outside the chart is used.
@@ -542,7 +574,20 @@ keycloak:
         "defaultClientScopes": [],
         "optionalClientScopes": []
       }
-
+  # -- configuration for the signing key to be used for issuing credentials
+  # signingKey:
+    # -- path to the keystore containing the signing key
+    # storePath:
+    # -- password for the keystore containing the signing key
+    # storePassword:
+    # -- alias of the signing key
+    # keyAlias:
+    # -- password of the signing key
+    # keyPassword:
+    # -- algorithm of the signing key
+    # keyAlgorithm: 
+    # -- did that the key belongs to 
+    # did: 
 
 ## configuration of the tm-forum-api - see https://github.com/FIWARE/helm-charts/tree/main/charts/tm-forum-api for details
 tm-forum-api:

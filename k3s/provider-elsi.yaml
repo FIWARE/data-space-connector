@@ -1,0 +1,326 @@
+keycloak:
+  enabled: false
+
+apisix:
+  image:
+    debug: true
+  dataPlane:
+    ingress:
+      enabled: true
+      hostname: mp-data-service.127.0.0.1.nip.io
+      extraHosts:
+        - name: mp-tmf-api.127.0.0.1.nip.io
+          path: /
+  catchAllRoute:
+    enabled: false
+  routes: |-
+    - uri: /.well-known/openid-configuration
+      host: mp-data-service.127.0.0.1.nip.io
+      upstream:
+        nodes:
+          verifier:3000: 1
+        type: roundrobin
+      plugins:
+        proxy-rewrite:
+          uri: /services/data-service/.well-known/openid-configuration
+    - uri: /.well-known/data-space-configuration
+      upstream:
+        nodes:
+          dsconfig:3002: 1
+        type: roundrobin
+      plugins:
+        proxy-rewrite:
+          uri: /.well-known/data-space-configuration/data-space-configuration.json
+        response-rewrite:
+          headers:
+            set:
+              content-type: application/json
+    - uri: /*
+      host: mp-data-service.127.0.0.1.nip.io
+      upstream:
+        nodes:
+          data-service-scorpio:9090: 1
+        type: roundrobin
+      plugins:
+        openid-connect:
+          bearer_only: true
+          use_jwks: true
+          client_id: data-service
+          client_secret: unused
+          ssl_verify: false
+          discovery: http://verifier:3000/services/data-service/.well-known/openid-configuration
+        opa:
+          host: "http://localhost:8181"
+          policy: policy/main
+          with_body: true
+    - uri: /.well-known/openid-configuration
+      host: mp-tmf-api.127.0.0.1.nip.io
+      upstream:
+        nodes:
+          verifier:3000: 1
+        type: roundrobin
+      plugins:
+        proxy-rewrite:
+          uri: /services/tmf-api/.well-known/openid-configuration
+    - uri: /*
+      host: mp-tmf-api.127.0.0.1.nip.io
+      upstream:
+        nodes:
+          tm-forum-api:8080: 1
+        type: roundrobin
+      plugins:
+        openid-connect:
+          bearer_only: true
+          use_jwks: true
+          client_id: contract-management
+          client_secret: unused
+          ssl_verify: false
+          discovery: http://verifier:3000/services/tmf-api/.well-known/openid-configuration
+        opa:
+          host: "http://localhost:8181"
+          policy: policy/main
+          with_body: true
+
+dss:
+  enabled: true
+  keystores:
+    store.jks: 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
+  trust:
+    stores:
+      - path: /keystores/store.jks
+        type: jks
+        password: password
+  deployment: 
+    additionalContainers:
+      - name: crl-provider-static
+        imagePullPolicy: Always
+        image: "lipanski/docker-static-website:2.1.0"
+        volumeMounts:
+          - name: crl-provider-json
+            mountPath: /home/static/crl.pem
+            subPath: crl.pem
+    additionalVolumes:
+      - name: crl-provider-json
+        secret:
+          secretName: crl-provider
+  health: 
+    port: 8080
+  crl:
+    enabled: true
+    secret: 
+      crl.pem: LS0tLS1CRUdJTiBYNTA5IENSTC0tLS0tCk1JSURuRENDQVlRQ0FRRXdEUVlKS29aSWh2Y05BUUVMQlFBd1pERUxNQWtHQTFVRUJoTUNSRVV4RHpBTkJnTlYKQkFnTUJrSmxjbXhwYmpFU01CQUdBMVVFQ2d3SlJrbFhRVkpGSUVOQk1SSXdFQVlEVlFRRERBbEdTVmRCVWtVdApRMEV4SERBYUJna3Foa2lHOXcwQkNRRVdEV05oUUdacGQyRnlaUzV2Y21jWERUSTFNREV4TXpFeU16VXpObG9YCkRUSTFNREl4TWpFeU16VXpObG93SnpBbEFoUlM2Y1lJTE5pOGZUVGR5NEJDYlFMVys2aXJ6UmNOTWpVd01URXoKTVRJek5UTTJXcUNCd2pDQnZ6Q0Jyd1lEVlIwakJJR25NSUdrZ0JTNEN3U21nRHlmd3oyalZFMm1hZkZSRUVtdQpmS0dCaUtTQmhUQ0JnakVMTUFrR0ExVUVCaE1DUkVVeER6QU5CZ05WQkFnTUJrSmxjbXhwYmpFUE1BMEdBMVVFCkJ3d0dRbVZ5YkdsdU1SSXdFQVlEVlFRS0RBbEdTVmRCVWtVZ1EwRXhFakFRQmdOVkJBTU1DVVpKVjBGU1JTMUQKUVRFY01Cb0dDU3FHU0liM0RRRUpBUllOWTJGQVptbDNZWEpsTG05eVp6RUxNQWtHQTFVRUJSTUNNREdDQVFFdwpDd1lEVlIwVUJBUUNBaEFCTUEwR0NTcUdTSWIzRFFFQkN3VUFBNElDQVFBdmFQTEpNbWh2MEM2cnA2eXF0a3JYCnZOT3BYNGlOdGVscUNnREpwTG5TYlhndTVJb1dtWFZHeVdFbldNUHkycytsbktnRW5hZmxEazYrdlNxbkp4cmYKcnNXMEZ5VzFaR2dGVDIrNVZRU1I3dXVXWUp3VmtacnM4THdOM3JuQVpuZzdnbWhNYjZqNk9mU2JEV3pBWjVsZApPOWx2cDBCR3lid2pqMmowOUJ3ZXFYK2ZLbHNXMFg3QSt4VWJjRDNKemJDd1lHRHNrc1YrckJNY3RHaEp0cEdkCi9VbFI4bWozcGNjT3RFRHQ4dTR2ZGpPNFlCcERaQ0pZNUxnUjdUZUNDdHgyZFRlck91Wm9hNXdTZFl0eVBybEoKSngzL0s3ckZld0hKaUFZMTl3K3JNWC9IVFN3RTVPMjVESDFabHBKUVVTRDJvR05laE4rTVRuYnZUNk5lKzlkUQpTRmlQbFVKVEZZZGtlTjhoZVR6bUFPR2VOSmdTQ1k5c2VRcEwwMFRvK3VMc2ZCcHZtdnhiRDZOdEJ4NGxtWk9jCjVnZ2NNc3A0aGlWeXFiaW9aTXdaUHZnL3NnUDJFODhTSUdSamJ3dGN1cVVPdHorYUdjZFYxekNvZVRqOEFvTEYKem4wYU9rSWhORVdOUHVJeFc5bHQvNXo4ZThjUmt4UVh0UkdobmpjeWpqWFVEbHZSQ1pCY0pLazZINFlYaFNLdQpsdHhjQ2luVVNpVlB0eFA2ak5FYVlEVzQrdzRkMnNWeFlXVi9tc1d3T1lPaEtOdUErRVBINTVnUHc1d08vci95CjRqc0gwUVhMNGtncmZZS01kSzIzUEJiV0FjaWh0eS8yWGhua1ZlOS91SWtWV2NWVGhmVDlVVkVQaENFSWJhWEIKbXp3akw5SmpIYlI5WFMrWnk5YWxzUT09Ci0tLS0tRU5EIFg1MDkgQ1JMLS0tLS0K
+
+vcverifier:
+  ingress:
+    enabled: true
+    hosts:
+      - host: provider-verifier.127.0.0.1.nip.io
+        paths:
+          - "/"
+  deployment:
+    verifier:
+      tirAddress: http://tir.127.0.0.1.nip.io:8080/
+      did: ${DID}
+    server:
+      host: http://provider-verifier.127.0.0.1.nip.io:8080
+    configRepo:
+      configEndpoint: http://credentials-config-service:8080
+    elsi:
+      enabled: true
+      validationEndpoint:
+        host: http://provider-dss:8080
+        validationPath: /validateSignature
+        healthPath: /health/liveness
+
+    alternativeConfig: /alternative-conf/server.yaml
+    additionalVolumes:
+      - name: did-material
+        emptyDir: {}
+      - name: alternative-conf
+        emptyDir: {}
+    additionalVolumeMounts:
+      - name: alternative-conf
+        mountPath: /alternative-conf
+    initContainers:
+      - name: get-did
+        image: ubuntu
+        command:
+          - /bin/bash
+        args:
+          - -ec
+          - |
+            #!/bin/bash
+            apt-get -y update; apt-get -y install wget; apt-get -y install gettext-base
+            cd /did-material
+            wget http://did-helper:3002/did-material/did.env
+            export $(cat /did-material/did.env)
+            cp /original-conf/server.yaml /alternative-conf/server.yaml
+            envsubst < /alternative-conf/server.yaml
+        volumeMounts:
+          - name: did-material
+            mountPath: /did-material
+          - name: config-volume
+            mountPath: /original-conf
+          - name: alternative-conf
+            mountPath: /alternative-conf
+
+      - name: register-at-tir
+        image: ubuntu
+        command:
+          - /bin/bash
+        args:
+          - -ec
+          - |
+            #!/bin/bash
+            source /did-material/did.env
+            apt-get -y update; apt-get -y install curl
+            curl -X 'POST' 'http://tir.trust-anchor.svc.cluster.local:8080/issuer' -H 'Content-Type: application/json' -d "{\"did\": \"${DID}\", \"credentials\": []}"
+        volumeMounts:
+          - name: did-material
+            mountPath: /did-material
+
+mysql:
+  primary:
+    persistence:
+      enabled: false
+  secondary:
+    persistence:
+      enabled: false
+
+postgis:
+  primary:
+    persistence:
+      enabled: false
+  readReplicas:
+    persistence:
+      enabled: false
+
+postgresql:
+  primary:
+    persistence:
+      enabled: false
+  readReplicas:
+    persistence:
+      enabled: false
+
+did:
+  enabled: true
+  secret: issuance-secret
+  serviceType: ClusterIP
+  port: 3002
+  cert:
+    country: DE
+    state: SAXONY
+    locality: Dresden
+    organization: M&P Operations Inc.
+    commonName: www.mp-operation.org
+  ingress:
+    enabled: true
+    host: did-provider.127.0.0.1.nip.io
+
+dataSpaceConfig:
+  enabled: true
+  serviceType: ClusterIP
+  port: 3002
+  supportedModels:
+    - "https://raw.githubusercontent.com/smart-data-models/dataModel.Consumption/master/ConsumptionPoint/schema.json"
+    - "https://raw.githubusercontent.com/smart-data-models/dataModel.Consumption/master/ConsumptionCost/schema.json"
+  supportedProtocols:
+    - http
+    - https
+  authenticationProtocols:
+    - oid4vp
+
+scorpio:
+  ingress:
+    enabled: true
+    # only to make it available for the test initialization
+    hosts:
+    - host: scorpio-provider.127.0.0.1.nip.io
+      paths:
+        - "/"
+  ccs:
+    defaultOidcScope:
+      name: default
+    oidcScopes:
+      default:
+        - type: UserCredential
+          trustedParticipantsLists:
+            - http://tir.trust-anchor.svc.cluster.local:8080
+          trustedIssuersLists:
+            - http://trusted-issuers-list:8080
+      operator:
+        - type: OperatorCredential
+          trustedParticipantsLists:
+            - http://tir.trust-anchor.svc.cluster.local:8080
+          trustedIssuersLists:
+            - http://trusted-issuers-list:8080
+
+
+odrl-pap:
+  deployment:
+    initContainers:
+      - name: get-did
+        image: ubuntu
+        command:
+          - /bin/bash
+        args:
+          - -ec
+          - |
+            #!/bin/bash
+            apt-get -y update; apt-get -y install wget
+            cd /did-material
+            wget http://did-helper:3002/did-material/did.env
+        volumeMounts:
+          - name: did-material
+            mountPath: /did-material
+    additionalVolumes:
+      - name: did-material
+        emptyDir: {}
+    additionalVolumeMounts:
+      - name: did-material
+        mountPath: /did-material
+    command:
+      - /bin/sh
+    args:
+      - -ec
+      - |
+        #!/bin/sh
+        source /did-material/did.env
+        export GENERAL_ORGANIZATION_DID=$DID
+        ./application -Dquarkus.http.host=0.0.0.0
+
+  ingress:
+    enabled: true
+    hosts:
+      - host: pap-provider.127.0.0.1.nip.io
+        paths:
+          - "/"
+
+tm-forum-api:
+  registration:
+    ccs:
+      defaultOidcScope:
+        credentialType: UserCredential
+        trustedParticipantsLists: http://tir.trust-anchor.svc.cluster.local:8080
+
+  ingress:
+    enabled: true
+    hosts:
+      - host: tm-forum-api.127.0.0.1.nip.io
+        paths:
+          - /
+
+contract-management:
+  til:
+    credentialType: OperatorCredential
+
+trusted-issuers-list:
+  # only open for clean up in the tests
+  ingress:
+    til:
+      enabled: true
+      hosts:
+        - host: til-provider.127.0.0.1.nip.io
+          paths:
+            - /
