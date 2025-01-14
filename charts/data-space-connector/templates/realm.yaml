@@ -112,7 +112,7 @@ data:
             {{- if eq .Values.elsi.enabled  true }}
             "providerId": "jades-jws-signing",
             {{- else }}
-            "providerId": "jwt-signing-service",
+            "providerId": "jwt_vc",
             {{- end }}
             "subComponents": {},
             "config": {
