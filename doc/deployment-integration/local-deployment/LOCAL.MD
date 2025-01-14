@@ -2,10 +2,25 @@
 
 In order to support development and exploration of the FIWARE Data Space Connector, a "Minimal Viable Dataspace" is
 provided as part of this repo.
+An alternative deployment guide, based on [MicroK8s](https://microk8s.io/) can be found here: https://github.com/cgonzalezITA/DSFiware-hackathon?tab=readme-ov-file#quick-deployment-from-scratch
+
+## Requirements
+
+The local deployment tries to be as decoupled from the host system as possible to reduce the amount of requirements but stills needs the following programs:
+
+- [Maven](https://maven.apache.org/)
+- Java Development Kit (at least v17)
+- [Docker](https://www.docker.com/)
+
+To check if the tools are installed, can run and are able to spin up minimal kubernetes cluster without further FIWARE components, you should execute the prepared [script](checkRequirements.sh).
+
+Issues revealed by the script are most likely due to incompatibility of your system or faulty installation of the required tools.
+
 
 ## Quick Start
 
 > :warning: The local deployment uses [k3s](https://k3s.io/) and is currently only tested on linux.
+> Its not recommended to use it on Windows or Mac Systems.
 
 > :warning: In current Ubuntu installations, ```br_netfilter``` is disabled by default. That leads to networking issues inside the k3s cluster and will prevent the connector to start up properly. Make sure that its enabled via ```modprobe br_netfilter```. See [Stackoverflow](https://stackoverflow.com/questions/48148838/kube-dns-error-reply-from-unexpected-source/48151279#48151279) for more.
 
