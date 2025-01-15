@@ -32,6 +32,7 @@ recipes.
   - [Local Deployment](#local-deployment)
   - [Deployment with Helm](#deployment-with-helm)
 - [Testing](#testing)
+- [Work in Progress](#work-in-progress)
 - [Additional documentation and resources](#additional-documentation-and-resources)
   - [Additional documentation](#additional-documentation)
   - [Additional Resources](#additional-resources)
@@ -349,7 +350,10 @@ the [test-scenarios](./it/src/test/resources/it/mvds_basic.feature) against it.
 
 
 
+## Work in Progress
 
+Topics that are currently planned or being worked at by the community:
+* Integration of support for the [Transfer Process Protocol}(https://docs.internationaldataspaces.org/ids-knowledgebase/dataspace-protocol/transfer-process/transfer.process.protocol)
 
 
 ## Additional documentation and resources
