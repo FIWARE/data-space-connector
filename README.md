@@ -32,6 +32,7 @@ recipes.
   - [Local Deployment](#local-deployment)
   - [Deployment with Helm](#deployment-with-helm)
 - [Testing](#testing)
+- [Work in Progress](#work-in-progress)
 - [Additional documentation and resources](#additional-documentation-and-resources)
   - [Additional documentation](#additional-documentation)
   - [Additional Resources](#additional-resources)
