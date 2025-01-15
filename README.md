@@ -33,6 +33,7 @@ recipes.
   - [Deployment with Helm](#deployment-with-helm)
 - [Testing](#testing)
 - [Additional documentation and resources](#additional-documentation-and-resources)
+  - [Ongoing Work](#ongoing-work)
   - [Additional documentation](#additional-documentation)
   - [Additional Resources](#additional-resources)
 
@@ -354,15 +355,14 @@ the [test-scenarios](./it/src/test/resources/it/mvds_basic.feature) against it.
 
 ## Additional documentation and resources
 
+### Ongoing Work
+The FIWARE Data Space Connector is constantly beeing developed and extended with new features. Their status and some previews will be listed [here](./doc/ONGOING_WORK.md).
 
 ### Additional documentation
 
 Additional and more detailed documentation about the FIWARE Data Space Connector, 
 specific flows and its deployment and integration with other frameworks, can be found here:
 * [Additional documentation](./doc)
-
-
-
 
 
 ### Additional Resources
