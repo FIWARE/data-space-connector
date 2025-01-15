@@ -81,6 +81,14 @@ apisix:
           policy: policy/main
           with_body: true
 
+credentials-config-service:
+  ingress:
+    enabled: true
+    hosts:
+      - host: provider-ccs.127.0.0.1.nip.io
+        paths:
+          - "/"
+
 vcverifier:
   ingress:
     enabled: true
