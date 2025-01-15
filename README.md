@@ -349,7 +349,10 @@ the [test-scenarios](./it/src/test/resources/it/mvds_basic.feature) against it.
 
 
 
+## Work in Progress
 
+Topics that are currently planned or being worked at by the community:
+* Integration of support for the [Transfer Process Protocol}(https://docs.internationaldataspaces.org/ids-knowledgebase/dataspace-protocol/transfer-process/transfer.process.protocol)
 
 
 ## Additional documentation and resources
