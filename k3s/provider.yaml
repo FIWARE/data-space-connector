@@ -295,25 +295,23 @@ contract-management:
       http:
         services:
           read-timeout: 30s
-          services:
-            trusted-issuers-list:
-              path: "/"
-              url: http://trusted-issuers-list:8080
-            product-catalog:
-              path: /tmf-api/productCatalogManagement/v4
-              url: http://tm-forum-api:8080
-            party:
-              path: /tmf-api/party/v4
-              url: http://tm-forum-api:8080
-            service-catalog:
-              path: /tmf-api/serviceCatalogManagement/v4
-              url: http://tm-forum-api:8080
-            rainbow:
-              path: "/"
-              url: http://rainbow:8080
+          trusted-issuers-list:
+            path: "/"
+            url: http://trusted-issuers-list:8080
+          product-catalog:
+            path: /tmf-api/productCatalogManagement/v4
+            url: http://tm-forum-api:8080
+          party:
+            path: /tmf-api/party/v4
+            url: http://tm-forum-api:8080
+          service-catalog:
+            path: /tmf-api/serviceCatalogManagement/v4
+            url: http://tm-forum-api:8080
+          rainbow:
+            path: "/"
+            url: http://rainbow:8080
     general:
-      name: contract-management
-      basepath: "/callback"
+      host: contract-management
       port: 8080
       til:
         credentialType: OperatorCredential

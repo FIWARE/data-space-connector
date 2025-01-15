@@ -698,9 +698,11 @@ rainbow:
 contract-management:
   # -- should it be enabled? set to false if one outside the chart is used.
   enabled: true
+  fullnameOverride: contract-management
   deployment:
     image:
       tag: 2.0.0-PRE-3
+      pullPolicy: Always
   services:
     ## Config for Trusted Issuers List
     til:
