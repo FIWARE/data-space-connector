@@ -357,6 +357,7 @@ the [test-scenarios](./it/src/test/resources/it/mvds_basic.feature) against it.
 
 ### Ongoing Work
 The FIWARE Data Space Connector is constantly beeing developed and extended with new features. Their status and some previews will be listed [here](./doc/ONGOING_WORK.md).
+A presentation about the ongoing work and future developments for the FIWARE Data Space Connector can be  found on [Youtube](https://www.youtube.com/watch?v=bZAzOHIdSr8).
 
 ### Additional documentation
 
