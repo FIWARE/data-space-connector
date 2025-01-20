@@ -841,6 +841,71 @@ with the TMForum-APIs directly.
     -H 'Accept: */*' \
     -H "Authorization: Bearer ${ACCESS_TOKEN}"
 ```
+
+## Holder Verification
+
+All previous steps allowed essentially everyone to use the credentials issued, since the verification does not check if they belong to the holder presenting them.
+However, in a lot of usecases only the one that got the credential issued should be able to use it. Therfor, the [Verifier](../../../README.md#components) can be configured to check that the presenter is actually the lawful holder of the credential.
+
+To try it out, insert your holder did (```echo $HOLDER_DID```) into the mapper configuration of your consumer(e.g. [consumer.yaml](../../../k3s/consumer.yamlL234-L241)). Redeploy the connector and then try the following: 
+
+1. Configure holder verfifcation for a certain scope:
+```shell
+  curl -X 'PUT' \
+  'http://provider-ccs.127.0.0.1.nip.io:8080/service/data-service' \
+  -H 'accept: application/json' \
+  -H 'Content-Type: application/json' \
+  -d '{
+        "defaultOidcScope": "default",
+        "oidcScopes": {
+            "default": [
+                {
+                    "type": "UserCredential",
+                    "trustedParticipantsLists": [
+                        "http://tir.trust-anchor.svc.cluster.local:8080"
+                    ],
+                    "trustedIssuersLists": [
+                        "http://trusted-issuers-list:8080"
+                    ],
+                    "holderVerification": {
+                        "enabled": true,
+                        "claim": "subject"
+                    }
+                }
+            ],
+            "operator": [
+                {
+                    "type": "OperatorCredential",
+                    "trustedParticipantsLists": [
+                        "http://tir.trust-anchor.svc.cluster.local:8080"
+                    ],
+                    "trustedIssuersLists": [
+                        "http://trusted-issuers-list:8080"
+                    ],
+                    "holderVerification": {
+                        "enabled": true,
+                        "claim": "subject"
+                    }
+                }
+            ]
+        }
+    }'
+``` 
+
+With that configuration, the providers service is only available for Operators with ```OperatorCredentials``` bound to there individual identity anymore. E.g. only if the claim ```subject``` contains the did that the [presentation was created with](#authenticate-via-oid4vp).
+
+If you now try to get an `ACCESS_TOKEN` with the `USER_CREDENTIAL`, it will fail(since it does not contain the `subject`):
+```shell
+  ./doc/scripts/get_access_token_oid4vp.sh http://mp-data-service.127.0.0.1.nip.io:8080 $USER_CREDENTIAL default
+```
+
+When using the `OPERATOR_CREDENTIAL`, it will work:
+```shell
+  ./doc/scripts/get_access_token_oid4vp.sh http://mp-data-service.127.0.0.1.nip.io:8080 $OPERATOR_CREDENTIAL operator
+```
+
+
+
 ## eIDAS compliancy
 
 In order to provide eIDAS complinacy, the Dataspace Connector supports the usage of the [did:elsi method](https://alastria.github.io/did-method-elsi/).
