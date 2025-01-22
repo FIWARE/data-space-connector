@@ -160,3 +160,102 @@ The result will be similar to the following:
     }
 ]
 ```
+
+5. Register the organization:
+
+    1. Get Did:
+
+```shell
+    export CONSUMER_DID=$(curl -X GET http://did-consumer.127.0.0.1.nip.io:8080/did-material/did.env | cut -d'=' -f2); echo ${CONSUMER_DID} 
+```
+
+    2. Register:
+
+```shell
+    export FANCY_MARKETPLACE_ID=$(curl -X POST http://tm-forum-api.127.0.0.1.nip.io:8080/tmf-api/party/v4/organization \
+    -H 'Accept: */*' \
+    -H 'Content-Type: application/json' \
+    -d "{
+      \"name\": \"Fancy Marketplace Inc.\",
+      \"partyCharacteristic\": [
+        {
+          \"name\": \"did\",
+          \"value\": \"${CONSUMER_DID}\" 
+        }
+      ]
+    }" | jq '.id' -r); echo ${FANCY_MARKETPLACE_ID} 
+```
+
+6. Create the product order:
+
+```shell
+    export PRODUCT_ORDER_ID=$(curl -X 'POST' \
+    'http://tm-forum-api.127.0.0.1.nip.io:8080/tmf-api/productOrderingManagement/v4/productOrder' \
+    -H 'accept: application/json;charset=utf-8' \
+    -H 'Content-Type: application/json;charset=utf-8' \
+    -d "{
+            \"productOrderItem\": [
+                {
+                    \"action\": \"add\",
+                    \"productOffering\": {
+                        \"id\": \"${PRODUCT_OFFERING_ID}\",
+                        \"name\":\"The Test Offer\"
+                    }
+                }
+            ],
+            \"relatedParty\": [{
+                \"id\": \"${FANCY_MARKETPLACE_ID}\",
+                \"name\": \"Fancy Marketplace Co.\"
+            }]
+        }" | jq .id -r); echo ${PRODUCT_ORDER_ID}
+```
+
+7. Get the agreement-id for the offering: 
+
+```shell
+    export AGREEMENT_ID=$(curl -X 'GET' \
+    'http://rainbow-provider.127.0.0.1.nip.io:8080/agreements' \
+    -H 'accept: application/json;charset=utf-8' \
+    -H 'Content-Type: application/json;charset=utf-8' | jq --arg POI "${PRODUCT_OFFERING_ID}" -r -c '[.[] | select(.data_service_id | contains($POI))][0] | .agreement_id'); echo ${AGREEMENT_ID}
+```
+
+8. Request the transfer:
+
+```shell
+    export CONSUMER_PID=$(curl -X 'POST' 'http://rainbow-provider.127.0.0.1.nip.io:8080/transfers/request'\
+    -H 'accept: application/json;charset=utf-8' \
+    -H 'Content-Type: application/json;charset=utf-8' \
+    -d "{
+            \"@context\": \"https://w3id.org/dspace/2024/1/context.json\",
+            \"@type\": \"dspace:TransferRequestMessage\",
+            \"dspace:consumerPid\": \"urn:uuid:$(cat /proc/sys/kernel/random/uuid)\",
+            \"dspace:agreementId\": \"${AGREEMENT_ID}\",
+            \"dct:format\": \"http+pull\",
+            \"dspace:callbackAddress\": \"http://rainbow-consumer.127.0.0.1.nip.io:8080/api/v1/callbacks\"
+        }" | jq .\"dspace:consumerPid\" -r); echo ${CONSUMER_PID}
+```
+```shell
+    export PROVIDER_PID=$(curl -X 'GET' 'http://rainbow-provider.127.0.0.1.nip.io:8080/api/v1/transfers' | jq --arg CPID "${CONSUMER_PID}" -r -c '[.[] | select (."dspace:consumerPid" | contains($CPID))][0] | ."dspace:providerPid"'); echo ${PROVIDER_PID}
+```
+
+9. Start the transfer:
+
+```shell
+    curl -X 'POST' 'http://rainbow-provider.127.0.0.1.nip.io:8080/transfers/start'\
+    -H 'accept: application/json;charset=utf-8' \
+    -H 'Content-Type: application/json;charset=utf-8' \
+    -d "{
+            \"@context\": \"https://w3id.org/dspace/2024/1/context.json\",
+            \"@type\": \"dspace:TransferStartMessage\",
+            \"dspace:consumerPid\": \"${CONSUMER_PID}\",
+            \"dspace:providerPid\": \"${PROVIDER_PID}\"
+        }" 
+```
+
+10. Get data:
+
+```shell
+curl -X GET http://tpp-data-service.127.0.0.1.nip.io:8080/ngsi-ld/v1/entities/urn:ngsi-ld:K8SCluster:fancy-marketplace \
+    -H 'Accept: */*' \
+    -H "transferId: ${PROVIDER_PID}"
+```
