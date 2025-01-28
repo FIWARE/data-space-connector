@@ -23,15 +23,47 @@
           "odrl:operator": {
             "@id": "http:isInPath"
           },
-          "odrl:rightOperand": "/api/v1/catalogs"
+          "odrl:rightOperand": "/transfers"
         }
       ]
     },
     "odrl:assignee": {
-      "@id": "vc:any"
+      "@type": "odrl:PartyCollection",
+      "odrl:source": "urn:user",
+      "odrl:refinement": {
+        "@type": "odrl:LogicalConstraint",
+        "odrl:and": [
+          {
+            "@type": "odrl:Constraint",
+            "odrl:leftOperand": {
+              "@id": "vc:role"
+            },
+            "odrl:operator": {
+              "@id": "odrl:hasPart"
+            },
+            "odrl:rightOperand": {
+              "@value": "OPERATOR",
+              "@type": "xsd:string"
+            }
+          },
+          {
+            "@type": "odrl:Constraint",
+            "odrl:leftOperand": {
+              "@id": "vc:type"
+            },
+            "odrl:operator": {
+              "@id": "odrl:hasPart"
+            },
+            "odrl:rightOperand": {
+              "@value": "OperatorCredential",
+              "@type": "xsd:string"
+            }
+          }
+        ]
+      }
     },
     "odrl:action": {
-      "@id": "odrl:read"
+      "@id": "odrl:use"
     }
   }
 }

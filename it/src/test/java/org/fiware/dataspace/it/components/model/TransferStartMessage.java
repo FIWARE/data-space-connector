@@ -15,15 +15,11 @@ public class TransferStartMessage {
 	@JsonProperty("@context")
 	private String context = "https://w3id.org/dspace/2024/1/context.json";
 	@JsonProperty("@type")
-	private String type = "dspace:TransferRequestMessage";
+	private String type = "dspace:TransferStartMessage";
 
 	@JsonProperty("dspace:consumerPid")
 	private String consumerPid;
-	@JsonProperty("dspace:agreementId")
-	private String agreementId;
-	@JsonProperty("dct:format")
-	private String format = "http+pull";
-	@JsonProperty("dspace:callbackAddress")
-	private String callbackAddress;
+	@JsonProperty("dspace:providerPid")
+	private String providerPid;
 
 }

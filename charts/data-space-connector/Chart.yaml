@@ -11,7 +11,7 @@ dependencies:
   # authentication
   - name: vcverifier
     condition: vcverifier.enabled
-    version: 2.11.2
+    version: 2.11.3
     repository: https://fiware.github.io/helm-charts
   - name: credentials-config-service
     condition: credentials-config-service.enabled
@@ -33,7 +33,7 @@ dependencies:
   # authorization
   - name: odrl-pap
     condition: odrl-pap.enabled
-    version: 0.2.1
+    version: 0.2.2
     repository: https://fiware.github.io/helm-charts
   - name: apisix
     condition: apisix.enabled
@@ -58,9 +58,9 @@ dependencies:
   # contract management
   - name: tm-forum-api
     condition: tm-forum-api.enabled
-    version: 0.9.4
+    version: 0.10.10
     repository: https://fiware.github.io/helm-charts
   - name: contract-management
     condition: contract-management.enabled
-    version: 0.6.6
+    version: 1.0.2
     repository: https://fiware.github.io/helm-charts

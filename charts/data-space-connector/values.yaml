@@ -175,6 +175,17 @@ opa:
   data:
     minDelay: 1
     maxDelay: 15
+
+
+# -- integration of checks for the transfer process protocol
+tpp:
+  # -- should checking for a running transfer process be enabled
+  enabled: false
+  transfers:
+    # -- host of the endpoint to check the process id, e.g. rainbow
+    host: ""
+    # -- path to check the id at
+    path: /transfers
   
 # -- configuration for apisix to be deployed as part of the connector, see https://github.com/bitnami/charts/tree/main/bitnami/apisix for all options
 apisix:
@@ -200,6 +211,24 @@ apisix:
       enabled: false
   # -- configuration in regard to the apisix dataplane
   dataPlane:
+    ingress:
+      extraRules:
+        - host: opa.127.0.0.1.nip.io
+          http:
+            paths:
+              - path: "/"
+                pathType: Prefix
+                backend:
+                  service:
+                    name: provider-apisix-data-plane
+                    port:
+                      number: 8181
+    service:
+      extraPorts:
+        - name: opa
+          port: 8181
+          protocol: TCP
+          targetPort: 8181
     # -- resource preset to have sufficient memory
     resourcesPreset: small
     # -- configuration for extra configmaps to be deployed
@@ -223,6 +252,9 @@ apisix:
       - name: opa-lua
         configMap:
           name: opa-lua
+      - name: tpp-policy
+        configMap:
+          name: tpp-policy
     # -- extra volumes to be mounted
     extraVolumeMounts:
       - name: routes
@@ -255,9 +287,12 @@ apisix:
           - "/config/opa.yaml"
           - "--addr"
           - "0.0.0.0:8181"
+          - "/tpp/tpp.rego"
         volumeMounts:
           - name: opa-config
             mountPath: /config
+          - name: tpp-policy
+            mountPath: /tpp
   # -- configuration in regard to the apisix dashboard
   dashboard:
     # -- should it be enabled
@@ -655,6 +690,10 @@ tm-forum-api:
       image: tmforum-service-catalog
       basePath: /tmf-api/serviceCatalogManagement/v4
 
+    - name: agreement
+      image: tmforum-agreement
+      basePath: /tmf-api/agreementManagement/v4
+
   # redis caching
   redis:
     enabled: false
@@ -699,22 +738,30 @@ contract-management:
   # -- should it be enabled? set to false if one outside the chart is used.
   enabled: true
   fullnameOverride: contract-management
-  deployment:
-    image:
-      tag: 2.0.0-PRE-3
-      pullPolicy: Always
   services:
     ## Config for Trusted Issuers List
-    til:
+    trusted-issuers-list:
       ## URL of the Trusted Issuers List Service
       url: http://trusted-issuers-list:8080
     ## Config for the TM Forum Service hosting the APIs
-    product:
+    product-order:
       ## URL of the TM Forum Service hosting the Product Ordering API
       url: http://tm-forum-api:8080
     party:
       ## URL of the TM Forum Service hosting the Party API
       url: http://tm-forum-api:8080
+    product-catalog:
+      ## URL of the TM Forum Service hosting the Product Catalog API
+      url: http://tm-forum-api:8080
+    service-catalog:
+      ## URL of the TM Forum Service hosting the Service Catalog API
+      url: http://tm-forum-api:8080
+    tmforum-agreement-api:
+      ## URL of the TM Forum Service hosting the Agreement API
+      url: http://tm-forum-api:8080
+    rainbow:
+      ## URL for the Rainbow service
+      url: http://rainbow:8080
 
 # -- configuration for the did-helper, should only be used for demonstrational deployments, see https://github.com/wistefan/did-helper
 did:

@@ -23,7 +23,7 @@
           "odrl:operator": {
             "@id": "http:isInPath"
           },
-          "odrl:rightOperand": "/api/v1/catalogs"
+          "odrl:rightOperand": "/agreements"
         }
       ]
     },

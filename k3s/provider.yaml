@@ -11,6 +11,10 @@ apisix:
       extraHosts:
         - name: mp-tmf-api.127.0.0.1.nip.io
           path: /
+        - name: tpp-data-service.127.0.0.1.nip.io
+          path: /
+        - name: tpp-service.127.0.0.1.nip.io
+          path: /
   catchAllRoute:
     enabled: false
   routes: |-
@@ -35,6 +39,23 @@ apisix:
           headers:
             set:
               content-type: application/json
+    - uri: /*
+      host: tpp-data-service.127.0.0.1.nip.io
+      upstream:
+        nodes:
+          data-service-scorpio:9090: 1
+        type: roundrobin
+      plugins:
+        openid-connect:
+          bearer_only: true
+          use_jwks: true
+          client_id: contract-management
+          client_secret: unused
+          ssl_verify: false
+          discovery: http://verifier:3000/services/tmf-api/.well-known/openid-configuration
+        opa:
+          host: "http://localhost:8181"
+          policy: tpp
     - uri: /*
       host: mp-data-service.127.0.0.1.nip.io
       upstream:
@@ -62,6 +83,28 @@ apisix:
       plugins:
         proxy-rewrite:
           uri: /services/tmf-api/.well-known/openid-configuration
+    - uri: /api/v1/catalogs
+      host: tpp-catalog-service.127.0.0.1.nip.io
+      upstream:
+        nodes:
+          rainbow:8080: 1
+    - uri: /*
+      host: tpp-service.127.0.0.1.nip.io
+      upstream:
+        nodes:
+          rainbow:8080: 1
+      plugins:
+        openid-connect:
+          bearer_only: true
+          use_jwks: true
+          client_id: data-service
+          client_secret: unused
+          ssl_verify: false
+          discovery: http://verifier:3000/services/data-service/.well-known/openid-configuration
+        opa:
+          host: "http://localhost:8181"
+          policy: policy/main
+          with_body: true
     - uri: /*
       host: mp-tmf-api.127.0.0.1.nip.io
       upstream:
@@ -295,47 +338,17 @@ rainbow:
     passwordKey: postgres-admin-password
   ingress:
     enabled: true
-    host: rainbow.127.0.0.1.nip.io
+    host: rainbow-provider.127.0.0.1.nip.io
+
+tpp:
+  enabled: true
+  transfers:
+    host: http://rainbow-provider.127.0.0.1.nip.io:8080
+    path: transfers
 
 contract-management:
-  config:
-    micronaut:
-      http:
-        services:
-          read-timeout: 30s
-          trusted-issuers-list:
-            path: "/"
-            url: http://trusted-issuers-list:8080
-          product-catalog:
-            path: /tmf-api/productCatalogManagement/v4
-            url: http://tm-forum-api:8080
-          party:
-            path: /tmf-api/party/v4
-            url: http://tm-forum-api:8080
-          service-catalog:
-            path: /tmf-api/serviceCatalogManagement/v4
-            url: http://tm-forum-api:8080
-          rainbow:
-            path: "/"
-            url: http://rainbow:8080
-    general:
-      host: contract-management
-      port: 8080
-      til:
-        credentialType: OperatorCredential
-    notification:
-      entities:
-        - entityType: "ProductOrder"
-          eventTypes: [ "CREATE", "STATE_CHANGE", "DELETE" ]
-          apiAddress: "http://tm-forum-api:8080/tmf-api/productOrderingManagement/v4"
-        - entityType: "ProductOffering"
-          eventTypes: [ "CREATE", "STATE_CHANGE", "DELETE" ]
-          apiAddress: "http://tm-forum-api:8080/tmf-api/productCatalogManagement/v4"
-        - entityType: "Catalog"
-          eventTypes: [ "CREATE", "UPDATE", "DELETE", "STATE_CHANGE" ]
-          apiAddress: "http://tm-forum-api:8080/tmf-api/productCatalogManagement/v4"
-
-
+  til:
+    credentialType: OperatorCredential
 
 trusted-issuers-list:
   # only open for clean up in the tests

@@ -23,7 +23,7 @@
           "odrl:operator": {
             "@id": "odrl:eq"
           },
-          "odrl:rightOperand": "EnergyReport"
+          "odrl:rightOperand": "UptimeReport"
         }
       ]
     },

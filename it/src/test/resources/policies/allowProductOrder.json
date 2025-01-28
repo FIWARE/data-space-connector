@@ -31,7 +31,7 @@
       "@id": "vc:any"
     },
     "odrl:action": {
-      "@id": "tmf:create"
+      "@id": "odrl:use"
     }
   }
 }
