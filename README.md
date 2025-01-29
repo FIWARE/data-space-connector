@@ -287,6 +287,12 @@ A detailed description of the steps to be performed by client applications and s
 in the [Service Interaction (M2M)](./doc/flows/service-interaction-m2m) documentation. 
 
 
+### Integration with the [Dataspace Protocol](https://docs.internationaldataspaces.org/ids-knowledgebase/dataspace-protocol)
+
+In order to be interoperable in Data Spaces with different connectors, the FIWARE Data Space Connector supports the [IDSA Dataspace Protocol](https://docs.internationaldataspaces.org/ids-knowledgebase/dataspace-protocol). Catalogs and Data Services can be explored in [DCAT-Format](https://www.w3.org/TR/vocab-dcat-3/) through the [Catalog Protocol](https://docs.internationaldataspaces.org/ids-knowledgebase/dataspace-protocol/catalog/catalog.protocol) and the Transfer Process can be controlled throught the [Transfer Process Protocol](https://docs.internationaldataspaces.org/ids-knowledgebase/dataspace-protocol/transfer-process/transfer.process.protocol). Contract Negotiation is not yet supported, due to its limitations in comparison to the TMForum API. 
+
+Find out more in the [Dataspace Protocol Integration Documentation](./doc/DSP_INTEGRATION.md).
+
 
 ## Deployment
 
