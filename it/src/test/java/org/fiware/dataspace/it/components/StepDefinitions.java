@@ -364,11 +364,57 @@ public class StepDefinitions {
 
 	@Given("M&P Operations offers a managed kubernetes.")
 	public void createManagedKubernetesOffering() throws Exception {
+		CategoryCreateVO categoryCreateVO = new CategoryCreateVO()
+				.description("Reports")
+				.name("Reports Category");
+		RequestBody categoryRequestBody = RequestBody.create(MediaType.parse("application/json"), OBJECT_MAPPER.writeValueAsString(categoryCreateVO));
+		Request categoryRequest = new Request.Builder()
+				.post(categoryRequestBody)
+				.url(MPOperationsEnvironment.TMF_DIRECT_ADDRESS + "/tmf-api/productCatalogManagement/v4/category")
+				.build();
+		Response categoryResponse = HTTP_CLIENT.newCall(categoryRequest).execute();
+		assertEquals(HttpStatus.SC_CREATED, categoryResponse.code(), "The category should have been created.");
+
+		CategoryVO categoryVO = OBJECT_MAPPER.readValue(categoryResponse.body().string(), CategoryVO.class);
+		CatalogCreateVO catalogCreateVO = new CatalogCreateVO()
+				.description("M&P Operations Catalog")
+				.name("M&P Operations Data")
+				.category(List.of(new CategoryRefVO()
+						.id(categoryVO.getId())));
+		categoryResponse.body().close();
+
+		RequestBody catalogRequestBody = RequestBody.create(MediaType.parse("application/json"), OBJECT_MAPPER.writeValueAsString(catalogCreateVO));
+		Request catalogRequest = new Request.Builder()
+				.post(catalogRequestBody)
+				.url(MPOperationsEnvironment.TMF_DIRECT_ADDRESS + "/tmf-api/productCatalogManagement/v4/catalog")
+				.build();
+		Response catalogResponse = HTTP_CLIENT.newCall(catalogRequest).execute();
+		assertEquals(HttpStatus.SC_CREATED, catalogResponse.code(), "The catalog should have been created.");
+		catalogResponse.body().close();
+
 		ProductSpecificationCreateVO pscVo = new ProductSpecificationCreateVO()
 				.brand("M&P Operations")
 				.version("1.0.0")
 				.lifecycleStatus("ACTIVE")
-				.name("M&P K8S");
+				.name("M&P K8S").productSpecCharacteristic(List.of(
+						new ProductSpecificationCharacteristicVO()
+								.id("endpointUrl")
+								.name("K8S Service Endpoint")
+								.valueType("endpointUrl")
+								.productSpecCharacteristicValue(
+										List.of(
+												new CharacteristicValueSpecificationVO()
+														.value(MPOperationsEnvironment.PROVIDER_TPP_DATA_API_ADDRESS)
+														.isDefault(true))),
+						new ProductSpecificationCharacteristicVO()
+								.id("endpointDescription")
+								.name("K8S Service Endpoint Description")
+								.valueType("endpointDescription")
+								.productSpecCharacteristicValue(
+										List.of(
+												new CharacteristicValueSpecificationVO()
+														.value("Endpoint of the K8S service.")))
+				));
 		RequestBody specificationRequestBody = RequestBody.create(MediaType.parse("application/json"), OBJECT_MAPPER.writeValueAsString(pscVo));
 		Request specificationRequest = new Request.Builder()
 				.post(specificationRequestBody)
@@ -382,6 +428,7 @@ public class StepDefinitions {
 		ProductOfferingCreateVO productOfferingCreate = new ProductOfferingCreateVO()
 				.lifecycleStatus("ACTIVE")
 				.name("M&P K8S Offering")
+				.category(List.of(new CategoryRefVO().id(categoryVO.getId())))
 				.version("1.0.0")
 				.productSpecification(new ProductSpecificationRefVO().id(createdSpec.getId()));
 		RequestBody productOfferingBody = RequestBody.create(MediaType.parse("application/json"), OBJECT_MAPPER.writeValueAsString(productOfferingCreate));
@@ -709,7 +756,7 @@ public class StepDefinitions {
 				Request creationRequest = createK8SClusterRequest(accessToken);
 				assertEquals(HttpStatus.SC_CREATED, HTTP_CLIENT.newCall(creationRequest).execute().code(), "The cluster should now have been created.");
 			} catch (Throwable t) {
-				throw new AssertionFailedError("Error: %s", t);
+				throw new AssertionFailedError(String.format("Error: %s", t));
 			}
 		});
 
@@ -828,6 +875,7 @@ public class StepDefinitions {
 				.filter(String.class::isInstance)
 				.map(String.class::cast)
 				.findAny();
+		agreementResponse.body().close();
 		assertTrue(agreementId.isPresent(), "The agreement id should be present.");
 
 		return agreementId.get();
