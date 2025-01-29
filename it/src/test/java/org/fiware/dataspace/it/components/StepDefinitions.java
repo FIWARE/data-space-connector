@@ -565,7 +565,7 @@ public class StepDefinitions {
 
 	@When("M&P Operations allows to read its agreements.")
 	public void mpRegisterAgreementPolicy() throws Exception {
-		createPolicyAtMP("allowAgreementRead");
+		createPolicyAtMP("allowTMFAgreementRead");
 	}
 
 	@When("M&P Operations allows operators to read uptime reports.")
