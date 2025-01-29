@@ -5,12 +5,14 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.util.List;
+
 @NoArgsConstructor
 @AllArgsConstructor
 @Data
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class ProductOrder {
 
-	private AgreementRef agreement;
+	private List<AgreementRef> agreement;
 
 }

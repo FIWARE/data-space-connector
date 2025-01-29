@@ -5,6 +5,7 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.util.ArrayList;
 import java.util.List;
 
 @NoArgsConstructor
@@ -13,5 +14,6 @@ import java.util.List;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class TMFAgreement {
 
-	private List<Characteristic> characteristic;
+	private String id;
+	private List<Characteristic> characteristic = new ArrayList<>();
 }

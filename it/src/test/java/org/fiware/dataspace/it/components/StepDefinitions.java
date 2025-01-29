@@ -59,9 +59,9 @@ public class StepDefinitions {
 	public void cleanUp() throws Exception {
 		cleanUpPolicies();
 		cleanUpEntities();
+		cleanUpDcatCatalog();
 		cleanUpTMForum();
 		cleanUpTIL();
-		cleanUpDcatCatalog();
 		cleanUpAgreements();
 	}
 
@@ -166,6 +166,52 @@ public class StepDefinitions {
 				});
 		specResponse.body().close();
 
+		Request orderRequest = new Request.Builder()
+				.get()
+				.url(MPOperationsEnvironment.TMF_DIRECT_ADDRESS + "/tmf-api/productOrderingManagement/v4/productOrder")
+				.build();
+		Response orderResponse = HTTP_CLIENT.newCall(orderRequest).execute();
+		assertEquals(HttpStatus.SC_OK, orderResponse.code(), "The spec should have been returend");
+		List<ProductOrderVO> orders = OBJECT_MAPPER.readValue(orderResponse.body().string(), new TypeReference<List<ProductOrderVO>>() {
+		});
+		orders.stream()
+				.map(ProductOrderVO::getId)
+				.forEach(id -> {
+					Request deletionRequest = new Request.Builder()
+							.delete()
+							.url(MPOperationsEnvironment.TMF_DIRECT_ADDRESS + "/tmf-api/productOrderingManagement/v4/productOrder/" + id)
+							.build();
+					try {
+						HTTP_CLIENT.newCall(deletionRequest).execute();
+					} catch (IOException e) {
+						// ignore
+					}
+				});
+		orderResponse.body().close();
+
+		Request agreementsRequest = new Request.Builder()
+				.get()
+				.url(MPOperationsEnvironment.TMF_DIRECT_ADDRESS + "/tmf-api/productCatalogManagement/v4/productSpecification")
+				.build();
+		Response agreementsResponse = HTTP_CLIENT.newCall(agreementsRequest).execute();
+		assertEquals(HttpStatus.SC_OK, agreementsResponse.code(), "The spec should have been returend");
+		List<TMFAgreement> agreements = OBJECT_MAPPER.readValue(agreementsResponse.body().string(), new TypeReference<List<TMFAgreement>>() {
+		});
+		agreements.stream()
+				.map(TMFAgreement::getId)
+				.forEach(id -> {
+					Request deletionRequest = new Request.Builder()
+							.delete()
+							.url(MPOperationsEnvironment.TMF_DIRECT_ADDRESS + "/tmf-api/agreementManagement/v4/agreement/" + id)
+							.build();
+					try {
+						HTTP_CLIENT.newCall(deletionRequest).execute();
+					} catch (IOException e) {
+						// ignore
+					}
+				});
+		orderResponse.body().close();
+
 		Request organizationRequest = new Request.Builder()
 				.get()
 				.url(MPOperationsEnvironment.TMF_DIRECT_ADDRESS + "/tmf-api/party/v4/organization")
@@ -255,8 +301,8 @@ public class StepDefinitions {
 	@Given("Fancy Marketplace is not allowed to create a cluster at M&P Operations.")
 	public void fmNotAllowedToCreateCluster() throws Exception {
 		assertThrows(AssertionFailedError.class, () ->
-				getAccessTokenForFancyMarketplace(OPERATOR_CREDENTIAL, OPERATOR_SCOPE), "Fancy Marketplace is not allowed to use the operator credential.");
-		String userToken = getAccessTokenForFancyMarketplace(USER_CREDENTIAL, DEFAULT_SCOPE);
+				getAccessTokenForFancyMarketplace(OPERATOR_CREDENTIAL, OPERATOR_SCOPE, MPOperationsEnvironment.PROVIDER_API_ADDRESS), "Fancy Marketplace is not allowed to use the operator credential.");
+		String userToken = getAccessTokenForFancyMarketplace(USER_CREDENTIAL, DEFAULT_SCOPE, MPOperationsEnvironment.PROVIDER_API_ADDRESS);
 		Request createClusterRequest = createK8SClusterRequest(userToken);
 		Response creationResponse = HTTP_CLIENT.newCall(createClusterRequest).execute();
 		creationResponse.body().close();
@@ -430,7 +476,7 @@ public class StepDefinitions {
 
 	@When("Fancy Marketplace registers itself at M&P Operations.")
 	public void registerAtMP() throws Exception {
-		String accessToken = getAccessTokenForFancyMarketplace(USER_CREDENTIAL, DEFAULT_SCOPE);
+		String accessToken = getAccessTokenForFancyMarketplace(USER_CREDENTIAL, DEFAULT_SCOPE, MPOperationsEnvironment.PROVIDER_API_ADDRESS);
 
 		CharacteristicVO didCharacteristic = new CharacteristicVO()
 				.name("did")
@@ -455,7 +501,7 @@ public class StepDefinitions {
 
 	@When("Fancy Marketplace buys access to M&P's k8s services.")
 	public void buyAccess() throws Exception {
-		String accessToken = getAccessTokenForFancyMarketplace(USER_CREDENTIAL, DEFAULT_SCOPE);
+		String accessToken = getAccessTokenForFancyMarketplace(USER_CREDENTIAL, DEFAULT_SCOPE, MPOperationsEnvironment.PROVIDER_API_ADDRESS);
 		Request offerRequest = new Request.Builder()
 				.get()
 				.url(MPOperationsEnvironment.TM_FORUM_API_ADDRESS + "/tmf-api/productCatalogManagement/v4/productOffering")
@@ -496,7 +542,7 @@ public class StepDefinitions {
 
 	@When("Fancy Marketplace buys access to M&P's uptime reports.")
 	public void buyAccessToReports() throws Exception {
-		String accessToken = getAccessTokenForFancyMarketplace(USER_CREDENTIAL, DEFAULT_SCOPE);
+		String accessToken = getAccessTokenForFancyMarketplace(USER_CREDENTIAL, DEFAULT_SCOPE, MPOperationsEnvironment.PROVIDER_API_ADDRESS);
 		Request offerRequest = new Request.Builder()
 				.get()
 				.url(MPOperationsEnvironment.TM_FORUM_API_ADDRESS + "/tmf-api/productCatalogManagement/v4/productOffering")
@@ -630,7 +676,7 @@ public class StepDefinitions {
 	public void requestDataTransfer() throws Exception {
 		Awaitility.await().atMost(Duration.ofSeconds(60)).untilAsserted(() -> {
 			try {
-				String accessToken = getAccessTokenForFancyMarketplace(OPERATOR_CREDENTIAL, OPERATOR_SCOPE);
+				String accessToken = getAccessTokenForFancyMarketplace(OPERATOR_CREDENTIAL, OPERATOR_SCOPE, MPOperationsEnvironment.PROVIDER_TPP_API_ADDRESS);
 				String agreementId = getAgreementId(accessToken);
 				String consumerPid = "urn:uuid:" + UUID.randomUUID();
 				transferProcessId = requestTransfer(accessToken, consumerPid, agreementId);
@@ -644,7 +690,7 @@ public class StepDefinitions {
 	@Then("Fancy Marketplace operators can get the report.")
 	public void getTheReports() throws Exception {
 		Awaitility.await().atMost(Duration.ofSeconds(60)).untilAsserted(() -> {
-			String accessToken = getAccessTokenForFancyMarketplace(OPERATOR_CREDENTIAL, OPERATOR_SCOPE);
+			String accessToken = getAccessTokenForFancyMarketplace(OPERATOR_CREDENTIAL, OPERATOR_SCOPE, MPOperationsEnvironment.PROVIDER_API_ADDRESS);
 			Request reportRequest = getTheDetailedReport(accessToken, transferProcessId);
 			Response reportResponse = HTTP_CLIENT.newCall(reportRequest).execute();
 			try {
@@ -659,7 +705,7 @@ public class StepDefinitions {
 	public void createK8SCluster() throws Exception {
 		Awaitility.await().atMost(Duration.ofSeconds(60)).untilAsserted(() -> {
 			try {
-				String accessToken = getAccessTokenForFancyMarketplace(OPERATOR_CREDENTIAL, OPERATOR_SCOPE);
+				String accessToken = getAccessTokenForFancyMarketplace(OPERATOR_CREDENTIAL, OPERATOR_SCOPE, MPOperationsEnvironment.PROVIDER_API_ADDRESS);
 				Request creationRequest = createK8SClusterRequest(accessToken);
 				assertEquals(HttpStatus.SC_CREATED, HTTP_CLIENT.newCall(creationRequest).execute().code(), "The cluster should now have been created.");
 			} catch (Throwable t) {
@@ -672,7 +718,7 @@ public class StepDefinitions {
 
 	@Then("Fancy Marketplace' employee can access the EnergyReport.")
 	public void accessTheEnergyReport() throws Exception {
-		String accessToken = getAccessTokenForFancyMarketplace(USER_CREDENTIAL, DEFAULT_SCOPE);
+		String accessToken = getAccessTokenForFancyMarketplace(USER_CREDENTIAL, DEFAULT_SCOPE, MPOperationsEnvironment.PROVIDER_API_ADDRESS);
 		Request authenticatedEntityRequest = new Request.Builder().get()
 				.url(MPOperationsEnvironment.PROVIDER_API_ADDRESS + "/ngsi-ld/v1/entities/urn:ngsi-ld:EnergyReport:fms-1")
 				.addHeader("Authorization", "Bearer " + accessToken)
@@ -690,7 +736,7 @@ public class StepDefinitions {
 		Awaitility.await()
 				.atMost(Duration.ofSeconds(60))
 				.untilAsserted(() -> {
-					String accessToken = getAccessTokenForFancyMarketplace(USER_CREDENTIAL, DEFAULT_SCOPE);
+					String accessToken = getAccessTokenForFancyMarketplace(USER_CREDENTIAL, DEFAULT_SCOPE, MPOperationsEnvironment.PROVIDER_API_ADDRESS);
 					Request authenticatedCatalogRequest = new Request.Builder().get()
 							.url(MPOperationsEnvironment.PROVIDER_TPP_API_ADDRESS + "/api/v1/catalogs")
 							.addHeader("Authorization", "Bearer " + accessToken)
@@ -764,10 +810,10 @@ public class StepDefinitions {
 		orderResponse.body().close();
 		assertEquals(1, orders.size(), "The agreement should have been returned.");
 
-		String tmfAgreementId = orders.get(0).getAgreement().getId();
+		String tmfAgreementId = orders.get(0).getAgreement().get(0).getId();
 		Request agreementRequest = new Request.Builder()
 				.get()
-				.url(MPOperationsEnvironment.TM_FORUM_API_ADDRESS + "/tmf-api/agreementManagement/v4/agreement" + tmfAgreementId)
+				.url(MPOperationsEnvironment.TM_FORUM_API_ADDRESS + "/tmf-api/agreementManagement/v4/agreement/" + tmfAgreementId)
 				.addHeader("Authorization", "Bearer " + accessToken)
 				.build();
 
@@ -787,8 +833,8 @@ public class StepDefinitions {
 		return agreementId.get();
 	}
 
-	private String getAccessTokenForFancyMarketplace(String credentialId, String scope) throws Exception {
-		OpenIdConfiguration openIdConfiguration = MPOperationsEnvironment.getOpenIDConfiguration(MPOperationsEnvironment.PROVIDER_API_ADDRESS);
+	private String getAccessTokenForFancyMarketplace(String credentialId, String scope, String targetAddress) throws Exception {
+		OpenIdConfiguration openIdConfiguration = MPOperationsEnvironment.getOpenIDConfiguration(targetAddress);
 		assertTrue(openIdConfiguration.getGrantTypesSupported().contains(GRANT_TYPE_VP_TOKEN), "The M&P environment should support vp_tokens");
 		assertTrue(openIdConfiguration.getResponseModeSupported().contains(RESPONSE_TYPE_DIRECT_POST), "The M&P environment should support direct_post");
 		assertNotNull(openIdConfiguration.getTokenEndpoint(), "The M&P environment should provide a token endpoint.");

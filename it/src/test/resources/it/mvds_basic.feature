@@ -21,7 +21,7 @@ Feature: The Data Space should support a basic data exchange between registered 
     When Fancy Marketplace registers itself at M&P Operations.
     And Fancy Marketplace buys access to M&P's k8s services.
     Then Fancy Marketplace operators can create clusters.
-    
+
   Scenario: A registered operator can access reports through the Transfer Process Protocol.
     Given M&P Operations is registered as a participant in the data space.
     And M&P Operations offers detailed reports.
