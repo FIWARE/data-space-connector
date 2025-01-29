@@ -21,6 +21,16 @@ spec:
     spec:
       serviceAccountName: default
       initContainers:
+        {{- if (eq .Values.rainbow.ccs.enabled true) }}
+        # -- curl container to register at the credentials config service
+        - name: register-credential-config
+          image: quay.io/curl/curl:8.1.2
+          command: [ "/bin/sh", "-c", "/bin/init.sh" ]
+          volumeMounts:
+            - name: ccs-registration
+              mountPath: /bin/init.sh
+              subPath: init.sh
+        {{- end }}
         - name: rainbow-init
           imagePullPolicy: Always
           image: quay.io/wi_stefan/rainbow:latest
@@ -67,4 +77,11 @@ spec:
           ports:
             - containerPort: 1234
               name: http
+      {{- if .Values.rainbow.ccs.configMap }}
+      volumes:
+        - name: ccs-registration
+          configMap:
+            name: {{ .Values.rainbow.ccs.configMap }}
+            defaultMode: 0755
+      {{- end }}
 {{- end }}

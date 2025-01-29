@@ -719,19 +719,40 @@ tm-forum-api:
         trustedIssuersLists: http://trusted-issuers-list:8080
 
 
-# -- integration of rainbow
+## configuration of rainbow to provide integration with the Dataspace Protocol
 rainbow:
+  # -- should rainbow be enabled
   enabled: false
+  # -- database configuration of rainbow
   db:
+    # -- host of the database to be used
     url:
+    # -- user to be used when accesing the database
     user: 
+    # -- secret containing the password for the database
     existingSecret:
+    # -- key of the password inside that secret
     passwordKey:
+  # -- configuration for external access to rainbow
   ingress:
+    # -- should the ingress be enabled
     enabled: false
-    host:
-  serviceType: ClusterIP
-  port: 8080
+  # -- configuration of service access to rainbow
+  service:
+    # -- service type to be used
+    serviceType: ClusterIP
+    # -- port of the service
+    port: 8080
+  # -- configuration to register rainbow at the credentials-config-service
+  ccs:
+    # -- should the registration at the credentials-config-service be enabled
+    enabled: false
+    # -- endpoint of the ccs to regsiter at
+    endpoint: http://credentials-config-service:8080
+    # -- configmap to get the registration information from
+    configMap: rainbow-registration
+    # -- service id of the data-service to be used
+    id: tpp-service
 
 ## configuration of the tm-forum-api - see https://github.com/FIWARE/helm-charts/tree/main/charts/contract-management for details
 contract-management:

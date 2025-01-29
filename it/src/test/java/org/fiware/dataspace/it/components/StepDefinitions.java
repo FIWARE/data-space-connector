@@ -3,22 +3,15 @@ package org.fiware.dataspace.it.components;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.squareup.okhttp.MediaType;
-import com.squareup.okhttp.OkHttpClient;
-import com.squareup.okhttp.Request;
-import com.squareup.okhttp.RequestBody;
-import com.squareup.okhttp.Response;
+import com.squareup.okhttp.*;
 import io.cucumber.java.After;
 import io.cucumber.java.Before;
-import io.cucumber.java.an.E;
 import io.cucumber.java.en.Given;
 import io.cucumber.java.en.Then;
 import io.cucumber.java.en.When;
-import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.http.HttpStatus;
 import org.awaitility.Awaitility;
-import org.bouncycastle.cert.ocsp.Req;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
 import org.fiware.dataspace.it.components.model.*;
 import org.fiware.dataspace.tmf.model.*;
@@ -31,10 +24,7 @@ import java.security.Security;
 import java.time.Duration;
 import java.util.*;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * @author <a href="https://github.com/wistefan">Stefan Wiedemann</a>
@@ -642,7 +632,7 @@ public class StepDefinitions {
 			try {
 				String accessToken = getAccessTokenForFancyMarketplace(OPERATOR_CREDENTIAL, OPERATOR_SCOPE);
 				String agreementId = getAgreementId(accessToken);
-				String consumerPid = "urn:uuid:" + UUID.randomUUID().toString();
+				String consumerPid = "urn:uuid:" + UUID.randomUUID();
 				transferProcessId = requestTransfer(accessToken, consumerPid, agreementId);
 				startTransfer(accessToken, consumerPid, transferProcessId);
 			} catch (Throwable t) {
@@ -762,18 +752,39 @@ public class StepDefinitions {
 	}
 
 	private static String getAgreementId(String accessToken) throws Exception {
-		Request agreementRequest = new Request.Builder()
+		Request orderRequest = new Request.Builder()
 				.get()
-				.url(MPOperationsEnvironment.PROVIDER_TPP_API_ADDRESS + "/agreements")
+				.url(MPOperationsEnvironment.TM_FORUM_API_ADDRESS + "/tmf-api/productOrderingManagement/v4/productOrder")
 				.addHeader("Authorization", "Bearer " + accessToken)
 				.build();
-		Response agreementResponse = HTTP_CLIENT.newCall(agreementRequest).execute();
-		assertEquals(HttpStatus.SC_OK, agreementResponse.code(), "The agreements should have been returned.");
-		List<Agreement> agreements = OBJECT_MAPPER.readValue(agreementResponse.body().string(), new TypeReference<List<Agreement>>() {
+		Response orderResponse = HTTP_CLIENT.newCall(orderRequest).execute();
+		assertEquals(HttpStatus.SC_OK, orderResponse.code(), "The orders should have been returned.");
+		List<ProductOrder> orders = OBJECT_MAPPER.readValue(orderResponse.body().string(), new TypeReference<List<ProductOrder>>() {
 		});
-		agreementResponse.body().close();
-		assertEquals(1, agreements.size(), "The agreement should have been returned.");
-		return agreements.get(0).getAgreementId();
+		orderResponse.body().close();
+		assertEquals(1, orders.size(), "The agreement should have been returned.");
+
+		String tmfAgreementId = orders.get(0).getAgreement().getId();
+		Request agreementRequest = new Request.Builder()
+				.get()
+				.url(MPOperationsEnvironment.TM_FORUM_API_ADDRESS + "/tmf-api/agreementManagement/v4/agreement" + tmfAgreementId)
+				.addHeader("Authorization", "Bearer " + accessToken)
+				.build();
+
+		Response agreementResponse = HTTP_CLIENT.newCall(agreementRequest).execute();
+		assertEquals(HttpStatus.SC_OK, agreementResponse.code(), "The agreement should have been returned.");
+		TMFAgreement tmfAgreement = OBJECT_MAPPER.readValue(agreementResponse.body().string(), TMFAgreement.class);
+		Optional<String> agreementId = tmfAgreement.getCharacteristic()
+				.stream()
+				.filter(characteristic -> characteristic.getName().equals("Data-Space-Protocol-Agreement-Id"))
+				.map(Characteristic::getValue)
+				.filter(Objects::nonNull)
+				.filter(String.class::isInstance)
+				.map(String.class::cast)
+				.findAny();
+		assertTrue(agreementId.isPresent(), "The agreement id should be present.");
+
+		return agreementId.get();
 	}
 
 	private String getAccessTokenForFancyMarketplace(String credentialId, String scope) throws Exception {

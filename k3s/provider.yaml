@@ -27,6 +27,15 @@ apisix:
       plugins:
         proxy-rewrite:
           uri: /services/data-service/.well-known/openid-configuration
+    - uri: /.well-known/openid-configuration
+      host: tpp-service.127.0.0.1.nip.io
+      upstream:
+        nodes:
+          verifier:3000: 1
+        type: roundrobin
+      plugins:
+        proxy-rewrite:
+          uri: /services/tpp-service/.well-known/openid-configuration
     - uri: /.well-known/data-space-configuration
       upstream:
         nodes:
@@ -339,6 +348,17 @@ rainbow:
   ingress:
     enabled: true
     host: rainbow-provider.127.0.0.1.nip.io
+  ccs:
+    enabled: true 
+    defaultOidcScope:
+      name: default
+    oidcScopes:
+      default:
+        - type: OperatorCredential
+          trustedParticipantsLists:
+            - http://tir.trust-anchor.svc.cluster.local:8080
+          trustedIssuersLists:
+            - http://trusted-issuers-list:8080
 
 tpp:
   enabled: true
