@@ -211,24 +211,6 @@ apisix:
       enabled: false
   # -- configuration in regard to the apisix dataplane
   dataPlane:
-    ingress:
-      extraRules:
-        - host: opa.127.0.0.1.nip.io
-          http:
-            paths:
-              - path: "/"
-                pathType: Prefix
-                backend:
-                  service:
-                    name: provider-apisix-data-plane
-                    port:
-                      number: 8181
-    service:
-      extraPorts:
-        - name: opa
-          port: 8181
-          protocol: TCP
-          targetPort: 8181
     # -- resource preset to have sufficient memory
     resourcesPreset: small
     # -- configuration for extra configmaps to be deployed
