@@ -238,7 +238,7 @@ curl -X 'POST' http://pap-provider.127.0.0.1.nip.io:8080/policy \
     -d "$(cat ./it/src/test/resources/policies/transferRequest.json)"
 ```
 
-5. Allow [the consumer to read its agreements.](../it/src/test/resources/policies/allowTMFAgreementRead.json)
+6. Allow [the consumer to read its agreements.](../it/src/test/resources/policies/allowTMFAgreementRead.json)
 
 ```shell
 curl -X 'POST' http://pap-provider.127.0.0.1.nip.io:8080/policy \
@@ -395,7 +395,7 @@ Once the request is completed, provider´s rainbow will check the callback at th
 4. Start the transfer(e.g. move state-machine to [STARTED](https://docs.internationaldataspaces.org/ids-knowledgebase/dataspace-protocol/transfer-process/transfer.process.protocol#id-1.3-state-machine))
 
 ```shell
-    export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh http://tpp-service.127.0.0.1.nip.io:8080 $OPERATOR_CREDENTIAL default); echo ${ACCESS_TOKEN}
+    export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh http://tpp-service.127.0.0.1.nip.io:8080 $OPERATOR_CREDENTIAL operator); echo ${ACCESS_TOKEN}
     curl -X 'POST' 'http://tpp-service.127.0.0.1.nip.io:8080/transfers/start'\
     -H 'accept: application/json;charset=utf-8' \
     -H "Authorization: Bearer ${ACCESS_TOKEN}" \
