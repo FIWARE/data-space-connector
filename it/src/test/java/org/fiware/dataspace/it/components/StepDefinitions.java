@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.squareup.okhttp.*;
 import io.cucumber.java.After;
 import io.cucumber.java.Before;
+import io.cucumber.java.an.E;
 import io.cucumber.java.en.Given;
 import io.cucumber.java.en.Then;
 import io.cucumber.java.en.When;
@@ -53,10 +54,16 @@ public class StepDefinitions {
 		Security.addProvider(new BouncyCastleProvider());
 		fancyMarketplaceEmployeeWallet = new Wallet();
 		OBJECT_MAPPER.setSerializationInclusion(JsonInclude.Include.NON_EMPTY);
+
+		clean();
 	}
 
 	@After
 	public void cleanUp() throws Exception {
+		clean();
+	}
+
+	public void clean() throws Exception {
 		cleanUpPolicies();
 		cleanUpEntities();
 		cleanUpDcatCatalog();
@@ -583,8 +590,23 @@ public class StepDefinitions {
 				.addHeader("Authorization", "Bearer " + accessToken)
 				.build();
 		Response pocResponse = HTTP_CLIENT.newCall(pocRequest).execute();
-		pocResponse.body().close();
 		assertEquals(HttpStatus.SC_CREATED, pocResponse.code(), "The product ordering should have been created.");
+		ProductOrderVO productOrderVO = OBJECT_MAPPER.readValue(pocResponse.body().string(), ProductOrderVO.class);
+		pocResponse.body().close();
+
+
+		ProductOrderUpdateVO productOrderUpdateVO = new ProductOrderUpdateVO()
+				.state(ProductOrderStateTypeVO.COMPLETED);
+		RequestBody updateBody = RequestBody.create(MediaType.parse("application/json"), OBJECT_MAPPER.writeValueAsString(productOrderUpdateVO));
+		Request updateRequest = new Request.Builder()
+				.patch(updateBody)
+				.url(MPOperationsEnvironment.TM_FORUM_API_ADDRESS + "/tmf-api/productOrderingManagement/v4/productOrder/" + productOrderVO.getId())
+				.addHeader("Authorization", "Bearer " + accessToken)
+				.build();
+		Response updateResponse = HTTP_CLIENT.newCall(updateRequest).execute();
+		updateResponse.body().close();
+		assertEquals(HttpStatus.SC_OK, updateResponse.code(), "The product ordering should have been updated.");
+
 	}
 
 	@When("Fancy Marketplace buys access to M&P's uptime reports.")

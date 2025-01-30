@@ -369,6 +369,30 @@ tpp:
 contract-management:
   til:
     credentialType: OperatorCredential
+  services:
+    ## Config for Trusted Issuers List
+    trusted-issuers-list:
+      ## URL of the Trusted Issuers List Service
+      url: http://trusted-issuers-list:8080
+    ## Config for the TM Forum Service hosting the APIs
+    product-order:
+      ## URL of the TM Forum Service hosting the Product Ordering API
+      url: http://provider-tm-forum-api-product-ordering-management:8080
+    party:
+      ## URL of the TM Forum Service hosting the Party API
+      url: http://provider-tm-forum-api-party-catalog:8080
+    product-catalog:
+      ## URL of the TM Forum Service hosting the Product Catalog API
+      url: http://provider-tm-forum-api-product-catalog:8080
+    service-catalog:
+      ## URL of the TM Forum Service hosting the Service Catalog API
+      url: http://provider-tm-forum-api-service-catalog:8080
+    tmforum-agreement-api:
+      ## URL of the TM Forum Service hosting the Agreement API
+      url: http://provider-tm-forum-api-agreement:8080
+    rainbow:
+      ## URL for the Rainbow service
+      url: http://rainbow:8080
 
 trusted-issuers-list:
   # only open for clean up in the tests
