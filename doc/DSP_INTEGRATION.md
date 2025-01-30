@@ -196,7 +196,7 @@ The result will be similar to the following:
 
 ### Authentication and Authorization
 
-The TMForum-API and the Data Service are secured by the IAM in addition to be connected with the Transfer Process Protocol. Therefor, the provider has to create policies to controll access to TMForumm the Data Service and the Rainbow API.
+The TMForum-API and the Data Service are secured by the IAM in addition to be connected with the Transfer Process Protocol. Therefor, the provider has to create policies to control access to TMForum, the Data Service and the Rainbow API.
 
 1. Allow [read-access to the Rainbow Catalog API](../it/src/test/resources/policies/allowCatalogRead.json)
 
