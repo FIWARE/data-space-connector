@@ -28,7 +28,7 @@ recipes.
   - [Service interaction](#service-interaction)
     - [Service interaction (H2M)](#service-interaction-h2m)
     - [Service interaction (M2M)](#service-interaction-m2m)
-  - [Dataspace Protocol](#integration-with-the-dataspace-protocol)
+  - [Integration with the Dataspace Protocol](#integration-with-the-dataspace-protocol)
 - [Deployment](#deployment)
   - [Local Deployment](#local-deployment)
   - [Deployment with Helm](#deployment-with-helm)
