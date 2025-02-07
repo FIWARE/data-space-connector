@@ -37,7 +37,7 @@ Relevant TMForum APIs:
 * [Agreement Management](https://www.tmforum.org/oda/open-apis/directory/agreement-management-api-TMF651/v4.0)
 
 
-### Initialization 
+### INITIALIZATION 
 
 Provider creates a ProductOffering:
 
