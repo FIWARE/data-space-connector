@@ -231,6 +231,16 @@ keycloak:
             }
           },
           {
+            "name": "subject-mapper",
+            "protocol": "oid4vc",
+            "protocolMapper": "oid4vc-static-claim-mapper",
+            "config": {
+              "subjectProperty": "subject",
+              "staticValue": "did:key:zDnaeiVpxCT7ARwqLndbWiCeGG2YZXvLfWFs1cGPgKUe8GPLe",
+              "supportedCredentialTypes": "OperatorCredential"
+            }
+          },
+          {
             "name": "lastName-mapper",
             "protocol": "oid4vc",
             "protocolMapper": "oid4vc-user-attribute-mapper",
@@ -247,6 +257,19 @@ keycloak:
         "defaultClientScopes": [],
         "optionalClientScopes": []
       }
+
+# -- integration of rainbow
+rainbow:
+  enabled: true
+  db:
+    url: postgresql
+    user: postgres
+    existingSecret: database-secret
+    passwordKey: postgres-admin-password
+  ingress:
+    enabled: true
+    host: rainbow-consumer.127.0.0.1.nip.io
+
 did:
   enabled: true
   secret: issuance-secret
