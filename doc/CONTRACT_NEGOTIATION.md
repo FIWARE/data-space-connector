@@ -352,3 +352,7 @@ Or reject the order and go to TERMINATED:
         "state": "rejected"     
      }"
 ```
+
+### FINALIZED
+
+The consumer can access data throught the [Transfer Process Protocol](https://docs.internationaldataspaces.org/ids-knowledgebase/dataspace-protocol/transfer-process/transfer.process.protocol) as described in the [DSP Integration](DSP_INTEGRATION.md).
