@@ -319,7 +319,7 @@ Or reject it and go to TERMINATED:
 
 Once the order is received, the Provider can:
 
-Create the agreement for the Order in Rainbow, fullfil all additonal steps(f.e. Trusted List entries, Policy creation) and set the order to completed:
+Create the agreement for the Order in Rainbow, fullfil all additonal steps(f.e. Trusted List entries, Policy creation) and set the order to completed and go to state FINALIZED:
 
 > all the following steps are already handled(with the exception of Policy-Creation) by the ContractManagement
 
