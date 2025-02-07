@@ -1,7 +1,20 @@
 # Contract negotiation with TMForum
 
+## Idea
 
-## [IDSA Contract Negotiation](https://docs.internationaldataspaces.org/ids-knowledgebase/dataspace-protocol/contract-negotiation/contract.negotiation.protocol)
+Use the [TMForum Quote API](https://www.tmforum.org/oda/open-apis/directory/quote-management-api-TMF648/v4.0) to execute contract negotiation between Consumer and Provider.
+The Quote-API ```is one of the Pre-Ordering Management APIs. The customer Quote API provides a standardized mechanism for placing a customer quote with all the necessary quote parameters.```. It is intended to negotiate serivce and product acquisition between Customer and Provider(according to the Quote-Object documentation) and therefor well suited for the use-case of Contract Negotiation. 
+
+Alternatives: 
+* [Product Offering Qualification API](https://www.tmforum.org/oda/open-apis/directory/product-offering-qualification-management-api-TMF679/v4.0): Pre-ordering API intended to check commercial elgibility, rather than negotiation. Not necessarily targeting Consumer interaction
+* direct manipilation of the Product Order: ProductOrder states are intended for "processing" the actual order, rather than negotiating 
+* [Agreement-API](https://www.tmforum.org/oda/open-apis/directory/agreement-management-api-TMF651/v4.0): Intended to specify concrete agreements between partners, not necessariyl product acquisiton. Limited states to be used.
+
+
+## State Mapping
+
+
+> [IDSA Contract Negotiation](https://docs.internationaldataspaces.org/ids-knowledgebase/dataspace-protocol/contract-negotiation/contract.negotiation.protocol)
 
 ![IDSA State Maching](./img/idsa-contract-negotiation.png)
 
@@ -15,17 +28,16 @@ States:
 * FINALIZED: The Provider has sent a finalization message including his own Agreement verification to the Consumer and the Consumer has sent an ACK response. Data is now available to the Consumer.
 * TERMINATED: The Provider or Consumer has placed the CN in a terminated state. A termination message has been sent by either of the Participants and the other has sent an ACK response. This is a terminal state.
 
-## TMForum APIs
+Relevant TMForum APIs:
 
 * [Product Catalog Management](https://www.tmforum.org/oda/open-apis/directory/product-catalog-management-api-TMF620/v4.1)
 * [Quote](https://www.tmforum.org/oda/open-apis/directory/quote-management-api-TMF648/v4.0)
-* [Product Offering Qualification](https://www.tmforum.org/oda/open-apis/directory/product-offering-qualification-management-api-TMF679/v4.0)
 * [Product Order Management](https://www.tmforum.org/oda/open-apis/directory/product-ordering-management-api-TMF622/v4.0)
+* [Product Offering Qualification](https://www.tmforum.org/oda/open-apis/directory/product-offering-qualification-management-api-TMF679/v4.0)
 * [Agreement Management](https://www.tmforum.org/oda/open-apis/directory/agreement-management-api-TMF651/v4.0)
 
-## State Mapping
 
-Initial: 
+### Initialization 
 
 Provider creates a ProductOffering:
 
