@@ -37,7 +37,7 @@ Relevant TMForum APIs:
 * [Agreement Management](https://www.tmforum.org/oda/open-apis/directory/agreement-management-api-TMF651/v4.0)
 
 
-### INITIALIZATION 
+### Preparation 
 
 Provider creates a ProductOffering:
 
@@ -78,9 +78,8 @@ export PRODUCT_OFFERING_ID=$(curl -X 'POST' http://tm-forum-api.127.0.0.1.nip.io
      }"| jq '.id' -r ); echo ${PRODUCT_OFFERING_ID}
 ```
 
-IDSA State Requested:
 
-### Intialization
+### INITIAL State
 
 To get into state REQUESTED, the consumer creates a ```Quote```, referncing the offer:
 
