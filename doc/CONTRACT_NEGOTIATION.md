@@ -36,7 +36,7 @@ Relevant TMForum APIs:
 * [Product Offering Qualification](https://www.tmforum.org/oda/open-apis/directory/product-offering-qualification-management-api-TMF679/v4.0)
 * [Agreement Management](https://www.tmforum.org/oda/open-apis/directory/agreement-management-api-TMF651/v4.0)
 
-The mapped State Machine:
+#### The mapped State Machine:
 
 ![Mapped Machine](./img/idsa-tmf-state-machine.png)
 
