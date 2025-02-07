@@ -28,6 +28,7 @@ recipes.
   - [Service interaction](#service-interaction)
     - [Service interaction (H2M)](#service-interaction-h2m)
     - [Service interaction (M2M)](#service-interaction-m2m)
+  - [Integration with the Dataspace Protocol](#integration-with-the-dataspace-protocol)
 - [Deployment](#deployment)
   - [Local Deployment](#local-deployment)
   - [Deployment with Helm](#deployment-with-helm)
@@ -286,6 +287,12 @@ The following displays the different steps for the two different types of intera
 A detailed description of the steps to be performed by client applications and service providers can be found 
 in the [Service Interaction (M2M)](./doc/flows/service-interaction-m2m) documentation. 
 
+
+### Integration with the [Dataspace Protocol](https://docs.internationaldataspaces.org/ids-knowledgebase/dataspace-protocol)
+
+In order to be interoperable in Data Spaces with different connectors, the FIWARE Data Space Connector supports the [IDSA Dataspace Protocol](https://docs.internationaldataspaces.org/ids-knowledgebase/dataspace-protocol). Catalogs and Data Services can be explored in [DCAT-Format](https://www.w3.org/TR/vocab-dcat-3/) through the [Catalog Protocol](https://docs.internationaldataspaces.org/ids-knowledgebase/dataspace-protocol/catalog/catalog.protocol) and the Transfer Process can be controlled throught the [Transfer Process Protocol](https://docs.internationaldataspaces.org/ids-knowledgebase/dataspace-protocol/transfer-process/transfer.process.protocol). Contract Negotiation is not yet supported, due to its limitations in comparison to the TMForum API. 
+
+Find out more in the [Dataspace Protocol Integration Documentation](./doc/DSP_INTEGRATION.md).
 
 
 ## Deployment

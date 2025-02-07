@@ -19,11 +19,11 @@
       "odrl:refinement": [
         {
           "@type": "odrl:Constraint",
-          "odrl:leftOperand": "tmf:resource",
+          "odrl:leftOperand": "http:path",
           "odrl:operator": {
-            "@id": "odrl:eq"
+            "@id": "http:isInPath"
           },
-          "odrl:rightOperand": "productOrder"
+          "odrl:rightOperand": "/agreements"
         }
       ]
     },
@@ -31,7 +31,7 @@
       "@id": "vc:any"
     },
     "odrl:action": {
-      "@id": "odrl:use"
+      "@id": "odrl:read"
     }
   }
 }

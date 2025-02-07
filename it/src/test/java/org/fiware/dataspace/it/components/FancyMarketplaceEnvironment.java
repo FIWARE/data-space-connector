@@ -6,6 +6,7 @@ package org.fiware.dataspace.it.components;
 public abstract class FancyMarketplaceEnvironment {
     public static final String DID_CONSUMER_ADDRESS = "http://did-consumer.127.0.0.1.nip.io:8080";
     public static final String CONSUMER_KEYCLOAK_ADDRESS = "http://keycloak-consumer.127.0.0.1.nip.io:8080";
+    public static final String CONSUMER_TPP_ADDRESS = "http://rainbow-consumer.127.0.0.1.nip.io:8080/api/v1/callbacks";
 
     public static final String OIDC_WELL_KNOWN_PATH = "/.well-known/openid-configuration";
     private static final String TEST_REALM = "test-realm";
