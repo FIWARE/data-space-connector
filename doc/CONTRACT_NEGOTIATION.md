@@ -16,6 +16,8 @@ Alternatives:
 
 > [IDSA Contract Negotiation](https://docs.internationaldataspaces.org/ids-knowledgebase/dataspace-protocol/contract-negotiation/contract.negotiation.protocol)
 
+#### IDSA State Machine
+
 ![IDSA State Maching](./img/idsa-contract-negotiation.png)
 
 States:
@@ -35,6 +37,10 @@ Relevant TMForum APIs:
 * [Product Order Management](https://www.tmforum.org/oda/open-apis/directory/product-ordering-management-api-TMF622/v4.0)
 * [Product Offering Qualification](https://www.tmforum.org/oda/open-apis/directory/product-offering-qualification-management-api-TMF679/v4.0)
 * [Agreement Management](https://www.tmforum.org/oda/open-apis/directory/agreement-management-api-TMF651/v4.0)
+
+#### TMF State Machine
+
+![TNF State Machine](./img/tmf-state-machine.png)
 
 #### The mapped State Machine:
 
