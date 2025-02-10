@@ -98,6 +98,7 @@ export QUOTE_ID=$(curl -X 'POST' http://tm-forum-api.127.0.0.1.nip.io:8080/tmf-a
                 \"role\": \"Consumer\"
             }
         ],
+        \"version\": \"1\",
         \"state\": "pending",
         \"quoteItem\": [
             {
@@ -106,6 +107,7 @@ export QUOTE_ID=$(curl -X 'POST' http://tm-forum-api.127.0.0.1.nip.io:8080/tmf-a
                     \"id\": \"${PRODUCT_OFFERING_ID}\"
                 },
                 \"action\": \"modify\",
+                \"state\": \"inProgress\",
                 \"note\": [{
                     \"id\": \"First note\",
                     \"text\": \"We would prefer weekly pricing and a discount\"
@@ -127,7 +129,7 @@ export QUOTE_ID=$(curl -X 'POST' http://tm-forum-api.127.0.0.1.nip.io:8080/tmf-a
      }" | jq '.id' -r ); echo ${QUOTE_ID}
 ```
 
-### IDSA REQUESTED - Quote in state ```pending```
+### IDSA REQUESTED - Quote in state ```inProgress```
 
 With that, the negotiation is in state requested and needs to be processed by the provider:
 
@@ -136,11 +138,11 @@ Provider can reject the Quote and go to state TERMINATED:
     curl -X 'PATCH' http://tm-forum-api.127.0.0.1.nip.io:8080/tmf-api/quoteManagement/v4/quote/${QUOTE_ID} \
      -H 'Content-Type: application/json;charset=utf-8' \
      -d "{ 
-        "state": "rejected"     
+        "state": "cannce"     
      }"
 ```
 
-Provider can approve it and go to state AGREED:
+Provider can approve it and go to state OFFERED:
 ```shell
     curl -X 'PATCH' http://tm-forum-api.127.0.0.1.nip.io:8080/tmf-api/quoteManagement/v4/quote/${QUOTE_ID} \
      -H 'Content-Type: application/json;charset=utf-8' \
@@ -149,12 +151,12 @@ Provider can approve it and go to state AGREED:
      }"
 ```
 
-Provider can make a counter-offer and go to OFFERED: 
+Provider can approve it and go to state OFFERED:(reject original Quote-Item) and go to OFFERED: 
 ```shell
 curl -X 'PATCH' http://tm-forum-api.127.0.0.1.nip.io:8080/tmf-api/quoteManagement/v4/quote/${QUOTE_ID} \
      -H 'Content-Type: application/json;charset=utf-8' \
      -d "{
-        \"state\": "inProgress",
+        \"state\": "approved",
         \"quoteItem\": [
             {
                 \"id\": \"item-id\",
@@ -162,11 +164,39 @@ curl -X 'PATCH' http://tm-forum-api.127.0.0.1.nip.io:8080/tmf-api/quoteManagemen
                     \"id\": \"${PRODUCT_OFFERING_ID}\"
                 },
                 \"action\": \"modify\",
+                \"version\": \"1\",
+                \"state\": \"rejected\",
                 \"note\": [
                     {
                         \"id\": \"First note\",
                         \"text\": \"We would prefer weekly pricing and a discount.\"
                     },
+                    {
+                        \"id\": \"Answer note\",
+                        \"text\": \"We can offer weekly payment, but no discount.\"
+                    }
+
+                ],
+                \"priceAlteration\": [
+                    {
+                        \"name\": \"alternative price\",
+                        \"priceType\": \"recurring\",
+                        \"recurringChargePeriod\": \"weekly\",
+                        \"price\": {
+                            "unit": "EUR",
+                            "value": 2.0
+                        }
+                    }
+                ]
+            },
+            {
+                \"id\": \"counter-item-id\",
+                \"productOffering\": {
+                    \"id\": \"${PRODUCT_OFFERING_ID}\"
+                },
+                \"action\": \"modify\",
+                \"state\": \"approved\",
+                \"note\": [
                     {
                         \"id\": \"Answer note\",
                         \"text\": \"We can offer weekly payment, but no discount.\"
@@ -203,13 +233,13 @@ Accept the offer and go to ACCEPTED:
      }"
 ```
 
-Or make another counter-offer and send it back to REQUESTED:
+Or can reject the quote and create a new one in REQUESTED:
 
 ```shell
 curl -X 'PATCH' http://tm-forum-api.127.0.0.1.nip.io:8080/tmf-api/quoteManagement/v4/quote/${QUOTE_ID} \
      -H 'Content-Type: application/json;charset=utf-8' \
      -d "{
-        \"state\": "pending",
+        \"state\": "rejected",
         \"quoteItem\": [
             {
                 \"id\": \"item-id\",
@@ -248,12 +278,55 @@ curl -X 'PATCH' http://tm-forum-api.127.0.0.1.nip.io:8080/tmf-api/quoteManagemen
      }"
 ```
 
-Or reject the Quote and go to state TERMINATED:
+```shell
+export QUOTE_ID=$(curl -X 'POST' http://tm-forum-api.127.0.0.1.nip.io:8080/tmf-api/quoteManagement/v4/quote \
+     -H 'Content-Type: application/json;charset=utf-8' \
+     -d "{
+        \"description\": \"Request for Test Offering\",
+        \"relatedParty\": [
+            {
+                \"id\": \"Requesting-Consumer\",
+                \"role\": \"Consumer\"
+            }
+        ],
+        \"state\": "inProgress",
+        \"version\": \"2\",
+        \"quoteItem\": [
+            {
+                \"id\": \"item-id\",
+                \"productOffering\": {
+                    \"id\": \"${PRODUCT_OFFERING_ID}\"
+                },
+                \"action\": \"modify\",
+                \"state\": \"inProgress\",
+                \"note\": [{
+                        \"id\": \"New Answer note\",
+                        \"text\": \"What about a discound and monthly payments.\"
+                }],
+                \"priceAlteration\": [
+                    {
+                        \"name\": \"alternative price\",
+                        \"priceType\": \"recurring\",
+                        \"recurringChargePeriod\": \"monthly\",
+                        \"price\": {
+                            "unit": "EUR",
+                            "value": 9.0
+                        }
+                    }
+                ]
+
+            }
+        ]
+     }" | jq '.id' -r ); echo ${QUOTE_ID}
+```
+
+
+Or cancell the Quote and go to state TERMINATED:
 ```shell
     curl -X 'PATCH' http://tm-forum-api.127.0.0.1.nip.io:8080/tmf-api/quoteManagement/v4/quote/${QUOTE_ID} \
      -H 'Content-Type: application/json;charset=utf-8' \
      -d "{ 
-        "state": "rejected"     
+        "state": "cancell"     
      }"
 ```
 
@@ -263,20 +336,14 @@ When the consumer did accept the offer from the provider, the provider can:
 
 Approve the offer and go to state AGREED: 
 
-```shell
-    curl -X 'PATCH' http://tm-forum-api.127.0.0.1.nip.io:8080/tmf-api/quoteManagement/v4/quote/${QUOTE_ID} \
-     -H 'Content-Type: application/json;charset=utf-8' \
-     -d "{ 
-        "state": "approved"     
-     }"
-```
+ -> Answer 200 ? 
 
-Or reject the Quote and go to state TERMINATED:
+Or cancel the Quote and go to state TERMINATED:
 ```shell
     curl -X 'PATCH' http://tm-forum-api.127.0.0.1.nip.io:8080/tmf-api/quoteManagement/v4/quote/${QUOTE_ID} \
      -H 'Content-Type: application/json;charset=utf-8' \
      -d "{ 
-        "state": "rejected"     
+        "state": "cancelled"     
      }"
 ```
 
