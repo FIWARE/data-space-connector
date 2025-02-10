@@ -105,7 +105,7 @@ export QUOTE_ID=$(curl -X 'POST' http://tm-forum-api.127.0.0.1.nip.io:8080/tmf-a
             }
         ],
         \"version\": \"1\",
-        \"state\": "pending",
+        \"state\": "inProgress",
         \"quoteItem\": [
             {
                 \"id\": \"item-id\",
@@ -139,12 +139,12 @@ export QUOTE_ID=$(curl -X 'POST' http://tm-forum-api.127.0.0.1.nip.io:8080/tmf-a
 
 With that, the negotiation is in state requested and needs to be processed by the provider:
 
-Provider can reject the Quote and go to state TERMINATED:
+Provider can cancel the Quote and go to state TERMINATED:
 ```shell
     curl -X 'PATCH' http://tm-forum-api.127.0.0.1.nip.io:8080/tmf-api/quoteManagement/v4/quote/${QUOTE_ID} \
      -H 'Content-Type: application/json;charset=utf-8' \
      -d "{ 
-        "state": "cannce"     
+        "state": "cancelled"     
      }"
 ```
 
@@ -157,7 +157,7 @@ Provider can approve it and go to state OFFERED:
      }"
 ```
 
-Provider can approve it and go to state OFFERED:(reject original Quote-Item) and go to OFFERED: 
+Provider can reject the original QuoteItem, add a new one and go to OFFERED: 
 ```shell
 curl -X 'PATCH' http://tm-forum-api.127.0.0.1.nip.io:8080/tmf-api/quoteManagement/v4/quote/${QUOTE_ID} \
      -H 'Content-Type: application/json;charset=utf-8' \
@@ -227,7 +227,7 @@ curl -X 'PATCH' http://tm-forum-api.127.0.0.1.nip.io:8080/tmf-api/quoteManagemen
 
 ### IDSA OFFERED  - Quote in state ```inProgress```
 
-Within state offered, the consumer can either:
+Within state OFFERED, the consumer can either:
 
 Accept the offer and go to ACCEPTED:
 
@@ -327,12 +327,12 @@ export QUOTE_ID=$(curl -X 'POST' http://tm-forum-api.127.0.0.1.nip.io:8080/tmf-a
 ```
 
 
-Or cancell the Quote and go to state TERMINATED:
+Or cancel the Quote and go to state TERMINATED:
 ```shell
     curl -X 'PATCH' http://tm-forum-api.127.0.0.1.nip.io:8080/tmf-api/quoteManagement/v4/quote/${QUOTE_ID} \
      -H 'Content-Type: application/json;charset=utf-8' \
      -d "{ 
-        "state": "cancell"     
+        "state": "cancelled"     
      }"
 ```
 
@@ -342,7 +342,7 @@ When the consumer did accept the offer from the provider, the provider can:
 
 Approve the offer and go to state AGREED: 
 
- -> Answer 200 ? 
+-> verify the request and answer 200
 
 Or cancel the Quote and go to state TERMINATED:
 ```shell
