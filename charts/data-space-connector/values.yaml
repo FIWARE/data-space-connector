@@ -70,6 +70,9 @@ vcverifier:
   m2m:
     # -- we do not need authentication here
     authEnabled: false
+  deployment:
+    image:
+      tag: 4.6.0-pre-49
 
 # -- configuration for the digital-signature.service to be deployed as part of the connector in case of did:elsi support
 dss:
@@ -85,6 +88,10 @@ dss:
 
 # -- configuration for the credentials-config-service to be deployed as part of the connector, see https://github.com/FIWARE/helm-charts/tree/main/charts/credentials-config-service for all options
 credentials-config-service:
+  deployment:
+    image: 
+      tag: 2.0.0-PRE-8
+
   # -- should it be enabled? set to false if one outside the chart is used.
   enabled: true
   # -- allows to set a fixed name for the services
@@ -721,3 +728,7 @@ dataSpaceConfig:
 
   # -- Supported authentication protocols (e.g.: oid4vp)
   authenticationProtocols: []
+
+
+didJson:
+  enabled: false
