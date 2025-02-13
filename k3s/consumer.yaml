@@ -31,6 +31,8 @@ keycloak:
   ingress:
     enabled: true
     hostname: keycloak-consumer.127.0.0.1.nip.io
+    annotations:
+      traefik.ingress.kubernetes.io/router.tls: "true"
   command:
     - /bin/bash
   args:
@@ -279,3 +281,10 @@ registration:
   til: http://trusted-issuers-list.provider.svc.cluster.local:8080
   did: ${DID}
   credentialsType: UserCredential
+
+didJson:
+  enabled: true
+  port: 3000
+  ingress:
+    enabled: true
+    host: consumer.127.0.0.1.nip.io  

@@ -1,0 +1,46 @@
+basicConstraints = CA:FALSE
+nsCertType = client, email
+nsComment = "OpenSSL Generated Client Certificate"
+subjectKeyIdentifier = hash
+authorityKeyIdentifier = keyid,issuer
+keyUsage = critical, nonRepudiation, digitalSignature, keyEncipherment
+extendedKeyUsage = clientAuth, emailProtection
+
+
+[req]
+req_extensions = qcStatements
+copy_extensions = copyall
+
+[qcStatements]
+1.3.6.1.5.5.7.1.3=ASN1:SEQUENCE:qcStatement
+
+[qcStatement]
+etsiQcsCompliance=SEQUENCE:etsiQcsCompliance
+qcs-QcPDS=SEQUENCE:qcs-QcPDS
+id-qc-statement=SEQUENCE:id-qc-statement   ## https://www.etsi.org/deliver/etsi_ts/119400_119499/119495/01.05.01_60/ts_119495v010501p.pdf
+qcs-QcType=SEQUENCE:qcs-QcType
+[etsiQcsCompliance]
+statementId=OID:0.4.0.1862.1.1
+[qcs-QcPDS]
+statementId=OID:0.4.0.1862.1.5
+QcPDS-List=SEQUENCE:QcPDS-List
+[QcPDS-List]
+QcPDS1=SEQUENCE:QcPDS1
+[QcPDS1]
+url=IA5STRING:https://example.org/pkidisclosure
+description=PRINTABLESTRING:example
+
+
+[id-qc-statement]
+statementId=OID:0.4.0.19495.2
+statementInfo=SEQUENCE:id-qc-statement-Info
+[id-qc-statement-Info]
+nCAName=UTF8String:Some test CA
+nCAId=UTF8String:XX-DFSA
+[qcs-QcType]
+statementId=OID:0.4.0.1862.1.6
+statementInfo=SEQUENCE:qcs-QcType-Info
+[qcs-QcType-Info]
+qct-esign=OID:0.4.0.1862.1.6.1
+qct-eseal=OID:0.4.0.1862.1.6.2
+qct-web=OID:0.4.0.1862.1.6.3

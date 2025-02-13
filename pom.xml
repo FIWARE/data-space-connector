@@ -114,6 +114,45 @@
                     <skip>true</skip>
                 </configuration>
             </plugin>
+
+            <plugin>
+                <groupId>io.github.download-maven-plugin</groupId>
+                <artifactId>download-maven-plugin</artifactId>
+                <version>2.0.0</version>
+                <configuration>
+                    <skip>true</skip>
+                </configuration>
+                <executions>
+                    <execution>
+                        <id>download-local-storage</id>
+                        <phase>prepare-package</phase>
+                        <goals>
+                            <goal>wget</goal>
+                        </goals>
+                        <configuration>
+                            <url>
+                                https://raw.githubusercontent.com/rancher/local-path-provisioner/v0.0.30/deploy/local-path-storage.yaml
+                            </url>
+                            <unpack>false</unpack>
+                            <outputDirectory>${project.build.directory}/k3s/infra</outputDirectory>
+                        </configuration>
+                    </execution>
+                   <!--<execution>
+                        <id>download-gx-registry</id>
+                        <phase>prepare-package</phase>
+                        <goals>
+                            <goal>wget</goal>
+                        </goals>
+                        <configuration>
+                            <url>
+                                https://gitlab.com/gaia-x/lab/compliance/gx-registry/-/archive/development/gx-registry-development.zip?path=k8s/gx-registry
+                            </url>
+                            <unpack>true</unpack>
+                            <outputDirectory>${project.build.directory}/temp</outputDirectory>
+                        </configuration>
+                    </execution>-->
+                </executions>
+            </plugin>
             <!-- copy the charts to the target repo to keep the sources clean -->
             <plugin>
                 <artifactId>maven-resources-plugin</artifactId>
@@ -121,6 +160,21 @@
                     <skip>true</skip>
                 </configuration>
                 <executions>
+                    <!--<execution>
+                        <id>copy-resources-gx-registry</id>
+                        <phase>prepare-package</phase>
+                        <goals>
+                            <goal>copy-resources</goal>
+                        </goals>
+                        <configuration>
+                            <outputDirectory>${project.build.directory}/charts/gx-registry</outputDirectory>
+                            <resources>
+                                <resource>
+                                    <directory>${project.build.directory}/temp/gx-registry-development-k8s-gx-registry/k8s/gx-registry</directory>
+                                </resource>
+                            </resources>
+                        </configuration>
+                    </execution>-->
                     <execution>
                         <id>copy-resources-trust-anchor</id>
                         <phase>prepare-package</phase>
@@ -181,6 +235,21 @@
                             </resources>
                         </configuration>
                     </execution>
+                     <execution>
+                        <id>copy-resources-certs</id>
+                        <phase>prepare-package</phase>
+                        <goals>
+                            <goal>copy-resources</goal>
+                        </goals>
+                        <configuration>
+                            <outputDirectory>${project.build.directory}/k3s/certs</outputDirectory>
+                            <resources>
+                                <resource>
+                                    <directory>${main.basedir}/k3s/certs</directory>
+                                </resource>
+                            </resources>
+                        </configuration>
+                    </execution>
                 </executions>
             </plugin>
             <!-- render the charts -->
@@ -205,8 +274,7 @@
                             <skipTemplate>false</skipTemplate>
                             <templateGenerateName>true</templateGenerateName>
                             <templateOutputDir>${project.build.directory}/k3s/dsc-provider</templateOutputDir>
-                            <additionalArguments>--name-template=provider --namespace=provider -f ${main.basedir}/k3s/provider.yaml
-                            </additionalArguments>
+                            <additionalArguments>--name-template=provider --namespace=provider -f ${main.basedir}/k3s/provider.yaml</additionalArguments>
                         </configuration>
                     </execution>
                     <execution>
@@ -222,8 +290,7 @@
                             <skipTemplate>false</skipTemplate>
                             <templateGenerateName>true</templateGenerateName>
                             <templateOutputDir>${project.build.directory}/k3s/dsc-consumer</templateOutputDir>
-                            <additionalArguments>--name-template=consumer --namespace=consumer -f ${main.basedir}/k3s/consumer.yaml
-                            </additionalArguments>
+                            <additionalArguments>--name-template=consumer --namespace=consumer -f ${main.basedir}/k3s/consumer.yaml</additionalArguments>
                         </configuration>
                     </execution>
                     <execution>
@@ -239,10 +306,25 @@
                             <skipTemplate>false</skipTemplate>
                             <templateGenerateName>true</templateGenerateName>
                             <templateOutputDir>${project.build.directory}/k3s/trust-anchor</templateOutputDir>
-                            <additionalArguments>--name-template=trust-anchor --namespace=trust-anchor -f ${main.basedir}/k3s/trust-anchor.yaml
-                            </additionalArguments>
+                            <additionalArguments>--name-template=trust-anchor --namespace=trust-anchor -f ${main.basedir}/k3s/trust-anchor.yaml</additionalArguments>
                         </configuration>
                     </execution>
+                    <!--<execution>
+                        <id>template-gx-registry</id>
+                        <goals>
+                            <goal>init</goal>
+                            <goal>dependency-update</goal>
+                            <goal>template</goal>
+                        </goals>
+                        <phase>package</phase>
+                        <configuration>
+                            <chartDirectory>${project.build.directory}/charts/gx-registry</chartDirectory>
+                            <skipTemplate>false</skipTemplate>
+                            <templateGenerateName>true</templateGenerateName>
+                            <templateOutputDir>${project.build.directory}/k3s</templateOutputDir>
+                            <additionalArguments>-f ${main.basedir}/k3s/gx-registry.yaml</additionalArguments>
+                        </configuration>
+                    </execution>-->
                 </executions>
             </plugin>
             <plugin>
@@ -252,7 +334,12 @@
                 <configuration>
                     <skip>true</skip>
                     <portBindings>
+                        <!-- Traefik http -->
                         <portBinding>8080:8080</portBinding>
+                        <!-- Traefik https -->
+                        <portBinding>8443:8443</portBinding>
+                        <!-- Squid proxy -->
+                        <portBinding>8888:8888</portBinding>
                     </portBindings>
                 </configuration>
                 <executions>
@@ -266,6 +353,17 @@
                         <configuration>
                             <failIfExists>false</failIfExists>
                             <manifests>${project.build.directory}/k3s/namespaces</manifests>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>apply-certs</id>
+                        <phase>deploy</phase>
+                        <goals>
+                            <goal>apply</goal>
+                        </goals>
+                        <configuration>
+                            <manifests>${project.build.directory}/k3s/certs</manifests>
+                            <timeout>500</timeout>
                         </configuration>
                     </execution>
                     <execution>
@@ -288,6 +386,14 @@
             <id>local</id>
             <build>
                 <plugins>
+                    <plugin>
+                        <groupId>io.github.download-maven-plugin</groupId>
+                        <artifactId>download-maven-plugin</artifactId>
+                        <version>2.0.0</version>
+                        <configuration>
+                            <skip>false</skip>
+                        </configuration>
+                    </plugin>
                     <plugin>
                         <artifactId>maven-resources-plugin</artifactId>
                         <configuration>
@@ -353,8 +459,7 @@
                                     <skipTemplate>false</skipTemplate>
                                     <templateGenerateName>true</templateGenerateName>
                                     <templateOutputDir>${project.build.directory}/k3s/dsc-provider</templateOutputDir>
-                                    <additionalArguments>--name-template=provider --namespace=provider -f ${main.basedir}/k3s/provider-elsi.yaml
-                                    </additionalArguments>
+                                    <additionalArguments>--name-template=provider --namespace=provider -f ${main.basedir}/k3s/provider-elsi.yaml</additionalArguments>
                                 </configuration>
                             </execution>
                             <execution>
@@ -371,8 +476,7 @@
                                     <skipTemplate>false</skipTemplate>
                                     <templateGenerateName>true</templateGenerateName>
                                     <templateOutputDir>${project.build.directory}/k3s/dsc-consumer</templateOutputDir>
-                                    <additionalArguments>--name-template=consumer --namespace=consumer -f ${main.basedir}/k3s/consumer-elsi.yaml
-                                    </additionalArguments>
+                                    <additionalArguments>--name-template=consumer --namespace=consumer -f ${main.basedir}/k3s/consumer-elsi.yaml</additionalArguments>
                                 </configuration>
                             </execution>
                             <execution>
@@ -388,8 +492,7 @@
                                     <skipTemplate>false</skipTemplate>
                                     <templateGenerateName>true</templateGenerateName>
                                     <templateOutputDir>${project.build.directory}/k3s/trust-anchor</templateOutputDir>
-                                    <additionalArguments>--name-template=trust-anchor --namespace=trust-anchor -f ${main.basedir}/k3s/trust-anchor.yaml
-                                    </additionalArguments>
+                                    <additionalArguments>--name-template=trust-anchor --namespace=trust-anchor -f ${main.basedir}/k3s/trust-anchor.yaml</additionalArguments>
                                 </configuration>
                             </execution>
                         </executions>

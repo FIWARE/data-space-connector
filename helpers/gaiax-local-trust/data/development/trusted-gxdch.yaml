@@ -1,0 +1,43 @@
+registry:
+  - registry.lab.gaia-x.eu/v1
+  - registry.lab.gaia-x.eu/v2
+  - gx-registry.airenetworks.es/v1
+  - gx-registry.arsys.es/v1
+  - gx-registry.arsys.es/v2
+  - gx-registry.aruba.it/v1
+  - gx-registry.gxdch.dih.telekom.com/v1
+  - gx-registry.gxdch.dih.telekom.com/v2
+  - www.delta-dao.com/registry/v1
+  - www.delta-dao.com/registry/v2
+  - registry.gxdch.gaiax.ovh/v1
+  - aerospace-digital-exchange.eu/registry/v1
+  - gx-registry.gxdch.proximus.eu/v1
+compliance:
+  - compliance.lab.gaia-x.eu/v1
+  - compliance.lab.gaia-x.eu/v2
+  - gx-compliance.airenetworks.es/v1
+  - gx-compliance.arsys.es/v1
+  - gx-compliance.arsys.es/v2
+  - gx-compliance.aruba.it/v1
+  - gx-compliance.gxdch.dih.telekom.com/v1
+  - gx-compliance.gxdch.dih.telekom.com/v2
+  - www.delta-dao.com/compliance/v1
+  - www.delta-dao.com/compliance/v2
+  - compliance.gxdch.gaiax.ovh/v1
+  - compliance.gxdch.gaiax.ovh/v2
+  - aerospace-digital-exchange.eu/compliance/v1
+  - gx-compliance.gxdch.proximus.eu/v1
+registration-notary:
+  - registrationnumber.notary.lab.gaia-x.eu/v1
+  - registrationnumber.notary.lab.gaia-x.eu/v2
+  - gx-notary.airenetworks.es/v1
+  - gx-notary.arsys.es/v1
+  - gx-notary.arsys.es/v2
+  - gx-notary.aruba.it/v1
+  - gx-notary.gxdch.dih.telekom.com/v1
+  - gx-notary.gxdch.dih.telekom.com/v2
+  - www.delta-dao.com/notary/v1
+  - www.delta-dao.com/notary/v2
+  - notary.gxdch.gaiax.ovh/v1
+  - aerospace-digital-exchange.eu/notary/v1
+  - gx-notary.gxdch.proximus.eu/v1

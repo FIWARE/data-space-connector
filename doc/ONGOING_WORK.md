@@ -160,3 +160,14 @@ The result will be similar to the following:
     }
 ]
 ```
+
+
+
+
+
+>>> TRY WITH HOST MAPPING IN DEPLOYMENT - SEE CONTRACT_MANAGEMENT
+
+```shell
+# ca
+
+```

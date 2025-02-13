@@ -5,6 +5,7 @@ metadata:
   name: did-json
   namespace: infra
   labels:
+    app.kubernetes.io/name: did-json
     {{ include "dsc.labels" . | nindent 4 }}
 spec:
   type: {{ .Values.didJson.serviceType }}
@@ -15,5 +16,4 @@ spec:
       name: http
   selector:
     app.kubernetes.io/name: did-json
-    app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}

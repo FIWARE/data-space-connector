@@ -9,10 +9,10 @@ metadata:
 data:
   did.json: |-
     {
-      "id": "did:web:consumer.127.0.0.1.nip.io%3A8443",
+      "id": "did:web:consumer.127.0.0.1.nip.io",
       "verificationMethod": [
         {
-          "id": "did:web:consumer.127.0.0.1.nip.io%3A8443"
+          "id": "did:web:consumer.127.0.0.1.nip.io"
           "type": "JsonWebKey2020",
           "publicKeyJwk": {
             "x5u": "https://consumer.127.0.0.1.nip.io/.well-known/tls.crt"
