@@ -3,11 +3,12 @@ apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: did-json
-  namespace: infra
-  labels:
-    {{ include "dsc.labels" . | nindent 4 }}
+  namespace: {{ $.Release.Namespace | quote }}
   annotations:
     traefik.ingress.kubernetes.io/router.tls: "true"
+    traefik.ingress.kubernetes.io/service.passhostheader: "true"
+  labels:
+    {{ include "dsc.labels" . | nindent 4 }}
 spec:
   rules:
     - host: {{ .Values.didJson.ingress.host }}

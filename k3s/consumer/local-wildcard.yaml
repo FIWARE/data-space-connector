@@ -6,5 +6,5 @@ kind: Secret
 metadata:
   creationTimestamp: null
   name: local-wildcard
-  namespace: infra
+  namespace: consumer
 type: kubernetes.io/tls

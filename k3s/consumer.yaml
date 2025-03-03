@@ -18,7 +18,6 @@ tm-forum-api:
   enabled: false
 contract-management:
   enabled: false
-
 postgresql:
   primary:
     persistence:
@@ -26,13 +25,10 @@ postgresql:
   readReplicas:
     persistence:
       enabled: false
-
 keycloak:
   ingress:
     enabled: true
     hostname: keycloak-consumer.127.0.0.1.nip.io
-    annotations:
-      traefik.ingress.kubernetes.io/router.tls: "true"
   command:
     - /bin/bash
   args:
@@ -44,30 +40,6 @@ keycloak:
       /opt/bitnami/scripts/keycloak/entrypoint.sh
       /opt/bitnami/scripts/keycloak/run.sh
   initContainers:
-    - name: get-did
-      image: ubuntu
-      command:
-        - /bin/bash
-      args:
-        - -ec
-        - |
-          #!/bin/bash
-          apt-get -y update; apt-get -y install wget; apt-get -y install sed;
-          
-          cd /did-material
-          wget http://did-helper:3001/did-material/cert.pfx
-          wget http://did-helper:3001/did-material/did.env
-          mkdir -p /did-material/client
-          cd /did-material/client
-          wget http://did-helper.provider.svc.cluster.local:3002/did-material/did.env
-          sed -i -e 's/DID/CLIENT_DID/g' /did-material/client/did.env
-          echo "" >> /did-material/did.env
-          echo $(cat /did-material/client/did.env) >> /did-material/did.env
-          echo $(cat /did-material/did.env)
-      volumeMounts:
-        - name: did-material
-          mountPath: /did-material
-
     - name: register-at-tir
       image: ubuntu
       command:
@@ -76,13 +48,11 @@ keycloak:
         - -ec
         - |
           #!/bin/bash
-          source /did-material/did.env
           apt-get -y update; apt-get -y install curl
-          curl -X 'POST' 'http://tir.trust-anchor.svc.cluster.local:8080/issuer' -H 'Content-Type: application/json' -d "{\"did\": \"${DID}\", \"credentials\": []}"
+          curl -X 'POST' 'http://tir.trust-anchor.svc.cluster.local:8080/issuer' -H 'Content-Type: application/json' -d "{\"did\": \"did:web:consumer.127.0.0.1.nip.io\", \"credentials\": []}"
       volumeMounts:
         - name: did-material
           mountPath: /did-material
-
     - name: register-at-til
       image: quay.io/curl/curl:8.1.2
       command:
@@ -91,7 +61,6 @@ keycloak:
         - -ec
         - |
           #!/bin/sh
-          export $(cat /did-material/did.env)
           /bin/init.sh
       volumeMounts:
         - name: consumer-til-registration
@@ -99,19 +68,19 @@ keycloak:
           subPath: init.sh
         - name: did-material
           mountPath: /did-material
-
   extraVolumeMounts:
     - name: did-material
       mountPath: /did-material
     - name: did-material
       mountPath: "/etc/env"
       readOnly: true
+    - name: consumer-key
+      mountPath: "/keys"
     - name: realms
       mountPath: /opt/bitnami/keycloak/data/import
-
   extraVolumes:
     - name: did-material
-      emptyDir: { }
+      emptyDir: {}
     - name: realms
       configMap:
         name: test-realm-realm
@@ -119,6 +88,17 @@ keycloak:
       configMap:
         name: consumer-til-registration
         defaultMode: 0755
+    - name: consumer-key
+      configMap:
+        name: consumer-keystore
+        defaultMode: 0755
+  signingKey:
+    storePath: /keys/cert.jks
+    storePassword: password
+    keyAlias: certificate
+    keyPassword: password
+    did: did:web:consumer.127.0.0.1.nip.io
+    keyAlgorithm: RS256
   realm:
     frontendUrl: http://keycloak-consumer.127.0.0.1.nip.io:8080
     import: true
@@ -136,7 +116,6 @@ keycloak:
           "clientRole": true
         }
       ]
-
     users: |
       {
         "username": "test-user",
@@ -273,18 +252,22 @@ did:
   ingress:
     enabled: true
     host: did-consumer.127.0.0.1.nip.io
-
 # register the consumer at the til. Only possible if it runs in the same environment and recommendable for demo deployments
 registration:
   enabled: true
   configMap: consumer-til-registration
   til: http://trusted-issuers-list.provider.svc.cluster.local:8080
-  did: ${DID}
+  did: did:web:consumer.127.0.0.1.nip.io
   credentialsType: UserCredential
-
 didJson:
   enabled: true
   port: 3000
+  did: did:web:consumer.127.0.0.1.nip.io
+  key:
+    kty: RSA
+    x5u: https://consumer.127.0.0.1.nip.io/.well-known/tls.crt
+    modulus: iehhaS8vz1XF9ejBEAOPzx56emC5N697ojz-cC2Gj-TNE7xw_lk0HmyXlrpYo1xmXmxUZ4vmcB6TwenmeZoyyykq1R4OHEL8ixDQuqjCH5DSi1EnebmcrzUqI43tjXr8j4nQFvc3pkb6dvibVhXzdEFY1sWXLaiz7cYFB775hcMJFxlyM_bBIYurN-DfDWFwg12Q9f4wEZ2MvVWPOh_sdGm6K8abFCf2Ds9LtlhIGmrXuNf8-_9-1GUtgmuwqMpNiiXNV1JgC2TSJK3Wq4_GnQu9_vNMeioiuQm50iGJzZf5uowfLuEGgQWQsU8GX-zrpdNiEH3bLmib8t--LSub94rC11hIBPQUauNVXyIOzcaNChUlfx0CNrXYMJhXEjQrDOkFQSbouPKUC04Dk5qBkLE0ps7j96MWgPmpCwpdAULOxglMQvMaZZem4IOtiSWkcTHqPX1-FvcwR_d7T0TsauolngUAfWDfgvHI38Fu6KlrIORWwqXpIab2rg2a_lwzKMn9ex4aU7aRYeLYlC4uXgA0ldtNTf0xYXKlCX8ESFpvJ6160zmgyOUFjFulx1qtS5vZ_B3KdSQLIWH-7etsQU9lb3gj0-0pWgPSbbXsY-7Kk96o_x1OWhDTGIzOzlykN0FJ9tHhKLQOCgwR55jspeVMl751hLDIcbTFedsbaAk
+    exponent: AQAB
   ingress:
     enabled: true
-    host: consumer.127.0.0.1.nip.io  
+    host: consumer.127.0.0.1.nip.io

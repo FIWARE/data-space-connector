@@ -1,49 +1,17 @@
 ```shell
   docker run -v $(pwd):/cert quay.io/wi_stefan/did-helper:0.1.1
+  export USER_CREDENTIAL=$(./doc/scripts/get_credential_for_consumer.sh http://keycloak-consumer.127.0.0.1.nip.io:8080 user-credential); echo ${USER_CREDENTIAL}
+  export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh http://mp-data-service.127.0.0.1.nip.io:8080 $USER_CREDENTIAL default); echo ${ACCESS_TOKEN}
 ```
 
-This will produce the files cert.pem, cert.pfx, private-key.pem, public-key.pem and did.json, containing all required
-information for the generated did:key.
-Find the did here:
 
 ```shell
-  export HOLDER_DID=$(cat did.json | jq '.id' -r); echo ${HOLDER_DID}
+  curl -k -x http://localhost:8888 -X POST 'https://registry.127.0.0.1.nip.io/v2/api/trustAnchor/chain/file' \
+  --header 'Accept: */*' \
+  --header 'Content-Type: application/json' \
+  --data-raw '{ "uri": "https://consumer.127.0.0.1.nip.io/.well-known/tls.crt"}'
 ```
 
-As a next step, a VerifiablePresentation, containing the Credential has to be created:
-
 ```shell
-  export VERIFIABLE_PRESENTATION="{
-    \"@context\": [\"https://www.w3.org/2018/credentials/v1\"],
-    \"type\": [\"VerifiablePresentation\"],
-    \"verifiableCredential\": [
-        \"${USER_CREDENTIAL}\"
-    ],
-    \"holder\": \"${HOLDER_DID}\"
-  }"; echo ${VERIFIABLE_PRESENTATION}
+  curl -k -x http://localhost:8888 -v https://consumer.127.0.0.1.nip.io/.well-known/did.json
 ```
-
-Now, the presentation has to be embedded into a signed JWT:
-
-Setup the header:
-
-```shell
-  export JWT_HEADER=$(echo -n "{\"alg\":\"ES256\", \"typ\":\"JWT\", \"iss\":\"${HOLDER_DID}\", \"kid\":\"${HOLDER_DID}\"}"| base64 -w0 | sed s/\+/-/g | sed 's/\//_/g' | sed -E s/=+$//); echo Header: ${JWT_HEADER}
-```
-
-Setup the payload:
-
-```shell
-  export PAYLOAD=$(echo -n "{\"iss\": \"${HOLDER_DID}\", \"sub\": \"${HOLDER_DID}\", \"vp\": ${VERIFIABLE_PRESENTATION}}" | base64 -w0 | sed s/\+/-/g |sed 's/\//_/g' |  sed -E s/=+$//); echo Payload: ${PAYLOAD};   
-```
-
-Create the signature:
-
-```shell
-  export SIGNATURE=$(echo -n "${JWT_HEADER}.${PAYLOAD}" | openssl dgst -sha256 -binary -sign private-key.pem | base64 -w0 | sed s/\+/-/g | sed 's/\//_/g' | sed -E s/=+$//); echo Signature: ${SIGNATURE}; 
-```
-
-Combine them to the JWT:
-
-```shell
-  export JWT="${JWT_HEADER}.${PAYLOAD}.${SIGNATURE}"; echo The Token: ${JWT}

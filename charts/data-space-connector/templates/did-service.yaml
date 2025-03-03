@@ -3,7 +3,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: did-json
-  namespace: infra
+  namespace: {{ $.Release.Namespace | quote }}
   labels:
     app.kubernetes.io/name: did-json
     {{ include "dsc.labels" . | nindent 4 }}

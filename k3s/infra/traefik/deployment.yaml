@@ -21,28 +21,12 @@ spec:
           image: traefik:v2.6.0
           imagePullPolicy: IfNotPresent
           args:
-            - --providers.kubernetesingress=true
-            - --entrypoints.traefik.address=:8090
-            - --entrypoints.websecure.address=:8443
-            - --entrypoints.http.address=:8080
-            - --accesslog=true
-            - --accesslog.fields.defaultmode=keep
-            - --accesslog.fields.headers.defaultmode=keep
-            - --ping=true
-            - --log=true
-            - --log.level=debug
-            - --api.insecure=true
-            - --api.dashboard=true
-            - --api.debug=true
-            - --global.checknewversion=false
-            - --global.sendAnonymousUsage=false
-            - --providers.file.filename=/config/tls.yaml
-            - --providers.file.watch=true
+            - --configFile=/etc/traefik/traefik.yaml
           ports:
             - name: http
               containerPort: 8080
             - name: https
-              containerPort: 8443
+              containerPort: 443
             - name: admin
               containerPort: 8090
           startupProbe:
@@ -75,11 +59,17 @@ spec:
             - mountPath: "/config/tls.yaml"
               name: tls-config
               subPath: tls.yaml
+            - mountPath: "/etc/traefik/traefik.yaml"
+              name: config
+              subPath: traefik.yaml
       volumes:
         - name: tls-cert
           secret:
             secretName: local-wildcard
         - name: tls-config
+          configMap:
+            name: tls-config
+        - name: config
           configMap:
             name: traefik-config
       serviceAccountName: traefik

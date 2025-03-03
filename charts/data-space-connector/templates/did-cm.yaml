@@ -3,19 +3,32 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: did-json
-  namespace: infra
+  namespace: {{ $.Release.Namespace | quote }}
   labels:
     {{ include "dsc.labels" . | nindent 4 }}
 data:
   did.json: |-
     {
-      "id": "did:web:consumer.127.0.0.1.nip.io",
+      "@context": "https://www.w3.org/ns/did/v1",
+      "id": {{ .Values.didJson.did | quote }},
       "verificationMethod": [
         {
-          "id": "did:web:consumer.127.0.0.1.nip.io"
+          "id": {{ .Values.didJson.did | quote }},
           "type": "JsonWebKey2020",
+          "controller": {{ .Values.didJson.did | quote }},
           "publicKeyJwk": {
+            {{- if .Values.didJson.key.kty }}
+            "kty": {{ .Values.didJson.key.kty | quote }},
+            {{- else }}
+            "kty: "RSA",
+            {{- end }}
+            "e": {{ .Values.didJson.key.exponent | quote }},
+            "n": {{ .Values.didJson.key.modulus | quote }},
+            {{- if .Values.didJson.key.x5u }}
+            "x5u": {{ .Values.didJson.key.x5u | quote }}
+            {{- else }}
             "x5u": "https://consumer.127.0.0.1.nip.io/.well-known/tls.crt"
+            {{- end }}
           }
         }
       ]

@@ -28,13 +28,12 @@ spec:
             - sh
             - -c
             - until nc -z gx-registry-kubo 5001; do echo waiting for Kubo; sleep 2; done;
-      initContainers:
         - name: local-trust
           image: quay.io/wi_stefan/gaiax-local-trust:0.0.1
           imagePullPolicy: Always
-          env: 
+          env:
             - name: ROOT_CA
-              value: "MIIFnDCCA4SgAwIBAgIBATANBgkqhkiG9w0BAQsFADBnMQswCQYDVQQGEwJERTEPMA0GA1UECAwGU2F4b255MRAwDgYDVQQHDAdEcmVzZGVuMRMwEQYDVQQKDApGSUNPREVTIENBMRMwEQYDVQQDDApGSUNPREVTLUNBMQswCQYDVQQFEwIwMTAeFw0yNTAyMTExNDUyMjhaFw0zNTAyMDkxNDUyMjhaMGcxCzAJBgNVBAYTAkRFMQ8wDQYDVQQIDAZTYXhvbnkxEDAOBgNVBAcMB0RyZXNkZW4xEzARBgNVBAoMCkZJQ09ERVMgQ0ExEzARBgNVBAMMCkZJQ09ERVMtQ0ExCzAJBgNVBAUTAjAxMIICIjANBgkqhkiG9w0BAQEFAAOCAg8AMIICCgKCAgEAvgHHRBoHo9mCc7eL9oxvgo7RDoBpl4x6IiHnA9ot3A3f++lVfczCtvitisPMXlR7fY5TDgq9RDOBRrV858XgpML36KMYHp8f2C04ENT5E64w0WG0QbgT7Jhy7tsPNEwSUXAjhPkst1Qzj42jTQ9NLL72I00KXenwuMoqgWwl7hxUpo3CUf8OsYi0qd+ZSqVhtXePiUZdxinXLUmoLy4+MJ0m1quXrbSERXXkD4pI1JBIstC9Gl9wHDjc6DZLzNnwFSM0HVvyqDIEbXxBAwn2INNs71gs6paRGIGVV8Qw4Ct4DOYeML0VfAkXJNVjWwb84YXfOwZs2ZDB2ip2y/JD3HrPEx5pt1bHLYL1+SMhf0fv6uea5LD6yM3iiQ5aDgYF8MX0lVu4PxsN+ZVuFGGfmdh6VbgfdViiJPTbjw9xy9WJFK/OWMVwg0LPyE+SVEtKnYw/gz+7c33pFfd0NRmxe3/3OdK67H688WhgtvT+E6W/euBYfRwQ/cGdtYtySYmejTqb0SBTzwJC8QVfQcgbE5rtvtmXwsdmyKRbJYm5+V4HJNBhb9INAt+KBAKllSfQXMJxBw2IvQSte7Q7k0n8VxocJJ93k2nZZtM7lJdLGe7mXOzqj83KBzwKx1Ham44DYoXbUqO8rfhqIZjbi9HbaW9Zb87tLYB60CoZXOnG8QkCAwEAAaNTMFEwHQYDVR0OBBYEFMu1GBPPaAOE/zOEMuUWO7anFA5wMB8GA1UdIwQYMBaAFMu1GBPPaAOE/zOEMuUWO7anFA5wMA8GA1UdEwEB/wQFMAMBAf8wDQYJKoZIhvcNAQELBQADggIBAAF47sHWMVRZ3xefhKlDcCCSmQDCRIJSX3asKbmlDimfHwhJof/PiXdoHOjAAzif0ahOsxk/uERDl6LzqTzgySUwhweryWcwVgs1fCo9K8SdiplQEZfPb+LROrtprR50FqvwDEy7moVi+sMUp23j2AG31wu4ehf0EjUit4P5Kr827nmSwGzQcM7Zrfyq8rHBMc08uBMxOLIikQYN3JJQvkZMVdgHqCAJdqPROqOKJBtre16Katf7ZlrYDjAMP2ZB81TVCgI8egQee8KEQRqOdlyHiWl21YDX852G3LK4kibNuhi+6fGTvThpxPDB6oNnmlQsw2DVAIjCSVzaXq7QfIm5TfnB8sLWkIo1/u7dwiypk9YSdN8IOD+C40hy4iiH3rsEuqbeQG1QYXY7LIJPu8yHwWv5EbhYz2GG48UQRwui07xYYGDt5pcEhYPRY9OndUM+hU/j6yU2OZplL/V95G5H63zjZWWwH9WyyHeGfFBzBaxI2WnzfHanW8ldNlmfAjc94AECkxjqYaRD5T3yaw2VDhKFwHwzXCESIwtYGNmyH2ZyWuldmIuIqvL3ol7g0sCa4s/GOt3bSUtsBQcGHVKswTbS1bbOrIGYcg5ZEA71juhBbQNPhCCYwllsSBXr6ELXwyjF+xtfbSfVz4HNznWCwiNpBbY0mwef8MUyJUXM"
+              value: "MIIFnDCCA4SgAwIBAgIBATANBgkqhkiG9w0BAQsFADBnMQswCQYDVQQGEwJERTEPMA0GA1UECAwGU2F4b255MRAwDgYDVQQHDAdEcmVzZGVuMRMwEQYDVQQKDApGSUNPREVTIENBMRMwEQYDVQQDDApGSUNPREVTLUNBMQswCQYDVQQFEwIwMTAeFw0yNTAzMDMxNDQ4MTRaFw0zNTAzMDExNDQ4MTRaMGcxCzAJBgNVBAYTAkRFMQ8wDQYDVQQIDAZTYXhvbnkxEDAOBgNVBAcMB0RyZXNkZW4xEzARBgNVBAoMCkZJQ09ERVMgQ0ExEzARBgNVBAMMCkZJQ09ERVMtQ0ExCzAJBgNVBAUTAjAxMIICIjANBgkqhkiG9w0BAQEFAAOCAg8AMIICCgKCAgEApe8+9e1GMHhHzw1fDqqS5zVOGs/wfmc9V7fvfmfI/yDbc6+4+M2wOlbYJJldKpP9TdT1wakztMqvFvmXOqAeh9YShB7/V1XY4RjpjX0ofKxNyGnahtSRzu3Voaermh1IgNULFONitGxQEuYRFOUFr5g8RogTfS2ybDeCfhRGWEFGUnG2TkiruzMayvQjEOioKMZMvVKQ4w0S03kLdORe2KXuTQVT3OIxOB9mgdcDORbm7Hy9/BkAkuOg+ARyFUtaNrjkaP9+1Ya+2xFzFR0XVYe4hZA2+iLsnM7X5BTzBq3Xav3NpMCkpg5jf/bZ1wypqf5bmyhhdq9vvSyP0SQpQfbu7JJFOpI/7ouI2EtwvbK/FelMePOYR0WntVN+PBW46qzwQY8EavBQ12To2sQRBD5KBYfG2A9VCHQhrKQ4ZvpetlxlPNYlyzUrEOh4Djgb0Vsni4FAMrUFqL2s/Wn2wL6Di4I57Yju5f3RjR3QrymSBoerUthYQnvMYZ/1TelVqaoa41ZuYIkiXI5oTMWQj23vfPVoAztRCNEtEhL+xeNHpIlFJdDHh0Uhyb6GNBfV9w+JuPmcm+vYybP1S2Ss7QFBGr/aJ8CgfMmT1ufqb891IdhgOlaqOBfenl2YAz1FLoqLbkJktHkIEgcQ+gX7/xlG0w2LunnXZBOfDO0/6PECAwEAAaNTMFEwHQYDVR0OBBYEFHaTXoSXDIbLD+LecRE8bA0hA7BqMB8GA1UdIwQYMBaAFHaTXoSXDIbLD+LecRE8bA0hA7BqMA8GA1UdEwEB/wQFMAMBAf8wDQYJKoZIhvcNAQELBQADggIBAGeZ0khTzgSnttOSOwfmtqSpcWBV+trSGwVXqXkTbUohH8i/7KaR0rRkX4DTMnioIb0PWJ6pEaf1wzBcYhdLLm9QPJvaUovdfe9ga4F3Pa5u7Dp4m9A16qtfgEaoQDepYvKuRpUMnoP7h94yg5aeqc2D9N6rpicwrgOUYySe8UhN+SQ8s3E+v02nwjvGDq7ToDU1p14tedUbPvQyqDZo/EuhARXbuMWRTgP1AfGWCETO2HBaUHZIZdV//djTWvnaNjjlRHq5i6tLbAvU82Z2Oy0brc2pHD77sOpsoEAI5C0M3k7bACAkb6qQ0gQLdKwvzdhTbj0kiu+c+PPwltr+JQ8WfoiCh/ufJtxnkYX4D+Vn6LkJJAaQP9WF1TuEkT6wmi3p85Cpt6MAA/YmBQP55cBNJcqJrxrkSHkgg5bdoPQwY5AodtCjkzofwO7naEO6HvN2goFWpoWGF1IYHHAUaWvZNBYCIPmreTKrWMa9KbrA3WZ9/nwEo0WMh8gwE2FPMjx8JE+6TzsQ8ts/8KiK2YyjV8eXjt6QsglZrfMUIystRZ/vi3wbi2ARtg1B38dbZIiXLkcCq9sqdI+Rd5JDe/hX7L5NYHec0nBi4/6TRRAx8GFEqJcALjaaJ3XNFf5gh8bUM26S1f9ndz9/K7DvtDkgs/CK8cF4Xef56BNudTQE"
           volumeMounts:
             - name: trust-anchor
               mountPath: /out
@@ -57,9 +56,9 @@ spec:
             - name: evsslonly
               value: "false"
             - name: revocationListURL
-              value: 
+              value:
             - name: trustedIssuersURL
-              value: 
+              value:
             - name: KUBO_HOST
               value: gx-registry-kubo
             - name: APP_BRANCH
@@ -71,6 +70,8 @@ spec:
             - name: NODE_TLS_REJECT_UNAUTHORIZED
               value: "0"
             - name: HTTPS_PROXY
+              value: "http://squid-proxy.infra.svc.cluster.local:8888"
+            - name: HTTP_PROXY
               value: "http://squid-proxy.infra.svc.cluster.local:8888"
           envFrom:
             - secretRef:
@@ -100,8 +101,7 @@ spec:
             httpGet:
               path: /v2
               port: 3000
-          resources:
-            {}
+          resources: {}
       volumes:
         - name: trust-anchor
           emptyDir: {}
@@ -109,7 +109,7 @@ spec:
     - metadata:
         name: registry-ipfs-data
       spec:
-        accessModes: [ "ReadWriteOnce" ]
+        accessModes: ["ReadWriteOnce"]
         resources:
           requests:
             storage: "500Mi"

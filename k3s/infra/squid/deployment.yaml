@@ -15,7 +15,8 @@ spec:
     spec:
       containers:
       - name: squid
-        image: ubuntu/squid:5.2-22.04_beta
+        image: quay.io/wi_stefan/squid-ssl
+        imagePullPolicy: Always
         volumeMounts:
         - name: squid-config
           mountPath: /etc/squid/squid.conf

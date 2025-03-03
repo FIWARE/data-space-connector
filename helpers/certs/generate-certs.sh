@@ -1,3 +1,7 @@
+#!/bin/bash
+
+k3sFolder=$1
+
 set -x
 set -e
 
@@ -57,17 +61,41 @@ mkdir -p ${OUTPUT_FOLDER}/client/certs
 
 openssl genrsa -out ${OUTPUT_FOLDER}/client/private/client.key.pem 4096
 openssl req -new -set_serial 03 -key ${OUTPUT_FOLDER}/client/private/client.key.pem -out ${OUTPUT_FOLDER}/client/csr/client.csr \
-  -subj "/C=BE/ST=BRUSSELS/L=Brussels/O=Fancy Marketplace Co. CA/CN=*.127.0.0.1.nip.io/serialNumber=03" \
   -config ./config/openssl-client.cnf
 openssl x509 -req -in ${OUTPUT_FOLDER}/client/csr/client.csr -CA ${OUTPUT_FOLDER}/intermediate/certs/ca-chain-bundle.cert.pem \
   -CAkey ${OUTPUT_FOLDER}/intermediate/private/intermediate.cakey.pem -out ${OUTPUT_FOLDER}/client/certs/client.cert.pem \
   -CAcreateserial -days 1825 -sha256 -extfile ./config/openssl-client.cnf \
-  -copy_extensions=copyall
+  -copy_extensions=copyall \
+  -extensions v3_req
 
 openssl x509 -in ${OUTPUT_FOLDER}/client/certs/client.cert.pem -out ${OUTPUT_FOLDER}/client/certs/client.cert.pem -outform PEM
 
 cat ${OUTPUT_FOLDER}/client/certs/client.cert.pem ${OUTPUT_FOLDER}/intermediate/certs/ca-chain-bundle.cert.pem > ${OUTPUT_FOLDER}/client/certs/client-chain-bundle.cert.pem
 
+# create keystore to be used by keycloak
+openssl pkcs12 -export -password pass:password -in ${OUTPUT_FOLDER}/client/certs/client-chain-bundle.cert.pem -inkey ${OUTPUT_FOLDER}/client/private/client.key.pem -out ${OUTPUT_FOLDER}/certificate.p12 -name "certificate"
+keytool -importkeystore -srckeystore ${OUTPUT_FOLDER}/certificate.p12 -srcstoretype pkcs12 -destkeystore ${OUTPUT_FOLDER}/cert.jks -srcstorepass password -deststorepass password -destkeypass password
 
-kubectl create secret tls local-wildcard --cert=${OUTPUT_FOLDER}/client/certs/client-chain-bundle.cert.pem --key=${OUTPUT_FOLDER}/client/private/client.key.pem --namespace infra -o yaml --dry-run > ${OUTPUT_FOLDER}/local-wildcard.yaml
-kubectl create secret generic gx-registry-keypair --from-file=PRIVATE_KEY=${OUTPUT_FOLDER}/ca/private/cakey-pkcs8.pem --from-file=X509_CERTIFICATE=${OUTPUT_FOLDER}/ca/certs/cacert.pem --namespace infra -o yaml --dry-run > ${OUTPUT_FOLDER}/secret.yaml
+kubectl create configmap consumer-keystore --from-file=${OUTPUT_FOLDER}/cert.jks --namespace consumer --dry-run=client -oyaml > ${k3sFolder}/consumer/keystore-cm.yaml
+kubectl create secret tls local-wildcard --cert=${OUTPUT_FOLDER}/client/certs/client-chain-bundle.cert.pem --key=${OUTPUT_FOLDER}/client/private/client.key.pem --namespace infra -o yaml --dry-run=client > ${k3sFolder}/certs/local-wildcard.yaml
+kubectl create secret tls local-wildcard --cert=${OUTPUT_FOLDER}/client/certs/client-chain-bundle.cert.pem --key=${OUTPUT_FOLDER}/client/private/client.key.pem --namespace consumer -o yaml --dry-run=client > ${k3sFolder}/consumer/local-wildcard.yaml
+kubectl create secret generic gx-registry-keypair --from-file=PRIVATE_KEY=${OUTPUT_FOLDER}/ca/private/cakey-pkcs8.pem --from-file=X509_CERTIFICATE=${OUTPUT_FOLDER}/ca/certs/cacert.pem --namespace infra -o yaml --dry-run=client > ${k3sFolder}/infra/gx-registry/secret.yaml
+kubectl create secret generic root-ca --from-file=${OUTPUT_FOLDER}/ca/certs/cacert.pem --namespace provider -o yaml --dry-run=client > ${k3sFolder}/provider/root-ca.yaml
+
+ca=$(cat ${OUTPUT_FOLDER}/ca/certs/cacert.pem | sed '/-----BEGIN CERTIFICATE-----/d' | sed '/-----END CERTIFICATE-----/d' | tr -d '\n')
+yq -i "(.spec.template.spec.initContainers[] | select(.name == \"local-trust\") | .env[] | select(.name == \"ROOT_CA\")).value = \"$ca\"" ${k3sFolder}/infra/gx-registry/deployment-registry.yaml
+
+openssl x509 -in ${OUTPUT_FOLDER}/client/certs/client.cert.pem -noout -pubkey > ${OUTPUT_FOLDER}/client/certs/public_key.pem
+
+n=$(openssl rsa -in ${OUTPUT_FOLDER}/client/certs/public_key.pem -pubin -modulus -noout | cut -d'=' -f2 | xxd -r -p | base64 -w 0 | tr -d '=' | tr '/+' '_-')
+e_dec=$(openssl rsa -in ${OUTPUT_FOLDER}/client/certs/public_key.pem -pubin -text -noout | grep "Exponent" | awk '{print $2}')
+if [ "$e_dec" -eq 65537 ]; then
+    e="AQAB"
+else
+    e=$(printf "%%x" "$e_dec" | xxd -r -p | base64 | tr -d '=' | tr '/+' '_-')
+fi
+echo $n
+echo $e
+
+yq -i ".didJson.key.modulus = \"${n}\"" ${k3sFolder}/consumer.yaml
+yq -i ".didJson.key.exponent = \"${e}\"" ${k3sFolder}/consumer.yaml
