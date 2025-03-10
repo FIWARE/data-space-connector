@@ -94,6 +94,9 @@ vcverifier:
         paths:
           - "/"
   deployment:
+    image:
+      tag: 4.7.0-pre-49
+      pullPolicy: Always
     logging:
       level: DEBUG
     verifier:
@@ -126,7 +129,7 @@ vcverifier:
       - name: HTTP_PROXY
         value: "http://squid-proxy.infra.svc.cluster.local:8888"
       - name: NO_PROXY
-        value: "credentials-config-service,w3.org"
+        value: "credentials-config-service,w3.org,trusted-issuers-list"
     initContainers:
       - name: add-root-ca
         image: alpine:3.21.3
@@ -244,13 +247,15 @@ scorpio:
       default:
         - type: UserCredential
           trustedParticipantsLists:
-            - http://tir.trust-anchor.svc.cluster.local:8080
+            - url: https://registry.127.0.0.1.nip.io
+              type: gaia-x
           trustedIssuersLists:
             - http://trusted-issuers-list:8080
       operator:
         - type: OperatorCredential
           trustedParticipantsLists:
-            - http://tir.trust-anchor.svc.cluster.local:8080
+            - url: https://registry.127.0.0.1.nip.io
+              type: gaia-x
           trustedIssuersLists:
             - http://trusted-issuers-list:8080
 odrl-pap:

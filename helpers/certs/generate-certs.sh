@@ -81,9 +81,11 @@ kubectl create secret tls local-wildcard --cert=${OUTPUT_FOLDER}/client/certs/cl
 kubectl create secret tls local-wildcard --cert=${OUTPUT_FOLDER}/client/certs/client-chain-bundle.cert.pem --key=${OUTPUT_FOLDER}/client/private/client.key.pem --namespace consumer -o yaml --dry-run=client > ${k3sFolder}/consumer/local-wildcard.yaml
 kubectl create secret generic gx-registry-keypair --from-file=PRIVATE_KEY=${OUTPUT_FOLDER}/ca/private/cakey-pkcs8.pem --from-file=X509_CERTIFICATE=${OUTPUT_FOLDER}/ca/certs/cacert.pem --namespace infra -o yaml --dry-run=client > ${k3sFolder}/infra/gx-registry/secret.yaml
 kubectl create secret generic root-ca --from-file=${OUTPUT_FOLDER}/ca/certs/cacert.pem --namespace provider -o yaml --dry-run=client > ${k3sFolder}/provider/root-ca.yaml
+kubectl create secret generic cert-chain --from-file=${OUTPUT_FOLDER}/client/certs/client-chain-bundle.cert.pem --namespace consumer -o yaml --dry-run=client > ${k3sFolder}/consumer/cert-chain.yaml
 
 ca=$(cat ${OUTPUT_FOLDER}/ca/certs/cacert.pem | sed '/-----BEGIN CERTIFICATE-----/d' | sed '/-----END CERTIFICATE-----/d' | tr -d '\n')
 yq -i "(.spec.template.spec.initContainers[] | select(.name == \"local-trust\") | .env[] | select(.name == \"ROOT_CA\")).value = \"$ca\"" ${k3sFolder}/infra/gx-registry/deployment-registry.yaml
+
 
 openssl x509 -in ${OUTPUT_FOLDER}/client/certs/client.cert.pem -noout -pubkey > ${OUTPUT_FOLDER}/client/certs/public_key.pem
 
@@ -96,6 +98,8 @@ else
 fi
 echo $n
 echo $e
+
+chain=$(cat ${OUTPUT_FOLDER}/client/certs/client-chain-bundle.cert.pem)
 
 yq -i ".didJson.key.modulus = \"${n}\"" ${k3sFolder}/consumer.yaml
 yq -i ".didJson.key.exponent = \"${e}\"" ${k3sFolder}/consumer.yaml
