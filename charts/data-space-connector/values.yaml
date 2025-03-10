@@ -70,9 +70,6 @@ vcverifier:
   m2m:
     # -- we do not need authentication here
     authEnabled: false
-  deployment:
-    image:
-      tag: 4.6.0-pre-49
 
 # -- configuration for the digital-signature.service to be deployed as part of the connector in case of did:elsi support
 dss:

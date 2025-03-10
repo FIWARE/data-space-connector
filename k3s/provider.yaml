@@ -1,5 +1,6 @@
 keycloak:
   enabled: false
+
 apisix:
   image:
     debug: true
@@ -9,6 +10,10 @@ apisix:
       hostname: mp-data-service.127.0.0.1.nip.io
       extraHosts:
         - name: mp-tmf-api.127.0.0.1.nip.io
+          path: /
+        - name: tpp-data-service.127.0.0.1.nip.io
+          path: /
+        - name: tpp-service.127.0.0.1.nip.io
           path: /
   catchAllRoute:
     enabled: false
@@ -22,6 +27,15 @@ apisix:
       plugins:
         proxy-rewrite:
           uri: /services/data-service/.well-known/openid-configuration
+    - uri: /.well-known/openid-configuration
+      host: tpp-service.127.0.0.1.nip.io
+      upstream:
+        nodes:
+          verifier:3000: 1
+        type: roundrobin
+      plugins:
+        proxy-rewrite:
+          uri: /services/tpp-service/.well-known/openid-configuration
     - uri: /.well-known/data-space-configuration
       upstream:
         nodes:
@@ -34,6 +48,23 @@ apisix:
           headers:
             set:
               content-type: application/json
+    - uri: /*
+      host: tpp-data-service.127.0.0.1.nip.io
+      upstream:
+        nodes:
+          data-service-scorpio:9090: 1
+        type: roundrobin
+      plugins:
+        openid-connect:
+          bearer_only: true
+          use_jwks: true
+          client_id: contract-management
+          client_secret: unused
+          ssl_verify: false
+          discovery: http://verifier:3000/services/tmf-api/.well-known/openid-configuration
+        opa:
+          host: "http://localhost:8181"
+          policy: tpp
     - uri: /*
       host: mp-data-service.127.0.0.1.nip.io
       upstream:
@@ -61,6 +92,28 @@ apisix:
       plugins:
         proxy-rewrite:
           uri: /services/tmf-api/.well-known/openid-configuration
+    - uri: /api/v1/catalogs
+      host: tpp-catalog-service.127.0.0.1.nip.io
+      upstream:
+        nodes:
+          rainbow:8080: 1
+    - uri: /*
+      host: tpp-service.127.0.0.1.nip.io
+      upstream:
+        nodes:
+          rainbow:8080: 1
+      plugins:
+        openid-connect:
+          bearer_only: true
+          use_jwks: true
+          client_id: data-service
+          client_secret: unused
+          ssl_verify: false
+          discovery: http://verifier:3000/services/data-service/.well-known/openid-configuration
+        opa:
+          host: "http://localhost:8181"
+          policy: policy/main
+          with_body: true
     - uri: /*
       host: mp-tmf-api.127.0.0.1.nip.io
       upstream:
@@ -79,6 +132,7 @@ apisix:
           host: "http://localhost:8181"
           policy: policy/main
           with_body: true
+
 credentials-config-service:
   ingress:
     enabled: true
@@ -86,6 +140,7 @@ credentials-config-service:
       - host: provider-ccs.127.0.0.1.nip.io
         paths:
           - "/"
+
 vcverifier:
   ingress:
     enabled: true
@@ -94,6 +149,8 @@ vcverifier:
         paths:
           - "/"
   deployment:
+    logging:
+      level: DEBUG
     verifier:
       tirAddress: http://tir.127.0.0.1.nip.io:8080/
       did: ${DID}
@@ -107,44 +164,10 @@ vcverifier:
         emptyDir: {}
       - name: alternative-conf
         emptyDir: {}
-      - name: root-ca
-        emptyDir: {}
-      - name: ca-to-add
-        secret:
-          secretName: root-ca
     additionalVolumeMounts:
       - name: alternative-conf
         mountPath: /alternative-conf
-      - name: root-ca
-        mountPath: /etc/ssl/cert.pem
-        subPath: cert.pem
-    additionalEnvVars:
-      - name: HTTPS_PROXY
-        value: "http://squid-proxy.infra.svc.cluster.local:8888"
-      - name: HTTP_PROXY
-        value: "http://squid-proxy.infra.svc.cluster.local:8888"
-      - name: NO_PROXY
-        value: "credentials-config-service,w3.org,trusted-issuers-list"
     initContainers:
-      - name: add-root-ca
-        image: alpine:3.21.3
-        command:
-          - /bin/sh
-        args:
-          - -c
-          - |
-            #!/bin/sh
-            cp /etc/ssl/cert.pem /root-ca/cert.pem
-            cat /root-ca/cacert.pem >> /root-ca/cert.pem
-        env:
-          - name: CA_TO_ADD
-            value: "-----BEGIN CERTIFICATE-----\nMIIFnDCCA4SgAwIBAgIBATANBgkqhkiG9w0BAQsFADBnMQswCQYDVQQGEwJERTEP\nMA0GA1UECAwGU2F4b255MRAwDgYDVQQHDAdEcmVzZGVuMRMwEQYDVQQKDApGSUNP\nREVTIENBMRMwEQYDVQQDDApGSUNPREVTLUNBMQswCQYDVQQFEwIwMTAeFw0yNTAy\nMjAwNzUwNDBaFw0zNTAyMTgwNzUwNDBaMGcxCzAJBgNVBAYTAkRFMQ8wDQYDVQQI\nDAZTYXhvbnkxEDAOBgNVBAcMB0RyZXNkZW4xEzARBgNVBAoMCkZJQ09ERVMgQ0Ex\nEzARBgNVBAMMCkZJQ09ERVMtQ0ExCzAJBgNVBAUTAjAxMIICIjANBgkqhkiG9w0B\nAQEFAAOCAg8AMIICCgKCAgEAwJguJDSWVxpHqbnvdTpqkiQI9aoYG06ccR50iY2Y\nJye8sLCHQXhDZYfdGFPR65N2veKQPolYgk95DL2587V668VjfqzlBIRkOXj5UkJ5\n50pxCzaXItn52bBmsW9QqXAyIxYFn4f1pT95NVGj+sE23FfSAS3O0qq4yTL42Czn\nSvq378PXak/OaTOJQ+xOAprnnPepEadPDcqEUe5PGSwejJGQd654dUk+VoTdHBTU\njRPdg0FkGI+PB6dpZKhSoeePpvFBznG9R5amDx/COCVzFx1YwhHpbDGMwiNLJqeb\nExiGT5o2O4GugV5RTWRFYuKr1xSTAHiY+g3fCzhQZCD+NGGuaPbkjRGjptwiDpMR\n3CgnkdZh6BqeCpnSiI6tQYpJ9ms5xcCSeTsyf4hisCbawHqbDmCjsuXsMw0WP6VG\nnyYwJ1gwR/RHHe44+zfgv/U7hfULTIb8yi/n24a2FVV0kEAF79UUQGLW7364rXGY\njrIF8vhATZbGAMQiQh1MJMV0kcM8pmqUawDSvZ/llQMhr3OgMybZ2dAsakHVWU2I\nffABGupX3vTONzkpGVYwJIJ21T0QXTPrZgUMzPX/bH+3BHog0QjJ7T3sp0aG4AKT\nBmzYDaU9rIUs47S6TqxBXRQW4xyyy7XMQvXfbe4tExjUkgNfOHQ/5TUjUuBSfjwS\nKZkCAwEAAaNTMFEwHQYDVR0OBBYEFDqF7FNIKOPtvfO6hmhXV6H35l0TMB8GA1Ud\nIwQYMBaAFDqF7FNIKOPtvfO6hmhXV6H35l0TMA8GA1UdEwEB/wQFMAMBAf8wDQYJ\nKoZIhvcNAQELBQADggIBAJ+vbD/9ajM9lOkBqKw2b4wb3Hs7A9olUeBzhnEH5hRI\ncXK+2CYvXf4PHfSyPSy33bhCeTqyeWjDN0eBM76tVUNu92/ft2Vlch27CoJjvkAK\nWO/+YiakgjAVC0IftAvs2YvZ54I6uU1C0EmdE1FcvDWAedyCypcl4871r4M8a55k\nJYg2FpfqOBJMFn9yBW1EkJlTPzzobP1H0q+GKXIMTLvyGRWrpb90DXxJu1i4jdtZ\n36sn6bb6TtT4pUC4OuhDvQ1N/LEbzKVTfRYBoMnEdlooybgZFu5t4uE0AJUgsRWq\nqnlHx2OMMBhhid+qjzo6jXXzXtIn8NjlF/IrwrGO0YrekVTMqKH5sx+4rFF0BO8X\n74N/fwZMHR6p3Zps4D72rogNGhmjZDBSt4tPVARPhAUbWXhRTPB1NunHvwHutfRk\nbBnyjC0BtKoYTqgPLOB4pkdGuuZ6E4dCZfzIE2s98QvY/RBYTUk+D2cJBuVC93RN\nv5wlx0WS46TNRWW0XP+P6cgPbkG5owqTyihuUx4eTh3Rf19wU1W+0wGQDFQ69uLL\n1T3Tkpg9btk/mhTWz4tu62r6NgwibM3KrGEJk0/oLq0z5qe52KW1mMRzRTGIb6pn\nGbGH8xZo2lxZcHzLDWVadXTdryUPDiFE90yyv6tW3GxJTkoi0BIWjYz3Wmf8qieU\n-----END CERTIFICATE-----"
-        volumeMounts:
-          - name: root-ca
-            mountPath: /root-ca
-          - name: ca-to-add
-            mountPath: /root-ca/cacert.pem
-            subPath: cacert.pem
       - name: get-did
         image: ubuntu
         command:
@@ -166,6 +189,7 @@ vcverifier:
             mountPath: /original-conf
           - name: alternative-conf
             mountPath: /alternative-conf
+
       - name: register-at-tir
         image: ubuntu
         command:
@@ -180,6 +204,7 @@ vcverifier:
         volumeMounts:
           - name: did-material
             mountPath: /did-material
+
 mysql:
   primary:
     persistence:
@@ -187,6 +212,7 @@ mysql:
   secondary:
     persistence:
       enabled: false
+
 postgis:
   primary:
     persistence:
@@ -194,6 +220,7 @@ postgis:
   readReplicas:
     persistence:
       enabled: false
+
 postgresql:
   primary:
     persistence:
@@ -201,6 +228,7 @@ postgresql:
   readReplicas:
     persistence:
       enabled: false
+
 did:
   enabled: true
   secret: issuance-secret
@@ -215,6 +243,7 @@ did:
   ingress:
     enabled: true
     host: did-provider.127.0.0.1.nip.io
+
 dataSpaceConfig:
   enabled: true
   serviceType: ClusterIP
@@ -227,14 +256,15 @@ dataSpaceConfig:
     - https
   authenticationProtocols:
     - oid4vp
+
 scorpio:
   ingress:
     enabled: true
     # only to make it available for the test initialization
     hosts:
-      - host: scorpio-provider.127.0.0.1.nip.io
-        paths:
-          - "/"
+    - host: scorpio-provider.127.0.0.1.nip.io
+      paths:
+        - "/"
   ccs:
     defaultOidcScope:
       name: default
@@ -242,21 +272,17 @@ scorpio:
       default:
         - type: UserCredential
           trustedParticipantsLists:
-            - url: https://registry.127.0.0.1.nip.io
-              type: gaia-x
-            - url: http://tir.trust-anchor.svc.cluster.local:8080
-              type: ebsi
+            - http://tir.trust-anchor.svc.cluster.local:8080
           trustedIssuersLists:
             - http://trusted-issuers-list:8080
       operator:
         - type: OperatorCredential
           trustedParticipantsLists:
-            - url: https://registry.127.0.0.1.nip.io
-              type: gaia-x
-            - url: http://tir.trust-anchor.svc.cluster.local:8080
-              type: ebsi
+            - http://tir.trust-anchor.svc.cluster.local:8080
           trustedIssuersLists:
             - http://trusted-issuers-list:8080
+
+
 odrl-pap:
   deployment:
     initContainers:
@@ -289,27 +315,85 @@ odrl-pap:
         source /did-material/did.env
         export GENERAL_ORGANIZATION_DID=$DID
         ./application -Dquarkus.http.host=0.0.0.0
+
   ingress:
     enabled: true
     hosts:
       - host: pap-provider.127.0.0.1.nip.io
         paths:
           - "/"
+
 tm-forum-api:
   registration:
     ccs:
       defaultOidcScope:
         credentialType: UserCredential
         trustedParticipantsLists: http://tir.trust-anchor.svc.cluster.local:8080
+
   ingress:
     enabled: true
     hosts:
       - host: tm-forum-api.127.0.0.1.nip.io
         paths:
           - /
+
+# -- integration of rainbow
+rainbow:
+  enabled: true
+  db:
+    url: postgresql
+    user: postgres
+    existingSecret: database-secret
+    passwordKey: postgres-admin-password
+  ingress:
+    enabled: true
+    host: rainbow-provider.127.0.0.1.nip.io
+  ccs:
+    enabled: true 
+    defaultOidcScope:
+      name: default
+    oidcScopes:
+      default:
+        - type: OperatorCredential
+          trustedParticipantsLists:
+            - http://tir.trust-anchor.svc.cluster.local:8080
+          trustedIssuersLists:
+            - http://trusted-issuers-list:8080
+
+tpp:
+  enabled: true
+  transfers:
+    host: http://rainbow-provider.127.0.0.1.nip.io:8080
+    path: transfers
+
 contract-management:
   til:
     credentialType: OperatorCredential
+  services:
+    ## Config for Trusted Issuers List
+    trusted-issuers-list:
+      ## URL of the Trusted Issuers List Service
+      url: http://trusted-issuers-list:8080
+    ## Config for the TM Forum Service hosting the APIs
+    product-order:
+      ## URL of the TM Forum Service hosting the Product Ordering API
+      url: http://provider-tm-forum-api-product-ordering-management:8080
+    party:
+      ## URL of the TM Forum Service hosting the Party API
+      url: http://provider-tm-forum-api-party-catalog:8080
+    product-catalog:
+      ## URL of the TM Forum Service hosting the Product Catalog API
+      url: http://provider-tm-forum-api-product-catalog:8080
+    service-catalog:
+      ## URL of the TM Forum Service hosting the Service Catalog API
+      url: http://provider-tm-forum-api-service-catalog:8080
+    tmforum-agreement-api:
+      ## URL of the TM Forum Service hosting the Agreement API
+      url: http://provider-tm-forum-api-agreement:8080
+    rainbow:
+      ## URL for the Rainbow service
+      url: http://rainbow:8080
+
 trusted-issuers-list:
   # only open for clean up in the tests
   ingress:

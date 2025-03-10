@@ -1,5 +1,10 @@
 #!/bin/bash
 
+cd "$(dirname "$0")"
+
+# cleanup previous artifacts
+rm -r out/ > /dev/null
+
 k3sFolder=$1
 
 set -x
@@ -96,10 +101,8 @@ if [ "$e_dec" -eq 65537 ]; then
 else
     e=$(printf "%%x" "$e_dec" | xxd -r -p | base64 | tr -d '=' | tr '/+' '_-')
 fi
-echo $n
-echo $e
 
 chain=$(cat ${OUTPUT_FOLDER}/client/certs/client-chain-bundle.cert.pem)
 
-yq -i ".didJson.key.modulus = \"${n}\"" ${k3sFolder}/consumer.yaml
-yq -i ".didJson.key.exponent = \"${e}\"" ${k3sFolder}/consumer.yaml
+yq -i ".didJson.key.modulus = \"${n}\"" ${k3sFolder}/consumer-gaia-x.yaml
+yq -i ".didJson.key.exponent = \"${e}\"" ${k3sFolder}/consumer-gaia-x.yaml
