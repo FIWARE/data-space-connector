@@ -94,11 +94,6 @@ vcverifier:
         paths:
           - "/"
   deployment:
-    image:
-      tag: 4.7.0-pre-49
-      pullPolicy: Always
-    logging:
-      level: DEBUG
     verifier:
       tirAddress: http://tir.127.0.0.1.nip.io:8080/
       did: ${DID}
@@ -249,6 +244,8 @@ scorpio:
           trustedParticipantsLists:
             - url: https://registry.127.0.0.1.nip.io
               type: gaia-x
+            - url: http://tir.trust-anchor.svc.cluster.local:8080
+              type: ebsi
           trustedIssuersLists:
             - http://trusted-issuers-list:8080
       operator:
@@ -256,6 +253,8 @@ scorpio:
           trustedParticipantsLists:
             - url: https://registry.127.0.0.1.nip.io
               type: gaia-x
+            - url: http://tir.trust-anchor.svc.cluster.local:8080
+              type: ebsi
           trustedIssuersLists:
             - http://trusted-issuers-list:8080
 odrl-pap:

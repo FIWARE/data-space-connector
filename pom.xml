@@ -137,20 +137,6 @@
                             <outputDirectory>${project.build.directory}/k3s/infra</outputDirectory>
                         </configuration>
                     </execution>
-                   <!--<execution>
-                        <id>download-gx-registry</id>
-                        <phase>prepare-package</phase>
-                        <goals>
-                            <goal>wget</goal>
-                        </goals>
-                        <configuration>
-                            <url>
-                                https://gitlab.com/gaia-x/lab/compliance/gx-registry/-/archive/development/gx-registry-development.zip?path=k8s/gx-registry
-                            </url>
-                            <unpack>true</unpack>
-                            <outputDirectory>${project.build.directory}/temp</outputDirectory>
-                        </configuration>
-                    </execution>-->
                 </executions>
             </plugin>
             <!-- copy the charts to the target repo to keep the sources clean -->
@@ -160,21 +146,6 @@
                     <skip>true</skip>
                 </configuration>
                 <executions>
-                    <!--<execution>
-                        <id>copy-resources-gx-registry</id>
-                        <phase>prepare-package</phase>
-                        <goals>
-                            <goal>copy-resources</goal>
-                        </goals>
-                        <configuration>
-                            <outputDirectory>${project.build.directory}/charts/gx-registry</outputDirectory>
-                            <resources>
-                                <resource>
-                                    <directory>${project.build.directory}/temp/gx-registry-development-k8s-gx-registry/k8s/gx-registry</directory>
-                                </resource>
-                            </resources>
-                        </configuration>
-                    </execution>-->
                     <execution>
                         <id>copy-resources-trust-anchor</id>
                         <phase>prepare-package</phase>
@@ -327,22 +298,6 @@
                             <additionalArguments>--name-template=trust-anchor --namespace=trust-anchor -f ${main.basedir}/k3s/trust-anchor.yaml</additionalArguments>
                         </configuration>
                     </execution>
-                    <!--<execution>
-                        <id>template-gx-registry</id>
-                        <goals>
-                            <goal>init</goal>
-                            <goal>dependency-update</goal>
-                            <goal>template</goal>
-                        </goals>
-                        <phase>package</phase>
-                        <configuration>
-                            <chartDirectory>${project.build.directory}/charts/gx-registry</chartDirectory>
-                            <skipTemplate>false</skipTemplate>
-                            <templateGenerateName>true</templateGenerateName>
-                            <templateOutputDir>${project.build.directory}/k3s</templateOutputDir>
-                            <additionalArguments>-f ${main.basedir}/k3s/gx-registry.yaml</additionalArguments>
-                        </configuration>
-                    </execution>-->
                 </executions>
             </plugin>
             <plugin>

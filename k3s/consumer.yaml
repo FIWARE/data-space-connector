@@ -265,6 +265,7 @@ didJson:
   did: did:web:consumer.127.0.0.1.nip.io
   key:
     kty: RSA
+    # while this in productive environments should be an https endpoint, limitations of the gx-registry service require http in order to work around proxy issues in the local env. 
     x5u: http://consumer.127.0.0.1.nip.io/.well-known/tls.crt
     modulus: ozaiCEhCBjv31zDVii1Btmt4tjTQvUTIqo-3221OM89gQtVxyIB8z73U2hecFK1FyXa0fWwoy2PYcV6hSuEPnwilNsheP09TJPTptKFwM5fZoOzuZNd95RZFclOLtD8BWzpr3pQwRr5y6F69SNYCQTKejfSKo2eWCjdNUndBmZ8bHAHME9jWZUG-BDO3ag8ykYA-aMzq4RSW_UNqFnkita30F95AzVZ4mF_7-0uc0CGE_u66f4T8mFIqMbEPiiNBEG9Yt4giLdi1xgyLGu6-8xifQekTyr_owIKGmPtu__UBAFmB-y2P6vnLsGRxvB2uatoYceZD6WBfGzj2QZpftQCgJ6QR6d-1Ag-8-1NJRUYVIQjZm45fc2WRi58QLg2urOhIbVYeCALdQIb_S9FP82VzLVWk6aOVL8TU_9QK9qwXLWiM5vRa_EKwJfr1bwsT8kTp20R6vfAlbqLD6QnQdmAtzZsR7Zqw3ef1G5TvelQFFTh49DMP7upTGkmZGIZO6qkHbWUq87LhWgFzHqNCe7O6jHTAHO3UIjpZJBCYg3RtEHV8UN07eIkYaYqnzEv9UJRjMqGQP6CeE7woUx2CHPemrxopEEQV1URCVIZ00BcHy-tyxWs56uo59QASVr9Ut0xRQm-L-x9QQKdB1XMpXw5UR-9Oe7ZW3Fokkk3wwMs
     exponent: AQAB
