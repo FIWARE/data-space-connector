@@ -1,0 +1,19 @@
+{{- if .Values.rainbow.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: rainbow
+  namespace: {{ $.Release.Namespace | quote }}
+  labels:
+    {{ include "dsc.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.rainbow.service.serviceType }}
+  ports:
+    - port: {{ .Values.rainbow.service.port }}
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: rainbow
+    app.kubernetes.io/instance: {{ .Release.Name }}
+{{- end }}
