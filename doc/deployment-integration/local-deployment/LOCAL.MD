@@ -50,9 +50,7 @@ The locally deployed Data Space consists of 2 Participants, connected through a 
 Every Data Spaces requires a framework that ensures trust between the participants. Depending on the requirements of the
 concrete Data Space,
 this can become a rather complex topic. Various trust-providers exist(
-f.e. [Gaia-X Digital Clearing Houses](https://gaia-x.eu/gxdch)) and could be reused, as long as
-they provide an implementation of
-the [EBSI-Trusted Issuers Registry](https://hub.ebsi.eu/apis/pilot/trusted-issuers-registry/v4) to the participants.
+f.e. [Gaia-X Digital Clearing Houses](https://gaia-x.eu/gxdch)) and could be reused(see [Gaia-X for more information](../GAIA_X.MD)). The default setup of the connector requires an [EBSI-Trusted Issuers Registry](https://hub.ebsi.eu/apis/pilot/trusted-issuers-registry/v4) to provide the list of participants.
 
 The local Data Spaces comes with the [FIWARE Trusted Issuers List](https://github.com/FIWARE/trusted-issuers-list) as a
 rather simple implementation of that API, providing CRUD functionality

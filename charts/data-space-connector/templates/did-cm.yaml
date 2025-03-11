@@ -27,7 +27,7 @@ data:
             {{- if .Values.didJson.key.x5u }}
             "x5u": {{ .Values.didJson.key.x5u | quote }}
             {{- else }}
-            "x5u": "https://consumer.127.0.0.1.nip.io/.well-known/tls.crt"
+            "x5u": "https://fancy-marketplace.biz/.well-known/tls.crt"
             {{- end }}
           }
         }

@@ -83,7 +83,6 @@ keytool -importkeystore -srckeystore ${OUTPUT_FOLDER}/certificate.p12 -srcstoret
 
 kubectl create configmap consumer-keystore --from-file=${OUTPUT_FOLDER}/cert.jks --namespace consumer --dry-run=client -oyaml > ${k3sFolder}/consumer/keystore-cm.yaml
 kubectl create secret tls local-wildcard --cert=${OUTPUT_FOLDER}/client/certs/client-chain-bundle.cert.pem --key=${OUTPUT_FOLDER}/client/private/client.key.pem --namespace infra -o yaml --dry-run=client > ${k3sFolder}/certs/local-wildcard.yaml
-kubectl create secret tls local-wildcard --cert=${OUTPUT_FOLDER}/client/certs/client-chain-bundle.cert.pem --key=${OUTPUT_FOLDER}/client/private/client.key.pem --namespace consumer -o yaml --dry-run=client > ${k3sFolder}/consumer/local-wildcard.yaml
 kubectl create secret generic gx-registry-keypair --from-file=PRIVATE_KEY=${OUTPUT_FOLDER}/ca/private/cakey-pkcs8.pem --from-file=X509_CERTIFICATE=${OUTPUT_FOLDER}/ca/certs/cacert.pem --namespace infra -o yaml --dry-run=client > ${k3sFolder}/infra/gx-registry/secret.yaml
 kubectl create secret generic root-ca --from-file=${OUTPUT_FOLDER}/ca/certs/cacert.pem --namespace provider -o yaml --dry-run=client > ${k3sFolder}/provider/root-ca.yaml
 kubectl create secret generic cert-chain --from-file=${OUTPUT_FOLDER}/client/certs/client-chain-bundle.cert.pem --namespace consumer -o yaml --dry-run=client > ${k3sFolder}/consumer/cert-chain.yaml

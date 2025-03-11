@@ -28,6 +28,7 @@ recipes.
   - [Service interaction](#service-interaction)
     - [Service interaction (H2M)](#service-interaction-h2m)
     - [Service interaction (M2M)](#service-interaction-m2m)
+  - [Integration with the Dataspace Protocol](#integration-with-the-dataspace-protocol)
 - [Deployment](#deployment)
   - [Local Deployment](#local-deployment)
   - [Deployment with Helm](#deployment-with-helm)
@@ -287,6 +288,17 @@ A detailed description of the steps to be performed by client applications and s
 in the [Service Interaction (M2M)](./doc/flows/service-interaction-m2m) documentation. 
 
 
+### Integration with the [Dataspace Protocol](https://docs.internationaldataspaces.org/ids-knowledgebase/dataspace-protocol)
+
+The FIWARE Data Space Connector already partly supports the [IDSA Dataspace Protocol](https://docs.internationaldataspaces.org/ids-knowledgebase/dataspace-protocol). Catalogs and Data Services can be explored in [DCAT-Format](https://www.w3.org/TR/vocab-dcat-3/) through the [Catalog Protocol](https://docs.internationaldataspaces.org/ids-knowledgebase/dataspace-protocol/catalog/catalog.protocol) and the Transfer Process can be controlled throught the [Transfer Process Protocol](https://docs.internationaldataspaces.org/ids-knowledgebase/dataspace-protocol/transfer-process/transfer.process.protocol). Contract Negotiation is not yet supported, due to the limitations of the current HTTP binding in comparison to the TMForum API. Work in progress towards alignment through definition of aspecific TM Forum Binding for the Contract Negotiation Protocol can be found in the [TM Forum binding for Contract Negotiation Data Space Protocol](https://github.com/FIWARE/data-space-connector/blob/contract-negotiation/doc/CONTRACT_NEGOTIATION.md)
+
+Find out more in the [Dataspace Protocol Integration Documentation](./doc/DSP_INTEGRATION.md).
+
+### Integration with the [Gaia-X Trust Framework](https://gaia-x.gitlab.io/policy-rules-committee/trust-framework/)
+
+In order to be compatible with common european frameworks for Dataspaces, the FIWARE Data Space Connector provides integrations with the [Gaia-X Trustframework](https://gaia-x.gitlab.io/policy-rules-committee/trust-framework/). While not the full framework is supported as of know, [Gaia-X Digital Clearing House's](https://gaia-x.eu/services-deliverables/digital-clearing-house/) can be used as Trust Anchors for the FIWARE Data Space Connector.
+
+Find out more in the dedicated [Gaia-X Integration Documentation](./doc/GAIA_X.MD).
 
 ## Deployment
 

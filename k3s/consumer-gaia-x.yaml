@@ -49,7 +49,7 @@ keycloak:
         - |
           #!/bin/bash
           apt-get -y update; apt-get -y install curl
-          curl -X 'POST' 'http://tir.trust-anchor.svc.cluster.local:8080/issuer' -H 'Content-Type: application/json' -d "{\"did\": \"did:web:consumer.127.0.0.1.nip.io\", \"credentials\": []}"
+          curl -X 'POST' 'http://tir.trust-anchor.svc.cluster.local:8080/issuer' -H 'Content-Type: application/json' -d "{\"did\": \"did:web:fancy-marketplace.biz\", \"credentials\": []}"
       volumeMounts:
         - name: did-material
           mountPath: /did-material
@@ -97,7 +97,7 @@ keycloak:
     storePassword: password
     keyAlias: certificate
     keyPassword: password
-    did: did:web:consumer.127.0.0.1.nip.io
+    did: did:web:fancy-marketplace.biz
     keyAlgorithm: RS256
   realm:
     frontendUrl: http://keycloak-consumer.127.0.0.1.nip.io:8080
@@ -239,39 +239,27 @@ keycloak:
         "optionalClientScopes": []
       }
 did:
-  enabled: true
-  secret: issuance-secret
-  serviceType: ClusterIP
-  port: 3001
-  cert:
-    country: BE
-    state: BRUSSELS
-    locality: Brussels
-    organization: Fancy Marketplace Co.
-    commonName: www.fancy-marketplace.biz
-  ingress:
-    enabled: true
-    host: did-consumer.127.0.0.1.nip.io
+  enabled: false
 # register the consumer at the til. Only possible if it runs in the same environment and recommendable for demo deployments
 registration:
   enabled: true
   configMap: consumer-til-registration
   til: http://trusted-issuers-list.provider.svc.cluster.local:8080
-  did: did:web:consumer.127.0.0.1.nip.io
+  did: did:web:fancy-marketplace.biz
   credentialsType: UserCredential
 didJson:
   enabled: true
   port: 3000
-  did: did:web:consumer.127.0.0.1.nip.io
+  did: did:web:fancy-marketplace.biz
   key:
     kty: RSA
     # while this in productive environments should be an https endpoint, limitations of the gx-registry service require http in order to work around proxy issues in the local env. 
-    x5u: http://consumer.127.0.0.1.nip.io/.well-known/tls.crt
-    modulus: sAAE9dFK8dU9rjrhH5q2chjqGttTgFXrcupk3P6TSFnUted7WQShjOkk4Zj60b62O3tuGnVkZWCVHmNkqTYh1kOmft3i0bwNvK62EsV768ehwlOsGPULeHpC2xFRuNNtJsXaCfrBRxRoyS2e5ulUh8Oa_QMr43QKZHiW4ISvKTXl_-TfYxilsG7zoqLr4ZfZyZ_TdHGCRHTuNlYk9Zxx1YSUkGIlLG85zeKJ4OOqPLXcYNJ-boodEEdx5J5KhWe0Q-BcZXZcemXxcW6mzahyKD5mxaGbqxcerkZQaRGmCj2ts5h--AVsY2wGd2Dq6TdLAo3wGiM9TXAFJbQtK5jb2_xgf9JDtWaSYLa7zT6IFt2cIJY9shNbCN9HStrS5rwNLSHF2RsUWuUMtenP4NNRuDVj_qBfCWg89XAYsJWY4vjs4y5nyQiCjDKeR1AFBkt-FX1fFC2wpNg773z-flwHJtoeXyazYJMu8xS2r8K4kkEQj2Y135huR0aAi52bR-UTLc2IyNouTwG5xRjZlf1VNlYj3yITa2su7yl4KZGxovrQOxVtqK3MmIf_bopB_7oVuE-EjsBc_B0UdentkRcpsZ9KHm2iCSbUeGxGmroqbf7BXzSMXofePoVHkP8Qqag7eesuMiz03QKk2VklQ1n7lF7EiPFQGafgrDyyUz2ryYc
+    x5u: http://fancy-marketplace.biz/.well-known/tls.crt
+    modulus: 1j7tntXHTIoRR4zL80XmOaI5bxC1SpqiNKbCiIR_8y689libIV0P_J1pB_MyeCJHwhbih91MHRAu2Dg4pg9dskpWBSKUtrQxHcPxSubupzZc0HUunoe-6jX_4GW-2stZ3gyZCsBBLLBAKMHlZGOMPGjG1gKci2ieBG-Vgyk6uKKelMqyJAxDFqqeXvD0rtFXmkcTCUZhgJyXc0PRYQr0EDdNTZprMY9aVg2g46vveBU_ck9y7Fws6MEwR3ElPonaU2sMOOrAfTpJm0OMaYYSDb-Pi41WCv3eXYPMkSyRA-nLVFeckv79tt1bKC48uuIq1DaRibJShCSt5Bb2BVrIQ1PdU4huO-HesyOTghspPC9jwf8JHDY4ND441_KsIUtuW3HBI6IQsTmovz7N022qCcEAC6rav8R25qOEKeX0_jHHg-BdlXIUFJXfKmOh17KAFFpreQfuyPXhYa2yE26HhZll-eZCKyWwfIqsmCBQdXA3_ZqpRN5xGjkhp92o4KWqGU9G0Eo9FTvbQDAxLri4hZlfe38XDwAoP_7pZrYx2oDPEv5E_0-GR2k2usTJQPuJjCpfu5BXBWHbAHv1--qqOBgHOcfBTroCMLgaYFLq0pu3ZnW-gf3RRcNtZyoh2PjD_MkbK_oMP16PX597heEAoOAHuQEcVRCuwNFIOtMxTtc
     exponent: AQAB
   ingress:
     enabled: true
-    host: consumer.127.0.0.1.nip.io
+    host: fancy-marketplace.biz
   certChain: |-
     -----BEGIN CERTIFICATE-----
     MIIGvzCCBKegAwIBAgIUHxej1PL8tNM6yqYN6FBftGbo524wDQYJKoZIhvcNAQEL
