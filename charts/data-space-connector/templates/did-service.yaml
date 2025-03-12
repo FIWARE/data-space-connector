@@ -1,0 +1,19 @@
+{{- if .Values.didJson.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: did-json
+  namespace: {{ $.Release.Namespace | quote }}
+  labels:
+    app.kubernetes.io/name: did-json
+    {{ include "dsc.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.didJson.serviceType }}
+  ports:
+    - port: {{ .Values.didJson.port }}
+      targetPort: 3000
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: did-json
+{{- end }}

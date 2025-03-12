@@ -1,0 +1,29 @@
+---
+# Source: gx-registry/templates/configmap-kubo.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: gx-registry-ipfs-init
+  namespace: infra
+  labels:
+    app.kubernetes.io/name: gx-registry-kubo
+data:
+  configure-ipfs.sh: |
+    #!/bin/sh
+    # Determine the port based on the `nameOverride` value
+    PORT=""
+    if [ "main" = "v2" ]; then
+      PORT="4001"
+    elif [ "main" = "main" ]; then
+      PORT="4002"
+    elif [ "main" = "development" ]; then
+      PORT="4003"
+    else
+      echo "Unknown nameOverride value"
+      exit 1
+    fi
+
+    ipfs config --json Addresses "{\"API\":\"/ip4/0.0.0.0/tcp/5001\",\"Announce\": [\"/dns/lab.gaia-x.eu/tcp/$PORT\",\"/dns/lab.gaia-x.eu/udp/$PORT/quic-v1\",\"/dns/lab.gaia-x.eu/udp/$PORT/quic-v1/webtransport\"],\"AppendAnnounce\": [\"/dns/lab.gaia-x.eu/tcp/$PORT\",\"/dns/lab.gaia-x.eu/udp/$PORT/quic-v1\",\"/dns/lab.gaia-x.eu/udp/$PORT/quic-v1/webtransport\"],\"Gateway\": \"/ip4/0.0.0.0/tcp/8080\",\"NoAnnounce\": null,\"Swarm\": [\"/ip4/0.0.0.0/tcp/4001\",\"/ip4/0.0.0.0/udp/4001/quic-v1\",\"/ip4/0.0.0.0/udp/4001/quic-v1/webtransport\"]}"
+    ipfs config --json Swarm.RelayClient "{\"Enabled\": false}"
+    ipfs config --json Swarm.RelayService "{\"Enabled\": false}"
+    ipfs config --json Swarm.DisableBandwidthMetrics "true"

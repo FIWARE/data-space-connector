@@ -8,4 +8,9 @@ All planned work is listed in the [FIWARE Data Space Connector Taiga-Board](http
 
 ## Gaia-X Integration
 
-UNDER CONSTRUCTION
+* Support for the [Gaia-X ODRL-Profile](https://gitlab.com/gaia-x/lab/policy-reasoning/odrl-vc-profile) as part of the [ODRL-PAP](https://github.com/wistefan/odrl-pap)
+* Support for the Credentials Chain defined in the [24.07 Releas of the Identity, Credential and Access Management](https://docs.gaia-x.eu/technical-committee/identity-credential-access-management/24.07/pdf/document.pdf)
+
+## Data Space Protocol Integration
+
+* Support for the [IDSA Contract Negotiation](https://docs.internationaldataspaces.org/ids-knowledgebase/dataspace-protocol/contract-negotiation/contract.negotiation.protocol), see [Contract-Negotiation Branch](https://github.com/FIWARE/data-space-connector/blob/contract-negotiation/doc/CONTRACT_NEGOTIATION.md) for more details
