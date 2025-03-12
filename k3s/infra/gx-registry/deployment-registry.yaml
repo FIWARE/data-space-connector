@@ -105,12 +105,5 @@ spec:
       volumes:
         - name: trust-anchor
           emptyDir: {}
-  volumeClaimTemplates:
-    - metadata:
-        name: registry-ipfs-data
-      spec:
-        accessModes: ["ReadWriteOnce"]
-        resources:
-          requests:
-            storage: "500Mi"
-        storageClassName: "local-path"
+        - name: registry-ipfs-data
+          emptyDir: {}
