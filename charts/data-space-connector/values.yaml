@@ -792,3 +792,8 @@ dataSpaceConfig:
 
   # -- Supported authentication protocols (e.g.: oid4vp)
   authenticationProtocols: []
+
+
+didJson:
+  enabled: false
+  key:

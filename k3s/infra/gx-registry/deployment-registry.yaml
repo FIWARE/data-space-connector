@@ -1,0 +1,109 @@
+---
+# Source: gx-registry/templates/deployment-registry.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: gx-registry
+  namespace: infra
+  labels:
+    app.kubernetes.io/name: gx-registry
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: gx-registry
+  template:
+    metadata:
+      annotations:
+        randstring: "AZtvXjSD"
+      labels:
+        app.kubernetes.io/name: gx-registry
+    spec:
+      securityContext:
+        fsGroup: 1000
+      initContainers:
+        - name: wait-for-kubo
+          image: busybox
+          command:
+            - sh
+            - -c
+            - until nc -z gx-registry-kubo 5001; do echo waiting for Kubo; sleep 2; done;
+        - name: local-trust
+          image: quay.io/wi_stefan/gaiax-local-trust:0.0.1
+          imagePullPolicy: Always
+          env:
+            - name: ROOT_CA
+              value: "MIIFnDCCA4SgAwIBAgIBATANBgkqhkiG9w0BAQsFADBnMQswCQYDVQQGEwJERTEPMA0GA1UECAwGU2F4b255MRAwDgYDVQQHDAdEcmVzZGVuMRMwEQYDVQQKDApGSUNPREVTIENBMRMwEQYDVQQDDApGSUNPREVTLUNBMQswCQYDVQQFEwIwMTAeFw0yNTAzMTExNDUwNTBaFw0zNTAzMDkxNDUwNTBaMGcxCzAJBgNVBAYTAkRFMQ8wDQYDVQQIDAZTYXhvbnkxEDAOBgNVBAcMB0RyZXNkZW4xEzARBgNVBAoMCkZJQ09ERVMgQ0ExEzARBgNVBAMMCkZJQ09ERVMtQ0ExCzAJBgNVBAUTAjAxMIICIjANBgkqhkiG9w0BAQEFAAOCAg8AMIICCgKCAgEAyN1GN2MmWdtla3iF4y/FaRupz28bp9YW6q1GiHnbFJSL+fLACxfX+b2lgR0ejB9YIEEStWyAAHfEuksByhYRhq84Pj6hP7KYh9w9BO6t8YvhUYnC8NMWRzpsRlpRrJQXEIpxXy+Eoff+MWW6GH+1Rvw0Pj5gmAddv7QozoYwFPdy5dcM9BR9fK9rBUaovhFudrpkmW20detngflgi0iPlnzSR4sobTnywcuovdWst71gK8ATNkGngoSVjk28H/5EARQ1Lfuu/aWVqXGtJ5TQzoaoqlsvbFwC+cM6vFAqVbe+A45dR7PvG1WEWHXNAlmwLzq52Ms07pgGTfx1/FEQsRm2lSyx65EFQ4c0ZTiMXVc8UKJyx01N4EnayOIVJqW+8WYhmbWoN5qAHEysWOWeCzJpYGXmHr3dW1EyqixIC7zy4er4YXwOir+YwenBW2FYfigcMk0wubWatSx/pDcFHWWbfqrtZL3F58dDxKI/t3TkBGXckZRaZz0Z5rWyclHB6ru9FWxSLiQqypGVlBl3REO2FSD3zprVSZuA+4UCYwEUTEISQVEHXsdNCJkS6W5Q90l0ZjCx5YA8GL+sdsrXhFvn5Hc8vAHoqvaxZ86g8tClNwrCHSC9z3P5Xp8AC5BeMaXEWRI71gWHeXgyy2UXkK8TBX6cd/pTGlv7P48teeMCAwEAAaNTMFEwHQYDVR0OBBYEFHgEuVtKYtsyWnBUa8roE32hALx6MB8GA1UdIwQYMBaAFHgEuVtKYtsyWnBUa8roE32hALx6MA8GA1UdEwEB/wQFMAMBAf8wDQYJKoZIhvcNAQELBQADggIBAAReUu4Od9HpRlY0onBMOdbFg3j+XUDClQXGa5ITssBnyliZGWOem3vszpGhJ9HyypXPnA1Cg5CuWCOjiltuJmo2QCMUfsqRwuJBUZDFqZfeUB6h2gkBVmYoeaYEPqAuWSgjfw2cfl1INgjq3utaTxnCNgtBPzrF5I5juHVTsqS2dfQKH1hSRy0tJ5mY6hLxJrx1OpMHpxxaIfRHm99Q0D5w0lQ4Z3WE66eHSq2MJ3uawLBgOBt8MhT53nSsTkfR3PzuHRuqKJhdrGm/ltPoYBYgX+s5VTeVMtX/tniIRuJ6RuQfRUrhtsq/+d+pGq3P8qTXunMBshyF5DzHEm+PnSWXD4SEA+ncA78i6qGaWt4wU1rTTESlcjEVFhbH/HxvEKRdvz6nwg9FScSqqUPo18SIrwK2H6jio3ZLfDdz0pRz4The4aC8BgKbFlWJ4+nDQ9B2s+TE3jgswxjDXahmafHq4vxzSseMX4PAeDh2BqFqIXV9Gsomh3T3nGZLIF11r28wGZ3VAu5r5V0xgkCHGUFBvvOGpjXt5psWV/7HJrOUBDLJ5H3K9uCKneD8NdWURXua6UvDFxjQxjmDi9u77PckUgvrbA7B7FUb+wSV+6KJw9yhatwC/fKglDvH6xjzlFewfz6Zk23vuvZRIX0hgIcdrq6B84hgd+GCCyxN5whi"
+          volumeMounts:
+            - name: trust-anchor
+              mountPath: /out
+      containers:
+        - name: gx-registry
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+          image: "registry.gitlab.com/gaia-x/lab/compliance/gx-registry:v2.8.1"
+          imagePullPolicy: Always
+          env:
+            - name: PORT
+              value: "3000"
+            - name: BASE_URI
+              value: "https://registry.127.0.0.1.nip.io/v2"
+            - name: BASE_URL
+              value: "https://registry.127.0.0.1.nip.io/v2"
+            - name: APP_PATH
+              value: "/v2"
+            - name: evsslonly
+              value: "false"
+            - name: revocationListURL
+              value:
+            - name: trustedIssuersURL
+              value:
+            - name: KUBO_HOST
+              value: gx-registry-kubo
+            - name: APP_BRANCH
+              value: "main"
+            - name: ONTOLOGY_VERSION
+              value: "development"
+            - name: PRIVATE_KEY_ALGORITHM
+              value: "PS256"
+            - name: NODE_TLS_REJECT_UNAUTHORIZED
+              value: "0"
+            - name: HTTPS_PROXY
+              value: "http://squid-proxy.infra.svc.cluster.local:8888"
+            - name: HTTP_PROXY
+              value: "http://squid-proxy.infra.svc.cluster.local:8888"
+          envFrom:
+            - secretRef:
+                name: gx-registry-keypair
+          volumeMounts:
+            - name: registry-ipfs-data
+              mountPath: /data/ipfs
+            - name: trust-anchor
+              mountPath: /data/ipfs/registry/
+          ports:
+            - name: http
+              containerPort: 3000
+              protocol: TCP
+          livenessProbe:
+            periodSeconds: 15
+            initialDelaySeconds: 15
+            failureThreshold: 10
+            successThreshold: 1
+            httpGet:
+              path: /v2
+              port: 3000
+          readinessProbe:
+            periodSeconds: 15
+            initialDelaySeconds: 15
+            failureThreshold: 10
+            successThreshold: 1
+            httpGet:
+              path: /v2
+              port: 3000
+          resources: {}
+      volumes:
+        - name: trust-anchor
+          emptyDir: {}
+        - name: registry-ipfs-data
+          emptyDir: {}

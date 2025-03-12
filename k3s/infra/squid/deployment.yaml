@@ -1,0 +1,35 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: squid-proxy
+  namespace: infra
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: squid-proxy
+  template:
+    metadata:
+      labels:
+        app: squid-proxy
+    spec:
+      containers:
+      - name: squid
+        image: ubuntu/squid:5.2-22.04_beta
+        imagePullPolicy: Always
+        volumeMounts:
+        - name: squid-config
+          mountPath: /etc/squid/squid.conf
+          subPath: squid.conf
+        - mountPath: /var/cache/squid
+          name: squid-cache
+        - mountPath: /var/log/squid
+          name: squid-log
+      volumes:
+        - name: squid-cache
+          emptyDir: {}
+        - name: squid-log
+          emptyDir: {}
+        - name: squid-config
+          configMap:
+            name: squid-config
