@@ -307,12 +307,11 @@
                 <configuration>
                     <skip>true</skip>
                     <portBindings>
-                        <!-- Traefik http -->
+                        <!-- Traefik http & https-->
                         <portBinding>8080:8080</portBinding>
+                        <portBinding>8443:8443</portBinding>
                         <!-- Squid proxy -->
                         <portBinding>8888:8888</portBinding>
-                        <!-- Squid proxy -->
-                        <portBinding>8443:8443</portBinding>
                     </portBindings>
                 </configuration>
                 <executions>
