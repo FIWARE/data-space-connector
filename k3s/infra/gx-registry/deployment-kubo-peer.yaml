@@ -1,0 +1,47 @@
+---
+# Source: gx-registry/templates/deployment-kubo-peer.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: gx-registry-kubo
+  namespace: infra
+  labels:
+    app.kubernetes.io/name: gx-registry-kubo
+spec:
+  serviceName: "gx-registry-kubo"
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: gx-registry-kubo
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: gx-registry-kubo
+    spec:
+      securityContext:
+        fsGroup: 1000
+      containers:
+        - name: kubo
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+          image: "ipfs/kubo:v0.26.0"
+          ports:
+            - containerPort: 4001 # default IPFS swarm port
+            - containerPort: 5001 # default IPFS API port
+            - containerPort: 8080 # default IPFS Gateway port
+          volumeMounts:
+            - name: kubo-working-data
+              mountPath: /data/ipfs
+            - name: ipfs-configure-script
+              mountPath: /usr/local/bin/ipfs-configure-script
+              readOnly: true
+          command: [ "/bin/sh" ]
+          args: [ "-c", "if [ ! -f /data/ipfs/config ]; then ipfs init; fi && sh /usr/local/bin/ipfs-configure-script/configure-ipfs.sh && ipfs daemon" ]
+      volumes:
+        - name: ipfs-configure-script
+          configMap:
+            name: gx-registry-ipfs-init
+        - name: kubo-working-data
+          emptyDir:
+            medium: Memory

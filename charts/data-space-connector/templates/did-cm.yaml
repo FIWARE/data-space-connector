@@ -1,0 +1,36 @@
+{{- if .Values.didJson.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: did-json
+  namespace: {{ $.Release.Namespace | quote }}
+  labels:
+    {{ include "dsc.labels" . | nindent 4 }}
+data:
+  did.json: |-
+    {
+      "@context": "https://www.w3.org/ns/did/v1",
+      "id": {{ .Values.didJson.did | quote }},
+      "verificationMethod": [
+        {
+          "id": {{ .Values.didJson.did | quote }},
+          "type": "JsonWebKey2020",
+          "controller": {{ .Values.didJson.did | quote }},
+          "publicKeyJwk": {
+            {{- if .Values.didJson.key.kty }}
+            "kty": {{ .Values.didJson.key.kty | quote }},
+            {{- else }}
+            "kty: "RSA",
+            {{- end }}
+            "e": {{ .Values.didJson.key.exponent | quote }},
+            "n": {{ .Values.didJson.key.modulus | quote }},
+            {{- if .Values.didJson.key.x5u }}
+            "x5u": {{ .Values.didJson.key.x5u | quote }}
+            {{- else }}
+            "x5u": "https://fancy-marketplace.biz/.well-known/tls.crt"
+            {{- end }}
+          }
+        }
+      ]
+    }
+{{- end }}

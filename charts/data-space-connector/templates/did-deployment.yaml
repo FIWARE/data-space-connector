@@ -1,0 +1,44 @@
+{{- if .Values.didJson.enabled }}
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: did-json
+  namespace: {{ $.Release.Namespace | quote }}
+  labels:
+    app.kubernetes.io/name: did-json
+    {{ include "dsc.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: did-json
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: did-json
+    spec:
+      serviceAccountName: default
+      containers:
+        - name: did-json-static
+          imagePullPolicy: Always
+          image: "lipanski/docker-static-website:2.1.0"
+          ports:
+            - name: http
+              containerPort: 3000
+              protocol: TCP
+          volumeMounts:
+            - name: did-json
+              mountPath: /home/static/.well-known/did.json
+              subPath: did.json
+            - name: certs
+              mountPath: /home/static/.well-known/tls.crt
+              subPath: client-chain-bundle.cert.pem
+      volumes:
+        - name: did-json
+          configMap:
+            name: did-json
+        - name: certs
+          secret:
+            secretName: cert-chain
+{{- end }}
