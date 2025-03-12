@@ -38,21 +38,10 @@ spec:
               readOnly: true
           command: [ "/bin/sh" ]
           args: [ "-c", "if [ ! -f /data/ipfs/config ]; then ipfs init; fi && sh /usr/local/bin/ipfs-configure-script/configure-ipfs.sh && ipfs daemon" ]
-          resources:
-            requests:
-              memory: "256Mi"
-            limits:
-              memory: "256Mi"
       volumes:
         - name: ipfs-configure-script
           configMap:
             name: gx-registry-ipfs-init
-  volumeClaimTemplates:
-    - metadata:
-        name: kubo-working-data
-      spec:
-        accessModes: [ "ReadWriteOnce" ]
-        resources:
-          requests:
-            storage: "500Mi"
-        storageClassName: "local-path"
+        - name: kubo-working-data
+          emptyDir:
+            medium: Memory
