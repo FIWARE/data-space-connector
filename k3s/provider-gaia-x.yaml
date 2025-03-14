@@ -94,8 +94,6 @@ vcverifier:
         paths:
           - "/"
   deployment:
-    image:
-      tag: 4.8.0-pre-49
     logging:
       level: DEBUG
     verifier:
