@@ -1,0 +1,12 @@
+{
+  "@context":  [
+    "https://www.w3.org/2018/credentials/v1",
+    {
+      "firstName": "https://schema.org/givenName",
+      "lastName": "https://schema.org/familyName",
+      "eMail": "https://schema.org/eMail",
+      "roles": "https://schema.org/roleName",
+      "@vocab": "https://fiware.github.io/data-space-connector/examples#"
+    }
+  ]
+}
