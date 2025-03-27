@@ -252,7 +252,7 @@ apisix:
     sidecars:
       # -- we want to deploy the open-policy-agent as a pdp
       - name: open-policy-agent
-        image: openpolicyagent/opa:0.64.1
+        image: openpolicyagent/opa:1.2.0
         imagePullPolicy: IfNotPresent
         ports:
           - name: http
