@@ -76,7 +76,7 @@ The FIWARE Data Space Connector supports the usage of all defined  components:
 
 ### ovc:Constraint
 
-Its a sup type of an [odrl:Constraint](https://www.w3.org/TR/odrl-vocab/#constraints), that requires an ovc:leftOperand and ovc:credentialSubjectType to be present, beside the mandatory [odrl:operator](https://www.w3.org/TR/odrl-vocab/#term-Operator) and [odrl:rightOperand](https://www.w3.org/TR/odrl-vocab/#term-RightOperand).
+Its a sub type of an [odrl:Constraint](https://www.w3.org/TR/odrl-vocab/#constraints), that requires an ovc:leftOperand and ovc:credentialSubjectType to be present, beside the mandatory [odrl:operator](https://www.w3.org/TR/odrl-vocab/#term-Operator) and [odrl:rightOperand](https://www.w3.org/TR/odrl-vocab/#term-RightOperand).
 
 ### ovc:leftOperand
 
