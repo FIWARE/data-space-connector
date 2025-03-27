@@ -67,3 +67,76 @@ The request has to be flagged as insecure, since the generated certificate is se
   ]
 }
 ```
+
+## Gaia-X ODRL Profile
+
+As part of [Gaia-X](https://gaia-x.eu/), an [ODRL-Profile](https://gitlab.com/gaia-x/lab/policy-reasoning/odrl-vc-profile) with the goal to be able to refer in a clear and preciese way to Verifiable Credential Claims within ODRL-Policies.
+The FIWARE Data Space Connector supports the usage of all defined  components:
+
+
+### ovc:Constraint
+
+Its a sub type of an [odrl:Constraint](https://www.w3.org/TR/odrl-vocab/#constraints), that requires an ovc:leftOperand and ovc:credentialSubjectType to be present, beside the mandatory [odrl:operator](https://www.w3.org/TR/odrl-vocab/#term-Operator) and [odrl:rightOperand](https://www.w3.org/TR/odrl-vocab/#term-RightOperand).
+
+### ovc:leftOperand
+
+Implementation of the [odrl:leftOperand](https://www.w3.org/TR/odrl-vocab/#term-LeftOperand) that addresses a Verifiable Credential's Claim by using the Json-Path. Json-Paths into arrays are currently not supported.
+
+Supported:
+```shell
+  "ovc:leftOperand": "$.credentialSubject.my.claim"
+```
+
+Not supported:
+```shell
+  "ovc:leftOperand": "$.credentialSubject.my.claim[0]"
+```
+
+### ovc:credentialSubjectType
+
+```ovc:credentialSubjectType``` is a way to define the type of Verifiable Credential that the ```ovc:Constraint``` is intended for. 
+
+
+## Usage 
+
+Policies can be created at the [ODRL-PAP](https://github.com/wistefan/odrl-pap). 
+
+> :bulb: The following examples use the [local-deployment of the connector](./deployment-integration/local-deployment/LOCAL.MD). However, all of them can be run on any other installation of the Data Space Connector.
+
+The policy would allow any caller providing a Verifiable Credential with the the ```credentialSubject.type``` being ```gx:LegalParticipant``` and containing a claim ```credentialSubject.gx:legalAddress.gx:countrySubdivisionCode``` with the value either being ```FR-HDF``` or ```BE-BRU``` to read the entity with the id ```my-secured-object``` .
+
+```shell
+curl -X 'POST' http://pap-provider.127.0.0.1.nip.io:8080/policy \
+    -H 'Content-Type: application/json'
+    -d '{
+        "@context": {
+            "odrl": "http://www.w3.org/ns/odrl/2/",
+            "ovc": "https://w3id.org/gaia-x/ovc/1/",
+            "rdfs": "http://www.w3.org/2000/01/rdf-schema#"
+        },
+        "@id": "urn:uuid:some-uuid",
+        "@type": "odrl:Policy",
+        "odrl:profile": "https://github.com/DOME-Marketplace/dome-odrl-profile/blob/main/dome-op.ttl",
+        "odrl:permission": {
+            "odrl:assigner": {
+                "@id": "https://www.mp-operation.org/"
+            },
+            "odrl:target": "my-secured-object",
+            "odrl:assignee":{
+              "@id": "vc:any"
+            },
+            "odrl:action": {
+                "@id": "odrl:read"
+            },
+            "ovc:constraint": [{
+                "ovc:leftOperand": "$.credentialSubject.gx:legalAddress.gx:countrySubdivisionCode",
+                "odrl:operator": "odrl:anyOf",
+                "odrl:rightOperand": [
+                    "FR-HDF",
+                    "BE-BRU"
+                ],
+                "ovc:credentialSubjectType": "gx:LegalParticipant"
+            }]
+        }
+    }' 
+```

@@ -2,7 +2,7 @@ apiVersion: v2
 name: data-space-connector
 description: Umbrella Chart for the FIWARE Data Space Connector, combining all essential parts to be used by a participant.
 type: application
-version: 7.34.0
+version: 7.37.0
 dependencies:
   - name: postgresql
     condition: postgresql.enabled
@@ -33,7 +33,7 @@ dependencies:
   # authorization
   - name: odrl-pap
     condition: odrl-pap.enabled
-    version: 0.2.2
+    version: 0.3.0
     repository: https://fiware.github.io/helm-charts
   - name: apisix
     condition: apisix.enabled
