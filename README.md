@@ -29,6 +29,7 @@ recipes.
     - [Service interaction (H2M)](#service-interaction-h2m)
     - [Service interaction (M2M)](#service-interaction-m2m)
   - [Integration with the Dataspace Protocol](#integration-with-the-dataspace-protocol)
+  - [Integration with the Gaia-X Trust Framework](#integration-with-the-gaia-x-trust-framework)
 - [Deployment](#deployment)
   - [Local Deployment](#local-deployment)
   - [Deployment with Helm](#deployment-with-helm)
@@ -294,6 +295,11 @@ The FIWARE Data Space Connector already partly supports the [IDSA Dataspace Prot
 
 Find out more in the [Dataspace Protocol Integration Documentation](./doc/DSP_INTEGRATION.md).
 
+### Integration with the [Gaia-X Trust Framework](https://gaia-x.gitlab.io/policy-rules-committee/trust-framework/)
+
+In order to be compatible with common european frameworks for Dataspaces, the FIWARE Data Space Connector provides integrations with the [Gaia-X Trustframework](https://gaia-x.gitlab.io/policy-rules-committee/trust-framework/). While not the full framework is supported as of know, [Gaia-X Digital Clearing House's](https://gaia-x.eu/services-deliverables/digital-clearing-house/) can be used as Trust Anchors for the FIWARE Data Space Connector.
+
+Find out more in the dedicated [Gaia-X Integration Documentation](./doc/GAIA_X.MD).
 
 ## Deployment
 

@@ -1,0 +1,35 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: squid-config
+  namespace: infra
+data:
+  squid.conf: |
+
+    # Port on which Squid listens for incoming proxy requests
+    http_port 8888
+
+    # Define allowed ports for SSL (HTTPS) tunneling
+    acl SSL_ports port 443
+
+    # Define safe HTTP and HTTPS ports, important to add the one used by traefik
+    acl Safe_ports port 80
+    acl Safe_ports port 8080
+    acl Safe_ports port 443
+    acl Safe_ports port 8443
+
+    # Allow access to defined safe ports
+    http_access deny !Safe_ports
+    http_access allow all
+
+    # configure squid as forward proxy to traefik
+    cache_peer traefik-loadbalancer-in.infra.svc.cluster.local parent 80 0 no-query originserver name=traefik-http
+    cache_peer traefik-loadbalancer-in.infra.svc.cluster.local parent 443 0 no-query originserver name=traefik-https
+
+    # Restrict cache_peer to CONNECT method for HTTPS requests
+    acl CONNECT method CONNECT
+    cache_peer_access traefik-https allow CONNECT
+    cache_peer_access traefik-http allow all
+
+    # Prevent direct connections to remote servers; enforce use of cache peers
+    never_direct allow all
