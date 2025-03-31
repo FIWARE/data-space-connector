@@ -350,7 +350,7 @@ scorpio:
     # -- repository to be used - resource friendly all-in-one-runner without kafka
     repository: scorpiobroker/all-in-one-runner
     # -- tag of the image to be used - latest java image without kafka
-    tag: java-4.1.11
+    tag: java-5.0.3
   ## configuration of the database to be used by broker
   db:
     # -- host of the db
@@ -613,11 +613,15 @@ tm-forum-api:
   enabled: true
   ## configuration to be used by every api-deployment if nothing specific is provided.
   defaultConfig:
+    image: 
+      tag: 1.2.3-PRE-85
+      pullPolicy: Always
     # --  ngsi-ld broker connection information
     ngsiLd:
       # -- address of the broker
       url: http://data-service-scorpio:9090
     contextUrl: https://uri.etsi.org/ngsi-ld/v1/ngsi-ld-core-context.jsonld
+    logLevel: TRACE
 
   # enable the api proxy
   apiProxy:
@@ -675,6 +679,10 @@ tm-forum-api:
     - name: agreement
       image: tmforum-agreement
       basePath: /tmf-api/agreementManagement/v4
+
+    - name: quote
+      image: tmforum-quote
+      basePath: /tmf-api/quote/v4
 
   # redis caching
   redis:

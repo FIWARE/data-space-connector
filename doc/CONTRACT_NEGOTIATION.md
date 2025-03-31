@@ -62,7 +62,7 @@ export PRICE_ID=$(curl -X 'POST' http://tm-forum-api.127.0.0.1.nip.io:8080/tmf-a
                 "unit": "EUR",
                 "value": 10.0
             }
-     }' | jq '.id' -r ); echo ${PRODUCT_SPEC_ID}
+     }' | jq '.id' -r ); echo ${PRICE_ID}
 
 export PRODUCT_SPEC_ID=$(curl -X 'POST' http://tm-forum-api.127.0.0.1.nip.io:8080/tmf-api/productCatalogManagement/v4/productSpecification \
      -H 'Content-Type: application/json;charset=utf-8' \
@@ -71,6 +71,7 @@ export PRODUCT_SPEC_ID=$(curl -X 'POST' http://tm-forum-api.127.0.0.1.nip.io:808
         "lifecycleStatus": "ACTIVE",
         "name": "Test Spec"
      }' | jq '.id' -r ); echo ${PRODUCT_SPEC_ID}
+
 export PRODUCT_OFFERING_ID=$(curl -X 'POST' http://tm-forum-api.127.0.0.1.nip.io:8080/tmf-api/productCatalogManagement/v4/productOffering \
      -H 'Content-Type: application/json;charset=utf-8' \
      -d "{
@@ -94,18 +95,11 @@ export PRODUCT_OFFERING_ID=$(curl -X 'POST' http://tm-forum-api.127.0.0.1.nip.io
 To get into state REQUESTED, the consumer creates a ```Quote```, referncing the offer:
 
 ```shell
-export QUOTE_ID=$(curl -X 'POST' http://tm-forum-api.127.0.0.1.nip.io:8080/tmf-api/quoteManagement/v4/quote \
+export QUOTE_ID=$(curl -X 'POST' http://tm-forum-api.127.0.0.1.nip.io:8080/tmf-api/quote/v4/quote \
      -H 'Content-Type: application/json;charset=utf-8' \
      -d "{
         \"description\": \"Request for Test Offering\",
-        \"relatedParty\": [
-            {
-                \"id\": \"Requesting-Consumer\",
-                \"role\": \"Consumer\"
-            }
-        ],
         \"version\": \"1\",
-        \"state\": "inProgress",
         \"quoteItem\": [
             {
                 \"id\": \"item-id\",
@@ -115,21 +109,26 @@ export QUOTE_ID=$(curl -X 'POST' http://tm-forum-api.127.0.0.1.nip.io:8080/tmf-a
                 \"action\": \"modify\",
                 \"state\": \"inProgress\",
                 \"note\": [{
-                    \"id\": \"First note\",
+                    \"id\": \"uri:random:note\",
                     \"text\": \"We would prefer weekly pricing and a discount\"
                 }],
-                \"priceAlteration\": [
+                \"quoteItemPrice\": [{
+                    \"productOfferingPrice\":  {   
+                        \"id\": \"${PRICE_ID}\"
+                    },
+                    \"priceAlteration\": [
                     {
                         \"name\": \"alternative price\",
                         \"priceType\": \"recurring\",
                         \"recurringChargePeriod\": \"weekly\",
                         \"price\": {
-                            "unit": "EUR",
-                            "value": 2.0
+                            \"taxIncludedAmount\": {
+                               \"unit\": \"EUR\",
+                                \"value\": 2.0
+                            }
                         }
-                    }
-                ]
-
+                    }]
+                }]
             }
         ]
      }" | jq '.id' -r ); echo ${QUOTE_ID}
@@ -141,28 +140,27 @@ With that, the negotiation is in state requested and needs to be processed by th
 
 Provider can cancel the Quote and go to state TERMINATED:
 ```shell
-    curl -X 'PATCH' http://tm-forum-api.127.0.0.1.nip.io:8080/tmf-api/quoteManagement/v4/quote/${QUOTE_ID} \
+    curl -X 'PATCH' http://tm-forum-api.127.0.0.1.nip.io:8080/tmf-api/quote/v4/quote/${QUOTE_ID} \
      -H 'Content-Type: application/json;charset=utf-8' \
-     -d "{ 
+     -d '{ 
         "state": "cancelled"     
-     }"
+     }' | jq .
 ```
 
 Provider can approve it and go to state OFFERED:
 ```shell
-    curl -X 'PATCH' http://tm-forum-api.127.0.0.1.nip.io:8080/tmf-api/quoteManagement/v4/quote/${QUOTE_ID} \
+    curl -X 'PATCH' http://tm-forum-api.127.0.0.1.nip.io:8080/tmf-api/quote/v4/quote/${QUOTE_ID} \
      -H 'Content-Type: application/json;charset=utf-8' \
-     -d "{ 
+     -d '{ 
         "state": "approved"     
-     }"
+     }' | jq . 
 ```
 
 Provider can reject the original QuoteItem, add a new one and go to OFFERED: 
 ```shell
-curl -X 'PATCH' http://tm-forum-api.127.0.0.1.nip.io:8080/tmf-api/quoteManagement/v4/quote/${QUOTE_ID} \
+curl -X 'PATCH' http://tm-forum-api.127.0.0.1.nip.io:8080/tmf-api/quote/v4/quote/${QUOTE_ID} \
      -H 'Content-Type: application/json;charset=utf-8' \
      -d "{
-        \"state\": "approved",
         \"quoteItem\": [
             {
                 \"id\": \"item-id\",
@@ -170,30 +168,35 @@ curl -X 'PATCH' http://tm-forum-api.127.0.0.1.nip.io:8080/tmf-api/quoteManagemen
                     \"id\": \"${PRODUCT_OFFERING_ID}\"
                 },
                 \"action\": \"modify\",
-                \"version\": \"1\",
                 \"state\": \"rejected\",
                 \"note\": [
                     {
-                        \"id\": \"First note\",
+                        \"id\": \"uri:random:note\",
                         \"text\": \"We would prefer weekly pricing and a discount.\"
                     },
                     {
-                        \"id\": \"Answer note\",
+                        \"id\": \"uri:random:second-note\",
                         \"text\": \"We can offer weekly payment, but no discount.\"
                     }
 
                 ],
-                \"priceAlteration\": [
+                \"quoteItemPrice\": [{
+                    \"productOfferingPrice\":  {   
+                        \"id\": \"${PRICE_ID}\"
+                    },
+                    \"priceAlteration\": [
                     {
                         \"name\": \"alternative price\",
                         \"priceType\": \"recurring\",
                         \"recurringChargePeriod\": \"weekly\",
                         \"price\": {
-                            "unit": "EUR",
-                            "value": 2.0
+                            \"taxIncludedAmount\": {
+                               \"unit\": \"EUR\",
+                                \"value\": 2.0
+                            }
                         }
-                    }
-                ]
+                    }]
+                }]
             },
             {
                 \"id\": \"counter-item-id\",
@@ -204,25 +207,31 @@ curl -X 'PATCH' http://tm-forum-api.127.0.0.1.nip.io:8080/tmf-api/quoteManagemen
                 \"state\": \"approved\",
                 \"note\": [
                     {
-                        \"id\": \"Answer note\",
+                        \"id\": \"urn:random:answer-note\",
                         \"text\": \"We can offer weekly payment, but no discount.\"
                     }
 
                 ],
-                \"priceAlteration\": [
+                \"quoteItemPrice\": [{
+                    \"productOfferingPrice\":  {   
+                        \"id\": \"${PRICE_ID}\"
+                    },
+                    \"priceAlteration\": [
                     {
                         \"name\": \"alternative price\",
                         \"priceType\": \"recurring\",
                         \"recurringChargePeriod\": \"weekly\",
                         \"price\": {
-                            "unit": "EUR",
-                            "value": 2.5
+                            \"taxIncludedAmount\": {
+                               \"unit\": \"EUR\",
+                                \"value\": 2.5
+                            }
                         }
-                    }
-                ]
+                    }]
+                }]
             }
         ]
-     }"
+     }" | jq .
 ```
 
 ### IDSA OFFERED  - Quote in state ```inProgress```
@@ -232,17 +241,17 @@ Within state OFFERED, the consumer can either:
 Accept the offer and go to ACCEPTED:
 
 ```shell
-    curl -X 'PATCH' http://tm-forum-api.127.0.0.1.nip.io:8080/tmf-api/quoteManagement/v4/quote/${QUOTE_ID} \
+    curl -X 'PATCH' http://tm-forum-api.127.0.0.1.nip.io:8080/tmf-api/quote/v4/quote/${QUOTE_ID} \
      -H 'Content-Type: application/json;charset=utf-8' \
-     -d "{ 
+     -d '{ 
         "state": "accepted"     
-     }"
+     }' | jq . 
 ```
 
 Or can reject the quote and create a new one in REQUESTED:
 
 ```shell
-curl -X 'PATCH' http://tm-forum-api.127.0.0.1.nip.io:8080/tmf-api/quoteManagement/v4/quote/${QUOTE_ID} \
+curl -X 'PATCH' http://tm-forum-api.127.0.0.1.nip.io:8080/tmf-api/quote/v4/quote/${QUOTE_ID} \
      -H 'Content-Type: application/json;charset=utf-8' \
      -d "{
         \"state\": "rejected",
@@ -285,7 +294,7 @@ curl -X 'PATCH' http://tm-forum-api.127.0.0.1.nip.io:8080/tmf-api/quoteManagemen
 ```
 
 ```shell
-export QUOTE_ID=$(curl -X 'POST' http://tm-forum-api.127.0.0.1.nip.io:8080/tmf-api/quoteManagement/v4/quote \
+export QUOTE_ID=$(curl -X 'POST' http://tm-forum-api.127.0.0.1.nip.io:8080/tmf-api/quote/v4/quote \
      -H 'Content-Type: application/json;charset=utf-8' \
      -d "{
         \"description\": \"Request for Test Offering\",
@@ -329,7 +338,7 @@ export QUOTE_ID=$(curl -X 'POST' http://tm-forum-api.127.0.0.1.nip.io:8080/tmf-a
 
 Or cancel the Quote and go to state TERMINATED:
 ```shell
-    curl -X 'PATCH' http://tm-forum-api.127.0.0.1.nip.io:8080/tmf-api/quoteManagement/v4/quote/${QUOTE_ID} \
+    curl -X 'PATCH' http://tm-forum-api.127.0.0.1.nip.io:8080/tmf-api/quote/v4/quote/${QUOTE_ID} \
      -H 'Content-Type: application/json;charset=utf-8' \
      -d "{ 
         "state": "cancelled"     
@@ -360,30 +369,25 @@ When the Provider approved the Quote, the Consumer can now either:
 Use it to create the order and go to state VERIFIED:
 
 ```shell
-    export ORDER_ID=$(curl -X 'POST' http://tm-forum-api.127.0.0.1.nip.io:8080/productOrderingManagement/v4/productOrder \
+    export ORDER_ID=$(curl -X 'POST' http://tm-forum-api.127.0.0.1.nip.io:8080/tmf-api/productOrderingManagement/v4/productOrder \
      -H 'Content-Type: application/json;charset=utf-8' \
      -d "{
         \"productOrderItem\": [
          {
-           \"id\": \"random-order-id\",
+           \"id\": \"uri:random:random-order-id\",
            \"action\": \"add\",
            \"quoteItem\": {
              \"id\" :  \"${QUOTE_ID}\"
            }
          }  
-       ],,
-       \"relatedParty\": [
-         {
-           \"id\": \"Requesting-Consumer\"
-         }
        ]
-     }" | jq '.id' -r ); echo ${QUOTE_ID}
+     }" | jq '.id' -r ); echo ${ORDER_ID}
 ```
 
 Or reject it and go to TERMINATED:
 
 ```shell
-    curl -X 'PATCH' http://tm-forum-api.127.0.0.1.nip.io:8080/tmf-api/quoteManagement/v4/quote/${QUOTE_ID} \
+    curl -X 'PATCH' http://tm-forum-api.127.0.0.1.nip.io:8080/tmf-api/quote/v4/quote/${QUOTE_ID} \
      -H 'Content-Type: application/json;charset=utf-8' \
      -d "{ 
         "state": "rejected"     
@@ -422,7 +426,7 @@ Create the agreement for the Order in Rainbow, fullfil all additonal steps(f.e. 
 Or reject the order and go to TERMINATED:
 
 ```shell
-    curl -X 'PATCH' http://tm-forum-api.127.0.0.1.nip.io:8080/tmf-api/quoteManagement/v4/productOrder/${ORDER_ID} \
+    curl -X 'PATCH' http://tm-forum-api.127.0.0.1.nip.io:8080/tmf-api/quote/v4/productOrder/${ORDER_ID} \
      -H 'Content-Type: application/json;charset=utf-8' \
      -d "{ 
         "state": "rejected"     
