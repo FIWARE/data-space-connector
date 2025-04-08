@@ -1,0 +1,31 @@
+apiVersion: v1
+kind: ConfigMap
+metadata: 
+  name: tpp-policy
+  namespace: {{ $.Release.Namespace | quote }}
+  labels:
+    {{ include "dsc.labels" . | nindent 4 }}
+data:
+  tpp.rego: |-
+    package tpp
+    
+    import rego.v1
+    import data.policy.main
+
+    default allow := false
+
+    host = {{ .Values.tpp.transfers.host | quote }}
+    path = {{ .Values.tpp.transfers.path | quote }}
+    url = sprintf("%v/%v/%v", [host, path, input.request.headers["transferid"]])
+
+    response := http.send({"method": "get", "url": url})
+  
+
+    {{- if .Values.tpp.checkMain }}
+    allow if {
+      response.body["dspace:state"] == "dspace:STARTED"
+      main.allow == true
+    } 
+    {{- else }}
+    allow if response.body["dspace:state"] == "dspace:STARTED"
+    {{- end }}

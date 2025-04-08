@@ -80,6 +80,18 @@ vcverifier:
     # -- we do not need authentication here
     authEnabled: false
 
+# -- configuration for the digital-signature.service to be deployed as part of the connector in case of did:elsi support
+dss:
+  # -- should it be enabled?
+  enabled: false
+  # -- allows to set a fixed name for the services
+  fullnameOverride: dss
+  # -- can be used to provide the crl for ca's provided as truststore to the dss
+  crl:
+    # -- should it be enabled?
+    enabled: false
+
+
 # -- configuration for the credentials-config-service to be deployed as part of the connector, see https://github.com/FIWARE/helm-charts/tree/main/charts/credentials-config-service for all options
 credentials-config-service:
   # -- should it be enabled? set to false if one outside the chart is used.
@@ -106,6 +118,9 @@ credentials-config-service:
 postgresql:
   # -- should it be enabled? set to false if one outside the chart is used.
   enabled: true
+  image:
+    # -- fixes the unpullable image referenced in the chart
+    tag: 13.18.0
   # -- allows to set a fixed name for the services
   fullnameOverride: postgresql
   generatePasswords:
@@ -129,6 +144,7 @@ postgresql:
         create.sh: |
           psql postgresql://postgres:${POSTGRES_PASSWORD}@localhost:5432 -c "CREATE DATABASE pap;"
           psql postgresql://postgres:${POSTGRES_PASSWORD}@localhost:5432 -c "CREATE DATABASE keycloak;"
+          psql postgresql://postgres:${POSTGRES_PASSWORD}@localhost:5432 -c "CREATE DATABASE rainbow;"
 
 # -- configuration for the odrl-pap to be deployed as part of the connector, see https://github.com/FIWARE/helm-charts/tree/main/charts/odrl-pap for all options
 odrl-pap:
@@ -169,6 +185,17 @@ opa:
     minDelay: 1
     maxDelay: 15
 
+
+# -- integration of checks for the transfer process protocol
+tpp:
+  # -- should checking for a running transfer process be enabled
+  enabled: false
+  transfers:
+    # -- host of the endpoint to check the process id, e.g. rainbow
+    host: ""
+    # -- path to check the id at
+    path: /transfers
+  
 # -- configuration for apisix to be deployed as part of the connector, see https://github.com/bitnami/charts/tree/main/bitnami/apisix for all options
 apisix:
   # -- should it be enabled? set to false if one outside the chart is used.
@@ -216,6 +243,9 @@ apisix:
       - name: opa-lua
         configMap:
           name: opa-lua
+      - name: tpp-policy
+        configMap:
+          name: tpp-policy
     # -- extra volumes to be mounted
     extraVolumeMounts:
       - name: routes
@@ -231,7 +261,7 @@ apisix:
     sidecars:
       # -- we want to deploy the open-policy-agent as a pdp
       - name: open-policy-agent
-        image: openpolicyagent/opa:0.64.1
+        image: openpolicyagent/opa:1.2.0
         imagePullPolicy: IfNotPresent
         ports:
           - name: http
@@ -248,9 +278,12 @@ apisix:
           - "/config/opa.yaml"
           - "--addr"
           - "0.0.0.0:8181"
+          - "/tpp/tpp.rego"
         volumeMounts:
           - name: opa-config
             mountPath: /config
+          - name: tpp-policy
+            mountPath: /tpp
   # -- configuration in regard to the apisix dashboard
   dashboard:
     # -- should it be enabled
@@ -292,6 +325,9 @@ apisix:
 postgis:
   # -- should it be enabled? set to false if one outside the chart is used.
   enabled: true
+  image:
+    # -- fixes the unpullable image referenced in the chart
+    tag: 13.18.0
   # -- overrides the generated name, provides stable service names - this should be avoided if multiple instances are available in the same namespace
   fullnameOverride: data-service-postgis
   # -- overrides the generated name, provides stable service names - this should be avoided if multiple instances are available in the same namespace
@@ -372,6 +408,26 @@ scorpio:
         name: scorpio-registration
         defaultMode: 0755
 
+# -- configuration to issue credentials, using a did:elsi
+elsi:
+  # -- should a did:elsi be used
+  enabled: false
+  # -- keystore to be used for signing the credentials 
+  # keystore: 
+    # store.p12: <THE_ENCODED_CONTENT>
+  # -- the did to be used
+  did:
+  # -- algorithm of the signing key
+  keyAlgorithm:
+  # -- path to the keystore 
+  storePath:
+  # -- password for the keystore
+  storePassword:
+  # -- alias of the key
+  keyAlias: 
+  # -- password of the key
+  keyPassword:
+
 ## configuration of the keycloak - see https://github.com/bitnami/charts/tree/main/bitnami/keycloak for details
 keycloak:
   # -- should it be enabled? set to false if one outside the chart is used.
@@ -380,16 +436,6 @@ keycloak:
   containerSecurityContext:
     enabled: false
  
-  command:
-    - /bin/bash
-  # -- we need the did of the participant here. when its generated with the did-helper, we have to get it first and replace inside the realm.json through env-vars
-  args:
-    - -ec
-    - |
-      #!/bin/sh
-      export $(cat /did-material/did.env)
-      /opt/bitnami/scripts/keycloak/entrypoint.sh
-      /opt/bitnami/scripts/keycloak/run.sh
   service:
     ports:
       http: 8080
@@ -404,23 +450,15 @@ keycloak:
   # -- host of the external db to be used
   externalDatabase:
     host: postgresql
-    
+    database: keycloak
+    user: postgres
+    existingSecret: database-secret
+    existingSecretPasswordKey: postgres-admin-password
+
   # -- extra volumes to be mounted
   extraVolumeMounts:
-    - name: did-material
-      mountPath: /did-material
-    - name: did-material
-      mountPath: "/etc/env"
-      readOnly: true
     - name: realms
       mountPath: /opt/bitnami/keycloak/data/import
-
-  extraVolumes:
-    - name: did-material
-      emptyDir: { }
-    - name: realms
-      configMap:
-        name: test-realm-realm
 
   # -- extra env vars to be set. we require them at the moment, since some of the chart config mechanisms only work with the bitnami-image
   extraEnvVars:
@@ -431,32 +469,6 @@ keycloak:
     # indicates ssl is terminated at the edge
     - name: KC_PROXY
       value: "edge"
-    # config for the db connection
-    - name: KC_DB_URL_HOST
-      value: postgresql
-    - name: KC_DB_URL_DATABASE
-      value: keycloak
-    - name: KC_DB_USERNAME
-      value: postgres
-    - name: KC_FRONTEND_URL
-      value: "https://keycloak-consumer.127.0.0.1.nip.io:8443"
-    - name: KC_HOSTNAME_STRICT
-      value: "false"
-    - name: KC_HOSTNAME_STRICT_HTTPS
-      value: "false"
-    - name: KC_HTTP_ENABLED
-      value: "true"
-    - name: KC_PROXY_HEADERS
-      value: xforwarded
-    - name: KC_PROXY_ADDRESS_FORWARDING
-      value: "true"
-    - name: KC_LOG_LEVEL
-      value: DEBUG
-    - name: KC_DB_PASSWORD
-      valueFrom:
-        secretKeyRef:
-          name: database-secret
-          key: postgres-admin-password
     # password for reading the key store connected to the did
     - name: STORE_PASS
       valueFrom:
@@ -469,41 +481,6 @@ keycloak:
         secretKeyRef:
           name: issuance-secret
           key: keycloak-admin
-
-  # -- init containers to be run with keycloak
-  initContainers:
-    # retrieve all did material required for the realm and store it to a shared folder
-    - name: get-did
-      image: ubuntu
-      command:
-        - /bin/bash
-      args:
-        - -ec
-        - |
-          #!/bin/bash
-          apt-get -y update; apt-get -y install wget
-          cd /did-material
-          wget http://did-helper:3000/did-material/cert.pfx
-          wget http://did-helper:3000/did-material/did.env
-      volumeMounts:
-        - name: did-material
-          mountPath: /did-material
-
-    # register the issuer at the trusted issuers registry - will only work if that one is publicly accessible
-    - name: register-at-tir
-      image: ubuntu
-      command:
-        - /bin/bash
-      args:
-        - -ec
-        - |
-          #!/bin/bash
-          source /did-material/did.env
-          apt-get -y update; apt-get -y install curl
-          curl -X 'POST' 'http://tir.trust-anchor.svc.cluster.local:8080/issuer' -H 'Content-Type: application/json' -d "{\"did\": \"${DID}\", \"credentials\": []}"
-      volumeMounts:
-        - name: did-material
-          mountPath: /did-material
 
   # -- configuration of the realm to be imported
   realm:
@@ -624,7 +601,20 @@ keycloak:
         "defaultClientScopes": [],
         "optionalClientScopes": []
       }
-
+  # -- configuration for the signing key to be used for issuing credentials
+  # signingKey:
+    # -- path to the keystore containing the signing key
+    # storePath:
+    # -- password for the keystore containing the signing key
+    # storePassword:
+    # -- alias of the signing key
+    # keyAlias:
+    # -- password of the signing key
+    # keyPassword:
+    # -- algorithm of the signing key
+    # keyAlgorithm: 
+    # -- did that the key belongs to 
+    # did: 
 
 ## configuration of the tm-forum-api - see https://github.com/FIWARE/helm-charts/tree/main/charts/tm-forum-api for details
 tm-forum-api:
@@ -691,6 +681,10 @@ tm-forum-api:
       image: tmforum-service-catalog
       basePath: /tmf-api/serviceCatalogManagement/v4
 
+    - name: agreement
+      image: tmforum-agreement
+      basePath: /tmf-api/agreementManagement/v4
+
     - name: usage-management
       image: tmforum-usage-management
       basePath: /tmf-api/usageManagement/v4
@@ -719,22 +713,71 @@ tm-forum-api:
         trustedParticipantsLists: http://tir.trust-anchor.org
         trustedIssuersLists: http://trusted-issuers-list:8080
 
+
+## configuration of rainbow to provide integration with the Dataspace Protocol
+rainbow:
+  # -- should rainbow be enabled
+  enabled: false
+  # -- database configuration of rainbow
+  db:
+    # -- host of the database to be used
+    url:
+    # -- user to be used when accesing the database
+    user: 
+    # -- secret containing the password for the database
+    existingSecret:
+    # -- key of the password inside that secret
+    passwordKey:
+  # -- configuration for external access to rainbow
+  ingress:
+    # -- should the ingress be enabled
+    enabled: false
+  # -- configuration of service access to rainbow
+  service:
+    # -- service type to be used
+    serviceType: ClusterIP
+    # -- port of the service
+    port: 8080
+  # -- configuration to register rainbow at the credentials-config-service
+  ccs:
+    # -- should the registration at the credentials-config-service be enabled
+    enabled: false
+    # -- endpoint of the ccs to regsiter at
+    endpoint: http://credentials-config-service:8080
+    # -- configmap to get the registration information from
+    configMap: rainbow-registration
+    # -- service id of the data-service to be used
+    id: tpp-service
+
 ## configuration of the tm-forum-api - see https://github.com/FIWARE/helm-charts/tree/main/charts/contract-management for details
 contract-management:
   # -- should it be enabled? set to false if one outside the chart is used.
   enabled: true
+  fullnameOverride: contract-management
   services:
     ## Config for Trusted Issuers List
-    til:
+    trusted-issuers-list:
       ## URL of the Trusted Issuers List Service
       url: http://trusted-issuers-list:8080
     ## Config for the TM Forum Service hosting the APIs
-    product:
+    product-order:
       ## URL of the TM Forum Service hosting the Product Ordering API
       url: http://tm-forum-api:8080
     party:
       ## URL of the TM Forum Service hosting the Party API
       url: http://tm-forum-api:8080
+    product-catalog:
+      ## URL of the TM Forum Service hosting the Product Catalog API
+      url: http://tm-forum-api:8080
+    service-catalog:
+      ## URL of the TM Forum Service hosting the Service Catalog API
+      url: http://tm-forum-api:8080
+    tmforum-agreement-api:
+      ## URL of the TM Forum Service hosting the Agreement API
+      url: http://tm-forum-api:8080
+    rainbow:
+      ## URL for the Rainbow service
+      url: http://rainbow:8080
 
 # -- configuration for the did-helper, should only be used for demonstrational deployments, see https://github.com/wistefan/did-helper
 did:
@@ -763,6 +806,10 @@ dataSpaceConfig:
   # -- Supported authentication protocols (e.g.: oid4vp)
   authenticationProtocols: []
 
+
+didJson:
+  enabled: false
+  key:
 
 mongodb:
   enabled: true

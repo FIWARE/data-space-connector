@@ -5,6 +5,7 @@ metadata:
   namespace: infra
 data:
   squid.conf: |
+
     # Port on which Squid listens for incoming proxy requests
     http_port 8888
 
@@ -22,8 +23,8 @@ data:
     http_access allow all
 
     # configure squid as forward proxy to traefik
-    cache_peer traefik-loadbalancer.infra.svc.cluster.local parent 8080 0 no-query originserver name=traefik-http
-    cache_peer traefik-loadbalancer.infra.svc.cluster.local parent 8443 0 no-query originserver name=traefik-https
+    cache_peer traefik-loadbalancer-in.infra.svc.cluster.local parent 80 0 no-query originserver name=traefik-http
+    cache_peer traefik-loadbalancer-in.infra.svc.cluster.local parent 443 0 no-query originserver name=traefik-https
 
     # Restrict cache_peer to CONNECT method for HTTPS requests
     acl CONNECT method CONNECT

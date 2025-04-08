@@ -1,0 +1,39 @@
+---
+# Source: gx-registry/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: gx-registry
+  namespace: infra
+  labels:
+    app.kubernetes.io/name: gx-registry
+spec:
+  type: ClusterIP
+  ports:
+    - port: 3000
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: gx-registry
+---
+# Source: gx-registry/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: gx-registry-kubo
+  namespace: infra
+spec:
+  clusterIP: None
+  ports:
+    - port: 4001
+      targetPort: 4001
+      name: swarm
+    - port: 5001
+      targetPort: 5001
+      name: api
+    - port: 8080
+      targetPort: 8080
+      name: gateway
+  selector:
+    app.kubernetes.io/name: gx-registry-kubo

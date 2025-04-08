@@ -28,11 +28,14 @@ recipes.
   - [Service interaction](#service-interaction)
     - [Service interaction (H2M)](#service-interaction-h2m)
     - [Service interaction (M2M)](#service-interaction-m2m)
+  - [Integration with the Dataspace Protocol](#integration-with-the-dataspace-protocol)
+  - [Integration with the Gaia-X Trust Framework](#integration-with-the-gaia-x-trust-framework)
 - [Deployment](#deployment)
   - [Local Deployment](#local-deployment)
   - [Deployment with Helm](#deployment-with-helm)
 - [Testing](#testing)
 - [Additional documentation and resources](#additional-documentation-and-resources)
+  - [Ongoing Work](#ongoing-work)
   - [Additional documentation](#additional-documentation)
   - [Additional Resources](#additional-resources)
 
@@ -85,20 +88,21 @@ Connector.
 
 Precisely, the connector bundles the following components:
 
-| Component       | Role            | Link |
-|-----------------|-----------------|------|
-| VCVerifier      | Verifier        | https://github.com/FIWARE/VCVerifier |
-| credentials-config-service | Credentials Config provider for the verifier | https://github.com/FIWARE/credentials-config-service |
-| Keycloak | Issuer of VCs | https://www.keycloak.org |
-| Scorpio        | Context Broker  | https://github.com/ScorpioBroker/ScorpioBroker |
-| trusted-issuers-list | Acts as Trusted Issuers List by providing an [EBSI Trusted Issuers Registry](https://api-pilot.ebsi.eu/docs/apis/trusted-issuers-registry) API | https://github.com/FIWARE/trusted-issuers-list |
-| APISIX | APISIX as API-Gateway with a sidecar OPA as PEP | https://apisix.apache.org/ / https://www.openpolicyagent.org/ |
-| odrl-pap        | PAP allowing to configure ODRL policies to be used by the OPA | https://github.com/wistefan/odrl-pap |
-| tmforum-api     | [TMForum APIs](https://www.tmforum.org/oda/open-apis/) for contract management | https://github.com/FIWARE/tmforum-api |
-| contract-management | Notification listener for contract management events out of TMForum | https://github.com/FIWARE/contract-management |
-| MySQL           | Database | https://www.mysql.com |
-| PostgreSQL      | Database | https://www.postgresql.org |
-| PostGIS         | PostgreSQL Database with PostGIS extensions | https://postgis.net/ |
+| Component       | Role            | Diagram field | Link |
+|-----------------|-----------------|---|------|
+| VCVerifier      | Validates VCs and exchanges them for tokens       |Verifier | https://github.com/FIWARE/VCVerifier |
+| credentials-config-service | Holds the information which VCs are required for accessing a service |PRP/PAP (authentication)| https://github.com/FIWARE/credentials-config-service |
+| Keycloak | Issuer of VCs on the Consumer side | | https://www.keycloak.org |
+| Scorpio        | Context Broker  | | https://github.com/ScorpioBroker/ScorpioBroker |
+| trusted-issuers-list | Acts as Trusted Issuers List by providing an [EBSI Trusted Issuers Registry](https://api-pilot.ebsi.eu/docs/apis/trusted-issuers-registry) API |Local Trusted Issuers List| https://github.com/FIWARE/trusted-issuers-list |
+| APISIX | APISIX as API-Gateway with a OPA plugin |PEP| https://apisix.apache.org/ / https://apisix.apache.org/docs/apisix/plugins/opa/ |
+| OPA | OpenPolicyAgent as the API Gateway's Sidecar |PDP | https://www.openpolicyagent.org/ |
+| odrl-pap        | Allowing to configure ODRL policies to be used by the OPA | PRP/PAP (authorization) | https://github.com/wistefan/odrl-pap |
+| tmforum-api     |  Implementation of the [TMForum APIs](https://www.tmforum.org/oda/open-apis/) for handling contracts|Contract Management| https://github.com/FIWARE/tmforum-api |
+| contract-management | Notification listener for contract management events out of TMForum |Contract Management | https://github.com/FIWARE/contract-management |
+| MySQL           | Database | | https://www.mysql.com |
+| PostgreSQL      | Database | | https://www.postgresql.org |
+| PostGIS         | PostgreSQL Database with PostGIS extensions | | https://postgis.net/ |
 
 **Note,** that some of the components shown in the diagram above are not implemented yet.
 
@@ -285,6 +289,17 @@ A detailed description of the steps to be performed by client applications and s
 in the [Service Interaction (M2M)](./doc/flows/service-interaction-m2m) documentation. 
 
 
+### Integration with the [Dataspace Protocol](https://docs.internationaldataspaces.org/ids-knowledgebase/dataspace-protocol)
+
+The FIWARE Data Space Connector already partly supports the [IDSA Dataspace Protocol](https://docs.internationaldataspaces.org/ids-knowledgebase/dataspace-protocol). Catalogs and Data Services can be explored in [DCAT-Format](https://www.w3.org/TR/vocab-dcat-3/) through the [Catalog Protocol](https://docs.internationaldataspaces.org/ids-knowledgebase/dataspace-protocol/catalog/catalog.protocol) and the Transfer Process can be controlled throught the [Transfer Process Protocol](https://docs.internationaldataspaces.org/ids-knowledgebase/dataspace-protocol/transfer-process/transfer.process.protocol). Contract Negotiation is not yet supported, due to the limitations of the current HTTP binding in comparison to the TMForum API. Work in progress towards alignment through definition of aspecific TM Forum Binding for the Contract Negotiation Protocol can be found in the [TM Forum binding for Contract Negotiation Data Space Protocol](https://github.com/FIWARE/data-space-connector/blob/contract-negotiation/doc/CONTRACT_NEGOTIATION.md)
+
+Find out more in the [Dataspace Protocol Integration Documentation](./doc/DSP_INTEGRATION.md).
+
+### Integration with the [Gaia-X Trust Framework](https://gaia-x.gitlab.io/policy-rules-committee/trust-framework/)
+
+In order to be compatible with common european frameworks for Dataspaces, the FIWARE Data Space Connector provides integrations with the [Gaia-X Trustframework](https://gaia-x.gitlab.io/policy-rules-committee/trust-framework/). While not the full framework is supported as of know, [Gaia-X Digital Clearing House's](https://gaia-x.eu/services-deliverables/digital-clearing-house/) can be used as Trust Anchors for the FIWARE Data Space Connector.
+
+Find out more in the dedicated [Gaia-X Integration Documentation](./doc/GAIA_X.MD).
 
 ## Deployment
 
@@ -353,15 +368,15 @@ the [test-scenarios](./it/src/test/resources/it/mvds_basic.feature) against it.
 
 ## Additional documentation and resources
 
+### Ongoing Work
+The FIWARE Data Space Connector is constantly beeing developed and extended with new features. Their status and some previews will be listed [here](./doc/ONGOING_WORK.md).
+A presentation about the ongoing work and future developments for the FIWARE Data Space Connector can be  found on [Youtube](https://www.youtube.com/watch?v=bZAzOHIdSr8).
 
 ### Additional documentation
 
 Additional and more detailed documentation about the FIWARE Data Space Connector, 
 specific flows and its deployment and integration with other frameworks, can be found here:
 * [Additional documentation](./doc)
-
-
-
 
 
 ### Additional Resources

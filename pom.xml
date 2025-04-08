@@ -114,6 +114,31 @@
                     <skip>true</skip>
                 </configuration>
             </plugin>
+
+            <plugin>
+                <groupId>io.github.download-maven-plugin</groupId>
+                <artifactId>download-maven-plugin</artifactId>
+                <version>2.0.0</version>
+                <configuration>
+                    <skip>true</skip>
+                </configuration>
+                <executions>
+                    <execution>
+                        <id>download-local-storage</id>
+                        <phase>prepare-package</phase>
+                        <goals>
+                            <goal>wget</goal>
+                        </goals>
+                        <configuration>
+                            <url>
+                                https://raw.githubusercontent.com/rancher/local-path-provisioner/v0.0.30/deploy/local-path-storage.yaml
+                            </url>
+                            <unpack>false</unpack>
+                            <outputDirectory>${project.build.directory}/k3s/infra</outputDirectory>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
             <!-- copy the charts to the target repo to keep the sources clean -->
             <plugin>
                 <artifactId>maven-resources-plugin</artifactId>
@@ -211,7 +236,7 @@
                             </resources>
                         </configuration>
                     </execution>
-                    <execution>
+                     <execution>
                         <id>copy-resources-certs</id>
                         <phase>prepare-package</phase>
                         <goals>
@@ -222,6 +247,24 @@
                             <resources>
                                 <resource>
                                     <directory>${main.basedir}/k3s/certs</directory>
+                                </resource>
+                            </resources>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>copy-resources-additional</id>
+                        <phase>prepare-package</phase>
+                        <goals>
+                            <goal>copy-resources</goal>
+                        </goals>
+                        <configuration>
+                            <outputDirectory>${project.build.directory}/k3s/additional-resources</outputDirectory>
+                            <resources>
+                                <resource>
+                                    <directory>${main.basedir}/k3s/provider</directory>
+                                </resource>
+                                <resource>
+                                    <directory>${main.basedir}/k3s/consumer</directory>
                                 </resource>
                             </resources>
                         </configuration>
@@ -250,8 +293,7 @@
                             <skipTemplate>false</skipTemplate>
                             <templateGenerateName>true</templateGenerateName>
                             <templateOutputDir>${project.build.directory}/k3s/dsc-provider</templateOutputDir>
-                            <additionalArguments>--name-template=provider --namespace=provider -f ${main.basedir}/k3s/provider.yaml
-                            </additionalArguments>
+                            <additionalArguments>--name-template=provider --namespace=provider -f ${main.basedir}/k3s/provider.yaml</additionalArguments>
                         </configuration>
                     </execution>
                     <execution>
@@ -267,8 +309,7 @@
                             <skipTemplate>false</skipTemplate>
                             <templateGenerateName>true</templateGenerateName>
                             <templateOutputDir>${project.build.directory}/k3s/dsc-consumer</templateOutputDir>
-                            <additionalArguments>--name-template=consumer --namespace=consumer -f ${main.basedir}/k3s/consumer.yaml
-                            </additionalArguments>
+                            <additionalArguments>--name-template=consumer --namespace=consumer -f ${main.basedir}/k3s/consumer.yaml</additionalArguments>
                         </configuration>
                     </execution>
                     <execution>
@@ -284,8 +325,7 @@
                             <skipTemplate>false</skipTemplate>
                             <templateGenerateName>true</templateGenerateName>
                             <templateOutputDir>${project.build.directory}/k3s/trust-anchor</templateOutputDir>
-                            <additionalArguments>--name-template=trust-anchor --namespace=trust-anchor -f ${main.basedir}/k3s/trust-anchor.yaml
-                            </additionalArguments>
+                            <additionalArguments>--name-template=trust-anchor --namespace=trust-anchor -f ${main.basedir}/k3s/trust-anchor.yaml</additionalArguments>
                         </configuration>
                     </execution>
                     <execution>
@@ -314,9 +354,11 @@
                 <configuration>
                     <skip>true</skip>
                     <portBindings>
+                        <!-- Traefik http & https-->
                         <portBinding>8080:8080</portBinding>
-                        <portBinding>8888:8888</portBinding>
                         <portBinding>8443:8443</portBinding>
+                        <!-- Squid proxy -->
+                        <portBinding>8888:8888</portBinding>
                     </portBindings>
                 </configuration>
                 <executions>
@@ -344,17 +386,6 @@
                         </configuration>
                     </execution>
                     <execution>
-                        <id>apply-infra</id>
-                        <phase>deploy</phase>
-                        <goals>
-                            <goal>apply</goal>
-                        </goals>
-                        <configuration>
-                            <manifests>${project.build.directory}/k3s/infra</manifests>
-                            <timeout>500</timeout>
-                        </configuration>
-                    </execution>
-                    <execution>
                         <id>apply-participants</id>
                         <phase>deploy</phase>
                         <goals>
@@ -362,7 +393,7 @@
                         </goals>
                         <configuration>
                             <manifests>${project.build.directory}/k3s</manifests>
-                            <timeout>500</timeout>
+                            <timeout>1000</timeout>
                         </configuration>
                     </execution>
                 </executions>
@@ -374,6 +405,14 @@
             <id>local</id>
             <build>
                 <plugins>
+                    <plugin>
+                        <groupId>io.github.download-maven-plugin</groupId>
+                        <artifactId>download-maven-plugin</artifactId>
+                        <version>2.0.0</version>
+                        <configuration>
+                            <skip>false</skip>
+                        </configuration>
+                    </plugin>
                     <plugin>
                         <artifactId>maven-resources-plugin</artifactId>
                         <configuration>
@@ -412,7 +451,165 @@
                 </plugins>
             </build>
         </profile>
+        <profile>
+            <id>elsi</id>
+            <build>
+                <plugins>
+                    <!-- render the charts -->
+                    <plugin>
+                        <groupId>io.kokuwa.maven</groupId>
+                        <artifactId>helm-maven-plugin</artifactId>
+                        <version>${version.io.kokuwa.helm-maven-plugin}</version>
+                        <configuration>
+                            <skip>false</skip>
+                        </configuration>
+                        <executions>
+                            <execution>
+                                <id>template-dsc-provider</id>
+                                <goals>
+                                    <goal>init</goal>
+                                    <goal>dependency-update</goal>
+                                    <goal>template</goal>
+                                </goals>
+                                <phase>package</phase>
+                                <configuration>
+                                    <chartDirectory>${project.build.directory}/charts/data-space-connector
+                                    </chartDirectory>
+                                    <skipTemplate>false</skipTemplate>
+                                    <templateGenerateName>true</templateGenerateName>
+                                    <templateOutputDir>${project.build.directory}/k3s/dsc-provider</templateOutputDir>
+                                    <additionalArguments>--name-template=provider --namespace=provider -f ${main.basedir}/k3s/provider-elsi.yaml</additionalArguments>
+                                </configuration>
+                            </execution>
+                            <execution>
+                                <id>template-dsc-consumer</id>
+                                <goals>
+                                    <goal>init</goal>
+                                    <goal>dependency-update</goal>
+                                    <goal>template</goal>
+                                </goals>
+                                <phase>package</phase>
+                                <configuration>
+                                    <chartDirectory>${project.build.directory}/charts/data-space-connector
+                                    </chartDirectory>
+                                    <skipTemplate>false</skipTemplate>
+                                    <templateGenerateName>true</templateGenerateName>
+                                    <templateOutputDir>${project.build.directory}/k3s/dsc-consumer</templateOutputDir>
+                                    <additionalArguments>--name-template=consumer --namespace=consumer -f ${main.basedir}/k3s/consumer-elsi.yaml</additionalArguments>
+                                </configuration>
+                            </execution>
+                            <execution>
+                                <id>template-trust-anchor</id>
+                                <goals>
+                                    <goal>init</goal>
+                                    <goal>dependency-update</goal>
+                                    <goal>template</goal>
+                                </goals>
+                                <phase>package</phase>
+                                <configuration>
+                                    <chartDirectory>${project.build.directory}/charts/trust-anchor</chartDirectory>
+                                    <skipTemplate>false</skipTemplate>
+                                    <templateGenerateName>true</templateGenerateName>
+                                    <templateOutputDir>${project.build.directory}/k3s/trust-anchor</templateOutputDir>
+                                    <additionalArguments>--name-template=trust-anchor --namespace=trust-anchor -f ${main.basedir}/k3s/trust-anchor.yaml</additionalArguments>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
 
+        <profile>
+            <id>gaia-x</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-antrun-plugin</artifactId>
+                        <version>1.8</version>
+                        <executions>
+                            <execution>
+                                <id>prepare-gaia-x</id>
+                                <phase>generate-test-sources</phase>
+                                <goals>
+                                    <goal>run</goal>
+                                </goals>
+                                <configuration>
+                                    <tasks>
+                                        <exec executable="/bin/bash">
+                                            <arg value="${main.basedir}/helpers/certs/generate-certs.sh" />
+                                            <arg value="${main.basedir}/k3s" />
+                                        </exec>
+                                    </tasks>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <!-- render the charts -->
+                    <plugin>
+                        <groupId>io.kokuwa.maven</groupId>
+                        <artifactId>helm-maven-plugin</artifactId>
+                        <version>${version.io.kokuwa.helm-maven-plugin}</version>
+                        <configuration>
+                            <skip>false</skip>
+                        </configuration>
+                        <executions>
+                            <execution>
+                                <id>template-dsc-provider</id>
+                                <goals>
+                                    <goal>init</goal>
+                                    <goal>dependency-update</goal>
+                                    <goal>template</goal>
+                                </goals>
+                                <phase>package</phase>
+                                <configuration>
+                                    <chartDirectory>${project.build.directory}/charts/data-space-connector
+                                    </chartDirectory>
+                                    <skipTemplate>false</skipTemplate>
+                                    <templateGenerateName>true</templateGenerateName>
+                                    <templateOutputDir>${project.build.directory}/k3s/dsc-provider</templateOutputDir>
+                                    <additionalArguments>--name-template=provider --namespace=provider -f ${main.basedir}/k3s/provider-gaia-x.yaml</additionalArguments>
+                                </configuration>
+                            </execution>
+                            <execution>
+                                <id>template-dsc-consumer</id>
+                                <goals>
+                                    <goal>init</goal>
+                                    <goal>dependency-update</goal>
+                                    <goal>template</goal>
+                                </goals>
+                                <phase>package</phase>
+                                <configuration>
+                                    <chartDirectory>${project.build.directory}/charts/data-space-connector
+                                    </chartDirectory>
+                                    <skipTemplate>false</skipTemplate>
+                                    <templateGenerateName>true</templateGenerateName>
+                                    <templateOutputDir>${project.build.directory}/k3s/dsc-consumer</templateOutputDir>
+                                    <additionalArguments>--name-template=consumer --namespace=consumer -f ${main.basedir}/k3s/consumer-gaia-x.yaml</additionalArguments>
+                                </configuration>
+                            </execution>
+                            <execution>
+                                <id>template-trust-anchor</id>
+                                <goals>
+                                    <goal>init</goal>
+                                    <goal>dependency-update</goal>
+                                    <goal>template</goal>
+                                </goals>
+                                <phase>package</phase>
+                                <configuration>
+                                    <chartDirectory>${project.build.directory}/charts/trust-anchor</chartDirectory>
+                                    <skipTemplate>false</skipTemplate>
+                                    <templateGenerateName>true</templateGenerateName>
+                                    <templateOutputDir>${project.build.directory}/k3s/trust-anchor</templateOutputDir>
+                                    <additionalArguments>--name-template=trust-anchor --namespace=trust-anchor -f ${main.basedir}/k3s/trust-anchor.yaml</additionalArguments>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
     </profiles>
 
 </project>

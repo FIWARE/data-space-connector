@@ -1,7 +1,7 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: traefik-config
+  name: tls-config
   namespace: infra
 data:
   tls.yaml: |-
