@@ -53,7 +53,7 @@ dependencies:
   # issuance
   - name: keycloak
     condition: keycloak.enabled
-    version: 24.0.1
+    version: 24.5.1
     repository: https://charts.bitnami.com/bitnami
   # contract management
   - name: tm-forum-api

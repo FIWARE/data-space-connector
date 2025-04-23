@@ -435,7 +435,8 @@ keycloak:
   # -- disable the security context, required by the current quarkus container, will be solved in the future chart versions of keycloak
   containerSecurityContext:
     enabled: false
- 
+  proxyHeaders: xforwarded
+  proxy: edge
   service:
     ports:
       http: 8080
@@ -462,13 +463,12 @@ keycloak:
 
   # -- extra env vars to be set. we require them at the moment, since some of the chart config mechanisms only work with the bitnami-image
   extraEnvVars:
+    - name: KEYCLOAK_LOG_LEVEL
+      value: DEBUG
     - name: KEYCLOAK_EXTRA_ARGS
       value: "--import-realm"
     - name: KC_FEATURES
       value: "oid4vc-vci"
-    # indicates ssl is terminated at the edge
-    - name: KC_PROXY
-      value: "edge"
     # password for reading the key store connected to the did
     - name: STORE_PASS
       valueFrom:

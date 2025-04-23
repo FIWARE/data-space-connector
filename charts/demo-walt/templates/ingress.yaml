@@ -5,23 +5,24 @@ metadata:
   namespace: {{ $.Release.Namespace | quote }}
   annotations:
     traefik.ingress.kubernetes.io/router.tls: "true"
+    traefik.ingress.kubernetes.io/service.passhostheader: "true"
 spec:
   rules:
-    - host: walt.127.0.0.1.nip.io
+    - host: wallet.127.0.0.1.nip.io
       http:
         paths:
           - path: /wallet-api
             pathType: Prefix
             backend:
               service:
-                name: demo-walt-backend
+                name: demo-walt-wallet-api
                 port:
                   name: http
           - path: /swagger
             pathType: Prefix
             backend:
               service:
-                name: demo-walt-backend
+                name: demo-walt-wallet-api
                 port:
                   name: http
           - path: /

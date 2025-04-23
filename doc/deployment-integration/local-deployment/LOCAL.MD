@@ -1259,3 +1259,27 @@ In order to build a concrete deployment, [maven](https://maven.apache.org/) exec
 
 adb shell am start -n com.android.chrome/com.google.android.apps.chrome.Main \
 --es args "--disable-web-security --user-data-dir=/tmp/temp"
+
+### Emulator
+
+1. Install Firefox Nigthly for Developers
+2. Install CA certificate on the emulator:
+  adb push ./helpers/certs/out/ca/certs/cacert.pem /sdcard/Download
+3. Install the CA in Android:
+  * Settings > Security > Encryption & credentials > Install a certificate > CA certificate
+4. Enable USB debugging
+  * Settings > About device > Tap on Build Number 5 times
+  * Settings > System > Developer options > USB debugging -> enabled
+5. Enable certificates in Firefox Nightly
+  * Enable debug mode: Firefox > Settings > About Firefox Nightly > Tap on Firefox Logo 5 times
+  * Firefox > Settings > Secret Settings > Enable "Use thrid party CA certificates"
+6. Go to Firefox on Host:
+  * type about:debugging
+  * Enable USB debugging
+  * Connect to device
+
+## Logging
+
+* adb shell pm list packages | grep euid
+* adb shell pidof <your.package.name>
+* adb logcat | grep pid

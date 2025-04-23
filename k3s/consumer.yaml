@@ -37,16 +37,7 @@ keycloak:
     hostname: keycloak-consumer.127.0.0.1.nip.io
     annotations:
       traefik.ingress.kubernetes.io/router.tls: "true"
-  command:
-    - /bin/bash
-  args:
-    - -ec
-    - |
-      #!/bin/sh
-      export $(cat /did-material/did.env)
-      export KC_HOSTNAME=keycloak-consumer.127.0.0.1.nip.io
-      /opt/bitnami/scripts/keycloak/entrypoint.sh
-      /opt/bitnami/scripts/keycloak/run.sh
+
   initContainers:
     - name: get-did
       image: ubuntu
@@ -124,7 +115,7 @@ keycloak:
         name: consumer-til-registration
         defaultMode: 0755
   realm:
-    frontendUrl: https://keycloak-consumer.127.0.0.1.nip.io:8443
+    frontendUrl: https://keycloak-consumer.127.0.0.1.nip.io
     import: true
     name: test-realm
     clientRoles: |
@@ -143,6 +134,77 @@ keycloak:
           "name": "REPRESENTATIVE",
           "description": "Is allowed to register.",
           "clientRole": true
+        }],
+      "account": [
+        {
+          "name": "delete-account",
+          "description": "${role_delete-account}",
+          "composite": false,
+          "clientRole": true,
+          "attributes": {}
+        },
+        {
+          "name": "view-consent",
+          "description": "${role_view-consent}",
+          "composite": false,
+          "clientRole": true,
+          "attributes": {}
+        },
+        {
+          "name": "view-groups",
+          "description": "${role_view-groups}",
+          "composite": false,
+          "clientRole": true,
+          "attributes": {}
+        },
+        {
+          "name": "manage-account",
+          "description": "${role_manage-account}",
+          "composite": true,
+          "composites": {
+            "client": {
+              "account": [
+                "manage-account-links"
+              ]
+            }
+          },
+          "clientRole": true,
+          "attributes": {}
+        },
+        {
+          "name": "view-profile",
+          "description": "${role_view-profile}",
+          "composite": false,
+          "clientRole": true,
+          "attributes": {}
+        },
+        {
+          "name": "view-applications",
+          "description": "${role_view-applications}",
+          "composite": false,
+          "clientRole": true,
+          "attributes": {}
+        },
+        {
+          "name": "manage-consent",
+          "description": "${role_manage-consent}",
+          "composite": true,
+          "composites": {
+            "client": {
+              "account": [
+                "view-consent"
+              ]
+            }
+          },
+          "clientRole": true,
+          "attributes": {}
+        },
+        {
+          "name": "manage-account-links",
+          "description": "${role_manage-account-links}",
+          "composite": false,
+          "clientRole": true,
+          "attributes": {}
         }
       ]
 
@@ -169,6 +231,7 @@ keycloak:
           ]
         },
         "groups": [
+            "/consumer"
         ]
       },
       {
@@ -193,6 +256,7 @@ keycloak:
           ]
         },
         "groups": [
+            "/consumer"
         ]
       },
       {
@@ -217,6 +281,7 @@ keycloak:
           ]
         },
         "groups": [
+            "/consumer"
         ]
       }
     clients: |
@@ -242,12 +307,17 @@ keycloak:
         "protocol": "oid4vc",
         "attributes": {
           "client.secret.creation.time": "1675260539",
-          "vc.user-credential.format": "jwt_vc",
+          "vc.user-credential.format": "vc+sd-jwt",
           "vc.user-credential.scope": "UserCredential",
-          "vc.verifiable-credential.format": "jwt_vc",
+          "vc.user-credential.vct": "UserCredential",
+          "vc.user-credential.credential_build_config.visible_claims": "roles,email",
+          "vc.user-credential.credential_build_config.decoys": "3",
+          "vc.verifiable-credential.format": "vc+sd-jwt",
           "vc.verifiable-credential.scope": "VerifiableCredential",
-          "vc.operator-credential.format": "jwt_vc",
-          "vc.operator-credential.scope": "OperatorCredential"
+          "vc.verifiable-credential.vct": "VerifiableCredential",
+          "vc.operator-credential.format": "vc+sd-jwt",
+          "vc.operator-credential.scope": "OperatorCredential",
+          "vc.operator-credential.vct": "OperatorCredential"
         },
         "protocolMappers": [
           {
@@ -315,7 +385,111 @@ keycloak:
         "nodeReRegistrationTimeout": -1,
         "defaultClientScopes": [],
         "optionalClientScopes": []
+      },
+      {
+        "clientId": "account",
+        "name": "${client_account}",
+        "rootUrl": "${authBaseUrl}",
+        "baseUrl": "/realms/test-realm/account/",
+        "surrogateAuthRequired": false,
+        "enabled": true,
+        "alwaysDisplayInConsole": false,
+        "clientAuthenticatorType": "client-secret",
+        "redirectUris": [
+          "/realms/test-realm/account/*"
+        ],
+        "webOrigins": [],
+        "notBefore": 0,
+        "bearerOnly": false,
+        "consentRequired": false,
+        "standardFlowEnabled": true,
+        "implicitFlowEnabled": false,
+        "directAccessGrantsEnabled": false,
+        "serviceAccountsEnabled": false,
+        "publicClient": true,
+        "frontchannelLogout": false,
+        "protocol": "openid-connect",
+        "attributes": {
+          "realm_client": "false",
+          "post.logout.redirect.uris": "+"
+        },
+        "authenticationFlowBindingOverrides": {},
+        "fullScopeAllowed": true,
+        "nodeReRegistrationTimeout": 0,
+        "defaultClientScopes": [
+          "web-origins",
+          "acr",
+          "roles",
+          "profile",
+          "basic",
+          "email"
+        ],
+        "optionalClientScopes": [
+          "address",
+          "phone",
+          "offline_access",
+          "organization",
+          "microprofile-jwt"
+        ]
+      },
+      {
+        "clientId": "account-console",
+        "name": "${client_account-console}",
+        "rootUrl": "${authBaseUrl}",
+        "baseUrl": "/realms/test-realm/account/",
+        "surrogateAuthRequired": false,
+        "enabled": true,
+        "alwaysDisplayInConsole": false,
+        "clientAuthenticatorType": "client-secret",
+        "redirectUris": [
+          "/realms/test-realm/account/*"
+        ],
+        "webOrigins": [],
+        "notBefore": 0,
+        "bearerOnly": false,
+        "consentRequired": false,
+        "standardFlowEnabled": true,
+        "implicitFlowEnabled": false,
+        "directAccessGrantsEnabled": false,
+        "serviceAccountsEnabled": false,
+        "publicClient": true,
+        "frontchannelLogout": false,
+        "protocol": "openid-connect",
+        "attributes": {
+          "realm_client": "false",
+          "post.logout.redirect.uris": "+",
+          "pkce.code.challenge.method": "S256"
+        },
+        "authenticationFlowBindingOverrides": {},
+        "fullScopeAllowed": true,
+        "nodeReRegistrationTimeout": 0,
+        "protocolMappers": [
+          {
+            "id": "706c5202-1b03-4fad-a5b8-484287e941f8",
+            "name": "audience resolve",
+            "protocol": "openid-connect",
+            "protocolMapper": "oidc-audience-resolve-mapper",
+            "consentRequired": false,
+            "config": {}
+          }
+        ],
+        "defaultClientScopes": [
+          "web-origins",
+          "acr",
+          "roles",
+          "profile",
+          "basic",
+          "email"
+        ],
+        "optionalClientScopes": [
+          "address",
+          "phone",
+          "offline_access",
+          "organization",
+          "microprofile-jwt"
+        ]
       }
+
 
 # -- integration of rainbow
 rainbow:

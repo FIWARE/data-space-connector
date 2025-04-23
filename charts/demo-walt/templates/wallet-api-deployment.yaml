@@ -1,37 +1,26 @@
 kind: Deployment
 apiVersion: apps/v1
 metadata:
-  name: demo-walt-backend
+  name: demo-walt-wallet-api
   namespace: {{ $.Release.Namespace | quote }}
 spec:
   selector:
     matchLabels:
-      app.kubernetes.io/instance: demo-walt-backend
-      app.kubernetes.io/name: demo-walt-backend
+      app.kubernetes.io/instance: demo-walt-wallet-api
+      app.kubernetes.io/name: demo-walt-wallet-api
   template:
     metadata:
       labels:
-        app.kubernetes.io/instance: demo-walt-backend
-        app.kubernetes.io/name: demo-walt-backend
+        app.kubernetes.io/instance: demo-walt-wallet-api
+        app.kubernetes.io/name: demo-walt-wallet-api
     spec:
       containers:
         - name: wallet-backend
-          image: waltid/wallet-api
+          image: quay.io/wi_stefan/wallet-api:0.0.1-DSC
+          imagePullPolicy: Always
           env:
             - name: WALTID_WALLET_API_OPTS
-              value: "-Djavax.net.ssl.trustStore=/temp/cacerts -Djavax.net.ssl.trustStorePassword=changeit"
-            - name: SQLITE_DB_DATA
-              value: "/data-sqlite/data.db"
-            - name: DB_NAME
-              value: "waltid"
-            - name: DB_USERNAME
-              value: "waltid"
-            - name: DB_PASSWORD
-              value: "waltid"
-            - name: WALLET_BACKEND_PORT
-              value: "4545"
-            - name: DEMO_WALLET_FRONTEND_PORT
-              value: "4545"
+              value: "-Djavax.net.ssl.trustStore=/temp/custom-truststore.jks -Djavax.net.ssl.trustStorePassword=changeit -Dhttp.proxyHost=squid-proxy.infra.svc.cluster.local -Dhttp.proxyPort=8888 -Dhttps.proxyHost=squid-proxy.infra.svc.cluster.local -Dhttps.proxyPort=8888"
             - name: DATABASE_ENGINE
               value: "sqlite"
           volumeMounts:
@@ -54,10 +43,9 @@ spec:
       volumes:
         - name: walt-backend-config
           configMap:
-            name: demo-walt-backend
+            name: demo-walt-wallet-api
         - name: walt-backend-data
           emptyDir: {}
         - name: cacerts
-          configMap:
-            name: cacerts
-          
+          secret:
+            secretName: custom-ca

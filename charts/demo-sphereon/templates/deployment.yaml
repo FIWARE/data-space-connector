@@ -16,10 +16,13 @@ spec:
     spec:
       containers:
         - name: wallet-backend
-          image: quay.io/wi_stefan/sphereon-wallet
+          image: quay.io/wi_stefan/sphereon-wallet:latest
+          imagePullPolicy: Always
           env:
             - name: PORT
               value: "5010"
+            - name: INTERNAL_HOSTNAME_OR_IP
+              value: "0.0.0.0"
             - name: DB_TYPE
               value: "postgres"
             - name: DB_URL
@@ -32,8 +35,26 @@ spec:
               value: "sphereon"
             - name: POSTGRES_PORT
               value: "5432"
+            - name: POSTGRES_PASSWORD
+              value: "password"
             - name: DB_ENCRYPTION_KEY
               value: "29739248cad1bd1a0fc4d9b75cd4d2990de535baf5caadfdf8d8f86664aa830c"
+            - name: JWT_SECRET
+              value: "qynpg8j8imxrzitlipvax3rkwutivhqugnpsw32hfffff"
+            - name: ANON_KEY
+              value: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.ewogICJyb2xlIjogImFub24iLAogICJpc3MiOiAic3VwYWJhc2UiLAogICJpYXQiOiAxNzEyNzAwMDAwLAogICJleHAiOiAxODcwNDY2NDAwCn0.GhRrVFUYPLOIcxwdSCEibEEQxjooJ8-ARghYlgX1u1U"
+            - name: SERVICE_ROLE_KEY
+              value: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.ewogICJyb2xlIjogInNlcnZpY2Vfcm9sZSIsCiAgImlzcyI6ICJzdXBhYmFzZSIsCiAgImlhdCI6IDE3MTI3MDAwMDAsCiAgImV4cCI6IDE4NzA0NjY0MDAKfQ.O7XtSZwu68C7g-MBw0zlLBglmCnKj-7gbjsxbCCFGpU"
+            - name: DASHBOARD_USERNAME
+              value: supabase
+            - name: DASHBOARD_PASSWORD
+              value: this_password_is_insecure_and_should_be_updated
+            - name: SECRET_KEY_BASE
+              value: "UpNVntn3cDxHJpq99YMc1T1AQgQpc8kfYTuRgBiYa15BLrx8etQoXz3gZv1/u2oq"
+            - name: VAULT_ENC_KEY
+              value: "your-encryption-key-32-chars-min"
+            - name: IS_WALLET_ENABLED
+              value: "true"
           ports:
             - containerPort: 5010
               name: http-api

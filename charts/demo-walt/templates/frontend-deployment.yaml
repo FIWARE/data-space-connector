@@ -16,12 +16,14 @@ spec:
     spec:
       containers:
       - name: wallet-frontend
-        image: waltid/waltid-demo-wallet
+        image: waltid/waltid-dev-wallet:latest
         env:
           - name: NUXT_PUBLIC_ISSUER_CALLBACK_URL
-            value: "https://walt.127.0.0.1.nip.io:8443"
+            value: "https://wallet.127.0.0.1.nip.io:8443"
+          - name: NUXT_PUBLIC_DEMO_WALLET_URL
+            value: "https://wallet.127.0.0.1.nip.io:8443"
           - name: NUXT_PUBLIC_DEV_WALLET_URL
-            value: "https://walt.127.0.0.1.nip.io:8443"
+            value: "https://wallet.127.0.0.1.nip.io:8443"
           - name: PORT
             value: "3000"
         ports:
