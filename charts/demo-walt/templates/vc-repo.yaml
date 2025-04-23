@@ -1,0 +1,25 @@
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: demo-walt-vc-repo
+  namespace: {{ $.Release.Namespace | quote }}
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: demo-walt-vc-repo
+      app.kubernetes.io/name: demo-walt-vc-repo
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/instance: demo-walt-vc-repo
+        app.kubernetes.io/name: demo-walt-vc-repo
+    spec:
+      containers:
+        - name: wallet-backend
+          image: docker.io/waltid/vc-repository:latest
+          env:
+            - name: PORT
+              value: "7103"
+          ports:
+            - containerPort: 7103
+              name: http-api
