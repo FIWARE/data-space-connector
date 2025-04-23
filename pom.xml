@@ -162,16 +162,31 @@
                         </configuration>
                     </execution>
                     <execution>
+                        <id>copy-resources-gaiax-wallet</id>
+                        <phase>prepare-package</phase>
+                        <goals>
+                            <goal>copy-resources</goal>
+                        </goals>
+                        <configuration>
+                            <outputDirectory>${project.build.directory}/charts/gaia-x-wallet</outputDirectory>
+                            <resources>
+                                <resource>
+                                    <directory>${main.basedir}/charts/gaia-x-wallet</directory>
+                                </resource>
+                            </resources>
+                        </configuration>
+                    </execution>
+                    <execution>
                         <id>copy-resources-wallet</id>
                         <phase>prepare-package</phase>
                         <goals>
                             <goal>copy-resources</goal>
                         </goals>
                         <configuration>
-                            <outputDirectory>${project.build.directory}/charts/dome-wallet</outputDirectory>
+                            <outputDirectory>${project.build.directory}/charts/demo-walt</outputDirectory>
                             <resources>
                                 <resource>
-                                    <directory>${main.basedir}/charts/dome-wallet</directory>
+                                    <directory>${main.basedir}/charts/demo-walt</directory>
                                 </resource>
                             </resources>
                         </configuration>
@@ -337,10 +352,10 @@
                         </goals>
                         <phase>package</phase>
                         <configuration>
-                            <chartDirectory>${project.build.directory}/charts/dome-wallet</chartDirectory>
+                            <chartDirectory>${project.build.directory}/charts/demo-sphereon</chartDirectory>
                             <skipTemplate>false</skipTemplate>
                             <templateGenerateName>true</templateGenerateName>
-                            <templateOutputDir>${project.build.directory}/k3s/dome-wallet</templateOutputDir>
+                            <templateOutputDir>${project.build.directory}/k3s/demo-sphereon</templateOutputDir>
                             <additionalArguments>--name-template=infra --namespace=infra
                             </additionalArguments>
                         </configuration>
