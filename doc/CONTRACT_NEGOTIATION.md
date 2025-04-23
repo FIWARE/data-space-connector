@@ -1,22 +1,14 @@
 # Contract negotiation with TMForum
 
-## Idea
+Contract Negotiation in the FIWARE Data Space Connector is provided through the [TMForum Quote API](https://www.tmforum.org/oda/open-apis/directory/quote-management-api-TMF648/v4.0). The Quote-API ```is one of the Pre-Ordering Management APIs. The customer Quote API provides a standardized mechanism for placing a customer quote with all the necessary quote parameters.```. It is intended to negotiate serivce and product acquisition between Customer and Provider(according to the Quote-Object documentation) and therefor well suited for the use-case of Contract Negotiation. 
 
-Use the [TMForum Quote API](https://www.tmforum.org/oda/open-apis/directory/quote-management-api-TMF648/v4.0) to execute contract negotiation between Consumer and Provider.
-The Quote-API ```is one of the Pre-Ordering Management APIs. The customer Quote API provides a standardized mechanism for placing a customer quote with all the necessary quote parameters.```. It is intended to negotiate serivce and product acquisition between Customer and Provider(according to the Quote-Object documentation) and therefor well suited for the use-case of Contract Negotiation. 
-
-Alternatives: 
-* [Product Offering Qualification API](https://www.tmforum.org/oda/open-apis/directory/product-offering-qualification-management-api-TMF679/v4.0): Pre-ordering API intended to check commercial elgibility, rather than negotiation. Not necessarily targeting Consumer interaction
-* direct manipilation of the Product Order: ProductOrder states are intended for "processing" the actual order, rather than negotiating 
-* [Agreement-API](https://www.tmforum.org/oda/open-apis/directory/agreement-management-api-TMF651/v4.0): Intended to specify concrete agreements between partners, not necessariyl product acquisiton. Limited states to be used.
-
+In order to provide compatibility with the [IDSA Protocol](https://docs.internationaldataspaces.org/ids-knowledgebase/dataspace-protocol/contract-negotiation/contract.negotiation.protocol) the states between TMForum and IDSA are mapped by the [Contract Management](https://github.com/FIWARE/contract-management) and the negotiation states are available in [Rainbow](https://github.com/ging/rainbow).
 
 ## State Mapping
 
+IDSA defines a State Machine for Contract Negotiation, while TMForum has its own State Machine around Quote-Items. Both have to be mapped and kept in synch.
 
-> [IDSA Contract Negotiation](https://docs.internationaldataspaces.org/ids-knowledgebase/dataspace-protocol/contract-negotiation/contract.negotiation.protocol)
-
-#### IDSA State Machine
+### IDSA State Machine
 
 ![IDSA State Maching](./img/idsa-contract-negotiation.png)
 
@@ -30,22 +22,20 @@ States:
 * FINALIZED: The Provider has sent a finalization message including his own Agreement verification to the Consumer and the Consumer has sent an ACK response. Data is now available to the Consumer.
 * TERMINATED: The Provider or Consumer has placed the CN in a terminated state. A termination message has been sent by either of the Participants and the other has sent an ACK response. This is a terminal state.
 
-Relevant TMForum APIs:
-
-* [Product Catalog Management](https://www.tmforum.org/oda/open-apis/directory/product-catalog-management-api-TMF620/v4.1)
-* [Quote](https://www.tmforum.org/oda/open-apis/directory/quote-management-api-TMF648/v4.0)
-* [Product Order Management](https://www.tmforum.org/oda/open-apis/directory/product-ordering-management-api-TMF622/v4.0)
-* [Product Offering Qualification](https://www.tmforum.org/oda/open-apis/directory/product-offering-qualification-management-api-TMF679/v4.0)
-* [Agreement Management](https://www.tmforum.org/oda/open-apis/directory/agreement-management-api-TMF651/v4.0)
-
-#### TMF State Machine
+### TMForum State Machine
 
 ![TNF State Machine](./img/tmf-state-machine.png)
 
-#### The mapped State Machine:
+### The mapped State Machine:
 
 ![Mapped Machine](./img/idsa-tmf-state-machine.png)
 
+
+## Usage
+
+In order to access a Service by using the Transfer Process Protocol, the following steps need to be taken:
+
+> :warning: The example calls are using the [local deployment](./deployment-integration/local-deployment/LOCAL.MD). Make sure its running before trying them out.
 
 ### Preparation 
 
@@ -113,9 +103,7 @@ export PRICE_ID=$(curl -X 'POST' http://tm-forum-api.127.0.0.1.nip.io:8080/tmf-a
      }' | jq '.id' -r ); echo ${PRICE_ID}
 ```
 
-
 4. Create a product specification. In order to be mapped to DCAT, it needs to contain the ```productSpecCharacteristic``` ```endpointUrl``` and ```endpointDescription```:
-
 
 ```shell
 export PRODUCT_SPEC_ID=$(curl -X 'POST' \
@@ -155,9 +143,7 @@ export PRODUCT_SPEC_ID=$(curl -X 'POST' \
     }" | jq .id -r); echo ${PRODUCT_SPEC_ID}
 ```
 
-
 5. Create the Product Offering:
-
 
 ```shell
 export PRODUCT_OFFERING_ID=$(curl -X 'POST' http://tm-forum-api.127.0.0.1.nip.io:8080/tmf-api/productCatalogManagement/v4/productOffering \
@@ -181,8 +167,13 @@ export PRODUCT_OFFERING_ID=$(curl -X 'POST' http://tm-forum-api.127.0.0.1.nip.io
      }"| jq '.id' -r ); echo ${PRODUCT_OFFERING_ID}
 ```
 
+### Interaction
 
-### INITIAL State
+Once prepartion is done, Consumer and Provider do negotiate the contract by exchanging information around the Quote-Object and transition through the state machine. 
+
+#### INITIAL State
+
+In the initial state, the consumer has to be registered at the marketplace and then can create a Quote to get the negotiation started.
 
 1. Get the consumer Did:
 
@@ -273,7 +264,7 @@ And get the negotiation state:
     curl -X 'GET' http://rainbow-provider.127.0.0.1.nip.io:8080/negotiations/${NEGOTIATION_ID} | jq .
 ```
 
-### IDSA REQUESTED - Quote in state ```inProgress```
+#### IDSA REQUESTED - Quote in state ```inProgress```
 
 With that, the negotiation is in state requested and needs to be processed by the provider:
 
@@ -324,13 +315,9 @@ curl -X 'PATCH' http://tm-forum-api.127.0.0.1.nip.io:8080/tmf-api/quote/v4/quote
                     \"odrl:permission\": [{
                         \"odrl:action\": \"odrl:use\",
                         \"odrl:constraint\": [{
-                            \"odrl:leftOperand\": {
-                                \"@id\": \"odrl:dateTime\"
-                            },
-                            \"odrl:operator\": \"odrl:gt\",
-                            \"odrl:rightOperand\": {
-                                \"@value\": \"2025-05-01\",
-                                \"@type\": \"xsd:date\"
+                            \"odrl:leftOperand\": \"odrl:dateTime\",
+                            \"odrl:operator\": \"odrl:eq\",
+                            \"odrl:rightOperand\": \"2027-01-01\"
                             }
                         }]
                     }]
@@ -363,14 +350,9 @@ curl -X 'PATCH' http://tm-forum-api.127.0.0.1.nip.io:8080/tmf-api/quote/v4/quote
                     \"odrl:permission\": [{
                         \"odrl:action\": \"odrl:use\",
                         \"odrl:constraint\": [{
-                            \"odrl:leftOperand\": {
-                                \"@id\": \"odrl:dateTime\"
-                            },
-                            \"odrl:operator\": \"odrl:gt\",
-                            \"odrl:rightOperand\": {
-                                \"@value\": \"2025-05-01\",
-                                \"@type\": \"xsd:date\"
-                            }
+                            \"odrl:leftOperand\": \"odrl:dateTime\",
+                            \"odrl:operator\": \"odrl:eq\",
+                            \"odrl:rightOperand\": \"2027-01-01\"
                         }]
                     }]
                 }],
@@ -396,17 +378,17 @@ curl -X 'PATCH' http://tm-forum-api.127.0.0.1.nip.io:8080/tmf-api/quote/v4/quote
      }"
 ```
 
-### IDSA OFFERED  - Quote in state ```inProgress```
+#### IDSA OFFERED  - Quote in state ```inProgress```
 
 Within state OFFERED, the consumer can either:
 
 Accept the offer and go to ACCEPTED:
 
 ```shell
-    curl -X 'PATCH' http://tm-forum-api.127.0.0.1.nip.io:8080/tmf-api/quote/v4/quote/${QUOTE_ID} \
+curl -X 'PATCH' http://tm-forum-api.127.0.0.1.nip.io:8080/tmf-api/quote/v4/quote/${QUOTE_ID} \
      -H 'Content-Type: application/json;charset=utf-8' \
-     -d '{ 
-        "state": "accepted",
+     -d "{ 
+        \"state\": \"accepted\",
         \"quoteItem\": [
             {
                 \"id\": \"item-id\",
@@ -443,7 +425,7 @@ Accept the offer and go to ACCEPTED:
                 }]
             }
         ]     
-     }' | jq . 
+     }" | jq . 
 ```
 And get the negotiation state: 
 
@@ -482,14 +464,9 @@ export QUOTE_ID=$(curl -X 'POST' http://tm-forum-api.127.0.0.1.nip.io:8080/tmf-a
                     \"odrl:permission\": [{
                         \"odrl:action\": \"odrl:use\",
                         \"odrl:constraint\": [{
-                            \"odrl:leftOperand\": {
-                                \"@id\": \"odrl:dateTime\"
-                            },
-                            \"odrl:operator\": \"odrl:gt\",
-                            \"odrl:rightOperand\": {
-                                \"@value\": \"2025-05-01\",
-                                \"@type\": \"xsd:date\"
-                            }
+                            \"odrl:leftOperand\": \"odrl:dateTime\",
+                            \"odrl:operator\": \"odrl:eq\",
+                            \"odrl:rightOperand\": \"2027-01-01\"
                         }]
                     }]
                 }],
@@ -516,7 +493,7 @@ export QUOTE_ID=$(curl -X 'POST' http://tm-forum-api.127.0.0.1.nip.io:8080/tmf-a
 ```
 
 
-### IDSA ACCEPTED  - Quote in state ```accepted```
+#### IDSA ACCEPTED  - Quote in state ```accepted```
 
 When the consumer did accept the offer from the provider, the provider can:
 
@@ -533,11 +510,11 @@ Or cancel the Quote and go to state TERMINATED:
      }"
 ```
 
-### IDSA AGREED - Quote in state ```approved```
+#### IDSA AGREED - Quote in state ```approved```
 
 When the Provider approved the Quote, the Consumer can now either:
 
-Use it to create the order and go to state VERIFIED:
+* Use it to create the order and go to state VERIFIED:
 
 ```shell
     export ORDER_ID=$(curl -X 'POST' http://tm-forum-api.127.0.0.1.nip.io:8080/tmf-api/productOrderingManagement/v4/productOrder \
@@ -558,7 +535,7 @@ And get the negotiation state:
     curl -X 'GET' http://rainbow-provider.127.0.0.1.nip.io:8080/negotiations/${NEGOTIATION_ID} | jq .
 ```
 
-Or reject it and go to TERMINATED:
+* Or reject it and go to TERMINATED:
 
 ```shell
     curl -X 'PATCH' http://tm-forum-api.127.0.0.1.nip.io:8080/tmf-api/quote/v4/quote/${QUOTE_ID} \
@@ -568,12 +545,11 @@ Or reject it and go to TERMINATED:
      }"
 ```
 
-
-### IDSA VERIFIED - Quote in state ```approved```, ProductOrder is created in state ```acknowledged```
+#### IDSA VERIFIED - Quote in state ```approved```, ProductOrder is created in state ```acknowledged```
 
 Once the order is received, the Provider can:
 
-Create the agreement for the Order in Rainbow, fullfil all additonal steps(f.e. Trusted List entries, Policy creation) and set the order to completed and go to state FINALIZED:
+* Create the agreement for the Order in Rainbow, fullfil all additonal steps(f.e. Trusted List entries, Policy creation) and set the order to completed and go to state FINALIZED:
 
 > all the following steps are already handled(with the exception of Policy-Creation) by the ContractManagement
 
@@ -599,7 +575,7 @@ And get the negotiation state:
     curl -X 'GET' http://rainbow-provider.127.0.0.1.nip.io:8080/negotiations/${NEGOTIATION_ID} | jq .
 ```
 
-Or reject the order and go to TERMINATED:
+* Or reject the order and go to TERMINATED:
 
 ```shell
     curl -X 'PATCH' http://tm-forum-api.127.0.0.1.nip.io:8080/tmf-api/quote/v4/productOrder/${ORDER_ID} \
@@ -609,6 +585,6 @@ Or reject the order and go to TERMINATED:
      }"
 ```
 
-### FINALIZED
+#### FINALIZED
 
 The consumer can access data throught the [Transfer Process Protocol](https://docs.internationaldataspaces.org/ids-knowledgebase/dataspace-protocol/transfer-process/transfer.process.protocol) as described in the [DSP Integration](DSP_INTEGRATION.md).

@@ -269,6 +269,10 @@ Its did is:
   export HOLDER_DID=$(cat did.json | jq '.id' -r); echo ${HOLDER_DID}
 ```
 
+### Contract Negotiation
+
+Since contract negotiation is a complex topic on its own, see the dedicated [Contract Negotiation Documentation](CONTRACT_NEGOTIATION.md).
+
 ### Get access to the Data Service
 
 To gain access to the service and become able to use the service through the Transfer Process Protocol, the offering has to be accepted through a ProductOrder. The order will be translated into an 
