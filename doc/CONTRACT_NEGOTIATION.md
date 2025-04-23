@@ -49,7 +49,55 @@ Relevant TMForum APIs:
 
 ### Preparation 
 
-Provider creates a ProductOffering:
+0. Prepare the IAM
+
+* Setup all required policies(see [DSP-Integration for details](DSP_INTEGRATION.md#authentication-and-authorization))
+```shell
+    ./doc/scripts/prepare-dsp-policies.sh
+``` 
+
+* Get credentials:
+```shell
+    export USER_CREDENTIAL=$(./doc/scripts/get_credential_for_consumer.sh http://keycloak-consumer.127.0.0.1.nip.io:8080 user-credential); echo ${USER_CREDENTIAL}
+```
+
+* Prepare holder and its did:
+```shell
+    docker run -v $(pwd):/cert quay.io/wi_stefan/did-helper:0.1.1
+    export HOLDER_DID=$(cat did.json | jq '.id' -r); echo ${HOLDER_DID}
+```
+1. Create a Category(to match offering and catalog):
+
+```shell
+export CATEGORY_ID=$(curl -X 'POST' \
+  'http://tm-forum-api.127.0.0.1.nip.io:8080/tmf-api/productCatalogManagement/v4/category' \
+  -H 'accept: application/json;charset=utf-8' \
+  -H 'Content-Type: application/json;charset=utf-8' \
+  -d '{
+        "description": "Test Category",
+        "name": "Test Category"
+    }' | jq .id -r); echo ${CATEGORY_ID}
+```
+
+2. Create a Catalog:
+
+```shell
+export CATALOG_ID=$(curl -X 'POST' \
+  'http://tm-forum-api.127.0.0.1.nip.io:8080/tmf-api/productCatalogManagement/v4/catalog' \
+  -H 'accept: application/json;charset=utf-8' \
+  -H 'Content-Type: application/json;charset=utf-8' \
+  -d "{
+  \"description\": \"Test Catalog\",
+  \"name\": \"Test Catalog\", 
+  \"category\": [
+    {
+        \"id\": \"${CATEGORY_ID}\"
+    }
+  ]
+}" | jq .id -r); echo ${CATALOG_ID}
+```
+
+3. Create an offering price:
 
 ```shell
 export PRICE_ID=$(curl -X 'POST' http://tm-forum-api.127.0.0.1.nip.io:8080/tmf-api/productCatalogManagement/v4/productOfferingPrice \
@@ -63,49 +111,133 @@ export PRICE_ID=$(curl -X 'POST' http://tm-forum-api.127.0.0.1.nip.io:8080/tmf-a
                 "value": 10.0
             }
      }' | jq '.id' -r ); echo ${PRICE_ID}
+```
 
-export PRODUCT_SPEC_ID=$(curl -X 'POST' http://tm-forum-api.127.0.0.1.nip.io:8080/tmf-api/productCatalogManagement/v4/productSpecification \
-     -H 'Content-Type: application/json;charset=utf-8' \
-     -d '{
-        "version": "1.0.0",
-        "lifecycleStatus": "ACTIVE",
-        "name": "Test Spec"
-     }' | jq '.id' -r ); echo ${PRODUCT_SPEC_ID}
 
+4. Create a product specification. In order to be mapped to DCAT, it needs to contain the ```productSpecCharacteristic``` ```endpointUrl``` and ```endpointDescription```:
+
+
+```shell
+export PRODUCT_SPEC_ID=$(curl -X 'POST' \
+  'http://tm-forum-api.127.0.0.1.nip.io:8080/tmf-api/productCatalogManagement/v4/productSpecification' \
+  -H 'accept: application/json;charset=utf-8' \
+  -H 'Content-Type: application/json;charset=utf-8' \
+  -d "{
+        \"name\": \"Test Spec\", 
+        \"productSpecCharacteristic\": [
+            {
+                \"id\": \"endpointUrl\",
+                \"name\":\"Service Endpoint URL\",
+                \"valueType\":\"endpointUrl\",
+                \"productSpecCharacteristicValue\": [{
+                    \"value\":\"https://the-test-service.org\",
+                    \"isDefault\": true
+                }]
+            },
+            {
+                \"id\": \"allowedAction\",
+                \"name\":\"Allowed Actio\",
+                \"valueType\":\"allowedAction\",
+                \"productSpecCharacteristicValue\": [{
+                    \"value\":\"Todrl:use\",
+                    \"isDefault\": true
+                }]
+            },
+            {
+                \"id\": \"endpointDescription\",
+                \"name\":\"Service Endpoint Description\",
+                \"valueType\":\"endpointDescription\",
+                \"productSpecCharacteristicValue\": [{
+                    \"value\":\"The Test Service\"
+                }]
+            }
+        ]
+    }" | jq .id -r); echo ${PRODUCT_SPEC_ID}
+```
+
+
+5. Create the Product Offering:
+
+
+```shell
 export PRODUCT_OFFERING_ID=$(curl -X 'POST' http://tm-forum-api.127.0.0.1.nip.io:8080/tmf-api/productCatalogManagement/v4/productOffering \
      -H 'Content-Type: application/json;charset=utf-8' \
      -d "{
-        \"version\": \"1.0.0\",
-        \"lifecycleStatus\": \"ACTIVE\",
         \"name\": \"Test Offering\",
+        \"description\": \"Test Offering description\", 
+        \"isBundle\": false,
+        \"isSellable\": true,
+        \"lifecycleStatus\": \"Active\",
         \"productSpecification\": {
-          \"id\": \"${PRODUCT_SPEC_ID}\"
+            \"id\": \"${PRODUCT_SPEC_ID}\",
+            \"name\":\"The Test Spec\"
         },
-        \"productOfferingPrice\": [
-            {   
+        \"productOfferingPrice\": [{   
                 \"id\": \"${PRICE_ID}\"
-            }
-        ]
+        }],
+        \"category\": [{
+            \"id\": \"${CATEGORY_ID}\"
+        }]
      }"| jq '.id' -r ); echo ${PRODUCT_OFFERING_ID}
 ```
 
 
 ### INITIAL State
 
-To get into state REQUESTED, the consumer creates a ```Quote```, referncing the offer:
+1. Get the consumer Did:
+
+```shell
+    export CONSUMER_DID=$(curl -X GET http://did-consumer.127.0.0.1.nip.io:8080/did-material/did.env | cut -d'=' -f2); echo ${CONSUMER_DID} 
+```
+
+2. Register the consumer at the marketplace:
+
+```shell
+    export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh http://mp-tmf-api.127.0.0.1.nip.io:8080 $USER_CREDENTIAL default); echo ${ACCESS_TOKEN}
+    export FANCY_MARKETPLACE_ID=$(curl -X POST http://mp-tmf-api.127.0.0.1.nip.io:8080/tmf-api/party/v4/organization \
+    -H 'Accept: */*' \
+    -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+    -H 'Content-Type: application/json' \
+    -d "{
+      \"name\": \"Fancy Marketplace Inc.\",
+      \"partyCharacteristic\": [
+        {
+          \"name\": \"did\",
+          \"value\": \"${CONSUMER_DID}\" 
+        }
+      ]
+    }" | jq '.id' -r); echo ${FANCY_MARKETPLACE_ID} 
+```
+
+3. Create a ```Quote``` to get into state REQUESTED, referencing the offer:
 
 ```shell
 export QUOTE_ID=$(curl -X 'POST' http://tm-forum-api.127.0.0.1.nip.io:8080/tmf-api/quote/v4/quote \
-     -H 'Content-Type: application/json;charset=utf-8' \
-     -d "{
+    -H 'Content-Type: application/json;charset=utf-8' \
+    -d "{
         \"description\": \"Request for Test Offering\",
         \"version\": \"1\",
+        \"relatedParty\":[{
+            \"id\":\"${FANCY_MARKETPLACE_ID}\",
+            \"role\":\"Consumer\"
+        }],
         \"quoteItem\": [
             {
                 \"id\": \"item-id\",
+                \"@schemaLocation\": \"https://raw.githubusercontent.com/FIWARE/contract-management/refs/heads/tpp-integration/schemas/policies.json\",
                 \"productOffering\": {
                     \"id\": \"${PRODUCT_OFFERING_ID}\"
                 },
+                \"policy\": [{
+                    \"odrl:permission\": [{
+                        \"odrl:action\": \"odrl:use\",
+                        \"odrl:constraint\": [{
+                            \"odrl:leftOperand\": \"odrl:dateTime\",
+                            \"odrl:operator\": \"odrl:eq\",
+                            \"odrl:rightOperand\": \"2027-01-01\"
+                        }]
+                    }]
+                }],
                 \"action\": \"modify\",
                 \"state\": \"inProgress\",
                 \"note\": [{
@@ -113,25 +245,32 @@ export QUOTE_ID=$(curl -X 'POST' http://tm-forum-api.127.0.0.1.nip.io:8080/tmf-a
                     \"text\": \"We would prefer weekly pricing and a discount\"
                 }],
                 \"quoteItemPrice\": [{
-                    \"productOfferingPrice\":  {   
-                        \"id\": \"${PRICE_ID}\"
-                    },
-                    \"priceAlteration\": [
-                    {
-                        \"name\": \"alternative price\",
-                        \"priceType\": \"recurring\",
-                        \"recurringChargePeriod\": \"weekly\",
-                        \"price\": {
-                            \"taxIncludedAmount\": {
-                               \"unit\": \"EUR\",
-                                \"value\": 2.0
-                            }
+                    \"priceType\": \"recurring\",
+                    \"name\": \"alternative price\",
+                    \"recurringChargePeriod\": \"weekly\",
+                    \"price\": {
+                        \"taxIncludedAmount\": {
+                            \"unit\": \"EUR\",
+                            \"value\": 2.0
                         }
-                    }]
+                    }
                 }]
             }
-        ]
-     }" | jq '.id' -r ); echo ${QUOTE_ID}
+        ]}" | jq '.id' -r ); echo ${QUOTE_ID}
+```
+
+4. Verify that the quote was handled and a negotiation is started(might take a couple of seconds):
+
+Get the quote and its "externalId", which corresponds to the negotiation:
+
+```shell
+    export NEGOTIATION_ID=$(curl -X 'GET' http://tm-forum-api.127.0.0.1.nip.io:8080/tmf-api/quote/v4/quote/${QUOTE_ID} | jq '.externalId' -r); echo ${NEGOTIATION_ID}
+```
+
+And get the negotiation state: 
+
+```shell
+    curl -X 'GET' http://rainbow-provider.127.0.0.1.nip.io:8080/negotiations/${NEGOTIATION_ID} | jq .
 ```
 
 ### IDSA REQUESTED - Quote in state ```inProgress```
@@ -156,82 +295,105 @@ Provider can approve it and go to state OFFERED:
      }' | jq . 
 ```
 
+And get the negotiation state: 
+
+```shell
+    curl -X 'GET' http://rainbow-provider.127.0.0.1.nip.io:8080/negotiations/${NEGOTIATION_ID} | jq .
+```
+
+
 Provider can reject the original QuoteItem, add a new one and go to OFFERED: 
 ```shell
 curl -X 'PATCH' http://tm-forum-api.127.0.0.1.nip.io:8080/tmf-api/quote/v4/quote/${QUOTE_ID} \
      -H 'Content-Type: application/json;charset=utf-8' \
      -d "{
+        \"description\": \"Request for Test Offering\",
+        \"version\": \"1\",
+        \"relatedParty\":[{
+            \"id\":\"${FANCY_MARKETPLACE_ID}\",
+            \"role\":\"Consumer\"
+        }],
         \"quoteItem\": [
             {
                 \"id\": \"item-id\",
+                \"@schemaLocation\": \"https://raw.githubusercontent.com/FIWARE/contract-management/refs/heads/tpp-integration/schemas/policies.json\",
                 \"productOffering\": {
                     \"id\": \"${PRODUCT_OFFERING_ID}\"
                 },
+                \"policy\": [{
+                    \"odrl:permission\": [{
+                        \"odrl:action\": \"odrl:use\",
+                        \"odrl:constraint\": [{
+                            \"odrl:leftOperand\": {
+                                \"@id\": \"odrl:dateTime\"
+                            },
+                            \"odrl:operator\": \"odrl:gt\",
+                            \"odrl:rightOperand\": {
+                                \"@value\": \"2025-05-01\",
+                                \"@type\": \"xsd:date\"
+                            }
+                        }]
+                    }]
+                }],
                 \"action\": \"modify\",
                 \"state\": \"rejected\",
-                \"note\": [
-                    {
-                        \"id\": \"uri:random:note\",
-                        \"text\": \"We would prefer weekly pricing and a discount.\"
-                    },
-                    {
-                        \"id\": \"uri:random:second-note\",
-                        \"text\": \"We can offer weekly payment, but no discount.\"
-                    }
-
-                ],
+                \"note\": [{
+                    \"id\": \"uri:random:note\",
+                    \"text\": \"We would prefer weekly pricing and a discount\"
+                }],
                 \"quoteItemPrice\": [{
-                    \"productOfferingPrice\":  {   
-                        \"id\": \"${PRICE_ID}\"
-                    },
-                    \"priceAlteration\": [
-                    {
-                        \"name\": \"alternative price\",
-                        \"priceType\": \"recurring\",
-                        \"recurringChargePeriod\": \"weekly\",
-                        \"price\": {
-                            \"taxIncludedAmount\": {
-                               \"unit\": \"EUR\",
-                                \"value\": 2.0
-                            }
+                    \"priceType\": \"recurring\",
+                    \"name\": \"alternative price\",
+                    \"recurringChargePeriod\": \"weekly\",
+                    \"price\": {
+                        \"taxIncludedAmount\": {
+                            \"unit\": \"EUR\",
+                            \"value\": 2.0
                         }
-                    }]
+                    }
                 }]
             },
             {
-                \"id\": \"counter-item-id\",
+                \"id\": \"item-id\",
+                \"@schemaLocation\": \"https://raw.githubusercontent.com/FIWARE/contract-management/refs/heads/tpp-integration/schemas/policies.json\",
                 \"productOffering\": {
                     \"id\": \"${PRODUCT_OFFERING_ID}\"
                 },
-                \"action\": \"modify\",
-                \"state\": \"approved\",
-                \"note\": [
-                    {
-                        \"id\": \"urn:random:answer-note\",
-                        \"text\": \"We can offer weekly payment, but no discount.\"
-                    }
-
-                ],
-                \"quoteItemPrice\": [{
-                    \"productOfferingPrice\":  {   
-                        \"id\": \"${PRICE_ID}\"
-                    },
-                    \"priceAlteration\": [
-                    {
-                        \"name\": \"alternative price\",
-                        \"priceType\": \"recurring\",
-                        \"recurringChargePeriod\": \"weekly\",
-                        \"price\": {
-                            \"taxIncludedAmount\": {
-                               \"unit\": \"EUR\",
-                                \"value\": 2.5
+                \"policy\": [{
+                    \"odrl:permission\": [{
+                        \"odrl:action\": \"odrl:use\",
+                        \"odrl:constraint\": [{
+                            \"odrl:leftOperand\": {
+                                \"@id\": \"odrl:dateTime\"
+                            },
+                            \"odrl:operator\": \"odrl:gt\",
+                            \"odrl:rightOperand\": {
+                                \"@value\": \"2025-05-01\",
+                                \"@type\": \"xsd:date\"
                             }
-                        }
+                        }]
                     }]
+                }],
+                \"action\": \"modify\",
+                \"state\": \"rejected\",
+                \"note\": [{
+                    \"id\": \"uri:random:second-note\",
+                    \"text\": \"We can offer weekly payment, but no discount.\"
+                }],
+                \"quoteItemPrice\": [{
+                    \"priceType\": \"recurring\",
+                    \"name\": \"alternative price\",
+                    \"recurringChargePeriod\": \"weekly\",
+                    \"price\": {
+                        \"taxIncludedAmount\": {
+                            \"unit\": \"EUR\",
+                            \"value\": 2.5
+                        }
+                    }
                 }]
             }
         ]
-     }" | jq .
+     }"
 ```
 
 ### IDSA OFFERED  - Quote in state ```inProgress```
@@ -244,8 +406,49 @@ Accept the offer and go to ACCEPTED:
     curl -X 'PATCH' http://tm-forum-api.127.0.0.1.nip.io:8080/tmf-api/quote/v4/quote/${QUOTE_ID} \
      -H 'Content-Type: application/json;charset=utf-8' \
      -d '{ 
-        "state": "accepted"     
+        "state": "accepted",
+        \"quoteItem\": [
+            {
+                \"id\": \"item-id\",
+                \"@schemaLocation\": \"https://raw.githubusercontent.com/FIWARE/contract-management/refs/heads/tpp-integration/schemas/policies.json\",
+                \"productOffering\": {
+                    \"id\": \"${PRODUCT_OFFERING_ID}\"
+                },
+                \"policy\": [{
+                    \"odrl:permission\": [{
+                        \"odrl:action\": \"odrl:use\",
+                        \"odrl:constraint\": [{
+                            \"odrl:leftOperand\": \"odrl:dateTime\",
+                            \"odrl:operator\": \"odrl:eq\",
+                            \"odrl:rightOperand\": \"2027-01-01\"
+                        }]
+                    }]
+                }],
+                \"action\": \"modify\",
+                \"state\": \"accepted\",
+                \"note\": [{
+                    \"id\": \"uri:random:note\",
+                    \"text\": \"We would prefer weekly pricing and a discount\"
+                }],
+                \"quoteItemPrice\": [{
+                    \"priceType\": \"recurring\",
+                    \"name\": \"alternative price\",
+                    \"recurringChargePeriod\": \"weekly\",
+                    \"price\": {
+                        \"taxIncludedAmount\": {
+                            \"unit\": \"EUR\",
+                            \"value\": 2.0
+                        }
+                    }
+                }]
+            }
+        ]     
      }' | jq . 
+```
+And get the negotiation state: 
+
+```shell
+    curl -X 'GET' http://rainbow-provider.127.0.0.1.nip.io:8080/negotiations/${NEGOTIATION_ID} | jq .
 ```
 
 Or can reject the quote and create a new one in REQUESTED:
@@ -254,42 +457,7 @@ Or can reject the quote and create a new one in REQUESTED:
 curl -X 'PATCH' http://tm-forum-api.127.0.0.1.nip.io:8080/tmf-api/quote/v4/quote/${QUOTE_ID} \
      -H 'Content-Type: application/json;charset=utf-8' \
      -d "{
-        \"state\": "rejected",
-        \"quoteItem\": [
-            {
-                \"id\": \"item-id\",
-                \"productOffering\": {
-                    \"id\": \"${PRODUCT_OFFERING_ID}\"
-                },
-                \"action\": \"modify\",
-                \"note\": [
-                    {
-                        \"id\": \"First note\",
-                        \"text\": \"We would prefer weekly pricing and a discount.\"
-                    },
-                    {
-                        \"id\": \"Answer note\",
-                        \"text\": \"We can offer weekly payment, but no discount.\"
-                    },
-                    {
-                        \"id\": \"New Answer note\",
-                        \"text\": \"What about a discound and monthly payments.\"
-                    }
-
-                ],
-                \"priceAlteration\": [
-                    {
-                        \"name\": \"alternative price\",
-                        \"priceType\": \"recurring\",
-                        \"recurringChargePeriod\": \"monthly\",
-                        \"price\": {
-                            "unit": "EUR",
-                            "value": 9
-                        }
-                    }
-                ]
-            }
-        ]
+        \"state\": "rejected"
      }"
 ```
 
@@ -298,52 +466,55 @@ export QUOTE_ID=$(curl -X 'POST' http://tm-forum-api.127.0.0.1.nip.io:8080/tmf-a
      -H 'Content-Type: application/json;charset=utf-8' \
      -d "{
         \"description\": \"Request for Test Offering\",
-        \"relatedParty\": [
-            {
-                \"id\": \"Requesting-Consumer\",
-                \"role\": \"Consumer\"
-            }
-        ],
-        \"state\": "inProgress",
-        \"version\": \"2\",
+        \"version\": \"1\",
+        \"relatedParty\":[{
+            \"id\":\"${FANCY_MARKETPLACE_ID}\",
+            \"role\":\"Consumer\"
+        }],
         \"quoteItem\": [
             {
                 \"id\": \"item-id\",
+                \"@schemaLocation\": \"https://raw.githubusercontent.com/FIWARE/contract-management/refs/heads/tpp-integration/schemas/policies.json\",
                 \"productOffering\": {
                     \"id\": \"${PRODUCT_OFFERING_ID}\"
                 },
+                \"policy\": [{
+                    \"odrl:permission\": [{
+                        \"odrl:action\": \"odrl:use\",
+                        \"odrl:constraint\": [{
+                            \"odrl:leftOperand\": {
+                                \"@id\": \"odrl:dateTime\"
+                            },
+                            \"odrl:operator\": \"odrl:gt\",
+                            \"odrl:rightOperand\": {
+                                \"@value\": \"2025-05-01\",
+                                \"@type\": \"xsd:date\"
+                            }
+                        }]
+                    }]
+                }],
                 \"action\": \"modify\",
                 \"state\": \"inProgress\",
                 \"note\": [{
-                        \"id\": \"New Answer note\",
-                        \"text\": \"What about a discound and monthly payments.\"
+                    \"id\": \"uri:random:note\",
+                    \"text\": \"What about a discount, but monthly payment\"
                 }],
-                \"priceAlteration\": [
-                    {
-                        \"name\": \"alternative price\",
-                        \"priceType\": \"recurring\",
-                        \"recurringChargePeriod\": \"monthly\",
-                        \"price\": {
-                            "unit": "EUR",
-                            "value": 9.0
+                \"quoteItemPrice\": [{
+                    \"priceType\": \"recurring\",
+                    \"name\": \"alternative price\",
+                    \"recurringChargePeriod\": \"monthly\",
+                    \"price\": {
+                        \"taxIncludedAmount\": {
+                            \"unit\": \"EUR\",
+                            \"value\": 9.0
                         }
                     }
-                ]
-
+                }]
             }
         ]
      }" | jq '.id' -r ); echo ${QUOTE_ID}
 ```
 
-
-Or cancel the Quote and go to state TERMINATED:
-```shell
-    curl -X 'PATCH' http://tm-forum-api.127.0.0.1.nip.io:8080/tmf-api/quote/v4/quote/${QUOTE_ID} \
-     -H 'Content-Type: application/json;charset=utf-8' \
-     -d "{ 
-        "state": "cancelled"     
-     }"
-```
 
 ### IDSA ACCEPTED  - Quote in state ```accepted```
 
@@ -372,16 +543,19 @@ Use it to create the order and go to state VERIFIED:
     export ORDER_ID=$(curl -X 'POST' http://tm-forum-api.127.0.0.1.nip.io:8080/tmf-api/productOrderingManagement/v4/productOrder \
      -H 'Content-Type: application/json;charset=utf-8' \
      -d "{
-        \"productOrderItem\": [
-         {
-           \"id\": \"uri:random:random-order-id\",
-           \"action\": \"add\",
-           \"quoteItem\": {
-             \"id\" :  \"${QUOTE_ID}\"
-           }
-         }  
-       ]
+            \"quote\": [{
+                \"id\": \"${QUOTE_ID}\" 
+            }],
+            \"relatedParty\": [{
+                \"id\": \"${FANCY_MARKETPLACE_ID}\",
+                \"role\":\"Consumer\"
+            }]
      }" | jq '.id' -r ); echo ${ORDER_ID}
+```
+And get the negotiation state: 
+
+```shell
+    curl -X 'GET' http://rainbow-provider.127.0.0.1.nip.io:8080/negotiations/${NEGOTIATION_ID} | jq .
 ```
 
 Or reject it and go to TERMINATED:
@@ -416,11 +590,13 @@ Create the agreement for the Order in Rainbow, fullfil all additonal steps(f.e. 
         -H 'accept: application/json;charset=utf-8' \
         -H 'Content-Type: application/json;charset=utf-8' \
         -d '{
-                "state": "completed",
-                "agreement": {
-                    "id": "tmf-agreement-id"
-                }
-            }'
+                "state": "completed"
+            }' | jq .
+```
+And get the negotiation state: 
+
+```shell
+    curl -X 'GET' http://rainbow-provider.127.0.0.1.nip.io:8080/negotiations/${NEGOTIATION_ID} | jq .
 ```
 
 Or reject the order and go to TERMINATED:

@@ -33,7 +33,7 @@ spec:
         {{- end }}
         - name: rainbow-init
           imagePullPolicy: Always
-          image: quay.io/wi_stefan/rainbow:0.0.2
+          image: quay.io/wi_stefan/rainbow:0.0.3
           args: [ "provider", "setup" ]
           env:
             - name: DB_URL
@@ -54,7 +54,7 @@ spec:
       containers:
         - name: rainbow
           imagePullPolicy: Always
-          image: quay.io/wi_stefan/rainbow:0.0.2
+          image: quay.io/wi_stefan/rainbow:0.0.3
           args: [ "provider", "start" ]
           env:
             - name: DB_URL
