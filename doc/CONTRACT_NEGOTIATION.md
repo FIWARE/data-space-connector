@@ -266,7 +266,7 @@ And get the negotiation state:
 
 #### IDSA REQUESTED - Quote in state ```inProgress```
 
-With that, the negotiation is in state requested and needs to be processed by the provider:
+With that, the negotiation is in state REQUESTED and needs to be processed by the provider:
 
 Provider can cancel the Quote and go to state TERMINATED:
 ```shell
