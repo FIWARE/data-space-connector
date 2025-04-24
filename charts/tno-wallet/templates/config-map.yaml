@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: tsg-config
+  namespace: {{ $.Release.Namespace | quote }}
+data:
+  config.yaml: |-
+    {{- tpl (.Values.config | toYaml) $ | nindent 4}}

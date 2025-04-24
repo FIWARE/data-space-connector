@@ -1,0 +1,43 @@
+{{- if .Values.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: tsg-ingress
+  namespace: {{ $.Release.Namespace | quote }}
+  annotations:
+    traefik.ingress.kubernetes.io/router.tls: "true"
+    traefik.ingress.kubernetes.io/service.passhostheader: "true"
+spec:
+  rules:
+    - host: {{ .Values.ingress.host }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: tsg-service
+                port:
+                  name: http
+          - path: /.well-known/did.json
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: tsg-service
+                port:
+                  name: http
+          - path: /.well-known/did.jsonl
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: tsg-service
+                port:
+                  name: http
+          - path: /.well-known/openid-credential-issuer
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: tsg-service
+                port:
+                  name: http
+{{- end }}

@@ -192,16 +192,16 @@
                         </configuration>
                     </execution>
                     <execution>
-                        <id>copy-resources-sphereon</id>
+                        <id>copy-resources-tno</id>
                         <phase>prepare-package</phase>
                         <goals>
                             <goal>copy-resources</goal>
                         </goals>
                         <configuration>
-                            <outputDirectory>${project.build.directory}/charts/demo-sphereon</outputDirectory>
+                            <outputDirectory>${project.build.directory}/charts/tno-wallet</outputDirectory>
                             <resources>
                                 <resource>
-                                    <directory>${main.basedir}/charts/demo-sphereon</directory>
+                                    <directory>${main.basedir}/charts/tno-wallet</directory>
                                 </resource>
                             </resources>
                         </configuration>
@@ -344,7 +344,7 @@
                         </configuration>
                     </execution>
                     <execution>
-                        <id>template-wallet</id>
+                        <id>template-tno</id>
                         <goals>
                             <goal>init</goal>
                             <goal>dependency-update</goal>
@@ -352,10 +352,10 @@
                         </goals>
                         <phase>package</phase>
                         <configuration>
-                            <chartDirectory>${project.build.directory}/charts/demo-sphereon</chartDirectory>
+                            <chartDirectory>${project.build.directory}/charts/tno-wallet</chartDirectory>
                             <skipTemplate>false</skipTemplate>
                             <templateGenerateName>true</templateGenerateName>
-                            <templateOutputDir>${project.build.directory}/k3s/demo-sphereon</templateOutputDir>
+                            <templateOutputDir>${project.build.directory}/k3s/tno-wallet</templateOutputDir>
                             <additionalArguments>--name-template=infra --namespace=infra
                             </additionalArguments>
                         </configuration>
