@@ -400,7 +400,7 @@ Once the request is completed, provider´s rainbow will check the callback at th
 
 ```shell
     export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh http://tpp-service.127.0.0.1.nip.io:8080 $OPERATOR_CREDENTIAL default); echo ${ACCESS_TOKEN}
-    curl -X 'POST' 'http://tpp-service.127.0.0.1.nip.io:8080/transfers/start'\
+    curl -X 'POST' http://tpp-service.127.0.0.1.nip.io:8080/transfers/${PROVIDER_PID}/start\
     -H 'accept: application/json;charset=utf-8' \
     -H "Authorization: Bearer ${ACCESS_TOKEN}" \
     -H 'Content-Type: application/json;charset=utf-8' \
@@ -427,7 +427,7 @@ Once the request is completed, provider´s rainbow will check the callback at th
 
 ```shell
     export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh http://tpp-service.127.0.0.1.nip.io:8080 $OPERATOR_CREDENTIAL default); echo ${ACCESS_TOKEN}
-    curl -X 'POST' http://tpp-service.127.0.0.1.nip.io:8080/transfers/completion \
+    curl -X 'POST' http://tpp-service.127.0.0.1.nip.io:8080/transfers/${PROVIDER_PID}/completion \
     -H 'accept: application/json;charset=utf-8' \
     -H "Authorization: Bearer ${ACCESS_TOKEN}" \
     -H 'Content-Type: application/json;charset=utf-8' \
