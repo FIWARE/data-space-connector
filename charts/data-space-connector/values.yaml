@@ -113,6 +113,10 @@ credentials-config-service:
     host: authentication-mysql
     # -- name of the schema inside the db
     name: ccsdb
+  deployment:
+    image:
+      tag: 3.0.0-PRE-9
+      pullPolicy: Always
 
 # -- configuration for the postgresql to be deployed as part of the connector, see https://github.com/bitnami/charts/tree/main/bitnami/postgresql for all options
 postgresql:
@@ -689,6 +693,10 @@ tm-forum-api:
       image: tmforum-usage-management
       basePath: /tmf-api/usageManagement/v4
 
+    - name: quote
+      image: tmforum-quote
+      basePath: /tmf-api/quote/v4
+
   # redis caching
   redis:
     enabled: false
@@ -774,6 +782,9 @@ contract-management:
       url: http://tm-forum-api:8080
     tmforum-agreement-api:
       ## URL of the TM Forum Service hosting the Agreement API
+      url: http://tm-forum-api:8080
+    quote:
+      ## URL of the TM Forum Service hosting the Quote API
       url: http://tm-forum-api:8080
     rainbow:
       ## URL for the Rainbow service

@@ -24,6 +24,10 @@ data:
         {{- else }}
         "issuerDid": "${DID}"
         {{- end }}
+        {{- if .Values.keycloak.realm.attributes }}
+        ,
+        {{ .Values.keycloak.realm.attributes | nindent 8 }}
+        {{- end }}
       },
       "sslRequired": "none",
       "roles": {
@@ -556,6 +560,10 @@ data:
             }
           ]
         }
+        {{- if .Values.keycloak.realm.clientScopes }}
+        ,
+        {{ .Values.keycloak.realm.clientScopes | nindent 8 }}
+        {{- end }}
       ],
       "defaultDefaultClientScopes": [
         "acr",
@@ -566,6 +574,7 @@ data:
         "profile"
       ],
       "defaultOptionalClientScopes": [
+        "oid4vc_user_scope",
         "microprofile-jwt",
         "phone",
         "address",
@@ -579,50 +588,7 @@ data:
             "providerId": "vc+sd-jwt"
           } 
         ],
-        "org.keycloak.protocol.oid4vc.issuance.signing.VerifiableCredentialsSigningService": [
-          {
-            "id": "jwt-signing",
-            "name": "jwt-signing-service",
-            {{- if eq .Values.elsi.enabled  true }}
-            "providerId": "jades-jws-signing",
-            {{- else }}
-            "providerId": "vc+sd-jwt",
-            {{- end }}
-            "subComponents": {},
-            "config": {
-              "keyId": [
-                {{- if eq .Values.elsi.enabled  true }}
-                {{ .Values.elsi.did | quote }}
-                {{- else if .Values.keycloak.signingKey }}
-                {{ .Values.keycloak.signingKey.did | quote }}
-                {{- else }}
-                "${DID}"
-                {{- end }}
-              ],
-              "algorithmType": [
-                {{- if eq .Values.elsi.enabled  true }}
-                {{ .Values.elsi.keyAlgorithm | quote }}
-                {{- else if .Values.keycloak.signingKey }}
-                {{ .Values.keycloak.signingKey.keyAlgorithm | quote }}
-                {{- else }}
-                "ES256"
-                {{- end }}
-              ],
-              "issuerDid": [
-                {{- if eq .Values.elsi.enabled  true }}
-                {{ .Values.elsi.did | quote }}
-                {{- else if .Values.keycloak.signingKey }}
-                {{ .Values.keycloak.signingKey.did | quote }}
-                {{- else }}
-                "${DID}"
-                {{- end }}
-              ],
-              "tokenType": [
-                "JWT"
-              ]
-            }
-          }
-        ],
+        
         {{- if eq .Values.elsi.enabled  true }}
         "org.keycloak.keys.KeyProvider": [
           {

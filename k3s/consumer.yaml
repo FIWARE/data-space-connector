@@ -118,8 +118,24 @@ keycloak:
     frontendUrl: https://keycloak-consumer.127.0.0.1.nip.io
     import: true
     name: test-realm
+    attributes: |
+      "vc.user-credential.credential_signing_alg_values_supported": "ES256",
+      "vc.user-credential.credential_build_config.signing_algorithm": "ES256",
+      "vc.user-credential.credential_build_config.token_jws_type": "vc+sd-jwt",
+      "vc.user-credential.credential_build_config.proof_types_supported": "{\"jwt\":{\"proof_signing_alg_values_supported\":[\"ES256\"]}}",
+      "vc.user-credential.format": "vc+sd-jwt",
+      "vc.user-credential.scope": "CitizenCredential",
+      "vc.user-credential.vct": "CitizenCredential",
+      "vc.user-credential.credential_build_config.visible_claims": "roles,email",
+      "vc.user-credential.credential_build_config.decoys": "3",
+      "vc.verifiable-credential.format": "vc+sd-jwt",
+      "vc.verifiable-credential.scope": "VerifiableCredential",
+      "vc.verifiable-credential.vct": "VerifiableCredential",
+      "vc.operator-credential.format": "vc+sd-jwt",
+      "vc.operator-credential.scope": "OperatorCredential",
+      "vc.operator-credential.vct": "OperatorCredential"
     clientRoles: |
-      "${CLIENT_DID}": [
+      "did:web:cg.gov.ma": [
         {
           "name": "READER",
           "description": "Is allowed to see offers etc.",
@@ -210,11 +226,11 @@ keycloak:
 
     users: |
       {
-        "username": "employee",
+        "username": "citizen",
         "enabled": true,
-        "email": "employee@consumer.org",
+        "email": "citizen@city.org",
         "firstName": "Test",
-        "lastName": "Reader",
+        "lastName": "Citizen",
         "credentials": [
           {
             "type": "password",
@@ -222,7 +238,7 @@ keycloak:
           }
         ],
         "clientRoles": {
-          "${CLIENT_DID}": [
+          "did:web:cg.gov.ma": [
             "READER"
           ],
           "account": [
@@ -247,7 +263,7 @@ keycloak:
           }
         ],
         "clientRoles": {
-          "${CLIENT_DID}": [
+          "did:web:cg.gov.ma": [
             "OPERATOR"
           ],
           "account": [
@@ -272,7 +288,7 @@ keycloak:
           }
         ],
         "clientRoles": {
-          "${CLIENT_DID}": [
+          "did:web:cg.gov.ma": [
             "REPRESENTATIVE"
           ],
           "account": [
@@ -284,9 +300,127 @@ keycloak:
             "/consumer"
         ]
       }
+    clientScopes: |
+      {
+        "name": "CitizenCredential",
+        "description": "OIDC4VC Scope, that adds all properties required for a user.",
+        "protocol": "openid-connect",
+        "attributes": {},
+        "protocolMappers": [
+          {
+            "name": "context-mapper",
+            "protocol": "oid4vc",
+            "protocolMapper": "oid4vc-context-mapper",
+            "config": {
+              "context": "https://www.w3.org/2018/credentials/v1",
+              "supportedCredentialTypes": "VerifiableCredential,CitizenCredential,OperatorCredential"
+            }
+          },
+          {
+            "name": "email-mapper",
+            "protocol": "oid4vc",
+            "protocolMapper": "oid4vc-user-attribute-mapper",
+            "config": {
+              "subjectProperty": "email",
+              "userAttribute": "email",
+              "supportedCredentialTypes": "CitizenCredential,OperatorCredential"
+            }
+          },
+          {
+            "name": "firstName-mapper",
+            "protocol": "oid4vc",
+            "protocolMapper": "oid4vc-user-attribute-mapper",
+            "config": {
+              "subjectProperty": "firstName",
+              "userAttribute": "firstName",
+              "supportedCredentialTypes": "CitizenCredential,OperatorCredential"
+            }
+          },
+          {
+            "name": "subject-mapper",
+            "protocol": "oid4vc",
+            "protocolMapper": "oid4vc-static-claim-mapper",
+            "config": {
+              "subjectProperty": "subject",
+              "staticValue": "did:key:zDnaeiVpxCT7ARwqLndbWiCeGG2YZXvLfWFs1cGPgKUe8GPLe",
+              "supportedCredentialTypes": "CitizenCredential"
+            }
+          },
+          {
+            "name": "street-mapper",
+            "protocol": "oid4vc",
+            "protocolMapper": "oid4vc-static-claim-mapper",
+            "config": {
+              "subjectProperty": "street",
+              "staticValue": "Main Street",
+              "supportedCredentialTypes": "CitizenCredential"
+            }
+          },
+          {
+            "name": "lastName-mapper",
+            "protocol": "oid4vc",
+            "protocolMapper": "oid4vc-user-attribute-mapper",
+            "config": {
+              "subjectProperty": "lastName",
+              "userAttribute": "lastName",
+              "supportedCredentialTypes": "CitizenCredential,OperatorCredential"
+            }
+          },
+          {
+            "name": "streetNumber-mapper",
+            "protocol": "oid4vc",
+            "protocolMapper": "oid4vc-static-claim-mapper",
+            "config": {
+              "subjectProperty": "streetNumber",
+              "staticValue": "10",
+              "supportedCredentialTypes": "CitizenCredential"
+            }
+          },
+          {
+            "name": "city-mapper",
+            "protocol": "oid4vc",
+            "protocolMapper": "oid4vc-static-claim-mapper",
+            "config": {
+              "subjectProperty": "city",
+              "staticValue": "Rabat",
+              "supportedCredentialTypes": "CitizenCredential"
+            }
+          },
+          {
+            "name": "region-mapper",
+            "protocol": "oid4vc",
+            "protocolMapper": "oid4vc-static-claim-mapper",
+            "config": {
+              "subjectProperty": "region",
+              "staticValue": "Rabat-Sale-Kenitra",
+              "supportedCredentialTypes": "CitizenCredential"
+            }
+          },
+          {
+            "name": "country-mapper",
+            "protocol": "oid4vc",
+            "protocolMapper": "oid4vc-static-claim-mapper",
+            "config": {
+              "subjectProperty": "country",
+              "staticValue": "Morocco",
+              "supportedCredentialTypes": "CitizenCredential"
+            }
+          },
+          {
+            "name": "zipcode-mapper",
+            "protocol": "oid4vc",
+            "protocolMapper": "oid4vc-static-claim-mapper",
+            "config": {
+              "subjectProperty": "zipcode",
+              "staticValue": "10000",
+              "supportedCredentialTypes": "CitizenCredential"
+            }
+          }
+        ]
+      }
     clients: |
       {
-        "clientId": "${CLIENT_DID}",
+        "clientId": "did:web:cg.gov.ma",
         "enabled": true,
         "description": "Client to connect test.org",
         "surrogateAuthRequired": false,
@@ -304,81 +438,11 @@ keycloak:
         "serviceAccountsEnabled": false,
         "publicClient": false,
         "frontchannelLogout": false,
-        "protocol": "oid4vc",
+        "protocol": "openid-connect",
         "attributes": {
-          "client.secret.creation.time": "1675260539",
-          "vc.user-credential.format": "vc+sd-jwt",
-          "vc.user-credential.scope": "UserCredential",
-          "vc.user-credential.vct": "UserCredential",
-          "vc.user-credential.credential_build_config.visible_claims": "roles,email",
-          "vc.user-credential.credential_build_config.decoys": "3",
-          "vc.verifiable-credential.format": "vc+sd-jwt",
-          "vc.verifiable-credential.scope": "VerifiableCredential",
-          "vc.verifiable-credential.vct": "VerifiableCredential",
-          "vc.operator-credential.format": "vc+sd-jwt",
-          "vc.operator-credential.scope": "OperatorCredential",
-          "vc.operator-credential.vct": "OperatorCredential"
+          "client.secret.creation.time": "1675260539"
         },
         "protocolMappers": [
-          {
-            "name": "target-role-mapper",
-            "protocol": "oid4vc",
-            "protocolMapper": "oid4vc-target-role-mapper",
-            "config": {
-              "subjectProperty": "roles",
-              "clientId": "${CLIENT_DID}",
-              "supportedCredentialTypes": "UserCredential,OperatorCredential"
-            }
-          },
-          {
-            "name": "context-mapper",
-            "protocol": "oid4vc",
-            "protocolMapper": "oid4vc-context-mapper",
-            "config": {
-              "context": "https://www.w3.org/2018/credentials/v1",
-              "supportedCredentialTypes": "VerifiableCredential,UserCredential,OperatorCredential"
-            }
-          },
-          {
-            "name": "email-mapper",
-            "protocol": "oid4vc",
-            "protocolMapper": "oid4vc-user-attribute-mapper",
-            "config": {
-              "subjectProperty": "email",
-              "userAttribute": "email",
-              "supportedCredentialTypes": "UserCredential,OperatorCredential"
-            }
-          },
-          {
-            "name": "firstName-mapper",
-            "protocol": "oid4vc",
-            "protocolMapper": "oid4vc-user-attribute-mapper",
-            "config": {
-              "subjectProperty": "firstName",
-              "userAttribute": "firstName",
-              "supportedCredentialTypes": "UserCredential,OperatorCredential"
-            }
-          },
-          {
-            "name": "subject-mapper",
-            "protocol": "oid4vc",
-            "protocolMapper": "oid4vc-static-claim-mapper",
-            "config": {
-              "subjectProperty": "subject",
-              "staticValue": "did:key:zDnaeiVpxCT7ARwqLndbWiCeGG2YZXvLfWFs1cGPgKUe8GPLe",
-              "supportedCredentialTypes": "OperatorCredential"
-            }
-          },
-          {
-            "name": "lastName-mapper",
-            "protocol": "oid4vc",
-            "protocolMapper": "oid4vc-user-attribute-mapper",
-            "config": {
-              "subjectProperty": "lastName",
-              "userAttribute": "lastName",
-              "supportedCredentialTypes": "UserCredential,OperatorCredential"
-            }
-          }
         ],
         "authenticationFlowBindingOverrides": {},
         "fullScopeAllowed": true,
@@ -486,7 +550,8 @@ keycloak:
           "phone",
           "offline_access",
           "organization",
-          "microprofile-jwt"
+          "microprofile-jwt",
+          "CitizenCredential"
         ]
       }
 
@@ -509,10 +574,10 @@ did:
   serviceType: ClusterIP
   port: 3001
   cert:
-    country: BE
-    state: BRUSSELS
-    locality: Brussels
-    organization: Fancy Marketplace Co.
+    country: MA
+    state: MAROCCO
+    locality: Rabat
+    organization: City of Rabat
     commonName: www.fancy-marketplace.biz
   ingress:
     enabled: true

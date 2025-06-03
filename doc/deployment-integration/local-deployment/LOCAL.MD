@@ -1252,7 +1252,7 @@ In order to build a concrete deployment, [maven](https://maven.apache.org/) exec
 ```shell
   # webcam2 is the virtual camera, webcam0 is any other cam in the system, p-xl is the device, hardware accelaration is on
   # Vulkan is required for proper browser rendering an api >29
-  ./emulator -avd p-xl-4 -camera-back webcam2 -accel on -no-snapshot-load -feature -Vulkan -grpc 8554
+  ~/Android/Sdk/emulator/emulator -avd p-xl-4 -camera-back webcam2 -accel on -no-snapshot-load -feature -Vulkan -grpc 8554
 ```
 9. Access the services via *.10.0.2.2.nip.io (only works for those where the host is configured)
 
@@ -1283,3 +1283,10 @@ adb shell am start -n com.android.chrome/com.google.android.apps.chrome.Main \
 * adb shell pm list packages | grep euid
 * adb shell pidof <your.package.name>
 * adb logcat | grep pid
+
+## Set proxy
+
+In android emulator, go to Settings -> Network&Internet -> Internet 
+
+* disable "Mobile Data" & "Roaming"
+* Android Wifi -> Configure -> Proxy Manual - Proxy Hostname 10.0.2.2 - Proxy port 8888

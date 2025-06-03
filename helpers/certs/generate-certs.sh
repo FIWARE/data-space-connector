@@ -78,7 +78,8 @@ mkdir -p ${OUTPUT_FOLDER}/client/private
 mkdir -p ${OUTPUT_FOLDER}/client/csr
 mkdir -p ${OUTPUT_FOLDER}/client/certs
 
-openssl genrsa -out ${OUTPUT_FOLDER}/client/private/client.key.pem 4096
+openssl ecparam -name prime256v1 -genkey -noout -out ${OUTPUT_FOLDER}/client/private/client.key.pem
+#openssl genrsa -out ${OUTPUT_FOLDER}/client/private/client.key.pem 4096
 openssl req -new -set_serial 03 -key ${OUTPUT_FOLDER}/client/private/client.key.pem -out ${OUTPUT_FOLDER}/client/csr/client.csr \
   -config ./config/openssl-client.cnf
 openssl x509 -req -in ${OUTPUT_FOLDER}/client/csr/client.csr -CA ${OUTPUT_FOLDER}/intermediate/certs/ca-chain-bundle.cert.pem \
@@ -100,6 +101,8 @@ kubectl create secret tls local-wildcard --cert=${OUTPUT_FOLDER}/client/certs/cl
 kubectl create secret generic gx-registry-keypair --from-file=PRIVATE_KEY=${OUTPUT_FOLDER}/ca/private/cakey-pkcs8.pem --from-file=X509_CERTIFICATE=${OUTPUT_FOLDER}/ca/certs/cacert.pem --namespace infra -o yaml --dry-run=client > ${k3sFolder}/infra/gx-registry/secret.yaml
 kubectl create secret generic root-ca --from-file=${OUTPUT_FOLDER}/ca/certs/cacert.pem --namespace provider -o yaml --dry-run=client > ${k3sFolder}/provider/root-ca.yaml
 kubectl create secret generic cert-chain --from-file=${OUTPUT_FOLDER}/client/certs/client-chain-bundle.cert.pem --namespace consumer -o yaml --dry-run=client > ${k3sFolder}/consumer/cert-chain.yaml
+kubectl create secret generic cert-chain --from-file=${OUTPUT_FOLDER}/client/certs/client-chain-bundle.cert.pem --namespace provider -o yaml --dry-run=client > ${k3sFolder}/provider/cert-chain.yaml
+kubectl create secret generic signing-key --from-file=${OUTPUT_FOLDER}/client/private/client.key.pem --namespace provider -o yaml --dry-run=client > ${k3sFolder}/provider/signing-key.yaml
 
 ca=$(cat ${OUTPUT_FOLDER}/ca/certs/cacert.pem | sed '/-----BEGIN CERTIFICATE-----/d' | sed '/-----END CERTIFICATE-----/d' | tr -d '\n')
 yq -i "(.spec.template.spec.initContainers[] | select(.name == \"local-trust\") | .env[] | select(.name == \"ROOT_CA\")).value = \"$ca\"" ${k3sFolder}/infra/gx-registry/deployment-registry.yaml
