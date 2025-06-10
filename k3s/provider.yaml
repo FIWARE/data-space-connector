@@ -152,8 +152,8 @@ vcverifier:
           - "/"
   deployment:
     image:
-      repository: quay.io/wi_stefan/vcverifier
-      tag: 10.0.0
+      repository: quay.io/fiware/vcverifier
+      tag: 6.0.0-pre-58
       pullPolicy: Always
     logging:
       level: DEBUG
@@ -288,6 +288,7 @@ scorpio:
       paths:
         - "/"
   ccs:
+    id: data-service
     defaultOidcScope:
       name: default
     oidcScopes:
@@ -308,7 +309,7 @@ scorpio:
                     path:
                       - $.vct
                     filter:
-                      const: "CitizenCredential"
+                      const: "UserCredential"
                   - id: subject
                     path:
                       - $.firstName

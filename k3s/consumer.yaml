@@ -37,7 +37,6 @@ keycloak:
     hostname: keycloak-consumer.127.0.0.1.nip.io
     annotations:
       traefik.ingress.kubernetes.io/router.tls: "true"
-
   initContainers:
     - name: get-did
       image: ubuntu
@@ -95,6 +94,24 @@ keycloak:
         - name: did-material
           mountPath: /did-material
 
+    - name: prepare-envs
+      image: docker.io/bitnami/keycloak:26.2.1-debian-12-r0
+      command:
+        - /bin/sh
+      args:
+        - -ec
+        - |
+          #!/bin/sh
+          export $(cat /etc/env/did.env)
+          cp -r /opt/bitnami/scripts/. /env-update/
+          echo "export DID=$DID" >> /env-update/keycloak-env.sh
+          cat /env-update/keycloak-env.sh
+      volumeMounts:
+        - name: kc-env
+          mountPath: /env-update
+        - name: did-material
+          mountPath: /etc/env
+
   extraVolumeMounts:
     - name: did-material
       mountPath: /did-material
@@ -103,9 +120,14 @@ keycloak:
       readOnly: true
     - name: realms
       mountPath: /opt/bitnami/keycloak/data/import
+    - name: kc-env
+      mountPath: /opt/bitnami/scripts/keycloak-env.sh
+      subPath: keycloak-env.sh
 
   extraVolumes:
     - name: did-material
+      emptyDir: { }
+    - name: kc-env
       emptyDir: { }
     - name: realms
       configMap:
@@ -124,8 +146,8 @@ keycloak:
       "vc.user-credential.credential_build_config.token_jws_type": "vc+sd-jwt",
       "vc.user-credential.credential_build_config.proof_types_supported": "{\"jwt\":{\"proof_signing_alg_values_supported\":[\"ES256\"]}}",
       "vc.user-credential.format": "vc+sd-jwt",
-      "vc.user-credential.scope": "CitizenCredential",
-      "vc.user-credential.vct": "CitizenCredential",
+      "vc.user-credential.scope": "UserCredential",
+      "vc.user-credential.vct": "UserCredential",
       "vc.user-credential.credential_build_config.visible_claims": "roles,email",
       "vc.user-credential.credential_build_config.decoys": "3",
       "vc.verifiable-credential.format": "vc+sd-jwt",
@@ -226,11 +248,11 @@ keycloak:
 
     users: |
       {
-        "username": "citizen",
+        "username": "employee",
         "enabled": true,
-        "email": "citizen@city.org",
+        "email": "employee@consumer.org",
         "firstName": "Test",
-        "lastName": "Citizen",
+        "lastName": "User",
         "credentials": [
           {
             "type": "password",
@@ -302,7 +324,7 @@ keycloak:
       }
     clientScopes: |
       {
-        "name": "CitizenCredential",
+        "name": "UserCredential",
         "description": "OIDC4VC Scope, that adds all properties required for a user.",
         "protocol": "openid-connect",
         "attributes": {},
@@ -313,7 +335,7 @@ keycloak:
             "protocolMapper": "oid4vc-context-mapper",
             "config": {
               "context": "https://www.w3.org/2018/credentials/v1",
-              "supportedCredentialTypes": "VerifiableCredential,CitizenCredential,OperatorCredential"
+              "supportedCredentialTypes": "VerifiableCredential,UserCredential,OperatorCredential"
             }
           },
           {
@@ -323,7 +345,7 @@ keycloak:
             "config": {
               "subjectProperty": "email",
               "userAttribute": "email",
-              "supportedCredentialTypes": "CitizenCredential,OperatorCredential"
+              "supportedCredentialTypes": "UserCredential,OperatorCredential"
             }
           },
           {
@@ -333,7 +355,7 @@ keycloak:
             "config": {
               "subjectProperty": "firstName",
               "userAttribute": "firstName",
-              "supportedCredentialTypes": "CitizenCredential,OperatorCredential"
+              "supportedCredentialTypes": "UserCredential,OperatorCredential"
             }
           },
           {
@@ -343,7 +365,7 @@ keycloak:
             "config": {
               "subjectProperty": "subject",
               "staticValue": "did:key:zDnaeiVpxCT7ARwqLndbWiCeGG2YZXvLfWFs1cGPgKUe8GPLe",
-              "supportedCredentialTypes": "CitizenCredential"
+              "supportedCredentialTypes": "UserCredential"
             }
           },
           {
@@ -353,7 +375,7 @@ keycloak:
             "config": {
               "subjectProperty": "street",
               "staticValue": "Main Street",
-              "supportedCredentialTypes": "CitizenCredential"
+              "supportedCredentialTypes": "UserCredential"
             }
           },
           {
@@ -363,7 +385,7 @@ keycloak:
             "config": {
               "subjectProperty": "lastName",
               "userAttribute": "lastName",
-              "supportedCredentialTypes": "CitizenCredential,OperatorCredential"
+              "supportedCredentialTypes": "UserCredential,OperatorCredential"
             }
           },
           {
@@ -373,7 +395,7 @@ keycloak:
             "config": {
               "subjectProperty": "streetNumber",
               "staticValue": "10",
-              "supportedCredentialTypes": "CitizenCredential"
+              "supportedCredentialTypes": "UserCredential"
             }
           },
           {
@@ -383,7 +405,7 @@ keycloak:
             "config": {
               "subjectProperty": "city",
               "staticValue": "Rabat",
-              "supportedCredentialTypes": "CitizenCredential"
+              "supportedCredentialTypes": "UserCredential"
             }
           },
           {
@@ -393,7 +415,7 @@ keycloak:
             "config": {
               "subjectProperty": "region",
               "staticValue": "Rabat-Sale-Kenitra",
-              "supportedCredentialTypes": "CitizenCredential"
+              "supportedCredentialTypes": "UserCredential"
             }
           },
           {
@@ -403,7 +425,7 @@ keycloak:
             "config": {
               "subjectProperty": "country",
               "staticValue": "Morocco",
-              "supportedCredentialTypes": "CitizenCredential"
+              "supportedCredentialTypes": "UserCredential"
             }
           },
           {
@@ -413,7 +435,7 @@ keycloak:
             "config": {
               "subjectProperty": "zipcode",
               "staticValue": "10000",
-              "supportedCredentialTypes": "CitizenCredential"
+              "supportedCredentialTypes": "UserCredential"
             }
           }
         ]
@@ -551,7 +573,59 @@ keycloak:
           "offline_access",
           "organization",
           "microprofile-jwt",
-          "CitizenCredential"
+          "UserCredential"
+        ]
+      },
+      {
+        "clientId": "admin-cli",
+        "name": "${client_admin-cli}",
+        "surrogateAuthRequired": false,
+        "enabled": true,
+        "alwaysDisplayInConsole": false,
+        "clientAuthenticatorType": "client-secret",
+        "redirectUris": [],
+        "webOrigins": [],
+        "notBefore": 0,
+        "bearerOnly": false,
+        "consentRequired": false,
+        "standardFlowEnabled": false,
+        "implicitFlowEnabled": false,
+        "directAccessGrantsEnabled": true,
+        "serviceAccountsEnabled": false,
+        "publicClient": true,
+        "frontchannelLogout": false,
+        "protocol": "openid-connect",
+        "attributes": {
+          "realm_client": "false",
+          "client.use.lightweight.access.token.enabled": "true"
+        },
+        "authenticationFlowBindingOverrides": {},
+        "fullScopeAllowed": true,
+        "nodeReRegistrationTimeout": 0,
+        "protocolMappers": [
+          {
+            "name": "audience resolve",
+            "protocol": "openid-connect",
+            "protocolMapper": "oidc-audience-resolve-mapper",
+            "consentRequired": false,
+            "config": {}
+          }
+        ],
+        "defaultClientScopes": [
+          "web-origins",
+          "acr",
+          "roles",
+          "profile",
+          "basic",
+          "email"
+        ],
+        "optionalClientScopes": [
+          "address",
+          "phone",
+          "offline_access",
+          "organization",
+          "microprofile-jwt",
+          "UserCredential"
         ]
       }
 

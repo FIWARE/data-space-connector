@@ -113,10 +113,6 @@ credentials-config-service:
     host: authentication-mysql
     # -- name of the schema inside the db
     name: ccsdb
-  deployment:
-    image:
-      tag: 3.0.0-PRE-9
-      pullPolicy: Always
 
 # -- configuration for the postgresql to be deployed as part of the connector, see https://github.com/bitnami/charts/tree/main/bitnami/postgresql for all options
 postgresql:
@@ -468,7 +464,7 @@ keycloak:
   # -- extra env vars to be set. we require them at the moment, since some of the chart config mechanisms only work with the bitnami-image
   extraEnvVars:
     - name: KEYCLOAK_LOG_LEVEL
-      value: DEBUG
+      value: INFO
     - name: KEYCLOAK_EXTRA_ARGS
       value: "--import-realm"
     - name: KC_FEATURES

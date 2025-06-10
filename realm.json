@@ -537,6 +537,10 @@
       {
         "client": "account-console",
         "roles": ["manage-account", "view-groups"]
+      },
+      {
+        "client": "admin-cli",
+        "roles": ["manage-account", "view-groups"]
       }
     ]
   },
