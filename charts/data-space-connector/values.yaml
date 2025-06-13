@@ -464,7 +464,7 @@ keycloak:
   # -- extra env vars to be set. we require them at the moment, since some of the chart config mechanisms only work with the bitnami-image
   extraEnvVars:
     - name: KEYCLOAK_LOG_LEVEL
-      value: DEBUG
+      value: INFO
     - name: KEYCLOAK_EXTRA_ARGS
       value: "--import-realm"
     - name: KC_FEATURES
