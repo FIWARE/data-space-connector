@@ -15,7 +15,7 @@ dependencies:
     repository: https://fiware.github.io/helm-charts
   - name: credentials-config-service
     condition: credentials-config-service.enabled
-    version: 1.0.0
+    version: 2.0.0
     repository: https://fiware.github.io/helm-charts
   - name: trusted-issuers-list
     condition: trusted-issuers-list.enabled
@@ -64,3 +64,15 @@ dependencies:
     condition: contract-management.enabled
     version: 1.0.4
     repository: https://fiware.github.io/helm-charts
+  # marketplace
+  - name: business-api-ecosystem
+    alias: marketplace
+    condition: marketplace.enabled
+    version: 0.11.12
+    repository: https://fiware.github.io/helm-charts
+  - name: mongodb
+    condition: mongodb.enabled
+    version: 16.5.21
+    repository: oci://registry-1.docker.io/bitnamicharts
+
+

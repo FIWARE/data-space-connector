@@ -586,6 +586,11 @@ data:
             "id": "sd-jwt-builder",
             "name": "sd-jwt-builder",
             "providerId": "vc+sd-jwt"
+          },
+          {
+            "id": "jwt-vc-builder",
+            "name": "jwt-vc-builder",
+            "providerId": "jwt_vc"
           } 
         ],
         
@@ -635,7 +640,7 @@ data:
               "kid": [ "${DID}" ],
               {{- end }}
               "active": [
-                "true"ac
+                "true"
               ],
               "priority": [
                 "0"

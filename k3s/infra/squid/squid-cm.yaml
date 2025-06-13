@@ -21,10 +21,10 @@ data:
     # Allow access to defined safe ports
     http_access deny !Safe_ports
     http_access allow all
-
+    
     # configure squid as forward proxy to traefik
     cache_peer traefik-loadbalancer-in.infra.svc.cluster.local parent 80 0 no-query originserver name=traefik-http
-    cache_peer traefik-loadbalancer-in.infra.svc.cluster.local parent 443 0 no-query originserver name=traefik-https
+    cache_peer traefik-loadbalancer-in.infra.svc.cluster.local parent 443 0 no-query originserver ssl name=traefik-https
 
     # Restrict cache_peer to CONNECT method for HTTPS requests
     acl CONNECT method CONNECT

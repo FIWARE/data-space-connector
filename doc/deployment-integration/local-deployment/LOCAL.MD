@@ -133,11 +133,11 @@ In order to retrieve an actual credential two ways are available:
 Get an AccessToken from Keycloak:
 
 ```shell
-    export ACCESS_TOKEN=$(curl -s -k -X POST https://keycloak-consumer.127.0.0.1.nip.io:8443/realms/test-realm/protocol/openid-connect/token \
+    export ACCESS_TOKEN=$(curl -s -k -x localhost:8888 -X POST https://keycloak-consumer.127.0.0.1.nip.io/realms/test-realm/protocol/openid-connect/token \
       --header 'Accept: */*' \
       --header 'Content-Type: application/x-www-form-urlencoded' \
       --data grant_type=password \
-      --data client_id=admin-cli \
+      --data client_id=account-console \
       --data username=employee \
       --data password=test | jq '.access_token' -r); echo ${ACCESS_TOKEN}
 ```
@@ -146,27 +146,27 @@ Get an AccessToken from Keycloak:
 Get the credentials issuer information:
 
 ```shell
-    curl -k -X GET https://keycloak-consumer.127.0.0.1.nip.io:8443/realms/test-realm/.well-known/openid-credential-issuer | python3 -m json.tool
+    curl -k -x localhost:8888 -X GET https://keycloak-consumer.127.0.0.1.nip.io/realms/test-realm/.well-known/openid-credential-issuer | python3 -m json.tool
 ```
 
 Get a credential offer uri(for the `user-credential), using the retrieved AccessToken:
 
 ```shell
-    export OFFER_URI=$(curl -s -k -X GET 'https://keycloak-consumer.127.0.0.1.nip.io:8443/realms/test-realm/protocol/oid4vc/credential-offer-uri?credential_configuration_id=user-credential' \
+    export OFFER_URI=$(curl -s -k -x localhost:8888 -X GET 'https://keycloak-consumer.127.0.0.1.nip.io/realms/test-realm/protocol/oid4vc/credential-offer-uri?credential_configuration_id=user-credential' \
       --header "Authorization: Bearer ${ACCESS_TOKEN}" | jq '"\(.issuer)\(.nonce)"' -r); echo ${OFFER_URI}
 ```
 
 Use the offer uri(e.g. the `issuer`and `nonce` fields), to retrieve the actual offer:
 
 ```shell
-    export PRE_AUTHORIZED_CODE=$(curl -s -k -X GET ${OFFER_URI} \
-            --header "Authorization: Bearer ${ACCESS_TOKEN}" | jq '.grants."urn:ietf:params:oauth:grant-type:pre-authorized_code"."pre-authorized_code"' -r); echo ${PRE_AUTHORIZED_CODE}
+    export PRE_AUTHORIZED_CODE=$(curl -s -k -x localhost:8888 -X GET ${OFFER_URI} \
+        --header "Authorization: Bearer ${ACCESS_TOKEN}" | jq '.grants."urn:ietf:params:oauth:grant-type:pre-authorized_code"."pre-authorized_code"' -r); echo ${PRE_AUTHORIZED_CODE}
 ```
 
 Exchange the pre-authorized code from the offer with an AccessToken at the authorization server:
 
 ```shell
-    export CREDENTIAL_ACCESS_TOKEN=$(curl -s -k -X POST https://keycloak-consumer.127.0.0.1.nip.io:8443/realms/test-realm/protocol/openid-connect/token \
+    export CREDENTIAL_ACCESS_TOKEN=$(curl -s -k -x localhost:8888 -X POST https://keycloak-consumer.127.0.0.1.nip.io/realms/test-realm/protocol/openid-connect/token \
       --header 'Accept: */*' \
       --header 'Content-Type: application/x-www-form-urlencoded' \
       --data grant_type=urn:ietf:params:oauth:grant-type:pre-authorized_code \
@@ -176,7 +176,7 @@ Exchange the pre-authorized code from the offer with an AccessToken at the autho
 Use the returned access token to get the actual credential:
 
 ```shell
-    export VERIFIABLE_CREDENTIAL=$(curl -s -k -X POST https://keycloak-consumer.127.0.0.1.nip.io:8443/realms/test-realm/protocol/oid4vc/credential \
+    export VERIFIABLE_CREDENTIAL=$(curl -s -k -x localhost:8888 -X POST https://keycloak-consumer.127.0.0.1.nip.io/realms/test-realm/protocol/oid4vc/credential \
       --header 'Accept: */*' \
       --header 'Content-Type: application/json' \
       --header "Authorization: Bearer ${CREDENTIAL_ACCESS_TOKEN}" \
@@ -421,7 +421,7 @@ The JWT representation of the JWT has to be Base64-encoded(no padding!):
 The vp_token can then be exchanged for the access-token
 
 ```shell
-    export DATA_SERVICE_ACCESS_TOKEN=$(curl -s -k -X POST $TOKEN_ENDPOINT \
+    export DATA_SERVICE_ACCESS_TOKEN=$(curl -s -k -x localhost:8888 -X POST $TOKEN_ENDPOINT \
       --header 'Accept: */*' \
       --header 'Content-Type: application/x-www-form-urlencoded' \
       --data grant_type=vp_token \
@@ -553,7 +553,7 @@ Since the offerings are handled through the TMForum APIs, the policies belong to
                       "@id": "odrl:hasPart"
                     },
                     "odrl:rightOperand": {
-                      "@value": "UserCredential",
+                      "@value": "LegalPersonCredential",
                       "@type": "xsd:string"
                     }
                   }
@@ -567,7 +567,7 @@ Since the offerings are handled through the TMForum APIs, the policies belong to
         }'
 ```
 Similar to the previous policy, it restricts access to a defined TMForum Resource(e.g. with `"odrl:leftOperand" : "tmf:resource"`), but allows
-creation of such through the action `"tmf:create"`. Additionaly, it restricts the assignee to have the role "REPRESENTATIVE" as part of its "UserCredential".
+creation of such through the action `"tmf:create"`. Additionaly, it restricts the assignee to have the role "REPRESENTATIVE" as part of its "LegalPersonCredential".
 
 3. Allow 'REPRESENTATIVES' to order products: 
 ```shell
@@ -630,7 +630,7 @@ creation of such through the action `"tmf:create"`. Additionaly, it restricts th
                       "@id": "odrl:hasPart"
                     },
                     "odrl:rightOperand": {
-                      "@value": "UserCredential",
+                      "@value": "LegalPersonCredential",
                       "@type": "xsd:string"
                     }
                   }
@@ -722,7 +722,7 @@ In addition to the policies for accessing the TMForum-APIS, another one to handl
               }
             }'
 ```
-Since initially only "UserCredentials" are allowed to be issued for the consumer inside the providers' Trusted-Issuers-List, no "OperatorCredentials"
+Since initially only "LegalPersonCredentials" are allowed to be issued for the consumer inside the providers' Trusted-Issuers-List, no "OperatorCredentials"
 are accepted before an order was created. Thus, the policy effectively restricts the cluster creation to participants that bought access and assigned
 users with the role "Operator".
 
@@ -766,11 +766,11 @@ local environment the same user will take care of both actions. However, in a re
 taking care of that. The issuance process is the same as it can be found in the [Data Consumer Chapter](#the-data-consumer), therefor 
 the steps are combined within a script:
 
-1. Get the UserCredential for the normal employee:
+1. Get the LegalPersonCredential for the normal employee:
 ```shell
  export USER_CREDENTIAL=$(./doc/scripts/get_credential_for_consumer.sh https://keycloak-consumer.127.0.0.1.nip.io:8443 user-credential employee); echo ${USER_CREDENTIAL}
 ```
-2. Get the UserCredential for the representative:
+2. Get the LegalPersonCredential for the representative:
 ```shell
  export REP_CREDENTIAL=$(./doc/scripts/get_credential_for_consumer.sh https://keycloak-consumer.127.0.0.1.nip.io:8443 user-credential representative); echo ${REP_CREDENTIAL}
 ```
@@ -931,7 +931,7 @@ To try it out, insert your holder did (```echo $HOLDER_DID```) into the mapper c
         "oidcScopes": {
             "default": [
                 {
-                    "type": "UserCredential",
+                    "type": "LegalPersonCredential",
                     "trustedParticipantsLists": [
                         "http://tir.trust-anchor.svc.cluster.local:8080"
                     ],
@@ -1222,6 +1222,15 @@ In order to build a concrete deployment, [maven](https://maven.apache.org/) exec
 
 ## Local Wallet
 
+### Certificats
+
+To have all required certificates, run before deploying(TODO: integrate in pipeline):
+
+```shell
+./helpers/certs/generate-certs.sh $(pwd)/k3s
+```
+
+### Simulated camera
 
 - Android Emulator + v4l2loopback:
 
@@ -1278,15 +1287,25 @@ adb shell am start -n com.android.chrome/com.google.android.apps.chrome.Main \
   * Enable USB debugging
   * Connect to device
 
-## Logging
+### Logging
 
 * adb shell pm list packages | grep euid
 * adb shell pidof <your.package.name>
 * adb logcat | grep pid
 
-## Set proxy
+### Set proxy
 
 In android emulator, go to Settings -> Network&Internet -> Internet 
 
 * disable "Mobile Data" & "Roaming"
 * Android Wifi -> Configure -> Proxy Manual - Proxy Hostname 10.0.2.2 - Proxy port 8888
+
+### Browser
+
+In order to connect with Keycloak, Verifier and BAE locally, the browser needs to use th proxy, too. Easiest solution is to use chrome with the [FoxyProxy-Plugin](https://chromewebstore.google.com/detail/foxyproxy/gcknhkkoolaabfmlnjonogaaifnjlfnp?hl=de&pli=1)(Firefox runs into various issues, thus its not recommended).
+In foxy-proxy, go to "options" -> "proxies" -> Add a proxy with:
+* Type HTTP 
+* Hostname 127.0.0.1
+* Port 8888
+
+Once its enabled, you can access ```https://keycloak-consumer.127.0.0.1.nip.io/realms/test-realm/account/``` and ```https://marketplace.127.0.0.1.nip.io/```. Be aware to accept the Certificate warnings on first access, since they provide a self-sigend certificate.

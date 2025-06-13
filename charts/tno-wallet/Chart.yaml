@@ -1,9 +1,0 @@
-apiVersion: v2
-name: tsg-wallet
-description: A Helm chart for Kubernetes
-type: application
-version: 0.10.0
-dependencies:
-  - name: postgresql
-    repository: oci://registry-1.docker.io/bitnamicharts
-    version: 13.1.5

@@ -147,7 +147,7 @@ vcverifier:
     annotations:
       traefik.ingress.kubernetes.io/router.tls: "true"
     hosts:
-      - host: provider-verifier.127.0.0.1.nip.io
+      - host: provider-verifier.io
         paths:
           - "/"
   deployment:
@@ -160,14 +160,14 @@ vcverifier:
     verifier:
       tirAddress: http://tir.127.0.0.1.nip.io:8080/
       did: ${DID}
-      supportedModes: ["urlEncoded","byValue","byReference"]
+      supportedModes: ["byValue","byReference"]
       clientIdentification:
         keyPath: /signing-key/client.key.pem
         requestKeyAlgorithm: ES256
-        id: x509_san_dns:provider-verifier.127.0.0.1.nip.io
+        id: x509_san_dns:provider-verifier.io
         certificatePath: /certificate/client-chain-bundle.cert.pem
     server:
-      host: https://provider-verifier.127.0.0.1.nip.io
+      host: https://provider-verifier.io
     configRepo:
       configEndpoint: http://credentials-config-service:8080
     alternativeConfig: /alternative-conf/server.yaml
@@ -182,6 +182,12 @@ vcverifier:
         emptyDir: {}
       - name: alternative-conf
         emptyDir: {}
+      # add the self generated root ca to the system truststore
+      - name: root-ca
+        emptyDir: {}
+      - name: ca-to-add
+        secret:
+          secretName: root-ca
     additionalVolumeMounts:
       - name: alternative-conf
         mountPath: /alternative-conf
@@ -189,7 +195,35 @@ vcverifier:
         mountPath: /signing-key
       - name: cert-chain
         mountPath: /certificate
+      # add the self generated root ca to the system truststore
+      - name: root-ca
+        mountPath: /etc/ssl/cert.pem
+        subPath: cert.pem
+    additionalEnvVars:
+      - name: HTTPS_PROXY
+        value: "http://squid-proxy.infra.svc.cluster.local:8888"
+      - name: HTTP_PROXY
+        value: "http://squid-proxy.infra.svc.cluster.local:8888"
+      - name: NO_PROXY
+        value: "credentials-config-service,w3.org,trusted-issuers-list"
     initContainers:
+      # add the self generated root ca to the system truststore
+      - name: add-root-ca
+        image: alpine:3.21.3
+        command:
+          - /bin/sh
+        args:
+          - -c
+          - |
+            #!/bin/sh
+            cp /etc/ssl/cert.pem /root-ca/cert.pem
+            cat /root-ca/cacert.pem >> /root-ca/cert.pem
+        volumeMounts:
+          - name: root-ca
+            mountPath: /root-ca
+          - name: ca-to-add
+            mountPath: /root-ca/cacert.pem
+            subPath: cacert.pem
       - name: get-did
         image: ubuntu
         command:
@@ -288,16 +322,20 @@ scorpio:
       paths:
         - "/"
   ccs:
+    id: did:key:zDnaeypyWjzn54GuUP7PmDXiiggCyiG7ksMF7Unm7kjtEKBez
     defaultOidcScope:
-      name: default
+      name: "openid learcredential"
     oidcScopes:
-      default:
+      "openid learcredential":
         credentials:
-          - type: UserCredential
+          - type: LegalPersonCredential
             trustedParticipantsLists:
-              - http://tir.trust-anchor.svc.cluster.local:8080
+              - http://tir.127.0.0.1.nip.io:8080
             trustedIssuersLists:
               - http://trusted-issuers-list:8080
+            jwtInclusion:
+              enabled: true
+              fullInclusion: true
         presentationDefinition:
           id: pd
           input_descriptors:
@@ -308,7 +346,7 @@ scorpio:
                     path:
                       - $.vct
                     filter:
-                      const: "CitizenCredential"
+                      const: "LegalPersonCredential"
                   - id: subject
                     path:
                       - $.firstName
@@ -324,7 +362,7 @@ scorpio:
         credentials:
           - type: OperatorCredential
             trustedParticipantsLists:
-              - http://tir.trust-anchor.svc.cluster.local:8080
+              - http://tir.127.0.0.1.nip.io:8080
             trustedIssuersLists:
               - http://trusted-issuers-list:8080
         presentationDefinition:
@@ -386,7 +424,7 @@ tm-forum-api:
   registration:
     ccs:
       defaultOidcScope:
-        credentialType: UserCredential
+        credentialType: LegalPersonCredential
         trustedParticipantsLists: http://tir.trust-anchor.svc.cluster.local:8080
 
   ingress:
@@ -466,18 +504,59 @@ trusted-issuers-list:
           paths:
             - /
 
-business-api-ecosystem:
+marketplace:
   siop:
     clientId: did:key:zDnaeypyWjzn54GuUP7PmDXiiggCyiG7ksMF7Unm7kjtEKBez
     verifier:
-      host: https://provider-verifier.127.0.0.1.nip.io:8443
-      qrCodePath: /api/v1/loginQR
-      tokenPath: /token
-      jwksPath: /.well-known/jwks
-  externalUrl: https://marketplace.127.0.0.1.nip.io:8443
+      host: https://provider-verifier.io
+      callbackURL: https://provider-verifier.io/auth/vc/callback
+  externalUrl: https://marketplace.127.0.0.1.nip.io
 
+  bizEcosystemApis:
+    tmForum:
+      catalog:
+        host: provider-tm-forum-api-product-catalog
+        port: 8080/tmf-api/productCatalogManagement/v4
+        path:
+      inventory:
+        host: provider-tm-forum-api-product-inventory
+        port: 8080/tmf-api/productInventory/v4
+        path: 
+      ordering:
+        host: provider-tm-forum-api-product-ordering-management
+        port: 8080/tmf-api/productOrderingManagement/v4
+        path: 
+      billing:
+        host: provider-tm-forum-api-customer-bill-management
+        port: 8080/tmf-api/customerBillManagement/v4
+        path: 
+      usage:
+        host: provider-tm-forum-api-usage-management
+        port: 8080/tmf-api/usageManagement/v4
+        path: 
+      party:
+        host: provider-tm-forum-api-party-catalog
+        port: 8080/tmf-api/party/v4
+        path: 
+      customer:
+        host: provider-tm-forum-api-customer-management
+        port: 8080/tmf-api/customerManagement/v4
+        path: 
+      resources:
+        host: provider-tm-forum-api-resource-catalog
+        port: 8080/tmf-api/resourceCatalog/v4
+        path: 
+      services:
+        host: provider-tm-forum-api-service-catalog
+        port: 8080/tmf-api/serviceCatalogManagement/v4
+        path: 
+      resourceInventory:
+        host: provider-tm-forum-api-resource-inventory
+        port: 8080/tmf-api/resourceInventoryManagement/v4
+        path: 
 
   bizEcosystemLogicProxy:
+    
 
     ingress: 
       enabled: true
@@ -487,3 +566,22 @@ business-api-ecosystem:
         - host: marketplace.127.0.0.1.nip.io
           paths: 
             - "/"
+    additionalEnvVars:
+      - name: BAE_LP_SIOP_IS_REDIRECTION
+        value: "true"
+      - name: BAE_LP_PURCHASE_ENABLED
+        value: "true"
+      - name: BAE_LP_MONGO_PASS
+        valueFrom:
+          secretKeyRef:
+            name: marketplace-secret-env
+            key: MONGO_BAE_BELP_PW
+      - name: BAE_LP_SIOP_PRIVATE_KEY
+        valueFrom:
+          secretKeyRef:
+            name: bae-did-secret
+            key: privateKey
+      - name: NODE_TLS_REJECT_UNAUTHORIZED
+        value: "0"
+      - name: HTTPS_PROXY
+        value: "http://squid-proxy.infra.svc.cluster.local:8888"

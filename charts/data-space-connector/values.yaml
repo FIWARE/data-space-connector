@@ -113,10 +113,6 @@ credentials-config-service:
     host: authentication-mysql
     # -- name of the schema inside the db
     name: ccsdb
-  deployment:
-    image:
-      tag: 3.0.0-PRE-9
-      pullPolicy: Always
 
 # -- configuration for the postgresql to be deployed as part of the connector, see https://github.com/bitnami/charts/tree/main/bitnami/postgresql for all options
 postgresql:
@@ -834,59 +830,22 @@ mongodb:
   initdbScriptsConfigMap: mongodb-bae-configmap
   extraEnvVarsSecret: marketplace-secret-env
 
-business-api-ecosystem:
+marketplace:
+  enabled: true
+  generatePasswords:
+    enabled: true
+    secretName: marketplace-secret
   bizEcosystemApis:
     enabled: false
 
-    tmForum:
-      catalog:
-        host: mp-tmf-api.127.0.0.1.nip.io
-        port: 8080
-        path: /tmf-api/productCatalogManagement/v4
-      inventory:
-        host: mp-tmf-api.127.0.0.1.nip.io
-        port: 8080
-        path: /tmf-api/productInventory/v4
-      ordering:
-        host: mp-tmf-api.127.0.0.1.nip.io
-        port: 8080
-        path: /tmf-api/productOrderingManagement/v4
-      billing:
-        host: mp-tmf-api.127.0.0.1.nip.io
-        port: 8080
-        path: /tmf-api/customerBillManagement/v4
-      usage:
-        host: mp-tmf-api.127.0.0.1.nip.io
-        port: 8080
-        path: /tmf-api/usageManagement/v4
-      party:
-        host: mp-tmf-api.127.0.0.1.nip.io
-        port: 8080
-        path: /tmf-api/party/v4
-      customer:
-        host: mp-tmf-api.127.0.0.1.nip.io
-        port: 8080
-        path: /tmf-api/customerManagement/v4
-      resources:
-        host: mp-tmf-api.127.0.0.1.nip.io
-        port: 8080
-        path: /tmf-api/resourceCatalog/v4
-      services:
-        host: mp-tmf-api.127.0.0.1.nip.io
-        port: 8080
-        path: /tmf-api/serviceCatalogManagement/v4
-      resourceInventory:
-        host: mp-tmf-api.127.0.0.1.nip.io
-        port: 8080
-        path: /tmf-api/resourceInventoryManagement/v4
   bizEcosystemRss:
     enabled: false
   siop:
     enabled: true
     verifier:
-      qrCodePath: /oidc/authorize
-      tokenPath: /oidc/token
-      jwksPath: /oidc/jwks
+      qrCodePath: /api/v2/loginQR
+      tokenPath: /token
+      jwksPath: /.well-known/jwks
     allowedRoles:
       - seller
       - customer
@@ -902,8 +861,7 @@ business-api-ecosystem:
     deployment:
       image:
         repository: fiware/biz-ecosystem-charging-backend
-        tag: 9.1.2
-        pullPolicy: Always
+        tag: 10.0.0
     
     plugins:
       enabled: false
@@ -952,8 +910,8 @@ business-api-ecosystem:
 
     statefulset:
       image:
-        repository: fiware/biz-ecosystem-logic-proxy
-        tag: "9.4.0"
+        repository: quay.io/wi_stefan/biz-ecosystem-logic-proxy
+        tag: "0.0.1"
         pullPolicy: Always
 
 
@@ -971,15 +929,3 @@ business-api-ecosystem:
       enabled: true
     initContainers: false
     propagateToken: true
-    additionalEnvVars:
-      - name: BAE_LP_SIOP_IS_REDIRECTION
-        value: "true"
-      - name: BAE_LP_SIOP_OPERATORS
-        value: VATES-B87798617
-      - name: BAE_LP_PURCHASE_ENABLED
-        value: "true"
-      - name: BAE_LP_MONGO_PASS
-        valueFrom:
-          secretKeyRef:
-            name: marketplace-secret-env
-            key: MONGO_BAE_BELP_PW

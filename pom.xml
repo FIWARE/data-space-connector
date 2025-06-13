@@ -162,51 +162,6 @@
                         </configuration>
                     </execution>
                     <execution>
-                        <id>copy-resources-gaiax-wallet</id>
-                        <phase>prepare-package</phase>
-                        <goals>
-                            <goal>copy-resources</goal>
-                        </goals>
-                        <configuration>
-                            <outputDirectory>${project.build.directory}/charts/gaia-x-wallet</outputDirectory>
-                            <resources>
-                                <resource>
-                                    <directory>${main.basedir}/charts/gaia-x-wallet</directory>
-                                </resource>
-                            </resources>
-                        </configuration>
-                    </execution>
-                    <execution>
-                        <id>copy-resources-wallet</id>
-                        <phase>prepare-package</phase>
-                        <goals>
-                            <goal>copy-resources</goal>
-                        </goals>
-                        <configuration>
-                            <outputDirectory>${project.build.directory}/charts/demo-walt</outputDirectory>
-                            <resources>
-                                <resource>
-                                    <directory>${main.basedir}/charts/demo-walt</directory>
-                                </resource>
-                            </resources>
-                        </configuration>
-                    </execution>
-                    <execution>
-                        <id>copy-resources-tno</id>
-                        <phase>prepare-package</phase>
-                        <goals>
-                            <goal>copy-resources</goal>
-                        </goals>
-                        <configuration>
-                            <outputDirectory>${project.build.directory}/charts/tno-wallet</outputDirectory>
-                            <resources>
-                                <resource>
-                                    <directory>${main.basedir}/charts/tno-wallet</directory>
-                                </resource>
-                            </resources>
-                        </configuration>
-                    </execution>
-                    <execution>
                         <id>copy-resources-dsc</id>
                         <phase>prepare-package</phase>
                         <goals>
@@ -343,23 +298,6 @@
                             <additionalArguments>--name-template=trust-anchor --namespace=trust-anchor -f ${main.basedir}/k3s/trust-anchor.yaml</additionalArguments>
                         </configuration>
                     </execution>
-                    <execution>
-                        <id>template-tno</id>
-                        <goals>
-                            <goal>init</goal>
-                            <goal>dependency-update</goal>
-                            <goal>template</goal>
-                        </goals>
-                        <phase>package</phase>
-                        <configuration>
-                            <chartDirectory>${project.build.directory}/charts/tno-wallet</chartDirectory>
-                            <skipTemplate>false</skipTemplate>
-                            <templateGenerateName>true</templateGenerateName>
-                            <templateOutputDir>${project.build.directory}/k3s/tno-wallet</templateOutputDir>
-                            <additionalArguments>--name-template=infra --namespace=infra
-                            </additionalArguments>
-                        </configuration>
-                    </execution>
                 </executions>
             </plugin>
             <plugin>
@@ -488,8 +426,7 @@
                                 </goals>
                                 <phase>package</phase>
                                 <configuration>
-                                    <chartDirectory>${project.build.directory}/charts/data-space-connector
-                                    </chartDirectory>
+                                    <chartDirectory>${project.build.directory}/charts/data-space-connector</chartDirectory>
                                     <skipTemplate>false</skipTemplate>
                                     <templateGenerateName>true</templateGenerateName>
                                     <templateOutputDir>${project.build.directory}/k3s/dsc-provider</templateOutputDir>
@@ -505,8 +442,7 @@
                                 </goals>
                                 <phase>package</phase>
                                 <configuration>
-                                    <chartDirectory>${project.build.directory}/charts/data-space-connector
-                                    </chartDirectory>
+                                    <chartDirectory>${project.build.directory}/charts/data-space-connector</chartDirectory>
                                     <skipTemplate>false</skipTemplate>
                                     <templateGenerateName>true</templateGenerateName>
                                     <templateOutputDir>${project.build.directory}/k3s/dsc-consumer</templateOutputDir>
@@ -579,8 +515,7 @@
                                 </goals>
                                 <phase>package</phase>
                                 <configuration>
-                                    <chartDirectory>${project.build.directory}/charts/data-space-connector
-                                    </chartDirectory>
+                                    <chartDirectory>${project.build.directory}/charts/data-space-connector</chartDirectory>
                                     <skipTemplate>false</skipTemplate>
                                     <templateGenerateName>true</templateGenerateName>
                                     <templateOutputDir>${project.build.directory}/k3s/dsc-provider</templateOutputDir>
@@ -596,8 +531,7 @@
                                 </goals>
                                 <phase>package</phase>
                                 <configuration>
-                                    <chartDirectory>${project.build.directory}/charts/data-space-connector
-                                    </chartDirectory>
+                                    <chartDirectory>${project.build.directory}/charts/data-space-connector</chartDirectory>
                                     <skipTemplate>false</skipTemplate>
                                     <templateGenerateName>true</templateGenerateName>
                                     <templateOutputDir>${project.build.directory}/k3s/dsc-consumer</templateOutputDir>
