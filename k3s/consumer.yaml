@@ -164,9 +164,9 @@ keycloak:
       "vc.operator-credential.scope": "OperatorCredential",
       "vc.operator-credential.vct": "OperatorCredential"
     clientRoles: |
-      "did:web:cg.gov.ma": [
+      "did:key:zDnaeypyWjzn54GuUP7PmDXiiggCyiG7ksMF7Unm7kjtEKBez": [
         {
-          "name": "READER",
+          "name": "customer",
           "description": "Is allowed to see offers etc.",
           "clientRole": true
         },
@@ -267,8 +267,8 @@ keycloak:
           }
         ],
         "clientRoles": {
-          "did:web:cg.gov.ma": [
-            "READER"
+          "did:key:zDnaeypyWjzn54GuUP7PmDXiiggCyiG7ksMF7Unm7kjtEKBez": [
+            "customer"
           ],
           "account": [
             "view-profile",
@@ -292,7 +292,7 @@ keycloak:
           }
         ],
         "clientRoles": {
-          "did:web:cg.gov.ma": [
+          "did:key:zDnaeypyWjzn54GuUP7PmDXiiggCyiG7ksMF7Unm7kjtEKBez": [
             "OPERATOR"
           ],
           "account": [
@@ -317,7 +317,7 @@ keycloak:
           }
         ],
         "clientRoles": {
-          "did:web:cg.gov.ma": [
+          "did:key:zDnaeypyWjzn54GuUP7PmDXiiggCyiG7ksMF7Unm7kjtEKBez": [
             "REPRESENTATIVE"
           ],
           "account": [
@@ -396,6 +396,16 @@ keycloak:
             }
           },
           {
+            "name": "role-mapper",
+            "protocol": "oid4vc",
+            "protocolMapper": "oid4vc-target-role-mapper",
+            "config": {
+              "subjectProperty": "roles",
+              "clientId": "did:key:zDnaeypyWjzn54GuUP7PmDXiiggCyiG7ksMF7Unm7kjtEKBez",
+              "supportedCredentialTypes": "LegalPersonCredential,OperatorCredential"
+            }
+          },
+          {
             "name": "streetNumber-mapper",
             "protocol": "oid4vc",
             "protocolMapper": "oid4vc-static-claim-mapper",
@@ -449,7 +459,7 @@ keycloak:
       }
     clients: |
       {
-        "clientId": "did:web:cg.gov.ma",
+        "clientId": "did:key:zDnaeypyWjzn54GuUP7PmDXiiggCyiG7ksMF7Unm7kjtEKBez",
         "enabled": true,
         "description": "Client to connect test.org",
         "surrogateAuthRequired": false,
