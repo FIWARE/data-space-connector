@@ -171,6 +171,11 @@ keycloak:
           "clientRole": true
         },
         {
+          "name": "READER",
+          "description": "Is allowed to see offers etc.",
+          "clientRole": true
+        },
+        {
           "name": "OPERATOR",
           "description": "Is allowed to operate clusters.",
           "clientRole": true
@@ -421,7 +426,7 @@ keycloak:
             "protocolMapper": "oid4vc-static-claim-mapper",
             "config": {
               "subjectProperty": "city",
-              "staticValue": "Rabat",
+              "staticValue": "Dresden",
               "supportedCredentialTypes": "LegalPersonCredential"
             }
           },
@@ -431,7 +436,7 @@ keycloak:
             "protocolMapper": "oid4vc-static-claim-mapper",
             "config": {
               "subjectProperty": "region",
-              "staticValue": "Rabat-Sale-Kenitra",
+              "staticValue": "Saxony",
               "supportedCredentialTypes": "LegalPersonCredential"
             }
           },
@@ -441,7 +446,7 @@ keycloak:
             "protocolMapper": "oid4vc-static-claim-mapper",
             "config": {
               "subjectProperty": "country",
-              "staticValue": "Morocco",
+              "staticValue": "Germany",
               "supportedCredentialTypes": "LegalPersonCredential"
             }
           },
@@ -451,7 +456,7 @@ keycloak:
             "protocolMapper": "oid4vc-static-claim-mapper",
             "config": {
               "subjectProperty": "zipcode",
-              "staticValue": "10000",
+              "staticValue": "01169",
               "supportedCredentialTypes": "LegalPersonCredential"
             }
           }
@@ -665,10 +670,10 @@ did:
   serviceType: ClusterIP
   port: 3001
   cert:
-    country: MA
-    state: MAROCCO
-    locality: Rabat
-    organization: City of Rabat
+    country: DE
+    state: SAXONY
+    locality: Dresden
+    organization: Fancy Marketplace Inc.
     commonName: www.fancy-marketplace.biz
   ingress:
     enabled: true
