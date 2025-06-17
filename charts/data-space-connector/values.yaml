@@ -627,7 +627,15 @@ tm-forum-api:
       # -- address of the broker
       url: http://data-service-scorpio:9090
     contextUrl: https://uri.etsi.org/ngsi-ld/v1/ngsi-ld-core-context.jsonld
-
+    additionalEnvVars: 
+      - name: API_EXTENSION_ENABLED
+        value: "true"
+      - name: GENERAL_NGSILDORQUERYVALUE
+        value: ","
+      - name: GENERAL_NGSILDORQUERYKEY
+        value: ","
+      - name: GENERAL_ENCLOSEQUERY
+        value: "false"
   # enable the api proxy
   apiProxy:
     enabled: true
@@ -636,6 +644,7 @@ tm-forum-api:
     service:
       # -- name to be used for the proxy service.
       nameOverride: tm-forum-api
+
 
   # -- list of apis to be deployed
   # -- every api needs to define a name and image. Basepath is required when routes or ingress will be enabled. Beside that, they can overwrite the default-config by using the same keys.
@@ -910,8 +919,8 @@ marketplace:
 
     statefulset:
       image:
-        repository: quay.io/wi_stefan/biz-ecosystem-logic-proxy
-        tag: "0.0.1"
+        repository: fiware/biz-ecosystem-logic-proxy
+        tag: "10.1.1-PRE-5"
         pullPolicy: Always
 
 

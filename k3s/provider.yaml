@@ -189,6 +189,10 @@ vcverifier:
         paths:
           - "/"
   deployment:
+    image:
+      repository: quay.io/wi_stefan/vcverifier
+      tag: 10.0.0
+      pullPolicy: Always
     logging:
       level: DEBUG
     verifier:
