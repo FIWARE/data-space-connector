@@ -137,6 +137,47 @@ credentials-config-service:
       - host: provider-ccs.127.0.0.1.nip.io
         paths:
           - "/"
+  registration:
+    enabled: true
+    services:
+      - id: did:key:zDnaeypyWjzn54GuUP7PmDXiiggCyiG7ksMF7Unm7kjtEKBez
+        defaultOidcScope: "openid learcredential"
+        oidcScopes:
+          "openid learcredential":
+            credentials:
+              - type: LegalPersonCredential
+                trustedParticipantsLists:
+                  - http://tir.127.0.0.1.nip.io:8080
+                trustedIssuersLists:
+                  - http://trusted-issuers-list:8080
+                jwtInclusion:
+                  enabled: true
+                  fullInclusion: true
+            presentationDefinition:
+              id: pd
+              input_descriptors:
+                - id: descriptor
+                  constraints: 
+                    fields:
+                      - id: vct
+                        path:
+                          - $.vct
+                        filter:
+                          const: "LegalPersonCredential"
+                      - id: subject
+                        path:
+                          - $.firstName
+                      - id: roles
+                        path:
+                          - $.roles
+                  format:
+                    "vc+sd-jwt": 
+                      alg: 
+                        - ES256
+              format:
+                "vc+sd-jwt": 
+                  alg: 
+                    - ES256
 
 vcverifier:
   ingress:
@@ -148,10 +189,6 @@ vcverifier:
         paths:
           - "/"
   deployment:
-    image:
-      repository: quay.io/wi_stefan/vcverifier
-      tag: 10.0.0
-      pullPolicy: Always
     logging:
       level: DEBUG
     verifier:
@@ -319,45 +356,19 @@ scorpio:
       paths:
         - "/"
   ccs:
-    id: did:key:zDnaeypyWjzn54GuUP7PmDXiiggCyiG7ksMF7Unm7kjtEKBez
     defaultOidcScope:
-      name: "openid learcredential"
+      name: default
     oidcScopes:
-      "openid learcredential":
+      default:
         credentials:
-          - type: LegalPersonCredential
+          - type: UserCredential
             trustedParticipantsLists:
-              - http://tir.127.0.0.1.nip.io:8080
+              - http://tir.trust-anchor.svc.cluster.local:8080
             trustedIssuersLists:
               - http://trusted-issuers-list:8080
             jwtInclusion:
               enabled: true
               fullInclusion: true
-        presentationDefinition:
-          id: pd
-          input_descriptors:
-            - id: descriptor
-              constraints: 
-                fields:
-                  - id: vct
-                    path:
-                      - $.vct
-                    filter:
-                      const: "LegalPersonCredential"
-                  - id: subject
-                    path:
-                      - $.firstName
-                  - id: roles
-                    path:
-                      - $.roles
-              format:
-                "vc+sd-jwt": 
-                  alg: 
-                    - ES256
-          format:
-            "vc+sd-jwt": 
-              alg: 
-                - ES256
       operator:
         credentials:
           - type: OperatorCredential
@@ -365,19 +376,9 @@ scorpio:
               - http://tir.127.0.0.1.nip.io:8080
             trustedIssuersLists:
               - http://trusted-issuers-list:8080
-        presentationDefinition:
-          id: pd
-          input_descriptors:
-            - id: descriptor
-              constraints: 
-                fields:
-                  - id: field
-                    path:
-                      - $.credentialSubject.firstName
-          format:
-            "vc+sd-jwt": 
-              alg: 
-                - ES256
+            jwtInclusion:
+              enabled: true
+              fullInclusion: true
 
 
 odrl-pap:

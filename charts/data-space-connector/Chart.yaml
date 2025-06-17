@@ -15,7 +15,7 @@ dependencies:
     repository: https://fiware.github.io/helm-charts
   - name: credentials-config-service
     condition: credentials-config-service.enabled
-    version: 2.0.0
+    version: 2.1.2
     repository: https://fiware.github.io/helm-charts
   - name: trusted-issuers-list
     condition: trusted-issuers-list.enabled
