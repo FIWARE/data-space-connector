@@ -532,7 +532,7 @@ marketplace:
         port: 8080/tmf-api/productOrderingManagement/v4
         path: 
       billing:
-        host: account
+        host: provider-tm-forum-api-account
         port: 8080/tmf-api/accountManagement/v4
         path: 
       usage:
