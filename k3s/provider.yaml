@@ -588,7 +588,7 @@ marketplace:
             key: privateKey
       - name: NODE_TLS_REJECT_UNAUTHORIZED
         value: "0"
-      - name: HTTPS_PROXY
+      - name: VC_HTTPS_PROXY
         value: "http://squid-proxy.infra.svc.cluster.local:8888"
 
 keycloak:

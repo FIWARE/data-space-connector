@@ -359,7 +359,7 @@ scorpio:
     # -- repository to be used - resource friendly all-in-one-runner without kafka
     repository: scorpiobroker/all-in-one-runner
     # -- tag of the image to be used - latest java image without kafka
-    tag: java-4.1.11
+    tag: java-4.1.10
   ## configuration of the database to be used by broker
   db:
     # -- host of the db
