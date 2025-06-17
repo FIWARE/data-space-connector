@@ -155,8 +155,8 @@ keycloak:
       "vc.user-credential.credential_build_config.token_jws_type": "JWT",
       "vc.user-credential.credential_build_config.proof_types_supported": "{\"jwt\":{\"proof_signing_alg_values_supported\":[\"ES256\"]}}",
       "vc.user-credential.format": "jwt_vc",
-      "vc.user-credential.scope": "LegalPersonCredential",
-      "vc.user-credential.vct": "LegalPersonCredential",
+      "vc.user-credential.scope": "UserCredential",
+      "vc.user-credential.vct": "UserCredential",
       "vc.verifiable-credential.format": "vc+sd-jwt",
       "vc.verifiable-credential.scope": "VerifiableCredential",
       "vc.verifiable-credential.vct": "VerifiableCredential",
@@ -347,7 +347,7 @@ keycloak:
             "protocolMapper": "oid4vc-context-mapper",
             "config": {
               "context": "https://www.w3.org/2018/credentials/v1",
-              "supportedCredentialTypes": "VerifiableCredential,LegalPersonCredential,OperatorCredential"
+              "supportedCredentialTypes": "VerifiableCredential,LegalPersonCredential,OperatorCredential,UserCredential"
             }
           },
           {
@@ -357,7 +357,7 @@ keycloak:
             "config": {
               "subjectProperty": "email",
               "userAttribute": "email",
-              "supportedCredentialTypes": "LegalPersonCredential,OperatorCredential"
+              "supportedCredentialTypes": "LegalPersonCredential,OperatorCredential,UserCredential"
             }
           },
           {
@@ -367,7 +367,7 @@ keycloak:
             "config": {
               "subjectProperty": "firstName",
               "userAttribute": "firstName",
-              "supportedCredentialTypes": "LegalPersonCredential,OperatorCredential"
+              "supportedCredentialTypes": "LegalPersonCredential,OperatorCredential,UserCredential"
             }
           },
           {
@@ -407,7 +407,7 @@ keycloak:
             "config": {
               "subjectProperty": "roles",
               "clientId": "did:key:zDnaeypyWjzn54GuUP7PmDXiiggCyiG7ksMF7Unm7kjtEKBez",
-              "supportedCredentialTypes": "LegalPersonCredential,OperatorCredential"
+              "supportedCredentialTypes": "LegalPersonCredential,OperatorCredential,UserCredential"
             }
           },
           {
