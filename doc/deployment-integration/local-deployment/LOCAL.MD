@@ -1332,3 +1332,45 @@ In foxy-proxy, go to "options" -> "proxies" -> Add a proxy with:
 * Port 8888
 
 Once its enabled, you can access ```https://keycloak-consumer.127.0.0.1.nip.io/realms/test-realm/account/``` and ```https://marketplace.127.0.0.1.nip.io/```. Be aware to accept the Certificate warnings on first access, since they provide a self-sigend certificate.
+
+
+## Presentation
+
+```shell
+  mvn clean deploy -Plocal
+```
+
+Create consumer service identity:
+```shell
+  mkdir cert
+  chmod o+rw cert
+  docker run -v $(pwd)/cert:/cert quay.io/wi_stefan/did-helper:0.1.1
+  # unsecure, only do that for demo
+  sudo chmod -R o+rw cert/private-key.pem
+```
+
+Export holder did:
+```shell
+  export HOLDER_DID=$(cat cert/did.json | jq '.id' -r); echo ${HOLDER_DID}
+```
+
+Get Operator Credential:
+```shell
+  export OPERATOR_CREDENTIAL=$(./doc/scripts/get_credential_for_consumer.sh https://keycloak-consumer.127.0.0.1.nip.io operator-credential operator); echo ${OPERATOR_CREDENTIAL}
+```
+
+Get access-token -> not allowed:
+```shell
+  ./doc/scripts/get_access_token_oid4vp.sh http://mp-data-service.127.0.0.1.nip.io:8080 $OPERATOR_CREDENTIAL operator
+```
+
+Frontend interaction(use browser and mobile phone with proxy settings described above):
+
+* Provider credentials: https://keycloak-provider.127.0.0.1.nip.io/realms/test-realm/account/oid4vci (employee@provider.org - test) -> select "user-sd"
+* Consumer credentials: https://keycloak-consumer.127.0.0.1.nip.io/realms/test-realm/account/oid4vci (employee@consumer.org - test) -> select "user-sd"
+* Marketplace login: https://marketplace.127.0.0.1.nip.io/
+
+Get access-token -> success:
+```shell
+  ./doc/scripts/get_access_token_oid4vp.sh http://mp-data-service.127.0.0.1.nip.io:8080 $OPERATOR_CREDENTIAL operator
+```

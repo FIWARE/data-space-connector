@@ -160,7 +160,11 @@ keycloak:
       "vc.verifiable-credential.format": "vc+sd-jwt",
       "vc.verifiable-credential.scope": "VerifiableCredential",
       "vc.verifiable-credential.vct": "VerifiableCredential",
-      "vc.operator-credential.format": "vc+sd-jwt",
+      "vc.operator-credential.credential_signing_alg_values_supported": "ES256",
+      "vc.operator-credential.credential_build_config.signing_algorithm": "ES256",
+      "vc.operator-credential.credential_build_config.token_jws_type": "JWT",
+      "vc.operator-credential.credential_build_config.proof_types_supported": "{\"jwt\":{\"proof_signing_alg_values_supported\":[\"ES256\"]}}",
+      "vc.operator-credential.format": "jwt_vc",
       "vc.operator-credential.scope": "OperatorCredential",
       "vc.operator-credential.vct": "OperatorCredential"
     clientRoles: |
@@ -461,6 +465,53 @@ keycloak:
             }
           }
         ]
+      },
+      {
+        "name": "OperatorCredential",
+        "description": "OIDC4VC Scope, that adds all properties required for a user.",
+        "protocol": "openid-connect",
+        "attributes": {},
+        "protocolMappers": [
+          {
+            "name": "context-mapper-oc",
+            "protocol": "oid4vc",
+            "protocolMapper": "oid4vc-context-mapper",
+            "config": {
+              "context": "https://www.w3.org/2018/credentials/v1",
+              "supportedCredentialTypes": "VerifiableCredential,LegalPersonCredential,OperatorCredential,UserCredential"
+            }
+          },
+          {
+            "name": "email-mapper-oc",
+            "protocol": "oid4vc",
+            "protocolMapper": "oid4vc-user-attribute-mapper",
+            "config": {
+              "subjectProperty": "email",
+              "userAttribute": "email",
+              "supportedCredentialTypes": "LegalPersonCredential,OperatorCredential,UserCredential"
+            }
+          },
+          {
+            "name": "firstName-mapper-oc",
+            "protocol": "oid4vc",
+            "protocolMapper": "oid4vc-user-attribute-mapper",
+            "config": {
+              "subjectProperty": "firstName",
+              "userAttribute": "firstName",
+              "supportedCredentialTypes": "LegalPersonCredential,OperatorCredential,UserCredential"
+            }
+          },
+          {
+            "name": "role-mapper-oc",
+            "protocol": "oid4vc",
+            "protocolMapper": "oid4vc-target-role-mapper",
+            "config": {
+              "subjectProperty": "roles",
+              "clientId": "did:key:zDnaeypyWjzn54GuUP7PmDXiiggCyiG7ksMF7Unm7kjtEKBez",
+              "supportedCredentialTypes": "LegalPersonCredential,OperatorCredential,UserCredential"
+            }
+          }
+        ]
       }
     clients: |
       {
@@ -595,7 +646,8 @@ keycloak:
           "offline_access",
           "organization",
           "microprofile-jwt",
-          "LegalPersonCredential"
+          "LegalPersonCredential",
+          "OperatorCredential"
         ]
       },
       {
