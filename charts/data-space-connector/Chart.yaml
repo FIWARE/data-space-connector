@@ -68,7 +68,7 @@ dependencies:
   - name: business-api-ecosystem
     alias: marketplace
     condition: marketplace.enabled
-    version: 0.11.12
+    version: 0.11.17
     repository: https://fiware.github.io/helm-charts
   - name: mongodb
     condition: mongodb.enabled

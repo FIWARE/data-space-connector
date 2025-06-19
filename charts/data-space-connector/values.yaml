@@ -656,7 +656,7 @@ tm-forum-api:
 
     - name: customer-bill-management
       image: tmforum-customer-bill-management
-      basePath: /tmf-api/customerBillManagement/v4
+      basePath: /tmf-api/customerBillManagement/v4/
 
     - name: customer-management
       image: tmforum-customer-management
@@ -701,6 +701,10 @@ tm-forum-api:
     - name: quote
       image: tmforum-quote
       basePath: /tmf-api/quote/v4
+
+    - name: account
+      image: tmforum-account
+      basePath: /tmf-api/accountManagement/v4
 
   # redis caching
   redis:
@@ -869,8 +873,8 @@ marketplace:
 
     deployment:
       image:
-        repository: fiware/biz-ecosystem-charging-backend
-        tag: 10.0.0
+        repository: quay.io/wi_stefan/biz-ecosystem-charging-backend
+        tag: 10.0.1
     
     plugins:
       enabled: false
@@ -899,13 +903,6 @@ marketplace:
       host: mongodb
       database: charging_db
       user: charging
-
-    extraEnvVars:
-      - name: BAE_CB_MONGO_PASS
-        valueFrom:
-          secretKeyRef:
-            name: marketplace-secret-env
-            key: MONGO_BAE_CHARGING_PW
 
   oauth:
     provider: "vc"

@@ -18,7 +18,7 @@ signature=$(echo -n "${jwt_header}.${payload}" | openssl dgst -sha256 -binary -s
 jwt="${jwt_header}.${payload}.${signature}"
 vp_token=$(echo -n ${jwt} | base64 -w0 | sed s/\+/-/g | sed 's/\//_/g' | sed -E s/=+$//)
 
-echo $(curl -s -k -X POST $token_endpoint \
+echo $(curl -s -k -x localhost:8888 -X POST $token_endpoint \
       --header 'Accept: */*' \
       --header 'Content-Type: application/x-www-form-urlencoded' \
       --data grant_type=vp_token \

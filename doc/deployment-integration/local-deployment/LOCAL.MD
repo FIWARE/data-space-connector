@@ -1233,13 +1233,17 @@ In order to use the wallet on an (Android) Mobile Phone, together with the local
 * enable ```Developer-Mode``` on the phone -> [Android Documentation](https://developer.android.com/studio/debug/dev-options)
 * download the Wallet App -> [Wallet on Google Drive](https://drive.google.com/file/d/10NT5uX1uLwjI2D_XoE1eqmarv8Wo61hO/view?usp=sharing)
 * install the Wallet through the downloaded APK. Be aware that warnings will be shown, since it does not come from a trusted store
-* get the IP address of your Laptop in the local WLAN(```ip a```)
+* two options:
+  * if client isolation is not enabled for the WLAN: get the IP address of your Laptop in the local WLAN(```ip a```) 
+  * connect the mobile via USB cable and enable USB tethering:  get the IP address of your Laptop in the tethering(```ip a```, most likely the last in the list)
 * on the mobile phone, go to ```settings```-> ```connections``` -> ```WLAN```
   * select the local WLAN
   * show advanced settings
   * set Proxy -> Manual
   * Proxy-Hostname: <IP-ADDRESS-OF-THE-LAPTOP>
   * Proxy-Port: 8888
+
+
 
 ### Certificats
 
