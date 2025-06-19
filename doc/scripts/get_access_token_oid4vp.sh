@@ -19,7 +19,6 @@ jwt="${jwt_header}.${payload}.${signature}"
 vp_token=$(echo -n ${jwt} | base64 -w0 | sed s/\+/-/g | sed 's/\//_/g' | sed -E s/=+$//)
 
 
-echo ${jwt}
 echo $(curl -s -k -x localhost:8888 -X POST $token_endpoint \
       --header 'Accept: */*' \
       --header 'Content-Type: application/x-www-form-urlencoded' \
