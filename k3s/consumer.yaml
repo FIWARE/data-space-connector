@@ -774,7 +774,8 @@ keycloak:
           "organization",
           "microprofile-jwt",
           "LegalPersonCredential",
-          "OperatorCredential"
+          "OperatorCredential",
+          "UserCredential"
         ]
       },
       {
