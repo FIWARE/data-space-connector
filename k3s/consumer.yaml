@@ -467,6 +467,133 @@ keycloak:
         ]
       },
       {
+        "name": "UserCredential",
+        "description": "OIDC4VC Scope, that adds all properties required for a user.",
+        "protocol": "openid-connect",
+        "attributes": {},
+        "protocolMappers": [
+          {
+            "name": "context-mapper-uc",
+            "protocol": "oid4vc",
+            "protocolMapper": "oid4vc-context-mapper",
+            "config": {
+              "context": "https://www.w3.org/2018/credentials/v1",
+              "supportedCredentialTypes": "VerifiableCredential,LegalPersonCredential,OperatorCredential,UserCredential"
+            }
+          },
+          {
+            "name": "email-mapper-uc",
+            "protocol": "oid4vc",
+            "protocolMapper": "oid4vc-user-attribute-mapper",
+            "config": {
+              "subjectProperty": "email",
+              "userAttribute": "email",
+              "supportedCredentialTypes": "LegalPersonCredential,OperatorCredential,UserCredential"
+            }
+          },
+          {
+            "name": "firstName-mapper-uc",
+            "protocol": "oid4vc",
+            "protocolMapper": "oid4vc-user-attribute-mapper",
+            "config": {
+              "subjectProperty": "firstName",
+              "userAttribute": "firstName",
+              "supportedCredentialTypes": "LegalPersonCredential,OperatorCredential,UserCredential"
+            }
+          },
+          {
+            "name": "subject-mapper-uc",
+            "protocol": "oid4vc",
+            "protocolMapper": "oid4vc-static-claim-mapper",
+            "config": {
+              "subjectProperty": "subject",
+              "staticValue": "did:key:zDnaeiVpxCT7ARwqLndbWiCeGG2YZXvLfWFs1cGPgKUe8GPLe",
+              "supportedCredentialTypes": "LegalPersonCredential,UserCredential"
+            }
+          },
+          {
+            "name": "street-mapper-uc",
+            "protocol": "oid4vc",
+            "protocolMapper": "oid4vc-static-claim-mapper",
+            "config": {
+              "subjectProperty": "street",
+              "staticValue": "Main Street",
+              "supportedCredentialTypes": "LegalPersonCredential,UserCredential"
+            }
+          },
+          {
+            "name": "lastName-mapper-uc",
+            "protocol": "oid4vc",
+            "protocolMapper": "oid4vc-user-attribute-mapper",
+            "config": {
+              "subjectProperty": "lastName",
+              "userAttribute": "lastName",
+              "supportedCredentialTypes": "LegalPersonCredential,OperatorCredential,UserCredential"
+            }
+          },
+          {
+            "name": "role-mapper-uc",
+            "protocol": "oid4vc",
+            "protocolMapper": "oid4vc-target-role-mapper",
+            "config": {
+              "subjectProperty": "roles",
+              "clientId": "did:key:zDnaeypyWjzn54GuUP7PmDXiiggCyiG7ksMF7Unm7kjtEKBez",
+              "supportedCredentialTypes": "LegalPersonCredential,OperatorCredential,UserCredential"
+            }
+          },
+          {
+            "name": "streetNumber-mapper-uc",
+            "protocol": "oid4vc",
+            "protocolMapper": "oid4vc-static-claim-mapper",
+            "config": {
+              "subjectProperty": "streetNumber",
+              "staticValue": "10",
+              "supportedCredentialTypes": "LegalPersonCredential,UserCredential"
+            }
+          },
+          {
+            "name": "city-mapper-uc",
+            "protocol": "oid4vc",
+            "protocolMapper": "oid4vc-static-claim-mapper",
+            "config": {
+              "subjectProperty": "city",
+              "staticValue": "Dresden",
+              "supportedCredentialTypes": "LegalPersonCredential,UserCredential"
+            }
+          },
+          {
+            "name": "region-mapper-uc",
+            "protocol": "oid4vc",
+            "protocolMapper": "oid4vc-static-claim-mapper",
+            "config": {
+              "subjectProperty": "region",
+              "staticValue": "Saxony",
+              "supportedCredentialTypes": "LegalPersonCredential,UserCredential"
+            }
+          },
+          {
+            "name": "country-mapper-uc",
+            "protocol": "oid4vc",
+            "protocolMapper": "oid4vc-static-claim-mapper",
+            "config": {
+              "subjectProperty": "country",
+              "staticValue": "Germany",
+              "supportedCredentialTypes": "LegalPersonCredential,UserCredential"
+            }
+          },
+          {
+            "name": "zipcode-mapper-uc",
+            "protocol": "oid4vc",
+            "protocolMapper": "oid4vc-static-claim-mapper",
+            "config": {
+              "subjectProperty": "zipcode",
+              "staticValue": "01169",
+              "supportedCredentialTypes": "LegalPersonCredential,UserCredential"
+            }
+          }
+        ]
+      },
+      {
         "name": "OperatorCredential",
         "description": "OIDC4VC Scope, that adds all properties required for a user.",
         "protocol": "openid-connect",
