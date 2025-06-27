@@ -488,11 +488,7 @@ keycloak:
             "protocolMapper": "oid4vc-context-mapper",
             "config": {
               "context": "https://www.w3.org/2018/credentials/v1",
-<<<<<<< HEAD
               "supportedCredentialTypes": "UserCredential"
-=======
-              "supportedCredentialTypes": "VerifiableCredential,LegalPersonCredential,OperatorCredential,UserCredential"
->>>>>>> origin/fix-local-deploy
             }
           },
           {
@@ -502,11 +498,7 @@ keycloak:
             "config": {
               "subjectProperty": "email",
               "userAttribute": "email",
-<<<<<<< HEAD
               "supportedCredentialTypes": "UserCredential"
-=======
-              "supportedCredentialTypes": "LegalPersonCredential,OperatorCredential,UserCredential"
->>>>>>> origin/fix-local-deploy
             }
           },
           {
@@ -516,11 +508,7 @@ keycloak:
             "config": {
               "subjectProperty": "firstName",
               "userAttribute": "firstName",
-<<<<<<< HEAD
               "supportedCredentialTypes": "UserCredential"
-=======
-              "supportedCredentialTypes": "LegalPersonCredential,OperatorCredential,UserCredential"
->>>>>>> origin/fix-local-deploy
             }
           },
           {
@@ -530,11 +518,7 @@ keycloak:
             "config": {
               "subjectProperty": "subject",
               "staticValue": "did:key:zDnaeiVpxCT7ARwqLndbWiCeGG2YZXvLfWFs1cGPgKUe8GPLe",
-<<<<<<< HEAD
               "supportedCredentialTypes": "UserCredential"
-=======
-              "supportedCredentialTypes": "LegalPersonCredential,UserCredential"
->>>>>>> origin/fix-local-deploy
             }
           },
           {
@@ -544,11 +528,7 @@ keycloak:
             "config": {
               "subjectProperty": "street",
               "staticValue": "Main Street",
-<<<<<<< HEAD
               "supportedCredentialTypes": "UserCredential"
-=======
-              "supportedCredentialTypes": "LegalPersonCredential,UserCredential"
->>>>>>> origin/fix-local-deploy
             }
           },
           {
@@ -558,11 +538,7 @@ keycloak:
             "config": {
               "subjectProperty": "lastName",
               "userAttribute": "lastName",
-<<<<<<< HEAD
               "supportedCredentialTypes": "UserCredential"
-=======
-              "supportedCredentialTypes": "LegalPersonCredential,OperatorCredential,UserCredential"
->>>>>>> origin/fix-local-deploy
             }
           },
           {
@@ -571,13 +547,8 @@ keycloak:
             "protocolMapper": "oid4vc-target-role-mapper",
             "config": {
               "subjectProperty": "roles",
-<<<<<<< HEAD
               "clientId": "${CLIENT_DID}",
               "supportedCredentialTypes": "UserCredential"
-=======
-              "clientId": "did:key:zDnaeypyWjzn54GuUP7PmDXiiggCyiG7ksMF7Unm7kjtEKBez",
-              "supportedCredentialTypes": "LegalPersonCredential,OperatorCredential,UserCredential"
->>>>>>> origin/fix-local-deploy
             }
           },
           {
@@ -587,11 +558,7 @@ keycloak:
             "config": {
               "subjectProperty": "streetNumber",
               "staticValue": "10",
-<<<<<<< HEAD
               "supportedCredentialTypes": "UserCredential"
-=======
-              "supportedCredentialTypes": "LegalPersonCredential,UserCredential"
->>>>>>> origin/fix-local-deploy
             }
           },
           {
@@ -601,11 +568,7 @@ keycloak:
             "config": {
               "subjectProperty": "city",
               "staticValue": "Dresden",
-<<<<<<< HEAD
               "supportedCredentialTypes": "UserCredential"
-=======
-              "supportedCredentialTypes": "LegalPersonCredential,UserCredential"
->>>>>>> origin/fix-local-deploy
             }
           },
           {
@@ -615,11 +578,7 @@ keycloak:
             "config": {
               "subjectProperty": "region",
               "staticValue": "Saxony",
-<<<<<<< HEAD
               "supportedCredentialTypes": "UserCredential"
-=======
-              "supportedCredentialTypes": "LegalPersonCredential,UserCredential"
->>>>>>> origin/fix-local-deploy
             }
           },
           {
@@ -629,11 +588,7 @@ keycloak:
             "config": {
               "subjectProperty": "country",
               "staticValue": "Germany",
-<<<<<<< HEAD
               "supportedCredentialTypes": "UserCredential"
-=======
-              "supportedCredentialTypes": "LegalPersonCredential,UserCredential"
->>>>>>> origin/fix-local-deploy
             }
           },
           {
@@ -643,11 +598,7 @@ keycloak:
             "config": {
               "subjectProperty": "zipcode",
               "staticValue": "01169",
-<<<<<<< HEAD
               "supportedCredentialTypes": "UserCredential"
-=======
-              "supportedCredentialTypes": "LegalPersonCredential,UserCredential"
->>>>>>> origin/fix-local-deploy
             }
           }
         ]
@@ -934,11 +885,7 @@ registration:
   configMap: consumer-til-registration
   til: http://trusted-issuers-list.provider.svc.cluster.local:8080
   did: ${DID}
-<<<<<<< HEAD
   credentialTypes:
     - LegalPersonCredential
     - UserCredential
   prepScript: export $(curl -f -X GET did-helper:3001/did-material/did.env)
-=======
-  credentialsType: LegalPersonCredential
->>>>>>> origin/fix-local-deploy
