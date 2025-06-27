@@ -533,9 +533,7 @@ marketplace:
   bizEcosystemChargingBackend:  
     deployment:
       image:
-        repository: quay.io/wi_stefan/biz-ecosystem-charging-backend
         tag: 10.0.1
-        pullPolicy: Always
     extraEnvVars:
       - name: BAE_CB_MONGO_PASS
         valueFrom:
