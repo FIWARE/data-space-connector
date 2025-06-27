@@ -35,6 +35,7 @@ recipes.
   - [Deployment with Helm](#deployment-with-helm)
 - [Testing](#testing)
 - [Additional documentation and resources](#additional-documentation-and-resources)
+  - [Marketplace Integration](#marketplace-integration)
   - [Ongoing Work](#ongoing-work)
   - [Additional documentation](#additional-documentation)
   - [Additional Resources](#additional-resources)
@@ -367,6 +368,12 @@ the [test-scenarios](./it/src/test/resources/it/mvds_basic.feature) against it.
 
 
 ## Additional documentation and resources
+
+### Marketplace Integration
+
+In order to share data and data-services, a marketplace to connect Consumer and Provider is required. The FIWARE Data Space Connector integrates with the [FIWARE BAE Marketplace](https://github.com/FIWARE-TMForum) to not only provide a Catalog-API, but also a human-friendly UI and automatic integration with the authentication/authorization system.
+
+Find more information in the dedicated [Marketplace Integration Section](./doc/MARKETPLACE_INTEGRATION.md)
 
 ### Ongoing Work
 The FIWARE Data Space Connector is constantly beeing developed and extended with new features. Their status and some previews will be listed [here](./doc/ONGOING_WORK.md).

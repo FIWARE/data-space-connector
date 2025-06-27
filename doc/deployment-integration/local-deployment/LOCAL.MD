@@ -133,54 +133,54 @@ In order to retrieve an actual credential two ways are available:
 Get an AccessToken from Keycloak:
 
 ```shell
-    export ACCESS_TOKEN=$(curl -s -k -x localhost:8888 -X POST https://keycloak-consumer.127.0.0.1.nip.io/realms/test-realm/protocol/openid-connect/token \
-      --header 'Accept: */*' \
-      --header 'Content-Type: application/x-www-form-urlencoded' \
-      --data grant_type=password \
-      --data client_id=account-console \
-      --data username=employee \
-      --data password=test | jq '.access_token' -r); echo ${ACCESS_TOKEN}
+  export ACCESS_TOKEN=$(curl -s -k -x localhost:8888 -X POST https://keycloak-consumer.127.0.0.1.nip.io/realms/test-realm/protocol/openid-connect/token \
+    --header 'Accept: */*' \
+    --header 'Content-Type: application/x-www-form-urlencoded' \
+    --data grant_type=password \
+    --data client_id=account-console \
+    --data username=employee \
+    --data password=test | jq '.access_token' -r); echo ${ACCESS_TOKEN}
 ```
 
 (Optional, since in the local case we know all of the values in advance)
 Get the credentials issuer information:
 
 ```shell
-    curl -k -x localhost:8888 -X GET https://keycloak-consumer.127.0.0.1.nip.io/realms/test-realm/.well-known/openid-credential-issuer | python3 -m json.tool
+  curl -k -x localhost:8888 -X GET https://keycloak-consumer.127.0.0.1.nip.io/realms/test-realm/.well-known/openid-credential-issuer | python3 -m json.tool
 ```
 
 Get a credential offer uri(for the `user-credential), using the retrieved AccessToken:
 
 ```shell
-    export OFFER_URI=$(curl -s -k -x localhost:8888 -X GET 'https://keycloak-consumer.127.0.0.1.nip.io/realms/test-realm/protocol/oid4vc/credential-offer-uri?credential_configuration_id=user-credential' \
-      --header "Authorization: Bearer ${ACCESS_TOKEN}" | jq '"\(.issuer)\(.nonce)"' -r); echo ${OFFER_URI}
+  export OFFER_URI=$(curl -s -k -x localhost:8888 -X GET 'https://keycloak-consumer.127.0.0.1.nip.io/realms/test-realm/protocol/oid4vc/credential-offer-uri?credential_configuration_id=user-credential' \
+    --header "Authorization: Bearer ${ACCESS_TOKEN}" | jq '"\(.issuer)\(.nonce)"' -r); echo ${OFFER_URI}
 ```
 
 Use the offer uri(e.g. the `issuer`and `nonce` fields), to retrieve the actual offer:
 
 ```shell
-    export PRE_AUTHORIZED_CODE=$(curl -s -k -x localhost:8888 -X GET ${OFFER_URI} \
-        --header "Authorization: Bearer ${ACCESS_TOKEN}" | jq '.grants."urn:ietf:params:oauth:grant-type:pre-authorized_code"."pre-authorized_code"' -r); echo ${PRE_AUTHORIZED_CODE}
+  export PRE_AUTHORIZED_CODE=$(curl -s -k -x localhost:8888 -X GET ${OFFER_URI} \
+    --header "Authorization: Bearer ${ACCESS_TOKEN}" | jq '.grants."urn:ietf:params:oauth:grant-type:pre-authorized_code"."pre-authorized_code"' -r); echo ${PRE_AUTHORIZED_CODE}
 ```
 
 Exchange the pre-authorized code from the offer with an AccessToken at the authorization server:
 
 ```shell
-    export CREDENTIAL_ACCESS_TOKEN=$(curl -s -k -x localhost:8888 -X POST https://keycloak-consumer.127.0.0.1.nip.io/realms/test-realm/protocol/openid-connect/token \
-      --header 'Accept: */*' \
-      --header 'Content-Type: application/x-www-form-urlencoded' \
-      --data grant_type=urn:ietf:params:oauth:grant-type:pre-authorized_code \
-      --data pre-authorized_code=${PRE_AUTHORIZED_CODE} | jq '.access_token' -r); echo ${CREDENTIAL_ACCESS_TOKEN}
+  export CREDENTIAL_ACCESS_TOKEN=$(curl -s -k -x localhost:8888 -X POST https://keycloak-consumer.127.0.0.1.nip.io/realms/test-realm/protocol/openid-connect/token \
+    --header 'Accept: */*' \
+    --header 'Content-Type: application/x-www-form-urlencoded' \
+    --data grant_type=urn:ietf:params:oauth:grant-type:pre-authorized_code \
+    --data pre-authorized_code=${PRE_AUTHORIZED_CODE} | jq '.access_token' -r); echo ${CREDENTIAL_ACCESS_TOKEN}
 ```
 
 Use the returned access token to get the actual credential:
 
 ```shell
-    export VERIFIABLE_CREDENTIAL=$(curl -s -k -x localhost:8888 -X POST https://keycloak-consumer.127.0.0.1.nip.io/realms/test-realm/protocol/oid4vc/credential \
-      --header 'Accept: */*' \
-      --header 'Content-Type: application/json' \
-      --header "Authorization: Bearer ${CREDENTIAL_ACCESS_TOKEN}" \
-      --data '{"credential_identifier":"user-credential", "format":"jwt_vc"}' | jq '.credential' -r); echo ${VERIFIABLE_CREDENTIAL}
+  export VERIFIABLE_CREDENTIAL=$(curl -s -k -x localhost:8888 -X POST https://keycloak-consumer.127.0.0.1.nip.io/realms/test-realm/protocol/oid4vc/credential \
+    --header 'Accept: */*' \
+    --header 'Content-Type: application/json' \
+    --header "Authorization: Bearer ${CREDENTIAL_ACCESS_TOKEN}" \
+    --data '{"credential_identifier":"user-credential", "format":"jwt_vc"}' | jq '.credential' -r); echo ${VERIFIABLE_CREDENTIAL}
 ```
 
 You will receive a jwt-encoded credential to be used within the data space.
@@ -311,7 +311,7 @@ Every required information for that flow can be retrieved via the standard endpo
 If you try to request the provider api without authentication, you will receive an 401:
 
 ```shell
-   curl -s -X GET 'http://mp-data-service.127.0.0.1.nip.io:8080/ngsi-ld/v1/entities/urn:ngsi-ld:EnergyReport:fms-1'
+  curl -s -X GET 'http://mp-data-service.127.0.0.1.nip.io:8080/ngsi-ld/v1/entities/urn:ngsi-ld:EnergyReport:fms-1'
 ```
 
 The normal flow is now to request the oidc-information at the well-known endpoint:
@@ -421,12 +421,12 @@ The JWT representation of the JWT has to be Base64-encoded(no padding!):
 The vp_token can then be exchanged for the access-token
 
 ```shell
-    export DATA_SERVICE_ACCESS_TOKEN=$(curl -s -k -x localhost:8888 -X POST $TOKEN_ENDPOINT \
-      --header 'Accept: */*' \
-      --header 'Content-Type: application/x-www-form-urlencoded' \
-      --data grant_type=vp_token \
-      --data vp_token=${VP_TOKEN} \
-      --data scope=default | jq '.access_token' -r ); echo ${DATA_SERVICE_ACCESS_TOKEN}
+  export DATA_SERVICE_ACCESS_TOKEN=$(curl -s -k -x localhost:8888 -X POST $TOKEN_ENDPOINT \
+    --header 'Accept: */*' \
+    --header 'Content-Type: application/x-www-form-urlencoded' \
+    --data grant_type=vp_token \
+    --data vp_token=${VP_TOKEN} \
+    --data scope=default | jq '.access_token' -r ); echo ${DATA_SERVICE_ACCESS_TOKEN}
 ```
 
 With that token, try to access the data again:
@@ -553,7 +553,7 @@ Since the offerings are handled through the TMForum APIs, the policies belong to
                       "@id": "odrl:hasPart"
                     },
                     "odrl:rightOperand": {
-                      "@value": "LegalPersonCredential",
+                      "@value": "UserCredential",
                       "@type": "xsd:string"
                     }
                   }
@@ -630,7 +630,7 @@ creation of such through the action `"tmf:create"`. Additionaly, it restricts th
                       "@id": "odrl:hasPart"
                     },
                     "odrl:rightOperand": {
-                      "@value": "LegalPersonCredential",
+                      "@value": "UserCredential",
                       "@type": "xsd:string"
                     }
                   }
@@ -736,26 +736,26 @@ The offer creation includes multiple steps:
 1. Create the product specification:
 ```shell
 export PRODUCT_SPEC_ID=$(curl -X 'POST' http://tm-forum-api.127.0.0.1.nip.io:8080/tmf-api/productCatalogManagement/v4/productSpecification \
-     -H 'Content-Type: application/json;charset=utf-8' \
-     -d '{
-        "brand": "M&P Operations",
-        "version": "1.0.0",
-        "lifecycleStatus": "ACTIVE",
-        "name": "M&P K8S"
-     }' | jq '.id' -r ); echo ${PRODUCT_SPEC_ID}
+  -H 'Content-Type: application/json;charset=utf-8' \
+  -d '{
+    "brand": "M&P Operations",
+    "version": "1.0.0",
+    "lifecycleStatus": "ACTIVE",
+    "name": "M&P K8S"
+  }' | jq '.id' -r ); echo ${PRODUCT_SPEC_ID}
 ```
 2. Create a product offering, referencing the spec:
 ```shell
 export PRODUCT_OFFERING_ID=$(curl -X 'POST' http://tm-forum-api.127.0.0.1.nip.io:8080/tmf-api/productCatalogManagement/v4/productOffering \
-     -H 'Content-Type: application/json;charset=utf-8' \
-     -d "{
-        \"version\": \"1.0.0\",
-        \"lifecycleStatus\": \"ACTIVE\",
-        \"name\": \"M&P K8S Offering\",
-        \"productSpecification\": {
-          \"id\": \"${PRODUCT_SPEC_ID}\"
-        }
-     }"| jq '.id' -r ); echo ${PRODUCT_OFFERING_ID}
+  -H 'Content-Type: application/json;charset=utf-8' \
+  -d "{
+    \"version\": \"1.0.0\",
+    \"lifecycleStatus\": \"ACTIVE\",
+    \"name\": \"M&P K8S Offering\",
+    \"productSpecification\": {
+      \"id\": \"${PRODUCT_SPEC_ID}\"
+    }
+  }"| jq '.id' -r ); echo ${PRODUCT_OFFERING_ID}
 ```
 
 #### Credentials issuance at the consumer
@@ -768,15 +768,15 @@ the steps are combined within a script:
 
 1. Get the LegalPersonCredential for the normal employee:
 ```shell
- export USER_CREDENTIAL=$(./doc/scripts/get_credential_for_consumer.sh https://keycloak-consumer.127.0.0.1.nip.io:8443 user-credential employee); echo ${USER_CREDENTIAL}
+ export USER_CREDENTIAL=$(./doc/scripts/get_credential_for_consumer.sh https://keycloak-consumer.127.0.0.1.nip.io user-credential employee); echo ${USER_CREDENTIAL}
 ```
 2. Get the LegalPersonCredential for the representative:
 ```shell
- export REP_CREDENTIAL=$(./doc/scripts/get_credential_for_consumer.sh https://keycloak-consumer.127.0.0.1.nip.io:8443 user-credential representative); echo ${REP_CREDENTIAL}
+ export REP_CREDENTIAL=$(./doc/scripts/get_credential_for_consumer.sh https://keycloak-consumer.127.0.0.1.nip.io user-credential representative); echo ${REP_CREDENTIAL}
 ```
 3. Get the OperatorCredential for the operator:
 ```shell
- export OPERATOR_CREDENTIAL=$(./doc/scripts/get_credential_for_consumer.sh https://keycloak-consumer.127.0.0.1.nip.io:8443 operator-credential operator); echo ${OPERATOR_CREDENTIAL}
+ export OPERATOR_CREDENTIAL=$(./doc/scripts/get_credential_for_consumer.sh https://keycloak-consumer.127.0.0.1.nip.io operator-credential operator); echo ${OPERATOR_CREDENTIAL}
 ```
 
 #### Buy access and create cluster
@@ -819,7 +819,7 @@ In order to prove that not every user can just create a cluster, try the followi
 
 3. Export the Fancy Marketplace's did:
 ```shell
-    export CONSUMER_DID=$(curl -X GET http://did-consumer.127.0.0.1.nip.io:8080/did-material/did.env | cut -d'=' -f2); echo ${CONSUMER_DID} 
+  export CONSUMER_DID=$(curl -X GET http://did-consumer.127.0.0.1.nip.io:8080/did-material/did.env | cut -d'=' -f2); echo ${CONSUMER_DID} 
 ```
 
 4. Register Fancy Marketplace at M&P Operations(as representative, e.g. use the REP_CREDENTIAL):
@@ -847,18 +847,17 @@ with the TMForum-APIs directly.
     1. List offerings
     ```shell
         export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh http://mp-data-service.127.0.0.1.nip.io:8080 $REP_CREDENTIAL default); echo $ACCESS_TOKEN
-        curl -X GET http://mp-tmf-api.127.0.0.1.nip.io:8080/tmf-api/productCatalogManagement/v4/productOffering -H "Authorization: Bearer ${ACCESS_TOKEN}" | python3 -m json.tool
+        curl -X GET http://mp-tmf-api.127.0.0.1.nip.io:8080/tmf-api/productCatalogManagement/v4/productOffering -H "Authorization: Bearer ${ACCESS_TOKEN}" | jq .
     ```
     2. To accept the offering, one has to be choosen(in the example, only one exists) and its id needs to be extracted:
     ```shell
         export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh http://mp-data-service.127.0.0.1.nip.io:8080 $REP_CREDENTIAL default); echo $ACCESS_TOKEN
         export OFFER_ID=$(curl -X GET http://mp-tmf-api.127.0.0.1.nip.io:8080/tmf-api/productCatalogManagement/v4/productOffering -H "Authorization: Bearer ${ACCESS_TOKEN}" | jq '.[0].id' -r); echo ${OFFER_ID}
-
-    ```
+   ```
    3. Create the order:
    ```shell
       export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh http://mp-data-service.127.0.0.1.nip.io:8080 $REP_CREDENTIAL default); echo $ACCESS_TOKEN
-      curl -X POST http://mp-tmf-api.127.0.0.1.nip.io:8080/tmf-api/productOrderingManagement/v4/productOrder \
+      export ORDER_ID=$(curl -X POST http://mp-tmf-api.127.0.0.1.nip.io:8080/tmf-api/productOrderingManagement/v4/productOrder \
       -H 'Accept: */*' \
       -H 'Content-Type: application/json' \
       -H "Authorization: Bearer ${ACCESS_TOKEN}" \
@@ -876,10 +875,22 @@ with the TMForum-APIs directly.
             {
               \"id\": \"${FANCY_MARKETPLACE_ID}\"
             }
-          ]}" | python3 -m json.tool
-   ```
-   Once the order is created, TMForum will notify the ContractManagement to create an entry in the TrustedIssuersList, 
-   allowing Fancy Marketplace to access M&P Operation's services with an ```Operator Credential``` 
+          ]}" | jq '.id' -r); echo ${ORDER_ID}
+  ```
+  4. Complete the order:
+  ```shell
+    curl -X 'PATCH' \
+        -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+        http://tm-forum-api.127.0.0.1.nip.io:8080/tmf-api/productOrderingManagement/v4/productOrder/${ORDER_ID} \
+        -H 'accept: application/json;charset=utf-8' \
+        -H 'Content-Type: application/json;charset=utf-8' \
+        -d "{
+                \"state\": \"completed\"
+            }" | jq .
+  ```
+
+  Once the order is created, TMForum will notify the ContractManagement to create an entry in the TrustedIssuersList, 
+  allowing Fancy Marketplace to access M&P Operation's services with an ```Operator Credential``` 
 
 6. Create a cluster as a Fancy Marketplace Operator:
 ```shell
@@ -922,45 +933,49 @@ To try it out, insert your holder did (```echo $HOLDER_DID```) into the mapper c
 
 1. Configure holder verfifcation for a certain scope:
 ```shell
-  curl -X 'PUT' \
-  'http://provider-ccs.127.0.0.1.nip.io:8080/service/data-service' \
-  -H 'accept: application/json' \
-  -H 'Content-Type: application/json' \
-  -d '{
-        "defaultOidcScope": "default",
-        "oidcScopes": {
-            "default": [
-                {
-                    "type": "LegalPersonCredential",
-                    "trustedParticipantsLists": [
-                        "http://tir.trust-anchor.svc.cluster.local:8080"
-                    ],
-                    "trustedIssuersLists": [
-                        "http://trusted-issuers-list:8080"
-                    ],
-                    "holderVerification": {
-                        "enabled": true,
-                        "claim": "subject"
+  curl -v -X 'PUT' \
+    'http://provider-ccs.127.0.0.1.nip.io:8080/service/data-service' \
+    -H 'accept: application/json' \
+    -H 'Content-Type: application/json' \
+    -d '{
+          "defaultOidcScope": "default",
+          "oidcScopes": {
+              "default": {
+                "credentials": [
+                    {
+                        "type": "UserCredential",
+                        "trustedParticipantsLists": [
+                            "http://tir.trust-anchor.svc.cluster.local:8080"
+                        ],
+                        "trustedIssuersLists": [
+                            "http://trusted-issuers-list:8080"
+                        ],
+                        "holderVerification": {
+                            "enabled": true,
+                            "claim": "subject"
+                        }
                     }
-                }
-            ],
-            "operator": [
-                {
-                    "type": "OperatorCredential",
-                    "trustedParticipantsLists": [
-                        "http://tir.trust-anchor.svc.cluster.local:8080"
-                    ],
-                    "trustedIssuersLists": [
-                        "http://trusted-issuers-list:8080"
-                    ],
-                    "holderVerification": {
-                        "enabled": true,
-                        "claim": "subject"
-                    }
-                }
-            ]
-        }
-    }'
+                ]
+              },
+              "operator":{
+                  "credentials": [
+                      {
+                          "type": "OperatorCredential",
+                          "trustedParticipantsLists": [
+                              "http://tir.trust-anchor.svc.cluster.local:8080"
+                          ],
+                          "trustedIssuersLists": [
+                              "http://trusted-issuers-list:8080"
+                          ],
+                          "holderVerification": {
+                              "enabled": true,
+                              "claim": "subject"
+                          }
+                      }
+                  ] 
+              }
+          }
+      }'
 ``` 
 
 With that configuration, the providers service is only available for Operators with ```OperatorCredentials``` bound to there individual identity anymore. E.g. only if the claim ```subject``` contains the did that the [presentation was created with](#authenticate-via-oid4vp).
@@ -974,8 +989,6 @@ When using the `OPERATOR_CREDENTIAL`, it will work:
 ```shell
   ./doc/scripts/get_access_token_oid4vp.sh http://mp-data-service.127.0.0.1.nip.io:8080 $OPERATOR_CREDENTIAL operator
 ```
-
-
 
 ## eIDAS compliancy
 
@@ -1258,10 +1271,7 @@ To have all required certificates, run before deploying(TODO: integrate in pipel
 - Android Emulator + v4l2loopback:
 
 1. Install v4l2loopback(virtual camera):
-```shell
-  sudo apt install v4l2loopback-dkms
-  sudo modprobe v4l2loopback
-```
+
 2. Find the virtual camera: 
 ```shell
   v4l2-ctl --list-devices
@@ -1273,12 +1283,12 @@ To have all required certificates, run before deploying(TODO: integrate in pipel
 ```
 
 4. Install Android Studio
-5. Create a Virtual Device(through the device-manager), rename it to an easy typable name(in the example, its 'p-xl')
+5. Create a Virtual Device(through the device-manager), rename it to an easy typable name(in the example, its 'p-xl-4')
 6. Close Android Studio and interact directly with the emulator, its located in the Android-SDK folder(most likely something like ~/Android/Sdk/emulator)
 7. Check the name your virtual camera is available to the emulator:
 ```shell
   # emulator executable in the sdk-folder, `p-xl`is the device created in android-studio
-  ./emulator -avd p-xl -webcam-list
+  ./emulator -avd p-xl-4 -webcam-list
 ```
 8. Start the emulator with the virtual cam configured as the back-camera:
 ```shell

@@ -113,7 +113,8 @@ credentials-config-service:
     host: authentication-mysql
     # -- name of the schema inside the db
     name: ccsdb
-
+  registration:
+    enabled: false
 # -- configuration for the postgresql to be deployed as part of the connector, see https://github.com/bitnami/charts/tree/main/bitnami/postgresql for all options
 postgresql:
   # -- should it be enabled? set to false if one outside the chart is used.
@@ -384,23 +385,23 @@ scorpio:
     type: ClusterIP
   # -- configuration to register the dataplane at the credentials-config-service
   ccs:
+    # -- should the automatic registration of scorpio be enabled
+    enabled: false
     # -- endpoint of the ccs to regsiter at
     endpoint: http://credentials-config-service:8080
     # -- configmap to get the registration information from
     configMap: scorpio-registration
-    # -- service id of the data-service to be used
-    id: data-service
 
   # -- additional init containers to be used for the dataplane
-  initContainers:
+  #initContainers:
     # -- curl container to register at the credentials config service
-    - name: register-credential-config
-      image: quay.io/curl/curl:8.1.2
-      command: [ "/bin/sh", "-c", "/bin/init.sh" ]
-      volumeMounts:
-        - name: scorpio-registration
-          mountPath: /bin/init.sh
-          subPath: init.sh
+    #- name: register-credential-config
+    #  image: quay.io/curl/curl:8.1.2
+    #  command: [ "/bin/sh", "-c", "/bin/init.sh" ]
+    #  volumeMounts:
+    #    - name: scorpio-registration
+    #      mountPath: /bin/init.sh
+    #      subPath: init.sh
   # -- additonal volumes to be mounted for the dataplane
   additionalVolumes:
     - name: scorpio-registration
@@ -806,6 +807,7 @@ did:
 # -- configuration for registering a participant at the til, will most probably only be used in demonstrational enviornments
 registration:
   enabled: false
+  prepScript: "test"
 
 # -- configuration for the .well-known/data-space-configuration endpoint document
 dataSpaceConfig:
@@ -855,6 +857,8 @@ marketplace:
     enabled: false
   siop:
     enabled: true
+    ccs:
+      enabled: false
     verifier:
       qrCodePath: /api/v2/loginQR
       tokenPath: /token

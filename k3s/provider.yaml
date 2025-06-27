@@ -53,12 +53,14 @@ apisix:
         type: roundrobin
       plugins:
         openid-connect:
+          proxy_opts:
+            https_proxy: http://squid-proxy.infra.svc.cluster.local:8888
           bearer_only: true
           use_jwks: true
           client_id: contract-management
           client_secret: unused
           ssl_verify: false
-          discovery: http://verifier:3000/services/tmf-api/.well-known/openid-configuration
+          discovery: https://provider-verifier.io/services/tmf-api/.well-known/openid-configuration
         opa:
           host: "http://localhost:8181"
           policy: tpp
@@ -70,12 +72,14 @@ apisix:
         type: roundrobin
       plugins:
         openid-connect:
+          proxy_opts:
+            https_proxy: http://squid-proxy.infra.svc.cluster.local:8888
           bearer_only: true
           use_jwks: true
           client_id: data-service
           client_secret: unused
           ssl_verify: false
-          discovery: http://verifier:3000/services/data-service/.well-known/openid-configuration
+          discovery: https://provider-verifier.io/services/data-service/.well-known/openid-configuration
         opa:
           host: "http://localhost:8181"
           policy: policy/main
@@ -101,12 +105,14 @@ apisix:
           rainbow:8080: 1
       plugins:
         openid-connect:
+          proxy_opts:
+            https_proxy: http://squid-proxy.infra.svc.cluster.local:8888
           bearer_only: true
           use_jwks: true
           client_id: data-service
           client_secret: unused
           ssl_verify: false
-          discovery: http://verifier:3000/services/data-service/.well-known/openid-configuration
+          discovery: https://provider-verifier.io/services/data-service/.well-known/openid-configuration
         opa:
           host: "http://localhost:8181"
           policy: policy/main
@@ -119,12 +125,14 @@ apisix:
         type: roundrobin
       plugins:
         openid-connect:
+          proxy_opts:
+            https_proxy: http://squid-proxy.infra.svc.cluster.local:8888
           bearer_only: true
           use_jwks: true
           client_id: contract-management
           client_secret: unused
           ssl_verify: false
-          discovery: http://verifier:3000/services/tmf-api/.well-known/openid-configuration
+          discovery: https://provider-verifier.io/services/tmf-api/.well-known/openid-configuration
         opa:
           host: "http://localhost:8181"
           policy: policy/main
@@ -139,15 +147,16 @@ credentials-config-service:
           - "/"
   registration:
     enabled: true
+    prepScript: export $(curl -f -X GET did-helper:3002/did-material/did.env)
     services:
-      - id: did:key:zDnaeypyWjzn54GuUP7PmDXiiggCyiG7ksMF7Unm7kjtEKBez
+      - id: ${DID}
         defaultOidcScope: "openid learcredential"
         oidcScopes:
           "openid learcredential":
             credentials:
               - type: LegalPersonCredential
                 trustedParticipantsLists:
-                  - http://tir.127.0.0.1.nip.io:8080
+                  - http://tir.127.0.0.1.nip.io
                 trustedIssuersLists:
                   - http://trusted-issuers-list:8080
                 jwtInclusion:
@@ -178,6 +187,29 @@ credentials-config-service:
                 "vc+sd-jwt": 
                   alg: 
                     - ES256
+      - id: data-service
+        defaultOidcScope: "default"
+        oidcScopes:
+          "default":
+            credentials:
+              - type: UserCredential
+                trustedParticipantsLists:
+                  - http://tir.127.0.0.1.nip.io
+                trustedIssuersLists:
+                  - http://trusted-issuers-list:8080
+                jwtInclusion:
+                  enabled: true
+                  fullInclusion: true
+          "operator":
+            credentials:
+              - type: OperatorCredential
+                trustedParticipantsLists:
+                  - http://tir.127.0.0.1.nip.io
+                trustedIssuersLists:
+                  - http://trusted-issuers-list:8080
+                jwtInclusion:
+                  enabled: true
+                  fullInclusion: true
 
 vcverifier:
   ingress:
@@ -191,12 +223,12 @@ vcverifier:
   deployment:
     image:
       repository: quay.io/wi_stefan/vcverifier
-      tag: 10.0.0
+      tag: 10.0.1
       pullPolicy: Always
     logging:
       level: DEBUG
     verifier:
-      tirAddress: http://tir.127.0.0.1.nip.io:8080/
+      tirAddress: http://tir.127.0.0.1.nip.io/
       did: did:web:marketplace.io
       supportedModes: ["byValue","byReference"]
       clientIdentification:
@@ -359,31 +391,6 @@ scorpio:
     - host: scorpio-provider.127.0.0.1.nip.io
       paths:
         - "/"
-  ccs:
-    defaultOidcScope:
-      name: default
-    oidcScopes:
-      default:
-        credentials:
-          - type: UserCredential
-            trustedParticipantsLists:
-              - http://tir.trust-anchor.svc.cluster.local:8080
-            trustedIssuersLists:
-              - http://trusted-issuers-list:8080
-            jwtInclusion:
-              enabled: true
-              fullInclusion: true
-      operator:
-        credentials:
-          - type: OperatorCredential
-            trustedParticipantsLists:
-              - http://tir.127.0.0.1.nip.io:8080
-            trustedIssuersLists:
-              - http://trusted-issuers-list:8080
-            jwtInclusion:
-              enabled: true
-              fullInclusion: true
-
 
 odrl-pap:
   deployment:
@@ -427,11 +434,7 @@ odrl-pap:
 
 tm-forum-api:
   registration:
-    ccs:
-      defaultOidcScope:
-        credentialType: LegalPersonCredential
-        trustedParticipantsLists: http://tir.trust-anchor.svc.cluster.local:8080
-
+    enabled: false
   ingress:
     enabled: true
     hosts:
@@ -450,17 +453,6 @@ rainbow:
   ingress:
     enabled: true
     host: rainbow-provider.127.0.0.1.nip.io
-  ccs:
-    enabled: true 
-    defaultOidcScope:
-      name: default
-    oidcScopes:
-      default:
-        - type: OperatorCredential
-          trustedParticipantsLists:
-            - http://tir.trust-anchor.svc.cluster.local:8080
-          trustedIssuersLists:
-            - http://trusted-issuers-list:8080
 
 tpp:
   enabled: true
@@ -469,9 +461,6 @@ tpp:
     path: transfers
 
 contract-management:
-  deployment:
-    image:
-      tag: 2.1.2-PRE-7
   til:
     credentialType: OperatorCredential
   services:
@@ -513,19 +502,40 @@ trusted-issuers-list:
             - /
 
 marketplace:
+  prep:
+    name: bae-prep
+    script: 
+      prep.sh: |-
+        #!/bin/bash
+
+        export $(curl -f -X GET did-helper:3002/did-material/did.env)
+        export BAE_LP_SIOP_CLIENT_ID=$(echo ${DID})
+
+        wget http://did-helper:3002/did-material/private-key.pem
+        export BAE_LP_SIOP_PRIVATE_KEY=$(openssl ec -in private-key.pem -noout -text | grep 'priv:' -A 3 | tail -n +2 | tr -d ':\n ') 
+        echo ${BAE_LP_SIOP_PRIVATE_KEY}
+        /entrypoint.sh
+  
   siop:
-    clientId: did:key:zDnaeypyWjzn54GuUP7PmDXiiggCyiG7ksMF7Unm7kjtEKBez
     verifier:
       host: https://provider-verifier.io
       callbackURL: https://provider-verifier.io/auth/vc/callback
+    allowedRoles:
+      - seller
+      - customer
+      - admin
+      - REPRESENTATIVE
+      - READER
+      - OPERATOR
+
   externalUrl: https://marketplace.127.0.0.1.nip.io
-
-
+    
   bizEcosystemChargingBackend:  
     deployment:
       image:
         repository: quay.io/wi_stefan/biz-ecosystem-charging-backend
         tag: 10.0.1
+        pullPolicy: Always
     extraEnvVars:
       - name: BAE_CB_MONGO_PASS
         valueFrom:
@@ -583,8 +593,8 @@ marketplace:
         path: /tmf-api/productInventory/v4
 
   bizEcosystemLogicProxy:
-    
-
+    command:
+      - /prep/prep.sh
     ingress: 
       enabled: true
       annotations:
@@ -593,6 +603,15 @@ marketplace:
         - host: marketplace.127.0.0.1.nip.io
           paths: 
             - "/"
+    extraVolumeMounts:
+      - name: bae-prep
+        mountPath: /prep
+    extraContainerVolumes:
+      - name: bae-prep
+        configMap:
+          name: bae-prep
+          defaultMode: 0777
+
     additionalEnvVars:
       - name: BAE_LP_SIOP_IS_REDIRECTION
         value: "true"
@@ -603,11 +622,6 @@ marketplace:
           secretKeyRef:
             name: marketplace-secret-env
             key: MONGO_BAE_BELP_PW
-      - name: BAE_LP_SIOP_PRIVATE_KEY
-        valueFrom:
-          secretKeyRef:
-            name: bae-did-secret
-            key: privateKey
       - name: NODE_TLS_REJECT_UNAUTHORIZED
         value: "0"
       - name: VC_HTTPS_PROXY
@@ -619,6 +633,14 @@ keycloak:
     hostname: keycloak-provider.127.0.0.1.nip.io
     annotations:
       traefik.ingress.kubernetes.io/router.tls: "true"
+  command:
+    - /bin/bash
+    - -c
+  args:
+    - |
+      #!/bin/sh
+      export $(cat /did-material/did.env)
+      exec /opt/bitnami/scripts/keycloak/entrypoint.sh /opt/bitnami/scripts/keycloak/run.sh  
   initContainers:
     - name: get-did
       image: ubuntu
@@ -746,7 +768,7 @@ keycloak:
       "vc.operator-credential.scope": "OperatorCredential",
       "vc.operator-credential.vct": "OperatorCredential"
     clientRoles: |
-      "did:key:zDnaeypyWjzn54GuUP7PmDXiiggCyiG7ksMF7Unm7kjtEKBez": [
+      "${DID}": [
         {
           "name": "customer",
           "description": "Is allowed to see offers etc.",
@@ -849,7 +871,7 @@ keycloak:
           }
         ],
         "clientRoles": {
-          "did:key:zDnaeypyWjzn54GuUP7PmDXiiggCyiG7ksMF7Unm7kjtEKBez": [
+          "${DID}": [
             "seller",
             "admin"
           ],
@@ -914,7 +936,7 @@ keycloak:
             "protocolMapper": "oid4vc-target-role-mapper",
             "config": {
               "subjectProperty": "roles",
-              "clientId": "did:key:zDnaeypyWjzn54GuUP7PmDXiiggCyiG7ksMF7Unm7kjtEKBez",
+              "clientId": "${DID}",
               "supportedCredentialTypes": "LegalPersonCredential,OperatorCredential"
             }
           }
@@ -922,7 +944,7 @@ keycloak:
       }
     clients: |
       {
-        "clientId": "did:key:zDnaeypyWjzn54GuUP7PmDXiiggCyiG7ksMF7Unm7kjtEKBez",
+        "clientId": "${DID}",
         "enabled": true,
         "description": "Client to connect test.org",
         "surrogateAuthRequired": false,
@@ -1114,4 +1136,6 @@ registration:
   configMap: provider-til-registration
   til: http://trusted-issuers-list.provider.svc.cluster.local:8080
   did: ${DID}
-  credentialsType: LegalPersonCredential
+  credentialTypes:
+    - LegalPersonCredential
+  prepScript: export $(curl -f -X GET did-helper:3002/did-material/did.env)

@@ -1,0 +1,28 @@
+{{- if .Values.registration.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ .Values.registration.configMap }}
+  namespace: {{ $.Release.Namespace | quote }}
+  labels:
+    {{- include "dsc.labels" . | nindent 4 }}
+spec:
+  template:
+    spec:
+      containers:
+        - name: register-credential-config
+          image: quay.io/curl/curl:8.1.2
+          command: [ "/bin/sh", "-c", "/bin/init.sh" ]
+          volumeMounts:
+            - name: participant-registration
+              mountPath: /bin/init.sh
+              subPath: init.sh
+      volumes:
+        - name: participant-registration
+          configMap:
+            name: {{ .Values.registration.configMap }}
+            defaultMode: 0755
+
+      restartPolicy: Never
+  backoffLimit: 10
+{{- end }}

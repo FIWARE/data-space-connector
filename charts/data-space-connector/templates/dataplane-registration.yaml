@@ -1,4 +1,4 @@
-{{- if and (eq .Values.scorpio.enabled true) (.Values.scorpio.ccs) }}
+{{- if and (eq .Values.scorpio.enabled true) (.Values.scorpio.ccs) (eq .Values.scorpio.ccs.enabled true) }}
 apiVersion: v1
 kind: ConfigMap
 metadata:

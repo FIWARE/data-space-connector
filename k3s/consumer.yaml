@@ -37,6 +37,14 @@ keycloak:
     hostname: keycloak-consumer.127.0.0.1.nip.io
     annotations:
       traefik.ingress.kubernetes.io/router.tls: "true"
+  command:
+    - /bin/bash
+    - -c
+  args:
+    - |
+      #!/bin/sh
+      export $(cat /did-material/did.env)
+      exec /opt/bitnami/scripts/keycloak/entrypoint.sh /opt/bitnami/scripts/keycloak/run.sh  
   initContainers:
     - name: get-did
       image: ubuntu
@@ -168,7 +176,7 @@ keycloak:
       "vc.operator-credential.scope": "OperatorCredential",
       "vc.operator-credential.vct": "OperatorCredential"
     clientRoles: |
-      "did:key:zDnaeypyWjzn54GuUP7PmDXiiggCyiG7ksMF7Unm7kjtEKBez": [
+      "${CLIENT_DID}": [
         {
           "name": "customer",
           "description": "Is allowed to see offers etc.",
@@ -276,8 +284,10 @@ keycloak:
           }
         ],
         "clientRoles": {
-          "did:key:zDnaeypyWjzn54GuUP7PmDXiiggCyiG7ksMF7Unm7kjtEKBez": [
-            "customer"
+          "${CLIENT_DID}": [
+            "customer",
+            "REPRESENTATIVE",
+            "READER"
           ],
           "account": [
             "view-profile",
@@ -301,7 +311,7 @@ keycloak:
           }
         ],
         "clientRoles": {
-          "did:key:zDnaeypyWjzn54GuUP7PmDXiiggCyiG7ksMF7Unm7kjtEKBez": [
+          "${CLIENT_DID}": [
             "OPERATOR"
           ],
           "account": [
@@ -326,7 +336,7 @@ keycloak:
           }
         ],
         "clientRoles": {
-          "did:key:zDnaeypyWjzn54GuUP7PmDXiiggCyiG7ksMF7Unm7kjtEKBez": [
+          "${CLIENT_DID}": [
             "REPRESENTATIVE"
           ],
           "account": [
@@ -410,7 +420,7 @@ keycloak:
             "protocolMapper": "oid4vc-target-role-mapper",
             "config": {
               "subjectProperty": "roles",
-              "clientId": "did:key:zDnaeypyWjzn54GuUP7PmDXiiggCyiG7ksMF7Unm7kjtEKBez",
+              "clientId": "${CLIENT_DID}",
               "supportedCredentialTypes": "LegalPersonCredential,OperatorCredential,UserCredential"
             }
           },
@@ -467,6 +477,133 @@ keycloak:
         ]
       },
       {
+        "name": "UserCredential",
+        "description": "OIDC4VC Scope, that adds all properties required for a user.",
+        "protocol": "openid-connect",
+        "attributes": {},
+        "protocolMappers": [
+          {
+            "name": "context-mapper-uc",
+            "protocol": "oid4vc",
+            "protocolMapper": "oid4vc-context-mapper",
+            "config": {
+              "context": "https://www.w3.org/2018/credentials/v1",
+              "supportedCredentialTypes": "UserCredential"
+            }
+          },
+          {
+            "name": "email-mapper-uc",
+            "protocol": "oid4vc",
+            "protocolMapper": "oid4vc-user-attribute-mapper",
+            "config": {
+              "subjectProperty": "email",
+              "userAttribute": "email",
+              "supportedCredentialTypes": "UserCredential"
+            }
+          },
+          {
+            "name": "firstName-mapper-uc",
+            "protocol": "oid4vc",
+            "protocolMapper": "oid4vc-user-attribute-mapper",
+            "config": {
+              "subjectProperty": "firstName",
+              "userAttribute": "firstName",
+              "supportedCredentialTypes": "UserCredential"
+            }
+          },
+          {
+            "name": "subject-mapper-uc",
+            "protocol": "oid4vc",
+            "protocolMapper": "oid4vc-static-claim-mapper",
+            "config": {
+              "subjectProperty": "subject",
+              "staticValue": "did:key:zDnaeiVpxCT7ARwqLndbWiCeGG2YZXvLfWFs1cGPgKUe8GPLe",
+              "supportedCredentialTypes": "UserCredential"
+            }
+          },
+          {
+            "name": "street-mapper-uc",
+            "protocol": "oid4vc",
+            "protocolMapper": "oid4vc-static-claim-mapper",
+            "config": {
+              "subjectProperty": "street",
+              "staticValue": "Main Street",
+              "supportedCredentialTypes": "UserCredential"
+            }
+          },
+          {
+            "name": "lastName-mapper-uc",
+            "protocol": "oid4vc",
+            "protocolMapper": "oid4vc-user-attribute-mapper",
+            "config": {
+              "subjectProperty": "lastName",
+              "userAttribute": "lastName",
+              "supportedCredentialTypes": "UserCredential"
+            }
+          },
+          {
+            "name": "role-mapper-uc",
+            "protocol": "oid4vc",
+            "protocolMapper": "oid4vc-target-role-mapper",
+            "config": {
+              "subjectProperty": "roles",
+              "clientId": "${CLIENT_DID}",
+              "supportedCredentialTypes": "UserCredential"
+            }
+          },
+          {
+            "name": "streetNumber-mapper-uc",
+            "protocol": "oid4vc",
+            "protocolMapper": "oid4vc-static-claim-mapper",
+            "config": {
+              "subjectProperty": "streetNumber",
+              "staticValue": "10",
+              "supportedCredentialTypes": "UserCredential"
+            }
+          },
+          {
+            "name": "city-mapper-uc",
+            "protocol": "oid4vc",
+            "protocolMapper": "oid4vc-static-claim-mapper",
+            "config": {
+              "subjectProperty": "city",
+              "staticValue": "Dresden",
+              "supportedCredentialTypes": "UserCredential"
+            }
+          },
+          {
+            "name": "region-mapper-uc",
+            "protocol": "oid4vc",
+            "protocolMapper": "oid4vc-static-claim-mapper",
+            "config": {
+              "subjectProperty": "region",
+              "staticValue": "Saxony",
+              "supportedCredentialTypes": "UserCredential"
+            }
+          },
+          {
+            "name": "country-mapper-uc",
+            "protocol": "oid4vc",
+            "protocolMapper": "oid4vc-static-claim-mapper",
+            "config": {
+              "subjectProperty": "country",
+              "staticValue": "Germany",
+              "supportedCredentialTypes": "UserCredential"
+            }
+          },
+          {
+            "name": "zipcode-mapper-uc",
+            "protocol": "oid4vc",
+            "protocolMapper": "oid4vc-static-claim-mapper",
+            "config": {
+              "subjectProperty": "zipcode",
+              "staticValue": "01169",
+              "supportedCredentialTypes": "UserCredential"
+            }
+          }
+        ]
+      },
+      {
         "name": "OperatorCredential",
         "description": "OIDC4VC Scope, that adds all properties required for a user.",
         "protocol": "openid-connect",
@@ -507,15 +644,25 @@ keycloak:
             "protocolMapper": "oid4vc-target-role-mapper",
             "config": {
               "subjectProperty": "roles",
-              "clientId": "did:key:zDnaeypyWjzn54GuUP7PmDXiiggCyiG7ksMF7Unm7kjtEKBez",
+              "clientId": "${CLIENT_DID}",
               "supportedCredentialTypes": "LegalPersonCredential,OperatorCredential,UserCredential"
+            }
+          },
+          {
+            "name": "subject-mapper-uc",
+            "protocol": "oid4vc",
+            "protocolMapper": "oid4vc-static-claim-mapper",
+            "config": {
+              "subjectProperty": "subject",
+              "staticValue": "did:key:zDnaeiVpxCT7ARwqLndbWiCeGG2YZXvLfWFs1cGPgKUe8GPLe",
+              "supportedCredentialTypes": "UserCredential"
             }
           }
         ]
       }
     clients: |
       {
-        "clientId": "did:key:zDnaeypyWjzn54GuUP7PmDXiiggCyiG7ksMF7Unm7kjtEKBez",
+        "clientId": "${CLIENT_DID}",
         "enabled": true,
         "description": "Client to connect test.org",
         "surrogateAuthRequired": false,
@@ -647,7 +794,8 @@ keycloak:
           "organization",
           "microprofile-jwt",
           "LegalPersonCredential",
-          "OperatorCredential"
+          "OperatorCredential",
+          "UserCredential"
         ]
       },
       {
@@ -737,4 +885,7 @@ registration:
   configMap: consumer-til-registration
   til: http://trusted-issuers-list.provider.svc.cluster.local:8080
   did: ${DID}
-  credentialsType: LegalPersonCredential
+  credentialTypes:
+    - LegalPersonCredential
+    - UserCredential
+  prepScript: export $(curl -f -X GET did-helper:3001/did-material/did.env)
