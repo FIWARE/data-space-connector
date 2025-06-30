@@ -1,13 +1,10 @@
 package org.fiware.dataspace.it.components;
 
-import com.squareup.okhttp.FormEncodingBuilder;
-import com.squareup.okhttp.OkHttpClient;
-import com.squareup.okhttp.Request;
-import com.squareup.okhttp.RequestBody;
-import com.squareup.okhttp.Response;
+
 import io.ipfs.multibase.Multibase;
 import jakarta.ws.rs.core.MediaType;
 import lombok.extern.slf4j.Slf4j;
+import okhttp3.*;
 import org.apache.http.HttpStatus;
 import org.bouncycastle.jce.interfaces.ECPublicKey;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
@@ -60,7 +57,7 @@ public class Wallet {
 
 	private final Map<String, String> credentialStorage = new HashMap<>();
 
-	private static final OkHttpClient HTTP_CLIENT = new OkHttpClient();
+	private static final OkHttpClient HTTP_CLIENT = TestUtils.OK_HTTP_CLIENT;
 
 	private final KeyWrapper walletKey;
 	private final String did;
@@ -69,12 +66,12 @@ public class Wallet {
 		walletKey = getECKey();
 		did = walletKey.getKid();
 	}
-	
+
 	public String exchangeCredentialForToken(OpenIdConfiguration openIdConfiguration, String credentialId, String scope) throws Exception {
 		String vpToken = Base64.getUrlEncoder()
 				.withoutPadding()
 				.encodeToString(createVPToken(did, walletKey, credentialStorage.get(credentialId)).getBytes());
-		RequestBody requestBody = new FormEncodingBuilder()
+		RequestBody requestBody = new FormBody.Builder()
 				.add("grant_type", "vp_token")
 				.add("vp_token", vpToken)
 				.add("scope", scope)
@@ -206,9 +203,7 @@ public class Wallet {
 		credentialRequest.setFormat(offeredCredential.getFormat());
 
 		RequestBody credentialRequestBody = RequestBody
-				.create(
-						com.squareup.okhttp.MediaType.parse(MediaType.APPLICATION_JSON),
-						OBJECT_MAPPER.writeValueAsString(credentialRequest));
+				.create(OBJECT_MAPPER.writeValueAsString(credentialRequest), okhttp3.MediaType.parse(MediaType.APPLICATION_JSON));
 		Request credentialHttpRequest = new Request.Builder()
 				.post(credentialRequestBody)
 				.url(credentialEndpoint)
@@ -225,7 +220,7 @@ public class Wallet {
 	}
 
 	public String getAccessToken(String tokenEndpoint, String preAuthorizedCode) throws Exception {
-		RequestBody requestBody = new FormEncodingBuilder()
+		RequestBody requestBody = new FormBody.Builder()
 				.add("grant_type", PRE_AUTHORIZED_GRANT_TYPE)
 				.add("pre-authorized_code", preAuthorizedCode)
 				.build();

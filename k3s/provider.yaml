@@ -70,7 +70,7 @@ apisix:
         nodes:
           data-service-scorpio:9090: 1
         type: roundrobin
-      plugins:
+      plugins: 
         openid-connect:
           proxy_opts:
             https_proxy: http://squid-proxy.infra.svc.cluster.local:8888
@@ -200,6 +200,19 @@ credentials-config-service:
                 jwtInclusion:
                   enabled: true
                   fullInclusion: true
+          "operator":
+            credentials:
+              - type: OperatorCredential
+                trustedParticipantsLists:
+                  - http://tir.127.0.0.1.nip.io
+                trustedIssuersLists:
+                  - http://trusted-issuers-list:8080
+                jwtInclusion:
+                  enabled: true
+                  fullInclusion: true
+      - id: tpp-service
+        defaultOidcScope: "operator"
+        oidcScopes:
           "operator":
             credentials:
               - type: OperatorCredential
