@@ -503,6 +503,9 @@ contract-management:
     rainbow:
       ## URL for the Rainbow service
       url: http://rainbow:8080
+    quote:
+      ## URL for TM Forum Service hosting the Quote API
+      url: http://provider-tm-forum-api-quote:8080
 
 trusted-issuers-list:
   # only open for clean up in the tests

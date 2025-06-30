@@ -706,7 +706,7 @@ tm-forum-api:
     - name: account
       image: tmforum-account
       basePath: /tmf-api/accountManagement/v4
-
+      
   # redis caching
   redis:
     enabled: false
@@ -799,6 +799,9 @@ contract-management:
     rainbow:
       ## URL for the Rainbow service
       url: http://rainbow:8080
+    quote:
+      ## URL for the Rainbow service
+      url: http://tm-forum-api:8080
 
 # -- configuration for the did-helper, should only be used for demonstrational deployments, see https://github.com/wistefan/did-helper
 did:

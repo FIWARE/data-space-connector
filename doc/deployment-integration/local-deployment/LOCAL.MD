@@ -6,11 +6,20 @@ An alternative deployment guide, based on [MicroK8s](https://microk8s.io/) can b
 
 ## Requirements
 
+Since the local deployment installs 2 connector instances and a trust-anchor, its recommended to use a strong enough machine. While 16Gb Ram might be enough, its recommended to have >24Gb available. The deployment is build and tested on Ubuntu, most other Linux distributions should work as well.
+
 The local deployment tries to be as decoupled from the host system as possible to reduce the amount of requirements but stills needs the following programs:
 
 - [Maven](https://maven.apache.org/)
 - Java Development Kit (at least v17)
 - [Docker](https://www.docker.com/)
+
+In order to interact with the system, the following tools are also helpful:
+
+- [kubectl](https://kubernetes.io/docs/tasks/tools/install-kubectl/)
+- [curl](https://curl.se/download.html)
+- [jq](https://stedolan.github.io/jq/download/)
+- [yq](https://mikefarah.gitbook.io/yq/)
 
 To check if the tools are installed, can run and are able to spin up minimal kubernetes cluster without further FIWARE components, you should execute the prepared [script](checkRequirements.sh).
 

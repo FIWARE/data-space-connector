@@ -843,7 +843,7 @@ public class StepDefinitions {
 
 		Request transferRequest = new Request.Builder()
 				.post(requestBody)
-				.url(MPOperationsEnvironment.PROVIDER_TPP_API_ADDRESS + "/transfers/start")
+				.url(MPOperationsEnvironment.PROVIDER_TPP_API_ADDRESS + "/transfers/" + providerPid + "/start")
 				.addHeader("Authorization", "Bearer " + accessToken)
 				.build();
 		Response transferResponse = HTTP_CLIENT.newCall(transferRequest).execute();
