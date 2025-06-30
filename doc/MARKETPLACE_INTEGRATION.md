@@ -144,17 +144,22 @@ In order to offer something at the marketplace, the provider needs to issue a cr
 * Access the provider keycloak at ```https://keycloak-provider.127.0.0.1.nip.io/realms/test-realm/account/oid4vci```
 * Login with ```employee@provider.org``` - Password: ```test```
 * Open the wallet in the emulator and click on "Scan QR":
+  
 ![Wallet - Initial Scan](./img/local/scan_1.png)
 * In Keycloak, goto the "VerifiableCredentials" section and select "user-sd"
 * Move the QR in the camera field and follow the flow (BE AWARE: every QR is only valid for 30s, if it times out, reload the page)
 * The credential should now be shown in the "Documents" section of the app:
+  
 ![Wallet - Documents Section](./img/local/documents_1.png)
 * Open the marketplace at ```https://marketplace.127.0.0.1.nip.io/```
+  
 ![Marketplace](./img/local/marketplace.png)
 * Click on login, a QR will be shown:
+  
 ![Login](./img/local/login.png)
 * In the Wallet, select "Home" -> "Authenticate" -> "Online" and scan the QR
 * Share the requested credential
+* 
 ![Share VC](./img/local/share_vc.png)
 
 #### Create the offering
@@ -162,6 +167,7 @@ In order to offer something at the marketplace, the provider needs to issue a cr
 An offering has to be created and launched for customers to be bought.
 
 * In the marketplace, move the "My Offerings"-Section
+  
 ![My Offerings](./img/local/my-offerings.png)
 
 * Create a Catalog and a ProductSpecification, set both to state "Launched"
@@ -185,8 +191,10 @@ In order to buy, an organization has to issue a credential containing the "custo
 * Click on login, a QR will be shown
 * In the Wallet, select "Home" -> "Authenticate" -> "Online" and scan the QR
 * In the sharing request, both credentials will be shown:
+  
 ![Share Both](./img/local/share_both.png)
 * Open the credential and disable sharing of the "seller"-credential:
+  
 ![Only Customer](./img/local/only_customer.png)
 
 #### Buy access
@@ -194,9 +202,11 @@ In order to buy, an organization has to issue a credential containing the "custo
 In order to get access to the service, the offering has to be bought.
 
 * In the marketplace, now select the service and add it to your cart
+  
 ![Add to cart](./img/local/add_to_cart.png)
 * Click on the cart button and "Proceed to purchase"
 * Fill out the billing address and click on the checkout button. The order will now be created in state "Unchecked"
+  
 ![Order unchecked](./img/local/unchecked.png)
 * Logout
 
@@ -207,6 +217,7 @@ The created order now needs to be processed from within the backoffice of the pr
 * Login with the "seller"-credential(see [customer-login](#get-a-credential-as-customer-and-login-to-the-marketplace))
 * Move to the "Product Order"-Section and open "As Provider"
 * Review the order, using the "Review"-Button
+  
 ![Product Orders](./img/local/product_orders.png)
 * Move the Order forward, until its in state "completed"
 
