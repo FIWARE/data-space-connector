@@ -87,7 +87,7 @@
             <version>${version.com.fasterxml.jackson.core}</version>
         </dependency>
         <dependency>
-            <groupId>com.squareup.okhttp</groupId>
+            <groupId>com.squareup.okhttp3</groupId>
             <artifactId>okhttp</artifactId>
             <version>${version.com.squareup.okhttp}</version>
         </dependency>
