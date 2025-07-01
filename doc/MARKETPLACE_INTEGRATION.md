@@ -36,7 +36,7 @@ To setup your (Android) Mobile Phone, the following is required:
 If running on the Mobile Phone is not possible or desirable, the Android Emulator can be used:
 
 * install the [Android Studio](https://developer.android.com/studio/install)
-* create a Virtual Device(through the device-manager), rename it to an easy typable name(in the example, its 'p-xl')
+* create a Virtual Device(through the device-manager), rename it to an easy typable name(in the example, its 'p-xl-4')
     * the image should support Android Version >= 13, min target SDK >= 23, for example an Google Pixel 4 image
 * close Android Studio and interact directly with the emulator, its located in the Android-SDK folder(most likely something like ~/Android/Sdk/emulator)
 
