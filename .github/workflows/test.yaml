@@ -30,6 +30,5 @@ jobs:
         id: debug
         run: | 
           export KUBECONFIG=$(pwd)/it/target/k3s.yaml
-          kubectl describe pod postgresql-0 -n provider
-          kubectl logs postgresql-0 -n provider
+          kubectl get pods -n provider --field-selector=status.phase!=Running -o json | jq -r '.items[].metadata.name' | xargs -I {} sh -c 'echo "=== Describe: {} ==="; kubectl describe pod {} -n provider; echo "=== Logs: {} ==="; kubectl logs {} -n provider; echo;'
 
