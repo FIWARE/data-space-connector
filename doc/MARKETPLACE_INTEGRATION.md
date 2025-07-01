@@ -36,8 +36,8 @@ To setup your (Android) Mobile Phone, the following is required:
 If running on the Mobile Phone is not possible or desirable, the Android Emulator can be used:
 
 * install the [Android Studio](https://developer.android.com/studio/install)
-* create a Virtual Device(through the device-manager), rename it to an easy typable name(in the example, its 'p-xl')
-    * the image should support Android Version >= 13, min target SDK >= 23, for examplke an Google Pixel 4 image
+* create a Virtual Device(through the device-manager), rename it to an easy typable name(in the example, its 'p-xl-4')
+    * the image should support Android Version >= 13, min target SDK >= 23, for example an Google Pixel 4 image
 * close Android Studio and interact directly with the emulator, its located in the Android-SDK folder(most likely something like ~/Android/Sdk/emulator)
 
 Since retrieving and presenting Credentials requires scanning an QR-Code from the screen, the screen-output needs to be presented to the emulator camera:
@@ -181,7 +181,7 @@ An offering has to be created and launched for customers to be bought.
 
 In order to buy, an organization has to issue a credential containing the "customer"-role to one of its employees.
 
-* Access the cconsumer keycloak at ```https://keycloak-consumer.127.0.0.1.nip.io/realms/test-realm/account/oid4vci```
+* Access the consumer keycloak at ```https://keycloak-consumer.127.0.0.1.nip.io/realms/test-realm/account/oid4vci```
 * Login with ```employee@consumer.org``` - Password: ```test```
 * In the wallet, go to the documents section and click on "+"
 * In Keycloak, goto the "VerifiableCredentials" section and select "user-sd"
