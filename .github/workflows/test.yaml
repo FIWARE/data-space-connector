@@ -18,17 +18,8 @@ jobs:
         run: |
           sudo modprobe br_netfilter
 
-      - uses: azure/setup-kubectl@v4
-
       - name: Execute tests
         id: test        
         continue-on-error: true
         run: |
           mvn clean integration-test -Ptest
-      
-      - name: Debug error
-        id: debug
-        run: | 
-          export KUBECONFIG=$(pwd)/it/target/k3s.yaml
-          kubectl get pods -n provider --field-selector=status.phase!=Running -o json | jq -r '.items[].metadata.name' | xargs -I {} sh -c 'echo "=== Describe: {} ==="; kubectl describe pod {} -n provider; echo "=== Logs: {} ==="; kubectl logs {} -n provider; echo;'
-
