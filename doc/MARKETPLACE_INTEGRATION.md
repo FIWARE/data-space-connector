@@ -37,7 +37,7 @@ If running on the Mobile Phone is not possible or desirable, the Android Emulato
 
 * install the [Android Studio](https://developer.android.com/studio/install)
 * create a Virtual Device(through the device-manager), rename it to an easy typable name(in the example, its 'p-xl')
-    * the image should support Android Version >= 13, min target SDK >= 23, for examplke an Google Pixel 4 image
+    * the image should support Android Version >= 13, min target SDK >= 23, for example an Google Pixel 4 image
 * close Android Studio and interact directly with the emulator, its located in the Android-SDK folder(most likely something like ~/Android/Sdk/emulator)
 
 Since retrieving and presenting Credentials requires scanning an QR-Code from the screen, the screen-output needs to be presented to the emulator camera:
