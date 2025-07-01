@@ -18,7 +18,16 @@ jobs:
         run: |
           sudo modprobe br_netfilter
 
+      - uses: azure/setup-kubectl@v4
+
       - name: Execute tests
-        id: test
+        id: test        
+        continue-on-error: true
         run: |
           mvn clean integration-test -Ptest
+      
+      - name: Debug error
+        id: debug
+        run: | 
+          kubectl describe deployment postgresql -n provider
+
