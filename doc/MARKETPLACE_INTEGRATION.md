@@ -181,7 +181,7 @@ An offering has to be created and launched for customers to be bought.
 
 In order to buy, an organization has to issue a credential containing the "customer"-role to one of its employees.
 
-* Access the cconsumer keycloak at ```https://keycloak-consumer.127.0.0.1.nip.io/realms/test-realm/account/oid4vci```
+* Access the consumer keycloak at ```https://keycloak-consumer.127.0.0.1.nip.io/realms/test-realm/account/oid4vci```
 * Login with ```employee@consumer.org``` - Password: ```test```
 * In the wallet, go to the documents section and click on "+"
 * In Keycloak, goto the "VerifiableCredentials" section and select "user-sd"
