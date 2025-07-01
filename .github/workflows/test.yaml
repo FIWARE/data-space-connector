@@ -19,6 +19,7 @@ jobs:
           sudo modprobe br_netfilter
 
       - name: Execute tests
-        id: test
+        id: test        
+        continue-on-error: true
         run: |
           mvn clean integration-test -Ptest

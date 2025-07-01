@@ -104,7 +104,8 @@ credentials-config-service:
     host: authentication-mysql
     # -- name of the schema inside the db
     name: ccsdb
-
+  registration:
+    enabled: false
 # -- configuration for the postgresql to be deployed as part of the connector, see https://github.com/bitnami/charts/tree/main/bitnami/postgresql for all options
 postgresql:
   # -- should it be enabled? set to false if one outside the chart is used.
@@ -350,7 +351,7 @@ scorpio:
     # -- repository to be used - resource friendly all-in-one-runner without kafka
     repository: scorpiobroker/all-in-one-runner
     # -- tag of the image to be used - latest java image without kafka
-    tag: java-5.0.3
+    tag: java-4.1.10
   ## configuration of the database to be used by broker
   db:
     # -- host of the db
@@ -375,23 +376,23 @@ scorpio:
     type: ClusterIP
   # -- configuration to register the dataplane at the credentials-config-service
   ccs:
+    # -- should the automatic registration of scorpio be enabled
+    enabled: false
     # -- endpoint of the ccs to regsiter at
     endpoint: http://credentials-config-service:8080
     # -- configmap to get the registration information from
     configMap: scorpio-registration
-    # -- service id of the data-service to be used
-    id: data-service
 
   # -- additional init containers to be used for the dataplane
-  initContainers:
+  #initContainers:
     # -- curl container to register at the credentials config service
-    - name: register-credential-config
-      image: quay.io/curl/curl:8.1.2
-      command: [ "/bin/sh", "-c", "/bin/init.sh" ]
-      volumeMounts:
-        - name: scorpio-registration
-          mountPath: /bin/init.sh
-          subPath: init.sh
+    #- name: register-credential-config
+    #  image: quay.io/curl/curl:8.1.2
+    #  command: [ "/bin/sh", "-c", "/bin/init.sh" ]
+    #  volumeMounts:
+    #    - name: scorpio-registration
+    #      mountPath: /bin/init.sh
+    #      subPath: init.sh
   # -- additonal volumes to be mounted for the dataplane
   additionalVolumes:
     - name: scorpio-registration
@@ -426,7 +427,8 @@ keycloak:
   # -- disable the security context, required by the current quarkus container, will be solved in the future chart versions of keycloak
   containerSecurityContext:
     enabled: false
- 
+  proxyHeaders: xforwarded
+  proxy: edge
   service:
     ports:
       http: 8080
@@ -453,13 +455,12 @@ keycloak:
 
   # -- extra env vars to be set. we require them at the moment, since some of the chart config mechanisms only work with the bitnami-image
   extraEnvVars:
+    - name: KEYCLOAK_LOG_LEVEL
+      value: INFO
     - name: KEYCLOAK_EXTRA_ARGS
       value: "--import-realm"
     - name: KC_FEATURES
       value: "oid4vc-vci"
-    # indicates ssl is terminated at the edge
-    - name: KC_PROXY
-      value: "edge"
     # password for reading the key store connected to the did
     - name: STORE_PASS
       valueFrom:
@@ -618,7 +619,15 @@ tm-forum-api:
       # -- address of the broker
       url: http://data-service-scorpio:9090
     contextUrl: https://uri.etsi.org/ngsi-ld/v1/ngsi-ld-core-context.jsonld
-
+    additionalEnvVars: 
+      - name: API_EXTENSION_ENABLED
+        value: "true"
+      - name: GENERAL_NGSILDORQUERYVALUE
+        value: ","
+      - name: GENERAL_NGSILDORQUERYKEY
+        value: ","
+      - name: GENERAL_ENCLOSEQUERY
+        value: "false"
   # enable the api proxy
   apiProxy:
     enabled: true
@@ -627,6 +636,7 @@ tm-forum-api:
     service:
       # -- name to be used for the proxy service.
       nameOverride: tm-forum-api
+
 
   # -- list of apis to be deployed
   # -- every api needs to define a name and image. Basepath is required when routes or ingress will be enabled. Beside that, they can overwrite the default-config by using the same keys.
@@ -676,10 +686,18 @@ tm-forum-api:
       image: tmforum-agreement
       basePath: /tmf-api/agreementManagement/v4
 
+    - name: usage-management
+      image: tmforum-usage-management
+      basePath: /tmf-api/usageManagement/v4
+
     - name: quote
       image: tmforum-quote
       basePath: /tmf-api/quote/v4
 
+    - name: account
+      image: tmforum-account
+      basePath: /tmf-api/accountManagement/v4
+      
   # redis caching
   redis:
     enabled: false
@@ -766,6 +784,9 @@ contract-management:
     tmforum-agreement-api:
       ## URL of the TM Forum Service hosting the Agreement API
       url: http://tm-forum-api:8080
+    quote:
+      ## URL of the TM Forum Service hosting the Quote API
+      url: http://tm-forum-api:8080
     rainbow:
       ## URL for the Rainbow service
       url: http://rainbow:8080
@@ -780,6 +801,7 @@ did:
 # -- configuration for registering a participant at the til, will most probably only be used in demonstrational enviornments
 registration:
   enabled: false
+  prepScript: "test"
 
 # -- configuration for the .well-known/data-space-configuration endpoint document
 dataSpaceConfig:
@@ -804,3 +826,122 @@ dataSpaceConfig:
 didJson:
   enabled: false
   key:
+
+# -- configuration of mongo db to be used for the marketplace
+mongodb:
+  enabled: false
+  fullnameOverride: mongodb
+  auth:
+    enabled: true
+    existingSecret: marketplace-secret
+  initdbScriptsConfigMap: mongodb-bae-configmap
+  extraEnvVarsSecret: marketplace-secret-env
+
+# -- configuration for the marketplace components
+marketplace:
+  enabled: false
+  generatePasswords:
+    # -- should a password for the database connection of marketplace components be generated in the cluster
+    enabled: true
+    # -- name of the secret to put the generated password into
+    secretName: marketplace-secret
+  # -- should the tmforum deployed together with the marketplace?
+  bizEcosystemApis:
+    enabled: false
+  # -- should RSS be enabled?
+  bizEcosystemRss:
+    enabled: false
+  # -- should vc based auth enabled?
+  siop:
+    enabled: true
+    # -- should the market place automatically registered in the credentials config service?
+    ccs:
+      enabled: false
+    # -- paths to the verifier
+    verifier:
+      qrCodePath: /api/v2/loginQR
+      tokenPath: /token
+      jwksPath: /.well-known/jwks
+    # -- roles allowed by the market
+    allowedRoles:
+      - seller
+      - customer
+      - admin
+  
+  # -- configuration for the charging backend
+  bizEcosystemChargingBackend:
+
+    # -- max size to be used for the market
+    maxUploadSize: "5242880"
+
+    serviceAccount:
+      create: true
+
+    # -- configuration of the charging backend to be deployed
+    deployment:
+      image:
+        tag: 10.0.1
+    
+    # -- should plugin support be enabled
+    plugins:
+      enabled: false
+
+    media:
+      enabled: false
+    
+    port: 8006
+
+    loglevel: debug
+
+    payment:
+      method: None
+
+
+    backup:
+      enabled: false
+
+    initContainers: false
+    propagateToken: true
+    basePath: /opt/business-ecosystem-charging-backend
+    token: 
+      enabled: false
+
+    db:
+      host: mongodb
+      database: charging_db
+      user: charging
+
+  oauth:
+    provider: "vc"
+
+  # -- configuration for the logic proxy
+  bizEcosystemLogicProxy:
+
+    serviceAccount:
+      create: true
+    
+    existingSecret: marketplace-secret
+
+    # -- image to be used for the statefulset
+    statefulset:
+      image:
+        repository: fiware/biz-ecosystem-logic-proxy
+        tag: "10.1.1-PRE-5"
+        pullPolicy: Always
+
+
+    port: 8004
+    nodeEnvironment: production
+
+    # -- db config
+    db:
+      host: mongodb
+      database: belp_db
+      user: belp
+      secretKey: mongodb-root-password
+    basePath: /opt/business-ecosystem-logic-proxy
+
+    externalIdp:
+      enabled: true
+    initContainers: false
+    propagateToken: true

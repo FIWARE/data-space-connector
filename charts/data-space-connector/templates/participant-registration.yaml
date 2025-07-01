@@ -8,16 +8,37 @@ metadata:
     {{- include "dsc.labels" . | nindent 4 }}
 data:
   init.sh: |-
+    {{- if .Values.registration.prepScript }}
+    # Prep script
+    {{ .Values.registration.prepScript }} 
+    {{- end }}
+    {{- $registration := .Values.registration}}
+    {{- range $index, $credentialType := .Values.registration.credentialTypes }}
+
     # credentials config service registration
-    curl -X 'POST' \
-      '{{ .Values.registration.til }}/issuer' \
+    {{- if eq $index 0 }}
+    curl -v -X 'POST' \
+      '{{ $registration.til }}/issuer' \
       -H 'accept: */*' \
       -H 'Content-Type: application/json' \
       -d "{
-      \"did\": \"{{ .Values.registration.did }}\",
-      \"credentials\": {
-        \"credentialsType\": \"{{ .Values.registration.credentialsType }}\"
-      }
+      \"did\": \"{{ $registration.did }}\",
+      \"credentials\": [{
+        \"credentialsType\": \"{{ $credentialType }}\"
+      }]
     }"
+    {{- else }}
+    curl -v -X 'PUT' \
+      "{{ $registration.til }}/issuer/{{ $registration.did }}" \
+      -H 'accept: */*' \
+      -H 'Content-Type: application/json' \
+      -d "{
+      \"did\": \"{{ $registration.did }}\",
+      \"credentials\": [{
+        \"credentialsType\": \"{{ $credentialType }}\"
+      }]
+    }"
+    {{- end }}
+    {{- end }}
 
 {{- end }}

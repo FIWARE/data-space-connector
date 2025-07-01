@@ -1,0 +1,11 @@
+{{- if and (eq .Values.marketplace.enabled true) (.Values.marketplace.prep) }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Values.marketplace.prep.name }}
+  namespace: {{ $.Release.Namespace | quote }}
+  labels:
+    {{ include "dsc.labels" . | nindent 4 }}
+data:
+  {{- toYaml .Values.marketplace.prep.script | nindent 2 }}
+{{- end }}
