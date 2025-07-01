@@ -29,5 +29,6 @@ jobs:
       - name: Debug error
         id: debug
         run: | 
+          export KUBECONFIG=$(pwd)/it/target/k3s.yaml
           kubectl describe deployment postgresql -n provider
 
