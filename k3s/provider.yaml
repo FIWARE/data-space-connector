@@ -517,7 +517,11 @@ trusted-issuers-list:
           paths:
             - /
 
+mongodb:
+  enabled: true
+
 marketplace:
+  enabled: true
   prep:
     name: bae-prep
     script: 

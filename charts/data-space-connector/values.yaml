@@ -22,15 +22,6 @@ issuance:
     #-- name of the secret to put the generated password into
     secretName: issuance-secret
 
-# -- configuration to be shared between the marketplace components
-marketplace: 
-  generatePasswords:
-    # -- should a password for the database connection of marketplace components be generated in the cluster
-    enabled: true
-    #-- name of the secret to put the generated password into
-    secretName: marketplace-secret
-
-
 # -- configuration for the mysql to be deployed as part of the connector, see https://github.com/bitnami/charts/tree/main/bitnami/mysql for all options
 mysql:
   # -- should it be enabled? set to false if one outside the chart is used.
@@ -657,7 +648,7 @@ tm-forum-api:
 
     - name: customer-bill-management
       image: tmforum-customer-bill-management
-      basePath: /tmf-api/customerBillManagement/v4/
+      basePath: /tmf-api/customerBillManagement/v4
 
     - name: customer-management
       image: tmforum-customer-management
@@ -836,8 +827,9 @@ didJson:
   enabled: false
   key:
 
+# -- configuration of mongo db to be used for the marketplace
 mongodb:
-  enabled: true
+  enabled: false
   fullnameOverride: mongodb
   persistence:
     enabled: false
@@ -848,41 +840,52 @@ mongodb:
   initdbScriptsConfigMap: mongodb-bae-configmap
   extraEnvVarsSecret: marketplace-secret-env
 
+# -- configuration for the marketplace components
 marketplace:
-  enabled: true
+  enabled: false
   generatePasswords:
+    # -- should a password for the database connection of marketplace components be generated in the cluster
     enabled: true
+    # -- name of the secret to put the generated password into
     secretName: marketplace-secret
+  # -- should the tmforum deployed together with the marketplace?
   bizEcosystemApis:
     enabled: false
-
+  # -- should RSS be enabled?
   bizEcosystemRss:
     enabled: false
+  # -- should vc based auth enabled?
   siop:
     enabled: true
+    # -- should the market place automatically registered in the credentials config service?
     ccs:
       enabled: false
+    # -- paths to the verifier
     verifier:
       qrCodePath: /api/v2/loginQR
       tokenPath: /token
       jwksPath: /.well-known/jwks
+    # -- roles allowed by the market
     allowedRoles:
       - seller
       - customer
       - admin
   
+  # -- configuration for the charging backend
   bizEcosystemChargingBackend:
 
+    # -- max size to be used for the market
     maxUploadSize: "5242880"
 
     serviceAccount:
       create: true
 
+    # -- configuration of the charging backend to be deployed
     deployment:
       image:
-        repository: quay.io/wi_stefan/biz-ecosystem-charging-backend
         tag: 10.0.1
     
+    # -- should plugin support be enabled
     plugins:
       enabled: false
 
@@ -914,6 +917,7 @@ marketplace:
   oauth:
     provider: "vc"
 
+  # -- configuration for the logic proxy
   bizEcosystemLogicProxy:
 
     serviceAccount:
@@ -921,6 +925,7 @@ marketplace:
     
     existingSecret: marketplace-secret
 
+    # -- image to be used for the statefulset
     statefulset:
       image:
         repository: fiware/biz-ecosystem-logic-proxy
@@ -931,6 +936,7 @@ marketplace:
     port: 8004
     nodeEnvironment: production
 
+    # -- db config
     db:
       host: mongodb
       database: belp_db
