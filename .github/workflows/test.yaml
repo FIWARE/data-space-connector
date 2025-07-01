@@ -30,5 +30,6 @@ jobs:
         id: debug
         run: | 
           export KUBECONFIG=$(pwd)/it/target/k3s.yaml
-          kubectl describe statefulset postgresql -n provider
+          kubectl describe pod postgresql-0 -n provider
+          kubectl logs postgresql-0 -n provider
 
