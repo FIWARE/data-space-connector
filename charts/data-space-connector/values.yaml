@@ -831,9 +831,6 @@ didJson:
 mongodb:
   enabled: false
   fullnameOverride: mongodb
-  persistence:
-    enabled: false
-  architecture: standalone
   auth:
     enabled: true
     existingSecret: marketplace-secret

@@ -345,6 +345,7 @@ vcverifier:
             mountPath: /did-material
 
 mysql:
+  resourcesPreset: none
   primary:
     persistence:
       enabled: false
@@ -354,6 +355,7 @@ mysql:
 
 postgis:
   primary:
+    resourcesPreset: none
     persistence:
       enabled: false
   readReplicas:
@@ -362,6 +364,7 @@ postgis:
 
 postgresql:
   primary:
+    resourcesPreset: none
     persistence:
       enabled: false
   readReplicas:
@@ -519,6 +522,10 @@ trusted-issuers-list:
 
 mongodb:
   enabled: true
+  resourcesPreset: none
+  persistence:
+    enabled: false
+  architecture: standalone
 
 marketplace:
   enabled: true
