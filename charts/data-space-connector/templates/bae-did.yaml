@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: Secret
+type: Opaque
+metadata:
+  name: bae-did-secret
+  namespace: {{ $.Release.Namespace | quote }}
+  labels:
+    {{ include "dsc.labels" . | nindent 4 }}
+data:
+  privateKey: YjI0YzkwNmM5Y2Q2YTczOTE5MWQ3ZTQxN2U1MTk0YzRlNDM3OGEyYjFjOWY0Y2Y0ZDkzZTA0YzAyMGY2Mzc2OQ==

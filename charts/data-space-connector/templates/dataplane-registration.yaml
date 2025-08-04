@@ -1,4 +1,4 @@
-{{- if and (eq .Values.scorpio.enabled true) (.Values.scorpio.ccs) }}
+{{- if and (eq .Values.scorpio.enabled true) (.Values.scorpio.ccs) (eq .Values.scorpio.ccs.enabled true) }}
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -18,17 +18,19 @@ data:
       "defaultOidcScope": {{ .Values.scorpio.ccs.defaultOidcScope.name | quote }},
       {{- if and (.Values.scorpio.ccs.defaultOidcScope.credentialType) (.Values.scorpio.ccs.defaultOidcScope.trustedParticipantsLists) (.Values.scorpio.ccs.defaultOidcScope.trustedIssuersLists) -}}
       "oidcScopes": {
-        {{ .Values.scorpio.ccs.defaultOidcScope.name | quote }}: [
-          {
-            "type": {{ .Values.scorpio.ccs.defaultOidcScope.credentialType | quote }},
-            "trustedParticipantsLists": [
-              {{ .Values.scorpio.ccs.defaultOidcScope.trustedParticipantsLists | quote }}
-            ],
-            "trustedIssuersLists": [
-              {{ .Values.scorpio.ccs.defaultOidcScope.trustedIssuersLists | quote }}
-            ]
-          }
-        ]
+        {{ .Values.scorpio.ccs.defaultOidcScope.name | quote }}: {
+          "credentials": [
+            {
+              "type": {{ .Values.scorpio.ccs.defaultOidcScope.credentialType | quote }},
+              "trustedParticipantsLists": [
+                {{ .Values.scorpio.ccs.defaultOidcScope.trustedParticipantsLists | quote }}
+              ],
+              "trustedIssuersLists": [
+                {{ .Values.scorpio.ccs.defaultOidcScope.trustedIssuersLists | quote }}
+              ]
+            }
+          ]
+        }
       }
       {{- end }}
       {{- if .Values.scorpio.ccs.oidcScopes -}}

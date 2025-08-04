@@ -13,3 +13,7 @@ data:
           keyFile: /ssl-certs/tls.key
           stores:
             - default
+      options:
+        default:
+          clientAuth:
+            clientAuthType: NoClientCert
