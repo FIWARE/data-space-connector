@@ -235,9 +235,7 @@ vcverifier:
           - "/"
   deployment:
     image:
-      repository: quay.io/wi_stefan/vcverifier
-      tag: 10.0.1
-      pullPolicy: Always
+      tag: 6.1.0
     logging:
       level: DEBUG
     verifier:
