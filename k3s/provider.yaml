@@ -235,9 +235,7 @@ vcverifier:
           - "/"
   deployment:
     image:
-      repository: quay.io/wi_stefan/vcverifier
-      tag: 10.0.1
-      pullPolicy: Always
+      tag: 6.1.1
     logging:
       level: DEBUG
     verifier:
@@ -477,6 +475,10 @@ tpp:
     path: transfers
 
 contract-management:
+  deployment:
+    image:
+      tag: 3.0.0-PRE-8
+      pullPolicy: Always
   til:
     credentialType: OperatorCredential
   services:
@@ -511,6 +513,9 @@ contract-management:
       url: http://provider-tm-forum-api-quote:8080
 
 trusted-issuers-list:
+  deployment:
+    image:
+      tag: 0.3.1
   # only open for clean up in the tests
   ingress:
     til:

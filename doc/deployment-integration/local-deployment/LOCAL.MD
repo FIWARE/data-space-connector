@@ -750,7 +750,31 @@ export PRODUCT_SPEC_ID=$(curl -X 'POST' http://tm-forum-api.127.0.0.1.nip.io:808
     "brand": "M&P Operations",
     "version": "1.0.0",
     "lifecycleStatus": "ACTIVE",
-    "name": "M&P K8S"
+    "name": "M&P K8S",
+    "productSpecCharacteristic": [
+      {
+        "id": "credentialsConfig",
+        "name": "Credentials Config",
+        "valueType": "credentialsConfiguration",
+        "productSpecCharacteristicValue": [
+          {
+            "isDefault": true,
+            "value": {
+              "credentialsType": "OperatorCredential",
+              "claims": [
+                {
+                  "name": "roles",
+                  "path": "$.roles[?(@.target==\\\"did:key:zDnaekVc9ruTbMgErhZYqtqa8HAkzUZgP1DptqwPFAuCJpaZR\\\")].names[*]",
+                  "allowedValues": [
+                    "OPERATOR"
+                  ]
+                }
+              ]
+            }
+          }
+        ]
+      }
+    ]
   }' | jq '.id' -r ); echo ${PRODUCT_SPEC_ID}
 ```
 2. Create a product offering, referencing the spec:
