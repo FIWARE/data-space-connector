@@ -26,6 +26,10 @@ issuance:
 mysql:
   # -- should it be enabled? set to false if one outside the chart is used.
   enabled: true
+  global:
+    security:
+      # allow the image from the legacy repo
+      allowInsecureImages: true
   # -- configuration of the used image
   image:
     # -- repository where the image is held, see https://github.com/bitnami/charts/issues/35164 for further info
@@ -114,6 +118,10 @@ credentials-config-service:
 postgresql:
   # -- should it be enabled? set to false if one outside the chart is used.
   enabled: true
+  global:
+    security:
+      # allow the image from the legacy repo
+      allowInsecureImages: true
   # -- configuration of the used image
   image:
     # -- repository where the image is held, see https://github.com/bitnami/charts/issues/35164 for further info
@@ -431,6 +439,10 @@ elsi:
 keycloak:
   # -- should it be enabled? set to false if one outside the chart is used.
   enabled: true
+  global:
+    security:
+      # allow the image from the legacy repo
+      allowInsecureImages: true
   # -- configuration of the used image
   image:
     # -- repository where the image is held, see https://github.com/bitnami/charts/issues/35164 for further info
@@ -842,6 +854,10 @@ didJson:
 mongodb:
   enabled: false
   # -- configuration of the used image
+  global:
+    security:
+      # allow the image from the legacy repo
+      allowInsecureImages: true
   image:
     # -- repository where the image is held, see https://github.com/bitnami/charts/issues/35164 for further info
     repository: bitnamilegacy/mongodb
