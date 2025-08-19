@@ -742,31 +742,39 @@ ingress to the TMForum API for test and demo instrumentation. In production envi
 > for all available options.
 
 The offer creation includes multiple steps:
-1. Create the product specification:
+
+
+1. Export the Providers's did:
+```shell
+export PROVIDER_DID=$(curl -X GET http://did-provider.127.0.0.1.nip.io:8080/did-material/did.env | cut -d'=' -f2); echo ${PROVIDER_DID} 
+```
+
+2. Create the product specification:
 ```shell
 export PRODUCT_SPEC_ID=$(curl -X 'POST' http://tm-forum-api.127.0.0.1.nip.io:8080/tmf-api/productCatalogManagement/v4/productSpecification \
   -H 'Content-Type: application/json;charset=utf-8' \
-  -d '{
-    "brand": "M&P Operations",
-    "version": "1.0.0",
-    "lifecycleStatus": "ACTIVE",
-    "name": "M&P K8S",
-    "productSpecCharacteristic": [
+  -d "{
+    \"brand\": \"M&P Operations\",
+    \"version\": \"1.0.0\",
+    \"lifecycleStatus\": \"ACTIVE\",
+    \"name\": \"M&P K8S\",
+    \"productSpecCharacteristic\": [
       {
-        "id": "credentialsConfig",
-        "name": "Credentials Config",
-        "valueType": "credentialsConfiguration",
-        "productSpecCharacteristicValue": [
+        \"id\": \"credentialsConfig\",
+        \"name\": \"Credentials Config\",
+        \"@schemaLocation\": \"https://raw.githubusercontent.com/FIWARE/contract-management/refs/heads/main/schemas/credentials/credentialConfigCharacteristic.json\",
+        \"valueType\": \"credentialsConfiguration\",
+        \"productSpecCharacteristicValue\": [
           {
-            "isDefault": true,
-            "value": {
-              "credentialsType": "OperatorCredential",
-              "claims": [
+            \"isDefault\": true,
+            \"value\": {
+              \"credentialsType\": \"OperatorCredential\",
+              \"claims\": [
                 {
-                  "name": "roles",
-                  "path": "$.roles[?(@.target==\\\"did:key:zDnaekVc9ruTbMgErhZYqtqa8HAkzUZgP1DptqwPFAuCJpaZR\\\")].names[*]",
-                  "allowedValues": [
-                    "OPERATOR"
+                  \"name\": \"roles\",
+                  \"path\": \"$.roles[?(@.target==\\\"${PROVIDER_DID}\\\")].names[*]\",
+                  \"allowedValues\": [
+                    \"OPERATOR\"
                   ]
                 }
               ]
@@ -775,9 +783,9 @@ export PRODUCT_SPEC_ID=$(curl -X 'POST' http://tm-forum-api.127.0.0.1.nip.io:808
         ]
       }
     ]
-  }' | jq '.id' -r ); echo ${PRODUCT_SPEC_ID}
+  }" | jq '.id' -r ); echo ${PRODUCT_SPEC_ID}
 ```
-2. Create a product offering, referencing the spec:
+3. Create a product offering, referencing the spec:
 ```shell
 export PRODUCT_OFFERING_ID=$(curl -X 'POST' http://tm-forum-api.127.0.0.1.nip.io:8080/tmf-api/productCatalogManagement/v4/productOffering \
   -H 'Content-Type: application/json;charset=utf-8' \
