@@ -2,7 +2,7 @@ apiVersion: v2
 name: data-space-connector
 description: Umbrella Chart for the FIWARE Data Space Connector, combining all essential parts to be used by a participant.
 type: application
-version: 24.0.0
+version: 24.0.2
 dependencies:
   - name: postgresql
     condition: postgresql.enabled
@@ -58,7 +58,7 @@ dependencies:
   # contract management
   - name: tm-forum-api
     condition: tm-forum-api.enabled
-    version: 0.14.1
+    version: 0.14.9
     repository: https://fiware.github.io/helm-charts
   - name: contract-management
     condition: contract-management.enabled
@@ -68,7 +68,7 @@ dependencies:
   - name: business-api-ecosystem
     alias: marketplace
     condition: marketplace.enabled
-    version: 0.11.19
+    version: 0.11.21
     repository: https://fiware.github.io/helm-charts
   - name: mongodb
     condition: mongodb.enabled
