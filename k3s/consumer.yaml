@@ -103,7 +103,7 @@ keycloak:
           mountPath: /did-material
 
     - name: prepare-envs
-      image: docker.io/bitnami/keycloak:26.2.1-debian-12-r0
+      image: docker.io/bitnamilegacy/keycloak:26.2.1-debian-12-r0
       command:
         - /bin/sh
       args:

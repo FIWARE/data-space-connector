@@ -26,6 +26,14 @@ issuance:
 mysql:
   # -- should it be enabled? set to false if one outside the chart is used.
   enabled: true
+  global:
+    security:
+      # allow the image from the legacy repo
+      allowInsecureImages: true
+  # -- configuration of the used image
+  image:
+    # -- repository where the image is held, see https://github.com/bitnami/charts/issues/35164 for further info
+    repository: bitnamilegacy/mysql
   # -- allows to set a fixed name for the services
   fullnameOverride: authentication-mysql
   # -- configure authentication to mysql
@@ -110,7 +118,14 @@ credentials-config-service:
 postgresql:
   # -- should it be enabled? set to false if one outside the chart is used.
   enabled: true
+  global:
+    security:
+      # allow the image from the legacy repo
+      allowInsecureImages: true
+  # -- configuration of the used image
   image:
+    # -- repository where the image is held, see https://github.com/bitnami/charts/issues/35164 for further info
+    repository: bitnamilegacy/postgresql
     # -- fixes the unpullable image referenced in the chart
     tag: 13.18.0
   # -- allows to set a fixed name for the services
@@ -424,6 +439,14 @@ elsi:
 keycloak:
   # -- should it be enabled? set to false if one outside the chart is used.
   enabled: true
+  global:
+    security:
+      # allow the image from the legacy repo
+      allowInsecureImages: true
+  # -- configuration of the used image
+  image:
+    # -- repository where the image is held, see https://github.com/bitnami/charts/issues/35164 for further info
+    repository: bitnamilegacy/keycloak
   # -- disable the security context, required by the current quarkus container, will be solved in the future chart versions of keycloak
   containerSecurityContext:
     enabled: false
@@ -830,6 +853,14 @@ didJson:
 # -- configuration of mongo db to be used for the marketplace
 mongodb:
   enabled: false
+  # -- configuration of the used image
+  global:
+    security:
+      # allow the image from the legacy repo
+      allowInsecureImages: true
+  image:
+    # -- repository where the image is held, see https://github.com/bitnami/charts/issues/35164 for further info
+    repository: bitnamilegacy/mongodb
   fullnameOverride: mongodb
   auth:
     enabled: true
