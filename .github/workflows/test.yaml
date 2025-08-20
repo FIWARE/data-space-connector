@@ -20,6 +20,5 @@ jobs:
 
       - name: Execute tests
         id: test        
-        continue-on-error: true
         run: |
           mvn clean integration-test -Ptest
