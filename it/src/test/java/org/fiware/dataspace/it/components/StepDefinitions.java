@@ -21,6 +21,7 @@ import org.opentest4j.AssertionFailedError;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.URI;
 import java.security.Security;
 import java.time.Duration;
 import java.util.*;
@@ -422,8 +423,24 @@ public class StepDefinitions {
 								.productSpecCharacteristicValue(
 										List.of(
 												new CharacteristicValueSpecificationVO()
-														.value("Endpoint of the K8S service.")))
-				));
+														.value("Endpoint of the K8S service."))),
+						new ProductSpecificationCharacteristicVO()
+								.id("credentialsConfig")
+								.name("Credentials Config for the Target Service")
+								.valueType("credentialsConfiguration")
+								.atSchemaLocation(URI.create("https://raw.githubusercontent.com/FIWARE/contract-management/refs/heads/main/schemas/credentials/credentialConfigCharacteristic.json"))
+								.productSpecCharacteristicValue(
+										List.of(
+												new CharacteristicValueSpecificationVO()
+														.value(Map.of(
+																"credentialsType", "OperatorCredential",
+																"claims", List.of(
+																		Map.of("name", "roles",
+																				"path", "$.roles[?(@.target==\\\"" + getDid(MPOperationsEnvironment.DID_PROVIDER_ADDRESS) + "\\\")].names[*]",
+																				"allowedValues", List.of("OPERATOR"))))
+														)
+										))));
+
 		RequestBody specificationRequestBody = RequestBody.create(OBJECT_MAPPER.writeValueAsString(pscVo), okhttp3.MediaType.parse(MediaType.APPLICATION_JSON));
 		Request specificationRequest = new Request.Builder()
 				.post(specificationRequestBody)
@@ -502,7 +519,23 @@ public class StepDefinitions {
 								.productSpecCharacteristicValue(
 										List.of(
 												new CharacteristicValueSpecificationVO()
-														.value("Endpoint of the reporting service.")))
+														.value("Endpoint of the reporting service."))),
+						new ProductSpecificationCharacteristicVO()
+								.id("credentialsConfig")
+								.name("Credentials Config for the Target Service")
+								.valueType("credentialsConfiguration")
+								.atSchemaLocation(URI.create("https://raw.githubusercontent.com/FIWARE/contract-management/refs/heads/main/schemas/credentials/credentialConfigCharacteristic.json"))
+								.productSpecCharacteristicValue(
+										List.of(
+												new CharacteristicValueSpecificationVO()
+														.value(Map.of(
+																"credentialsType", "OperatorCredential",
+																"claims", List.of(
+																		Map.of("name", "roles",
+																				"path", "$.roles[?(@.target==\\\"" + getDid(MPOperationsEnvironment.DID_PROVIDER_ADDRESS) + "\\\")].names[*]",
+																				"allowedValues", List.of("OPERATOR"))))
+														)
+										))
 				));
 		RequestBody specificationRequestBody = RequestBody.create(OBJECT_MAPPER.writeValueAsString(pscVo), okhttp3.MediaType.parse(MediaType.APPLICATION_JSON));
 		Request specificationRequest = new Request.Builder()
@@ -787,7 +820,7 @@ public class StepDefinitions {
 
 		createdEntities.add("urn:ngsi-ld:K8SCluster:fancy-marketplace");
 	}
-	
+
 	@Then("Fancy Marketplace' employee can access the EnergyReport.")
 	public void accessTheEnergyReport() throws Exception {
 		String accessToken = getAccessTokenForFancyMarketplace(USER_CREDENTIAL, DEFAULT_SCOPE, MPOperationsEnvironment.PROVIDER_API_ADDRESS);
