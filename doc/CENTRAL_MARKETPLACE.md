@@ -35,3 +35,7 @@
     5.1. Adds the customer to the trusted-issuers-list(according to the order)
 
     5.2. Creates the policies from the order
+
+Open:
+
+* notify product to the provider -> handling of cancellation etc.?
