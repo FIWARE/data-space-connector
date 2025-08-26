@@ -906,7 +906,7 @@ marketplace:
     maxUploadSize: "5242880"
 
     serviceAccount:
-      create: true
+      create: false
 
     # -- configuration of the charging backend to be deployed
     deployment:
