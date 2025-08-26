@@ -827,8 +827,11 @@ contract-management:
       ## URL for the Rainbow service
       url: http://rainbow:8080
     quote:
-      ## URL for the Rainbow service
+      ## URL for the Quote API
       url: http://tm-forum-api:8080
+    odrl:
+      ## URL to the ODRL-PAP
+      url: http://odrl-pap:8080
 
 # -- configuration for the did-helper, should only be used for demonstrational deployments, see https://github.com/wistefan/did-helper
 did:
