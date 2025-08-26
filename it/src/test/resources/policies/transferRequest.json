@@ -8,6 +8,7 @@
     "skos": "http://www.w3.org/2004/02/skos/core#"
   },
   "@id": "https://mp-operation.org/policy/common/type",
+  "odrl:uid": "https://mp-operation.org/policy/common/transferRequest",
   "@type": "odrl:Policy",
   "odrl:permission": {
     "odrl:assigner": {
