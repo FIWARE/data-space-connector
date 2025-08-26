@@ -234,8 +234,6 @@ vcverifier:
         paths:
           - "/"
   deployment:
-    image:
-      tag: 6.1.1
     logging:
       level: DEBUG
     verifier:
@@ -407,6 +405,7 @@ scorpio:
         - "/"
 
 odrl-pap:
+
   deployment:
     initContainers:
       - name: get-did
@@ -475,10 +474,6 @@ tpp:
     path: transfers
 
 contract-management:
-  deployment:
-    image:
-      tag: 3.0.0-PRE-8
-      pullPolicy: Always
   til:
     credentialType: OperatorCredential
   services:
@@ -508,14 +503,11 @@ contract-management:
     rainbow:
       ## URL for the Rainbow service
       url: http://rainbow:8080
-    quote:
-      ## URL for TM Forum Service hosting the Quote API
-      url: http://provider-tm-forum-api-quote:8080
+    odrl:
+      ## URL for the ODRL-PAP
+      url: http://odrl-pap:8080
 
 trusted-issuers-list:
-  deployment:
-    image:
-      tag: 0.3.1
   # only open for clean up in the tests
   ingress:
     til:
