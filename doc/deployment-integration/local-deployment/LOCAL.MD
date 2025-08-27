@@ -247,7 +247,8 @@ The policy can be created at the PAP via:
               "rdfs": "http://www.w3.org/2000/01/rdf-schema#",
               "skos": "http://www.w3.org/2004/02/skos/core#"
             },
-            "@id": "https://mp-operation.org/policy/common/type",
+            "@id": "https://mp-operation.org/policy/common/test",
+            "odrl:uid": "https://mp-operation.org/policy/common/test",
             "@type": "odrl:Policy",
             "odrl:permission": {
               "odrl:assigner": {
@@ -472,7 +473,8 @@ Since the offerings are handled through the TMForum APIs, the policies belong to
             "rdfs": "http://www.w3.org/2000/01/rdf-schema#",
             "skos": "http://www.w3.org/2004/02/skos/core#"
           },
-          "@id": "https://mp-operation.org/policy/common/type",
+          "@id": "https://mp-operation.org/policy/common/offering",
+          "odrl:uid": "https://mp-operation.org/policy/common/offering",
           "@type": "odrl:Policy",
           "odrl:permission": {
             "odrl:assigner": {
@@ -514,7 +516,8 @@ Since the offerings are handled through the TMForum APIs, the policies belong to
             "rdfs": "http://www.w3.org/2000/01/rdf-schema#",
             "skos": "http://www.w3.org/2004/02/skos/core#"
           },
-          "@id": "https://mp-operation.org/policy/common/type",
+          "@id": "https://mp-operation.org/policy/common/selfRegistration",
+          "odrl:uid": "https://mp-operation.org/policy/common/selfRegistration",
           "@type": "odrl:Policy",
           "odrl:permission": {
             "odrl:assigner": {
@@ -591,7 +594,8 @@ creation of such through the action `"tmf:create"`. Additionaly, it restricts th
             "rdfs": "http://www.w3.org/2000/01/rdf-schema#",
             "skos": "http://www.w3.org/2004/02/skos/core#"
           },
-          "@id": "https://mp-operation.org/policy/common/type",
+          "@id": "https://mp-operation.org/policy/common/ordering",
+          "odrl:uid": "https://mp-operation.org/policy/common/ordering",
           "@type": "odrl:Policy",
           "odrl:permission": {
             "odrl:assigner": {
@@ -652,12 +656,9 @@ creation of such through the action `"tmf:create"`. Additionaly, it restricts th
           }
         }'
 ```
-Accepting an offer essentially happens by creating a ProductOrder in TMForum. While this step is "manual" in our demo here, its
-usually hidden behind a marketplace application, taking care of the concrete TMForum interaction. A possible marketplace would be f.e. the [FIWARE BAE Marketplace](https://github.com/FIWARE-TMForum/Business-API-Ecosystem).
 
-In addition to the policies for accessing the TMForum-APIS, another one to handle the actual "cluster creation" is required:
+4. Allow "OPERATORS" to retrieve information about the clusters: 
 
-4. Allow creation of entities of type "K8SCluster" to authenticated participants with the role "OPERATOR":
 ```shell
   curl -s -X 'POST' http://pap-provider.127.0.0.1.nip.io:8080/policy \
     -H 'Content-Type: application/json' \
@@ -670,7 +671,7 @@ In addition to the policies for accessing the TMForum-APIS, another one to handl
                 "rdfs": "http://www.w3.org/2000/01/rdf-schema#",
                 "skos": "http://www.w3.org/2004/02/skos/core#"
               },
-              "@id": "https://mp-operation.org/policy/common/type",
+              "odrl:uid": "https://mp-operation.org/policy/common/allowRead",
               "@type": "odrl:Policy",
               "odrl:permission": {
                 "odrl:assigner": {
@@ -726,14 +727,14 @@ In addition to the policies for accessing the TMForum-APIS, another one to handl
                   }
                 },
                 "odrl:action": {
-                  "@id": "odrl:use"
+                  "@id": "odrl:read"
                 }
               }
             }'
 ```
-Since initially only "LegalPersonCredentials" are allowed to be issued for the consumer inside the providers' Trusted-Issuers-List, no "OperatorCredentials"
-are accepted before an order was created. Thus, the policy effectively restricts the cluster creation to participants that bought access and assigned
-users with the role "Operator".
+
+Accepting an offer essentially happens by creating a ProductOrder in TMForum. While this step is "manual" in our demo here, its
+usually hidden behind a marketplace application, taking care of the concrete TMForum interaction. A possible marketplace would be f.e. the [FIWARE BAE Marketplace](https://github.com/FIWARE-TMForum/Business-API-Ecosystem).
 
 In addition to the policies, an offering should be created. Similar to the broker access, the local deployment contains a direct
 ingress to the TMForum API for test and demo instrumentation. In production environments, this should never be accessible without an IAM framework in front.
@@ -742,30 +743,248 @@ ingress to the TMForum API for test and demo instrumentation. In production envi
 > for all available options.
 
 The offer creation includes multiple steps:
-1. Create the product specification:
+
+
+1. Export the Providers's did:
 ```shell
-export PRODUCT_SPEC_ID=$(curl -X 'POST' http://tm-forum-api.127.0.0.1.nip.io:8080/tmf-api/productCatalogManagement/v4/productSpecification \
-  -H 'Content-Type: application/json;charset=utf-8' \
-  -d '{
-    "brand": "M&P Operations",
-    "version": "1.0.0",
-    "lifecycleStatus": "ACTIVE",
-    "name": "M&P K8S"
-  }' | jq '.id' -r ); echo ${PRODUCT_SPEC_ID}
+export PROVIDER_DID=$(curl -X GET http://did-provider.127.0.0.1.nip.io:8080/did-material/did.env | cut -d'=' -f2); echo ${PROVIDER_DID} 
 ```
-2. Create a product offering, referencing the spec:
-```shell
-export PRODUCT_OFFERING_ID=$(curl -X 'POST' http://tm-forum-api.127.0.0.1.nip.io:8080/tmf-api/productCatalogManagement/v4/productOffering \
-  -H 'Content-Type: application/json;charset=utf-8' \
-  -d "{
-    \"version\": \"1.0.0\",
-    \"lifecycleStatus\": \"ACTIVE\",
-    \"name\": \"M&P K8S Offering\",
-    \"productSpecification\": {
-      \"id\": \"${PRODUCT_SPEC_ID}\"
-    }
-  }"| jq '.id' -r ); echo ${PRODUCT_OFFERING_ID}
-```
+
+2. Create the product specification. The specification should contain the configuration of credentials to be trusted by the customer(in this case, "OperatorCredential" with the role "OPERATOR" for the target-service) and the policy to be created for the customer. In the example, we will offer 2 different types service: "small" and "full", where small restricts the cluster-size to be created:
+
+  1. "small": 
+  ```shell
+  export PRODUCT_SPEC_SMALL_ID=$(curl -X 'POST' http://tm-forum-api.127.0.0.1.nip.io:8080/tmf-api/productCatalogManagement/v4/productSpecification \
+    -H 'Content-Type: application/json;charset=utf-8' \
+    -d "{
+      \"brand\": \"M&P Operations\",
+      \"version\": \"1.0.0\",
+      \"lifecycleStatus\": \"ACTIVE\",
+      \"name\": \"M&P K8S Small\",
+      \"productSpecCharacteristic\": [
+        {
+          \"id\": \"credentialsConfig\",
+          \"name\": \"Credentials Config\",
+          \"@schemaLocation\": \"https://raw.githubusercontent.com/FIWARE/contract-management/refs/heads/main/schemas/credentials/credentialConfigCharacteristic.json\",
+          \"valueType\": \"credentialsConfiguration\",
+          \"productSpecCharacteristicValue\": [
+            {
+              \"isDefault\": true,
+              \"value\": {
+                \"credentialsType\": \"OperatorCredential\",
+                \"claims\": [
+                  {
+                    \"name\": \"roles\",
+                    \"path\": \"$.roles[?(@.target==\\\"${PROVIDER_DID}\\\")].names[*]\",
+                    \"allowedValues\": [
+                      \"OPERATOR\"
+                    ]
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          \"id\": \"policyConfig\",
+          \"name\": \"Policy for creation of K8S clusters.\",
+          \"@schemaLocation\": \"https://raw.githubusercontent.com/FIWARE/contract-management/refs/heads/policy-support/schemas/odrl/policyCharacteristic.json\",
+          \"valueType\": \"authorizationPolicy\",
+          \"productSpecCharacteristicValue\": [
+            {
+              \"isDefault\": true,
+              \"value\": {
+                \"@context\": {
+                  \"odrl\": \"http://www.w3.org/ns/odrl/2/\"
+                },
+                \"@id\": \"https://mp-operation.org/policy/common/k8s-small\",
+                \"odrl:uid\": \"https://mp-operation.org/policy/common/k8s-small\",
+                \"@type\": \"odrl:Policy\",
+                \"odrl:permission\": {
+                  \"odrl:assigner\": \"https://www.mp-operation.org/\",
+                  \"odrl:target\": {
+                    \"@type\": \"odrl:AssetCollection\",
+                    \"odrl:source\": \"urn:asset\",
+                    \"odrl:refinement\": [
+                      {
+                        \"@type\": \"odrl:Constraint\",
+                        \"odrl:leftOperand\": \"ngsi-ld:entityType\",
+                        \"odrl:operator\": \"odrl:eq\",
+                        \"odrl:rightOperand\": \"K8SCluster\"
+                      },
+                      {
+                        \"@type\": \"odrl:Constraint\",
+                        \"http:bodyValue\": \"$.numNodes.value\",
+                        \"odrl:operator\": \"odrl:eq\",
+                        \"odrl:rightOperand\": \"3\"
+                      }
+                    ]
+                  },
+                  \"odrl:assignee\": {
+                    \"@type\": \"odrl:PartyCollection\",
+                    \"odrl:source\": \"urn:user\",
+                    \"odrl:refinement\": {
+                      \"@type\": \"odrl:LogicalConstraint\",
+                      \"odrl:and\": [
+                        {
+                          \"@type\": \"odrl:Constraint\",
+                          \"odrl:leftOperand\": \"vc:role\",
+                          \"odrl:operator\": \"odrl:hasPart\",
+                          \"odrl:rightOperand\": {
+                            \"@value\": \"OPERATOR\",
+                            \"@type\": \"xsd:string\"
+                          }
+                        },
+                        {
+                          \"@type\": \"odrl:Constraint\",
+                          \"odrl:leftOperand\": \"vc:type\",
+                          \"odrl:operator\": \"odrl:hasPart\",
+                          \"odrl:rightOperand\": {
+                            \"@value\": \"OperatorCredential\",
+                            \"@type\": \"xsd:string\"
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  \"odrl:action\": \"odrl:use\"
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }" | jq '.id' -r ); echo ${PRODUCT_SPEC_SMALL_ID}
+  ```
+
+  1. "full": 
+  ```shell
+  export PRODUCT_SPEC_FULL_ID=$(curl -X 'POST' http://tm-forum-api.127.0.0.1.nip.io:8080/tmf-api/productCatalogManagement/v4/productSpecification \
+    -H 'Content-Type: application/json;charset=utf-8' \
+    -d "{
+      \"brand\": \"M&P Operations\",
+      \"version\": \"1.0.0\",
+      \"lifecycleStatus\": \"ACTIVE\",
+      \"name\": \"M&P K8S\",
+      \"productSpecCharacteristic\": [
+        {
+          \"id\": \"credentialsConfig\",
+          \"name\": \"Credentials Config\",
+          \"@schemaLocation\": \"https://raw.githubusercontent.com/FIWARE/contract-management/refs/heads/main/schemas/credentials/credentialConfigCharacteristic.json\",
+          \"valueType\": \"credentialsConfiguration\",
+          \"productSpecCharacteristicValue\": [
+            {
+              \"isDefault\": true,
+              \"value\": {
+                \"credentialsType\": \"OperatorCredential\",
+                \"claims\": [
+                  {
+                    \"name\": \"roles\",
+                    \"path\": \"$.roles[?(@.target==\\\"${PROVIDER_DID}\\\")].names[*]\",
+                    \"allowedValues\": [
+                      \"OPERATOR\"
+                    ]
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          \"id\": \"policyConfig\",
+          \"name\": \"Policy for creation of K8S clusters.\",
+          \"@schemaLocation\": \"https://raw.githubusercontent.com/FIWARE/contract-management/refs/heads/policy-support/schemas/odrl/policyCharacteristic.json\",
+          \"valueType\": \"authorizationPolicy\",
+          \"productSpecCharacteristicValue\": [
+            {
+              \"isDefault\": true,
+              \"value\": {
+                \"@context\": {
+                  \"odrl\": \"http://www.w3.org/ns/odrl/2/\"
+                },
+                \"@id\": \"https://mp-operation.org/policy/common/k8s-full\",
+                \"odrl:uid\": \"https://mp-operation.org/policy/common/k8s-full\",
+                \"@type\": \"odrl:Policy\",
+                \"odrl:permission\": {
+                  \"odrl:assigner\": \"https://www.mp-operation.org/\",
+                  \"odrl:target\": {
+                    \"@type\": \"odrl:AssetCollection\",
+                    \"odrl:source\": \"urn:asset\",
+                    \"odrl:refinement\": [
+                      {
+                        \"@type\": \"odrl:Constraint\",
+                        \"odrl:leftOperand\": \"ngsi-ld:entityType\",
+                        \"odrl:operator\": \"odrl:eq\",
+                        \"odrl:rightOperand\": \"K8SCluster\"
+                      }
+                    ]
+                  },
+                  \"odrl:assignee\": {
+                    \"@type\": \"odrl:PartyCollection\",
+                    \"odrl:source\": \"urn:user\",
+                    \"odrl:refinement\": {
+                      \"@type\": \"odrl:LogicalConstraint\",
+                      \"odrl:and\": [
+                        {
+                          \"@type\": \"odrl:Constraint\",
+                          \"odrl:leftOperand\": \"vc:role\",
+                          \"odrl:operator\": \"odrl:hasPart\",
+                          \"odrl:rightOperand\": {
+                            \"@value\": \"OPERATOR\",
+                            \"@type\": \"xsd:string\"
+                          }
+                        },
+                        {
+                          \"@type\": \"odrl:Constraint\",
+                          \"odrl:leftOperand\": \"vc:type\",
+                          \"odrl:operator\": \"odrl:hasPart\",
+                          \"odrl:rightOperand\": {
+                            \"@value\": \"OperatorCredential\",
+                            \"@type\": \"xsd:string\"
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  \"odrl:action\": \"odrl:use\"
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }" | jq '.id' -r ); echo ${PRODUCT_SPEC_FULL_ID}
+  ```
+
+3. Create a product offering, referencing the spec:
+
+  1. "small":
+  ```shell
+  export PRODUCT_OFFERING_SMALL_ID=$(curl -X 'POST' http://tm-forum-api.127.0.0.1.nip.io:8080/tmf-api/productCatalogManagement/v4/productOffering \
+    -H 'Content-Type: application/json;charset=utf-8' \
+    -d "{
+      \"version\": \"1.0.0\",
+      \"lifecycleStatus\": \"ACTIVE\",
+      \"name\": \"M&P K8S Offering Small\",
+      \"productSpecification\": {
+        \"id\": \"${PRODUCT_SPEC_SMALL_ID}\"
+      }
+    }"| jq '.id' -r ); echo ${PRODUCT_OFFERING_SMALL_ID}
+  ```
+  
+  2. "small":
+  ```shell
+  export PRODUCT_OFFERING_FULL_ID=$(curl -X 'POST' http://tm-forum-api.127.0.0.1.nip.io:8080/tmf-api/productCatalogManagement/v4/productOffering \
+    -H 'Content-Type: application/json;charset=utf-8' \
+    -d "{
+      \"version\": \"1.0.0\",
+      \"lifecycleStatus\": \"ACTIVE\",
+      \"name\": \"M&P K8S Offering\",
+      \"productSpecification\": {
+        \"id\": \"${PRODUCT_SPEC_FULL_ID}\"
+      }
+    }"| jq '.id' -r ); echo ${PRODUCT_OFFERING_FULL_ID}
+  ```
 
 #### Credentials issuance at the consumer
 
@@ -853,38 +1072,38 @@ As a result of the operation, Fancy Marketplace Inc. is registered in M&P Operat
 5. Buy access. In order to buy access, a ProductOrder, referencing the offering from M&P Operations has to be created. A typical 
 marketplace implementation would take care of that and handle potential payments. For the sample use-case, we continue to communicate 
 with the TMForum-APIs directly.
-    1. List offerings
-    ```shell
-        export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh http://mp-data-service.127.0.0.1.nip.io:8080 $REP_CREDENTIAL default); echo $ACCESS_TOKEN
-        curl -X GET http://mp-tmf-api.127.0.0.1.nip.io:8080/tmf-api/productCatalogManagement/v4/productOffering -H "Authorization: Bearer ${ACCESS_TOKEN}" | jq .
-    ```
-    2. To accept the offering, one has to be choosen(in the example, only one exists) and its id needs to be extracted:
-    ```shell
-        export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh http://mp-data-service.127.0.0.1.nip.io:8080 $REP_CREDENTIAL default); echo $ACCESS_TOKEN
-        export OFFER_ID=$(curl -X GET http://mp-tmf-api.127.0.0.1.nip.io:8080/tmf-api/productCatalogManagement/v4/productOffering -H "Authorization: Bearer ${ACCESS_TOKEN}" | jq '.[0].id' -r); echo ${OFFER_ID}
-   ```
-   3. Create the order:
-   ```shell
-      export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh http://mp-data-service.127.0.0.1.nip.io:8080 $REP_CREDENTIAL default); echo $ACCESS_TOKEN
-      export ORDER_ID=$(curl -X POST http://mp-tmf-api.127.0.0.1.nip.io:8080/tmf-api/productOrderingManagement/v4/productOrder \
-      -H 'Accept: */*' \
-      -H 'Content-Type: application/json' \
-      -H "Authorization: Bearer ${ACCESS_TOKEN}" \
-      -d "{
-          \"productOrderItem\": [
-            {
-              \"id\": \"random-order-id\",
-              \"action\": \"add\",
-              \"productOffering\": {
-                \"id\" :  \"${OFFER_ID}\"
-              }
-            }  
-          ],
-          \"relatedParty\": [
-            {
-              \"id\": \"${FANCY_MARKETPLACE_ID}\"
+  1. List offerings
+  ```shell
+    export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh http://mp-data-service.127.0.0.1.nip.io:8080 $REP_CREDENTIAL default); echo $ACCESS_TOKEN
+    curl -X GET http://mp-tmf-api.127.0.0.1.nip.io:8080/tmf-api/productCatalogManagement/v4/productOffering -H "Authorization: Bearer ${ACCESS_TOKEN}" | jq .
+  ```
+  2. To accept the offering, one has to be choosen and its id needs to be extracted. We will start with the "small" version:
+  ```shell
+    export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh http://mp-data-service.127.0.0.1.nip.io:8080 $REP_CREDENTIAL default); echo $ACCESS_TOKEN
+    export OFFER_ID=$(curl -X GET http://mp-tmf-api.127.0.0.1.nip.io:8080/tmf-api/productCatalogManagement/v4/productOffering -H "Authorization: Bearer ${ACCESS_TOKEN}" | jq '.[0].id' -r); echo ${OFFER_ID}
+  ```
+  3. Create the order:
+  ```shell
+    export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh http://mp-data-service.127.0.0.1.nip.io:8080 $REP_CREDENTIAL default); echo $ACCESS_TOKEN
+    export ORDER_ID=$(curl -X POST http://mp-tmf-api.127.0.0.1.nip.io:8080/tmf-api/productOrderingManagement/v4/productOrder \
+    -H 'Accept: */*' \
+    -H 'Content-Type: application/json' \
+    -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+    -d "{
+        \"productOrderItem\": [
+          {
+            \"id\": \"random-order-id\",
+            \"action\": \"add\",
+            \"productOffering\": {
+              \"id\" :  \"${OFFER_ID}\"
             }
-          ]}" | jq '.id' -r); echo ${ORDER_ID}
+          }  
+        ],
+        \"relatedParty\": [
+          {
+            \"id\": \"${FANCY_MARKETPLACE_ID}\"
+          }
+        ]}" | jq '.id' -r); echo ${ORDER_ID}
   ```
   4. Complete the order:
   ```shell
@@ -901,9 +1120,9 @@ with the TMForum-APIs directly.
   Once the order is created, TMForum will notify the ContractManagement to create an entry in the TrustedIssuersList, 
   allowing Fancy Marketplace to access M&P Operation's services with an ```Operator Credential``` 
 
-6. Create a cluster as a Fancy Marketplace Operator:
+6. Create a cluster as a Fancy Marketplace Operator with numNodes <= 3:
 ```shell
-  export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh http://mp-data-service.127.0.0.1.nip.io:8080 $OPERATOR_CREDENTIAL operator); echo $ACCESS_TOKEN
+  export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh http://mp-data-service.127.0.0.1.nip.io:8080 $OPERATOR_CREDENTIAL operator)
   curl -X POST http://mp-data-service.127.0.0.1.nip.io:8080/ngsi-ld/v1/entities \
     -H 'Accept: */*' \
     -H 'Content-Type: application/json' \
@@ -925,12 +1144,107 @@ with the TMForum-APIs directly.
       }
     }'
 ```
+
 7. Verify that it now exists:
 ```shell
   export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh http://mp-data-service.127.0.0.1.nip.io:8080 $OPERATOR_CREDENTIAL operator)
   curl -X GET http://mp-data-service.127.0.0.1.nip.io:8080/ngsi-ld/v1/entities/urn:ngsi-ld:K8SCluster:fancy-marketplace \
     -H 'Accept: */*' \
     -H "Authorization: Bearer ${ACCESS_TOKEN}"
+```
+
+8. Try to create a bigger one -> it will fail.
+```shell
+  export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh http://mp-data-service.127.0.0.1.nip.io:8080 $OPERATOR_CREDENTIAL operator)
+  curl -X POST http://mp-data-service.127.0.0.1.nip.io:8080/ngsi-ld/v1/entities \
+    -H 'Accept: */*' \
+    -H 'Content-Type: application/json' \
+    -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+    -d '{
+      "id": "urn:ngsi-ld:K8SCluster:fancy-marketplace-big",
+      "type": "K8SCluster",
+      "name": {
+        "type": "Property",
+        "value": "Fancy Marketplace Cluster"
+      },
+      "numNodes": {
+        "type": "Property",
+        "value": "4"
+      },
+      "k8sVersion": {
+        "type": "Property",
+        "value": "1.26.0"        
+      }
+    }'
+```
+
+9. Buy access to the full offering:
+
+  1. Get offer id:
+  ```shell
+      export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh http://mp-data-service.127.0.0.1.nip.io:8080 $REP_CREDENTIAL default); echo $ACCESS_TOKEN
+      export OFFER_ID=$(curl -X GET http://mp-tmf-api.127.0.0.1.nip.io:8080/tmf-api/productCatalogManagement/v4/productOffering -H "Authorization: Bearer ${ACCESS_TOKEN}" | jq '.[1].id' -r); echo ${OFFER_ID}
+  ```
+
+  2. Create the order:
+  ```shell
+    export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh http://mp-data-service.127.0.0.1.nip.io:8080 $REP_CREDENTIAL default); echo $ACCESS_TOKEN
+    export ORDER_ID=$(curl -X POST http://mp-tmf-api.127.0.0.1.nip.io:8080/tmf-api/productOrderingManagement/v4/productOrder \
+    -H 'Accept: */*' \
+    -H 'Content-Type: application/json' \
+    -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+    -d "{
+        \"productOrderItem\": [
+          {
+            \"id\": \"random-order-id\",
+            \"action\": \"add\",
+            \"productOffering\": {
+              \"id\" :  \"${OFFER_ID}\"
+            }
+          }  
+        ],
+        \"relatedParty\": [
+          {
+            \"id\": \"${FANCY_MARKETPLACE_ID}\"
+          }
+        ]}" | jq '.id' -r); echo ${ORDER_ID}
+  ```
+
+  3. Complete the order:
+    ```shell
+  curl -X 'PATCH' \
+      -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+      http://tm-forum-api.127.0.0.1.nip.io:8080/tmf-api/productOrderingManagement/v4/productOrder/${ORDER_ID} \
+      -H 'accept: application/json;charset=utf-8' \
+      -H 'Content-Type: application/json;charset=utf-8' \
+      -d "{
+              \"state\": \"completed\"
+          }" | jq .
+  ```
+
+10. Try to create again -> success:
+```shell
+  export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh http://mp-data-service.127.0.0.1.nip.io:8080 $OPERATOR_CREDENTIAL operator); echo $ACCESS_TOKEN
+  curl -X POST http://mp-data-service.127.0.0.1.nip.io:8080/ngsi-ld/v1/entities \
+    -H 'Accept: */*' \
+    -H 'Content-Type: application/json' \
+    -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+    -d '{
+      "id": "urn:ngsi-ld:K8SCluster:fancy-marketplace-big",
+      "type": "K8SCluster",
+      "name": {
+        "type": "Property",
+        "value": "Fancy Marketplace Cluster"
+      },
+      "numNodes": {
+        "type": "Property",
+        "value": "5"
+      },
+      "k8sVersion": {
+        "type": "Property",
+        "value": "1.26.0"        
+      }
+    }'
 ```
 
 ## Holder Verification
