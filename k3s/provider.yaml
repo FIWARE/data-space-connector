@@ -474,7 +474,7 @@ tm-forum-api:
           - /
 
 postgres-operator:
-  enabled: true
+  enabled: false
 
 managedPostgres:
   enabled: true
