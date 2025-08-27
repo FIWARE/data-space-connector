@@ -435,7 +435,12 @@ elsi:
   # -- password of the key
   keyPassword:
 
-## Usage of the postgresql-operator - see https://github.com/zalando/postgres-operator
+## Installation of the postgres-operator - see https://github.com/zalando/postgres-operator
+postgres-operator:
+  # -- should the postgres-operator be installed
+  enabled: false
+
+## Usage of the postgres-operator - see https://github.com/zalando/postgres-operator
 managedPostgres:
   # -- should it be enabled? Requires the postgres-operator CRDs to be installed before applying the chart
   enabled: false

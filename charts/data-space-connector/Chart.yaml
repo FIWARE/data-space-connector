@@ -74,3 +74,8 @@ dependencies:
     condition: mongodb.enabled
     version: 16.5.21
     repository: oci://registry-1.docker.io/bitnamicharts
+  # operators
+  - name: postgres-operator
+    condition: postgres-operator.enabled
+    version: 1.14.0
+    repository: https://opensource.zalando.com/postgres-operator/charts/postgres-operator

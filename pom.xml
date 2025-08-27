@@ -263,7 +263,7 @@
                             <skipTemplate>false</skipTemplate>
                             <templateGenerateName>true</templateGenerateName>
                             <templateOutputDir>${project.build.directory}/k3s/dsc-provider</templateOutputDir>
-                            <additionalArguments>--name-template=provider --namespace=provider -f ${main.basedir}/k3s/provider.yaml</additionalArguments>
+                            <additionalArguments>--name-template=provider --namespace=provider --include-crds -f ${main.basedir}/k3s/provider.yaml</additionalArguments>
                         </configuration>
                     </execution>
                     <execution>

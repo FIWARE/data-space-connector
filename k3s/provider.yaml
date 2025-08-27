@@ -472,7 +472,10 @@ tm-forum-api:
       - host: tm-forum-api.127.0.0.1.nip.io
         paths:
           - /
-          - 
+
+postgres-operator:
+  enabled: true
+
 managedPostgres:
   enabled: true
   config:
