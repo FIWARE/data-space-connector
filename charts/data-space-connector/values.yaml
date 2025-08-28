@@ -435,6 +435,24 @@ elsi:
   # -- password of the key
   keyPassword:
 
+## Installation of the postgres-operator - see https://github.com/zalando/postgres-operator
+postgres-operator:
+  # -- should the postgres-operator be installed
+  enabled: false
+
+## Usage of the postgres-operator - see https://github.com/zalando/postgres-operator
+managedPostgres:
+  # -- should it be enabled? Requires the postgres-operator CRDs to be installed before applying the chart
+  enabled: false
+  # -- config as defined in https://github.com/zalando/postgres-operator/blob/master/charts/postgres-operator/crds/postgresqls.yaml
+  config:
+    teamId: "dsc"
+    volume:
+      size: 1Gi
+    numberOfInstances: 1
+    postgresql:
+      version: "17"
+
 ## configuration of the keycloak - see https://github.com/bitnami/charts/tree/main/bitnami/keycloak for details
 keycloak:
   # -- should it be enabled? set to false if one outside the chart is used.
