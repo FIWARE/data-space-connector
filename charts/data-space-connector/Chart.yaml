@@ -53,12 +53,12 @@ dependencies:
   # issuance
   - name: keycloak
     condition: keycloak.enabled
-    version: 24.6.1
-    repository: https://charts.bitnami.com/bitnami
+    version: 24.5.2
+    repository: oci://registry-1.docker.io/bitnamicharts
   # contract management
   - name: tm-forum-api
     condition: tm-forum-api.enabled
-    version: 0.14.9
+    version: 0.14.11
     repository: https://fiware.github.io/helm-charts
   - name: contract-management
     condition: contract-management.enabled
