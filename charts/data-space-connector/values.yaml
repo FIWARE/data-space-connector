@@ -764,6 +764,23 @@ rainbow:
   ingress:
     # -- should the ingress be enabled
     enabled: false
+    # -- annotations to be added to the ingress
+    annotations: {}
+      # kubernetes.io/ingress.class: "ambassador"
+      ## example annotations, allowing cert-manager to automatically create tls-certs and forcing everything to use ssl.
+      # kubernetes.io/tls-acme: "true"
+      # ingress.kubernetes.io/ssl-redirect: "true"
+    # -- all hosts to be provided
+    hosts: []
+      ## provide a hosts and the paths that should be available
+      # - host: localhost
+        # paths:
+        # - /
+    # -- configure the ingress' tls
+    tls: []
+      # - secretName: rainbow-tls
+        # hosts:
+          # - rainbow.fiware.org
   # -- configuration of service access to rainbow
   service:
     # -- service type to be used
@@ -813,9 +830,6 @@ contract-management:
     rainbow:
       ## URL for the Rainbow service
       url: http://rainbow:8080
-    quote:
-      ## URL for the Quote API
-      url: http://tm-forum-api:8080
     odrl:
       ## URL to the ODRL-PAP
       url: http://odrl-pap:8080
@@ -909,7 +923,7 @@ marketplace:
     maxUploadSize: "5242880"
 
     serviceAccount:
-      create: true
+      create: false
 
     # -- configuration of the charging backend to be deployed
     deployment:
