@@ -23,7 +23,7 @@ dependencies:
     repository: https://fiware.github.io/helm-charts
   - name: mysql
     condition: mysql.enabled
-    version: 9.4.4
+    version: 12.2.2
     repository: https://charts.bitnami.com/bitnami
   - name: dss-validation-service
     alias: dss

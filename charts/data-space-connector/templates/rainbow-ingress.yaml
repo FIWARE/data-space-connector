@@ -5,17 +5,40 @@ metadata:
   name: rainbow
   namespace: {{ $.Release.Namespace | quote }}
   labels:
-    {{ include "dsc.labels" . | nindent 4 }}
+     {{- include "dsc.labels" . | nindent 4 }}
+  {{- if .Values.rainbow.ingress.annotations }}
+  annotations:
+    {{- with .Values.rainbow.ingress.annotations }}
+      {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- end }}
 spec:
+  {{- if .Values.rainbow.ingress.className }}
+  ingressClassName: {{ .Values.rainbow.ingress.className }}
+  {{- end }}
+  {{- if .Values.rainbow.ingress.tls }}
+  tls:
+    {{- range .Values.rainbow.ingress.tls }}
+    - hosts:
+      {{- range .hosts }}
+        - {{ . | quote }}
+      {{- end }}
+      secretName: {{ .secretName }}
+    {{- end }}
+  {{- end }}
   rules:
-    - host: {{ .Values.rainbow.ingress.host }}
+  {{- range .Values.rainbow.ingress.hosts }}
+    - host: {{ .host | quote }}
       http:
         paths:
-          - path: /
-            pathType: Prefix
-            backend:
-              service:
-                name: rainbow
-                port:
-                  name: http
+        {{- range .paths }}
+        - path: {{ . }}
+          pathType: Prefix
+          backend:
+            service:
+              name: rainbow
+              port:
+                number: {{ $.Values.rainbow.service.port }}
+        {{- end }}
+  {{- end }}
 {{- end }}
