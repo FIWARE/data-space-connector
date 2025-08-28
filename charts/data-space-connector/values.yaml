@@ -471,8 +471,14 @@ keycloak:
     existingSecret: database-secret
     existingSecretPasswordKey: postgres-admin-password
 
-  tls:
-    enabled: false
+  resources:
+    requests:
+      memory: "1Gi"
+      cpu: "500m"
+    limits:
+      memory: "2Gi"
+      cpu: "1"
+
   # -- extra volumes to be mounted
   extraVolumeMounts:
     - name: realms
@@ -481,9 +487,7 @@ keycloak:
   # -- extra env vars to be set. we require them at the moment, since some of the chart config mechanisms only work with the bitnami-image
   extraEnvVars:
     - name: KEYCLOAK_LOG_LEVEL
-      value: DEBUG
-    - name: KC_LOG_LEVEL
-      value: DEBUG
+      value: INFO
     - name: KEYCLOAK_EXTRA_ARGS
       value: "--import-realm"
     - name: KC_FEATURES
@@ -500,10 +504,8 @@ keycloak:
         secretKeyRef:
           name: issuance-secret
           key: keycloak-admin
-    - name: KC_HTTPS_PORT
-      value: "8443"
-    - name: KC_DB
-      value: "postgres"
+    - name: KC_HEAP_SIZE
+      value: "1024m"
 
   # -- configuration of the realm to be imported
   realm:
