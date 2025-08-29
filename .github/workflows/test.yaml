@@ -30,8 +30,8 @@ jobs:
       - name: Logs
         run: |
           ls 
-          ls target/
-          ls $(pwd)/target
+          echo Next
+          ls /target
           export KUBECONFIG=$(pwd)/target/k3s.yaml
           kubectl logs -n provider -l app.kubernetes.io/name=odrl-pap
           kubectl logs -n provider -l app.kubernetes.io/name=rainbow
