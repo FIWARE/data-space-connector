@@ -31,4 +31,6 @@ jobs:
         run: |
           export KUBECONFIG=$(pwd)/it/target/k3s.yaml
           kubectl describe pods -n provider
+          kubectl logs -n provider -l component=biz-ecosystem-charging-backend
+          kubectl logs -n provider -l component=component=biz-ecosystem-logic-proxy
           
