@@ -22,15 +22,7 @@ jobs:
         id: install
 
       - name: Execute tests
-        continue-on-error: true
         id: test        
         run: |
           mvn clean integration-test -Ptest
-
-      - name: logs
-        run: |
-          export KUBECONFIG=$(pwd)/it/target/k3s.yaml
-          kubectl describe pods -n provider
-          kubectl logs -n provider -l component=biz-ecosystem-charging-backend
-          kubectl logs -n provider -l component=component=biz-ecosystem-logic-proxy
           
