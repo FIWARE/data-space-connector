@@ -18,9 +18,6 @@ jobs:
         run: |
           sudo modprobe br_netfilter
 
-      - uses: azure/setup-kubectl@v4
-        id: install
-
       - name: Execute tests
         id: test        
         run: |
