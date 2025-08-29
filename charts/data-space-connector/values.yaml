@@ -447,6 +447,7 @@ keycloak:
   image:
     # -- repository where the image is held, see https://github.com/bitnami/charts/issues/35164 for further info
     repository: bitnamilegacy/keycloak
+    tag: 26.3.2-debian-12-r0
   # -- disable the security context, required by the current quarkus container, will be solved in the future chart versions of keycloak
   containerSecurityContext:
     enabled: false
@@ -460,6 +461,18 @@ keycloak:
     existingSecret: issuance-secret
     passwordSecretKey: keycloak-admin
     adminUser: keycloak-admin
+
+  # -- sets memory requests for keycloak
+  # increased above the bitnami defaults to prevent OOMs in linux kernel >=6.14
+  resources:
+    requests:
+      memory: "500Mi"
+      cpu: "0.5"
+    limits:
+      memory: "2Gi"
+      cpu: "1"
+
+
   # -- should the db be deployed as part of the keycloak chart
   postgresql:
     enabled: false
@@ -496,6 +509,9 @@ keycloak:
         secretKeyRef:
           name: issuance-secret
           key: keycloak-admin
+    # set in accordance with the memory requests, will result in OOM otherwise
+    - name: KC_HEAP_SIZE
+      value: "1024m"
 
   # -- configuration of the realm to be imported
   realm:
