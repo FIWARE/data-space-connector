@@ -29,17 +29,10 @@ jobs:
 
       - name: logs
         run: |
-          ls
-          echo pwd
-          pwd
-          echo ls
-          ls $(pwd)/target
-          echo integration
-          ls $(pwd)/it/target
-
-          export KUBECONFIG=./target/k3s.yaml
+          export KUBECONFIG=$(pwd)/it/target/k3s.yaml
           kubectl logs -n provider -l app.kubernetes.io/name=odrl-pap
           kubectl logs -n provider -l app.kubernetes.io/name=rainbow
           kubectl logs -n provider postgresql-0
+          kubectl describe pods -n provider
 
           
