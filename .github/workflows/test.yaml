@@ -33,7 +33,9 @@ jobs:
           echo pwd
           pwd
           echo ls
-          ls ./
+          ls $(pwd)/target
+          echo integration
+          ls $(pwd)/it/target
 
           export KUBECONFIG=./target/k3s.yaml
           kubectl logs -n provider -l app.kubernetes.io/name=odrl-pap
