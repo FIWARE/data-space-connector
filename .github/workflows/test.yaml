@@ -26,7 +26,10 @@ jobs:
         id: test        
         run: |
           mvn clean integration-test -Ptest
-          ls /target
+
+      - name: logs
+        run: |
+          ls /target    
           export KUBECONFIG=/target/k3s.yaml
           kubectl logs -n provider -l app.kubernetes.io/name=odrl-pap
           kubectl logs -n provider -l app.kubernetes.io/name=rainbow
