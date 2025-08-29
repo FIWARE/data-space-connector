@@ -18,22 +18,18 @@ jobs:
         run: |
           sudo modprobe br_netfilter
 
+      - uses: azure/setup-kubectl@v4
+        id: install
+
       - name: Execute tests
         continue-on-error: true
         id: test        
         run: |
           mvn clean integration-test -Ptest
-
-      - uses: azure/setup-kubectl@v4
-        id: install
-
-      - name: Logs
-        run: |
-          echo pwd
-          echo Next
-          ls target/
-          export KUBECONFIG=./target/k3s.yaml
+          ls /target
+          export KUBECONFIG=/target/k3s.yaml
           kubectl logs -n provider -l app.kubernetes.io/name=odrl-pap
           kubectl logs -n provider -l app.kubernetes.io/name=rainbow
           kubectl logs -n provider postgresql-0
+
           
