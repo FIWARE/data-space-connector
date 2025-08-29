@@ -335,7 +335,7 @@
                         </goals>
                         <configuration>
                             <manifests>${project.build.directory}/k3s/certs</manifests>
-                            <timeout>100</timeout>
+                            <timeout>500</timeout>
                         </configuration>
                     </execution>
                     <execution>
@@ -346,7 +346,7 @@
                         </goals>
                         <configuration>
                             <manifests>${project.build.directory}/k3s</manifests>
-                            <timeout>300</timeout>
+                            <timeout>1000</timeout>
                         </configuration>
                     </execution>
                 </executions>
