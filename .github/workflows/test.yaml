@@ -30,9 +30,9 @@ jobs:
       - name: logs
         run: |
           export KUBECONFIG=$(pwd)/it/target/k3s.yaml
+          kubectl describe pods -n provider
           kubectl logs -n provider -l app.kubernetes.io/name=odrl-pap
           kubectl logs -n provider -l app.kubernetes.io/name=rainbow
           kubectl logs -n provider postgresql-0
-          kubectl describe pods -n provider
 
           
