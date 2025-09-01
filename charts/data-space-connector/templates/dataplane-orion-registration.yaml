@@ -1,0 +1,41 @@
+{{- if and (eq .Values.orion.enabled true) (.Values.orion.ccs) (eq .Values.orion.ccs.enabled true) }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Values.orion.ccs.configMap }}
+  namespace: {{ $.Release.Namespace | quote }}
+  labels:
+    {{- include "dsc.labels" . | nindent 4 }}
+data:
+  init.sh: |-
+    # credentials config service registration
+    curl -X 'POST' \
+      '{{ .Values.orion.ccs.endpoint }}/service' \
+      -H 'accept: */*' \
+      -H 'Content-Type: application/json' \
+      -d '{
+      "id": {{ .Values.orion.ccs.id | quote }},
+      "defaultOidcScope": {{ .Values.orion.ccs.defaultOidcScope.name | quote }},
+      {{- if and (.Values.orion.ccs.defaultOidcScope.credentialType) (.Values.orion.ccs.defaultOidcScope.trustedParticipantsLists) (.Values.orion.ccs.defaultOidcScope.trustedIssuersLists) -}}
+      "oidcScopes": {
+        {{ .Values.orion.ccs.defaultOidcScope.name | quote }}: {
+          "credentials": [
+            {
+              "type": {{ .Values.orion.ccs.defaultOidcScope.credentialType | quote }},
+              "trustedParticipantsLists": [
+                {{ .Values.orion.ccs.defaultOidcScope.trustedParticipantsLists | quote }}
+              ],
+              "trustedIssuersLists": [
+                {{ .Values.orion.ccs.defaultOidcScope.trustedIssuersLists | quote }}
+              ]
+            }
+          ]
+        }
+      }
+      {{- end }}
+      {{- if .Values.orion.ccs.oidcScopes -}}
+      "oidcScopes": {{- toJson .Values.orion.ccs.oidcScopes }}
+      {{- end }}
+    }'
+
+{{- end }}

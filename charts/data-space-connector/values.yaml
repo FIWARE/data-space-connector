@@ -415,6 +415,34 @@ scorpio:
         name: scorpio-registration
         defaultMode: 0755
 
+orion:
+  enabled: false
+  fullnameOverride: data-service-orion
+  service:
+    type: ClusterIP
+  ccs:
+    enabled: false
+    endpoint: http://credentials-config-service:8080
+    configMap: orion-registration
+  broker:
+    db:
+      hosts:
+        - data-service-mongodb
+  deployment:
+    initContainers:
+      - name: register-credential-config
+        image: quay.io/curl/curl:8.1.2
+        command: [ "/bin/sh", "-c", "/bin/init.sh" ]
+        volumeMounts:
+          - name: orion-registration
+            mountPath: /bin/init.sh
+            subPath: init.sh
+    volumes:
+      - name: orion-registration
+        configMap:
+          name: orion-registration
+          defaultMode: 0755
+
 # -- configuration to issue credentials, using a did:elsi
 elsi:
   # -- should a did:elsi be used

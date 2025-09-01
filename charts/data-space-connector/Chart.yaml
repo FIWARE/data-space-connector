@@ -45,6 +45,11 @@ dependencies:
     condition: scorpio.enabled
     repository: https://fiware.github.io/helm-charts
     version: 0.4.7
+  - name: orion
+    alias: orion
+    condition: orion.enabled
+    repository: https://fiware.github.io/helm-charts
+    version: 1.6.0
   - name: postgresql
     alias: postgis
     condition: postgis.enabled
