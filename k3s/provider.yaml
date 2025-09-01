@@ -350,6 +350,7 @@ mysql:
       enabled: false
 
 postgis:
+  enabled: false
   primary:
     resourcesPreset: none
     persistence:
@@ -359,6 +360,7 @@ postgis:
       enabled: false
 
 postgresql:
+  enabled: false
   primary:
     resourcesPreset: none
     persistence:
@@ -396,6 +398,13 @@ dataSpaceConfig:
     - oid4vp
 
 scorpio:
+  db:
+    dbhost: postgres
+    user: scorpio
+    existingSecret:
+      enabled: true
+      name: scorpio.postgres.credentials.postgresql.acid.zalan.do
+      key: password
   ingress:
     enabled: true
     # only to make it available for the test initialization
@@ -404,8 +413,17 @@ scorpio:
       paths:
         - "/"
 
-odrl-pap:
-
+odrl-pap:  
+  database:
+    # -- url to connect the db at
+    url: jdbc:postgresql://postgres:5432/pap
+    # -- username to access the db
+    username: pap
+    # -- secret to take the password from
+    existingSecret:
+      enabled: true
+      name: pap.postgres.credentials.postgresql.acid.zalan.do
+      key: password
   deployment:
     initContainers:
       - name: get-did
@@ -455,14 +473,23 @@ tm-forum-api:
         paths:
           - /
 
+postgres-operator:
+  enabled: false
+
+managedPostgres:
+  enabled: true
+  config:
+    volume:
+      storageClass: local-path
+
 # -- integration of rainbow
 rainbow:
   enabled: true
   db:
-    url: postgresql
-    user: postgres
-    existingSecret: database-secret
-    passwordKey: postgres-admin-password
+    url: postgres
+    user: rainbow
+    existingSecret: rainbow.postgres.credentials.postgresql.acid.zalan.do
+    passwordKey: password
   ingress:
     enabled: true
     hosts:
@@ -653,6 +680,12 @@ marketplace:
         value: "http://squid-proxy.infra.svc.cluster.local:8888"
 
 keycloak:
+  externalDatabase:
+    host: postgres
+    database: keycloak
+    user: keycloak
+    existingSecret: keycloak.postgres.credentials.postgresql.acid.zalan.do
+    existingSecretPasswordKey: password
   ingress:
     enabled: true
     hostname: keycloak-provider.127.0.0.1.nip.io
