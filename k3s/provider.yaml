@@ -492,7 +492,10 @@ rainbow:
     passwordKey: password
   ingress:
     enabled: true
-    host: rainbow-provider.127.0.0.1.nip.io
+    hosts:
+      - host: rainbow-provider.127.0.0.1.nip.io
+        paths:
+          - /
 
 tpp:
   enabled: true

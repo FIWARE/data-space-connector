@@ -465,6 +465,7 @@ keycloak:
   image:
     # -- repository where the image is held, see https://github.com/bitnami/charts/issues/35164 for further info
     repository: bitnamilegacy/keycloak
+    tag: 26.3.2-debian-12-r0
   # -- disable the security context, required by the current quarkus container, will be solved in the future chart versions of keycloak
   containerSecurityContext:
     enabled: false
@@ -478,6 +479,18 @@ keycloak:
     existingSecret: issuance-secret
     passwordSecretKey: keycloak-admin
     adminUser: keycloak-admin
+
+  # -- sets memory requests for keycloak
+  # increased above the bitnami defaults to prevent OOMs in linux kernel >=6.14
+  resources:
+    requests:
+      memory: "500Mi"
+      cpu: "0.5"
+    limits:
+      memory: "2Gi"
+      cpu: "1"
+
+
   # -- should the db be deployed as part of the keycloak chart
   postgresql:
     enabled: false
@@ -514,6 +527,9 @@ keycloak:
         secretKeyRef:
           name: issuance-secret
           key: keycloak-admin
+    # set in accordance with the memory requests, will result in OOM otherwise
+    - name: KC_HEAP_SIZE
+      value: "1024m"
 
   # -- configuration of the realm to be imported
   realm:
@@ -782,6 +798,23 @@ rainbow:
   ingress:
     # -- should the ingress be enabled
     enabled: false
+    # -- annotations to be added to the ingress
+    annotations: {}
+      # kubernetes.io/ingress.class: "ambassador"
+      ## example annotations, allowing cert-manager to automatically create tls-certs and forcing everything to use ssl.
+      # kubernetes.io/tls-acme: "true"
+      # ingress.kubernetes.io/ssl-redirect: "true"
+    # -- all hosts to be provided
+    hosts: []
+      ## provide a hosts and the paths that should be available
+      # - host: localhost
+        # paths:
+        # - /
+    # -- configure the ingress' tls
+    tls: []
+      # - secretName: rainbow-tls
+        # hosts:
+          # - rainbow.fiware.org
   # -- configuration of service access to rainbow
   service:
     # -- service type to be used
@@ -831,9 +864,6 @@ contract-management:
     rainbow:
       ## URL for the Rainbow service
       url: http://rainbow:8080
-    quote:
-      ## URL for the Quote API
-      url: http://tm-forum-api:8080
     odrl:
       ## URL to the ODRL-PAP
       url: http://odrl-pap:8080
@@ -927,7 +957,7 @@ marketplace:
     maxUploadSize: "5242880"
 
     serviceAccount:
-      create: true
+      create: false
 
     # -- configuration of the charging backend to be deployed
     deployment:
