@@ -149,6 +149,7 @@ keycloak:
     import: true
     name: test-realm
     attributes: |
+      "issuerDid": "${DID}",
       "vc.user-sd.credential_signing_alg_values_supported": "ES256",
       "vc.user-sd.credential_build_config.signing_algorithm": "ES256",
       "vc.user-sd.credential_build_config.token_jws_type": "vc+sd-jwt",
@@ -353,7 +354,10 @@ keycloak:
         "name": "LegalPersonCredential",
         "description": "OIDC4VC Scope, that adds all properties required for a user.",
         "protocol": "openid-connect",
-        "attributes": {},
+        "attributes": {
+          "include.in.token.scope": "false",
+          "display.on.consent.screen": "false"
+        },
         "protocolMappers": [
           {
             "name": "context-mapper",
@@ -861,6 +865,11 @@ rainbow:
     existingSecret: database-secret
     passwordKey: postgres-admin-password
   ingress:
+    enabled: true
+    hosts:
+      - host: rainbow-consumer.127.0.0.1.nip.io
+        paths:
+          - /
     enabled: true
     host: rainbow-consumer.127.0.0.1.nip.io
 
