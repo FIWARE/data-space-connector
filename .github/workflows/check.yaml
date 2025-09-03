@@ -111,8 +111,6 @@ jobs:
           yq --version
 
       - uses: actions/checkout@v3
-        with:
-          ref: ${{ github.head_ref }}
 
       - name: Update versions
         shell: bash

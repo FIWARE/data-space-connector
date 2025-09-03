@@ -1,3 +1,5 @@
+# TEST
+
 # -- configuration to be shared between the authentication components
 authentication:
   generatePasswords:
