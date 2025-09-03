@@ -113,11 +113,11 @@ jobs:
       - uses: actions/checkout@v3
         with:
           ref: ${{ github.head_ref }}
-          path: /current-branch
+          path: current-branch
 
       - uses: actions/checkout@v3
         with:
-          path: /main
+          path: main
           
       - name: Update versions
         shell: bash
@@ -136,7 +136,7 @@ jobs:
 
           for c in "${changedCharts[@]}"; do
               # get version from chart yaml
-              version=$(yq e '.version' "/main/charts/$c/Chart.yaml")
+              version=$(yq e '.version' "main/charts/$c/Chart.yaml")
               major=$(cut -d'.' -f1 <<< "$version")
               minor=$(cut -d'.' -f2 <<< "$version")
               patch=$(cut -d'.' -f3 <<< "$version")
@@ -157,7 +157,7 @@ jobs:
                   patch=$((patch+1))
               fi
               echo Update version to $major.$minor.$patch for $c
-              yq e -i '.version = "'$major.$minor.$patch'"' /current-branch/charts/$c/Chart.yaml
+              yq e -i '.version = "'$major.$minor.$patch'"' current-branch/charts/$c/Chart.yaml
           done
 
       - name: Commit files
@@ -176,5 +176,5 @@ jobs:
         continue-on-error: true
         uses: ad-m/github-push-action@master
         with:
-          directory: /current-branch
+          directory: current-branch
           branch: ${{ github.head_ref }}
