@@ -20,6 +20,7 @@ recipes.
 <!-- param::isNotitle::true:: -->
 
 - [Overview](#overview)
+- [Release Information](#release-information)
 - [Components](#components)
 - [Description of flows in a data space](#description-of-flows-in-a-data-space)
   - [Onboarding of an organization in the data space](#onboarding-of-an-organization-in-the-data-space)
@@ -44,7 +45,6 @@ recipes.
 
 
 </details>
-
 
 
 ## Overview
@@ -78,7 +78,12 @@ containing all the sub-charts and their dependencies for deployment via Helm.
 Thus, being provided as Helm chart, the FIWARE Data Space Connector can be deployed on 
 [Kubernetes](https://kubernetes.io/) environments.
 
+## Release Information
 
+The FIWARE Data Space Connector uses a continious integration flow, where every merge to the main-branch triggers a new release. Versioning follows [Semantic Versioning 2.0.0](https://semver.org/lang/de/), therefor only major changes will contain breaking changes. 
+Important releases will be listed below, with additional information linked:
+
+* [8.x.x](doc/release-notes/8-x.md) - Update the FIWARE Data Space Connector from 7.x.x to 8.x.x 
 
 ## Components
 
@@ -361,10 +366,6 @@ The tests can be executed via:
 ```
 They will spin up the [Local Data Space](./doc/deployment-integration/local-deployment/LOCAL.MD) and run 
 the [test-scenarios](./it/src/test/resources/it/mvds_basic.feature) against it.
-
-
-
-
 
 
 ## Additional documentation and resources
