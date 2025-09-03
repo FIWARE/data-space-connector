@@ -445,9 +445,11 @@ keycloak:
       allowInsecureImages: true
   # -- configuration of the used image
   image:
+    registry: quay.io
     # -- repository where the image is held, see https://github.com/bitnami/charts/issues/35164 for further info
-    repository: bitnamilegacy/keycloak
-    tag: 26.3.2-debian-12-r0
+    repository: wi_stefan/keycloak
+    tag: 27-PRE
+    pullPolicy: Always
   # -- disable the security context, required by the current quarkus container, will be solved in the future chart versions of keycloak
   containerSecurityContext:
     enabled: false
@@ -492,7 +494,7 @@ keycloak:
   # -- extra env vars to be set. we require them at the moment, since some of the chart config mechanisms only work with the bitnami-image
   extraEnvVars:
     - name: KEYCLOAK_LOG_LEVEL
-      value: INFO
+      value: DEBUG
     - name: KEYCLOAK_EXTRA_ARGS
       value: "--import-realm"
     - name: KC_FEATURES
@@ -579,6 +581,7 @@ keycloak:
         "frontchannelLogout": false,
         "protocol": "oid4vc",
         "attributes": {
+          "oid4vci.enabled": true,
           "client.secret.creation.time": "1675260539",
           "vc.natural-person.format": "jwt_vc",
           "vc.natural-person.scope": "NaturalPersonCredential",

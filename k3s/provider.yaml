@@ -180,11 +180,11 @@ credentials-config-service:
                         path:
                           - $.roles
                   format:
-                    "vc+sd-jwt": 
+                    "dc+sd-jwt": 
                       alg: 
                         - ES256
               format:
-                "vc+sd-jwt": 
+                "dc+sd-jwt": 
                   alg: 
                     - ES256
       - id: data-service
@@ -772,9 +772,9 @@ keycloak:
     attributes: |
       "vc.user-sd.credential_signing_alg_values_supported": "ES256",
       "vc.user-sd.credential_build_config.signing_algorithm": "ES256",
-      "vc.user-sd.credential_build_config.token_jws_type": "vc+sd-jwt",
+      "vc.user-sd.credential_build_config.token_jws_type": "dc+sd-jwt",
       "vc.user-sd.credential_build_config.proof_types_supported": "{\"jwt\":{\"proof_signing_alg_values_supported\":[\"ES256\"]}}",
-      "vc.user-sd.format": "vc+sd-jwt",
+      "vc.user-sd.format": "dc+sd-jwt",
       "vc.user-sd.scope": "LegalPersonCredential",
       "vc.user-sd.vct": "LegalPersonCredential",
       "vc.user-sd.credential_build_config.visible_claims": "roles,email",
@@ -786,10 +786,10 @@ keycloak:
       "vc.user-credential.format": "jwt_vc",
       "vc.user-credential.scope": "LegalPersonCredential",
       "vc.user-credential.vct": "LegalPersonCredential",
-      "vc.verifiable-credential.format": "vc+sd-jwt",
+      "vc.verifiable-credential.format": "dc+sd-jwt",
       "vc.verifiable-credential.scope": "VerifiableCredential",
       "vc.verifiable-credential.vct": "VerifiableCredential",
-      "vc.operator-credential.format": "vc+sd-jwt",
+      "vc.operator-credential.format": "dc+sd-jwt",
       "vc.operator-credential.scope": "OperatorCredential",
       "vc.operator-credential.vct": "OperatorCredential"
     clientRoles: |
@@ -913,8 +913,12 @@ keycloak:
       {
         "name": "LegalPersonCredential",
         "description": "OIDC4VC Scope, that adds all properties required for a user.",
-        "protocol": "openid-connect",
-        "attributes": {},
+        "protocol": "oid4vc",
+        "attributes": {
+          "vc.credential_configuration_id": "LegalPersonCredential",
+          "vc.credential_identifier": "LegalPersonCredential",
+          "vc.issuer_did": "${DID}"
+        },
         "protocolMappers": [
           {
             "name": "context-mapper",
@@ -922,6 +926,7 @@ keycloak:
             "protocolMapper": "oid4vc-context-mapper",
             "config": {
               "context": "https://www.w3.org/2018/credentials/v1",
+              "claim.name": "@context",
               "supportedCredentialTypes": "VerifiableCredential,LegalPersonCredential,OperatorCredential"
             }
           },
@@ -930,7 +935,7 @@ keycloak:
             "protocol": "oid4vc",
             "protocolMapper": "oid4vc-user-attribute-mapper",
             "config": {
-              "subjectProperty": "email",
+              "claim.name": "email",
               "userAttribute": "email",
               "supportedCredentialTypes": "LegalPersonCredential,OperatorCredential"
             }
@@ -940,8 +945,8 @@ keycloak:
             "protocol": "oid4vc",
             "protocolMapper": "oid4vc-user-attribute-mapper",
             "config": {
-              "subjectProperty": "firstName",
               "userAttribute": "firstName",
+              "claim.name": "firstName",
               "supportedCredentialTypes": "LegalPersonCredential,OperatorCredential"
             }
           },
@@ -950,8 +955,8 @@ keycloak:
             "protocol": "oid4vc",
             "protocolMapper": "oid4vc-user-attribute-mapper",
             "config": {
-              "subjectProperty": "lastName",
               "userAttribute": "lastName",
+              "claim.name": "lastName",
               "supportedCredentialTypes": "LegalPersonCredential,OperatorCredential"
             }
           },
@@ -960,8 +965,8 @@ keycloak:
             "protocol": "oid4vc",
             "protocolMapper": "oid4vc-target-role-mapper",
             "config": {
-              "subjectProperty": "roles",
               "clientId": "${DID}",
+              "claim.name": "roles",
               "supportedCredentialTypes": "LegalPersonCredential,OperatorCredential"
             }
           }
@@ -989,6 +994,7 @@ keycloak:
         "frontchannelLogout": false,
         "protocol": "openid-connect",
         "attributes": {
+          "oid4vci.enabled": true,
           "client.secret.creation.time": "1675260539"
         },
         "protocolMappers": [
@@ -1023,6 +1029,7 @@ keycloak:
         "frontchannelLogout": false,
         "protocol": "openid-connect",
         "attributes": {
+          "oid4vci.enabled": true,
           "realm_client": "false",
           "post.logout.redirect.uris": "+"
         },
@@ -1069,6 +1076,7 @@ keycloak:
         "frontchannelLogout": false,
         "protocol": "openid-connect",
         "attributes": {
+          "oid4vci.enabled": true,
           "realm_client": "false",
           "post.logout.redirect.uris": "+",
           "pkce.code.challenge.method": "S256"
@@ -1123,6 +1131,7 @@ keycloak:
         "frontchannelLogout": false,
         "protocol": "openid-connect",
         "attributes": {
+          "oid4vci.enabled": true,
           "realm_client": "false",
           "client.use.lightweight.access.token.enabled": "true"
         },

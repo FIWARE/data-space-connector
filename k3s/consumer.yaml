@@ -152,9 +152,9 @@ keycloak:
       "issuerDid": "${DID}",
       "vc.user-sd.credential_signing_alg_values_supported": "ES256",
       "vc.user-sd.credential_build_config.signing_algorithm": "ES256",
-      "vc.user-sd.credential_build_config.token_jws_type": "vc+sd-jwt",
+      "vc.user-sd.credential_build_config.token_jws_type": "dc+sd-jwt",
       "vc.user-sd.credential_build_config.proof_types_supported": "{\"jwt\":{\"proof_signing_alg_values_supported\":[\"ES256\"]}}",
-      "vc.user-sd.format": "vc+sd-jwt",
+      "vc.user-sd.format": "dc+sd-jwt",
       "vc.user-sd.scope": "LegalPersonCredential",
       "vc.user-sd.vct": "LegalPersonCredential",
       "vc.user-sd.credential_build_config.visible_claims": "roles,email",
@@ -166,7 +166,7 @@ keycloak:
       "vc.user-credential.format": "jwt_vc",
       "vc.user-credential.scope": "UserCredential",
       "vc.user-credential.vct": "UserCredential",
-      "vc.verifiable-credential.format": "vc+sd-jwt",
+      "vc.verifiable-credential.format": "dc+sd-jwt",
       "vc.verifiable-credential.scope": "VerifiableCredential",
       "vc.verifiable-credential.vct": "VerifiableCredential",
       "vc.operator-credential.credential_signing_alg_values_supported": "ES256",
@@ -353,8 +353,11 @@ keycloak:
       {
         "name": "LegalPersonCredential",
         "description": "OIDC4VC Scope, that adds all properties required for a user.",
-        "protocol": "openid-connect",
+        "protocol": "oid4vc",
         "attributes": {
+          "vc.credential_configuration_id": "LegalPersonCredential",
+          "vc.credential_identifier": "LegalPersonCredential",
+          "vc.issuer_did": "${DID}",
           "include.in.token.scope": "false",
           "display.on.consent.screen": "false"
         },
@@ -373,7 +376,7 @@ keycloak:
             "protocol": "oid4vc",
             "protocolMapper": "oid4vc-user-attribute-mapper",
             "config": {
-              "subjectProperty": "email",
+              "claim.name": "email",
               "userAttribute": "email",
               "supportedCredentialTypes": "LegalPersonCredential,OperatorCredential,UserCredential"
             }
@@ -393,7 +396,7 @@ keycloak:
             "protocol": "oid4vc",
             "protocolMapper": "oid4vc-static-claim-mapper",
             "config": {
-              "subjectProperty": "subject",
+              "claim.name": "subject",
               "staticValue": "did:key:zDnaeiVpxCT7ARwqLndbWiCeGG2YZXvLfWFs1cGPgKUe8GPLe",
               "supportedCredentialTypes": "LegalPersonCredential"
             }
@@ -403,7 +406,7 @@ keycloak:
             "protocol": "oid4vc",
             "protocolMapper": "oid4vc-static-claim-mapper",
             "config": {
-              "subjectProperty": "street",
+              "claim.name": "street",
               "staticValue": "Main Street",
               "supportedCredentialTypes": "LegalPersonCredential"
             }
@@ -413,7 +416,7 @@ keycloak:
             "protocol": "oid4vc",
             "protocolMapper": "oid4vc-user-attribute-mapper",
             "config": {
-              "subjectProperty": "lastName",
+              "claim.name": "lastName",
               "userAttribute": "lastName",
               "supportedCredentialTypes": "LegalPersonCredential,OperatorCredential"
             }
@@ -423,7 +426,7 @@ keycloak:
             "protocol": "oid4vc",
             "protocolMapper": "oid4vc-target-role-mapper",
             "config": {
-              "subjectProperty": "roles",
+              "claim.name": "roles",
               "clientId": "${CLIENT_DID}",
               "supportedCredentialTypes": "LegalPersonCredential,OperatorCredential,UserCredential"
             }
@@ -433,7 +436,7 @@ keycloak:
             "protocol": "oid4vc",
             "protocolMapper": "oid4vc-static-claim-mapper",
             "config": {
-              "subjectProperty": "streetNumber",
+              "claim.name": "streetNumber",
               "staticValue": "10",
               "supportedCredentialTypes": "LegalPersonCredential"
             }
@@ -443,7 +446,7 @@ keycloak:
             "protocol": "oid4vc",
             "protocolMapper": "oid4vc-static-claim-mapper",
             "config": {
-              "subjectProperty": "city",
+              "claim.name": "city",
               "staticValue": "Dresden",
               "supportedCredentialTypes": "LegalPersonCredential"
             }
@@ -453,7 +456,7 @@ keycloak:
             "protocol": "oid4vc",
             "protocolMapper": "oid4vc-static-claim-mapper",
             "config": {
-              "subjectProperty": "region",
+              "claim.name": "region",
               "staticValue": "Saxony",
               "supportedCredentialTypes": "LegalPersonCredential"
             }
@@ -463,7 +466,7 @@ keycloak:
             "protocol": "oid4vc",
             "protocolMapper": "oid4vc-static-claim-mapper",
             "config": {
-              "subjectProperty": "country",
+              "claim.name": "country",
               "staticValue": "Germany",
               "supportedCredentialTypes": "LegalPersonCredential"
             }
@@ -473,7 +476,7 @@ keycloak:
             "protocol": "oid4vc",
             "protocolMapper": "oid4vc-static-claim-mapper",
             "config": {
-              "subjectProperty": "zipcode",
+              "claim.name": "zipcode",
               "staticValue": "01169",
               "supportedCredentialTypes": "LegalPersonCredential"
             }
@@ -483,14 +486,19 @@ keycloak:
       {
         "name": "UserCredential",
         "description": "OIDC4VC Scope, that adds all properties required for a user.",
-        "protocol": "openid-connect",
-        "attributes": {},
+        "protocol": "oid4vc",
+        "attributes": {
+          "vc.issuer_did": "${DID}",
+          "vc.credential_configuration_id": "UserCredential",
+          "vc.credential_identifier": "UserCredential"
+        },
         "protocolMappers": [
           {
             "name": "context-mapper-uc",
             "protocol": "oid4vc",
             "protocolMapper": "oid4vc-context-mapper",
             "config": {
+              "claim.name": "@context",
               "context": "https://www.w3.org/2018/credentials/v1",
               "supportedCredentialTypes": "UserCredential"
             }
@@ -500,7 +508,7 @@ keycloak:
             "protocol": "oid4vc",
             "protocolMapper": "oid4vc-user-attribute-mapper",
             "config": {
-              "subjectProperty": "email",
+              "claim.name": "email",
               "userAttribute": "email",
               "supportedCredentialTypes": "UserCredential"
             }
@@ -510,7 +518,7 @@ keycloak:
             "protocol": "oid4vc",
             "protocolMapper": "oid4vc-user-attribute-mapper",
             "config": {
-              "subjectProperty": "firstName",
+              "claim.name": "firstName",
               "userAttribute": "firstName",
               "supportedCredentialTypes": "UserCredential"
             }
@@ -520,7 +528,7 @@ keycloak:
             "protocol": "oid4vc",
             "protocolMapper": "oid4vc-static-claim-mapper",
             "config": {
-              "subjectProperty": "subject",
+              "claim.name": "subject",
               "staticValue": "did:key:zDnaeiVpxCT7ARwqLndbWiCeGG2YZXvLfWFs1cGPgKUe8GPLe",
               "supportedCredentialTypes": "UserCredential"
             }
@@ -530,7 +538,7 @@ keycloak:
             "protocol": "oid4vc",
             "protocolMapper": "oid4vc-static-claim-mapper",
             "config": {
-              "subjectProperty": "street",
+              "claim.name": "street",
               "staticValue": "Main Street",
               "supportedCredentialTypes": "UserCredential"
             }
@@ -540,7 +548,7 @@ keycloak:
             "protocol": "oid4vc",
             "protocolMapper": "oid4vc-user-attribute-mapper",
             "config": {
-              "subjectProperty": "lastName",
+              "claim.name": "lastName",
               "userAttribute": "lastName",
               "supportedCredentialTypes": "UserCredential"
             }
@@ -550,7 +558,7 @@ keycloak:
             "protocol": "oid4vc",
             "protocolMapper": "oid4vc-target-role-mapper",
             "config": {
-              "subjectProperty": "roles",
+              "claim.name": "roles",
               "clientId": "${CLIENT_DID}",
               "supportedCredentialTypes": "UserCredential"
             }
@@ -560,7 +568,7 @@ keycloak:
             "protocol": "oid4vc",
             "protocolMapper": "oid4vc-static-claim-mapper",
             "config": {
-              "subjectProperty": "streetNumber",
+              "claim.name": "streetNumber",
               "staticValue": "10",
               "supportedCredentialTypes": "UserCredential"
             }
@@ -570,7 +578,7 @@ keycloak:
             "protocol": "oid4vc",
             "protocolMapper": "oid4vc-static-claim-mapper",
             "config": {
-              "subjectProperty": "city",
+              "claim.name": "city",
               "staticValue": "Dresden",
               "supportedCredentialTypes": "UserCredential"
             }
@@ -580,7 +588,7 @@ keycloak:
             "protocol": "oid4vc",
             "protocolMapper": "oid4vc-static-claim-mapper",
             "config": {
-              "subjectProperty": "region",
+              "claim.name": "region",
               "staticValue": "Saxony",
               "supportedCredentialTypes": "UserCredential"
             }
@@ -590,7 +598,7 @@ keycloak:
             "protocol": "oid4vc",
             "protocolMapper": "oid4vc-static-claim-mapper",
             "config": {
-              "subjectProperty": "country",
+              "claim.name": "country",
               "staticValue": "Germany",
               "supportedCredentialTypes": "UserCredential"
             }
@@ -600,7 +608,7 @@ keycloak:
             "protocol": "oid4vc",
             "protocolMapper": "oid4vc-static-claim-mapper",
             "config": {
-              "subjectProperty": "zipcode",
+              "claim.name": "zipcode",
               "staticValue": "01169",
               "supportedCredentialTypes": "UserCredential"
             }
@@ -610,14 +618,19 @@ keycloak:
       {
         "name": "OperatorCredential",
         "description": "OIDC4VC Scope, that adds all properties required for a user.",
-        "protocol": "openid-connect",
-        "attributes": {},
+        "protocol": "oid4vc",
+        "attributes": {
+          "vc.issuer_did": "${DID}",
+          "vc.credential_configuration_id": "OperatorCredential",
+          "vc.credential_identifier": "OperatorCredential"
+        },
         "protocolMappers": [
           {
             "name": "context-mapper-oc",
             "protocol": "oid4vc",
             "protocolMapper": "oid4vc-context-mapper",
             "config": {
+              "claim.name" : "@context",
               "context": "https://www.w3.org/2018/credentials/v1",
               "supportedCredentialTypes": "VerifiableCredential,LegalPersonCredential,OperatorCredential,UserCredential"
             }
@@ -627,7 +640,7 @@ keycloak:
             "protocol": "oid4vc",
             "protocolMapper": "oid4vc-user-attribute-mapper",
             "config": {
-              "subjectProperty": "email",
+              "claim.name": "email",
               "userAttribute": "email",
               "supportedCredentialTypes": "LegalPersonCredential,OperatorCredential,UserCredential"
             }
@@ -637,7 +650,7 @@ keycloak:
             "protocol": "oid4vc",
             "protocolMapper": "oid4vc-user-attribute-mapper",
             "config": {
-              "subjectProperty": "firstName",
+              "claim.name": "firstName",
               "userAttribute": "firstName",
               "supportedCredentialTypes": "LegalPersonCredential,OperatorCredential,UserCredential"
             }
@@ -647,7 +660,7 @@ keycloak:
             "protocol": "oid4vc",
             "protocolMapper": "oid4vc-target-role-mapper",
             "config": {
-              "subjectProperty": "roles",
+              "claim.name": "roles",
               "clientId": "${CLIENT_DID}",
               "supportedCredentialTypes": "LegalPersonCredential,OperatorCredential,UserCredential"
             }
@@ -657,7 +670,7 @@ keycloak:
             "protocol": "oid4vc",
             "protocolMapper": "oid4vc-static-claim-mapper",
             "config": {
-              "subjectProperty": "subject",
+              "claim.name": "subject",
               "staticValue": "did:key:zDnaeiVpxCT7ARwqLndbWiCeGG2YZXvLfWFs1cGPgKUe8GPLe",
               "supportedCredentialTypes": "UserCredential"
             }
@@ -686,6 +699,7 @@ keycloak:
         "frontchannelLogout": false,
         "protocol": "openid-connect",
         "attributes": {
+          "oid4vci.enabled": true,
           "client.secret.creation.time": "1675260539"
         },
         "protocolMappers": [
@@ -720,6 +734,7 @@ keycloak:
         "frontchannelLogout": false,
         "protocol": "openid-connect",
         "attributes": {
+          "oid4vci.enabled": true,
           "realm_client": "false",
           "post.logout.redirect.uris": "+"
         },
@@ -766,6 +781,7 @@ keycloak:
         "frontchannelLogout": false,
         "protocol": "openid-connect",
         "attributes": {
+          "oid4vci.enabled": true,
           "realm_client": "false",
           "post.logout.redirect.uris": "+",
           "pkce.code.challenge.method": "S256"
@@ -822,6 +838,7 @@ keycloak:
         "frontchannelLogout": false,
         "protocol": "openid-connect",
         "attributes": {
+          "oid4vci.enabled": true,
           "realm_client": "false",
           "client.use.lightweight.access.token.enabled": "true"
         },
