@@ -351,23 +351,9 @@ mysql:
 
 postgis:
   enabled: false
-  primary:
-    resourcesPreset: none
-    persistence:
-      enabled: false
-  readReplicas:
-    persistence:
-      enabled: false
 
 postgresql:
   enabled: false
-  primary:
-    resourcesPreset: none
-    persistence:
-      enabled: false
-  readReplicas:
-    persistence:
-      enabled: false
 
 did:
   enabled: true

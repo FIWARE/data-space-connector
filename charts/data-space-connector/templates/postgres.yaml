@@ -35,6 +35,5 @@ spec:
       defaultUsers: true
       extensions:
         postgis: public
-        timescaledb: public
 {{- toYaml .Values.managedPostgres.config | nindent 2 }}
 {{- end }}
