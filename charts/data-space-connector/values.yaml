@@ -439,6 +439,8 @@ elsi:
 postgres-operator:
   # -- should the postgres-operator be installed
   enabled: false
+  configKubernetes:
+    enable_readiness_probe: true
 
 ## Usage of the postgres-operator - see https://github.com/zalando/postgres-operator
 managedPostgres:
