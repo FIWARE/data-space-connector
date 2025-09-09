@@ -381,6 +381,10 @@
                                 <id>template-trust-anchor</id>
                                 <phase>test-compile</phase>
                             </execution>
+                            <execution>
+                                <id>template-dsc-operator</id>
+                                <phase>test-compile</phase>
+                            </execution>
                         </executions>
                     </plugin>
                     <plugin>
@@ -396,6 +400,10 @@
                             </execution>
                             <execution>
                                 <id>create-namespaces</id>
+                                <phase>pre-integration-test</phase>
+                            </execution>
+                            <execution>
+                                <id>apply-operators</id>
                                 <phase>pre-integration-test</phase>
                             </execution>
                         </executions>
