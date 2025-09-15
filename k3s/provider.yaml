@@ -234,6 +234,10 @@ vcverifier:
         paths:
           - "/"
   deployment:
+    image:
+      tag: 0.0.62
+      repository: quay.io/wi_stefan/vcverifier
+      pullPolicy: Always
     logging:
       level: DEBUG
     verifier:
@@ -777,8 +781,6 @@ keycloak:
       "vc.user-sd.format": "dc+sd-jwt",
       "vc.user-sd.scope": "LegalPersonCredential",
       "vc.user-sd.vct": "LegalPersonCredential",
-      "vc.user-sd.credential_build_config.visible_claims": "roles,email",
-      "vc.user-sd.credential_build_config.decoys": "3",
       "vc.user-credential.credential_signing_alg_values_supported": "ES256",
       "vc.user-credential.credential_build_config.signing_algorithm": "ES256",
       "vc.user-credential.credential_build_config.token_jws_type": "JWT",

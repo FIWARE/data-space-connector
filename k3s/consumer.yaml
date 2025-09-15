@@ -150,22 +150,6 @@ keycloak:
     name: test-realm
     attributes: |
       "issuerDid": "${DID}",
-      "vc.user-sd.credential_signing_alg_values_supported": "ES256",
-      "vc.user-sd.credential_build_config.signing_algorithm": "ES256",
-      "vc.user-sd.credential_build_config.token_jws_type": "dc+sd-jwt",
-      "vc.user-sd.credential_build_config.proof_types_supported": "{\"jwt\":{\"proof_signing_alg_values_supported\":[\"ES256\"]}}",
-      "vc.user-sd.format": "dc+sd-jwt",
-      "vc.user-sd.scope": "LegalPersonCredential",
-      "vc.user-sd.vct": "LegalPersonCredential",
-      "vc.user-sd.credential_build_config.visible_claims": "roles,email",
-      "vc.user-sd.credential_build_config.decoys": "3",
-      "vc.user-credential.credential_signing_alg_values_supported": "ES256",
-      "vc.user-credential.credential_build_config.signing_algorithm": "ES256",
-      "vc.user-credential.credential_build_config.token_jws_type": "JWT",
-      "vc.user-credential.credential_build_config.proof_types_supported": "{\"jwt\":{\"proof_signing_alg_values_supported\":[\"ES256\"]}}",
-      "vc.user-credential.format": "jwt_vc",
-      "vc.user-credential.scope": "UserCredential",
-      "vc.user-credential.vct": "UserCredential",
       "vc.verifiable-credential.format": "dc+sd-jwt",
       "vc.verifiable-credential.scope": "VerifiableCredential",
       "vc.verifiable-credential.vct": "VerifiableCredential",
@@ -355,8 +339,14 @@ keycloak:
         "description": "OIDC4VC Scope, that adds all properties required for a user.",
         "protocol": "oid4vc",
         "attributes": {
+          "vc.format": "dc+sd-jwt",
+          "vc.credential_build_config.vct": "LegalPersonCredential",
           "vc.credential_configuration_id": "LegalPersonCredential",
           "vc.credential_identifier": "LegalPersonCredential",
+          "vc.credential_build_config.token_jws_type": "dc+sd-jwt",
+          "vc.credential_build_config.visible_claims": "roles,email",
+          "vc.credential_build_config.decoys": "3",
+          "vc.credential_build_config.hash_algorithm": "sha-256",
           "vc.issuer_did": "${DID}",
           "include.in.token.scope": "false",
           "display.on.consent.screen": "false"
@@ -489,7 +479,8 @@ keycloak:
         "protocol": "oid4vc",
         "attributes": {
           "vc.issuer_did": "${DID}",
-          "vc.credential_configuration_id": "UserCredential",
+          "vc.credential_build_config.vct": "UserCredential",
+          "vc.credential_configuration_id": "user-credential",
           "vc.credential_identifier": "UserCredential"
         },
         "protocolMappers": [
