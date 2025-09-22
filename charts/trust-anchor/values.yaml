@@ -9,6 +9,14 @@ generatePasswords:
 mysql:
   # -- should it be enabled? set to false if one outside the chart is used.
   enabled: true
+  global:
+    security:
+      # allow the image from the legacy repo
+      allowInsecureImages: true
+  # -- configuration of the used image
+  image:
+    # -- repository where the image is held, see https://github.com/bitnami/charts/issues/35164 for further info
+    repository: bitnamilegacy/mysql
   # -- allows to set a fixed name for the services
   fullnameOverride: trust-anchor-mysql
   # -- configure authentication to mysql
