@@ -622,7 +622,7 @@ data:
           {
             "id": "sd-jwt-builder",
             "name": "sd-jwt-builder",
-            "providerId": "vc+sd-jwt"
+            "providerId": "dc+sd-jwt"
           },
           {
             "id": "jwt-vc-builder",
@@ -630,9 +630,33 @@ data:
             "providerId": "jwt_vc"
           } 
         ],
-        
-        {{- if eq .Values.elsi.enabled  true }}
         "org.keycloak.keys.KeyProvider": [
+          {
+            "name": "ecdh-generated",
+            "providerId": "ecdh-generated",
+            "subComponents": {},
+            "config": {
+              "ecGenerateCertificate": [
+                "false"
+              ],
+              "active": [
+                "true"
+              ],
+              "priority": [
+                "0"
+              ],
+              "ecdhAlgorithm": [
+                "ECDH-ES"
+              ],
+              "ecdhEllipticCurveKey": [
+                "P-256"
+              ],
+              "enabled": [
+                "true"
+              ]
+            }
+          },
+        {{- if eq .Values.elsi.enabled  true }}
           {
             "id": "a4589e8f-7f82-4345-b2ea-ccc9d4366600",
             "name": {{ .Values.elsi.keyAlias | quote }},
@@ -658,9 +682,7 @@ data:
               ]
             }
           }
-        ]
         {{- else if .Values.keycloak.signingKey }}
-        "org.keycloak.keys.KeyProvider": [
           {
             "id": "a4589e8f-7f82-4345-b2ea-ccc9d4366600",
             "name": "signing-key",
@@ -690,9 +712,7 @@ data:
               ]
             }
           }
-        ]
         {{ else }}
-        "org.keycloak.keys.KeyProvider": [
           {
             "id": "a4589e8f-7f82-4345-b2ea-ccc9d4366600",
             "name": "test-key",
@@ -718,8 +738,8 @@ data:
               ]
             }
           }
-        ]
         {{- end }}
+        ]
       }
     }
 

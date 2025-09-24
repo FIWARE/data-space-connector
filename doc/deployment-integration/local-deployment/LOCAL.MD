@@ -148,6 +148,7 @@ Get an AccessToken from Keycloak:
     --data grant_type=password \
     --data client_id=account-console \
     --data username=employee \
+    --data scope=openid \
     --data password=test | jq '.access_token' -r); echo ${ACCESS_TOKEN}
 ```
 
@@ -161,7 +162,7 @@ Get the credentials issuer information:
 Get a credential offer uri(for the `user-credential), using the retrieved AccessToken:
 
 ```shell
-  export OFFER_URI=$(curl -s -k -x localhost:8888 -X GET 'https://keycloak-consumer.127.0.0.1.nip.io/realms/test-realm/protocol/oid4vc/credential-offer-uri?credential_configuration_id=user-credential' \
+  export OFFER_URI=$(curl -s -k -x localhost:8888 -X GET 'https://keycloak-consumer.127.0.0.1.nip.io/realms/test-realm/protocol/oid4vc/credential-offer-uri?credential_configuration_id=UserCredential' \
     --header "Authorization: Bearer ${ACCESS_TOKEN}" | jq '"\(.issuer)\(.nonce)"' -r); echo ${OFFER_URI}
 ```
 
@@ -189,7 +190,9 @@ Use the returned access token to get the actual credential:
     --header 'Accept: */*' \
     --header 'Content-Type: application/json' \
     --header "Authorization: Bearer ${CREDENTIAL_ACCESS_TOKEN}" \
-    --data '{"credential_identifier":"user-credential", "format":"jwt_vc"}' | jq '.credential' -r); echo ${VERIFIABLE_CREDENTIAL}
+    --data "{
+              \"credential_identifier\": \"UserCredential\"
+            }" | jq '.credentials[0].credential' -r); echo ${VERIFIABLE_CREDENTIAL}
 ```
 
 You will receive a jwt-encoded credential to be used within the data space.
