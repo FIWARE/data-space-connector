@@ -37,7 +37,7 @@ dependencies:
     repository: https://fiware.github.io/helm-charts
   - name: apisix
     condition: apisix.enabled
-    version: 3.5.1
+    version: 6.0.0
     repository: oci://registry-1.docker.io/bitnamicharts
   # data-service
   - name: scorpio-broker-aaio
