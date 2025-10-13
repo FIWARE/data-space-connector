@@ -1,0 +1,39 @@
+{{- if .Values.managedPostgres.enabled }}
+apiVersion: "acid.zalan.do/v1"
+kind: postgresql
+metadata:
+  name: postgres
+  namespace: {{ $.Release.Namespace | quote }}
+  labels:
+    {{- include "dsc.labels" . | nindent 4 }}
+spec:
+  users:
+    admin: # maintainer
+      - superuser
+      - createdb
+    pap:
+      - createdb
+    keycloak:
+      - createdb
+    rainbow:
+      - createdb
+    scorpio:
+      - createdb
+      - superuser # to enable extensions
+  databases: # db: user
+    pap: pap
+    keycloak: keycloak
+    rainbow: rainbow
+    ngb: scorpio
+  patroni:
+    pg_hba: # Allow connections without ssl as db is not exposed
+      - local   all all           trust
+      - hostssl all all 0.0.0.0/0 md5
+      - host    all all 0.0.0.0/0 md5
+  preparedDatabases:
+    ngb:
+      defaultUsers: true
+      extensions:
+        postgis: public
+{{- toYaml .Values.managedPostgres.config | nindent 2 }}
+{{- end }}
