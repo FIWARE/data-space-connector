@@ -1,0 +1,66 @@
+mongo-operator:
+  enabled: true
+  database:
+    namespace: provider
+  operator:
+    watchNamespace: "*"
+
+managedMongo:
+  enabled: false
+
+apisix:
+  enabled: false
+
+credentials-config-service:
+  enabled: false
+
+vcverifier:
+  enabled: false
+
+mysql:
+  enabled: false
+
+postgresql:
+  enabled: false
+
+postgis:
+  enabled: false
+
+did:
+  enabled: false
+
+dataSpaceConfig:
+  enabled: false
+
+scorpio:
+  enabled: false
+
+odrl-pap:
+  enabled: false
+
+tm-forum-api:
+  enabled: false
+
+rainbow:
+  enabled: false
+
+tpp:
+  enabled: false
+
+contract-management:
+  enabled: false
+
+trusted-issuers-list:
+  enabled: false
+
+mongodb:
+  enabled: false
+
+marketplace:
+  enabled: false
+
+keycloak:
+  enabled: false
+
+registration:
+  enabled: false

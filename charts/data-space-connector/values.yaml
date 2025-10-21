@@ -924,12 +924,10 @@ mongo-operator:
 managedMongo:
   # -- should it be enabled?
   enabled: false
-  # -- config as defined in https://github.com/mongodb/helm-charts/tree/main/charts/community-operator-crds
-  config:
-    volume:
-      size: 1Gi
-    numberOfInstances: 1
-    mongoVersion: "6.0.5"
+  # -- spec as defined in https://github.com/mongodb/helm-charts/tree/main/charts/community-operator-crds
+  spec:
+    additionalMongodConfig:
+      storage.wiredTiger.engineConfig.journalCompressor: zlib
 
 # -- configuration for the marketplace components
 marketplace:
