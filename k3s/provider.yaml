@@ -12,9 +12,39 @@ apisix:
           path: /
         - name: tpp-service.127.0.0.1.nip.io
           path: /
+        - name: contract-management.127.0.0.1.nip.io
+          path: /
   catchAllRoute:
     enabled: false
   routes: |-
+    - uri: /.well-known/openid-configuration
+      host: contract-management.127.0.0.1.nip.io
+      upstream:
+        nodes:
+          verifier:3000: 1
+        type: roundrobin
+      plugins:
+        proxy-rewrite:
+          uri: /services/data-service/.well-known/openid-configuration
+    - uri: /*
+      host: contract-management.127.0.0.1.nip.io
+      upstream:
+        nodes:
+          contract-management:8080: 1
+        type: roundrobin
+      plugins:
+        openid-connect:
+          proxy_opts:
+            https_proxy: http://squid-proxy.infra.svc.cluster.local:8888
+          bearer_only: true
+          use_jwks: true
+          client_id: data-service
+          client_secret: unused
+          ssl_verify: false
+          discovery: https://provider-verifier.io/services/data-service/.well-known/openid-configuration
+        opa:
+          host: "http://localhost:8181"
+          policy: tpp
     - uri: /.well-known/openid-configuration
       host: mp-data-service.127.0.0.1.nip.io
       upstream:
@@ -205,6 +235,31 @@ credentials-config-service:
                   meta:
                     type_values:
                       - UserCredential
+          "legal":
+            credentials:
+              - type: LegalPersonCredential
+                trustedParticipantsLists:
+                  - http://tir.127.0.0.1.nip.io
+                trustedIssuersLists:
+                  - http://trusted-issuers-list:8080
+                jwtInclusion:
+                  enabled: true
+                  fullInclusion: true          
+            dcql:
+              credentials: 
+                - id: legal-person-query
+                  format: "dc+sd-jwt"
+                  multiple: false
+                  claims:
+                    - id: name-claim
+                      path: 
+                        - firstName
+                    - id: roles-claim
+                      path:
+                        - roles
+                  meta:
+                    vct_values:
+                      - LegalPersonCredential
           "operator":
             credentials:
               - type: OperatorCredential

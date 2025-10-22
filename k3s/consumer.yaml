@@ -155,7 +155,6 @@ keycloak:
       "vc.verifiable-credential.vct": "VerifiableCredential",
       "vc.operator-credential.credential_signing_alg_values_supported": "ES256",
       "vc.operator-credential.credential_build_config.signing_algorithm": "ES256",
-      "vc.operator-credential.credential_build_config.token_jws_type": "JWT",
       "vc.operator-credential.credential_build_config.proof_types_supported": "{\"jwt\":{\"proof_signing_alg_values_supported\":[\"ES256\"]}}",
       "vc.operator-credential.format": "jwt_vc",
       "vc.operator-credential.scope": "OperatorCredential",
@@ -334,6 +333,32 @@ keycloak:
         ]
       }
     clientScopes: |
+     {
+        "name": "LdpCredential",
+        "description": "OIDC4VC Scope, that adds all properties required for a user.",
+        "protocol": "oid4vc",
+        "attributes": {
+          "vc.format": "ldp_vc",
+          "vc.credential_build_config.vct": "LegalPersonCredential",
+          "vc.credential_configuration_id": "LdpCredential",
+          "vc.credential_identifier": "LdpCredential",
+          "vc.issuer_did": "${DID}",
+          "include.in.token.scope": "false",
+          "display.on.consent.screen": "false"
+        },
+        "protocolMappers": [
+          {
+            "name": "email-mapper",
+            "protocol": "oid4vc",
+            "protocolMapper": "oid4vc-user-attribute-mapper",
+            "config": {
+              "claim.name": "email",
+              "userAttribute": "email",
+              "supportedCredentialTypes": "LdpCredential"
+            }
+          }
+        ]
+      },
       {
         "name": "LegalPersonCredential",
         "description": "OIDC4VC Scope, that adds all properties required for a user.",
@@ -475,6 +500,7 @@ keycloak:
           "vc.credential_build_config.vct": "UserCredential",
           "vc.credential_configuration_id": "UserCredential",
           "vc.credential_identifier": "UserCredential",
+          "vc.credential_build_config.token_jws_type": "JWT",
           "include.in.token.scope": "false",
           "display.on.consent.screen": "false"
         },
@@ -610,6 +636,7 @@ keycloak:
           "vc.format": "jwt_vc",
           "vc.credential_configuration_id": "OperatorCredential",
           "vc.credential_identifier": "OperatorCredential",
+          "vc.credential_build_config.token_jws_type": "JWT",
           "include.in.token.scope": "false",
           "display.on.consent.screen": "false"
         },
