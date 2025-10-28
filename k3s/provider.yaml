@@ -602,7 +602,7 @@ marketplace:
   bizEcosystemChargingBackend:  
     deployment:
       image:
-        tag: 10.5.0-PRE-1
+        tag: 10.5.0-PRE-2
     extraEnvVars:
       - name: BAE_CB_CUSTOMER_BILL
         value: "http://provider-tm-forum-api-customer-bill-management:8080/tmf-api/customerBillManagement/v4"
@@ -649,15 +649,11 @@ marketplace:
         host: provider-tm-forum-api-resource-inventory
         port: 8080
         path: /tmf-api/resourceInventoryManagement/v4
-      inventory:
-        host: provider-tm-forum-api-product-inventory
-        port: 8080
-        path: /tmf-api/productInventory/v4
 
   bizEcosystemLogicProxy:
     statefulset:
       image:
-        tag: 10.4.0-PRE-1
+        tag: 10.4.0-PRE-2
     command:
       - /prep/prep.sh
     ingress: 
