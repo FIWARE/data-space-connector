@@ -63,7 +63,7 @@ metadata:
   name: mongodb-admin-password
   namespace: {{ $.Release.Namespace | quote }}
 type: Opaque
-stringData:
+data:
   password: {{ randAlphaNum 30 | b64enc | quote }}
 ---
 apiVersion: v1
@@ -72,7 +72,7 @@ metadata:
   name: mongodb-charging-password
   namespace: {{ $.Release.Namespace | quote }}
 type: Opaque
-stringData:
+data:
   {{ .Values.marketplace.bizEcosystemChargingBackend.db.secretKey }}: {{ randAlphaNum 30 | b64enc | quote }}
 ---
 apiVersion: v1
@@ -81,7 +81,7 @@ metadata:
   name: mongodb-belp-password
   namespace: {{ $.Release.Namespace | quote }}
 type: Opaque
-stringData:
+data:
   {{ .Values.marketplace.bizEcosystemLogicProxy.db.secretKey }}: {{ randAlphaNum 30 | b64enc | quote }}
 {{- end }}
 {{- end }}
