@@ -520,12 +520,54 @@ trusted-issuers-list:
           paths:
             - /
 
-mongodb:
+mongo-operator:
+  enabled: false
+
+managedMongo:
   enabled: true
-  resourcesPreset: none
-  persistence:
-    enabled: false
-  architecture: standalone
+  spec:
+    statefulSet:
+      spec:     
+        template:
+          spec:
+            #  Hostpath volumes are owned by root
+            #  but MongoDB containers run as non root
+            #  so we use an init container to change the owner of
+            #  the directory (init containers run as root)
+            initContainers:
+            - command:
+                - chown
+                - -R
+                - "2000"
+                - /data
+              image: busybox
+              volumeMounts:
+              - mountPath: /data
+                name: data-volume
+              securityContext:
+                runAsNonRoot: false
+                runAsUser: 0
+                runAsGroup: 0
+              name: change-dir-permissions       
+        volumeClaimTemplates:
+        - metadata:
+            name: data-volume
+          spec:
+            accessModes:
+            - ReadWriteOnce
+            storageClassName: default
+            resources:
+              requests:
+                storage: "1Gi"
+        - metadata:
+            name: logs-volume
+          spec:
+            accessModes:
+            - ReadWriteOnce
+            storageClassName: default
+            resources:
+              requests:
+                storage: "1Gi"
 
 marketplace:
   enabled: true
@@ -560,13 +602,8 @@ marketplace:
   bizEcosystemChargingBackend:  
     deployment:
       image:
-        tag: 10.0.1
+        tag: 10.5.0
     extraEnvVars:
-      - name: BAE_CB_MONGO_PASS
-        valueFrom:
-          secretKeyRef:
-            name: marketplace-secret-env
-            key: MONGO_BAE_CHARGING_PW
       - name: BAE_CB_CUSTOMER_BILL
         value: "http://provider-tm-forum-api-customer-bill-management:8080/tmf-api/customerBillManagement/v4"
 
@@ -612,12 +649,11 @@ marketplace:
         host: provider-tm-forum-api-resource-inventory
         port: 8080
         path: /tmf-api/resourceInventoryManagement/v4
-      inventory:
-        host: provider-tm-forum-api-product-inventory
-        port: 8080
-        path: /tmf-api/productInventory/v4
 
   bizEcosystemLogicProxy:
+    statefulset:
+      image:
+        tag: 10.5.0-PRE-1
     command:
       - /prep/prep.sh
     ingress: 
@@ -642,14 +678,9 @@ marketplace:
         value: "true"
       - name: BAE_LP_PURCHASE_ENABLED
         value: "true"
-      - name: BAE_LP_MONGO_PASS
-        valueFrom:
-          secretKeyRef:
-            name: marketplace-secret-env
-            key: MONGO_BAE_BELP_PW
       - name: NODE_TLS_REJECT_UNAUTHORIZED
         value: "0"
-      - name: VC_HTTPS_PROXY
+      - name: HTTPS_PROXY
         value: "http://squid-proxy.infra.svc.cluster.local:8888"
 
 keycloak:

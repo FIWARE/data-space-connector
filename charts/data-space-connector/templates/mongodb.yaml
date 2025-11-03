@@ -1,0 +1,87 @@
+{{- if .Values.managedMongo.enabled }}
+---
+apiVersion: mongodbcommunity.mongodb.com/v1
+kind: MongoDBCommunity
+metadata:
+  name: mongodb
+  namespace: {{ $.Release.Namespace | quote }}
+spec:
+{{- $spec := .Values.managedMongo.spec | default dict }}
+
+  members: {{ $spec.members | default 1 }}
+  type: {{ $spec.type | default "ReplicaSet" | quote }}
+  version: {{ $spec.version | default "6.0.5" | quote }}
+  security:
+    {{- $security := $spec.security | default (dict "authentication" (dict "modes" (list "SCRAM"))) }}
+{{ toYaml $security | nindent 4 }}
+
+{{- with $spec.additionalMongodConfig }}
+  additionalMongodConfig:
+{{ toYaml . | nindent 4 }}
+{{- end }}
+
+{{- $inputUsers := $spec.users | default list }}
+{{- $finalUsers := list }}
+{{- $adminUserExists := false }}
+
+{{- range $user := $inputUsers }}
+  {{- if eq $user.name "admin" }}
+    {{- $adminUserExists = true }}
+  {{- end }}
+{{- end }}
+
+{{- if not $adminUserExists }}
+  {{- $adminUser := dict "name" "admin" "db" "admin" "passwordSecretRef" (dict "name" "mongodb-admin-password") "scramCredentialsSecretName" "mongodb-admin-password" "roles" (list (dict "name" "clusterAdmin" "db" "admin") (dict "name" "userAdminAnyDatabase" "db" "admin")) }}
+  {{- $finalUsers = append $finalUsers $adminUser }}
+{{- end }}
+
+{{- if .Values.marketplace.enabled }}
+  {{- $chargingUser := dict "name" .Values.marketplace.bizEcosystemChargingBackend.db.user "db" .Values.marketplace.bizEcosystemChargingBackend.db.database "passwordSecretRef" (dict "name" "mongodb-charging-password") "scramCredentialsSecretName" "mongodb-charging-password" "roles" (list (dict "name" "readWrite" "db" .Values.marketplace.bizEcosystemChargingBackend.db.database)) }}
+  {{- $finalUsers = append $finalUsers $chargingUser }}
+  
+  {{- $proxyUser := dict "name" .Values.marketplace.bizEcosystemLogicProxy.db.user "db" .Values.marketplace.bizEcosystemLogicProxy.db.database "passwordSecretRef" (dict "name" "mongodb-belp-password") "scramCredentialsSecretName" "mongodb-belp-password" "roles" (list (dict "name" "readWrite" "db" .Values.marketplace.bizEcosystemLogicProxy.db.database)) }}
+  {{- $finalUsers = append $finalUsers $proxyUser }}
+{{- end }}
+
+{{- range $user := $inputUsers }}
+  {{- $finalUsers = append $finalUsers $user }}
+{{- end }}
+
+  users:
+{{ toYaml $finalUsers | nindent 4 }}
+
+{{- with $spec.statefulSet }}
+  statefulSet:
+{{ toYaml . | nindent 4 }}
+{{- end }}
+
+{{- if and .Values.marketplace.generatePasswords }}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: mongodb-admin-password
+  namespace: {{ $.Release.Namespace | quote }}
+type: Opaque
+stringData:
+  password: {{ randAlphaNum 30 | b64enc | quote }}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: mongodb-charging-password
+  namespace: {{ $.Release.Namespace | quote }}
+type: Opaque
+stringData:
+  {{ .Values.marketplace.bizEcosystemChargingBackend.db.secretKey }}: {{ randAlphaNum 30 | b64enc | quote }}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: mongodb-belp-password
+  namespace: {{ $.Release.Namespace | quote }}
+type: Opaque
+stringData:
+  {{ .Values.marketplace.bizEcosystemLogicProxy.db.secretKey }}: {{ randAlphaNum 30 | b64enc | quote }}
+{{- end }}
+{{- end }}

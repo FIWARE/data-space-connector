@@ -298,6 +298,23 @@
                             <additionalArguments>--name-template=trust-anchor --namespace=trust-anchor -f ${main.basedir}/k3s/trust-anchor.yaml</additionalArguments>
                         </configuration>
                     </execution>
+                    <!-- Mongo operator as referenced in the DSC chart -->
+                    <execution>
+                        <id>template-dsc-mongo-operator</id>
+                        <goals>
+                            <goal>init</goal>
+                            <goal>dependency-update</goal>
+                            <goal>template</goal>
+                        </goals>
+                        <phase>package</phase>
+                        <configuration>
+                            <chartDirectory>${project.build.directory}/charts/data-space-connector</chartDirectory>
+                            <skipTemplate>false</skipTemplate>
+                            <templateGenerateName>true</templateGenerateName>
+                            <templateOutputDir>${project.build.directory}/k3s/infra/mongo-operator</templateOutputDir>
+                            <additionalArguments>--name-template=mongo-operator --namespace=mongo-operator -f ${main.basedir}/k3s/mongo-operator.yaml</additionalArguments>
+                        </configuration>
+                    </execution>
                 </executions>
             </plugin>
             <plugin>
@@ -335,6 +352,17 @@
                         </goals>
                         <configuration>
                             <manifests>${project.build.directory}/k3s/certs</manifests>
+                            <timeout>500</timeout>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>apply-mongo-operator</id>
+                        <phase>deploy</phase>
+                        <goals>
+                            <goal>apply</goal>
+                        </goals>
+                        <configuration>
+                            <manifests>${project.build.directory}/k3s/infra/mongo-operator</manifests>
                             <timeout>500</timeout>
                         </configuration>
                     </execution>
@@ -487,6 +515,23 @@
                                     <additionalArguments>--name-template=trust-anchor --namespace=trust-anchor -f ${main.basedir}/k3s/trust-anchor.yaml</additionalArguments>
                                 </configuration>
                             </execution>
+                            <!-- Operator as referenced in the DSC chart -->
+                            <execution>
+                                <id>template-dsc-mongo-operator</id>
+                                <goals>
+                                    <goal>init</goal>
+                                    <goal>dependency-update</goal>
+                                    <goal>template</goal>
+                                </goals>
+                                <phase>package</phase>
+                                <configuration>
+                                    <chartDirectory>${project.build.directory}/charts/data-space-connector</chartDirectory>
+                                    <skipTemplate>false</skipTemplate>
+                                    <templateGenerateName>true</templateGenerateName>
+                                    <templateOutputDir>${project.build.directory}/k3s/infra/mongo-operator</templateOutputDir>
+                                    <additionalArguments>--name-template=mongo-operator --namespace=mongo-operator -f ${main.basedir}/k3s/operator.yaml</additionalArguments>
+                                </configuration>
+                            </execution>
                         </executions>
                     </plugin>
                 </plugins>
@@ -574,6 +619,23 @@
                                     <templateGenerateName>true</templateGenerateName>
                                     <templateOutputDir>${project.build.directory}/k3s/trust-anchor</templateOutputDir>
                                     <additionalArguments>--name-template=trust-anchor --namespace=trust-anchor -f ${main.basedir}/k3s/trust-anchor.yaml</additionalArguments>
+                                </configuration>
+                            </execution>
+                            <!-- Mongo operator as referenced in the DSC chart -->
+                            <execution>
+                                <id>template-dsc-mongo-operator</id>
+                                <goals>
+                                    <goal>init</goal>
+                                    <goal>dependency-update</goal>
+                                    <goal>template</goal>
+                                </goals>
+                                <phase>package</phase>
+                                <configuration>
+                                    <chartDirectory>${project.build.directory}/charts/data-space-connector</chartDirectory>
+                                    <skipTemplate>false</skipTemplate>
+                                    <templateGenerateName>true</templateGenerateName>
+                                    <templateOutputDir>${project.build.directory}/k3s/infra/mongo-operator</templateOutputDir>
+                                    <additionalArguments>--name-template=mongo-operator --namespace=mongo-operator -f ${main.basedir}/k3s/operator.yaml</additionalArguments>
                                 </configuration>
                             </execution>
                         </executions>

@@ -381,6 +381,10 @@
                                 <id>template-trust-anchor</id>
                                 <phase>test-compile</phase>
                             </execution>
+                            <execution>
+                                <id>template-dsc-mongo-operator</id>
+                                <phase>test-compile</phase>
+                            </execution>
                         </executions>
                     </plugin>
                     <plugin>
@@ -391,11 +395,15 @@
                         </configuration>
                         <executions>
                             <execution>
-                                <id>apply-participants</id>
+                                <id>create-namespaces</id>
                                 <phase>pre-integration-test</phase>
                             </execution>
                             <execution>
-                                <id>create-namespaces</id>
+                                <id>apply-mongo-operator</id>
+                                <phase>pre-integration-test</phase>
+                            </execution>
+                            <execution>
+                                <id>apply-participants</id>
                                 <phase>pre-integration-test</phase>
                             </execution>
                         </executions>
