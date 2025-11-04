@@ -8,7 +8,7 @@ metadata:
     {{ include "dsc.labels" . | nindent 4 }}
 {{- if .Values.did.ingress.annotations }}
   annotations:
-{{ toYaml .Values.did.ingress.annotations | nindent 4 }}
+{{- toYaml .Values.did.ingress.annotations | nindent 4 }}
 {{- end }}
 spec:
   rules:

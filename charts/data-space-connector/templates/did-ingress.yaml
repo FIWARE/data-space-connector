@@ -6,7 +6,7 @@ metadata:
   namespace: {{ $.Release.Namespace | quote }}
 {{- if .Values.didJson.ingress.annotations }}
   annotations:
-{{ toYaml .Values.didJson.ingress.annotations | nindent 4 }}
+{{- toYaml .Values.didJson.ingress.annotations | nindent 4 }}
 {{- end }}
   labels:
     {{ include "dsc.labels" . | nindent 4 }}
