@@ -546,7 +546,8 @@ tpp:
     path: transfers
 
 contract-management:
-  did: did:web:marketplace.io
+  did: did:web:provider.io
+  enableCentralMarketplace: true
   services:
     ## Config for Trusted Issuers List
     trusted-issuers-list:
