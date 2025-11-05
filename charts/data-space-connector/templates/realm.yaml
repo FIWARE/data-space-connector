@@ -622,7 +622,7 @@ data:
           {
             "id": "sd-jwt-builder",
             "name": "sd-jwt-builder",
-            "providerId": "dc+sd-jwt"
+            "providerId": "vc+sd-jwt"
           },
           {
             "id": "jwt-vc-builder",

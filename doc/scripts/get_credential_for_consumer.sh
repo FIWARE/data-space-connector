@@ -25,4 +25,4 @@ curl -s -k -x localhost:8888 -X POST "$1/realms/test-realm/protocol/oid4vc/crede
   --header 'Accept: */*' \
   --header 'Content-Type: application/json' \
   --header "Authorization: Bearer ${credential_access_token}" \
-  --data "{\"credential_identifier\":\"$2\"}" | jq '.credentials[0].credential' -r
+  --data "{\"credential_identifier\":\"$2\", \"format\":\"jwt_vc\"}" | jq '.credential' -r

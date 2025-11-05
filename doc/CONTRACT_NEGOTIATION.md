@@ -48,7 +48,7 @@ In order to access a Service by using the Transfer Process Protocol, the followi
 
 * Get credentials:
 ```shell
-    export USER_CREDENTIAL=$(./doc/scripts/get_credential_for_consumer.sh http://keycloak-consumer.127.0.0.1.nip.io:8080 user-credential); echo ${USER_CREDENTIAL}
+export USER_CREDENTIAL=$(./doc/scripts/get_credential_for_consumer.sh https://keycloak-consumer.127.0.0.1.nip.io user-credential employee); echo ${USER_CREDENTIAL}
 ```
 
 * Prepare holder and its did:
@@ -184,7 +184,7 @@ In the initial state, the consumer has to be registered at the marketplace and t
 2. Register the consumer at the marketplace:
 
 ```shell
-    export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh http://mp-tmf-api.127.0.0.1.nip.io:8080 $USER_CREDENTIAL default); echo ${ACCESS_TOKEN}
+    export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh http://mp-data-service.127.0.0.1.nip.io:8080 $USER_CREDENTIAL default); echo ${ACCESS_TOKEN}
     export FANCY_MARKETPLACE_ID=$(curl -X POST http://mp-tmf-api.127.0.0.1.nip.io:8080/tmf-api/party/v4/organization \
     -H 'Accept: */*' \
     -H "Authorization: Bearer ${ACCESS_TOKEN}" \
@@ -318,7 +318,6 @@ curl -X 'PATCH' http://tm-forum-api.127.0.0.1.nip.io:8080/tmf-api/quote/v4/quote
                             \"odrl:leftOperand\": \"odrl:dateTime\",
                             \"odrl:operator\": \"odrl:eq\",
                             \"odrl:rightOperand\": \"2027-01-01\"
-                            }
                         }]
                     }]
                 }],
@@ -439,8 +438,8 @@ Or can reject the quote and create a new one in REQUESTED:
 curl -X 'PATCH' http://tm-forum-api.127.0.0.1.nip.io:8080/tmf-api/quote/v4/quote/${QUOTE_ID} \
      -H 'Content-Type: application/json;charset=utf-8' \
      -d "{
-        \"state\": "rejected"
-     }"
+        \"state\": \"rejected\"
+     }" | jq .
 ```
 
 ```shell

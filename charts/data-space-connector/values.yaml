@@ -93,11 +93,6 @@ dss:
 
 # -- configuration for the credentials-config-service to be deployed as part of the connector, see https://github.com/FIWARE/helm-charts/tree/main/charts/credentials-config-service for all options
 credentials-config-service:
-  deployment:
-    image:
-      tag: 0.0.1-L
-      repository: quay.io/wi_stefan/credentials-config-service
-      pullPolicy: Always
   # -- should it be enabled? set to false if one outside the chart is used.
   enabled: true
   # -- allows to set a fixed name for the services
@@ -482,16 +477,17 @@ keycloak:
       allowInsecureImages: true
   # -- configuration of the used image
   image:
-    registry: quay.io
     # -- repository where the image is held, see https://github.com/bitnami/charts/issues/35164 for further info
-    repository: wi_stefan/keycloak
-    tag: 27-PRE
-    pullPolicy: Always
+    repository: bitnamilegacy/keycloak
   # -- disable the security context, required by the current quarkus container, will be solved in the future chart versions of keycloak
   containerSecurityContext:
     enabled: false
   proxyHeaders: xforwarded
   proxy: edge
+  logging:
+    level: DEBUG
+  tls:
+    enabled: false
   service:
     ports:
       http: 8080
@@ -530,8 +526,6 @@ keycloak:
 
   # -- extra env vars to be set. we require them at the moment, since some of the chart config mechanisms only work with the bitnami-image
   extraEnvVars:
-    - name: KEYCLOAK_LOG_LEVEL
-      value: DEBUG
     - name: KEYCLOAK_EXTRA_ARGS
       value: "--import-realm"
     - name: KC_FEATURES
@@ -859,6 +853,8 @@ contract-management:
   # -- should it be enabled? set to false if one outside the chart is used.
   enabled: true
   fullnameOverride: contract-management
+  til:
+    credentialType: OperatorCredential
   services:
     ## Config for Trusted Issuers List
     trusted-issuers-list:
@@ -889,6 +885,7 @@ contract-management:
     odrl:
       ## URL to the ODRL-PAP
       url: http://odrl-pap:8080
+  
 
 # -- configuration for the did-helper, should only be used for demonstrational deployments, see https://github.com/wistefan/did-helper
 did:
@@ -897,7 +894,6 @@ did:
 # -- configuration for registering a participant at the til, will most probably only be used in demonstrational enviornments
 registration:
   enabled: false
-  prepScript: "test"
 
 # -- configuration for the .well-known/data-space-configuration endpoint document
 dataSpaceConfig:

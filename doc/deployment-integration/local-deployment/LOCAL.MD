@@ -70,7 +70,7 @@ are automatically registered as "Trusted Issuers" in the registry with their did
 Get a list of the issuers:
 
 ```shell
-    curl -X GET http://tir.127.0.0.1.nip.io:8080/v4/issuers | python3 -m json.tool
+    curl -X GET http://tir.127.0.0.1.nip.io:8080/v4/issuers | jq .
 ```
 
 A new issuer could for example be registered via:
@@ -81,7 +81,7 @@ A new issuer could for example be registered via:
     --data '{
       "did": "did:key:myKey",
       "credentials": []
-    }'  | python3 -m json.tool
+    }'  | jq .
 ```
 
 For more information about the API, see
@@ -156,13 +156,13 @@ Get an AccessToken from Keycloak:
 Get the credentials issuer information:
 
 ```shell
-  curl -k -x localhost:8888 -X GET https://keycloak-consumer.127.0.0.1.nip.io/realms/test-realm/.well-known/openid-credential-issuer | python3 -m json.tool
+  curl -k -x localhost:8888 -X GET https://keycloak-consumer.127.0.0.1.nip.io/realms/test-realm/.well-known/openid-credential-issuer | jq .
 ```
 
 Get a credential offer uri(for the `user-credential), using the retrieved AccessToken:
 
 ```shell
-  export OFFER_URI=$(curl -s -k -x localhost:8888 -X GET 'https://keycloak-consumer.127.0.0.1.nip.io/realms/test-realm/protocol/oid4vc/credential-offer-uri?credential_configuration_id=UserCredential' \
+  export OFFER_URI=$(curl -s -k -x localhost:8888 -X GET 'https://keycloak-consumer.127.0.0.1.nip.io/realms/test-realm/protocol/oid4vc/credential-offer-uri?credential_configuration_id=user-credential' \
     --header "Authorization: Bearer ${ACCESS_TOKEN}" | jq '"\(.issuer)\(.nonce)"' -r); echo ${OFFER_URI}
 ```
 
@@ -191,8 +191,9 @@ Use the returned access token to get the actual credential:
     --header 'Content-Type: application/json' \
     --header "Authorization: Bearer ${CREDENTIAL_ACCESS_TOKEN}" \
     --data "{
-              \"credential_identifier\": \"UserCredential\"
-            }" | jq '.credentials[0].credential' -r); echo ${VERIFIABLE_CREDENTIAL}
+              \"credential_identifier\": \"user-credential\",
+              \"format\":\"jwt_vc\"
+            }" | jq '.credential' -r); echo ${VERIFIABLE_CREDENTIAL}
 ```
 
 You will receive a jwt-encoded credential to be used within the data space.
@@ -999,15 +1000,15 @@ the steps are combined within a script:
 
 1. Get the LegalPersonCredential for the normal employee:
 ```shell
- export USER_CREDENTIAL=$(./doc/scripts/get_credential_for_consumer.sh https://keycloak-consumer.127.0.0.1.nip.io user-credential employee); echo ${USER_CREDENTIAL}
+export USER_CREDENTIAL=$(./doc/scripts/get_credential_for_consumer.sh https://keycloak-consumer.127.0.0.1.nip.io user-credential employee); echo ${USER_CREDENTIAL}
 ```
 2. Get the LegalPersonCredential for the representative:
 ```shell
- export REP_CREDENTIAL=$(./doc/scripts/get_credential_for_consumer.sh https://keycloak-consumer.127.0.0.1.nip.io user-credential representative); echo ${REP_CREDENTIAL}
+export REP_CREDENTIAL=$(./doc/scripts/get_credential_for_consumer.sh https://keycloak-consumer.127.0.0.1.nip.io user-credential representative); echo ${REP_CREDENTIAL}
 ```
 3. Get the OperatorCredential for the operator:
 ```shell
- export OPERATOR_CREDENTIAL=$(./doc/scripts/get_credential_for_consumer.sh https://keycloak-consumer.127.0.0.1.nip.io operator-credential operator); echo ${OPERATOR_CREDENTIAL}
+export OPERATOR_CREDENTIAL=$(./doc/scripts/get_credential_for_consumer.sh https://keycloak-consumer.127.0.0.1.nip.io operator-credential operator); echo ${OPERATOR_CREDENTIAL}
 ```
 
 #### Buy access and create cluster
@@ -1125,7 +1126,7 @@ with the TMForum-APIs directly.
 
 6. Create a cluster as a Fancy Marketplace Operator with numNodes <= 3:
 ```shell
-  export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh http://mp-data-service.127.0.0.1.nip.io:8080 $OPERATOR_CREDENTIAL operator)
+  export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh http://mp-data-service.127.0.0.1.nip.io:8080 $OPERATOR_CREDENTIAL operator); echo $ACCESS_TOKEN 
   curl -X POST http://mp-data-service.127.0.0.1.nip.io:8080/ngsi-ld/v1/entities \
     -H 'Accept: */*' \
     -H 'Content-Type: application/json' \

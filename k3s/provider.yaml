@@ -201,7 +201,7 @@ credentials-config-service:
             dcql:
               credentials: 
                 - id: legal-person-query
-                  format: "dc+sd-jwt"
+                  format: "vc+sd-jwt"
                   multiple: false
                   claims:
                     - id: name-claim
@@ -248,7 +248,7 @@ credentials-config-service:
             dcql:
               credentials: 
                 - id: legal-person-query
-                  format: "dc+sd-jwt"
+                  format: "vc+sd-jwt"
                   multiple: false
                   claims:
                     - id: name-claim
@@ -303,10 +303,6 @@ vcverifier:
         paths:
           - "/"
   deployment:
-    image:
-      tag: 0.0.1-D
-      repository: quay.io/wi_stefan/vcverifier
-      pullPolicy: Always
     logging:
       level: DEBUG
     verifier:
@@ -550,8 +546,7 @@ tpp:
     path: transfers
 
 contract-management:
-  til:
-    credentialType: OperatorCredential
+  did: did:web:marketplace.io
   services:
     ## Config for Trusted Issuers List
     trusted-issuers-list:
@@ -582,6 +577,12 @@ contract-management:
     odrl:
       ## URL for the ODRL-PAP
       url: http://odrl-pap:8080
+  notification:
+    enabled: true
+    host: contract-management
+  additionalEnvVars:
+    - name: LOGGER_LEVELS_ROOT
+      value: DEBUG
 
 trusted-issuers-list:
   # only open for clean up in the tests
@@ -828,7 +829,7 @@ keycloak:
           mountPath: /did-material
 
     - name: prepare-envs
-      image: docker.io/bitnamilegacy/keycloak:26.2.1-debian-12-r0
+      image: docker.io/bitnamilegacy/keycloak:26.3.3-debian-12-r0
       command:
         - /bin/sh
       args:
@@ -876,11 +877,13 @@ keycloak:
     attributes: |
       "vc.user-sd.credential_signing_alg_values_supported": "ES256",
       "vc.user-sd.credential_build_config.signing_algorithm": "ES256",
-      "vc.user-sd.credential_build_config.token_jws_type": "dc+sd-jwt",
+      "vc.user-sd.credential_build_config.token_jws_type": "vc+sd-jwt",
       "vc.user-sd.credential_build_config.proof_types_supported": "{\"jwt\":{\"proof_signing_alg_values_supported\":[\"ES256\"]}}",
-      "vc.user-sd.format": "dc+sd-jwt",
+      "vc.user-sd.format": "vc+sd-jwt",
       "vc.user-sd.scope": "LegalPersonCredential",
       "vc.user-sd.vct": "LegalPersonCredential",
+      "vc.user-sd.credential_build_config.visible_claims": "roles,email",
+      "vc.user-sd.credential_build_config.decoys": "3",
       "vc.user-credential.credential_signing_alg_values_supported": "ES256",
       "vc.user-credential.credential_build_config.signing_algorithm": "ES256",
       "vc.user-credential.credential_build_config.token_jws_type": "JWT",
@@ -888,10 +891,10 @@ keycloak:
       "vc.user-credential.format": "jwt_vc",
       "vc.user-credential.scope": "LegalPersonCredential",
       "vc.user-credential.vct": "LegalPersonCredential",
-      "vc.verifiable-credential.format": "dc+sd-jwt",
+      "vc.verifiable-credential.format": "vc+sd-jwt",
       "vc.verifiable-credential.scope": "VerifiableCredential",
       "vc.verifiable-credential.vct": "VerifiableCredential",
-      "vc.operator-credential.format": "dc+sd-jwt",
+      "vc.operator-credential.format": "vc+sd-jwt",
       "vc.operator-credential.scope": "OperatorCredential",
       "vc.operator-credential.vct": "OperatorCredential"
     clientRoles: |
@@ -1015,12 +1018,8 @@ keycloak:
       {
         "name": "LegalPersonCredential",
         "description": "OIDC4VC Scope, that adds all properties required for a user.",
-        "protocol": "oid4vc",
-        "attributes": {
-          "vc.credential_configuration_id": "LegalPersonCredential",
-          "vc.credential_identifier": "LegalPersonCredential",
-          "vc.issuer_did": "${DID}"
-        },
+        "protocol": "openid-connect",
+        "attributes": {},
         "protocolMappers": [
           {
             "name": "context-mapper",
@@ -1028,7 +1027,6 @@ keycloak:
             "protocolMapper": "oid4vc-context-mapper",
             "config": {
               "context": "https://www.w3.org/2018/credentials/v1",
-              "claim.name": "@context",
               "supportedCredentialTypes": "VerifiableCredential,LegalPersonCredential,OperatorCredential"
             }
           },
@@ -1037,7 +1035,7 @@ keycloak:
             "protocol": "oid4vc",
             "protocolMapper": "oid4vc-user-attribute-mapper",
             "config": {
-              "claim.name": "email",
+              "subjectProperty": "email",
               "userAttribute": "email",
               "supportedCredentialTypes": "LegalPersonCredential,OperatorCredential"
             }
@@ -1047,8 +1045,8 @@ keycloak:
             "protocol": "oid4vc",
             "protocolMapper": "oid4vc-user-attribute-mapper",
             "config": {
+              "subjectProperty": "firstName",
               "userAttribute": "firstName",
-              "claim.name": "firstName",
               "supportedCredentialTypes": "LegalPersonCredential,OperatorCredential"
             }
           },
@@ -1057,8 +1055,8 @@ keycloak:
             "protocol": "oid4vc",
             "protocolMapper": "oid4vc-user-attribute-mapper",
             "config": {
+              "subjectProperty": "lastName",
               "userAttribute": "lastName",
-              "claim.name": "lastName",
               "supportedCredentialTypes": "LegalPersonCredential,OperatorCredential"
             }
           },
@@ -1067,8 +1065,8 @@ keycloak:
             "protocol": "oid4vc",
             "protocolMapper": "oid4vc-target-role-mapper",
             "config": {
+              "subjectProperty": "roles",
               "clientId": "${DID}",
-              "claim.name": "roles",
               "supportedCredentialTypes": "LegalPersonCredential,OperatorCredential"
             }
           }
@@ -1096,7 +1094,6 @@ keycloak:
         "frontchannelLogout": false,
         "protocol": "openid-connect",
         "attributes": {
-          "oid4vci.enabled": true,
           "client.secret.creation.time": "1675260539"
         },
         "protocolMappers": [
@@ -1131,7 +1128,6 @@ keycloak:
         "frontchannelLogout": false,
         "protocol": "openid-connect",
         "attributes": {
-          "oid4vci.enabled": true,
           "realm_client": "false",
           "post.logout.redirect.uris": "+"
         },
@@ -1178,7 +1174,6 @@ keycloak:
         "frontchannelLogout": false,
         "protocol": "openid-connect",
         "attributes": {
-          "oid4vci.enabled": true,
           "realm_client": "false",
           "post.logout.redirect.uris": "+",
           "pkce.code.challenge.method": "S256"
@@ -1233,7 +1228,6 @@ keycloak:
         "frontchannelLogout": false,
         "protocol": "openid-connect",
         "attributes": {
-          "oid4vci.enabled": true,
           "realm_client": "false",
           "client.use.lightweight.access.token.enabled": "true"
         },
