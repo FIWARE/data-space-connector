@@ -965,7 +965,7 @@ marketplace:
   
   # -- configuration for the charging backend
   bizEcosystemChargingBackend:
-
+        
     existingSecret: mongodb-charging-password
 
     # -- max size to be used for the market
@@ -977,7 +977,7 @@ marketplace:
     # -- configuration of the charging backend to be deployed
     deployment:
       image:
-        tag: 10.0.1
+        tag: 10.5.0
     
     # -- should plugin support be enabled
     plugins:
@@ -1024,7 +1024,7 @@ marketplace:
     statefulset:
       image:
         repository: fiware/biz-ecosystem-logic-proxy
-        tag: "10.1.1-PRE-5"
+        tag: "10.5.0-PRE-1"
         pullPolicy: Always
 
 
