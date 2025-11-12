@@ -11,11 +11,11 @@ dependencies:
   # authentication
   - name: vcverifier
     condition: vcverifier.enabled
-    version: 4.1.2
+    version: 4.3.0
     repository: https://fiware.github.io/helm-charts
   - name: credentials-config-service
     condition: credentials-config-service.enabled
-    version: 2.1.12
+    version: 2.3.0
     repository: https://fiware.github.io/helm-charts
   - name: trusted-issuers-list
     condition: trusted-issuers-list.enabled
@@ -33,7 +33,7 @@ dependencies:
   # authorization
   - name: odrl-pap
     condition: odrl-pap.enabled
-    version: 2.0.2
+    version: 2.3.0
     repository: https://fiware.github.io/helm-charts
   - name: apisix
     condition: apisix.enabled
@@ -53,16 +53,16 @@ dependencies:
   # issuance
   - name: keycloak
     condition: keycloak.enabled
-    version: 24.5.2
+    version: 25.2.0
     repository: oci://registry-1.docker.io/bitnamicharts
   # contract management
   - name: tm-forum-api
     condition: tm-forum-api.enabled
-    version: 0.14.11
+    version: 0.14.14
     repository: https://fiware.github.io/helm-charts
   - name: contract-management
     condition: contract-management.enabled
-    version: 3.2.0
+    version: 3.5.6
     repository: https://fiware.github.io/helm-charts
   # marketplace
   - name: business-api-ecosystem

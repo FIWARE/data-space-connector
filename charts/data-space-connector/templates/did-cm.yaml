@@ -22,8 +22,15 @@ data:
             {{- else }}
             "kty: "RSA",
             {{- end }}
+            {{- if eq .Values.didJson.key.kty "RSA" }}
             "e": {{ .Values.didJson.key.exponent | quote }},
             "n": {{ .Values.didJson.key.modulus | quote }},
+            {{- end }}
+            {{- if eq .Values.didJson.key.kty "EC" }}
+            "crv": {{ .Values.didJson.key.crv | quote }},
+            "x": {{ .Values.didJson.key.xCoord | quote }},
+            "y": {{ .Values.didJson.key.yCoord | quote }},
+            {{- end }}
             {{- if .Values.didJson.key.x5u }}
             "x5u": {{ .Values.didJson.key.x5u | quote }}
             {{- else }}

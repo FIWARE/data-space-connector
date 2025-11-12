@@ -252,11 +252,16 @@ didJson:
   port: 3000
   did: did:web:fancy-marketplace.biz
   key:
-    kty: RSA
+    kty: EC
     # while this in productive environments should be an https endpoint, limitations of the gx-registry service require http in order to work around proxy issues in the local env. 
     x5u: http://fancy-marketplace.biz/.well-known/tls.crt
     modulus: ""
     exponent: ""
+    crv: P-256
+    x: oIekaVX7EquGf0auBaEosOhu-9qUvLk_-aLbtfzaHVU
+    y: L_okheo3HdetOlIpcH1hkCSE3adoG1IJ6C9aeht7wbY
+    xCoord: WiCQZHPqGNYyH60_dztrwP67RUWit9_FVZ9VCGe1CAE
+    yCoord: 21EOPxwZslkUwV_kR7mpnha-PdHuHZr4akrq1v6cctk
   ingress:
     enabled: true
     host: fancy-marketplace.biz
