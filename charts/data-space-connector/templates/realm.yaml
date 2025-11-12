@@ -11,8 +11,8 @@ data:
     {
       "id": "{{ .Values.keycloak.realm.name }}",
       "realm": "{{ .Values.keycloak.realm.name }}",
-      "displayName": "Keycloak",
-      "displayNameHtml": "<div class=\"kc-logo-text\"><span>Keycloak</span></div>",
+      "displayName": "{{ .Values.keycloak.realm.name }}",
+      "displayNameHtml": "<div class=\"kc-logo-text\"><span>{{ .Values.keycloak.realm.name }}</span></div>",
       "verifiableCredentialsEnabled": true,
       "enabled": true,
       "attributes": {

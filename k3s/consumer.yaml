@@ -1,28 +1,3 @@
-vcverifier:
-  enabled: false
-credentials-config-service:
-  enabled: false
-trusted-issuers-list:
-  enabled: false
-mysql:
-  enabled: false
-odrl-pap:
-  enabled: false
-apisix:
-  enabled: false
-scorpio:
-  enabled: false
-postgis:
-  enabled: false
-tm-forum-api:
-  enabled: false
-contract-management:
-  enabled: false
-marketplace:
-  enabled: false
-mongodb:
-  enabled: false
-
 postgresql:
   primary:
     persistence:
@@ -30,46 +5,13 @@ postgresql:
   readReplicas:
     persistence:
       enabled: false
-
 keycloak:
   ingress:
     enabled: true
     hostname: keycloak-consumer.127.0.0.1.nip.io
     annotations:
       traefik.ingress.kubernetes.io/router.tls: "true"
-  command:
-    - /bin/bash
-    - -c
-  args:
-    - |
-      #!/bin/sh
-      export $(cat /did-material/did.env)
-      exec /opt/bitnami/scripts/keycloak/entrypoint.sh /opt/bitnami/scripts/keycloak/run.sh  
   initContainers:
-    - name: get-did
-      image: ubuntu
-      command:
-        - /bin/bash
-      args:
-        - -ec
-        - |
-          #!/bin/bash
-          apt-get -y update; apt-get -y install wget; apt-get -y install sed;
-          
-          cd /did-material
-          wget http://did-helper:3001/did-material/cert.pfx
-          wget http://did-helper:3001/did-material/did.env
-          mkdir -p /did-material/client
-          cd /did-material/client
-          wget http://did-helper.provider.svc.cluster.local:3002/did-material/did.env
-          sed -i -e 's/DID/CLIENT_DID/g' /did-material/client/did.env
-          echo "" >> /did-material/did.env
-          echo $(cat /did-material/client/did.env) >> /did-material/did.env
-          echo $(cat /did-material/did.env)
-      volumeMounts:
-        - name: did-material
-          mountPath: /did-material
-
     - name: register-at-tir
       image: ubuntu
       command:
@@ -78,78 +20,34 @@ keycloak:
         - -ec
         - |
           #!/bin/bash
-          source /did-material/did.env
           apt-get -y update; apt-get -y install curl
-          curl -X 'POST' 'http://tir.trust-anchor.svc.cluster.local:8080/issuer' -H 'Content-Type: application/json' -d "{\"did\": \"${DID}\", \"credentials\": []}"
-      volumeMounts:
-        - name: did-material
-          mountPath: /did-material
-
-    - name: register-at-til
-      image: quay.io/curl/curl:8.1.2
-      command:
-        - /bin/sh
-      args:
-        - -ec
-        - |
-          #!/bin/sh
-          export $(cat /did-material/did.env)
-          /bin/init.sh
-      volumeMounts:
-        - name: consumer-til-registration
-          mountPath: /bin/init.sh
-          subPath: init.sh
-        - name: did-material
-          mountPath: /did-material
-
-    - name: prepare-envs
-      image: docker.io/bitnamilegacy/keycloak:26.3.3-debian-12-r0
-      command:
-        - /bin/sh
-      args:
-        - -ec
-        - |
-          #!/bin/sh
-          export $(cat /etc/env/did.env)
-          cp -r /opt/bitnami/scripts/. /env-update/
-          echo "export DID=$DID" >> /env-update/keycloak-env.sh
-          cat /env-update/keycloak-env.sh
-      volumeMounts:
-        - name: kc-env
-          mountPath: /env-update
-        - name: did-material
-          mountPath: /etc/env
-
+          curl -X 'POST' 'http://tir.trust-anchor.svc.cluster.local:8080/issuer' -H 'Content-Type: application/json' -d "{\"did\": \"did:web:fancy-marketplace.biz\", \"credentials\": []}"
   extraVolumeMounts:
-    - name: did-material
-      mountPath: /did-material
-    - name: did-material
-      mountPath: "/etc/env"
-      readOnly: true
     - name: realms
       mountPath: /opt/bitnami/keycloak/data/import
-    - name: kc-env
-      mountPath: /opt/bitnami/scripts/keycloak-env.sh
-      subPath: keycloak-env.sh
-
+    - name: consumer-key
+      mountPath: "/keys"
   extraVolumes:
-    - name: did-material
-      emptyDir: { }
-    - name: kc-env
-      emptyDir: { }
     - name: realms
       configMap:
         name: test-realm-realm
-    - name: consumer-til-registration
+    - name: consumer-key
       configMap:
-        name: consumer-til-registration
+        name: consumer-keystore
         defaultMode: 0755
+  signingKey:
+    storePath: /keys/cert.jks
+    storePassword: password
+    keyAlias: certificate
+    keyPassword: password
+    did: did:web:fancy-marketplace.biz
+    keyAlgorithm: ES256
   realm:
     frontendUrl: https://keycloak-consumer.127.0.0.1.nip.io
     import: true
     name: test-realm
     attributes: |
-      "issuerDid": "${DID}",
+      "issuerDid": "did:web:fancy-marketplace.biz",
       "vc.user-sd.credential_signing_alg_values_supported": "ES256",
       "vc.user-sd.credential_build_config.signing_algorithm": "ES256",
       "vc.user-sd.credential_build_config.token_jws_type": "vc+sd-jwt",
@@ -166,6 +64,12 @@ keycloak:
       "vc.user-credential.format": "jwt_vc",
       "vc.user-credential.scope": "UserCredential",
       "vc.user-credential.vct": "UserCredential",
+      "vc.marketplace-credential.credential_signing_alg_values_supported": "ES256",
+      "vc.marketplace-credential.credential_build_config.signing_algorithm": "ES256",
+      "vc.marketplace-credential.credential_build_config.token_jws_type": "JWT",
+      "vc.marketplace-credential.format": "jwt_vc",
+      "vc.marketplace-credential.scope": "MarketplaceCredential",
+      "vc.marketplace-credential.vct": "MarketplaceCredential",
       "vc.verifiable-credential.format": "vc+sd-jwt",
       "vc.verifiable-credential.scope": "VerifiableCredential",
       "vc.verifiable-credential.vct": "VerifiableCredential",
@@ -177,7 +81,7 @@ keycloak:
       "vc.operator-credential.scope": "OperatorCredential",
       "vc.operator-credential.vct": "OperatorCredential"
     clientRoles: |
-      "${CLIENT_DID}": [
+      "did:web:mp-operations.org": [
         {
           "name": "customer",
           "description": "Is allowed to see offers etc.",
@@ -192,7 +96,8 @@ keycloak:
           "name": "OPERATOR",
           "description": "Is allowed to operate clusters.",
           "clientRole": true
-        },
+        }],
+      "did:web:fancy-marketplace.biz": [
         {
           "name": "REPRESENTATIVE",
           "description": "Is allowed to register.",
@@ -270,7 +175,6 @@ keycloak:
           "attributes": {}
         }
       ]
-
     users: |
       {
         "username": "employee",
@@ -285,10 +189,13 @@ keycloak:
           }
         ],
         "clientRoles": {
-          "${CLIENT_DID}": [
+          "did:web:mp-operations.org": [
             "customer",
             "REPRESENTATIVE",
             "READER"
+          ],
+          "did:web:fancy-marketplace.biz": [
+            "REPRESENTATIVE"
           ],
           "account": [
             "view-profile",
@@ -312,7 +219,7 @@ keycloak:
           }
         ],
         "clientRoles": {
-          "${CLIENT_DID}": [
+          "did:web:mp-operations.org": [
             "OPERATOR"
           ],
           "account": [
@@ -337,7 +244,7 @@ keycloak:
           }
         ],
         "clientRoles": {
-          "${CLIENT_DID}": [
+          "did:web:mp-operations.org": [
             "REPRESENTATIVE"
           ],
           "account": [
@@ -424,7 +331,17 @@ keycloak:
             "protocolMapper": "oid4vc-target-role-mapper",
             "config": {
               "subjectProperty": "roles",
-              "clientId": "${CLIENT_DID}",
+              "clientId": "did:web:mp-operations.org",
+              "supportedCredentialTypes": "LegalPersonCredential,OperatorCredential,UserCredential"
+            }
+          },
+          {
+            "name": "role-mapper-marketplace",
+            "protocol": "oid4vc",
+            "protocolMapper": "oid4vc-target-role-mapper",
+            "config": {
+              "subjectProperty": "roles",
+              "clientId": "did:web:fancy-marketplace.biz",
               "supportedCredentialTypes": "LegalPersonCredential,OperatorCredential,UserCredential"
             }
           },
@@ -551,7 +468,7 @@ keycloak:
             "protocolMapper": "oid4vc-target-role-mapper",
             "config": {
               "subjectProperty": "roles",
-              "clientId": "${CLIENT_DID}",
+              "clientId": "did:web:mp-operations.org",
               "supportedCredentialTypes": "UserCredential"
             }
           },
@@ -648,7 +565,7 @@ keycloak:
             "protocolMapper": "oid4vc-target-role-mapper",
             "config": {
               "subjectProperty": "roles",
-              "clientId": "${CLIENT_DID}",
+              "clientId": "did:web:mp-operations.org",
               "supportedCredentialTypes": "LegalPersonCredential,OperatorCredential,UserCredential"
             }
           },
@@ -663,12 +580,61 @@ keycloak:
             }
           }
         ]
+      },
+      {
+        "name": "MarketplaceCredential",
+        "description": "Scope to produce a credential intended for m2m-access as a marketplace.",
+        "protocol": "openid-connect",
+        "attributes": {},
+        "protocolMappers": [
+          {
+            "name": "context-mapper-oc",
+            "protocol": "oid4vc",
+            "protocolMapper": "oid4vc-context-mapper",
+            "config": {
+              "context": "https://www.w3.org/2018/credentials/v1",
+              "supportedCredentialTypes": "MarketplaceCredential"
+            }
+          }
+        ]
       }
     clients: |
       {
-        "clientId": "${CLIENT_DID}",
+        "clientId": "did:web:mp-operations.org",
         "enabled": true,
-        "description": "Client to connect test.org",
+        "description": "Client to connect mp-operations.org",
+        "surrogateAuthRequired": false,
+        "alwaysDisplayInConsole": false,
+        "clientAuthenticatorType": "client-secret",
+        "defaultRoles": [],
+        "redirectUris": [],   
+        "webOrigins": [],
+        "notBefore": 0,
+        "bearerOnly": false,
+        "consentRequired": false,
+        "standardFlowEnabled": true,
+        "implicitFlowEnabled": false,
+        "directAccessGrantsEnabled": false,
+        "serviceAccountsEnabled": true,
+        "publicClient": false,
+        "frontchannelLogout": false,
+        "secret": "kpWxZn7LgcWT84AzS3aS5X5URmL0FC0Q",
+        "protocol": "openid-connect",
+        "attributes": {
+          "client.secret.creation.time": "1675260539"
+        },
+        "protocolMappers": [
+        ],
+        "authenticationFlowBindingOverrides": {},
+        "fullScopeAllowed": true,
+        "nodeReRegistrationTimeout": -1,
+        "defaultClientScopes": [],
+        "optionalClientScopes": []
+      },
+      {
+        "clientId": "did:web:fancy-marketplace.biz",
+        "enabled": true,
+        "description": "Client to connect itself",
         "surrogateAuthRequired": false,
         "alwaysDisplayInConsole": false,
         "clientAuthenticatorType": "client-secret",
@@ -715,11 +681,12 @@ keycloak:
         "standardFlowEnabled": true,
         "implicitFlowEnabled": false,
         "directAccessGrantsEnabled": false,
-        "serviceAccountsEnabled": false,
+        "serviceAccountsEnabled": true,
         "publicClient": true,
         "frontchannelLogout": false,
         "protocol": "openid-connect",
         "attributes": {
+          "client.secret.creation.time": "1675260539",
           "realm_client": "false",
           "post.logout.redirect.uris": "+"
         },
@@ -799,7 +766,8 @@ keycloak:
           "microprofile-jwt",
           "LegalPersonCredential",
           "OperatorCredential",
-          "UserCredential"
+          "UserCredential",
+          "MarketplaceCredential"
         ]
       },
       {
@@ -809,6 +777,7 @@ keycloak:
         "enabled": true,
         "alwaysDisplayInConsole": false,
         "clientAuthenticatorType": "client-secret",
+        "secret": "kpWxZn7LgcWT84AzS3aS5X5URmL0FC0Q",
         "redirectUris": [],
         "webOrigins": [],
         "notBefore": 0,
@@ -817,11 +786,12 @@ keycloak:
         "standardFlowEnabled": false,
         "implicitFlowEnabled": false,
         "directAccessGrantsEnabled": true,
-        "serviceAccountsEnabled": false,
-        "publicClient": true,
+        "serviceAccountsEnabled": true,
+        "publicClient": false,
         "frontchannelLogout": false,
         "protocol": "openid-connect",
         "attributes": {
+          "client.secret.creation.time": "1675260539",
           "realm_client": "false",
           "client.use.lightweight.access.token.enabled": "true"
         },
@@ -851,10 +821,11 @@ keycloak:
           "offline_access",
           "organization",
           "microprofile-jwt",
-          "UserCredential"
+          "UserCredential",
+          "LegalPersonCredential",
+          "MarketplaceCredential"
         ]
       }
-
 
 # -- integration of rainbow
 rainbow:
@@ -872,29 +843,447 @@ rainbow:
           - /
     enabled: true
     host: rainbow-consumer.127.0.0.1.nip.io
-
 did:
+  enabled: false
+didJson:
   enabled: true
-  secret: issuance-secret
-  serviceType: ClusterIP
-  port: 3001
-  cert:
-    country: DE
-    state: SAXONY
-    locality: Dresden
-    organization: Fancy Marketplace Inc.
-    commonName: www.fancy-marketplace.biz
+  port: 3000
+  did: did:web:fancy-marketplace.biz
+  key:
+    kty: EC
+    # while this in productive environments should be an https endpoint, limitations of the gx-registry service require http in order to work around proxy issues in the local env. 
+    x5u: http://fancy-marketplace.biz/.well-known/tls.crt
+    xCoord: "WiCQZHPqGNYyH60_dztrwP67RUWit9_FVZ9VCGe1CAE"
+    # do not rename to `y`, since yaml interprest `y` as bool true.
+    yCoord: "21EOPxwZslkUwV_kR7mpnha-PdHuHZr4akrq1v6cctk"
+    crv: "P-256"
   ingress:
     enabled: true
-    host: did-consumer.127.0.0.1.nip.io
-
+    host: fancy-marketplace.biz
+    tlsSecret: tls-secret
+    annotations:
+      traefik.ingress.kubernetes.io/router.tls: "true"
+  certChain: |-
+    -----BEGIN CERTIFICATE-----
+    MIIFNzCCAx+gAwIBAgIULK0rapkDHBvq8dw5K6QQe+too+MwDQYJKoZIhvcNAQEL
+    BQAwcTELMAkGA1UEBhMCREUxDzANBgNVBAgMBlNheG9ueTETMBEGA1UECgwKRklD
+    T0RFUyBDQTEdMBsGA1UEAwwURklDT0RFUy1JTlRFUk1FRElBVEUxHTAbBgkqhkiG
+    9w0BCQEWDmNhQGZpY29kZXMuY29tMB4XDTI1MTExMTE1MjQ1N1oXDTMwMTExMDE1
+    MjQ1N1owgYAxCzAJBgNVBAYTAkJFMREwDwYDVQQIDAhCUlVTU0VMUzERMA8GA1UE
+    BwwIQnJ1c3NlbHMxHjAcBgNVBAoMFUZhbmN5IE1hcmtldHBsYWNlIENvLjELMAkG
+    A1UECwwCSXQxHjAcBgNVBAMMFWZhbmN5LW1hcmtldHBsYWNlLmJpejBZMBMGByqG
+    SM49AgEGCCqGSM49AwEHA0IABFogkGRz6hjWMh+tP3c7a8D+u0VForffxVWfVQhn
+    tQgB21EOPxwZslkUwV/kR7mpnha+PdHuHZr4akrq1v6cctmjggGAMIIBfDCBngYI
+    KwYBBQUHAQMEgZEwgY4wCAYGBACORgEBMDgGBgQAjkYBBTAuMCwWIWh0dHBzOi8v
+    ZXhhbXBsZS5vcmcvcGtpZGlzY2xvc3VyZRMHZXhhbXBsZTAhBgYEAIGYJwIwFwwM
+    U29tZSB0ZXN0IENBDAdYWC1ERlNBMCUGBgQAjkYBBjAbBgcEAI5GAQYBBgcEAI5G
+    AQYCBgcEAI5GAQYDMAsGA1UdDwQEAwIDuDAdBgNVHSUEFjAUBggrBgEFBQcDAQYI
+    KwYBBQUHAwIwbQYDVR0RBGYwZIISKi4xMjcuMC4wLjEubmlwLmlvghVmYW5jeS1t
+    YXJrZXRwbGFjZS5iaXqCFyouZmFuY3ktbWFya2V0cGxhY2UuYml6gh52ZXJpZmll
+    ci5mYW5jeS1tYXJrZXRwbGFjZS5iaXowHQYDVR0OBBYEFEdP1g0qqXx71ZNXcG5g
+    S1/bvfvGMB8GA1UdIwQYMBaAFFGnJXyc7jHXheJt+6LtdzVWFw8IMA0GCSqGSIb3
+    DQEBCwUAA4ICAQAmHqXx59XytnsZy097JxCcimWo82G4bHhNNU6tctQYABQ6CcoC
+    ThlIWEVnTF/b8Fj2Zx7+XdIMcXYaBXYb+wijd8A1jiAMrhJDPjoK9AuVyHci+bIL
+    WdYfH6kNi18487qq4R5TNGmBXHJFjEOZXD+IxJ3rayO9GWv353iikJ4KpAVQbLA+
+    D/ShTwg37Oz1JHyKYe9aCa54zaZ0YWhn18n1bJJ+8rf8ExeG4Q+fF2KJ+f2nlY3Q
+    /+tmvy2o28KDh4Grnp5O2cePLIJotgxlAJ4sKTWywqu6nN9kafEPHCwYA7FcBvHh
+    Wh7B5aLqIikxUDqUOMUgU9f5s1IeM53kTD/PBN+ho+FaGauD8cvIA0aqfFqmfNjc
+    NzVwmk/1tYwDoqBYe/GZxq/bYWyCr8QUWidKb9GW9EJiZfjBq+MSb9Z2a9mmLx9S
+    Htu/mZqhzAS4ARKLR9bStnS7FlU406Bh2vRnDa3cKOUpcRd/8bKemcwKXZjLOWs3
+    ngmKtLSGhUapeLpuIPGuZiEYc4In6wYZdlH1sQ6ZmVztJplZOM4jAQQjz7yX4mZF
+    BgWZawbGSh5TirBMeQUujlTenyxHyz7bxq8JGZpC+Z4nUBk/0JrQHIjE9mcPvPJd
+    sKIpNiikKarwApoMdUogO0G9KHVv2MIodWNLHbqC7qzqSAooxL3zxqpzRQ==
+    -----END CERTIFICATE-----
+    -----BEGIN CERTIFICATE-----
+    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
+    mS+gpAIcggxONOredLrDEqWF5rHlSLVLHfS9xzI=
+    -----END CERTIFICATE-----
+    -----BEGIN CERTIFICATE-----
+    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
+    -----END CERTIFICATE-----
 # register the consumer at the til. Only possible if it runs in the same environment and recommendable for demo deployments
 registration:
   enabled: true
   configMap: consumer-til-registration
   til: http://trusted-issuers-list.provider.svc.cluster.local:8080
-  did: ${DID}
+  did: did:web:fancy-marketplace.biz
   credentialTypes:
     - LegalPersonCredential
     - UserCredential
-  prepScript: export $(curl -f -X GET did-helper:3001/did-material/did.env)
+## configuration for providing the (central) marketplace
+# tmf as marketplace backend
+tm-forum-api:
+  registration:
+    enabled: false
+  ingress:
+    enabled: true
+    hosts:
+      - host: consumer-tmf.127.0.0.1.nip.io
+        paths:
+          - /
+# scorpio as tmf backend, no public endpoint required
+scorpio:
+  enabled: true
+# policies for accessing the tmf
+odrl-pap:
+  additionalEnvVars:
+    - name: GENERAL_ORGANIZATION_DID
+      value: did:web:fancy-marketplace.biz
+  ingress:
+    enabled: true
+    hosts:
+      - host: pap-consumer.127.0.0.1.nip.io
+        paths:
+          - "/"
+# authentication configuration
+credentials-config-service:
+  additionalEnvVars:
+    - name: FLYWAY_DATASOURCES_DEFAULT_LOCATIONS
+      value: classpath:db/migration/common,classpath:db/migration/mysql
+  registration:
+    enabled: true
+    services:
+      - id: tm-forum
+        defaultOidcScope: "default"
+        authorizationType: "DEEPLINK"
+        oidcScopes:
+          "default":
+            credentials:
+              - type: LegalPersonCredential
+                trustedParticipantsLists:
+                  - http://tir.127.0.0.1.nip.io
+                # we want that every participant can access the marketplace and register
+                trustedIssuersLists:
+                  - "*"
+                jwtInclusion:
+                  enabled: true
+                  fullInclusion: true
+            dcql:
+              credentials:
+                - id: legal-person-query
+                  format: "vc+sd-jwt"
+                  multiple: false
+                  claims:
+                    - id: roles-claim
+                      path:
+                        - roles
+                  meta:
+                    vct_values:
+                      - LegalPersonCredential
+# provide authentication capabilities
+vcverifier:
+  ingress:
+    enabled: true
+    annotations:
+      traefik.ingress.kubernetes.io/router.tls: "true"
+    tls:
+      - hosts:
+          - verifier.fancy-marketplace.biz
+        secretName: tls-secret
+    hosts:
+      - host: verifier.fancy-marketplace.biz
+        paths:
+          - "/"
+  deployment:
+    logging:
+      level: DEBUG
+    verifier:
+      tirAddress: http://tir.127.0.0.1.nip.io/
+      did: did:web:fancy-marketplace.biz
+      supportedModes: ["byValue", "byReference"]
+      clientIdentification:
+        keyPath: /signing-key/client.key.pem
+        requestKeyAlgorithm: ES256
+        id: x509_san_dns:verifier.fancy-marketplace.biz
+        certificatePath: /certificate/client-chain-bundle.cert.pem
+    server:
+      host: https://verifier.fancy-marketplace.biz
+    configRepo:
+      configEndpoint: http://credentials-config-service:8080
+    additionalVolumes:
+      - name: signing-key
+        secret:
+          secretName: signing-key
+      - name: cert-chain
+        secret:
+          secretName: cert-chain
+      # add the self generated root ca to the system truststore
+      - name: root-ca
+        emptyDir: {}
+      - name: ca-to-add
+        secret:
+          secretName: root-ca
+    additionalVolumeMounts:
+      - name: signing-key
+        mountPath: /signing-key
+      - name: cert-chain
+        mountPath: /certificate
+      # add the self generated root ca to the system truststore
+      - name: root-ca
+        mountPath: /etc/ssl/cert.pem
+        subPath: cert.pem
+    additionalEnvVars:
+      - name: HTTPS_PROXY
+        value: "http://squid-proxy.infra.svc.cluster.local:8888"
+      - name: HTTP_PROXY
+        value: "http://squid-proxy.infra.svc.cluster.local:8888"
+      - name: NO_PROXY
+        value: "credentials-config-service,w3.org,trusted-issuers-list"
+    initContainers:
+      # add the self generated root ca to the system truststore
+      - name: add-root-ca
+        image: alpine:3.21.3
+        command:
+          - /bin/sh
+        args:
+          - -c
+          - |
+            #!/bin/sh
+            cp /etc/ssl/cert.pem /root-ca/cert.pdata.typeem
+            cat /root-ca/cacert.pem >> /root-ca/cert.pem
+        volumeMounts:
+          - name: root-ca
+            mountPath: /root-ca
+          - name: ca-to-add
+            mountPath: /root-ca/cacert.pem
+            subPath: cacert.pem
+      - name: register-at-tir
+        image: ubuntu
+        command:
+          - /bin/bash
+        args:
+          - -ec
+          - |
+            #!/bin/bash
+            apt-get -y update; apt-get -y install curl
+            curl -X 'POST' 'http://tir.trust-anchor.svc.cluster.local:8080/issuer' -H 'Content-Type: application/json' -d "{\"did\": \"did:web:fancy-marketplace.biz\", \"credentials\": []}"
+# required dbs
+mysql:
+  resourcesPreset: none
+  primary:
+    persistence:
+      enabled: false
+  secondary:
+    persistence:
+      enabled: false
+postgis:
+  primary:
+    resourcesPreset: none
+    persistence:
+      enabled: false
+  readReplicas:
+    persistence:
+      enabled: false
+postgresql:
+  primary:
+    resourcesPreset: none
+    persistence:
+      enabled: false
+  readReplicas:
+    persistence:
+      enabled: false
+# authorized access to tmforum
+apisix:
+  image:
+    debug: true
+  dataPlane:
+    ingress:
+      enabled: true
+      hostname: fancy-marketplace.127.0.0.1.nip.io
+  catchAllRoute:
+    enabled: false
+  routes: |-
+    - uri: /.well-known/openid-configuration
+      host: fancy-marketplace.127.0.0.1.nip.io
+      upstream:
+        nodes:
+          verifier:3000: 1
+        type: roundrobin
+      plugins:
+        proxy-rewrite:
+          uri: /services/tm-forum/.well-known/openid-configuration
+    - uri: /*
+      host: fancy-marketplace.127.0.0.1.nip.io
+      upstream:
+        nodes:
+          tm-forum-api:8080: 1
+        type: roundrobin
+      plugins:
+        openid-connect:
+          proxy_opts:
+            https_proxy: http://squid-proxy.infra.svc.cluster.local:8888
+          bearer_only: true
+          use_jwks: true
+          client_id: tm-forum
+          client_secret: unused
+          ssl_verify: false
+          discovery: https://verifier.fancy-marketplace.biz/services/tm-forum/.well-known/openid-configuration
+        opa:
+          host: "http://localhost:8181"
+          policy: policy/main
+          with_body: true
+# contract management for distributing the buy events
+contract-management:
+  did: did:web:fancy-marketplace.biz
+  enableCentralMarketplace: true
+  # we only support externally offered services, thus not local policies or til-entries required
+  enableOdrlPap: false
+  enableTrustedIssuersList: false
+  # no dsp required
+  enableRainbow: false
+  # authentication inf
+  oid4vp:
+    enabled: true
+    credentialsFolder: /credential-repo
+    trustAnchors:
+      - /etc/ssl/cacert.pem
+    holder:
+      holderId: did:web:fancy-marketplace.biz
+      keyType: EC
+      keyPath: /signing-key/client-pkcs8.key.pem
+      signatureAlgorithm: ECDH-ES
+    proxyConfig:
+      enabled: true
+      proxyHost: squid-proxy.infra.svc.cluster.local
+      proxyPort: 8888
+  services:
+    ## Config for Trusted Issuers List
+    trusted-issuers-list:
+      ## URL of the Trusted Issuers List Service
+      url: http://trusted-issuers-list:8080
+    ## Config for the TM Forum Service hosting the APIs
+    product-order:
+      ## URL of the TM Forum Service hosting the Product Ordering API
+      url: http://consumer-tm-forum-api-product-ordering-management:8080
+    party:
+      ## URL of the TM Forum Service hosting the Party API
+      url: http://consumer-tm-forum-api-party-catalog:8080
+    product-catalog:
+      ## URL of the TM Forum Service hosting the Product Catalog API
+      url: http://consumer-tm-forum-api-product-catalog:8080
+    service-catalog:
+      ## URL of the TM Forum Service hosting the Service Catalog API
+      url: http://consumer-tm-forum-api-service-catalog:8080
+    tmforum-agreement-api:
+      ## URL of the TM Forum Service hosting the Agreement API
+      url: http://consumer-tm-forum-api-agreement:8080
+    quote:
+      ## URL for TM Forum Service hosting the Quote API
+      url: http://consumer-tm-forum-api-quote:8080
+  deployment:
+    # init containers to be used for the local demo
+    initContainers:
+      # load the self-generated root ca into the java truststore
+      - name: load-certs
+        image: quay.io/fiware/contract-management:3.3.0
+        command: ["/bin/sh", "-c", "/bin/import-ca.sh /certs-folder /root-ca/cacert.pem"]
+        volumeMounts:
+          - name: ca-certs-script
+            mountPath: /bin/import-ca.sh
+            subPath: import-ca.sh
+          - name: cacerts
+            mountPath: /certs-folder/
+          - name: root-ca
+            mountPath: /root-ca
+      # get a credential to be used by the contract-management
+      - name: get-credential
+        image: quay.io/curl/curl:8.1.2
+        command: ["/bin/sh", "-c", "/bin/get-credential.sh /credential-repo"]
+        volumeMounts:
+          - name: marketplace-credential-script
+            mountPath: /bin/get-credential.sh
+            subPath: get-credential.sh
+          - name: credential-repo
+            mountPath: /credential-repo
+    additionalVolumes:
+      - name: marketplace-credential-script
+        configMap:
+          name: marketplace-credential
+          defaultMode: 0755
+      - name: ca-certs-script
+        configMap:
+          name: ca-certs-script
+          defaultMode: 0755
+      - name: credential-repo
+        emptyDir: {}
+      - name: signing-key
+        secret:
+          secretName: signing-key
+      - name: root-ca
+        secret:
+          secretName: root-ca
+      - name: cacerts
+        emptyDir: {}
+    additionalVolumeMounts:
+      - name: credential-repo
+        mountPath: /credential-repo
+      - name: signing-key
+        mountPath: /signing-key
+      # add the self generated root ca to the system truststore
+      - name: root-ca
+        mountPath: /etc/ssl/cacert.pem
+        subPath: cacert.pem
+      - name: cacerts
+        mountPath: /usr/lib/jvm/java-21/lib/security/cacerts
+        subPath: cacerts
+  notification:
+    enabled: true
+    host: contract-management

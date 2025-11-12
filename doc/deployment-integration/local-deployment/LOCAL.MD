@@ -751,7 +751,7 @@ The offer creation includes multiple steps:
 
 1. Export the Providers's did:
 ```shell
-export PROVIDER_DID=$(curl -X GET http://did-provider.127.0.0.1.nip.io:8080/did-material/did.env | cut -d'=' -f2); echo ${PROVIDER_DID} 
+export PROVIDER_DID="did:web:mp-operations.org"
 ```
 
 2. Create the product specification. The specification should contain the configuration of credentials to be trusted by the customer(in this case, "OperatorCredential" with the role "OPERATOR" for the target-service) and the policy to be created for the customer. In the example, we will offer 2 different types service: "small" and "full", where small restricts the cluster-size to be created:
@@ -1000,15 +1000,15 @@ the steps are combined within a script:
 
 1. Get the LegalPersonCredential for the normal employee:
 ```shell
-export USER_CREDENTIAL=$(./doc/scripts/get_credential_for_consumer.sh https://keycloak-consumer.127.0.0.1.nip.io user-credential employee); echo ${USER_CREDENTIAL}
+export USER_CREDENTIAL=$(./doc/scripts/get_credential.sh https://keycloak-consumer.127.0.0.1.nip.io user-credential employee); echo ${USER_CREDENTIAL}
 ```
 2. Get the LegalPersonCredential for the representative:
 ```shell
-export REP_CREDENTIAL=$(./doc/scripts/get_credential_for_consumer.sh https://keycloak-consumer.127.0.0.1.nip.io user-credential representative); echo ${REP_CREDENTIAL}
+export REP_CREDENTIAL=$(./doc/scripts/get_credential.sh https://keycloak-consumer.127.0.0.1.nip.io user-credential representative); echo ${REP_CREDENTIAL}
 ```
 3. Get the OperatorCredential for the operator:
 ```shell
-export OPERATOR_CREDENTIAL=$(./doc/scripts/get_credential_for_consumer.sh https://keycloak-consumer.127.0.0.1.nip.io operator-credential operator); echo ${OPERATOR_CREDENTIAL}
+export OPERATOR_CREDENTIAL=$(./doc/scripts/get_credential.sh https://keycloak-consumer.127.0.0.1.nip.io operator-credential operator); echo ${OPERATOR_CREDENTIAL}
 ```
 
 #### Buy access and create cluster
@@ -1028,7 +1028,7 @@ In order to prove that not every user can just create a cluster, try the followi
     -d '{
       "id": "urn:ngsi-ld:K8SCluster:fancy-marketplace",
       "type": "K8SCluster",
-      "name": {
+      "name": { 
         "type": "Property",
         "value": "Fancy Marketplace Cluster"
       },
@@ -1051,7 +1051,7 @@ In order to prove that not every user can just create a cluster, try the followi
 
 3. Export the Fancy Marketplace's did:
 ```shell
-  export CONSUMER_DID=$(curl -X GET http://did-consumer.127.0.0.1.nip.io:8080/did-material/did.env | cut -d'=' -f2); echo ${CONSUMER_DID} 
+  export CONSUMER_DID="did:web:fancy-marketplace.biz"
 ```
 
 4. Register Fancy Marketplace at M&P Operations(as representative, e.g. use the REP_CREDENTIAL):
@@ -1500,7 +1500,7 @@ Once everything is properly configured, the Dataspace can be deployed locally vi
 The interaction is the same as in all previously described steps - see [Demo Interactions](#demo-interactions). The most visible difference is in the credential.
 Get one via:
 ```shell
- export ELSI_CREDENTIAL=$(./doc/scripts/get_credential_for_consumer.sh http://keycloak-consumer.127.0.0.1.nip.io:8080 user-credential); echo ${ELSI_CREDENTIAL}
+ export ELSI_CREDENTIAL=$(./doc/scripts/get_credential.sh http://keycloak-consumer.127.0.0.1.nip.io:8080 user-credential); echo ${ELSI_CREDENTIAL}
 ```
 Now it can be inspected f.e. on [jwt.io](https://jwt.io/). The certificate chain should be included in the jwt-headers and the issuer is the configured `did:elsi`
 

@@ -1,5 +1,7 @@
 #!/bin/bash
 
+format=${4:-jwt_vc} 
+
 access_token=$(curl -s -k -x localhost:8888 -X POST "$1/realms/test-realm/protocol/openid-connect/token" \
   --header 'Accept: */*' \
   --header 'Content-Type: application/x-www-form-urlencoded' \
@@ -25,4 +27,4 @@ curl -s -k -x localhost:8888 -X POST "$1/realms/test-realm/protocol/oid4vc/crede
   --header 'Accept: */*' \
   --header 'Content-Type: application/json' \
   --header "Authorization: Bearer ${credential_access_token}" \
-  --data "{\"credential_identifier\":\"$2\", \"format\":\"jwt_vc\"}" | jq '.credential' -r
+  --data "{\"credential_identifier\":\"$2\", \"format\":\"$format\"}" | jq '.credential' -r

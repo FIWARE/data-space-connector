@@ -5,11 +5,19 @@ metadata:
   name: did-json
   namespace: {{ $.Release.Namespace | quote }}
   annotations:
-    traefik.ingress.kubernetes.io/router.tls: "true"
+    {{- with .Values.didJson.ingress.annotations }}
+      {{- toYaml . | nindent 4 }}
+    {{- end }}
     traefik.ingress.kubernetes.io/service.passhostheader: "true"
   labels:
     {{ include "dsc.labels" . | nindent 4 }}
 spec:
+  {{- if .Values.didJson.ingress.tlsSecret }}
+  tls:
+    - hosts:
+      - {{ .Values.didJson.ingress.host }}
+      secretName: {{ .Values.didJson.ingress.tlsSecret }}
+  {{- end }}
   rules:
     - host: {{ .Values.didJson.ingress.host }}
       http:

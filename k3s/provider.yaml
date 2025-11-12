@@ -18,34 +18,6 @@ apisix:
     enabled: false
   routes: |-
     - uri: /.well-known/openid-configuration
-      host: contract-management.127.0.0.1.nip.io
-      upstream:
-        nodes:
-          verifier:3000: 1
-        type: roundrobin
-      plugins:
-        proxy-rewrite:
-          uri: /services/data-service/.well-known/openid-configuration
-    - uri: /*
-      host: contract-management.127.0.0.1.nip.io
-      upstream:
-        nodes:
-          contract-management:8080: 1
-        type: roundrobin
-      plugins:
-        openid-connect:
-          proxy_opts:
-            https_proxy: http://squid-proxy.infra.svc.cluster.local:8888
-          bearer_only: true
-          use_jwks: true
-          client_id: data-service
-          client_secret: unused
-          ssl_verify: false
-          discovery: https://provider-verifier.io/services/data-service/.well-known/openid-configuration
-        opa:
-          host: "http://localhost:8181"
-          policy: tpp
-    - uri: /.well-known/openid-configuration
       host: mp-data-service.127.0.0.1.nip.io
       upstream:
         nodes:
@@ -54,6 +26,15 @@ apisix:
       plugins:
         proxy-rewrite:
           uri: /services/data-service/.well-known/openid-configuration
+    - uri: /.well-known/openid-configuration
+      host: contract-management.127.0.0.1.nip.io
+      upstream:
+        nodes:
+          verifier:3000: 1
+        type: roundrobin
+      plugins:
+        proxy-rewrite:
+          uri: /services/contract-management/.well-known/openid-configuration
     - uri: /.well-known/openid-configuration
       host: tpp-service.127.0.0.1.nip.io
       upstream:
@@ -90,7 +71,7 @@ apisix:
           client_id: contract-management
           client_secret: unused
           ssl_verify: false
-          discovery: https://provider-verifier.io/services/tmf-api/.well-known/openid-configuration
+          discovery: https://verifier.mp-operations.org/services/tmf-api/.well-known/openid-configuration
         opa:
           host: "http://localhost:8181"
           policy: tpp
@@ -109,7 +90,7 @@ apisix:
           client_id: data-service
           client_secret: unused
           ssl_verify: false
-          discovery: https://provider-verifier.io/services/data-service/.well-known/openid-configuration
+          discovery: https://verifier.mp-operations.org/services/data-service/.well-known/openid-configuration
         opa:
           host: "http://localhost:8181"
           policy: policy/main
@@ -142,7 +123,7 @@ apisix:
           client_id: data-service
           client_secret: unused
           ssl_verify: false
-          discovery: https://provider-verifier.io/services/data-service/.well-known/openid-configuration
+          discovery: https://verifier.mp-operations.org/services/data-service/.well-known/openid-configuration
         opa:
           host: "http://localhost:8181"
           policy: policy/main
@@ -162,29 +143,46 @@ apisix:
           client_id: contract-management
           client_secret: unused
           ssl_verify: false
-          discovery: https://provider-verifier.io/services/tmf-api/.well-known/openid-configuration
+          discovery: https://verifier.mp-operations.org/services/tmf-api/.well-known/openid-configuration
+        opa:
+          host: "http://localhost:8181"
+          policy: policy/main
+          with_body: true
+    - uri: /*
+      host: contract-management.127.0.0.1.nip.io
+      upstream:
+        nodes:
+          contract-management:8080: 1
+        type: roundrobin
+      plugins:
+        openid-connect:
+          proxy_opts:
+            https_proxy: http://squid-proxy.infra.svc.cluster.local:8888
+          bearer_only: true
+          use_jwks: true
+          client_id: contract-management
+          client_secret: unused
+          ssl_verify: false
+          discovery: https://verifier.mp-operations.org/services/contract-management/.well-known/openid-configuration
         opa:
           host: "http://localhost:8181"
           policy: policy/main
           with_body: true
 
 credentials-config-service:
-  deployment:
-    image:
-      repository: quay.io/wi_stefan/credentials-config-service
-      tag: 0.0.1-L
-      pullPolicy: Always
   ingress:
     enabled: true
     hosts:
       - host: provider-ccs.127.0.0.1.nip.io
         paths:
           - "/"
+  additionalEnvVars:
+    - name: FLYWAY_DATASOURCES_DEFAULT_LOCATIONS
+      value: classpath:db/migration/common,classpath:db/migration/mysql
   registration:
     enabled: true
-    prepScript: export $(curl -f -X GET did-helper:3002/did-material/did.env)
     services:
-      - id: ${DID}
+      - id: bae
         defaultOidcScope: "openid learcredential"
         authorizationType: "FRONTEND_V2"
         oidcScopes:
@@ -199,13 +197,13 @@ credentials-config-service:
                   enabled: true
                   fullInclusion: true
             dcql:
-              credentials: 
+              credentials:
                 - id: legal-person-query
                   format: "vc+sd-jwt"
                   multiple: false
                   claims:
                     - id: name-claim
-                      path: 
+                      path:
                         - firstName
                     - id: roles-claim
                       path:
@@ -226,9 +224,9 @@ credentials-config-service:
                   - http://trusted-issuers-list:8080
                 jwtInclusion:
                   enabled: true
-                  fullInclusion: true          
+                  fullInclusion: true
             dcql:
-              credentials: 
+              credentials:
                 - id: user-query
                   format: "jwt_vc_json"
                   multiple: true
@@ -244,15 +242,15 @@ credentials-config-service:
                   - http://trusted-issuers-list:8080
                 jwtInclusion:
                   enabled: true
-                  fullInclusion: true          
+                  fullInclusion: true
             dcql:
-              credentials: 
+              credentials:
                 - id: legal-person-query
                   format: "vc+sd-jwt"
                   multiple: false
                   claims:
                     - id: name-claim
-                      path: 
+                      path:
                         - firstName
                     - id: roles-claim
                       path:
@@ -269,9 +267,9 @@ credentials-config-service:
                   - http://trusted-issuers-list:8080
                 jwtInclusion:
                   enabled: true
-                  fullInclusion: true   
+                  fullInclusion: true
             dcql:
-              credentials: 
+              credentials:
                 - id: operator-query
                   format: "jwt_vc_json"
                   multiple: true
@@ -292,14 +290,40 @@ credentials-config-service:
                 jwtInclusion:
                   enabled: true
                   fullInclusion: true
+      - id: contract-management
+        defaultOidcScope: "external-marketplace"
+        authorizationType: "DEEPLINK"
+        oidcScopes:
+          "external-marketplace":
+            credentials:
+              - type: MarketplaceCredential
+                trustedParticipantsLists:
+                  - http://tir.127.0.0.1.nip.io
+                trustedIssuersLists:
+                  - "*"
+                jwtInclusion:
+                  enabled: true
+                  fullInclusion: true
+            dcql:
+              credentials:
+                - id: mc-query
+                  format: "jwt_vc_json"
+                  multiple: true
+                  meta:
+                    type_values:
+                      - MarketplaceCredential
 
 vcverifier:
   ingress:
     enabled: true
     annotations:
       traefik.ingress.kubernetes.io/router.tls: "true"
+    tls:
+      - hosts:
+          - verifier.mp-operations.org
+        secretName: tls-secret
     hosts:
-      - host: provider-verifier.io
+      - host: verifier.mp-operations.org
         paths:
           - "/"
   deployment:
@@ -307,18 +331,17 @@ vcverifier:
       level: DEBUG
     verifier:
       tirAddress: http://tir.127.0.0.1.nip.io/
-      did: did:web:marketplace.io
-      supportedModes: ["byValue","byReference"]
+      did: did:web:mp-operations.org
+      supportedModes: ["byValue", "byReference"]
       clientIdentification:
         keyPath: /signing-key/client.key.pem
         requestKeyAlgorithm: ES256
-        id: x509_san_dns:provider-verifier.io
+        id: x509_san_dns:verifier.mp-operations.org
         certificatePath: /certificate/client-chain-bundle.cert.pem
     server:
-      host: https://provider-verifier.io
+      host: https://verifier.mp-operations.org
     configRepo:
       configEndpoint: http://credentials-config-service:8080
-    alternativeConfig: /alternative-conf/server.yaml
     additionalVolumes:
       - name: signing-key
         secret:
@@ -326,10 +349,6 @@ vcverifier:
       - name: cert-chain
         secret:
           secretName: cert-chain
-      - name: did-material
-        emptyDir: {}
-      - name: alternative-conf
-        emptyDir: {}
       # add the self generated root ca to the system truststore
       - name: root-ca
         emptyDir: {}
@@ -337,8 +356,6 @@ vcverifier:
         secret:
           secretName: root-ca
     additionalVolumeMounts:
-      - name: alternative-conf
-        mountPath: /alternative-conf
       - name: signing-key
         mountPath: /signing-key
       - name: cert-chain
@@ -372,28 +389,6 @@ vcverifier:
           - name: ca-to-add
             mountPath: /root-ca/cacert.pem
             subPath: cacert.pem
-      - name: get-did
-        image: ubuntu
-        command:
-          - /bin/bash
-        args:
-          - -ec
-          - |
-            #!/bin/bash
-            apt-get -y update; apt-get -y install wget; apt-get -y install gettext-base
-            cd /did-material
-            wget http://did-helper:3002/did-material/did.env
-            export $(cat /did-material/did.env)
-            cp /original-conf/server.yaml /alternative-conf/server.yaml
-            envsubst < /alternative-conf/server.yaml
-        volumeMounts:
-          - name: did-material
-            mountPath: /did-material
-          - name: config-volume
-            mountPath: /original-conf
-          - name: alternative-conf
-            mountPath: /alternative-conf
-
       - name: register-at-tir
         image: ubuntu
         command:
@@ -402,13 +397,8 @@ vcverifier:
           - -ec
           - |
             #!/bin/bash
-            source /did-material/did.env
             apt-get -y update; apt-get -y install curl
-            curl -X 'POST' 'http://tir.trust-anchor.svc.cluster.local:8080/issuer' -H 'Content-Type: application/json' -d "{\"did\": \"${DID}\", \"credentials\": []}"
-        volumeMounts:
-          - name: did-material
-            mountPath: /did-material
-
+            curl -X 'POST' 'http://tir.trust-anchor.svc.cluster.local:8080/issuer' -H 'Content-Type: application/json' -d "{\"did\": \"did:web:mp-operations.org\", \"credentials\": []}"
 mysql:
   resourcesPreset: none
   primary:
@@ -417,7 +407,6 @@ mysql:
   secondary:
     persistence:
       enabled: false
-
 postgis:
   primary:
     resourcesPreset: none
@@ -426,7 +415,6 @@ postgis:
   readReplicas:
     persistence:
       enabled: false
-
 postgresql:
   primary:
     resourcesPreset: none
@@ -435,22 +423,122 @@ postgresql:
   readReplicas:
     persistence:
       enabled: false
-
 did:
+  enabled: false
+didJson:
   enabled: true
-  secret: issuance-secret
-  serviceType: ClusterIP
-  port: 3002
-  cert:
-    country: DE
-    state: SAXONY
-    locality: Dresden
-    organization: M&P Operations Inc.
-    commonName: www.mp-operation.org
+  port: 3000
+  did: did:web:mp-operations.org
+  key:
+    kty: EC
+    # while this in productive environments should be an https endpoint, limitations of the gx-registry service require http in order to work around proxy issues in the local env. 
+    x5u: http://mp-operations.org/.well-known/tls.crt
+    xCoord: "LjoyaX04PT7vBs7EANqIv87xJWMkgItI3nHvRh1CKes"
+    # do not rename to `y`, since yaml interprest `y` as bool true.
+    yCoord: "bQZ9DBl6e0_HkVXDgZOy1THv1BO_Jjmg3cAX0BZ_GNM"
+    crv: "P-256"
   ingress:
     enabled: true
-    host: did-provider.127.0.0.1.nip.io
-
+    annotations:
+      traefik.ingress.kubernetes.io/router.tls: "true"
+    host: mp-operations.org
+    tlsSecret: tls-secret
+  certChain: |-
+    -----BEGIN CERTIFICATE-----
+    MIIFNzCCAx+gAwIBAgIULK0rapkDHBvq8dw5K6QQe+too+MwDQYJKoZIhvcNAQEL
+    BQAwcTELMAkGA1UEBhMCREUxDzANBgNVBAgMBlNheG9ueTETMBEGA1UECgwKRklD
+    T0RFUyBDQTEdMBsGA1UEAwwURklDT0RFUy1JTlRFUk1FRElBVEUxHTAbBgkqhkiG
+    9w0BCQEWDmNhQGZpY29kZXMuY29tMB4XDTI1MTExMTE1MjQ1N1oXDTMwMTExMDE1
+    MjQ1N1owgYAxCzAJBgNVBAYTAkJFMREwDwYDVQQIDAhCUlVTU0VMUzERMA8GA1UE
+    BwwIQnJ1c3NlbHMxHjAcBgNVBAoMFUZhbmN5IE1hcmtldHBsYWNlIENvLjELMAkG
+    A1UECwwCSXQxHjAcBgNVBAMMFWZhbmN5LW1hcmtldHBsYWNlLmJpejBZMBMGByqG
+    SM49AgEGCCqGSM49AwEHA0IABFogkGRz6hjWMh+tP3c7a8D+u0VForffxVWfVQhn
+    tQgB21EOPxwZslkUwV/kR7mpnha+PdHuHZr4akrq1v6cctmjggGAMIIBfDCBngYI
+    KwYBBQUHAQMEgZEwgY4wCAYGBACORgEBMDgGBgQAjkYBBTAuMCwWIWh0dHBzOi8v
+    ZXhhbXBsZS5vcmcvcGtpZGlzY2xvc3VyZRMHZXhhbXBsZTAhBgYEAIGYJwIwFwwM
+    U29tZSB0ZXN0IENBDAdYWC1ERlNBMCUGBgQAjkYBBjAbBgcEAI5GAQYBBgcEAI5G
+    AQYCBgcEAI5GAQYDMAsGA1UdDwQEAwIDuDAdBgNVHSUEFjAUBggrBgEFBQcDAQYI
+    KwYBBQUHAwIwbQYDVR0RBGYwZIISKi4xMjcuMC4wLjEubmlwLmlvghVmYW5jeS1t
+    YXJrZXRwbGFjZS5iaXqCFyouZmFuY3ktbWFya2V0cGxhY2UuYml6gh52ZXJpZmll
+    ci5mYW5jeS1tYXJrZXRwbGFjZS5iaXowHQYDVR0OBBYEFEdP1g0qqXx71ZNXcG5g
+    S1/bvfvGMB8GA1UdIwQYMBaAFFGnJXyc7jHXheJt+6LtdzVWFw8IMA0GCSqGSIb3
+    DQEBCwUAA4ICAQAmHqXx59XytnsZy097JxCcimWo82G4bHhNNU6tctQYABQ6CcoC
+    ThlIWEVnTF/b8Fj2Zx7+XdIMcXYaBXYb+wijd8A1jiAMrhJDPjoK9AuVyHci+bIL
+    WdYfH6kNi18487qq4R5TNGmBXHJFjEOZXD+IxJ3rayO9GWv353iikJ4KpAVQbLA+
+    D/ShTwg37Oz1JHyKYe9aCa54zaZ0YWhn18n1bJJ+8rf8ExeG4Q+fF2KJ+f2nlY3Q
+    /+tmvy2o28KDh4Grnp5O2cePLIJotgxlAJ4sKTWywqu6nN9kafEPHCwYA7FcBvHh
+    Wh7B5aLqIikxUDqUOMUgU9f5s1IeM53kTD/PBN+ho+FaGauD8cvIA0aqfFqmfNjc
+    NzVwmk/1tYwDoqBYe/GZxq/bYWyCr8QUWidKb9GW9EJiZfjBq+MSb9Z2a9mmLx9S
+    Htu/mZqhzAS4ARKLR9bStnS7FlU406Bh2vRnDa3cKOUpcRd/8bKemcwKXZjLOWs3
+    ngmKtLSGhUapeLpuIPGuZiEYc4In6wYZdlH1sQ6ZmVztJplZOM4jAQQjz7yX4mZF
+    BgWZawbGSh5TirBMeQUujlTenyxHyz7bxq8JGZpC+Z4nUBk/0JrQHIjE9mcPvPJd
+    sKIpNiikKarwApoMdUogO0G9KHVv2MIodWNLHbqC7qzqSAooxL3zxqpzRQ==
+    -----END CERTIFICATE-----
+    -----BEGIN CERTIFICATE-----
+    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
+    mS+gpAIcggxONOredLrDEqWF5rHlSLVLHfS9xzI=
+    -----END CERTIFICATE-----
+    -----BEGIN CERTIFICATE-----
+    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
+    -----END CERTIFICATE-----
 dataSpaceConfig:
   enabled: true
   serviceType: ClusterIP
@@ -463,57 +551,24 @@ dataSpaceConfig:
     - https
   authenticationProtocols:
     - oid4vp
-
 scorpio:
   ingress:
     enabled: true
     # only to make it available for the test initialization
     hosts:
-    - host: scorpio-provider.127.0.0.1.nip.io
-      paths:
-        - "/"
-
+      - host: scorpio-provider.127.0.0.1.nip.io
+        paths:
+          - "/"
 odrl-pap:
-
-  deployment:
-    initContainers:
-      - name: get-did
-        image: ubuntu
-        command:
-          - /bin/bash
-        args:
-          - -ec
-          - |
-            #!/bin/bash
-            apt-get -y update; apt-get -y install wget
-            cd /did-material
-            wget http://did-helper:3002/did-material/did.env
-        volumeMounts:
-          - name: did-material
-            mountPath: /did-material
-    additionalVolumes:
-      - name: did-material
-        emptyDir: {}
-    additionalVolumeMounts:
-      - name: did-material
-        mountPath: /did-material
-    command:
-      - /bin/sh
-    args:
-      - -ec
-      - |
-        #!/bin/sh
-        source /did-material/did.env
-        export GENERAL_ORGANIZATION_DID=$DID
-        ./application -Dquarkus.http.host=0.0.0.0
-
+  additionalEnvVars:
+    - name: GENERAL_ORGANIZATION_DID
+      value: did:web:mp-operations.org
   ingress:
     enabled: true
     hosts:
       - host: pap-provider.127.0.0.1.nip.io
         paths:
           - "/"
-
 tm-forum-api:
   registration:
     enabled: false
@@ -523,7 +578,6 @@ tm-forum-api:
       - host: tm-forum-api.127.0.0.1.nip.io
         paths:
           - /
-
 # -- integration of rainbow
 rainbow:
   enabled: true
@@ -538,15 +592,13 @@ rainbow:
       - host: rainbow-provider.127.0.0.1.nip.io
         paths:
           - /
-
 tpp:
   enabled: true
   transfers:
     host: http://rainbow-provider.127.0.0.1.nip.io:8080
     path: transfers
-
 contract-management:
-  did: did:web:provider.io
+  did: did:web:mp-operations.org
   enableCentralMarketplace: true
   services:
     ## Config for Trusted Issuers List
@@ -584,7 +636,6 @@ contract-management:
   additionalEnvVars:
     - name: LOGGER_LEVELS_ROOT
       value: DEBUG
-
 trusted-issuers-list:
   # only open for clean up in the tests
   ingress:
@@ -594,15 +645,13 @@ trusted-issuers-list:
         - host: til-provider.127.0.0.1.nip.io
           paths:
             - /
-
 mongo-operator:
   enabled: false
-
 managedMongo:
   enabled: true
   spec:
     statefulSet:
-      spec:     
+      spec:
         template:
           spec:
             #  Hostpath volumes are owned by root
@@ -610,60 +659,44 @@ managedMongo:
             #  so we use an init container to change the owner of
             #  the directory (init containers run as root)
             initContainers:
-            - command:
-                - chown
-                - -R
-                - "2000"
-                - /data
-              image: busybox
-              volumeMounts:
-              - mountPath: /data
-                name: data-volume
-              securityContext:
-                runAsNonRoot: false
-                runAsUser: 0
-                runAsGroup: 0
-              name: change-dir-permissions       
+              - command:
+                  - chown
+                  - -R
+                  - "2000"
+                  - /data
+                image: busybox
+                volumeMounts:
+                  - mountPath: /data
+                    name: data-volume
+                securityContext:
+                  runAsNonRoot: false
+                  runAsUser: 0
+                  runAsGroup: 0
+                name: change-dir-permissions
         volumeClaimTemplates:
-        - metadata:
-            name: data-volume
-          spec:
-            accessModes:
-            - ReadWriteOnce
-            storageClassName: default
-            resources:
-              requests:
-                storage: "1Gi"
-        - metadata:
-            name: logs-volume
-          spec:
-            accessModes:
-            - ReadWriteOnce
-            storageClassName: default
-            resources:
-              requests:
-                storage: "1Gi"
-
+          - metadata:
+              name: data-volume
+            spec:
+              accessModes:
+                - ReadWriteOnce
+              storageClassName: default
+              resources:
+                requests:
+                  storage: "1Gi"
+          - metadata:
+              name: logs-volume
+            spec:
+              accessModes:
+                - ReadWriteOnce
+              storageClassName: default
+              resources:
+                requests:
+                  storage: "1Gi"
 marketplace:
   enabled: true
-  prep:
-    name: bae-prep
-    script: 
-      prep.sh: |-
-        #!/bin/bash
-
-        export $(curl -f -X GET did-helper:3002/did-material/did.env)
-        export BAE_LP_SIOP_CLIENT_ID=$(echo ${DID})
-
-        wget http://did-helper:3002/did-material/private-key.pem
-        export BAE_LP_SIOP_PRIVATE_KEY=$(openssl ec -in private-key.pem -noout -text | grep 'priv:' -A 3 | tail -n +2 | tr -d ':\n ') 
-        echo ${BAE_LP_SIOP_PRIVATE_KEY}
-        /entrypoint.sh
-  
   siop:
     verifier:
-      host: https://provider-verifier.io
-      callbackURL: https://provider-verifier.io/auth/vc/callback
+      host: https://verifier.mp-operations.org
     allowedRoles:
       - seller
       - customer
@@ -671,17 +704,14 @@ marketplace:
       - REPRESENTATIVE
       - READER
       - OPERATOR
-
   externalUrl: https://marketplace.127.0.0.1.nip.io
-    
-  bizEcosystemChargingBackend:  
+  bizEcosystemChargingBackend:
     deployment:
       image:
         tag: 10.5.0
     extraEnvVars:
       - name: BAE_CB_CUSTOMER_BILL
         value: "http://provider-tm-forum-api-customer-bill-management:8080/tmf-api/customerBillManagement/v4"
-
   bizEcosystemApis:
     tmForum:
       catalog:
@@ -711,7 +741,7 @@ marketplace:
       customer:
         host: provider-tm-forum-api-customer-management
         port: 8080
-        path: /tmf-api/customerManagement/v4 
+        path: /tmf-api/customerManagement/v4
       resources:
         host: provider-tm-forum-api-resource-catalog
         port: 8080
@@ -724,30 +754,18 @@ marketplace:
         host: provider-tm-forum-api-resource-inventory
         port: 8080
         path: /tmf-api/resourceInventoryManagement/v4
-
   bizEcosystemLogicProxy:
     statefulset:
       image:
         tag: 10.5.0-PRE-1
-    command:
-      - /prep/prep.sh
-    ingress: 
+    ingress:
       enabled: true
       annotations:
         traefik.ingress.kubernetes.io/router.tls: "true"
-      hosts: 
+      hosts:
         - host: marketplace.127.0.0.1.nip.io
-          paths: 
+          paths:
             - "/"
-    extraVolumeMounts:
-      - name: bae-prep
-        mountPath: /prep
-    extraContainerVolumes:
-      - name: bae-prep
-        configMap:
-          name: bae-prep
-          defaultMode: 0777
-
     additionalEnvVars:
       - name: BAE_LP_SIOP_IS_REDIRECTION
         value: "true"
@@ -757,120 +775,39 @@ marketplace:
         value: "0"
       - name: HTTPS_PROXY
         value: "http://squid-proxy.infra.svc.cluster.local:8888"
-
+      - name: BAE_LP_SIOP_CLIENT_ID
+        value: did:web:mp-operations.org
+      - name: BAE_LP_SIOP_PRIVATE_KEY
+        valueFrom:
+          secretKeyRef:
+            name: signing-key-env
+            key: key
 keycloak:
   ingress:
     enabled: true
     hostname: keycloak-provider.127.0.0.1.nip.io
     annotations:
       traefik.ingress.kubernetes.io/router.tls: "true"
-  command:
-    - /bin/bash
-    - -c
-  args:
-    - |
-      #!/bin/sh
-      export $(cat /did-material/did.env)
-      exec /opt/bitnami/scripts/keycloak/entrypoint.sh /opt/bitnami/scripts/keycloak/run.sh  
-  initContainers:
-    - name: get-did
-      image: ubuntu
-      command:
-        - /bin/bash
-      args:
-        - -ec
-        - |
-          #!/bin/bash
-          apt-get -y update; apt-get -y install wget; apt-get -y install sed;
-          
-          cd /did-material
-          wget http://did-helper:3002/did-material/cert.pfx
-          wget http://did-helper:3002/did-material/did.env
-          mkdir -p /did-material/client
-          cd /did-material/client
-          wget http://did-helper.provider.svc.cluster.local:3002/did-material/did.env
-          sed -i -e 's/DID/CLIENT_DID/g' /did-material/client/did.env
-          echo "" >> /did-material/did.env
-          echo $(cat /did-material/client/did.env) >> /did-material/did.env
-          echo $(cat /did-material/did.env)
-      volumeMounts:
-        - name: did-material
-          mountPath: /did-material
-
-    - name: register-at-tir
-      image: ubuntu
-      command:
-        - /bin/bash
-      args:
-        - -ec
-        - |
-          #!/bin/bash
-          source /did-material/did.env
-          apt-get -y update; apt-get -y install curl
-          curl -X 'POST' 'http://tir.trust-anchor.svc.cluster.local:8080/issuer' -H 'Content-Type: application/json' -d "{\"did\": \"${DID}\", \"credentials\": []}"
-      volumeMounts:
-        - name: did-material
-          mountPath: /did-material
-
-    - name: register-at-til
-      image: quay.io/curl/curl:8.1.2
-      command:
-        - /bin/sh
-      args:
-        - -ec
-        - |
-          #!/bin/sh
-          export $(cat /did-material/did.env)
-          /bin/init.sh
-      volumeMounts:
-        - name: provider-til-registration
-          mountPath: /bin/init.sh
-          subPath: init.sh
-        - name: did-material
-          mountPath: /did-material
-
-    - name: prepare-envs
-      image: docker.io/bitnamilegacy/keycloak:26.3.3-debian-12-r0
-      command:
-        - /bin/sh
-      args:
-        - -ec
-        - |
-          #!/bin/sh
-          export $(cat /etc/env/did.env)
-          cp -r /opt/bitnami/scripts/. /env-update/
-          echo "export DID=$DID" >> /env-update/keycloak-env.sh
-          cat /env-update/keycloak-env.sh
-      volumeMounts:
-        - name: kc-env
-          mountPath: /env-update
-        - name: did-material
-          mountPath: /etc/env
-
   extraVolumeMounts:
-    - name: did-material
-      mountPath: /did-material
-    - name: did-material
-      mountPath: "/etc/env"
-      readOnly: true
     - name: realms
       mountPath: /opt/bitnami/keycloak/data/import
-    - name: kc-env
-      mountPath: /opt/bitnami/scripts/keycloak-env.sh
-      subPath: keycloak-env.sh
-
+    - name: provider-key
+      mountPath: "/keys"
   extraVolumes:
-    - name: did-material
-      emptyDir: { }
-    - name: kc-env
-      emptyDir: { }
     - name: realms
       configMap:
         name: test-realm-realm
-    - name: provider-til-registration
+    - name: provider-key
       configMap:
-        name: provider-til-registration
+        name: provider-keystore
         defaultMode: 0755
+  signingKey:
+    storePath: /keys/cert.jks
+    storePassword: password
+    keyAlias: certificate
+    keyPassword: password
+    did: did:web:mp-operations.org
+    keyAlgorithm: ES256
   realm:
     frontendUrl: https://keycloak-provider.127.0.0.1.nip.io
     import: true
@@ -899,7 +836,7 @@ keycloak:
       "vc.operator-credential.scope": "OperatorCredential",
       "vc.operator-credential.vct": "OperatorCredential"
     clientRoles: |
-      "${DID}": [
+      "did:web:fancy-marketplace.biz": [
         {
           "name": "customer",
           "description": "Is allowed to see offers etc.",
@@ -987,7 +924,6 @@ keycloak:
           "attributes": {}
         }
       ]
-
     users: |
       {
         "username": "employee",
@@ -1002,9 +938,10 @@ keycloak:
           }
         ],
         "clientRoles": {
-          "${DID}": [
+          "did:web:fancy-marketplace.biz": [
             "seller",
-            "admin"
+            "admin",
+            "REPRESENTATIVE"
           ],
           "account": [
             "view-profile",
@@ -1018,7 +955,7 @@ keycloak:
     clientScopes: |
       {
         "name": "LegalPersonCredential",
-        "description": "OIDC4VC Scope, that adds all properties required for a user.",
+        "description": "OIDC4VC Scope, thahttps://github.com/wistefan/did-helpert adds all properties required for a user.",
         "protocol": "openid-connect",
         "attributes": {},
         "protocolMappers": [
@@ -1067,7 +1004,7 @@ keycloak:
             "protocolMapper": "oid4vc-target-role-mapper",
             "config": {
               "subjectProperty": "roles",
-              "clientId": "${DID}",
+              "clientId": "did:web:fancy-marketplace.biz",
               "supportedCredentialTypes": "LegalPersonCredential,OperatorCredential"
             }
           }
@@ -1075,7 +1012,7 @@ keycloak:
       }
     clients: |
       {
-        "clientId": "${DID}",
+        "clientId": "did:web:fancy-marketplace.biz",
         "enabled": true,
         "description": "Client to connect test.org",
         "surrogateAuthRequired": false,
@@ -1266,7 +1203,7 @@ registration:
   enabled: true
   configMap: provider-til-registration
   til: http://trusted-issuers-list.provider.svc.cluster.local:8080
-  did: ${DID}
+  did: did:web:mp-operations.org
   credentialTypes:
     - LegalPersonCredential
   prepScript: export $(curl -f -X GET did-helper:3002/did-material/did.env)

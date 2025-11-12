@@ -48,7 +48,7 @@ In order to access a Service by using the Transfer Process Protocol, the followi
 
 * Get credentials:
 ```shell
-export USER_CREDENTIAL=$(./doc/scripts/get_credential_for_consumer.sh https://keycloak-consumer.127.0.0.1.nip.io user-credential employee); echo ${USER_CREDENTIAL}
+export USER_CREDENTIAL=$(./doc/scripts/get_credential.sh https://keycloak-consumer.127.0.0.1.nip.io user-credential employee); echo ${USER_CREDENTIAL}
 ```
 
 * Prepare holder and its did:
