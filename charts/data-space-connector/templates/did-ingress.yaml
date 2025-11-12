@@ -4,7 +4,6 @@ kind: Ingress
 metadata:
   name: did-json
   namespace: {{ $.Release.Namespace | quote }}
-{{- if .Values.didJson.ingress.annotations }}
   annotations:
     {{- with .Values.didJson.ingress.annotations }}
       {{- toYaml . | nindent 4 }}
