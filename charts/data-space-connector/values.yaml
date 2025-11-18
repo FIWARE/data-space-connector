@@ -205,6 +205,20 @@ tpp:
   
 # -- configuration for apisix to be deployed as part of the connector, see https://github.com/bitnami/charts/tree/main/bitnami/apisix for all options
 apisix:
+  global:
+    security:
+      # allow the image from the legacy repo
+      allowInsecureImages: true
+  # -- configuration of the used image
+  image:
+    # -- repository where the image is held, see https://github.com/bitnami/charts/issues/35164 for further info
+    repository: bitnamilegacy/apisix
+    debug: true
+  waitContainer:
+    # -- configuration of the used image
+    image:
+      # -- repository where the image is held, see https://github.com/bitnami/charts/issues/35164 for further info
+      repository: bitnamilegacy/os-shell
   # -- should it be enabled? set to false if one outside the chart is used.
   enabled: true
   # -- configuration in regard to the apisix control plane
@@ -217,10 +231,22 @@ apisix:
   ingressController:
     # -- should it be enabled
     enabled: false
+    # -- configuration of the used image
+    image:
+      # -- repository where the image is held, see https://github.com/bitnami/charts/issues/35164 for further info
+      repository: bitnamilegacy/apisix-ingress-controller
   # -- configuration in regard to the apisix etcd
   etcd:
     # -- should it be enabled
     enabled: true
+    global:
+      security:
+        # allow the image from the legacy repo
+        allowInsecureImages: true
+    # -- configuration of the used image
+    image:
+      # -- repository where the image is held, see https://github.com/bitnami/charts/issues/35164 for further info
+      repository: bitnamilegacy/etcd
     # -- persistence configuration of etcd
     persistence:
       # -- should it be enabled
@@ -332,9 +358,15 @@ apisix:
 postgis:
   # -- should it be enabled? set to false if one outside the chart is used.
   enabled: true
+  global:
+    security:
+      # allow the image from the legacy repo
+      allowInsecureImages: true
   image:
     # -- fixes the unpullable image referenced in the chart
     tag: 13.18.0
+    # -- repository where the image is held, see https://github.com/bitnami/charts/issues/35164 for further info
+    repository: bitnamilegacy/postgresql
   # -- overrides the generated name, provides stable service names - this should be avoided if multiple instances are available in the same namespace
   fullnameOverride: data-service-postgis
   # -- overrides the generated name, provides stable service names - this should be avoided if multiple instances are available in the same namespace
@@ -883,32 +915,27 @@ didJson:
   enabled: false
   key:
 
-# -- configuration of mongo db to be used for the marketplace
-mongodb:
+## Installation of the mongo-operator - see https://github.com/mongodb/helm-charts/tree/main/charts/community-operator
+mongo-operator:
+  # -- should the mongo-operator be installed
   enabled: false
-  # -- configuration of the used image
-  global:
-    security:
-      # allow the image from the legacy repo
-      allowInsecureImages: true
-  image:
-    # -- repository where the image is held, see https://github.com/bitnami/charts/issues/35164 for further info
-    repository: bitnamilegacy/mongodb
-  fullnameOverride: mongodb
-  auth:
-    enabled: true
-    existingSecret: marketplace-secret
-  initdbScriptsConfigMap: mongodb-bae-configmap
-  extraEnvVarsSecret: marketplace-secret-env
+
+## Usage of the mongo-operator - see https://github.com/mongodb/mongodb-kubernetes-operator
+managedMongo:
+  # -- should it be enabled?
+  enabled: false
+  # -- spec as defined in https://github.com/mongodb/helm-charts/tree/main/charts/community-operator-crds
+  spec:
+    additionalMongodConfig:
+      storage.wiredTiger.engineConfig.journalCompressor: zlib
 
 # -- configuration for the marketplace components
 marketplace:
   enabled: false
-  generatePasswords:
-    # -- should a password for the database connection of marketplace components be generated in the cluster
-    enabled: true
-    # -- name of the secret to put the generated password into
-    secretName: marketplace-secret
+
+  # -- should a password for the database connection of marketplace components be generated in the cluster
+  generatePasswords: true
+
   # -- should the tmforum deployed together with the marketplace?
   bizEcosystemApis:
     enabled: false
@@ -934,6 +961,8 @@ marketplace:
   
   # -- configuration for the charging backend
   bizEcosystemChargingBackend:
+        
+    existingSecret: mongodb-charging-password
 
     # -- max size to be used for the market
     maxUploadSize: "5242880"
@@ -944,7 +973,7 @@ marketplace:
     # -- configuration of the charging backend to be deployed
     deployment:
       image:
-        tag: 10.0.1
+        tag: 10.5.0
     
     # -- should plugin support be enabled
     plugins:
@@ -971,9 +1000,10 @@ marketplace:
       enabled: false
 
     db:
-      host: mongodb
+      host: mongodb-svc
       database: charging_db
       user: charging
+      secretKey: password
 
   oauth:
     provider: "vc"
@@ -984,13 +1014,13 @@ marketplace:
     serviceAccount:
       create: true
     
-    existingSecret: marketplace-secret
+    existingSecret: mongodb-belp-password
 
     # -- image to be used for the statefulset
     statefulset:
       image:
         repository: fiware/biz-ecosystem-logic-proxy
-        tag: "10.1.1-PRE-5"
+        tag: "10.5.0-PRE-1"
         pullPolicy: Always
 
 
@@ -999,10 +1029,10 @@ marketplace:
 
     # -- db config
     db:
-      host: mongodb
+      host: mongodb-svc
       database: belp_db
       user: belp
-      secretKey: mongodb-root-password
+      secretKey: password
     basePath: /opt/business-ecosystem-logic-proxy
 
     externalIdp:
