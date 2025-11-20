@@ -24,6 +24,7 @@ issuance:
 
 # -- configuration for the mysql to be deployed as part of the connector, see https://github.com/bitnami/charts/tree/main/bitnami/mysql for all options
 mysql:
+  kubeVersion: 1.34-1
   # -- should it be enabled? set to false if one outside the chart is used.
   enabled: true
   global:
@@ -116,6 +117,7 @@ credentials-config-service:
     enabled: false
 # -- configuration for the postgresql to be deployed as part of the connector, see https://github.com/bitnami/charts/tree/main/bitnami/postgresql for all options
 postgresql:
+  kubeVersion: 1.34-1
   # -- should it be enabled? set to false if one outside the chart is used.
   enabled: true
   global:
@@ -205,6 +207,7 @@ tpp:
   
 # -- configuration for apisix to be deployed as part of the connector, see https://github.com/bitnami/charts/tree/main/bitnami/apisix for all options
 apisix:
+  kubeVersion: 1.34-1
   global:
     security:
       # allow the image from the legacy repo
@@ -237,6 +240,7 @@ apisix:
       repository: bitnamilegacy/apisix-ingress-controller
   # -- configuration in regard to the apisix etcd
   etcd:
+    kubeVersion: 1.34-1
     # -- should it be enabled
     enabled: true
     global:
@@ -356,6 +360,7 @@ apisix:
 
 # -- configuration for the postgresql to be deployed as part of the connector, see https://github.com/bitnami/charts/tree/main/bitnami/postgresql for all options
 postgis:
+  kubeVersion: 1.34-1
   # -- should it be enabled? set to false if one outside the chart is used.
   enabled: true
   global:
@@ -469,6 +474,7 @@ elsi:
 
 ## configuration of the keycloak - see https://github.com/bitnami/charts/tree/main/bitnami/keycloak for details
 keycloak:
+  kubeVersion: 1.34-1
   # -- should it be enabled? set to false if one outside the chart is used.
   enabled: true
   global:
@@ -479,12 +485,13 @@ keycloak:
   image:
     # -- repository where the image is held, see https://github.com/bitnami/charts/issues/35164 for further info
     repository: bitnamilegacy/keycloak
-    tag: 26.3.2-debian-12-r0
   # -- disable the security context, required by the current quarkus container, will be solved in the future chart versions of keycloak
   containerSecurityContext:
     enabled: false
   proxyHeaders: xforwarded
   proxy: edge
+  tls:
+    enabled: false
   service:
     ports:
       http: 8080
@@ -523,8 +530,6 @@ keycloak:
 
   # -- extra env vars to be set. we require them at the moment, since some of the chart config mechanisms only work with the bitnami-image
   extraEnvVars:
-    - name: KEYCLOAK_LOG_LEVEL
-      value: INFO
     - name: KEYCLOAK_EXTRA_ARGS
       value: "--import-realm"
     - name: KC_FEATURES
@@ -611,6 +616,7 @@ keycloak:
         "frontchannelLogout": false,
         "protocol": "oid4vc",
         "attributes": {
+          "oid4vci.enabled": true,
           "client.secret.creation.time": "1675260539",
           "vc.natural-person.format": "jwt_vc",
           "vc.natural-person.scope": "NaturalPersonCredential",
@@ -851,6 +857,8 @@ contract-management:
   # -- should it be enabled? set to false if one outside the chart is used.
   enabled: true
   fullnameOverride: contract-management
+  til:
+    credentialType: OperatorCredential
   services:
     ## Config for Trusted Issuers List
     trusted-issuers-list:
@@ -881,6 +889,7 @@ contract-management:
     odrl:
       ## URL to the ODRL-PAP
       url: http://odrl-pap:8080
+  
 
 # -- configuration for the did-helper, should only be used for demonstrational deployments, see https://github.com/wistefan/did-helper
 did:
@@ -889,7 +898,6 @@ did:
 # -- configuration for registering a participant at the til, will most probably only be used in demonstrational enviornments
 registration:
   enabled: false
-  prepScript: "test"
 
 # -- configuration for the .well-known/data-space-configuration endpoint document
 dataSpaceConfig:
@@ -911,9 +919,42 @@ dataSpaceConfig:
   authenticationProtocols: []
 
 
+## didJson provider to make the did.json file available
 didJson:
+  # -- should the did.json be provided?
   enabled: false
+  # -- port of the service to be used
+  port: 3000
+  # -- did to be serverd
+  did:
+  # -- key material to be provided in the jwk of the did.json
   key:
+    # -- kty to be used in the jwk - RSA and EC supported
+    kty: EC
+    # -- optional x5u endpoint to provide access to the corresponding cert chain
+    x5u: 
+    # -- In case of kty==EC: xCoord of the EC key 
+    xCoord:
+    # -- In case of kty==EC: yCoord of the EC key 
+    yCoord:
+    # -- In case of kty==EC: curve to be used for the EC key
+    crv:
+    # -- In case of kty==RSA: exponent of the RSA key
+    exponent:
+    # -- In case of kty==RSA: modulus of the RSA key
+    modulus:
+  # -- ingress configuration of the did.json
+  ingress:
+    # -- should the ingress be enabled?
+    enabled: false
+    # -- host to provide the did.json at
+    host:
+    # -- tls secret to be used for the ingress
+    tlsSecret:
+    # -- annotations to be applied to the ingress
+    annotations:
+      traefik.ingress.kubernetes.io/service.passhostheader: "true"
+      traefik.ingress.kubernetes.io/router.tls: "true"
 
 ## Installation of the mongo-operator - see https://github.com/mongodb/helm-charts/tree/main/charts/community-operator
 mongo-operator:
