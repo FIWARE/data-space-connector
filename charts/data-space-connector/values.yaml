@@ -973,7 +973,7 @@ marketplace:
     # -- configuration of the charging backend to be deployed
     deployment:
       image:
-        tag: 10.5.0
+        tag: 10.6.0
     
     # -- should plugin support be enabled
     plugins:
@@ -1020,7 +1020,7 @@ marketplace:
     statefulset:
       image:
         repository: fiware/biz-ecosystem-logic-proxy
-        tag: "10.5.0-PRE-1"
+        tag: "10.7.0"
         pullPolicy: Always
 
 
