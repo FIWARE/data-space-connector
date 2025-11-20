@@ -484,8 +484,6 @@ keycloak:
     enabled: false
   proxyHeaders: xforwarded
   proxy: edge
-  logging:
-    level: DEBUG
   tls:
     enabled: false
   service:
@@ -915,9 +913,42 @@ dataSpaceConfig:
   authenticationProtocols: []
 
 
+## didJson provider to make the did.json file available
 didJson:
+  # -- should the did.json be provided?
   enabled: false
+  # -- port of the service to be used
+  port: 3000
+  # -- did to be serverd
+  did:
+  # -- key material to be provided in the jwk of the did.json
   key:
+    # -- kty to be used in the jwk - RSA and EC supported
+    kty: EC
+    # -- optional x5u endpoint to provide access to the corresponding cert chain
+    x5u: 
+    # -- In case of kty==EC: xCoord of the EC key 
+    xCoord:
+    # -- In case of kty==EC: yCoord of the EC key 
+    yCoord:
+    # -- In case of kty==EC: curve to be used for the EC key
+    crv:
+    # -- In case of kty==RSA: exponent of the RSA key
+    exponent:
+    # -- In case of kty==RSA: modulus of the RSA key
+    modulus:
+  # -- ingress configuration of the did.json
+  ingress:
+    # -- should the ingress be enabled?
+    enabled: false
+    # -- host to provide the did.json at
+    host:
+    # -- tls secret to be used for the ingress
+    tlsSecret:
+    # -- annotations to be applied to the ingress
+    annotations:
+      traefik.ingress.kubernetes.io/service.passhostheader: "true"
+      traefik.ingress.kubernetes.io/router.tls: "true"
 
 ## Installation of the mongo-operator - see https://github.com/mongodb/helm-charts/tree/main/charts/community-operator
 mongo-operator:

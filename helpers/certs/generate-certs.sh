@@ -174,7 +174,6 @@ yq -i ".didJson.key.yCoord = \"${y_consumer_enc}\"" ${k3sFolder}/consumer-gaia-x
 yq -i ".didJson.key.crv = \"P-256\"" ${k3sFolder}/consumer.yaml
 yq -i ".didJson.key.xCoord = \"${x_consumer_enc}\"" ${k3sFolder}/consumer.yaml
 yq -i ".didJson.key.yCoord = \"${y_consumer_enc}\"" ${k3sFolder}/consumer.yaml
-yq -i ".didJson.certChain = \"${consumer_chain}\"" ${k3sFolder}/consumer.yaml
 
 
 # provider identity
@@ -192,4 +191,3 @@ y_provider_enc=$(echo -n "$y_provider" | xxd -r -p | openssl base64 -A | tr '+/'
 yq -i ".didJson.key.crv = \"P-256\"" ${k3sFolder}/provider.yaml
 yq -i ".didJson.key.xCoord = \"${x_provider_enc}\"" ${k3sFolder}/provider.yaml
 yq -i ".didJson.key.yCoord = \"${y_provider_enc}\"" ${k3sFolder}/provider.yaml
-yq -i ".didJson.certChain = \"${provider_chain}\"" ${k3sFolder}/provider.yaml

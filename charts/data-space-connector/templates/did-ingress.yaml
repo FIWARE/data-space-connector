@@ -8,7 +8,6 @@ metadata:
     {{- with .Values.didJson.ingress.annotations }}
       {{- toYaml . | nindent 4 }}
     {{- end }}
-    traefik.ingress.kubernetes.io/service.passhostheader: "true"
   labels:
     {{ include "dsc.labels" . | nindent 4 }}
 spec:
@@ -36,7 +35,9 @@ metadata:
   name: did-json-unsecured
   namespace: {{ $.Release.Namespace | quote }}
   annotations:
-    traefik.ingress.kubernetes.io/service.passhostheader: "true"
+    {{- with .Values.didJson.ingress.annotations }}
+      {{- toYaml . | nindent 4 }}
+    {{- end }}
   labels:
     {{ include "dsc.labels" . | nindent 4 }}
 spec:
