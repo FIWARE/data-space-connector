@@ -315,8 +315,7 @@ vcverifier:
             cd /did-material
             wget http://did-helper:3002/did-material/did.env
             export $(cat /did-material/did.env)
-            cp /original-conf/server.yaml /alternative-conf/server.yaml
-            envsubst < /alternative-conf/server.yaml
+            envsubst < /original-conf/server.yaml > /alternative-conf/server.yaml
         volumeMounts:
           - name: did-material
             mountPath: /did-material
@@ -584,7 +583,6 @@ marketplace:
         export BAE_LP_SIOP_PRIVATE_KEY=$(openssl ec -in private-key.pem -noout -text | grep 'priv:' -A 3 | tail -n +2 | tr -d ':\n ') 
         echo ${BAE_LP_SIOP_PRIVATE_KEY}
         /entrypoint.sh
-  
   siop:
     verifier:
       host: https://provider-verifier.io
