@@ -555,7 +555,7 @@ managedMongo:
           spec:
             accessModes:
             - ReadWriteOnce
-            storageClassName: local-path
+            storageClassName: default
             resources:
               requests:
                 storage: "1Gi"
@@ -564,7 +564,7 @@ managedMongo:
           spec:
             accessModes:
             - ReadWriteOnce
-            storageClassName: local-path
+            storageClassName: default
             resources:
               requests:
                 storage: "1Gi"
