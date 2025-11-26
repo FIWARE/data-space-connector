@@ -222,17 +222,29 @@
                         </configuration>
                     </execution>
                     <execution>
-                        <id>copy-resources-additional</id>
+                        <id>copy-resources-additional-provider</id>
                         <phase>prepare-package</phase>
                         <goals>
                             <goal>copy-resources</goal>
                         </goals>
                         <configuration>
-                            <outputDirectory>${project.build.directory}/k3s/additional-resources</outputDirectory>
+                            <outputDirectory>${project.build.directory}/k3s/additional-resources-provider</outputDirectory>
                             <resources>
                                 <resource>
                                     <directory>${main.basedir}/k3s/provider</directory>
                                 </resource>
+                            </resources>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>copy-resources-additional-consumer</id>
+                        <phase>prepare-package</phase>
+                        <goals>
+                            <goal>copy-resources</goal>
+                        </goals>
+                        <configuration>
+                            <outputDirectory>${project.build.directory}/k3s/additional-consumer-provider</outputDirectory>
+                            <resources>
                                 <resource>
                                     <directory>${main.basedir}/k3s/consumer</directory>
                                 </resource>

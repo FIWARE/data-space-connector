@@ -1,5 +1,4 @@
 #!/bin/bash
-
 token_endpoint=$(curl -s -k -X GET "$1/.well-known/openid-configuration" | jq -r '.token_endpoint')
 holder_did=$(cat cert/did.json | jq '.id' -r)
 

@@ -70,7 +70,7 @@ are automatically registered as "Trusted Issuers" in the registry with their did
 Get a list of the issuers:
 
 ```shell
-    curl -X GET http://tir.127.0.0.1.nip.io:8080/v4/issuers | python3 -m json.tool
+    curl -X GET http://tir.127.0.0.1.nip.io:8080/v4/issuers | jq .
 ```
 
 A new issuer could for example be registered via:
@@ -81,7 +81,7 @@ A new issuer could for example be registered via:
     --data '{
       "did": "did:key:myKey",
       "credentials": []
-    }'  | python3 -m json.tool
+    }'  | jq .
 ```
 
 For more information about the API, see
@@ -148,6 +148,7 @@ Get an AccessToken from Keycloak:
     --data grant_type=password \
     --data client_id=account-console \
     --data username=employee \
+    --data scope=openid \
     --data password=test | jq '.access_token' -r); echo ${ACCESS_TOKEN}
 ```
 
@@ -155,7 +156,7 @@ Get an AccessToken from Keycloak:
 Get the credentials issuer information:
 
 ```shell
-  curl -k -x localhost:8888 -X GET https://keycloak-consumer.127.0.0.1.nip.io/realms/test-realm/.well-known/openid-credential-issuer | python3 -m json.tool
+  curl -k -x localhost:8888 -X GET https://keycloak-consumer.127.0.0.1.nip.io/realms/test-realm/.well-known/openid-credential-issuer | jq .
 ```
 
 Get a credential offer uri(for the `user-credential), using the retrieved AccessToken:
@@ -189,7 +190,10 @@ Use the returned access token to get the actual credential:
     --header 'Accept: */*' \
     --header 'Content-Type: application/json' \
     --header "Authorization: Bearer ${CREDENTIAL_ACCESS_TOKEN}" \
-    --data '{"credential_identifier":"user-credential", "format":"jwt_vc"}' | jq '.credential' -r); echo ${VERIFIABLE_CREDENTIAL}
+    --data "{
+              \"credential_identifier\": \"user-credential\",
+              \"format\":\"jwt_vc\"
+            }" | jq '.credential' -r); echo ${VERIFIABLE_CREDENTIAL}
 ```
 
 You will receive a jwt-encoded credential to be used within the data space.
@@ -747,7 +751,7 @@ The offer creation includes multiple steps:
 
 1. Export the Providers's did:
 ```shell
-export PROVIDER_DID=$(curl -X GET http://did-provider.127.0.0.1.nip.io:8080/did-material/did.env | cut -d'=' -f2); echo ${PROVIDER_DID} 
+export PROVIDER_DID="did:web:mp-operations.org"
 ```
 
 2. Create the product specification. The specification should contain the configuration of credentials to be trusted by the customer(in this case, "OperatorCredential" with the role "OPERATOR" for the target-service) and the policy to be created for the customer. In the example, we will offer 2 different types service: "small" and "full", where small restricts the cluster-size to be created:
@@ -996,15 +1000,15 @@ the steps are combined within a script:
 
 1. Get the LegalPersonCredential for the normal employee:
 ```shell
- export USER_CREDENTIAL=$(./doc/scripts/get_credential_for_consumer.sh https://keycloak-consumer.127.0.0.1.nip.io user-credential employee); echo ${USER_CREDENTIAL}
+export USER_CREDENTIAL=$(./doc/scripts/get_credential.sh https://keycloak-consumer.127.0.0.1.nip.io user-credential employee); echo ${USER_CREDENTIAL}
 ```
 2. Get the LegalPersonCredential for the representative:
 ```shell
- export REP_CREDENTIAL=$(./doc/scripts/get_credential_for_consumer.sh https://keycloak-consumer.127.0.0.1.nip.io user-credential representative); echo ${REP_CREDENTIAL}
+export REP_CREDENTIAL=$(./doc/scripts/get_credential.sh https://keycloak-consumer.127.0.0.1.nip.io user-credential representative); echo ${REP_CREDENTIAL}
 ```
 3. Get the OperatorCredential for the operator:
 ```shell
- export OPERATOR_CREDENTIAL=$(./doc/scripts/get_credential_for_consumer.sh https://keycloak-consumer.127.0.0.1.nip.io operator-credential operator); echo ${OPERATOR_CREDENTIAL}
+export OPERATOR_CREDENTIAL=$(./doc/scripts/get_credential.sh https://keycloak-consumer.127.0.0.1.nip.io operator-credential operator); echo ${OPERATOR_CREDENTIAL}
 ```
 
 #### Buy access and create cluster
@@ -1024,7 +1028,7 @@ In order to prove that not every user can just create a cluster, try the followi
     -d '{
       "id": "urn:ngsi-ld:K8SCluster:fancy-marketplace",
       "type": "K8SCluster",
-      "name": {
+      "name": { 
         "type": "Property",
         "value": "Fancy Marketplace Cluster"
       },
@@ -1047,7 +1051,7 @@ In order to prove that not every user can just create a cluster, try the followi
 
 3. Export the Fancy Marketplace's did:
 ```shell
-  export CONSUMER_DID=$(curl -X GET http://did-consumer.127.0.0.1.nip.io:8080/did-material/did.env | cut -d'=' -f2); echo ${CONSUMER_DID} 
+  export CONSUMER_DID="did:web:fancy-marketplace.biz"
 ```
 
 4. Register Fancy Marketplace at M&P Operations(as representative, e.g. use the REP_CREDENTIAL):
@@ -1122,7 +1126,7 @@ with the TMForum-APIs directly.
 
 6. Create a cluster as a Fancy Marketplace Operator with numNodes <= 3:
 ```shell
-  export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh http://mp-data-service.127.0.0.1.nip.io:8080 $OPERATOR_CREDENTIAL operator)
+  export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh http://mp-data-service.127.0.0.1.nip.io:8080 $OPERATOR_CREDENTIAL operator); echo $ACCESS_TOKEN 
   curl -X POST http://mp-data-service.127.0.0.1.nip.io:8080/ngsi-ld/v1/entities \
     -H 'Accept: */*' \
     -H 'Content-Type: application/json' \
@@ -1496,7 +1500,7 @@ Once everything is properly configured, the Dataspace can be deployed locally vi
 The interaction is the same as in all previously described steps - see [Demo Interactions](#demo-interactions). The most visible difference is in the credential.
 Get one via:
 ```shell
- export ELSI_CREDENTIAL=$(./doc/scripts/get_credential_for_consumer.sh http://keycloak-consumer.127.0.0.1.nip.io:8080 user-credential); echo ${ELSI_CREDENTIAL}
+ export ELSI_CREDENTIAL=$(./doc/scripts/get_credential.sh http://keycloak-consumer.127.0.0.1.nip.io:8080 user-credential); echo ${ELSI_CREDENTIAL}
 ```
 Now it can be inspected f.e. on [jwt.io](https://jwt.io/). The certificate chain should be included in the jwt-headers and the issuer is the configured `did:elsi`
 

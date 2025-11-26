@@ -250,11 +250,15 @@ In order to use the endpoints, the Consumer needs to issue a User and an Operato
 
 1. Get the UserCredential:
 ```shell
- export USER_CREDENTIAL=$(./doc/scripts/get_credential_for_consumer.sh http://keycloak-consumer.127.0.0.1.nip.io:8080 user-credential); echo ${USER_CREDENTIAL}
+export USER_CREDENTIAL=$(./doc/scripts/get_credential.sh https://keycloak-consumer.127.0.0.1.nip.io user-credential employee); echo ${USER_CREDENTIAL}
 ```
 2. Get the OperatorCredential:
 ```shell
- export OPERATOR_CREDENTIAL=$(./doc/scripts/get_credential_for_consumer.sh http://keycloak-consumer.127.0.0.1.nip.io:8080 operator-credential); echo ${OPERATOR_CREDENTIAL}
+export OPERATOR_CREDENTIAL=$(./doc/scripts/get_credential.sh https://keycloak-consumer.127.0.0.1.nip.io operator-credential operator); echo ${OPERATOR_CREDENTIAL}
+```
+3. Get the LegalPersonCredential for the representative:
+```shell
+export REP_CREDENTIAL=$(./doc/scripts/get_credential.sh https://keycloak-consumer.127.0.0.1.nip.io user-credential representative); echo ${REP_CREDENTIAL}
 ```
 
 To prepare usage of the credentials, also create the keymaterial for the holder:
@@ -287,7 +291,7 @@ To gain access to the service and become able to use the service through the Tra
 2. Register the consumer at the marketplace:
 
 ```shell
-    export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh http://mp-tmf-api.127.0.0.1.nip.io:8080 $USER_CREDENTIAL default); echo ${ACCESS_TOKEN}
+    export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh http://mp-data-service.127.0.0.1.nip.io:8080 $REP_CREDENTIAL default); echo ${ACCESS_TOKEN}
     export FANCY_MARKETPLACE_ID=$(curl -X POST http://mp-tmf-api.127.0.0.1.nip.io:8080/tmf-api/party/v4/organization \
     -H 'Accept: */*' \
     -H "Authorization: Bearer ${ACCESS_TOKEN}" \
@@ -306,7 +310,7 @@ To gain access to the service and become able to use the service through the Tra
 3. Create the Product Order(in the demo flow, we just reuse the already known offer-id. In reality, it should be retrieved from the list of offerings):
 
 ```shell
-    export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh http://mp-tmf-api.127.0.0.1.nip.io:8080 $USER_CREDENTIAL default); echo ${ACCESS_TOKEN}
+    export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh http://mp-data-service.127.0.0.1.nip.io:8080 $USER_CREDENTIAL default); echo ${ACCESS_TOKEN}
     export PRODUCT_ORDER_ID=$(curl -X 'POST' \
     'http://mp-tmf-api.127.0.0.1.nip.io:8080/tmf-api/productOrderingManagement/v4/productOrder' \
     -H 'accept: application/json;charset=utf-8' \
@@ -334,7 +338,7 @@ To gain access to the service and become able to use the service through the Tra
 
 
 ```shell
-    export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh http://mp-tmf-api.127.0.0.1.nip.io:8080 $USER_CREDENTIAL default); echo ${ACCESS_TOKEN}
+    export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh http://mp-data-service.127.0.0.1.nip.io:8080 $USER_CREDENTIAL default); echo ${ACCESS_TOKEN}
     curl -X 'PATCH' \
         -H "Authorization: Bearer ${ACCESS_TOKEN}" \
         http://mp-tmf-api.127.0.0.1.nip.io:8080/tmf-api/productOrderingManagement/v4/productOrder/${PRODUCT_ORDER_ID} \
@@ -353,7 +357,7 @@ To start it, a [Transfer Request Message](https://docs.internationaldataspaces.o
 1. Get the Agreement ID in TMForum. The contract management creates a [TMForum Agreement](https://github.com/FIWARE/tmforum-api/blob/main/api/tm-forum/agreement/api.json#L1485) containing the ID of the Agreement in Rainbow. Its linked in the original ProductOrder.
 
 ```shell 
-    export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh http://mp-tmf-api.127.0.0.1.nip.io:8080 $USER_CREDENTIAL default); echo ${ACCESS_TOKEN}
+    export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh http://mp-data-service.127.0.0.1.nip.io:8080 $USER_CREDENTIAL default); echo ${ACCESS_TOKEN}
     export AGREEMENT_TMF_ID=$(curl -X 'GET' \
     http://mp-tmf-api.127.0.0.1.nip.io:8080/tmf-api/productOrderingManagement/v4/productOrder/${PRODUCT_ORDER_ID} \
     -H 'accept: application/json;charset=utf-8' \
@@ -365,7 +369,7 @@ To start it, a [Transfer Request Message](https://docs.internationaldataspaces.o
 2. Get the Agreement and retrieve the ID of the Agreement in Rainbow(provider rainbow is available at ```tpp-service.127.0.0.1.nip.io``` through the ApiGateway):
 
 ```shell
-    export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh http://mp-tmf-api.127.0.0.1.nip.io:8080 $USER_CREDENTIAL default); echo ${ACCESS_TOKEN}
+    export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh http://mp-data-service.127.0.0.1.nip.io:8080 $USER_CREDENTIAL default); echo ${ACCESS_TOKEN}
     export AGREEMENT_ID=$(curl -X 'GET' \
     http://mp-tmf-api.127.0.0.1.nip.io:8080/tmf-api/agreementManagement/v4/agreement/${AGREEMENT_TMF_ID} \
     -H 'accept: application/json;charset=utf-8' \
@@ -377,7 +381,7 @@ To start it, a [Transfer Request Message](https://docs.internationaldataspaces.o
 3. Request the transfer at Rainbow and retrieve consumer and provider PID from it:
 
 ```shell
-    export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh http://tpp-service.127.0.0.1.nip.io:8080 $OPERATOR_CREDENTIAL default); echo ${ACCESS_TOKEN}
+    export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh http://tpp-service.127.0.0.1.nip.io:8080 $OPERATOR_CREDENTIAL operator); echo ${ACCESS_TOKEN}
     export CONSUMER_PID=$(curl -X 'POST' 'http://tpp-service.127.0.0.1.nip.io:8080/transfers/request'\
     -H 'accept: application/json;charset=utf-8' \
     -H "Authorization: Bearer ${ACCESS_TOKEN}" \
@@ -391,7 +395,7 @@ To start it, a [Transfer Request Message](https://docs.internationaldataspaces.o
             \"dspace:callbackAddress\": \"http://rainbow-consumer.127.0.0.1.nip.io:8080/api/v1/callbacks\"
         }" | jq .\"dspace:consumerPid\" -r); echo ${CONSUMER_PID}
     # workaround to get the provider pid into an env-var. The id is already included in the previous response, thus this call is not required in "normal" usage
-    export PROVIDER_PID=$(curl -X 'GET' 'http://rainbow-provider.127.0.0.1.nip.io:8080/api/v1/transfers' | jq --arg CPID "${CONSUMER_PID}" -r -c '[.[] | select (."dspace:consumerPid" | contains($CPID))][0] | ."dspace:providerPid"'); echo ${PROVIDER_PID}
+    export PROVIDER_PID=$(curl -X 'GET' 'http://rainbow-provider.127.0.0.1.nip.io:8080/api/v1/transfers' | jq '.[0].provider_pid' -r); echo ${PROVIDER_PID}
 ```
 Once the request is completed, provider´s rainbow will check the callback at the consumer to ensure its actually reachable.
 
@@ -399,7 +403,7 @@ Once the request is completed, provider´s rainbow will check the callback at th
 4. Start the transfer(e.g. move state-machine to [STARTED](https://docs.internationaldataspaces.org/ids-knowledgebase/dataspace-protocol/transfer-process/transfer.process.protocol#id-1.3-state-machine))
 
 ```shell
-    export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh http://tpp-service.127.0.0.1.nip.io:8080 $OPERATOR_CREDENTIAL default); echo ${ACCESS_TOKEN}
+    export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh http://tpp-service.127.0.0.1.nip.io:8080 $OPERATOR_CREDENTIAL operator); echo ${ACCESS_TOKEN}
     curl -X 'POST' http://tpp-service.127.0.0.1.nip.io:8080/transfers/${PROVIDER_PID}/start\
     -H 'accept: application/json;charset=utf-8' \
     -H "Authorization: Bearer ${ACCESS_TOKEN}" \
@@ -426,7 +430,7 @@ Once the request is completed, provider´s rainbow will check the callback at th
 6. Stop the transfer by setting its state to ```COMPLETED```:
 
 ```shell
-    export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh http://tpp-service.127.0.0.1.nip.io:8080 $OPERATOR_CREDENTIAL default); echo ${ACCESS_TOKEN}
+    export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh http://tpp-service.127.0.0.1.nip.io:8080 $OPERATOR_CREDENTIAL operator); echo ${ACCESS_TOKEN}
     curl -X 'POST' http://tpp-service.127.0.0.1.nip.io:8080/transfers/${PROVIDER_PID}/completion \
     -H 'accept: application/json;charset=utf-8' \
     -H "Authorization: Bearer ${ACCESS_TOKEN}" \

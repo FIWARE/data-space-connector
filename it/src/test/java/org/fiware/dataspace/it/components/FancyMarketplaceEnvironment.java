@@ -7,7 +7,8 @@ import java.security.NoSuchAlgorithmException;
  * @author <a href="https://github.com/wistefan">Stefan Wiedemann</a>
  */
 public abstract class FancyMarketplaceEnvironment {
-	public static final String DID_CONSUMER_ADDRESS = "http://did-consumer.127.0.0.1.nip.io";
+
+	public static final String CONSUMER_DID = "did:web:fancy-marketplace.biz";
 	public static final String CONSUMER_KEYCLOAK_ADDRESS = "https://keycloak-consumer.127.0.0.1.nip.io";
 	public static final String CONSUMER_TPP_ADDRESS = "http://rainbow-consumer.127.0.0.1.nip.io:8080/api/v1/callbacks";
 

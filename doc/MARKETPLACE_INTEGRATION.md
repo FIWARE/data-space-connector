@@ -126,7 +126,7 @@ The following flow will enable a customer to use a service offered by the provid
 
 * Get the "OperatorCredential":
 ```shell
-  export OPERATOR_CREDENTIAL=$(./doc/scripts/get_credential_for_consumer.sh https://keycloak-consumer.127.0.0.1.nip.io operator-credential operator); echo ${OPERATOR_CREDENTIAL}
+  export OPERATOR_CREDENTIAL=$(./doc/scripts/get_credential.sh https://keycloak-consumer.127.0.0.1.nip.io operator-credential operator); echo ${OPERATOR_CREDENTIAL}
 ```
 
 * Try to get an access-token from the Provider - nothing should be returned:
