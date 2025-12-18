@@ -112,14 +112,14 @@ public class StepDefinitions {
 	}
 
 	private void cleanUpTIL() throws Exception {
-		String consumerDid = getDid(FancyMarketplaceEnvironment.DID_CONSUMER_ADDRESS);
+		String consumerDid = FancyMarketplaceEnvironment.CONSUMER_DID;
 		Request tilCleanRequest = new Request.Builder()
 				.delete()
 				.url(MPOperationsEnvironment.TIL_DIRECT_ADDRESS + "/issuer/" + consumerDid)
 				.build();
 		HTTP_CLIENT.newCall(tilCleanRequest).execute();
 		Map tilConfig = Map.of(
-				"did", getDid(FancyMarketplaceEnvironment.DID_CONSUMER_ADDRESS),
+				"did", FancyMarketplaceEnvironment.CONSUMER_DID,
 				"credentials", List.of(Map.of("credentialsType", "UserCredential", "claims", List.of())));
 		RequestBody tilUpdateBody = RequestBody.create(OBJECT_MAPPER.writeValueAsString(tilConfig), okhttp3.MediaType.parse(MediaType.APPLICATION_JSON));
 		Request tilUpdateRequest = new Request.Builder()
@@ -290,7 +290,7 @@ public class StepDefinitions {
 	@Given("M&P Operations is registered as a participant in the data space.")
 	public void checkMPRegistered() throws Exception {
 		Request didCheckRequest = new Request.Builder()
-				.url(TrustAnchorEnvironment.TIR_ADDRESS + "/v4/issuers/" + getDid(MPOperationsEnvironment.DID_PROVIDER_ADDRESS))
+				.url(TrustAnchorEnvironment.TIR_ADDRESS + "/v4/issuers/" + MPOperationsEnvironment.PROVIDER_DID)
 				.build();
 		Response tirResponse = HTTP_CLIENT.newCall(didCheckRequest).execute();
 		assertEquals(HttpStatus.SC_OK, tirResponse.code(), "The did should be registered at the trust-anchor.");
@@ -301,7 +301,7 @@ public class StepDefinitions {
 	@Given("Fancy Marketplace is registered as a participant in the data space.")
 	public void checkFMRegistered() throws Exception {
 		Request didCheckRequest = new Request.Builder()
-				.url(TrustAnchorEnvironment.TIR_ADDRESS + "/v4/issuers/" + getDid(FancyMarketplaceEnvironment.DID_CONSUMER_ADDRESS))
+				.url(TrustAnchorEnvironment.TIR_ADDRESS + "/v4/issuers/" + FancyMarketplaceEnvironment.CONSUMER_DID)
 				.build();
 		Response tirResponse = HTTP_CLIENT.newCall(didCheckRequest).execute();
 		assertEquals(HttpStatus.SC_OK, tirResponse.code(), "The did should be registered at the trust-anchor.");
@@ -436,7 +436,7 @@ public class StepDefinitions {
 																"credentialsType", "OperatorCredential",
 																"claims", List.of(
 																		Map.of("name", "roles",
-																				"path", "$.roles[?(@.target==\\\"" + getDid(MPOperationsEnvironment.DID_PROVIDER_ADDRESS) + "\\\")].names[*]",
+																				"path", "$.roles[?(@.target==\\\"" + MPOperationsEnvironment.PROVIDER_DID + "\\\")].names[*]",
 																				"allowedValues", List.of("OPERATOR"))))
 														)
 										))));
@@ -532,7 +532,7 @@ public class StepDefinitions {
 																"credentialsType", "OperatorCredential",
 																"claims", List.of(
 																		Map.of("name", "roles",
-																				"path", "$.roles[?(@.target==\\\"" + getDid(MPOperationsEnvironment.DID_PROVIDER_ADDRESS) + "\\\")].names[*]",
+																				"path", "$.roles[?(@.target==\\\"" + MPOperationsEnvironment.PROVIDER_DID + "\\\")].names[*]",
 																				"allowedValues", List.of("OPERATOR"))))
 														)
 										))
@@ -569,7 +569,7 @@ public class StepDefinitions {
 
 		CharacteristicVO didCharacteristic = new CharacteristicVO()
 				.name("did")
-				.value(getDid(FancyMarketplaceEnvironment.DID_CONSUMER_ADDRESS));
+				.value(FancyMarketplaceEnvironment.CONSUMER_DID);
 
 		OrganizationCreateVO organizationCreateVO = new OrganizationCreateVO()
 				.organizationType("Consumer")

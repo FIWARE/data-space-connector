@@ -11,8 +11,8 @@ data:
     {
       "id": "{{ .Values.keycloak.realm.name }}",
       "realm": "{{ .Values.keycloak.realm.name }}",
-      "displayName": "Keycloak",
-      "displayNameHtml": "<div class=\"kc-logo-text\"><span>Keycloak</span></div>",
+      "displayName": "{{ .Values.keycloak.realm.name }}",
+      "displayNameHtml": "<div class=\"kc-logo-text\"><span>{{ .Values.keycloak.realm.name }}</span></div>",
       "verifiableCredentialsEnabled": true,
       "enabled": true,
       "attributes": {
@@ -630,9 +630,33 @@ data:
             "providerId": "jwt_vc"
           } 
         ],
-        
-        {{- if eq .Values.elsi.enabled  true }}
         "org.keycloak.keys.KeyProvider": [
+          {
+            "name": "ecdh-generated",
+            "providerId": "ecdh-generated",
+            "subComponents": {},
+            "config": {
+              "ecGenerateCertificate": [
+                "false"
+              ],
+              "active": [
+                "true"
+              ],
+              "priority": [
+                "0"
+              ],
+              "ecdhAlgorithm": [
+                "ECDH-ES"
+              ],
+              "ecdhEllipticCurveKey": [
+                "P-256"
+              ],
+              "enabled": [
+                "true"
+              ]
+            }
+          },
+        {{- if eq .Values.elsi.enabled  true }}
           {
             "id": "a4589e8f-7f82-4345-b2ea-ccc9d4366600",
             "name": {{ .Values.elsi.keyAlias | quote }},
@@ -658,9 +682,7 @@ data:
               ]
             }
           }
-        ]
         {{- else if .Values.keycloak.signingKey }}
-        "org.keycloak.keys.KeyProvider": [
           {
             "id": "a4589e8f-7f82-4345-b2ea-ccc9d4366600",
             "name": "signing-key",
@@ -690,9 +712,7 @@ data:
               ]
             }
           }
-        ]
         {{ else }}
-        "org.keycloak.keys.KeyProvider": [
           {
             "id": "a4589e8f-7f82-4345-b2ea-ccc9d4366600",
             "name": "test-key",
@@ -718,8 +738,8 @@ data:
               ]
             }
           }
-        ]
         {{- end }}
+        ]
       }
     }
 

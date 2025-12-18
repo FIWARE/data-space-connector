@@ -4,10 +4,40 @@ kind: Ingress
 metadata:
   name: did-json
   namespace: {{ $.Release.Namespace | quote }}
-{{- if .Values.didJson.ingress.annotations }}
   annotations:
-{{- toYaml .Values.didJson.ingress.annotations | nindent 4 }}
-{{- end }}
+    {{- with .Values.didJson.ingress.annotations }}
+      {{- toYaml . | nindent 4 }}
+    {{- end }}
+  labels:
+    {{ include "dsc.labels" . | nindent 4 }}
+spec:
+  {{- if .Values.didJson.ingress.tlsSecret }}
+  tls:
+    - hosts:
+      - {{ .Values.didJson.ingress.host }}
+      secretName: {{ .Values.didJson.ingress.tlsSecret }}
+  {{- end }}
+  rules:
+    - host: {{ .Values.didJson.ingress.host }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: did-json
+                port:
+                  name: http
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: did-json-unsecured
+  namespace: {{ $.Release.Namespace | quote }}
+  annotations:
+    {{- with .Values.didJson.ingress.annotations }}
+      {{- toYaml . | nindent 4 }}
+    {{- end }}
   labels:
     {{ include "dsc.labels" . | nindent 4 }}
 spec:
