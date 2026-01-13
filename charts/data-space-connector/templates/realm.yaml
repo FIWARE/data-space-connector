@@ -5,7 +5,7 @@ metadata:
   name: {{ .Values.keycloak.realm.name }}-realm
   namespace: {{ $.Release.Namespace | quote }}
   labels:
-    {{ include "dsc.labels" . | nindent 4 }}
+    {{- include "dsc.labels" . | nindent 4 }}
 data:
   {{ .Values.keycloak.realm.name }}-realm.json: |-
     {
@@ -78,7 +78,7 @@ data:
           }
         ],
         "client": {
-          {{ .Values.keycloak.realm.clientRoles | nindent 10 }}
+          {{- .Values.keycloak.realm.clientRoles | trim | nindent 10 }}
         }
       },
       "groups": [
@@ -100,10 +100,10 @@ data:
         }
       ],
       "users": [
-        {{ .Values.keycloak.realm.users | nindent 8 }}
+        {{- .Values.keycloak.realm.users | trim | nindent 8 }}
       ],
       "clients": [
-        {{ .Values.keycloak.realm.clients | nindent 8 }}
+        {{- .Values.keycloak.realm.clients | trim | nindent 8 }}
       ],
       "clientScopes": [
         {
@@ -599,7 +599,7 @@ data:
         }
         {{- if .Values.keycloak.realm.clientScopes }}
         ,
-        {{ .Values.keycloak.realm.clientScopes | nindent 8 }}
+        {{- .Values.keycloak.realm.clientScopes | trim | nindent 8 }}
         {{- end }}
       ],
       "defaultDefaultClientScopes": [
@@ -628,7 +628,7 @@ data:
             "id": "jwt-vc-builder",
             "name": "jwt-vc-builder",
             "providerId": "jwt_vc"
-          } 
+          }
         ],
         "org.keycloak.keys.KeyProvider": [
           {
@@ -678,7 +678,7 @@ data:
                 "true"
               ],
               "algorithm": [
-                {{ .Values.elsi.keyAlgorithm | quote }}
+                {{- .Values.elsi.keyAlgorithm | quote }}
               ]
             }
           }
@@ -708,7 +708,7 @@ data:
                 "true"
               ],
               "algorithm": [
-                {{ .Values.keycloak.signingKey.keyAlgorithm | quote }}
+                {{- .Values.keycloak.signingKey.keyAlgorithm | quote }}
               ]
             }
           }
@@ -742,5 +742,4 @@ data:
         ]
       }
     }
-
 {{- end }}
