@@ -32,16 +32,22 @@ keycloak:
       configMap:
         name: test-realm-realm
     - name: consumer-key
-      configMap:
-        name: consumer-keystore
+      secret:
+        secretName: consumer-keystore
         defaultMode: 0755
   signingKey:
-    storePath: /keys/cert.jks
-    storePassword: password
+    storePath: /keys/keystore.pfx
+    storePassword: "${STORE_PASS}"
     keyAlias: certificate
-    keyPassword: password
+    keyPassword: "${STORE_PASS}"
     did: did:web:fancy-marketplace.biz
     keyAlgorithm: ES256
+  extraEnvVars:
+    - name: "STORE_PASS"
+      valueFrom:
+        secretKeyRef:
+          name: consumer-keystore
+          key: password
   realm:
     frontendUrl: https://keycloak-consumer.127.0.0.1.nip.io
     import: true
@@ -598,235 +604,7 @@ keycloak:
           }
         ]
       }
-    clients: |
-      {
-        "clientId": "did:web:mp-operations.org",
-        "enabled": true,
-        "description": "Client to connect mp-operations.org",
-        "surrogateAuthRequired": false,
-        "alwaysDisplayInConsole": false,
-        "clientAuthenticatorType": "client-secret",
-        "defaultRoles": [],
-        "redirectUris": [],   
-        "webOrigins": [],
-        "notBefore": 0,
-        "bearerOnly": false,
-        "consentRequired": false,
-        "standardFlowEnabled": true,
-        "implicitFlowEnabled": false,
-        "directAccessGrantsEnabled": false,
-        "serviceAccountsEnabled": true,
-        "publicClient": false,
-        "frontchannelLogout": false,
-        "secret": "kpWxZn7LgcWT84AzS3aS5X5URmL0FC0Q",
-        "protocol": "openid-connect",
-        "attributes": {
-          "client.secret.creation.time": "1675260539"
-        },
-        "protocolMappers": [
-        ],
-        "authenticationFlowBindingOverrides": {},
-        "fullScopeAllowed": true,
-        "nodeReRegistrationTimeout": -1,
-        "defaultClientScopes": [],
-        "optionalClientScopes": []
-      },
-      {
-        "clientId": "did:web:fancy-marketplace.biz",
-        "enabled": true,
-        "description": "Client to connect itself",
-        "surrogateAuthRequired": false,
-        "alwaysDisplayInConsole": false,
-        "clientAuthenticatorType": "client-secret",
-        "defaultRoles": [],
-        "redirectUris": [],   
-        "webOrigins": [],
-        "notBefore": 0,
-        "bearerOnly": false,
-        "consentRequired": false,
-        "standardFlowEnabled": true,
-        "implicitFlowEnabled": false,
-        "directAccessGrantsEnabled": false,
-        "serviceAccountsEnabled": false,
-        "publicClient": false,
-        "frontchannelLogout": false,
-        "protocol": "openid-connect",
-        "attributes": {
-          "client.secret.creation.time": "1675260539"
-        },
-        "protocolMappers": [
-        ],
-        "authenticationFlowBindingOverrides": {},
-        "fullScopeAllowed": true,
-        "nodeReRegistrationTimeout": -1,
-        "defaultClientScopes": [],
-        "optionalClientScopes": []
-      },
-      {
-        "clientId": "account",
-        "name": "${client_account}",
-        "rootUrl": "${authBaseUrl}",
-        "baseUrl": "/realms/test-realm/account/",
-        "surrogateAuthRequired": false,
-        "enabled": true,
-        "alwaysDisplayInConsole": false,
-        "clientAuthenticatorType": "client-secret",
-        "redirectUris": [
-          "/realms/test-realm/account/*"
-        ],
-        "webOrigins": [],
-        "notBefore": 0,
-        "bearerOnly": false,
-        "consentRequired": false,
-        "standardFlowEnabled": true,
-        "implicitFlowEnabled": false,
-        "directAccessGrantsEnabled": false,
-        "serviceAccountsEnabled": true,
-        "publicClient": true,
-        "frontchannelLogout": false,
-        "protocol": "openid-connect",
-        "attributes": {
-          "client.secret.creation.time": "1675260539",
-          "realm_client": "false",
-          "post.logout.redirect.uris": "+"
-        },
-        "authenticationFlowBindingOverrides": {},
-        "fullScopeAllowed": true,
-        "nodeReRegistrationTimeout": 0,
-        "defaultClientScopes": [
-          "web-origins",
-          "acr",
-          "roles",
-          "profile",
-          "basic",
-          "email"
-        ],
-        "optionalClientScopes": [
-          "address",
-          "phone",
-          "offline_access",
-          "organization",
-          "microprofile-jwt"
-        ]
-      },
-      {
-        "clientId": "account-console",
-        "name": "${client_account-console}",
-        "rootUrl": "${authBaseUrl}",
-        "baseUrl": "/realms/test-realm/account/",
-        "surrogateAuthRequired": false,
-        "enabled": true,
-        "alwaysDisplayInConsole": false,
-        "clientAuthenticatorType": "client-secret",
-        "redirectUris": [
-          "/realms/test-realm/account/*"
-        ],
-        "webOrigins": [],
-        "notBefore": 0,
-        "bearerOnly": false,
-        "consentRequired": false,
-        "standardFlowEnabled": true,
-        "implicitFlowEnabled": false,
-        "directAccessGrantsEnabled": true,
-        "serviceAccountsEnabled": false,
-        "publicClient": true,
-        "frontchannelLogout": false,
-        "protocol": "openid-connect",
-        "attributes": {
-          "realm_client": "false",
-          "post.logout.redirect.uris": "+",
-          "pkce.code.challenge.method": "S256"
-        },
-        "authenticationFlowBindingOverrides": {},
-        "fullScopeAllowed": true,
-        "nodeReRegistrationTimeout": 0,
-        "protocolMappers": [
-          {
-            "id": "706c5202-1b03-4fad-a5b8-484287e941f8",
-            "name": "audience resolve",
-            "protocol": "openid-connect",
-            "protocolMapper": "oidc-audience-resolve-mapper",
-            "consentRequired": false,
-            "config": {}
-          }
-        ],
-        "defaultClientScopes": [
-          "web-origins",
-          "acr",
-          "roles",
-          "profile",
-          "basic",
-          "email"
-        ],
-        "optionalClientScopes": [
-          "address",
-          "phone",
-          "offline_access",
-          "organization",
-          "microprofile-jwt",
-          "LegalPersonCredential",
-          "OperatorCredential",
-          "UserCredential",
-          "MarketplaceCredential"
-        ]
-      },
-      {
-        "clientId": "admin-cli",
-        "name": "${client_admin-cli}",
-        "surrogateAuthRequired": false,
-        "enabled": true,
-        "alwaysDisplayInConsole": false,
-        "clientAuthenticatorType": "client-secret",
-        "secret": "kpWxZn7LgcWT84AzS3aS5X5URmL0FC0Q",
-        "redirectUris": [],
-        "webOrigins": [],
-        "notBefore": 0,
-        "bearerOnly": false,
-        "consentRequired": false,
-        "standardFlowEnabled": false,
-        "implicitFlowEnabled": false,
-        "directAccessGrantsEnabled": true,
-        "serviceAccountsEnabled": true,
-        "publicClient": false,
-        "frontchannelLogout": false,
-        "protocol": "openid-connect",
-        "attributes": {
-          "client.secret.creation.time": "1675260539",
-          "realm_client": "false",
-          "client.use.lightweight.access.token.enabled": "true"
-        },
-        "authenticationFlowBindingOverrides": {},
-        "fullScopeAllowed": true,
-        "nodeReRegistrationTimeout": 0,
-        "protocolMappers": [
-          {
-            "name": "audience resolve",
-            "protocol": "openid-connect",
-            "protocolMapper": "oidc-audience-resolve-mapper",
-            "consentRequired": false,
-            "config": {}
-          }
-        ],
-        "defaultClientScopes": [
-          "web-origins",
-          "acr",
-          "roles",
-          "profile",
-          "basic",
-          "email"
-        ],
-        "optionalClientScopes": [
-          "address",
-          "phone",
-          "offline_access",
-          "organization",
-          "microprofile-jwt",
-          "UserCredential",
-          "LegalPersonCredential",
-          "MarketplaceCredential"
-        ]
-      }
-
+    clients: "{\n  \"clientId\": \"did:web:mp-operations.org\",\n  \"enabled\": true,\n  \"description\": \"Client to connect mp-operations.org\",\n  \"surrogateAuthRequired\": false,\n  \"alwaysDisplayInConsole\": false,\n  \"clientAuthenticatorType\": \"client-secret\",\n  \"defaultRoles\": [],\n  \"redirectUris\": [],   \n  \"webOrigins\": [],\n  \"notBefore\": 0,\n  \"bearerOnly\": false,\n  \"consentRequired\": false,\n  \"standardFlowEnabled\": true,\n  \"implicitFlowEnabled\": false,\n  \"directAccessGrantsEnabled\": false,\n  \"serviceAccountsEnabled\": true,\n  \"publicClient\": false,\n  \"frontchannelLogout\": false,\n  \"secret\": \"kpWxZn7LgcWT84AzS3aS5X5URmL0FC0Q\",\n  \"protocol\": \"openid-connect\",\n  \"attributes\": {\n    \"client.secret.creation.time\": \"1675260539\"\n  },\n  \"protocolMappers\": [\n  ],\n  \"authenticationFlowBindingOverrides\": {},\n  \"fullScopeAllowed\": true,\n  \"nodeReRegistrationTimeout\": -1,\n  \"defaultClientScopes\": [],\n  \"optionalClientScopes\": []\n},\n{\n  \"clientId\": \"did:web:fancy-marketplace.biz\",\n  \"enabled\": true,\n  \"description\": \"Client to connect itself\",\n  \"surrogateAuthRequired\": false,\n  \"alwaysDisplayInConsole\": false,\n  \"clientAuthenticatorType\": \"client-secret\",\n  \"defaultRoles\": [],\n  \"redirectUris\": [],   \n  \"webOrigins\": [],\n  \"notBefore\": 0,\n  \"bearerOnly\": false,\n  \"consentRequired\": false,\n  \"standardFlowEnabled\": true,\n  \"implicitFlowEnabled\": false,\n  \"directAccessGrantsEnabled\": false,\n  \"serviceAccountsEnabled\": false,\n  \"publicClient\": false,\n  \"frontchannelLogout\": false,\n  \"protocol\": \"openid-connect\",\n  \"attributes\": {\n    \"client.secret.creation.time\": \"1675260539\"\n  },\n  \"protocolMappers\": [\n  ],\n  \"authenticationFlowBindingOverrides\": {},\n  \"fullScopeAllowed\": true,\n  \"nodeReRegistrationTimeout\": -1,\n  \"defaultClientScopes\": [],\n  \"optionalClientScopes\": []\n},\n{\n  \"clientId\": \"account\",\n  \"name\": \"${client_account}\",\n  \"rootUrl\": \"${authBaseUrl}\",\n  \"baseUrl\": \"/realms/test-realm/account/\",\n  \"surrogateAuthRequired\": false,\n  \"enabled\": true,\n  \"alwaysDisplayInConsole\": false,\n  \"clientAuthenticatorType\": \"client-secret\",\n  \"redirectUris\": [\n    \"/realms/test-realm/account/*\"\n  ],\n  \"webOrigins\": [],\n  \"notBefore\": 0,\n  \"bearerOnly\": false,\n  \"consentRequired\": false,\n  \"standardFlowEnabled\": true,\n  \"implicitFlowEnabled\": false,\n  \"directAccessGrantsEnabled\": false,\n  \"serviceAccountsEnabled\": true,\n  \"publicClient\": true,\n  \"frontchannelLogout\": false,\n  \"protocol\": \"openid-connect\",\n  \"attributes\": {\n    \"client.secret.creation.time\": \"1675260539\",\n    \"realm_client\": \"false\",\n    \"post.logout.redirect.uris\": \"+\"\n  },\n  \"authenticationFlowBindingOverrides\": {},\n  \"fullScopeAllowed\": true,\n  \"nodeReRegistrationTimeout\": 0,\n  \"defaultClientScopes\": [\n    \"web-origins\",\n    \"acr\",\n    \"roles\",\n    \"profile\",\n    \"basic\",\n    \"email\"\n  ],\n  \"optionalClientScopes\": [\n    \"address\",\n    \"phone\",\n    \"offline_access\",\n    \"organization\",\n    \"microprofile-jwt\"\n  ]\n},\n{\n  \"clientId\": \"account-console\",\n  \"name\": \"${client_account-console}\",\n  \"rootUrl\": \"${authBaseUrl}\",\n  \"baseUrl\": \"/realms/test-realm/account/\",\n  \"surrogateAuthRequired\": false,\n  \"enabled\": true,\n  \"alwaysDisplayInConsole\": false,\n  \"clientAuthenticatorType\": \"client-secret\",\n  \"redirectUris\": [\n    \"/realms/test-realm/account/*\"\n  ],\n  \"webOrigins\": [],\n  \"notBefore\": 0,\n  \"bearerOnly\": false,\n  \"consentRequired\": false,\n  \"standardFlowEnabled\": true,\n  \"implicitFlowEnabled\": false,\n  \"directAccessGrantsEnabled\": true,\n  \"serviceAccountsEnabled\": false,\n  \"publicClient\": true,\n  \"frontchannelLogout\": false,\n  \"protocol\": \"openid-connect\",\n  \"attributes\": {\n    \"realm_client\": \"false\",\n    \"post.logout.redirect.uris\": \"+\",\n    \"pkce.code.challenge.method\": \"S256\"\n  },\n  \"authenticationFlowBindingOverrides\": {},\n  \"fullScopeAllowed\": true,\n  \"nodeReRegistrationTimeout\": 0,\n  \"protocolMappers\": [\n    {\n      \"id\": \"706c5202-1b03-4fad-a5b8-484287e941f8\",\n      \"name\": \"audience resolve\",\n      \"protocol\": \"openid-connect\",\n      \"protocolMapper\": \"oidc-audience-resolve-mapper\",\n      \"consentRequired\": false,\n      \"config\": {}\n    }\n  ],\n  \"defaultClientScopes\": [\n    \"web-origins\",\n    \"acr\",\n    \"roles\",\n    \"profile\",\n    \"basic\",\n    \"email\"\n  ],\n  \"optionalClientScopes\": [\n    \"address\",\n    \"phone\",\n    \"offline_access\",\n    \"organization\",\n    \"microprofile-jwt\",\n    \"LegalPersonCredential\",\n    \"OperatorCredential\",\n    \"UserCredential\",\n    \"MarketplaceCredential\"\n  ]\n},\n{\n  \"clientId\": \"admin-cli\",\n  \"name\": \"${client_admin-cli}\",\n  \"surrogateAuthRequired\": false,\n  \"enabled\": true,\n  \"alwaysDisplayInConsole\": false,\n  \"clientAuthenticatorType\": \"client-secret\",\n  \"secret\": \"kpWxZn7LgcWT84AzS3aS5X5URmL0FC0Q\",\n  \"redirectUris\": [],\n  \"webOrigins\": [],\n  \"notBefore\": 0,\n  \"bearerOnly\": false,\n  \"consentRequired\": false,\n  \"standardFlowEnabled\": false,\n  \"implicitFlowEnabled\": false,\n  \"directAccessGrantsEnabled\": true,\n  \"serviceAccountsEnabled\": true,\n  \"publicClient\": false,\n  \"frontchannelLogout\": false,\n  \"protocol\": \"openid-connect\",\n  \"attributes\": {\n    \"client.secret.creation.time\": \"1675260539\",\n    \"realm_client\": \"false\",\n    \"client.use.lightweight.access.token.enabled\": \"true\"\n  },\n  \"authenticationFlowBindingOverrides\": {},\n  \"fullScopeAllowed\": true,\n  \"nodeReRegistrationTimeout\": 0,\n  \"protocolMappers\": [\n    {\n      \"name\": \"audience resolve\",\n      \"protocol\": \"openid-connect\",\n      \"protocolMapper\": \"oidc-audience-resolve-mapper\",\n      \"consentRequired\": false,\n      \"config\": {}\n    }\n  ],\n  \"defaultClientScopes\": [\n    \"web-origins\",\n    \"acr\",\n    \"roles\",\n    \"profile\",\n    \"basic\",\n    \"email\"\n  ],\n  \"optionalClientScopes\": [\n    \"address\",\n    \"phone\",\n    \"offline_access\",\n    \"organization\",\n    \"microprofile-jwt\",\n    \"UserCredential\",\n    \"LegalPersonCredential\",\n    \"MarketplaceCredential\"\n  ]\n}\n"
 # -- integration of rainbow
 rainbow:
   enabled: true
@@ -843,28 +621,38 @@ rainbow:
           - /
     enabled: true
     host: rainbow-consumer.127.0.0.1.nip.io
-did:
-  enabled: false
-didJson:
+did-helper:
   enabled: true
-  port: 3000
-  did: did:web:fancy-marketplace.biz
-  key:
-    kty: EC
-    # while this in productive environments should be an https endpoint, limitations of the gx-registry service require http in order to work around proxy issues in the local env. 
-    x5u: http://fancy-marketplace.biz/.well-known/tls.crt
-    xCoord: "WiCQZHPqGNYyH60_dztrwP67RUWit9_FVZ9VCGe1CAE"
-    # do not rename to `y`, since yaml interprest `y` as bool true.
-    yCoord: "21EOPxwZslkUwV_kR7mpnha-PdHuHZr4akrq1v6cctk"
-    crv: "P-256"
+  config:
+    server:
+      serverPort: "3000"
+      didType: "web"
+      hostUrl: "http://fancy-marketplace.biz"
+      outputFormat: "json_jwk"
+      keystorePasswordSecretName: "consumer-keystore"
+      keystorePasswordSecretKey: "password"
+    generateKey:
+      enabled: false
+    provideKeystore:
+      enabled: true
+      keystoreSecretName: "consumer-keystore"
+      keystoreSecretKey: "keystore.pfx"
+      keyType: "EC"
   ingress:
     enabled: true
-    host: fancy-marketplace.biz
-    tlsSecret: tls-secret
+    className: ""
     annotations:
       traefik.ingress.kubernetes.io/service.passhostheader: "true"
       traefik.ingress.kubernetes.io/router.tls: "true"
-
+    hosts:
+      - host: fancy-marketplace.biz
+        paths:
+          - path: /
+            pathType: ImplementationSpecific
+    tls:
+      - secretName: tls-secret
+        hosts:
+          - fancy-marketplace.biz
 # register the consumer at the til. Only possible if it runs in the same environment and recommendable for demo deployments
 registration:
   enabled: true

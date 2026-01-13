@@ -541,7 +541,7 @@
                                     <skipTemplate>false</skipTemplate>
                                     <templateGenerateName>true</templateGenerateName>
                                     <templateOutputDir>${project.build.directory}/k3s/infra/mongo-operator</templateOutputDir>
-                                    <additionalArguments>--name-template=mongo-operator --namespace=mongo-operator -f ${main.basedir}/k3s/operator.yaml</additionalArguments>
+                                    <additionalArguments>--name-template=mongo-operator --namespace=mongo-operator -f ${main.basedir}/k3s/mongo-operator.yaml</additionalArguments>
                                 </configuration>
                             </execution>
                         </executions>
@@ -647,7 +647,7 @@
                                     <skipTemplate>false</skipTemplate>
                                     <templateGenerateName>true</templateGenerateName>
                                     <templateOutputDir>${project.build.directory}/k3s/infra/mongo-operator</templateOutputDir>
-                                    <additionalArguments>--name-template=mongo-operator --namespace=mongo-operator -f ${main.basedir}/k3s/operator.yaml</additionalArguments>
+                                    <additionalArguments>--name-template=mongo-operator --namespace=mongo-operator -f ${main.basedir}/k3s/mongo-operator.yaml</additionalArguments>
                                 </configuration>
                             </execution>
                         </executions>
