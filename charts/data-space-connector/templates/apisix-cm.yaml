@@ -4,7 +4,7 @@ metadata:
   name: apisix-routes
   namespace: {{ $.Release.Namespace | quote }}
   labels:
-    {{ include "dsc.labels" . | nindent 4 }}
+    {{- include "dsc.labels" . | nindent 4 }}
 data:
   apisix.yaml: |-
     routes:
@@ -26,6 +26,6 @@ data:
             policy: policy/main
     {{- end }}
     {{- if .Values.apisix.routes }}
-      {{ .Values.apisix.routes | nindent 6 }}
+      {{- .Values.apisix.routes | nindent 6 }}
     {{- end }}
     #END
