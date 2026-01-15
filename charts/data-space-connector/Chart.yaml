@@ -53,8 +53,8 @@ dependencies:
   # issuance
   - name: keycloak
     condition: keycloak.enabled
-    version: 25.2.0
-    repository: oci://registry-1.docker.io/bitnamicharts
+    version: 0.11.4
+    repository: oci://registry-1.docker.io/cloudpirates
   # contract management
   - name: tm-forum-api
     condition: tm-forum-api.enabled

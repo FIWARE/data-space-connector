@@ -204,7 +204,7 @@ tpp:
     host: ""
     # -- path to check the id at
     path: /transfers
-  
+
 # -- configuration for apisix to be deployed as part of the connector, see https://github.com/bitnami/charts/tree/main/bitnami/apisix for all options
 apisix:
   kubeVersion: 1.34-1
@@ -327,7 +327,7 @@ apisix:
     enabled: false
     # -- resource preset to have sufficient memory
     resourcesPreset: small
- 
+
   # -- configuration of a catchAll-route(e.g. /*)
   catchAllRoute:
     # -- should it be enabled
@@ -456,100 +456,81 @@ scorpio:
 elsi:
   # -- should a did:elsi be used
   enabled: false
-  # -- keystore to be used for signing the credentials 
-  # keystore: 
+  # -- keystore to be used for signing the credentials
+  # keystore:
     # store.p12: <THE_ENCODED_CONTENT>
   # -- the did to be used
   did:
   # -- algorithm of the signing key
   keyAlgorithm:
-  # -- path to the keystore 
+  # -- path to the keystore
   storePath:
   # -- password for the keystore
   storePassword:
   # -- alias of the key
-  keyAlias: 
+  keyAlias:
   # -- password of the key
   keyPassword:
 
 ## configuration of the keycloak - see https://github.com/bitnami/charts/tree/main/bitnami/keycloak for details
 keycloak:
-  kubeVersion: 1.34-1
   # -- should it be enabled? set to false if one outside the chart is used.
   enabled: true
-  global:
-    security:
-      # allow the image from the legacy repo
-      allowInsecureImages: true
-  # -- configuration of the used image
-  image:
-    # -- repository where the image is held, see https://github.com/bitnami/charts/issues/35164 for further info
-    repository: bitnamilegacy/keycloak
-  # -- disable the security context, required by the current quarkus container, will be solved in the future chart versions of keycloak
-  containerSecurityContext:
-    enabled: false
-  proxyHeaders: xforwarded
-  proxy: edge
+  keycloak:
+    proxyHeaders: xforwarded
+    adminUser: keycloak-admin
+    existingSecret: issuance-secret
+    secretKeys:
+      adminPasswordKey: keycloak-admin
   tls:
     enabled: false
-  service:
-    ports:
-      http: 8080
-  # -- authentication config for keycloak
-  auth:
-    existingSecret: issuance-secret
-    passwordSecretKey: keycloak-admin
-    adminUser: keycloak-admin
-
   # -- sets memory requests for keycloak
   # increased above the bitnami defaults to prevent OOMs in linux kernel >=6.14
   resources:
     requests:
-      memory: "500Mi"
+      memory: 500Mi
       cpu: "0.5"
     limits:
-      memory: "2Gi"
+      memory: 2Gi
       cpu: "1"
 
 
   # -- should the db be deployed as part of the keycloak chart
-  postgresql:
+  postgres:
     enabled: false
   # -- host of the external db to be used
-  externalDatabase:
+  database:
+    type: postgres
     host: postgresql
-    database: keycloak
-    user: postgres
+    name: keycloak
+    username: postgres
     existingSecret: database-secret
-    existingSecretPasswordKey: postgres-admin-password
-
-  # -- extra volumes to be mounted
-  extraVolumeMounts:
-    - name: realms
-      mountPath: /opt/bitnami/keycloak/data/import
+    secretKeys:
+      passwordKey: postgres-admin-password
+      usernameKey: postgres-user-username
+  features:
+    enabled: [ oid4vc-vci ]
 
   # -- extra env vars to be set. we require them at the moment, since some of the chart config mechanisms only work with the bitnami-image
   extraEnvVars:
-    - name: KEYCLOAK_EXTRA_ARGS
-      value: "--import-realm"
-    - name: KC_FEATURES
-      value: "oid4vc-vci"
     # password for reading the key store connected to the did
     - name: STORE_PASS
       valueFrom:
         secretKeyRef:
           name: issuance-secret
           key: store-pass
-    # keycloak admin password
-    - name: KC_ADMIN_PASSWORD
-      valueFrom:
-        secretKeyRef:
-          name: issuance-secret
-          key: keycloak-admin
+
     # set in accordance with the memory requests, will result in OOM otherwise
     - name: KC_HEAP_SIZE
       value: "1024m"
 
+  extraVolumeMounts:
+    - name: realms
+      mountPath: /opt/keycloak/data/import
+  extraVolumes:
+    - name: realms
+      configMap:
+        name: test-realm-realm # should be {{ .Values.keycloak.realm.name }}-realm
   # -- configuration of the realm to be imported
   realm:
     # -- should the realm be imported
@@ -681,9 +662,9 @@ keycloak:
     # -- password of the signing key
     # keyPassword:
     # -- algorithm of the signing key
-    # keyAlgorithm: 
-    # -- did that the key belongs to 
-    # did: 
+    # keyAlgorithm:
+    # -- did that the key belongs to
+    # did:
 
 ## configuration of the tm-forum-api - see https://github.com/FIWARE/helm-charts/tree/main/charts/tm-forum-api for details
 tm-forum-api:
@@ -696,7 +677,7 @@ tm-forum-api:
       # -- address of the broker
       url: http://data-service-scorpio:9090
     contextUrl: https://uri.etsi.org/ngsi-ld/v1/ngsi-ld-core-context.jsonld
-    additionalEnvVars: 
+    additionalEnvVars:
       - name: API_EXTENSION_ENABLED
         value: "true"
       - name: GENERAL_NGSILDORQUERYVALUE
@@ -774,7 +755,7 @@ tm-forum-api:
     - name: account
       image: tmforum-account
       basePath: /tmf-api/accountManagement/v4
-      
+
   # redis caching
   redis:
     enabled: false
@@ -809,7 +790,7 @@ rainbow:
     # -- host of the database to be used
     url:
     # -- user to be used when accesing the database
-    user: 
+    user:
     # -- secret containing the password for the database
     existingSecret:
     # -- key of the password inside that secret
@@ -889,7 +870,7 @@ contract-management:
     odrl:
       ## URL to the ODRL-PAP
       url: http://odrl-pap:8080
-  
+
 
 # -- configuration for the did-helper, should only be used for demonstrational deployments, see https://github.com/wistefan/did-helper
 did:
@@ -932,10 +913,10 @@ didJson:
     # -- kty to be used in the jwk - RSA and EC supported
     kty: EC
     # -- optional x5u endpoint to provide access to the corresponding cert chain
-    x5u: 
-    # -- In case of kty==EC: xCoord of the EC key 
+    x5u:
+    # -- In case of kty==EC: xCoord of the EC key
     xCoord:
-    # -- In case of kty==EC: yCoord of the EC key 
+    # -- In case of kty==EC: yCoord of the EC key
     yCoord:
     # -- In case of kty==EC: curve to be used for the EC key
     crv:
@@ -999,10 +980,10 @@ marketplace:
       - seller
       - customer
       - admin
-  
+
   # -- configuration for the charging backend
   bizEcosystemChargingBackend:
-        
+
     existingSecret: mongodb-charging-password
 
     # -- max size to be used for the market
@@ -1015,14 +996,14 @@ marketplace:
     deployment:
       image:
         tag: 10.5.0
-    
+
     # -- should plugin support be enabled
     plugins:
       enabled: false
 
     media:
       enabled: false
-    
+
     port: 8006
 
     loglevel: debug
@@ -1037,7 +1018,7 @@ marketplace:
     initContainers: false
     propagateToken: true
     basePath: /opt/business-ecosystem-charging-backend
-    token: 
+    token:
       enabled: false
 
     db:
@@ -1054,7 +1035,7 @@ marketplace:
 
     serviceAccount:
       create: true
-    
+
     existingSecret: mongodb-belp-password
 
     # -- image to be used for the statefulset
