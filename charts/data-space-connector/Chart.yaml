@@ -75,3 +75,8 @@ dependencies:
     condition: mongo-operator.enabled
     version: 0.13.0
     repository: https://mongodb.github.io/helm-charts
+  # did-helper
+  - name: did-helper
+    condition: did-helper.enabled
+    version: 0.1.12
+    repository: https://fiware.github.io/helm-charts
