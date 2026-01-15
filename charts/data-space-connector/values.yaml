@@ -523,7 +523,11 @@ keycloak:
     # set in accordance with the memory requests, will result in OOM otherwise
     - name: KC_HEAP_SIZE
       value: "1024m"
-
+    - name: DID
+      valueFrom:
+        configMapKeyRef:
+          name: did-json
+          key: did
   extraVolumeMounts:
     - name: realms
       mountPath: /opt/keycloak/data/import
@@ -598,6 +602,7 @@ keycloak:
         "protocol": "oid4vc",
         "attributes": {
           "oid4vci.enabled": true,
+          "preAuthorizedCodeLifespanS": 120,
           "client.secret.creation.time": "1675260539",
           "vc.natural-person.format": "jwt_vc",
           "vc.natural-person.scope": "NaturalPersonCredential",

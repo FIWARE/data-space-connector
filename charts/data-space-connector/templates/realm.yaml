@@ -24,9 +24,8 @@ data:
         {{- else }}
         "issuerDid": "${DID}"
         {{- end }}
-        {{- if .Values.keycloak.realm.attributes }}
-        ,
-        {{ .Values.keycloak.realm.attributes | nindent 8 }}
+        {{- if .Values.keycloak.realm.attributes }},
+        {{- .Values.keycloak.realm.attributes | nindent 8 }}
         {{- end }}
       },
       "sslRequired": "none",
@@ -87,7 +86,8 @@ data:
           "path": "/admin",
           "realmRoles": [
             "user",
-            "default-roles-test-realm"
+            "default-roles-test-realm",
+            "credential-offer-create"
           ]
         },
         {
@@ -95,7 +95,8 @@ data:
           "path": "/consumer",
           "realmRoles": [
             "user",
-            "default-roles-test-realm"
+            "default-roles-test-realm",
+            "credential-offer-create"
           ]
         }
       ],
@@ -622,7 +623,7 @@ data:
           {
             "id": "sd-jwt-builder",
             "name": "sd-jwt-builder",
-            "providerId": "vc+sd-jwt"
+            "providerId": "dc+sd-jwt"
           },
           {
             "id": "jwt-vc-builder",

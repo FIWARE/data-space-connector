@@ -1,17 +1,14 @@
-postgresql:
-  primary:
-    persistence:
-      enabled: false
-  readReplicas:
-    persistence:
-      enabled: false
 keycloak:
   ingress:
     enabled: true
-    hostname: keycloak-consumer.127.0.0.1.nip.io
+    hosts:
+    - host: keycloak-consumer.127.0.0.1.nip.io
+      paths:
+        - path: /
+          pathType: Prefix
     annotations:
       traefik.ingress.kubernetes.io/router.tls: "true"
-  initContainers:
+  extraInitContainers:
     - name: register-at-tir
       image: ubuntu
       command:
@@ -24,7 +21,7 @@ keycloak:
           curl -X 'POST' 'http://tir.trust-anchor.svc.cluster.local:8080/issuer' -H 'Content-Type: application/json' -d "{\"did\": \"did:web:fancy-marketplace.biz\", \"credentials\": []}"
   extraVolumeMounts:
     - name: realms
-      mountPath: /opt/bitnami/keycloak/data/import
+      mountPath: /opt/keycloak/data/import
     - name: consumer-key
       mountPath: "/keys"
   extraVolumes:
@@ -46,40 +43,7 @@ keycloak:
     frontendUrl: https://keycloak-consumer.127.0.0.1.nip.io
     import: true
     name: test-realm
-    attributes: |
-      "issuerDid": "did:web:fancy-marketplace.biz",
-      "vc.user-sd.credential_signing_alg_values_supported": "ES256",
-      "vc.user-sd.credential_build_config.signing_algorithm": "ES256",
-      "vc.user-sd.credential_build_config.token_jws_type": "vc+sd-jwt",
-      "vc.user-sd.credential_build_config.proof_types_supported": "{\"jwt\":{\"proof_signing_alg_values_supported\":[\"ES256\"]}}",
-      "vc.user-sd.format": "vc+sd-jwt",
-      "vc.user-sd.scope": "LegalPersonCredential",
-      "vc.user-sd.vct": "LegalPersonCredential",
-      "vc.user-sd.credential_build_config.visible_claims": "roles,email",
-      "vc.user-sd.credential_build_config.decoys": "3",
-      "vc.user-credential.credential_signing_alg_values_supported": "ES256",
-      "vc.user-credential.credential_build_config.signing_algorithm": "ES256",
-      "vc.user-credential.credential_build_config.token_jws_type": "JWT",
-      "vc.user-credential.credential_build_config.proof_types_supported": "{\"jwt\":{\"proof_signing_alg_values_supported\":[\"ES256\"]}}",
-      "vc.user-credential.format": "jwt_vc",
-      "vc.user-credential.scope": "UserCredential",
-      "vc.user-credential.vct": "UserCredential",
-      "vc.marketplace-credential.credential_signing_alg_values_supported": "ES256",
-      "vc.marketplace-credential.credential_build_config.signing_algorithm": "ES256",
-      "vc.marketplace-credential.credential_build_config.token_jws_type": "JWT",
-      "vc.marketplace-credential.format": "jwt_vc",
-      "vc.marketplace-credential.scope": "MarketplaceCredential",
-      "vc.marketplace-credential.vct": "MarketplaceCredential",
-      "vc.verifiable-credential.format": "vc+sd-jwt",
-      "vc.verifiable-credential.scope": "VerifiableCredential",
-      "vc.verifiable-credential.vct": "VerifiableCredential",
-      "vc.operator-credential.credential_signing_alg_values_supported": "ES256",
-      "vc.operator-credential.credential_build_config.signing_algorithm": "ES256",
-      "vc.operator-credential.credential_build_config.token_jws_type": "JWT",
-      "vc.operator-credential.credential_build_config.proof_types_supported": "{\"jwt\":{\"proof_signing_alg_values_supported\":[\"ES256\"]}}",
-      "vc.operator-credential.format": "jwt_vc",
-      "vc.operator-credential.scope": "OperatorCredential",
-      "vc.operator-credential.vct": "OperatorCredential"
+    attributes: ''
     clientRoles: |
       "did:web:mp-operations.org": [
         {
@@ -96,7 +60,13 @@ keycloak:
           "name": "OPERATOR",
           "description": "Is allowed to operate clusters.",
           "clientRole": true
-        }],
+        },
+        {
+          "name": "REPRESENTATIVE",
+          "description": "Is allowed to operate clusters.",
+          "clientRole": true
+        }
+      ],
       "did:web:fancy-marketplace.biz": [
         {
           "name": "REPRESENTATIVE",
@@ -202,6 +172,9 @@ keycloak:
             "manage-account"
           ]
         },
+        "realmRoles": [
+          "credential-offer-create"
+        ],
         "groups": [
             "/consumer"
         ]
@@ -260,10 +233,21 @@ keycloak:
       {
         "name": "LegalPersonCredential",
         "description": "OIDC4VC Scope, that adds all properties required for a user.",
-        "protocol": "openid-connect",
+        "protocol": "oid4vc",
         "attributes": {
-          "include.in.token.scope": "false",
-          "display.on.consent.screen": "false"
+          "include.in.token.scope": "true",
+          "display.on.consent.screen": "false",
+          "vc.credential_configuration_id": "user-sd",
+          "vc.credential_signing_alg": "ES256",
+          "vc.cryptographic_binding_methods_supported": "ES256",
+          "vc.credential_build_config.token_jws_type": "dc+sd-jwt",
+          "vc.format": "dc+sd-jwt",
+          "vc.credential_build_config.proof_types_supported": "{\"jwt\":{\"proof_signing_alg_values_supported\":[\"ES256\"]}}",
+          "vc.verifiable_credential_type": "LegalPersonCredential",
+          "vc.credential_build_config.sd_jwt.visible_claims": "roles,email",
+          "vc.sd_jwt.number_of_decoys": "3",
+          "vc.issuerDid": "did:web:fancy-marketplace.biz",
+          "vc.include_in_metadata": "true"
         },
         "protocolMappers": [
           {
@@ -280,7 +264,7 @@ keycloak:
             "protocol": "oid4vc",
             "protocolMapper": "oid4vc-user-attribute-mapper",
             "config": {
-              "subjectProperty": "email",
+              "claim.name": "email",
               "userAttribute": "email",
               "supportedCredentialTypes": "LegalPersonCredential,OperatorCredential,UserCredential"
             }
@@ -290,7 +274,7 @@ keycloak:
             "protocol": "oid4vc",
             "protocolMapper": "oid4vc-user-attribute-mapper",
             "config": {
-              "subjectProperty": "firstName",
+              "claim.name": "firstName",
               "userAttribute": "firstName",
               "supportedCredentialTypes": "LegalPersonCredential,OperatorCredential,UserCredential"
             }
@@ -300,7 +284,7 @@ keycloak:
             "protocol": "oid4vc",
             "protocolMapper": "oid4vc-static-claim-mapper",
             "config": {
-              "subjectProperty": "subject",
+              "claim.name": "subject",
               "staticValue": "did:key:zDnaeiVpxCT7ARwqLndbWiCeGG2YZXvLfWFs1cGPgKUe8GPLe",
               "supportedCredentialTypes": "LegalPersonCredential"
             }
@@ -310,7 +294,7 @@ keycloak:
             "protocol": "oid4vc",
             "protocolMapper": "oid4vc-static-claim-mapper",
             "config": {
-              "subjectProperty": "street",
+              "claim.name": "street",
               "staticValue": "Main Street",
               "supportedCredentialTypes": "LegalPersonCredential"
             }
@@ -320,7 +304,7 @@ keycloak:
             "protocol": "oid4vc",
             "protocolMapper": "oid4vc-user-attribute-mapper",
             "config": {
-              "subjectProperty": "lastName",
+              "claim.name": "lastName",
               "userAttribute": "lastName",
               "supportedCredentialTypes": "LegalPersonCredential,OperatorCredential"
             }
@@ -330,18 +314,8 @@ keycloak:
             "protocol": "oid4vc",
             "protocolMapper": "oid4vc-target-role-mapper",
             "config": {
-              "subjectProperty": "roles",
+              "claim.name": "roles",
               "clientId": "did:web:mp-operations.org",
-              "supportedCredentialTypes": "LegalPersonCredential,OperatorCredential,UserCredential"
-            }
-          },
-          {
-            "name": "role-mapper-marketplace",
-            "protocol": "oid4vc",
-            "protocolMapper": "oid4vc-target-role-mapper",
-            "config": {
-              "subjectProperty": "roles",
-              "clientId": "did:web:fancy-marketplace.biz",
               "supportedCredentialTypes": "LegalPersonCredential,OperatorCredential,UserCredential"
             }
           },
@@ -350,7 +324,7 @@ keycloak:
             "protocol": "oid4vc",
             "protocolMapper": "oid4vc-static-claim-mapper",
             "config": {
-              "subjectProperty": "streetNumber",
+              "claim.name": "streetNumber",
               "staticValue": "10",
               "supportedCredentialTypes": "LegalPersonCredential"
             }
@@ -360,7 +334,7 @@ keycloak:
             "protocol": "oid4vc",
             "protocolMapper": "oid4vc-static-claim-mapper",
             "config": {
-              "subjectProperty": "city",
+              "claim.name": "city",
               "staticValue": "Dresden",
               "supportedCredentialTypes": "LegalPersonCredential"
             }
@@ -370,7 +344,7 @@ keycloak:
             "protocol": "oid4vc",
             "protocolMapper": "oid4vc-static-claim-mapper",
             "config": {
-              "subjectProperty": "region",
+              "claim.name": "region",
               "staticValue": "Saxony",
               "supportedCredentialTypes": "LegalPersonCredential"
             }
@@ -380,7 +354,7 @@ keycloak:
             "protocol": "oid4vc",
             "protocolMapper": "oid4vc-static-claim-mapper",
             "config": {
-              "subjectProperty": "country",
+              "claim.name": "country",
               "staticValue": "Germany",
               "supportedCredentialTypes": "LegalPersonCredential"
             }
@@ -390,7 +364,7 @@ keycloak:
             "protocol": "oid4vc",
             "protocolMapper": "oid4vc-static-claim-mapper",
             "config": {
-              "subjectProperty": "zipcode",
+              "claim.name": "zipcode",
               "staticValue": "01169",
               "supportedCredentialTypes": "LegalPersonCredential"
             }
@@ -400,8 +374,18 @@ keycloak:
       {
         "name": "UserCredential",
         "description": "OIDC4VC Scope, that adds all properties required for a user.",
-        "protocol": "openid-connect",
-        "attributes": {},
+        "protocol": "oid4vc",
+        "attributes": {
+          "include.in.token.scope": "true",
+          "vc.credential_configuration_id": "user-credential",
+          "vc.credential_signing_alg": "ES256",
+          "vc.cryptographic_binding_methods_supported": "ES256",
+          "vc.credential_build_config.token_jws_type": "JWT",
+          "vc.format": "jwt_vc",
+          "vc.credential_build_config.proof_types_supported": "{\"jwt\":{\"proof_signing_alg_values_supported\":[\"ES256\"]}}",
+          "vc.verifiable_credential_type": "UserCredential",
+          "vc.issuerDid": "did:web:fancy-marketplace.biz"
+        },
         "protocolMappers": [
           {
             "name": "context-mapper-uc",
@@ -417,7 +401,7 @@ keycloak:
             "protocol": "oid4vc",
             "protocolMapper": "oid4vc-user-attribute-mapper",
             "config": {
-              "subjectProperty": "email",
+              "claim.name": "email",
               "userAttribute": "email",
               "supportedCredentialTypes": "UserCredential"
             }
@@ -427,7 +411,7 @@ keycloak:
             "protocol": "oid4vc",
             "protocolMapper": "oid4vc-user-attribute-mapper",
             "config": {
-              "subjectProperty": "firstName",
+              "claim.name": "firstName",
               "userAttribute": "firstName",
               "supportedCredentialTypes": "UserCredential"
             }
@@ -437,7 +421,7 @@ keycloak:
             "protocol": "oid4vc",
             "protocolMapper": "oid4vc-static-claim-mapper",
             "config": {
-              "subjectProperty": "subject",
+              "claim.name": "subject",
               "staticValue": "did:key:zDnaeiVpxCT7ARwqLndbWiCeGG2YZXvLfWFs1cGPgKUe8GPLe",
               "supportedCredentialTypes": "UserCredential"
             }
@@ -447,7 +431,7 @@ keycloak:
             "protocol": "oid4vc",
             "protocolMapper": "oid4vc-static-claim-mapper",
             "config": {
-              "subjectProperty": "street",
+              "claim.name": "street",
               "staticValue": "Main Street",
               "supportedCredentialTypes": "UserCredential"
             }
@@ -457,7 +441,7 @@ keycloak:
             "protocol": "oid4vc",
             "protocolMapper": "oid4vc-user-attribute-mapper",
             "config": {
-              "subjectProperty": "lastName",
+              "claim.name": "lastName",
               "userAttribute": "lastName",
               "supportedCredentialTypes": "UserCredential"
             }
@@ -467,7 +451,7 @@ keycloak:
             "protocol": "oid4vc",
             "protocolMapper": "oid4vc-target-role-mapper",
             "config": {
-              "subjectProperty": "roles",
+              "claim.name": "roles",
               "clientId": "did:web:mp-operations.org",
               "supportedCredentialTypes": "UserCredential"
             }
@@ -477,7 +461,7 @@ keycloak:
             "protocol": "oid4vc",
             "protocolMapper": "oid4vc-static-claim-mapper",
             "config": {
-              "subjectProperty": "streetNumber",
+              "claim.name": "streetNumber",
               "staticValue": "10",
               "supportedCredentialTypes": "UserCredential"
             }
@@ -487,7 +471,7 @@ keycloak:
             "protocol": "oid4vc",
             "protocolMapper": "oid4vc-static-claim-mapper",
             "config": {
-              "subjectProperty": "city",
+              "claim.name": "city",
               "staticValue": "Dresden",
               "supportedCredentialTypes": "UserCredential"
             }
@@ -497,7 +481,7 @@ keycloak:
             "protocol": "oid4vc",
             "protocolMapper": "oid4vc-static-claim-mapper",
             "config": {
-              "subjectProperty": "region",
+              "claim.name": "region",
               "staticValue": "Saxony",
               "supportedCredentialTypes": "UserCredential"
             }
@@ -507,7 +491,7 @@ keycloak:
             "protocol": "oid4vc",
             "protocolMapper": "oid4vc-static-claim-mapper",
             "config": {
-              "subjectProperty": "country",
+              "claim.name": "country",
               "staticValue": "Germany",
               "supportedCredentialTypes": "UserCredential"
             }
@@ -517,7 +501,7 @@ keycloak:
             "protocol": "oid4vc",
             "protocolMapper": "oid4vc-static-claim-mapper",
             "config": {
-              "subjectProperty": "zipcode",
+              "claim.name": "zipcode",
               "staticValue": "01169",
               "supportedCredentialTypes": "UserCredential"
             }
@@ -527,8 +511,18 @@ keycloak:
       {
         "name": "OperatorCredential",
         "description": "OIDC4VC Scope, that adds all properties required for a user.",
-        "protocol": "openid-connect",
-        "attributes": {},
+        "protocol": "oid4vc",
+        "attributes": {
+          "include.in.token.scope": "true",
+          "vc.credential_configuration_id": "operator-credential",
+          "vc.credential_signing_alg": "ES256",
+          "vc.cryptographic_binding_methods_supported": "ES256",
+          "vc.credential_build_config.token_jws_type": "JWT",
+          "vc.format": "jwt_vc",
+          "vc.credential_build_config.proof_types_supported": "{\"jwt\":{\"proof_signing_alg_values_supported\":[\"ES256\"]}}",
+          "vc.verifiable_credential_type": "OperatorCredential",
+          "vc.issuerDid": "did:web:fancy-marketplace.biz"
+        },
         "protocolMappers": [
           {
             "name": "context-mapper-oc",
@@ -544,7 +538,7 @@ keycloak:
             "protocol": "oid4vc",
             "protocolMapper": "oid4vc-user-attribute-mapper",
             "config": {
-              "subjectProperty": "email",
+              "claim.name": "email",
               "userAttribute": "email",
               "supportedCredentialTypes": "LegalPersonCredential,OperatorCredential,UserCredential"
             }
@@ -554,7 +548,7 @@ keycloak:
             "protocol": "oid4vc",
             "protocolMapper": "oid4vc-user-attribute-mapper",
             "config": {
-              "subjectProperty": "firstName",
+              "claim.name": "firstName",
               "userAttribute": "firstName",
               "supportedCredentialTypes": "LegalPersonCredential,OperatorCredential,UserCredential"
             }
@@ -564,7 +558,7 @@ keycloak:
             "protocol": "oid4vc",
             "protocolMapper": "oid4vc-target-role-mapper",
             "config": {
-              "subjectProperty": "roles",
+              "claim.name": "roles",
               "clientId": "did:web:mp-operations.org",
               "supportedCredentialTypes": "LegalPersonCredential,OperatorCredential,UserCredential"
             }
@@ -574,7 +568,7 @@ keycloak:
             "protocol": "oid4vc",
             "protocolMapper": "oid4vc-static-claim-mapper",
             "config": {
-              "subjectProperty": "subject",
+              "claim.name": "subject",
               "staticValue": "did:key:zDnaeiVpxCT7ARwqLndbWiCeGG2YZXvLfWFs1cGPgKUe8GPLe",
               "supportedCredentialTypes": "UserCredential"
             }
@@ -584,8 +578,18 @@ keycloak:
       {
         "name": "MarketplaceCredential",
         "description": "Scope to produce a credential intended for m2m-access as a marketplace.",
-        "protocol": "openid-connect",
-        "attributes": {},
+        "protocol": "oid4vc",
+        "attributes": {
+          "include.in.token.scope": "true",
+          "vc.credential_configuration_id": "marketplace-credential",
+          "vc.credential_signing_alg": "ES256",
+          "vc.cryptographic_binding_methods_supported": "ES256",
+          "vc.credential_build_config.token_jws_type": "JWT",
+          "vc.format": "jwt_vc",
+          "vc.credential_build_config.proof_types_supported": "{\"jwt\":{\"proof_signing_alg_values_supported\":[\"ES256\"]}}",
+          "vc.verifiable_credential_type": "MarketplaceCredential",
+          "vc.issuerDid": "did:web:fancy-marketplace.biz"
+        },
         "protocolMappers": [
           {
             "name": "context-mapper-oc",
@@ -594,6 +598,16 @@ keycloak:
             "config": {
               "context": "https://www.w3.org/2018/credentials/v1",
               "supportedCredentialTypes": "MarketplaceCredential"
+            }
+          },
+          {
+            "name": "role-mapper-marketplace",
+            "protocol": "oid4vc",
+            "protocolMapper": "oid4vc-target-role-mapper",
+            "config": {
+              "claim.name": "roles",
+              "clientId": "did:web:fancy-marketplace.biz",
+              "supportedCredentialTypes": "LegalPersonCredential,OperatorCredential,UserCredential"
             }
           }
         ]
@@ -607,7 +621,7 @@ keycloak:
         "alwaysDisplayInConsole": false,
         "clientAuthenticatorType": "client-secret",
         "defaultRoles": [],
-        "redirectUris": [],   
+        "redirectUris": [],
         "webOrigins": [],
         "notBefore": 0,
         "bearerOnly": false,
@@ -621,7 +635,8 @@ keycloak:
         "secret": "kpWxZn7LgcWT84AzS3aS5X5URmL0FC0Q",
         "protocol": "openid-connect",
         "attributes": {
-          "client.secret.creation.time": "1675260539"
+          "client.secret.creation.time": "1675260539",
+          "oid4vci.enabled": "true"
         },
         "protocolMappers": [
         ],
@@ -639,7 +654,7 @@ keycloak:
         "alwaysDisplayInConsole": false,
         "clientAuthenticatorType": "client-secret",
         "defaultRoles": [],
-        "redirectUris": [],   
+        "redirectUris": [],
         "webOrigins": [],
         "notBefore": 0,
         "bearerOnly": false,
@@ -652,7 +667,8 @@ keycloak:
         "frontchannelLogout": false,
         "protocol": "openid-connect",
         "attributes": {
-          "client.secret.creation.time": "1675260539"
+          "client.secret.creation.time": "1675260539",
+          "oid4vci.enabled": "true"
         },
         "protocolMappers": [
         ],
@@ -735,7 +751,8 @@ keycloak:
         "attributes": {
           "realm_client": "false",
           "post.logout.redirect.uris": "+",
-          "pkce.code.challenge.method": "S256"
+          "pkce.code.challenge.method": "S256",
+          "oid4vci.enabled": "true"
         },
         "authenticationFlowBindingOverrides": {},
         "fullScopeAllowed": true,
@@ -793,7 +810,8 @@ keycloak:
         "attributes": {
           "client.secret.creation.time": "1675260539",
           "realm_client": "false",
-          "client.use.lightweight.access.token.enabled": "true"
+          "client.use.lightweight.access.token.enabled": "true",
+          "oid4vci.enabled": "true"
         },
         "authenticationFlowBindingOverrides": {},
         "fullScopeAllowed": true,
@@ -841,7 +859,6 @@ rainbow:
       - host: rainbow-consumer.127.0.0.1.nip.io
         paths:
           - /
-    enabled: true
     host: rainbow-consumer.127.0.0.1.nip.io
 did:
   enabled: false
@@ -851,7 +868,7 @@ didJson:
   did: did:web:fancy-marketplace.biz
   key:
     kty: EC
-    # while this in productive environments should be an https endpoint, limitations of the gx-registry service require http in order to work around proxy issues in the local env. 
+    # while this in productive environments should be an https endpoint, limitations of the gx-registry service require http in order to work around proxy issues in the local env.
     x5u: http://fancy-marketplace.biz/.well-known/tls.crt
     xCoord: "WiCQZHPqGNYyH60_dztrwP67RUWit9_FVZ9VCGe1CAE"
     # do not rename to `y`, since yaml interprest `y` as bool true.
@@ -925,7 +942,7 @@ credentials-config-service:
             dcql:
               credentials:
                 - id: legal-person-query
-                  format: "vc+sd-jwt"
+                  format: "dc+sd-jwt"
                   multiple: false
                   claims:
                     - id: roles-claim

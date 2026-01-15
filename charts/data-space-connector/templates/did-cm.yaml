@@ -5,8 +5,9 @@ metadata:
   name: did-json
   namespace: {{ $.Release.Namespace | quote }}
   labels:
-    {{ include "dsc.labels" . | nindent 4 }}
+    {{- include "dsc.labels" . | nindent 4 }}
 data:
+  did: {{ .Values.didJson.did | quote }}
   did.json: |-
     {
       "@context": "https://www.w3.org/ns/did/v1",
@@ -20,7 +21,7 @@ data:
             {{- if .Values.didJson.key.kty }}
             "kty": {{ .Values.didJson.key.kty | quote }},
             {{- else }}
-            "kty: "RSA",
+            "kty": "RSA",
             {{- end }}
             {{- if eq .Values.didJson.key.kty "RSA" }}
             "e": {{ .Values.didJson.key.exponent | quote }},
