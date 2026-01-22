@@ -1,5 +1,7 @@
 # Contract negotiation with TMForum
 
+> :warning: Mapping the contract negotiation to Rainbow is deprecated. IDSA Compatibility is now provided through the FIWARE Data Space Connector EDC extension. The following documentation will be updated in the near future.
+
 Contract Negotiation in the FIWARE Data Space Connector is provided through the [TMForum Quote API](https://www.tmforum.org/oda/open-apis/directory/quote-management-api-TMF648/v4.0). The Quote-API ```is one of the Pre-Ordering Management APIs. The customer Quote API provides a standardized mechanism for placing a customer quote with all the necessary quote parameters.```. It is intended to negotiate serivce and product acquisition between Customer and Provider(according to the Quote-Object documentation) and therefor well suited for the use-case of Contract Negotiation. 
 
 In order to provide compatibility with the [IDSA Protocol](https://docs.internationaldataspaces.org/ids-knowledgebase/dataspace-protocol/contract-negotiation/contract.negotiation.protocol) the states between TMForum and IDSA are mapped by the [Contract Management](https://github.com/FIWARE/contract-management) and the negotiation states are available in [Rainbow](https://github.com/ging/rainbow).

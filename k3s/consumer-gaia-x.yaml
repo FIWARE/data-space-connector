@@ -260,8 +260,8 @@ didJson:
     crv: P-256
     x: oIekaVX7EquGf0auBaEosOhu-9qUvLk_-aLbtfzaHVU
     y: L_okheo3HdetOlIpcH1hkCSE3adoG1IJ6C9aeht7wbY
-    xCoord: WiCQZHPqGNYyH60_dztrwP67RUWit9_FVZ9VCGe1CAE
-    yCoord: 21EOPxwZslkUwV_kR7mpnha-PdHuHZr4akrq1v6cctk
+    xCoord: 2qa9TVW5KM5d6bDFj9QBT3-l5xCrA54Om8RjUIvRNZw
+    yCoord: RbSFjuCCxUS4JLMf2iQGkGE9SmADUScM5o88bFl7ccE
   ingress:
     enabled: true
     host: fancy-marketplace.biz

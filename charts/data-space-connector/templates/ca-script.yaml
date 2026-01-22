@@ -1,0 +1,17 @@
+{{- $cm := index .Values "contract-management" }}
+{{- if or (eq $cm.enabled true) (eq .Values.dsp.enabled true) }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ca-certs-script
+  namespace: {{ $.Release.Namespace | quote }}
+data:
+  import-ca.sh: |-
+    #!/bin/sh
+    chmod a+rw -R $1/
+    cp /etc/pki/java/cacerts $1/
+    keytool -importcert -file $2 -alias myCA \
+      -keystore $1/cacerts \
+      -storepass changeit  \
+      -noprompt
+{{- end }}

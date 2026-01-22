@@ -56,7 +56,7 @@ keycloak:
       "vc.user-sd.scope": "LegalPersonCredential",
       "vc.user-sd.vct": "LegalPersonCredential",
       "vc.user-sd.credential_build_config.visible_claims": "roles,email",
-      "vc.user-sd.credential_build_config.decoys": "3",
+      "vc.user-sd.credential_build_config.decoys": "0",
       "vc.user-credential.credential_signing_alg_values_supported": "ES256",
       "vc.user-credential.credential_build_config.signing_algorithm": "ES256",
       "vc.user-credential.credential_build_config.token_jws_type": "JWT",
@@ -64,6 +64,13 @@ keycloak:
       "vc.user-credential.format": "jwt_vc",
       "vc.user-credential.scope": "UserCredential",
       "vc.user-credential.vct": "UserCredential",
+      "vc.legal-person-credential.credential_signing_alg_values_supported": "ES256",
+      "vc.legal-person-credential.credential_build_config.signing_algorithm": "ES256",
+      "vc.legal-person-credential.credential_build_config.token_jws_type": "JWT",
+      "vc.legal-person-credential.credential_build_config.proof_types_supported": "{\"jwt\":{\"proof_signing_alg_values_supported\":[\"ES256\"]}}",
+      "vc.legal-person-credential.format": "jwt_vc",
+      "vc.legal-person-credential.scope": "LegalPersonCredential",
+      "vc.legal-person-credential.vct": "LegalPersonCredential",
       "vc.marketplace-credential.credential_signing_alg_values_supported": "ES256",
       "vc.marketplace-credential.credential_build_config.signing_algorithm": "ES256",
       "vc.marketplace-credential.credential_build_config.token_jws_type": "JWT",
@@ -827,22 +834,6 @@ keycloak:
         ]
       }
 
-# -- integration of rainbow
-rainbow:
-  enabled: true
-  db:
-    url: postgresql
-    user: postgres
-    existingSecret: database-secret
-    passwordKey: postgres-admin-password
-  ingress:
-    enabled: true
-    hosts:
-      - host: rainbow-consumer.127.0.0.1.nip.io
-        paths:
-          - /
-    enabled: true
-    host: rainbow-consumer.127.0.0.1.nip.io
 did:
   enabled: false
 didJson:
@@ -853,9 +844,9 @@ didJson:
     kty: EC
     # while this in productive environments should be an https endpoint, limitations of the gx-registry service require http in order to work around proxy issues in the local env. 
     x5u: http://fancy-marketplace.biz/.well-known/tls.crt
-    xCoord: "WiCQZHPqGNYyH60_dztrwP67RUWit9_FVZ9VCGe1CAE"
+    xCoord: "2qa9TVW5KM5d6bDFj9QBT3-l5xCrA54Om8RjUIvRNZw"
     # do not rename to `y`, since yaml interprest `y` as bool true.
-    yCoord: "21EOPxwZslkUwV_kR7mpnha-PdHuHZr4akrq1v6cctk"
+    yCoord: "RbSFjuCCxUS4JLMf2iQGkGE9SmADUScM5o88bFl7ccE"
     crv: "P-256"
   ingress:
     enabled: true
@@ -864,7 +855,6 @@ didJson:
     annotations:
       traefik.ingress.kubernetes.io/service.passhostheader: "true"
       traefik.ingress.kubernetes.io/router.tls: "true"
-
 # register the consumer at the til. Only possible if it runs in the same environment and recommendable for demo deployments
 registration:
   enabled: true
@@ -933,6 +923,28 @@ credentials-config-service:
                         - roles
                   meta:
                     vct_values:
+                      - LegalPersonCredential
+      - id: dsp
+        defaultOidcScope: "openid"
+        authorizationType: "DEEPLINK"
+        oidcScopes:
+          "openid":
+            credentials:
+              - type: LegalPersonCredential
+                trustedParticipantsLists:
+                  - http://tir.127.0.0.1.nip.io
+                trustedIssuersLists:
+                  - "*"
+                jwtInclusion:
+                  enabled: true
+                  fullInclusion: true
+            dcql:
+              credentials:
+                - id: lpc-query
+                  format: "jwt_vc_json"
+                  multiple: true
+                  meta:
+                    type_values:
                       - LegalPersonCredential
 # provide authentication capabilities
 vcverifier:
@@ -1054,9 +1066,16 @@ apisix:
     ingress:
       enabled: true
       hostname: fancy-marketplace.127.0.0.1.nip.io
+      extraHosts:
+        - name: dsp-fancy-marketplace.127.0.0.1.nip.io
+          path: /
+        - name: dsp-management.127.0.0.1.nip.io
+          path: /
   catchAllRoute:
     enabled: false
-  routes: |-
+  controlPlane:
+    address: http://consumer-apisix-control-plane:9180
+  routes:
     - uri: /.well-known/openid-configuration
       host: fancy-marketplace.127.0.0.1.nip.io
       upstream:
@@ -1086,6 +1105,36 @@ apisix:
           host: "http://localhost:8181"
           policy: policy/main
           with_body: true
+    - uri: /*
+      host: dsp-management.127.0.0.1.nip.io
+      upstream:
+        nodes:
+          dsp-controlplane:8085: 1
+        type: roundrobin
+    - uri: /.well-known/openid-configuration
+      host: dsp-fancy-marketplace.127.0.0.1.nip.io
+      upstream:
+        nodes:
+          verifier:3000: 1
+        type: roundrobin
+      plugins:
+        proxy-rewrite:
+          uri: /services/dsp/.well-known/openid-configuration
+    - uri: /*
+      host: dsp-fancy-marketplace.127.0.0.1.nip.io
+      upstream:
+        nodes:
+          dsp-controlplane:8080: 1
+      plugins:
+        openid-connect:
+          proxy_opts:
+            https_proxy: http://squid-proxy.infra.svc.cluster.local:8888
+          bearer_only: true
+          use_jwks: true
+          client_id: dsp
+          client_secret: unused
+          ssl_verify: false
+          discovery: https://verifier.fancy-marketplace.biz/services/dsp/.well-known/openid-configuration
 # contract management for distributing the buy events
 contract-management:
   did: did:web:fancy-marketplace.biz
@@ -1137,6 +1186,21 @@ contract-management:
   deployment:
     # init containers to be used for the local demo
     initContainers:
+      # helper container to wait for keycloak present in local deployments, to avoid cascading crash-loops
+      - name: wait-for-keycloak
+        image: curlimages/curl:8.6.0
+        command:
+          - sh
+          - -c
+          - |
+            set -e
+            echo "Waiting for Keycloak to become ready..."
+
+            until curl -sf http://consumer-keycloak:9000/health/ready > /dev/null; do
+              echo "Keycloak not ready yet, retrying..."
+              sleep 5
+            done
+            echo "Keycloak is ready."
       # load the self-generated root ca into the java truststore
       - name: load-certs
         image: quay.io/fiware/contract-management:3.3.0
@@ -1154,15 +1218,18 @@ contract-management:
         image: quay.io/curl/curl:8.1.2
         command: ["/bin/sh", "-c", "/bin/get-credential.sh /credential-repo"]
         volumeMounts:
-          - name: marketplace-credential-script
+          - name: credentials-script
             mountPath: /bin/get-credential.sh
             subPath: get-credential.sh
           - name: credential-repo
             mountPath: /credential-repo
     additionalVolumes:
-      - name: marketplace-credential-script
+      - name: signing-key
+        secret:
+          secretName: signing-key
+      - name: credentials-script
         configMap:
-          name: marketplace-credential
+          name: credentials-script
           defaultMode: 0755
       - name: ca-certs-script
         configMap:
@@ -1170,9 +1237,6 @@ contract-management:
           defaultMode: 0755
       - name: credential-repo
         emptyDir: {}
-      - name: signing-key
-        secret:
-          secretName: signing-key
       - name: root-ca
         secret:
           secretName: root-ca
@@ -1193,3 +1257,110 @@ contract-management:
   notification:
     enabled: true
     host: contract-management
+
+dsp:
+  enabled: true
+  deployment:
+    additionalVolumeMounts:      
+      - name: credential-repo
+        mountPath: /credential-repo
+      - name: signing-key
+        mountPath: /signing-key
+      - name: root-ca
+        mountPath: /root-ca
+    additionalVolumes:
+      - name: signing-key
+        secret:
+          secretName: signing-key
+      - name: credentials-script
+        configMap:
+          name: credentials-script
+          defaultMode: 0755
+      - name: ca-certs-script
+        configMap:
+          name: ca-certs-script
+          defaultMode: 0755
+      - name: credential-repo
+        emptyDir: {}
+      - name: root-ca
+        secret:
+          secretName: root-ca
+      - name: cacerts
+        emptyDir: {}
+    initContainers:
+      # helper container to wait for keycloak present in local deployments, to avoid cascading crash-loops
+      - name: wait-for-keycloak
+        image: curlimages/curl:8.6.0
+        command:
+          - sh
+          - -c
+          - |
+            set -e
+            echo "Waiting for Keycloak to become ready..."
+
+            until curl -sf http://consumer-keycloak:9000/health/ready > /dev/null; do
+              echo "Keycloak not ready yet, retrying..."
+              sleep 5
+            done
+            echo "Keycloak is ready."
+      # get a credential to be used by the contract-management
+      - name: get-credential
+        image: quay.io/curl/curl:8.1.2
+        command: ["/bin/sh", "-c", "/bin/get-credential.sh /credential-repo"]
+        volumeMounts:
+          - name: credentials-script
+            mountPath: /bin/get-credential.sh
+            subPath: get-credential.sh
+          - name: credential-repo
+            mountPath: /credential-repo
+
+  config:
+    edc:
+      hostname: dsp-fancy-marketplace.127.0.0.1.nip.io
+      participant:
+        id: did:web:fancy-marketplace.biz
+
+    oid4vp:
+      enabled: true
+      credentialsFolder: /credential-repo
+      trustAnchorsFolder: /root-ca
+      trustAll: true
+      holder:
+        id: did:web:fancy-marketplace.biz
+        kid: did:web:fancy-marketplace.biz
+        key:
+          path: /signing-key/client-pkcs8.key.pem
+      proxy:
+        enabled: true
+        host: squid-proxy.infra.svc.cluster.local
+        port: 8888
+      
+    tmfExtension:
+      quoteApi: http://consumer-tm-forum-api-quote:8080/tmf-api/quote/v4
+      agreementApi: http://consumer-tm-forum-api-agreement:8080/tmf-api/agreementManagement/v4
+      productOrderApi: http://consumer-tm-forum-api-product-ordering-management:8080/tmf-api/productOrderingManagement/v4
+      productCatalogApi: http://consumer-tm-forum-api-product-catalog:8080/tmf-api/productCatalogManagement/v4
+      productInventoryApi: http://consumer-tm-forum-api-product-inventory:8080/tmf-api/productInventory/v4
+      usageManagementApi: http://consumer-tm-forum-api-usage-management:8080/tmf-api/usageManagement/v4
+      partyCatalogApi: http://consumer-tm-forum-api-party-catalog:8080/tmf-api/party/v4
+
+    # -- transfer extension is only needed at the provider side
+    fdscTransfer:
+      enabled: false
+
+credentials:
+  enabled: true
+  keycloak:
+    address: http://consumer-keycloak:8080
+    realm: test-realm
+    clientId: account-console
+    username: employee
+    scope: openid
+    password: test
+  configurations:
+    - id: marketplace-credential
+      format: jwt_vc
+      targetFile: marketplace-credential.jwt
+    - id: legal-person-credential
+      format: jwt_vc
+      targetFile: legal-person-credential.jwt

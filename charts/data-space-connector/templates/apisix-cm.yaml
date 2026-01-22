@@ -26,6 +26,6 @@ data:
             policy: policy/main
     {{- end }}
     {{- if .Values.apisix.routes }}
-      {{ .Values.apisix.routes | nindent 6 }}
+      {{ .Values.apisix.routes | toYaml | nindent 6 }}
     {{- end }}
     #END

@@ -341,6 +341,7 @@
                         <portBinding>8443:8443</portBinding>
                         <!-- Squid proxy -->
                         <portBinding>8888:8888</portBinding>
+                        <portBinding>9180:9180</portBinding>
                     </portBindings>
                 </configuration>
                 <executions>
