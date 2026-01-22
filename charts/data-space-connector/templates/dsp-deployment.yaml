@@ -1,0 +1,149 @@
+{{- if .Values.dsp.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dsp-controlplane
+  namespace: {{ $.Release.Namespace | quote }}
+  labels:
+    app.kubernetes.io/name: dsp-dataplane
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  {{- if not .Values.dsp.autoscaling.enabled }}
+  replicas: {{ .Values.dsp.deployment.replicaCount }}
+  {{- end }}
+  revisionHistoryLimit: {{ .Values.dsp.deployment.revisionHistoryLimit }}
+  strategy:
+  {{- with .Values.dsp.deployment.updateStrategy }}
+  {{- toYaml . | nindent 4 }}
+  {{- end }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: dsp-controlplane
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: dsp-controlplane
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        {{- with .Values.dsp.deployment.additionalLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- if .Values.dsp.deployment.additionalAnnotations -}}
+      annotations:
+        {{- with .Values.dsp.deployment.additionalAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- end }}
+    spec:
+      {{- if .Values.dsp.imagePullSecrets }}
+      imagePullSecrets:
+        {{- range .Values.dsp.imagePullSecrets }}
+        - name: {{ . }}
+        {{- end }}
+      {{- end }}
+      serviceAccountName: default
+      {{- if .Values.dsp.deployment.initContainers }}
+      initContainers:
+        {{- with .Values.dsp.deployment.initContainers }}
+          {{- toYaml . | nindent 8 }}
+          {{- end }}
+      {{- end }}
+
+      hostAliases:
+        - ip: "192.168.2.224"  # Replace with your host's IP
+          hostnames:
+            - "local-host"
+      containers:
+        - name: {{ .Chart.Name }}
+          imagePullPolicy: {{ .Values.dsp.deployment.image.pullPolicy }}
+          image: "{{ .Values.dsp.deployment.image.repository }}:{{ .Values.dsp.deployment.image.tag }}"
+          {{- if .Values.dsp.deployment.command }}
+          command:
+          {{- with .Values.dsp.deployment.command }}
+          {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- end }}
+          {{- if .Values.dsp.deployment.args }}
+          args:
+            - --log-level=debug
+          {{- with .Values.dsp.deployment.args }}
+          {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- end }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.dsp.config.web.http.port }}
+              protocol: TCP
+            - name: http-version
+              containerPort: {{ .Values.dsp.config.web.http.version.port }}
+              protocol: TCP
+            - name: http-management
+              containerPort: {{ .Values.dsp.config.web.http.management.port }}
+              protocol: TCP
+            - name: http-protocol
+              containerPort: {{ .Values.dsp.config.web.http.protocol.port }}
+              protocol: TCP
+            - name: http-catalog
+              containerPort: {{ .Values.dsp.config.web.http.catalog.port }}
+              protocol: TCP
+            - name: http-control
+              containerPort: {{ .Values.dsp.config.web.http.control.port }}
+              protocol: TCP
+            - name: http-tck
+              containerPort: {{ .Values.dsp.config.testExtension.controller.port }}
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.dsp.deployment.path}}/check/liveness
+              port: http
+            initialDelaySeconds: {{ .Values.dsp.deployment.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.dsp.deployment.livenessProbe.periodSeconds }}
+            successThreshold: {{ .Values.dsp.deployment.livenessProbe.successThreshold }}
+            timeoutSeconds: {{ .Values.dsp.deployment.livenessProbe.timeoutSeconds }}
+          readinessProbe:
+            httpGet:
+              path: {{ .Values.dsp.deployment.path}}/check/readiness
+              port: http
+            initialDelaySeconds: {{ .Values.dsp.deployment.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.dsp.deployment.readinessProbe.periodSeconds }}
+            successThreshold: {{ .Values.dsp.deployment.readinessProbe.successThreshold }}
+            timeoutSeconds: {{ .Values.dsp.deployment.readinessProbe.timeoutSeconds }}
+          env:
+            - name: EDC_FS_CONFIG
+              value: /config/dataspaceconnector-configuration.properties
+            {{- with .Values.dsp.additionalEnvVars }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          volumeMounts:
+            - name: config-properties
+              mountPath: /config/dataspaceconnector-configuration.properties
+              subPath: dataspaceconnector-configuration.properties
+            {{- if .Values.dsp.deployment.additionalVolumeMounts }}
+            {{- with .Values.dsp.deployment.additionalVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+            {{- end }}
+          resources:
+            {{- toYaml .Values.dsp.deployment.resources | nindent 12 }}
+      volumes:
+        - name: config-properties
+          configMap:
+            name: dsp-controlplane
+        {{- if .Values.dsp.deployment.additionalVolumes }}
+        {{- with .Values.dsp.deployment.additionalVolumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- end }}
+      {{- with .Values.dsp.deployment.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.dsp.deployment.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.dsp.deployment.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}

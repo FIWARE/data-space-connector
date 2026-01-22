@@ -54,8 +54,9 @@ With the following steps, a catalog containing a DataService can be created:
 
 >:warning: For better understandability, the creation happens directly through the TMForum-API, without authentication.
 
-1. Create a Category(to match offering and catalog):
+Prepare the offering on the provider side: 
 
+1. Create the category:
 ```shell
 export CATEGORY_ID=$(curl -X 'POST' \
   'http://tm-forum-api.127.0.0.1.nip.io:8080/tmf-api/productCatalogManagement/v4/category' \
@@ -67,8 +68,7 @@ export CATEGORY_ID=$(curl -X 'POST' \
 }' | jq .id -r); echo ${CATEGORY_ID}
 ```
 
-2. Create a Catalog:
-
+2. Create the catalog:
 ```shell
 export CATALOG_ID=$(curl -X 'POST' \
   'http://tm-forum-api.127.0.0.1.nip.io:8080/tmf-api/productCatalogManagement/v4/catalog' \
@@ -76,7 +76,7 @@ export CATALOG_ID=$(curl -X 'POST' \
   -H 'Content-Type: application/json;charset=utf-8' \
   -d "{
   \"description\": \"Test Catalog\",
-  \"name\": \"Test Catalog\", 
+  \"name\": \"Test Catalog\",
   \"category\": [
     {
         \"id\": \"${CATEGORY_ID}\"
@@ -85,370 +85,349 @@ export CATALOG_ID=$(curl -X 'POST' \
 }" | jq .id -r); echo ${CATALOG_ID}
 ```
 
-3. Create a product specification. In order to be mapped to DCAT, it needs to contain the ```productSpecCharacteristic``` ```endpointUrl``` and ```endpointDescription```:
-
+3. Create the product-specifction(e.g. the dataset) - pointing towards the NGSI-LD based data service. In order to work with the DSP, the following specCharacteristics have to be provided:
+* endpointUrl: host address that the service will be made available at
+* endpointDescription: a description of the service to be used in the catalog
+* upstreamAddress: internal address of the service, required for provisioning - will not be published through the catalog api
+* (optional) targetSpecification: An odrl:AssetCollection to be used as target of the policies. If not provided, the AssetId will be enforced as the target
+* serviceConfiguration: Configuration to be provided at the credentials-config-service for OID4VP support
 
 ```shell
 export PRODUCT_SPEC_ID=$(curl -X 'POST' \
-  'http://tm-forum-api.127.0.0.1.nip.io:8080/tmf-api/productCatalogManagement/v4/productSpecification' \
-  -H 'accept: application/json;charset=utf-8' \
-  -H 'Content-Type: application/json;charset=utf-8' \
-  -d "{
-        \"name\": \"Test Spec\", 
-        \"productSpecCharacteristic\": [
-            {
-                \"id\": \"endpointUrl\",
-                \"name\":\"Service Endpoint URL\",
-                \"valueType\":\"endpointUrl\",
-                \"productSpecCharacteristicValue\": [{
-                    \"value\":\"https://the-test-service.org\",
-                    \"isDefault\": true
-                }]
-            },
-            {
-                \"id\": \"endpointDescription\",
-                \"name\":\"Service Endpoint Description\",
-                \"valueType\":\"endpointDescription\",
-                \"productSpecCharacteristicValue\": [{
-                    \"value\":\"The Test Service\"
-                }]
-            }
-        ]
-    }" | jq .id -r); echo ${PRODUCT_SPEC_ID}
-```
-
-4. Create the Product Offering:
-
-
-```shell
-export PRODUCT_OFFERING_ID=$(curl -X 'POST' \
-  'http://tm-forum-api.127.0.0.1.nip.io:8080/tmf-api/productCatalogManagement/v4/productOffering' \
-  -H 'accept: application/json;charset=utf-8' \
-  -H 'Content-Type: application/json;charset=utf-8' \
-  -d "{
-        \"name\": \"Test Offering\",
-        \"description\": \"Test Offering description\", 
-        \"isBundle\": false,
-        \"isSellable\": true,
-        \"lifecycleStatus\": \"Active\",
-        \"productSpecification\": 
-            {
-                \"id\": \"${PRODUCT_SPEC_ID}\",
-                \"name\":\"The Test Spec\"
-            },
-        \"category\": [{
-            \"id\": \"${CATEGORY_ID}\"
-        }]
-    }" | jq .id -r); echo ${PRODUCT_OFFERING_ID}
-```
-
-After those steps, the catalog with the offering(as a ```dcat:service```) is available:
-
-```shell
-    curl -X GET 'http://rainbow-provider.127.0.0.1.nip.io:8080/api/v1/catalogs' | jq .
-```
-
-The result will be similar to the following:
-
-```json
-[
-    {
-        "@context": "https://w3id.org/dspace/2024/1/context.json",
-        "@type": "dcat:Catalog",
-        "@id": "urn:ngsi-ld:catalog:5b33f5bc-65e7-40b4-a71c-b722da52a919",
-        "foaf:homepage": null,
-        "dcat:theme": "",
-        "dcat:keyword": "",
-        "dct:conformsTo": null,
-        "dct:creator": null,
-        "dct:identifier": "urn:ngsi-ld:catalog:5b33f5bc-65e7-40b4-a71c-b722da52a919",
-        "dct:issued": "2025-01-15T07:25:19.779168",
-        "dct:modified": null,
-        "dct:title": "Test Catalog",
-        "dct:description": [],
-        "dspace:participantId": null,
-        "odrl:hasPolicy": [],
-        "dspace:extraFields": null,
-        "dcat:dataset": [],
-        "dcat:service": [
-            {
-                "@context": "https://w3id.org/dspace/2024/1/context.json",
-                "@type": "dcat:DataService",
-                "@id": "urn:ngsi-ld:product-offering:96eaae6d-1615-41b0-b721-91c6a2e36551",
-                "dcat:theme": "",
-                "dcat:keyword": "",
-                "dcat:endpointDescription": "The Test Service",
-                "dcat:endpointURL": "https://the-test-service.org",
-                "dct:conformsTo": null,
-                "dct:creator": null,
-                "dct:identifier": "urn:ngsi-ld:product-offering:96eaae6d-1615-41b0-b721-91c6a2e36551",
-                "dct:issued": "2025-01-15T07:25:31.220506",
-                "dct:modified": null,
-                "dct:title": "Test Spec",
-                "dct:description": [],
-                "odrl:hasPolicy": [],
-                "dspace:extraFields": null
-            }
-        ]
-    }
-]
-```
-
-### Authentication and Authorization
-
-The TMForum-API and the Data Service are secured by the IAM in addition to be connected with the Transfer Process Protocol. Therefor, the provider has to create policies to control access to TMForum, the Data Service and the Rainbow API.
-
-1. Allow [read-access to the Rainbow Catalog API](../it/src/test/resources/policies/allowCatalogRead.json)
-
-```shell
-curl -X 'POST' http://pap-provider.127.0.0.1.nip.io:8080/policy \
-    -H 'Content-Type: application/json' \
-    -d "$(cat ./it/src/test/resources/policies/allowCatalogRead.json)"
-```
-
-2. Allow [self-registration of organizations at TMForum](../it/src/test/resources/policies/allowSelfRegistration.json)
-
-```shell
-curl -X 'POST' http://pap-provider.127.0.0.1.nip.io:8080/policy \
-    -H 'Content-Type: application/json' \
-    -d "$(cat ./it/src/test/resources/policies/allowSelfRegistration.json)"
-```
-
-3. Allow [to order at TMForum](../it/src/test/resources/policies/allowProductOrder.json.json)
-
-```shell
-curl -X 'POST' http://pap-provider.127.0.0.1.nip.io:8080/policy \
-    -H 'Content-Type: application/json' \
-    -d "$(cat ./it/src/test/resources/policies/allowProductOrder.json)"
-```
-
-4. Allow [operators to read uptime-reports](../it/src/test/resources/policies/uptimeReport.json)
-
-```shell
-curl -X 'POST' http://pap-provider.127.0.0.1.nip.io:8080/policy \
-    -H 'Content-Type: application/json' \
-    -d "$(cat ./it/src/test/resources/policies/uptimeReport.json)"
-```
-
-5. Allow [operators to request data transfers at Rainbow](../it/src/test/resources/policies/transferRequest.json)
-
-```shell
-curl -X 'POST' http://pap-provider.127.0.0.1.nip.io:8080/policy \
-    -H 'Content-Type: application/json' \
-    -d "$(cat ./it/src/test/resources/policies/transferRequest.json)"
-```
-
-6. Allow [the consumer to read its agreements.](../it/src/test/resources/policies/allowTMFAgreementRead.json)
-
-```shell
-curl -X 'POST' http://pap-provider.127.0.0.1.nip.io:8080/policy \
-    -H 'Content-Type: application/json' \
-    -d "$(cat ./it/src/test/resources/policies/allowTMFAgreementRead.json)"
-```
-
-In order to use the endpoints, the Consumer needs to issue a User and an Operator credential:
-
-1. Get the UserCredential:
-```shell
-export USER_CREDENTIAL=$(./doc/scripts/get_credential.sh https://keycloak-consumer.127.0.0.1.nip.io user-credential employee); echo ${USER_CREDENTIAL}
-```
-2. Get the OperatorCredential:
-```shell
-export OPERATOR_CREDENTIAL=$(./doc/scripts/get_credential.sh https://keycloak-consumer.127.0.0.1.nip.io operator-credential operator); echo ${OPERATOR_CREDENTIAL}
-```
-3. Get the LegalPersonCredential for the representative:
-```shell
-export REP_CREDENTIAL=$(./doc/scripts/get_credential.sh https://keycloak-consumer.127.0.0.1.nip.io user-credential representative); echo ${REP_CREDENTIAL}
-```
-
-To prepare usage of the credentials, also create the keymaterial for the holder:
-
-```shell
-  docker run -v $(pwd):/cert quay.io/wi_stefan/did-helper:0.1.1
-```
-
-Its did is: 
-
-```shell
-  export HOLDER_DID=$(cat did.json | jq '.id' -r); echo ${HOLDER_DID}
-```
-
-### Contract Negotiation
-
-Since contract negotiation is a complex topic on its own, see the dedicated [Contract Negotiation Documentation](CONTRACT_NEGOTIATION.md).
-
-### Get access to the Data Service
-
-To gain access to the service and become able to use the service through the Transfer Process Protocol, the offering has to be accepted through a ProductOrder. The order will be translated into an 
-[IDSA Agreement](https://docs.internationaldataspaces.org/ids-knowledgebase/dataspace-protocol/overview/terminology#agreement) once its completed. 
-
-1. Get the consumer Did:
-
-```shell
-    export CONSUMER_DID=$(curl -X GET http://did-consumer.127.0.0.1.nip.io:8080/did-material/did.env | cut -d'=' -f2); echo ${CONSUMER_DID} 
-```
-
-2. Register the consumer at the marketplace:
-
-```shell
-    export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh http://mp-data-service.127.0.0.1.nip.io:8080 $REP_CREDENTIAL default); echo ${ACCESS_TOKEN}
-    export FANCY_MARKETPLACE_ID=$(curl -X POST http://mp-tmf-api.127.0.0.1.nip.io:8080/tmf-api/party/v4/organization \
-    -H 'Accept: */*' \
-    -H "Authorization: Bearer ${ACCESS_TOKEN}" \
-    -H 'Content-Type: application/json' \
-    -d "{
-      \"name\": \"Fancy Marketplace Inc.\",
-      \"partyCharacteristic\": [
-        {
-          \"name\": \"did\",
-          \"value\": \"${CONSUMER_DID}\" 
-        }
-      ]
-    }" | jq '.id' -r); echo ${FANCY_MARKETPLACE_ID} 
-```
-
-3. Create the Product Order(in the demo flow, we just reuse the already known offer-id. In reality, it should be retrieved from the list of offerings):
-
-```shell
-    export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh http://mp-data-service.127.0.0.1.nip.io:8080 $USER_CREDENTIAL default); echo ${ACCESS_TOKEN}
-    export PRODUCT_ORDER_ID=$(curl -X 'POST' \
-    'http://mp-tmf-api.127.0.0.1.nip.io:8080/tmf-api/productOrderingManagement/v4/productOrder' \
+    'http://tm-forum-api.127.0.0.1.nip.io:8080/tmf-api/productCatalogManagement/v4/productSpecification' \
     -H 'accept: application/json;charset=utf-8' \
-    -H "Authorization: Bearer ${ACCESS_TOKEN}" \
     -H 'Content-Type: application/json;charset=utf-8' \
     -d "{
-            \"productOrderItem\": [
-                {
-                    \"id\":\"the-order-item\",
-                    \"action\": \"add\",
-                    \"productOffering\": {
-                        \"id\": \"${PRODUCT_OFFERING_ID}\",
-                        \"name\":\"The Test Offer\"
-                    }
-                }
-            ],
-            \"relatedParty\": [{
-                \"id\": \"${FANCY_MARKETPLACE_ID}\",
-                \"name\": \"Fancy Marketplace Co.\"
-            }]
-        }" | jq .id -r); echo ${PRODUCT_ORDER_ID}
+           \"name\": \"Test Spec\",
+           \"externalId\": \"ASSET-1\",
+           \"@schemaLocation\": \"https://raw.githubusercontent.com/wistefan/edc-dsc/refs/heads/init/schemas/external-id.json\",
+           \"productSpecCharacteristic\": [
+               {
+                   \"id\": \"endpointUrl\",
+                   \"name\":\"Service Endpoint URL\",
+                   \"valueType\":\"endpointUrl\",
+                   \"productSpecCharacteristicValue\": [{
+                       \"value\":\"http://mp-data-service.127.0.0.1.nip.io\",
+                       \"isDefault\": true
+                   }]
+               },
+               {
+                   \"id\": \"upstreamAddress\",
+                   \"name\":\"Address of the upstream serving the data\",
+                   \"valueType\":\"upstreamAddress\",
+                   \"productSpecCharacteristicValue\": [{
+                       \"value\":\"data-service-scorpio:9090\",
+                       \"isDefault\": true
+                   }]
+               },
+               {
+                   \"id\": \"endpointDescription\",
+                   \"name\":\"Service Endpoint Description\",
+                   \"valueType\":\"endpointDescription\",
+                   \"productSpecCharacteristicValue\": [{
+                       \"value\":\"The Test Service\"
+                   }]
+               },
+               {
+                   \"id\": \"targetSpecification\",
+                   \"name\":\"Detailed specification of the ODRL target\",
+                   \"valueType\":\"targetSpecification\",
+                   \"productSpecCharacteristicValue\": [{
+                      \"value\": {
+                        \"@type\": \"AssetCollection\",
+                        \"refinement\": [
+                          {
+                            \"@type\": \"Constraint\",
+                            \"leftOperand\": \"http:path\",
+                            \"operator\": \"http:isInPath\",
+                            \"rightOperand\": \"/*/ngsi-ld/v1/entities\"
+                          }
+                        ]
+                       },
+                       \"isDefault\": true
+                   }]
+               },
+               {
+                 \"id\": \"serviceConfiguration\",
+                 \"name\": \"Service config to be used in the credentials config service\",
+                 \"valueType\": \"serviceConfiguration\",
+                 \"productSpecCharacteristicValue\": [
+                   {
+                     \"isDefault\": true,
+                     \"value\": {
+                       \"defaultOidcScope\": \"openid\",
+                       \"authorizationType\": \"DEEPLINK\",
+                       \"oidcScopes\": {
+                         \"openid\": {
+                           \"credentials\": [
+                             {
+                               \"type\": \"LegalPersonCredential\",
+                               \"trustedParticipantsLists\": [
+                                {
+                                  \"type\": \"ebsi\",
+                                  \"url\": \"http://tir.127.0.0.1.nip.io\"
+                                }
+                               ],
+                               \"trustedIssuersLists\": [\"http://trusted-issuers-list:8080\"],
+                               \"jwtInclusion\": {
+                                 \"enabled\": true,
+                                 \"fullInclusion\": true
+                               }
+                             }
+                           ],
+                           \"dcql\": {
+                             \"credentials\": [
+                               {
+                                 \"id\": \"legal-person-query\",
+                                 \"format\": \"dc+sd-jwt\",
+                                 \"multiple\": false,
+                                 \"claims\": [
+                                   {
+                                     \"id\": \"name-claim\",
+                                     \"path\": [\"firstName\"]
+                                   }
+                                 ],
+                                 \"meta\": {
+                                   \"vct_values\": [\"LegalPersonCredential\"]
+                                 }
+                               }
+                             ]
+                           }
+                         }
+                       }
+                     }
+                   }
+                 ]
+               }
+           ]
+       }" | jq '.id' -r); echo ${PRODUCT_SPEC_ID}
 ```
 
-4. Complete the order. Usually, thats something a marketplace application might do, f.e. once the payment is fullfilled.
-
+4. Create the corresponding ProductOffering. It will include the policies to be used for the offering. As of now, only access-policies are supported(for compatibility reasons, the contract policy still needs an id).
 
 ```shell
-    export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh http://mp-data-service.127.0.0.1.nip.io:8080 $USER_CREDENTIAL default); echo ${ACCESS_TOKEN}
-    curl -X 'PATCH' \
-        -H "Authorization: Bearer ${ACCESS_TOKEN}" \
-        http://mp-tmf-api.127.0.0.1.nip.io:8080/tmf-api/productOrderingManagement/v4/productOrder/${PRODUCT_ORDER_ID} \
-        -H 'accept: application/json;charset=utf-8' \
-        -H 'Content-Type: application/json;charset=utf-8' \
-        -d "{
-                \"state\": \"completed\"
+access_policy_id=$(uuidgen)
+contract_policy_id=$(uuidgen)
+curl -X 'POST' \
+    'http://tm-forum-api.127.0.0.1.nip.io:8080/tmf-api/productCatalogManagement/v4/productOffering' \
+    -H 'accept: application/json;charset=utf-8' \
+    -H 'Content-Type: application/json;charset=utf-8' \
+    -d "{
+                \"name\": \"Test Offering\",
+                \"description\": \"Test Offering description\",
+                \"isBundle\": false,
+                \"isSellable\": true,
+                \"lifecycleStatus\": \"Active\",
+                \"@schemaLocation\": \"https://raw.githubusercontent.com/wistefan/edc-dsc/refs/heads/init/schemas/external-id.json\",
+                \"externalId\": \"OFFER:ASSET-1:123\",
+                \"productSpecification\":
+                    {
+                        \"id\": \"${PRODUCT_SPEC_ID}\",
+                        \"name\":\"The Test Spec\"
+                    },
+                \"category\": [{
+                    \"id\": \"${CATEGORY_ID}\"
+                }],
+                \"productOfferingTerm\": [
+                {
+                    \"name\": \"edc:contractDefinition\",
+                    \"@schemaLocation\": \"https://raw.githubusercontent.com/wistefan/edc-dsc/refs/heads/init/schemas/contract-definition.json\",
+                    \"accessPolicy\": {
+                      \"odrl:uid\": \"${access_policy_id}\"
+                    },
+                    \"contractPolicy\": {
+                      \"@context\": \"http://www.w3.org/ns/odrl.jsonld\",
+                      \"odrl:uid\": \"${contract_policy_id}\",
+                      \"assigner\": \"did:web:mp-operations.org\",
+                      \"permissions\": [{
+                          \"action\": {
+                            \"type\": \"http://www.w3.org/ns/odrl/2/use\"
+                          },
+                          \"edctype\": \"dataspaceconnector:permission\"
+                      }],
+                      \"@type\": {
+                          \"@policytype\": \"offer\"
+                      }
+                    }
+                }
+                ]
             }" | jq .
 ```
 
-### Access the service through the Transfer Process Protocol
-
-In order to actually use the service, an active [Transfer Process](https://docs.internationaldataspaces.org/ids-knowledgebase/dataspace-protocol/transfer-process/transfer.process.protocol) is required. 
-To start it, a [Transfer Request Message](https://docs.internationaldataspaces.org/ids-knowledgebase/dataspace-protocol/transfer-process/transfer.process.protocol#id-2.1-transfer-request-message) including the id of the previously created agreement has to be submitted.
-
-1. Get the Agreement ID in TMForum. The contract management creates a [TMForum Agreement](https://github.com/FIWARE/tmforum-api/blob/main/api/tm-forum/agreement/api.json#L1485) containing the ID of the Agreement in Rainbow. Its linked in the original ProductOrder.
-
-```shell 
-    export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh http://mp-data-service.127.0.0.1.nip.io:8080 $USER_CREDENTIAL default); echo ${ACCESS_TOKEN}
-    export AGREEMENT_TMF_ID=$(curl -X 'GET' \
-    http://mp-tmf-api.127.0.0.1.nip.io:8080/tmf-api/productOrderingManagement/v4/productOrder/${PRODUCT_ORDER_ID} \
-    -H 'accept: application/json;charset=utf-8' \
-    -H "Authorization: Bearer ${ACCESS_TOKEN}" \
-    -H 'Content-Type: application/json;charset=utf-8' | jq -r '.agreement[0].id'
-    ); echo ${AGREEMENT_TMF_ID}
+5. The catalog now can be read at the Providers DSP Catalog(needs to be authenticated):
+```shell
+export LEGAL_PERSON_CREDENTIAL=$(./doc/scripts/get_credential.sh https://keycloak-consumer.127.0.0.1.nip.io legal-person-credential employee)
+export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh http://dsp-mp-operations.127.0.0.1.nip.io $LEGAL_PERSON_CREDENTIAL openid)
+curl  -X POST \
+  'http://dsp-mp-operations.127.0.0.1.nip.io:8080/api/dsp/2025-1/catalog/request' \
+  --header 'Accept: */*' \
+  --header 'Content-Type: application/json' \
+  --header "Authorization: Bearer ${ACCESS_TOKEN}" \
+  --data-raw '{
+        "@context": [
+            "https://w3id.org/dspace/2025/1/context.jsonld"
+        ],
+        "@type": "CatalogRequestMessage",
+        "querySpec": {
+        }
+    }' | jq .
 ```
 
-2. Get the Agreement and retrieve the ID of the Agreement in Rainbow(provider rainbow is available at ```tpp-service.127.0.0.1.nip.io``` through the ApiGateway):
+### Interact with the FDSC-EDC
 
+
+All following interactions will happen through the Managment-API of the consumer-side connector. To ease its usage, the api is made available at ```dsp-management.127.0.0.1.nip.io```. In productive environments, this needs to be protected.
+
+6. The catalog can be read through the local connector. The connector will authenticate itself at the provider side, configured in ```counterPartyAddress```.
 ```shell
-    export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh http://mp-data-service.127.0.0.1.nip.io:8080 $USER_CREDENTIAL default); echo ${ACCESS_TOKEN}
-    export AGREEMENT_ID=$(curl -X 'GET' \
-    http://mp-tmf-api.127.0.0.1.nip.io:8080/tmf-api/agreementManagement/v4/agreement/${AGREEMENT_TMF_ID} \
-    -H 'accept: application/json;charset=utf-8' \
-    -H "Authorization: Bearer ${ACCESS_TOKEN}" \
-    -H 'Content-Type: application/json;charset=utf-8' | jq -r '.characteristic[0].value'
-    ); echo ${AGREEMENT_ID}
+curl  -X POST \
+  'http://dsp-management.127.0.0.1.nip.io:8080/api/v1/management/v3/catalog/request' \
+  --header 'Accept: */*' \
+  --header 'Content-Type: application/json' \
+  --data-raw '{
+        "@context": [
+            "https://w3id.org/edc/connector/management/v0.0.1"
+        ],
+        "@type": "CatalogRequestMessage",
+        "protocol": "dataspace-protocol-http:2025-1",
+        "counterPartyAddress": "http://dsp-mp-operations.127.0.0.1.nip.io:8080/api/dsp/2025-1",
+        "querySpec": {
+        }
+    }' | jq .
 ```
 
-3. Request the transfer at Rainbow and retrieve consumer and provider PID from it:
+7. In order to start a negotiation, an offer has to be selected(for the demo flow, only one is configured):
 
 ```shell
-    export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh http://tpp-service.127.0.0.1.nip.io:8080 $OPERATOR_CREDENTIAL operator); echo ${ACCESS_TOKEN}
-    export CONSUMER_PID=$(curl -X 'POST' 'http://tpp-service.127.0.0.1.nip.io:8080/transfers/request'\
-    -H 'accept: application/json;charset=utf-8' \
-    -H "Authorization: Bearer ${ACCESS_TOKEN}" \
-    -H 'Content-Type: application/json;charset=utf-8' \
-    -d "{
-            \"@context\": \"https://w3id.org/dspace/2024/1/context.json\",
-            \"@type\": \"dspace:TransferRequestMessage\",
-            \"dspace:consumerPid\": \"urn:uuid:$(cat /proc/sys/kernel/random/uuid)\",
-            \"dspace:agreementId\": \"${AGREEMENT_ID}\",
-            \"dct:format\": \"http+pull\",
-            \"dspace:callbackAddress\": \"http://rainbow-consumer.127.0.0.1.nip.io:8080/api/v1/callbacks\"
-        }" | jq .\"dspace:consumerPid\" -r); echo ${CONSUMER_PID}
-    # workaround to get the provider pid into an env-var. The id is already included in the previous response, thus this call is not required in "normal" usage
-    export PROVIDER_PID=$(curl -X 'GET' 'http://rainbow-provider.127.0.0.1.nip.io:8080/api/v1/transfers' | jq '.[0].provider_pid' -r); echo ${PROVIDER_PID}
-```
-Once the request is completed, provider´s rainbow will check the callback at the consumer to ensure its actually reachable.
-
-
-4. Start the transfer(e.g. move state-machine to [STARTED](https://docs.internationaldataspaces.org/ids-knowledgebase/dataspace-protocol/transfer-process/transfer.process.protocol#id-1.3-state-machine))
-
-```shell
-    export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh http://tpp-service.127.0.0.1.nip.io:8080 $OPERATOR_CREDENTIAL operator); echo ${ACCESS_TOKEN}
-    curl -X 'POST' http://tpp-service.127.0.0.1.nip.io:8080/transfers/${PROVIDER_PID}/start\
-    -H 'accept: application/json;charset=utf-8' \
-    -H "Authorization: Bearer ${ACCESS_TOKEN}" \
-    -H 'Content-Type: application/json;charset=utf-8' \
-    -d "{
-            \"@context\": \"https://w3id.org/dspace/2024/1/context.json\",
-            \"@type\": \"dspace:TransferStartMessage\",
-            \"dspace:consumerPid\": \"${CONSUMER_PID}\",
-            \"dspace:providerPid\": \"${PROVIDER_PID}\"
-        }" | jq .
+curl  -X POST \
+  'http://dsp-management.127.0.0.1.nip.io:8080/api/v1/management/v3/contractnegotiations' \
+  --header 'Accept: */*' \
+  --header 'Content-Type: application/json' \
+  --data-raw '{
+        "@context": [
+            "https://w3id.org/edc/connector/management/v0.0.1"
+        ],
+        "@type": "ContractRequest",
+        "counterPartyAddress": "http://dsp-mp-operations.127.0.0.1.nip.io:8080/api/dsp/2025-1",
+        "counterPartyId": "did:web:mp-operations.org",
+        "protocol": "dataspace-protocol-http:2025-1",
+        "policy": {
+            "@context": "http://www.w3.org/ns/odrl.jsonld",
+            "@type": "Offer",
+            "@id": "OFFER:ASSET-1:123",
+            "assigner": "did:web:mp-operations.org",
+            "permission": [
+                {
+                  "action": "use"
+                }  
+            ],
+            "target": "ASSET-1"
+        }
+    }' | jq .
 ```
 
-5. Get data for the running process. The provider-pid needs to be included as ```transferId``` header: 
-
+8. Negotiation state can be retrieved at the consumer:
 
 ```shell
-    export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh http://mp-data-service.127.0.0.1.nip.io:8080 $OPERATOR_CREDENTIAL operator); echo ${ACCESS_TOKEN}
-    curl -X GET http://tpp-data-service.127.0.0.1.nip.io:8080/ngsi-ld/v1/entities/urn:ngsi-ld:UptimeReport:fms-1 \
-        -H 'Accept: */*' \
-        -H "transferId: ${PROVIDER_PID}" \
-        -H "Authorization: Bearer ${ACCESS_TOKEN}"
+curl  -X POST \
+  'http://dsp-management.127.0.0.1.nip.io:8080/api/v1/management/v3/contractnegotiations/request' \
+  --header 'Accept: */*' \
+  --header 'Content-Type: application/json' | jq .
 ```
 
-6. Stop the transfer by setting its state to ```COMPLETED```:
+9. When the state of the negotiation is "finalized", the agreement id can be retrieved: 
 
 ```shell
-    export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh http://tpp-service.127.0.0.1.nip.io:8080 $OPERATOR_CREDENTIAL operator); echo ${ACCESS_TOKEN}
-    curl -X 'POST' http://tpp-service.127.0.0.1.nip.io:8080/transfers/${PROVIDER_PID}/completion \
-    -H 'accept: application/json;charset=utf-8' \
-    -H "Authorization: Bearer ${ACCESS_TOKEN}" \
-    -H 'Content-Type: application/json;charset=utf-8' \
-    -d "{
-            \"@context\": \"https://w3id.org/dspace/2024/1/context.json\",
-            \"@type\": \"dspace:TransferCompletionMessage\",
-            \"dspace:consumerPid\": \"${CONSUMER_PID}\",
-            \"dspace:providerPid\": \"${PROVIDER_PID}\"
-        }" | jq .
+export AGREEMENT_ID=$(curl  -X POST \
+  'http://dsp-management.127.0.0.1.nip.io:8080/api/v1/management/v3/contractnegotiations/request' \
+  --header 'Accept: */*' \
+  --header 'Content-Type: application/json' | jq -r .[].contractAgreementId); echo ${AGREEMENT_ID}
 ```
 
-7. Try to get data again. It should not be allowed anymore.
+10. With a successfull agreement in place, a transfer process can be started:
 
 ```shell
-    export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh http://mp-data-service.127.0.0.1.nip.io:8080 $OPERATOR_CREDENTIAL operator); echo ${ACCESS_TOKEN}
-    curl -X GET http://tpp-data-service.127.0.0.1.nip.io:8080/ngsi-ld/v1/entities/urn:ngsi-ld:UptimeReport:fms-1 \
-        -H 'Accept: */*' \
-        -H "transferId: ${PROVIDER_PID}" \
-        -H "Authorization: Bearer ${ACCESS_TOKEN}" 
+curl  -X POST \
+  'http://dsp-management.127.0.0.1.nip.io:8080/api/v1/management/v3/transferprocesses' \
+  --header 'Accept: */*' \
+  --header 'Content-Type: application/json' \
+  --data-raw "{
+    \"@context\": [
+        \"https://w3id.org/edc/connector/management/v0.0.1\"
+    ],
+    \"assetId\": \"asset-1\",
+    \"counterPartyAddress\":  \"http://dsp-mp-operations.127.0.0.1.nip.io:8080/api/dsp/2025-1\",
+    \"connectorId\": \"did:web:mp-operations.org\",
+    \"contractId\": \"${AGREEMENT_ID}\",
+    \"dataDestination\": {
+        \"type\": \"HttpProxy\"
+    },
+    \"protocol\": \"dataspace-protocol-http:2025-1\",
+    \"transferType\": \"HttpData-PULL\"
+}" | jq .
+```
+
+11. The transfer state can be retrieved at the consumer:
+
+```shell
+curl  -X POST \
+  'http://dsp-management.127.0.0.1.nip.io:8080/api/v1/management/v3/transferprocesses/request' \
+  --header 'Accept: */*' \
+  --header 'Content-Type: application/json' \
+  --data-raw '{
+    "@context": ["https://w3id.org/edc/connector/management/v0.0.1"],
+    "@type": "QuerySpec"
+  }' | jq .
+```
+
+12. When state is "started", the transfer Id can be retrieved:
+
+```shell
+export TRANSFER_ID=$(curl  -X POST \
+  'http://dsp-management.127.0.0.1.nip.io:8080/api/v1/management/v3/transferprocesses/request' \
+  --header 'Accept: */*' \
+  --header 'Content-Type: application/json' \
+  --data-raw '{
+    "@context": ["https://w3id.org/edc/connector/management/v0.0.1"],
+    "@type": "QuerySpec"
+  }' | jq -r '.[]."@id"'); echo ${TRANSFER_ID}
+```
+
+13. For the started transfer, now the provisioned endpoint has to be retrieved:
+```shell
+export ENDPOINT=$(curl -X GET "http://dsp-management.127.0.0.1.nip.io:8080/api/v1/management/v3/edrs/${TRANSFER_ID}/dataaddress" | jq -r .endpoint); echo ${ENDPOINT}
+```
+
+14. Since OID4VP is configured to be used for authentication, a 401 should be returned for that endpoint(the proxy has to be used in the local deployment, to allow proper dns resolution):
+```shell
+curl -x localhost:8888 -X GET ${ENDPOINT}/ngsi-ld/v1/entities/urn:ngsi-ld:UptimeReport:fms-1
+```
+
+15. Get the OpenId Configuration for the provisioned endpoint:
+```shell
+curl -x localhost:8888 -X GET ${ENDPOINT}/.well-known/openid-configuration | jq .
+```
+
+16. With the OpenId-Configuration, a proper OID4VP flow can be executed. The user identifies itself with a LegalPersonCredential and gets an AccessToken back from the verifier. With that, the entity can be accessed:
+```shell
+export LEGAL_PERSON_CREDENTIAL=$(./doc/scripts/get_credential.sh https://keycloak-consumer.127.0.0.1.nip.io legal-person-credential employee)
+export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh ${ENDPOINT} $LEGAL_PERSON_CREDENTIAL openid)
+curl -x localhost:8888 -X GET ${ENDPOINT}/ngsi-ld/v1/entities/urn:ngsi-ld:UptimeReport:fms-1 \
+  --header 'Content-Type: application/json' \
+  --header "Authorization: Bearer ${ACCESS_TOKEN}"
+```
+
+17. Once interaction has finished, the transfer can be stopped:
+
+```shell
+curl -X POST "http://dsp-management.127.0.0.1.nip.io:8080/api/v1/management/v3/transferprocesses/${TRANSFER_ID}/terminate" \
+  --header 'Accept: */*' \
+  --header 'Content-Type: application/json' \
+  --data-raw "{
+      \"@context\": [
+          \"https://w3id.org/edc/connector/management/v0.0.1\"
+      ],
+      \"counterPartyAddress\":  \"http://dsp-mp-operations.127.0.0.1.nip.io:8080/api/dsp/2025-1\",
+      \"reason\" : \"finished\"
+  }" | jq .
 ```

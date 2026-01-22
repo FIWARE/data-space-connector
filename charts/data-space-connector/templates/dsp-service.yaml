@@ -1,0 +1,48 @@
+{{- if .Values.dsp.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: dsp-controlplane
+  namespace: {{ $.Release.Namespace | quote }}
+  {{- if .Values.dsp.service.annotations }}
+  annotations:
+    {{ toYaml .Values.dsp.service.annotations | nindent 4 }}
+  {{- end }}
+  labels:
+    app.kubernetes.io/name: dsp-controlplane
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  type: {{ .Values.dsp.service.type }}
+  ports:
+    - port: {{ .Values.dsp.config.web.http.port }}
+      targetPort: http
+      protocol: TCP
+      name: http
+    - port: {{ .Values.dsp.config.web.http.version.port }}
+      targetPort: http-version
+      protocol: TCP
+      name: http-version
+    - port: {{ .Values.dsp.config.web.http.protocol.port }}
+      targetPort: http-protocol
+      protocol: TCP
+      name: http-protocol
+    - port: {{ .Values.dsp.config.web.http.catalog.port }}
+      targetPort: http-catalog
+      protocol: TCP
+      name: http-catalog
+    - port: {{ .Values.dsp.config.web.http.management.port }}
+      targetPort: http-management
+      protocol: TCP
+      name: http-management
+    - port: {{ .Values.dsp.config.web.http.control.port }}
+      targetPort: http-control
+      protocol: TCP
+      name: http-control
+    - port: {{ .Values.dsp.config.testExtension.controller.port }}
+      targetPort: http-tck
+      protocol: TCP
+      name: http-tck
+  selector:
+    app.kubernetes.io/name: dsp-controlplane
+    app.kubernetes.io/instance: {{ .Release.Name }}
+{{- end }}
