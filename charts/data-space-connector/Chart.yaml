@@ -2,7 +2,7 @@ apiVersion: v2
 name: data-space-connector
 description: Umbrella Chart for the FIWARE Data Space Connector, combining all essential parts to be used by a participant.
 type: application
-version: 8.3.1
+version: 8.4.0
 dependencies:
   - name: postgresql
     condition: postgresql.enabled
@@ -11,15 +11,15 @@ dependencies:
   # authentication
   - name: vcverifier
     condition: vcverifier.enabled
-    version: 4.3.0
+    version: 4.3.8
     repository: https://fiware.github.io/helm-charts
   - name: credentials-config-service
     condition: credentials-config-service.enabled
-    version: 2.3.0
+    version: 2.4.9
     repository: https://fiware.github.io/helm-charts
   - name: trusted-issuers-list
     condition: trusted-issuers-list.enabled
-    version: 0.10.3
+    version: 0.11.4
     repository: https://fiware.github.io/helm-charts
   - name: mysql
     condition: mysql.enabled
@@ -28,12 +28,12 @@ dependencies:
   - name: dss-validation-service
     alias: dss
     condition: dss.enabled
-    version: 0.0.14
+    version: 0.0.18
     repository: https://fiware.github.io/helm-charts
   # authorization
   - name: odrl-pap
     condition: odrl-pap.enabled
-    version: 2.3.0
+    version: 2.3.8
     repository: https://fiware.github.io/helm-charts
   - name: apisix
     condition: apisix.enabled
@@ -44,7 +44,7 @@ dependencies:
     alias: scorpio
     condition: scorpio.enabled
     repository: https://fiware.github.io/helm-charts
-    version: 0.4.7
+    version: 0.4.12
   - name: postgresql
     alias: postgis
     condition: postgis.enabled
@@ -58,17 +58,17 @@ dependencies:
   # contract management
   - name: tm-forum-api
     condition: tm-forum-api.enabled
-    version: 0.14.14
+    version: 0.15.4
     repository: https://fiware.github.io/helm-charts
   - name: contract-management
     condition: contract-management.enabled
-    version: 3.5.6
+    version: 3.5.12
     repository: https://fiware.github.io/helm-charts
   # marketplace
   - name: business-api-ecosystem
     alias: marketplace
     condition: marketplace.enabled
-    version: 0.11.22
+    version: 0.11.26
     repository: https://fiware.github.io/helm-charts
   - name: community-operator
     alias: mongo-operator

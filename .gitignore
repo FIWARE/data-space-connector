@@ -1,0 +1,4 @@
+Chart.lock
+/charts/**/charts
+.DS_Store
+it/target
