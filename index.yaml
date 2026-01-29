@@ -2,6 +2,82 @@ apiVersion: v1
 entries:
   data-space-connector:
   - apiVersion: v2
+    created: "2026-01-29T14:11:19.722700457Z"
+    dependencies:
+    - condition: postgresql.enabled
+      name: postgresql
+      repository: oci://registry-1.docker.io/bitnamicharts
+      version: 16.7.27
+    - condition: vcverifier.enabled
+      name: vcverifier
+      repository: https://fiware.github.io/helm-charts
+      version: 4.3.8
+    - condition: credentials-config-service.enabled
+      name: credentials-config-service
+      repository: https://fiware.github.io/helm-charts
+      version: 2.4.9
+    - condition: trusted-issuers-list.enabled
+      name: trusted-issuers-list
+      repository: https://fiware.github.io/helm-charts
+      version: 0.11.4
+    - condition: mysql.enabled
+      name: mysql
+      repository: https://charts.bitnami.com/bitnami
+      version: 12.2.2
+    - alias: dss
+      condition: dss.enabled
+      name: dss-validation-service
+      repository: https://fiware.github.io/helm-charts
+      version: 0.0.18
+    - condition: odrl-pap.enabled
+      name: odrl-pap
+      repository: https://fiware.github.io/helm-charts
+      version: 2.3.8
+    - condition: apisix.enabled
+      name: apisix
+      repository: oci://registry-1.docker.io/bitnamicharts
+      version: 3.5.1
+    - alias: scorpio
+      condition: scorpio.enabled
+      name: scorpio-broker-aaio
+      repository: https://fiware.github.io/helm-charts
+      version: 0.4.12
+    - alias: postgis
+      condition: postgis.enabled
+      name: postgresql
+      repository: oci://registry-1.docker.io/bitnamicharts
+      version: 16.7.27
+    - condition: keycloak.enabled
+      name: keycloak
+      repository: oci://registry-1.docker.io/bitnamicharts
+      version: 25.2.0
+    - condition: tm-forum-api.enabled
+      name: tm-forum-api
+      repository: https://fiware.github.io/helm-charts
+      version: 0.15.4
+    - condition: contract-management.enabled
+      name: contract-management
+      repository: https://fiware.github.io/helm-charts
+      version: 3.5.12
+    - alias: marketplace
+      condition: marketplace.enabled
+      name: business-api-ecosystem
+      repository: https://fiware.github.io/helm-charts
+      version: 0.11.26
+    - alias: mongo-operator
+      condition: mongo-operator.enabled
+      name: community-operator
+      repository: https://mongodb.github.io/helm-charts
+      version: 0.13.0
+    description: Umbrella Chart for the FIWARE Data Space Connector, combining all
+      essential parts to be used by a participant.
+    digest: 86ddaadc57b2bef3fdd8984e49b595e29ef79af94827502519b05a5b28e7b841
+    name: data-space-connector
+    type: application
+    urls:
+    - https://github.com/FIWARE/data-space-connector/releases/download/data-space-connector-8.4.0/data-space-connector-8.4.0.tgz
+    version: 8.4.0
+  - apiVersion: v2
     created: "2026-01-13T08:08:57.462047891Z"
     dependencies:
     - condition: postgresql.enabled
@@ -1478,4 +1554,4 @@ entries:
     urls:
     - https://github.com/FIWARE/data-space-connector/releases/download/trust-anchor-0.2.0/trust-anchor-0.2.0.tgz
     version: 0.2.0
-generated: "2026-01-13T08:08:57.462210637Z"
+generated: "2026-01-29T14:11:19.722867659Z"
