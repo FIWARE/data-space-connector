@@ -44,7 +44,7 @@ dependencies:
     alias: scorpio
     condition: scorpio.enabled
     repository: https://fiware.github.io/helm-charts
-    version: 0.4.7
+    version: 0.4.12
   - name: postgresql
     alias: postgis
     condition: postgis.enabled
