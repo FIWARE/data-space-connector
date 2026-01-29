@@ -619,9 +619,8 @@ rainbow:
       - host: rainbow-consumer.127.0.0.1.nip.io
         paths:
           - /
-    enabled: true
     host: rainbow-consumer.127.0.0.1.nip.io
-did-helper:
+did:
   enabled: true
   config:
     server:

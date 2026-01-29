@@ -251,7 +251,7 @@ registration:
   did: did:web:fancy-marketplace.biz
   credentialTypes: 
     - UserCredential
-did-helper:
+did:
   enabled: true
   config:
     server:

@@ -205,18 +205,33 @@ postgresql:
 
 did:
   enabled: true
-  secret: issuance-secret
-  serviceType: ClusterIP
-  port: 3002
-  cert:
-    country: DE
-    state: SAXONY
-    locality: Dresden
-    organization: M&P Operations Inc.
-    commonName: www.mp-operation.org
+  config:
+    server:
+      serverPort: "3002"
+      didType: "web"
+      hostUrl: "http://did-provider.127.0.0.1.nip.io"
+      outputFormat: "json_jwk"
+      keystorePasswordSecretName: "provider-keystore"
+      keystorePasswordSecretKey: "password"
+    generateKey:
+      enabled: true
+      keyTypeToGenerate: "EC"
+      country: "DE"
+      state: "SAXONY"
+      locality: "Dresden"
+      organization: "M&P Operations Inc."
+      commonName: "www.mp-operation.org"
   ingress:
     enabled: true
-    host: did-provider.127.0.0.1.nip.io
+    className: ""
+    annotations:
+      traefik.ingress.kubernetes.io/service.passhostheader: "true"
+      traefik.ingress.kubernetes.io/router.tls: "true"
+    hosts:
+      - host: did-provider.127.0.0.1.nip.io
+        paths:
+          - path: /
+            pathType: ImplementationSpecific
 
 dataSpaceConfig:
   enabled: true
