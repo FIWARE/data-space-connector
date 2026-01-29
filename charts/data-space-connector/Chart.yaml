@@ -28,7 +28,7 @@ dependencies:
   - name: dss-validation-service
     alias: dss
     condition: dss.enabled
-    version: 0.0.14
+    version: 0.0.18
     repository: https://fiware.github.io/helm-charts
   # authorization
   - name: odrl-pap
