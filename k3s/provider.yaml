@@ -270,7 +270,7 @@ postgresql:
   readReplicas:
     persistence:
       enabled: false
-did-helper:
+did:
   enabled: true
   config:
     server:

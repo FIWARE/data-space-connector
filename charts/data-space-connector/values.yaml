@@ -892,7 +892,7 @@ contract-management:
   
 
 # -- configuration for the did-helper, see https://github.com/wistefan/did-helper
-did-helper:
+did:
   enabled: false
 
 # -- configuration for registering a participant at the til, will most probably only be used in demonstrational enviornments
