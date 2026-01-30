@@ -672,6 +672,21 @@ tm-forum-api:
       - host: consumer-tmf.127.0.0.1.nip.io
         paths:
           - /
+  defaultConfig:
+    livenessProbe:
+      healthPath: /health/liveness
+      initialDelaySeconds: 30
+      periodSeconds: 1000
+      successThreshold: 1
+      failureThreshold: 3000
+      timeoutSeconds: 10000
+    readinessProbe:
+      readinessPath: /health/readiness
+      initialDelaySeconds: 30
+      periodSeconds: 1000
+      successThreshold: 1
+      failureThreshold: 3000
+      timeoutSeconds: 10000
 # scorpio as tmf backend, no public endpoint required
 scorpio:
   enabled: true
@@ -835,6 +850,8 @@ postgresql:
       enabled: false
 # authorized access to tmforum
 apisix:
+  etcd:
+    replicaCount: 1
   image:
     debug: true
   dataPlane:

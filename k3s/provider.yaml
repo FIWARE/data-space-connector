@@ -1,4 +1,6 @@
 apisix:
+  etcd:
+    replicaCount: 1
   image:
     debug: true
   dataPlane:
@@ -341,6 +343,21 @@ tm-forum-api:
       - host: tm-forum-api.127.0.0.1.nip.io
         paths:
           - /
+  defaultConfig:
+    livenessProbe:
+      healthPath: /health/liveness
+      initialDelaySeconds: 30
+      periodSeconds: 1000
+      successThreshold: 1
+      failureThreshold: 3000
+      timeoutSeconds: 10000
+    readinessProbe:
+      readinessPath: /health/readiness
+      initialDelaySeconds: 30
+      periodSeconds: 1000
+      successThreshold: 1
+      failureThreshold: 3000
+      timeoutSeconds: 10000
 # -- integration of rainbow
 rainbow:
   enabled: true
