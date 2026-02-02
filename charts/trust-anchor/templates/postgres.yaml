@@ -1,0 +1,9 @@
+{{- if .Values.managedPostgres.enabled }}
+apiVersion: "acid.zalan.do/v1"
+kind: postgresql
+metadata:
+  name: postgres
+  namespace: {{ $.Release.Namespace | quote }}
+spec:
+{{- toYaml .Values.managedPostgres.config | nindent 2 }}
+{{- end }}

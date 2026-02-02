@@ -1,3 +1,12 @@
+postgres-operator:
+  enabled: false
+
+managedPostgres:
+  enabled: true
+  config:
+    volume:
+      storageClass: "local-path"
+
 trusted-issuers-list:
   # -- it should work as the TrustedIssuersRegistry of the dataspace, thus we publish this api only
   ingress:
@@ -9,11 +18,3 @@ trusted-issuers-list:
       enabled: true
       hosts:
         - host: til.127.0.0.1.nip.io
-
-mysql:
-  primary:
-    persistence:
-      enabled: false
-  secondary:
-    persistence:
-      enabled: false
