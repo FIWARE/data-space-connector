@@ -20,7 +20,7 @@ jobs:
       plain-version: ${{ steps.out.outputs.plain-version }}
 
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v5
 
       - id: bump
         uses: zwaldowski/match-label-action@v1
@@ -35,13 +35,15 @@ jobs:
 
       - name: Get PR Number
         id: pr_number
-        run: echo "::set-output name=nr::$(echo $GITHUB_REF | awk 'BEGIN { FS = "/" } ; { print $3 }')"
+        run: |
+          NR=$(echo $GITHUB_REF | awk 'BEGIN { FS = "/" } ; { print $3 }')
+          echo "nr=$NR" >> $GITHUB_OUTPUT
 
       - name: Set version output
         id: out
         run: |
-          echo "::set-output name=version::$(echo ${VERSION}-PRE-${{ steps.pr_number.outputs.nr }})"
-          echo "::set-output name=plain-version::$(echo ${VERSION})"
+          echo "version=${VERSION}-PRE-${{ steps.pr_number.outputs.nr }}" >> $GITHUB_OUTPUT
+          echo "plain-version=${VERSION}" >> $GITHUB_OUTPUT
 
           
   git-release:
@@ -50,7 +52,7 @@ jobs:
 
     steps:
 
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v5
 
       - name: Generate Table of contents
         uses: technote-space/toc-generator@v4
