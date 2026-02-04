@@ -444,8 +444,8 @@ keycloak:
             "protocol": "oid4vc",
             "protocolMapper": "oid4vc-static-claim-mapper",
             "config": {
-              "subjectProperty": "subject",
-              "staticValue": "did:key:zDnaeiVpxCT7ARwqLndbWiCeGG2YZXvLfWFs1cGPgKUe8GPLe",
+              "subjectProperty": "id",
+              "staticValue": "did:web:fancy-marketplace.biz",
               "supportedCredentialTypes": "UserCredential"
             }
           },
@@ -836,8 +836,10 @@ keycloak:
 
 did:
   enabled: false
+
+# -- for dcp, disable it  
 didJson:
-  enabled: true
+  enabled: false
   port: 3000
   did: did:web:fancy-marketplace.biz
   key:
@@ -1069,6 +1071,10 @@ apisix:
       extraHosts:
         - name: dsp-fancy-marketplace.127.0.0.1.nip.io
           path: /
+        - name: dcp-fancy-marketplace.127.0.0.1.nip.io
+          path: /
+        - name: identityhub-fancy-marketplace.127.0.0.1.nip.io
+          path: /
         - name: dsp-management.127.0.0.1.nip.io
           path: /
   catchAllRoute:
@@ -1120,6 +1126,16 @@ apisix:
       plugins:
         proxy-rewrite:
           uri: /services/dsp/.well-known/openid-configuration
+    - uri: /api/credentials/*
+      host: identityhub-fancy-marketplace.127.0.0.1.nip.io
+      upstream:
+        nodes:
+          identityhub-service:8083: 1
+    - uri: /*
+      host: dcp-fancy-marketplace.127.0.0.1.nip.io
+      upstream:
+        nodes:
+          dsp-controlplane:8080: 1
     - uri: /*
       host: dsp-fancy-marketplace.127.0.0.1.nip.io
       upstream:
@@ -1268,6 +1284,9 @@ dsp:
         mountPath: /signing-key
       - name: root-ca
         mountPath: /root-ca
+      - name: cacerts
+        mountPath: /opt/java/openjdk/lib/security/cacerts
+        subPath: cacerts
     additionalVolumes:
       - name: signing-key
         secret:
@@ -1303,6 +1322,17 @@ dsp:
               sleep 5
             done
             echo "Keycloak is ready."
+      - name: load-certs
+        image: "quay.io/fiware/contract-management:3.3.0"
+        command: ["/bin/sh", "-c", "/bin/import-ca.sh /certs-folder /root-ca/cacert.pem"]
+        volumeMounts:
+          - name: ca-certs-script
+            mountPath: /bin/import-ca.sh
+            subPath: import-ca.sh
+          - name: cacerts
+            mountPath: /certs-folder/
+          - name: root-ca
+            mountPath: /root-ca
       # get a credential to be used by the contract-management
       - name: get-credential
         image: quay.io/curl/curl:8.1.2
@@ -1315,8 +1345,16 @@ dsp:
             mountPath: /credential-repo
 
   config:
+    issuerId: did:web:fancy-marketplace.biz
+    ebsiTir:
+      enabled: true
+      tilAddress: http://trusted-issuers-list.consumer.svc.cluster.local:8080
+    oauth:
+      tokenUrl: http://identityhub-service.consumer.svc.cluster.local:8087/api/sts/token
+      clientId: did:web:fancy-marketplace.biz
+      secretAlias: did:web:fancy-marketplace.biz-sts-client-secret
     edc:
-      hostname: dsp-fancy-marketplace.127.0.0.1.nip.io
+      hostname: dcp-fancy-marketplace.127.0.0.1.nip.io
       participant:
         id: did:web:fancy-marketplace.biz
 
@@ -1336,17 +1374,25 @@ dsp:
         port: 8888
       
     tmfExtension:
-      quoteApi: http://consumer-tm-forum-api-quote:8080/tmf-api/quote/v4
-      agreementApi: http://consumer-tm-forum-api-agreement:8080/tmf-api/agreementManagement/v4
-      productOrderApi: http://consumer-tm-forum-api-product-ordering-management:8080/tmf-api/productOrderingManagement/v4
-      productCatalogApi: http://consumer-tm-forum-api-product-catalog:8080/tmf-api/productCatalogManagement/v4
-      productInventoryApi: http://consumer-tm-forum-api-product-inventory:8080/tmf-api/productInventory/v4
-      usageManagementApi: http://consumer-tm-forum-api-usage-management:8080/tmf-api/usageManagement/v4
-      partyCatalogApi: http://consumer-tm-forum-api-party-catalog:8080/tmf-api/party/v4
+      quoteApi: http://consumer-tm-forum-api-quote.consumer.svc.cluster.local:8080/tmf-api/quote/v4
+      agreementApi: http://consumer-tm-forum-api-agreement.consumer.svc.cluster.local:8080/tmf-api/agreementManagement/v4
+      productOrderApi: http://consumer-tm-forum-api-product-ordering-management.consumer.svc.cluster.local:8080/tmf-api/productOrderingManagement/v4
+      productCatalogApi: http://consumer-tm-forum-api-product-catalog.consumer.svc.cluster.local:8080/tmf-api/productCatalogManagement/v4
+      productInventoryApi: http://consumer-tm-forum-api-product-inventory.consumer.svc.cluster.local:8080/tmf-api/productInventory/v4
+      usageManagementApi: http://consumer-tm-forum-api-usage-management.consumer.svc.cluster.local:8080/tmf-api/usageManagement/v4
+      partyCatalogApi: http://consumer-tm-forum-api-party-catalog.consumer.svc.cluster.local:8080/tmf-api/party/v4
 
     # -- transfer extension is only needed at the provider side
     fdscTransfer:
       enabled: false
+    
+    dcp:
+      enabled: true
+      scopes:
+        catalog: org.eclipse.tractusx.vc.type:MembershipCredential:read
+        negotiation: org.eclipse.tractusx.vc.type:MembershipCredential:read
+        transfer: org.eclipse.tractusx.vc.type:MembershipCredential:read
+        version: org.eclipse.tractusx.vc.type:MembershipCredential:read
 
 credentials:
   enabled: true
@@ -1364,3 +1410,45 @@ credentials:
     - id: legal-person-credential
       format: jwt_vc
       targetFile: legal-person-credential.jwt
+
+identityhub:
+  enabled: true
+  postgresql:
+    host: postgresql
+    port: 5432
+    auth:
+      username: postgres
+      password: "password"
+  
+  deployment:
+    additionalVolumeMounts:      
+      - name: root-ca
+        mountPath: /root-ca
+      - name: cacerts
+        mountPath: /opt/java/openjdk/lib/security/cacerts
+        subPath: cacerts
+    additionalVolumes:
+      - name: ca-certs-script
+        configMap:
+          name: ca-certs-script
+          defaultMode: 0755
+      - name: root-ca
+        secret:
+          secretName: root-ca
+      - name: cacerts
+        emptyDir: {}
+    initContainers:
+      - name: load-certs
+        image: "quay.io/fiware/contract-management:3.3.0"
+        command: ["/bin/sh", "-c", "/bin/import-ca.sh /certs-folder /root-ca/cacert.pem"]
+        volumeMounts:
+          - name: ca-certs-script
+            mountPath: /bin/import-ca.sh
+            subPath: import-ca.sh
+          - name: cacerts
+            mountPath: /certs-folder/
+          - name: root-ca
+            mountPath: /root-ca
+
+vault:
+  enabled: true

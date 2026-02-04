@@ -1,11 +1,11 @@
-{{- if .Values.dsp.enabled }}
+{{- if (eq .Values.dsp.enabled true) }}
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: dsp-controlplane
   namespace: {{ $.Release.Namespace | quote }}
   labels:
-    app.kubernetes.io/name: dsp-dataplane
+    app.kubernetes.io/name: dsp-controlplane
     {{ include "dsc.labels" . | nindent 4 }}
 data:
   dataspaceconnector-configuration.properties: |
@@ -44,15 +44,32 @@ data:
     tmfExtension.catalog.enabled={{ .Values.dsp.config.tmfExtension.catalog.enabled }}
 
     fdscTransfer.enabled={{ .Values.dsp.config.fdscTransfer.enabled }}
-    fdscTransfer.credentialsConfigAddress={{ .Values.dsp.config.fdscTransfer.credentialsConfigAddress }}
     fdscTransfer.transferHost={{ .Values.dsp.config.fdscTransfer.transferHost }}
-    fdscTransfer.verifierHost={{ .Values.dsp.config.fdscTransfer.verifierHost }}
-    fdscTransfer.verifierInternalHost={{ .Values.dsp.config.fdscTransfer.verifierInternalHost }}
-    fdscTransfer.opaHost={{ .Values.dsp.config.fdscTransfer.opaHost }}
-    fdscTransfer.odrlPapHost={{ .Values.dsp.config.fdscTransfer.odrlPapHost }}
+    fdscTransfer.dcp.enabled={{ .Values.dsp.config.fdscTransfer.dcp.enabled }}
+    fdscTransfer.dcp.oid.host={{ .Values.dsp.config.fdscTransfer.dcp.oid.host }}
+    fdscTransfer.dcp.oid.openIdPath={{ .Values.dsp.config.fdscTransfer.dcp.oid.openIdPath }}
+    fdscTransfer.dcp.oid.jwksPath={{ .Values.dsp.config.fdscTransfer.dcp.oid.jwksPath }}
+    
+    jwksAddress={{ .Values.dsp.config.fdscTransfer.dcp.jwksAddress }}
+    fdscTransfer.oid4vc.enabled={{ .Values.dsp.config.fdscTransfer.oid4vc.enabled }}
+    fdscTransfer.oid4vc.credentialsConfigAddress={{ .Values.dsp.config.fdscTransfer.oid4vc.credentialsConfigAddress }}
+    fdscTransfer.oid4vc.verifierHost={{ .Values.dsp.config.fdscTransfer.oid4vc.verifierHost }}
+    fdscTransfer.oid4vc.verifierInternalHost={{ .Values.dsp.config.fdscTransfer.oid4vc.verifierInternalHost }}
+    fdscTransfer.oid4vc.opaHost={{ .Values.dsp.config.fdscTransfer.oid4vc.opaHost }}
+    fdscTransfer.oid4vc.odrlPapHost={{ .Values.dsp.config.fdscTransfer.oid4vc.odrlPapHost }}
     fdscTransfer.apisix.address={{ .Values.dsp.config.fdscTransfer.apisix.address }}
     fdscTransfer.apisix.token={{ .Values.dsp.config.fdscTransfer.apisix.token }}
     fdscTransfer.apisix.httpsProxy={{ .Values.dsp.config.fdscTransfer.apisix.httpsProxy }}
+
+    ebsiTir.enabled={{ .Values.dsp.config.ebsiTir.enabled }}
+    ebsiTir.tilAddress={{ .Values.dsp.config.ebsiTir.tilAddress }}
+
+    dcp.enabled={{ .Values.dsp.config.dcp.enabled }}
+    dcp.scopes.catalog={{ .Values.dsp.config.dcp.scopes.catalog }}
+    dcp.scopes.negotiation={{ .Values.dsp.config.dcp.scopes.negotiation }}
+    dcp.scopes.transfer={{ .Values.dsp.config.dcp.scopes.transfer }}
+    dcp.scopes.version={{ .Values.dsp.config.dcp.scopes.version }}
+
 
     edc.participant.id={{ .Values.dsp.config.edc.participant.id }}
     edc.log.level={{ .Values.dsp.config.edc.log.level }}
@@ -74,4 +91,17 @@ data:
     web.http.version.path={{ .Values.dsp.config.web.http.version.path }}
     web.http.version.port={{ .Values.dsp.config.web.http.version.port }}
 
+
+    edc.iam.sts.oauth.token.url={{ .Values.dsp.config.oauth.tokenUrl }}
+    edc.iam.sts.oauth.client.id={{ .Values.dsp.config.oauth.clientId }}
+    edc.iam.sts.oauth.client.secret.alias={{ .Values.dsp.config.oauth.secretAlias }}
+    edc.iam.issuer.id={{ .Values.dsp.config.issuerId }}
+
+    edc.vault.hashicorp.url={{ tpl .Values.vault.hashicorp.url . }}
+    edc.vault.hashicorp.token={{ .Values.vault.hashicorp.token }}
+    edc.vault.hashicorp.timeout.seconds={{ .Values.vault.hashicorp.timeout }}
+    edc.vault.hashicorp.health.check.enabled={{ .Values.vault.hashicorp.healthCheck.enabled }}
+    edc.vault.hashicorp.health.check.standby.ok={{ .Values.vault.hashicorp.healthCheck.standbyOk }}
+    edc.vault.hashicorp.api.secret.path={{ .Values.vault.hashicorp.paths.secret }}
+    edc.vault.hashicorp.api.health.check.path={{ .Values.vault.hashicorp.paths.health }}
 {{- end }}

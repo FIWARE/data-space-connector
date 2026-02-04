@@ -1,4 +1,4 @@
-{{- if and .Values.didJson.enabled .Values.didJson.ingress.enabled }}
+{{- if or (and (eq .Values.didJson.enabled true) (eq .Values.didJson.ingress.enabled true)) (eq .Values.identityhub.didIngress.enabled true) }}
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -25,9 +25,15 @@ spec:
             pathType: Prefix
             backend:
               service:
+                {{- if (eq .Values.identityhub.didIngress.enabled true)}}
+                name: {{ .Values.identityhub.didIngress.service }}
+                port:
+                  name: {{ .Values.identityhub.didIngress.port }}
+                {{- else }}
                 name: did-json
                 port:
                   name: http
+                {{- end }}
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
@@ -49,7 +55,13 @@ spec:
             pathType: Prefix
             backend:
               service:
+                {{- if (eq .Values.identityhub.didIngress.enabled true)}}
+                name: {{ .Values.identityhub.didIngress.service }}
+                port:
+                  name: {{ .Values.identityhub.didIngress.port }}
+                {{- else }}
                 name: did-json
                 port:
                   name: http
+                {{- end }}
 {{- end }}

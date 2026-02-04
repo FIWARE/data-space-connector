@@ -1,0 +1,73 @@
+#################################################################################
+  #  Copyright (c) 2025 Cofinity-X
+  #  Copyright (c) 2025 Contributors to the Eclipse Foundation
+  #
+  #  See the NOTICE file(s) distributed with this work for additional
+  #  information regarding copyright ownership.
+  #
+  #  This program and the accompanying materials are made available under the
+  #  terms of the Apache License, Version 2.0 which is available at
+  #  https://www.apache.org/licenses/LICENSE-2.0.
+  #
+  #  Unless required by applicable law or agreed to in writing, software
+  #  distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+  #  WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+  #  License for the specific language governing permissions and limitations
+  #  under the License.
+  #
+  #  SPDX-License-Identifier: Apache-2.0
+  #################################################################################
+
+
+---
+{{- if (eq .Values.identityhub.enabled true) }}
+# this configmap contains all database configuration that is required by the identityhub runtime.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: "identityhub-datasource-config"
+  namespace: {{ .Release.Namespace | default "default" | quote }}
+  labels:
+    app.kubernetes.io/name: identityhub
+    app.kubernetes.io/instance: {{ .Release.Name }}
+data:
+
+  ################
+  ## POSTGRESQL ##
+  ################
+
+  # participant context
+  edc.sql.store.participantcontext.datasource: "participantcontext"
+  edc.datasource.participantcontext.url: jdbc:postgresql://{{ .Values.identityhub.postgresql.host }}:{{ .Values.identityhub.postgresql.port }}/{{ .Values.identityhub.postgresql.database }}
+  edc.datasource.participantcontext.user: {{ .Values.identityhub.postgresql.auth.username | quote }}
+
+  # keypair
+  edc.sql.store.keypair.datasource: "keypair"
+  edc.datasource.keypair.url: jdbc:postgresql://{{ .Values.identityhub.postgresql.host }}:{{ .Values.identityhub.postgresql.port }}/{{ .Values.identityhub.postgresql.database }}
+  edc.datasource.keypair.user: {{ .Values.identityhub.postgresql.auth.username | quote }}
+
+  # did documents
+  edc.sql.store.didresource.datasource: "didresource"
+  edc.datasource.didresource.url: jdbc:postgresql://{{ .Values.identityhub.postgresql.host }}:{{ .Values.identityhub.postgresql.port }}/{{ .Values.identityhub.postgresql.database }}
+  edc.datasource.didresource.user: {{ .Values.identityhub.postgresql.auth.username | quote }}
+
+  # STS Client
+  edc.sql.store.stsclient.datasource: "stsclient"
+  edc.datasource.stsclient.url: jdbc:postgresql://{{ .Values.identityhub.postgresql.host }}:{{ .Values.identityhub.postgresql.port }}/{{ .Values.identityhub.postgresql.database }}
+  edc.datasource.stsclient.user: {{ .Values.identityhub.postgresql.auth.username | quote }}
+
+  # HolderCredentialRequests
+  edc.sql.store.credentialrequest.datasource: "credentialrequest"
+  edc.datasource.credentialrequest.url: jdbc:postgresql://{{ .Values.identityhub.postgresql.host }}:{{ .Values.identityhub.postgresql.port }}/{{ .Values.identityhub.postgresql.database }}
+  edc.datasource.credentialrequest.user: {{ .Values.identityhub.postgresql.auth.username | quote }}
+
+  # VerifiableCredentialResources
+  edc.sql.store.credentials.datasource: "credentials"
+  edc.datasource.credentials.url: jdbc:postgresql://{{ .Values.identityhub.postgresql.host }}:{{ .Values.identityhub.postgresql.port }}/{{ .Values.identityhub.postgresql.database }}
+  edc.datasource.credentials.user: {{ .Values.identityhub.postgresql.auth.username | quote }}
+
+  # JTI validation
+  edc.sql.store.jti.datasource: "jti"
+  edc.datasource.jti.url: jdbc:postgresql://{{ .Values.identityhub.postgresql.host }}:{{ .Values.identityhub.postgresql.port }}/{{ .Values.identityhub.postgresql.database }}
+  edc.datasource.jti.user: {{ .Values.identityhub.postgresql.auth.username | quote }}
+{{- end }}

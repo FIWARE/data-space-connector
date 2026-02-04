@@ -75,3 +75,9 @@ dependencies:
     condition: mongo-operator.enabled
     version: 0.13.0
     repository: https://mongodb.github.io/helm-charts
+  # identityhub
+  - name: vault
+    alias: vault
+    condition: vault.enabled
+    version: 0.29.1
+    repository: https://helm.releases.hashicorp.com
