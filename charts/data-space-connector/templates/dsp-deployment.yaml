@@ -1,11 +1,11 @@
-{{- if .Values.dsp.enabled }}
+{{- if (eq .Values.dsp.enabled true) }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: dsp-controlplane
   namespace: {{ $.Release.Namespace | quote }}
   labels:
-    app.kubernetes.io/name: dsp-dataplane
+    app.kubernetes.io/name: dsp-controlplane
     app.kubernetes.io/instance: {{ .Release.Name }}
 spec:
   {{- if not .Values.dsp.autoscaling.enabled }}
@@ -109,6 +109,13 @@ spec:
             successThreshold: {{ .Values.dsp.deployment.readinessProbe.successThreshold }}
             timeoutSeconds: {{ .Values.dsp.deployment.readinessProbe.timeoutSeconds }}
           env:
+            - name: JAVA_TOOL_OPTIONS
+              value: >
+                -Dhttps.proxyHost=squid-proxy.infra.svc.cluster.local
+                -Dhttps.proxyPort=8888
+                -Dhttp.proxyHost=squid-proxy.infra.svc.cluster.local
+                -Dhttp.proxyPort=8888
+                -Dhttp.nonProxyHosts="*-vault|*.cluster.local"
             - name: EDC_FS_CONFIG
               value: /config/dataspaceconnector-configuration.properties
             {{- with .Values.dsp.additionalEnvVars }}

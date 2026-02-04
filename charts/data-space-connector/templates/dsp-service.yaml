@@ -1,4 +1,4 @@
-{{- if .Values.dsp.enabled }}
+{{- if (eq .Values.dsp.enabled true) }}
 apiVersion: v1
 kind: Service
 metadata:

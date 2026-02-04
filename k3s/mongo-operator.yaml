@@ -64,3 +64,12 @@ keycloak:
 
 registration:
   enabled: false
+
+identityhub:
+  enabled: false
+
+vault:
+  enabled: false
+
+issuerservice:
+  enabled: false
