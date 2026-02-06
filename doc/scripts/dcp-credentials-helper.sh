@@ -1,84 +1,42 @@
-#!/usr/bin/env bash
-set -euo pipefail
+#! /usr/bin/env bash
 
-############################################
-# Usage check
-############################################
-if [ "$#" -ne 2 ]; then
-  echo "Usage: $0 '<header.payload>' '<jwk-json>'" >&2
-  exit 1
-fi
+ALG="RS256"
 
-DATA="$1"
-JWK_JSON="$2"
+DID=$1
+KEY_ID=$2
+CREDENTIAL_CONTENT=$3
+KEY=$4
 
-############################################
-# Helpers
-############################################
-b64url_decode() {
-  local input="$1"
-  local pad=$(( (4 - ${#input} % 4) % 4 ))
-  printf '%s' "${input}$(printf '=%.0s' $(seq 1 $pad))" \
-    | tr '_-' '/+' \
-    | base64 -d
+VERIFIABLE_CREDENTIAL=$(echo "{
+  \"iss\": \"${DID}\",
+  \"sub\": \"${DID}\",
+  \"vc\": ${CREDENTIAL_CONTENT},
+  \"iat\": 1748844919
+}")
+
+JWT_HEADER=$(echo -n "{\"alg\":\"ES256\", \"typ\":\"JWT\", \"kid\":\"${DID}#${KEY_ID}\"}")
+
+function b64enc() { openssl enc -base64 -A | tr '+/' '-_' | tr -d '='; }
+
+function convert_ec {
+    INPUT=$(openssl asn1parse -inform der)
+    R=$(echo "$INPUT" | head -2 | tail -1 | cut -d':' -f4)
+    S=$(echo "$INPUT" | head -3 | tail -1 | cut -d':' -f4)
+
+    echo -n $R | xxd -r -p
+    echo -n $S | xxd -r -p
 }
 
-############################################
-# Extract private key from JWK
-############################################
-D_B64URL=$(printf '%s' "$JWK_JSON" | jq -r '.d')
+function rs_sign() { openssl dgst -binary -sha${1} -sign "$2"; }
+function es_sign() { openssl dgst -binary -sha${1} -sign "$2" | convert_ec; }
 
-if [ -z "$D_B64URL" ] || [ "$D_B64URL" = "null" ]; then
-  echo "Error: JWK does not contain private key 'd'" >&2
-  exit 1
-fi
+JWT_HDR_B64="$(echo -n "$JWT_HEADER" | b64enc)"
+JWT_PAY_B64="$(echo -n "$VERIFIABLE_CREDENTIAL" | b64enc)" 
+UNSIGNED_JWT="$JWT_HDR_B64.$JWT_PAY_B64"
 
-############################################
-# Decode Ed25519 private key
-############################################
-PRIV_HEX=$(b64url_decode "$D_B64URL" | xxd -p | tr -d '\n')
+case "$ALG" in
+    RS*) SIGNATURE=$(echo -n "$UNSIGNED_JWT" | rs_sign "${ALG#RS}" "$KEY" | b64enc) ;;
+    ES*) SIGNATURE=$(echo -n "$UNSIGNED_JWT" | es_sign "${ALG#ES}" "$KEY" | b64enc) ;;
+esac
 
-# Must be exactly 32 bytes = 64 hex chars
-if [ "${#PRIV_HEX}" -ne 64 ]; then
-  echo "Error: Ed25519 private key must be 32 bytes" >&2
-  exit 1
-fi
-
-############################################
-# Temp files (REQUIRED for OpenSSL 3)
-############################################
-MSG_FILE=$(mktemp)
-KEY_FILE=$(mktemp)
-trap 'rm -f "$MSG_FILE" "$KEY_FILE"' EXIT
-
-printf '%s' "$DATA" > "$MSG_FILE"
-
-############################################
-# Build PKCS#8 Ed25519 private key (DER → PEM)
-############################################
-# PKCS#8 DER header for Ed25519:
-# 30 2e 02 01 00 30 05 06 03 2b 65 70 04 22 04 20 <32-byte key>
-
-printf "302e020100300506032b657004220420%s" "$PRIV_HEX" \
- | xxd -r -p \
- | openssl pkcs8 -inform DER -outform PEM -nocrypt \
- > "$KEY_FILE"
-
-############################################
-# Sign (this is the ONLY reliable invocation)
-############################################
-SIGNATURE=$(
-  openssl pkeyutl \
-    -sign \
-    -rawin \
-    -inkey "$KEY_FILE" \
-    -in "$MSG_FILE" \
-  | base64 -w0 \
-  | tr '+/' '-_' \
-  | sed -E 's/=+$//'
-)
-
-############################################
-# Output full JWT
-############################################
-echo "${DATA}.${SIGNATURE}"
+echo "$UNSIGNED_JWT.$SIGNATURE"

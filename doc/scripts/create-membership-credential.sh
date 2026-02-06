@@ -12,7 +12,7 @@ VERIFIABLE_CREDENTIAL=$(echo "{
   \"iat\": 1748844919
 }")
 
-JWT_HEADER=$(echo -n "{\"alg\":\"EdDSA\", \"typ\":\"JWT\", \"kid\":\"${DID}#${KEY_ID}\"}"| base64 -w0 | sed s/\+/-/g | sed 's/\//_/g' | sed -E s/=+$//)
+JWT_HEADER=$(echo -n "{\"alg\":\"ES256\", \"typ\":\"JWT\", \"kid\":\"${DID}#${KEY_ID}\"}"| base64 -w0 | sed s/\+/-/g | sed 's/\//_/g' | sed -E s/=+$//)
 
 PAYLOAD=$(echo -n ${VERIFIABLE_CREDENTIAL} | base64 -w0 | sed s/\+/-/g |sed 's/\//_/g' |  sed -E s/=+$//)
 
