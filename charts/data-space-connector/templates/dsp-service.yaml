@@ -1,48 +1,67 @@
-{{- if (eq .Values.dsp.enabled true) }}
+{{- if .Values.dsp.enabled }}
+{{- range $name, $deployment := .Values.dsp.deployment }}
+
+{{- $cfg := mergeOverwrite (deepCopy $.Values.dsp.common) $deployment }}
+
+---
 apiVersion: v1
 kind: Service
 metadata:
-  name: dsp-controlplane
+  name: dsp-controlplane-{{ $name }}
   namespace: {{ $.Release.Namespace | quote }}
-  {{- if .Values.dsp.service.annotations }}
+
+  {{- with $cfg.service.annotations }}
   annotations:
-    {{ toYaml .Values.dsp.service.annotations | nindent 4 }}
+    {{- toYaml . | nindent 4 }}
   {{- end }}
+
   labels:
     app.kubernetes.io/name: dsp-controlplane
-    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/instance: {{ $.Release.Name }}
+    app.kubernetes.io/component: {{ $name }}
+
 spec:
-  type: {{ .Values.dsp.service.type }}
+  type: {{ $cfg.service.type }}
+
   ports:
-    - port: {{ .Values.dsp.config.web.http.port }}
+    - name: http
+      port: {{ $cfg.config.web.http.port }}
       targetPort: http
       protocol: TCP
-      name: http
-    - port: {{ .Values.dsp.config.web.http.version.port }}
+
+    - name: http-version
+      port: {{ $cfg.config.web.http.version.port }}
       targetPort: http-version
       protocol: TCP
-      name: http-version
-    - port: {{ .Values.dsp.config.web.http.protocol.port }}
+
+    - name: http-protocol
+      port: {{ $cfg.config.web.http.protocol.port }}
       targetPort: http-protocol
       protocol: TCP
-      name: http-protocol
-    - port: {{ .Values.dsp.config.web.http.catalog.port }}
+
+    - name: http-catalog
+      port: {{ $cfg.config.web.http.catalog.port }}
       targetPort: http-catalog
       protocol: TCP
-      name: http-catalog
-    - port: {{ .Values.dsp.config.web.http.management.port }}
+
+    - name: http-management
+      port: {{ $cfg.config.web.http.management.port }}
       targetPort: http-management
       protocol: TCP
-      name: http-management
-    - port: {{ .Values.dsp.config.web.http.control.port }}
+
+    - name: http-control
+      port: {{ $cfg.config.web.http.control.port }}
       targetPort: http-control
       protocol: TCP
-      name: http-control
-    - port: {{ .Values.dsp.config.testExtension.controller.port }}
+
+    - name: http-tck
+      port: {{ $cfg.config.testExtension.controller.port }}
       targetPort: http-tck
       protocol: TCP
-      name: http-tck
+
   selector:
     app.kubernetes.io/name: dsp-controlplane
-    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: {{ $name }}
+
+{{- end }}
 {{- end }}

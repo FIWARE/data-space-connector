@@ -103,12 +103,20 @@ export PRODUCT_SPEC_ID=$(curl -X 'POST' \
            \"@schemaLocation\": \"https://raw.githubusercontent.com/wistefan/edc-dsc/refs/heads/init/schemas/external-id.json\",
            \"productSpecCharacteristic\": [
                {
-                   \"id\": \"endpointUrl\",
-                   \"name\":\"Service Endpoint URL\",
+                   \"id\": \"endpointUrl-dcp\",
+                   \"name\":\"Endpoint, that the service can be negotiated at via DCP.\",
                    \"valueType\":\"endpointUrl\",
                    \"productSpecCharacteristicValue\": [{
-                       \"value\":\"http://mp-data-service.127.0.0.1.nip.io\",
-                       \"isDefault\": true
+                      \"value\":\"http://dcp-mp-operations.127.0.0.1.nip.io:8080/api/dsp/2025-1\",
+                      \"isDefault\": true
+                   }]
+               },{
+                   \"id\": \"endpointUrl-oid4vc\",
+                   \"name\":\"Endpoint, that the service can be negotiated at via OID4VC.\",
+                   \"valueType\":\"endpointUrl\",
+                   \"productSpecCharacteristicValue\": [{
+                      \"value\":\"http://dsp-mp-operations.127.0.0.1.nip.io:8080/api/dsp/2025-1\",
+                      \"isDefault\": true
                    }]
                },
                {
@@ -213,51 +221,50 @@ curl -X 'POST' \
     -H 'accept: application/json;charset=utf-8' \
     -H 'Content-Type: application/json;charset=utf-8' \
     -d "{
-                \"name\": \"Test Offering\",
-                \"description\": \"Test Offering description\",
-                \"isBundle\": false,
-                \"isSellable\": true,
-                \"lifecycleStatus\": \"Active\",
-                \"@schemaLocation\": \"https://raw.githubusercontent.com/wistefan/edc-dsc/refs/heads/init/schemas/external-id.json\",
-                \"externalId\": \"OFFER-2\",
-                \"productSpecification\":
-                    {
-                        \"id\": \"${PRODUCT_SPEC_ID}\",
-                        \"name\":\"The Test Spec\"
-                    },
-                \"category\": [{
-                    \"id\": \"${CATEGORY_ID}\"
+          \"name\": \"Test Offering\",
+          \"description\": \"Test Offering description\",
+          \"isBundle\": false,
+          \"isSellable\": true,
+          \"lifecycleStatus\": \"Active\",
+          \"@schemaLocation\": \"https://raw.githubusercontent.com/wistefan/edc-dsc/refs/heads/init/schemas/external-id.json\",
+          \"externalId\": \"OFFER-2\",
+          \"productSpecification\":
+              {
+                  \"id\": \"${PRODUCT_SPEC_ID}\",
+                  \"name\":\"The Test Spec\"
+              },
+          \"category\": [{
+              \"id\": \"${CATEGORY_ID}\"
+          }],
+          \"productOfferingTerm\": [
+          {
+              \"name\": \"edc:contractDefinition\",
+              \"@schemaLocation\": \"https://raw.githubusercontent.com/wistefan/edc-dsc/refs/heads/init/schemas/contract-definition.json\",
+              \"accessPolicy\": {
+                \"@context\": \"http://www.w3.org/ns/odrl.jsonld\",
+                \"odrl:uid\": \"${access_policy_id}\",
+                \"assigner\": \"did:web:mp-operations.org\",
+                \"permission\": [{
+                    \"action\":  \"use\"
                 }],
-                \"productOfferingTerm\": [
-                {
-                    \"name\": \"edc:contractDefinition\",
-                    \"@schemaLocation\": \"https://raw.githubusercontent.com/wistefan/edc-dsc/refs/heads/init/schemas/contract-definition.json\",
-                    \"accessPolicy\": {
-                      \"@context\": \"http://www.w3.org/ns/odrl.jsonld\",
-                      \"odrl:uid\": \"${access_policy_id}\",
-                      \"assigner\": \"did:web:mp-operations.org\",
-                      \"permission\": [{
-                          \"action\":  \"use\"
-                      }],
-                      \"@type\":  \"Offer\"  
-                    },
-                    \"contractPolicy\": {
-                      \"@context\": \"http://www.w3.org/ns/odrl.jsonld\",
-                      \"odrl:uid\": \"${contract_policy_id}\",
-                      \"assigner\": \"did:web:mp-operations.org\",
-                      \"permission\": [{
-                          \"action\":  \"use\",
-                          \"constraint\": {
-                            \"leftOperand\": \"dayOfWeek\",
-                            \"operator\": \"lt\",
-                            \"rightOperand\": 6
-                          }
-                      }],
-                      \"@type\":  \"Offer\"
+                \"@type\":  \"Offer\"  
+              },
+              \"contractPolicy\": {
+                \"@context\": \"http://www.w3.org/ns/odrl.jsonld\",
+                \"odrl:uid\": \"${contract_policy_id}\",
+                \"assigner\": \"did:web:mp-operations.org\",
+                \"permission\": [{
+                    \"action\":  \"use\",
+                    \"constraint\": {
+                      \"leftOperand\": \"odrl:dayOfWeek\",
+                      \"operator\": \"lt\",
+                      \"rightOperand\": 6
                     }
-                }
-                ]
-            }" | jq .
+                }],
+                \"@type\":  \"Offer\"
+              }
+          }]
+        }" | jq .
 ```
 
 5. The catalog now can be read at the Providers DSP Catalog(needs to be authenticated):
@@ -279,7 +286,7 @@ curl  -X POST \
     }' | jq .
 ```
 
-### Interact with the FDSC-EDC
+### Interact with the FDSC-EDC Through DCP secured endpoints
 
 
 All following interactions will happen through the Managment-API of the consumer-side connector. To ease its usage, the api is made available at ```dsp-management.127.0.0.1.nip.io```. In productive environments, this needs to be protected.
@@ -287,7 +294,7 @@ All following interactions will happen through the Managment-API of the consumer
 6. The catalog can be read through the local connector. The connector will authenticate itself at the provider side, configured in ```counterPartyAddress```.
 ```shell
 curl  -X POST \
-  'http://dsp-management.127.0.0.1.nip.io:8080/api/v1/management/v3/catalog/request' \
+  'http://dsp-dcp-management.127.0.0.1.nip.io:8080/api/v1/management/v3/catalog/request' \
   --header 'Accept: */*' \
   --header 'Content-Type: application/json' \
   --data-raw '{
@@ -307,7 +314,7 @@ curl  -X POST \
 
 ```shell
 curl  -X POST \
-  'http://dsp-management.127.0.0.1.nip.io:8080/api/v1/management/v3/contractnegotiations' \
+  'http://dsp-dcp-management.127.0.0.1.nip.io:8080/api/v1/management/v3/contractnegotiations' \
   --header 'Accept: */*' \
   --header 'Content-Type: application/json' \
   --data-raw '{
@@ -326,7 +333,7 @@ curl  -X POST \
             "permission": [{
               "action":  "use",
               "constraint": {
-                "leftOperand": "dayOfWeek",
+                "leftOperand": "odrl:dayOfWeek",
                 "operator": "lt",
                 "rightOperand": 6
               }
@@ -340,7 +347,7 @@ curl  -X POST \
 
 ```shell
 curl  -X POST \
-  'http://dsp-management.127.0.0.1.nip.io:8080/api/v1/management/v3/contractnegotiations/request' \
+  'http://dsp-dcp-management.127.0.0.1.nip.io:8080/api/v1/management/v3/contractnegotiations/request' \
   --header 'Accept: */*' \
   --header 'Content-Type: application/json' | jq .
 ```
@@ -349,7 +356,7 @@ curl  -X POST \
 
 ```shell
 export AGREEMENT_ID=$(curl  -X POST \
-  'http://dsp-management.127.0.0.1.nip.io:8080/api/v1/management/v3/contractnegotiations/request' \
+  'http://dsp-dcp-management.127.0.0.1.nip.io:8080/api/v1/management/v3/contractnegotiations/request' \
   --header 'Accept: */*' \
   --header 'Content-Type: application/json' | jq -r .[].contractAgreementId); echo ${AGREEMENT_ID}
 ```
@@ -358,7 +365,7 @@ export AGREEMENT_ID=$(curl  -X POST \
 
 ```shell
 curl  -X POST \
-  'http://dsp-management.127.0.0.1.nip.io:8080/api/v1/management/v3/transferprocesses' \
+  'http://dsp-dcp-management.127.0.0.1.nip.io:8080/api/v1/management/v3/transferprocesses' \
   --header 'Accept: */*' \
   --header 'Content-Type: application/json' \
   --data-raw "{
@@ -382,7 +389,7 @@ curl  -X POST \
 
 ```shell
 curl  -X POST \
-  'http://dsp-management.127.0.0.1.nip.io:8080/api/v1/management/v3/transferprocesses/request' \
+  'http://dsp-dcp-management.127.0.0.1.nip.io:8080/api/v1/management/v3/transferprocesses/request' \
   --header 'Accept: */*' \
   --header 'Content-Type: application/json' \
   --data-raw '{
@@ -395,7 +402,7 @@ curl  -X POST \
 
 ```shell
 export TRANSFER_ID=$(curl  -X POST \
-  'http://dsp-management.127.0.0.1.nip.io:8080/api/v1/management/v3/transferprocesses/request' \
+  'http://dsp-dcp-management.127.0.0.1.nip.io:8080/api/v1/management/v3/transferprocesses/request' \
   --header 'Accept: */*' \
   --header 'Content-Type: application/json' \
   --data-raw '{
@@ -404,15 +411,172 @@ export TRANSFER_ID=$(curl  -X POST \
   }' | jq -r '.[]."@id"'); echo ${TRANSFER_ID}
 ```
 
-[OID4VC]
+
+
 13. For the started transfer, now the provisioned endpoint has to be retrieved:
 ```shell
-export ENDPOINT=$(curl -X GET "http://dsp-management.127.0.0.1.nip.io:8080/api/v1/management/v3/edrs/${TRANSFER_ID}/dataaddress" | jq -r .endpoint); echo ${ENDPOINT}
+export ENDPOINT=$(curl -X GET "http://dsp-dcp-management.127.0.0.1.nip.io:8080/api/v1/management/v3/edrs/${TRANSFER_ID}/dataaddress" | jq -r .endpoint); echo ${ENDPOINT}
+```
+
+14. The token can be retrieved the same way: 
+```shell
+export ACCESS_TOKEN=$(curl -X GET "http://dsp-dcp-management.127.0.0.1.nip.io:8080/api/v1/management/v3/edrs/${TRANSFER_ID}/dataaddress" | jq -r .token); echo ${ACCESS_TOKEN}
+```
+
+15. Get the data:
+```shell
+curl -x localhost:8888 -X GET ${ENDPOINT}/ngsi-ld/v1/entities/urn:ngsi-ld:UptimeReport:fms-1 \
+  --header 'Content-Type: application/json' \
+  --header "Authorization: Bearer ${ACCESS_TOKEN}"
+```
+
+16. Once interaction has finished, the transfer can be stopped:
+
+```shell
+curl -X POST "http://dsp-dcp-management.127.0.0.1.nip.io:8080/api/v1/management/v3/transferprocesses/${TRANSFER_ID}/terminate" \
+  --header 'Accept: */*' \
+  --header 'Content-Type: application/json' \
+  --data-raw "{
+      \"@context\": [
+          \"https://w3id.org/edc/connector/management/v0.0.1\"
+      ],
+      \"counterPartyAddress\":  \"http://dsp-mp-operations.127.0.0.1.nip.io:8080/api/dsp/2025-1\",
+      \"reason\" : \"finished\"
+  }" | jq .
+```
+
+--------
+
+[OID4VC]
+6. The catalog can be read through the local connector. The connector will authenticate itself at the provider side, configured in ```counterPartyAddress```.
+```shell
+curl  -X POST \
+  'http://dsp-oid4vc-management.127.0.0.1.nip.io:8080/api/v1/management/v3/catalog/request' \
+  --header 'Accept: */*' \
+  --header 'Content-Type: application/json' \
+  --data-raw '{
+        "@context": [
+            "https://w3id.org/edc/connector/management/v0.0.1"
+        ],
+        "@type": "CatalogRequestMessage",
+        "protocol": "dataspace-protocol-http:2025-1",
+        "counterPartyId": "did:web:mp-operations.org",
+        "counterPartyAddress": "http://dsp-mp-operations.127.0.0.1.nip.io:8080/api/dsp/2025-1",
+        "querySpec": {
+        }
+    }' | jq .
+```
+
+7. In order to start a negotiation, an offer has to be selected(for the demo flow, only one is configured):
+
+```shell
+curl  -X POST \
+  'http://dsp-oid4vc-management.127.0.0.1.nip.io:8080/api/v1/management/v3/contractnegotiations' \
+  --header 'Accept: */*' \
+  --header 'Content-Type: application/json' \
+  --data-raw '{
+        "@context": [
+            "https://w3id.org/edc/connector/management/v0.0.1"
+        ],
+        "@type": "ContractRequest",
+        "counterPartyAddress": "http://dsp-mp-operations.127.0.0.1.nip.io:8080/api/dsp/2025-1",
+        "counterPartyId": "did:web:mp-operations.org",
+        "protocol": "dataspace-protocol-http:2025-1",
+        "policy": {
+            "@context": "http://www.w3.org/ns/odrl.jsonld",
+            "@type": "Offer",
+            "@id": "OFFER-2:ASSET-1:123",
+            "assigner": "did:web:mp-operations.org",
+            "permission": [{
+              "action":  "use",
+              "constraint": {
+                "leftOperand": "odrl:dayOfWeek",
+                "operator": "lt",
+                "rightOperand": 6
+              }
+            }],
+            "target": "ASSET-1"
+        }
+    }' | jq .
+```
+
+8. Negotiation state can be retrieved at the consumer:
+
+```shell
+curl  -X POST \
+  'http://dsp-oid4vc-management.127.0.0.1.nip.io:8080/api/v1/management/v3/contractnegotiations/request' \
+  --header 'Accept: */*' \
+  --header 'Content-Type: application/json' | jq .
+```
+
+9. When the state of the negotiation is "finalized", the agreement id can be retrieved: 
+
+```shell
+export AGREEMENT_ID=$(curl  -X POST \
+  'http://dsp-oid4vc-management.127.0.0.1.nip.io:8080/api/v1/management/v3/contractnegotiations/request' \
+  --header 'Accept: */*' \
+  --header 'Content-Type: application/json' | jq -r .[].contractAgreementId); echo ${AGREEMENT_ID}
+```
+
+10. With a successfull agreement in place, a transfer process can be started:
+
+```shell
+curl  -X POST \
+  'http://dsp-oid4vc-management.127.0.0.1.nip.io:8080/api/v1/management/v3/transferprocesses' \
+  --header 'Accept: */*' \
+  --header 'Content-Type: application/json' \
+  --data-raw "{
+    \"@context\": [
+        \"https://w3id.org/edc/connector/management/v0.0.1\"
+    ],
+    \"assetId\": \"ASSET-1\",
+    \"counterPartyId\": \"did:web:mp-operations.org\",
+    \"counterPartyAddress\":  \"http://dsp-mp-operations.127.0.0.1.nip.io:8080/api/dsp/2025-1\",
+    \"connectorId\": \"did:web:mp-operations.org\",
+    \"contractId\": \"${AGREEMENT_ID}\",
+    \"dataDestination\": {
+        \"type\": \"HttpProxy\"
+    },
+    \"protocol\": \"dataspace-protocol-http:2025-1\",
+    \"transferType\": \"HttpData-PULL\"
+}" | jq .
+```
+
+11. The transfer state can be retrieved at the consumer:
+
+```shell
+curl  -X POST \
+  'http://dsp-oid4vc-management.127.0.0.1.nip.io:8080/api/v1/management/v3/transferprocesses/request' \
+  --header 'Accept: */*' \
+  --header 'Content-Type: application/json' \
+  --data-raw '{
+    "@context": ["https://w3id.org/edc/connector/management/v0.0.1"],
+    "@type": "QuerySpec"
+  }' | jq .
+```
+
+12. When state is "started", the transfer Id can be retrieved:
+
+```shell
+export TRANSFER_ID=$(curl  -X POST \
+  'http://dsp-oid4vc-management.127.0.0.1.nip.io:8080/api/v1/management/v3/transferprocesses/request' \
+  --header 'Accept: */*' \
+  --header 'Content-Type: application/json' \
+  --data-raw '{
+    "@context": ["https://w3id.org/edc/connector/management/v0.0.1"],
+    "@type": "QuerySpec"
+  }' | jq -r '.[]."@id"'); echo ${TRANSFER_ID}
+```
+
+
+13. For the started transfer, now the provisioned endpoint has to be retrieved:
+```shell
+export ENDPOINT=$(curl -X GET "http://dsp-oid4vc-management.127.0.0.1.nip.io:8080/api/v1/management/v3/edrs/${TRANSFER_ID}/dataaddress" | jq -r .endpoint); echo ${ENDPOINT}
 ```
 
 14. Since OID4VP is configured to be used for authentication, a 401 should be returned for that endpoint(the proxy has to be used in the local deployment, to allow proper dns resolution):
 ```shell
-export ENDPOINT=$(curl -X GET "http://dsp-management.127.0.0.1.nip.io:8080/api/v1/management/v3/edrs/${TRANSFER_ID}/dataaddress" | jq -r .endpoint); echo ${ENDPOINT}
+curl -x localhost:8888 -X GET ${ENDPOINT}/ngsi-ld/v1/entities/urn:ngsi-ld:UptimeReport:fms-1
 ```
 
 15. Get the OpenId Configuration for the provisioned endpoint:
@@ -429,53 +593,26 @@ curl -x localhost:8888 -X GET ${ENDPOINT}/ngsi-ld/v1/entities/urn:ngsi-ld:Uptime
   --header "Authorization: Bearer ${ACCESS_TOKEN}"
 ```
 
-[DCP]
-13. For the started transfer, now the provisioned endpoint has to be retrieved:
-```shell
-export ENDPOINT=$(curl -X GET "http://dsp-management.127.0.0.1.nip.io:8080/api/v1/management/v3/edrs/${TRANSFER_ID}/dataaddress" | jq -r .endpoint); echo ${ENDPOINT}
-```
-
-14. The token can be retrieved the same way: 
-```shell
-export ACCESS_TOKEN=$(curl -X GET "http://dsp-management.127.0.0.1.nip.io:8080/api/v1/management/v3/edrs/${TRANSFER_ID}/dataaddress" | jq -r .token); echo ${ACCESS_TOKEN}
-```
-
-15. Get the data:
-```shell
-curl -x localhost:8888 -X GET ${ENDPOINT}/ngsi-ld/v1/entities/urn:ngsi-ld:UptimeReport:fms-1 \
-  --header 'Content-Type: application/json' \
-  --header "Authorization: Bearer ${ACCESS_TOKEN}"
-```
-
-
-17. Once interaction has finished, the transfer can be stopped:
-
-```shell
-curl -X POST "http://dsp-management.127.0.0.1.nip.io:8080/api/v1/management/v3/transferprocesses/${TRANSFER_ID}/terminate" \
-  --header 'Accept: */*' \
-  --header 'Content-Type: application/json' \
-  --data-raw "{
-      \"@context\": [
-          \"https://w3id.org/edc/connector/management/v0.0.1\"
-      ],
-      \"counterPartyAddress\":  \"http://dsp-mp-operations.127.0.0.1.nip.io:8080/api/dsp/2025-1\",
-      \"reason\" : \"finished\"
-  }" | jq .
-```
-
-
 ## DCP 
 
 
 Consumer:
 
+Get client key as jwk
 ```shell
-curl  -X POST \
-  'http://localhost:8082/api/identity/v1alpha/participants' \
-  --header 'Accept: */*' \
-  --header 'x-api-key: c3VwZXItdXNlcg==.random' \
-  --header 'Content-Type: application/json' \
-  --data-raw '{
+export JWK=$(./doc/scripts/get-private-jwk-p-256.sh ./helpers/certs/out/client-consumer/private/client-pkcs8.key.pem); echo $JWK
+```
+
+Create key in vault:
+```shell
+curl -X POST 'http://vault-mp-operations.127.0.0.1.nip.io:8080/v1/secret/data/key-1' \
+  --header 'X-Vault-Token: root' \
+  --data "$(jq -n --arg content "$JWK" '{data:{content:$content}}')"
+```
+
+```shell
+export PUBLIC_JWK=$(echo $JWK | jq 'del(.d)' | jq '. += {"kid":"did:web:fancy-marketplace.biz#key-1"}')
+export DATA=$(echo '{
       "role": ["admin"],
       "serviceEndpoints": [
           {
@@ -490,73 +627,79 @@ curl  -X POST \
       "key": {
         "keyId": "did:web:fancy-marketplace.biz#key-1",
         "privateKeyAlias": "key-1",
-        "keyGeneratorParams":{
-          "algorithm": "EdDSA"
-        }
+        "publicKeyJwk": {}     
       }
-    }'
+    }')
+
+export DATA_RAW=$(echo "${DATA}" | jq --argjson pem "$PUBLIC_JWK" '.key.publicKeyJwk = $pem'); echo $DATA_RAW | jq .
+curl -X POST \
+  'http://identityhub-management-fancy-marketplace.127.0.0.1.nip.io:8080/api/identity/v1alpha/participants' \
+  --header 'Accept: */*' \
+  --header 'x-api-key: c3VwZXItdXNlcg==.random' \
+  --header 'Content-Type: application/json' \
+  --data "${DATA_RAW}"
 ```
 
 Provider:
 
+Get client key as jwk
 ```shell
-curl  -X POST \
-  'http://localhost:8082/api/identity/v1alpha/participants' \
+export JWK=$(./doc/scripts/get-private-jwk-p-256.sh ./helpers/certs/out/client-provider/private/client-pkcs8.key.pem); echo $JWK
+```
+
+Create key in vault:
+```shell
+kubectl port-forward provider-vault-0 8200:8200 -n provider
+curl -X POST 'http://localhost:8200/v1/secret/data/key-1' \
+  --header 'X-Vault-Token: root' \
+  --data "$(jq -n --arg content "$JWK" '{data:{content:$content}}')"
+```
+
+```shell
+export PUBLIC_JWK=$(echo $JWK | jq 'del(.d)' | jq '. += {"kid":"did:web:mp-operations.org#key-1"}')
+export DATA=$(echo '{
+      "role": ["admin"],
+      "serviceEndpoints": [
+          {
+            "type": "CredentialService", 
+            "serviceEndpoint": "http://identityhub-mp-operations.127.0.0.1.nip.io/api/credentials/v1/participants/ZGlkOndlYjptcC1vcGVyYXRpb25zLm9yZw",
+            "id": "credential-service"
+          }
+        ],
+      "active": true,
+      "participantId": "did:web:mp-operations.org",
+      "did": "did:web:mp-operations.org",
+      "key": {
+        "keyId": "did:web:mp-operations.org#key-1",
+        "privateKeyAlias": "key-1",
+        "publicKeyJwk": {}     
+      }
+    }')
+
+export DATA_RAW=$(echo "${DATA}" | jq --argjson pem "$PUBLIC_JWK" '.key.publicKeyJwk = $pem'); echo $DATA_RAW | jq .
+curl -X POST \
+  'http://identityhub-management-mp-operations.127.0.0.1.nip.io:8080/api/identity/v1alpha/participants' \
   --header 'Accept: */*' \
   --header 'x-api-key: c3VwZXItdXNlcg==.random' \
   --header 'Content-Type: application/json' \
-  --data-raw '{
-  "role": ["admin"],
-  "serviceEndpoints": [
-      {
-        "type": "CredentialService", 
-        "serviceEndpoint": "http://identityhub-mp-operations.127.0.0.1.nip.io/api/credentials/v1/participants/ZGlkOndlYjptcC1vcGVyYXRpb25zLm9yZw",
-        "id": "credential-service"
-      }
-    ],
-  "active": true,
-  "participantId": "did:web:mp-operations.org",
-  "did": "did:web:mp-operations.org",
-  "key": {
-    "keyId": "did:web:mp-operations.org#key-1",
-    "privateKeyAlias": "key-1",
-   "keyGeneratorParams":{
-      "algorithm": "EdDSA"
-    }
-  }
-}'
+  --data "${DATA_RAW}"
 ```
 
 Add credential:
 
 ```shell
-export CONSUMER_CREDENTIAL_CONTENT=$(./doc/scripts/get-membership-credential-content.sh did:web:fancy-marketplace.biz FullMember); echo Provider Content: ${CONSUMER_CREDENTIAL_CONTENT}
+export CONSUMER_CREDENTIAL=$(./doc/scripts/get_credential.sh https://keycloak-consumer.127.0.0.1.nip.io membership-credential employee); echo Consumer Credential: ${CONSUMER_CREDENTIAL}
 ```
 
 ```shell
-export CONSUMER_CREDENTIAL=$(./doc/scripts/create-membership-credential.sh did:web:fancy-marketplace.biz key-1 "${CONSUMER_CREDENTIAL_CONTENT}"); echo Consumer Credential: ${CONSUMER_CREDENTIAL}
-```
-
-Get private key(port forward vault 8200):
-
-```shell
-kubectl port-forward consumer-vault-0 8200:8200 -n consumer
-export CONSUMER_JWK=$(curl  -X GET \
-  'http://localhost:8200/v1/secret/data/key-1' \
-  --header 'Accept: */*' \
-  --header 'X-Vault-Token: root' | jq .data.data.content | jq -r 'fromjson'); echo ${CONSUMER_JWK}
-```
-
-Generate jwt_vc:
-```shell
-export CONSUMER_MEMBERSHIP_CREDENTIAL=$(./doc/scripts/dcp-credentials-helper.sh "${CONSUMER_CREDENTIAL}" "${CONSUMER_JWK}"); echo Consumer Membership Credential: ${CONSUMER_MEMBERSHIP_CREDENTIAL};   
+export CONSUMER_CREDENTIAL_CONTENT=$(./doc/scripts/get-payload-from-jwt.sh "${CONSUMER_CREDENTIAL}" | jq -r '.vc'); echo Content: ${CONSUMER_CREDENTIAL_CONTENT}
 ```
 
 Put credential:
 
 ```shell
 curl  -X POST \
-  'http://localhost:8082/api/identity/v1alpha/participants/ZGlkOndlYjpmYW5jeS1tYXJrZXRwbGFjZS5iaXo/credentials' \
+  'http://identityhub-management-fancy-marketplace.127.0.0.1.nip.io:8080/api/identity/v1alpha/participants/ZGlkOndlYjpmYW5jeS1tYXJrZXRwbGFjZS5iaXo/credentials' \
   --header 'Accept: */*' \
   --header 'x-api-key: c3VwZXItdXNlcg==.random' \
   --header 'Content-Type: application/json' \
@@ -564,14 +707,14 @@ curl  -X POST \
     \"id\": \"my-credential\",
     \"participantContextId\": \"did:web:fancy-marketplace.biz\",
     \"verifiableCredentialContainer\": {
-      \"rawVc\": \"${CONSUMER_MEMBERSHIP_CREDENTIAL}\",
+      \"rawVc\": \"${CONSUMER_CREDENTIAL}\",
       \"format\": \"VC1_0_JWT\",
       \"credential\": ${CONSUMER_CREDENTIAL_CONTENT}
     }
   }"
 ```
 
-Register Membership Credential & Verifiable Credential at provider til:
+Register Membership Credential at provider til:
 
 ```shell
 curl -X PUT http://til-provider.127.0.0.1.nip.io:8080/issuer/did:web:fancy-marketplace.biz \
@@ -588,9 +731,6 @@ curl -X PUT http://til-provider.127.0.0.1.nip.io:8080/issuer/did:web:fancy-marke
     },
     {
       "credentialsType": "MembershipCredential"
-    },
-    {
-      "credentialsType": "VerifiableCredential"
     }
   ]
 }'
@@ -601,34 +741,18 @@ Credentials for provider:
 Prepare credential:
 
 ```shell
-export PROVIDER_CREDENTIAL_CONTENT=$(./doc/scripts/get-membership-credential-content.sh did:web:mp-operations.org FullMember); echo Provider Content: ${PROVIDER_CREDENTIAL_CONTENT}
+export PROVIDER_CREDENTIAL=$(./doc/scripts/get_credential.sh https://keycloak-provider.127.0.0.1.nip.io membership-credential employee); echo Provider Credential: ${PROVIDER_CREDENTIAL}
 ```
 
 ```shell
-export PROVIDER_CREDENTIAL=$(./doc/scripts/create-membership-credential.sh did:web:mp-operations.org key-1 "${PROVIDER_CREDENTIAL_CONTENT}"); echo Provider Credential: ${PROVIDER_CREDENTIAL}
-```
-
-
-Get private key(port forward vault 8200):
-
-```shell
-kubectl port-forward provider-vault-0 8200:8200 -n provider
-export PROVIDER_JWK=$(curl  -X GET \
-  'http://localhost:8200/v1/secret/data/key-1' \
-  --header 'Accept: */*' \
-  --header 'X-Vault-Token: root' | jq .data.data.content | jq -r 'fromjson'); echo ${PROVIDER_JWK}
-```
-
-Generate jwt_vc:
-```shell
-export PROVIDER_MEMBERSHIP_CREDENTIAL=$(./doc/scripts/dcp-credentials-helper.sh "${PROVIDER_CREDENTIAL}" "${PROVIDER_JWK}"); echo Provider Membership Credential: ${PROVIDER_MEMBERSHIP_CREDENTIAL};   
+export PROVIDER_CREDENTIAL_CONTENT=$(./doc/scripts/get-payload-from-jwt.sh "${PROVIDER_CREDENTIAL}" | jq -r '.vc'); echo Content: ${PROVIDER_CREDENTIAL_CONTENT}
 ```
 
 Put credential:
 
 ```shell
 curl  -X POST \
-  'http://localhost:8082/api/identity/v1alpha/participants/ZGlkOndlYjptcC1vcGVyYXRpb25zLm9yZw/credentials' \
+  'http://identityhub-management-mp-operations.127.0.0.1.nip.io:8080/api/identity/v1alpha/participants/ZGlkOndlYjptcC1vcGVyYXRpb25zLm9yZw/credentials' \
   --header 'Accept: */*' \
   --header 'x-api-key: c3VwZXItdXNlcg==.random' \
   --header 'Content-Type: application/json' \
@@ -636,7 +760,7 @@ curl  -X POST \
     \"id\": \"my-credential\",
     \"participantContextId\": \"did:web:mp-operations.org\",
     \"verifiableCredentialContainer\": {
-      \"rawVc\": \"${PROVIDER_MEMBERSHIP_CREDENTIAL}\",
+      \"rawVc\": \"${PROVIDER_CREDENTIAL}\",
       \"format\": \"VC1_0_JWT\",
       \"credential\": ${PROVIDER_CREDENTIAL_CONTENT}
     }
@@ -655,9 +779,6 @@ curl  -X POST \
   "credentials": [
     {
       "credentialsType": "MembershipCredential"
-    },
-    {
-      "credentialsType": "VerifiableCredential"
     }
   ]
 }'

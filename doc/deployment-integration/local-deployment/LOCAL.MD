@@ -1245,7 +1245,9 @@ with the TMForum-APIs directly.
         "value": "5"
       },
       "k8sVersion": {
-        "type": "Property",
+        "type": "Property",curl -x localhost:8888 -X GET ${ENDPOINT}/ngsi-ld/v1/entities/urn:ngsi-ld:UptimeReport:fms-1 \
+  --header 'Content-Type: application/json' \
+  --header "Authorization: Bearer ${ACCESS_TOKEN}"
         "value": "1.26.0"        
       }
     }'

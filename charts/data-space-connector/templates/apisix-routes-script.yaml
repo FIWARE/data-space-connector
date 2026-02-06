@@ -7,42 +7,43 @@ metadata:
     {{ include "dsc.labels" . | nindent 4 }}
 data:
   create-routes.sh: |-
+    set -e
     {{- if .Values.apisix.catchAllRoute.enabled }}
-      curl -k -X POST {{ .Values.apisix.controlPlane.fullnameOverride }}/apisix/admin/routes \
-        --header 'Accept: */*' \
-        --header 'X-API-KEY: {{ .Values.apisix.controlPlane.apiTokenAdmin }}' \
-        --header 'Content-Type: application/json' \
-        --data-raw '{
-          "uri": "/*",
-          "upstream": {
-            "type": "roundrobin",
-            "nodes": {
-              {{ .Values.apisix.catchAllRoute.upstream.url | quote }}: 1
-            }
-          },
-          "plugins": {
-            "openid-connect": {
-              "client_id": {{ .Values.apisix.catchAllRoute.oidc.clientId | quote }},
-              "client_secret": "the-secret",
-              "bearer_only": true,
-              "use_jwks": true,
-              "discovery": {{ .Values.apisix.catchAllRoute.oidc.discoveryEndpoint | quote }}
-            },
-            "opa": {
-              "host": "http://localhost:{{ .Values.opa.port }}",
-              "policy": "policy/main"
-            }
+    curl -k -f -X POST {{ .Values.apisix.controlPlane.fullnameOverride }}/apisix/admin/routes \
+      --header 'Accept: */*' \
+      --header 'X-API-KEY: {{ .Values.apisix.controlPlane.apiTokenAdmin }}' \
+      --header 'Content-Type: application/json' \
+      --data-raw '{
+        "uri": "/*",
+        "upstream": {
+          "type": "roundrobin",
+          "nodes": {
+            {{ .Values.apisix.catchAllRoute.upstream.url | quote }}: 1
           }
-        }'
+        },
+        "plugins": {
+          "openid-connect": {
+            "client_id": {{ .Values.apisix.catchAllRoute.oidc.clientId | quote }},
+            "client_secret": "the-secret",
+            "bearer_only": true,
+            "use_jwks": true,
+            "discovery": {{ .Values.apisix.catchAllRoute.oidc.discoveryEndpoint | quote }}
+          },
+          "opa": {
+            "host": "http://localhost:{{ .Values.opa.port }}",
+            "policy": "policy/main"
+          }
+        }
+      }'
     {{- end }}
     {{- if .Values.apisix.routes }}
 
-      {{- $values := .Values -}}
-      {{- range $index, $route := .Values.apisix.routes }}
-      curl -k -X POST {{ $values.apisix.controlPlane.address }}/apisix/admin/routes \
-        --header 'Accept: */*' \
-        --header 'X-API-KEY: {{ $values.apisix.controlPlane.apiTokenAdmin }}' \
-        --header 'Content-Type: application/json' \
-        --data-raw '{{ $route | toJson }}'
-      {{- end }}
+    {{- $values := .Values -}}
+    {{- range $index, $route := .Values.apisix.routes }}
+    curl -k -f -X POST {{ $values.apisix.controlPlane.address }}/apisix/admin/routes \
+      --header 'Accept: */*' \
+      --header 'X-API-KEY: {{ $values.apisix.controlPlane.apiTokenAdmin }}' \
+      --header 'Content-Type: application/json' \
+      --data-raw '{{ $route | toJson }}'
+    {{- end }}
     {{- end }}

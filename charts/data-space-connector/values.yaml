@@ -917,7 +917,7 @@ contract-management:
 did:
   enabled: false
 
-# -- configuration for registering a participant at the til, will most probably only be used in demonstrational enviornments
+# -- configuration for registering a participant at the til. Allows to preconfigure trust-relationships on deployment
 registration:
   enabled: false
 
@@ -1104,319 +1104,320 @@ marketplace:
     propagateToken: true
 
 dsp:
-  ## configuration for the k8s service to access cp
-  service:
-    # -- service type
-    type: ClusterIP
-    # -- port to be used by the service
-    port: 8081
-    # -- additional annotations, if required
-    annotations: { }
-    # -- define the name of the service and avoid generating one
-    serviceNameOverride: ""
-    protocol:
-      port: 8080
-    control:
-      port: 8082
-    catalog:
-      port: 8083
-    version:
-      port: 8084
-    management:
-      port: 8085
-
-  ## deployment specific configuration
-  deployment:
-    # -- port that the cp container uses
-    port: 8080
-    # -- base path of the controlplane
-    path: /api
-    # -- initial number of target replications, can be different if autoscaling is enabled
-    replicaCount: 1
-    # -- number of old replicas to be retained
-    revisionHistoryLimit: 3
-    ## configuration of the cp update strategy
-    updateStrategy:
-      # -- type of the update
-      type: RollingUpdate
-      # -- new pods will be added gradually
-      rollingUpdate:
-        # -- number of pods that can be created above the desired amount while updating
-        maxSurge: 1
-        # -- number of pods that can be unavailable while updating
-        maxUnavailable: 0
-    ## configuration of the image to be used
-    image:
-      # -- cp image name
-      repository: quay.io/wi_stefan/fdsc-edc-controlplane-dcp
-      # -- tag of the image to be used
-      tag: 0.0.1-SNAPSHOT
-      # -- specification of the image pull policy
-      pullPolicy: Always
-    # -- secrets for pulling images from a private repository
-    # ref: https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/
-    imagePullSecrets: [ ]
-    # -- additional labels for the deployment, if required
-    additionalLabels: { }
-    # -- additional annotations for the deployment, if required
-    additionalAnnotations: { }
-    
-    # -- additional volume
-    additionalVolumeMounts:
-      - name: credential-repo
-        mountPath: /credential-repo
-      - name: signing-key
-        mountPath: /signing-key
-      # add the self generated root ca to the system truststore
-      - name: root-ca
-        mountPath: /etc/ssl/cacert.pem
-        subPath: cacert.pem
-      - name: cacerts
-        mountPath: /usr/lib/jvm/java-21/lib/security/cacerts
-        subPath: cacerts
-    # -- additional volumes to be added for the containers
-    additionalVolumes:
-      - name: marketplace-credential-script
-        configMap:
-          name: marketplace-credential
-          defaultMode: 0755
-      - name: ca-certs-script
-        configMap:
-          name: ca-certs-script
-          defaultMode: 0755
-      - name: credential-repo
-        emptyDir: {}
-      - name: signing-key
-        secret:
-          secretName: signing-key
-      - name: root-ca
-        secret:
-          secretName: root-ca
-      - name: cacerts
-        emptyDir: {}
-    ## cp resource requests and limits, we leave the default empty to make that a concious choice by the user.
-    ## for the autoscaling to make sense, you should configure this.
-    # resources:
-    # limits:
-    # cpu: 100m
-    # memory: 128Mi
-    # requests:
-    # cpu: 100m
-    # memory: 128Mi
-    # -- selector template
-    # ref: https://kubernetes.io/docs/user-guide/node-selection/
-    nodeSelector: { }
-    # -- tolerations template
-    # ref: ref: https://kubernetes.io/docs/concepts/configuration/taint-and-toleration/
-    tolerations: [ ]
-    # -- affinity template
-    # ref: https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#affinity-and-anti-affinity
-    affinity: { }
-    ## liveness and readiness probes
-    # ref: https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/#container-probes
-    livenessProbe:
-      initialDelaySeconds: 30
-      periodSeconds: 10
-      successThreshold: 1
-      timeoutSeconds: 30
-    readinessProbe:
-      initialDelaySeconds: 31
-      periodSeconds: 10
-      successThreshold: 1
-      timeoutSeconds: 30
-    # -- arguments to be set for the container
-    args: [ ]
-    # -- command to be used for starting the container
-    command: [ ]
-    # -- individual ports and paths
-
-
-  ## pod autoscaling configuration, use for automatic scaling of the broker pods
-  autoscaling:
-    #  -- should autoscaling be enabled for cp
-    enabled: false
-
-  # -- a list of additional env vars to be set
-  additonalEnvVars: [ ]
-
-  config:
-    oauth:
-      tokenUrl:
-    # -- configuration for the OID4VP extension
-    oid4vp:
-      # -- should the extension be enabled
-      enabled: false
-      # -- client id to be used for OID4VP
-      clientId: "dsp"
-      # -- scope to be used
-      scope: "openid"
-      # -- trust all certificates presented at https. DO NOT USE IN PRODUCTION
-      trustAll: true
-      # -- identification of the credentials holder
-      holder:
-        # -- id of the holder
-        id:
-        # -- kid to be used for signing, often the same as id
-        kid:
-        # -- algorithm to be used for signing the verifiable presentations
-        signatureAlgorithm: ECDH-ES
-        # -- key to be used for signing the presentations
-        key:  
-          # -- type of the key
-          type: EC
-          # -- path to the key
-          path: oid4vp/private-key.pem
-      # -- folder of the credentials to be used for authentication 
-      credentialsFolder: oid4vp/credentials
-      # -- additional trust-anchors to be used for client identification(e.g. the verifier)
-      trustAnchorsFolder:
-      # -- claim used inside the jwts for identifying the organization
-      organizationClaim: verifiableCredential.issuer
-      # -- configuration of the proxy to be used for OID4VP authentication        
-      proxy:
-        # -- should a proxy be used at all
-        enabled: false
-        # -- host of the proxy
-        host:
-        # port of the proxy
-        port:
-    # -- configuration of the test-extension. Only relevant for running conformance tests
-    testExtension:
-      # -- should it be enabled
-      enabled: false
-      # -- configuration of the test controller
-      controller:
-        # -- should the controller providing additional test endpoints be enabled
-        enabled: false
-        # -- port that the test endpoints are available at
-        port: 8687
-        # -- path that the test endpoints are available at
-        path: /tck
-      # -- configuration of the test identity service
-      identity:
-        enabled: false
-    
-    # -- configuration of the TMForum extension
-    tmfExtension:
-      # -- should the extension be enabled
-      enabled: true
-      # -- address of the quote api to be used
-      quoteApi:
-      # -- address of the agreement api to be used
-      agreementApi:
-      # -- address of the product ordering api to be used
-      productOrderApi:
-      # -- address of the product catalog api to be used
-      productCatalogApi:
-      # -- address of the product inventory api to be used
-      productInventoryApi:
-      # -- address of the usage management api to be used
-      usageManagementApi:
-      # -- address of the party catalog api to be used
-      partyCatalogApi:
-      # -- should the tmforum extension for the catalog endpoint be enable
+  common:
+    ## configuration for the k8s service to access cp
+    service:
+      # -- service type
+      type: ClusterIP
+      # -- port to be used by the service
+      port: 8081
+      # -- additional annotations, if required
+      annotations: { }
+      # -- define the name of the service and avoid generating one
+      serviceNameOverride: ""
+      protocol:
+        port: 8080
+      control:
+        port: 8082
       catalog:
-        enabled: true
+        port: 8083
+      version:
+        port: 8084
+      management:
+        port: 8085
 
-    # -- configuration of the transfer process extension
-    fdscTransfer:
-      # -- should it be enabled
-      enabled: true
-      # -- host to be used for offering the transfer processes
-      transferHost: 
-      # -- configuration to be used in case provisioning of DCP secured resources is supported
-      dcp:
+    ## deployment specific configuration
+    deployment:
+      # -- port that the cp container uses
+      port: 8080
+      # -- base path of the controlplane
+      path: /api
+      # -- initial number of target replications, can be different if autoscaling is enabled
+      replicaCount: 1
+      # -- number of old replicas to be retained
+      revisionHistoryLimit: 3
+      ## configuration of the cp update strategy
+      updateStrategy:
+        # -- type of the update
+        type: RollingUpdate
+        # -- new pods will be added gradually
+        rollingUpdate:
+          # -- number of pods that can be created above the desired amount while updating
+          maxSurge: 1
+          # -- number of pods that can be unavailable while updating
+          maxUnavailable: 0
+      ## configuration of the image to be used
+      image:
+        # -- cp image name
+        repository: quay.io/wi_stefan/fdsc-edc-controlplane-oid4vc
+        # -- tag of the image to be used
+        tag: 0.0.1-SNAPSHOT
+        # -- specification of the image pull policy
+        pullPolicy: Always
+      # -- secrets for pulling images from a private repository
+      # ref: https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/
+      imagePullSecrets: [ ]
+      # -- additional labels for the deployment, if required
+      additionalLabels: { }
+      # -- additional annotations for the deployment, if required
+      additionalAnnotations: { }
+      
+      # -- additional volume
+      additionalVolumeMounts:
+        - name: credential-repo
+          mountPath: /credential-repo
+        - name: signing-key
+          mountPath: /signing-key
+        # add the self generated root ca to the system truststore
+        - name: root-ca
+          mountPath: /etc/ssl/cacert.pem
+          subPath: cacert.pem
+        - name: cacerts
+          mountPath: /usr/lib/jvm/java-21/lib/security/cacerts
+          subPath: cacerts
+      # -- additional volumes to be added for the containers
+      additionalVolumes:
+        - name: marketplace-credential-script
+          configMap:
+            name: marketplace-credential
+            defaultMode: 0755
+        - name: ca-certs-script
+          configMap:
+            name: ca-certs-script
+            defaultMode: 0755
+        - name: credential-repo
+          emptyDir: {}
+        - name: signing-key
+          secret:
+            secretName: signing-key
+        - name: root-ca
+          secret:
+            secretName: root-ca
+        - name: cacerts
+          emptyDir: {}
+      ## cp resource requests and limits, we leave the default empty to make that a concious choice by the user.
+      ## for the autoscaling to make sense, you should configure this.
+      # resources:
+      # limits:
+      # cpu: 100m
+      # memory: 128Mi
+      # requests:
+      # cpu: 100m
+      # memory: 128Mi
+      # -- selector template
+      # ref: https://kubernetes.io/docs/user-guide/node-selection/
+      nodeSelector: { }
+      # -- tolerations template
+      # ref: ref: https://kubernetes.io/docs/concepts/configuration/taint-and-toleration/
+      tolerations: [ ]
+      # -- affinity template
+      # ref: https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#affinity-and-anti-affinity
+      affinity: { }
+      ## liveness and readiness probes
+      # ref: https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/#container-probes
+      livenessProbe:
+        initialDelaySeconds: 30
+        periodSeconds: 10
+        successThreshold: 1
+        timeoutSeconds: 30
+      readinessProbe:
+        initialDelaySeconds: 31
+        periodSeconds: 10
+        successThreshold: 1
+        timeoutSeconds: 30
+      # -- arguments to be set for the container
+      args: [ ]
+      # -- command to be used for starting the container
+      command: [ ]
+      # -- individual ports and paths
+
+
+    ## pod autoscaling configuration, use for automatic scaling of the broker pods
+    autoscaling:
+      #  -- should autoscaling be enabled for cp
+      enabled: false
+
+    # -- a list of additional env vars to be set
+    additonalEnvVars: [ ]
+
+    config:
+      oauth:
+        tokenUrl:
+      # -- configuration for the OID4VP extension
+      oid4vp:
+        # -- should the extension be enabled
+        enabled: false
+        # -- client id to be used for OID4VP
+        clientId: "dsp"
+        # -- scope to be used
+        scope: "openid"
+        # -- trust all certificates presented at https. DO NOT USE IN PRODUCTION
+        trustAll: true
+        # -- identification of the credentials holder
+        holder:
+          # -- id of the holder
+          id:
+          # -- kid to be used for signing, often the same as id
+          kid:
+          # -- algorithm to be used for signing the verifiable presentations
+          signatureAlgorithm: ECDH-ES
+          # -- key to be used for signing the presentations
+          key:  
+            # -- type of the key
+            type: EC
+            # -- path to the key
+            path: oid4vp/private-key.pem
+        # -- folder of the credentials to be used for authentication 
+        credentialsFolder: oid4vp/credentials
+        # -- additional trust-anchors to be used for client identification(e.g. the verifier)
+        trustAnchorsFolder:
+        # -- claim used inside the jwts for identifying the organization
+        organizationClaim: verifiableCredential.issuer
+        # -- configuration of the proxy to be used for OID4VP authentication        
+        proxy:
+          # -- should a proxy be used at all
+          enabled: false
+          # -- host of the proxy
+          host:
+          # port of the proxy
+          port:
+      # -- configuration of the test-extension. Only relevant for running conformance tests
+      testExtension:
         # -- should it be enabled
         enabled: false
-        # -- address of the dsp-jwks endpoint
-        oid:
-          host:
-          jwksPath: /.well-known/jwks
-          openIdPath: /.well-known/openid-configuration
-
-      # -- configuration to be used in case provisioning of OID4VC secured resources is supported
-      oid4vc:
-        # -- should OID4VC provisioning be enabled
-        enabled: false
-        # -- address of the credentials config service to be used
-        credentialsConfigAddress: 
-        # -- external host of the verifier to be used for OID4VP on transfers
-        verifierHost:
-        # -- internal host of the verifier to be used for OID4VP on transfers, the external one can also be reused here
-        verifierInternalHost:
-        # -- internal address of the open policy agent - to be used as PDP on the incoming routes 
-        opaHost: http://localhost:8181
-        # -- host of the ODRL-PAP to register the policies
-        odrlPapHost: http://odrl-pap:8080
-      # -- configuration of the apisix to be confiugured for serving the process
-      apisix:
-        # -- address of the management api of apisix
-        address:
-        # -- token to be used as an API-Key at the mangement api
-        token:
-        # -- in case the route should use a proxy, configure it here
-        httpsProxy:
-    
-    ## -- configuration of the trusted issuers list to be use in case of DCP
-    ebsiTir:
-      ## -- should an ebsi-api based tir be used?
-      enabled: false
-      ## -- address to the trusted issuers list
-      tilAddress: 
-
-    ## -- configuration for dcp based authn/z
-    dcp:
-      ## -- should it be enabled
-      enabled: false
-      ## -- configuration of the default scopes for the endpoints
-      scopes:
-        ## -- scope for the catalog
+        # -- configuration of the test controller
+        controller:
+          # -- should the controller providing additional test endpoints be enabled
+          enabled: false
+          # -- port that the test endpoints are available at
+          port: 8687
+          # -- path that the test endpoints are available at
+          path: /tck
+        # -- configuration of the test identity service
+        identity:
+          enabled: false
+      
+      # -- configuration of the TMForum extension
+      tmfExtension:
+        # -- should the extension be enabled
+        enabled: true
+        # -- address of the quote api to be used
+        quoteApi:
+        # -- address of the agreement api to be used
+        agreementApi:
+        # -- address of the product ordering api to be used
+        productOrderApi:
+        # -- address of the product catalog api to be used
+        productCatalogApi:
+        # -- address of the product inventory api to be used
+        productInventoryApi:
+        # -- address of the usage management api to be used
+        usageManagementApi:
+        # -- address of the party catalog api to be used
+        partyCatalogApi:
+        # -- should the tmforum extension for the catalog endpoint be enable
         catalog:
-        ## -- scope for interacting with the negotiation protocol
-        negotiation:
-        ## -- scope for interacting with the transfer protocol
-        transfer:
-        ## -- scope for the version endpoint
-        version:
-
-    ## -- general configuration for the edc
-    edc:
-      participant:
-        ## -- id of the participant to be used
-        id:
-      log:
-        ## -- loglevel to be used
-        level: DEBUG
-      # -- handling of edc internal json-ld resolution 
-      jsonld:
-        https: 
           enabled: true
-        http: 
-          enabled: trusted
-    ## -- endpoints to be provided by the edc
-    web:
-      http:
-        port: 8081
-        ## -- configuration of the dsp protocol
-        protocol:
-          path: /api/dsp
-          port: 8080
-        ## -- configuration of the control api
-        control:
-          path: /api/control
-          port: 8082
-        ## -- configuration of the catalog api
-        catalog:
-          path: /api/catalog
-          port: 8083
-        ## -- configuration of the version api
-        version:
-          path: /api/version
-          port: 8084
-        ## -- configuration of the management api
-        management:
-          path: /api/v1/management
-          port: 8085
+
+      # -- configuration of the transfer process extension
+      fdscTransfer:
+        # -- should it be enabled
+        enabled: true
+        # -- host to be used for offering the transfer processes
+        transferHost: 
+        # -- configuration to be used in case provisioning of DCP secured resources is supported
+        dcp:
+          # -- should it be enabled
+          enabled: false
+          # -- address of the dsp-jwks endpoint
+          oid:
+            host:
+            jwksPath: /.well-known/jwks
+            openIdPath: /.well-known/openid-configuration
+
+        # -- configuration to be used in case provisioning of OID4VC secured resources is supported
+        oid4vc:
+          # -- should OID4VC provisioning be enabled
+          enabled: false
+          # -- address of the credentials config service to be used
+          credentialsConfigAddress: 
+          # -- external host of the verifier to be used for OID4VP on transfers
+          verifierHost:
+          # -- internal host of the verifier to be used for OID4VP on transfers, the external one can also be reused here
+          verifierInternalHost:
+          # -- internal address of the open policy agent - to be used as PDP on the incoming routes 
+          opaHost: http://localhost:8181
+          # -- host of the ODRL-PAP to register the policies
+          odrlPapHost: http://odrl-pap:8080
+        # -- configuration of the apisix to be confiugured for serving the process
+        apisix:
+          # -- address of the management api of apisix
+          address:
+          # -- token to be used as an API-Key at the mangement api
+          token:
+          # -- in case the route should use a proxy, configure it here
+          httpsProxy:
+      
+      ## -- configuration of the trusted issuers list to be use in case of DCP
+      ebsiTir:
+        ## -- should an ebsi-api based tir be used?
+        enabled: false
+        ## -- address to the trusted issuers list
+        tilAddress: 
+
+      ## -- configuration for dcp based authn/z
+      dcp:
+        ## -- should it be enabled
+        enabled: false
+        ## -- configuration of the default scopes for the endpoints
+        scopes:
+          ## -- scope for the catalog
+          catalog:
+          ## -- scope for interacting with the negotiation protocol
+          negotiation:
+          ## -- scope for interacting with the transfer protocol
+          transfer:
+          ## -- scope for the version endpoint
+          version:
+
+      ## -- general configuration for the edc
+      edc:
+        participant:
+          ## -- id of the participant to be used
+          id:
+        log:
+          ## -- loglevel to be used
+          level: DEBUG
+        # -- handling of edc internal json-ld resolution 
+        jsonld:
+          https: 
+            enabled: true
+          http: 
+            enabled: trusted
+      ## -- endpoints to be provided by the edc
+      web:
+        http:
+          port: 8081
+          ## -- configuration of the dsp protocol
+          protocol:
+            path: /api/dsp
+            port: 8080
+          ## -- configuration of the control api
+          control:
+            path: /api/control
+            port: 8082
+          ## -- configuration of the catalog api
+          catalog:
+            path: /api/catalog
+            port: 8083
+          ## -- configuration of the version api
+          version:
+            path: /api/version
+            port: 8084
+          ## -- configuration of the management api
+          management:
+            path: /api/v1/management
+            port: 8085
 
 # -- helper script to retrieve credentials for applications
 credentials:

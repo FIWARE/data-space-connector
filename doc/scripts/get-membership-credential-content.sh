@@ -13,7 +13,6 @@ echo "{
     ],
     \"id\": \"http://org.yourdataspace.com/credentials/2347\",
     \"type\": [
-      \"VerifiableCredential\",
       \"MembershipCredential\"
     ],
     \"issuer\": \"${DID}\",

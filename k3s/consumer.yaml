@@ -35,12 +35,13 @@ keycloak:
       configMap:
         name: consumer-keystore
         defaultMode: 0755
+  issuerDid: did:web:fancy-marketplace.biz
   signingKey:
     storePath: /keys/cert.jks
     storePassword: password
     keyAlias: certificate
     keyPassword: password
-    did: did:web:fancy-marketplace.biz
+    did: did:web:fancy-marketplace.biz#key-1
     keyAlgorithm: ES256
   realm:
     frontendUrl: https://keycloak-consumer.127.0.0.1.nip.io
@@ -71,6 +72,12 @@ keycloak:
       "vc.legal-person-credential.format": "jwt_vc",
       "vc.legal-person-credential.scope": "LegalPersonCredential",
       "vc.legal-person-credential.vct": "LegalPersonCredential",
+      "vc.membership-credential.credential_signing_alg_values_supported": "ES256",
+      "vc.membership-credential.credential_build_config.signing_algorithm": "ES256",
+      "vc.membership-credential.credential_build_config.token_jws_type": "JWT",
+      "vc.membership-credential.format": "jwt_vc",
+      "vc.membership-credential.scope": "MembershipCredential",
+      "vc.membership-credential.vct": "MembershipCredential",
       "vc.marketplace-credential.credential_signing_alg_values_supported": "ES256",
       "vc.marketplace-credential.credential_build_config.signing_algorithm": "ES256",
       "vc.marketplace-credential.credential_build_config.token_jws_type": "JWT",
@@ -604,6 +611,43 @@ keycloak:
             }
           }
         ]
+      },
+      {
+        "name": "MembershipCredential",
+        "description": "Scope to produce a credential intended for m2m-access as a marketplace.",
+        "protocol": "openid-connect",
+        "attributes": {},
+        "protocolMappers": [
+          {
+            "name": "context-mapper-mc",
+            "protocol": "oid4vc",
+            "protocolMapper": "oid4vc-context-mapper",
+            "config": {
+              "context": "https://www.w3.org/2018/credentials/v1",
+              "supportedCredentialTypes": "MembershipCredential"
+            }
+          },
+          {
+            "name": "subject-mapper-mc-id",
+            "protocol": "oid4vc",
+            "protocolMapper": "oid4vc-static-claim-mapper",
+            "config": {
+              "subjectProperty": "id",
+              "staticValue": "did:web:fancy-marketplace.biz",
+              "supportedCredentialTypes": "MembershipCredential"
+            }
+          },
+          {
+            "name": "subject-mapper-mc-type",
+            "protocol": "oid4vc",
+            "protocolMapper": "oid4vc-static-claim-mapper",
+            "config": {
+              "subjectProperty": "membershipType",
+              "staticValue": "FullMember",
+              "supportedCredentialTypes": "MembershipCredential"
+            }
+          }
+        ]
       }
     clients: |
       {
@@ -774,7 +818,8 @@ keycloak:
           "LegalPersonCredential",
           "OperatorCredential",
           "UserCredential",
-          "MarketplaceCredential"
+          "MarketplaceCredential",
+          "MembershipCredential"
         ]
       },
       {
@@ -857,15 +902,15 @@ didJson:
     annotations:
       traefik.ingress.kubernetes.io/service.passhostheader: "true"
       traefik.ingress.kubernetes.io/router.tls: "true"
-# register the consumer at the til. Only possible if it runs in the same environment and recommendable for demo deployments
+# register the provider at the til.
 registration:
   enabled: true
   configMap: consumer-til-registration
-  til: http://trusted-issuers-list.provider.svc.cluster.local:8080
-  did: did:web:fancy-marketplace.biz
-  credentialTypes:
-    - LegalPersonCredential
-    - UserCredential
+  til: http://trusted-issuers-list.consumer.svc.cluster.local:8080
+  issuer:
+    - did: did:web:mp-operations.org
+      credentialTypes:
+        - MembershipCredential
 ## configuration for providing the (central) marketplace
 # tmf as marketplace backend
 tm-forum-api:
@@ -932,7 +977,7 @@ credentials-config-service:
         oidcScopes:
           "openid":
             credentials:
-              - type: LegalPersonCredential
+              - type: MembershipCredential
                 trustedParticipantsLists:
                   - http://tir.127.0.0.1.nip.io
                 trustedIssuersLists:
@@ -942,12 +987,12 @@ credentials-config-service:
                   fullInclusion: true
             dcql:
               credentials:
-                - id: lpc-query
+                - id: mc-query
                   format: "jwt_vc_json"
                   multiple: true
                   meta:
                     type_values:
-                      - LegalPersonCredential
+                      - MembershipCredential
 # provide authentication capabilities
 vcverifier:
   ingress:
@@ -1075,7 +1120,13 @@ apisix:
           path: /
         - name: identityhub-fancy-marketplace.127.0.0.1.nip.io
           path: /
-        - name: dsp-management.127.0.0.1.nip.io
+        - name: identityhub-management-fancy-marketplace.127.0.0.1.nip.io
+          path: /
+        - name: dsp-dcp-management.127.0.0.1.nip.io
+          path: /
+        - name: dsp-oid4vc-management.127.0.0.1.nip.io
+          path: /
+        - name: vault-fancy-marketplace.127.0.0.1.nip.io
           path: /
   catchAllRoute:
     enabled: false
@@ -1112,10 +1163,16 @@ apisix:
           policy: policy/main
           with_body: true
     - uri: /*
-      host: dsp-management.127.0.0.1.nip.io
+      host: dsp-dcp-management.127.0.0.1.nip.io
       upstream:
         nodes:
-          dsp-controlplane:8085: 1
+          dsp-controlplane-dcp:8085: 1
+        type: roundrobin
+    - uri: /*
+      host: dsp-oid4vc-management.127.0.0.1.nip.io
+      upstream:
+        nodes:
+          dsp-controlplane-oid4vc:8085: 1
         type: roundrobin
     - uri: /.well-known/openid-configuration
       host: dsp-fancy-marketplace.127.0.0.1.nip.io
@@ -1126,6 +1183,11 @@ apisix:
       plugins:
         proxy-rewrite:
           uri: /services/dsp/.well-known/openid-configuration
+    - uri: /api/identity/*
+      host: identityhub-management-fancy-marketplace.127.0.0.1.nip.io
+      upstream:
+        nodes:
+          identityhub-service:8082: 1
     - uri: /api/credentials/*
       host: identityhub-fancy-marketplace.127.0.0.1.nip.io
       upstream:
@@ -1135,12 +1197,12 @@ apisix:
       host: dcp-fancy-marketplace.127.0.0.1.nip.io
       upstream:
         nodes:
-          dsp-controlplane:8080: 1
+          dsp-controlplane-dcp:8080: 1
     - uri: /*
       host: dsp-fancy-marketplace.127.0.0.1.nip.io
       upstream:
         nodes:
-          dsp-controlplane:8080: 1
+          dsp-controlplane-oid4vc:8080: 1
       plugins:
         openid-connect:
           proxy_opts:
@@ -1151,6 +1213,11 @@ apisix:
           client_secret: unused
           ssl_verify: false
           discovery: https://verifier.fancy-marketplace.biz/services/dsp/.well-known/openid-configuration
+    - uri: /*
+      host: vault-fancy-marketplace.127.0.0.1.nip.io
+      upstream:
+        nodes:
+          consumer-vault:8200: 1
 # contract management for distributing the buy events
 contract-management:
   did: did:web:fancy-marketplace.biz
@@ -1277,122 +1344,139 @@ contract-management:
 dsp:
   enabled: true
   deployment:
-    additionalVolumeMounts:      
-      - name: credential-repo
-        mountPath: /credential-repo
-      - name: signing-key
-        mountPath: /signing-key
-      - name: root-ca
-        mountPath: /root-ca
-      - name: cacerts
-        mountPath: /opt/java/openjdk/lib/security/cacerts
-        subPath: cacerts
-    additionalVolumes:
-      - name: signing-key
-        secret:
-          secretName: signing-key
-      - name: credentials-script
-        configMap:
-          name: credentials-script
-          defaultMode: 0755
-      - name: ca-certs-script
-        configMap:
-          name: ca-certs-script
-          defaultMode: 0755
-      - name: credential-repo
-        emptyDir: {}
-      - name: root-ca
-        secret:
-          secretName: root-ca
-      - name: cacerts
-        emptyDir: {}
-    initContainers:
-      # helper container to wait for keycloak present in local deployments, to avoid cascading crash-loops
-      - name: wait-for-keycloak
-        image: curlimages/curl:8.6.0
-        command:
-          - sh
-          - -c
-          - |
-            set -e
-            echo "Waiting for Keycloak to become ready..."
+    dcp: 
+      deployment:
+        image:
+          repository: quay.io/wi_stefan/fdsc-edc-controlplane-dcp
+      service: {}
+      config:
+        edc:
+          hostname: dcp-fancy-marketplace.127.0.0.1.nip.io
+    oid4vc:
+      deployment:
+        image:
+          repository: quay.io/wi_stefan/fdsc-edc-controlplane-oid4vc
+      service: {}
+      config: 
+        edc:
+          hostname: dsp-fancy-marketplace.127.0.0.1.nip.io
+  common:
+    deployment:
+      additionalVolumeMounts:      
+        - name: credential-repo
+          mountPath: /credential-repo
+        - name: signing-key
+          mountPath: /signing-key
+        - name: root-ca
+          mountPath: /root-ca
+        - name: cacerts
+          mountPath: /opt/java/openjdk/lib/security/cacerts
+          subPath: cacerts
+      additionalVolumes:
+        - name: signing-key
+          secret:
+            secretName: signing-key
+        - name: credentials-script
+          configMap:
+            name: credentials-script
+            defaultMode: 0755
+        - name: ca-certs-script
+          configMap:
+            name: ca-certs-script
+            defaultMode: 0755
+        - name: credential-repo
+          emptyDir: {}
+        - name: root-ca
+          secret:
+            secretName: root-ca
+        - name: cacerts
+          emptyDir: {}
+      initContainers:
+        # helper container to wait for keycloak present in local deployments, to avoid cascading crash-loops
+        - name: wait-for-keycloak
+          image: curlimages/curl:8.6.0
+          command:
+            - sh
+            - -c
+            - |
+              set -e
+              echo "Waiting for Keycloak to become ready..."
 
-            until curl -sf http://consumer-keycloak:9000/health/ready > /dev/null; do
-              echo "Keycloak not ready yet, retrying..."
-              sleep 5
-            done
-            echo "Keycloak is ready."
-      - name: load-certs
-        image: "quay.io/fiware/contract-management:3.3.0"
-        command: ["/bin/sh", "-c", "/bin/import-ca.sh /certs-folder /root-ca/cacert.pem"]
-        volumeMounts:
-          - name: ca-certs-script
-            mountPath: /bin/import-ca.sh
-            subPath: import-ca.sh
-          - name: cacerts
-            mountPath: /certs-folder/
-          - name: root-ca
-            mountPath: /root-ca
-      # get a credential to be used by the contract-management
-      - name: get-credential
-        image: quay.io/curl/curl:8.1.2
-        command: ["/bin/sh", "-c", "/bin/get-credential.sh /credential-repo"]
-        volumeMounts:
-          - name: credentials-script
-            mountPath: /bin/get-credential.sh
-            subPath: get-credential.sh
-          - name: credential-repo
-            mountPath: /credential-repo
+              until curl -sf http://consumer-keycloak:9000/health/ready > /dev/null; do
+                echo "Keycloak not ready yet, retrying..."
+                sleep 5
+              done
+              echo "Keycloak is ready."
+        - name: load-certs
+          image: "quay.io/fiware/contract-management:3.3.0"
+          command: ["/bin/sh", "-c", "/bin/import-ca.sh /certs-folder /root-ca/cacert.pem"]
+          volumeMounts:
+            - name: ca-certs-script
+              mountPath: /bin/import-ca.sh
+              subPath: import-ca.sh
+            - name: cacerts
+              mountPath: /certs-folder/
+            - name: root-ca
+              mountPath: /root-ca
+        # get a credential to be used by the contract-management
+        - name: get-credential
+          image: quay.io/curl/curl:8.1.2
+          command: ["/bin/sh", "-c", "/bin/get-credential.sh /credential-repo"]
+          volumeMounts:
+            - name: credentials-script
+              mountPath: /bin/get-credential.sh
+              subPath: get-credential.sh
+            - name: credential-repo
+              mountPath: /credential-repo
 
-  config:
-    issuerId: did:web:fancy-marketplace.biz
-    ebsiTir:
-      enabled: true
-      tilAddress: http://trusted-issuers-list.consumer.svc.cluster.local:8080
-    oauth:
-      tokenUrl: http://identityhub-service.consumer.svc.cluster.local:8087/api/sts/token
-      clientId: did:web:fancy-marketplace.biz
-      secretAlias: did:web:fancy-marketplace.biz-sts-client-secret
-    edc:
-      hostname: dcp-fancy-marketplace.127.0.0.1.nip.io
-      participant:
-        id: did:web:fancy-marketplace.biz
-
-    oid4vp:
-      enabled: true
-      credentialsFolder: /credential-repo
-      trustAnchorsFolder: /root-ca
-      trustAll: true
-      holder:
-        id: did:web:fancy-marketplace.biz
-        kid: did:web:fancy-marketplace.biz
-        key:
-          path: /signing-key/client-pkcs8.key.pem
-      proxy:
+    config:
+      issuerId: did:web:fancy-marketplace.biz
+      ebsiTir:
         enabled: true
-        host: squid-proxy.infra.svc.cluster.local
-        port: 8888
-      
-    tmfExtension:
-      quoteApi: http://consumer-tm-forum-api-quote.consumer.svc.cluster.local:8080/tmf-api/quote/v4
-      agreementApi: http://consumer-tm-forum-api-agreement.consumer.svc.cluster.local:8080/tmf-api/agreementManagement/v4
-      productOrderApi: http://consumer-tm-forum-api-product-ordering-management.consumer.svc.cluster.local:8080/tmf-api/productOrderingManagement/v4
-      productCatalogApi: http://consumer-tm-forum-api-product-catalog.consumer.svc.cluster.local:8080/tmf-api/productCatalogManagement/v4
-      productInventoryApi: http://consumer-tm-forum-api-product-inventory.consumer.svc.cluster.local:8080/tmf-api/productInventory/v4
-      usageManagementApi: http://consumer-tm-forum-api-usage-management.consumer.svc.cluster.local:8080/tmf-api/usageManagement/v4
-      partyCatalogApi: http://consumer-tm-forum-api-party-catalog.consumer.svc.cluster.local:8080/tmf-api/party/v4
+        tilAddress: http://trusted-issuers-list.consumer.svc.cluster.local:8080
+      oauth:
+        tokenUrl: http://identityhub-service.consumer.svc.cluster.local:8087/api/sts/token
+        clientId: did:web:fancy-marketplace.biz
+        secretAlias: did:web:fancy-marketplace.biz-sts-client-secret
+      edc:
+        participant:
+          id: did:web:fancy-marketplace.biz
 
-    # -- transfer extension is only needed at the provider side
-    fdscTransfer:
-      enabled: false
-    
-    dcp:
-      enabled: true
-      scopes:
-        catalog: org.eclipse.tractusx.vc.type:MembershipCredential:read
-        negotiation: org.eclipse.tractusx.vc.type:MembershipCredential:read
-        transfer: org.eclipse.tractusx.vc.type:MembershipCredential:read
-        version: org.eclipse.tractusx.vc.type:MembershipCredential:read
+      oid4vp:
+        enabled: true
+        credentialsFolder: /credential-repo
+        trustAnchorsFolder: /root-ca
+        trustAll: true
+        holder:
+          id: did:web:fancy-marketplace.biz
+          kid: did:web:fancy-marketplace.biz
+          key:
+            path: /signing-key/client-pkcs8.key.pem
+        proxy:
+          enabled: true
+          host: squid-proxy.infra.svc.cluster.local
+          port: 8888
+        
+      tmfExtension:
+        quoteApi: http://consumer-tm-forum-api-quote.consumer.svc.cluster.local:8080/tmf-api/quote/v4
+        agreementApi: http://consumer-tm-forum-api-agreement.consumer.svc.cluster.local:8080/tmf-api/agreementManagement/v4
+        productOrderApi: http://consumer-tm-forum-api-product-ordering-management.consumer.svc.cluster.local:8080/tmf-api/productOrderingManagement/v4
+        productCatalogApi: http://consumer-tm-forum-api-product-catalog.consumer.svc.cluster.local:8080/tmf-api/productCatalogManagement/v4
+        productInventoryApi: http://consumer-tm-forum-api-product-inventory.consumer.svc.cluster.local:8080/tmf-api/productInventory/v4
+        usageManagementApi: http://consumer-tm-forum-api-usage-management.consumer.svc.cluster.local:8080/tmf-api/usageManagement/v4
+        partyCatalogApi: http://consumer-tm-forum-api-party-catalog.consumer.svc.cluster.local:8080/tmf-api/party/v4
+
+      # -- transfer extension is only needed at the provider side
+      fdscTransfer:
+        enabled: false
+      
+      dcp:
+        enabled: true
+        scopes:
+          catalog: org.eclipse.tractusx.vc.type:MembershipCredential:read
+          negotiation: org.eclipse.tractusx.vc.type:MembershipCredential:read
+          transfer: org.eclipse.tractusx.vc.type:MembershipCredential:read
+          version: org.eclipse.tractusx.vc.type:MembershipCredential:read
 
 credentials:
   enabled: true
@@ -1407,6 +1491,9 @@ credentials:
     - id: marketplace-credential
       format: jwt_vc
       targetFile: marketplace-credential.jwt
+    - id: membership-credential
+      format: jwt_vc
+      targetFile: membership-credential.jwt
     - id: legal-person-credential
       format: jwt_vc
       targetFile: legal-person-credential.jwt

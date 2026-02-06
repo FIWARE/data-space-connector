@@ -1,113 +1,114 @@
-{{- if (eq .Values.dsp.enabled true) }}
+{{- if .Values.dsp.enabled }}
+{{- range $name, $deployment := .Values.dsp.deployment }}
+{{- $cfg := mergeOverwrite (deepCopy $.Values.dsp.common) $deployment }}
+
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: dsp-controlplane
+  name: dsp-controlplane-{{ $name }}
   namespace: {{ $.Release.Namespace | quote }}
   labels:
     app.kubernetes.io/name: dsp-controlplane
-    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/instance: {{ $.Release.Name }}
+    app.kubernetes.io/component: {{ $name }}
+
 spec:
-  {{- if not .Values.dsp.autoscaling.enabled }}
-  replicas: {{ .Values.dsp.deployment.replicaCount }}
-  {{- end }}
-  revisionHistoryLimit: {{ .Values.dsp.deployment.revisionHistoryLimit }}
+  replicas: {{ $cfg.deployment.replicaCount }}
+
+  revisionHistoryLimit: {{ $cfg.deployment.revisionHistoryLimit }}
+
   strategy:
-  {{- with .Values.dsp.deployment.updateStrategy }}
-  {{- toYaml . | nindent 4 }}
-  {{- end }}
+    {{- toYaml $cfg.deployment.updateStrategy | nindent 4 }}
+
   selector:
     matchLabels:
       app.kubernetes.io/name: dsp-controlplane
-      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/component: {{ $name }}
+
   template:
     metadata:
       labels:
         app.kubernetes.io/name: dsp-controlplane
-        app.kubernetes.io/instance: {{ .Release.Name }}
-        {{- with .Values.dsp.deployment.additionalLabels }}
+        app.kubernetes.io/component: {{ $name }}
+        {{- with $cfg.deployment.additionalLabels }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
-      {{- if .Values.dsp.deployment.additionalAnnotations -}}
+      {{- with $cfg.deployment.additionalAnnotations }}
       annotations:
-        {{- with .Values.dsp.deployment.additionalAnnotations }}
         {{- toYaml . | nindent 8 }}
-        {{- end }}
       {{- end }}
+
     spec:
-      {{- if .Values.dsp.imagePullSecrets }}
+      serviceAccountName: default
+
+      {{- with $cfg.imagePullSecrets }}
       imagePullSecrets:
-        {{- range .Values.dsp.imagePullSecrets }}
+        {{- range . }}
         - name: {{ . }}
         {{- end }}
       {{- end }}
-      serviceAccountName: default
-      {{- if .Values.dsp.deployment.initContainers }}
+
+      {{- with $cfg.deployment.initContainers }}
       initContainers:
-        {{- with .Values.dsp.deployment.initContainers }}
-          {{- toYaml . | nindent 8 }}
-          {{- end }}
+        {{- toYaml . | nindent 8 }}
       {{- end }}
 
       hostAliases:
-        - ip: "192.168.2.224"  # Replace with your host's IP
+        - ip: "192.168.2.224"
           hostnames:
             - "local-host"
+
       containers:
-        - name: {{ .Chart.Name }}
-          imagePullPolicy: {{ .Values.dsp.deployment.image.pullPolicy }}
-          image: "{{ .Values.dsp.deployment.image.repository }}:{{ .Values.dsp.deployment.image.tag }}"
-          {{- if .Values.dsp.deployment.command }}
+        - name: dsp
+          image: "{{ $cfg.deployment.image.repository }}:{{ $cfg.deployment.image.tag }}"
+          imagePullPolicy: {{ $cfg.deployment.image.pullPolicy }}
+
+          {{- with $cfg.deployment.command }}
           command:
-          {{- with .Values.dsp.deployment.command }}
-          {{- toYaml . | nindent 12 }}
+            {{- toYaml . | nindent 12 }}
           {{- end }}
-          {{- end }}
-          {{- if .Values.dsp.deployment.args }}
+
+          {{- with $cfg.deployment.args }}
           args:
             - --log-level=debug
-          {{- with .Values.dsp.deployment.args }}
-          {{- toYaml . | nindent 12 }}
+            {{- toYaml . | nindent 12 }}
           {{- end }}
-          {{- end }}
+
           ports:
             - name: http
-              containerPort: {{ .Values.dsp.config.web.http.port }}
-              protocol: TCP
+              containerPort: {{ $cfg.config.web.http.port }}
             - name: http-version
-              containerPort: {{ .Values.dsp.config.web.http.version.port }}
-              protocol: TCP
+              containerPort: {{ $cfg.config.web.http.version.port }}
             - name: http-management
-              containerPort: {{ .Values.dsp.config.web.http.management.port }}
-              protocol: TCP
+              containerPort: {{ $cfg.config.web.http.management.port }}
             - name: http-protocol
-              containerPort: {{ .Values.dsp.config.web.http.protocol.port }}
-              protocol: TCP
+              containerPort: {{ $cfg.config.web.http.protocol.port }}
             - name: http-catalog
-              containerPort: {{ .Values.dsp.config.web.http.catalog.port }}
-              protocol: TCP
+              containerPort: {{ $cfg.config.web.http.catalog.port }}
             - name: http-control
-              containerPort: {{ .Values.dsp.config.web.http.control.port }}
-              protocol: TCP
+              containerPort: {{ $cfg.config.web.http.control.port }}
             - name: http-tck
-              containerPort: {{ .Values.dsp.config.testExtension.controller.port }}
-              protocol: TCP
+              containerPort: {{ $cfg.config.testExtension.controller.port }}
+
           livenessProbe:
             httpGet:
-              path: {{ .Values.dsp.deployment.path}}/check/liveness
+              path: {{ $cfg.deployment.path }}/check/liveness
               port: http
-            initialDelaySeconds: {{ .Values.dsp.deployment.livenessProbe.initialDelaySeconds }}
-            periodSeconds: {{ .Values.dsp.deployment.livenessProbe.periodSeconds }}
-            successThreshold: {{ .Values.dsp.deployment.livenessProbe.successThreshold }}
-            timeoutSeconds: {{ .Values.dsp.deployment.livenessProbe.timeoutSeconds }}
+            initialDelaySeconds: {{ $cfg.deployment.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ $cfg.deployment.livenessProbe.periodSeconds }}
+            successThreshold: {{ $cfg.deployment.livenessProbe.successThreshold }}
+            timeoutSeconds: {{ $cfg.deployment.livenessProbe.timeoutSeconds }}
+
           readinessProbe:
             httpGet:
-              path: {{ .Values.dsp.deployment.path}}/check/readiness
+              path: {{ $cfg.deployment.path }}/check/readiness
               port: http
-            initialDelaySeconds: {{ .Values.dsp.deployment.readinessProbe.initialDelaySeconds }}
-            periodSeconds: {{ .Values.dsp.deployment.readinessProbe.periodSeconds }}
-            successThreshold: {{ .Values.dsp.deployment.readinessProbe.successThreshold }}
-            timeoutSeconds: {{ .Values.dsp.deployment.readinessProbe.timeoutSeconds }}
+            initialDelaySeconds: {{ $cfg.deployment.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ $cfg.deployment.readinessProbe.periodSeconds }}
+            successThreshold: {{ $cfg.deployment.readinessProbe.successThreshold }}
+            timeoutSeconds: {{ $cfg.deployment.readinessProbe.timeoutSeconds }}
+
           env:
             - name: JAVA_TOOL_OPTIONS
               value: >
@@ -116,41 +117,49 @@ spec:
                 -Dhttp.proxyHost=squid-proxy.infra.svc.cluster.local
                 -Dhttp.proxyPort=8888
                 -Dhttp.nonProxyHosts="*-vault|*.cluster.local"
+
             - name: EDC_FS_CONFIG
               value: /config/dataspaceconnector-configuration.properties
-            {{- with .Values.dsp.additionalEnvVars }}
+
+            {{- with $cfg.additionalEnvVars }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
+
           volumeMounts:
             - name: config-properties
               mountPath: /config/dataspaceconnector-configuration.properties
               subPath: dataspaceconnector-configuration.properties
-            {{- if .Values.dsp.deployment.additionalVolumeMounts }}
-            {{- with .Values.dsp.deployment.additionalVolumeMounts }}
+
+            {{- with $cfg.deployment.additionalVolumeMounts }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
-            {{- end }}
+
           resources:
-            {{- toYaml .Values.dsp.deployment.resources | nindent 12 }}
+            {{- toYaml $cfg.deployment.resources | nindent 12 }}
+
       volumes:
         - name: config-properties
           configMap:
-            name: dsp-controlplane
-        {{- if .Values.dsp.deployment.additionalVolumes }}
-        {{- with .Values.dsp.deployment.additionalVolumes }}
+            name: dsp-controlplane-{{ $name }}
+
+        {{- with $cfg.deployment.additionalVolumes }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
-        {{- end }}
-      {{- with .Values.dsp.deployment.nodeSelector }}
+
+      {{- with $cfg.deployment.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- with .Values.dsp.deployment.affinity }}
+
+      {{- with $cfg.deployment.affinity }}
       affinity:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- with .Values.dsp.deployment.tolerations }}
+
+      {{- with $cfg.deployment.tolerations }}
       tolerations:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+
+{{- end }}
 {{- end }}

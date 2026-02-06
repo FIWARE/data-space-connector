@@ -1,107 +1,113 @@
-{{- if (eq .Values.dsp.enabled true) }}
+{{- if .Values.dsp.enabled }}
+{{- range $name, $deployment := .Values.dsp.deployment }}
+{{- $cfg := mergeOverwrite (deepCopy $.Values.dsp.common) $deployment }}
+
+---
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: dsp-controlplane
+  name: dsp-controlplane-{{ $name }}
   namespace: {{ $.Release.Namespace | quote }}
   labels:
     app.kubernetes.io/name: dsp-controlplane
-    {{ include "dsc.labels" . | nindent 4 }}
+    app.kubernetes.io/component: {{ $name }}
+    {{- include "dsc.labels" $ | nindent 4 }}
+
 data:
   dataspaceconnector-configuration.properties: |
     default.http.https.resolution=true
 
-    oid4vp.enabled={{ .Values.dsp.config.oid4vp.enabled }}
-    oid4vp.clientId={{ .Values.dsp.config.oid4vp.clientId }}
-    oid4vp.scope={{ .Values.dsp.config.oid4vp.scope }}
-    oid4vp.trustAll={{ .Values.dsp.config.oid4vp.trustAll }}
-    oid4vp.holder.id={{ .Values.dsp.config.oid4vp.holder.id }}
-    oid4vp.holder.kid={{ .Values.dsp.config.oid4vp.holder.kid }}
-    oid4vp.holder.key.type={{ .Values.dsp.config.oid4vp.holder.key.type }}
-    oid4vp.holder.key.path={{ .Values.dsp.config.oid4vp.holder.key.path }}
-    oid4vp.holder.signatureAlgorithm={{ .Values.dsp.config.oid4vp.holder.signatureAlgorithm }}
-    oid4vp.credentialsFolder={{ .Values.dsp.config.oid4vp.credentialsFolder }}
-    oid4vp.trustAnchorsFolder={{ .Values.dsp.config.oid4vp.trustAnchorsFolder }}
-    oid4vp.organizationClaim={{ .Values.dsp.config.oid4vp.organizationClaim }}
-    oid4vp.proxy.enabled={{ .Values.dsp.config.oid4vp.proxy.enabled }}
-    oid4vp.proxy.host={{ .Values.dsp.config.oid4vp.proxy.host }}
-    oid4vp.proxy.port={{ .Values.dsp.config.oid4vp.proxy.port }}
+    oid4vp.enabled={{ $cfg.config.oid4vp.enabled }}
+    oid4vp.clientId={{ $cfg.config.oid4vp.clientId }}
+    oid4vp.scope={{ $cfg.config.oid4vp.scope }}
+    oid4vp.trustAll={{ $cfg.config.oid4vp.trustAll }}
+    oid4vp.holder.id={{ $cfg.config.oid4vp.holder.id }}
+    oid4vp.holder.kid={{ $cfg.config.oid4vp.holder.kid }}
+    oid4vp.holder.key.type={{ $cfg.config.oid4vp.holder.key.type }}
+    oid4vp.holder.key.path={{ $cfg.config.oid4vp.holder.key.path }}
+    oid4vp.holder.signatureAlgorithm={{ $cfg.config.oid4vp.holder.signatureAlgorithm }}
+    oid4vp.credentialsFolder={{ $cfg.config.oid4vp.credentialsFolder }}
+    oid4vp.trustAnchorsFolder={{ $cfg.config.oid4vp.trustAnchorsFolder }}
+    oid4vp.organizationClaim={{ $cfg.config.oid4vp.organizationClaim }}
+    oid4vp.proxy.enabled={{ $cfg.config.oid4vp.proxy.enabled }}
+    oid4vp.proxy.host={{ $cfg.config.oid4vp.proxy.host }}
+    oid4vp.proxy.port={{ $cfg.config.oid4vp.proxy.port }}
 
-    testExtension.enabled={{ .Values.dsp.config.testExtension.enabled }}
-    testExtension.controller.enabled={{ .Values.dsp.config.testExtension.controller.enabled }}
-    testExtension.controller.port={{ .Values.dsp.config.testExtension.controller.port }}
-    testExtension.controller.path={{ .Values.dsp.config.testExtension.controller.path }}
-    testExtension.identity.enabled={{ .Values.dsp.config.testExtension.identity.enabled }}
+    testExtension.enabled={{ $cfg.config.testExtension.enabled }}
+    testExtension.controller.enabled={{ $cfg.config.testExtension.controller.enabled }}
+    testExtension.controller.port={{ $cfg.config.testExtension.controller.port }}
+    testExtension.controller.path={{ $cfg.config.testExtension.controller.path }}
+    testExtension.identity.enabled={{ $cfg.config.testExtension.identity.enabled }}
 
-    tmfExtension.enabled={{ .Values.dsp.config.tmfExtension.enabled }}
-    tmfExtension.quoteApi={{ .Values.dsp.config.tmfExtension.quoteApi }}
-    tmfExtension.agreementApi={{ .Values.dsp.config.tmfExtension.agreementApi }}
-    tmfExtension.productOrderApi={{ .Values.dsp.config.tmfExtension.productOrderApi }}
-    tmfExtension.productCatalogApi={{ .Values.dsp.config.tmfExtension.productCatalogApi }}
-    tmfExtension.productInventoryApi={{ .Values.dsp.config.tmfExtension.productInventoryApi }}
-    tmfExtension.usageManagementApi={{ .Values.dsp.config.tmfExtension.usageManagementApi }}
-    tmfExtension.partyCatalogApi={{ .Values.dsp.config.tmfExtension.partyCatalogApi }}
-    tmfExtension.catalog.enabled={{ .Values.dsp.config.tmfExtension.catalog.enabled }}
+    tmfExtension.enabled={{ $cfg.config.tmfExtension.enabled }}
+    tmfExtension.quoteApi={{ $cfg.config.tmfExtension.quoteApi }}
+    tmfExtension.agreementApi={{ $cfg.config.tmfExtension.agreementApi }}
+    tmfExtension.productOrderApi={{ $cfg.config.tmfExtension.productOrderApi }}
+    tmfExtension.productCatalogApi={{ $cfg.config.tmfExtension.productCatalogApi }}
+    tmfExtension.productInventoryApi={{ $cfg.config.tmfExtension.productInventoryApi }}
+    tmfExtension.usageManagementApi={{ $cfg.config.tmfExtension.usageManagementApi }}
+    tmfExtension.partyCatalogApi={{ $cfg.config.tmfExtension.partyCatalogApi }}
+    tmfExtension.catalog.enabled={{ $cfg.config.tmfExtension.catalog.enabled }}
 
-    fdscTransfer.enabled={{ .Values.dsp.config.fdscTransfer.enabled }}
-    fdscTransfer.transferHost={{ .Values.dsp.config.fdscTransfer.transferHost }}
-    fdscTransfer.dcp.enabled={{ .Values.dsp.config.fdscTransfer.dcp.enabled }}
-    fdscTransfer.dcp.oid.host={{ .Values.dsp.config.fdscTransfer.dcp.oid.host }}
-    fdscTransfer.dcp.oid.openIdPath={{ .Values.dsp.config.fdscTransfer.dcp.oid.openIdPath }}
-    fdscTransfer.dcp.oid.jwksPath={{ .Values.dsp.config.fdscTransfer.dcp.oid.jwksPath }}
-    
-    jwksAddress={{ .Values.dsp.config.fdscTransfer.dcp.jwksAddress }}
-    fdscTransfer.oid4vc.enabled={{ .Values.dsp.config.fdscTransfer.oid4vc.enabled }}
-    fdscTransfer.oid4vc.credentialsConfigAddress={{ .Values.dsp.config.fdscTransfer.oid4vc.credentialsConfigAddress }}
-    fdscTransfer.oid4vc.verifierHost={{ .Values.dsp.config.fdscTransfer.oid4vc.verifierHost }}
-    fdscTransfer.oid4vc.verifierInternalHost={{ .Values.dsp.config.fdscTransfer.oid4vc.verifierInternalHost }}
-    fdscTransfer.oid4vc.opaHost={{ .Values.dsp.config.fdscTransfer.oid4vc.opaHost }}
-    fdscTransfer.oid4vc.odrlPapHost={{ .Values.dsp.config.fdscTransfer.oid4vc.odrlPapHost }}
-    fdscTransfer.apisix.address={{ .Values.dsp.config.fdscTransfer.apisix.address }}
-    fdscTransfer.apisix.token={{ .Values.dsp.config.fdscTransfer.apisix.token }}
-    fdscTransfer.apisix.httpsProxy={{ .Values.dsp.config.fdscTransfer.apisix.httpsProxy }}
+    fdscTransfer.enabled={{ $cfg.config.fdscTransfer.enabled }}
+    fdscTransfer.transferHost={{ $cfg.config.fdscTransfer.transferHost }}
+    fdscTransfer.dcp.enabled={{ $cfg.config.fdscTransfer.dcp.enabled }}
+    fdscTransfer.dcp.oid.host={{ $cfg.config.fdscTransfer.dcp.oid.host }}
+    fdscTransfer.dcp.oid.openIdPath={{ $cfg.config.fdscTransfer.dcp.oid.openIdPath }}
+    fdscTransfer.dcp.oid.jwksPath={{ $cfg.config.fdscTransfer.dcp.oid.jwksPath }}
+    jwksAddress={{ $cfg.config.fdscTransfer.dcp.jwksAddress }}
 
-    ebsiTir.enabled={{ .Values.dsp.config.ebsiTir.enabled }}
-    ebsiTir.tilAddress={{ .Values.dsp.config.ebsiTir.tilAddress }}
+    fdscTransfer.oid4vc.enabled={{ $cfg.config.fdscTransfer.oid4vc.enabled }}
+    fdscTransfer.oid4vc.credentialsConfigAddress={{ $cfg.config.fdscTransfer.oid4vc.credentialsConfigAddress }}
+    fdscTransfer.oid4vc.verifierHost={{ $cfg.config.fdscTransfer.oid4vc.verifierHost }}
+    fdscTransfer.oid4vc.verifierInternalHost={{ $cfg.config.fdscTransfer.oid4vc.verifierInternalHost }}
+    fdscTransfer.oid4vc.opaHost={{ $cfg.config.fdscTransfer.oid4vc.opaHost }}
+    fdscTransfer.oid4vc.odrlPapHost={{ $cfg.config.fdscTransfer.oid4vc.odrlPapHost }}
+    fdscTransfer.apisix.address={{ $cfg.config.fdscTransfer.apisix.address }}
+    fdscTransfer.apisix.token={{ $cfg.config.fdscTransfer.apisix.token }}
+    fdscTransfer.apisix.httpsProxy={{ $cfg.config.fdscTransfer.apisix.httpsProxy }}
 
-    dcp.enabled={{ .Values.dsp.config.dcp.enabled }}
-    dcp.scopes.catalog={{ .Values.dsp.config.dcp.scopes.catalog }}
-    dcp.scopes.negotiation={{ .Values.dsp.config.dcp.scopes.negotiation }}
-    dcp.scopes.transfer={{ .Values.dsp.config.dcp.scopes.transfer }}
-    dcp.scopes.version={{ .Values.dsp.config.dcp.scopes.version }}
+    ebsiTir.enabled={{ $cfg.config.ebsiTir.enabled }}
+    ebsiTir.tilAddress={{ $cfg.config.ebsiTir.tilAddress }}
 
+    dcp.enabled={{ $cfg.config.dcp.enabled }}
+    dcp.scopes.catalog={{ $cfg.config.dcp.scopes.catalog }}
+    dcp.scopes.negotiation={{ $cfg.config.dcp.scopes.negotiation }}
+    dcp.scopes.transfer={{ $cfg.config.dcp.scopes.transfer }}
+    dcp.scopes.version={{ $cfg.config.dcp.scopes.version }}
 
-    edc.participant.id={{ .Values.dsp.config.edc.participant.id }}
-    edc.log.level={{ .Values.dsp.config.edc.log.level }}
-    edc.jsonld.https.enabled={{ .Values.dsp.config.edc.jsonld.https.enabled }}
-    edc.jsonld.http.enabled={{ .Values.dsp.config.edc.jsonld.http.enabled }}
-    {{- if .Values.dsp.config.edc.hostname }}
-    edc.hostname={{ .Values.dsp.config.edc.hostname }}
+    edc.participant.id={{ $cfg.config.edc.participant.id }}
+    edc.log.level={{ $cfg.config.edc.log.level }}
+    edc.jsonld.https.enabled={{ $cfg.config.edc.jsonld.https.enabled }}
+    edc.jsonld.http.enabled={{ $cfg.config.edc.jsonld.http.enabled }}
+    {{- if $cfg.config.edc.hostname }}
+    edc.hostname={{ $cfg.config.edc.hostname }}
     {{- end }}
 
-    web.http.port={{ .Values.dsp.config.web.http.port }}
-    web.http.management.path={{ .Values.dsp.config.web.http.management.path }}
-    web.http.management.port={{ .Values.dsp.config.web.http.management.port }}
-    web.http.protocol.path={{ .Values.dsp.config.web.http.protocol.path }}
-    web.http.protocol.port={{ .Values.dsp.config.web.http.protocol.port }}
-    web.http.control.path={{ .Values.dsp.config.web.http.control.path }}
-    web.http.control.port={{ .Values.dsp.config.web.http.control.port }}
-    web.http.catalog.path={{ .Values.dsp.config.web.http.catalog.path }}
-    web.http.catalog.port={{ .Values.dsp.config.web.http.catalog.port }}
-    web.http.version.path={{ .Values.dsp.config.web.http.version.path }}
-    web.http.version.port={{ .Values.dsp.config.web.http.version.port }}
+    web.http.port={{ $cfg.config.web.http.port }}
+    web.http.management.path={{ $cfg.config.web.http.management.path }}
+    web.http.management.port={{ $cfg.config.web.http.management.port }}
+    web.http.protocol.path={{ $cfg.config.web.http.protocol.path }}
+    web.http.protocol.port={{ $cfg.config.web.http.protocol.port }}
+    web.http.control.path={{ $cfg.config.web.http.control.path }}
+    web.http.control.port={{ $cfg.config.web.http.control.port }}
+    web.http.catalog.path={{ $cfg.config.web.http.catalog.path }}
+    web.http.catalog.port={{ $cfg.config.web.http.catalog.port }}
+    web.http.version.path={{ $cfg.config.web.http.version.path }}
+    web.http.version.port={{ $cfg.config.web.http.version.port }}
 
+    edc.iam.sts.oauth.token.url={{ $cfg.config.oauth.tokenUrl }}
+    edc.iam.sts.oauth.client.id={{ $cfg.config.oauth.clientId }}
+    edc.iam.sts.oauth.client.secret.alias={{ $cfg.config.oauth.secretAlias }}
+    edc.iam.issuer.id={{ $cfg.config.issuerId }}
 
-    edc.iam.sts.oauth.token.url={{ .Values.dsp.config.oauth.tokenUrl }}
-    edc.iam.sts.oauth.client.id={{ .Values.dsp.config.oauth.clientId }}
-    edc.iam.sts.oauth.client.secret.alias={{ .Values.dsp.config.oauth.secretAlias }}
-    edc.iam.issuer.id={{ .Values.dsp.config.issuerId }}
+    edc.vault.hashicorp.url={{ tpl $.Values.vault.hashicorp.url $ }}
+    edc.vault.hashicorp.token={{ $.Values.vault.hashicorp.token }}
+    edc.vault.hashicorp.timeout.seconds={{ $.Values.vault.hashicorp.timeout }}
+    edc.vault.hashicorp.health.check.enabled={{ $.Values.vault.hashicorp.healthCheck.enabled }}
+    edc.vault.hashicorp.health.check.standby.ok={{ $.Values.vault.hashicorp.healthCheck.standbyOk }}
+    edc.vault.hashicorp.api.secret.path={{ $.Values.vault.hashicorp.paths.secret }}
+    edc.vault.hashicorp.api.health.check.path={{ $.Values.vault.hashicorp.paths.health }}
 
-    edc.vault.hashicorp.url={{ tpl .Values.vault.hashicorp.url . }}
-    edc.vault.hashicorp.token={{ .Values.vault.hashicorp.token }}
-    edc.vault.hashicorp.timeout.seconds={{ .Values.vault.hashicorp.timeout }}
-    edc.vault.hashicorp.health.check.enabled={{ .Values.vault.hashicorp.healthCheck.enabled }}
-    edc.vault.hashicorp.health.check.standby.ok={{ .Values.vault.hashicorp.healthCheck.standbyOk }}
-    edc.vault.hashicorp.api.secret.path={{ .Values.vault.hashicorp.paths.secret }}
-    edc.vault.hashicorp.api.health.check.path={{ .Values.vault.hashicorp.paths.health }}
+{{- end }}
 {{- end }}
