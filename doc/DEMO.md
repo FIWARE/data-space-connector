@@ -1,5 +1,11 @@
 # Prepare the participants
 
+> setup the environment
+```shell
+mvn clean deploy -Plocal
+```
+
+
 ## Setup the consumer
 
 The consumer-identity and key-material needs to be registered in the identityhub, in order to participate in DCP-based DSP interactions. Since all OID4VC base flows do not rely on any propriatary extensions to the did-standard, they can also work with that.
