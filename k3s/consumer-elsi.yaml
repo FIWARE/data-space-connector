@@ -236,19 +236,34 @@ keycloak:
         "optionalClientScopes": []
       }
 did:
-  enabled: false
-  secret: issuance-secret
-  serviceType: ClusterIP
-  port: 3001
-  cert:
-    country: BE
-    state: BRUSSELS
-    locality: Brussels
-    organization: Fancy Marketplace Co.
-    commonName: www.fancy-marketplace.biz
+  enabled: true
+  config:
+    server:
+      serverPort: "3001"
+      didType: "web"
+      hostUrl: "http://did-consumer.127.0.0.1.nip.io"
+      outputFormat: "json_jwk"
+      keystorePasswordSecretName: "consumer-keystore"
+      keystorePasswordSecretKey: "password"
+    generateKey:
+      enabled: true
+      keyTypeToGenerate: "EC"
+      country: "BE"
+      state: "BRUSSELS"
+      locality: "Brussels"
+      organization: "Fancy Marketplace Co."
+      commonName: "www.fancy-marketplace.biz"
   ingress:
     enabled: true
-    host: did-consumer.127.0.0.1.nip.io
+    className: ""
+    annotations:
+      traefik.ingress.kubernetes.io/service.passhostheader: "true"
+      traefik.ingress.kubernetes.io/router.tls: "true"
+    hosts:
+      - host: did-consumer.127.0.0.1.nip.io
+        paths:
+          - path: /
+            pathType: ImplementationSpecific
 
 # register the consumer at the til. Only possible if it runs in the same environment and recommendable for demo deployments
 registration:
