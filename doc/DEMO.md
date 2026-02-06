@@ -615,9 +615,6 @@ curl  -X POST \
     \"counterPartyAddress\":  \"http://dcp-mp-operations.127.0.0.1.nip.io:8080/api/dsp/2025-1\",
     \"connectorId\": \"did:web:mp-operations.org\",
     \"contractId\": \"${AGREEMENT_ID}\",
-    \"dataDestination\": {
-        \"type\": \"HttpProxy\"
-    },
     \"protocol\": \"dataspace-protocol-http:2025-1\",
     \"transferType\": \"HttpData-PULL\"
 }" | jq .
@@ -741,8 +738,8 @@ curl -x localhost:8888 -X GET ${ENDPOINT}/.well-known/openid-configuration | jq 
 7. Access via OID4VP:
 ```shell
 export MEMBERSHIP_CREDENTIAL=$(./doc/scripts/get_credential.sh https://keycloak-consumer.127.0.0.1.nip.io membership-credential employee)
-export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh ${ENDPOINT} $MEMBERSHIP_CREDENTIAL openid)
+export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh ${ENDPOINT} $MEMBERSHIP_CREDENTIAL openid); echo Access Token: $ACCESS_TOKEN
 curl -x localhost:8888 -X GET ${ENDPOINT}/ngsi-ld/v1/entities/urn:ngsi-ld:UptimeReport:fms-1 \
   --header 'Content-Type: application/json' \
-  --header "Authorization: Bearer ${ACCESS_TOKEN}"
+  --header "Authorization: Bearer ${ACCESS_TOKEN}" | jq .
 ```
