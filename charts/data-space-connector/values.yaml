@@ -204,7 +204,7 @@ tpp:
     host: ""
     # -- path to check the id at
     path: /transfers
-  
+
 # -- configuration for apisix to be deployed as part of the connector, see https://github.com/bitnami/charts/tree/main/bitnami/apisix for all options
 apisix:
   kubeVersion: 1.34-1
@@ -230,6 +230,8 @@ apisix:
     enabled: true
     # -- resource preset to have sufficient memory
     resourcesPreset: small
+    # -- Enable APISIX Control Plane to expose APISIX Dashboards
+    dashboardEnabled: false
   # -- configuration in regard to the apisix ingressController
   ingressController:
     # -- should it be enabled
@@ -321,13 +323,7 @@ apisix:
             mountPath: /config
           - name: tpp-policy
             mountPath: /tpp
-  # -- configuration in regard to the apisix dashboard
-  dashboard:
-    # -- should it be enabled
-    enabled: false
-    # -- resource preset to have sufficient memory
-    resourcesPreset: small
- 
+
   # -- configuration of a catchAll-route(e.g. /*)
   catchAllRoute:
     # -- should it be enabled
@@ -456,19 +452,19 @@ scorpio:
 elsi:
   # -- should a did:elsi be used
   enabled: false
-  # -- keystore to be used for signing the credentials 
-  # keystore: 
+  # -- keystore to be used for signing the credentials
+  # keystore:
     # store.p12: <THE_ENCODED_CONTENT>
   # -- the did to be used
   did:
   # -- algorithm of the signing key
   keyAlgorithm:
-  # -- path to the keystore 
+  # -- path to the keystore
   storePath:
   # -- password for the keystore
   storePassword:
   # -- alias of the key
-  keyAlias: 
+  keyAlias:
   # -- password of the key
   keyPassword:
 
@@ -681,9 +677,9 @@ keycloak:
     # -- password of the signing key
     # keyPassword:
     # -- algorithm of the signing key
-    # keyAlgorithm: 
-    # -- did that the key belongs to 
-    # did: 
+    # keyAlgorithm:
+    # -- did that the key belongs to
+    # did:
 
 ## configuration of the tm-forum-api - see https://github.com/FIWARE/helm-charts/tree/main/charts/tm-forum-api for details
 tm-forum-api:
@@ -696,7 +692,7 @@ tm-forum-api:
       # -- address of the broker
       url: http://data-service-scorpio:9090
     contextUrl: https://uri.etsi.org/ngsi-ld/v1/ngsi-ld-core-context.jsonld
-    additionalEnvVars: 
+    additionalEnvVars:
       - name: API_EXTENSION_ENABLED
         value: "true"
       - name: GENERAL_NGSILDORQUERYVALUE
@@ -774,7 +770,7 @@ tm-forum-api:
     - name: account
       image: tmforum-account
       basePath: /tmf-api/accountManagement/v4
-      
+
   # redis caching
   redis:
     enabled: false
@@ -809,7 +805,7 @@ rainbow:
     # -- host of the database to be used
     url:
     # -- user to be used when accesing the database
-    user: 
+    user:
     # -- secret containing the password for the database
     existingSecret:
     # -- key of the password inside that secret
@@ -889,7 +885,7 @@ contract-management:
     odrl:
       ## URL to the ODRL-PAP
       url: http://odrl-pap:8080
-  
+
 
 # -- configuration for the did-helper, should only be used for demonstrational deployments, see https://github.com/wistefan/did-helper
 did:
@@ -932,10 +928,10 @@ didJson:
     # -- kty to be used in the jwk - RSA and EC supported
     kty: EC
     # -- optional x5u endpoint to provide access to the corresponding cert chain
-    x5u: 
-    # -- In case of kty==EC: xCoord of the EC key 
+    x5u:
+    # -- In case of kty==EC: xCoord of the EC key
     xCoord:
-    # -- In case of kty==EC: yCoord of the EC key 
+    # -- In case of kty==EC: yCoord of the EC key
     yCoord:
     # -- In case of kty==EC: curve to be used for the EC key
     crv:
@@ -999,10 +995,10 @@ marketplace:
       - seller
       - customer
       - admin
-  
+
   # -- configuration for the charging backend
   bizEcosystemChargingBackend:
-        
+
     existingSecret: mongodb-charging-password
 
     # -- max size to be used for the market
@@ -1015,14 +1011,14 @@ marketplace:
     deployment:
       image:
         tag: 10.5.0
-    
+
     # -- should plugin support be enabled
     plugins:
       enabled: false
 
     media:
       enabled: false
-    
+
     port: 8006
 
     loglevel: debug
@@ -1037,7 +1033,7 @@ marketplace:
     initContainers: false
     propagateToken: true
     basePath: /opt/business-ecosystem-charging-backend
-    token: 
+    token:
       enabled: false
 
     db:
@@ -1054,7 +1050,7 @@ marketplace:
 
     serviceAccount:
       create: true
-    
+
     existingSecret: mongodb-belp-password
 
     # -- image to be used for the statefulset
