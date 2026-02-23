@@ -272,11 +272,7 @@ registration:
   did: did:web:fancy-marketplace.biz
   credentialTypes: 
     - UserCredential
-<<<<<<< HEAD
 did:
-=======
-didJson:
->>>>>>> ac53db8 (feat(decentralized-iam): integrate decentralized-iam and refactor helm chart)
   enabled: true
   config:
     server:
