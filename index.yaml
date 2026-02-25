@@ -1521,6 +1521,23 @@ entries:
     version: 7.0.0
   trust-anchor:
   - apiVersion: v2
+    created: "2026-02-25T15:40:34.743738747Z"
+    dependencies:
+    - condition: trusted-issuers-list.enabled
+      name: trusted-issuers-list
+      repository: https://fiware.github.io/helm-charts
+      version: 0.15.0
+    - condition: mysql.enabled
+      name: mysql
+      repository: https://charts.bitnami.com/bitnami
+      version: 9.4.4
+    description: Umbrella Chart to provide a minimal trust anchor for a FIWARE Dataspace
+    digest: 393a4d13e176041a1060c4d6803efc32dbdfeb936e1b25cedce0c9b241ef1402
+    name: trust-anchor
+    urls:
+    - https://github.com/FIWARE/data-space-connector/releases/download/trust-anchor-0.3.0/trust-anchor-0.3.0.tgz
+    version: 0.3.0
+  - apiVersion: v2
     created: "2025-09-23T05:14:31.790467172Z"
     dependencies:
     - condition: trusted-issuers-list.enabled
@@ -1554,4 +1571,4 @@ entries:
     urls:
     - https://github.com/FIWARE/data-space-connector/releases/download/trust-anchor-0.2.0/trust-anchor-0.2.0.tgz
     version: 0.2.0
-generated: "2026-01-29T14:11:19.722867659Z"
+generated: "2026-02-25T15:40:34.743817443Z"
