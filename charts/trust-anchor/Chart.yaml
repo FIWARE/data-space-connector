@@ -5,7 +5,7 @@ version: 0.2.1
 dependencies:
   - name: trusted-issuers-list
     condition: trusted-issuers-list.enabled
-    version: 0.6.2
+    version: 0.15.0
     repository: https://fiware.github.io/helm-charts
   - name: mysql
     condition: mysql.enabled
