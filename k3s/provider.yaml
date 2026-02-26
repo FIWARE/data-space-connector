@@ -1,4 +1,6 @@
 apisix:
+  etcd:
+    replicaCount: 1
   image:
     debug: true
   dataPlane:
@@ -16,159 +18,7 @@ apisix:
           path: /
   catchAllRoute:
     enabled: false
-  routes: |-
-    - uri: /.well-known/openid-configuration
-      host: mp-data-service.127.0.0.1.nip.io
-      upstream:
-        nodes:
-          verifier:3000: 1
-        type: roundrobin
-      plugins:
-        proxy-rewrite:
-          uri: /services/data-service/.well-known/openid-configuration
-    - uri: /.well-known/openid-configuration
-      host: contract-management.127.0.0.1.nip.io
-      upstream:
-        nodes:
-          verifier:3000: 1
-        type: roundrobin
-      plugins:
-        proxy-rewrite:
-          uri: /services/contract-management/.well-known/openid-configuration
-    - uri: /.well-known/openid-configuration
-      host: tpp-service.127.0.0.1.nip.io
-      upstream:
-        nodes:
-          verifier:3000: 1
-        type: roundrobin
-      plugins:
-        proxy-rewrite:
-          uri: /services/tpp-service/.well-known/openid-configuration
-    - uri: /.well-known/data-space-configuration
-      upstream:
-        nodes:
-          dsconfig:3002: 1
-        type: roundrobin
-      plugins:
-        proxy-rewrite:
-          uri: /.well-known/data-space-configuration/data-space-configuration.json
-        response-rewrite:
-          headers:
-            set:
-              content-type: application/json
-    - uri: /*
-      host: tpp-data-service.127.0.0.1.nip.io
-      upstream:
-        nodes:
-          data-service-scorpio:9090: 1
-        type: roundrobin
-      plugins:
-        openid-connect:
-          proxy_opts:
-            https_proxy: http://squid-proxy.infra.svc.cluster.local:8888
-          bearer_only: true
-          use_jwks: true
-          client_id: contract-management
-          client_secret: unused
-          ssl_verify: false
-          discovery: https://verifier.mp-operations.org/services/tmf-api/.well-known/openid-configuration
-        opa:
-          host: "http://localhost:8181"
-          policy: tpp
-    - uri: /*
-      host: mp-data-service.127.0.0.1.nip.io
-      upstream:
-        nodes:
-          data-service-scorpio:9090: 1
-        type: roundrobin
-      plugins: 
-        openid-connect:
-          proxy_opts:
-            https_proxy: http://squid-proxy.infra.svc.cluster.local:8888
-          bearer_only: true
-          use_jwks: true
-          client_id: data-service
-          client_secret: unused
-          ssl_verify: false
-          discovery: https://verifier.mp-operations.org/services/data-service/.well-known/openid-configuration
-        opa:
-          host: "http://localhost:8181"
-          policy: policy/main
-          with_body: true
-    - uri: /.well-known/openid-configuration
-      host: mp-tmf-api.127.0.0.1.nip.io
-      upstream:
-        nodes:
-          verifier:3000: 1
-        type: roundrobin
-      plugins:
-        proxy-rewrite:
-          uri: /services/tmf-api/.well-known/openid-configuration
-    - uri: /api/v1/catalogs
-      host: tpp-catalog-service.127.0.0.1.nip.io
-      upstream:
-        nodes:
-          rainbow:8080: 1
-    - uri: /*
-      host: tpp-service.127.0.0.1.nip.io
-      upstream:
-        nodes:
-          rainbow:8080: 1
-      plugins:
-        openid-connect:
-          proxy_opts:
-            https_proxy: http://squid-proxy.infra.svc.cluster.local:8888
-          bearer_only: true
-          use_jwks: true
-          client_id: data-service
-          client_secret: unused
-          ssl_verify: false
-          discovery: https://verifier.mp-operations.org/services/data-service/.well-known/openid-configuration
-        opa:
-          host: "http://localhost:8181"
-          policy: policy/main
-          with_body: true
-    - uri: /*
-      host: mp-tmf-api.127.0.0.1.nip.io
-      upstream:
-        nodes:
-          tm-forum-api:8080: 1
-        type: roundrobin
-      plugins:
-        openid-connect:
-          proxy_opts:
-            https_proxy: http://squid-proxy.infra.svc.cluster.local:8888
-          bearer_only: true
-          use_jwks: true
-          client_id: contract-management
-          client_secret: unused
-          ssl_verify: false
-          discovery: https://verifier.mp-operations.org/services/tmf-api/.well-known/openid-configuration
-        opa:
-          host: "http://localhost:8181"
-          policy: policy/main
-          with_body: true
-    - uri: /*
-      host: contract-management.127.0.0.1.nip.io
-      upstream:
-        nodes:
-          contract-management:8080: 1
-        type: roundrobin
-      plugins:
-        openid-connect:
-          proxy_opts:
-            https_proxy: http://squid-proxy.infra.svc.cluster.local:8888
-          bearer_only: true
-          use_jwks: true
-          client_id: contract-management
-          client_secret: unused
-          ssl_verify: false
-          discovery: https://verifier.mp-operations.org/services/contract-management/.well-known/openid-configuration
-        opa:
-          host: "http://localhost:8181"
-          policy: policy/main
-          with_body: true
-
+  routes: "- uri: /.well-known/openid-configuration\n  host: mp-data-service.127.0.0.1.nip.io\n  upstream:\n    nodes:\n      verifier:3000: 1\n    type: roundrobin\n  plugins:\n    proxy-rewrite:\n      uri: /services/data-service/.well-known/openid-configuration\n- uri: /.well-known/openid-configuration\n  host: contract-management.127.0.0.1.nip.io\n  upstream:\n    nodes:\n      verifier:3000: 1\n    type: roundrobin\n  plugins:\n    proxy-rewrite:\n      uri: /services/contract-management/.well-known/openid-configuration\n- uri: /.well-known/openid-configuration\n  host: tpp-service.127.0.0.1.nip.io\n  upstream:\n    nodes:\n      verifier:3000: 1\n    type: roundrobin\n  plugins:\n    proxy-rewrite:\n      uri: /services/tpp-service/.well-known/openid-configuration\n- uri: /.well-known/data-space-configuration\n  upstream:\n    nodes:\n      dsconfig:3002: 1\n    type: roundrobin\n  plugins:\n    proxy-rewrite:\n      uri: /.well-known/data-space-configuration/data-space-configuration.json\n    response-rewrite:\n      headers:\n        set:\n          content-type: application/json\n- uri: /*\n  host: tpp-data-service.127.0.0.1.nip.io\n  upstream:\n    nodes:\n      data-service-scorpio:9090: 1\n    type: roundrobin\n  plugins:\n    openid-connect:\n      proxy_opts:\n        https_proxy: http://squid-proxy.infra.svc.cluster.local:8888\n      bearer_only: true\n      use_jwks: true\n      client_id: contract-management\n      client_secret: unused\n      ssl_verify: false\n      discovery: https://verifier.mp-operations.org/services/tmf-api/.well-known/openid-configuration\n    opa:\n      host: \"http://localhost:8181\"\n      policy: tpp\n- uri: /*\n  host: mp-data-service.127.0.0.1.nip.io\n  upstream:\n    nodes:\n      data-service-scorpio:9090: 1\n    type: roundrobin\n  plugins: \n    openid-connect:\n      proxy_opts:\n        https_proxy: http://squid-proxy.infra.svc.cluster.local:8888\n      bearer_only: true\n      use_jwks: true\n      client_id: data-service\n      client_secret: unused\n      ssl_verify: false\n      discovery: https://verifier.mp-operations.org/services/data-service/.well-known/openid-configuration\n    opa:\n      host: \"http://localhost:8181\"\n      policy: policy/main\n      with_body: true\n- uri: /.well-known/openid-configuration\n  host: mp-tmf-api.127.0.0.1.nip.io\n  upstream:\n    nodes:\n      verifier:3000: 1\n    type: roundrobin\n  plugins:\n    proxy-rewrite:\n      uri: /services/tmf-api/.well-known/openid-configuration\n- uri: /api/v1/catalogs\n  host: tpp-catalog-service.127.0.0.1.nip.io\n  upstream:\n    nodes:\n      rainbow:8080: 1\n- uri: /*\n  host: tpp-service.127.0.0.1.nip.io\n  upstream:\n    nodes:\n      rainbow:8080: 1\n  plugins:\n    openid-connect:\n      proxy_opts:\n        https_proxy: http://squid-proxy.infra.svc.cluster.local:8888\n      bearer_only: true\n      use_jwks: true\n      client_id: data-service\n      client_secret: unused\n      ssl_verify: false\n      discovery: https://verifier.mp-operations.org/services/data-service/.well-known/openid-configuration\n    opa:\n      host: \"http://localhost:8181\"\n      policy: policy/main\n      with_body: true\n- uri: /*\n  host: mp-tmf-api.127.0.0.1.nip.io\n  upstream:\n    nodes:\n      tm-forum-api:8080: 1\n    type: roundrobin\n  plugins:\n    openid-connect:\n      proxy_opts:\n        https_proxy: http://squid-proxy.infra.svc.cluster.local:8888\n      bearer_only: true\n      use_jwks: true\n      client_id: contract-management\n      client_secret: unused\n      ssl_verify: false\n      discovery: https://verifier.mp-operations.org/services/tmf-api/.well-known/openid-configuration\n    opa:\n      host: \"http://localhost:8181\"\n      policy: policy/main\n      with_body: true\n- uri: /*\n  host: contract-management.127.0.0.1.nip.io\n  upstream:\n    nodes:\n      contract-management:8080: 1\n    type: roundrobin\n  plugins:\n    openid-connect:\n      proxy_opts:\n        https_proxy: http://squid-proxy.infra.svc.cluster.local:8888\n      bearer_only: true\n      use_jwks: true\n      client_id: contract-management\n      client_secret: unused\n      ssl_verify: false\n      discovery: https://verifier.mp-operations.org/services/contract-management/.well-known/openid-configuration\n    opa:\n      host: \"http://localhost:8181\"\n      policy: policy/main\n      with_body: true"
 credentials-config-service:
   ingress:
     enabled: true
@@ -312,7 +162,6 @@ credentials-config-service:
                   meta:
                     type_values:
                       - MarketplaceCredential
-
 vcverifier:
   ingress:
     enabled: true
@@ -424,27 +273,37 @@ postgresql:
     persistence:
       enabled: false
 did:
-  enabled: false
-didJson:
   enabled: true
-  port: 3000
-  did: did:web:mp-operations.org
-  key:
-    kty: EC
-    # while this in productive environments should be an https endpoint, limitations of the gx-registry service require http in order to work around proxy issues in the local env. 
-    x5u: http://mp-operations.org/.well-known/tls.crt
-    xCoord: "LjoyaX04PT7vBs7EANqIv87xJWMkgItI3nHvRh1CKes"
-    # do not rename to `y`, since yaml interprest `y` as bool true.
-    yCoord: "bQZ9DBl6e0_HkVXDgZOy1THv1BO_Jjmg3cAX0BZ_GNM"
-    crv: "P-256"
+  config:
+    server:
+      serverPort: "3000"
+      didType: "web"
+      hostUrl: "http://mp-operations.org"
+      outputFormat: "json_jwk"
+      keystorePasswordSecretName: "provider-keystore"
+      keystorePasswordSecretKey: "password"
+    generateKey:
+      enabled: false
+    provideKeystore:
+      enabled: true
+      keystoreSecretName: "provider-keystore"
+      keystoreSecretKey: "keystore.pfx"
+      keyType: "EC"
   ingress:
     enabled: true
+    className: ""
     annotations:
       traefik.ingress.kubernetes.io/service.passhostheader: "true"
       traefik.ingress.kubernetes.io/router.tls: "true"
-    host: mp-operations.org
-    tlsSecret: tls-secret
- 
+    hosts:
+      - host: mp-operations.org
+        paths:
+          - path: /
+            pathType: ImplementationSpecific
+    tls:
+      - secretName: tls-secret
+        hosts:
+          - mp-operations.org
 dataSpaceConfig:
   enabled: true
   serviceType: ClusterIP
@@ -484,6 +343,21 @@ tm-forum-api:
       - host: tm-forum-api.127.0.0.1.nip.io
         paths:
           - /
+  defaultConfig:
+    livenessProbe:
+      healthPath: /health/liveness
+      initialDelaySeconds: 30
+      periodSeconds: 1000
+      successThreshold: 1
+      failureThreshold: 3000
+      timeoutSeconds: 10000
+    readinessProbe:
+      readinessPath: /health/readiness
+      initialDelaySeconds: 30
+      periodSeconds: 1000
+      successThreshold: 1
+      failureThreshold: 3000
+      timeoutSeconds: 10000
 # -- integration of rainbow
 rainbow:
   enabled: true
@@ -704,16 +578,22 @@ keycloak:
       configMap:
         name: test-realm-realm
     - name: provider-key
-      configMap:
-        name: provider-keystore
+      secret:
+        secretName: provider-keystore
         defaultMode: 0755
   signingKey:
     storePath: /keys/cert.jks
-    storePassword: password
+    storePassword: "${STORE_PASS}"
     keyAlias: certificate
-    keyPassword: password
+    keyPassword: "${STORE_PASS}"
     did: did:web:mp-operations.org
     keyAlgorithm: ES256
+  extraEnvVars:
+    - name: "STORE_PASS"
+      valueFrom:
+        secretKeyRef:
+          name: provider-keystore
+          key: password
   realm:
     frontendUrl: https://keycloak-provider.127.0.0.1.nip.io
     import: true
@@ -916,195 +796,7 @@ keycloak:
           }
         ]
       }
-    clients: |
-      {
-        "clientId": "did:web:fancy-marketplace.biz",
-        "enabled": true,
-        "description": "Client to connect test.org",
-        "surrogateAuthRequired": false,
-        "alwaysDisplayInConsole": false,
-        "clientAuthenticatorType": "client-secret",
-        "defaultRoles": [],
-        "redirectUris": [],   
-        "webOrigins": [],
-        "notBefore": 0,
-        "bearerOnly": false,
-        "consentRequired": false,
-        "standardFlowEnabled": true,
-        "implicitFlowEnabled": false,
-        "directAccessGrantsEnabled": false,
-        "serviceAccountsEnabled": false,
-        "publicClient": false,
-        "frontchannelLogout": false,
-        "protocol": "openid-connect",
-        "attributes": {
-          "client.secret.creation.time": "1675260539"
-        },
-        "protocolMappers": [
-        ],
-        "authenticationFlowBindingOverrides": {},
-        "fullScopeAllowed": true,
-        "nodeReRegistrationTimeout": -1,
-        "defaultClientScopes": [],
-        "optionalClientScopes": []
-      },
-      {
-        "clientId": "account",
-        "name": "${client_account}",
-        "rootUrl": "${authBaseUrl}",
-        "baseUrl": "/realms/test-realm/account/",
-        "surrogateAuthRequired": false,
-        "enabled": true,
-        "alwaysDisplayInConsole": false,
-        "clientAuthenticatorType": "client-secret",
-        "redirectUris": [
-          "/realms/test-realm/account/*"
-        ],
-        "webOrigins": [],
-        "notBefore": 0,
-        "bearerOnly": false,
-        "consentRequired": false,
-        "standardFlowEnabled": true,
-        "implicitFlowEnabled": false,
-        "directAccessGrantsEnabled": false,
-        "serviceAccountsEnabled": false,
-        "publicClient": true,
-        "frontchannelLogout": false,
-        "protocol": "openid-connect",
-        "attributes": {
-          "realm_client": "false",
-          "post.logout.redirect.uris": "+"
-        },
-        "authenticationFlowBindingOverrides": {},
-        "fullScopeAllowed": true,
-        "nodeReRegistrationTimeout": 0,
-        "defaultClientScopes": [
-          "web-origins",
-          "acr",
-          "roles",
-          "profile",
-          "basic",
-          "email"
-        ],
-        "optionalClientScopes": [
-          "address",
-          "phone",
-          "offline_access",
-          "organization",
-          "microprofile-jwt"
-        ]
-      },
-      {
-        "clientId": "account-console",
-        "name": "${client_account-console}",
-        "rootUrl": "${authBaseUrl}",
-        "baseUrl": "/realms/test-realm/account/",
-        "surrogateAuthRequired": false,
-        "enabled": true,
-        "alwaysDisplayInConsole": false,
-        "clientAuthenticatorType": "client-secret",
-        "redirectUris": [
-          "/realms/test-realm/account/*"
-        ],
-        "webOrigins": [],
-        "notBefore": 0,
-        "bearerOnly": false,
-        "consentRequired": false,
-        "standardFlowEnabled": true,
-        "implicitFlowEnabled": false,
-        "directAccessGrantsEnabled": true,
-        "serviceAccountsEnabled": false,
-        "publicClient": true,
-        "frontchannelLogout": false,
-        "protocol": "openid-connect",
-        "attributes": {
-          "realm_client": "false",
-          "post.logout.redirect.uris": "+",
-          "pkce.code.challenge.method": "S256"
-        },
-        "authenticationFlowBindingOverrides": {},
-        "fullScopeAllowed": true,
-        "nodeReRegistrationTimeout": 0,
-        "protocolMappers": [
-          {
-            "id": "706c5202-1b03-4fad-a5b8-484287e941f8",
-            "name": "audience resolve",
-            "protocol": "openid-connect",
-            "protocolMapper": "oidc-audience-resolve-mapper",
-            "consentRequired": false,
-            "config": {}
-          }
-        ],
-        "defaultClientScopes": [
-          "web-origins",
-          "acr",
-          "roles",
-          "profile",
-          "basic",
-          "email"
-        ],
-        "optionalClientScopes": [
-          "address",
-          "phone",
-          "offline_access",
-          "organization",
-          "microprofile-jwt",
-          "LegalPersonCredential"
-        ]
-      },
-      {
-        "clientId": "admin-cli",
-        "name": "${client_admin-cli}",
-        "surrogateAuthRequired": false,
-        "enabled": true,
-        "alwaysDisplayInConsole": false,
-        "clientAuthenticatorType": "client-secret",
-        "redirectUris": [],
-        "webOrigins": [],
-        "notBefore": 0,
-        "bearerOnly": false,
-        "consentRequired": false,
-        "standardFlowEnabled": false,
-        "implicitFlowEnabled": false,
-        "directAccessGrantsEnabled": true,
-        "serviceAccountsEnabled": false,
-        "publicClient": true,
-        "frontchannelLogout": false,
-        "protocol": "openid-connect",
-        "attributes": {
-          "realm_client": "false",
-          "client.use.lightweight.access.token.enabled": "true"
-        },
-        "authenticationFlowBindingOverrides": {},
-        "fullScopeAllowed": true,
-        "nodeReRegistrationTimeout": 0,
-        "protocolMappers": [
-          {
-            "name": "audience resolve",
-            "protocol": "openid-connect",
-            "protocolMapper": "oidc-audience-resolve-mapper",
-            "consentRequired": false,
-            "config": {}
-          }
-        ],
-        "defaultClientScopes": [
-          "web-origins",
-          "acr",
-          "roles",
-          "profile",
-          "basic",
-          "email"
-        ],
-        "optionalClientScopes": [
-          "address",
-          "phone",
-          "offline_access",
-          "organization",
-          "microprofile-jwt",
-          "UserCredential"
-        ]
-      }
-
+    clients: "{\n  \"clientId\": \"did:web:fancy-marketplace.biz\",\n  \"enabled\": true,\n  \"description\": \"Client to connect test.org\",\n  \"surrogateAuthRequired\": false,\n  \"alwaysDisplayInConsole\": false,\n  \"clientAuthenticatorType\": \"client-secret\",\n  \"defaultRoles\": [],\n  \"redirectUris\": [],   \n  \"webOrigins\": [],\n  \"notBefore\": 0,\n  \"bearerOnly\": false,\n  \"consentRequired\": false,\n  \"standardFlowEnabled\": true,\n  \"implicitFlowEnabled\": false,\n  \"directAccessGrantsEnabled\": false,\n  \"serviceAccountsEnabled\": false,\n  \"publicClient\": false,\n  \"frontchannelLogout\": false,\n  \"protocol\": \"openid-connect\",\n  \"attributes\": {\n    \"client.secret.creation.time\": \"1675260539\"\n  },\n  \"protocolMappers\": [\n  ],\n  \"authenticationFlowBindingOverrides\": {},\n  \"fullScopeAllowed\": true,\n  \"nodeReRegistrationTimeout\": -1,\n  \"defaultClientScopes\": [],\n  \"optionalClientScopes\": []\n},\n{\n  \"clientId\": \"account\",\n  \"name\": \"${client_account}\",\n  \"rootUrl\": \"${authBaseUrl}\",\n  \"baseUrl\": \"/realms/test-realm/account/\",\n  \"surrogateAuthRequired\": false,\n  \"enabled\": true,\n  \"alwaysDisplayInConsole\": false,\n  \"clientAuthenticatorType\": \"client-secret\",\n  \"redirectUris\": [\n    \"/realms/test-realm/account/*\"\n  ],\n  \"webOrigins\": [],\n  \"notBefore\": 0,\n  \"bearerOnly\": false,\n  \"consentRequired\": false,\n  \"standardFlowEnabled\": true,\n  \"implicitFlowEnabled\": false,\n  \"directAccessGrantsEnabled\": false,\n  \"serviceAccountsEnabled\": false,\n  \"publicClient\": true,\n  \"frontchannelLogout\": false,\n  \"protocol\": \"openid-connect\",\n  \"attributes\": {\n    \"realm_client\": \"false\",\n    \"post.logout.redirect.uris\": \"+\"\n  },\n  \"authenticationFlowBindingOverrides\": {},\n  \"fullScopeAllowed\": true,\n  \"nodeReRegistrationTimeout\": 0,\n  \"defaultClientScopes\": [\n    \"web-origins\",\n    \"acr\",\n    \"roles\",\n    \"profile\",\n    \"basic\",\n    \"email\"\n  ],\n  \"optionalClientScopes\": [\n    \"address\",\n    \"phone\",\n    \"offline_access\",\n    \"organization\",\n    \"microprofile-jwt\"\n  ]\n},\n{\n  \"clientId\": \"account-console\",\n  \"name\": \"${client_account-console}\",\n  \"rootUrl\": \"${authBaseUrl}\",\n  \"baseUrl\": \"/realms/test-realm/account/\",\n  \"surrogateAuthRequired\": false,\n  \"enabled\": true,\n  \"alwaysDisplayInConsole\": false,\n  \"clientAuthenticatorType\": \"client-secret\",\n  \"redirectUris\": [\n    \"/realms/test-realm/account/*\"\n  ],\n  \"webOrigins\": [],\n  \"notBefore\": 0,\n  \"bearerOnly\": false,\n  \"consentRequired\": false,\n  \"standardFlowEnabled\": true,\n  \"implicitFlowEnabled\": false,\n  \"directAccessGrantsEnabled\": true,\n  \"serviceAccountsEnabled\": false,\n  \"publicClient\": true,\n  \"frontchannelLogout\": false,\n  \"protocol\": \"openid-connect\",\n  \"attributes\": {\n    \"realm_client\": \"false\",\n    \"post.logout.redirect.uris\": \"+\",\n    \"pkce.code.challenge.method\": \"S256\"\n  },\n  \"authenticationFlowBindingOverrides\": {},\n  \"fullScopeAllowed\": true,\n  \"nodeReRegistrationTimeout\": 0,\n  \"protocolMappers\": [\n    {\n      \"id\": \"706c5202-1b03-4fad-a5b8-484287e941f8\",\n      \"name\": \"audience resolve\",\n      \"protocol\": \"openid-connect\",\n      \"protocolMapper\": \"oidc-audience-resolve-mapper\",\n      \"consentRequired\": false,\n      \"config\": {}\n    }\n  ],\n  \"defaultClientScopes\": [\n    \"web-origins\",\n    \"acr\",\n    \"roles\",\n    \"profile\",\n    \"basic\",\n    \"email\"\n  ],\n  \"optionalClientScopes\": [\n    \"address\",\n    \"phone\",\n    \"offline_access\",\n    \"organization\",\n    \"microprofile-jwt\",\n    \"LegalPersonCredential\"\n  ]\n},\n{\n  \"clientId\": \"admin-cli\",\n  \"name\": \"${client_admin-cli}\",\n  \"surrogateAuthRequired\": false,\n  \"enabled\": true,\n  \"alwaysDisplayInConsole\": false,\n  \"clientAuthenticatorType\": \"client-secret\",\n  \"redirectUris\": [],\n  \"webOrigins\": [],\n  \"notBefore\": 0,\n  \"bearerOnly\": false,\n  \"consentRequired\": false,\n  \"standardFlowEnabled\": false,\n  \"implicitFlowEnabled\": false,\n  \"directAccessGrantsEnabled\": true,\n  \"serviceAccountsEnabled\": false,\n  \"publicClient\": true,\n  \"frontchannelLogout\": false,\n  \"protocol\": \"openid-connect\",\n  \"attributes\": {\n    \"realm_client\": \"false\",\n    \"client.use.lightweight.access.token.enabled\": \"true\"\n  },\n  \"authenticationFlowBindingOverrides\": {},\n  \"fullScopeAllowed\": true,\n  \"nodeReRegistrationTimeout\": 0,\n  \"protocolMappers\": [\n    {\n      \"name\": \"audience resolve\",\n      \"protocol\": \"openid-connect\",\n      \"protocolMapper\": \"oidc-audience-resolve-mapper\",\n      \"consentRequired\": false,\n      \"config\": {}\n    }\n  ],\n  \"defaultClientScopes\": [\n    \"web-origins\",\n    \"acr\",\n    \"roles\",\n    \"profile\",\n    \"basic\",\n    \"email\"\n  ],\n  \"optionalClientScopes\": [\n    \"address\",\n    \"phone\",\n    \"offline_access\",\n    \"organization\",\n    \"microprofile-jwt\",\n    \"UserCredential\"\n  ]\n}\n"
 registration:
   enabled: true
   configMap: provider-til-registration

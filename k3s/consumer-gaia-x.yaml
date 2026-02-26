@@ -89,16 +89,22 @@ keycloak:
         name: consumer-til-registration
         defaultMode: 0755
     - name: consumer-key
-      configMap:
-        name: consumer-keystore
+      secret:
+        secretName: consumer-keystore
         defaultMode: 0755
   signingKey:
-    storePath: /keys/cert.jks
-    storePassword: password
+    storePath: /keys/keystore.pfx
+    storePassword: "${STORE_PASS}"
     keyAlias: certificate
-    keyPassword: password
+    keyPassword: "${STORE_PASS}"
     did: did:web:fancy-marketplace.biz
     keyAlgorithm: RS256
+  extraEnvVars:
+    - name: "STORE_PASS"
+      valueFrom:
+        secretKeyRef:
+          name: consumer-keystore
+          key: password
   realm:
     frontendUrl: http://keycloak-consumer.127.0.0.1.nip.io:8080
     import: true
@@ -238,135 +244,38 @@ keycloak:
         "defaultClientScopes": [],
         "optionalClientScopes": []
       }
-did:
-  enabled: false
-# register the consumer at the til. Only possible if it runs in the same environment and recommendable for demo deployments
 registration:
   enabled: true
   configMap: consumer-til-registration
   til: http://trusted-issuers-list.provider.svc.cluster.local:8080
   did: did:web:fancy-marketplace.biz
-  credentialsType: UserCredential
-didJson:
+  credentialTypes: 
+    - UserCredential
+did:
   enabled: true
-  port: 3000
-  did: did:web:fancy-marketplace.biz
-  key:
-    kty: EC
-    # while this in productive environments should be an https endpoint, limitations of the gx-registry service require http in order to work around proxy issues in the local env. 
-    x5u: http://fancy-marketplace.biz/.well-known/tls.crt
-    modulus: ""
-    exponent: ""
-    crv: P-256
-    x: oIekaVX7EquGf0auBaEosOhu-9qUvLk_-aLbtfzaHVU
-    y: L_okheo3HdetOlIpcH1hkCSE3adoG1IJ6C9aeht7wbY
-    xCoord: WiCQZHPqGNYyH60_dztrwP67RUWit9_FVZ9VCGe1CAE
-    yCoord: 21EOPxwZslkUwV_kR7mpnha-PdHuHZr4akrq1v6cctk
+  config:
+    server:
+      serverPort: "3000"
+      didType: "web"
+      hostUrl: "http://fancy-marketplace.biz"
+      outputFormat: "json_jwk"
+      keystorePasswordSecretName: "consumer-keystore"
+      keystorePasswordSecretKey: "password"
+    generateKey:
+      enabled: false
+    provideKeystore:
+      enabled: true
+      keystoreSecretName: "consumer-keystore"
+      keystoreSecretKey: "keystore.pfx"
+      keyType: "EC"
   ingress:
     enabled: true
-    host: fancy-marketplace.biz
-  certChain: |-
-    -----BEGIN CERTIFICATE-----
-    MIIGvzCCBKegAwIBAgIUHxej1PL8tNM6yqYN6FBftGbo524wDQYJKoZIhvcNAQEL
-    BQAwcTELMAkGA1UEBhMCREUxDzANBgNVBAgMBlNheG9ueTETMBEGA1UECgwKRklD
-    T0RFUyBDQTEdMBsGA1UEAwwURklDT0RFUy1JTlRFUk1FRElBVEUxHTAbBgkqhkiG
-    9w0BCQEWDmNhQGZpY29kZXMuY29tMB4XDTI1MDMwNjE1MTE1M1oXDTMwMDMwNTE1
-    MTE1M1owgYAxCzAJBgNVBAYTAkJFMREwDwYDVQQIDAhCUlVTU0VMUzERMA8GA1UE
-    BwwIQnJ1c3NlbHMxHjAcBgNVBAoMFUZhbmN5IE1hcmtldHBsYWNlIENvLjELMAkG
-    A1UECwwCSXQxHjAcBgNVBAMMFWZhbmN5LW1hcmtldHBsYWNlLm9yZzCCAiIwDQYJ
-    KoZIhvcNAQEBBQADggIPADCCAgoCggIBAMMSgRPwxvHEhsnnOZS6WAGZKbEje27S
-    51AINYhBstdfB21QR9g+uSpmyYELsxYDZgQEgfSySkzuoN9Hy3C33mfiACCnaLtQ
-    HKUaFnyqqZY0Vrs+jE8TF/Li5bRcNjpmdXMa74W9sGIhPJrzcr+q8GzKIoUtAEkf
-    tK/H7oACzHtjXwvnbopSUSxmr6rtaiXFHcuR1U00UC1z1pHtMAwS37w8oEN7Zynk
-    T+7z5SF73ZG0q9zMSVddP1VIynJahhRCv6JgfmLOlDhJ9K0JBUFnQKkwqnDssGEz
-    eO8kjWnR4APv+lfgj1S0NeqV5Cb8/KDiMjv7WzoigYBKbOREUY2aiLw9foXR17af
-    +P3b1HaAkVNQAUPkY6i3fQKq8SSzBaT2MNPnJRGNjZtZa5Se9GQqwreVZjyx/kjs
-    jaUdAwwj43F6W+eTUaa9JJjxSXp1mL9yur6FC8FsTDXzxJC4lUgYMxS2WUNIaUdg
-    npUVe9CAOBUpPiNHFV1q8dyZa5BstwgclN8Jd75bsXLi7+rAaD2K9R79C/Hw4EM7
-    BOfCo38orRb2yMUnZf+mfIy80trfVvB8k7jxceK3obFa5ZsaDXQ774BWLFxkxl9o
-    pHgo+igVGfT9CQiH4Tturx7mmGMAUYwwJU+NtqNlMo+pmI/MTu23YPArfDrRTXkW
-    qijz5snetkKbAgMBAAGjggE9MIIBOTCBngYIKwYBBQUHAQMEgZEwgY4wCAYGBACO
-    RgEBMDgGBgQAjkYBBTAuMCwWIWh0dHBzOi8vZXhhbXBsZS5vcmcvcGtpZGlzY2xv
-    c3VyZRMHZXhhbXBsZTAhBgYEAIGYJwIwFwwMU29tZSB0ZXN0IENBDAdYWC1ERlNB
-    MCUGBgQAjkYBBjAbBgcEAI5GAQYBBgcEAI5GAQYCBgcEAI5GAQYDMAsGA1UdDwQE
-    AwIEMDATBgNVHSUEDDAKBggrBgEFBQcDATA0BgNVHREELTArghIqLjEyNy4wLjAu
-    MS5uaXAuaW+CFWZhbmN5LW1hcmtldHBsYWNlLm9yZzAdBgNVHQ4EFgQUfFPNgIzU
-    Ul4SWvW56w/Lf5EU18IwHwYDVR0jBBgwFoAUlbbtMRT2ZWd3HVdkJXF48aRp568w
-    DQYJKoZIhvcNAQELBQADggIBAJ1sq+fFUJqli8GVVH6pQuRTuQdyZaVW6EWFxa+8
-    vMZEDSNc5HB27sdFi4bj4r8G544nsFGg0iCCdQ245WQRlqDwnADqAOHBYEi7S/4K
-    Znj1Hxdpvmaabu6KANg3hzfLt9ai5jEHOhQ7+XFRqrl0oo+j7vrLHCvdhWyV91wU
-    WwmFi9H28QPBVFHE+ggIx9fvDN4/FmektVUCJYpTW5jYNV2Z+1WsgU7stgMLqSYv
-    oP9Bowaa8zx243dTa9aixMuxAwPn5nNxs/7EP2j02y/utnfHpBEo/H8Q8eweEiot
-    ZrnkgMQl1jOcnCdl9kT3DRDwYQGhY8BLgp0DH//RuhPqsuhQZbWkPrkGkVqZ9hLf
-    EgpO/KZ9XMuZ48/SZDBSlyGxhVBIvwQiWM/NPHWneMAEliFdt8cJijrQYyJQl6jB
-    WP+cR5LLwmudbaaI20giX9uJrUhpCp8PIKuZcG13JVxJyJUdJGSCP/MLchL/02Ky
-    /3Nxl2DbteAqmS8yc4LIi96mqmzwoyax5yVTJh1f0UYJKqtYgM7lYlSzZBX/BQu7
-    dSbGg5EMp3lixRWiFjdjVApuRKjjukkFpIfYo3eFWq35WpgyLsrSJacaNj9Cde0s
-    CIfTTho3qXNnZ2u+64covgCRRhE9TVz+ytM9BpSn37PoIPfW0WEi5Wi/udRvhiIt
-    1uyD
-    -----END CERTIFICATE-----
-    -----BEGIN CERTIFICATE-----
-    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
-    Zf2PnbXG7VZcuujAiKbnJ2eNOLe9EN819uwz8nI=
-    -----END CERTIFICATE-----
-    -----BEGIN CERTIFICATE-----
-    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
-    -----END CERTIFICATE-----
+    className: ""
+    annotations:
+      traefik.ingress.kubernetes.io/service.passhostheader: "true"
+      traefik.ingress.kubernetes.io/router.tls: "true"
+    hosts:
+      - host: fancy-marketplace.biz
+        paths:
+          - path: /
+            pathType: ImplementationSpecific
