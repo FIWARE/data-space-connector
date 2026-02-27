@@ -385,6 +385,10 @@
                                 <id>template-dsc-mongo-operator</id>
                                 <phase>test-compile</phase>
                             </execution>
+                            <execution>
+                                <id>template-dsc-postgres-operator</id>
+                                <phase>test-compile</phase>
+                            </execution>
                         </executions>
                     </plugin>
                     <plugin>
@@ -400,6 +404,14 @@
                             </execution>
                             <execution>
                                 <id>apply-mongo-operator</id>
+                                <phase>pre-integration-test</phase>
+                            </execution>
+                            <execution>
+                                <id>apply-postgres-operator-crd</id>
+                                <phase>pre-integration-test</phase>
+                            </execution>
+                            <execution>
+                                <id>apply-postgres-operator</id>
                                 <phase>pre-integration-test</phase>
                             </execution>
                             <execution>
