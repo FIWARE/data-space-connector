@@ -1,31 +1,40 @@
-vcverifier:
-  enabled: false
-credentials-config-service:
-  enabled: false
-trusted-issuers-list:
-  enabled: false
-mysql:
-  enabled: false
-odrl-pap:
-  enabled: false
-apisix:
-  enabled: false
+decentralizedIam:
+  enabled: true
+
+  vcAuthentication:
+
+    postgres-operator:
+      enabled: false
+
+    managedPostgres:
+      enabled: true
+      config:
+        volume:
+          storageClass: "local-path"
+
+    vcverifier:
+      enabled: false
+    credentials-config-service:
+      enabled: false
+    trusted-issuers-list:
+      enabled: false
+    dss:
+      enabled: false
+      crl:
+        enabled: false
+
+  odrlAuthorization:
+    odrl-pap:
+      enabled: false
+    apisix:
+      enabled: false
+
 scorpio:
-  enabled: false
-postgis:
   enabled: false
 tm-forum-api:
   enabled: false
 contract-management:
   enabled: false
-
-postgresql:
-  primary:
-    persistence:
-      enabled: false
-  readReplicas:
-    persistence:
-      enabled: false
 
 keycloak:
   ingress:
@@ -256,12 +265,8 @@ registration:
   configMap: consumer-til-registration
   til: http://trusted-issuers-list.provider.svc.cluster.local:8080
   did: ${DID}
-  credentialsType: UserCredential
-
-dss:
-  enabled: false
-  crl:
-    enabled: false
+  credentialTypes: 
+    - UserCredential
 
 elsi:
   enabled: true

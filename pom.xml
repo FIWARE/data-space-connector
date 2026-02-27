@@ -137,6 +137,20 @@
                             <outputDirectory>${project.build.directory}/k3s/infra</outputDirectory>
                         </configuration>
                     </execution>
+                    <execution>
+                        <id>download-postgres-operator-config-crd</id>
+                        <phase>prepare-package</phase>
+                        <goals>
+                            <goal>wget</goal>
+                        </goals>
+                        <configuration>
+                            <url>
+                                https://raw.githubusercontent.com/zalando/postgres-operator/refs/tags/v1.15.1/charts/postgres-operator/crds/operatorconfigurations.yaml
+                            </url>
+                            <unpack>false</unpack>
+                            <outputDirectory>${project.build.directory}/k3s/infra</outputDirectory>
+                        </configuration>
+                    </execution>
                 </executions>
             </plugin>
             <!-- copy the charts to the target repo to keep the sources clean -->
@@ -327,6 +341,23 @@
                             <additionalArguments>--name-template=mongo-operator --namespace=mongo-operator -f ${main.basedir}/k3s/mongo-operator.yaml</additionalArguments>
                         </configuration>
                     </execution>
+                    <!-- Postgres operator as referenced in the DSC chart -->
+                    <execution>
+                        <id>template-dsc-postgres-operator</id>
+                        <goals>
+                            <goal>init</goal>
+                            <goal>dependency-update</goal>
+                            <goal>template</goal>
+                        </goals>
+                        <phase>package</phase>
+                        <configuration>
+                            <chartDirectory>${project.build.directory}/charts/data-space-connector</chartDirectory>
+                            <skipTemplate>false</skipTemplate>
+                            <templateGenerateName>true</templateGenerateName>
+                            <templateOutputDir>${project.build.directory}/k3s/infra/postgres-operator</templateOutputDir>
+                            <additionalArguments>--name-template=postgres-operator --namespace=postgres-operator -f ${main.basedir}/k3s/postgres-operator.yaml</additionalArguments>
+                        </configuration>
+                    </execution>
                 </executions>
             </plugin>
             <plugin>
@@ -375,6 +406,28 @@
                         </goals>
                         <configuration>
                             <manifests>${project.build.directory}/k3s/infra/mongo-operator</manifests>
+                            <timeout>500</timeout>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>apply-postgres-operator-crd</id>
+                        <phase>deploy</phase>
+                        <goals>
+                            <goal>apply</goal>
+                        </goals>
+                        <configuration>
+                            <manifests>${project.build.directory}/k3s/infra/operatorconfigurations.yaml</manifests>
+                            <timeout>500</timeout>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>apply-postgres-operator</id>
+                        <phase>deploy</phase>
+                        <goals>
+                            <goal>apply</goal>
+                        </goals>
+                        <configuration>
+                            <manifests>${project.build.directory}/k3s/infra/postgres-operator</manifests>
                             <timeout>500</timeout>
                         </configuration>
                     </execution>
@@ -541,7 +594,24 @@
                                     <skipTemplate>false</skipTemplate>
                                     <templateGenerateName>true</templateGenerateName>
                                     <templateOutputDir>${project.build.directory}/k3s/infra/mongo-operator</templateOutputDir>
-                                    <additionalArguments>--name-template=mongo-operator --namespace=mongo-operator -f ${main.basedir}/k3s/operator.yaml</additionalArguments>
+                                    <additionalArguments>--name-template=mongo-operator --namespace=mongo-operator -f ${main.basedir}/k3s/mongo-operator.yaml</additionalArguments>
+                                </configuration>
+                            </execution>
+                            <!-- Postgres operator as referenced in the DSC chart -->
+                            <execution>
+                                <id>template-dsc-postgres-operator</id>
+                                <goals>
+                                    <goal>init</goal>
+                                    <goal>dependency-update</goal>
+                                    <goal>template</goal>
+                                </goals>
+                                <phase>package</phase>
+                                <configuration>
+                                    <chartDirectory>${project.build.directory}/charts/data-space-connector</chartDirectory>
+                                    <skipTemplate>false</skipTemplate>
+                                    <templateGenerateName>true</templateGenerateName>
+                                    <templateOutputDir>${project.build.directory}/k3s/infra/postgres-operator</templateOutputDir>
+                                    <additionalArguments>--name-template=postgres-operator --namespace=postgres-operator -f ${main.basedir}/k3s/postgres-operator.yaml</additionalArguments>
                                 </configuration>
                             </execution>
                         </executions>
@@ -647,7 +717,24 @@
                                     <skipTemplate>false</skipTemplate>
                                     <templateGenerateName>true</templateGenerateName>
                                     <templateOutputDir>${project.build.directory}/k3s/infra/mongo-operator</templateOutputDir>
-                                    <additionalArguments>--name-template=mongo-operator --namespace=mongo-operator -f ${main.basedir}/k3s/operator.yaml</additionalArguments>
+                                    <additionalArguments>--name-template=mongo-operator --namespace=mongo-operator -f ${main.basedir}/k3s/mongo-operator.yaml</additionalArguments>
+                                </configuration>
+                            </execution>
+                            <!-- Postgres operator as referenced in the DSC chart -->
+                            <execution>
+                                <id>template-dsc-postgres-operator</id>
+                                <goals>
+                                    <goal>init</goal>
+                                    <goal>dependency-update</goal>
+                                    <goal>template</goal>
+                                </goals>
+                                <phase>package</phase>
+                                <configuration>
+                                    <chartDirectory>${project.build.directory}/charts/data-space-connector</chartDirectory>
+                                    <skipTemplate>false</skipTemplate>
+                                    <templateGenerateName>true</templateGenerateName>
+                                    <templateOutputDir>${project.build.directory}/k3s/infra/postgres-operator</templateOutputDir>
+                                    <additionalArguments>--name-template=postgres-operator --namespace=postgres-operator -f ${main.basedir}/k3s/postgres-operator.yaml</additionalArguments>
                                 </configuration>
                             </execution>
                         </executions>

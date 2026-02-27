@@ -22,6 +22,24 @@ echo -n "" > ${OUTPUT_FOLDER}/index.txt
 echo -n "01" > ${OUTPUT_FOLDER}/serial
 echo -n "1000" > ${OUTPUT_FOLDER}/crlnumber
 
+# Determine whether the installed OpenSSL supports the -copy_extensions option.
+# LibreSSL on macOS doesn't support it, so disable when running under LibreSSL.
+if openssl version 2>&1 | grep -qi libre; then
+  COPY_EXTS=""
+else
+  COPY_EXTS="-copy_extensions=copyall"
+fi
+
+# Create temporary OpenSSL config files with the correct `dir` value so
+# LibreSSL/OpenSSL both receive a concrete path (avoids $ENV::... issues).
+TMP_OPENSSL_CNF=$(mktemp)
+TMP_OPENSSL_INTERMEDIATE_CNF=$(mktemp)
+sed "s|^dir[[:space:]]*=.*$|dir = ${OUTPUT_FOLDER}|" ${CONFIG_FILE}/openssl.cnf > ${TMP_OPENSSL_CNF}
+sed "s|^dir[[:space:]]*=.*$|dir = ${OUTPUT_FOLDER}|" ${CONFIG_FILE}/openssl-intermediate.cnf > ${TMP_OPENSSL_INTERMEDIATE_CNF}
+
+# Ensure temp files are removed on exit
+trap 'rm -f "${TMP_OPENSSL_CNF}" "${TMP_OPENSSL_INTERMEDIATE_CNF}"' EXIT
+
 # Only create ca if it does not exist. It allows to update the client certificates whitout having to update the ca everywhere
 if [ ! -f ${OUTPUT_FOLDER}/ca/certs/cacert.pem ]; then
 
@@ -31,9 +49,9 @@ if [ ! -f ${OUTPUT_FOLDER}/ca/certs/cacert.pem ]; then
 
   # generate key
   openssl genrsa -out ${OUTPUT_FOLDER}/ca/private/cakey.pem 4096
-  # create CA Request
+  # create CA Request (use temp config with correct dir)
   openssl req -new -x509 -set_serial 01 -days 3650 \
-    -config ./config/openssl.cnf \
+    -config "${TMP_OPENSSL_CNF}" \
     -extensions v3_ca \
     -key ${OUTPUT_FOLDER}/ca/private/cakey.pem \
     -out ${OUTPUT_FOLDER}/ca/csr/cacert.pem \
@@ -57,11 +75,11 @@ if [ ! -f "${OUTPUT_FOLDER}/intermediate/private/intermediate.cakey.pem" ] || [ 
 
 
   openssl genrsa -out ${OUTPUT_FOLDER}/intermediate/private/intermediate.cakey.pem 4096
-  openssl req -new -sha256 -set_serial 02 -config ./config/openssl-intermediate.cnf \
+  openssl req -new -sha256 -set_serial 02 -config "${TMP_OPENSSL_INTERMEDIATE_CNF}" \
     -subj "/C=DE/ST=Saxony/L=Dresden/O=FICODES CA/CN=FICODES-INTERMEDIATE/emailAddress=ca@ficodes.com/serialNumber=02" \
     -key ${OUTPUT_FOLDER}/intermediate/private/intermediate.cakey.pem \
     -out ${OUTPUT_FOLDER}/intermediate/csr/intermediate.csr.pem
-  openssl ca -config ./config/openssl.cnf -extensions v3_intermediate_ca -days 2650 -notext \
+  openssl ca -config "${TMP_OPENSSL_CNF}" -extensions v3_intermediate_ca -days 2650 -notext \
     -batch -in ${OUTPUT_FOLDER}/intermediate/csr/intermediate.csr.pem \
     -out ${OUTPUT_FOLDER}/intermediate/certs/intermediate.cacert.pem
   openssl x509 -in ${OUTPUT_FOLDER}/intermediate/certs/intermediate.cacert.pem -out ${OUTPUT_FOLDER}/intermediate/certs/intermediate.cacert.pem -outform PEM
@@ -85,7 +103,7 @@ openssl req -new -set_serial 03 -key ${OUTPUT_FOLDER}/client-consumer/private/cl
 openssl x509 -req -in ${OUTPUT_FOLDER}/client-consumer/csr/client.csr -CA ${OUTPUT_FOLDER}/intermediate/certs/ca-chain-bundle.cert.pem \
   -CAkey ${OUTPUT_FOLDER}/intermediate/private/intermediate.cakey.pem -out ${OUTPUT_FOLDER}/client-consumer/certs/client.cert.pem \
   -CAcreateserial -days 1825 -sha256 -extfile ./config/openssl-client-consumer.cnf \
-  -copy_extensions=copyall \
+  ${COPY_EXTS} \
   -extensions v3_req
 
 openssl x509 -in ${OUTPUT_FOLDER}/client-consumer/certs/client.cert.pem -out ${OUTPUT_FOLDER}/client-consumer/certs/client.cert.pem -outform PEM
@@ -104,7 +122,7 @@ openssl req -new -set_serial 03 -key ${OUTPUT_FOLDER}/client-provider/private/cl
 openssl x509 -req -in ${OUTPUT_FOLDER}/client-provider/csr/client.csr -CA ${OUTPUT_FOLDER}/intermediate/certs/ca-chain-bundle.cert.pem \
   -CAkey ${OUTPUT_FOLDER}/intermediate/private/intermediate.cakey.pem -out ${OUTPUT_FOLDER}/client-provider/certs/client.cert.pem \
   -CAcreateserial -days 1825 -sha256 -extfile ./config/openssl-client-provider.cnf \
-  -copy_extensions=copyall \
+  ${COPY_EXTS} \
   -extensions v3_req
 
 openssl x509 -in ${OUTPUT_FOLDER}/client-provider/certs/client.cert.pem -out ${OUTPUT_FOLDER}/client-provider/certs/client.cert.pem -outform PEM
@@ -113,16 +131,14 @@ cat ${OUTPUT_FOLDER}/client-provider/certs/client.cert.pem ${OUTPUT_FOLDER}/inte
 
 ## create keystore to be used by keycloak
 # consumer
-openssl pkcs12 -export -password pass:password -in ${OUTPUT_FOLDER}/client-consumer/certs/client-chain-bundle.cert.pem -inkey ${OUTPUT_FOLDER}/client-consumer/private/client.key.pem -out ${OUTPUT_FOLDER}/client-consumer/certificate.p12 -name "certificate"
-keytool -importkeystore -srckeystore ${OUTPUT_FOLDER}/client-consumer/certificate.p12 -srcstoretype pkcs12 -destkeystore ${OUTPUT_FOLDER}/client-consumer/cert.jks -srcstorepass password -deststorepass password -destkeypass password
+openssl pkcs12 -export -password pass:password -in ${OUTPUT_FOLDER}/client-consumer/certs/client-chain-bundle.cert.pem -inkey ${OUTPUT_FOLDER}/client-consumer/private/client.key.pem -out ${OUTPUT_FOLDER}/client-consumer/keystore.pfx -name "certificate"
 
 # provider
-openssl pkcs12 -export -password pass:password -in ${OUTPUT_FOLDER}/client-provider/certs/client-chain-bundle.cert.pem -inkey ${OUTPUT_FOLDER}/client-provider/private/client.key.pem -out ${OUTPUT_FOLDER}/client-provider/certificate.p12 -name "certificate"
-keytool -importkeystore -srckeystore ${OUTPUT_FOLDER}/client-provider/certificate.p12 -srcstoretype pkcs12 -destkeystore ${OUTPUT_FOLDER}/client-provider/cert.jks -srcstorepass password -deststorepass password -destkeypass password
+openssl pkcs12 -export -password pass:password -in ${OUTPUT_FOLDER}/client-provider/certs/client-chain-bundle.cert.pem -inkey ${OUTPUT_FOLDER}/client-provider/private/client.key.pem -out ${OUTPUT_FOLDER}/client-provider/keystore.pfx -name "certificate"
 
 # consumer
 kubectl create secret tls tls-secret --cert=${OUTPUT_FOLDER}/client-consumer/certs/client-chain-bundle.cert.pem --key=${OUTPUT_FOLDER}/client-consumer/private/client.key.pem --namespace consumer -o yaml --dry-run=client > ${k3sFolder}/consumer/tls-secret.yaml
-kubectl create configmap consumer-keystore --from-file=${OUTPUT_FOLDER}/client-consumer/cert.jks --namespace consumer --dry-run=client -oyaml > ${k3sFolder}/consumer/keystore-cm.yaml
+kubectl create secret generic consumer-keystore --from-file=keystore.pfx=${OUTPUT_FOLDER}/client-consumer/keystore.pfx --from-literal=password="password" --namespace=consumer --dry-run=client -oyaml > ${k3sFolder}/consumer/keystore-secret.yaml
 kubectl create secret generic cert-chain --from-file=${OUTPUT_FOLDER}/client-consumer/certs/client-chain-bundle.cert.pem --namespace consumer -o yaml --dry-run=client > ${k3sFolder}/consumer/cert-chain.yaml
 
 consumer_key_env=$(openssl ec -in ${OUTPUT_FOLDER}/client-consumer/private/client.key.pem -noout -text | grep 'priv:' -A 3 | tail -n +2 | tr -d ':\n ')
@@ -134,7 +150,7 @@ kubectl create secret generic signing-key-env --from-literal=key="${consumer_key
 
 # provider
 kubectl create secret tls tls-secret --cert=${OUTPUT_FOLDER}/client-provider/certs/client-chain-bundle.cert.pem --key=${OUTPUT_FOLDER}/client-provider/private/client.key.pem --namespace provider -o yaml --dry-run=client > ${k3sFolder}/provider/tls-secret.yaml
-kubectl create configmap provider-keystore --from-file=${OUTPUT_FOLDER}/client-provider/cert.jks --namespace provider --dry-run=client -oyaml > ${k3sFolder}/provider/keystore-cm.yaml
+kubectl create secret generic provider-keystore --from-file=keystore.pfx=${OUTPUT_FOLDER}/client-provider/keystore.pfx --from-literal=password="password" --namespace=provider --dry-run=client -oyaml > ${k3sFolder}/provider/keystore-secret.yaml
 kubectl create secret generic cert-chain --from-file=${OUTPUT_FOLDER}/client-provider/certs/client-chain-bundle.cert.pem --namespace provider -o yaml --dry-run=client > ${k3sFolder}/provider/cert-chain.yaml
 
 provider_key_env=$(openssl ec -in ${OUTPUT_FOLDER}/client-provider/private/client.key.pem -noout -text | grep 'priv:' -A 3 | tail -n +2 | tr -d ':\n ')
@@ -154,40 +170,3 @@ kubectl create secret generic root-ca --from-file=${OUTPUT_FOLDER}/ca/certs/cace
 
 ca=$(cat ${OUTPUT_FOLDER}/ca/certs/cacert.pem | sed '/-----BEGIN CERTIFICATE-----/d' | sed '/-----END CERTIFICATE-----/d' | tr -d '\n')
 yq -i "(.spec.template.spec.initContainers[] | select(.name == \"local-trust\") | .env[] | select(.name == \"ROOT_CA\")).value = \"$ca\"" ${k3sFolder}/infra/gx-registry/deployment-registry.yaml
-
-
-# consumer identity
-openssl x509 -in ${OUTPUT_FOLDER}/client-consumer/certs/client.cert.pem -noout -pubkey > ${OUTPUT_FOLDER}/client-consumer/certs/public_key.pem
-
-consumer_chain=$(cat ${OUTPUT_FOLDER}/client-consumer/certs/client-chain-bundle.cert.pem)
-
-pub_hex_consumer=$(openssl ec -in ${OUTPUT_FOLDER}/client-consumer/private/client.key.pem -pubout -outform DER | tail -c 65 | xxd -p -c 65)
-x_consumer=${pub_hex_consumer:2:64}
-y_consumer=${pub_hex_consumer:66:64}
-
-x_consumer_enc=$(echo -n "$x_consumer" | xxd -r -p | openssl base64 -A | tr '+/' '-_' | tr -d '=')
-y_consumer_enc=$(echo -n "$y_consumer" | xxd -r -p | openssl base64 -A | tr '+/' '-_' | tr -d '=')
-
-yq -i ".didJson.key.crv = \"P-256\"" ${k3sFolder}/consumer-gaia-x.yaml
-yq -i ".didJson.key.xCoord = \"${x_consumer_enc}\"" ${k3sFolder}/consumer-gaia-x.yaml
-yq -i ".didJson.key.yCoord = \"${y_consumer_enc}\"" ${k3sFolder}/consumer-gaia-x.yaml
-yq -i ".didJson.key.crv = \"P-256\"" ${k3sFolder}/consumer.yaml
-yq -i ".didJson.key.xCoord = \"${x_consumer_enc}\"" ${k3sFolder}/consumer.yaml
-yq -i ".didJson.key.yCoord = \"${y_consumer_enc}\"" ${k3sFolder}/consumer.yaml
-
-
-# provider identity
-openssl x509 -in ${OUTPUT_FOLDER}/client-provider/certs/client.cert.pem -noout -pubkey > ${OUTPUT_FOLDER}/client-provider/certs/public_key.pem
-
-provider_chain=$(cat ${OUTPUT_FOLDER}/client-consumer/certs/client-chain-bundle.cert.pem)
-
-pub_hex_provider=$(openssl ec -in ${OUTPUT_FOLDER}/client-provider/private/client.key.pem -pubout -outform DER | tail -c 65 | xxd -p -c 65)
-x_provider=${pub_hex_provider:2:64}
-y_provider=${pub_hex_provider:66:64}
-
-x_provider_enc=$(echo -n "$x_provider" | xxd -r -p | openssl base64 -A | tr '+/' '-_' | tr -d '=')
-y_provider_enc=$(echo -n "$y_provider" | xxd -r -p | openssl base64 -A | tr '+/' '-_' | tr -d '=')
-
-yq -i ".didJson.key.crv = \"P-256\"" ${k3sFolder}/provider.yaml
-yq -i ".didJson.key.xCoord = \"${x_provider_enc}\"" ${k3sFolder}/provider.yaml
-yq -i ".didJson.key.yCoord = \"${y_provider_enc}\"" ${k3sFolder}/provider.yaml

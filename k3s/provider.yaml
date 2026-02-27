@@ -1,420 +1,449 @@
-apisix:
-  image:
-    debug: true
-  dataPlane:
-    ingress:
+decentralizedIam:
+  enabled: true
+
+  vcAuthentication:
+
+    postgres-operator:
+      enabled: false
+
+    managedPostgres:
       enabled: true
-      hostname: mp-data-service.127.0.0.1.nip.io
-      extraHosts:
-        - name: mp-tmf-api.127.0.0.1.nip.io
-          path: /
-        - name: tpp-data-service.127.0.0.1.nip.io
-          path: /
-        - name: tpp-service.127.0.0.1.nip.io
-          path: /
-        - name: contract-management.127.0.0.1.nip.io
-          path: /
-  catchAllRoute:
-    enabled: false
-  routes: |-
-    - uri: /.well-known/openid-configuration
-      host: mp-data-service.127.0.0.1.nip.io
-      upstream:
-        nodes:
-          verifier:3000: 1
-        type: roundrobin
-      plugins:
-        proxy-rewrite:
-          uri: /services/data-service/.well-known/openid-configuration
-    - uri: /.well-known/openid-configuration
-      host: contract-management.127.0.0.1.nip.io
-      upstream:
-        nodes:
-          verifier:3000: 1
-        type: roundrobin
-      plugins:
-        proxy-rewrite:
-          uri: /services/contract-management/.well-known/openid-configuration
-    - uri: /.well-known/openid-configuration
-      host: tpp-service.127.0.0.1.nip.io
-      upstream:
-        nodes:
-          verifier:3000: 1
-        type: roundrobin
-      plugins:
-        proxy-rewrite:
-          uri: /services/tpp-service/.well-known/openid-configuration
-    - uri: /.well-known/data-space-configuration
-      upstream:
-        nodes:
-          dsconfig:3002: 1
-        type: roundrobin
-      plugins:
-        proxy-rewrite:
-          uri: /.well-known/data-space-configuration/data-space-configuration.json
-        response-rewrite:
-          headers:
-            set:
-              content-type: application/json
-    - uri: /*
-      host: tpp-data-service.127.0.0.1.nip.io
-      upstream:
-        nodes:
-          data-service-scorpio:9090: 1
-        type: roundrobin
-      plugins:
-        openid-connect:
-          proxy_opts:
-            https_proxy: http://squid-proxy.infra.svc.cluster.local:8888
-          bearer_only: true
-          use_jwks: true
-          client_id: contract-management
-          client_secret: unused
-          ssl_verify: false
-          discovery: https://verifier.mp-operations.org/services/tmf-api/.well-known/openid-configuration
-        opa:
-          host: "http://localhost:8181"
-          policy: tpp
-    - uri: /*
-      host: mp-data-service.127.0.0.1.nip.io
-      upstream:
-        nodes:
-          data-service-scorpio:9090: 1
-        type: roundrobin
-      plugins: 
-        openid-connect:
-          proxy_opts:
-            https_proxy: http://squid-proxy.infra.svc.cluster.local:8888
-          bearer_only: true
-          use_jwks: true
-          client_id: data-service
-          client_secret: unused
-          ssl_verify: false
-          discovery: https://verifier.mp-operations.org/services/data-service/.well-known/openid-configuration
-        opa:
-          host: "http://localhost:8181"
-          policy: policy/main
-          with_body: true
-    - uri: /.well-known/openid-configuration
-      host: mp-tmf-api.127.0.0.1.nip.io
-      upstream:
-        nodes:
-          verifier:3000: 1
-        type: roundrobin
-      plugins:
-        proxy-rewrite:
-          uri: /services/tmf-api/.well-known/openid-configuration
-    - uri: /api/v1/catalogs
-      host: tpp-catalog-service.127.0.0.1.nip.io
-      upstream:
-        nodes:
-          rainbow:8080: 1
-    - uri: /*
-      host: tpp-service.127.0.0.1.nip.io
-      upstream:
-        nodes:
-          rainbow:8080: 1
-      plugins:
-        openid-connect:
-          proxy_opts:
-            https_proxy: http://squid-proxy.infra.svc.cluster.local:8888
-          bearer_only: true
-          use_jwks: true
-          client_id: data-service
-          client_secret: unused
-          ssl_verify: false
-          discovery: https://verifier.mp-operations.org/services/data-service/.well-known/openid-configuration
-        opa:
-          host: "http://localhost:8181"
-          policy: policy/main
-          with_body: true
-    - uri: /*
-      host: mp-tmf-api.127.0.0.1.nip.io
-      upstream:
-        nodes:
-          tm-forum-api:8080: 1
-        type: roundrobin
-      plugins:
-        openid-connect:
-          proxy_opts:
-            https_proxy: http://squid-proxy.infra.svc.cluster.local:8888
-          bearer_only: true
-          use_jwks: true
-          client_id: contract-management
-          client_secret: unused
-          ssl_verify: false
-          discovery: https://verifier.mp-operations.org/services/tmf-api/.well-known/openid-configuration
-        opa:
-          host: "http://localhost:8181"
-          policy: policy/main
-          with_body: true
-    - uri: /*
-      host: contract-management.127.0.0.1.nip.io
-      upstream:
-        nodes:
-          contract-management:8080: 1
-        type: roundrobin
-      plugins:
-        openid-connect:
-          proxy_opts:
-            https_proxy: http://squid-proxy.infra.svc.cluster.local:8888
-          bearer_only: true
-          use_jwks: true
-          client_id: contract-management
-          client_secret: unused
-          ssl_verify: false
-          discovery: https://verifier.mp-operations.org/services/contract-management/.well-known/openid-configuration
-        opa:
-          host: "http://localhost:8181"
-          policy: policy/main
-          with_body: true
+      config:
+        volume:
+          storageClass: "local-path"
+        users:
+          ngb:
+            - createdb
+        databases:
+          ngb: ngb
+        preparedDatabases:
+          ngb:
+            extensions:
+              postgis: public
 
-credentials-config-service:
-  ingress:
-    enabled: true
-    hosts:
-      - host: provider-ccs.127.0.0.1.nip.io
-        paths:
-          - "/"
-  additionalEnvVars:
-    - name: FLYWAY_DATASOURCES_DEFAULT_LOCATIONS
-      value: classpath:db/migration/common,classpath:db/migration/mysql
-  registration:
-    enabled: true
-    services:
-      - id: bae
-        defaultOidcScope: "openid learcredential"
-        authorizationType: "FRONTEND_V2"
-        oidcScopes:
-          "openid learcredential":
-            credentials:
-              - type: LegalPersonCredential
-                trustedParticipantsLists:
-                  - http://tir.127.0.0.1.nip.io
-                trustedIssuersLists:
-                  - http://trusted-issuers-list:8080
-                jwtInclusion:
-                  enabled: true
-                  fullInclusion: true
-            dcql:
-              credentials:
-                - id: legal-person-query
-                  format: "vc+sd-jwt"
-                  multiple: false
-                  claims:
-                    - id: name-claim
-                      path:
-                        - firstName
-                    - id: roles-claim
-                      path:
-                        - roles
-                  meta:
-                    vct_values:
-                      - LegalPersonCredential
-      - id: data-service
-        defaultOidcScope: "default"
-        authorizationType: "DEEPLINK"
-        oidcScopes:
-          "default":
-            credentials:
-              - type: UserCredential
-                trustedParticipantsLists:
-                  - http://tir.127.0.0.1.nip.io
-                trustedIssuersLists:
-                  - http://trusted-issuers-list:8080
-                jwtInclusion:
-                  enabled: true
-                  fullInclusion: true
-            dcql:
-              credentials:
-                - id: user-query
-                  format: "jwt_vc_json"
-                  multiple: true
-                  meta:
-                    type_values:
-                      - UserCredential
-          "legal":
-            credentials:
-              - type: LegalPersonCredential
-                trustedParticipantsLists:
-                  - http://tir.127.0.0.1.nip.io
-                trustedIssuersLists:
-                  - http://trusted-issuers-list:8080
-                jwtInclusion:
-                  enabled: true
-                  fullInclusion: true
-            dcql:
-              credentials:
-                - id: legal-person-query
-                  format: "vc+sd-jwt"
-                  multiple: false
-                  claims:
-                    - id: name-claim
-                      path:
-                        - firstName
-                    - id: roles-claim
-                      path:
-                        - roles
-                  meta:
-                    vct_values:
-                      - LegalPersonCredential
-          "operator":
-            credentials:
-              - type: OperatorCredential
-                trustedParticipantsLists:
-                  - http://tir.127.0.0.1.nip.io
-                trustedIssuersLists:
-                  - http://trusted-issuers-list:8080
-                jwtInclusion:
-                  enabled: true
-                  fullInclusion: true
-            dcql:
-              credentials:
-                - id: operator-query
-                  format: "jwt_vc_json"
-                  multiple: true
-                  meta:
-                    type_values:
-                      - OperatorCredential
-      - id: tpp-service
-        defaultOidcScope: "operator"
-        authorizationType: "DEEPLINK"
-        oidcScopes:
-          "operator":
-            credentials:
-              - type: OperatorCredential
-                trustedParticipantsLists:
-                  - http://tir.127.0.0.1.nip.io
-                trustedIssuersLists:
-                  - http://trusted-issuers-list:8080
-                jwtInclusion:
-                  enabled: true
-                  fullInclusion: true
-      - id: contract-management
-        defaultOidcScope: "external-marketplace"
-        authorizationType: "DEEPLINK"
-        oidcScopes:
-          "external-marketplace":
-            credentials:
-              - type: MarketplaceCredential
-                trustedParticipantsLists:
-                  - http://tir.127.0.0.1.nip.io
-                trustedIssuersLists:
-                  - "*"
-                jwtInclusion:
-                  enabled: true
-                  fullInclusion: true
-            dcql:
-              credentials:
-                - id: mc-query
-                  format: "jwt_vc_json"
-                  multiple: true
-                  meta:
-                    type_values:
-                      - MarketplaceCredential
+    credentials-config-service:
+      ingress:
+        enabled: true
+        hosts:
+          - host: provider-ccs.127.0.0.1.nip.io
+            paths:
+              - "/"
+      additionalEnvVars:
+        - name: FLYWAY_DATASOURCES_DEFAULT_LOCATIONS
+          value: classpath:db/migration/common,classpath:db/migration/mysql
+      registration:
+        enabled: true
+        services:
+          - id: bae
+            defaultOidcScope: "openid learcredential"
+            authorizationType: "FRONTEND_V2"
+            oidcScopes:
+              "openid learcredential":
+                credentials:
+                  - type: LegalPersonCredential
+                    trustedParticipantsLists:
+                      - http://tir.127.0.0.1.nip.io
+                    trustedIssuersLists:
+                      - http://trusted-issuers-list:8080
+                    jwtInclusion:
+                      enabled: true
+                      fullInclusion: true
+                dcql:
+                  credentials:
+                    - id: legal-person-query
+                      format: "vc+sd-jwt"
+                      multiple: false
+                      claims:
+                        - id: name-claim
+                          path:
+                            - firstName
+                        - id: roles-claim
+                          path:
+                            - roles
+                      meta:
+                        vct_values:
+                          - LegalPersonCredential
+          - id: data-service
+            defaultOidcScope: "default"
+            authorizationType: "DEEPLINK"
+            oidcScopes:
+              "default":
+                credentials:
+                  - type: UserCredential
+                    trustedParticipantsLists:
+                      - http://tir.127.0.0.1.nip.io
+                    trustedIssuersLists:
+                      - http://trusted-issuers-list:8080
+                    jwtInclusion:
+                      enabled: true
+                      fullInclusion: true
+                dcql:
+                  credentials:
+                    - id: user-query
+                      format: "jwt_vc_json"
+                      multiple: true
+                      meta:
+                        type_values:
+                          - UserCredential
+              "legal":
+                credentials:
+                  - type: LegalPersonCredential
+                    trustedParticipantsLists:
+                      - http://tir.127.0.0.1.nip.io
+                    trustedIssuersLists:
+                      - http://trusted-issuers-list:8080
+                    jwtInclusion:
+                      enabled: true
+                      fullInclusion: true
+                dcql:
+                  credentials:
+                    - id: legal-person-query
+                      format: "vc+sd-jwt"
+                      multiple: false
+                      claims:
+                        - id: name-claim
+                          path:
+                            - firstName
+                        - id: roles-claim
+                          path:
+                            - roles
+                      meta:
+                        vct_values:
+                          - LegalPersonCredential
+              "operator":
+                credentials:
+                  - type: OperatorCredential
+                    trustedParticipantsLists:
+                      - http://tir.127.0.0.1.nip.io
+                    trustedIssuersLists:
+                      - http://trusted-issuers-list:8080
+                    jwtInclusion:
+                      enabled: true
+                      fullInclusion: true
+                dcql:
+                  credentials:
+                    - id: operator-query
+                      format: "jwt_vc_json"
+                      multiple: true
+                      meta:
+                        type_values:
+                          - OperatorCredential
+          - id: tpp-service
+            defaultOidcScope: "operator"
+            authorizationType: "DEEPLINK"
+            oidcScopes:
+              "operator":
+                credentials:
+                  - type: OperatorCredential
+                    trustedParticipantsLists:
+                      - http://tir.127.0.0.1.nip.io
+                    trustedIssuersLists:
+                      - http://trusted-issuers-list:8080
+                    jwtInclusion:
+                      enabled: true
+                      fullInclusion: true
+          - id: contract-management
+            defaultOidcScope: "external-marketplace"
+            authorizationType: "DEEPLINK"
+            oidcScopes:
+              "external-marketplace":
+                credentials:
+                  - type: MarketplaceCredential
+                    trustedParticipantsLists:
+                      - http://tir.127.0.0.1.nip.io
+                    trustedIssuersLists:
+                      - "*"
+                    jwtInclusion:
+                      enabled: true
+                      fullInclusion: true
+                dcql:
+                  credentials:
+                    - id: mc-query
+                      format: "jwt_vc_json"
+                      multiple: true
+                      meta:
+                        type_values:
+                          - MarketplaceCredential
 
-vcverifier:
-  ingress:
-    enabled: true
-    annotations:
-      traefik.ingress.kubernetes.io/router.tls: "true"
-    tls:
-      - hosts:
-          - verifier.mp-operations.org
-        secretName: tls-secret
-    hosts:
-      - host: verifier.mp-operations.org
-        paths:
-          - "/"
-  deployment:
-    logging:
-      level: DEBUG
-    verifier:
-      tirAddress: http://tir.127.0.0.1.nip.io/
-      did: did:web:mp-operations.org
-      supportedModes: ["byValue", "byReference"]
-      clientIdentification:
-        keyPath: /signing-key/client.key.pem
-        requestKeyAlgorithm: ES256
-        id: x509_san_dns:verifier.mp-operations.org
-        certificatePath: /certificate/client-chain-bundle.cert.pem
-    server:
-      host: https://verifier.mp-operations.org
-    configRepo:
-      configEndpoint: http://credentials-config-service:8080
-    additionalVolumes:
-      - name: signing-key
-        secret:
-          secretName: signing-key
-      - name: cert-chain
-        secret:
-          secretName: cert-chain
-      # add the self generated root ca to the system truststore
-      - name: root-ca
-        emptyDir: {}
-      - name: ca-to-add
-        secret:
-          secretName: root-ca
-    additionalVolumeMounts:
-      - name: signing-key
-        mountPath: /signing-key
-      - name: cert-chain
-        mountPath: /certificate
-      # add the self generated root ca to the system truststore
-      - name: root-ca
-        mountPath: /etc/ssl/cert.pem
-        subPath: cert.pem
-    additionalEnvVars:
-      - name: HTTPS_PROXY
-        value: "http://squid-proxy.infra.svc.cluster.local:8888"
-      - name: HTTP_PROXY
-        value: "http://squid-proxy.infra.svc.cluster.local:8888"
-      - name: NO_PROXY
-        value: "credentials-config-service,w3.org,trusted-issuers-list"
-    initContainers:
-      # add the self generated root ca to the system truststore
-      - name: add-root-ca
-        image: alpine:3.21.3
-        command:
-          - /bin/sh
-        args:
-          - -c
-          - |
-            #!/bin/sh
-            cp /etc/ssl/cert.pem /root-ca/cert.pdata.typeem
-            cat /root-ca/cacert.pem >> /root-ca/cert.pem
-        volumeMounts:
+    vcverifier:
+      ingress:
+        enabled: true
+        annotations:
+          traefik.ingress.kubernetes.io/router.tls: "true"
+        tls:
+          - hosts:
+              - verifier.mp-operations.org
+            secretName: tls-secret
+        hosts:
+          - host: verifier.mp-operations.org
+            paths:
+              - "/"
+      deployment:
+        logging:
+          level: DEBUG
+        verifier:
+          tirAddress: http://tir.127.0.0.1.nip.io/
+          did: did:web:mp-operations.org
+          supportedModes: ["byValue", "byReference"]
+          clientIdentification:
+            keyPath: /signing-key/client.key.pem
+            requestKeyAlgorithm: ES256
+            id: x509_san_dns:verifier.mp-operations.org
+            certificatePath: /certificate/client-chain-bundle.cert.pem
+        server:
+          host: https://verifier.mp-operations.org
+        configRepo:
+          configEndpoint: http://credentials-config-service:8080
+        additionalVolumes:
+          - name: signing-key
+            secret:
+              secretName: signing-key
+          - name: cert-chain
+            secret:
+              secretName: cert-chain
+          # add the self generated root ca to the system truststore
           - name: root-ca
-            mountPath: /root-ca
+            emptyDir: {}
           - name: ca-to-add
-            mountPath: /root-ca/cacert.pem
-            subPath: cacert.pem
-      - name: register-at-tir
-        image: ubuntu
-        command:
-          - /bin/bash
-        args:
-          - -ec
-          - |
-            #!/bin/bash
-            apt-get -y update; apt-get -y install curl
-            curl -X 'POST' 'http://tir.trust-anchor.svc.cluster.local:8080/issuer' -H 'Content-Type: application/json' -d "{\"did\": \"did:web:mp-operations.org\", \"credentials\": []}"
-mysql:
-  resourcesPreset: none
-  primary:
-    persistence:
-      enabled: false
-  secondary:
-    persistence:
-      enabled: false
-postgis:
-  primary:
-    resourcesPreset: none
-    persistence:
-      enabled: false
-  readReplicas:
-    persistence:
-      enabled: false
+            secret:
+              secretName: root-ca
+        additionalVolumeMounts:
+          - name: signing-key
+            mountPath: /signing-key
+          - name: cert-chain
+            mountPath: /certificate
+          # add the self generated root ca to the system truststore
+          - name: root-ca
+            mountPath: /etc/ssl/cert.pem
+            subPath: cert.pem
+        additionalEnvVars:
+          - name: HTTPS_PROXY
+            value: "http://squid-proxy.infra.svc.cluster.local:8888"
+          - name: HTTP_PROXY
+            value: "http://squid-proxy.infra.svc.cluster.local:8888"
+          - name: NO_PROXY
+            value: "credentials-config-service,w3.org,trusted-issuers-list"
+        initContainers:
+          # add the self generated root ca to the system truststore
+          - name: add-root-ca
+            image: alpine:3.21.3
+            command:
+              - /bin/sh
+            args:
+              - -c
+              - |
+                #!/bin/sh
+                cp /etc/ssl/cert.pem /root-ca/cert.pdata.typeem
+                cat /root-ca/cacert.pem >> /root-ca/cert.pem
+            volumeMounts:
+              - name: root-ca
+                mountPath: /root-ca
+              - name: ca-to-add
+                mountPath: /root-ca/cacert.pem
+                subPath: cacert.pem
+          - name: register-at-tir
+            image: ubuntu
+            command:
+              - /bin/bash
+            args:
+              - -ec
+              - |
+                #!/bin/bash
+                apt-get -y update; apt-get -y install curl
+                curl -X 'POST' 'http://tir.trust-anchor.svc.cluster.local:8080/issuer' -H 'Content-Type: application/json' -d "{\"did\": \"did:web:mp-operations.org\", \"credentials\": []}"
+
+  odrlAuthorization:
+
+    apisix:
+      etcd:
+        replicaCount: 1
+        persistence:
+          enabled: false
+      ingress:
+        enabled: true
+        hosts:
+          - host: mp-data-service.127.0.0.1.nip.io
+            paths: ["/"]
+          - host: mp-tmf-api.127.0.0.1.nip.io
+            paths: ["/"]
+          - host: tpp-data-service.127.0.0.1.nip.io
+            paths: ["/"]
+          - host: tpp-service.127.0.0.1.nip.io
+            paths: ["/"]
+          - host: contract-management.127.0.0.1.nip.io
+            paths: ["/"]
+      catchAllRoute:
+        enabled: false
+      routes:
+        - uri: /.well-known/openid-configuration
+          host: mp-data-service.127.0.0.1.nip.io
+          upstream:
+            nodes:
+              verifier:3000: 1
+            type: roundrobin
+          plugins:
+            proxy-rewrite:
+              uri: /services/data-service/.well-known/openid-configuration
+        - uri: /.well-known/openid-configuration
+          host: contract-management.127.0.0.1.nip.io
+          upstream:
+            nodes:
+              verifier:3000: 1
+            type: roundrobin
+          plugins:
+            proxy-rewrite:
+              uri: /services/contract-management/.well-known/openid-configuration
+        - uri: /.well-known/openid-configuration
+          host: tpp-service.127.0.0.1.nip.io
+          upstream:
+            nodes:
+              verifier:3000: 1
+            type: roundrobin
+          plugins:
+            proxy-rewrite:
+              uri: /services/tpp-service/.well-known/openid-configuration
+        - uri: /.well-known/data-space-configuration
+          upstream:
+            nodes:
+              dsconfig:3002: 1
+            type: roundrobin
+          plugins:
+            proxy-rewrite:
+              uri: /.well-known/data-space-configuration/data-space-configuration.json
+            response-rewrite:
+              headers:
+                set:
+                  content-type: application/json
+        - uri: /*
+          host: tpp-data-service.127.0.0.1.nip.io
+          upstream:
+            nodes:
+              data-service-scorpio:9090: 1
+            type: roundrobin
+          plugins:
+            openid-connect:
+              proxy_opts:
+                https_proxy: http://squid-proxy.infra.svc.cluster.local:8888
+              bearer_only: true
+              use_jwks: true
+              client_id: contract-management
+              client_secret: unused
+              ssl_verify: false
+              discovery: https://verifier.mp-operations.org/services/tmf-api/.well-known/openid-configuration
+            opa:
+              host: "http://localhost:8181"
+              policy: tpp
+        - uri: /*
+          host: mp-data-service.127.0.0.1.nip.io
+          upstream:
+            nodes:
+              data-service-scorpio:9090: 1
+            type: roundrobin
+          plugins: 
+            openid-connect:
+              proxy_opts:
+                https_proxy: http://squid-proxy.infra.svc.cluster.local:8888
+              bearer_only: true
+              use_jwks: true
+              client_id: data-service
+              client_secret: unused
+              ssl_verify: false
+              discovery: https://verifier.mp-operations.org/services/data-service/.well-known/openid-configuration
+            opa:
+              host: "http://localhost:8181"
+              policy: policy/main
+              with_body: true
+        - uri: /.well-known/openid-configuration
+          host: mp-tmf-api.127.0.0.1.nip.io
+          upstream:
+            nodes:
+              verifier:3000: 1
+            type: roundrobin
+          plugins:
+            proxy-rewrite:
+              uri: /services/tmf-api/.well-known/openid-configuration
+        - uri: /api/v1/catalogs
+          host: tpp-catalog-service.127.0.0.1.nip.io
+          upstream:
+            nodes:
+              rainbow:8080: 1
+        - uri: /*
+          host: tpp-service.127.0.0.1.nip.io
+          upstream:
+            nodes:
+              rainbow:8080: 1
+          plugins:
+            openid-connect:
+              proxy_opts:
+                https_proxy: http://squid-proxy.infra.svc.cluster.local:8888
+              bearer_only: true
+              use_jwks: true
+              client_id: data-service
+              client_secret: unused
+              ssl_verify: false
+              discovery: https://verifier.mp-operations.org/services/data-service/.well-known/openid-configuration
+            opa:
+              host: "http://localhost:8181"
+              policy: policy/main
+              with_body: true
+        - uri: /*
+          host: mp-tmf-api.127.0.0.1.nip.io
+          upstream:
+            nodes:
+              tm-forum-api:8080: 1
+            type: roundrobin
+          plugins:
+            openid-connect:
+              proxy_opts:
+                https_proxy: http://squid-proxy.infra.svc.cluster.local:8888
+              bearer_only: true
+              use_jwks: true
+              client_id: contract-management
+              client_secret: unused
+              ssl_verify: false
+              discovery: https://verifier.mp-operations.org/services/tmf-api/.well-known/openid-configuration
+            opa:
+              host: "http://localhost:8181"
+              policy: policy/main
+              with_body: true
+        - uri: /*
+          host: contract-management.127.0.0.1.nip.io
+          upstream:
+            nodes:
+              contract-management:8080: 1
+            type: roundrobin
+          plugins:
+            openid-connect:
+              proxy_opts:
+                https_proxy: http://squid-proxy.infra.svc.cluster.local:8888
+              bearer_only: true
+              use_jwks: true
+              client_id: contract-management
+              client_secret: unused
+              ssl_verify: false
+              discovery: https://verifier.mp-operations.org/services/contract-management/.well-known/openid-configuration
+            opa:
+              host: "http://localhost:8181"
+              policy: policy/main
+              with_body: true
+
+    odrl-pap:
+      additionalEnvVars:
+        - name: GENERAL_ORGANIZATION_DID
+          value: did:web:mp-operations.org
+      ingress:
+        enabled: true
+        hosts:
+          - host: pap-provider.127.0.0.1.nip.io
+            paths:
+              - "/"
+
+    tpp:
+      enabled: true
+      transfers:
+        host: http://rainbow-provider.127.0.0.1.nip.io:8080
+        path: transfers
+
 postgresql:
   primary:
     resourcesPreset: none
@@ -465,16 +494,6 @@ scorpio:
       - host: scorpio-provider.127.0.0.1.nip.io
         paths:
           - "/"
-odrl-pap:
-  additionalEnvVars:
-    - name: GENERAL_ORGANIZATION_DID
-      value: did:web:mp-operations.org
-  ingress:
-    enabled: true
-    hosts:
-      - host: pap-provider.127.0.0.1.nip.io
-        paths:
-          - "/"
 tm-forum-api:
   registration:
     enabled: false
@@ -498,11 +517,6 @@ rainbow:
       - host: rainbow-provider.127.0.0.1.nip.io
         paths:
           - /
-tpp:
-  enabled: true
-  transfers:
-    host: http://rainbow-provider.127.0.0.1.nip.io:8080
-    path: transfers
 contract-management:
   did: did:web:mp-operations.org
   enableCentralMarketplace: true
@@ -585,7 +599,7 @@ managedMongo:
             spec:
               accessModes:
                 - ReadWriteOnce
-              storageClassName: default
+              storageClassName: local-path
               resources:
                 requests:
                   storage: "1Gi"
@@ -594,7 +608,7 @@ managedMongo:
             spec:
               accessModes:
                 - ReadWriteOnce
-              storageClassName: default
+              storageClassName: local-path
               resources:
                 requests:
                   storage: "1Gi"
@@ -704,16 +718,35 @@ keycloak:
       configMap:
         name: test-realm-realm
     - name: provider-key
-      configMap:
-        name: provider-keystore
+      secret:
+        secretName: provider-keystore
         defaultMode: 0755
   signingKey:
-    storePath: /keys/cert.jks
-    storePassword: password
+    storePath: /keys/keystore.pfx
+    storePassword: "${STORE_PASS}"
     keyAlias: certificate
-    keyPassword: password
+    keyPassword: "${STORE_PASS}"
     did: did:web:mp-operations.org
     keyAlgorithm: ES256
+  extraEnvVars:
+    - name: KEYCLOAK_EXTRA_ARGS
+      value: "--import-realm"
+    - name: KC_FEATURES
+      value: "oid4vc-vci"
+    # keycloak admin password
+    - name: KC_ADMIN_PASSWORD
+      valueFrom:
+        secretKeyRef:
+          name: issuance-secret
+          key: keycloak-admin
+    # set in accordance with the memory requests, will result in OOM otherwise
+    - name: KC_HEAP_SIZE
+      value: "1024m"
+    - name: "STORE_PASS"
+      valueFrom:
+        secretKeyRef:
+          name: provider-keystore
+          key: password
   realm:
     frontendUrl: https://keycloak-provider.127.0.0.1.nip.io
     import: true

@@ -19,27 +19,28 @@ recipes.
 <!-- DON'T EDIT THIS SECTION, INSTEAD RE-RUN doctoc TO UPDATE -->
 <!-- param::isNotitle::true:: -->
 
-- [Overview](#overview)
-- [Release Information](#release-information)
-- [Components](#components)
-- [Description of flows in a data space](#description-of-flows-in-a-data-space)
-  - [Onboarding of an organization in the data space](#onboarding-of-an-organization-in-the-data-space)
-  - [Consumer registration](#consumer-registration)
-  - [Contract management](#contract-management)
-  - [Service interaction](#service-interaction)
-    - [Service interaction (H2M)](#service-interaction-h2m)
-    - [Service interaction (M2M)](#service-interaction-m2m)
-  - [Integration with the Dataspace Protocol](#integration-with-the-dataspace-protocol)
-  - [Integration with the Gaia-X Trust Framework](#integration-with-the-gaia-x-trust-framework)
-- [Deployment](#deployment)
-  - [Local Deployment](#local-deployment)
-  - [Deployment with Helm](#deployment-with-helm)
-- [Testing](#testing)
-- [Additional documentation and resources](#additional-documentation-and-resources)
-  - [Marketplace Integration](#marketplace-integration)
-  - [Ongoing Work](#ongoing-work)
-  - [Additional documentation](#additional-documentation)
-  - [Additional Resources](#additional-resources)
+- [FIWARE Data Space Connector](#fiware-data-space-connector)
+  - [Overview](#overview)
+  - [Release Information](#release-information)
+  - [Components](#components)
+  - [Description of flows in a data space](#description-of-flows-in-a-data-space)
+    - [Onboarding of an organization in the data space](#onboarding-of-an-organization-in-the-data-space)
+    - [Consumer registration](#consumer-registration)
+    - [Contract management](#contract-management)
+    - [Service interaction](#service-interaction)
+      - [Service interaction (H2M)](#service-interaction-h2m)
+      - [Service interaction (M2M)](#service-interaction-m2m)
+    - [Integration with the Dataspace Protocol](#integration-with-the-dataspace-protocol)
+    - [Integration with the Gaia-X Trust Framework](#integration-with-the-gaia-x-trust-framework)
+  - [Deployment](#deployment)
+    - [Local Deployment](#local-deployment)
+    - [Deployment with Helm](#deployment-with-helm)
+  - [Testing](#testing)
+  - [Additional documentation and resources](#additional-documentation-and-resources)
+    - [Marketplace Integration](#marketplace-integration)
+    - [Ongoing Work](#ongoing-work)
+    - [Additional documentation](#additional-documentation)
+    - [Additional Resources](#additional-resources)
 
 <!-- END doctoc generated TOC please keep comment here to allow auto update -->
 
@@ -94,21 +95,90 @@ Connector.
 
 Precisely, the connector bundles the following components:
 
-| Component       | Role            | Diagram field | Link |
-|-----------------|-----------------|---|------|
-| VCVerifier      | Validates VCs and exchanges them for tokens       |Verifier | https://github.com/FIWARE/VCVerifier |
-| credentials-config-service | Holds the information which VCs are required for accessing a service |PRP/PAP (authentication)| https://github.com/FIWARE/credentials-config-service |
-| Keycloak | Issuer of VCs on the Consumer side | | https://www.keycloak.org |
-| Scorpio        | Context Broker  | | https://github.com/ScorpioBroker/ScorpioBroker |
-| trusted-issuers-list | Acts as Trusted Issuers List by providing an [EBSI Trusted Issuers Registry](https://api-pilot.ebsi.eu/docs/apis/trusted-issuers-registry) API |Local Trusted Issuers List| https://github.com/FIWARE/trusted-issuers-list |
-| APISIX | APISIX as API-Gateway with a OPA plugin |PEP| https://apisix.apache.org/ / https://apisix.apache.org/docs/apisix/plugins/opa/ |
-| OPA | OpenPolicyAgent as the API Gateway's Sidecar |PDP | https://www.openpolicyagent.org/ |
-| odrl-pap        | Allowing to configure ODRL policies to be used by the OPA | PRP/PAP (authorization) | https://github.com/wistefan/odrl-pap |
-| tmforum-api     |  Implementation of the [TMForum APIs](https://www.tmforum.org/oda/open-apis/) for handling contracts|Contract Management| https://github.com/FIWARE/tmforum-api |
-| contract-management | Notification listener for contract management events out of TMForum |Contract Management | https://github.com/FIWARE/contract-management |
-| MySQL           | Database | | https://www.mysql.com |
-| PostgreSQL      | Database | | https://www.postgresql.org |
-| PostGIS         | PostgreSQL Database with PostGIS extensions | | https://postgis.net/ |
+<table>
+    <thead>
+        <tr>
+            <th>Umbrella component</th>
+            <th>Sub-umbrella component</th>
+            <th>Component</th>
+            <th>Role</th>
+            <th>Diagram field</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td rowspan="6"><b><a href="https://github.com/FIWARE/decentralized-iam">decentralized-iam</a></b></td>
+            <td rowspan="3"><a href="https://github.com/FIWARE/vc-authentication">vc-authentication</a></td>
+            <td><a href="https://github.com/FIWARE/VCVerifier">VCVerifier</a></td>
+            <td>Validates VCs and exchanges them for tokens</td>
+            <td>Verifier</td>
+        </tr>
+        <tr>
+            <td><a href="https://github.com/FIWARE/credentials-config-service">credentials-config-service</a></td>
+            <td>Holds the information which VCs are required for accessing a service</td>
+            <td>PRP/PAP (authentication)</td>
+        </tr>
+        <tr>
+            <td><a href="https://github.com/FIWARE/trusted-issuers-list">trusted-issuers-list</a></td>
+            <td>Acts as Trusted Issuers List by providing an <a
+                    href="https://api-pilot.ebsi.eu/docs/apis/trusted-issuers-registry">EBSI Trusted Issuers
+                    Registry</a> API</td>
+            <td>Local Trusted Issuers List</td>
+        </tr>
+        <tr>
+            <td rowspan="3"><a href="https://github.com/FIWARE/odrl-authorization">odrl-authorization</a></td>
+            <td><a href="https://apisix.apache.org/">APISIX</a></td>
+            <td>APISIX as API-Gateway with a OPA plugin</td>
+            <td>PEP</td>
+        </tr>
+        <tr>
+            <td><a href="https://www.openpolicyagent.org/">OPA</a></td>
+            <td>OpenPolicyAgent as the API Gateway's Sidecar</td>
+            <td>PDP</td>
+        </tr>
+        <tr>
+            <td><a href="https://github.com/wistefan/odrl-pap">odrl-pap</a></td>
+            <td>Allowing to configure ODRL policies to be used by the OPA</td>
+            <td>PRP/PAP (authorization)</td>
+        </tr>
+        <tr>
+            <td>-</td>
+            <td>-</td>
+            <td><a href="https://www.keycloak.org">Keycloak</a></td>
+            <td>Issuer of VCs on the Consumer side</td>
+            <td></td>
+        </tr>
+        <tr>
+            <td>-</td>
+            <td>-</td>
+            <td><a href="https://github.com/ScorpioBroker/ScorpioBroker">Scorpio</a></td>
+            <td>Context Broker</td>
+            <td></td>
+        </tr>
+        <tr>
+            <td>-</td>
+            <td>-</td>
+            <td><a href="https://github.com/FIWARE/tmforum-api">tmforum-api</a></td>
+            <td>Implementation of the <a href="https://www.tmforum.org/oda/open-apis/">TMForum APIs</a> for handling
+                contracts</td>
+            <td>Contract Management</td>
+        </tr>
+        <tr>
+            <td>-</td>
+            <td>-</td>
+            <td><a href="https://github.com/FIWARE/contract-management">contract-management</a></td>
+            <td>Notification listener for contract management events out of TMForum</td>
+            <td>Contract Management</td>
+        </tr>
+        <tr>
+            <td>-</td>
+            <td>-</td>
+            <td><a href="https://www.postgresql.org">PostgreSQL</a></td>
+            <td>PostgreSQL Database with <a href="https://postgis.net/">PostGIS extensions</a></td>
+            <td></td>
+        </tr>
+    </tbody>
+</table>
 
 **Note,** that some of the components shown in the diagram above are not implemented yet.
 

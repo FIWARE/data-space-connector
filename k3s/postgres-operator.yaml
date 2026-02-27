@@ -1,15 +1,11 @@
-mongo-operator:
-  enabled: true
-  database:
-    namespace: provider
-  operator:
-    watchNamespace: "*"
-
 
 decentralizedIam:
+
   vcAuthentication:
     postgres-operator:
-      enabled: false
+      enabled: true
+      configKubernetes:
+        enable_cross_namespace_secret: true
 
     managedPostgres:
       enabled: false
@@ -32,6 +28,9 @@ decentralizedIam:
 
     tpp:
       enabled: false
+
+mongo-operator:
+  enabled: false
 
 managedMongo:
   enabled: false

@@ -1,10 +1,3 @@
-postgresql:
-  primary:
-    persistence:
-      enabled: false
-  readReplicas:
-    persistence:
-      enabled: false
 keycloak:
   ingress:
     enabled: true
@@ -32,16 +25,35 @@ keycloak:
       configMap:
         name: test-realm-realm
     - name: consumer-key
-      configMap:
-        name: consumer-keystore
+      secret:
+        secretName: consumer-keystore
         defaultMode: 0755
   signingKey:
-    storePath: /keys/cert.jks
-    storePassword: password
+    storePath: /keys/keystore.pfx
+    storePassword: "${STORE_PASS}"
     keyAlias: certificate
-    keyPassword: password
+    keyPassword: "${STORE_PASS}"
     did: did:web:fancy-marketplace.biz
     keyAlgorithm: ES256
+  extraEnvVars:
+    - name: KEYCLOAK_EXTRA_ARGS
+      value: "--import-realm"
+    - name: KC_FEATURES
+      value: "oid4vc-vci"
+    # keycloak admin password
+    - name: KC_ADMIN_PASSWORD
+      valueFrom:
+        secretKeyRef:
+          name: issuance-secret
+          key: keycloak-admin
+    # set in accordance with the memory requests, will result in OOM otherwise
+    - name: KC_HEAP_SIZE
+      value: "1024m"
+    - name: "STORE_PASS"
+      valueFrom:
+        secretKeyRef:
+          name: consumer-keystore
+          key: password
   realm:
     frontendUrl: https://keycloak-consumer.127.0.0.1.nip.io
     import: true
@@ -831,17 +843,16 @@ keycloak:
 rainbow:
   enabled: true
   db:
-    url: postgresql
+    url: postgres
     user: postgres
-    existingSecret: database-secret
-    passwordKey: postgres-admin-password
+    existingSecret: postgres.postgres.credentials.postgresql.acid.zalan.do
+    passwordKey: password
   ingress:
     enabled: true
     hosts:
       - host: rainbow-consumer.127.0.0.1.nip.io
         paths:
           - /
-    enabled: true
     host: rainbow-consumer.127.0.0.1.nip.io
 did:
   enabled: false
@@ -888,204 +899,207 @@ tm-forum-api:
 # scorpio as tmf backend, no public endpoint required
 scorpio:
   enabled: true
-# policies for accessing the tmf
-odrl-pap:
-  additionalEnvVars:
-    - name: GENERAL_ORGANIZATION_DID
-      value: did:web:fancy-marketplace.biz
-  ingress:
-    enabled: true
-    hosts:
-      - host: pap-consumer.127.0.0.1.nip.io
-        paths:
-          - "/"
-# authentication configuration
-credentials-config-service:
-  additionalEnvVars:
-    - name: FLYWAY_DATASOURCES_DEFAULT_LOCATIONS
-      value: classpath:db/migration/common,classpath:db/migration/mysql
-  registration:
-    enabled: true
-    services:
-      - id: tm-forum
-        defaultOidcScope: "default"
-        authorizationType: "DEEPLINK"
-        oidcScopes:
-          "default":
-            credentials:
-              - type: LegalPersonCredential
-                trustedParticipantsLists:
-                  - http://tir.127.0.0.1.nip.io
-                # we want that every participant can access the marketplace and register
-                trustedIssuersLists:
-                  - "*"
-                jwtInclusion:
-                  enabled: true
-                  fullInclusion: true
-            dcql:
-              credentials:
-                - id: legal-person-query
-                  format: "vc+sd-jwt"
-                  multiple: false
-                  claims:
-                    - id: roles-claim
-                      path:
-                        - roles
-                  meta:
-                    vct_values:
-                      - LegalPersonCredential
-# provide authentication capabilities
-vcverifier:
-  ingress:
-    enabled: true
-    annotations:
-      traefik.ingress.kubernetes.io/router.tls: "true"
-    tls:
-      - hosts:
-          - verifier.fancy-marketplace.biz
-        secretName: tls-secret
-    hosts:
-      - host: verifier.fancy-marketplace.biz
-        paths:
-          - "/"
-  deployment:
-    logging:
-      level: DEBUG
-    verifier:
-      tirAddress: http://tir.127.0.0.1.nip.io/
-      did: did:web:fancy-marketplace.biz
-      supportedModes: ["byValue", "byReference"]
-      clientIdentification:
-        keyPath: /signing-key/client.key.pem
-        requestKeyAlgorithm: ES256
-        id: x509_san_dns:verifier.fancy-marketplace.biz
-        certificatePath: /certificate/client-chain-bundle.cert.pem
-    server:
-      host: https://verifier.fancy-marketplace.biz
-    configRepo:
-      configEndpoint: http://credentials-config-service:8080
-    additionalVolumes:
-      - name: signing-key
-        secret:
-          secretName: signing-key
-      - name: cert-chain
-        secret:
-          secretName: cert-chain
-      # add the self generated root ca to the system truststore
-      - name: root-ca
-        emptyDir: {}
-      - name: ca-to-add
-        secret:
-          secretName: root-ca
-    additionalVolumeMounts:
-      - name: signing-key
-        mountPath: /signing-key
-      - name: cert-chain
-        mountPath: /certificate
-      # add the self generated root ca to the system truststore
-      - name: root-ca
-        mountPath: /etc/ssl/cert.pem
-        subPath: cert.pem
-    additionalEnvVars:
-      - name: HTTPS_PROXY
-        value: "http://squid-proxy.infra.svc.cluster.local:8888"
-      - name: HTTP_PROXY
-        value: "http://squid-proxy.infra.svc.cluster.local:8888"
-      - name: NO_PROXY
-        value: "credentials-config-service,w3.org,trusted-issuers-list"
-    initContainers:
-      # add the self generated root ca to the system truststore
-      - name: add-root-ca
-        image: alpine:3.21.3
-        command:
-          - /bin/sh
-        args:
-          - -c
-          - |
-            #!/bin/sh
-            cp /etc/ssl/cert.pem /root-ca/cert.pdata.typeem
-            cat /root-ca/cacert.pem >> /root-ca/cert.pem
-        volumeMounts:
-          - name: root-ca
-            mountPath: /root-ca
-          - name: ca-to-add
-            mountPath: /root-ca/cacert.pem
-            subPath: cacert.pem
-      - name: register-at-tir
-        image: ubuntu
-        command:
-          - /bin/bash
-        args:
-          - -ec
-          - |
-            #!/bin/bash
-            apt-get -y update; apt-get -y install curl
-            curl -X 'POST' 'http://tir.trust-anchor.svc.cluster.local:8080/issuer' -H 'Content-Type: application/json' -d "{\"did\": \"did:web:fancy-marketplace.biz\", \"credentials\": []}"
-# required dbs
-mysql:
-  resourcesPreset: none
-  primary:
-    persistence:
+
+decentralizedIam:
+  enabled: true
+
+  vcAuthentication:
+
+    postgres-operator:
       enabled: false
-  secondary:
-    persistence:
-      enabled: false
-postgis:
-  primary:
-    resourcesPreset: none
-    persistence:
-      enabled: false
-  readReplicas:
-    persistence:
-      enabled: false
-postgresql:
-  primary:
-    resourcesPreset: none
-    persistence:
-      enabled: false
-  readReplicas:
-    persistence:
-      enabled: false
-# authorized access to tmforum
-apisix:
-  image:
-    debug: true
-  dataPlane:
-    ingress:
+
+    managedPostgres:
       enabled: true
-      hostname: fancy-marketplace.127.0.0.1.nip.io
-  catchAllRoute:
-    enabled: false
-  routes: |-
-    - uri: /.well-known/openid-configuration
-      host: fancy-marketplace.127.0.0.1.nip.io
-      upstream:
-        nodes:
-          verifier:3000: 1
-        type: roundrobin
-      plugins:
-        proxy-rewrite:
-          uri: /services/tm-forum/.well-known/openid-configuration
-    - uri: /*
-      host: fancy-marketplace.127.0.0.1.nip.io
-      upstream:
-        nodes:
-          tm-forum-api:8080: 1
-        type: roundrobin
-      plugins:
-        openid-connect:
-          proxy_opts:
-            https_proxy: http://squid-proxy.infra.svc.cluster.local:8888
-          bearer_only: true
-          use_jwks: true
-          client_id: tm-forum
-          client_secret: unused
-          ssl_verify: false
-          discovery: https://verifier.fancy-marketplace.biz/services/tm-forum/.well-known/openid-configuration
-        opa:
-          host: "http://localhost:8181"
-          policy: policy/main
-          with_body: true
+      config:
+        volume:
+          storageClass: "local-path"
+        users:
+          ngb:
+            - createdb
+        databases:
+          ngb: ngb
+        preparedDatabases:
+          ngb:
+            extensions:
+              postgis: public
+
+    credentials-config-service:
+      additionalEnvVars:
+        - name: FLYWAY_DATASOURCES_DEFAULT_LOCATIONS
+          value: classpath:db/migration/common,classpath:db/migration/mysql
+      registration:
+        enabled: true
+        services:
+          - id: tm-forum
+            defaultOidcScope: "default"
+            authorizationType: "DEEPLINK"
+            oidcScopes:
+              "default":
+                credentials:
+                  - type: LegalPersonCredential
+                    trustedParticipantsLists:
+                      - http://tir.127.0.0.1.nip.io
+                    # we want that every participant can access the marketplace and register
+                    trustedIssuersLists:
+                      - "*"
+                    jwtInclusion:
+                      enabled: true
+                      fullInclusion: true
+                dcql:
+                  credentials:
+                    - id: legal-person-query
+                      format: "vc+sd-jwt"
+                      multiple: false
+                      claims:
+                        - id: roles-claim
+                          path:
+                            - roles
+                      meta:
+                        vct_values:
+                          - LegalPersonCredential 
+    vcverifier:
+      ingress:
+        enabled: true
+        annotations:
+          traefik.ingress.kubernetes.io/router.tls: "true"
+        tls:
+          - hosts:
+              - verifier.fancy-marketplace.biz
+            secretName: tls-secret
+        hosts:
+          - host: verifier.fancy-marketplace.biz
+            paths:
+              - "/"
+      deployment:
+        logging:
+          level: DEBUG
+        verifier:
+          tirAddress: http://tir.127.0.0.1.nip.io/
+          did: did:web:fancy-marketplace.biz
+          supportedModes: ["byValue", "byReference"]
+          clientIdentification:
+            keyPath: /signing-key/client.key.pem
+            requestKeyAlgorithm: ES256
+            id: x509_san_dns:verifier.fancy-marketplace.biz
+            certificatePath: /certificate/client-chain-bundle.cert.pem
+        server:
+          host: https://verifier.fancy-marketplace.biz
+        configRepo:
+          configEndpoint: http://credentials-config-service:8080
+        additionalVolumes:
+          - name: signing-key
+            secret:
+              secretName: signing-key
+          - name: cert-chain
+            secret:
+              secretName: cert-chain
+          # add the self generated root ca to the system truststore
+          - name: root-ca
+            emptyDir: {}
+          - name: ca-to-add
+            secret:
+              secretName: root-ca
+        additionalVolumeMounts:
+          - name: signing-key
+            mountPath: /signing-key
+          - name: cert-chain
+            mountPath: /certificate
+          # add the self generated root ca to the system truststore
+          - name: root-ca
+            mountPath: /etc/ssl/cert.pem
+            subPath: cert.pem
+        additionalEnvVars:
+          - name: HTTPS_PROXY
+            value: "http://squid-proxy.infra.svc.cluster.local:8888"
+          - name: HTTP_PROXY
+            value: "http://squid-proxy.infra.svc.cluster.local:8888"
+          - name: NO_PROXY
+            value: "credentials-config-service,w3.org,trusted-issuers-list"
+        initContainers:
+          # add the self generated root ca to the system truststore
+          - name: add-root-ca
+            image: alpine:3.21.3
+            command:
+              - /bin/sh
+            args:
+              - -c
+              - |
+                #!/bin/sh
+                cp /etc/ssl/cert.pem /root-ca/cert.pdata.typeem
+                cat /root-ca/cacert.pem >> /root-ca/cert.pem
+            volumeMounts:
+              - name: root-ca
+                mountPath: /root-ca
+              - name: ca-to-add
+                mountPath: /root-ca/cacert.pem
+                subPath: cacert.pem
+          - name: register-at-tir
+            image: ubuntu
+            command:
+              - /bin/bash
+            args:
+              - -ec
+              - |
+                #!/bin/bash
+                apt-get -y update; apt-get -y install curl
+                curl -X 'POST' 'http://tir.trust-anchor.svc.cluster.local:8080/issuer' -H 'Content-Type: application/json' -d "{\"did\": \"did:web:fancy-marketplace.biz\", \"credentials\": []}"
+
+  odrlAuthorization:
+    # authorized access to tmforum
+    apisix:
+      etcd:
+        replicaCount: 1
+        persistence:
+          enabled: false
+      ingress:
+        enabled: true
+        hosts:
+          - host: fancy-marketplace.127.0.0.1.nip.io
+            paths: ["/"]
+      catchAllRoute:
+        enabled: false
+      routes:
+        - uri: /.well-known/openid-configuration
+          host: fancy-marketplace.127.0.0.1.nip.io
+          upstream:
+            nodes:
+              verifier:3000: 1
+            type: roundrobin
+          plugins:
+            proxy-rewrite:
+              uri: /services/tm-forum/.well-known/openid-configuration
+        - uri: /*
+          host: fancy-marketplace.127.0.0.1.nip.io
+          upstream:
+            nodes:
+              tm-forum-api:8080: 1
+            type: roundrobin
+          plugins:
+            openid-connect:
+              proxy_opts:
+                https_proxy: http://squid-proxy.infra.svc.cluster.local:8888
+              bearer_only: true
+              use_jwks: true
+              client_id: tm-forum
+              client_secret: unused
+              ssl_verify: false
+              discovery: https://verifier.fancy-marketplace.biz/services/tm-forum/.well-known/openid-configuration
+            opa:
+              host: "http://localhost:8181"
+              policy: policy/main
+              with_body: true
+    # policies for accessing the tmf
+    odrl-pap:
+      additionalEnvVars:
+        - name: GENERAL_ORGANIZATION_DID
+          value: did:web:fancy-marketplace.biz
+      ingress:
+        enabled: true
+        hosts:
+          - host: pap-consumer.127.0.0.1.nip.io
+            paths:
+              - "/"
+
 # contract management for distributing the buy events
 contract-management:
   did: did:web:fancy-marketplace.biz
