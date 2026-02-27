@@ -40,6 +40,34 @@ decentralizedIam:
     tpp:
       enabled: false
 
+
+decentralizedIam:
+  vcAuthentication:
+    postgres-operator:
+      enabled: false
+
+    managedPostgres:
+      enabled: false
+
+    trusted-issuers-list:
+      enabled: false
+
+    credentials-config-service:
+      enabled: false
+
+    vcverifier:
+      enabled: false
+
+  odrlAuthorization:
+    apisix:
+      enabled: false
+
+    odrl-pap:
+      enabled: false
+
+    tpp:
+      enabled: false
+
 managedMongo:
   enabled: false
 

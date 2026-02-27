@@ -130,7 +130,7 @@ decentralizedIam:
                 dcql:
                   credentials:
                     - id: legal-person-query
-                      format: "dc+sd-jwt"
+                      format: "vc+sd-jwt"
                       multiple: false
                       claims:
                         - id: name-claim
