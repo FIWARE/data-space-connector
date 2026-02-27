@@ -15,7 +15,7 @@ jobs:
         version: ${{ steps.out.outputs.version }}
 
       steps:
-        - uses: actions/checkout@v2
+        - uses: actions/checkout@v5
 
         - uses: actions/setup-java@v1
           with:
@@ -53,7 +53,7 @@ jobs:
 
         - name: Set version output
           id: out
-          run: echo "::set-output name=version::$(echo ${VERSION})"
+          run: echo "version=${VERSION}" >> $GITHUB_OUTPUT
 
     deploy:
       name: "Release charts"
@@ -62,7 +62,7 @@ jobs:
       runs-on: ubuntu-latest
 
       steps:
-        - uses: actions/checkout@v2
+        - uses: actions/checkout@v5
 
         - name: Fetch history
           run: git fetch --prune --unshallow
@@ -91,7 +91,7 @@ jobs:
 
       steps:
 
-        - uses: actions/checkout@v2
+        - uses: actions/checkout@v5
 
         - name: Generate Table of contents
           uses: technote-space/toc-generator@v4
