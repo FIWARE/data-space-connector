@@ -518,7 +518,6 @@ decentralizedIam:
               host: http://localhost:8181
               policy: policy/main
               with_body: true
-
     odrl-pap:
       additionalEnvVars:
         - name: GENERAL_ORGANIZATION_DID
