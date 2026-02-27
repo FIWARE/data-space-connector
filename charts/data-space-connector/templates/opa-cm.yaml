@@ -9,24 +9,24 @@ data:
   opa.yaml: |-
     services:
       - name: bundle-server
-        url: {{ .Values.opa.resourceUrl }}
+        url: {{ .Values.decentralizedIam.odrlAuthorization.opa.resourceUrl }}
     bundles:
       policies:
           service: bundle-server
           resource: policies.tar.gz
           polling:
-            min_delay_seconds: {{ .Values.opa.policies.minDelay }}
-            max_delay_seconds: {{ .Values.opa.policies.maxDelay }}
+            min_delay_seconds: {{ .Values.decentralizedIam.odrlAuthorization.opa.policies.minDelay }}
+            max_delay_seconds: {{ .Values.decentralizedIam.odrlAuthorization.opa.policies.maxDelay }}
       methods:
           service: bundle-server
           resource: methods.tar.gz
           polling:
-            min_delay_seconds: {{ .Values.opa.methods.minDelay }}
-            max_delay_seconds: {{ .Values.opa.methods.maxDelay }}
+            min_delay_seconds: {{ .Values.decentralizedIam.odrlAuthorization.opa.methods.minDelay }}
+            max_delay_seconds: {{ .Values.decentralizedIam.odrlAuthorization.opa.methods.maxDelay }}
       data:
           service: bundle-server
           resource: data.tar.gz
           polling:
-            min_delay_seconds: {{ .Values.opa.data.minDelay }}
-            max_delay_seconds: {{ .Values.opa.data.maxDelay }}
+            min_delay_seconds: {{ .Values.decentralizedIam.odrlAuthorization.opa.data.minDelay }}
+            max_delay_seconds: {{ .Values.decentralizedIam.odrlAuthorization.opa.data.maxDelay }}
     default_decision: /policy/main/allow

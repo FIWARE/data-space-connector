@@ -1,19 +1,3 @@
-# -- configuration to be shared between the authentication components
-authentication:
-  generatePasswords:
-    # -- should a password for the database connection of authentication components be generated in the cluster
-    enabled: true
-    #-- name of the secret to put the generated password into
-    secretName: authentication-database-secret
-
-# -- configuration to be shared between the dataplane components
-dataplane:
-  generatePasswords:
-    # -- should a password for the database connection of dataplane components be generated in the cluster
-    enabled: true
-    #-- name of the secret to put the generated password into
-    secretName: data-service-secret
-
 # -- configuration to be shared between the issuance components
 issuance:
   generatePasswords:
@@ -22,376 +6,180 @@ issuance:
     #-- name of the secret to put the generated password into
     secretName: issuance-secret
 
-# -- configuration for the mysql to be deployed as part of the connector, see https://github.com/bitnami/charts/tree/main/bitnami/mysql for all options
-mysql:
-  kubeVersion: 1.34-1
-  # -- should it be enabled? set to false if one outside the chart is used.
+decentralizedIam:
   enabled: true
-  global:
-    security:
-      # allow the image from the legacy repo
-      allowInsecureImages: true
-  # -- configuration of the used image
-  image:
-    # -- repository where the image is held, see https://github.com/bitnami/charts/issues/35164 for further info
-    repository: bitnamilegacy/mysql
-  # -- allows to set a fixed name for the services
-  fullnameOverride: authentication-mysql
-  # -- configure authentication to mysql
-  auth:
-    # -- name of the secret to take the passowrds from
-    existingSecret: authentication-database-secret
-  # -- scripts to be executed on db startup
-  initdbScripts:
-    create.sql: |
-      CREATE DATABASE tildb;
-      CREATE DATABASE ccsdb;
 
-# -- configuration for the trusted-issuers-list to be deployed as part of the connector, see https://github.com/FIWARE/helm-charts/tree/main/charts/trusted-issuers-list for all options
-trusted-issuers-list:
-  # -- should it be enabled? set to false if one outside the chart is used.
-  enabled: true
-  # -- allows to set a fixed name for the services
-  fullnameOverride: trusted-issuers-list
-  # -- connection to the database
-  database:
-    # -- should persistence be used?
-    persistence: true
-    # -- name of the db user
-    username: root
-    # -- configuration for the existing secret to get the passwords from
-    existingSecret:
+  # -- configuration for the vc-authentication to be deployed as part of the connector, see https://github.com/FIWARE/vc-authentication/tree/master
+  vcAuthentication:
+
+    ## Usage of the postgres-operator - see https://github.com/zalando/postgres-operator
+    managedPostgres:
+      # -- should it be enabled? Requires the postgres-operator CRDs to be installed before applying the chart
       enabled: true
-      name: authentication-database-secret
-      key: mysql-root-password
-    # -- host of the database
-    host: authentication-mysql
-    # -- name of the schema inside the db
-    name: tildb
+      # -- config as defined in https://github.com/zalando/postgres-operator/blob/master/charts/postgres-operator/crds/postgresqls.yaml
+      config:
+        teamId: "dsc"
+        numberOfInstances: 1
+        postgresql:
+          version: "16"
+        volume:
+          size: 1Gi
+        users:
+          admin: # maintainer
+            - superuser
+            - createdb
+          til:
+            - createdb
+          ccs:
+            - createdb
+          pap:
+            - createdb
+          keycloak:
+            - createdb
+          rainbow:
+            - createdb
+        databases:
+          tildb: til
+          ccsdb: ccs
+          papdb: pap
+          keycloakdb: keycloak
+          rainbowdb: rainbow
 
-# -- configuration for the vcverifier to be deployed as part of the connector, see https://github.com/FIWARE/helm-charts/tree/main/charts/vcverifier for all options
-vcverifier:
-  # -- should it be enabled? set to false if one outside the chart is used.
-  enabled: true
-  # -- allows to set a fixed name for the services
-  fullnameOverride: verifier
-  # -- configuration for the m2m flow, in case the tir is requiring authentication
-  m2m:
-    # -- we do not need authentication here
-    authEnabled: false
-
-# -- configuration for the digital-signature.service to be deployed as part of the connector in case of did:elsi support
-dss:
-  # -- should it be enabled?
-  enabled: false
-  # -- allows to set a fixed name for the services
-  fullnameOverride: dss
-  # -- can be used to provide the crl for ca's provided as truststore to the dss
-  crl:
-    # -- should it be enabled?
-    enabled: false
-
-
-# -- configuration for the credentials-config-service to be deployed as part of the connector, see https://github.com/FIWARE/helm-charts/tree/main/charts/credentials-config-service for all options
-credentials-config-service:
-  # -- should it be enabled? set to false if one outside the chart is used.
-  enabled: true
-  # -- allows to set a fixed name for the services
-  fullnameOverride: credentials-config-service
-  # -- connection to the database
-  database:
-    # -- should persistence be used?
-    persistence: true
-    # -- name of the db user
-    username: root
-    # -- configuration for the existing secret to get the passwords from
-    existingSecret:
+    # -- configuration for the trusted-issuers-list to be deployed as part of the connector, see https://github.com/FIWARE/helm-charts/tree/main/charts/trusted-issuers-list for all options
+    trusted-issuers-list:
+      # -- should it be enabled? set to false if one outside the chart is used.
       enabled: true
-      name: authentication-database-secret
-      key: mysql-root-password
-    # -- host of the database
-    host: authentication-mysql
-    # -- name of the schema inside the db
-    name: ccsdb
-  registration:
-    enabled: false
-# -- configuration for the postgresql to be deployed as part of the connector, see https://github.com/bitnami/charts/tree/main/bitnami/postgresql for all options
-postgresql:
-  kubeVersion: 1.34-1
-  # -- should it be enabled? set to false if one outside the chart is used.
-  enabled: true
-  global:
-    security:
-      # allow the image from the legacy repo
-      allowInsecureImages: true
-  # -- configuration of the used image
-  image:
-    # -- repository where the image is held, see https://github.com/bitnami/charts/issues/35164 for further info
-    repository: bitnamilegacy/postgresql
-    # -- fixes the unpullable image referenced in the chart
-    tag: 13.18.0
-  # -- allows to set a fixed name for the services
-  fullnameOverride: postgresql
-  generatePasswords:
-    # -- should a password for the database be generated in the cluster
-    enabled: true
-    # -- name of the secret to store the password in
-    secretName: database-secret
-  # -- configure authentication to mysql
-  auth:
-    # -- name of the secret to take the passowrds from
-    existingSecret: database-secret
-    # -- key of the secrets inside the secret
-    secretKeys:
-      adminPasswordKey: postgres-admin-password
-      userPasswordKey: postgres-user-password
-  # -- configuration for the primary of the db
-  primary:
-    # -- scripts to be run on intialization
-    initdb:
-      scripts:
-        create.sh: |
-          psql postgresql://postgres:${POSTGRES_PASSWORD}@localhost:5432 -c "CREATE DATABASE pap;"
-          psql postgresql://postgres:${POSTGRES_PASSWORD}@localhost:5432 -c "CREATE DATABASE keycloak;"
-          psql postgresql://postgres:${POSTGRES_PASSWORD}@localhost:5432 -c "CREATE DATABASE rainbow;"
+      # -- allows to set a fixed name for the services
+      fullnameOverride: trusted-issuers-list
+      # -- connection to the database
+      database:
+        # -- should persistence be used?
+        persistence: true
+        # -- name of the db dialect
+        dialect: POSTGRES
+        # -- name of the db user
+        username: postgres
+        # -- configuration for the existing secret to get the passwords from
+        existingSecret:
+          enabled: true
+          name: postgres.postgres.credentials.postgresql.acid.zalan.do
+          key: password
+        # -- host of the database
+        host: postgres
+        # -- host of the database
+        port: 5432
+        # -- name of the schema inside the db
+        name: tildb
 
-# -- configuration for the odrl-pap to be deployed as part of the connector, see https://github.com/FIWARE/helm-charts/tree/main/charts/odrl-pap for all options
-odrl-pap:
-  # -- should it be enabled? set to false if one outside the chart is used.
-  enabled: true
-  # -- allows to set a fixed name for the services
-  fullnameOverride: odrl-pap
-  # -- connection to the database
-  database:
-    # -- url to connect the db at
-    url: jdbc:postgresql://postgresql:5432/pap
-    # -- username to access the db
-    username: postgres
-    # -- secret to take the password from
-    existingSecret:
+    # -- configuration for the vcverifier to be deployed as part of the connector, see https://github.com/FIWARE/helm-charts/tree/main/charts/vcverifier for all options
+    vcverifier:
+      # -- should it be enabled? set to false if one outside the chart is used.
       enabled: true
-      name: database-secret
-      key: postgres-admin-password
+      # -- allows to set a fixed name for the services
+      fullnameOverride: verifier
+      # -- configuration for the m2m flow, in case the tir is requiring authentication
+      m2m:
+        # -- we do not need authentication here
+        authEnabled: false
 
-# -- configuration for the open-policy-agent to be deployed as part of the connector fulfilling the role of the PDP, as a sidecar to apisix
-opa:
-  # -- should an opa sidecar be deployed to apisix
-  enabled: true
-  # -- address of the pap to get the policies from
-  resourceUrl: http://odrl-pap:8080/bundles/service/v1
-  # -- port to make opa available at
-  port: 8181
-  # -- pull delays for the policies bundle
-  policies:
-    minDelay: 2
-    maxDelay: 4
-  # -- pull delays for the methods bundle
-  methods:
-    minDelay: 1
-    maxDelay: 3
-  # -- pull delays for the data bundle
-  data:
-    minDelay: 1
-    maxDelay: 15
-
-
-# -- integration of checks for the transfer process protocol
-tpp:
-  # -- should checking for a running transfer process be enabled
-  enabled: false
-  transfers:
-    # -- host of the endpoint to check the process id, e.g. rainbow
-    host: ""
-    # -- path to check the id at
-    path: /transfers
-  
-# -- configuration for apisix to be deployed as part of the connector, see https://github.com/bitnami/charts/tree/main/bitnami/apisix for all options
-apisix:
-  kubeVersion: 1.34-1
-  global:
-    security:
-      # allow the image from the legacy repo
-      allowInsecureImages: true
-  # -- configuration of the used image
-  image:
-    # -- repository where the image is held, see https://github.com/bitnami/charts/issues/35164 for further info
-    repository: bitnamilegacy/apisix
-    debug: true
-  waitContainer:
-    # -- configuration of the used image
-    image:
-      # -- repository where the image is held, see https://github.com/bitnami/charts/issues/35164 for further info
-      repository: bitnamilegacy/os-shell
-  # -- should it be enabled? set to false if one outside the chart is used.
-  enabled: true
-  # -- configuration in regard to the apisix control plane
-  controlPlane:
-    # -- should it be enabled
-    enabled: true
-    # -- resource preset to have sufficient memory
-    resourcesPreset: small
-  # -- configuration in regard to the apisix ingressController
-  ingressController:
-    # -- should it be enabled
-    enabled: false
-    # -- configuration of the used image
-    image:
-      # -- repository where the image is held, see https://github.com/bitnami/charts/issues/35164 for further info
-      repository: bitnamilegacy/apisix-ingress-controller
-  # -- configuration in regard to the apisix etcd
-  etcd:
-    kubeVersion: 1.34-1
-    # -- should it be enabled
-    enabled: true
-    global:
-      security:
-        # allow the image from the legacy repo
-        allowInsecureImages: true
-    # -- configuration of the used image
-    image:
-      # -- repository where the image is held, see https://github.com/bitnami/charts/issues/35164 for further info
-      repository: bitnamilegacy/etcd
-    # -- persistence configuration of etcd
-    persistence:
-      # -- should it be enabled
-      enabled: false
-  # -- configuration in regard to the apisix dataplane
-  dataPlane:
-    # -- resource preset to have sufficient memory
-    resourcesPreset: small
-    # -- configuration for extra configmaps to be deployed
-    extraConfig:
+    # -- configuration for the credentials-config-service to be deployed as part of the connector, see https://github.com/FIWARE/helm-charts/tree/main/charts/credentials-config-service for all options
+    credentials-config-service:
+      # -- should it be enabled? set to false if one outside the chart is used.
+      enabled: true
+      # -- allows to set a fixed name for the services
+      fullnameOverride: credentials-config-service
       deployment:
-        # -- allows to configure apisix through a yaml file
-        role_data_plane:
-          config_provider: yaml
-      apisix:
-        extra_lua_path: /extra/apisix/plugins/?.lua
-    # -- extra volumes
-    # we need `routes` to declaratively configure the routes
-    # and the config for the opa sidecar
-    extraVolumes:
-      - name: routes
-        configMap:
-          name: apisix-routes
-      - name: opa-config
-        configMap:
-          name: opa-config
-      - name: opa-lua
-        configMap:
-          name: opa-lua
-      - name: tpp-policy
-        configMap:
-          name: tpp-policy
-    # -- extra volumes to be mounted
-    extraVolumeMounts:
-      - name: routes
-        mountPath: /usr/local/apisix/conf/apisix.yaml
-        subPath: apisix.yaml
-      - name: opa-lua
-        mountPath: /usr/local/apisix/apisix/plugins/opa/helper.lua
-        subPath: helper.lua
-      - name: opa-lua
-        mountPath: /usr/local/apisix/apisix/plugins/opa.lua
-        subPath: opa.lua
-    # -- sidecars to be deployed for apisix
-    sidecars:
-      # -- we want to deploy the open-policy-agent as a pdp
-      - name: open-policy-agent
-        image: openpolicyagent/opa:1.2.0
-        imagePullPolicy: IfNotPresent
-        ports:
-          - name: http
-            containerPort: 8181
-            protocol: TCP
-        # opa should be started to listen at 8181 and get its config from the mounted config yaml
-        args:
-          - "run"
-          - "--ignore=.*"  # exclude hidden dirs created by Kubernetes
-          - "--server"
-          - "-l"
-          - "debug"
-          - "-c"
-          - "/config/opa.yaml"
-          - "--addr"
-          - "0.0.0.0:8181"
-          - "/tpp/tpp.rego"
-        volumeMounts:
-          - name: opa-config
-            mountPath: /config
-          - name: tpp-policy
-            mountPath: /tpp
-  # -- configuration in regard to the apisix dashboard
-  dashboard:
-    # -- should it be enabled
-    enabled: false
-    # -- resource preset to have sufficient memory
-    resourcesPreset: small
- 
-  # -- configuration of a catchAll-route(e.g. /*)
-  catchAllRoute:
-    # -- should it be enabled
-    enabled: true
-    # -- configuration to connect the upstream broker
-    upstream:
-      url: http://my-broker:8000
-    # -- configuration to verify the jwt, coming from the verifier
-    oidc:
-      clientId: mySecuredService
-      discoveryEndpoint: http://verifier:3000/services/mySecuredService/.well-known/openid-configuration
+        image:
+          tag: 3.4.1 # To fix bug. Remove when update CCS chart to latest version
+      # -- connection to the database
+      database:
+        # -- should persistence be used?
+        persistence: true
+        # -- name of the db dialect
+        dialect: POSTGRES
+        # -- name of the db user
+        username: postgres
+        # -- configuration for the existing secret to get the passwords from
+        existingSecret:
+          enabled: true
+          name: postgres.postgres.credentials.postgresql.acid.zalan.do
+          key: password
+        # -- host of the database
+        host: postgres
+        # -- host of the database
+        port: 5432
+        # -- name of the schema inside the db
+        name: ccsdb
+      registration:
+        enabled: false
 
-  # -- configuration of routes for apisix
-  routes:
-#    - uri: /myRoute
-#      upstream:
-#        nodes:
-#            http://my-upstream-service:8080: 1
-#        type: roundrobin
-#      plugins:
-#        openid-connect:
-#          client_id: test-id
-#          client_secret: the-secret
-#          bearer_only: true
-#          use_jwks: true
-#          discovery: http://the-service/.well-known/openid-configuration
-#        opa:
-#          host: "http://localhost:8181"
-#          policy: policy/main/allow
+    # -- configuration for the digital-signature.service to be deployed as part of the connector in case of did:elsi support
+    dss:
+      # -- should it be enabled?
+      enabled: false
+      # -- allows to set a fixed name for the services
+      fullnameOverride: dss
+      # -- can be used to provide the crl for ca's provided as truststore to the dss
+      crl:
+        # -- should it be enabled?
+        enabled: false
 
-# -- configuration for the postgresql to be deployed as part of the connector, see https://github.com/bitnami/charts/tree/main/bitnami/postgresql for all options
-postgis:
-  kubeVersion: 1.34-1
-  # -- should it be enabled? set to false if one outside the chart is used.
-  enabled: true
-  global:
-    security:
-      # allow the image from the legacy repo
-      allowInsecureImages: true
-  image:
-    # -- fixes the unpullable image referenced in the chart
-    tag: 13.18.0
-    # -- repository where the image is held, see https://github.com/bitnami/charts/issues/35164 for further info
-    repository: bitnamilegacy/postgresql
-  # -- overrides the generated name, provides stable service names - this should be avoided if multiple instances are available in the same namespace
-  fullnameOverride: data-service-postgis
-  # -- overrides the generated name, provides stable service names - this should be avoided if multiple instances are available in the same namespace
-  nameOverride: data-service-postgis
-  ## auth configuration for the database
-  auth:
-    existingSecret: data-service-secret
-    secretKeys:
-      adminPasswordKey: postgres-admin-password
-      userPasswordKey: postgres-user-password
-  ## configuration of the postgres primary replicas
-  primary:
-    ## provide db initialization
-    initdb:
-      ## provide scripts for initialization
-      scripts:
-        # -- enable the postgis extension and create the database as expected by scorpio
-        enable.sh: |
-          psql postgresql://postgres:${POSTGRES_PASSWORD}@localhost:5432 -c "CREATE EXTENSION postgis;"
-          psql postgresql://postgres:${POSTGRES_PASSWORD}@localhost:5432 -c "CREATE DATABASE ngb;"
+  # configuration for the odrl-authorization to be deployed as part of the connector, see https://github.com/FIWARE/odrl-authorization/tree/master
+  odrlAuthorization:
+
+    # -- configuration for the odrl-pap to be deployed as part of the connector, see https://apisix.apache.org/
+    apisix:
+      ingress-controller:
+        enabled: false
+
+    # -- configuration for the odrl-pap to be deployed as part of the connector, see https://github.com/FIWARE/helm-charts/tree/main/charts/odrl-pap for all options
+    odrl-pap:
+      # -- should it be enabled? set to false if one outside the chart is used.
+      enabled: true
+      # -- allows to set a fixed name for the services
+      fullnameOverride: odrl-pap
+      # -- connection to the database
+      database:
+        # -- url to connect the db at
+        url: jdbc:postgresql://postgres:5432/papdb
+        # -- username to access the db
+        username: postgres
+        # -- secret to take the password from
+        existingSecret:
+          enabled: true
+          name: postgres.postgres.credentials.postgresql.acid.zalan.do
+          key: password
+
+    # -- configuration for the open-policy-agent to be deployed as part of the connector fulfilling the role of the PDP, as a sidecar to apisix
+    opa:
+      # -- should an opa sidecar be deployed to apisix
+      enabled: true
+      # -- address of the pap to get the policies from
+      resourceUrl: http://odrl-pap:8080/bundles/service/v1
+      # -- port to make opa available at
+      port: 8181
+      # -- pull delays for the policies bundle
+      policies:
+        minDelay: 2
+        maxDelay: 4
+      # -- pull delays for the methods bundle
+      methods:
+        minDelay: 1
+        maxDelay: 3
+      # -- pull delays for the data bundle
+      data:
+        minDelay: 1
+        maxDelay: 15
+
+    # -- integration of checks for the transfer process protocol
+    tpp:
+      # -- should checking for a running transfer process be enabled
+      enabled: false
+      transfers:
+        # -- host of the endpoint to check the process id, e.g. rainbow
+        host: ""
+        # -- path to check the id at
+        path: /transfers
 
 ## configuration of the context-broker - see https://github.com/FIWARE/helm-charts/tree/main/charts/scorpio-broker-aaio for details
 scorpio:
@@ -407,13 +195,13 @@ scorpio:
   ## configuration of the database to be used by broker
   db:
     # -- host of the db
-    dbhost: data-service-postgis
+    dbhost: postgres
     # -- username to be used
     user: postgres
     existingSecret:
       enabled: true
-      name: data-service-secret
-      key: postgres-admin-password
+      name: postgres.postgres.credentials.postgresql.acid.zalan.do
+      key: password
   ## configuration of the readiness probe
   readinessProbe:
     # -- path to be used for the readiness probe, older versions used /actuator/health
@@ -517,11 +305,11 @@ keycloak:
     enabled: false
   # -- host of the external db to be used
   externalDatabase:
-    host: postgresql
-    database: keycloak
+    host: postgres
+    database: keycloakdb
     user: postgres
-    existingSecret: database-secret
-    existingSecretPasswordKey: postgres-admin-password
+    existingSecret: postgres.postgres.credentials.postgresql.acid.zalan.do
+    existingSecretPasswordKey: password
 
   # -- extra volumes to be mounted
   extraVolumeMounts:
@@ -534,12 +322,6 @@ keycloak:
       value: "--import-realm"
     - name: KC_FEATURES
       value: "oid4vc-vci"
-    # password for reading the key store connected to the did
-    - name: STORE_PASS
-      valueFrom:
-        secretKeyRef:
-          name: issuance-secret
-          key: store-pass
     # keycloak admin password
     - name: KC_ADMIN_PASSWORD
       valueFrom:
@@ -794,7 +576,8 @@ tm-forum-api:
         # -- name of the scope
         name: default
         # -- name of the default credential to be configured
-        credentialType: VerifiableCredential
+        credentialTypes: 
+          - VerifiableCredential
         # -- needs to be updated for the concrete dataspace
         trustedParticipantsLists: http://tir.trust-anchor.org
         trustedIssuersLists: http://trusted-issuers-list:8080

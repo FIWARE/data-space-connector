@@ -14,14 +14,14 @@ data:
 
     default allow := false
 
-    host = {{ .Values.tpp.transfers.host | quote }}
-    path = {{ .Values.tpp.transfers.path | quote }}
+    host = {{ .Values.decentralizedIam.odrlAuthorization.tpp.transfers.host | quote }}
+    path = {{ .Values.decentralizedIam.odrlAuthorization.tpp.transfers.path | quote }}
     url = sprintf("%v/%v/%v", [host, path, input.request.headers["transferid"]])
 
     response := http.send({"method": "get", "url": url})
   
 
-    {{- if .Values.tpp.checkMain }}
+    {{- if .Values.decentralizedIam.odrlAuthorization.tpp.checkMain }}
     allow if {
       response.body["dspace:state"] == "dspace:STARTED"
       main.allow == true
