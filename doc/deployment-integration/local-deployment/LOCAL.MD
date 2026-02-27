@@ -1494,7 +1494,7 @@ dss:
 
 Once everything is properly configured, the Dataspace can be deployed locally via:
 ```shell
-  mvn clean deploy -Plocal,etsi
+  mvn clean deploy -Plocal,elsi
 ```
 
 The interaction is the same as in all previously described steps - see [Demo Interactions](#demo-interactions). The most visible difference is in the credential.
