@@ -2,3 +2,7 @@ Chart.lock
 /charts/**/charts
 .DS_Store
 it/target
+helm
+target
+maven-status
+.idea
