@@ -674,7 +674,7 @@ contract-management:
       url: http://odrl-pap:8080
 
 
-# -- configuration for the did-helper, should only be used for demonstrational deployments, see https://github.com/wistefan/did-helper
+# -- configuration for the did-helper, see https://github.com/wistefan/did-helper
 did:
   enabled: false
 
