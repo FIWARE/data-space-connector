@@ -1,11 +1,11 @@
 apiVersion: v2
 name: trust-anchor
 description: Umbrella Chart to provide a minimal trust anchor for a FIWARE Dataspace
-version: 0.2.1
+version: 0.3.0
 dependencies:
   - name: trusted-issuers-list
     condition: trusted-issuers-list.enabled
-    version: 0.6.2
+    version: 0.16.0
     repository: https://fiware.github.io/helm-charts
   - name: mysql
     condition: mysql.enabled
