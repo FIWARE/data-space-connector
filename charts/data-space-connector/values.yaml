@@ -1097,7 +1097,7 @@ marketplace:
     initContainers: false
     propagateToken: true
 
-dsp:
+fdsc-edc:
   common:
     ## configuration for the k8s service to access cp
     service:
@@ -1412,6 +1412,13 @@ dsp:
           management:
             path: /api/v1/management
             port: 8085
+
+    vault:
+      hashicorp:
+        enabled: true
+        url: "http://{{ .Release.Name }}-vault:8200"
+        token: "root"
+        timeout: 30
 
 # -- helper script to retrieve credentials for applications
 credentials:

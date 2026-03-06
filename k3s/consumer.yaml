@@ -655,236 +655,7 @@ keycloak:
           }
         ]
       }
-    clients: |
-      {
-        "clientId": "did:web:mp-operations.org",
-        "enabled": true,
-        "description": "Client to connect mp-operations.org",
-        "surrogateAuthRequired": false,
-        "alwaysDisplayInConsole": false,
-        "clientAuthenticatorType": "client-secret",
-        "defaultRoles": [],
-        "redirectUris": [],   
-        "webOrigins": [],
-        "notBefore": 0,
-        "bearerOnly": false,
-        "consentRequired": false,
-        "standardFlowEnabled": true,
-        "implicitFlowEnabled": false,
-        "directAccessGrantsEnabled": false,
-        "serviceAccountsEnabled": true,
-        "publicClient": false,
-        "frontchannelLogout": false,
-        "secret": "kpWxZn7LgcWT84AzS3aS5X5URmL0FC0Q",
-        "protocol": "openid-connect",
-        "attributes": {
-          "client.secret.creation.time": "1675260539"
-        },
-        "protocolMappers": [
-        ],
-        "authenticationFlowBindingOverrides": {},
-        "fullScopeAllowed": true,
-        "nodeReRegistrationTimeout": -1,
-        "defaultClientScopes": [],
-        "optionalClientScopes": []
-      },
-      {
-        "clientId": "did:web:fancy-marketplace.biz",
-        "enabled": true,
-        "description": "Client to connect itself",
-        "surrogateAuthRequired": false,
-        "alwaysDisplayInConsole": false,
-        "clientAuthenticatorType": "client-secret",
-        "defaultRoles": [],
-        "redirectUris": [],   
-        "webOrigins": [],
-        "notBefore": 0,
-        "bearerOnly": false,
-        "consentRequired": false,
-        "standardFlowEnabled": true,
-        "implicitFlowEnabled": false,
-        "directAccessGrantsEnabled": false,
-        "serviceAccountsEnabled": false,
-        "publicClient": false,
-        "frontchannelLogout": false,
-        "protocol": "openid-connect",
-        "attributes": {
-          "client.secret.creation.time": "1675260539"
-        },
-        "protocolMappers": [
-        ],
-        "authenticationFlowBindingOverrides": {},
-        "fullScopeAllowed": true,
-        "nodeReRegistrationTimeout": -1,
-        "defaultClientScopes": [],
-        "optionalClientScopes": []
-      },
-      {
-        "clientId": "account",
-        "name": "${client_account}",
-        "rootUrl": "${authBaseUrl}",
-        "baseUrl": "/realms/test-realm/account/",
-        "surrogateAuthRequired": false,
-        "enabled": true,
-        "alwaysDisplayInConsole": false,
-        "clientAuthenticatorType": "client-secret",
-        "redirectUris": [
-          "/realms/test-realm/account/*"
-        ],
-        "webOrigins": [],
-        "notBefore": 0,
-        "bearerOnly": false,
-        "consentRequired": false,
-        "standardFlowEnabled": true,
-        "implicitFlowEnabled": false,
-        "directAccessGrantsEnabled": false,
-        "serviceAccountsEnabled": true,
-        "publicClient": true,
-        "frontchannelLogout": false,
-        "protocol": "openid-connect",
-        "attributes": {
-          "client.secret.creation.time": "1675260539",
-          "realm_client": "false",
-          "post.logout.redirect.uris": "+"
-        },
-        "authenticationFlowBindingOverrides": {},
-        "fullScopeAllowed": true,
-        "nodeReRegistrationTimeout": 0,
-        "defaultClientScopes": [
-          "web-origins",
-          "acr",
-          "roles",
-          "profile",
-          "basic",
-          "email"
-        ],
-        "optionalClientScopes": [
-          "address",
-          "phone",
-          "offline_access",
-          "organization",
-          "microprofile-jwt"
-        ]
-      },
-      {
-        "clientId": "account-console",
-        "name": "${client_account-console}",
-        "rootUrl": "${authBaseUrl}",
-        "baseUrl": "/realms/test-realm/account/",
-        "surrogateAuthRequired": false,
-        "enabled": true,
-        "alwaysDisplayInConsole": false,
-        "clientAuthenticatorType": "client-secret",
-        "redirectUris": [
-          "/realms/test-realm/account/*"
-        ],
-        "webOrigins": [],
-        "notBefore": 0,
-        "bearerOnly": false,
-        "consentRequired": false,
-        "standardFlowEnabled": true,
-        "implicitFlowEnabled": false,
-        "directAccessGrantsEnabled": true,
-        "serviceAccountsEnabled": false,
-        "publicClient": true,
-        "frontchannelLogout": false,
-        "protocol": "openid-connect",
-        "attributes": {
-          "realm_client": "false",
-          "post.logout.redirect.uris": "+",
-          "pkce.code.challenge.method": "S256"
-        },
-        "authenticationFlowBindingOverrides": {},
-        "fullScopeAllowed": true,
-        "nodeReRegistrationTimeout": 0,
-        "protocolMappers": [
-          {
-            "id": "706c5202-1b03-4fad-a5b8-484287e941f8",
-            "name": "audience resolve",
-            "protocol": "openid-connect",
-            "protocolMapper": "oidc-audience-resolve-mapper",
-            "consentRequired": false,
-            "config": {}
-          }
-        ],
-        "defaultClientScopes": [
-          "web-origins",
-          "acr",
-          "roles",
-          "profile",
-          "basic",
-          "email"
-        ],
-        "optionalClientScopes": [
-          "address",
-          "phone",
-          "offline_access",
-          "organization",
-          "microprofile-jwt",
-          "LegalPersonCredential",
-          "OperatorCredential",
-          "UserCredential",
-          "MarketplaceCredential",
-          "MembershipCredential"
-        ]
-      },
-      {
-        "clientId": "admin-cli",
-        "name": "${client_admin-cli}",
-        "surrogateAuthRequired": false,
-        "enabled": true,
-        "alwaysDisplayInConsole": false,
-        "clientAuthenticatorType": "client-secret",
-        "secret": "kpWxZn7LgcWT84AzS3aS5X5URmL0FC0Q",
-        "redirectUris": [],
-        "webOrigins": [],
-        "notBefore": 0,
-        "bearerOnly": false,
-        "consentRequired": false,
-        "standardFlowEnabled": false,
-        "implicitFlowEnabled": false,
-        "directAccessGrantsEnabled": true,
-        "serviceAccountsEnabled": true,
-        "publicClient": false,
-        "frontchannelLogout": false,
-        "protocol": "openid-connect",
-        "attributes": {
-          "client.secret.creation.time": "1675260539",
-          "realm_client": "false",
-          "client.use.lightweight.access.token.enabled": "true"
-        },
-        "authenticationFlowBindingOverrides": {},
-        "fullScopeAllowed": true,
-        "nodeReRegistrationTimeout": 0,
-        "protocolMappers": [
-          {
-            "name": "audience resolve",
-            "protocol": "openid-connect",
-            "protocolMapper": "oidc-audience-resolve-mapper",
-            "consentRequired": false,
-            "config": {}
-          }
-        ],
-        "defaultClientScopes": [
-          "web-origins",
-          "acr",
-          "roles",
-          "profile",
-          "basic",
-          "email"
-        ],
-        "optionalClientScopes": [
-          "address",
-          "phone",
-          "offline_access",
-          "organization",
-          "microprofile-jwt",
-          "UserCredential",
-          "LegalPersonCredential",
-          "MarketplaceCredential"
-        ]
-      }
-
+    clients: "{\n  \"clientId\": \"did:web:mp-operations.org\",\n  \"enabled\": true,\n  \"description\": \"Client to connect mp-operations.org\",\n  \"surrogateAuthRequired\": false,\n  \"alwaysDisplayInConsole\": false,\n  \"clientAuthenticatorType\": \"client-secret\",\n  \"defaultRoles\": [],\n  \"redirectUris\": [],   \n  \"webOrigins\": [],\n  \"notBefore\": 0,\n  \"bearerOnly\": false,\n  \"consentRequired\": false,\n  \"standardFlowEnabled\": true,\n  \"implicitFlowEnabled\": false,\n  \"directAccessGrantsEnabled\": false,\n  \"serviceAccountsEnabled\": true,\n  \"publicClient\": false,\n  \"frontchannelLogout\": false,\n  \"secret\": \"kpWxZn7LgcWT84AzS3aS5X5URmL0FC0Q\",\n  \"protocol\": \"openid-connect\",\n  \"attributes\": {\n    \"client.secret.creation.time\": \"1675260539\"\n  },\n  \"protocolMappers\": [\n  ],\n  \"authenticationFlowBindingOverrides\": {},\n  \"fullScopeAllowed\": true,\n  \"nodeReRegistrationTimeout\": -1,\n  \"defaultClientScopes\": [],\n  \"optionalClientScopes\": []\n},\n{\n  \"clientId\": \"did:web:fancy-marketplace.biz\",\n  \"enabled\": true,\n  \"description\": \"Client to connect itself\",\n  \"surrogateAuthRequired\": false,\n  \"alwaysDisplayInConsole\": false,\n  \"clientAuthenticatorType\": \"client-secret\",\n  \"defaultRoles\": [],\n  \"redirectUris\": [],   \n  \"webOrigins\": [],\n  \"notBefore\": 0,\n  \"bearerOnly\": false,\n  \"consentRequired\": false,\n  \"standardFlowEnabled\": true,\n  \"implicitFlowEnabled\": false,\n  \"directAccessGrantsEnabled\": false,\n  \"serviceAccountsEnabled\": false,\n  \"publicClient\": false,\n  \"frontchannelLogout\": false,\n  \"protocol\": \"openid-connect\",\n  \"attributes\": {\n    \"client.secret.creation.time\": \"1675260539\"\n  },\n  \"protocolMappers\": [\n  ],\n  \"authenticationFlowBindingOverrides\": {},\n  \"fullScopeAllowed\": true,\n  \"nodeReRegistrationTimeout\": -1,\n  \"defaultClientScopes\": [],\n  \"optionalClientScopes\": []\n},\n{\n  \"clientId\": \"account\",\n  \"name\": \"${client_account}\",\n  \"rootUrl\": \"${authBaseUrl}\",\n  \"baseUrl\": \"/realms/test-realm/account/\",\n  \"surrogateAuthRequired\": false,\n  \"enabled\": true,\n  \"alwaysDisplayInConsole\": false,\n  \"clientAuthenticatorType\": \"client-secret\",\n  \"redirectUris\": [\n    \"/realms/test-realm/account/*\"\n  ],\n  \"webOrigins\": [],\n  \"notBefore\": 0,\n  \"bearerOnly\": false,\n  \"consentRequired\": false,\n  \"standardFlowEnabled\": true,\n  \"implicitFlowEnabled\": false,\n  \"directAccessGrantsEnabled\": false,\n  \"serviceAccountsEnabled\": true,\n  \"publicClient\": true,\n  \"frontchannelLogout\": false,\n  \"protocol\": \"openid-connect\",\n  \"attributes\": {\n    \"client.secret.creation.time\": \"1675260539\",\n    \"realm_client\": \"false\",\n    \"post.logout.redirect.uris\": \"+\"\n  },\n  \"authenticationFlowBindingOverrides\": {},\n  \"fullScopeAllowed\": true,\n  \"nodeReRegistrationTimeout\": 0,\n  \"defaultClientScopes\": [\n    \"web-origins\",\n    \"acr\",\n    \"roles\",\n    \"profile\",\n    \"basic\",\n    \"email\"\n  ],\n  \"optionalClientScopes\": [\n    \"address\",\n    \"phone\",\n    \"offline_access\",\n    \"organization\",\n    \"microprofile-jwt\"\n  ]\n},\n{\n  \"clientId\": \"account-console\",\n  \"name\": \"${client_account-console}\",\n  \"rootUrl\": \"${authBaseUrl}\",\n  \"baseUrl\": \"/realms/test-realm/account/\",\n  \"surrogateAuthRequired\": false,\n  \"enabled\": true,\n  \"alwaysDisplayInConsole\": false,\n  \"clientAuthenticatorType\": \"client-secret\",\n  \"redirectUris\": [\n    \"/realms/test-realm/account/*\"\n  ],\n  \"webOrigins\": [],\n  \"notBefore\": 0,\n  \"bearerOnly\": false,\n  \"consentRequired\": false,\n  \"standardFlowEnabled\": true,\n  \"implicitFlowEnabled\": false,\n  \"directAccessGrantsEnabled\": true,\n  \"serviceAccountsEnabled\": false,\n  \"publicClient\": true,\n  \"frontchannelLogout\": false,\n  \"protocol\": \"openid-connect\",\n  \"attributes\": {\n    \"realm_client\": \"false\",\n    \"post.logout.redirect.uris\": \"+\",\n    \"pkce.code.challenge.method\": \"S256\"\n  },\n  \"authenticationFlowBindingOverrides\": {},\n  \"fullScopeAllowed\": true,\n  \"nodeReRegistrationTimeout\": 0,\n  \"protocolMappers\": [\n    {\n      \"id\": \"706c5202-1b03-4fad-a5b8-484287e941f8\",\n      \"name\": \"audience resolve\",\n      \"protocol\": \"openid-connect\",\n      \"protocolMapper\": \"oidc-audience-resolve-mapper\",\n      \"consentRequired\": false,\n      \"config\": {}\n    }\n  ],\n  \"defaultClientScopes\": [\n    \"web-origins\",\n    \"acr\",\n    \"roles\",\n    \"profile\",\n    \"basic\",\n    \"email\"\n  ],\n  \"optionalClientScopes\": [\n    \"address\",\n    \"phone\",\n    \"offline_access\",\n    \"organization\",\n    \"microprofile-jwt\",\n    \"LegalPersonCredential\",\n    \"OperatorCredential\",\n    \"UserCredential\",\n    \"MarketplaceCredential\",\n    \"MembershipCredential\"\n  ]\n},\n{\n  \"clientId\": \"admin-cli\",\n  \"name\": \"${client_admin-cli}\",\n  \"surrogateAuthRequired\": false,\n  \"enabled\": true,\n  \"alwaysDisplayInConsole\": false,\n  \"clientAuthenticatorType\": \"client-secret\",\n  \"secret\": \"kpWxZn7LgcWT84AzS3aS5X5URmL0FC0Q\",\n  \"redirectUris\": [],\n  \"webOrigins\": [],\n  \"notBefore\": 0,\n  \"bearerOnly\": false,\n  \"consentRequired\": false,\n  \"standardFlowEnabled\": false,\n  \"implicitFlowEnabled\": false,\n  \"directAccessGrantsEnabled\": true,\n  \"serviceAccountsEnabled\": true,\n  \"publicClient\": false,\n  \"frontchannelLogout\": false,\n  \"protocol\": \"openid-connect\",\n  \"attributes\": {\n    \"client.secret.creation.time\": \"1675260539\",\n    \"realm_client\": \"false\",\n    \"client.use.lightweight.access.token.enabled\": \"true\"\n  },\n  \"authenticationFlowBindingOverrides\": {},\n  \"fullScopeAllowed\": true,\n  \"nodeReRegistrationTimeout\": 0,\n  \"protocolMappers\": [\n    {\n      \"name\": \"audience resolve\",\n      \"protocol\": \"openid-connect\",\n      \"protocolMapper\": \"oidc-audience-resolve-mapper\",\n      \"consentRequired\": false,\n      \"config\": {}\n    }\n  ],\n  \"defaultClientScopes\": [\n    \"web-origins\",\n    \"acr\",\n    \"roles\",\n    \"profile\",\n    \"basic\",\n    \"email\"\n  ],\n  \"optionalClientScopes\": [\n    \"address\",\n    \"phone\",\n    \"offline_access\",\n    \"organization\",\n    \"microprofile-jwt\",\n    \"UserCredential\",\n    \"LegalPersonCredential\",\n    \"MarketplaceCredential\"\n  ]\n}\n"
 did:
   enabled: true
   config:
@@ -1372,11 +1143,10 @@ contract-management:
   notification:
     enabled: true
     host: contract-management
-
-dsp:
+fdsc-edc:
   enabled: true
   deployment:
-    dcp: 
+    dcp:
       deployment:
         image:
           repository: quay.io/wi_stefan/fdsc-edc-controlplane-dcp
@@ -1389,12 +1159,12 @@ dsp:
         image:
           repository: quay.io/wi_stefan/fdsc-edc-controlplane-oid4vc
       service: {}
-      config: 
+      config:
         edc:
           hostname: dsp-fancy-marketplace.127.0.0.1.nip.io
   common:
     deployment:
-      additionalVolumeMounts:      
+      additionalVolumeMounts:
         - name: credential-repo
           mountPath: /credential-repo
         - name: signing-key
@@ -1460,7 +1230,6 @@ dsp:
               subPath: get-credential.sh
             - name: credential-repo
               mountPath: /credential-repo
-
     config:
       issuerId: did:web:fancy-marketplace.biz
       ebsiTir:
@@ -1473,7 +1242,6 @@ dsp:
       edc:
         participant:
           id: did:web:fancy-marketplace.biz
-
       oid4vp:
         enabled: true
         credentialsFolder: /credential-repo
@@ -1488,7 +1256,6 @@ dsp:
           enabled: true
           host: squid-proxy.infra.svc.cluster.local
           port: 8888
-        
       tmfExtension:
         quoteApi: http://consumer-tm-forum-api-quote.consumer.svc.cluster.local:8080/tmf-api/quote/v4
         agreementApi: http://consumer-tm-forum-api-agreement.consumer.svc.cluster.local:8080/tmf-api/agreementManagement/v4
@@ -1497,11 +1264,9 @@ dsp:
         productInventoryApi: http://consumer-tm-forum-api-product-inventory.consumer.svc.cluster.local:8080/tmf-api/productInventory/v4
         usageManagementApi: http://consumer-tm-forum-api-usage-management.consumer.svc.cluster.local:8080/tmf-api/usageManagement/v4
         partyCatalogApi: http://consumer-tm-forum-api-party-catalog.consumer.svc.cluster.local:8080/tmf-api/party/v4
-
       # -- transfer extension is only needed at the provider side
       fdscTransfer:
         enabled: false
-      
       dcp:
         enabled: true
         scopes:
@@ -1509,7 +1274,6 @@ dsp:
           negotiation: org.eclipse.tractusx.vc.type:MembershipCredential:read
           transfer: org.eclipse.tractusx.vc.type:MembershipCredential:read
           version: org.eclipse.tractusx.vc.type:MembershipCredential:read
-
 credentials:
   enabled: true
   keycloak:
@@ -1529,7 +1293,6 @@ credentials:
     - id: legal-person-credential
       format: jwt_vc
       targetFile: legal-person-credential.jwt
-
 identityhub:
   enabled: true
   postgresql:
@@ -1538,9 +1301,8 @@ identityhub:
     auth:
       username: postgres
       password: "password"
-  
   deployment:
-    additionalVolumeMounts:      
+    additionalVolumeMounts:
       - name: root-ca
         mountPath: /root-ca
       - name: cacerts
@@ -1568,6 +1330,5 @@ identityhub:
             mountPath: /certs-folder/
           - name: root-ca
             mountPath: /root-ca
-
 vault:
   enabled: true

@@ -75,7 +75,11 @@ dependencies:
     condition: mongo-operator.enabled
     version: 0.13.0
     repository: https://mongodb.github.io/helm-charts
-  # identityhub
+  # dsp
+  - name: fdsc-edc
+    condition: fdsc-edc.enabled
+    version: 0.0.14
+    repository: https://fiware.github.io/helm-charts
   - name: vault
     alias: vault
     condition: vault.enabled
