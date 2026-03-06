@@ -1,5 +1,3 @@
-{{- $cm := index .Values "contract-management" }}
-{{- if or (eq $cm.enabled true) (eq .Values.dsp.enabled true) }}
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -14,4 +12,3 @@ data:
       -keystore $1/cacerts \
       -storepass changeit  \
       -noprompt
-{{- end }}
