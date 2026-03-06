@@ -543,6 +543,7 @@ export OPERATOR_CREDENTIAL=$(./doc/scripts/get_credential.sh https://keycloak-co
 
 3. Register the consumer in the marketplace:
 
+13. For the started transfer, now the provisioned endpoint has to be retrieved:
 ```shell
 export CONSUMER_DID="did:web:fancy-marketplace.biz"  
 export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh http://mp-data-service.127.0.0.1.nip.io:8080 $REP_CREDENTIAL default); echo ${ACCESS_TOKEN}
@@ -609,6 +610,10 @@ With that, the Data Space Connector will create:
 
 5. Access the entity:
 
+
+Consumer:
+
+Get client key as jwk
 ```shell
 export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh http://mp-data-service.127.0.0.1.nip.io:8080 $OPERATOR_CREDENTIAL operator); echo $ACCESS_TOKEN 
 curl  -X GET http://mp-data-service.127.0.0.1.nip.io:8080/ngsi-ld/v1/entities/urn:ngsi-ld:UptimeReport:fms-1 \
