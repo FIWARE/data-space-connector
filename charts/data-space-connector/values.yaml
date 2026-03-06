@@ -550,8 +550,8 @@ keycloak:
     - name: STORE_PASS
       valueFrom:
         secretKeyRef:
-          name: issuance-secret
-          key: store-pass
+          name: kc-keystore
+          key: password
     # keycloak admin password
     - name: KC_ADMIN_PASSWORD
       valueFrom:
@@ -1413,12 +1413,12 @@ fdsc-edc:
             path: /api/v1/management
             port: 8085
 
-    vault:
-      hashicorp:
-        enabled: true
-        url: "http://{{ .Release.Name }}-vault:8200"
-        token: "root"
-        timeout: 30
+      vault:
+        hashicorp:
+          enabled: true
+          url: "http://{{ .Release.Name }}-vault:8200"
+          token: "root"
+          timeout: 30
 
 # -- helper script to retrieve credentials for applications
 credentials:

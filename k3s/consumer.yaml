@@ -33,7 +33,7 @@ keycloak:
         name: test-realm-realm
     - name: consumer-key
       secret:
-        secretName: consumer-keystore
+        secretName: kc-keystore
         defaultMode: 0755
   issuerDid: did:web:fancy-marketplace.biz
   signingKey:
@@ -43,12 +43,6 @@ keycloak:
     keyPassword: "${STORE_PASS}"
     did: did:web:fancy-marketplace.biz
     keyAlgorithm: ES256
-  extraEnvVars:
-    - name: "STORE_PASS"
-      valueFrom:
-        secretKeyRef:
-          name: consumer-keystore
-          key: password
   realm:
     frontendUrl: https://keycloak-consumer.127.0.0.1.nip.io
     import: true
@@ -664,14 +658,14 @@ did:
       didType: "web"
       hostUrl: "http://fancy-marketplace.biz"
       outputFormat: "json_jwk"
-      keystorePasswordSecretName: "consumer-keystore"
+      keystorePasswordSecretName: "did-keystore"
       keystorePasswordSecretKey: "password"
     generateKey:
       enabled: false
     provideKeystore:
       enabled: true
-      keystoreSecretName: "consumer-keystore"
-      keystoreSecretKey: "keystore.pfx"
+      keystoreSecretName: "did-keystore"
+      keystoreSecretKey: "keystore-did.pfx"
       keyType: "EC"
   ingress:
     enabled: true

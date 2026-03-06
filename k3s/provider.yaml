@@ -444,14 +444,14 @@ did:
       didType: "web"
       hostUrl: "http://mp-operations.org"
       outputFormat: "json_jwk"
-      keystorePasswordSecretName: "provider-keystore"
+      keystorePasswordSecretName: "did-keystore"
       keystorePasswordSecretKey: "password"
     generateKey:
       enabled: false
     provideKeystore:
       enabled: true
-      keystoreSecretName: "provider-keystore"
-      keystoreSecretKey: "keystore.pfx"
+      keystoreSecretName: "did-keystore"
+      keystoreSecretKey: "keystore-did.pfx"
       keyType: "EC"
   ingress:
     enabled: true
@@ -526,20 +526,7 @@ tm-forum-api:
       successThreshold: 1
       failureThreshold: 3000
       timeoutSeconds: 10000
-# -- integration of rainbow
-rainbow:
-  enabled: true
-  db:
-    url: postgresql
-    user: postgres
-    existingSecret: database-secret
-    passwordKey: postgres-admin-password
-  ingress:
-    enabled: true
-    hosts:
-      - host: rainbow-provider.127.0.0.1.nip.io
-        paths:
-          - /
+
 tpp:
   enabled: true
   transfers:
@@ -750,22 +737,16 @@ keycloak:
         name: test-realm-realm
     - name: provider-key
       secret:
-        secretName: provider-keystore
+        secretName: kc-keystore
         defaultMode: 0755
   issuerDid: did:web:mp-operations.org
   signingKey:
-    storePath: /keys/cert.jks
+    storePath: /keys/keystore.pfx
     storePassword: "${STORE_PASS}"
     keyAlias: certificate
     keyPassword: "${STORE_PASS}"
     did: did:web:mp-operations.org
     keyAlgorithm: ES256
-  extraEnvVars:
-    - name: "STORE_PASS"
-      valueFrom:
-        secretKeyRef:
-          name: provider-keystore
-          key: password
   realm:
     frontendUrl: https://keycloak-provider.127.0.0.1.nip.io
     import: true
