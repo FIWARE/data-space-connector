@@ -20,13 +20,11 @@ decentralizedIam:
       enabled: false
     trusted-issuers-list:
       enabled: false
-
   odrlAuthorization:
     odrl-pap:
       enabled: false
     apisix:
       enabled: false
-
 keycloak:
   ingress:
     enabled: true
