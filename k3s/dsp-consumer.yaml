@@ -1,0 +1,15 @@
+fdsc-edc:
+  enabled: true
+
+identityhub:
+  enabled: true
+
+vault:
+  enabled: true
+
+did: 
+  enabled: false
+
+keycloak:
+  signingKey:
+    did: did:web:fancy-marketplace.biz#key-1

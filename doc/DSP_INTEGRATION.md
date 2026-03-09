@@ -46,9 +46,9 @@ In order to authenticate itself, the FDSC-EDC requires access to the Verifiable 
 
 In order to authenticate via DCP, an instance of the Identity Hub has to be provided. The following diagram only includes it on the Consumer side, but its also needed on the Provider side to call back.
 
-![DCP Flow](./img/OID4VP-FIWARE-DSC-EDC-Detail.png)
+![DCP Flow](./img/DCP-FIWARE-DSC-EDC-Detail.png)
 
-1. Connector gets a [Self-Issued Token](https://eclipse-dataspace-dcp.github.io/decentralized-claims-protocol/v1.0.1/#self-issued-id-tokens) from its IdentiyHub(STS-Service), that includes the ID-Token and the Access Token
+1. Connector gets an [Self-Issued ID-Token](https://eclipse-dataspace-dcp.github.io/decentralized-claims-protocol/v1.0.1/#self-issued-id-tokens) from its IdentiyHub(STS-Service), that includes the DID and the Access Token
 2. Sends request with both Tokens to the Provider connector
 3. Provider resolves the DID, extracted from the ID-Token, requests did-document at the Consumer's IdentityHub(DID-Service)
 4. Consumer returns did-document, containing the Credential Service address
@@ -82,9 +82,14 @@ With an agreement in place, connectors can request data transfers using the [Tra
 
 ## Usage
 
-> :warning: The following steps expect a local environment deployed, as described in [the local deployment quick start](./deployment-integration/local-deployment/LOCAL.MD#quick-start)
+
+To run the local setup:
+```shell
+  mvn clean deploy -Plocal,dsp
+```
 
 The following steps will show how to create a ProductOffering throught the TMForum-APIs, buy access to it via TMForum, DSP+OID4VP and DSP+DCP and access the purchased data-service through all 3 methods. It requires a proper setup of Consumer and Provider identities as expected for the DCP, which also works for OID4VP.
+
 
 ### Setup the consumer
 

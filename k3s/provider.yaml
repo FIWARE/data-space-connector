@@ -101,7 +101,7 @@ apisix:
       host: dsp-mp-operations.127.0.0.1.nip.io
       upstream:
         nodes:
-          dsp-controlplane-oid4vc:8080: 1
+          provider-fdsc-edc-oid4vc:8080: 1
       plugins:
         openid-connect:
           proxy_opts:
@@ -126,7 +126,7 @@ apisix:
       host: dcp-mp-operations.127.0.0.1.nip.io
       upstream:
         nodes:
-          dsp-controlplane-dcp:8080: 1
+          provider-fdsc-edc-dcp:8080: 1
     - uri: /*
       host: mp-tmf-api.127.0.0.1.nip.io
       upstream:
@@ -468,6 +468,8 @@ did:
       - secretName: tls-secret
         hosts:
           - mp-operations.org
+    
+    
 dataSpaceConfig:
   enabled: true
   serviceType: ClusterIP
@@ -515,17 +517,17 @@ tm-forum-api:
     livenessProbe:
       healthPath: /health/liveness
       initialDelaySeconds: 30
-      periodSeconds: 1000
+      periodSeconds: 100
       successThreshold: 1
-      failureThreshold: 3000
-      timeoutSeconds: 10000
+      failureThreshold: 300
+      timeoutSeconds: 100
     readinessProbe:
       readinessPath: /health/readiness
       initialDelaySeconds: 30
-      periodSeconds: 1000
+      periodSeconds: 100
       successThreshold: 1
-      failureThreshold: 3000
-      timeoutSeconds: 10000
+      failureThreshold: 300
+      timeoutSeconds: 100
 
 tpp:
   enabled: true
@@ -1008,7 +1010,7 @@ registration:
         - MembershipCredential
   prepScript: export $(curl -f -X GET did-helper:3002/did-material/did.env)
 fdsc-edc:
-  enabled: true
+  enabled: false
   deployment:
     dcp:
       deployment:
@@ -1080,6 +1082,14 @@ fdsc-edc:
             secretName: root-ca
         - name: cacerts
           emptyDir: {}
+      additionalEnvVars:
+        - name: JAVA_TOOL_OPTIONS
+          value: >
+            -Dhttps.proxyHost=squid-proxy.infra.svc.cluster.local
+            -Dhttps.proxyPort=8888
+            -Dhttp.proxyHost=squid-proxy.infra.svc.cluster.local
+            -Dhttp.proxyPort=8888
+            -Dhttp.nonProxyHosts="*-vault|*.cluster.local"
       initContainers:
         # helper container to wait for keycloak present in local deployments, to avoid cascading crash-loops
         - name: wait-for-keycloak
@@ -1146,7 +1156,7 @@ fdsc-edc:
         dcp:
           enabled: true
           oid:
-            host: http://dsp-controlplane-dcp.provider.svc.cluster.local:8081/api
+            host: http://provider-fdsc-edc-dcp.provider.svc.cluster.local:8081/api
         # -- configuration of the apisix to be confiugured for serving the process
         apisix:
           # -- address of the management api of apisix
@@ -1181,7 +1191,12 @@ credentials:
       targetFile: membership-credential.jwt
 
 identityhub:
-  enabled: true
+  enabled: false
+  didIngress:
+    hosts:
+    - host: mp-operations.org
+      paths:
+        - /
   postgresql:
     host: postgresql
     port: 5432
@@ -1218,4 +1233,4 @@ identityhub:
             mountPath: /root-ca
             
 vault:
-  enabled: true
+  enabled: false

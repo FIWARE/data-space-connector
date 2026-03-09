@@ -682,6 +682,7 @@ did:
       - secretName: tls-secret
         hosts:
           - fancy-marketplace.biz
+   
 # register the consumer at the til. Only possible if it runs in the same environment and recommendable for demo deployments
 registration:
   enabled: true
@@ -706,17 +707,17 @@ tm-forum-api:
     livenessProbe:
       healthPath: /health/liveness
       initialDelaySeconds: 30
-      periodSeconds: 1000
+      periodSeconds: 100
       successThreshold: 1
-      failureThreshold: 3000
-      timeoutSeconds: 10000
+      failureThreshold: 300
+      timeoutSeconds: 100
     readinessProbe:
       readinessPath: /health/readiness
       initialDelaySeconds: 30
-      periodSeconds: 1000
+      periodSeconds: 100
       successThreshold: 1
-      failureThreshold: 3000
-      timeoutSeconds: 10000
+      failureThreshold: 300
+      timeoutSeconds: 100
 # scorpio as tmf backend, no public endpoint required
 scorpio:
   enabled: true
@@ -963,13 +964,13 @@ apisix:
       host: dsp-dcp-management.127.0.0.1.nip.io
       upstream:
         nodes:
-          dsp-controlplane-dcp:8085: 1
+          consumer-fdsc-edc-dcp:8085: 1
         type: roundrobin
     - uri: /*
       host: dsp-oid4vc-management.127.0.0.1.nip.io
       upstream:
         nodes:
-          dsp-controlplane-oid4vc:8085: 1
+          consumer-fdsc-edc-oid4vc:8085: 1
         type: roundrobin
     - uri: /.well-known/openid-configuration
       host: dsp-fancy-marketplace.127.0.0.1.nip.io
@@ -994,12 +995,12 @@ apisix:
       host: dcp-fancy-marketplace.127.0.0.1.nip.io
       upstream:
         nodes:
-          dsp-controlplane-dcp:8080: 1
+          consumer-fdsc-edc-dcp:8080: 1
     - uri: /*
       host: dsp-fancy-marketplace.127.0.0.1.nip.io
       upstream:
         nodes:
-          dsp-controlplane-oid4vc:8080: 1
+          consumer-fdsc-edc-oid4vc:8080: 1
       plugins:
         openid-connect:
           proxy_opts:
@@ -1187,6 +1188,14 @@ fdsc-edc:
             secretName: root-ca
         - name: cacerts
           emptyDir: {}
+      additionalEnvVars:
+        - name: JAVA_TOOL_OPTIONS
+          value: >
+            -Dhttps.proxyHost=squid-proxy.infra.svc.cluster.local
+            -Dhttps.proxyPort=8888
+            -Dhttp.proxyHost=squid-proxy.infra.svc.cluster.local
+            -Dhttp.proxyPort=8888
+            -Dhttp.nonProxyHosts="*-vault|*.cluster.local"    
       initContainers:
         # helper container to wait for keycloak present in local deployments, to avoid cascading crash-loops
         - name: wait-for-keycloak
@@ -1289,6 +1298,11 @@ credentials:
       targetFile: legal-person-credential.jwt
 identityhub:
   enabled: true
+  didIngress:
+    hosts:
+    - host: fancy-marketplace.biz
+      paths:
+        - /
   postgresql:
     host: postgresql
     port: 5432

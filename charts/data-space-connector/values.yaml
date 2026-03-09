@@ -706,12 +706,12 @@ tm-forum-api:
   ## configuration to be used by every api-deployment if nothing specific is provided.
   defaultConfig:
     image: 
-      tag: 1.4.2-PRE-124
+      tag: 1.4.4
     # --  ngsi-ld broker connection information
     ngsiLd:
       # -- address of the broker
       url: http://data-service-scorpio:9090
-    contextUrl: https://raw.githubusercontent.com/wistefan/edc-dsc/refs/heads/init/odrl-context.jsonld
+    contextUrl: https://raw.githubusercontent.com/SEAMWARE/fdsc-edc/refs/heads/main/schemas/odrl-context.jsonld
     additionalEnvVars: 
       - name: API_EXTENSION_ENABLED
         value: "true"
@@ -1489,7 +1489,9 @@ identityhub:
     successThreshold: 1
   didIngress:
     enabled: true
-    service: identityhub-service
+    annotations:
+      traefik.ingress.kubernetes.io/router.tls: "true"
+      traefik.ingress.kubernetes.io/service.passhostheader: "true"
     port: did
   # -- endpoints of the control plane
   endpoints:
