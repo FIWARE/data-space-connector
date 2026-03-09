@@ -1,3 +1,4 @@
+{{- if (eq .Values.apisix.enabled true) }}
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -47,3 +48,4 @@ data:
       --data-raw '{{ $route | toJson }}'
     {{- end }}
     {{- end }}
+{{- end }}
