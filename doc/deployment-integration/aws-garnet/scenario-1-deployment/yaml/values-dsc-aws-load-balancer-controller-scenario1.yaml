@@ -952,13 +952,13 @@ keycloak:
     initContainers:
       - name: add-vc-issuer
         image: quay.io/fiware/keycloak-vc-issuer:0.5.0
-        imagePullPolicy: Always
+        imagePullPolicy: IfNotPresent
         volumeMounts:
           - name: providers
             mountPath: /target
       - name: load-did
         image: quay.io/opencloudio/curl:4.2.0-build.8
-        imagePullPolicy: Always
+        imagePullPolicy: IfNotPresent
         command:
           - /bin/sh
           - /opt/did/script/import.sh

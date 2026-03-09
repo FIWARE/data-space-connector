@@ -36,10 +36,12 @@ public abstract class MPOperationsEnvironment {
 				.url(targetHost + OIDC_WELL_KNOWN_PATH)
 				.build();
 		Response wellKnownResponse = HTTP_CLIENT.newCall(wellKnownRequest).execute();
-		assertEquals(HttpStatus.SC_OK, wellKnownResponse.code(), "The oidc config should have been returned.");
-		OpenIdConfiguration openIdConfiguration = OBJECT_MAPPER.readValue(wellKnownResponse.body().string(), OpenIdConfiguration.class);
-		wellKnownResponse.body().close();
-		return openIdConfiguration;
+		try {
+			assertEquals(HttpStatus.SC_OK, wellKnownResponse.code(), "The oidc config should have been returned.");
+			return OBJECT_MAPPER.readValue(wellKnownResponse.body().string(), OpenIdConfiguration.class);
+		} finally {
+			wellKnownResponse.body().close();
+		}
 	}
 
 }

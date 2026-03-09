@@ -94,9 +94,6 @@ decentralizedIam:
       enabled: true
       # -- allows to set a fixed name for the services
       fullnameOverride: credentials-config-service
-      deployment:
-        image:
-          tag: 3.4.1 # To fix bug. Remove when update CCS chart to latest version
       # -- connection to the database
       database:
         # -- should persistence be used?

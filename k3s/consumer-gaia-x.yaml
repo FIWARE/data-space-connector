@@ -4,35 +4,27 @@ tm-forum-api:
   enabled: false
 contract-management:
   enabled: false
-
 decentralizedIam:
   enabled: true
-
   vcAuthentication:
-
     postgres-operator:
       enabled: false
-
     managedPostgres:
       enabled: true
       config:
         volume:
           storageClass: "local-path"
-
     vcverifier:
       enabled: false
     credentials-config-service:
       enabled: false
     trusted-issuers-list:
       enabled: false
-
   odrlAuthorization:
-
     odrl-pap:
       enabled: false
     apisix:
       enabled: false
-
 keycloak:
   ingress:
     enabled: true
@@ -49,14 +41,13 @@ keycloak:
       /opt/bitnami/scripts/keycloak/run.sh
   initContainers:
     - name: register-at-tir
-      image: ubuntu
+      image: curlimages/curl:8.18.0
       command:
-        - /bin/bash
+        - /bin/sh
       args:
         - -ec
         - |
-          #!/bin/bash
-          apt-get -y update; apt-get -y install curl
+          #!/bin/sh
           curl -X 'POST' 'http://tir.trust-anchor.svc.cluster.local:8080/issuer' -H 'Content-Type: application/json' -d "{\"did\": \"did:web:fancy-marketplace.biz\", \"credentials\": []}"
       volumeMounts:
         - name: did-material
@@ -270,7 +261,7 @@ registration:
   configMap: consumer-til-registration
   til: http://trusted-issuers-list.provider.svc.cluster.local:8080
   did: did:web:fancy-marketplace.biz
-  credentialTypes: 
+  credentialTypes:
     - UserCredential
 did:
   enabled: true

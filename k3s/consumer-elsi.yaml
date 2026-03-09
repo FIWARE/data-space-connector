@@ -53,21 +53,20 @@ keycloak:
   initContainers:
     - name: install-jades-issuer
       image: quay.io/fiware/keycloak-jades-vc-issuer:1.2.0
-      imagePullPolicy: Always
+      imagePullPolicy: IfNotPresent
       volumeMounts:
         - name: providers
           mountPath: /target
 
     - name: register-at-tir
-      image: ubuntu
+      image: curlimages/curl:8.18.0
       command:
-        - /bin/bash
+        - /bin/sh
       args:
         - -ec
         - |
-          #!/bin/bash
-          # source /did-material/did.env
-          apt-get -y update; apt-get -y install curl
+          #!/bin/sh
+          . /did-material/did.env
           curl -X 'POST' 'http://tir.trust-anchor.svc.cluster.local:8080/issuer' -H 'Content-Type: application/json' -d "{\"did\": \"did:elsi:VATDE-1234567\", \"credentials\": []}"
       volumeMounts:
         - name: did-material

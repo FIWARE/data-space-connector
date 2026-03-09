@@ -17,7 +17,7 @@
         <release.version>17</release.version>
 
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <version.io.kokuwa.maven.k3s-plugin>1.3.0</version.io.kokuwa.maven.k3s-plugin>
+        <version.io.kokuwa.maven.k3s-plugin>2.1.0</version.io.kokuwa.maven.k3s-plugin>
         <version.io.kokuwa.helm-maven-plugin>6.13.0</version.io.kokuwa.helm-maven-plugin>
         <version.org.apache.maven.plugins.maven-install>3.1.1</version.org.apache.maven.plugins.maven-install>
         <version.org.apache.maven.plugins.maven-source>2.4</version.org.apache.maven.plugins.maven-source>
@@ -280,7 +280,7 @@
                         <id>template-dsc-provider</id>
                         <goals>
                             <goal>init</goal>
-                            <goal>dependency-update</goal>
+                            <!-- <goal>dependency-update</goal> -->
                             <goal>template</goal>
                         </goals>
                         <phase>package</phase>
@@ -296,7 +296,7 @@
                         <id>template-dsc-consumer</id>
                         <goals>
                             <goal>init</goal>
-                            <goal>dependency-update</goal>
+                            <!-- <goal>dependency-update</goal> -->
                             <goal>template</goal>
                         </goals>
                         <phase>package</phase>
@@ -312,7 +312,7 @@
                         <id>template-trust-anchor</id>
                         <goals>
                             <goal>init</goal>
-                            <goal>dependency-update</goal>
+                            <!-- <goal>dependency-update</goal> -->
                             <goal>template</goal>
                         </goals>
                         <phase>package</phase>
@@ -329,7 +329,7 @@
                         <id>template-dsc-mongo-operator</id>
                         <goals>
                             <goal>init</goal>
-                            <goal>dependency-update</goal>
+                            <!-- <goal>dependency-update</goal> -->
                             <goal>template</goal>
                         </goals>
                         <phase>package</phase>
@@ -346,7 +346,7 @@
                         <id>template-dsc-postgres-operator</id>
                         <goals>
                             <goal>init</goal>
-                            <goal>dependency-update</goal>
+                            <!-- <goal>dependency-update</goal> -->
                             <goal>template</goal>
                         </goals>
                         <phase>package</phase>
@@ -356,6 +356,45 @@
                             <templateGenerateName>true</templateGenerateName>
                             <templateOutputDir>${project.build.directory}/k3s/infra/postgres-operator</templateOutputDir>
                             <additionalArguments>--name-template=postgres-operator --namespace=postgres-operator -f ${main.basedir}/k3s/postgres-operator.yaml</additionalArguments>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <!-- Workaround for https://github.com/apache/apisix-helm-chart/issues/949:
+                 The APISIX helm chart ingress template does not include the namespace in the resource
+                 metadata. This causes the ingress to be applied to the wrong namespace when kubectl
+                 is run without the explicit namespace flag. This step patches the rendered
+                 APISIX ingress manifests to inject the correct namespace before the apply steps. -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-antrun-plugin</artifactId>
+                <version>3.1.0</version>
+                <executions>
+                    <execution>
+                        <id>patch-apisix-ingress-namespace</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>run</goal>
+                        </goals>
+                        <configuration>
+                            <target>
+                                <replaceregexp
+                                        match="(kind: Ingress&#xa;metadata:&#xa;  name: [^\n]+)"
+                                        replace="\1&#xa;  namespace: provider"
+                                        byline="false">
+                                    <fileset dir="${project.build.directory}/k3s/dsc-provider"
+                                             includes="**/apisix/templates/ingress.yaml"
+                                             erroronmissingdir="false"/>
+                                </replaceregexp>
+                                <replaceregexp
+                                        match="(kind: Ingress&#xa;metadata:&#xa;  name: [^\n]+)"
+                                        replace="\1&#xa;  namespace: consumer"
+                                        byline="false">
+                                    <fileset dir="${project.build.directory}/k3s/dsc-consumer"
+                                             includes="**/apisix/templates/ingress.yaml"
+                                             erroronmissingdir="false"/>
+                                </replaceregexp>
+                            </target>
                         </configuration>
                     </execution>
                 </executions>
@@ -536,7 +575,7 @@
                                 <id>template-dsc-provider</id>
                                 <goals>
                                     <goal>init</goal>
-                                    <goal>dependency-update</goal>
+                                    <!-- <goal>dependency-update</goal> -->
                                     <goal>template</goal>
                                 </goals>
                                 <phase>package</phase>
@@ -552,7 +591,7 @@
                                 <id>template-dsc-consumer</id>
                                 <goals>
                                     <goal>init</goal>
-                                    <goal>dependency-update</goal>
+                                    <!-- <goal>dependency-update</goal> -->
                                     <goal>template</goal>
                                 </goals>
                                 <phase>package</phase>
@@ -568,7 +607,7 @@
                                 <id>template-trust-anchor</id>
                                 <goals>
                                     <goal>init</goal>
-                                    <goal>dependency-update</goal>
+                                    <!-- <goal>dependency-update</goal> -->
                                     <goal>template</goal>
                                 </goals>
                                 <phase>package</phase>
@@ -585,7 +624,7 @@
                                 <id>template-dsc-mongo-operator</id>
                                 <goals>
                                     <goal>init</goal>
-                                    <goal>dependency-update</goal>
+                                    <!-- <goal>dependency-update</goal> -->
                                     <goal>template</goal>
                                 </goals>
                                 <phase>package</phase>
@@ -602,7 +641,7 @@
                                 <id>template-dsc-postgres-operator</id>
                                 <goals>
                                     <goal>init</goal>
-                                    <goal>dependency-update</goal>
+                                    <!-- <goal>dependency-update</goal> -->
                                     <goal>template</goal>
                                 </goals>
                                 <phase>package</phase>
@@ -743,7 +782,7 @@
                                 <id>template-dsc-provider</id>
                                 <goals>
                                     <goal>init</goal>
-                                    <goal>dependency-update</goal>
+                                    <!-- <goal>dependency-update</goal> -->
                                     <goal>template</goal>
                                 </goals>
                                 <phase>package</phase>
@@ -759,7 +798,7 @@
                                 <id>template-dsc-consumer</id>
                                 <goals>
                                     <goal>init</goal>
-                                    <goal>dependency-update</goal>
+                                    <!-- <goal>dependency-update</goal> -->
                                     <goal>template</goal>
                                 </goals>
                                 <phase>package</phase>
@@ -775,7 +814,7 @@
                                 <id>template-trust-anchor</id>
                                 <goals>
                                     <goal>init</goal>
-                                    <goal>dependency-update</goal>
+                                    <!-- <goal>dependency-update</goal> -->
                                     <goal>template</goal>
                                 </goals>
                                 <phase>package</phase>
@@ -792,7 +831,7 @@
                                 <id>template-dsc-mongo-operator</id>
                                 <goals>
                                     <goal>init</goal>
-                                    <goal>dependency-update</goal>
+                                    <!-- <goal>dependency-update</goal> -->
                                     <goal>template</goal>
                                 </goals>
                                 <phase>package</phase>
@@ -809,7 +848,7 @@
                                 <id>template-dsc-postgres-operator</id>
                                 <goals>
                                     <goal>init</goal>
-                                    <goal>dependency-update</goal>
+                                    <!-- <goal>dependency-update</goal> -->
                                     <goal>template</goal>
                                 </goals>
                                 <phase>package</phase>
