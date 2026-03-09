@@ -1,4 +1,9 @@
 keycloak:
+  resources:
+    requests:
+      cpu: "100m"
+    limits:
+      cpu: "500m"
   ingress:
     enabled: true
     hostname: keycloak-consumer.127.0.0.1.nip.io
@@ -6,14 +11,13 @@ keycloak:
       traefik.ingress.kubernetes.io/router.tls: "true"
   initContainers:
     - name: register-at-tir
-      image: ubuntu
+      image: curlimages/curl:8.18.0
       command:
-        - /bin/bash
+        - /bin/sh
       args:
         - -ec
         - |
-          #!/bin/bash
-          apt-get -y update; apt-get -y install curl
+          #!/bin/sh
           curl -X 'POST' 'http://tir.trust-anchor.svc.cluster.local:8080/issuer' -H 'Content-Type: application/json' -d "{\"did\": \"did:web:fancy-marketplace.biz\", \"credentials\": []}"
   extraVolumeMounts:
     - name: realms
@@ -616,8 +620,8 @@ rainbow:
   enabled: true
   db:
     url: postgres
-    user: postgres
-    existingSecret: postgres.postgres.credentials.postgresql.acid.zalan.do
+    user: rainbow
+    existingSecret: rainbow.postgres.credentials.postgresql.acid.zalan.do
     passwordKey: password
   ingress:
     enabled: true
@@ -670,6 +674,9 @@ registration:
 ## configuration for providing the (central) marketplace
 # tmf as marketplace backend
 tm-forum-api:
+  defaultConfig:
+    image:
+      tag: "1.4.4"
   registration:
     enabled: false
   ingress:
@@ -696,15 +703,18 @@ tm-forum-api:
 # scorpio as tmf backend, no public endpoint required
 scorpio:
   enabled: true
-
+  resources:
+    limits:
+      cpu: "500m"
+      memory: 1Gi
+    requests:
+      cpu: "100m"
+      memory: 128Mi
 decentralizedIam:
   enabled: true
-
   vcAuthentication:
-
     postgres-operator:
       enabled: false
-
     managedPostgres:
       enabled: true
       config:
@@ -713,13 +723,26 @@ decentralizedIam:
         users:
           ngb:
             - createdb
+          rainbow:
+            - createdb
         databases:
           ngb: ngb
+          rainbow: rainbow
         preparedDatabases:
           ngb:
             extensions:
               postgis: public
-
+    trusted-issuers-list:
+      deployment:
+        image:
+          tag: "0.8.0" # ToDo: remove when updating dependencies
+        resources:
+          limits:
+            cpu: 300m
+            memory: 512Mi
+          requests:
+            cpu: 100m
+            memory: 128Mi
     credentials-config-service:
       additionalEnvVars:
         - name: FLYWAY_DATASOURCES_DEFAULT_LOCATIONS
@@ -753,7 +776,7 @@ decentralizedIam:
                             - roles
                       meta:
                         vct_values:
-                          - LegalPersonCredential 
+                          - LegalPersonCredential
     vcverifier:
       ingress:
         enabled: true
@@ -822,7 +845,7 @@ decentralizedIam:
               - -c
               - |
                 #!/bin/sh
-                cp /etc/ssl/cert.pem /root-ca/cert.pdata.typeem
+                cp /etc/ssl/cert.pem /root-ca/cert.pem
                 cat /root-ca/cacert.pem >> /root-ca/cert.pem
             volumeMounts:
               - name: root-ca
@@ -831,16 +854,13 @@ decentralizedIam:
                 mountPath: /root-ca/cacert.pem
                 subPath: cacert.pem
           - name: register-at-tir
-            image: ubuntu
+            image: curlimages/curl:8.18.0
             command:
-              - /bin/bash
+              - /bin/sh
             args:
               - -ec
               - |
-                #!/bin/bash
-                apt-get -y update; apt-get -y install curl
                 curl -X 'POST' 'http://tir.trust-anchor.svc.cluster.local:8080/issuer' -H 'Content-Type: application/json' -d "{\"did\": \"did:web:fancy-marketplace.biz\", \"credentials\": []}"
-
   odrlAuthorization:
     # authorized access to tmforum
     apisix:
@@ -896,7 +916,6 @@ decentralizedIam:
           - host: pap-consumer.127.0.0.1.nip.io
             paths:
               - "/"
-
 # contract management for distributing the buy events
 contract-management:
   did: did:web:fancy-marketplace.biz

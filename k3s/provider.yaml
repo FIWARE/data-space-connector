@@ -289,7 +289,7 @@ decentralizedIam:
         deployment:
           mode: standalone
           role: "data_plane"
-          role_traditional:
+          role_data_plane:
             config_provider: "yaml"
         catchAllRoute:
           enabled: false
@@ -350,7 +350,7 @@ decentralizedIam:
               ssl_verify: false
               discovery: https://verifier.mp-operations.org/services/tmf-api/.well-known/openid-configuration
             opa:
-              host: \"http://localhost:8181\"
+              host: http://localhost:8181
               policy: tpp
         - uri: /*
           host: mp-data-service.127.0.0.1.nip.io
@@ -358,7 +358,7 @@ decentralizedIam:
             nodes:
               data-service-scorpio:9090: 1
             type: roundrobin
-          plugins: 
+          plugins:
             openid-connect:
               proxy_opts:
                 https_proxy: http://squid-proxy.infra.svc.cluster.local:8888
@@ -369,7 +369,7 @@ decentralizedIam:
               ssl_verify: false
               discovery: https://verifier.mp-operations.org/services/data-service/.well-known/openid-configuration
             opa:
-              host: \"http://localhost:8181\"
+              host: http://localhost:8181
               policy: policy/main
               with_body: true
         - uri: /.well-known/openid-configuration
@@ -402,7 +402,7 @@ decentralizedIam:
               ssl_verify: false
               discovery: https://verifier.mp-operations.org/services/data-service/.well-known/openid-configuration
             opa:
-              host: \"http://localhost:8181\"
+              host: http://localhost:8181
               policy: policy/main
               with_body: true
         - uri: /*
@@ -422,7 +422,7 @@ decentralizedIam:
               ssl_verify: false
               discovery: https://verifier.mp-operations.org/services/tmf-api/.well-known/openid-configuration
             opa:
-              host: \"http://localhost:8181\"
+              host: http://localhost:8181
               policy: policy/main
               with_body: true
         - uri: /*
@@ -442,7 +442,7 @@ decentralizedIam:
               ssl_verify: false
               discovery: https://verifier.mp-operations.org/services/contract-management/.well-known/openid-configuration
             opa:
-              host: \"http://localhost:8181\"
+              host: http://localhost:8181
               policy: policy/main
               with_body: true
     odrl-pap:
@@ -531,15 +531,6 @@ tm-forum-api:
   defaultConfig:
     image:
       tag: "1.4.4"
-  registration:
-    enabled: false
-  ingress:
-    enabled: true
-    hosts:
-      - host: tm-forum-api.127.0.0.1.nip.io
-        paths:
-          - /
-  defaultConfig:
     livenessProbe:
       healthPath: /health/liveness
       initialDelaySeconds: 30
@@ -554,6 +545,14 @@ tm-forum-api:
       successThreshold: 1
       failureThreshold: 3000
       timeoutSeconds: 10000
+  registration:
+    enabled: false
+  ingress:
+    enabled: true
+    hosts:
+      - host: tm-forum-api.127.0.0.1.nip.io
+        paths:
+          - /
 # -- integration of rainbow
 rainbow:
   enabled: true
