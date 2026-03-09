@@ -32,7 +32,7 @@ spec:
               subPath: init.sh
         {{- end }}
         - name: rainbow-init
-          imagePullPolicy: Always
+          imagePullPolicy: IfNotPresent
           image: quay.io/wi_stefan/rainbow:0.0.3
           args: [ "provider", "setup" ]
           env:
@@ -53,7 +53,7 @@ spec:
               value: "5432"
       containers:
         - name: rainbow
-          imagePullPolicy: Always
+          imagePullPolicy: IfNotPresent
           image: quay.io/wi_stefan/rainbow:0.0.3
           args: [ "provider", "start" ]
           env:

@@ -57,14 +57,14 @@ decentralizedIam:
             mountPath: /alternative-conf
         initContainers:
           - name: get-did
-            image: ubuntu
+            image: alpine:3
             command:
-              - /bin/bash
+              - /bin/sh
             args:
               - -ec
               - |
-                #!/bin/bash
-                apt-get -y update; apt-get -y install wget; apt-get -y install gettext-base
+                #!/bin/sh
+                apk add --no-cache wget gettext
                 cd /did-material
                 wget http://did-helper:3002/did-material/did.env
                 export $(cat /did-material/did.env)
@@ -79,15 +79,14 @@ decentralizedIam:
                 mountPath: /alternative-conf
 
           - name: register-at-tir
-            image: ubuntu
+            image: curlimages/curl:8.18.0
             command:
-              - /bin/bash
+              - /bin/sh
             args:
               - -ec
               - |
-                #!/bin/bash
-                source /did-material/did.env
-                apt-get -y update; apt-get -y install curl
+                #!/bin/sh
+                . /did-material/did.env
                 curl -X 'POST' 'http://tir.trust-anchor.svc.cluster.local:8080/issuer' -H 'Content-Type: application/json' -d "{\"did\": \"${DID}\", \"credentials\": []}"
             volumeMounts:
               - name: did-material
@@ -115,7 +114,7 @@ decentralizedIam:
       deployment: 
         additionalContainers:
           - name: crl-provider-static
-            imagePullPolicy: Always
+            imagePullPolicy: IfNotPresent
             image: "lipanski/docker-static-website:2.1.0"
             volumeMounts:
               - name: crl-provider-json
@@ -222,14 +221,14 @@ decentralizedIam:
       deployment:
         initContainers:
           - name: get-did
-            image: ubuntu
+            image: alpine:3
             command:
-              - /bin/bash
+              - /bin/sh
             args:
               - -ec
               - |
-                #!/bin/bash
-                apt-get -y update; apt-get -y install wget
+                #!/bin/sh
+                apk add --no-cache wget
                 cd /did-material
                 wget http://did-helper:3002/did-material/did.env
             volumeMounts:

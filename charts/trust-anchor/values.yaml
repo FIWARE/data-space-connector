@@ -25,8 +25,9 @@ mysql:
     existingSecret: mysql-database-secret
   # -- scripts to be executed on db startup
   initdbScripts:
-    create.sql: |
-      CREATE DATABASE tirdb;
+    create.sh: |
+      #!/bin/bash
+      mysql -u root -p"${MYSQL_ROOT_PASSWORD}" -e "CREATE DATABASE IF NOT EXISTS tirdb;"
 
 # -- configuration for the trusted-issuers-list to be deployed as part of the trust-anchor, see https://github.com/FIWARE/helm-charts/tree/main/charts/trusted-issuers-list for all options
 trusted-issuers-list:

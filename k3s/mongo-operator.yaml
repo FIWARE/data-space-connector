@@ -4,6 +4,13 @@ mongo-operator:
     namespace: provider
   operator:
     watchNamespace: "*"
+    resources:
+      limits:
+        cpu: 300m
+        memory: 1Gi
+      requests:
+        cpu: 100m
+        memory: 200Mi
 
 
 decentralizedIam:
