@@ -1512,7 +1512,7 @@ identityhub:
       # -- path for incoming api calls
       path: /api/identity
       # -- authentication key, must be attached to each 'X-Api-Key' request header
-      authKeyAlias: "sup3r$3cr3t"
+      authKeyAlias:
     # -- DCP Presentation API endpoint
     credentials:
       # -- port for incoming api calls
@@ -1529,7 +1529,7 @@ identityhub:
     accounts:
       port: 8085
       path: /api/accounts
-      authKeyAlias: "sup3r$3cr3t"
+      authKeyAlias:
     # -- Version API, used to obtain exact version information about all APIs at runtime
     version:
       port: 8086
