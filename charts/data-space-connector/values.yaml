@@ -1493,9 +1493,6 @@ identityhub:
     successThreshold: 1
   didIngress:
     enabled: true
-    annotations:
-      traefik.ingress.kubernetes.io/router.tls: "true"
-      traefik.ingress.kubernetes.io/service.passhostheader: "true"
     port: did
   # -- endpoints of the control plane
   endpoints:
@@ -1529,7 +1526,6 @@ identityhub:
     accounts:
       port: 8085
       path: /api/accounts
-      authKeyAlias:
     # -- Version API, used to obtain exact version information about all APIs at runtime
     version:
       port: 8086

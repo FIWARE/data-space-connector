@@ -191,8 +191,7 @@ spec:
             - name: {{ $key | quote }}
               value: {{ $value | quote }}
           {{- end }}
-          {{- if and (or .Values.identityhub.envSecretNames .Values.identityhub.envConfigMapNames) (or (gt (len .Values.identityhub.envSecretNames) 0) (gt (len .Values.identityhub.envConfigMapNames) 0)) }}
-          envFrom:
+          {{- if or .Values.identityhub.envSecretNames .Values.identityhub.envConfigMapNames }}          envFrom:
           {{- range $value := .Values.identityhub.envSecretNames }}
             - secretRef:
                 name: {{ $value | quote }}
