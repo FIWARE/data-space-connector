@@ -129,7 +129,7 @@ openssl x509 -in ${OUTPUT_FOLDER}/client-provider/certs/client.cert.pem -out ${O
 
 cat ${OUTPUT_FOLDER}/client-provider/certs/client.cert.pem ${OUTPUT_FOLDER}/intermediate/certs/ca-chain-bundle.cert.pem > ${OUTPUT_FOLDER}/client-provider/certs/client-chain-bundle.cert.pem
 
-## create keystore to be used by keycloak
+## create keystore to be used by keycloak (with full chain bundle)
 # consumer
 openssl pkcs12 -export -password pass:password -in ${OUTPUT_FOLDER}/client-consumer/certs/client-chain-bundle.cert.pem -inkey ${OUTPUT_FOLDER}/client-consumer/private/client.key.pem -out ${OUTPUT_FOLDER}/client-consumer/certificate.p12 -name "certificate"
 openssl pkcs12 -export -password pass:password -in ${OUTPUT_FOLDER}/client-consumer/certs/client.cert.pem -inkey ${OUTPUT_FOLDER}/client-consumer/private/client.key.pem -out ${OUTPUT_FOLDER}/client-consumer/keystore-did.pfx -name "certificate"
@@ -140,11 +140,16 @@ openssl pkcs12 -export -password pass:password -in ${OUTPUT_FOLDER}/client-provi
 openssl pkcs12 -export -password pass:password -in ${OUTPUT_FOLDER}/client-provider/certs/client.cert.pem -inkey ${OUTPUT_FOLDER}/client-provider/private/client.key.pem -out ${OUTPUT_FOLDER}/client-provider/keystore-did.pfx -name "certificate"
 openssl pkcs12 -export -password pass:password -in ${OUTPUT_FOLDER}/client-provider/certs/client-chain-bundle.cert.pem -inkey ${OUTPUT_FOLDER}/client-provider/private/client.key.pem -out ${OUTPUT_FOLDER}/client-provider/keystore.pfx -name "certificate"
 
+## create keystore to be used by did-helper (cert + key only, no chain - did-helper only supports 2 bags)
+# consumer
+openssl pkcs12 -export -password pass:password -in ${OUTPUT_FOLDER}/client-consumer/certs/client.cert.pem -inkey ${OUTPUT_FOLDER}/client-consumer/private/client.key.pem -out ${OUTPUT_FOLDER}/client-consumer/keystore-did.pfx -name "certificate"
+
+# provider
+openssl pkcs12 -export -password pass:password -in ${OUTPUT_FOLDER}/client-provider/certs/client.cert.pem -inkey ${OUTPUT_FOLDER}/client-provider/private/client.key.pem -out ${OUTPUT_FOLDER}/client-provider/keystore-did.pfx -name "certificate"
 
 # consumer
 kubectl create secret tls tls-secret --cert=${OUTPUT_FOLDER}/client-consumer/certs/client-chain-bundle.cert.pem --key=${OUTPUT_FOLDER}/client-consumer/private/client.key.pem --namespace consumer -o yaml --dry-run=client > ${k3sFolder}/consumer/tls-secret.yaml
-kubectl create secret generic kc-keystore --from-file=keystore.pfx=${OUTPUT_FOLDER}/client-consumer/keystore.pfx --from-literal=password="password" --namespace=consumer --dry-run=client -oyaml > ${k3sFolder}/consumer/keystore-secret.yaml
-kubectl create secret generic did-keystore --from-file=keystore-did.pfx=${OUTPUT_FOLDER}/client-consumer/keystore-did.pfx --from-literal=password="password" --namespace=consumer --dry-run=client -oyaml > ${k3sFolder}/consumer/keystore-did-secret.yaml
+kubectl create secret generic consumer-keystore --from-file=keystore.pfx=${OUTPUT_FOLDER}/client-consumer/keystore.pfx --from-file=keystore-did.pfx=${OUTPUT_FOLDER}/client-consumer/keystore-did.pfx --from-literal=password="password" --namespace=consumer --dry-run=client -oyaml > ${k3sFolder}/consumer/keystore-secret.yaml
 kubectl create secret generic cert-chain --from-file=${OUTPUT_FOLDER}/client-consumer/certs/client-chain-bundle.cert.pem --namespace consumer -o yaml --dry-run=client > ${k3sFolder}/consumer/cert-chain.yaml
 
 consumer_key_env=$(openssl ec -in ${OUTPUT_FOLDER}/client-consumer/private/client.key.pem -noout -text | grep 'priv:' -A 3 | tail -n +2 | tr -d ':\n ')
@@ -156,8 +161,7 @@ kubectl create secret generic signing-key-env --from-literal=key="${consumer_key
 
 # provider
 kubectl create secret tls tls-secret --cert=${OUTPUT_FOLDER}/client-provider/certs/client-chain-bundle.cert.pem --key=${OUTPUT_FOLDER}/client-provider/private/client.key.pem --namespace provider -o yaml --dry-run=client > ${k3sFolder}/provider/tls-secret.yaml
-kubectl create secret generic kc-keystore --from-file=keystore.pfx=${OUTPUT_FOLDER}/client-provider/keystore.pfx --from-literal=password="password" --namespace=provider --dry-run=client -oyaml > ${k3sFolder}/provider/keystore-secret.yaml
-kubectl create secret generic did-keystore --from-file=keystore-did.pfx=${OUTPUT_FOLDER}/client-provider/keystore-did.pfx --from-literal=password="password" --namespace=provider --dry-run=client -oyaml > ${k3sFolder}/provider/keystore-did-secret.yaml
+kubectl create secret generic provider-keystore --from-file=keystore.pfx=${OUTPUT_FOLDER}/client-provider/keystore.pfx --from-file=keystore-did.pfx=${OUTPUT_FOLDER}/client-provider/keystore-did.pfx --from-literal=password="password" --namespace=provider --dry-run=client -oyaml > ${k3sFolder}/provider/keystore-secret.yaml
 kubectl create secret generic cert-chain --from-file=${OUTPUT_FOLDER}/client-provider/certs/client-chain-bundle.cert.pem --namespace provider -o yaml --dry-run=client > ${k3sFolder}/provider/cert-chain.yaml
 
 provider_key_env=$(openssl ec -in ${OUTPUT_FOLDER}/client-provider/private/client.key.pem -noout -text | grep 'priv:' -A 3 | tail -n +2 | tr -d ':\n ')
@@ -177,39 +181,3 @@ kubectl create secret generic root-ca --from-file=${OUTPUT_FOLDER}/ca/certs/cace
 
 ca=$(cat ${OUTPUT_FOLDER}/ca/certs/cacert.pem | sed '/-----BEGIN CERTIFICATE-----/d' | sed '/-----END CERTIFICATE-----/d' | tr -d '\n')
 yq -i "(.spec.template.spec.initContainers[] | select(.name == \"local-trust\") | .env[] | select(.name == \"ROOT_CA\")).value = \"$ca\"" ${k3sFolder}/infra/gx-registry/deployment-registry.yaml
-
-# consumer identity
-openssl x509 -in ${OUTPUT_FOLDER}/client-consumer/certs/client.cert.pem -noout -pubkey > ${OUTPUT_FOLDER}/client-consumer/certs/public_key.pem
-
-consumer_chain=$(cat ${OUTPUT_FOLDER}/client-consumer/certs/client-chain-bundle.cert.pem)
-
-pub_hex_consumer=$(openssl ec -in ${OUTPUT_FOLDER}/client-consumer/private/client.key.pem -pubout -outform DER | tail -c 65 | xxd -p -c 65)
-x_consumer=${pub_hex_consumer:2:64}
-y_consumer=${pub_hex_consumer:66:64}
-
-x_consumer_enc=$(echo -n "$x_consumer" | xxd -r -p | openssl base64 -A | tr '+/' '-_' | tr -d '=')
-y_consumer_enc=$(echo -n "$y_consumer" | xxd -r -p | openssl base64 -A | tr '+/' '-_' | tr -d '=')
-
-yq -i ".didJson.key.crv = \"P-256\"" ${k3sFolder}/consumer-gaia-x.yaml
-yq -i ".didJson.key.xCoord = \"${x_consumer_enc}\"" ${k3sFolder}/consumer-gaia-x.yaml
-yq -i ".didJson.key.yCoord = \"${y_consumer_enc}\"" ${k3sFolder}/consumer-gaia-x.yaml
-yq -i ".didJson.key.crv = \"P-256\"" ${k3sFolder}/consumer.yaml
-yq -i ".didJson.key.xCoord = \"${x_consumer_enc}\"" ${k3sFolder}/consumer.yaml
-yq -i ".didJson.key.yCoord = \"${y_consumer_enc}\"" ${k3sFolder}/consumer.yaml
-
-
-# provider identity
-openssl x509 -in ${OUTPUT_FOLDER}/client-provider/certs/client.cert.pem -noout -pubkey > ${OUTPUT_FOLDER}/client-provider/certs/public_key.pem
-
-provider_chain=$(cat ${OUTPUT_FOLDER}/client-consumer/certs/client-chain-bundle.cert.pem)
-
-pub_hex_provider=$(openssl ec -in ${OUTPUT_FOLDER}/client-provider/private/client.key.pem -pubout -outform DER | tail -c 65 | xxd -p -c 65)
-x_provider=${pub_hex_provider:2:64}
-y_provider=${pub_hex_provider:66:64}
-
-x_provider_enc=$(echo -n "$x_provider" | xxd -r -p | openssl base64 -A | tr '+/' '-_' | tr -d '=')
-y_provider_enc=$(echo -n "$y_provider" | xxd -r -p | openssl base64 -A | tr '+/' '-_' | tr -d '=')
-
-yq -i ".didJson.key.crv = \"P-256\"" ${k3sFolder}/provider.yaml
-yq -i ".didJson.key.xCoord = \"${x_provider_enc}\"" ${k3sFolder}/provider.yaml
-yq -i ".didJson.key.yCoord = \"${y_provider_enc}\"" ${k3sFolder}/provider.yaml

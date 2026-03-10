@@ -508,7 +508,7 @@ did:
       enabled: false
     provideKeystore:
       enabled: true
-      keystoreSecretName: "did-keystore"
+      keystoreSecretName: "provider-keystore"
       keystoreSecretKey: "keystore-did.pfx"
       keyType: "EC"
   ingress:
