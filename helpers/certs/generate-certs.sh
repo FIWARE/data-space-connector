@@ -181,39 +181,3 @@ kubectl create secret generic root-ca --from-file=${OUTPUT_FOLDER}/ca/certs/cace
 
 ca=$(cat ${OUTPUT_FOLDER}/ca/certs/cacert.pem | sed '/-----BEGIN CERTIFICATE-----/d' | sed '/-----END CERTIFICATE-----/d' | tr -d '\n')
 yq -i "(.spec.template.spec.initContainers[] | select(.name == \"local-trust\") | .env[] | select(.name == \"ROOT_CA\")).value = \"$ca\"" ${k3sFolder}/infra/gx-registry/deployment-registry.yaml
-
-# consumer identity
-openssl x509 -in ${OUTPUT_FOLDER}/client-consumer/certs/client.cert.pem -noout -pubkey > ${OUTPUT_FOLDER}/client-consumer/certs/public_key.pem
-
-consumer_chain=$(cat ${OUTPUT_FOLDER}/client-consumer/certs/client-chain-bundle.cert.pem)
-
-pub_hex_consumer=$(openssl ec -in ${OUTPUT_FOLDER}/client-consumer/private/client.key.pem -pubout -outform DER | tail -c 65 | xxd -p -c 65)
-x_consumer=${pub_hex_consumer:2:64}
-y_consumer=${pub_hex_consumer:66:64}
-
-x_consumer_enc=$(echo -n "$x_consumer" | xxd -r -p | openssl base64 -A | tr '+/' '-_' | tr -d '=')
-y_consumer_enc=$(echo -n "$y_consumer" | xxd -r -p | openssl base64 -A | tr '+/' '-_' | tr -d '=')
-
-yq -i ".didJson.key.crv = \"P-256\"" ${k3sFolder}/consumer-gaia-x.yaml
-yq -i ".didJson.key.xCoord = \"${x_consumer_enc}\"" ${k3sFolder}/consumer-gaia-x.yaml
-yq -i ".didJson.key.yCoord = \"${y_consumer_enc}\"" ${k3sFolder}/consumer-gaia-x.yaml
-yq -i ".didJson.key.crv = \"P-256\"" ${k3sFolder}/consumer.yaml
-yq -i ".didJson.key.xCoord = \"${x_consumer_enc}\"" ${k3sFolder}/consumer.yaml
-yq -i ".didJson.key.yCoord = \"${y_consumer_enc}\"" ${k3sFolder}/consumer.yaml
-
-
-# provider identity
-openssl x509 -in ${OUTPUT_FOLDER}/client-provider/certs/client.cert.pem -noout -pubkey > ${OUTPUT_FOLDER}/client-provider/certs/public_key.pem
-
-provider_chain=$(cat ${OUTPUT_FOLDER}/client-consumer/certs/client-chain-bundle.cert.pem)
-
-pub_hex_provider=$(openssl ec -in ${OUTPUT_FOLDER}/client-provider/private/client.key.pem -pubout -outform DER | tail -c 65 | xxd -p -c 65)
-x_provider=${pub_hex_provider:2:64}
-y_provider=${pub_hex_provider:66:64}
-
-x_provider_enc=$(echo -n "$x_provider" | xxd -r -p | openssl base64 -A | tr '+/' '-_' | tr -d '=')
-y_provider_enc=$(echo -n "$y_provider" | xxd -r -p | openssl base64 -A | tr '+/' '-_' | tr -d '=')
-
-yq -i ".didJson.key.crv = \"P-256\"" ${k3sFolder}/provider.yaml
-yq -i ".didJson.key.xCoord = \"${x_provider_enc}\"" ${k3sFolder}/provider.yaml
-yq -i ".didJson.key.yCoord = \"${y_provider_enc}\"" ${k3sFolder}/provider.yaml
