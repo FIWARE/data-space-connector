@@ -19,8 +19,8 @@ data:
         "frontendUrl": "{{ .Values.keycloak.realm.frontendUrl }}",
         {{- if eq .Values.elsi.enabled  true }}
         "issuerDid": {{ .Values.elsi.did | quote }}
-        {{- else if .Values.keycloak.signingKey }}
-        "issuerDid": {{ .Values.keycloak.signingKey.did | quote }}
+        {{- else if .Values.keycloak.issuerDid }}
+        "issuerDid": {{ .Values.keycloak.issuerDid | quote }}
         {{- else }}
         "issuerDid": "${DID}"
         {{- end }}

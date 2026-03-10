@@ -14,20 +14,24 @@ data:
     {{- end }}
     {{- $registration := .Values.registration}}
 
-    curl -v -X 'POST' \
+    {{- $values := .Values -}}
+    {{- range $index, $issuer := .Values.registration.issuer }}
+    curl -v -f -X 'POST' \
       '{{ $registration.til }}/issuer' \
       -H 'accept: */*' \
       -H 'Content-Type: application/json' \
       -d "{
-      \"did\": \"{{ $registration.did }}\",
+      \"did\": \"{{ $issuer.did }}\",
       \"credentials\": [
-        {{- $last := sub (len $registration.credentialTypes) 1 -}}
-        {{- range $index, $credentialType := $registration.credentialTypes }}
+        {{- $last := sub (len $issuer.credentialTypes) 1 -}}
+        {{- range $index, $credentialType := $issuer.credentialTypes }}
           {
             \"credentialsType\": \"{{ $credentialType }}\"
           }{{- if lt $index $last }},{{ end }}
         {{- end }}
       ]
     }"
+    {{- end }}
+    
 
 {{- end }}
