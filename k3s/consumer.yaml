@@ -695,7 +695,7 @@ did:
       enabled: false
     provideKeystore:
       enabled: true
-      keystoreSecretName: "did-keystore"
+      keystoreSecretName: "consumer-keystore"
       keystoreSecretKey: "keystore-did.pfx"
       keyType: "EC"
   ingress:
