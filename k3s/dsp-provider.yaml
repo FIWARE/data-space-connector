@@ -13,3 +13,9 @@ did:
 keycloak:
   signingKey:
     did: did:web:mp-operations.org#key-1
+
+identityhub:
+  superuser:
+    key: c3VwZXItdXNlcg==.random
+  env:
+    JAVA_TOOL_OPTIONS: -Dhttps.proxyHost=squid-proxy.infra.svc.cluster.local -Dhttps.proxyPort=8888 -Dhttp.proxyHost=squid-proxy.infra.svc.cluster.local -Dhttp.proxyPort=8888 -Dhttp.nonProxyHosts="*-vault|*.cluster.local" -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=5005

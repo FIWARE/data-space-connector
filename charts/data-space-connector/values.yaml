@@ -1456,11 +1456,15 @@ identityhub:
     # -- [Kubernetes image pull policy](https://kubernetes.io/docs/concepts/containers/images/#image-pull-policy) to use
     pullPolicy: IfNotPresent
   initContainers: []
-  useSVE: false
-  debug:
-    enabled: true
-    port: 5005
-    suspendOnStart: false
+  # -- configuration of the super user to be created in the identity hub
+  # -- the api key needs to be in form base64(<username>).<random-string>
+  superuser:
+    # -- reference to the existing secret containing the key
+    existingSecret:
+    # -- key in the secret containing the key
+    existingSecretKeyKey:
+    # -- the plain key, will be ignored if existingSecret is set
+    key:
   livenessProbe:
     # -- Whether to enable kubernetes [liveness-probe](https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/)
     enabled: true
@@ -1694,8 +1698,8 @@ identityhub:
     port:
     database: "ih"
     auth:
-      username: "user"
-      password: "password"
+      username:
+      password:
       existingSecret: database-secret
       existingSecretPasswordKey: postgres-admin-password
 

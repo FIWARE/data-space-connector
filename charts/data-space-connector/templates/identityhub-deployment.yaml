@@ -106,14 +106,6 @@ spec:
           resources:
             {{- toYaml .Values.identityhub.resources | nindent 12 }}
           env:
-            - name: JAVA_TOOL_OPTIONS
-              value: >
-                -Dhttps.proxyHost=squid-proxy.infra.svc.cluster.local
-                -Dhttps.proxyPort=8888
-                -Dhttp.proxyHost=squid-proxy.infra.svc.cluster.local
-                -Dhttp.proxyPort=8888
-                -Dhttp.nonProxyHosts="*-vault|*.cluster.local"
-                -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=5005
             - name: EDC_DATASOURCE_PARTICIPANTCONTEXT_PASSWORD
               {{- if .Values.identityhub.postgresql.auth.existingSecret }}
               valueFrom:
@@ -178,9 +170,14 @@ spec:
               value: {{ .Values.identityhub.postgresql.auth.password | quote }}
               {{- end }}
             - name: EDC_IH_API_SUPERUSER_KEY
-              value: c3VwZXItdXNlcg==.random
-          
-
+              {- if .Values.identityhub.superuser.existingSecret }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.identityhub.superuser.existingSecret }}
+                  key: {{ .Values.identityhub.superuser.existingSecretKeyKey }}                
+              {{- else }}
+              value: {{ .Values.identityhub.superuser.key | quote }}
+              {{- end }}
 
             ######################################
             ## Additional environment variables ##

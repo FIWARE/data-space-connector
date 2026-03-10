@@ -245,7 +245,7 @@ curl -X POST http://scorpio-provider.127.0.0.1.nip.io:8080/ngsi-ld/v1/entities \
 
 ### Prepare the offering
 
-The Demo - Offering  should be available for negotiation and usage through standard TMForum mechanisms and through DSP. Therefor all offerings are managed through TMForum-Standard APIs. In the Demo they are requested directly, while in real-world use-cases they most likely will be used through graphical interfaces like the [BAE Marketplace](https://github.com/FIWARE-TMForum/Business-API-Ecosystem).
+The Demo - Offering  should be available for negotiation and usage through standard TMForum mechanisms and through DSP. There for all offerings are managed through TMForum-Standard APIs. In the Demo they are requested directly, while in real-world use-cases they most likely will be used through graphical interfaces like the [BAE Marketplace](https://github.com/FIWARE-TMForum/Business-API-Ecosystem).
 
 1. A category has to be created, in order to assing the offering to a catalog:
 ```shell
@@ -548,7 +548,6 @@ export OPERATOR_CREDENTIAL=$(./doc/scripts/get_credential.sh https://keycloak-co
 
 3. Register the consumer in the marketplace:
 
-13. For the started transfer, now the provisioned endpoint has to be retrieved:
 ```shell
 export CONSUMER_DID="did:web:fancy-marketplace.biz"  
 export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh http://mp-data-service.127.0.0.1.nip.io:8080 $REP_CREDENTIAL default); echo ${ACCESS_TOKEN}
