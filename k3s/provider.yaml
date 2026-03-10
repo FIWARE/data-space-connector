@@ -3,6 +3,10 @@ apisix:
     replicaCount: 1
   image:
     debug: true
+  controlPlane:
+    service:
+      type: LoadBalancer
+    address: http://provider-apisix-control-plane:9180
   dataPlane:
     ingress:
       enabled: true
@@ -10,15 +14,164 @@ apisix:
       extraHosts:
         - name: mp-tmf-api.127.0.0.1.nip.io
           path: /
-        - name: tpp-data-service.127.0.0.1.nip.io
-          path: /
-        - name: tpp-service.127.0.0.1.nip.io
-          path: /
         - name: contract-management.127.0.0.1.nip.io
+          path: /
+        - name: dsp-mp-operations.127.0.0.1.nip.io
+          path: /
+        - name: dcp-mp-operations.127.0.0.1.nip.io
+          path: /
+        - name: identityhub-mp-operations.127.0.0.1.nip.io
+          path: /
+        - name: identityhub-management-mp-operations.127.0.0.1.nip.io
+          path: /
+        - name: vault-mp-operations.127.0.0.1.nip.io
           path: /
   catchAllRoute:
     enabled: false
-  routes: "- uri: /.well-known/openid-configuration\n  host: mp-data-service.127.0.0.1.nip.io\n  upstream:\n    nodes:\n      verifier:3000: 1\n    type: roundrobin\n  plugins:\n    proxy-rewrite:\n      uri: /services/data-service/.well-known/openid-configuration\n- uri: /.well-known/openid-configuration\n  host: contract-management.127.0.0.1.nip.io\n  upstream:\n    nodes:\n      verifier:3000: 1\n    type: roundrobin\n  plugins:\n    proxy-rewrite:\n      uri: /services/contract-management/.well-known/openid-configuration\n- uri: /.well-known/openid-configuration\n  host: tpp-service.127.0.0.1.nip.io\n  upstream:\n    nodes:\n      verifier:3000: 1\n    type: roundrobin\n  plugins:\n    proxy-rewrite:\n      uri: /services/tpp-service/.well-known/openid-configuration\n- uri: /.well-known/data-space-configuration\n  upstream:\n    nodes:\n      dsconfig:3002: 1\n    type: roundrobin\n  plugins:\n    proxy-rewrite:\n      uri: /.well-known/data-space-configuration/data-space-configuration.json\n    response-rewrite:\n      headers:\n        set:\n          content-type: application/json\n- uri: /*\n  host: tpp-data-service.127.0.0.1.nip.io\n  upstream:\n    nodes:\n      data-service-scorpio:9090: 1\n    type: roundrobin\n  plugins:\n    openid-connect:\n      proxy_opts:\n        https_proxy: http://squid-proxy.infra.svc.cluster.local:8888\n      bearer_only: true\n      use_jwks: true\n      client_id: contract-management\n      client_secret: unused\n      ssl_verify: false\n      discovery: https://verifier.mp-operations.org/services/tmf-api/.well-known/openid-configuration\n    opa:\n      host: \"http://localhost:8181\"\n      policy: tpp\n- uri: /*\n  host: mp-data-service.127.0.0.1.nip.io\n  upstream:\n    nodes:\n      data-service-scorpio:9090: 1\n    type: roundrobin\n  plugins: \n    openid-connect:\n      proxy_opts:\n        https_proxy: http://squid-proxy.infra.svc.cluster.local:8888\n      bearer_only: true\n      use_jwks: true\n      client_id: data-service\n      client_secret: unused\n      ssl_verify: false\n      discovery: https://verifier.mp-operations.org/services/data-service/.well-known/openid-configuration\n    opa:\n      host: \"http://localhost:8181\"\n      policy: policy/main\n      with_body: true\n- uri: /.well-known/openid-configuration\n  host: mp-tmf-api.127.0.0.1.nip.io\n  upstream:\n    nodes:\n      verifier:3000: 1\n    type: roundrobin\n  plugins:\n    proxy-rewrite:\n      uri: /services/tmf-api/.well-known/openid-configuration\n- uri: /api/v1/catalogs\n  host: tpp-catalog-service.127.0.0.1.nip.io\n  upstream:\n    nodes:\n      rainbow:8080: 1\n- uri: /*\n  host: tpp-service.127.0.0.1.nip.io\n  upstream:\n    nodes:\n      rainbow:8080: 1\n  plugins:\n    openid-connect:\n      proxy_opts:\n        https_proxy: http://squid-proxy.infra.svc.cluster.local:8888\n      bearer_only: true\n      use_jwks: true\n      client_id: data-service\n      client_secret: unused\n      ssl_verify: false\n      discovery: https://verifier.mp-operations.org/services/data-service/.well-known/openid-configuration\n    opa:\n      host: \"http://localhost:8181\"\n      policy: policy/main\n      with_body: true\n- uri: /*\n  host: mp-tmf-api.127.0.0.1.nip.io\n  upstream:\n    nodes:\n      tm-forum-api:8080: 1\n    type: roundrobin\n  plugins:\n    openid-connect:\n      proxy_opts:\n        https_proxy: http://squid-proxy.infra.svc.cluster.local:8888\n      bearer_only: true\n      use_jwks: true\n      client_id: contract-management\n      client_secret: unused\n      ssl_verify: false\n      discovery: https://verifier.mp-operations.org/services/tmf-api/.well-known/openid-configuration\n    opa:\n      host: \"http://localhost:8181\"\n      policy: policy/main\n      with_body: true\n- uri: /*\n  host: contract-management.127.0.0.1.nip.io\n  upstream:\n    nodes:\n      contract-management:8080: 1\n    type: roundrobin\n  plugins:\n    openid-connect:\n      proxy_opts:\n        https_proxy: http://squid-proxy.infra.svc.cluster.local:8888\n      bearer_only: true\n      use_jwks: true\n      client_id: contract-management\n      client_secret: unused\n      ssl_verify: false\n      discovery: https://verifier.mp-operations.org/services/contract-management/.well-known/openid-configuration\n    opa:\n      host: \"http://localhost:8181\"\n      policy: policy/main\n      with_body: true"
+  routes:
+    - uri: /.well-known/openid-configuration
+      host: mp-data-service.127.0.0.1.nip.io
+      upstream:
+        nodes:
+          verifier:3000: 1
+        type: roundrobin
+      plugins:
+        proxy-rewrite:
+          uri: /services/data-service/.well-known/openid-configuration
+    - uri: /.well-known/openid-configuration
+      host: contract-management.127.0.0.1.nip.io
+      upstream:
+        nodes:
+          verifier:3000: 1
+        type: roundrobin
+      plugins:
+        proxy-rewrite:
+          uri: /services/contract-management/.well-known/openid-configuration
+    - uri: /.well-known/data-space-configuration
+      upstream:
+        nodes:
+          dsconfig:3002: 1
+        type: roundrobin
+      plugins:
+        proxy-rewrite:
+          uri: /.well-known/data-space-configuration/data-space-configuration.json
+        response-rewrite:
+          headers:
+            set:
+              content-type: application/json
+    - uri: /*
+      host: mp-data-service.127.0.0.1.nip.io
+      upstream:
+        nodes:
+          data-service-scorpio:9090: 1
+        type: roundrobin
+      plugins:
+        openid-connect:
+          proxy_opts:
+            https_proxy: http://squid-proxy.infra.svc.cluster.local:8888
+          bearer_only: true
+          use_jwks: true
+          client_id: data-service
+          client_secret: unused
+          ssl_verify: false
+          discovery: https://verifier.mp-operations.org/services/data-service/.well-known/openid-configuration
+        opa:
+          host: "http://localhost:8181"
+          policy: policy/main
+          with_body: true
+    - uri: /.well-known/openid-configuration
+      host: mp-tmf-api.127.0.0.1.nip.io
+      upstream:
+        nodes:
+          verifier:3000: 1
+        type: roundrobin
+      plugins:
+        proxy-rewrite:
+          uri: /services/tmf-api/.well-known/openid-configuration
+    - uri: /.well-known/openid-configuration
+      host: dsp-mp-operations.127.0.0.1.nip.io
+      upstream:
+        nodes:
+          verifier:3000: 1
+        type: roundrobin
+      plugins:
+        proxy-rewrite:
+          uri: /services/dsp/.well-known/openid-configuration
+    - uri: /*
+      host: dsp-mp-operations.127.0.0.1.nip.io
+      upstream:
+        nodes:
+          provider-fdsc-edc-oid4vc:8080: 1
+      plugins:
+        openid-connect:
+          proxy_opts:
+            https_proxy: http://squid-proxy.infra.svc.cluster.local:8888
+          bearer_only: true
+          use_jwks: true
+          client_id: dsp
+          client_secret: unused
+          ssl_verify: false
+          discovery: https://verifier.mp-operations.org/services/dsp/.well-known/openid-configuration
+    - uri: /api/identity/*
+      host: identityhub-management-mp-operations.127.0.0.1.nip.io
+      upstream:
+        nodes:
+          identityhub-service:8082: 1
+    - uri: /api/credentials/*
+      host: identityhub-mp-operations.127.0.0.1.nip.io
+      upstream:
+        nodes:
+          identityhub-service:8083: 1
+    - uri: /*
+      host: dcp-mp-operations.127.0.0.1.nip.io
+      upstream:
+        nodes:
+          provider-fdsc-edc-dcp:8080: 1
+    - uri: /*
+      host: mp-tmf-api.127.0.0.1.nip.io
+      upstream:
+        nodes:
+          tm-forum-api:8080: 1
+        type: roundrobin
+      plugins:
+        openid-connect:
+          proxy_opts:
+            https_proxy: http://squid-proxy.infra.svc.cluster.local:8888
+          bearer_only: true
+          use_jwks: true
+          client_id: contract-management
+          client_secret: unused
+          ssl_verify: false
+          discovery: https://verifier.mp-operations.org/services/tmf-api/.well-known/openid-configuration
+        opa:
+          host: "http://localhost:8181"
+          policy: policy/main
+          with_body: true
+    - uri: /*
+      host: contract-management.127.0.0.1.nip.io
+      upstream:
+        nodes:
+          contract-management:8080: 1
+        type: roundrobin
+      plugins:
+        openid-connect:
+          proxy_opts:
+            https_proxy: http://squid-proxy.infra.svc.cluster.local:8888
+          bearer_only: true
+          use_jwks: true
+          client_id: contract-management
+          client_secret: unused
+          ssl_verify: false
+          discovery: https://verifier.mp-operations.org/services/contract-management/.well-known/openid-configuration
+        opa:
+          host: "http://localhost:8181"
+          policy: policy/main
+          with_body: true
+    - uri: /*
+      host: vault-mp-operations.127.0.0.1.nip.io
+      upstream:
+        nodes:
+          provider-vault:8200: 1
 credentials-config-service:
   ingress:
     enabled: true
@@ -96,7 +249,7 @@ credentials-config-service:
             dcql:
               credentials:
                 - id: legal-person-query
-                  format: "vc+sd-jwt"
+                  format: "dc+sd-jwt"
                   multiple: false
                   claims:
                     - id: name-claim
@@ -126,20 +279,28 @@ credentials-config-service:
                   meta:
                     type_values:
                       - OperatorCredential
-      - id: tpp-service
-        defaultOidcScope: "operator"
+      - id: dsp
+        defaultOidcScope: "openid"
         authorizationType: "DEEPLINK"
         oidcScopes:
-          "operator":
+          "openid":
             credentials:
-              - type: OperatorCredential
+              - type: MembershipCredential
                 trustedParticipantsLists:
                   - http://tir.127.0.0.1.nip.io
                 trustedIssuersLists:
-                  - http://trusted-issuers-list:8080
+                  - "*"
                 jwtInclusion:
                   enabled: true
                   fullInclusion: true
+            dcql:
+              credentials:
+                - id: mc-query
+                  format: "jwt_vc_json"
+                  multiple: true
+                  meta:
+                    type_values:
+                      - MembershipCredential
       - id: contract-management
         defaultOidcScope: "external-marketplace"
         authorizationType: "DEEPLINK"
@@ -176,6 +337,9 @@ vcverifier:
         paths:
           - "/"
   deployment:
+    image:
+      tag: 5.0.0-PRE
+      repository: quay.io/wi_stefan/vcverifier
     logging:
       level: DEBUG
     verifier:
@@ -280,14 +444,14 @@ did:
       didType: "web"
       hostUrl: "http://mp-operations.org"
       outputFormat: "json_jwk"
-      keystorePasswordSecretName: "provider-keystore"
+      keystorePasswordSecretName: "did-keystore"
       keystorePasswordSecretKey: "password"
     generateKey:
       enabled: false
     provideKeystore:
       enabled: true
-      keystoreSecretName: "provider-keystore"
-      keystoreSecretKey: "keystore.pfx"
+      keystoreSecretName: "did-keystore"
+      keystoreSecretKey: "keystore-did.pfx"
       keyType: "EC"
   ingress:
     enabled: true
@@ -304,6 +468,8 @@ did:
       - secretName: tls-secret
         hosts:
           - mp-operations.org
+    
+    
 dataSpaceConfig:
   enabled: true
   serviceType: ClusterIP
@@ -325,6 +491,10 @@ scorpio:
         paths:
           - "/"
 odrl-pap:
+  deployment:
+    image:
+      tag: 1.4.2
+      pullPolicy: Always
   additionalEnvVars:
     - name: GENERAL_ORGANIZATION_DID
       value: did:web:mp-operations.org
@@ -347,39 +517,32 @@ tm-forum-api:
     livenessProbe:
       healthPath: /health/liveness
       initialDelaySeconds: 30
-      periodSeconds: 1000
+      periodSeconds: 100
       successThreshold: 1
-      failureThreshold: 3000
-      timeoutSeconds: 10000
+      failureThreshold: 300
+      timeoutSeconds: 100
     readinessProbe:
       readinessPath: /health/readiness
       initialDelaySeconds: 30
-      periodSeconds: 1000
+      periodSeconds: 100
       successThreshold: 1
-      failureThreshold: 3000
-      timeoutSeconds: 10000
-# -- integration of rainbow
-rainbow:
-  enabled: true
-  db:
-    url: postgresql
-    user: postgres
-    existingSecret: database-secret
-    passwordKey: postgres-admin-password
-  ingress:
-    enabled: true
-    hosts:
-      - host: rainbow-provider.127.0.0.1.nip.io
-        paths:
-          - /
+      failureThreshold: 300
+      timeoutSeconds: 100
+
 tpp:
   enabled: true
   transfers:
     host: http://rainbow-provider.127.0.0.1.nip.io:8080
     path: transfers
 contract-management:
+  deployment:
+    image:
+      tag: latest
+      pullPolicy: Always
   did: did:web:mp-operations.org
-  enableCentralMarketplace: true
+  enableCentralMarketplace: false
+  enableOdrlPap: true
+  enableRainbow: false
   services:
     ## Config for Trusted Issuers List
     trusted-issuers-list:
@@ -404,9 +567,6 @@ contract-management:
     quote:
       ## URL for TM Forum Service hosting the Quote API
       url: http://provider-tm-forum-api-quote:8080
-    rainbow:
-      ## URL for the Rainbow service
-      url: http://rainbow:8080
     odrl:
       ## URL for the ODRL-PAP
       url: http://odrl-pap:8080
@@ -579,21 +739,16 @@ keycloak:
         name: test-realm-realm
     - name: provider-key
       secret:
-        secretName: provider-keystore
+        secretName: kc-keystore
         defaultMode: 0755
+  issuerDid: did:web:mp-operations.org
   signingKey:
-    storePath: /keys/cert.jks
+    storePath: /keys/keystore.pfx
     storePassword: "${STORE_PASS}"
     keyAlias: certificate
     keyPassword: "${STORE_PASS}"
     did: did:web:mp-operations.org
     keyAlgorithm: ES256
-  extraEnvVars:
-    - name: "STORE_PASS"
-      valueFrom:
-        secretKeyRef:
-          name: provider-keystore
-          key: password
   realm:
     frontendUrl: https://keycloak-provider.127.0.0.1.nip.io
     import: true
@@ -615,6 +770,12 @@ keycloak:
       "vc.user-credential.format": "jwt_vc",
       "vc.user-credential.scope": "LegalPersonCredential",
       "vc.user-credential.vct": "LegalPersonCredential",
+      "vc.membership-credential.credential_signing_alg_values_supported": "ES256",
+      "vc.membership-credential.credential_build_config.signing_algorithm": "ES256",
+      "vc.membership-credential.credential_build_config.token_jws_type": "JWT",
+      "vc.membership-credential.format": "jwt_vc",
+      "vc.membership-credential.scope": "MembershipCredential",
+      "vc.membership-credential.vct": "MembershipCredential",
       "vc.verifiable-credential.format": "vc+sd-jwt",
       "vc.verifiable-credential.scope": "VerifiableCredential",
       "vc.verifiable-credential.vct": "VerifiableCredential",
@@ -795,13 +956,281 @@ keycloak:
             }
           }
         ]
+      },
+      {
+        "name": "MembershipCredential",
+        "description": "Scope to produce a credential intended for m2m-access as a marketplace.",
+        "protocol": "openid-connect",
+        "attributes": {},
+        "protocolMappers": [
+          {
+            "name": "context-mapper-mc",
+            "protocol": "oid4vc",
+            "protocolMapper": "oid4vc-context-mapper",
+            "config": {
+              "context": "https://www.w3.org/2018/credentials/v1",
+              "supportedCredentialTypes": "MembershipCredential"
+            }
+          },
+          {
+            "name": "subject-mapper-mc-id",
+            "protocol": "oid4vc",
+            "protocolMapper": "oid4vc-static-claim-mapper",
+            "config": {
+              "subjectProperty": "id",
+              "staticValue": "did:web:mp-operations.org",
+              "supportedCredentialTypes": "MembershipCredential"
+            }
+          },
+          {
+            "name": "subject-mapper-mc-type",
+            "protocol": "oid4vc",
+            "protocolMapper": "oid4vc-static-claim-mapper",
+            "config": {
+              "subjectProperty": "membershipType",
+              "staticValue": "FullMember",
+              "supportedCredentialTypes": "MembershipCredential"
+            }
+          }
+        ]
       }
-    clients: "{\n  \"clientId\": \"did:web:fancy-marketplace.biz\",\n  \"enabled\": true,\n  \"description\": \"Client to connect test.org\",\n  \"surrogateAuthRequired\": false,\n  \"alwaysDisplayInConsole\": false,\n  \"clientAuthenticatorType\": \"client-secret\",\n  \"defaultRoles\": [],\n  \"redirectUris\": [],   \n  \"webOrigins\": [],\n  \"notBefore\": 0,\n  \"bearerOnly\": false,\n  \"consentRequired\": false,\n  \"standardFlowEnabled\": true,\n  \"implicitFlowEnabled\": false,\n  \"directAccessGrantsEnabled\": false,\n  \"serviceAccountsEnabled\": false,\n  \"publicClient\": false,\n  \"frontchannelLogout\": false,\n  \"protocol\": \"openid-connect\",\n  \"attributes\": {\n    \"client.secret.creation.time\": \"1675260539\"\n  },\n  \"protocolMappers\": [\n  ],\n  \"authenticationFlowBindingOverrides\": {},\n  \"fullScopeAllowed\": true,\n  \"nodeReRegistrationTimeout\": -1,\n  \"defaultClientScopes\": [],\n  \"optionalClientScopes\": []\n},\n{\n  \"clientId\": \"account\",\n  \"name\": \"${client_account}\",\n  \"rootUrl\": \"${authBaseUrl}\",\n  \"baseUrl\": \"/realms/test-realm/account/\",\n  \"surrogateAuthRequired\": false,\n  \"enabled\": true,\n  \"alwaysDisplayInConsole\": false,\n  \"clientAuthenticatorType\": \"client-secret\",\n  \"redirectUris\": [\n    \"/realms/test-realm/account/*\"\n  ],\n  \"webOrigins\": [],\n  \"notBefore\": 0,\n  \"bearerOnly\": false,\n  \"consentRequired\": false,\n  \"standardFlowEnabled\": true,\n  \"implicitFlowEnabled\": false,\n  \"directAccessGrantsEnabled\": false,\n  \"serviceAccountsEnabled\": false,\n  \"publicClient\": true,\n  \"frontchannelLogout\": false,\n  \"protocol\": \"openid-connect\",\n  \"attributes\": {\n    \"realm_client\": \"false\",\n    \"post.logout.redirect.uris\": \"+\"\n  },\n  \"authenticationFlowBindingOverrides\": {},\n  \"fullScopeAllowed\": true,\n  \"nodeReRegistrationTimeout\": 0,\n  \"defaultClientScopes\": [\n    \"web-origins\",\n    \"acr\",\n    \"roles\",\n    \"profile\",\n    \"basic\",\n    \"email\"\n  ],\n  \"optionalClientScopes\": [\n    \"address\",\n    \"phone\",\n    \"offline_access\",\n    \"organization\",\n    \"microprofile-jwt\"\n  ]\n},\n{\n  \"clientId\": \"account-console\",\n  \"name\": \"${client_account-console}\",\n  \"rootUrl\": \"${authBaseUrl}\",\n  \"baseUrl\": \"/realms/test-realm/account/\",\n  \"surrogateAuthRequired\": false,\n  \"enabled\": true,\n  \"alwaysDisplayInConsole\": false,\n  \"clientAuthenticatorType\": \"client-secret\",\n  \"redirectUris\": [\n    \"/realms/test-realm/account/*\"\n  ],\n  \"webOrigins\": [],\n  \"notBefore\": 0,\n  \"bearerOnly\": false,\n  \"consentRequired\": false,\n  \"standardFlowEnabled\": true,\n  \"implicitFlowEnabled\": false,\n  \"directAccessGrantsEnabled\": true,\n  \"serviceAccountsEnabled\": false,\n  \"publicClient\": true,\n  \"frontchannelLogout\": false,\n  \"protocol\": \"openid-connect\",\n  \"attributes\": {\n    \"realm_client\": \"false\",\n    \"post.logout.redirect.uris\": \"+\",\n    \"pkce.code.challenge.method\": \"S256\"\n  },\n  \"authenticationFlowBindingOverrides\": {},\n  \"fullScopeAllowed\": true,\n  \"nodeReRegistrationTimeout\": 0,\n  \"protocolMappers\": [\n    {\n      \"id\": \"706c5202-1b03-4fad-a5b8-484287e941f8\",\n      \"name\": \"audience resolve\",\n      \"protocol\": \"openid-connect\",\n      \"protocolMapper\": \"oidc-audience-resolve-mapper\",\n      \"consentRequired\": false,\n      \"config\": {}\n    }\n  ],\n  \"defaultClientScopes\": [\n    \"web-origins\",\n    \"acr\",\n    \"roles\",\n    \"profile\",\n    \"basic\",\n    \"email\"\n  ],\n  \"optionalClientScopes\": [\n    \"address\",\n    \"phone\",\n    \"offline_access\",\n    \"organization\",\n    \"microprofile-jwt\",\n    \"LegalPersonCredential\"\n  ]\n},\n{\n  \"clientId\": \"admin-cli\",\n  \"name\": \"${client_admin-cli}\",\n  \"surrogateAuthRequired\": false,\n  \"enabled\": true,\n  \"alwaysDisplayInConsole\": false,\n  \"clientAuthenticatorType\": \"client-secret\",\n  \"redirectUris\": [],\n  \"webOrigins\": [],\n  \"notBefore\": 0,\n  \"bearerOnly\": false,\n  \"consentRequired\": false,\n  \"standardFlowEnabled\": false,\n  \"implicitFlowEnabled\": false,\n  \"directAccessGrantsEnabled\": true,\n  \"serviceAccountsEnabled\": false,\n  \"publicClient\": true,\n  \"frontchannelLogout\": false,\n  \"protocol\": \"openid-connect\",\n  \"attributes\": {\n    \"realm_client\": \"false\",\n    \"client.use.lightweight.access.token.enabled\": \"true\"\n  },\n  \"authenticationFlowBindingOverrides\": {},\n  \"fullScopeAllowed\": true,\n  \"nodeReRegistrationTimeout\": 0,\n  \"protocolMappers\": [\n    {\n      \"name\": \"audience resolve\",\n      \"protocol\": \"openid-connect\",\n      \"protocolMapper\": \"oidc-audience-resolve-mapper\",\n      \"consentRequired\": false,\n      \"config\": {}\n    }\n  ],\n  \"defaultClientScopes\": [\n    \"web-origins\",\n    \"acr\",\n    \"roles\",\n    \"profile\",\n    \"basic\",\n    \"email\"\n  ],\n  \"optionalClientScopes\": [\n    \"address\",\n    \"phone\",\n    \"offline_access\",\n    \"organization\",\n    \"microprofile-jwt\",\n    \"UserCredential\"\n  ]\n}\n"
+    clients: "{\n  \"clientId\": \"did:web:fancy-marketplace.biz\",\n  \"enabled\": true,\n  \"description\": \"Client to connect test.org\",\n  \"surrogateAuthRequired\": false,\n  \"alwaysDisplayInConsole\": false,\n  \"clientAuthenticatorType\": \"client-secret\",\n  \"defaultRoles\": [],\n  \"redirectUris\": [],   \n  \"webOrigins\": [],\n  \"notBefore\": 0,\n  \"bearerOnly\": false,\n  \"consentRequired\": false,\n  \"standardFlowEnabled\": true,\n  \"implicitFlowEnabled\": false,\n  \"directAccessGrantsEnabled\": false,\n  \"serviceAccountsEnabled\": false,\n  \"publicClient\": false,\n  \"frontchannelLogout\": false,\n  \"protocol\": \"openid-connect\",\n  \"attributes\": {\n    \"client.secret.creation.time\": \"1675260539\"\n  },\n  \"protocolMappers\": [\n  ],\n  \"authenticationFlowBindingOverrides\": {},\n  \"fullScopeAllowed\": true,\n  \"nodeReRegistrationTimeout\": -1,\n  \"defaultClientScopes\": [],\n  \"optionalClientScopes\": []\n},\n{\n  \"clientId\": \"account\",\n  \"name\": \"${client_account}\",\n  \"rootUrl\": \"${authBaseUrl}\",\n  \"baseUrl\": \"/realms/test-realm/account/\",\n  \"surrogateAuthRequired\": false,\n  \"enabled\": true,\n  \"alwaysDisplayInConsole\": false,\n  \"clientAuthenticatorType\": \"client-secret\",\n  \"redirectUris\": [\n    \"/realms/test-realm/account/*\"\n  ],\n  \"webOrigins\": [],\n  \"notBefore\": 0,\n  \"bearerOnly\": false,\n  \"consentRequired\": false,\n  \"standardFlowEnabled\": true,\n  \"implicitFlowEnabled\": false,\n  \"directAccessGrantsEnabled\": false,\n  \"serviceAccountsEnabled\": false,\n  \"publicClient\": true,\n  \"frontchannelLogout\": false,\n  \"protocol\": \"openid-connect\",\n  \"attributes\": {\n    \"realm_client\": \"false\",\n    \"post.logout.redirect.uris\": \"+\"\n  },\n  \"authenticationFlowBindingOverrides\": {},\n  \"fullScopeAllowed\": true,\n  \"nodeReRegistrationTimeout\": 0,\n  \"defaultClientScopes\": [\n    \"web-origins\",\n    \"acr\",\n    \"roles\",\n    \"profile\",\n    \"basic\",\n    \"email\"\n  ],\n  \"optionalClientScopes\": [\n    \"address\",\n    \"phone\",\n    \"offline_access\",\n    \"organization\",\n    \"microprofile-jwt\"\n  ]\n},\n{\n  \"clientId\": \"account-console\",\n  \"name\": \"${client_account-console}\",\n  \"rootUrl\": \"${authBaseUrl}\",\n  \"baseUrl\": \"/realms/test-realm/account/\",\n  \"surrogateAuthRequired\": false,\n  \"enabled\": true,\n  \"alwaysDisplayInConsole\": false,\n  \"clientAuthenticatorType\": \"client-secret\",\n  \"redirectUris\": [\n    \"/realms/test-realm/account/*\"\n  ],\n  \"webOrigins\": [],\n  \"notBefore\": 0,\n  \"bearerOnly\": false,\n  \"consentRequired\": false,\n  \"standardFlowEnabled\": true,\n  \"implicitFlowEnabled\": false,\n  \"directAccessGrantsEnabled\": true,\n  \"serviceAccountsEnabled\": false,\n  \"publicClient\": true,\n  \"frontchannelLogout\": false,\n  \"protocol\": \"openid-connect\",\n  \"attributes\": {\n    \"realm_client\": \"false\",\n    \"post.logout.redirect.uris\": \"+\",\n    \"pkce.code.challenge.method\": \"S256\"\n  },\n  \"authenticationFlowBindingOverrides\": {},\n  \"fullScopeAllowed\": true,\n  \"nodeReRegistrationTimeout\": 0,\n  \"protocolMappers\": [\n    {\n      \"id\": \"706c5202-1b03-4fad-a5b8-484287e941f8\",\n      \"name\": \"audience resolve\",\n      \"protocol\": \"openid-connect\",\n      \"protocolMapper\": \"oidc-audience-resolve-mapper\",\n      \"consentRequired\": false,\n      \"config\": {}\n    }\n  ],\n  \"defaultClientScopes\": [\n    \"web-origins\",\n    \"acr\",\n    \"roles\",\n    \"profile\",\n    \"basic\",\n    \"email\"\n  ],\n  \"optionalClientScopes\": [\n    \"address\",\n    \"phone\",\n    \"offline_access\",\n    \"organization\",\n    \"microprofile-jwt\",\n    \"LegalPersonCredential\",\n    \"MembershipCredential\"\n  ]\n},\n{\n  \"clientId\": \"admin-cli\",\n  \"name\": \"${client_admin-cli}\",\n  \"surrogateAuthRequired\": false,\n  \"enabled\": true,\n  \"alwaysDisplayInConsole\": false,\n  \"clientAuthenticatorType\": \"client-secret\",\n  \"redirectUris\": [],\n  \"webOrigins\": [],\n  \"notBefore\": 0,\n  \"bearerOnly\": false,\n  \"consentRequired\": false,\n  \"standardFlowEnabled\": false,\n  \"implicitFlowEnabled\": false,\n  \"directAccessGrantsEnabled\": true,\n  \"serviceAccountsEnabled\": false,\n  \"publicClient\": true,\n  \"frontchannelLogout\": false,\n  \"protocol\": \"openid-connect\",\n  \"attributes\": {\n    \"realm_client\": \"false\",\n    \"client.use.lightweight.access.token.enabled\": \"true\"\n  },\n  \"authenticationFlowBindingOverrides\": {},\n  \"fullScopeAllowed\": true,\n  \"nodeReRegistrationTimeout\": 0,\n  \"protocolMappers\": [\n    {\n      \"name\": \"audience resolve\",\n      \"protocol\": \"openid-connect\",\n      \"protocolMapper\": \"oidc-audience-resolve-mapper\",\n      \"consentRequired\": false,\n      \"config\": {}\n    }\n  ],\n  \"defaultClientScopes\": [\n    \"web-origins\",\n    \"acr\",\n    \"roles\",\n    \"profile\",\n    \"basic\",\n    \"email\"\n  ],\n  \"optionalClientScopes\": [\n    \"address\",\n    \"phone\",\n    \"offline_access\",\n    \"organization\",\n    \"microprofile-jwt\",\n    \"UserCredential\"\n  ]\n}\n"
 registration:
   enabled: true
   configMap: provider-til-registration
   til: http://trusted-issuers-list.provider.svc.cluster.local:8080
-  did: did:web:mp-operations.org
-  credentialTypes:
-    - LegalPersonCredential
+  issuer:
+    - did: did:web:mp-operations.org
+      credentialTypes:
+        - LegalPersonCredential
+    - did: did:web:fancy-marketplace.biz
+      credentialTypes:
+        - LegalPersonCredential
+        - UserCredential
+        - MembershipCredential
   prepScript: export $(curl -f -X GET did-helper:3002/did-material/did.env)
+fdsc-edc:
+  enabled: false
+  deployment:
+    dcp:
+      deployment:
+        image:
+          repository: quay.io/wi_stefan/fdsc-edc-controlplane-dcp
+      service: {}
+      config:
+        edc:
+          hostname: dcp-mp-operations.127.0.0.1.nip.io
+    oid4vc:
+      deployment:
+        image:
+          repository: quay.io/wi_stefan/fdsc-edc-controlplane-oid4vc
+      config:
+        edc:
+          hostname: dsp-mp-operations.127.0.0.1.nip.io
+        fdscTransfer:
+          dcp:
+            enabled: false
+          oid4vc:
+            enabled: true
+            credentialsConfigAddress: http://credentials-config-service.provider.svc.cluster.local:8080
+            verifierHost: https://verifier.mp-operations.org
+            verifierInternalHost: verifier.provider.svc.cluster.local:3000
+            opaHost: http://localhost:8181
+            odrlPapHost: http://odrl-pap.provider.svc.cluster.local:8080
+        oid4vp:
+          enabled: true
+          credentialsFolder: /credential-repo
+          trustAnchorsFolder: /root-ca
+          trustAll: true
+          holder:
+            id: did:web:mp-operations.org
+            kid: did:web:mp-operations.org
+            key:
+              path: /signing-key/client-pkcs8.key.pem
+          proxy:
+            enabled: true
+            host: squid-proxy.infra.svc.cluster.local
+            port: 8888
+  common:
+    deployment:
+      additionalVolumeMounts:
+        - name: credential-repo
+          mountPath: /credential-repo
+        - name: signing-key
+          mountPath: /signing-key
+        - name: root-ca
+          mountPath: /root-ca
+        - name: cacerts
+          mountPath: /opt/java/openjdk/lib/security/cacerts
+          subPath: cacerts
+      additionalVolumes:
+        - name: signing-key
+          secret:
+            secretName: signing-key
+        - name: credentials-script
+          configMap:
+            name: credentials-script
+            defaultMode: 0755
+        - name: ca-certs-script
+          configMap:
+            name: ca-certs-script
+            defaultMode: 0755
+        - name: credential-repo
+          emptyDir: {}
+        - name: root-ca
+          secret:
+            secretName: root-ca
+        - name: cacerts
+          emptyDir: {}
+      additionalEnvVars:
+        - name: JAVA_TOOL_OPTIONS
+          value: >
+            -Dhttps.proxyHost=squid-proxy.infra.svc.cluster.local
+            -Dhttps.proxyPort=8888
+            -Dhttp.proxyHost=squid-proxy.infra.svc.cluster.local
+            -Dhttp.proxyPort=8888
+            -Dhttp.nonProxyHosts="*-vault|*.cluster.local"
+      initContainers:
+        # helper container to wait for keycloak present in local deployments, to avoid cascading crash-loops
+        - name: wait-for-keycloak
+          image: curlimages/curl:8.6.0
+          command:
+            - sh
+            - -c
+            - |
+              set -e
+              echo "Waiting for Keycloak to become ready..."
+
+              until curl -sf http://provider-keycloak:9000/health/ready > /dev/null; do
+                echo "Keycloak not ready yet, retrying..."
+                sleep 5
+              done
+              echo "Keycloak is ready."
+        - name: load-certs
+          image: "quay.io/fiware/contract-management:3.3.0"
+          command: ["/bin/sh", "-c", "/bin/import-ca.sh /certs-folder /root-ca/cacert.pem"]
+          volumeMounts:
+            - name: ca-certs-script
+              mountPath: /bin/import-ca.sh
+              subPath: import-ca.sh
+            - name: cacerts
+              mountPath: /certs-folder/
+            - name: root-ca
+              mountPath: /root-ca
+        # get a credential to be used by the contract-management
+        - name: get-credential
+          image: quay.io/curl/curl:8.1.2
+          command: ["/bin/sh", "-c", "/bin/get-credential.sh /credential-repo"]
+          volumeMounts:
+            - name: credentials-script
+              mountPath: /bin/get-credential.sh
+              subPath: get-credential.sh
+            - name: credential-repo
+              mountPath: /credential-repo
+    config:
+      issuerId: did:web:mp-operations.org
+      ebsiTir:
+        enabled: true
+        tilAddress: http://trusted-issuers-list.provider.svc.cluster.local:8080
+      oauth:
+        tokenUrl: http://identityhub-service.provider.svc.cluster.local:8087/api/sts/token
+        clientId: did:web:mp-operations.org
+        secretAlias: did:web:mp-operations.org-sts-client-secret
+      edc:
+        participant:
+          id: did:web:mp-operations.org
+      tmfExtension:
+        quoteApi: http://provider-tm-forum-api-quote.provider.svc.cluster.local:8080/tmf-api/quote/v4
+        agreementApi: http://provider-tm-forum-api-agreement.provider.svc.cluster.local:8080/tmf-api/agreementManagement/v4
+        productOrderApi: http://provider-tm-forum-api-product-ordering-management.provider.svc.cluster.local:8080/tmf-api/productOrderingManagement/v4
+        productCatalogApi: http://provider-tm-forum-api-product-catalog.provider.svc.cluster.local:8080/tmf-api/productCatalogManagement/v4
+        productInventoryApi: http://provider-tm-forum-api-product-inventory.provider.svc.cluster.local:8080/tmf-api/productInventory/v4
+        usageManagementApi: http://provider-tm-forum-api-usage-management.provider.svc.cluster.local:8080/tmf-api/usageManagement/v4
+        partyCatalogApi: http://provider-tm-forum-api-party-catalog.provider.svc.cluster.local:8080/tmf-api/party/v4
+      fdscTransfer:
+        credentialsConfigAddress: http://provider-ccs.127.0.0.1.nip.io:8080
+        transferHost: mp-data-service.127.0.0.1.nip.io
+        verifierHost: https://verifier.mp-operations.org
+        verifierInternalHost: verifier.provider.svc.cluster.local:3000
+        odrlPapHost: http://odrl-pap.provider.svc.cluster.local:8080
+        dcp:
+          enabled: true
+          oid:
+            host: http://provider-fdsc-edc-dcp.provider.svc.cluster.local:8081/api
+        # -- configuration of the apisix to be confiugured for serving the process
+        apisix:
+          # -- address of the management api of apisix
+          address: http://provider-apisix-control-plane.provider.svc.cluster.local:9180
+          # -- token to be used as an API-Key at the mangement api
+          token: admin
+          # -- in case the route should use a proxy, configure it here
+          httpsProxy: http://squid-proxy.infra.svc.cluster.local:8888
+      dcp:
+        enabled: true
+        scopes:
+          catalog: org.eclipse.tractusx.vc.type:MembershipCredential:read
+          negotiation: org.eclipse.tractusx.vc.type:MembershipCredential:read
+          transfer: org.eclipse.tractusx.vc.type:MembershipCredential:read
+          version: org.eclipse.tractusx.vc.type:MembershipCredential:read
+
+credentials:
+  enabled: true
+  keycloak:
+    address: http://provider-keycloak:8080
+    realm: test-realm
+    clientId: account-console
+    username: employee
+    scope: openid
+    password: test
+  configurations:
+    - id: user-credential
+      format: jwt_vc
+      targetFile: user-credential.jwt
+    - id: membership-credential
+      format: jwt_vc
+      targetFile: membership-credential.jwt
+
+identityhub:
+  enabled: false
+  didIngress:
+    hosts:
+    - host: mp-operations.org
+      paths:
+        - /
+  postgresql:
+    host: postgresql
+    port: 5432
+    auth:
+      username: postgres
+  deployment:
+    additionalVolumeMounts:
+      - name: root-ca
+        mountPath: /root-ca
+      - name: cacerts
+        mountPath: /opt/java/openjdk/lib/security/cacerts
+        subPath: cacerts
+    additionalVolumes:
+      - name: ca-certs-script
+        configMap:
+          name: ca-certs-script
+          defaultMode: 0755
+      - name: root-ca
+        secret:
+          secretName: root-ca
+      - name: cacerts
+        emptyDir: {}
+    initContainers:
+      - name: load-certs
+        image: "quay.io/fiware/contract-management:3.3.0"
+        command: ["/bin/sh", "-c", "/bin/import-ca.sh /certs-folder /root-ca/cacert.pem"]
+        volumeMounts:
+          - name: ca-certs-script
+            mountPath: /bin/import-ca.sh
+            subPath: import-ca.sh
+          - name: cacerts
+            mountPath: /certs-folder/
+          - name: root-ca
+            mountPath: /root-ca
+            
+vault:
+  enabled: false
