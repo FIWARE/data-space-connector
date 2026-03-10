@@ -15,6 +15,9 @@ keycloak:
     did: did:web:fancy-marketplace.biz#key-1
 
 identityhub:
+  endpoints:
+    identity:
+      authKeyAlias: "sup3r$3cr3t"
   superuser:
     key: c3VwZXItdXNlcg==.random
   env:
