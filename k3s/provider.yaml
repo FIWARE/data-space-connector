@@ -52,6 +52,20 @@ decentralizedIam:
       registration:
         enabled: true
         services:
+          - id: tpp-service
+            defaultOidcScope: "operator"
+            authorizationType: "DEEPLINK"
+            oidcScopes:
+              "operator":
+                credentials:
+                  - type: OperatorCredential
+                    trustedParticipantsLists:
+                      - http://tir.127.0.0.1.nip.io
+                    trustedIssuersLists:
+                      - http://trusted-issuers-list:8080
+                    jwtInclusion:
+                      enabled: true
+                      fullInclusion: true
           - id: bae
             defaultOidcScope: "openid learcredential"
             authorizationType: "FRONTEND_V2"
@@ -291,23 +305,38 @@ decentralizedIam:
       ingress:
         enabled: true
         hosts:
-          - name: mp-tmf-api.127.0.0.1.nip.io
-            path: ["/"]
-          - name: contract-management.127.0.0.1.nip.io
-            path: ["/"]
-          - name: dsp-mp-operations.127.0.0.1.nip.io
-            path: ["/"]
-          - name: dcp-mp-operations.127.0.0.1.nip.io
-            path: ["/"]
-          - name: identityhub-mp-operations.127.0.0.1.nip.io
-            path: ["/"]
-          - name: identityhub-management-mp-operations.127.0.0.1.nip.io
-            path: ["/"]
-          - name: vault-mp-operations.127.0.0.1.nip.io
-            path: ["/"]
+          - host: mp-data-service.127.0.0.1.nip.io
+            paths: ["/"]
+          - host: tpp-data-service.127.0.0.1.nip.io
+            paths: ["/"]
+          - host: tpp-service.127.0.0.1.nip.io
+            paths: ["/"]
+          - host: mp-tmf-api.127.0.0.1.nip.io
+            paths: ["/"]
+          - host: contract-management.127.0.0.1.nip.io
+            paths: ["/"]
+          - host: dsp-mp-operations.127.0.0.1.nip.io
+            paths: ["/"]
+          - host: dcp-mp-operations.127.0.0.1.nip.io
+            paths: ["/"]
+          - host: identityhub-mp-operations.127.0.0.1.nip.io
+            paths: ["/"]
+          - host: identityhub-management-mp-operations.127.0.0.1.nip.io
+            paths: ["/"]
+          - host: vault-mp-operations.127.0.0.1.nip.io
+            paths: ["/"]
       catchAllRoute:
         enabled: false
       routes:
+        - uri: /.well-known/openid-configuration
+          host: tpp-service.127.0.0.1.nip.io
+          upstream:
+            nodes:
+              verifier:3000: 1
+            type: roundrobin
+          plugins:
+            proxy-rewrite:
+              uri: /services/tpp-service/.well-known/openid-configuration
         - uri: /.well-known/openid-configuration
           host: mp-data-service.127.0.0.1.nip.io
           upstream:
@@ -470,6 +499,25 @@ decentralizedIam:
           upstream:
             nodes:
               provider-vault:8200: 1
+        - uri: /*
+          host: tpp-service.127.0.0.1.nip.io
+          upstream:
+            nodes:
+              rainbow:8080: 1
+          plugins:
+            openid-connect:
+              proxy_opts:
+                https_proxy: http://squid-proxy.infra.svc.cluster.local:8888
+              bearer_only: true
+              use_jwks: true
+              client_id: data-service
+              client_secret: unused
+              ssl_verify: false
+              discovery: https://verifier.mp-operations.org/services/data-service/.well-known/openid-configuration
+            opa:
+              host: http://localhost:8181
+              policy: policy/main
+              with_body: true
 
     odrl-pap:
       additionalEnvVars:
@@ -502,7 +550,7 @@ did:
       didType: "web"
       hostUrl: "http://mp-operations.org"
       outputFormat: "json_jwk"
-      keystorePasswordSecretName: "did-keystore"
+      keystorePasswordSecretName: "provider-keystore"
       keystorePasswordSecretKey: "password"
     generateKey:
       enabled: false
@@ -603,7 +651,7 @@ contract-management:
   did: did:web:mp-operations.org
   enableCentralMarketplace: false
   enableOdrlPap: true
-  enableRainbow: false
+  enableRainbow: true
   services:
     ## Config for Trusted Issuers List
     trusted-issuers-list:
@@ -620,6 +668,7 @@ contract-management:
       ## URL of the TM Forum Service hosting the Product Catalog API
       url: http://provider-tm-forum-api-product-catalog:8080
     service-catalog:
+
       ## URL of the TM Forum Service hosting the Service Catalog API
       url: http://provider-tm-forum-api-service-catalog:8080
     tmforum-agreement-api:
@@ -822,7 +871,7 @@ keycloak:
         name: test-realm-realm
     - name: provider-key
       secret:
-        secretName: kc-keystore
+        secretName: provider-keystore
         defaultMode: 0755
   issuerDid: did:web:mp-operations.org
   signingKey:
