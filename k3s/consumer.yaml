@@ -1,4 +1,6 @@
 keycloak:
+  metrics:
+    enabled: true
   resources:
     requests:
       cpu: "100m"
@@ -30,7 +32,7 @@ keycloak:
         name: test-realm-realm
     - name: consumer-key
       secret:
-        secretName: kc-keystore
+        secretName: consumer-keystore
         defaultMode: 0755
   issuerDid: did:web:fancy-marketplace.biz
   signingKey:
@@ -45,6 +47,9 @@ keycloak:
       value: "--import-realm"
     - name: KC_FEATURES
       value: "oid4vc-vci"
+    # enable health endpoints
+    - name: KC_HEALTH_ENABLED
+      value: "true"
     # keycloak admin password
     - name: KC_ADMIN_PASSWORD
       valueFrom:
@@ -689,7 +694,7 @@ did:
       didType: "web"
       hostUrl: "http://fancy-marketplace.biz"
       outputFormat: "json_jwk"
-      keystorePasswordSecretName: "did-keystore"
+      keystorePasswordSecretName: "consumer-keystore"
       keystorePasswordSecretKey: "password"
     generateKey:
       enabled: false
@@ -729,15 +734,6 @@ tm-forum-api:
   defaultConfig:
     image:
       tag: "1.4.4"
-  registration:
-    enabled: false
-  ingress:
-    enabled: true
-    hosts:
-      - host: consumer-tmf.127.0.0.1.nip.io
-        paths:
-          - /
-  defaultConfig:
     livenessProbe:
       healthPath: /health/liveness
       initialDelaySeconds: 30
@@ -752,6 +748,15 @@ tm-forum-api:
       successThreshold: 1
       failureThreshold: 300
       timeoutSeconds: 100
+  registration:
+    enabled: false
+  ingress:
+    enabled: true
+    hosts:
+      - host: consumer-tmf.127.0.0.1.nip.io
+        paths:
+          - /
+
 # scorpio as tmf backend, no public endpoint required
 scorpio:
   enabled: true
@@ -925,20 +930,20 @@ decentralizedIam:
         hosts:
           - host: fancy-marketplace.127.0.0.1.nip.io
             paths: ["/"]
-          - name: dsp-fancy-marketplace.127.0.0.1.nip.io
-            path: ["/"]
-          - name: dcp-fancy-marketplace.127.0.0.1.nip.io
-            path: ["/"]
-          - name: identityhub-fancy-marketplace.127.0.0.1.nip.io
-            path: ["/"]
-          - name: identityhub-management-fancy-marketplace.127.0.0.1.nip.io
-            path: ["/"]
-          - name: dsp-dcp-management.127.0.0.1.nip.io
-            path: ["/"]
-          - name: dsp-oid4vc-management.127.0.0.1.nip.io
-            path: ["/"]
-          - name: vault-fancy-marketplace.127.0.0.1.nip.io
-            path: ["/"]
+          - host: dsp-fancy-marketplace.127.0.0.1.nip.io
+            paths: ["/"]
+          - host: dcp-fancy-marketplace.127.0.0.1.nip.io
+            paths: ["/"]
+          - host: identityhub-fancy-marketplace.127.0.0.1.nip.io
+            paths: ["/"]
+          - host: identityhub-management-fancy-marketplace.127.0.0.1.nip.io
+            paths: ["/"]
+          - host: dsp-dcp-management.127.0.0.1.nip.io
+            paths: ["/"]
+          - host: dsp-oid4vc-management.127.0.0.1.nip.io
+            paths: ["/"]
+          - host: vault-fancy-marketplace.127.0.0.1.nip.io
+            paths: ["/"]
       catchAllRoute:
         enabled: false
       routes:

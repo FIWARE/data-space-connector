@@ -368,7 +368,7 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-antrun-plugin</artifactId>
-                <version>3.1.0</version>
+                <version>1.8</version>
                 <executions>
                     <execution>
                         <id>patch-apisix-ingress-namespace</id>
@@ -377,7 +377,7 @@
                             <goal>run</goal>
                         </goals>
                         <configuration>
-                            <target>
+                            <tasks>
                                 <replaceregexp
                                         match="(kind: Ingress&#xa;metadata:&#xa;  name: [^\n]+)"
                                         replace="\1&#xa;  namespace: provider"
@@ -394,7 +394,7 @@
                                              includes="**/apisix/templates/ingress.yaml"
                                              erroronmissingdir="false"/>
                                 </replaceregexp>
-                            </target>
+                            </tasks>
                         </configuration>
                     </execution>
                 </executions>
