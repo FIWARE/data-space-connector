@@ -20,7 +20,7 @@
   #
 
 ---
-{{- if (eq .Values.identityhub.enabled true) }}
+{{- if .Values.identityhub.enabled }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -170,7 +170,7 @@ spec:
               value: {{ .Values.identityhub.postgresql.auth.password | quote }}
               {{- end }}
             - name: EDC_IH_API_SUPERUSER_KEY
-              {- if .Values.identityhub.superuser.existingSecret }}
+              {{- if .Values.identityhub.superuser.existingSecret }}
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.identityhub.superuser.existingSecret }}
@@ -191,7 +191,8 @@ spec:
             - name: {{ $key | quote }}
               value: {{ $value | quote }}
           {{- end }}
-          {{- if or .Values.identityhub.envSecretNames .Values.identityhub.envConfigMapNames }}          envFrom:
+          {{- if or .Values.identityhub.envSecretNames .Values.identityhub.envConfigMapNames }}
+          envFrom:
           {{- range $value := .Values.identityhub.envSecretNames }}
             - secretRef:
                 name: {{ $value | quote }}

@@ -1,9 +1,6 @@
 fdsc-edc:
   enabled: true
 
-identityhub:
-  enabled: true
-
 vault:
   enabled: true
 
@@ -15,6 +12,7 @@ keycloak:
     did: did:web:fancy-marketplace.biz#key-1
 
 identityhub:
+  enabled: true
   endpoints:
     identity:
       authKeyAlias: "sup3r$3cr3t"

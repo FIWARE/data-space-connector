@@ -1297,7 +1297,7 @@ credentials:
       format: jwt_vc
       targetFile: legal-person-credential.jwt
 identityhub:
-  enabled: true
+  enabled: false
   didIngress:
     hosts:
     - host: fancy-marketplace.biz
