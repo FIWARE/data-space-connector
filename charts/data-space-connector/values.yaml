@@ -1285,8 +1285,6 @@ identityhub:
     sts:
       port: 8087
       path: /api/sts
-
-
   service:
     # -- [Service type](https://kubernetes.io/docs/concepts/services-networking/service/#publishing-services-service-types) to expose the running application on a set of Pods as a network service.
     type: ClusterIP
@@ -1441,14 +1439,14 @@ identityhub:
     public: ""
     readiness: ""
   postgresql:
-    host:
-    port:
+    host: postgres
+    port: "5432"
     database: "ih"
     auth:
-      username:
+      username: ih
       password:
-      existingSecret: database-secret
-      existingSecretPasswordKey: postgres-admin-password
+      existingSecret: ih.postgres.credentials.postgresql.acid.zalan.do
+      existingSecretPasswordKey: password
 
 vault:
   enabled: false
