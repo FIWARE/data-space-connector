@@ -31,7 +31,7 @@
         <version.com.squareup.okhttp>4.12.0</version.com.squareup.okhttp>
         <version.com.github.multiformat.multi-base>v1.1.1</version.com.github.multiformat.multi-base>
 
-        <parent.dir>${project.basedir}../</parent.dir>
+        <parent.dir>${project.basedir}/..</parent.dir>
     </properties>
 
     <dependencyManagement>
