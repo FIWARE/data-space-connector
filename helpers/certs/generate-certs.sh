@@ -131,13 +131,9 @@ cat ${OUTPUT_FOLDER}/client-provider/certs/client.cert.pem ${OUTPUT_FOLDER}/inte
 
 ## create keystore to be used by keycloak (with full chain bundle)
 # consumer
-openssl pkcs12 -export -password pass:password -in ${OUTPUT_FOLDER}/client-consumer/certs/client-chain-bundle.cert.pem -inkey ${OUTPUT_FOLDER}/client-consumer/private/client.key.pem -out ${OUTPUT_FOLDER}/client-consumer/certificate.p12 -name "certificate"
-openssl pkcs12 -export -password pass:password -in ${OUTPUT_FOLDER}/client-consumer/certs/client.cert.pem -inkey ${OUTPUT_FOLDER}/client-consumer/private/client.key.pem -out ${OUTPUT_FOLDER}/client-consumer/keystore-did.pfx -name "certificate"
 openssl pkcs12 -export -password pass:password -in ${OUTPUT_FOLDER}/client-consumer/certs/client-chain-bundle.cert.pem -inkey ${OUTPUT_FOLDER}/client-consumer/private/client.key.pem -out ${OUTPUT_FOLDER}/client-consumer/keystore.pfx -name "certificate"
 
 # provider
-openssl pkcs12 -export -password pass:password -in ${OUTPUT_FOLDER}/client-provider/certs/client-chain-bundle.cert.pem -inkey ${OUTPUT_FOLDER}/client-provider/private/client.key.pem -out ${OUTPUT_FOLDER}/client-provider/certificate.p12 -name "certificate"
-openssl pkcs12 -export -password pass:password -in ${OUTPUT_FOLDER}/client-provider/certs/client.cert.pem -inkey ${OUTPUT_FOLDER}/client-provider/private/client.key.pem -out ${OUTPUT_FOLDER}/client-provider/keystore-did.pfx -name "certificate"
 openssl pkcs12 -export -password pass:password -in ${OUTPUT_FOLDER}/client-provider/certs/client-chain-bundle.cert.pem -inkey ${OUTPUT_FOLDER}/client-provider/private/client.key.pem -out ${OUTPUT_FOLDER}/client-provider/keystore.pfx -name "certificate"
 
 ## create keystore to be used by did-helper (cert + key only, no chain - did-helper only supports 2 bags)
