@@ -18,7 +18,79 @@ jobs:
           sudo modprobe br_netfilter
 
       - name: Execute tests
-        id: test        
+        id: test
         run: |
           mvn clean integration-test -Ptest
-          
+
+      - name: Post-mortem on failure
+        if: failure()
+        run: |
+          echo "=============================="
+          echo "  CLUSTER POST-MORTEM REPORT  "
+          echo "=============================="
+
+          echo ""
+          echo "### NODE STATUS ###"
+          kubectl get nodes -o wide || true
+
+          echo ""
+          echo "### NODE CAPACITY & ALLOCATABLE RESOURCES ###"
+          kubectl describe nodes | grep -A 10 -E "^(Name:|Capacity:|Allocatable:|Conditions:)" || true
+
+          echo ""
+          echo "### ALL PODS (all namespaces) ###"
+          kubectl get pods --all-namespaces -o wide || true
+
+          echo ""
+          echo "### PODS NOT RUNNING ###"
+          kubectl get pods --all-namespaces --field-selector='status.phase!=Running,status.phase!=Succeeded' -o wide || true
+
+          echo ""
+          echo "### EVENTS (sorted by time, last 100) ###"
+          kubectl get events --all-namespaces --sort-by='.lastTimestamp' | tail -100 || true
+
+          echo ""
+          echo "### EVENTS WARNING ###"
+          kubectl get events --all-namespaces --field-selector=type=Warning --sort-by='.lastTimestamp' || true
+
+          echo ""
+          echo "### IMAGE PULL / BACKOFF ERRORS ###"
+          kubectl get pods --all-namespaces -o json \
+            | jq -r '.items[] | select(.status.containerStatuses != null) | .metadata.namespace + "/" + .metadata.name + ": " + (.status.containerStatuses[].state | to_entries[] | .key + " -> " + (.value.reason // ""))' 2>/dev/null \
+            | grep -iE "backoff|imagepull|errimagepull|crashloop|oomkill" || echo "No image pull / crash errors found"
+
+          echo ""
+          echo "### DESCRIBE PODS NOT RUNNING ###"
+          kubectl get pods --all-namespaces --field-selector='status.phase!=Running,status.phase!=Succeeded' -o json \
+            | jq -r '.items[].metadata | .namespace + "/" + .name' \
+            | while read pod; do
+                ns=$(echo $pod | cut -d/ -f1)
+                name=$(echo $pod | cut -d/ -f2)
+                echo "--- Pod: $pod ---"
+                kubectl describe pod "$name" -n "$ns" || true
+                echo ""
+              done
+
+          echo ""
+          echo "### LOGS OF FAILED/ERRORED PODS (last 100 lines each) ###"
+          kubectl get pods --all-namespaces -o json \
+            | jq -r '.items[] | select(.status.phase == "Failed" or ((.status.containerStatuses // [])[] | .state.waiting.reason // "" | test("Error|BackOff|CrashLoop"))) | .metadata.namespace + "/" + .metadata.name' \
+            | while read pod; do
+                ns=$(echo $pod | cut -d/ -f1)
+                name=$(echo $pod | cut -d/ -f2)
+                echo "--- Logs: $pod ---"
+                kubectl logs "$name" -n "$ns" --all-containers --tail=100 2>&1 || true
+                echo ""
+              done
+
+          echo ""
+          echo "### DISK & MEMORY ON RUNNER ###"
+          df -h || true
+          free -h || true
+
+          echo ""
+          echo "### DOCKER IMAGES PULLED ###"
+          docker images || true
+
+          echo ""
+          echo "=== END OF POST-MORTEM ==="
