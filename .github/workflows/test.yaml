@@ -24,6 +24,8 @@ jobs:
 
       - name: Post-mortem on failure
         if: failure()
+        env:
+          KUBECONFIG: ${{ github.workspace }}/it/target/k3s.yaml
         run: |
           echo "=============================="
           echo "  CLUSTER POST-MORTEM REPORT  "
