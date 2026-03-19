@@ -608,9 +608,6 @@ tm-forum-api:
     contextUrl: https://uri.etsi.org/ngsi-ld/v1/ngsi-ld-core-context.jsonld
   allInOne:
     enabled: true
-    image:
-      repository: mortega5/tmforum-all-in-one
-      tag: 1.4.7
   apiProxy:
     enabled: false
   registration:

@@ -733,9 +733,6 @@ registration:
 tm-forum-api:
   allInOne:
     enabled: true
-    image:
-      repository: mortega5/tmforum-all-in-one
-      tag: 1.4.7
   apiProxy:
     enabled: false
   registration:

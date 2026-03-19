@@ -40,16 +40,6 @@ keycloak:
   ingress:
     enabled: true
     hostname: keycloak-consumer.127.0.0.1.nip.io
-  command:
-    - /bin/bash
-  args:
-    - -ec
-    - |
-      #!/bin/sh
-      export $(cat /did-material/did.env)
-      export KC_HOSTNAME=keycloak-consumer.127.0.0.1.nip.io
-      /opt/bitnami/scripts/keycloak/entrypoint.sh
-      /opt/bitnami/scripts/keycloak/run.sh
   initContainers:
     - name: install-jades-issuer
       image: quay.io/fiware/keycloak-jades-vc-issuer:1.2.0
@@ -57,7 +47,6 @@ keycloak:
       volumeMounts:
         - name: providers
           mountPath: /target
-
     - name: register-at-tir
       image: curlimages/curl:8.18.0
       command:
@@ -65,13 +54,7 @@ keycloak:
       args:
         - -ec
         - |
-          #!/bin/sh
-          . /did-material/did.env
           curl -X 'POST' 'http://tir.trust-anchor.svc.cluster.local:8080/issuer' -H 'Content-Type: application/json' -d "{\"did\": \"did:elsi:VATDE-1234567\", \"credentials\": []}"
-      volumeMounts:
-        - name: did-material
-          mountPath: /did-material
-
     - name: register-at-til
       image: quay.io/curl/curl:8.1.2
       command:
@@ -88,7 +71,6 @@ keycloak:
         - name: consumer-til-registration
           mountPath: /bin/init.sh
           subPath: init.sh
-
   extraVolumeMounts:
     - name: elsi-trust-store
       mountPath: /trust-store
@@ -96,10 +78,7 @@ keycloak:
       mountPath: /opt/bitnami/keycloak/data/import
     - name: providers
       mountPath: /opt/bitnami/keycloak/providers/
-
   extraVolumes:
-    - name: did-material
-      emptyDir: { }
     - name: realms
       configMap:
         name: test-realm-realm
@@ -118,7 +97,7 @@ keycloak:
     import: true
     name: test-realm
     clientRoles: |
-      "${CLIENT_DID}": [
+      "did:web:did-provider.127.0.0.1.nip.io": [
         {
           "name": "READER",
           "description": "Is allowed to see offers etc.",
@@ -145,7 +124,7 @@ keycloak:
           }
         ],
         "clientRoles": {
-          "${CLIENT_DID}": [
+          "did:web:did-provider.127.0.0.1.nip.io": [
             "OPERATOR"
           ],
           "account": [
@@ -158,7 +137,7 @@ keycloak:
       }
     clients: |
       {
-        "clientId": "${CLIENT_DID}",
+        "clientId": "did:web:did-provider.127.0.0.1.nip.io",
         "enabled": true,
         "description": "Client to connect test.org",
         "surrogateAuthRequired": false,
@@ -193,7 +172,7 @@ keycloak:
             "protocolMapper": "oid4vc-target-role-mapper",
             "config": {
               "subjectProperty": "roles",
-              "clientId": "${CLIENT_DID}",
+              "clientId": "did:web:did-provider.127.0.0.1.nip.io",
               "supportedCredentialTypes": "OperatorCredential"
             }
           },
