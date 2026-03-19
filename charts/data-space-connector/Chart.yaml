@@ -23,7 +23,7 @@ dependencies:
   # contract management
   - name: tm-forum-api
     condition: tm-forum-api.enabled
-    version: 0.15.5
+    version: 0.16.1
     repository: https://fiware.github.io/helm-charts
   - name: contract-management
     condition: contract-management.enabled

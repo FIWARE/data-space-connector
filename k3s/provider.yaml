@@ -458,7 +458,7 @@ decentralizedIam:
           host: mp-tmf-api.127.0.0.1.nip.io
           upstream:
             nodes:
-              tm-forum-api:8080: 1
+              tm-forum-api-svc:8080: 1
             type: roundrobin
           plugins:
             openid-connect:
@@ -605,22 +605,14 @@ scorpio:
           - "/"
 tm-forum-api:
   defaultConfig:
+    contextUrl: https://uri.etsi.org/ngsi-ld/v1/ngsi-ld-core-context.jsonld
+  allInOne:
+    enabled: true
     image:
-      tag: "1.4.4"
-    livenessProbe:
-      healthPath: /health/liveness
-      initialDelaySeconds: 30
-      periodSeconds: 100
-      successThreshold: 1
-      failureThreshold: 300
-      timeoutSeconds: 100
-    readinessProbe:
-      readinessPath: /health/readiness
-      initialDelaySeconds: 30
-      periodSeconds: 100
-      successThreshold: 1
-      failureThreshold: 3000
-      timeoutSeconds: 10000
+      repository: mortega5/tmforum-all-in-one
+      tag: 1.4.7
+  apiProxy:
+    enabled: false
   registration:
     enabled: false
   ingress:
@@ -644,10 +636,6 @@ rainbow:
         paths:
           - /
 contract-management:
-  deployment:
-    image:
-      tag: latest
-      pullPolicy: Always
   did: did:web:mp-operations.org
   enableCentralMarketplace: false
   enableOdrlPap: true
@@ -660,23 +648,22 @@ contract-management:
     ## Config for the TM Forum Service hosting the APIs
     product-order:
       ## URL of the TM Forum Service hosting the Product Ordering API
-      url: http://provider-tm-forum-api-product-ordering-management:8080
+      url: http://tm-forum-api-svc:8080
     party:
       ## URL of the TM Forum Service hosting the Party API
-      url: http://provider-tm-forum-api-party-catalog:8080
+      url: http://tm-forum-api-svc:8080
     product-catalog:
       ## URL of the TM Forum Service hosting the Product Catalog API
-      url: http://provider-tm-forum-api-product-catalog:8080
+      url: http://tm-forum-api-svc:8080
     service-catalog:
-
       ## URL of the TM Forum Service hosting the Service Catalog API
-      url: http://provider-tm-forum-api-service-catalog:8080
+      url: http://tm-forum-api-svc:8080
     tmforum-agreement-api:
       ## URL of the TM Forum Service hosting the Agreement API
-      url: http://provider-tm-forum-api-agreement:8080
+      url: http://tm-forum-api-svc:8080
     quote:
       ## URL for TM Forum Service hosting the Quote API
-      url: http://provider-tm-forum-api-quote:8080
+      url: http://tm-forum-api-svc:8080
     odrl:
       ## URL for the ODRL-PAP
       url: http://odrl-pap:8080
@@ -777,47 +764,47 @@ marketplace:
         tag: 10.5.0
     extraEnvVars:
       - name: BAE_CB_CUSTOMER_BILL
-        value: "http://provider-tm-forum-api-customer-bill-management:8080/tmf-api/customerBillManagement/v4"
+        value: "http://tm-forum-api-svc:8080/tmf-api/customerBillManagement/v4"
   bizEcosystemApis:
     tmForum:
       catalog:
-        host: provider-tm-forum-api-product-catalog
+        host: tm-forum-api-svc
         port: 8080
         path: /tmf-api/productCatalogManagement/v4
       inventory:
-        host: provider-tm-forum-api-product-inventory
+        host: tm-forum-api-svc
         port: 8080
         path: /tmf-api/productInventory/v4
       ordering:
-        host: provider-tm-forum-api-product-ordering-management
+        host: tm-forum-api-svc
         port: 8080
         path: /tmf-api/productOrderingManagement/v4
       billing:
-        host: provider-tm-forum-api-account
+        host: tm-forum-api-svc
         port: 8080
         path: /tmf-api/accountManagement/v4
       usage:
-        host: provider-tm-forum-api-usage-management
+        host: tm-forum-api-svc
         port: 8080
         path: /tmf-api/usageManagement/v4
       party:
-        host: provider-tm-forum-api-party-catalog
+        host: tm-forum-api-svc
         port: 8080
         path: /tmf-api/party/v4
       customer:
-        host: provider-tm-forum-api-customer-management
+        host: tm-forum-api-svc
         port: 8080
         path: /tmf-api/customerManagement/v4
       resources:
-        host: provider-tm-forum-api-resource-catalog
+        host: tm-forum-api-svc
         port: 8080
         path: /tmf-api/resourceCatalog/v4
       services:
-        host: provider-tm-forum-api-service-catalog
+        host: tm-forum-api-svc
         port: 8080
         path: /tmf-api/serviceCatalogManagement/v4
       resourceInventory:
-        host: provider-tm-forum-api-resource-inventory
+        host: tm-forum-api-svc
         port: 8080
         path: /tmf-api/resourceInventoryManagement/v4
   bizEcosystemLogicProxy:
@@ -1291,13 +1278,13 @@ fdsc-edc:
         participant:
           id: did:web:mp-operations.org
       tmfExtension:
-        quoteApi: http://provider-tm-forum-api-quote.provider.svc.cluster.local:8080/tmf-api/quote/v4
-        agreementApi: http://provider-tm-forum-api-agreement.provider.svc.cluster.local:8080/tmf-api/agreementManagement/v4
-        productOrderApi: http://provider-tm-forum-api-product-ordering-management.provider.svc.cluster.local:8080/tmf-api/productOrderingManagement/v4
-        productCatalogApi: http://provider-tm-forum-api-product-catalog.provider.svc.cluster.local:8080/tmf-api/productCatalogManagement/v4
-        productInventoryApi: http://provider-tm-forum-api-product-inventory.provider.svc.cluster.local:8080/tmf-api/productInventory/v4
-        usageManagementApi: http://provider-tm-forum-api-usage-management.provider.svc.cluster.local:8080/tmf-api/usageManagement/v4
-        partyCatalogApi: http://provider-tm-forum-api-party-catalog.provider.svc.cluster.local:8080/tmf-api/party/v4
+        quoteApi: http://tm-forum-api-svc.provider.svc.cluster.local:8080/tmf-api/quote/v4
+        agreementApi: http://tm-forum-api-svc-.provider.svc.cluster.local:8080/tmf-api/agreementManagement/v4
+        productOrderApi: http://tm-forum-api-svc.provider.svc.cluster.local:8080/tmf-api/productOrderingManagement/v4
+        productCatalogApi: http://tm-forum-api-svc.provider.svc.cluster.local:8080/tmf-api/productCatalogManagement/v4
+        productInventoryApi: http://tm-forum-api-svc.provider.svc.cluster.local:8080/tmf-api/productInventory/v4
+        usageManagementApi: http://tm-forum-api-svc.provider.svc.cluster.local:8080/tmf-api/usageManagement/v4
+        partyCatalogApi: http://tm-forum-api-svc.provider.svc.cluster.local:8080/tmf-api/party/v4
       fdscTransfer:
         credentialsConfigAddress: http://provider-ccs.127.0.0.1.nip.io:8080
         transferHost: mp-data-service.127.0.0.1.nip.io
