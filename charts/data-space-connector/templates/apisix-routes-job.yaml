@@ -20,7 +20,7 @@ spec:
       volumes:
         - name: apisix-routes
           configMap:
-            name: apisix-routes
+            name: apisix-routes-script
             defaultMode: 0755
 
       restartPolicy: Never

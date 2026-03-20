@@ -2,7 +2,7 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: apisix-routes
+  name: apisix-routes-script
   namespace: {{ $.Release.Namespace | quote }}
   labels:
     {{ include "dsc.labels" . | nindent 4 }}
