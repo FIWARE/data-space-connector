@@ -91,6 +91,26 @@ else
   echo "Intermediate CA already exists, skipping generation."
 fi
 
+# wildcard
+mkdir -p ${OUTPUT_FOLDER}/client-wildcard/private
+mkdir -p ${OUTPUT_FOLDER}/client-wildcard/csr
+mkdir -p ${OUTPUT_FOLDER}/client-wildcard/certs
+
+openssl ecparam -name prime256v1 -genkey -noout -out ${OUTPUT_FOLDER}/client-wildcard/private/client.key.pem
+
+openssl req -new -set_serial 03 -key ${OUTPUT_FOLDER}/client-wildcard/private/client.key.pem -out ${OUTPUT_FOLDER}/client-wildcard/csr/client.csr \
+  -config ./config/openssl-client.cnf
+openssl x509 -req -in ${OUTPUT_FOLDER}/client-wildcard/csr/client.csr -CA ${OUTPUT_FOLDER}/intermediate/certs/ca-chain-bundle.cert.pem \
+  -CAkey ${OUTPUT_FOLDER}/intermediate/private/intermediate.cakey.pem -out ${OUTPUT_FOLDER}/client-wildcard/certs/client.cert.pem \
+  -CAcreateserial -days 1825 -sha256 -extfile ./config/openssl-client.cnf \
+  ${COPY_EXTS} \
+  -extensions v3_req
+
+openssl x509 -in ${OUTPUT_FOLDER}/client-wildcard/certs/client.cert.pem -out ${OUTPUT_FOLDER}/client-wildcard/certs/client.cert.pem -outform PEM
+
+cat ${OUTPUT_FOLDER}/client-wildcard/certs/client.cert.pem ${OUTPUT_FOLDER}/intermediate/certs/ca-chain-bundle.cert.pem > ${OUTPUT_FOLDER}/client-wildcard/certs/client-chain-bundle.cert.pem
+
+
 # consumer client
 mkdir -p ${OUTPUT_FOLDER}/client-consumer/private
 mkdir -p ${OUTPUT_FOLDER}/client-consumer/csr
@@ -167,7 +187,7 @@ kubectl create secret generic signing-key --from-file=${OUTPUT_FOLDER}/client-pr
 kubectl create secret generic signing-key-env --from-literal=key="${provider_key_env}" --namespace provider -o yaml --dry-run=client > ${k3sFolder}/provider/signing-key-env.yaml 
 
 # infra
-kubectl create secret tls local-wildcard --cert=${OUTPUT_FOLDER}/client-consumer/certs/client-chain-bundle.cert.pem --key=${OUTPUT_FOLDER}/client-consumer/private/client.key.pem --namespace infra -o yaml --dry-run=client > ${k3sFolder}/certs/local-wildcard.yaml
+kubectl create secret tls local-wildcard --cert=${OUTPUT_FOLDER}/client-wildcard/certs/client-chain-bundle.cert.pem --key=${OUTPUT_FOLDER}/client-wildcard/private/client.key.pem --namespace infra -o yaml --dry-run=client > ${k3sFolder}/certs/local-wildcard.yaml
 kubectl create secret generic gx-registry-keypair --from-file=PRIVATE_KEY=${OUTPUT_FOLDER}/ca/private/cakey-pkcs8.pem --from-file=X509_CERTIFICATE=${OUTPUT_FOLDER}/ca/certs/cacert.pem --namespace infra -o yaml --dry-run=client > ${k3sFolder}/infra/gx-registry/secret.yaml
 
 # root ca is required to enable trust for the verifier
