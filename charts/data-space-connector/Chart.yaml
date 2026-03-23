@@ -53,6 +53,6 @@ dependencies:
   # did-helper
   - name: did-helper
     alias: did
-    condition: did-helper.enabled
+    condition: did.enabled
     version: 0.1.13
     repository: https://fiware.github.io/helm-charts
