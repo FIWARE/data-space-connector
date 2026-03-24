@@ -14,6 +14,8 @@ mongo-operator:
 
 
 decentralizedIam:
+  enabled: false
+
   vcAuthentication:
     postgres-operator:
       enabled: false
@@ -80,4 +82,7 @@ vault:
   enabled: false
 
 issuerservice:
+  enabled: false
+
+cert-manager:
   enabled: false

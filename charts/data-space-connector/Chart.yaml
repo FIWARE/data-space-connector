@@ -6,7 +6,7 @@ version: 8.5.0
 dependencies:
   - name: decentralized-iam
     alias: decentralizedIam
-    condition: decentralized-iam.enabled
+    condition: decentralizedIam.enabled
     version: 2.0.0
     repository: https://fiware.github.io/decentralized-iam
   # data-service
@@ -56,3 +56,9 @@ dependencies:
     condition: did.enabled
     version: 0.1.13
     repository: https://fiware.github.io/helm-charts
+  # cert-manager
+  - name: cert-manager
+    alias: cert-manager
+    condition: cert-manager.enabled
+    version: 1.20.0
+    repository: https://charts.jetstack.io

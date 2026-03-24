@@ -9,7 +9,14 @@ metadata:
     app.kubernetes.io/name: gx-registry
   annotations:
     traefik.ingress.kubernetes.io/router.tls: "true"
+    cert-manager.io/cluster-issuer: "selfsigned-issuer"
+    cert-manager.io/private-key-algorithm: "ECDSA"
+    cert-manager.io/common-name: "registry.127.0.0.1.nip.io"
 spec:
+  tls:
+    - secretName: registry.127.0.0.1.nip.io-tls
+      hosts:
+        - registry.127.0.0.1.nip.io
   rules:
     - host: "registry.127.0.0.1.nip.io"
       http:

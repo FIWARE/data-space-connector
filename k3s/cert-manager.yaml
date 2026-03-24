@@ -1,11 +1,21 @@
+cert-manager:
+  enabled: true
+  crds:
+    enabled: true
+  startupapicheck:
+    # Disables the startup api check.
+    enabled: false
+
+mongo-operator:
+  enabled: false
 
 decentralizedIam:
+  enabled: false
 
   vcAuthentication:
+    enabled: false
     postgres-operator:
-      enabled: true
-      configKubernetes:
-        enable_cross_namespace_secret: true
+      enabled: false
 
     managedPostgres:
       enabled: false
@@ -29,9 +39,6 @@ decentralizedIam:
 
     tpp:
       enabled: false
-
-mongo-operator:
-  enabled: false
 
 managedMongo:
   enabled: false
@@ -66,5 +73,11 @@ keycloak:
 registration:
   enabled: false
 
-cert-manager:
+identityhub:
+  enabled: false
+
+vault:
+  enabled: false
+
+issuerservice:
   enabled: false
