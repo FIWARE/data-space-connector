@@ -1,3 +1,6 @@
+cert-manager:
+  enabled: false
+
 decentralizedIam:
   enabled: true
   vcAuthentication:
@@ -35,20 +38,33 @@ decentralizedIam:
       ingress:
         til:
           enabled: true
+          annotations:
+            cert-manager.io/cluster-issuer: "selfsigned-issuer"
+            cert-manager.io/private-key-algorithm: "ECDSA"
+            cert-manager.io/common-name: "til-provider.127.0.0.1.nip.io"
           hosts:
             - host: til-provider.127.0.0.1.nip.io
               paths:
                 - /
+          tls:
+            - secretName: til-provider.127.0.0.1.nip.io-tls
+              hosts:
+                - til-provider.127.0.0.1.nip.io
     credentials-config-service:
       ingress:
         enabled: true
+        annotations:
+          cert-manager.io/cluster-issuer: "selfsigned-issuer"
+          cert-manager.io/private-key-algorithm: "ECDSA"
+          cert-manager.io/common-name: "provider-ccs.127.0.0.1.nip.io"
         hosts:
           - host: provider-ccs.127.0.0.1.nip.io
             paths:
               - "/"
-      additionalEnvVars:
-        - name: FLYWAY_DATASOURCES_DEFAULT_LOCATIONS
-          value: classpath:db/migration/common,classpath:db/migration/mysql
+        tls:
+          - secretName: provider-ccs.127.0.0.1.nip.io-tls
+            hosts:
+              - provider-ccs.127.0.0.1.nip.io
       registration:
         enabled: true
         services:
@@ -209,10 +225,13 @@ decentralizedIam:
         enabled: true
         annotations:
           traefik.ingress.kubernetes.io/router.tls: "true"
+          cert-manager.io/cluster-issuer: "selfsigned-issuer"
+          cert-manager.io/private-key-algorithm: "ECDSA"
+          cert-manager.io/common-name: "verifier.mp-operations.org"
         tls:
           - hosts:
               - verifier.mp-operations.org
-            secretName: tls-secret
+            secretName: verifier.mp-operations.org-tls
         hosts:
           - host: verifier.mp-operations.org
             paths:
@@ -225,10 +244,10 @@ decentralizedIam:
           did: did:web:mp-operations.org
           supportedModes: ["byValue", "byReference"]
           clientIdentification:
-            keyPath: /signing-key/client.key.pem
+            keyPath: /signing-key/tls.key
+            certificatePath: /signing-key/tls.crt
             requestKeyAlgorithm: ES256
             id: x509_san_dns:verifier.mp-operations.org
-            certificatePath: /certificate/client-chain-bundle.cert.pem
         server:
           host: https://verifier.mp-operations.org
         configRepo:
@@ -236,22 +255,14 @@ decentralizedIam:
         additionalVolumes:
           - name: signing-key
             secret:
-              secretName: signing-key
-          - name: cert-chain
-            secret:
-              secretName: cert-chain
-          # add the self generated root ca to the system truststore
+              secretName: verifier.mp-operations.org-tls
+          # add the cert-manager CA to the system truststore
           - name: root-ca
             emptyDir: {}
-          - name: ca-to-add
-            secret:
-              secretName: root-ca
         additionalVolumeMounts:
           - name: signing-key
             mountPath: /signing-key
-          - name: cert-chain
-            mountPath: /certificate
-          # add the self generated root ca to the system truststore
+          # add the cert-manager CA to the system truststore
           - name: root-ca
             mountPath: /etc/ssl/cert.pem
             subPath: cert.pem
@@ -263,23 +274,16 @@ decentralizedIam:
           - name: NO_PROXY
             value: "credentials-config-service,w3.org,trusted-issuers-list"
         initContainers:
-          # add the self generated root ca to the system truststore
+          # add the cert-manager CA to the system truststore
           - name: add-root-ca
             image: alpine:3.21.3
-            command:
-              - /bin/sh
-            args:
-              - -c
-              - |
-                #!/bin/sh
-                cp /etc/ssl/cert.pem /root-ca/cert.pem
-                cat /root-ca/cacert.pem >> /root-ca/cert.pem
+            command: ["sh", "-c", "cat /etc/ssl/cert.pem /tmp/ca.crt > /root-ca/cert.pem"]
             volumeMounts:
               - name: root-ca
                 mountPath: /root-ca
-              - name: ca-to-add
-                mountPath: /root-ca/cacert.pem
-                subPath: cacert.pem
+              - name: signing-key
+                mountPath: /tmp/ca.crt
+                subPath: ca.crt
           - name: register-at-tir
             image: curlimages/curl:8.18.0
             command:
@@ -312,6 +316,9 @@ decentralizedIam:
           enabled: false
       ingress:
         enabled: true
+        annotations:
+          cert-manager.io/cluster-issuer: "selfsigned-issuer"
+          cert-manager.io/private-key-algorithm: "ECDSA"
         hosts:
           - host: mp-data-service.127.0.0.1.nip.io
             paths: ["/"]
@@ -333,6 +340,19 @@ decentralizedIam:
             paths: ["/"]
           - host: vault-mp-operations.127.0.0.1.nip.io
             paths: ["/"]
+        tls:
+          - secretName: apisix-provider-tls
+            hosts:
+              - mp-data-service.127.0.0.1.nip.io
+              - tpp-data-service.127.0.0.1.nip.io
+              - tpp-service.127.0.0.1.nip.io
+              - mp-tmf-api.127.0.0.1.nip.io
+              - contract-management.127.0.0.1.nip.io
+              - dsp-mp-operations.127.0.0.1.nip.io
+              - dcp-mp-operations.127.0.0.1.nip.io
+              - identityhub-mp-operations.127.0.0.1.nip.io
+              - identityhub-management-mp-operations.127.0.0.1.nip.io
+              - vault-mp-operations.127.0.0.1.nip.io
       catchAllRoute:
         enabled: false
       routes:
@@ -532,10 +552,18 @@ decentralizedIam:
           value: did:web:mp-operations.org
       ingress:
         enabled: true
+        annotations:
+          cert-manager.io/cluster-issuer: "selfsigned-issuer"
+          cert-manager.io/private-key-algorithm: "ECDSA"
+          cert-manager.io/common-name: "pap-provider.127.0.0.1.nip.io"
         hosts:
           - host: pap-provider.127.0.0.1.nip.io
             paths:
               - "/"
+        tls:
+          - secretName: pap-provider.127.0.0.1.nip.io-tls
+            hosts:
+              - pap-provider.127.0.0.1.nip.io
     tpp:
       enabled: true
       transfers:
@@ -553,36 +581,37 @@ did:
   enabled: true
   config:
     server:
-      serverPort: "3000"
-      didType: "web"
       hostUrl: "http://mp-operations.org"
-      outputFormat: "json_jwk"
-      keystorePasswordSecretName: "provider-keystore"
-      keystorePasswordSecretKey: "password"
-    generateKey:
-      enabled: false
-    provideKeystore:
-      enabled: true
-      keystoreSecretName: "provider-keystore"
-      keystoreSecretKey: "keystore-did.pfx"
-      keyType: "EC"
+      certPath: "/certs/tls.crt"
+  volumes:
+    - name: certs
+      secret:
+        secretName: mp-operations.org-tls
+        items:
+          - key: tls.crt
+            path: tls.crt
+  volumeMounts:
+    - name: certs
+      mountPath: /certs
   ingress:
     enabled: true
     className: ""
     annotations:
       traefik.ingress.kubernetes.io/service.passhostheader: "true"
       traefik.ingress.kubernetes.io/router.tls: "true"
+      cert-manager.io/cluster-issuer: "selfsigned-issuer"
+      cert-manager.io/private-key-algorithm: "ECDSA"
+      cert-manager.io/common-name: "mp-operations.org"
     hosts:
       - host: mp-operations.org
         paths:
           - path: /
             pathType: ImplementationSpecific
     tls:
-      - secretName: tls-secret
+      - secretName: mp-operations.org-tls
         hosts:
           - mp-operations.org
-    
-    
+
 dataSpaceConfig:
   enabled: true
   serviceType: ClusterIP
@@ -606,10 +635,18 @@ scorpio:
   ingress:
     enabled: true
     # only to make it available for the test initialization
+    annotations:
+      cert-manager.io/cluster-issuer: "selfsigned-issuer"
+      cert-manager.io/private-key-algorithm: "ECDSA"
+      cert-manager.io/common-name: "scorpio-provider.127.0.0.1.nip.io"
     hosts:
       - host: scorpio-provider.127.0.0.1.nip.io
         paths:
           - "/"
+    tls:
+      - secretName: scorpio-provider.127.0.0.1.nip.io-tls
+        hosts:
+          - scorpio-provider.127.0.0.1.nip.io
 tm-forum-api:
   defaultConfig:
     contextUrl: https://uri.etsi.org/ngsi-ld/v1/ngsi-ld-core-context.jsonld
@@ -621,10 +658,18 @@ tm-forum-api:
     enabled: false
   ingress:
     enabled: true
+    annotations:
+      cert-manager.io/cluster-issuer: "selfsigned-issuer"
+      cert-manager.io/private-key-algorithm: "ECDSA"
+      cert-manager.io/common-name: "tm-forum-api.127.0.0.1.nip.io"
     hosts:
       - host: tm-forum-api.127.0.0.1.nip.io
         paths:
           - /
+    tls:
+      - secretName: tm-forum-api.127.0.0.1.nip.io-tls
+        hosts:
+          - tm-forum-api.127.0.0.1.nip.io
 # -- integration of rainbow
 rainbow:
   enabled: true
@@ -635,10 +680,18 @@ rainbow:
     passwordKey: password
   ingress:
     enabled: true
+    annotations:
+      cert-manager.io/cluster-issuer: "selfsigned-issuer"
+      cert-manager.io/private-key-algorithm: "ECDSA"
+      cert-manager.io/common-name: "rainbow-provider.127.0.0.1.nip.io"
     hosts:
       - host: rainbow-provider.127.0.0.1.nip.io
         paths:
           - /
+    tls:
+      - secretName: rainbow-provider.127.0.0.1.nip.io-tls
+        hosts:
+          - rainbow-provider.127.0.0.1.nip.io
 contract-management:
   did: did:web:mp-operations.org
   enableCentralMarketplace: false
@@ -765,7 +818,7 @@ marketplace:
   bizEcosystemChargingBackend:
     deployment:
       image:
-        tag: 10.5.0
+        tag: 11.3.1
     extraEnvVars:
       - name: BAE_CB_CUSTOMER_BILL
         value: "http://tm-forum-api-svc:8080/tmf-api/customerBillManagement/v4"
@@ -814,15 +867,22 @@ marketplace:
   bizEcosystemLogicProxy:
     statefulset:
       image:
-        tag: 10.5.0-PRE-1
+        tag: 11.11.1
     ingress:
       enabled: true
       annotations:
         traefik.ingress.kubernetes.io/router.tls: "true"
+        cert-manager.io/cluster-issuer: "selfsigned-issuer"
+        cert-manager.io/private-key-algorithm: "ECDSA"
+        cert-manager.io/common-name: "marketplace.127.0.0.1.nip.io"
       hosts:
         - host: marketplace.127.0.0.1.nip.io
           paths:
             - "/"
+      tls:
+        - secretName: marketplace.127.0.0.1.nip.io-tls
+          hosts:
+            - marketplace.127.0.0.1.nip.io
     additionalEnvVars:
       - name: BAE_LP_SIOP_IS_REDIRECTION
         value: "true"
@@ -834,11 +894,17 @@ marketplace:
         value: "http://squid-proxy.infra.svc.cluster.local:8888"
       - name: BAE_LP_SIOP_CLIENT_ID
         value: did:web:mp-operations.org
-      - name: BAE_LP_SIOP_PRIVATE_KEY
-        valueFrom:
-          secretKeyRef:
-            name: signing-key-env
-            key: key
+      - name: BAE_LP_SIOP_PRIVATE_KEY_PEM
+        value: /certs-did/tls.key
+      - name: DATASPACE_ENABLED
+        value: "true"
+    extraVolumeMounts:
+      - name: did-priv-key
+        mountPath: /certs-did
+    extraContainerVolumes:
+      - name: did-priv-key
+        secret:
+          secretName: mp-operations.org-tls
 keycloak:
   resources:
     requests:
@@ -850,25 +916,59 @@ keycloak:
     hostname: keycloak-provider.127.0.0.1.nip.io
     annotations:
       traefik.ingress.kubernetes.io/router.tls: "true"
+      cert-manager.io/cluster-issuer: "selfsigned-issuer"
+      cert-manager.io/private-key-algorithm: "ECDSA"
+      cert-manager.io/common-name: "keycloak-provider.127.0.0.1.nip.io"
     pathType: Prefix
+    tls: true
+    extraTls:
+      - hosts:
+          - keycloak-provider.127.0.0.1.nip.io
+        secretName: keycloak-provider.127.0.0.1.nip.io-tls
+  initContainers:
+    - name: prepare-keystore
+      image: alpine/openssl:3.5.5
+      command: ["/bin/sh", "-c"]
+      args:
+        - |
+          openssl pkcs12 -export \
+            -in /certs-did/tls.crt \
+            -inkey /certs-did/tls.key \
+            -certfile /certs-did/ca.crt \
+            -out /did-material/cert.pfx \
+            -name "didPrivateKey" \
+            -passout env:STORE_PASS
+          chmod 644 /did-material/cert.pfx
+      env:
+      - name: "STORE_PASS"
+        valueFrom:
+          secretKeyRef:
+            name: keystore-password
+            key: password
+      volumeMounts:
+        - name: did-material
+          mountPath: /did-material
+        - name: did-priv-key
+          mountPath: /certs-did
   extraVolumeMounts:
-    - name: realms
-      mountPath: /opt/bitnami/keycloak/data/import
-    - name: provider-key
-      mountPath: "/keys"
+    - mountPath: /did-material
+      name: did-material
+    - mountPath: /opt/bitnami/keycloak/data/import
+      name: realms
   extraVolumes:
-    - name: realms
-      configMap:
+    - emptyDir: {}
+      name: did-material
+    - configMap:
         name: test-realm-realm
-    - name: provider-key
+      name: realms
+    - name: did-priv-key
       secret:
-        secretName: provider-keystore
-        defaultMode: 0755
+        secretName: mp-operations.org-tls
   issuerDid: did:web:mp-operations.org
   signingKey:
-    storePath: /keys/keystore.pfx
+    storePath: /did-material/cert.pfx
     storePassword: "${STORE_PASS}"
-    keyAlias: certificate
+    keyAlias: didPrivateKey
     keyPassword: "${STORE_PASS}"
     did: did:web:mp-operations.org
     keyAlgorithm: ES256
@@ -889,7 +989,7 @@ keycloak:
     - name: "STORE_PASS"
       valueFrom:
         secretKeyRef:
-          name: provider-keystore
+          name: keystore-password
           key: password
   realm:
     frontendUrl: https://keycloak-provider.127.0.0.1.nip.io
@@ -1190,7 +1290,7 @@ fdsc-edc:
             id: did:web:mp-operations.org
             kid: did:web:mp-operations.org
             key:
-              path: /signing-key/client-pkcs8.key.pem
+              path: /signing-key/tls.key
           proxy:
             enabled: true
             host: squid-proxy.infra.svc.cluster.local
@@ -1211,6 +1311,9 @@ fdsc-edc:
         - name: signing-key
           secret:
             secretName: signing-key
+            items:
+              - key: tls.key
+                path: tls.key
         - name: credentials-script
           configMap:
             name: credentials-script
@@ -1223,7 +1326,10 @@ fdsc-edc:
           emptyDir: {}
         - name: root-ca
           secret:
-            secretName: root-ca
+            secretName: mp-operations.org-tls
+            items:
+              - key: ca.crt
+                path: ca.crt
         - name: cacerts
           emptyDir: {}
       additionalEnvVars:
@@ -1251,8 +1357,8 @@ fdsc-edc:
               done
               echo "Keycloak is ready."
         - name: load-certs
-          image: "quay.io/seamware/fdsc-edc-controlplane-oid4vc:0.1.1"
-          command: ["/bin/sh", "-c", "/bin/import-ca.sh /certs-folder /root-ca/cacert.pem /opt/java/openjdk/lib/security/cacerts"]
+          image: "quay.io/fiware/contract-management:3.3.0"
+          command: ["/bin/sh", "-c", "/bin/import-ca.sh /certs-folder /root-ca/ca.crt"]
           volumeMounts:
             - name: ca-certs-script
               mountPath: /bin/import-ca.sh
@@ -1337,6 +1443,10 @@ credentials:
 identityhub:
   enabled: false
   didIngress:
+    annotations:
+      cert-manager.io/cluster-issuer: "selfsigned-issuer"
+      cert-manager.io/private-key-algorithm: "ECDSA"
+      cert-manager.io/common-name: "mp-operations.org"
     hosts:
     - host: mp-operations.org
       paths:
@@ -1348,34 +1458,37 @@ identityhub:
       username: ih
       existingSecret: ih.postgres.credentials.postgresql.acid.zalan.do
       existingSecretKeyKey: "password"
-  additionalVolumeMounts:
-    - name: root-ca
-      mountPath: /root-ca
-    - name: cacerts
-      mountPath: /opt/java/openjdk/lib/security/cacerts
-      subPath: cacerts
-  additionalVolumes:
-    - name: ca-certs-script
-      configMap:
-        name: ca-certs-script
-        defaultMode: 0755
-    - name: root-ca
-      secret:
-        secretName: root-ca
-    - name: cacerts
-      emptyDir: {}
-  initContainers:
-    - name: load-certs
-      image: "tractusx/identityhub:sha-687d69f"
-      command: ["/bin/sh", "-c", "/bin/import-ca.sh /certs-folder /root-ca/cacert.pem /opt/java/openjdk/lib/security/cacerts"]
-      volumeMounts:
-        - name: ca-certs-script
-          mountPath: /bin/import-ca.sh
-          subPath: import-ca.sh
-        - name: cacerts
-          mountPath: /certs-folder/
-        - name: root-ca
-          mountPath: /root-ca
-            
+  deployment:
+    additionalVolumeMounts:
+      - name: root-ca
+        mountPath: /root-ca
+      - name: cacerts
+        mountPath: /opt/java/openjdk/lib/security/cacerts
+        subPath: cacerts
+    additionalVolumes:
+      - name: ca-certs-script
+        configMap:
+          name: ca-certs-script
+          defaultMode: 0755
+      - name: root-ca
+        secret:
+          secretName: mp-operations.org-tls
+          items:
+            - key: ca.crt
+              path: ca.crt
+      - name: cacerts
+        emptyDir: {}
+    initContainers:
+      - name: load-certs
+        image: "quay.io/fiware/contract-management:3.3.0"
+        command: ["/bin/sh", "-c", "/bin/import-ca.sh /certs-folder /root-ca/ca.crt"]
+        volumeMounts:
+          - name: ca-certs-script
+            mountPath: /bin/import-ca.sh
+            subPath: import-ca.sh
+          - name: cacerts
+            mountPath: /certs-folder/
+          - name: root-ca
+            mountPath: /root-ca
 vault:
   enabled: false

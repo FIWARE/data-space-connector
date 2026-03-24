@@ -1,3 +1,6 @@
+cert-manager:
+  enabled: false
+
 keycloak:
   enabled: false
 
@@ -27,10 +30,18 @@ decentralizedIam:
     vcverifier:
       ingress:
         enabled: true
+        annotations:
+          cert-manager.io/cluster-issuer: "selfsigned-issuer"
+          cert-manager.io/private-key-algorithm: "ECDSA"
+          cert-manager.io/common-name: "provider-verifier.127.0.0.1.nip.io"
         hosts:
           - host: provider-verifier.127.0.0.1.nip.io
             paths:
               - "/"
+        tls:
+          - secretName: provider-verifier.127.0.0.1.nip.io-tls
+            hosts:
+              - provider-verifier.127.0.0.1.nip.io
       deployment:
         verifier:
           tirAddress: http://tir.127.0.0.1.nip.io:8080/
@@ -60,10 +71,18 @@ decentralizedIam:
       ingress:
         til:
           enabled: true
+          annotations:
+            cert-manager.io/cluster-issuer: "selfsigned-issuer"
+            cert-manager.io/private-key-algorithm: "ECDSA"
+            cert-manager.io/common-name: "til-provider.127.0.0.1.nip.io"
           hosts:
             - host: til-provider.127.0.0.1.nip.io
               paths:
                 - /
+          tls:
+            - secretName: til-provider.127.0.0.1.nip.io-tls
+              hosts:
+                - til-provider.127.0.0.1.nip.io
 
     dss:
       enabled: true
@@ -107,6 +126,15 @@ decentralizedIam:
         ingress:
           enabled: true
           hostname: mp-data-service.127.0.0.1.nip.io
+          annotations:
+            cert-manager.io/cluster-issuer: "selfsigned-issuer"
+            cert-manager.io/private-key-algorithm: "ECDSA"
+            cert-manager.io/common-name: "mp-data-service.127.0.0.1.nip.io"
+          tls: true
+          extraTls:
+            - secretName: mp-data-service.127.0.0.1.nip.io-tls
+              hosts:
+                - mp-data-service.127.0.0.1.nip.io
           extraHosts:
             - name: mp-tmf-api.127.0.0.1.nip.io
               path: /
@@ -186,40 +214,53 @@ decentralizedIam:
           value: did:web:did-provider.127.0.0.1.nip.io
       ingress:
         enabled: true
+        annotations:
+          cert-manager.io/cluster-issuer: "selfsigned-issuer"
+          cert-manager.io/private-key-algorithm: "ECDSA"
+          cert-manager.io/common-name: "pap-provider.127.0.0.1.nip.io"
         hosts:
           - host: pap-provider.127.0.0.1.nip.io
             paths:
               - "/"
+        tls:
+          - secretName: pap-provider.127.0.0.1.nip.io-tls
+            hosts:
+              - pap-provider.127.0.0.1.nip.io
 
 did:
   enabled: true
   config:
     server:
-      serverPort: "3002"
-      didType: "web"
       hostUrl: "http://did-provider.127.0.0.1.nip.io"
-      outputFormat: "json_jwk"
-      keystorePasswordSecretName: "provider-keystore"
-      keystorePasswordSecretKey: "password"
-    generateKey:
-      enabled: true
-      keyTypeToGenerate: "EC"
-      country: "DE"
-      state: "SAXONY"
-      locality: "Dresden"
-      organization: "M&P Operations Inc."
-      commonName: "www.mp-operation.org"
+      certPath: "/certs/tls.crt"
+  volumes:
+    - name: certs
+      secret:
+        secretName: did-provider.127.0.0.1.nip.io-tls
+        items:
+          - key: tls.crt
+            path: tls.crt
+  volumeMounts:
+    - name: certs
+      mountPath: /certs
   ingress:
     enabled: true
     className: ""
     annotations:
       traefik.ingress.kubernetes.io/service.passhostheader: "true"
       traefik.ingress.kubernetes.io/router.tls: "true"
+      cert-manager.io/cluster-issuer: "selfsigned-issuer"
+      cert-manager.io/private-key-algorithm: "ECDSA"
+      cert-manager.io/common-name: "did-provider.127.0.0.1.nip.io"
     hosts:
       - host: did-provider.127.0.0.1.nip.io
         paths:
           - path: /
             pathType: ImplementationSpecific
+    tls:
+      - secretName: did-provider.127.0.0.1.nip.io-tls
+        hosts:
+          - did-provider.127.0.0.1.nip.io
 
 dataSpaceConfig:
   enabled: true
@@ -238,10 +279,18 @@ scorpio:
   ingress:
     enabled: true
     # only to make it available for the test initialization
+    annotations:
+      cert-manager.io/cluster-issuer: "selfsigned-issuer"
+      cert-manager.io/private-key-algorithm: "ECDSA"
+      cert-manager.io/common-name: "scorpio-provider.127.0.0.1.nip.io"
     hosts:
     - host: scorpio-provider.127.0.0.1.nip.io
       paths:
         - "/"
+    tls:
+      - secretName: scorpio-provider.127.0.0.1.nip.io-tls
+        hosts:
+          - scorpio-provider.127.0.0.1.nip.io
   ccs:
     enabled: true
     defaultOidcScope:
@@ -270,16 +319,24 @@ tm-forum-api:
   registration:
     ccs:
       defaultOidcScope:
-        credentialTypes: 
+        credentialTypes:
           - UserCredential
         trustedParticipantsLists: http://tir.trust-anchor.svc.cluster.local:8080
 
   ingress:
     enabled: true
+    annotations:
+      cert-manager.io/cluster-issuer: "selfsigned-issuer"
+      cert-manager.io/private-key-algorithm: "ECDSA"
+      cert-manager.io/common-name: "tm-forum-api.127.0.0.1.nip.io"
     hosts:
       - host: tm-forum-api.127.0.0.1.nip.io
         paths:
           - /
+    tls:
+      - secretName: tm-forum-api.127.0.0.1.nip.io-tls
+        hosts:
+          - tm-forum-api.127.0.0.1.nip.io
 
 contract-management:
   services:

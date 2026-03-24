@@ -1,3 +1,6 @@
+cert-manager:
+  enabled: false
+
 keycloak:
   metrics:
     enabled: true
@@ -11,7 +14,36 @@ keycloak:
     hostname: keycloak-consumer.127.0.0.1.nip.io
     annotations:
       traefik.ingress.kubernetes.io/router.tls: "true"
+      cert-manager.io/cluster-issuer: "selfsigned-issuer"
+      cert-manager.io/private-key-algorithm: "ECDSA"
+      cert-manager.io/common-name: "keycloak-consumer.127.0.0.1.nip.io"
+    pathType: Prefix
+    tls: true
   initContainers:
+    - name: prepare-keystore
+      image: alpine/openssl:3.5.5
+      command: ["/bin/sh", "-c"]
+      args:
+        - |
+          openssl pkcs12 -export \
+            -in /certs-did/tls.crt \
+            -inkey /certs-did/tls.key \
+            -certfile /certs-did/ca.crt \
+            -out /did-material/cert.pfx \
+            -name "didPrivateKey" \
+            -passout env:STORE_PASS
+          chmod 644 /did-material/cert.pfx
+      env:
+      - name: "STORE_PASS"
+        valueFrom:
+          secretKeyRef:
+            name: keystore-password
+            key: password
+      volumeMounts:
+        - name: did-material
+          mountPath: /did-material
+        - name: did-priv-key
+          mountPath: /certs-did
     - name: register-at-tir
       image: curlimages/curl:8.18.0
       command:
@@ -22,23 +54,24 @@ keycloak:
           #!/bin/sh
           curl -X 'POST' 'http://tir.trust-anchor.svc.cluster.local:8080/issuer' -H 'Content-Type: application/json' -d "{\"did\": \"did:web:fancy-marketplace.biz\", \"credentials\": []}"
   extraVolumeMounts:
-    - name: realms
-      mountPath: /opt/bitnami/keycloak/data/import
-    - name: consumer-key
-      mountPath: "/keys"
+    - mountPath: /did-material
+      name: did-material
+    - mountPath: /opt/bitnami/keycloak/data/import
+      name: realms
   extraVolumes:
-    - name: realms
-      configMap:
+    - emptyDir: {}
+      name: did-material
+    - configMap:
         name: test-realm-realm
-    - name: consumer-key
+      name: realms
+    - name: did-priv-key
       secret:
-        secretName: consumer-keystore
-        defaultMode: 0755
+        secretName: fancy-marketplace.biz-tls
   issuerDid: did:web:fancy-marketplace.biz
   signingKey:
-    storePath: /keys/keystore.pfx
+    storePath: /did-material/cert.pfx
     storePassword: "${STORE_PASS}"
-    keyAlias: certificate
+    keyAlias: didPrivateKey
     keyPassword: "${STORE_PASS}"
     did: did:web:fancy-marketplace.biz
     keyAlgorithm: ES256
@@ -62,7 +95,7 @@ keycloak:
     - name: "STORE_PASS"
       valueFrom:
         secretKeyRef:
-          name: consumer-keystore
+          name: keystore-password
           key: password
   realm:
     frontendUrl: https://keycloak-consumer.127.0.0.1.nip.io
@@ -681,44 +714,54 @@ rainbow:
     passwordKey: password
   ingress:
     enabled: true
+    annotations:
+      cert-manager.io/cluster-issuer: "selfsigned-issuer"
+      cert-manager.io/private-key-algorithm: "ECDSA"
+      cert-manager.io/common-name: "rainbow-consumer.127.0.0.1.nip.io"
     hosts:
       - host: rainbow-consumer.127.0.0.1.nip.io
         paths:
           - /
     host: rainbow-consumer.127.0.0.1.nip.io
+    tls:
+      - secretName: rainbow-consumer.127.0.0.1.nip.io-tls
+        hosts:
+          - rainbow-consumer.127.0.0.1.nip.io
 did:
   enabled: true
   config:
     server:
-      serverPort: "3000"
-      didType: "web"
       hostUrl: "http://fancy-marketplace.biz"
-      outputFormat: "json_jwk"
-      keystorePasswordSecretName: "consumer-keystore"
-      keystorePasswordSecretKey: "password"
-    generateKey:
-      enabled: false
-    provideKeystore:
-      enabled: true
-      keystoreSecretName: "consumer-keystore"
-      keystoreSecretKey: "keystore-did.pfx"
-      keyType: "EC"
+      certPath: "/certs/tls.crt"
+  volumes:
+    - name: certs
+      secret:
+        secretName: fancy-marketplace.biz-tls
+        items:
+          - key: tls.crt
+            path: tls.crt
+  volumeMounts:
+    - name: certs
+      mountPath: /certs
   ingress:
     enabled: true
     className: ""
     annotations:
       traefik.ingress.kubernetes.io/service.passhostheader: "true"
       traefik.ingress.kubernetes.io/router.tls: "true"
+      cert-manager.io/cluster-issuer: "selfsigned-issuer"
+      cert-manager.io/private-key-algorithm: "ECDSA"
+      cert-manager.io/common-name: "fancy-marketplace.biz"
     hosts:
       - host: fancy-marketplace.biz
         paths:
           - path: /
             pathType: ImplementationSpecific
     tls:
-      - secretName: tls-secret
+      - secretName: fancy-marketplace.biz-tls
         hosts:
           - fancy-marketplace.biz
-   
+
 # register the consumer at the til. Only possible if it runs in the same environment and recommendable for demo deployments
 registration:
   enabled: true
@@ -739,10 +782,18 @@ tm-forum-api:
     enabled: false
   ingress:
     enabled: true
+    annotations:
+      cert-manager.io/cluster-issuer: "selfsigned-issuer"
+      cert-manager.io/private-key-algorithm: "ECDSA"
+      cert-manager.io/common-name: "consumer-tmf.127.0.0.1.nip.io"
     hosts:
       - host: consumer-tmf.127.0.0.1.nip.io
         paths:
           - /
+    tls:
+      - secretName: consumer-tmf.127.0.0.1.nip.io-tls
+        hosts:
+          - consumer-tmf.127.0.0.1.nip.io
 
 # scorpio as tmf backend, no public endpoint required
 scorpio:
@@ -787,7 +838,37 @@ decentralizedIam:
           requests:
             cpu: 100m
             memory: 128Mi
+      # only open for clean up in the tests
+      ingress:
+        til:
+          enabled: true
+          annotations:
+            cert-manager.io/cluster-issuer: "selfsigned-issuer"
+            cert-manager.io/private-key-algorithm: "ECDSA"
+            cert-manager.io/common-name: "til-consumer.127.0.0.1.nip.io"
+          hosts:
+            - host: til-consumer.127.0.0.1.nip.io
+              paths:
+                - /
+          tls:
+            - secretName: til-consumer.127.0.0.1.nip.io-tls
+              hosts:
+                - til-consumer.127.0.0.1.nip.io
     credentials-config-service:
+      ingress:
+        enabled: true
+        annotations:
+          cert-manager.io/cluster-issuer: "selfsigned-issuer"
+          cert-manager.io/private-key-algorithm: "ECDSA"
+          cert-manager.io/common-name: "consumer-ccs.127.0.0.1.nip.io"
+        hosts:
+          - host: consumer-ccs.127.0.0.1.nip.io
+            paths:
+              - "/"
+        tls:
+          - secretName: consumer-ccs.127.0.0.1.nip.io-tls
+            hosts:
+              - consumer-ccs.127.0.0.1.nip.io
       additionalEnvVars:
         - name: FLYWAY_DATASOURCES_DEFAULT_LOCATIONS
           value: classpath:db/migration/common,classpath:db/migration/mysql
@@ -848,10 +929,13 @@ decentralizedIam:
         enabled: true
         annotations:
           traefik.ingress.kubernetes.io/router.tls: "true"
+          cert-manager.io/cluster-issuer: "selfsigned-issuer"
+          cert-manager.io/private-key-algorithm: "ECDSA"
+          cert-manager.io/common-name: "verifier.fancy-marketplace.biz"
         tls:
           - hosts:
               - verifier.fancy-marketplace.biz
-            secretName: tls-secret
+            secretName: verifier.fancy-marketplace.biz-tls
         hosts:
           - host: verifier.fancy-marketplace.biz
             paths:
@@ -864,10 +948,10 @@ decentralizedIam:
           did: did:web:fancy-marketplace.biz
           supportedModes: ["byValue", "byReference"]
           clientIdentification:
-            keyPath: /signing-key/client.key.pem
+            keyPath: /signing-key/tls.key
+            certificatePath: /signing-key/tls.crt
             requestKeyAlgorithm: ES256
             id: x509_san_dns:verifier.fancy-marketplace.biz
-            certificatePath: /certificate/client-chain-bundle.cert.pem
         server:
           host: https://verifier.fancy-marketplace.biz
         configRepo:
@@ -875,22 +959,14 @@ decentralizedIam:
         additionalVolumes:
           - name: signing-key
             secret:
-              secretName: signing-key
-          - name: cert-chain
-            secret:
-              secretName: cert-chain
-          # add the self generated root ca to the system truststore
+              secretName: verifier.fancy-marketplace.biz-tls
+          # add the cert-manager CA to the system truststore
           - name: root-ca
             emptyDir: {}
-          - name: ca-to-add
-            secret:
-              secretName: root-ca
         additionalVolumeMounts:
           - name: signing-key
             mountPath: /signing-key
-          - name: cert-chain
-            mountPath: /certificate
-          # add the self generated root ca to the system truststore
+          # add the cert-manager CA to the system truststore
           - name: root-ca
             mountPath: /etc/ssl/cert.pem
             subPath: cert.pem
@@ -902,7 +978,7 @@ decentralizedIam:
           - name: NO_PROXY
             value: "credentials-config-service,w3.org,trusted-issuers-list"
         initContainers:
-          # add the self generated root ca to the system truststore
+          # add the cert-manager CA to the system truststore
           - name: add-root-ca
             image: alpine:3.21.3
             command:
@@ -916,9 +992,9 @@ decentralizedIam:
             volumeMounts:
               - name: root-ca
                 mountPath: /root-ca
-              - name: ca-to-add
+              - name: signing-key
                 mountPath: /root-ca/cacert.pem
-                subPath: cacert.pem
+                subPath: ca.crt
           - name: register-at-tir
             image: curlimages/curl:8.18.0
             command:
@@ -929,7 +1005,7 @@ decentralizedIam:
                 curl -X 'POST' 'http://tir.trust-anchor.svc.cluster.local:8080/issuer' -H 'Content-Type: application/json' -d "{\"did\": \"did:web:fancy-marketplace.biz\", \"credentials\": []}"
   odrlAuthorization:
     # authorized access to tmforum
-    apisix: 
+    apisix:
       etcd:
         replicaCount: 1
         persistence:
@@ -952,6 +1028,9 @@ decentralizedIam:
           enabled: false
       ingress:
         enabled: true
+        annotations:
+          cert-manager.io/cluster-issuer: "selfsigned-issuer"
+          cert-manager.io/private-key-algorithm: "ECDSA"
         hosts:
           - host: fancy-marketplace.127.0.0.1.nip.io
             paths: ["/"]
@@ -969,6 +1048,17 @@ decentralizedIam:
             paths: ["/"]
           - host: vault-fancy-marketplace.127.0.0.1.nip.io
             paths: ["/"]
+        tls:
+          - secretName: apisix-consumer-tls
+            hosts:
+              - fancy-marketplace.127.0.0.1.nip.io
+              - dsp-fancy-marketplace.127.0.0.1.nip.io
+              - dcp-fancy-marketplace.127.0.0.1.nip.io
+              - identityhub-fancy-marketplace.127.0.0.1.nip.io
+              - identityhub-management-fancy-marketplace.127.0.0.1.nip.io
+              - dsp-dcp-management.127.0.0.1.nip.io
+              - dsp-oid4vc-management.127.0.0.1.nip.io
+              - vault-fancy-marketplace.127.0.0.1.nip.io
       catchAllRoute:
         enabled: false
       routes:
@@ -1064,10 +1154,18 @@ decentralizedIam:
           value: did:web:fancy-marketplace.biz
       ingress:
         enabled: true
+        annotations:
+          cert-manager.io/cluster-issuer: "selfsigned-issuer"
+          cert-manager.io/private-key-algorithm: "ECDSA"
+          cert-manager.io/common-name: "pap-consumer.127.0.0.1.nip.io"
         hosts:
           - host: pap-consumer.127.0.0.1.nip.io
             paths:
               - "/"
+        tls:
+          - secretName: pap-consumer.127.0.0.1.nip.io-tls
+            hosts:
+              - pap-consumer.127.0.0.1.nip.io
 # contract management for distributing the buy events
 contract-management:
   did: did:web:fancy-marketplace.biz
@@ -1086,7 +1184,7 @@ contract-management:
     holder:
       holderId: did:web:fancy-marketplace.biz
       keyType: EC
-      keyPath: /signing-key/client-pkcs8.key.pem
+      keyPath: /signing-key/tls.key
       signatureAlgorithm: ECDH-ES
     proxyConfig:
       enabled: true
@@ -1137,7 +1235,7 @@ contract-management:
       # load the self-generated root ca into the java truststore
       - name: load-certs
         image: quay.io/fiware/contract-management:3.3.0
-        command: ["/bin/sh", "-c", "/bin/import-ca.sh /certs-folder /root-ca/cacert.pem"]
+        command: ["/bin/sh", "-c", "/bin/import-ca.sh /certs-folder /root-ca/ca.crt"]
         volumeMounts:
           - name: ca-certs-script
             mountPath: /bin/import-ca.sh
@@ -1160,6 +1258,9 @@ contract-management:
       - name: signing-key
         secret:
           secretName: signing-key
+          items:
+            - key: tls.key
+              path: tls.key
       - name: credentials-script
         configMap:
           name: credentials-script
@@ -1172,7 +1273,10 @@ contract-management:
         emptyDir: {}
       - name: root-ca
         secret:
-          secretName: root-ca
+          secretName: fancy-marketplace.biz-tls
+          items:
+            - key: ca.crt
+              path: ca.crt
       - name: cacerts
         emptyDir: {}
     additionalVolumeMounts:
@@ -1180,10 +1284,10 @@ contract-management:
         mountPath: /credential-repo
       - name: signing-key
         mountPath: /signing-key
-      # add the self generated root ca to the system truststore
+      # add the cert-manager CA to the system truststore
       - name: root-ca
         mountPath: /etc/ssl/cacert.pem
-        subPath: cacert.pem
+        subPath: ca.crt
       - name: cacerts
         mountPath: /usr/lib/jvm/java-21/lib/security/cacerts
         subPath: cacerts
@@ -1227,6 +1331,9 @@ fdsc-edc:
         - name: signing-key
           secret:
             secretName: signing-key
+            items:
+              - key: tls.key
+                path: tls.key
         - name: credentials-script
           configMap:
             name: credentials-script
@@ -1239,7 +1346,10 @@ fdsc-edc:
           emptyDir: {}
         - name: root-ca
           secret:
-            secretName: root-ca
+            secretName: fancy-marketplace.biz-tls
+            items:
+              - key: ca.crt
+                path: ca.crt
         - name: cacerts
           emptyDir: {}
       additionalEnvVars:
@@ -1249,7 +1359,7 @@ fdsc-edc:
             -Dhttps.proxyPort=8888
             -Dhttp.proxyHost=squid-proxy.infra.svc.cluster.local
             -Dhttp.proxyPort=8888
-            -Dhttp.nonProxyHosts="*-vault|*.cluster.local"    
+            -Dhttp.nonProxyHosts="*-vault|*.cluster.local"
       initContainers:
         # helper container to wait for keycloak present in local deployments, to avoid cascading crash-loops
         - name: wait-for-keycloak
@@ -1267,8 +1377,8 @@ fdsc-edc:
               done
               echo "Keycloak is ready."
         - name: load-certs
-          image: "quay.io/seamware/fdsc-edc-controlplane-oid4vc:0.1.1"
-          command: ["/bin/sh", "-c", "/bin/import-ca.sh /certs-folder /root-ca/cacert.pem /opt/java/openjdk/lib/security/cacerts"]
+          image: "quay.io/fiware/contract-management:3.3.0"
+          command: ["/bin/sh", "-c", "/bin/import-ca.sh /certs-folder /root-ca/ca.crt"]
           volumeMounts:
             - name: ca-certs-script
               mountPath: /bin/import-ca.sh
@@ -1308,7 +1418,7 @@ fdsc-edc:
           id: did:web:fancy-marketplace.biz
           kid: did:web:fancy-marketplace.biz
           key:
-            path: /signing-key/client-pkcs8.key.pem
+            path: /signing-key/tls.key
         proxy:
           enabled: true
           host: squid-proxy.infra.svc.cluster.local
@@ -1365,33 +1475,37 @@ identityhub:
       username: ih
       existingSecret: ih.postgres.credentials.postgresql.acid.zalan.do
       existingSecretKeyKey: "password"
-  additionalVolumeMounts:
-    - name: root-ca
-      mountPath: /root-ca
-    - name: cacerts
-      mountPath: /opt/java/openjdk/lib/security/cacerts
-      subPath: cacerts
-  additionalVolumes:
-    - name: ca-certs-script
-      configMap:
-        name: ca-certs-script
-        defaultMode: 0755
-    - name: root-ca
-      secret:
-        secretName: root-ca
-    - name: cacerts
-      emptyDir: {}
-  initContainers:
-    - name: load-certs
-      image: "tractusx/identityhub:sha-687d69f"
-      command: ["/bin/sh", "-c", "/bin/import-ca.sh /certs-folder /root-ca/cacert.pem /opt/java/openjdk/lib/security/cacerts"]
-      volumeMounts:
-        - name: ca-certs-script
-          mountPath: /bin/import-ca.sh
-          subPath: import-ca.sh
-        - name: cacerts
-          mountPath: /certs-folder/
-        - name: root-ca
-          mountPath: /root-ca
+  deployment:
+    additionalVolumeMounts:
+      - name: root-ca
+        mountPath: /root-ca
+      - name: cacerts
+        mountPath: /opt/java/openjdk/lib/security/cacerts
+        subPath: cacerts
+    additionalVolumes:
+      - name: ca-certs-script
+        configMap:
+          name: ca-certs-script
+          defaultMode: 0755
+      - name: root-ca
+        secret:
+          secretName: fancy-marketplace.biz-tls
+          items:
+            - key: ca.crt
+              path: ca.crt
+      - name: cacerts
+        emptyDir: {}
+    initContainers:
+      - name: load-certs
+        image: "quay.io/fiware/contract-management:3.3.0"
+        command: ["/bin/sh", "-c", "/bin/import-ca.sh /certs-folder /root-ca/ca.crt"]
+        volumeMounts:
+          - name: ca-certs-script
+            mountPath: /bin/import-ca.sh
+            subPath: import-ca.sh
+          - name: cacerts
+            mountPath: /certs-folder/
+          - name: root-ca
+            mountPath: /root-ca
 vault:
   enabled: true

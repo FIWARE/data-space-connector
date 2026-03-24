@@ -1462,3 +1462,6 @@ vault:
     paths:
       secret: /v1/secret
       health: /v1/sys/health
+
+cert-manager:
+  enabled: false

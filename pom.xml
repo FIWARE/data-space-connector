@@ -358,6 +358,23 @@
                             <additionalArguments>--name-template=postgres-operator --namespace=postgres-operator -f ${main.basedir}/k3s/postgres-operator.yaml</additionalArguments>
                         </configuration>
                     </execution>
+                    <!-- Cert-Manager operator as referenced in the DSC chart -->
+                    <execution>
+                        <id>template-dsc-cert-manager</id>
+                        <goals>
+                            <goal>init</goal>
+                            <goal>dependency-update</goal>
+                            <goal>template</goal>
+                        </goals>
+                        <phase>package</phase>
+                        <configuration>
+                            <chartDirectory>${project.build.directory}/charts/data-space-connector</chartDirectory>
+                            <skipTemplate>false</skipTemplate>
+                            <templateGenerateName>true</templateGenerateName>
+                            <templateOutputDir>${project.build.directory}/k3s/infra/cert-manager</templateOutputDir>
+                            <additionalArguments>--name-template=cert-manager --namespace=cert-manager -f ${main.basedir}/k3s/cert-manager.yaml</additionalArguments>
+                        </configuration>
+                    </execution>
                 </executions>
             </plugin>
             <!-- Workaround for https://github.com/apache/apisix-helm-chart/issues/949:
@@ -467,6 +484,17 @@
                         </goals>
                         <configuration>
                             <manifests>${project.build.directory}/k3s/infra/postgres-operator</manifests>
+                            <timeout>500</timeout>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>apply-cert-manager</id>
+                        <phase>deploy</phase>
+                        <goals>
+                            <goal>apply</goal>
+                        </goals>
+                        <configuration>
+                            <manifests>${project.build.directory}/k3s/infra/cert-manager</manifests>
                             <timeout>500</timeout>
                         </configuration>
                     </execution>
