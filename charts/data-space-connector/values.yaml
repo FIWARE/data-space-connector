@@ -334,12 +334,6 @@ keycloak:
       value: "--import-realm --health-enabled true"
     - name: KC_FEATURES
       value: "oid4vc-vci"
-    # password for reading the key store connected to the did
-    - name: STORE_PASS
-      valueFrom:
-        secretKeyRef:
-          name: kc-keystore
-          key: password
     # keycloak admin password
     - name: KC_ADMIN_PASSWORD
       valueFrom:
