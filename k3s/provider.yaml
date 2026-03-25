@@ -616,7 +616,6 @@ did:
       - secretName: mp-operations.org-tls
         hosts:
           - mp-operations.org
-
 dataSpaceConfig:
   enabled: true
   serviceType: ClusterIP
