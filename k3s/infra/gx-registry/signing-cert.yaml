@@ -1,0 +1,17 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: gx-registry-signing-cert
+  namespace: infra
+spec:
+  secretName: gx-registry-signing-cert
+  issuerRef:
+    name: selfsigned-issuer
+    kind: ClusterIssuer
+  privateKey:
+    algorithm: RSA
+    size: 4096
+    encoding: PKCS8
+  commonName: registry.127.0.0.1.nip.io
+  dnsNames:
+    - registry.127.0.0.1.nip.io

@@ -31,12 +31,17 @@ spec:
         - name: local-trust
           image: quay.io/wi_stefan/gaiax-local-trust:0.0.1
           imagePullPolicy: IfNotPresent
-          env:
-            - name: ROOT_CA
-              value: "MIIFnDCCA4SgAwIBAgIBATANBgkqhkiG9w0BAQsFADBnMQswCQYDVQQGEwJERTEPMA0GA1UECAwGU2F4b255MRAwDgYDVQQHDAdEcmVzZGVuMRMwEQYDVQQKDApGSUNPREVTIENBMRMwEQYDVQQDDApGSUNPREVTLUNBMQswCQYDVQQFEwIwMTAeFw0yNjAyMjUxNDM1NTBaFw0zNjAyMjMxNDM1NTBaMGcxCzAJBgNVBAYTAkRFMQ8wDQYDVQQIDAZTYXhvbnkxEDAOBgNVBAcMB0RyZXNkZW4xEzARBgNVBAoMCkZJQ09ERVMgQ0ExEzARBgNVBAMMCkZJQ09ERVMtQ0ExCzAJBgNVBAUTAjAxMIICIjANBgkqhkiG9w0BAQEFAAOCAg8AMIICCgKCAgEAvLPxmWkECMWVZpRSZkqy21eF3bS5imsZoRZCxPM9YU7flVujHuw8DQx3cWlO4IdiH5gQix7WFb2bJn7iXRDWfYW7SIDRTSKu21Q1pc9cJjVXMBSbfC80Dp8yX2zdAeraGfGY+yz+rnsjFlXtssK+4Gf2ut2Rtb7/ssqKLqt2ybzj2GwuubC79r03MchJ8O8lUROwy67ZUrwPlCg0POBtAOzJNueaBPhlPVPV/XeXQLdcK9utzu5Uv+oklgnepu9k/B/oVJO7lDdkcW18ESVdXfl/G7d2qGwE+CyV9KKD/qxrTB6zOHoLhaUrvcb+EmEYYUiUF8W8OGbMzIT3qpLOwaTk0ESVZO9YSc4fOlHz8MrUCxzRpKheMhRC6HCggTlyIvh0Wwf5TRieODGkBFpjYCkChxHO/iQ6hEc2VLdokZIJzDt43Qltj9+W3VOYEQaTBtWWNWyAYzgJGeGNRavXVz65gz+HfUKlkv6rcflMXojCYAphj2ZbRnZfzg8RdvHHWPfYpoexEaaTFsyjrufUCa7iAguO7P4e+EE3JLdHJwBhOb018cCyK5Hemiu+nvoYDcp8aiPdto8ARbvaubIdiwdsZ8X9FG0HhAsc3YTqN6BykDatA/kK6zJc/kOItbFSO1ODL7r4NTv799wsyip7sDfqOCYEQ97G7SY17JulHf0CAwEAAaNTMFEwHQYDVR0OBBYEFKXw6Nql+0B1mvtDFDSVNsHV9aTCMB8GA1UdIwQYMBaAFKXw6Nql+0B1mvtDFDSVNsHV9aTCMA8GA1UdEwEB/wQFMAMBAf8wDQYJKoZIhvcNAQELBQADggIBAEhbFwa5ZjJYF5X/0ggZLQE3BSPl4yfA0kZGxvjmr/H2FpVwSRHatxV6IKN3o2e6R355GpbjfX+8BSEoVBytbITT36AVqYahGe+D3JcbOE6Se5wfSR5cwe3QnGx1ge9jbnPoIFcz7xpkT41t9YLkA1WoUz9bybTK/BZ1gJG0eJcPI2MZSQsyBMPZBGNKxElqGMp/8KxcmiHKROmUqN4rhIKq1XpkyMwsuahD1hyDX0zR/DLvpphTSWhag45CYoAwj4mijCRn7NISctU/7GRyOmvgXJ4eNG9UuxnOTPMS0UXk/1/OHrFMX183wjoKqKSfxabmV2bvgzbFogiPCxsD7nXey+NZz0Qb+gxFNQm8m3WtB4tIckUvxJnIcKB2idGdmmAIAyzOmvbaea0n3KZyVL0yBZMQqIyAkpoOz4LQsar8JhSiqQMWHJFu155qxNivBrTDWp0RuLnZfuwAkJMODbHTwSfMUHrwzDUE8v3PFbOHd78kvGywtOPBhHOmNzUZ+qx4myRgR7U2Pe9R9w4B3zz56b2oIQoUCxSMWzwxMN2JsxwK2YQXCE9XI2MeGeOiZn0E/igU4eN8FDu8NGkkgslc3jhbJl0/KmOJ7nl6SMdZtXJO2UdBFhO8UKuar3l62pcBtKiELwgzmQsJ05i1/NQjLcu3c+hTXkYuD1qyVFFX"
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              export ROOT_CA=$(sed '/-----BEGIN CERTIFICATE-----/d;/-----END CERTIFICATE-----/d' /ca/ca.crt | tr -d '\n')
+              /entrypoint.sh
           volumeMounts:
             - name: trust-anchor
               mountPath: /out
+            - name: ca-cert
+              mountPath: /ca
+              readOnly: true
       containers:
         - name: gx-registry
           securityContext:
@@ -73,9 +78,16 @@ spec:
               value: "http://squid-proxy.infra.svc.cluster.local:8888"
             - name: HTTP_PROXY
               value: "http://squid-proxy.infra.svc.cluster.local:8888"
-          envFrom:
-            - secretRef:
-                name: gx-registry-keypair
+            - name: PRIVATE_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: gx-registry-signing-cert
+                  key: tls.key
+            - name: X509_CERTIFICATE
+              valueFrom:
+                secretKeyRef:
+                  name: gx-registry-signing-cert
+                  key: tls.crt
           volumeMounts:
             - name: registry-ipfs-data
               mountPath: /data/ipfs
@@ -107,3 +119,9 @@ spec:
           emptyDir: {}
         - name: registry-ipfs-data
           emptyDir: {}
+        - name: ca-cert
+          secret:
+            secretName: registry.127.0.0.1.nip.io-tls
+            items:
+              - key: ca.crt
+                path: ca.crt
