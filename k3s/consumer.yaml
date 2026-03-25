@@ -731,23 +731,10 @@ registration:
 ## configuration for providing the (central) marketplace
 # tmf as marketplace backend
 tm-forum-api:
-  defaultConfig:
-    image:
-      tag: "1.4.4"
-    livenessProbe:
-      healthPath: /health/liveness
-      initialDelaySeconds: 30
-      periodSeconds: 100
-      successThreshold: 1
-      failureThreshold: 300
-      timeoutSeconds: 100
-    readinessProbe:
-      readinessPath: /health/readiness
-      initialDelaySeconds: 30
-      periodSeconds: 100
-      successThreshold: 1
-      failureThreshold: 300
-      timeoutSeconds: 100
+  allInOne:
+    enabled: true
+  apiProxy:
+    enabled: false
   registration:
     enabled: false
   ingress:
@@ -998,7 +985,7 @@ decentralizedIam:
           host: fancy-marketplace.127.0.0.1.nip.io
           upstream:
             nodes:
-              tm-forum-api:8080: 1
+              tm-forum-api-svc:8080: 1
             type: roundrobin
           plugins:
             openid-connect:
@@ -1113,22 +1100,22 @@ contract-management:
     ## Config for the TM Forum Service hosting the APIs
     product-order:
       ## URL of the TM Forum Service hosting the Product Ordering API
-      url: http://consumer-tm-forum-api-product-ordering-management:8080
+      url: http://tm-forum-api-svc:8080
     party:
       ## URL of the TM Forum Service hosting the Party API
-      url: http://consumer-tm-forum-api-party-catalog:8080
+      url: http://tm-forum-api-svc:8080
     product-catalog:
       ## URL of the TM Forum Service hosting the Product Catalog API
-      url: http://consumer-tm-forum-api-product-catalog:8080
+      url: http://tm-forum-api-svc:8080
     service-catalog:
       ## URL of the TM Forum Service hosting the Service Catalog API
-      url: http://consumer-tm-forum-api-service-catalog:8080
+      url: http://tm-forum-api-svc:8080
     tmforum-agreement-api:
       ## URL of the TM Forum Service hosting the Agreement API
-      url: http://consumer-tm-forum-api-agreement:8080
+      url: http://tm-forum-api-svc:8080s
     quote:
       ## URL for TM Forum Service hosting the Quote API
-      url: http://consumer-tm-forum-api-quote:8080
+      url: http://tm-forum-api-svc:8080
   deployment:
     # init containers to be used for the local demo
     initContainers:
@@ -1327,13 +1314,13 @@ fdsc-edc:
           host: squid-proxy.infra.svc.cluster.local
           port: 8888
       tmfExtension:
-        quoteApi: http://consumer-tm-forum-api-quote.consumer.svc.cluster.local:8080/tmf-api/quote/v4
-        agreementApi: http://consumer-tm-forum-api-agreement.consumer.svc.cluster.local:8080/tmf-api/agreementManagement/v4
-        productOrderApi: http://consumer-tm-forum-api-product-ordering-management.consumer.svc.cluster.local:8080/tmf-api/productOrderingManagement/v4
-        productCatalogApi: http://consumer-tm-forum-api-product-catalog.consumer.svc.cluster.local:8080/tmf-api/productCatalogManagement/v4
-        productInventoryApi: http://consumer-tm-forum-api-product-inventory.consumer.svc.cluster.local:8080/tmf-api/productInventory/v4
-        usageManagementApi: http://consumer-tm-forum-api-usage-management.consumer.svc.cluster.local:8080/tmf-api/usageManagement/v4
-        partyCatalogApi: http://consumer-tm-forum-api-party-catalog.consumer.svc.cluster.local:8080/tmf-api/party/v4
+        quoteApi: http://tm-forum-api-svc.consumer.svc.cluster.local:8080/tmf-api/quote/v4
+        agreementApi: http://tm-forum-api-svc.consumer.svc.cluster.local:8080/tmf-api/agreementManagement/v4
+        productOrderApi: http://tm-forum-api-svc.consumer.svc.cluster.local:8080/tmf-api/productOrderingManagement/v4
+        productCatalogApi: http://tm-forum-api-svc.consumer.svc.cluster.local:8080/tmf-api/productCatalogManagement/v4
+        productInventoryApi: http://tm-forum-api-svc.consumer.svc.cluster.local:8080/tmf-api/productInventory/v4
+        usageManagementApi: http://tm-forum-api-svc.consumer.svc.cluster.local:8080/tmf-api/usageManagement/v4
+        partyCatalogApi: http://tm-forum-api-svc.consumer.svc.cluster.local:8080/tmf-api/party/v4
       # -- transfer extension is only needed at the provider side
       fdscTransfer:
         enabled: false

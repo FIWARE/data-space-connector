@@ -485,10 +485,11 @@ keycloak:
 tm-forum-api:
   # -- should it be enabled? set to false if one outside the chart is used.
   enabled: true
+  # -- All TM Forum APIs in a single deployment, using the all-in-one image. This is recommended for testing and development, but not for production use. When set to false, every API will be deployed separately, allowing for more flexibility and scalability.
+  allInOne:
+    enabled: false
   ## configuration to be used by every api-deployment if nothing specific is provided.
   defaultConfig:
-    image: 
-      tag: 1.4.4
     # --  ngsi-ld broker connection information
     ngsiLd:
       # -- address of the broker
