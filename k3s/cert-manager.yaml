@@ -6,6 +6,9 @@ cert-manager:
     # Disables the startup api check.
     enabled: false
 
+certManagerResources:
+  enabled: false
+
 mongo-operator:
   enabled: false
 

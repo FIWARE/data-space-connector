@@ -1,6 +1,11 @@
 cert-manager:
   enabled: false
 
+certManagerResources:
+  enabled: true
+  namespace: cert-manager
+  type: "selfsigned"
+
 decentralizedIam:
   enabled: true
   vcAuthentication:
