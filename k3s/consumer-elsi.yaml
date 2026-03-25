@@ -1,69 +1,60 @@
-vcverifier:
-  enabled: false
-credentials-config-service:
-  enabled: false
-trusted-issuers-list:
-  enabled: false
-mysql:
-  enabled: false
-odrl-pap:
-  enabled: false
-apisix:
-  enabled: false
+decentralizedIam:
+  enabled: true
+
+  vcAuthentication:
+
+    postgres-operator:
+      enabled: false
+
+    managedPostgres:
+      enabled: true
+      config:
+        volume:
+          storageClass: "local-path"
+
+    vcverifier:
+      enabled: false
+    credentials-config-service:
+      enabled: false
+    trusted-issuers-list:
+      enabled: false
+    dss:
+      enabled: false
+      crl:
+        enabled: false
+
+  odrlAuthorization:
+    odrl-pap:
+      enabled: false
+    apisix:
+      enabled: false
+
 scorpio:
-  enabled: false
-postgis:
   enabled: false
 tm-forum-api:
   enabled: false
 contract-management:
   enabled: false
 
-postgresql:
-  primary:
-    persistence:
-      enabled: false
-  readReplicas:
-    persistence:
-      enabled: false
-
 keycloak:
   ingress:
     enabled: true
     hostname: keycloak-consumer.127.0.0.1.nip.io
-  command:
-    - /bin/bash
-  args:
-    - -ec
-    - |
-      #!/bin/sh
-      export $(cat /did-material/did.env)
-      export KC_HOSTNAME=keycloak-consumer.127.0.0.1.nip.io
-      /opt/bitnami/scripts/keycloak/entrypoint.sh
-      /opt/bitnami/scripts/keycloak/run.sh
   initContainers:
     - name: install-jades-issuer
       image: quay.io/fiware/keycloak-jades-vc-issuer:1.2.0
-      imagePullPolicy: Always
+      imagePullPolicy: IfNotPresent
       volumeMounts:
         - name: providers
           mountPath: /target
-
     - name: register-at-tir
-      image: ubuntu
+      image: curlimages/curl:8.18.0
       command:
-        - /bin/bash
+        - /bin/sh
       args:
         - -ec
         - |
-          #!/bin/bash
-          # source /did-material/did.env
-          apt-get -y update; apt-get -y install curl
           curl -X 'POST' 'http://tir.trust-anchor.svc.cluster.local:8080/issuer' -H 'Content-Type: application/json' -d "{\"did\": \"did:elsi:VATDE-1234567\", \"credentials\": []}"
-      volumeMounts:
-        - name: did-material
-          mountPath: /did-material
-
     - name: register-at-til
       image: quay.io/curl/curl:8.1.2
       command:
@@ -80,7 +71,6 @@ keycloak:
         - name: consumer-til-registration
           mountPath: /bin/init.sh
           subPath: init.sh
-
   extraVolumeMounts:
     - name: elsi-trust-store
       mountPath: /trust-store
@@ -88,10 +78,7 @@ keycloak:
       mountPath: /opt/bitnami/keycloak/data/import
     - name: providers
       mountPath: /opt/bitnami/keycloak/providers/
-
   extraVolumes:
-    - name: did-material
-      emptyDir: { }
     - name: realms
       configMap:
         name: test-realm-realm
@@ -110,7 +97,7 @@ keycloak:
     import: true
     name: test-realm
     clientRoles: |
-      "${CLIENT_DID}": [
+      "did:web:did-provider.127.0.0.1.nip.io": [
         {
           "name": "READER",
           "description": "Is allowed to see offers etc.",
@@ -137,7 +124,7 @@ keycloak:
           }
         ],
         "clientRoles": {
-          "${CLIENT_DID}": [
+          "did:web:did-provider.127.0.0.1.nip.io": [
             "OPERATOR"
           ],
           "account": [
@@ -150,7 +137,7 @@ keycloak:
       }
     clients: |
       {
-        "clientId": "${CLIENT_DID}",
+        "clientId": "did:web:did-provider.127.0.0.1.nip.io",
         "enabled": true,
         "description": "Client to connect test.org",
         "surrogateAuthRequired": false,
@@ -185,7 +172,7 @@ keycloak:
             "protocolMapper": "oid4vc-target-role-mapper",
             "config": {
               "subjectProperty": "roles",
-              "clientId": "${CLIENT_DID}",
+              "clientId": "did:web:did-provider.127.0.0.1.nip.io",
               "supportedCredentialTypes": "OperatorCredential"
             }
           },
@@ -271,12 +258,8 @@ registration:
   configMap: consumer-til-registration
   til: http://trusted-issuers-list.provider.svc.cluster.local:8080
   did: ${DID}
-  credentialsType: UserCredential
-
-dss:
-  enabled: false
-  crl:
-    enabled: false
+  credentialTypes: 
+    - UserCredential
 
 elsi:
   enabled: true

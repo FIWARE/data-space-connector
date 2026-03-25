@@ -91,6 +91,26 @@ else
   echo "Intermediate CA already exists, skipping generation."
 fi
 
+# wildcard
+mkdir -p ${OUTPUT_FOLDER}/client-wildcard/private
+mkdir -p ${OUTPUT_FOLDER}/client-wildcard/csr
+mkdir -p ${OUTPUT_FOLDER}/client-wildcard/certs
+
+openssl ecparam -name prime256v1 -genkey -noout -out ${OUTPUT_FOLDER}/client-wildcard/private/client.key.pem
+
+openssl req -new -set_serial 03 -key ${OUTPUT_FOLDER}/client-wildcard/private/client.key.pem -out ${OUTPUT_FOLDER}/client-wildcard/csr/client.csr \
+  -config ./config/openssl-client.cnf
+openssl x509 -req -in ${OUTPUT_FOLDER}/client-wildcard/csr/client.csr -CA ${OUTPUT_FOLDER}/intermediate/certs/ca-chain-bundle.cert.pem \
+  -CAkey ${OUTPUT_FOLDER}/intermediate/private/intermediate.cakey.pem -out ${OUTPUT_FOLDER}/client-wildcard/certs/client.cert.pem \
+  -CAcreateserial -days 1825 -sha256 -extfile ./config/openssl-client.cnf \
+  ${COPY_EXTS} \
+  -extensions v3_req
+
+openssl x509 -in ${OUTPUT_FOLDER}/client-wildcard/certs/client.cert.pem -out ${OUTPUT_FOLDER}/client-wildcard/certs/client.cert.pem -outform PEM
+
+cat ${OUTPUT_FOLDER}/client-wildcard/certs/client.cert.pem ${OUTPUT_FOLDER}/intermediate/certs/ca-chain-bundle.cert.pem > ${OUTPUT_FOLDER}/client-wildcard/certs/client-chain-bundle.cert.pem
+
+
 # consumer client
 mkdir -p ${OUTPUT_FOLDER}/client-consumer/private
 mkdir -p ${OUTPUT_FOLDER}/client-consumer/csr
@@ -129,22 +149,23 @@ openssl x509 -in ${OUTPUT_FOLDER}/client-provider/certs/client.cert.pem -out ${O
 
 cat ${OUTPUT_FOLDER}/client-provider/certs/client.cert.pem ${OUTPUT_FOLDER}/intermediate/certs/ca-chain-bundle.cert.pem > ${OUTPUT_FOLDER}/client-provider/certs/client-chain-bundle.cert.pem
 
-## create keystore to be used by keycloak
+## create keystore to be used by keycloak (with full chain bundle)
 # consumer
-openssl pkcs12 -export -password pass:password -in ${OUTPUT_FOLDER}/client-consumer/certs/client-chain-bundle.cert.pem -inkey ${OUTPUT_FOLDER}/client-consumer/private/client.key.pem -out ${OUTPUT_FOLDER}/client-consumer/certificate.p12 -name "certificate"
-openssl pkcs12 -export -password pass:password -in ${OUTPUT_FOLDER}/client-consumer/certs/client.cert.pem -inkey ${OUTPUT_FOLDER}/client-consumer/private/client.key.pem -out ${OUTPUT_FOLDER}/client-consumer/keystore-did.pfx -name "certificate"
 openssl pkcs12 -export -password pass:password -in ${OUTPUT_FOLDER}/client-consumer/certs/client-chain-bundle.cert.pem -inkey ${OUTPUT_FOLDER}/client-consumer/private/client.key.pem -out ${OUTPUT_FOLDER}/client-consumer/keystore.pfx -name "certificate"
 
 # provider
-openssl pkcs12 -export -password pass:password -in ${OUTPUT_FOLDER}/client-provider/certs/client-chain-bundle.cert.pem -inkey ${OUTPUT_FOLDER}/client-provider/private/client.key.pem -out ${OUTPUT_FOLDER}/client-provider/certificate.p12 -name "certificate"
-openssl pkcs12 -export -password pass:password -in ${OUTPUT_FOLDER}/client-provider/certs/client.cert.pem -inkey ${OUTPUT_FOLDER}/client-provider/private/client.key.pem -out ${OUTPUT_FOLDER}/client-provider/keystore-did.pfx -name "certificate"
 openssl pkcs12 -export -password pass:password -in ${OUTPUT_FOLDER}/client-provider/certs/client-chain-bundle.cert.pem -inkey ${OUTPUT_FOLDER}/client-provider/private/client.key.pem -out ${OUTPUT_FOLDER}/client-provider/keystore.pfx -name "certificate"
 
+## create keystore to be used by did-helper (cert + key only, no chain - did-helper only supports 2 bags)
+# consumer
+openssl pkcs12 -export -password pass:password -in ${OUTPUT_FOLDER}/client-consumer/certs/client.cert.pem -inkey ${OUTPUT_FOLDER}/client-consumer/private/client.key.pem -out ${OUTPUT_FOLDER}/client-consumer/keystore-did.pfx -name "certificate"
+
+# provider
+openssl pkcs12 -export -password pass:password -in ${OUTPUT_FOLDER}/client-provider/certs/client.cert.pem -inkey ${OUTPUT_FOLDER}/client-provider/private/client.key.pem -out ${OUTPUT_FOLDER}/client-provider/keystore-did.pfx -name "certificate"
 
 # consumer
 kubectl create secret tls tls-secret --cert=${OUTPUT_FOLDER}/client-consumer/certs/client-chain-bundle.cert.pem --key=${OUTPUT_FOLDER}/client-consumer/private/client.key.pem --namespace consumer -o yaml --dry-run=client > ${k3sFolder}/consumer/tls-secret.yaml
-kubectl create secret generic kc-keystore --from-file=keystore.pfx=${OUTPUT_FOLDER}/client-consumer/keystore.pfx --from-literal=password="password" --namespace=consumer --dry-run=client -oyaml > ${k3sFolder}/consumer/keystore-secret.yaml
-kubectl create secret generic did-keystore --from-file=keystore-did.pfx=${OUTPUT_FOLDER}/client-consumer/keystore-did.pfx --from-literal=password="password" --namespace=consumer --dry-run=client -oyaml > ${k3sFolder}/consumer/keystore-did-secret.yaml
+kubectl create secret generic consumer-keystore --from-file=keystore.pfx=${OUTPUT_FOLDER}/client-consumer/keystore.pfx --from-file=keystore-did.pfx=${OUTPUT_FOLDER}/client-consumer/keystore-did.pfx --from-literal=password="password" --namespace=consumer --dry-run=client -oyaml > ${k3sFolder}/consumer/keystore-secret.yaml
 kubectl create secret generic cert-chain --from-file=${OUTPUT_FOLDER}/client-consumer/certs/client-chain-bundle.cert.pem --namespace consumer -o yaml --dry-run=client > ${k3sFolder}/consumer/cert-chain.yaml
 
 consumer_key_env=$(openssl ec -in ${OUTPUT_FOLDER}/client-consumer/private/client.key.pem -noout -text | grep 'priv:' -A 3 | tail -n +2 | tr -d ':\n ')
@@ -156,8 +177,7 @@ kubectl create secret generic signing-key-env --from-literal=key="${consumer_key
 
 # provider
 kubectl create secret tls tls-secret --cert=${OUTPUT_FOLDER}/client-provider/certs/client-chain-bundle.cert.pem --key=${OUTPUT_FOLDER}/client-provider/private/client.key.pem --namespace provider -o yaml --dry-run=client > ${k3sFolder}/provider/tls-secret.yaml
-kubectl create secret generic kc-keystore --from-file=keystore.pfx=${OUTPUT_FOLDER}/client-provider/keystore.pfx --from-literal=password="password" --namespace=provider --dry-run=client -oyaml > ${k3sFolder}/provider/keystore-secret.yaml
-kubectl create secret generic did-keystore --from-file=keystore-did.pfx=${OUTPUT_FOLDER}/client-provider/keystore-did.pfx --from-literal=password="password" --namespace=provider --dry-run=client -oyaml > ${k3sFolder}/provider/keystore-did-secret.yaml
+kubectl create secret generic provider-keystore --from-file=keystore.pfx=${OUTPUT_FOLDER}/client-provider/keystore.pfx --from-file=keystore-did.pfx=${OUTPUT_FOLDER}/client-provider/keystore-did.pfx --from-literal=password="password" --namespace=provider --dry-run=client -oyaml > ${k3sFolder}/provider/keystore-secret.yaml
 kubectl create secret generic cert-chain --from-file=${OUTPUT_FOLDER}/client-provider/certs/client-chain-bundle.cert.pem --namespace provider -o yaml --dry-run=client > ${k3sFolder}/provider/cert-chain.yaml
 
 provider_key_env=$(openssl ec -in ${OUTPUT_FOLDER}/client-provider/private/client.key.pem -noout -text | grep 'priv:' -A 3 | tail -n +2 | tr -d ':\n ')
@@ -167,7 +187,7 @@ kubectl create secret generic signing-key --from-file=${OUTPUT_FOLDER}/client-pr
 kubectl create secret generic signing-key-env --from-literal=key="${provider_key_env}" --namespace provider -o yaml --dry-run=client > ${k3sFolder}/provider/signing-key-env.yaml 
 
 # infra
-kubectl create secret tls local-wildcard --cert=${OUTPUT_FOLDER}/client-consumer/certs/client-chain-bundle.cert.pem --key=${OUTPUT_FOLDER}/client-consumer/private/client.key.pem --namespace infra -o yaml --dry-run=client > ${k3sFolder}/certs/local-wildcard.yaml
+kubectl create secret tls local-wildcard --cert=${OUTPUT_FOLDER}/client-wildcard/certs/client-chain-bundle.cert.pem --key=${OUTPUT_FOLDER}/client-wildcard/private/client.key.pem --namespace infra -o yaml --dry-run=client > ${k3sFolder}/certs/local-wildcard.yaml
 kubectl create secret generic gx-registry-keypair --from-file=PRIVATE_KEY=${OUTPUT_FOLDER}/ca/private/cakey-pkcs8.pem --from-file=X509_CERTIFICATE=${OUTPUT_FOLDER}/ca/certs/cacert.pem --namespace infra -o yaml --dry-run=client > ${k3sFolder}/infra/gx-registry/secret.yaml
 
 # root ca is required to enable trust for the verifier

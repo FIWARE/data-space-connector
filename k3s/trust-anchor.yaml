@@ -9,6 +9,14 @@ trusted-issuers-list:
       enabled: true
       hosts:
         - host: til.127.0.0.1.nip.io
+  deployment:
+    resources:
+      limits:
+        cpu: 300m
+        memory: 512Mi
+      requests:
+        cpu: 100m
+        memory: 128Mi
 
 mysql:
   primary:
