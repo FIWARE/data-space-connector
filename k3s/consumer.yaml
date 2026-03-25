@@ -821,6 +821,28 @@ decentralizedIam:
                       meta:
                         vct_values:
                           - LegalPersonCredential
+          - id: dsp
+            defaultOidcScope: "openid"
+            authorizationType: "DEEPLINK"
+            oidcScopes:
+              "openid":
+                credentials:
+                  - type: MembershipCredential
+                    trustedParticipantsLists:
+                      - http://tir.127.0.0.1.nip.io
+                    trustedIssuersLists:
+                      - "*"
+                    jwtInclusion:
+                      enabled: true
+                      fullInclusion: true
+                dcql:
+                  credentials:
+                    - id: mc-query
+                      format: "jwt_vc_json"
+                      multiple: true
+                      meta:
+                        type_values:
+                          - MembershipCredential
     vcverifier:
       ingress:
         enabled: true
@@ -907,10 +929,26 @@ decentralizedIam:
                 curl -X 'POST' 'http://tir.trust-anchor.svc.cluster.local:8080/issuer' -H 'Content-Type: application/json' -d "{\"did\": \"did:web:fancy-marketplace.biz\", \"credentials\": []}"
   odrlAuthorization:
     # authorized access to tmforum
-    apisix:
+    apisix: 
       etcd:
         replicaCount: 1
         persistence:
+          enabled: false
+      apisix:
+        admin:
+          credentials:
+            admin: admin
+          allow:
+            ipList:
+              - 0.0.0.0/0
+        deployment:
+          mode: traditional
+          role: "traditional"
+          role_traditional:
+            config_provider: "etcd"
+          role_data_plane:
+            config_provider: "etcd"
+        catchAllRoute:
           enabled: false
       ingress:
         enabled: true
@@ -1158,7 +1196,8 @@ fdsc-edc:
     dcp:
       deployment:
         image:
-          repository: quay.io/wi_stefan/fdsc-edc-controlplane-dcp
+          repository: quay.io/seamware/fdsc-edc-controlplane-dcp
+          tag: 0.0.2
       service: {}
       config:
         edc:
@@ -1166,7 +1205,8 @@ fdsc-edc:
     oid4vc:
       deployment:
         image:
-          repository: quay.io/wi_stefan/fdsc-edc-controlplane-oid4vc
+          repository: quay.io/seamware/fdsc-edc-controlplane-oid4vc
+          tag: 0.0.2
       service: {}
       config:
         edc:
@@ -1227,8 +1267,8 @@ fdsc-edc:
               done
               echo "Keycloak is ready."
         - name: load-certs
-          image: "quay.io/fiware/contract-management:3.3.0"
-          command: ["/bin/sh", "-c", "/bin/import-ca.sh /certs-folder /root-ca/cacert.pem"]
+          image: "quay.io/seamware/fdsc-edc-controlplane-oid4vc:0.1.1"
+          command: ["/bin/sh", "-c", "/bin/import-ca.sh /certs-folder /root-ca/cacert.pem /opt/java/openjdk/lib/security/cacerts"]
           volumeMounts:
             - name: ca-certs-script
               mountPath: /bin/import-ca.sh
@@ -1291,6 +1331,7 @@ fdsc-edc:
           negotiation: org.eclipse.tractusx.vc.type:MembershipCredential:read
           transfer: org.eclipse.tractusx.vc.type:MembershipCredential:read
           version: org.eclipse.tractusx.vc.type:MembershipCredential:read
+
 credentials:
   enabled: true
   keycloak:
@@ -1318,39 +1359,39 @@ identityhub:
       paths:
         - /
   postgresql:
-    host: postgresql
+    host: postgres
     port: 5432
     auth:
-      username: postgres
-      password: "password"
-  deployment:
-    additionalVolumeMounts:
-      - name: root-ca
-        mountPath: /root-ca
-      - name: cacerts
-        mountPath: /opt/java/openjdk/lib/security/cacerts
-        subPath: cacerts
-    additionalVolumes:
-      - name: ca-certs-script
-        configMap:
-          name: ca-certs-script
-          defaultMode: 0755
-      - name: root-ca
-        secret:
-          secretName: root-ca
-      - name: cacerts
-        emptyDir: {}
-    initContainers:
-      - name: load-certs
-        image: "quay.io/fiware/contract-management:3.3.0"
-        command: ["/bin/sh", "-c", "/bin/import-ca.sh /certs-folder /root-ca/cacert.pem"]
-        volumeMounts:
-          - name: ca-certs-script
-            mountPath: /bin/import-ca.sh
-            subPath: import-ca.sh
-          - name: cacerts
-            mountPath: /certs-folder/
-          - name: root-ca
-            mountPath: /root-ca
+      username: ih
+      existingSecret: ih.postgres.credentials.postgresql.acid.zalan.do
+      existingSecretKeyKey: "password"
+  additionalVolumeMounts:
+    - name: root-ca
+      mountPath: /root-ca
+    - name: cacerts
+      mountPath: /opt/java/openjdk/lib/security/cacerts
+      subPath: cacerts
+  additionalVolumes:
+    - name: ca-certs-script
+      configMap:
+        name: ca-certs-script
+        defaultMode: 0755
+    - name: root-ca
+      secret:
+        secretName: root-ca
+    - name: cacerts
+      emptyDir: {}
+  initContainers:
+    - name: load-certs
+      image: "tractusx/identityhub:sha-687d69f"
+      command: ["/bin/sh", "-c", "/bin/import-ca.sh /certs-folder /root-ca/cacert.pem /opt/java/openjdk/lib/security/cacerts"]
+      volumeMounts:
+        - name: ca-certs-script
+          mountPath: /bin/import-ca.sh
+          subPath: import-ca.sh
+        - name: cacerts
+          mountPath: /certs-folder/
+        - name: root-ca
+          mountPath: /root-ca
 vault:
   enabled: true
