@@ -1,11 +1,11 @@
-postgresql:
-  primary:
-    persistence:
-      enabled: false
-  readReplicas:
-    persistence:
-      enabled: false
 keycloak:
+  metrics:
+    enabled: true
+  resources:
+    requests:
+      cpu: "100m"
+    limits:
+      cpu: "500m"
   ingress:
     enabled: true
     hostname: keycloak-consumer.127.0.0.1.nip.io
@@ -13,14 +13,13 @@ keycloak:
       traefik.ingress.kubernetes.io/router.tls: "true"
   initContainers:
     - name: register-at-tir
-      image: ubuntu
+      image: curlimages/curl:8.18.0
       command:
-        - /bin/bash
+        - /bin/sh
       args:
         - -ec
         - |
-          #!/bin/bash
-          apt-get -y update; apt-get -y install curl
+          #!/bin/sh
           curl -X 'POST' 'http://tir.trust-anchor.svc.cluster.local:8080/issuer' -H 'Content-Type: application/json' -d "{\"did\": \"did:web:fancy-marketplace.biz\", \"credentials\": []}"
   extraVolumeMounts:
     - name: realms
@@ -33,7 +32,7 @@ keycloak:
         name: test-realm-realm
     - name: consumer-key
       secret:
-        secretName: kc-keystore
+        secretName: consumer-keystore
         defaultMode: 0755
   issuerDid: did:web:fancy-marketplace.biz
   signingKey:
@@ -43,6 +42,28 @@ keycloak:
     keyPassword: "${STORE_PASS}"
     did: did:web:fancy-marketplace.biz
     keyAlgorithm: ES256
+  extraEnvVars:
+    - name: KEYCLOAK_EXTRA_ARGS
+      value: "--import-realm"
+    - name: KC_FEATURES
+      value: "oid4vc-vci"
+    # enable health endpoints
+    - name: KC_HEALTH_ENABLED
+      value: "true"
+    # keycloak admin password
+    - name: KC_ADMIN_PASSWORD
+      valueFrom:
+        secretKeyRef:
+          name: issuance-secret
+          key: keycloak-admin
+    # set in accordance with the memory requests, will result in OOM otherwise
+    - name: KC_HEAP_SIZE
+      value: "1024m"
+    - name: "STORE_PASS"
+      valueFrom:
+        secretKeyRef:
+          name: consumer-keystore
+          key: password
   realm:
     frontendUrl: https://keycloak-consumer.127.0.0.1.nip.io
     import: true
@@ -649,7 +670,22 @@ keycloak:
           }
         ]
       }
-    clients: "{\n  \"clientId\": \"did:web:mp-operations.org\",\n  \"enabled\": true,\n  \"description\": \"Client to connect mp-operations.org\",\n  \"surrogateAuthRequired\": false,\n  \"alwaysDisplayInConsole\": false,\n  \"clientAuthenticatorType\": \"client-secret\",\n  \"defaultRoles\": [],\n  \"redirectUris\": [],   \n  \"webOrigins\": [],\n  \"notBefore\": 0,\n  \"bearerOnly\": false,\n  \"consentRequired\": false,\n  \"standardFlowEnabled\": true,\n  \"implicitFlowEnabled\": false,\n  \"directAccessGrantsEnabled\": false,\n  \"serviceAccountsEnabled\": true,\n  \"publicClient\": false,\n  \"frontchannelLogout\": false,\n  \"secret\": \"kpWxZn7LgcWT84AzS3aS5X5URmL0FC0Q\",\n  \"protocol\": \"openid-connect\",\n  \"attributes\": {\n    \"client.secret.creation.time\": \"1675260539\"\n  },\n  \"protocolMappers\": [\n  ],\n  \"authenticationFlowBindingOverrides\": {},\n  \"fullScopeAllowed\": true,\n  \"nodeReRegistrationTimeout\": -1,\n  \"defaultClientScopes\": [],\n  \"optionalClientScopes\": []\n},\n{\n  \"clientId\": \"did:web:fancy-marketplace.biz\",\n  \"enabled\": true,\n  \"description\": \"Client to connect itself\",\n  \"surrogateAuthRequired\": false,\n  \"alwaysDisplayInConsole\": false,\n  \"clientAuthenticatorType\": \"client-secret\",\n  \"defaultRoles\": [],\n  \"redirectUris\": [],   \n  \"webOrigins\": [],\n  \"notBefore\": 0,\n  \"bearerOnly\": false,\n  \"consentRequired\": false,\n  \"standardFlowEnabled\": true,\n  \"implicitFlowEnabled\": false,\n  \"directAccessGrantsEnabled\": false,\n  \"serviceAccountsEnabled\": false,\n  \"publicClient\": false,\n  \"frontchannelLogout\": false,\n  \"protocol\": \"openid-connect\",\n  \"attributes\": {\n    \"client.secret.creation.time\": \"1675260539\"\n  },\n  \"protocolMappers\": [\n  ],\n  \"authenticationFlowBindingOverrides\": {},\n  \"fullScopeAllowed\": true,\n  \"nodeReRegistrationTimeout\": -1,\n  \"defaultClientScopes\": [],\n  \"optionalClientScopes\": []\n},\n{\n  \"clientId\": \"account\",\n  \"name\": \"${client_account}\",\n  \"rootUrl\": \"${authBaseUrl}\",\n  \"baseUrl\": \"/realms/test-realm/account/\",\n  \"surrogateAuthRequired\": false,\n  \"enabled\": true,\n  \"alwaysDisplayInConsole\": false,\n  \"clientAuthenticatorType\": \"client-secret\",\n  \"redirectUris\": [\n    \"/realms/test-realm/account/*\"\n  ],\n  \"webOrigins\": [],\n  \"notBefore\": 0,\n  \"bearerOnly\": false,\n  \"consentRequired\": false,\n  \"standardFlowEnabled\": true,\n  \"implicitFlowEnabled\": false,\n  \"directAccessGrantsEnabled\": false,\n  \"serviceAccountsEnabled\": true,\n  \"publicClient\": true,\n  \"frontchannelLogout\": false,\n  \"protocol\": \"openid-connect\",\n  \"attributes\": {\n    \"client.secret.creation.time\": \"1675260539\",\n    \"realm_client\": \"false\",\n    \"post.logout.redirect.uris\": \"+\"\n  },\n  \"authenticationFlowBindingOverrides\": {},\n  \"fullScopeAllowed\": true,\n  \"nodeReRegistrationTimeout\": 0,\n  \"defaultClientScopes\": [\n    \"web-origins\",\n    \"acr\",\n    \"roles\",\n    \"profile\",\n    \"basic\",\n    \"email\"\n  ],\n  \"optionalClientScopes\": [\n    \"address\",\n    \"phone\",\n    \"offline_access\",\n    \"organization\",\n    \"microprofile-jwt\"\n  ]\n},\n{\n  \"clientId\": \"account-console\",\n  \"name\": \"${client_account-console}\",\n  \"rootUrl\": \"${authBaseUrl}\",\n  \"baseUrl\": \"/realms/test-realm/account/\",\n  \"surrogateAuthRequired\": false,\n  \"enabled\": true,\n  \"alwaysDisplayInConsole\": false,\n  \"clientAuthenticatorType\": \"client-secret\",\n  \"redirectUris\": [\n    \"/realms/test-realm/account/*\"\n  ],\n  \"webOrigins\": [],\n  \"notBefore\": 0,\n  \"bearerOnly\": false,\n  \"consentRequired\": false,\n  \"standardFlowEnabled\": true,\n  \"implicitFlowEnabled\": false,\n  \"directAccessGrantsEnabled\": true,\n  \"serviceAccountsEnabled\": false,\n  \"publicClient\": true,\n  \"frontchannelLogout\": false,\n  \"protocol\": \"openid-connect\",\n  \"attributes\": {\n    \"realm_client\": \"false\",\n    \"post.logout.redirect.uris\": \"+\",\n    \"pkce.code.challenge.method\": \"S256\"\n  },\n  \"authenticationFlowBindingOverrides\": {},\n  \"fullScopeAllowed\": true,\n  \"nodeReRegistrationTimeout\": 0,\n  \"protocolMappers\": [\n    {\n      \"id\": \"706c5202-1b03-4fad-a5b8-484287e941f8\",\n      \"name\": \"audience resolve\",\n      \"protocol\": \"openid-connect\",\n      \"protocolMapper\": \"oidc-audience-resolve-mapper\",\n      \"consentRequired\": false,\n      \"config\": {}\n    }\n  ],\n  \"defaultClientScopes\": [\n    \"web-origins\",\n    \"acr\",\n    \"roles\",\n    \"profile\",\n    \"basic\",\n    \"email\"\n  ],\n  \"optionalClientScopes\": [\n    \"address\",\n    \"phone\",\n    \"offline_access\",\n    \"organization\",\n    \"microprofile-jwt\",\n    \"LegalPersonCredential\",\n    \"OperatorCredential\",\n    \"UserCredential\",\n    \"MarketplaceCredential\",\n    \"MembershipCredential\"\n  ]\n},\n{\n  \"clientId\": \"admin-cli\",\n  \"name\": \"${client_admin-cli}\",\n  \"surrogateAuthRequired\": false,\n  \"enabled\": true,\n  \"alwaysDisplayInConsole\": false,\n  \"clientAuthenticatorType\": \"client-secret\",\n  \"secret\": \"kpWxZn7LgcWT84AzS3aS5X5URmL0FC0Q\",\n  \"redirectUris\": [],\n  \"webOrigins\": [],\n  \"notBefore\": 0,\n  \"bearerOnly\": false,\n  \"consentRequired\": false,\n  \"standardFlowEnabled\": false,\n  \"implicitFlowEnabled\": false,\n  \"directAccessGrantsEnabled\": true,\n  \"serviceAccountsEnabled\": true,\n  \"publicClient\": false,\n  \"frontchannelLogout\": false,\n  \"protocol\": \"openid-connect\",\n  \"attributes\": {\n    \"client.secret.creation.time\": \"1675260539\",\n    \"realm_client\": \"false\",\n    \"client.use.lightweight.access.token.enabled\": \"true\"\n  },\n  \"authenticationFlowBindingOverrides\": {},\n  \"fullScopeAllowed\": true,\n  \"nodeReRegistrationTimeout\": 0,\n  \"protocolMappers\": [\n    {\n      \"name\": \"audience resolve\",\n      \"protocol\": \"openid-connect\",\n      \"protocolMapper\": \"oidc-audience-resolve-mapper\",\n      \"consentRequired\": false,\n      \"config\": {}\n    }\n  ],\n  \"defaultClientScopes\": [\n    \"web-origins\",\n    \"acr\",\n    \"roles\",\n    \"profile\",\n    \"basic\",\n    \"email\"\n  ],\n  \"optionalClientScopes\": [\n    \"address\",\n    \"phone\",\n    \"offline_access\",\n    \"organization\",\n    \"microprofile-jwt\",\n    \"UserCredential\",\n    \"LegalPersonCredential\",\n    \"MarketplaceCredential\"\n  ]\n}\n"
+    clients: "{\n  \"clientId\": \"did:web:mp-operations.org\",\n  \"enabled\": true,\n  \"description\": \"Client to connect mp-operations.org\",\n  \"surrogateAuthRequired\": false,\n  \"alwaysDisplayInConsole\": false,\n  \"clientAuthenticatorType\": \"client-secret\",\n  \"defaultRoles\": [],\n  \"redirectUris\": [],   \n  \"webOrigins\": [],\n  \"notBefore\": 0,\n  \"bearerOnly\": false,\n  \"consentRequired\": false,\n  \"standardFlowEnabled\": true,\n  \"implicitFlowEnabled\": false,\n  \"directAccessGrantsEnabled\": false,\n  \"serviceAccountsEnabled\": true,\n  \"publicClient\": false,\n  \"frontchannelLogout\": false,\n  \"secret\": \"kpWxZn7LgcWT84AzS3aS5X5URmL0FC0Q\",\n  \"protocol\": \"openid-connect\",\n  \"attributes\": {\n    \"client.secret.creation.time\": \"1675260539\"\n  },\n  \"protocolMappers\": [\n  ],\n  \"authenticationFlowBindingOverrides\": {},\n  \"fullScopeAllowed\": true,\n  \"nodeReRegistrationTimeout\": -1,\n  \"defaultClientScopes\": [],\n  \"optionalClientScopes\": []\n},\n{\n  \"clientId\": \"did:web:fancy-marketplace.biz\",\n  \"enabled\": true,\n  \"description\": \"Client to connect itself\",\n  \"surrogateAuthRequired\": false,\n  \"alwaysDisplayInConsole\": false,\n  \"clientAuthenticatorType\": \"client-secret\",\n  \"defaultRoles\": [],\n  \"redirectUris\": [],   \n  \"webOrigins\": [],\n  \"notBefore\": 0,\n  \"bearerOnly\": false,\n  \"consentRequired\": false,\n  \"standardFlowEnabled\": true,\n  \"implicitFlowEnabled\": false,\n  \"directAccessGrantsEnabled\": false,\n  \"serviceAccountsEnabled\": false,\n  \"publicClient\": false,\n  \"frontchannelLogout\": false,\n  \"protocol\": \"openid-connect\",\n  \"attributes\": {\n    \"client.secret.creation.time\": \"1675260539\"\n  },\n  \"protocolMappers\": [\n  ],\n  \"authenticationFlowBindingOverrides\": {},\n  \"fullScopeAllowed\": true,\n  \"nodeReRegistrationTimeout\": -1,\n  \"defaultClientScopes\": [],\n  \"optionalClientScopes\": []\n},\n{\n  \"clientId\": \"account\",\n  \"name\": \"${client_account}\",\n  \"rootUrl\": \"${authBaseUrl}\",\n  \"baseUrl\": \"/realms/test-realm/account/\",\n  \"surrogateAuthRequired\": false,\n  \"enabled\": true,\n  \"alwaysDisplayInConsole\": false,\n  \"clientAuthenticatorType\": \"client-secret\",\n  \"redirectUris\": [\n    \"/realms/test-realm/account/*\"\n  ],\n  \"webOrigins\": [],\n  \"notBefore\": 0,\n  \"bearerOnly\": false,\n  \"consentRequired\": false,\n  \"standardFlowEnabled\": true,\n  \"implicitFlowEnabled\": false,\n  \"directAccessGrantsEnabled\": false,\n  \"serviceAccountsEnabled\": true,\n  \"publicClient\": true,\n  \"frontchannelLogout\": false,\n  \"protocol\": \"openid-connect\",\n  \"attributes\": {\n    \"client.secret.creation.time\": \"1675260539\",\n    \"realm_client\": \"false\",\n    \"post.logout.redirect.uris\": \"+\"\n  },\n  \"authenticationFlowBindingOverrides\": {},\n  \"fullScopeAllowed\": true,\n  \"nodeReRegistrationTimeout\": 0,\n  \"defaultClientScopes\": [\n    \"web-origins\",\n    \"acr\",\n    \"roles\",\n    \"profile\",\n    \"basic\",\n    \"email\"\n  ],\n  \"optionalClientScopes\": [\n    \"address\",\n    \"phone\",\n    \"offline_access\",\n    \"organization\",\n    \"microprofile-jwt\"\n  ]\n},\n{\n  \"clientId\": \"account-console\",\n  \"name\": \"${client_account-console}\",\n  \"rootUrl\": \"${authBaseUrl}\",\n  \"baseUrl\": \"/realms/test-realm/account/\",\n  \"surrogateAuthRequired\": false,\n  \"enabled\": true,\n  \"alwaysDisplayInConsole\": false,\n  \"clientAuthenticatorType\": \"client-secret\",\n  \"redirectUris\": [\n    \"/realms/test-realm/account/*\"\n  ],\n  \"webOrigins\": [],\n  \"notBefore\": 0,\n  \"bearerOnly\": false,\n  \"consentRequired\": false,\n  \"standardFlowEnabled\": true,\n  \"implicitFlowEnabled\": false,\n  \"directAccessGrantsEnabled\": true,\n  \"serviceAccountsEnabled\": false,\n  \"publicClient\": true,\n  \"frontchannelLogout\": false,\n  \"protocol\": \"openid-connect\",\n  \"attributes\": {\n    \"realm_client\": \"false\",\n    \"post.logout.redirect.uris\": \"+\",\n    \"pkce.code.challenge.method\": \"S256\"\n  },\n  \"authenticationFlowBindingOverrides\": {},\n  \"fullScopeAllowed\": true,\n  \"nodeReRegistrationTimeout\": 0,\n  \"protocolMappers\": [\n    {\n      \"id\": \"706c5202-1b03-4fad-a5b8-484287e941f8\",\n      \"name\": \"audience resolve\",\n      \"protocol\": \"openid-connect\",\n      \"protocolMapper\": \"oidc-audience-resolve-mapper\",\n      \"consentRequired\": false,\n      \"config\": {}\n    }\n  ],\n  \"defaultClientScopes\": [\n    \"web-origins\",\n    \"acr\",\n    \"roles\",\n    \"profile\",\n    \"basic\",\n    \"email\"\n  ],\n  \"optionalClientScopes\": [\n    \"address\",\n    \"phone\",\n    \"offline_access\",\n    \"organization\",\n    \"microprofile-jwt\",\n    \"LegalPersonCredential\",\n    \"OperatorCredential\",\n    \"UserCredential\",\n    \"MarketplaceCredential\",\n    \"MembershipCredential\"\n  ]\n},\n{\n  \"clientId\": \"admin-cli\",\n  \"name\": \"${client_admin-cli}\",\n  \"surrogateAuthRequired\": false,\n  \"enabled\": true,\n  \"alwaysDisplayInConsole\": false,\n  \"clientAuthenticatorType\": \"client-secret\",\n  \"secret\": \"kpWxZn7LgcWT84AzS3aS5X5URmL0FC0Q\",\n  \"redirectUris\": [],\n  \"webOrigins\": [],\n  \"notBefore\": 0,\n  \"bearerOnly\": false,\n  \"consentRequired\": false,\n  \"standardFlowEnabled\": false,\n  \"implicitFlowEnabled\": false,\n  \"directAccessGrantsEnabled\": true,\n  \"serviceAccountsEnabled\": true,\n  \"publicClient\": false,\n  \"frontchannelLogout\": false,\n  \"protocol\": \"openid-connect\",\n  \"attributes\": {\n    \"client.secret.creation.time\": \"1675260539\",\n    \"realm_client\": \"false\",\n    \"client.use.lightweight.access.token.enabled\": \"true\"\n  },\n  \"authenticationFlowBindingOverrides\": {},\n  \"fullScopeAllowed\": true,\n  \"nodeReRegistrationTimeout\": 0,\n  \"protocolMappers\": [\n    {\n      \"name\": \"audience resolve\",\n      \"protocol\": \"openid-connect\",\n      \"protocolMapper\": \"oidc-audience-resolve-mapper\",\n      \"consentRequired\": false,\n      \"config\": {}\n    }\n  ],\n  \"defaultClientScopes\": [\n    \"web-origins\",\n    \"acr\",\n    \"roles\",\n    \"profile\",\n    \"basic\",\n    \"email\"\n  ],\n  \"optionalClientScopes\": [\n    \"address\",\n    \"phone\",\n    \"offline_access\",\n    \"organization\",\n    \"microprofile-jwt\",\n    \"UserCredential\",\n    \"LegalPersonCredential\",\n    \"MembershipCredential\",\n    \"MarketplaceCredential\"\n  ]\n}\n"
+# -- integration of rainbow
+rainbow:
+  enabled: true
+  db:
+    url: postgres
+    user: rainbow
+    existingSecret: rainbow.postgres.credentials.postgresql.acid.zalan.do
+    passwordKey: password
+  ingress:
+    enabled: true
+    hosts:
+      - host: rainbow-consumer.127.0.0.1.nip.io
+        paths:
+          - /
+    host: rainbow-consumer.127.0.0.1.nip.io
 did:
   enabled: true
   config:
@@ -658,13 +694,13 @@ did:
       didType: "web"
       hostUrl: "http://fancy-marketplace.biz"
       outputFormat: "json_jwk"
-      keystorePasswordSecretName: "did-keystore"
+      keystorePasswordSecretName: "consumer-keystore"
       keystorePasswordSecretKey: "password"
     generateKey:
       enabled: false
     provideKeystore:
       enabled: true
-      keystoreSecretName: "did-keystore"
+      keystoreSecretName: "consumer-keystore"
       keystoreSecretKey: "keystore-did.pfx"
       keyType: "EC"
   ingress:
@@ -695,15 +731,9 @@ registration:
 ## configuration for providing the (central) marketplace
 # tmf as marketplace backend
 tm-forum-api:
-  registration:
-    enabled: false
-  ingress:
-    enabled: true
-    hosts:
-      - host: consumer-tmf.127.0.0.1.nip.io
-        paths:
-          - /
   defaultConfig:
+    image:
+      tag: "1.4.4"
     livenessProbe:
       healthPath: /health/liveness
       initialDelaySeconds: 30
@@ -718,304 +748,339 @@ tm-forum-api:
       successThreshold: 1
       failureThreshold: 300
       timeoutSeconds: 100
+  registration:
+    enabled: false
+  ingress:
+    enabled: true
+    hosts:
+      - host: consumer-tmf.127.0.0.1.nip.io
+        paths:
+          - /
+
 # scorpio as tmf backend, no public endpoint required
 scorpio:
   enabled: true
-# policies for accessing the tmf
-odrl-pap:
-  additionalEnvVars:
-    - name: GENERAL_ORGANIZATION_DID
-      value: did:web:fancy-marketplace.biz
-  ingress:
-    enabled: true
-    hosts:
-      - host: pap-consumer.127.0.0.1.nip.io
-        paths:
-          - "/"
-# authentication configuration
-credentials-config-service:
-  additionalEnvVars:
-    - name: FLYWAY_DATASOURCES_DEFAULT_LOCATIONS
-      value: classpath:db/migration/common,classpath:db/migration/mysql
-  registration:
-    enabled: true
-    services:
-      - id: tm-forum
-        defaultOidcScope: "default"
-        authorizationType: "DEEPLINK"
-        oidcScopes:
-          "default":
-            credentials:
-              - type: LegalPersonCredential
-                trustedParticipantsLists:
-                  - http://tir.127.0.0.1.nip.io
-                # we want that every participant can access the marketplace and register
-                trustedIssuersLists:
-                  - "*"
-                jwtInclusion:
-                  enabled: true
-                  fullInclusion: true
-            dcql:
-              credentials:
-                - id: legal-person-query
-                  format: "vc+sd-jwt"
-                  multiple: false
-                  claims:
-                    - id: roles-claim
-                      path:
-                        - roles
-                  meta:
-                    vct_values:
-                      - LegalPersonCredential
-      - id: dsp
-        defaultOidcScope: "openid"
-        authorizationType: "DEEPLINK"
-        oidcScopes:
-          "openid":
-            credentials:
-              - type: MembershipCredential
-                trustedParticipantsLists:
-                  - http://tir.127.0.0.1.nip.io
-                trustedIssuersLists:
-                  - "*"
-                jwtInclusion:
-                  enabled: true
-                  fullInclusion: true
-            dcql:
-              credentials:
-                - id: mc-query
-                  format: "jwt_vc_json"
-                  multiple: true
-                  meta:
-                    type_values:
-                      - MembershipCredential
-# provide authentication capabilities
-vcverifier:
-  ingress:
-    enabled: true
-    annotations:
-      traefik.ingress.kubernetes.io/router.tls: "true"
-    tls:
-      - hosts:
-          - verifier.fancy-marketplace.biz
-        secretName: tls-secret
-    hosts:
-      - host: verifier.fancy-marketplace.biz
-        paths:
-          - "/"
-  deployment:
-    logging:
-      level: DEBUG
-    verifier:
-      tirAddress: http://tir.127.0.0.1.nip.io/
-      did: did:web:fancy-marketplace.biz
-      supportedModes: ["byValue", "byReference"]
-      clientIdentification:
-        keyPath: /signing-key/client.key.pem
-        requestKeyAlgorithm: ES256
-        id: x509_san_dns:verifier.fancy-marketplace.biz
-        certificatePath: /certificate/client-chain-bundle.cert.pem
-    server:
-      host: https://verifier.fancy-marketplace.biz
-    configRepo:
-      configEndpoint: http://credentials-config-service:8080
-    additionalVolumes:
-      - name: signing-key
-        secret:
-          secretName: signing-key
-      - name: cert-chain
-        secret:
-          secretName: cert-chain
-      # add the self generated root ca to the system truststore
-      - name: root-ca
-        emptyDir: {}
-      - name: ca-to-add
-        secret:
-          secretName: root-ca
-    additionalVolumeMounts:
-      - name: signing-key
-        mountPath: /signing-key
-      - name: cert-chain
-        mountPath: /certificate
-      # add the self generated root ca to the system truststore
-      - name: root-ca
-        mountPath: /etc/ssl/cert.pem
-        subPath: cert.pem
-    additionalEnvVars:
-      - name: HTTPS_PROXY
-        value: "http://squid-proxy.infra.svc.cluster.local:8888"
-      - name: HTTP_PROXY
-        value: "http://squid-proxy.infra.svc.cluster.local:8888"
-      - name: NO_PROXY
-        value: "credentials-config-service,w3.org,trusted-issuers-list"
-    initContainers:
-      # add the self generated root ca to the system truststore
-      - name: add-root-ca
-        image: alpine:3.21.3
-        command:
-          - /bin/sh
-        args:
-          - -c
-          - |
-            #!/bin/sh
-            cp /etc/ssl/cert.pem /root-ca/cert.pdata.typeem
-            cat /root-ca/cacert.pem >> /root-ca/cert.pem
-        volumeMounts:
-          - name: root-ca
-            mountPath: /root-ca
-          - name: ca-to-add
-            mountPath: /root-ca/cacert.pem
-            subPath: cacert.pem
-      - name: register-at-tir
-        image: ubuntu
-        command:
-          - /bin/bash
-        args:
-          - -ec
-          - |
-            #!/bin/bash
-            apt-get -y update; apt-get -y install curl
-            curl -X 'POST' 'http://tir.trust-anchor.svc.cluster.local:8080/issuer' -H 'Content-Type: application/json' -d "{\"did\": \"did:web:fancy-marketplace.biz\", \"credentials\": []}"
-# required dbs
-mysql:
-  resourcesPreset: none
-  primary:
-    persistence:
+  resources:
+    limits:
+      cpu: "500m"
+      memory: 1Gi
+    requests:
+      cpu: "100m"
+      memory: 128Mi
+decentralizedIam:
+  enabled: true
+  vcAuthentication:
+    postgres-operator:
       enabled: false
-  secondary:
-    persistence:
-      enabled: false
-postgis:
-  primary:
-    resourcesPreset: none
-    persistence:
-      enabled: false
-  readReplicas:
-    persistence:
-      enabled: false
-postgresql:
-  primary:
-    resourcesPreset: none
-    persistence:
-      enabled: false
-  readReplicas:
-    persistence:
-      enabled: false
-# authorized access to tmforum
-apisix:
-  etcd:
-    replicaCount: 1
-  image:
-    debug: true
-  dataPlane:
-    ingress:
+    managedPostgres:
       enabled: true
-      hostname: fancy-marketplace.127.0.0.1.nip.io
-      extraHosts:
-        - name: dsp-fancy-marketplace.127.0.0.1.nip.io
-          path: /
-        - name: dcp-fancy-marketplace.127.0.0.1.nip.io
-          path: /
-        - name: identityhub-fancy-marketplace.127.0.0.1.nip.io
-          path: /
-        - name: identityhub-management-fancy-marketplace.127.0.0.1.nip.io
-          path: /
-        - name: dsp-dcp-management.127.0.0.1.nip.io
-          path: /
-        - name: dsp-oid4vc-management.127.0.0.1.nip.io
-          path: /
-        - name: vault-fancy-marketplace.127.0.0.1.nip.io
-          path: /
-  catchAllRoute:
-    enabled: false
-  controlPlane:
-    address: http://consumer-apisix-control-plane:9180
-  routes:
-    - uri: /.well-known/openid-configuration
-      host: fancy-marketplace.127.0.0.1.nip.io
-      upstream:
-        nodes:
-          verifier:3000: 1
-        type: roundrobin
-      plugins:
-        proxy-rewrite:
-          uri: /services/tm-forum/.well-known/openid-configuration
-    - uri: /*
-      host: fancy-marketplace.127.0.0.1.nip.io
-      upstream:
-        nodes:
-          tm-forum-api:8080: 1
-        type: roundrobin
-      plugins:
-        openid-connect:
-          proxy_opts:
-            https_proxy: http://squid-proxy.infra.svc.cluster.local:8888
-          bearer_only: true
-          use_jwks: true
-          client_id: tm-forum
-          client_secret: unused
-          ssl_verify: false
-          discovery: https://verifier.fancy-marketplace.biz/services/tm-forum/.well-known/openid-configuration
-        opa:
-          host: "http://localhost:8181"
-          policy: policy/main
-          with_body: true
-    - uri: /*
-      host: dsp-dcp-management.127.0.0.1.nip.io
-      upstream:
-        nodes:
-          consumer-fdsc-edc-dcp:8085: 1
-        type: roundrobin
-    - uri: /*
-      host: dsp-oid4vc-management.127.0.0.1.nip.io
-      upstream:
-        nodes:
-          consumer-fdsc-edc-oid4vc:8085: 1
-        type: roundrobin
-    - uri: /.well-known/openid-configuration
-      host: dsp-fancy-marketplace.127.0.0.1.nip.io
-      upstream:
-        nodes:
-          verifier:3000: 1
-        type: roundrobin
-      plugins:
-        proxy-rewrite:
-          uri: /services/dsp/.well-known/openid-configuration
-    - uri: /api/identity/*
-      host: identityhub-management-fancy-marketplace.127.0.0.1.nip.io
-      upstream:
-        nodes:
-          identityhub-service:8082: 1
-    - uri: /api/credentials/*
-      host: identityhub-fancy-marketplace.127.0.0.1.nip.io
-      upstream:
-        nodes:
-          identityhub-service:8083: 1
-    - uri: /*
-      host: dcp-fancy-marketplace.127.0.0.1.nip.io
-      upstream:
-        nodes:
-          consumer-fdsc-edc-dcp:8080: 1
-    - uri: /*
-      host: dsp-fancy-marketplace.127.0.0.1.nip.io
-      upstream:
-        nodes:
-          consumer-fdsc-edc-oid4vc:8080: 1
-      plugins:
-        openid-connect:
-          proxy_opts:
-            https_proxy: http://squid-proxy.infra.svc.cluster.local:8888
-          bearer_only: true
-          use_jwks: true
-          client_id: dsp
-          client_secret: unused
-          ssl_verify: false
-          discovery: https://verifier.fancy-marketplace.biz/services/dsp/.well-known/openid-configuration
-    - uri: /*
-      host: vault-fancy-marketplace.127.0.0.1.nip.io
-      upstream:
-        nodes:
-          consumer-vault:8200: 1
+      config:
+        volume:
+          storageClass: "local-path"
+        users:
+          ngb:
+            - createdb
+          rainbow:
+            - createdb
+        databases:
+          ngb: ngb
+          rainbow: rainbow
+        preparedDatabases:
+          ngb:
+            extensions:
+              postgis: public
+    trusted-issuers-list:
+      deployment:
+        image:
+          tag: "0.8.0" # ToDo: remove when updating dependencies
+        resources:
+          limits:
+            cpu: 300m
+            memory: 512Mi
+          requests:
+            cpu: 100m
+            memory: 128Mi
+    credentials-config-service:
+      additionalEnvVars:
+        - name: FLYWAY_DATASOURCES_DEFAULT_LOCATIONS
+          value: classpath:db/migration/common,classpath:db/migration/mysql
+      registration:
+        enabled: true
+        services:
+          - id: tm-forum
+            defaultOidcScope: "default"
+            authorizationType: "DEEPLINK"
+            oidcScopes:
+              "default":
+                credentials:
+                  - type: LegalPersonCredential
+                    trustedParticipantsLists:
+                      - http://tir.127.0.0.1.nip.io
+                    # we want that every participant can access the marketplace and register
+                    trustedIssuersLists:
+                      - "*"
+                    jwtInclusion:
+                      enabled: true
+                      fullInclusion: true
+                dcql:
+                  credentials:
+                    - id: legal-person-query
+                      format: "vc+sd-jwt"
+                      multiple: false
+                      claims:
+                        - id: roles-claim
+                          path:
+                            - roles
+                      meta:
+                        vct_values:
+                          - LegalPersonCredential
+          - id: dsp
+            defaultOidcScope: "openid"
+            authorizationType: "DEEPLINK"
+            oidcScopes:
+              "openid":
+                credentials:
+                  - type: MembershipCredential
+                    trustedParticipantsLists:
+                      - http://tir.127.0.0.1.nip.io
+                    trustedIssuersLists:
+                      - "*"
+                    jwtInclusion:
+                      enabled: true
+                      fullInclusion: true
+                dcql:
+                  credentials:
+                    - id: mc-query
+                      format: "jwt_vc_json"
+                      multiple: true
+                      meta:
+                        type_values:
+                          - MembershipCredential
+    vcverifier:
+      ingress:
+        enabled: true
+        annotations:
+          traefik.ingress.kubernetes.io/router.tls: "true"
+        tls:
+          - hosts:
+              - verifier.fancy-marketplace.biz
+            secretName: tls-secret
+        hosts:
+          - host: verifier.fancy-marketplace.biz
+            paths:
+              - "/"
+      deployment:
+        logging:
+          level: DEBUG
+        verifier:
+          tirAddress: http://tir.127.0.0.1.nip.io/
+          did: did:web:fancy-marketplace.biz
+          supportedModes: ["byValue", "byReference"]
+          clientIdentification:
+            keyPath: /signing-key/client.key.pem
+            requestKeyAlgorithm: ES256
+            id: x509_san_dns:verifier.fancy-marketplace.biz
+            certificatePath: /certificate/client-chain-bundle.cert.pem
+        server:
+          host: https://verifier.fancy-marketplace.biz
+        configRepo:
+          configEndpoint: http://credentials-config-service:8080
+        additionalVolumes:
+          - name: signing-key
+            secret:
+              secretName: signing-key
+          - name: cert-chain
+            secret:
+              secretName: cert-chain
+          # add the self generated root ca to the system truststore
+          - name: root-ca
+            emptyDir: {}
+          - name: ca-to-add
+            secret:
+              secretName: root-ca
+        additionalVolumeMounts:
+          - name: signing-key
+            mountPath: /signing-key
+          - name: cert-chain
+            mountPath: /certificate
+          # add the self generated root ca to the system truststore
+          - name: root-ca
+            mountPath: /etc/ssl/cert.pem
+            subPath: cert.pem
+        additionalEnvVars:
+          - name: HTTPS_PROXY
+            value: "http://squid-proxy.infra.svc.cluster.local:8888"
+          - name: HTTP_PROXY
+            value: "http://squid-proxy.infra.svc.cluster.local:8888"
+          - name: NO_PROXY
+            value: "credentials-config-service,w3.org,trusted-issuers-list"
+        initContainers:
+          # add the self generated root ca to the system truststore
+          - name: add-root-ca
+            image: alpine:3.21.3
+            command:
+              - /bin/sh
+            args:
+              - -c
+              - |
+                #!/bin/sh
+                cp /etc/ssl/cert.pem /root-ca/cert.pem
+                cat /root-ca/cacert.pem >> /root-ca/cert.pem
+            volumeMounts:
+              - name: root-ca
+                mountPath: /root-ca
+              - name: ca-to-add
+                mountPath: /root-ca/cacert.pem
+                subPath: cacert.pem
+          - name: register-at-tir
+            image: curlimages/curl:8.18.0
+            command:
+              - /bin/sh
+            args:
+              - -ec
+              - |
+                curl -X 'POST' 'http://tir.trust-anchor.svc.cluster.local:8080/issuer' -H 'Content-Type: application/json' -d "{\"did\": \"did:web:fancy-marketplace.biz\", \"credentials\": []}"
+  odrlAuthorization:
+    # authorized access to tmforum
+    apisix: 
+      etcd:
+        replicaCount: 1
+        persistence:
+          enabled: false
+      apisix:
+        admin:
+          credentials:
+            admin: admin
+          allow:
+            ipList:
+              - 0.0.0.0/0
+        deployment:
+          mode: traditional
+          role: "traditional"
+          role_traditional:
+            config_provider: "etcd"
+          role_data_plane:
+            config_provider: "etcd"
+        catchAllRoute:
+          enabled: false
+      ingress:
+        enabled: true
+        hosts:
+          - host: fancy-marketplace.127.0.0.1.nip.io
+            paths: ["/"]
+          - host: dsp-fancy-marketplace.127.0.0.1.nip.io
+            paths: ["/"]
+          - host: dcp-fancy-marketplace.127.0.0.1.nip.io
+            paths: ["/"]
+          - host: identityhub-fancy-marketplace.127.0.0.1.nip.io
+            paths: ["/"]
+          - host: identityhub-management-fancy-marketplace.127.0.0.1.nip.io
+            paths: ["/"]
+          - host: dsp-dcp-management.127.0.0.1.nip.io
+            paths: ["/"]
+          - host: dsp-oid4vc-management.127.0.0.1.nip.io
+            paths: ["/"]
+          - host: vault-fancy-marketplace.127.0.0.1.nip.io
+            paths: ["/"]
+      catchAllRoute:
+        enabled: false
+      routes:
+        - uri: /.well-known/openid-configuration
+          host: fancy-marketplace.127.0.0.1.nip.io
+          upstream:
+            nodes:
+              verifier:3000: 1
+            type: roundrobin
+          plugins:
+            proxy-rewrite:
+              uri: /services/tm-forum/.well-known/openid-configuration
+        - uri: /*
+          host: fancy-marketplace.127.0.0.1.nip.io
+          upstream:
+            nodes:
+              tm-forum-api:8080: 1
+            type: roundrobin
+          plugins:
+            openid-connect:
+              proxy_opts:
+                https_proxy: http://squid-proxy.infra.svc.cluster.local:8888
+              bearer_only: true
+              use_jwks: true
+              client_id: tm-forum
+              client_secret: unused
+              ssl_verify: false
+              discovery: https://verifier.fancy-marketplace.biz/services/tm-forum/.well-known/openid-configuration
+            opa:
+              host: "http://localhost:8181"
+              policy: policy/main
+              with_body: true
+        - uri: /*
+          host: dsp-dcp-management.127.0.0.1.nip.io
+          upstream:
+            nodes:
+              consumer-fdsc-edc-dcp:8085: 1
+            type: roundrobin
+        - uri: /*
+          host: dsp-oid4vc-management.127.0.0.1.nip.io
+          upstream:
+            nodes:
+              consumer-fdsc-edc-oid4vc:8085: 1
+            type: roundrobin
+        - uri: /.well-known/openid-configuration
+          host: dsp-fancy-marketplace.127.0.0.1.nip.io
+          upstream:
+            nodes:
+              verifier:3000: 1
+            type: roundrobin
+          plugins:
+            proxy-rewrite:
+              uri: /services/dsp/.well-known/openid-configuration
+        - uri: /api/identity/*
+          host: identityhub-management-fancy-marketplace.127.0.0.1.nip.io
+          upstream:
+            nodes:
+              identityhub-service:8082: 1
+        - uri: /api/credentials/*
+          host: identityhub-fancy-marketplace.127.0.0.1.nip.io
+          upstream:
+            nodes:
+              identityhub-service:8083: 1
+        - uri: /*
+          host: dcp-fancy-marketplace.127.0.0.1.nip.io
+          upstream:
+            nodes:
+              consumer-fdsc-edc-dcp:8080: 1
+        - uri: /*
+          host: dsp-fancy-marketplace.127.0.0.1.nip.io
+          upstream:
+            nodes:
+              consumer-fdsc-edc-oid4vc:8080: 1
+          plugins:
+            openid-connect:
+              proxy_opts:
+                https_proxy: http://squid-proxy.infra.svc.cluster.local:8888
+              bearer_only: true
+              use_jwks: true
+              client_id: dsp
+              client_secret: unused
+              ssl_verify: false
+              discovery: https://verifier.fancy-marketplace.biz/services/dsp/.well-known/openid-configuration
+        - uri: /*
+          host: vault-fancy-marketplace.127.0.0.1.nip.io
+          upstream:
+            nodes:
+              consumer-vault:8200: 1
+    # policies for accessing the tmf
+    odrl-pap:
+      additionalEnvVars:
+        - name: GENERAL_ORGANIZATION_DID
+          value: did:web:fancy-marketplace.biz
+      ingress:
+        enabled: true
+        hosts:
+          - host: pap-consumer.127.0.0.1.nip.io
+            paths:
+              - "/"
 # contract management for distributing the buy events
 contract-management:
   did: did:web:fancy-marketplace.biz
@@ -1144,7 +1209,8 @@ fdsc-edc:
     dcp:
       deployment:
         image:
-          repository: quay.io/wi_stefan/fdsc-edc-controlplane-dcp
+          repository: quay.io/seamware/fdsc-edc-controlplane-dcp
+          tag: 0.0.2
       service: {}
       config:
         edc:
@@ -1152,7 +1218,8 @@ fdsc-edc:
     oid4vc:
       deployment:
         image:
-          repository: quay.io/wi_stefan/fdsc-edc-controlplane-oid4vc
+          repository: quay.io/seamware/fdsc-edc-controlplane-oid4vc
+          tag: 0.0.2
       service: {}
       config:
         edc:
@@ -1213,8 +1280,8 @@ fdsc-edc:
               done
               echo "Keycloak is ready."
         - name: load-certs
-          image: "quay.io/fiware/contract-management:3.3.0"
-          command: ["/bin/sh", "-c", "/bin/import-ca.sh /certs-folder /root-ca/cacert.pem"]
+          image: "quay.io/seamware/fdsc-edc-controlplane-oid4vc:0.1.1"
+          command: ["/bin/sh", "-c", "/bin/import-ca.sh /certs-folder /root-ca/cacert.pem /opt/java/openjdk/lib/security/cacerts"]
           volumeMounts:
             - name: ca-certs-script
               mountPath: /bin/import-ca.sh
@@ -1277,6 +1344,7 @@ fdsc-edc:
           negotiation: org.eclipse.tractusx.vc.type:MembershipCredential:read
           transfer: org.eclipse.tractusx.vc.type:MembershipCredential:read
           version: org.eclipse.tractusx.vc.type:MembershipCredential:read
+
 credentials:
   enabled: true
   keycloak:
@@ -1304,39 +1372,39 @@ identityhub:
       paths:
         - /
   postgresql:
-    host: postgresql
+    host: postgres
     port: 5432
     auth:
-      username: postgres
-      password: "password"
-  deployment:
-    additionalVolumeMounts:
-      - name: root-ca
-        mountPath: /root-ca
-      - name: cacerts
-        mountPath: /opt/java/openjdk/lib/security/cacerts
-        subPath: cacerts
-    additionalVolumes:
-      - name: ca-certs-script
-        configMap:
-          name: ca-certs-script
-          defaultMode: 0755
-      - name: root-ca
-        secret:
-          secretName: root-ca
-      - name: cacerts
-        emptyDir: {}
-    initContainers:
-      - name: load-certs
-        image: "quay.io/fiware/contract-management:3.3.0"
-        command: ["/bin/sh", "-c", "/bin/import-ca.sh /certs-folder /root-ca/cacert.pem"]
-        volumeMounts:
-          - name: ca-certs-script
-            mountPath: /bin/import-ca.sh
-            subPath: import-ca.sh
-          - name: cacerts
-            mountPath: /certs-folder/
-          - name: root-ca
-            mountPath: /root-ca
+      username: ih
+      existingSecret: ih.postgres.credentials.postgresql.acid.zalan.do
+      existingSecretKeyKey: "password"
+  additionalVolumeMounts:
+    - name: root-ca
+      mountPath: /root-ca
+    - name: cacerts
+      mountPath: /opt/java/openjdk/lib/security/cacerts
+      subPath: cacerts
+  additionalVolumes:
+    - name: ca-certs-script
+      configMap:
+        name: ca-certs-script
+        defaultMode: 0755
+    - name: root-ca
+      secret:
+        secretName: root-ca
+    - name: cacerts
+      emptyDir: {}
+  initContainers:
+    - name: load-certs
+      image: "tractusx/identityhub:sha-687d69f"
+      command: ["/bin/sh", "-c", "/bin/import-ca.sh /certs-folder /root-ca/cacert.pem /opt/java/openjdk/lib/security/cacerts"]
+      volumeMounts:
+        - name: ca-certs-script
+          mountPath: /bin/import-ca.sh
+          subPath: import-ca.sh
+        - name: cacerts
+          mountPath: /certs-folder/
+        - name: root-ca
+          mountPath: /root-ca
 vault:
   enabled: true

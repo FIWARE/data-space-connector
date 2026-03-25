@@ -8,11 +8,39 @@ did:
   enabled: false
 
 keycloak:
+  metrics:
+    enabled: true
+  extraEnvVars:
+    - name: KEYCLOAK_EXTRA_ARGS
+      value: "--import-realm"
+    - name: KC_FEATURES
+      value: "oid4vc-vci"
+    # keycloak admin password
+    - name: KC_ADMIN_PASSWORD
+      valueFrom:
+        secretKeyRef:
+          name: issuance-secret
+          key: keycloak-admin
+    # set in accordance with the memory requests, will result in OOM otherwise
+    - name: KC_HEAP_SIZE
+      value: "1024m"
+    - name: "STORE_PASS"
+      valueFrom:
+        secretKeyRef:
+          name: provider-keystore
+          key: password
+    - name: KC_HEALTH_ENABLED
+      value: "true"
   signingKey:
     did: did:web:mp-operations.org#key-1
 
 identityhub:
   enabled: true
+  didIngress:
+    enabled: true
+    annotations:
+      traefik.ingress.kubernetes.io/service.passhostheader: "true"
+      traefik.ingress.kubernetes.io/router.tls: "true"
   endpoints:
     identity:
       authKeyAlias: "sup3r$3cr3t"

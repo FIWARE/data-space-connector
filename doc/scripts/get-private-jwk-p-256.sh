@@ -13,12 +13,11 @@ if [ ! -f "$PEM_FILE" ]; then
   exit 1
 fi
 
-# Extract EC key parameters in hex
-EC_TEXT=$(openssl ec -in "$PEM_FILE" -no_public -text 2>/dev/null)
+# Extract EC key parameters in hex (supports both EC and PKCS#8 formats)
+KEY_TEXT=$(openssl pkey -in "$PEM_FILE" -text -noout 2>/dev/null)
 
-D_HEX=$(echo "$EC_TEXT" | awk '/priv:/{flag=1;next}/pub:/{flag=0}flag' | tr -d ' :\n')
-PUB_HEX=$(openssl ec -in "$PEM_FILE" -pubout -text 2>/dev/null \
-  | awk '/pub:/{flag=1;next}/ASN1 OID/{flag=0}flag' | tr -d ' :\n')
+D_HEX=$(echo "$KEY_TEXT" | awk '/priv:/{flag=1;next}/pub:/{flag=0}flag' | tr -d ' :\n')
+PUB_HEX=$(echo "$KEY_TEXT" | awk '/pub:/{flag=1;next}/ASN1 OID/{flag=0}flag' | tr -d ' :\n')
 
 # Remove uncompressed point prefix (04)
 PUB_HEX="${PUB_HEX#04}"

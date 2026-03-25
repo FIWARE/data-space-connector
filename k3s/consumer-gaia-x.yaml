@@ -1,29 +1,29 @@
-vcverifier:
-  enabled: false
-credentials-config-service:
-  enabled: false
-trusted-issuers-list:
-  enabled: false
-mysql:
-  enabled: false
-odrl-pap:
-  enabled: false
-apisix:
-  enabled: false
 scorpio:
-  enabled: false
-postgis:
   enabled: false
 tm-forum-api:
   enabled: false
 contract-management:
   enabled: false
-postgresql:
-  primary:
-    persistence:
+decentralizedIam:
+  enabled: true
+  vcAuthentication:
+    postgres-operator:
       enabled: false
-  readReplicas:
-    persistence:
+    managedPostgres:
+      enabled: true
+      config:
+        volume:
+          storageClass: "local-path"
+    vcverifier:
+      enabled: false
+    credentials-config-service:
+      enabled: false
+    trusted-issuers-list:
+      enabled: false
+  odrlAuthorization:
+    odrl-pap:
+      enabled: false
+    apisix:
       enabled: false
 keycloak:
   ingress:
@@ -41,14 +41,13 @@ keycloak:
       /opt/bitnami/scripts/keycloak/run.sh
   initContainers:
     - name: register-at-tir
-      image: ubuntu
+      image: curlimages/curl:8.18.0
       command:
-        - /bin/bash
+        - /bin/sh
       args:
         - -ec
         - |
-          #!/bin/bash
-          apt-get -y update; apt-get -y install curl
+          #!/bin/sh
           curl -X 'POST' 'http://tir.trust-anchor.svc.cluster.local:8080/issuer' -H 'Content-Type: application/json' -d "{\"did\": \"did:web:fancy-marketplace.biz\", \"credentials\": []}"
       volumeMounts:
         - name: did-material
@@ -92,19 +91,32 @@ keycloak:
       secret:
         secretName: consumer-keystore
         defaultMode: 0755
+  extraEnvVars:
+    - name: KEYCLOAK_EXTRA_ARGS
+      value: "--import-realm"
+    - name: KC_FEATURES
+      value: "oid4vc-vci"
+    # keycloak admin password
+    - name: KC_ADMIN_PASSWORD
+      valueFrom:
+        secretKeyRef:
+          name: issuance-secret
+          key: keycloak-admin
+    # set in accordance with the memory requests, will result in OOM otherwise
+    - name: KC_HEAP_SIZE
+      value: "1024m"
+    - name: "STORE_PASS"
+      valueFrom:
+        secretKeyRef:
+          name: consumer-keystore
+          key: password
   signingKey:
     storePath: /keys/keystore.pfx
     storePassword: "${STORE_PASS}"
     keyAlias: certificate
     keyPassword: "${STORE_PASS}"
     did: did:web:fancy-marketplace.biz
-    keyAlgorithm: RS256
-  extraEnvVars:
-    - name: "STORE_PASS"
-      valueFrom:
-        secretKeyRef:
-          name: consumer-keystore
-          key: password
+    keyAlgorithm: ES256
   realm:
     frontendUrl: http://keycloak-consumer.127.0.0.1.nip.io:8080
     import: true
@@ -249,7 +261,7 @@ registration:
   configMap: consumer-til-registration
   til: http://trusted-issuers-list.provider.svc.cluster.local:8080
   did: did:web:fancy-marketplace.biz
-  credentialTypes: 
+  credentialTypes:
     - UserCredential
 did:
   enabled: true
@@ -266,7 +278,7 @@ did:
     provideKeystore:
       enabled: true
       keystoreSecretName: "consumer-keystore"
-      keystoreSecretKey: "keystore.pfx"
+      keystoreSecretKey: "keystore-did.pfx"
       keyType: "EC"
   ingress:
     enabled: true
