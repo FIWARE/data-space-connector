@@ -701,7 +701,7 @@
                                     <skipTemplate>false</skipTemplate>
                                     <templateGenerateName>true</templateGenerateName>
                                     <templateOutputDir>${project.build.directory}/k3s/dsc-consumer</templateOutputDir>
-                                    <additionalArguments>--name-template=consumer --namespace=consumer -f ${main.basedir}/k3s/consumer.yaml -f ${main.basedir}/k3s/consumer-auth.yaml -f ${main.basedir}/k3s/consumer-tmf.yaml -f ${main.basedir}/k3s/dsp-consumer.yaml</additionalArguments>
+                                    <additionalArguments>--name-template=consumer --namespace=consumer -f ${main.basedir}/k3s/consumer.yaml -f ${main.basedir}/k3s/consumer-auth.yaml -f ${main.basedir}/k3s/consumer-tmf.yaml -f ${main.basedir}/k3s/dsp-consumer.yaml --skip-tests</additionalArguments>
                                 </configuration>
                             </execution>
                             <execution>
