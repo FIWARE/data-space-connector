@@ -22,7 +22,7 @@ spec:
       serviceAccountName: default
       containers:
         - name: dsconfig-static
-          imagePullPolicy: Always
+          imagePullPolicy: IfNotPresent
           image: "lipanski/docker-static-website:2.1.0"
           ports:
             - name: http

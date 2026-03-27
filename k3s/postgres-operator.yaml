@@ -1,24 +1,11 @@
-mongo-operator:
-  enabled: true
-  database:
-    namespace: provider
-  operator:
-    watchNamespace: "*"
-    resources:
-      limits:
-        cpu: 300m
-        memory: 1Gi
-      requests:
-        cpu: 100m
-        memory: 200Mi
-
 
 decentralizedIam:
-  enabled: false
 
   vcAuthentication:
     postgres-operator:
-      enabled: false
+      enabled: true
+      configKubernetes:
+        enable_cross_namespace_secret: true
 
     managedPostgres:
       enabled: false
@@ -41,6 +28,9 @@ decentralizedIam:
 
     tpp:
       enabled: false
+
+mongo-operator:
+  enabled: false
 
 managedMongo:
   enabled: false
@@ -73,13 +63,4 @@ keycloak:
   enabled: false
 
 registration:
-  enabled: false
-
-identityhub:
-  enabled: false
-
-vault:
-  enabled: false
-
-issuerservice:
   enabled: false

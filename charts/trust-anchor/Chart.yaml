@@ -9,5 +9,5 @@ dependencies:
     repository: https://fiware.github.io/helm-charts
   - name: mysql
     condition: mysql.enabled
-    version: 9.4.4
+    version: 14.0.3
     repository: https://charts.bitnami.com/bitnami

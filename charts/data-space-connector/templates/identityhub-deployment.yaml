@@ -57,9 +57,9 @@ spec:
       serviceAccountName: default
       securityContext:
         {{- toYaml .Values.identityhub.podSecurityContext | nindent 8 }}
-      {{- if .Values.identityhub.deployment.initContainers }}
+      {{- if .Values.identityhub.initContainers }}
       initContainers:
-        {{- with .Values.identityhub.deployment.initContainers }}
+        {{- with .Values.identityhub.initContainers }}
           {{- toYaml . | nindent 8 }}
         {{- end }}
       {{- end }}
@@ -215,14 +215,14 @@ spec:
               subPath: logging.properties
             - name: logs
               mountPath: {{ .Values.identityhub.logging.path }}
-            {{- if .Values.identityhub.deployment.additionalVolumeMounts }}
-            {{- with .Values.identityhub.deployment.additionalVolumeMounts }}
+            {{- if .Values.identityhub.additionalVolumeMounts }}
+            {{- with .Values.identityhub.additionalVolumeMounts }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
             {{- end }}
       volumes:
-        {{- if .Values.identityhub.deployment.additionalVolumes }}
-        {{- with .Values.identityhub.deployment.additionalVolumes }}
+        {{- if .Values.identityhub.additionalVolumes }}
+        {{- with .Values.identityhub.additionalVolumes }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
         {{- end }}

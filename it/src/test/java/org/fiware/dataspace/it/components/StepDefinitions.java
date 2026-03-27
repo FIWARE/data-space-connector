@@ -80,16 +80,26 @@ public class StepDefinitions {
 				.get()
 				.url(MPOperationsEnvironment.RAINBOW_DIRECT_ADDRESS + "/api/v1/catalogs")
 				.build();
-		Response catalogsResponse = HTTP_CLIENT.newCall(catalogsRequest).execute();
-		List<DcatCatalog> catalogs = OBJECT_MAPPER.readValue(catalogsResponse.body().string(), new TypeReference<List<DcatCatalog>>() {
-		});
-
-		for (DcatCatalog dcat : catalogs) {
-			Request deleteRequest = new Request.Builder()
-					.delete()
-					.url(MPOperationsEnvironment.RAINBOW_DIRECT_ADDRESS + "/api/v1/catalogs/" + dcat.getId())
-					.build();
-			HTTP_CLIENT.newCall(deleteRequest).execute();
+		try (Response catalogsResponse = HTTP_CLIENT.newCall(catalogsRequest).execute()) {
+			ResponseBody responseBody = catalogsResponse.body();
+			if (responseBody == null || !catalogsResponse.isSuccessful()) {
+				return;
+			}
+			String bodyString = responseBody.string();
+			List<DcatCatalog> catalogs;
+			try {
+				catalogs = OBJECT_MAPPER.readValue(bodyString, new TypeReference<List<DcatCatalog>>() {});
+			} catch (Exception e) {
+				log.warn("Could not parse catalogs response (status={}): {}", catalogsResponse.code(), bodyString);
+				return;
+			}
+			for (DcatCatalog dcat : catalogs) {
+				Request deleteRequest = new Request.Builder()
+						.delete()
+						.url(MPOperationsEnvironment.RAINBOW_DIRECT_ADDRESS + "/api/v1/catalogs/" + dcat.getId())
+						.build();
+				try (Response ignored = HTTP_CLIENT.newCall(deleteRequest).execute()) {}
+			}
 		}
 	}
 
@@ -98,16 +108,26 @@ public class StepDefinitions {
 				.get()
 				.url(MPOperationsEnvironment.RAINBOW_DIRECT_ADDRESS + "/api/v1/agreements")
 				.build();
-		Response catalogsResponse = HTTP_CLIENT.newCall(agreementsRequest).execute();
-		List<Agreement> agreements = OBJECT_MAPPER.readValue(catalogsResponse.body().string(), new TypeReference<List<Agreement>>() {
-		});
-
-		for (Agreement agreement : agreements) {
-			Request deleteRequest = new Request.Builder()
-					.delete()
-					.url(MPOperationsEnvironment.RAINBOW_DIRECT_ADDRESS + "/api/v1/agreements/" + agreement.getAgreementId())
-					.build();
-			HTTP_CLIENT.newCall(deleteRequest).execute();
+		try (Response agreementsResponse = HTTP_CLIENT.newCall(agreementsRequest).execute()) {
+			ResponseBody responseBody = agreementsResponse.body();
+			if (responseBody == null || !agreementsResponse.isSuccessful()) {
+				return;
+			}
+			String bodyString = responseBody.string();
+			List<Agreement> agreements;
+			try {
+				agreements = OBJECT_MAPPER.readValue(bodyString, new TypeReference<List<Agreement>>() {});
+			} catch (Exception e) {
+				log.warn("Could not parse agreements response (status={}): {}", agreementsResponse.code(), bodyString);
+				return;
+			}
+			for (Agreement agreement : agreements) {
+				Request deleteRequest = new Request.Builder()
+						.delete()
+						.url(MPOperationsEnvironment.RAINBOW_DIRECT_ADDRESS + "/api/v1/agreements/" + agreement.getAgreementId())
+						.build();
+				try (Response ignored = HTTP_CLIENT.newCall(deleteRequest).execute()) {}
+			}
 		}
 	}
 
@@ -583,9 +603,12 @@ public class StepDefinitions {
 				.addHeader("Authorization", "Bearer " + accessToken)
 				.build();
 		Response organizationCreateResponse = HTTP_CLIENT.newCall(organizationCreateRequest).execute();
-		assertEquals(HttpStatus.SC_CREATED, organizationCreateResponse.code(), "The organization should have been created.");
-		fancyMarketplaceRegistration = OBJECT_MAPPER.readValue(organizationCreateResponse.body().string(), OrganizationVO.class);
-		organizationCreateResponse.body().close();
+		try {
+			assertEquals(HttpStatus.SC_CREATED, organizationCreateResponse.code(), "The organization should have been created.");
+			fancyMarketplaceRegistration = OBJECT_MAPPER.readValue(organizationCreateResponse.body().string(), OrganizationVO.class);
+		} finally {
+			organizationCreateResponse.body().close();
+		}
 	}
 
 	@When("Fancy Marketplace buys access to M&P's k8s services.")
@@ -812,7 +835,12 @@ public class StepDefinitions {
 			try {
 				String accessToken = getAccessTokenForFancyMarketplace(OPERATOR_CREDENTIAL, OPERATOR_SCOPE, MPOperationsEnvironment.PROVIDER_API_ADDRESS);
 				Request creationRequest = createK8SClusterRequest(accessToken);
-				assertEquals(HttpStatus.SC_CREATED, HTTP_CLIENT.newCall(creationRequest).execute().code(), "The cluster should now have been created.");
+				Response creationResponse = HTTP_CLIENT.newCall(creationRequest).execute();
+				try {
+					assertEquals(HttpStatus.SC_CREATED, creationResponse.code(), "The cluster should now have been created.");
+				} finally {
+					creationResponse.body().close();
+				}
 			} catch (Throwable t) {
 				throw new AssertionFailedError(String.format("Error: %s", t));
 			}
@@ -833,7 +861,14 @@ public class StepDefinitions {
 
 		Awaitility.await()
 				.atMost(Duration.ofSeconds(20))
-				.until(() -> HttpStatus.SC_OK == HTTP_CLIENT.newCall(authenticatedEntityRequest).execute().code());
+				.until(() -> {
+					Response r = HTTP_CLIENT.newCall(authenticatedEntityRequest).execute();
+					try {
+						return HttpStatus.SC_OK == r.code();
+					} finally {
+						r.body().close();
+					}
+				});
 	}
 
 	@Then("M&P Operations uptime report service is offered at the IDSA Catalog Endpoint.")

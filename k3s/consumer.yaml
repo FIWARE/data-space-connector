@@ -1,11 +1,11 @@
-postgresql:
-  primary:
-    persistence:
-      enabled: false
-  readReplicas:
-    persistence:
-      enabled: false
 keycloak:
+  metrics:
+    enabled: true
+  resources:
+    requests:
+      cpu: "100m"
+    limits:
+      cpu: "500m"
   ingress:
     enabled: true
     hostname: keycloak-consumer.127.0.0.1.nip.io
@@ -13,14 +13,13 @@ keycloak:
       traefik.ingress.kubernetes.io/router.tls: "true"
   initContainers:
     - name: register-at-tir
-      image: ubuntu
+      image: curlimages/curl:8.18.0
       command:
-        - /bin/bash
+        - /bin/sh
       args:
         - -ec
         - |
-          #!/bin/bash
-          apt-get -y update; apt-get -y install curl
+          #!/bin/sh
           curl -X 'POST' 'http://tir.trust-anchor.svc.cluster.local:8080/issuer' -H 'Content-Type: application/json' -d "{\"did\": \"did:web:fancy-marketplace.biz\", \"credentials\": []}"
   extraVolumeMounts:
     - name: realms
@@ -33,7 +32,7 @@ keycloak:
         name: test-realm-realm
     - name: consumer-key
       secret:
-        secretName: kc-keystore
+        secretName: consumer-keystore
         defaultMode: 0755
   issuerDid: did:web:fancy-marketplace.biz
   signingKey:
@@ -43,6 +42,28 @@ keycloak:
     keyPassword: "${STORE_PASS}"
     did: did:web:fancy-marketplace.biz
     keyAlgorithm: ES256
+  extraEnvVars:
+    - name: KEYCLOAK_EXTRA_ARGS
+      value: "--import-realm"
+    - name: KC_FEATURES
+      value: "oid4vc-vci"
+    # enable health endpoints
+    - name: KC_HEALTH_ENABLED
+      value: "true"
+    # keycloak admin password
+    - name: KC_ADMIN_PASSWORD
+      valueFrom:
+        secretKeyRef:
+          name: issuance-secret
+          key: keycloak-admin
+    # set in accordance with the memory requests, will result in OOM otherwise
+    - name: KC_HEAP_SIZE
+      value: "1024m"
+    - name: "STORE_PASS"
+      valueFrom:
+        secretKeyRef:
+          name: consumer-keystore
+          key: password
   realm:
     frontendUrl: https://keycloak-consumer.127.0.0.1.nip.io
     import: true
@@ -659,13 +680,13 @@ did:
       didType: "web"
       hostUrl: "http://fancy-marketplace.biz"
       outputFormat: "json_jwk"
-      keystorePasswordSecretName: "did-keystore"
+      keystorePasswordSecretName: "consumer-keystore"
       keystorePasswordSecretKey: "password"
     generateKey:
       enabled: false
     provideKeystore:
       enabled: true
-      keystoreSecretName: "did-keystore"
+      keystoreSecretName: "consumer-keystore"
       keystoreSecretKey: "keystore-did.pfx"
       keyType: "EC"
   ingress:

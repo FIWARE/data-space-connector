@@ -150,6 +150,11 @@ keycloak:
 # provides dcp functionality
 identityhub:
   enabled: true
+  didIngress:
+    enabled: true
+    annotations:
+      traefik.ingress.kubernetes.io/service.passhostheader: "true"
+      traefik.ingress.kubernetes.io/router.tls: "true"
   endpoints:
     identity:
       authKeyAlias: "sup3r$3cr3t"

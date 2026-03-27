@@ -1412,7 +1412,7 @@ This will load the keystore into a secret and configures the [realm](../../../ch
     # add the init container that copies the plugin to the shared folder
     - name: install-jades-issuer
       image: quay.io/fiware/keycloak-jades-vc-issuer:1.2.0
-      imagePullPolicy: Always
+      imagePullPolicy: IfNotPresent
       volumeMounts:
         - name: providers
           mountPath: /target
@@ -1460,7 +1460,7 @@ dss:
   deployment: 
     additionalContainers:
       - name: crl-provider-static
-        imagePullPolicy: Always
+        imagePullPolicy: IfNotPresent
         image: "lipanski/docker-static-website:2.1.0"
         volumeMounts:
           - name: crl-provider-json
@@ -1494,7 +1494,7 @@ dss:
 
 Once everything is properly configured, the Dataspace can be deployed locally via:
 ```shell
-  mvn clean deploy -Plocal,etsi
+  mvn clean deploy -Plocal,elsi
 ```
 
 The interaction is the same as in all previously described steps - see [Demo Interactions](#demo-interactions). The most visible difference is in the credential.
