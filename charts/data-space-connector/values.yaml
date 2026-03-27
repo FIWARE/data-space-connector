@@ -1077,7 +1077,7 @@ marketplace:
     statefulset:
       image:
         repository: fiware/biz-ecosystem-logic-proxy
-        tag: "10.5.0-PRE-1"
+        tag: "11.15.0"
         pullPolicy: Always
 
 

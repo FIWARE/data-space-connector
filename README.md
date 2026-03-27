@@ -96,27 +96,99 @@ contain breaking changes. Important releases will be listed below, with addition
 
 
 ## Components
+The following diagram shows a logical overview of the different components of the FIWARE Data Space 
+Connector.
 
-The following table lists the components bundled in the connector:
+![connector-components](doc/img/flows/Connector_Components.png)
 
-| Component | Role | Link |
-|-----------|------|------|
-| VCVerifier | Validates VCs and exchanges them for JWT tokens (Verifier) | https://github.com/FIWARE/VCVerifier |
-| credentials-config-service | Configures which VCs are required for accessing a service (PRP/PAP authentication) | https://github.com/FIWARE/credentials-config-service |
-| trusted-issuers-list | EBSI Trusted Issuers Registry API (Local Trusted Issuers List) | https://github.com/FIWARE/trusted-issuers-list |
-| Keycloak | OIDC-based VC issuer | https://www.keycloak.org |
-| APISIX | API Gateway with OPA plugin (PEP) | https://apisix.apache.org/ |
-| OPA | Open Policy Agent (PDP) | https://www.openpolicyagent.org/ |
-| odrl-pap | ODRL policy administration (PRP/PAP authorization) | https://github.com/SEAMWARE/odrl-pap |
-| tmforum-api | TM Forum Open APIs for catalog and contract management | https://github.com/FIWARE/tmforum-api |
-| contract-management | Event listener for contract management lifecycle | https://github.com/FIWARE/contract-management |
-| FDSC-EDC | Eclipse Dataspace Components connector (DSP Catalog, Contract Negotiation, Transfer Process) | https://github.com/SEAMWARE/fdsc-edc |
-| Scorpio | NGSI-LD Context Broker | https://github.com/ScorpioBroker/ScorpioBroker |
-| BAE Marketplace | Marketplace portal for product catalog and contracting | https://github.com/FIWARE-TMForum/Business-API-Ecosystem |
-| did-helper | DID management helper | https://github.com/SEAMWARE/did-helper |
-| Vault | Secret management | https://www.vaultproject.io/ |
-| PostgreSQL / PostGIS | Databases | https://www.postgresql.org / https://postgis.net/ |
-| MySQL | Database | https://www.mysql.com |
+Precisely, the connector bundles the following components:
+
+<table>
+    <thead>
+        <tr>
+            <th>Umbrella component</th>
+            <th>Sub-umbrella component</th>
+            <th>Component</th>
+            <th>Role</th>
+            <th>Diagram field</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td rowspan="6"><b><a href="https://github.com/FIWARE/decentralized-iam">decentralized-iam</a></b></td>
+            <td rowspan="3"><a href="https://github.com/FIWARE/vc-authentication">vc-authentication</a></td>
+            <td><a href="https://github.com/FIWARE/VCVerifier">VCVerifier</a></td>
+            <td>Validates VCs and exchanges them for tokens</td>
+            <td>Verifier</td>
+        </tr>
+        <tr>
+            <td><a href="https://github.com/FIWARE/credentials-config-service">credentials-config-service</a></td>
+            <td>Holds the information which VCs are required for accessing a service</td>
+            <td>PRP/PAP (authentication)</td>
+        </tr>
+        <tr>
+            <td><a href="https://github.com/FIWARE/trusted-issuers-list">trusted-issuers-list</a></td>
+            <td>Acts as Trusted Issuers List by providing an <a
+                    href="https://api-pilot.ebsi.eu/docs/apis/trusted-issuers-registry">EBSI Trusted Issuers
+                    Registry</a> API</td>
+            <td>Local Trusted Issuers List</td>
+        </tr>
+        <tr>
+            <td rowspan="3"><a href="https://github.com/FIWARE/odrl-authorization">odrl-authorization</a></td>
+            <td><a href="https://apisix.apache.org/">APISIX</a></td>
+            <td>APISIX as API-Gateway with a OPA plugin</td>
+            <td>PEP</td>
+        </tr>
+        <tr>
+            <td><a href="https://www.openpolicyagent.org/">OPA</a></td>
+            <td>OpenPolicyAgent as the API Gateway's Sidecar</td>
+            <td>PDP</td>
+        </tr>
+        <tr>
+            <td><a href="https://github.com/SEAMWARE/odrl-pap">odrl-pap</a></td>
+            <td>Allowing to configure ODRL policies to be used by the OPA</td>
+            <td>PRP/PAP (authorization)</td>
+        </tr>
+        <tr>
+            <td>-</td>
+            <td>-</td>
+            <td><a href="https://www.keycloak.org">Keycloak</a></td>
+            <td>Issuer of VCs on the Consumer side</td>
+            <td></td>
+        </tr>
+        <tr>
+            <td>-</td>
+            <td>-</td>
+            <td><a href="https://github.com/ScorpioBroker/ScorpioBroker">Scorpio</a></td>
+            <td>Context Broker</td>
+            <td></td>
+        </tr>
+        <tr>
+            <td>-</td>
+            <td>-</td>
+            <td><a href="https://github.com/FIWARE/tmforum-api">tmforum-api</a></td>
+            <td>Implementation of the <a href="https://www.tmforum.org/oda/open-apis/">TMForum APIs</a> for handling
+                contracts</td>
+            <td>Contract Management</td>
+        </tr>
+        <tr>
+            <td>-</td>
+            <td>-</td>
+            <td><a href="https://github.com/FIWARE/contract-management">contract-management</a></td>
+            <td>Notification listener for contract management events out of TMForum</td>
+            <td>Contract Management</td>
+        </tr>
+        <tr>
+            <td>-</td>
+            <td>-</td>
+            <td><a href="https://www.postgresql.org">PostgreSQL</a></td>
+            <td>PostgreSQL Database with <a href="https://postgis.net/">PostGIS extensions</a></td>
+            <td></td>
+        </tr>
+    </tbody>
+</table>
+
+**Note,** that some of the components shown in the diagram above are not implemented yet.
 
 
 ## Description of modules and interaction flows
@@ -390,10 +462,10 @@ Find out more in the dedicated [Gaia-X Integration Documentation](./doc/GAIA_X.M
 
 ### Local Deployment
 
-The FIWARE Data Space Connector provides a local deployment of a Minimal Viable Dataspace.
+The FIWARE Data Space Connector Repository provides a local deployment of a Minimum Viable Dataspace.
 * Find a detailed documentation here: [Local Deployment](./doc/deployment-integration/local-deployment/LOCAL.MD)
 
-This deployment allows to easily spin up a minimal data space on a local machine using
+This deployment allows to easily spin up a minimum data space on a local machine using
 [Maven](https://maven.apache.org/) and [Docker](https://www.docker.com/) (with [k3s](https://k3s.io/)), and
 can be used to try out the connector, to get familiar with the different components and flows within the data space,
 or to perform tests with the different APIs provided.

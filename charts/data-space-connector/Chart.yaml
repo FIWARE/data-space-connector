@@ -33,7 +33,7 @@ dependencies:
   # authorization
   - name: odrl-pap
     condition: odrl-pap.enabled
-    version: 2.3.8
+    version: 2.9.1
     repository: https://fiware.github.io/helm-charts
   - name: apisix
     condition: apisix.enabled
@@ -62,7 +62,7 @@ dependencies:
     repository: https://fiware.github.io/helm-charts
   - name: contract-management
     condition: contract-management.enabled
-    version: 3.5.12
+    version: 3.5.15
     repository: https://fiware.github.io/helm-charts
   # marketplace
   - name: business-api-ecosystem
@@ -88,6 +88,6 @@ dependencies:
   # did-helper
   - name: did-helper
     alias: did
-    condition: did-helper.enabled
+    condition: did.enabled
     version: 0.1.13
     repository: https://fiware.github.io/helm-charts

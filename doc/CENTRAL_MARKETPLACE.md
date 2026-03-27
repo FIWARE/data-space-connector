@@ -34,7 +34,12 @@ The basic flow of integration is as following:
 
 ## Demo
 
-In order to run the Demo flows, the [Local Deployment](./deployment-integration/local-deployment/LOCAL.MD) has to be prepared.
+In order to run the Demo flows setup a local deployment via: 
+
+```shell
+  mvn clean deploy -Plocal,central
+```
+
 In the Demo-Scenario, the Consumer-Organization("fancy-marketplace.biz") also acts as the provider of the centralized marketplace, while the Provider-Organization("mp-operations.org") offers its services through that market. 
 
 ### Prepare the marketplace
