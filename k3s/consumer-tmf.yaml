@@ -3,6 +3,10 @@
 # tmf as marketplace backend
 tm-forum-api:
   enabled: true
+  allInOne:
+    enabled: true
+  apiProxy:
+    enabled: false
   registration:
     enabled: false
   ingress:
@@ -11,25 +15,17 @@ tm-forum-api:
       - host: consumer-tmf.127.0.0.1.nip.io
         paths:
           - /
-  defaultConfig:
-    livenessProbe:
-      healthPath: /health/liveness
-      initialDelaySeconds: 30
-      periodSeconds: 100
-      successThreshold: 1
-      failureThreshold: 300
-      timeoutSeconds: 100
-    readinessProbe:
-      readinessPath: /health/readiness
-      initialDelaySeconds: 30
-      periodSeconds: 100
-      successThreshold: 1
-      failureThreshold: 300
-      timeoutSeconds: 100
 
 # scorpio as tmf backend, no public endpoint required
 scorpio:
   enabled: true  
+  resources:
+    limits:
+      cpu: "500m"
+      memory: 1Gi
+    requests:
+      cpu: "100m"
+      memory: 128Mi
 
 postgis:
   enabled: true
@@ -75,22 +71,22 @@ contract-management:
     ## Config for the TM Forum Service hosting the APIs
     product-order:
       ## URL of the TM Forum Service hosting the Product Ordering API
-      url: http://consumer-tm-forum-api-product-ordering-management:8080
+      url: http://tm-forum-api-svc:8080
     party:
       ## URL of the TM Forum Service hosting the Party API
-      url: http://consumer-tm-forum-api-party-catalog:8080
+      url: http://tm-forum-api-svc:8080
     product-catalog:
       ## URL of the TM Forum Service hosting the Product Catalog API
-      url: http://consumer-tm-forum-api-product-catalog:8080
+      url: http://tm-forum-api-svc:8080
     service-catalog:
       ## URL of the TM Forum Service hosting the Service Catalog API
-      url: http://consumer-tm-forum-api-service-catalog:8080
+      url: http://tm-forum-api-svc:8080
     tmforum-agreement-api:
       ## URL of the TM Forum Service hosting the Agreement API
-      url: http://consumer-tm-forum-api-agreement:8080
+      url: http://tm-forum-api-svc:8080
     quote:
       ## URL for TM Forum Service hosting the Quote API
-      url: http://consumer-tm-forum-api-quote:8080
+      url: http://tm-forum-api-svc:8080
   deployment:
     # init containers to be used for the local demo
     initContainers:

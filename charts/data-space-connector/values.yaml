@@ -36,8 +36,6 @@ decentralizedIam:
             - createdb
           keycloak:
             - createdb
-          rainbow:
-            - createdb
           ih:
             - createdb
           issuer:
@@ -47,7 +45,6 @@ decentralizedIam:
           ccsdb: ccs
           papdb: pap
           keycloakdb: keycloak
-          rainbowdb: rainbow
           ih: ih
           issuer: issuer
 

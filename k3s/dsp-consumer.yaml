@@ -4,15 +4,14 @@ fdsc-edc:
     dcp:
       deployment:
         image:
-          repository: quay.io/wi_stefan/fdsc-edc-controlplane-dcp
-      service: {}
+          repository: quay.io/seamware/fdsc-edc-controlplane-dcp
       config:
         edc:
           hostname: dcp-fancy-marketplace.127.0.0.1.nip.io
     oid4vc:
       deployment:
         image:
-          repository: quay.io/wi_stefan/fdsc-edc-controlplane-oid4vc
+          repository: quay.io/seamware/fdsc-edc-controlplane-oid4vc
       service: {}
       config:
         edc:
@@ -73,8 +72,8 @@ fdsc-edc:
               done
               echo "Keycloak is ready."
         - name: load-certs
-          image: "quay.io/fiware/contract-management:3.3.5"
-          command: ["/bin/sh", "-c", "/bin/import-ca.sh /certs-folder /root-ca/cacert.pem"]
+          image: "quay.io/seamware/fdsc-edc-controlplane-oid4vc:0.1.1"
+          command: ["/bin/sh", "-c", "/bin/import-ca.sh /certs-folder /root-ca/cacert.pem /opt/java/openjdk/lib/security/cacerts"]
           volumeMounts:
             - name: ca-certs-script
               mountPath: /bin/import-ca.sh
@@ -120,13 +119,13 @@ fdsc-edc:
           host: squid-proxy.infra.svc.cluster.local
           port: 8888
       tmfExtension:
-        quoteApi: http://consumer-tm-forum-api-quote.consumer.svc.cluster.local:8080/tmf-api/quote/v4
-        agreementApi: http://consumer-tm-forum-api-agreement.consumer.svc.cluster.local:8080/tmf-api/agreementManagement/v4
-        productOrderApi: http://consumer-tm-forum-api-product-ordering-management.consumer.svc.cluster.local:8080/tmf-api/productOrderingManagement/v4
-        productCatalogApi: http://consumer-tm-forum-api-product-catalog.consumer.svc.cluster.local:8080/tmf-api/productCatalogManagement/v4
-        productInventoryApi: http://consumer-tm-forum-api-product-inventory.consumer.svc.cluster.local:8080/tmf-api/productInventory/v4
-        usageManagementApi: http://consumer-tm-forum-api-usage-management.consumer.svc.cluster.local:8080/tmf-api/usageManagement/v4
-        partyCatalogApi: http://consumer-tm-forum-api-party-catalog.consumer.svc.cluster.local:8080/tmf-api/party/v4
+        quoteApi: http://tm-forum-api-svc.consumer.svc.cluster.local:8080/tmf-api/quote/v4
+        agreementApi: http://tm-forum-api-svc.consumer.svc.cluster.local:8080/tmf-api/agreementManagement/v4
+        productOrderApi: http://tm-forum-api-svc.consumer.svc.cluster.local:8080/tmf-api/productOrderingManagement/v4
+        productCatalogApi: http://tm-forum-api-svc.consumer.svc.cluster.local:8080/tmf-api/productCatalogManagement/v4
+        productInventoryApi: http://tm-forum-api-svc.consumer.svc.cluster.local:8080/tmf-api/productInventory/v4
+        usageManagementApi: http://tm-forum-api-svc.consumer.svc.cluster.local:8080/tmf-api/usageManagement/v4
+        partyCatalogApi: http://tm-forum-api-svc.consumer.svc.cluster.local:8080/tmf-api/party/v4
       # -- transfer extension is only needed at the provider side
       fdscTransfer:
         enabled: false
@@ -172,40 +171,40 @@ identityhub:
       paths:
         - /
   postgresql:
-    host: postgresql
+    host: postgres
     port: 5432
     auth:
-      username: postgres
-      password: "password"
-  deployment:
-    additionalVolumeMounts:
-      - name: root-ca
-        mountPath: /root-ca
-      - name: cacerts
-        mountPath: /opt/java/openjdk/lib/security/cacerts
-        subPath: cacerts
-    additionalVolumes:
-      - name: ca-certs-script
-        configMap:
-          name: ca-certs-script
-          defaultMode: 0755
-      - name: root-ca
-        secret:
-          secretName: root-ca
-      - name: cacerts
-        emptyDir: {}
-    initContainers:
-      - name: load-certs
-        image: "quay.io/fiware/contract-management:3.3.5"
-        command: ["/bin/sh", "-c", "/bin/import-ca.sh /certs-folder /root-ca/cacert.pem"]
-        volumeMounts:
-          - name: ca-certs-script
-            mountPath: /bin/import-ca.sh
-            subPath: import-ca.sh
-          - name: cacerts
-            mountPath: /certs-folder/
-          - name: root-ca
-            mountPath: /root-ca
+      username: ih
+      existingSecret: ih.postgres.credentials.postgresql.acid.zalan.do
+      existingSecretKeyKey: "password"
+  additionalVolumeMounts:
+    - name: root-ca
+      mountPath: /root-ca
+    - name: cacerts
+      mountPath: /opt/java/openjdk/lib/security/cacerts
+      subPath: cacerts
+  additionalVolumes:
+    - name: ca-certs-script
+      configMap:
+        name: ca-certs-script
+        defaultMode: 0755
+    - name: root-ca
+      secret:
+        secretName: root-ca
+    - name: cacerts
+      emptyDir: {}
+  initContainers:
+    - name: load-certs
+      image: "quay.io/fiware/contract-management:3.3.5"
+      command: ["/bin/sh", "-c", "/bin/import-ca.sh /certs-folder /root-ca/cacert.pem"]
+      volumeMounts:
+        - name: ca-certs-script
+          mountPath: /bin/import-ca.sh
+          subPath: import-ca.sh
+        - name: cacerts
+          mountPath: /certs-folder/
+        - name: root-ca
+          mountPath: /root-ca
 
 # required to provide the secrets for identity hub
 vault:

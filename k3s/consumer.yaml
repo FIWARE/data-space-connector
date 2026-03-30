@@ -705,36 +705,38 @@ did:
         hosts:
           - fancy-marketplace.biz
 
-trusted-issuers-list:
-  enabled: false
-
 tm-forum-api:
   enabled: false
-  
-odrl-pap:
-  enabled: false
 
-credentials-config-service:
-  enabled: false
-vcverifier:
-  enabled: false
-  
-# required dbs
-mysql:
-  enabled: false
-postgis:
-  enabled: false
-postgresql:
-  primary:
-    resourcesPreset: none
-    persistence:
+decentralizedIam:
+  enabled: true
+  vcAuthentication:
+    vcverifier:
       enabled: false
-  readReplicas:
-    persistence:
+    credentials-config-service:
+      enabled: false
+    trusted-issuers-list:
+      enabled: false
+    managedPostgres:
+      enabled: true
+      config:
+        volume:
+          storageClass: "local-path"
+        users:
+          ngb:
+            - createdb
+        databases:
+          ngb: ngb
+        preparedDatabases:
+          ngb:
+            extensions:
+              postgis: public    
+  odrlAuthorization:
+    odrl-pap:
+      enabled: false
+    apisix: 
       enabled: false
 
-apisix:
-  enabled: false
 
 contract-management:
   enabled: false

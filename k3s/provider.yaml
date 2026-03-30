@@ -11,11 +11,8 @@ decentralizedIam:
         users:
           ngb:
             - createdb
-          rainbow:
-            - createdb
         databases:
           ngb: ngb
-          rainbow: rainbow
         preparedDatabases:
           ngb:
             extensions:
@@ -507,25 +504,6 @@ decentralizedIam:
           upstream:
             nodes:
               provider-vault:8200: 1
-        - uri: /*
-          host: tpp-service.127.0.0.1.nip.io
-          upstream:
-            nodes:
-              rainbow:8080: 1
-          plugins:
-            openid-connect:
-              proxy_opts:
-                https_proxy: http://squid-proxy.infra.svc.cluster.local:8888
-              bearer_only: true
-              use_jwks: true
-              client_id: data-service
-              client_secret: unused
-              ssl_verify: false
-              discovery: https://verifier.mp-operations.org/services/data-service/.well-known/openid-configuration
-            opa:
-              host: http://localhost:8181
-              policy: policy/main
-              with_body: true
     odrl-pap:
       additionalEnvVars:
         - name: GENERAL_ORGANIZATION_DID
@@ -629,25 +607,12 @@ tm-forum-api:
       - host: tm-forum-api.127.0.0.1.nip.io
         paths:
           - /
-# -- integration of rainbow
-rainbow:
-  enabled: true
-  db:
-    url: postgres
-    user: rainbow
-    existingSecret: rainbow.postgres.credentials.postgresql.acid.zalan.do
-    passwordKey: password
-  ingress:
-    enabled: true
-    hosts:
-      - host: rainbow-provider.127.0.0.1.nip.io
-        paths:
-          - /
+  
 contract-management:
   did: did:web:mp-operations.org
   enableCentralMarketplace: false
   enableOdrlPap: true
-  enableRainbow: true
+  enableRainbow: false
   services:
     ## Config for Trusted Issuers List
     trusted-issuers-list:
@@ -1164,169 +1129,6 @@ registration:
   prepScript: export $(curl -f -X GET did-helper:3002/did-material/did.env)
 fdsc-edc:
   enabled: false
-  deployment:
-    dcp:
-      deployment:
-        image:
-          repository: quay.io/seamware/fdsc-edc-controlplane-dcp
-          tag: 0.0.2
-      service: {}
-      config:
-        edc:
-          hostname: dcp-mp-operations.127.0.0.1.nip.io
-    oid4vc:
-      deployment:
-        image:
-          repository: quay.io/seamware/fdsc-edc-controlplane-oid4vc
-          tag: 0.0.2
-      config:
-        edc:
-          hostname: dsp-mp-operations.127.0.0.1.nip.io
-        fdscTransfer:
-          dcp:
-            enabled: false
-          oid4vc:
-            enabled: true
-            credentialsConfigAddress: http://credentials-config-service.provider.svc.cluster.local:8080
-            verifierHost: https://verifier.mp-operations.org
-            verifierInternalHost: verifier.provider.svc.cluster.local:3000
-            opaHost: http://localhost:8181
-            odrlPapHost: http://odrl-pap.provider.svc.cluster.local:8080
-        oid4vp:
-          enabled: true
-          credentialsFolder: /credential-repo
-          trustAnchorsFolder: /root-ca
-          trustAll: true
-          holder:
-            id: did:web:mp-operations.org
-            kid: did:web:mp-operations.org
-            key:
-              path: /signing-key/client-pkcs8.key.pem
-          proxy:
-            enabled: true
-            host: squid-proxy.infra.svc.cluster.local
-            port: 8888
-  common:
-    deployment:
-      additionalVolumeMounts:
-        - name: credential-repo
-          mountPath: /credential-repo
-        - name: signing-key
-          mountPath: /signing-key
-        - name: root-ca
-          mountPath: /root-ca
-        - name: cacerts
-          mountPath: /opt/java/openjdk/lib/security/cacerts
-          subPath: cacerts
-      additionalVolumes:
-        - name: signing-key
-          secret:
-            secretName: signing-key
-        - name: credentials-script
-          configMap:
-            name: credentials-script
-            defaultMode: 0755
-        - name: ca-certs-script
-          configMap:
-            name: ca-certs-script
-            defaultMode: 0755
-        - name: credential-repo
-          emptyDir: {}
-        - name: root-ca
-          secret:
-            secretName: root-ca
-        - name: cacerts
-          emptyDir: {}
-      additionalEnvVars:
-        - name: JAVA_TOOL_OPTIONS
-          value: >
-            -Dhttps.proxyHost=squid-proxy.infra.svc.cluster.local
-            -Dhttps.proxyPort=8888
-            -Dhttp.proxyHost=squid-proxy.infra.svc.cluster.local
-            -Dhttp.proxyPort=8888
-            -Dhttp.nonProxyHosts="*-vault|*.cluster.local"
-      initContainers:
-        # helper container to wait for keycloak present in local deployments, to avoid cascading crash-loops
-        - name: wait-for-keycloak
-          image: curlimages/curl:8.6.0
-          command:
-            - sh
-            - -c
-            - |
-              set -e
-              echo "Waiting for Keycloak to become ready..."
-
-              until curl -sf http://provider-keycloak:9000/health/ready > /dev/null; do
-                echo "Keycloak not ready yet, retrying..."
-                sleep 5
-              done
-              echo "Keycloak is ready."
-        - name: load-certs
-          image: "quay.io/seamware/fdsc-edc-controlplane-oid4vc:0.1.1"
-          command: ["/bin/sh", "-c", "/bin/import-ca.sh /certs-folder /root-ca/cacert.pem /opt/java/openjdk/lib/security/cacerts"]
-          volumeMounts:
-            - name: ca-certs-script
-              mountPath: /bin/import-ca.sh
-              subPath: import-ca.sh
-            - name: cacerts
-              mountPath: /certs-folder/
-            - name: root-ca
-              mountPath: /root-ca
-        # get a credential to be used by the contract-management
-        - name: get-credential
-          image: quay.io/curl/curl:8.1.2
-          command: ["/bin/sh", "-c", "/bin/get-credential.sh /credential-repo"]
-          volumeMounts:
-            - name: credentials-script
-              mountPath: /bin/get-credential.sh
-              subPath: get-credential.sh
-            - name: credential-repo
-              mountPath: /credential-repo
-    config:
-      issuerId: did:web:mp-operations.org
-      ebsiTir:
-        enabled: true
-        tilAddress: http://trusted-issuers-list.provider.svc.cluster.local:8080
-      oauth:
-        tokenUrl: http://identityhub-service.provider.svc.cluster.local:8087/api/sts/token
-        clientId: did:web:mp-operations.org
-        secretAlias: did:web:mp-operations.org-sts-client-secret
-      edc:
-        participant:
-          id: did:web:mp-operations.org
-      tmfExtension:
-        quoteApi: http://tm-forum-api-svc.provider.svc.cluster.local:8080/tmf-api/quote/v4
-        agreementApi: http://tm-forum-api-svc-.provider.svc.cluster.local:8080/tmf-api/agreementManagement/v4
-        productOrderApi: http://tm-forum-api-svc.provider.svc.cluster.local:8080/tmf-api/productOrderingManagement/v4
-        productCatalogApi: http://tm-forum-api-svc.provider.svc.cluster.local:8080/tmf-api/productCatalogManagement/v4
-        productInventoryApi: http://tm-forum-api-svc.provider.svc.cluster.local:8080/tmf-api/productInventory/v4
-        usageManagementApi: http://tm-forum-api-svc.provider.svc.cluster.local:8080/tmf-api/usageManagement/v4
-        partyCatalogApi: http://tm-forum-api-svc.provider.svc.cluster.local:8080/tmf-api/party/v4
-      fdscTransfer:
-        credentialsConfigAddress: http://provider-ccs.127.0.0.1.nip.io:8080
-        transferHost: mp-data-service.127.0.0.1.nip.io
-        verifierHost: https://verifier.mp-operations.org
-        verifierInternalHost: verifier.provider.svc.cluster.local:3000
-        odrlPapHost: http://odrl-pap.provider.svc.cluster.local:8080
-        dcp:
-          enabled: true
-          oid:
-            host: http://provider-fdsc-edc-dcp.provider.svc.cluster.local:8081/api
-        # -- configuration of the apisix to be confiugured for serving the process
-        apisix:
-          # -- address of the management api of apisix
-          address: http://provider-apisix-admin.provider.svc.cluster.local:9180
-          # -- token to be used as an API-Key at the mangement api
-          token: admin
-          # -- in case the route should use a proxy, configure it here
-          httpsProxy: http://squid-proxy.infra.svc.cluster.local:8888
-      dcp:
-        enabled: true
-        scopes:
-          catalog: org.eclipse.tractusx.vc.type:MembershipCredential:read
-          negotiation: org.eclipse.tractusx.vc.type:MembershipCredential:read
-          transfer: org.eclipse.tractusx.vc.type:MembershipCredential:read
-          version: org.eclipse.tractusx.vc.type:MembershipCredential:read
 
 credentials:
   enabled: true
@@ -1349,49 +1151,8 @@ credentials:
 fdsc-edc:
   enabled: false
 
-
 identityhub:
   enabled: false
-  didIngress:
-    hosts:
-    - host: mp-operations.org
-      paths:
-        - /
-  postgresql:
-    host: postgres
-    port: 5432
-    auth:
-      username: ih
-      existingSecret: ih.postgres.credentials.postgresql.acid.zalan.do
-      existingSecretKeyKey: "password"
-  additionalVolumeMounts:
-    - name: root-ca
-      mountPath: /root-ca
-    - name: cacerts
-      mountPath: /opt/java/openjdk/lib/security/cacerts
-      subPath: cacerts
-  additionalVolumes:
-    - name: ca-certs-script
-      configMap:
-        name: ca-certs-script
-        defaultMode: 0755
-    - name: root-ca
-      secret:
-        secretName: root-ca
-    - name: cacerts
-      emptyDir: {}
-  initContainers:
-    - name: load-certs
-      image: "tractusx/identityhub:sha-687d69f"
-      command: ["/bin/sh", "-c", "/bin/import-ca.sh /certs-folder /root-ca/cacert.pem /opt/java/openjdk/lib/security/cacerts"]
-      volumeMounts:
-        - name: ca-certs-script
-          mountPath: /bin/import-ca.sh
-          subPath: import-ca.sh
-        - name: cacerts
-          mountPath: /certs-folder/
-        - name: root-ca
-          mountPath: /root-ca
-            
+ 
 vault:
   enabled: false
