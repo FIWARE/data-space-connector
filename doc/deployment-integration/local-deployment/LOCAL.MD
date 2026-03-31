@@ -1,6 +1,6 @@
 # Local Deployment
 
-In order to support development and exploration of the FIWARE Data Space Connector, a "Minimal Viable Dataspace" is
+In order to support development and exploration of the FIWARE Data Space Connector, a "Minimum Viable Dataspace" is
 provided as part of this repo.
 An alternative deployment guide, based on [MicroK8s](https://microk8s.io/) can be found here: https://github.com/cgonzalezITA/DSFiware-hackathon?tab=readme-ov-file#quick-deployment-from-scratch
 
@@ -21,7 +21,7 @@ In order to interact with the system, the following tools are also helpful:
 - [jq](https://stedolan.github.io/jq/download/)
 - [yq](https://mikefarah.gitbook.io/yq/)
 
-To check if the tools are installed, can run and are able to spin up minimal kubernetes cluster without further FIWARE components, you should execute the prepared [script](checkRequirements.sh).
+To check if the tools are installed, can run and are able to spin up a kubernetes cluster without further FIWARE components, you should execute the prepared [script](checkRequirements.sh).
 
 Issues revealed by the script are most likely due to incompatibility of your system or faulty installation of the required tools.
 
@@ -89,7 +89,7 @@ its [OpenAPI Spec](https://github.com/FIWARE/trusted-issuers-list/blob/main/api/
 
 ## The Participants
 
-The minimal Data Space should provide an easy-to-understand introduction to the FIWARE Data Space. Therefor the roles of
+The Minimum Data Space should provide an easy-to-understand introduction to the FIWARE Data Space. Therefor the roles of
 the
 participants are clearly seperated into "Data Consumer" and "Data Provider". However, in most real-world Data Spaces the
 participants
@@ -453,7 +453,7 @@ With that token, try to access the data again:
 
 ### Buy access to a service offering
 
-An essential use-case within Dataspaces is trading of data and digital services. The Minimal Viable Dataspace supports 
+An essential use-case within Dataspaces is trading of data and digital services. The Minimum Viable Dataspace supports 
 such marketplace services as part of the Data Provider. In the scenario, M&P Operations will offer managed Kubernetes Clusters
 to other participants of the Dataspace. While every participant should be allowed to see the offerings, only those that are 
 registered as customers at M&P Operations and bought access should be allowed to create clusters. 

@@ -6,7 +6,7 @@ version: 8.5.2
 dependencies:
   - name: decentralized-iam
     alias: decentralizedIam
-    condition: decentralized-iam.enabled
+    condition: decentralizedIam.enabled
     version: 2.0.1
     repository: https://fiware.github.io/decentralized-iam
   # data-service
@@ -27,7 +27,7 @@ dependencies:
     repository: https://fiware.github.io/helm-charts
   - name: contract-management
     condition: contract-management.enabled
-    version: 3.5.14
+    version: 3.5.15
     repository: https://fiware.github.io/helm-charts
   # marketplace
   - name: business-api-ecosystem
@@ -43,7 +43,7 @@ dependencies:
   # dsp
   - name: fdsc-edc
     condition: fdsc-edc.enabled
-    version: 0.1.1
+    version: 0.1.3
     repository: https://fiware.github.io/helm-charts
   - name: vault
     alias: vault
