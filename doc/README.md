@@ -17,7 +17,7 @@ specific flows and its deployment and integration with other frameworks.
   - [Contract Management](#contract-management)
   - [M2M Service Interaction](#m2m-service-interaction)
 - [Deployment / Integration](#deployment--integration)
-  - [Local deployment of Minimal Viable Dataspace (helm/k3s)](#local-deployment-of-minimal-viable-dataspace-helmk3s)
+  - [Local deployment of Minimum Viable Dataspace (helm/k3s)](#local-deployment-of-minimum-viable-dataspace-helmk3s)
   - [Packet Delivery Company (ArgoCD)](#packet-delivery-company-argocd)
   - [Integration with AWS Garnet Framework (formerly AWS Smart Territory Framework)](#integration-with-aws-garnet-framework-formerly-aws-smart-territory-framework)
 
@@ -54,9 +54,9 @@ can be found here:
 
 ## Deployment / Integration
 
-### Local deployment of Minimal Viable Dataspace (helm/k3s)
+### Local deployment of Minimum Viable Dataspace (helm/k3s)
 
-This is an example of a "Minimal Viable Dataspace", consisting of a fictitious data service 
+This is an example of a "Minimum Viable Dataspace", consisting of a fictitious data service 
 provider called M&P Operations Inc. (using the FIWARE Data Space Connector), a data service consumer 
 called Fancy Marketplace Co. and the 
 data space's trust anchor.
