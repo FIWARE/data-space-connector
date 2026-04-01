@@ -696,7 +696,7 @@ curl  -X POST \
 export AGREEMENT_ID=$(curl  -X POST \
   'http://dsp-dcp-management.127.0.0.1.nip.io:8080/api/v1/management/v3/contractnegotiations/request' \
   --header 'Accept: */*' \
-  --header 'Content-Type: application/json' | jq -r '.[].@id'); echo ${AGREEMENT_ID}
+  --header 'Content-Type: application/json' | jq -r '.[0]."@id"'); echo ${AGREEMENT_ID}
 ```
 
 5. With the aggreement, the transfer can be started:
