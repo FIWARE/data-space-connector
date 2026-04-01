@@ -886,9 +886,9 @@ fdsc-edc:
       ## configuration of the image to be used
       image:
         # -- cp image name
-        repository: quay.io/wi_stefan/fdsc-edc-controlplane-oid4vc
+        repository: quay.io/seamware/fdsc-edc-controlplane-oid4vc
         # -- tag of the image to be used
-        tag: 0.0.1-SNAPSHOT
+        tag: 0.1.4
         # -- specification of the image pull policy
         pullPolicy: Always
       # -- secrets for pulling images from a private repository

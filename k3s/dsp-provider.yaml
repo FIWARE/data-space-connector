@@ -35,7 +35,7 @@ fdsc-edc:
             id: did:web:mp-operations.org
             kid: did:web:mp-operations.org
             key:
-              path: /signing-key/client-pkcs8.key.pem
+              path: /signing-key/tls.key
           proxy:
             enabled: true
             host: squid-proxy.infra.svc.cluster.local
@@ -56,6 +56,9 @@ fdsc-edc:
         - name: signing-key
           secret:
             secretName: signing-key
+            items:
+              - key: tls.key
+                path: tls.key
         - name: credentials-script
           configMap:
             name: credentials-script
@@ -68,7 +71,10 @@ fdsc-edc:
           emptyDir: {}
         - name: root-ca
           secret:
-            secretName: root-ca
+            secretName: mp-operations.org-tls
+            items:
+              - key: ca.crt
+                path: ca.crt
         - name: cacerts
           emptyDir: {}
       additionalEnvVars:
@@ -105,7 +111,8 @@ fdsc-edc:
             - name: cacerts
               mountPath: /certs-folder/
             - name: root-ca
-              mountPath: /root-ca
+              mountPath: /root-ca/cacert.pem
+              subPath: ca.crt
         # get a credential to be used by the contract-management
         - name: get-credential
           image: quay.io/curl/curl:8.1.2
@@ -240,8 +247,8 @@ identityhub:
       emptyDir: {}
   initContainers:
     - name: load-certs
-      image: "quay.io/fiware/contract-management:3.3.0"
-      command: ["/bin/sh", "-c", "/bin/import-ca.sh /certs-folder /root-ca/ca.crt /opt/java/openjdk/lib/security/cacerts"]
+      image: "quay.io/seamware/fdsc-edc-controlplane-oid4vc:0.1.1"
+      command: ["/bin/sh", "-c", "/bin/import-ca.sh /certs-folder /root-ca/cacert.pem /opt/java/openjdk/lib/security/cacerts"]
       volumeMounts:
         - name: ca-certs-script
           mountPath: /bin/import-ca.sh
@@ -249,7 +256,8 @@ identityhub:
         - name: cacerts
           mountPath: /certs-folder/
         - name: root-ca
-          mountPath: /root-ca
+          mountPath: /root-ca/cacert.pem
+          subPath: ca.crt
   endpoints:
     identity:
       authKeyAlias: "sup3r$3cr3t"
@@ -257,47 +265,3 @@ identityhub:
     key: c3VwZXItdXNlcg==.random
   env:
     JAVA_TOOL_OPTIONS: -Dhttps.proxyHost=squid-proxy.infra.svc.cluster.local -Dhttps.proxyPort=8888 -Dhttp.proxyHost=squid-proxy.infra.svc.cluster.local -Dhttp.proxyPort=8888 -Dhttp.nonProxyHosts="*-vault|*.cluster.local" -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=5005
-  didIngress:
-    enabled: true
-    annotations:
-      traefik.ingress.kubernetes.io/service.passhostheader: "true"
-      traefik.ingress.kubernetes.io/router.tls: "true"
-    hosts:
-    - host: mp-operations.org
-      paths:
-        - /
-  postgresql:
-    host: postgres
-    port: 5432
-    auth:
-      username: ih
-      existingSecret: ih.postgres.credentials.postgresql.acid.zalan.do
-      existingSecretKeyKey: "password"
-  additionalVolumeMounts:
-    - name: root-ca
-      mountPath: /root-ca
-    - name: cacerts
-      mountPath: /opt/java/openjdk/lib/security/cacerts
-      subPath: cacerts
-  additionalVolumes:
-    - name: ca-certs-script
-      configMap:
-        name: ca-certs-script
-        defaultMode: 0755
-    - name: root-ca
-      secret:
-        secretName: root-ca
-    - name: cacerts
-      emptyDir: {}
-  initContainers:
-    - name: load-certs
-      image: "quay.io/fiware/contract-management:3.3.5"
-      command: ["/bin/sh", "-c", "/bin/import-ca.sh /certs-folder /root-ca/cacert.pem"]
-      volumeMounts:
-        - name: ca-certs-script
-          mountPath: /bin/import-ca.sh
-          subPath: import-ca.sh
-        - name: cacerts
-          mountPath: /certs-folder/
-        - name: root-ca
-          mountPath: /root-ca
