@@ -1361,8 +1361,8 @@ fdsc-edc:
               done
               echo "Keycloak is ready."
         - name: load-certs
-          image: "quay.io/fiware/contract-management:3.3.0"
-          command: ["/bin/sh", "-c", "/bin/import-ca.sh /certs-folder /root-ca/ca.crt"]
+          image: "quay.io/seamware/fdsc-edc-controlplane-oid4vc:0.1.1"
+          command: ["/bin/sh", "-c", "/bin/import-ca.sh /certs-folder /root-ca/ca.crt /opt/java/openjdk/lib/security/cacerts"]
           volumeMounts:
             - name: ca-certs-script
               mountPath: /bin/import-ca.sh
@@ -1374,7 +1374,7 @@ fdsc-edc:
         # get a credential to be used by the contract-management
         - name: get-credential
           image: quay.io/curl/curl:8.1.2
-          command: ["/bin/sh", "-c", "/bin/get-credential.sh /credential-repo"]
+          command: ["/bin/sh", "-c", "/bin/get-credential.sh /credential-repo /opt/java/openjdk/lib/security/cacerts"]
           volumeMounts:
             - name: credentials-script
               mountPath: /bin/get-credential.sh
@@ -1395,7 +1395,7 @@ fdsc-edc:
           id: did:web:mp-operations.org
       tmfExtension:
         quoteApi: http://tm-forum-api-svc.provider.svc.cluster.local:8080/tmf-api/quote/v4
-        agreementApi: http://tm-forum-api-svc-.provider.svc.cluster.local:8080/tmf-api/agreementManagement/v4
+        agreementApi: http://tm-forum-api-svc.provider.svc.cluster.local:8080/tmf-api/agreementManagement/v4
         productOrderApi: http://tm-forum-api-svc.provider.svc.cluster.local:8080/tmf-api/productOrderingManagement/v4
         productCatalogApi: http://tm-forum-api-svc.provider.svc.cluster.local:8080/tmf-api/productCatalogManagement/v4
         productInventoryApi: http://tm-forum-api-svc.provider.svc.cluster.local:8080/tmf-api/productInventory/v4
@@ -1446,53 +1446,6 @@ credentials:
 
 identityhub:
   enabled: false
-  didIngress:
-    annotations:
-      cert-manager.io/cluster-issuer: "selfsigned-issuer"
-      cert-manager.io/private-key-algorithm: "ECDSA"
-      cert-manager.io/common-name: "mp-operations.org"
-    hosts:
-    - host: mp-operations.org
-      paths:
-        - /
-  postgresql:
-    host: postgres
-    port: 5432
-    auth:
-      username: ih
-      existingSecret: ih.postgres.credentials.postgresql.acid.zalan.do
-      existingSecretKeyKey: "password"
-  deployment:
-    additionalVolumeMounts:
-      - name: root-ca
-        mountPath: /root-ca
-      - name: cacerts
-        mountPath: /opt/java/openjdk/lib/security/cacerts
-        subPath: cacerts
-    additionalVolumes:
-      - name: ca-certs-script
-        configMap:
-          name: ca-certs-script
-          defaultMode: 0755
-      - name: root-ca
-        secret:
-          secretName: mp-operations.org-tls
-          items:
-            - key: ca.crt
-              path: ca.crt
-      - name: cacerts
-        emptyDir: {}
-    initContainers:
-      - name: load-certs
-        image: "quay.io/fiware/contract-management:3.3.0"
-        command: ["/bin/sh", "-c", "/bin/import-ca.sh /certs-folder /root-ca/ca.crt"]
-        volumeMounts:
-          - name: ca-certs-script
-            mountPath: /bin/import-ca.sh
-            subPath: import-ca.sh
-          - name: cacerts
-            mountPath: /certs-folder/
-          - name: root-ca
-            mountPath: /root-ca
+
 vault:
   enabled: false

@@ -54,7 +54,7 @@ With the following steps, a catalog containing a DataService can be created:
 
 >:warning: For better understandability, the creation happens directly through the TMForum-API, without authentication.
 
-Prepare the offering on the provider side: 
+Prepare the offering on the provider side:
 
 1. Create the category:
 ```shell
@@ -247,7 +247,7 @@ curl -X 'POST' \
                 \"permission\": [{
                     \"action\":  \"use\"
                 }],
-                \"@type\":  \"Offer\"  
+                \"@type\":  \"Offer\"
               },
               \"contractPolicy\": {
                 \"@context\": \"http://www.w3.org/ns/odrl.jsonld\",
@@ -352,7 +352,7 @@ curl  -X POST \
   --header 'Content-Type: application/json' | jq .
 ```
 
-9. When the state of the negotiation is "finalized", the agreement id can be retrieved: 
+9. When the state of the negotiation is "finalized", the agreement id can be retrieved:
 
 ```shell
 export AGREEMENT_ID=$(curl  -X POST \
@@ -418,7 +418,7 @@ export TRANSFER_ID=$(curl  -X POST \
 export ENDPOINT=$(curl -X GET "http://dsp-dcp-management.127.0.0.1.nip.io:8080/api/v1/management/v3/edrs/${TRANSFER_ID}/dataaddress" | jq -r .endpoint); echo ${ENDPOINT}
 ```
 
-14. The token can be retrieved the same way: 
+14. The token can be retrieved the same way:
 ```shell
 export ACCESS_TOKEN=$(curl -X GET "http://dsp-dcp-management.127.0.0.1.nip.io:8080/api/v1/management/v3/edrs/${TRANSFER_ID}/dataaddress" | jq -r .token); echo ${ACCESS_TOKEN}
 ```
@@ -509,7 +509,7 @@ curl  -X POST \
   --header 'Content-Type: application/json' | jq .
 ```
 
-9. When the state of the negotiation is "finalized", the agreement id can be retrieved: 
+9. When the state of the negotiation is "finalized", the agreement id can be retrieved:
 
 ```shell
 export AGREEMENT_ID=$(curl  -X POST \
@@ -593,14 +593,14 @@ curl -x localhost:8888 -X GET ${ENDPOINT}/ngsi-ld/v1/entities/urn:ngsi-ld:Uptime
   --header "Authorization: Bearer ${ACCESS_TOKEN}"
 ```
 
-## DCP 
+## DCP
 
 
 Consumer:
 
 Get client key as jwk
 ```shell
-export JWK=$(./doc/scripts/get-private-jwk-p-256.sh ./helpers/certs/out/client-consumer/private/client-pkcs8.key.pem); echo $JWK
+export JWK=$(./doc/scripts/get-private-jwk-from-k8s-secret.sh consumer fancy-marketplace.biz-tls); echo $JWK
 ```
 
 Create key in vault:
@@ -616,7 +616,7 @@ export DATA=$(echo '{
       "role": ["admin"],
       "serviceEndpoints": [
           {
-            "type": "CredentialService", 
+            "type": "CredentialService",
             "serviceEndpoint": "http://identityhub-fancy-marketplace.127.0.0.1.nip.io/api/credentials/v1/participants/ZGlkOndlYjpmYW5jeS1tYXJrZXRwbGFjZS5iaXo",
             "id": "credential-service"
           }
@@ -627,7 +627,7 @@ export DATA=$(echo '{
       "key": {
         "keyId": "did:web:fancy-marketplace.biz#key-1",
         "privateKeyAlias": "key-1",
-        "publicKeyJwk": {}     
+        "publicKeyJwk": {}
       }
     }')
 
@@ -644,7 +644,7 @@ Provider:
 
 Get client key as jwk
 ```shell
-export JWK=$(./doc/scripts/get-private-jwk-p-256.sh ./helpers/certs/out/client-provider/private/client-pkcs8.key.pem); echo $JWK
+export JWK=$(./doc/scripts/get-private-jwk-from-k8s-secret.sh provider mp-operations.org-tls); echo $JWK
 ```
 
 Create key in vault:
@@ -661,7 +661,7 @@ export DATA=$(echo '{
       "role": ["admin"],
       "serviceEndpoints": [
           {
-            "type": "CredentialService", 
+            "type": "CredentialService",
             "serviceEndpoint": "http://identityhub-mp-operations.127.0.0.1.nip.io/api/credentials/v1/participants/ZGlkOndlYjptcC1vcGVyYXRpb25zLm9yZw",
             "id": "credential-service"
           }
@@ -672,7 +672,7 @@ export DATA=$(echo '{
       "key": {
         "keyId": "did:web:mp-operations.org#key-1",
         "privateKeyAlias": "key-1",
-        "publicKeyJwk": {}     
+        "publicKeyJwk": {}
       }
     }')
 

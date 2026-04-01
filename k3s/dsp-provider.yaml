@@ -4,7 +4,7 @@ fdsc-edc:
 vault:
   enabled: true
 
-did: 
+did:
   enabled: false
 
 keycloak:
@@ -27,7 +27,7 @@ keycloak:
     - name: "STORE_PASS"
       valueFrom:
         secretKeyRef:
-          name: provider-keystore
+          name: keystore-password
           key: password
     - name: KC_HEALTH_ENABLED
       value: "true"
@@ -37,10 +37,58 @@ keycloak:
 identityhub:
   enabled: true
   didIngress:
-    enabled: true
     annotations:
       traefik.ingress.kubernetes.io/service.passhostheader: "true"
       traefik.ingress.kubernetes.io/router.tls: "true"
+      cert-manager.io/cluster-issuer: "selfsigned-issuer"
+      cert-manager.io/private-key-algorithm: "ECDSA"
+      cert-manager.io/common-name: "mp-operations.org"
+    hosts:
+    - host: mp-operations.org
+      paths:
+        - /
+    tls:
+    - secretName: mp-operations.org-tls
+      hosts:
+        - mp-operations.org
+  postgresql:
+    host: postgres
+    port: 5432
+    auth:
+      username: ih
+      existingSecret: ih.postgres.credentials.postgresql.acid.zalan.do
+      existingSecretKeyKey: "password"
+  additionalVolumeMounts:
+    - name: root-ca
+      mountPath: /root-ca
+    - name: cacerts
+      mountPath: /opt/java/openjdk/lib/security/cacerts
+      subPath: cacerts
+  additionalVolumes:
+    - name: ca-certs-script
+      configMap:
+        name: ca-certs-script
+        defaultMode: 0755
+    - name: root-ca
+      secret:
+        secretName: mp-operations.org-tls
+        items:
+          - key: ca.crt
+            path: ca.crt
+    - name: cacerts
+      emptyDir: {}
+  initContainers:
+    - name: load-certs
+      image: "quay.io/fiware/contract-management:3.3.0"
+      command: ["/bin/sh", "-c", "/bin/import-ca.sh /certs-folder /root-ca/ca.crt /opt/java/openjdk/lib/security/cacerts"]
+      volumeMounts:
+        - name: ca-certs-script
+          mountPath: /bin/import-ca.sh
+          subPath: import-ca.sh
+        - name: cacerts
+          mountPath: /certs-folder/
+        - name: root-ca
+          mountPath: /root-ca
   endpoints:
     identity:
       authKeyAlias: "sup3r$3cr3t"

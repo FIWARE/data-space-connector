@@ -444,17 +444,6 @@
                         </configuration>
                     </execution>
                     <execution>
-                        <id>apply-certs</id>
-                        <phase>deploy</phase>
-                        <goals>
-                            <goal>apply</goal>
-                        </goals>
-                        <configuration>
-                            <manifests>${project.build.directory}/k3s/certs</manifests>
-                            <timeout>500</timeout>
-                        </configuration>
-                    </execution>
-                    <execution>
                         <id>apply-mongo-operator</id>
                         <phase>deploy</phase>
                         <goals>

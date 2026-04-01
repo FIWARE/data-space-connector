@@ -19,10 +19,10 @@ In order to be compatible with other connectors, the FIWARE Data Space Connector
       * OID4VC - uses the [OpenID for Verifiable Credentials Protocols](https://openid.net/sg/openid4vc/) for authentication between connectors
       * DCP - uses the [Decentralized Claims Protocol](https://eclipse-dataspace-dcp.github.io/decentralized-claims-protocol/v1.0.1/) for authentication between connectors
 * Identity Hub - implementation of the EDC-Identity Services, currently using the [Tractus-X IdentityHub](github.com/eclipse-tractusx/tractusx-identityhub)
-    
+
 ### Authentication via OID4VP
 
-In order to integrate with [EUDI Wallet ARF](https://eudi.dev/1.1.0/arf/) compatible wallets and better support for human-to-machine interaction, the FDSC-EDC implementation supports the usage of [OpenID 4 Verifiable Presentations](https://openid.net/specs/openid-4-verifiable-presentations-1_0.html) for Connector-to-Connector communication and for authentication of users accessing the actual data and services. 
+In order to integrate with [EUDI Wallet ARF](https://eudi.dev/1.1.0/arf/) compatible wallets and better support for human-to-machine interaction, the FDSC-EDC implementation supports the usage of [OpenID 4 Verifiable Presentations](https://openid.net/specs/openid-4-verifiable-presentations-1_0.html) for Connector-to-Connector communication and for authentication of users accessing the actual data and services.
 Both sides need to have a full IAM-Framework in place(including Verifier and PEP). The following architecture only shows those components at the provider side, however the flow is the same on call from provider to consumer, thus the consumer needs to have them, too.
 
 ![OID4VP Flow](./img/OID4VP-FIWARE-DSC-EDC-Detail.png)
@@ -95,9 +95,9 @@ The following steps will show how to create a ProductOffering throught the TMFor
 
 The consumer-identity and key-material needs to be registered in the identityhub, in order to participate in DCP-based DSP interactions. Since all OID4VC base flows do not rely on any propriatary extensions to the did-standard, they can also work with that.
 
-1. Get the private key(generated during deployment process, used for signing the certificates) as JWK(to allow signing tokens in the Secure Token Service):
+1. Get the private key(managed by cert-manager, used for signing the certificates) as JWK(to allow signing tokens in the Secure Token Service):
 ```shell
-export CONSUMER_JWK=$(./doc/scripts/get-private-jwk-p-256.sh ./helpers/certs/out/client-consumer/private/client-pkcs8.key.pem); echo $CONSUMER_JWK
+export CONSUMER_JWK=$(./doc/scripts/get-private-jwk-from-k8s-secret.sh consumer fancy-marketplace.biz-tls); echo $CONSUMER_JWK
 ```
 
 2. Insert the key into Vault:
@@ -107,7 +107,7 @@ curl -X POST 'http://vault-fancy-marketplace.127.0.0.1.nip.io:8080/v1/secret/dat
   --data "$(jq -n --arg content "$CONSUMER_JWK" '{data:{content:$content}}')"
 ```
 
-3. Insert the participants identity and public key into identity hub. 
+3. Insert the participants identity and public key into identity hub.
 ```shell
 export CONSUMER_PARTICIPANT=$(./doc/scripts/get-participant-create.sh "${CONSUMER_JWK}" did:web:fancy-marketplace.biz "http://identityhub-fancy-marketplace.127.0.0.1.nip.io" "key-1"); echo ${CONSUMER_PARTICIPANT} | jq .
 curl -X POST \
@@ -127,9 +127,9 @@ curl -x localhost:8888 https://fancy-marketplace.biz/.well-known/did.json -k | j
 
 The provider indentity has to be prepared exactly the same way:
 
-1. Get the private key(generated during deployment process, used for signing the certificates) as JWK(to allow signing tokens in the Secure Token Service):
+1. Get the private key(managed by cert-manager, used for signing the certificates) as JWK(to allow signing tokens in the Secure Token Service):
 ```shell
-export PROVIDER_JWK=$(./doc/scripts/get-private-jwk-p-256.sh ./helpers/certs/out/client-provider/private/client-pkcs8.key.pem); echo $PROVIDER_JWK
+export PROVIDER_JWK=$(./doc/scripts/get-private-jwk-from-k8s-secret.sh provider mp-operations.org-tls); echo $PROVIDER_JWK
 ```
 
 2. Insert the key into Vault:
@@ -139,7 +139,7 @@ curl -X POST 'http://vault-mp-operations.127.0.0.1.nip.io:8080/v1/secret/data/ke
   --data "$(jq -n --arg content "$PROVIDER_JWK" '{data:{content:$content}}')"
 ```
 
-3. Insert the participants identity and public key into identity hub. 
+3. Insert the participants identity and public key into identity hub.
 ```shell
 export PROVIDER_PARTICIPANT=$(./doc/scripts/get-participant-create.sh "${PROVIDER_JWK}" "did:web:mp-operations.org" "http://identityhub-mp-operations.127.0.0.1.nip.io" "key-1"); echo ${PROVIDER_PARTICIPANT} | jq .
 curl -X POST \
@@ -505,7 +505,7 @@ curl -X 'POST' \
                 \"permission\": [{
                     \"action\":  \"use\"
                 }],
-                \"@type\":  \"Offer\"  
+                \"@type\":  \"Offer\"
               },
               \"contractPolicy\": {
                 \"@context\": \"http://www.w3.org/ns/odrl.jsonld\",
@@ -549,9 +549,9 @@ export OPERATOR_CREDENTIAL=$(./doc/scripts/get_credential.sh https://keycloak-co
 3. Register the consumer in the marketplace:
 
 ```shell
-export CONSUMER_DID="did:web:fancy-marketplace.biz"  
+export CONSUMER_DID="did:web:fancy-marketplace.biz"
 export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh http://mp-data-service.127.0.0.1.nip.io:8080 $REP_CREDENTIAL default); echo ${ACCESS_TOKEN}
-export FANCY_MARKETPLACE_ID=$(curl -X POST http://mp-tmf-api.127.0.0.1.nip.io:8080/tmf-api/party/v4/organization \
+export FANCY_MARKETPLACE_ID=$(curl -X POST http://tm-forum-api.127.0.0.1.nip.io:8080/tmf-api/party/v4/organization \
 -H 'Accept: */*' \
 -H 'Content-Type: application/json' \
 -H "Authorization: Bearer ${ACCESS_TOKEN}" \
@@ -560,23 +560,23 @@ export FANCY_MARKETPLACE_ID=$(curl -X POST http://mp-tmf-api.127.0.0.1.nip.io:80
     \"partyCharacteristic\": [
     {
         \"name\": \"did\",
-        \"value\": \"${CONSUMER_DID}\" 
+        \"value\": \"${CONSUMER_DID}\"
     }
     ]
-}" | jq '.id' -r); echo ${FANCY_MARKETPLACE_ID} 
+}" | jq '.id' -r); echo ${FANCY_MARKETPLACE_ID}
 ```
 
 4. Buy access through TMForum:
     1. List offerings
     ```shell
         export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh http://mp-data-service.127.0.0.1.nip.io:8080 $REP_CREDENTIAL default); echo $ACCESS_TOKEN
-        curl -X GET http://mp-tmf-api.127.0.0.1.nip.io:8080/tmf-api/productCatalogManagement/v4/productOffering -H "Authorization: Bearer ${ACCESS_TOKEN}" | jq .
+        curl -X GET http://tm-forum-api.127.0.0.1.nip.io:8080/tmf-api/productCatalogManagement/v4/productOffering -H "Authorization: Bearer ${ACCESS_TOKEN}" | jq .
     ```
     2. Get offer Id and order it:
-    ```shell 
+    ```shell
         export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh http://mp-data-service.127.0.0.1.nip.io:8080 $REP_CREDENTIAL default); echo $ACCESS_TOKEN
-        export OFFER_ID=$(curl -X GET http://mp-tmf-api.127.0.0.1.nip.io:8080/tmf-api/productCatalogManagement/v4/productOffering -H "Authorization: Bearer ${ACCESS_TOKEN}" | jq '.[0].id' -r); echo ${OFFER_ID}
-        export ORDER_ID=$(curl -X POST http://mp-tmf-api.127.0.0.1.nip.io:8080/tmf-api/productOrderingManagement/v4/productOrder \
+        export OFFER_ID=$(curl -X GET http://tm-forum-api.127.0.0.1.nip.io:8080/tmf-api/productCatalogManagement/v4/productOffering -H "Authorization: Bearer ${ACCESS_TOKEN}" | jq '.[0].id' -r); echo ${OFFER_ID}
+        export ORDER_ID=$(curl -X POST http://tm-forum-api.127.0.0.1.nip.io:8080/tmf-api/productOrderingManagement/v4/productOrder \
             -H 'Accept: */*' \
             -H 'Content-Type: application/json' \
             -H "Authorization: Bearer ${ACCESS_TOKEN}" \
@@ -588,7 +588,7 @@ export FANCY_MARKETPLACE_ID=$(curl -X POST http://mp-tmf-api.127.0.0.1.nip.io:80
                     \"productOffering\": {
                     \"id\" :  \"${OFFER_ID}\"
                     }
-                }  
+                }
                 ],
                 \"relatedParty\": [
                 {
@@ -619,13 +619,13 @@ Consumer:
 
 Get client key as jwk
 ```shell
-export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh http://mp-data-service.127.0.0.1.nip.io:8080 $OPERATOR_CREDENTIAL operator); echo $ACCESS_TOKEN 
+export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh http://mp-data-service.127.0.0.1.nip.io:8080 $OPERATOR_CREDENTIAL operator); echo $ACCESS_TOKEN
 curl  -X GET http://mp-data-service.127.0.0.1.nip.io:8080/ngsi-ld/v1/entities/urn:ngsi-ld:UptimeReport:fms-1 \
     --header 'Content-Type: application/json' \
     --header "Authorization: Bearer ${ACCESS_TOKEN}"
-``` 
+```
 
-### Order through DSP 
+### Order through DSP
 
 The same product now can be negotiatiated throught the Dataspace Protocol. The interactions will be controlled throught he management API of the FDSC-EDC Controlplane, authentication is done by the connector's and cannot be related to the actual actor.
 
@@ -690,13 +690,13 @@ curl  -X POST \
   --header 'Content-Type: application/json' | jq .
 ```
 
-4. When the state of the negotiation is "finalized", the agreement id can be retrieved: 
+4. When the state of the negotiation is "finalized", the agreement id can be retrieved:
 
 ```shell
 export AGREEMENT_ID=$(curl  -X POST \
   'http://dsp-dcp-management.127.0.0.1.nip.io:8080/api/v1/management/v3/contractnegotiations/request' \
   --header 'Accept: */*' \
-  --header 'Content-Type: application/json' | jq -r .[].contractAgreementId); echo ${AGREEMENT_ID}
+  --header 'Content-Type: application/json' | jq -r '.[].@id'); echo ${AGREEMENT_ID}
 ```
 
 5. With the aggreement, the transfer can be started:

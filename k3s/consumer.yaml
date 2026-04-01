@@ -1378,7 +1378,7 @@ fdsc-edc:
               echo "Keycloak is ready."
         - name: load-certs
           image: "quay.io/fiware/contract-management:3.3.0"
-          command: ["/bin/sh", "-c", "/bin/import-ca.sh /certs-folder /root-ca/ca.crt"]
+          command: ["/bin/sh", "-c", "/bin/import-ca.sh /certs-folder /root-ca/ca.crt /opt/java/openjdk/lib/security/cacerts"]
           volumeMounts:
             - name: ca-certs-script
               mountPath: /bin/import-ca.sh
@@ -1463,49 +1463,6 @@ credentials:
       targetFile: legal-person-credential.jwt
 identityhub:
   enabled: false
-  didIngress:
-    hosts:
-    - host: fancy-marketplace.biz
-      paths:
-        - /
-  postgresql:
-    host: postgres
-    port: 5432
-    auth:
-      username: ih
-      existingSecret: ih.postgres.credentials.postgresql.acid.zalan.do
-      existingSecretKeyKey: "password"
-  deployment:
-    additionalVolumeMounts:
-      - name: root-ca
-        mountPath: /root-ca
-      - name: cacerts
-        mountPath: /opt/java/openjdk/lib/security/cacerts
-        subPath: cacerts
-    additionalVolumes:
-      - name: ca-certs-script
-        configMap:
-          name: ca-certs-script
-          defaultMode: 0755
-      - name: root-ca
-        secret:
-          secretName: fancy-marketplace.biz-tls
-          items:
-            - key: ca.crt
-              path: ca.crt
-      - name: cacerts
-        emptyDir: {}
-    initContainers:
-      - name: load-certs
-        image: "quay.io/fiware/contract-management:3.3.0"
-        command: ["/bin/sh", "-c", "/bin/import-ca.sh /certs-folder /root-ca/ca.crt"]
-        volumeMounts:
-          - name: ca-certs-script
-            mountPath: /bin/import-ca.sh
-            subPath: import-ca.sh
-          - name: cacerts
-            mountPath: /certs-folder/
-          - name: root-ca
-            mountPath: /root-ca
+
 vault:
   enabled: true
