@@ -375,7 +375,7 @@ export PRODUCT_SPEC_ID=$(curl -X 'POST' \
                                  "format": "jwt_vc_json",
                                  "multiple": false,
                                  "meta": {
-                                   "type_values": ["MembershipCredential"]
+                                   "type_values": [["MembershipCredential"]]
                                  }
                                }
                              ]
@@ -614,10 +614,6 @@ With that, the Data Space Connector will create:
 
 5. Access the entity:
 
-
-Consumer:
-
-Get client key as jwk
 ```shell
 export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh http://mp-data-service.127.0.0.1.nip.io:8080 $OPERATOR_CREDENTIAL operator); echo $ACCESS_TOKEN
 curl  -X GET http://mp-data-service.127.0.0.1.nip.io:8080/ngsi-ld/v1/entities/urn:ngsi-ld:UptimeReport:fms-1 \
