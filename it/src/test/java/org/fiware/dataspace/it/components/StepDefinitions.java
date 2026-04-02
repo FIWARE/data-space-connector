@@ -25,6 +25,7 @@ import java.net.URI;
 import java.security.Security;
 import java.time.Duration;
 import java.util.*;
+import java.util.LinkedHashMap;
 
 import static org.fiware.dataspace.it.components.FancyMarketplaceEnvironment.OPERATOR_USER_NAME;
 import static org.fiware.dataspace.it.components.FancyMarketplaceEnvironment.TEST_USER_NAME;
@@ -45,14 +46,28 @@ public class StepDefinitions {
 	private static final String GRANT_TYPE_VP_TOKEN = "vp_token";
 	private static final String RESPONSE_TYPE_DIRECT_POST = "direct_post";
 	private static final String ENERGY_REPORT_ENTITY_ID = "urn:ngsi-ld:EnergyReport:fms-1";
+	/** Entity ID for the small K8S cluster created during marketplace tests. */
+	private static final String K8S_CLUSTER_ENTITY_ID = "urn:ngsi-ld:K8SCluster:fancy-marketplace";
+	/** Entity ID for a larger K8S cluster used to test size restrictions. */
+	private static final String K8S_CLUSTER_BIG_ENTITY_ID = "urn:ngsi-ld:K8SCluster:fancy-marketplace-big";
+	/** Schema location for the TMForum credential configuration characteristic. */
+	private static final String CREDENTIALS_CONFIG_SCHEMA = "https://raw.githubusercontent.com/FIWARE/contract-management/refs/heads/main/schemas/credentials/credentialConfigCharacteristic.json";
+	/** Schema location for the TMForum ODRL policy configuration characteristic. */
+	private static final String POLICY_CONFIG_SCHEMA = "https://raw.githubusercontent.com/FIWARE/contract-management/refs/heads/policy-support/schemas/odrl/policyCharacteristic.json";
 	/** Timeout in seconds for policy propagation to OPA via the PAP. */
 	private static final int POLICY_PROPAGATION_TIMEOUT_SECONDS = 20;
 	/** Timeout in seconds for data access assertions that require async policy updates. */
 	private static final int DATA_ACCESS_TIMEOUT_SECONDS = 20;
+	/** Timeout in seconds for order completion and contract management propagation. */
+	private static final int ORDER_PROPAGATION_TIMEOUT_SECONDS = 60;
 
 	private Wallet fancyMarketplaceEmployeeWallet;
 	private OrganizationVO fancyMarketplaceRegistration;
 	private String transferProcessId;
+	/** Stores the product specification ID for the Small K8S spec. */
+	private String productSpecSmallId;
+	/** Stores the product specification ID for the Full K8S spec. */
+	private String productSpecFullId;
 	private List<String> createdPolicies = new ArrayList<>();
 	private List<String> createdEntities = new ArrayList<>();
 
@@ -1254,6 +1269,446 @@ public class StepDefinitions {
 		} finally {
 			response.body().close();
 		}
+	}
+
+	// --- LOCAL.MD: Marketplace and Service Buying Flow Steps ---
+
+	/**
+	 * Creates the "M&P K8S Small" product specification at the provider's TMForum API.
+	 * Includes both credentialsConfig (OperatorCredential with OPERATOR role) and
+	 * policyConfig (ODRL policy restricting numNodes to 3) characteristics as documented in LOCAL.MD.
+	 */
+	@When("The provider creates a K8S Small product specification with credentials and policy config.")
+	public void createSmallProductSpec() throws Exception {
+		productSpecSmallId = createProductSpecWithPolicy("M&P K8S Small",
+				"https://mp-operation.org/policy/common/k8s-small", buildSmallPolicyRefinements());
+	}
+
+	/**
+	 * Creates the "M&P K8S" (full) product specification at the provider's TMForum API.
+	 * Includes both credentialsConfig (OperatorCredential with OPERATOR role) and
+	 * policyConfig (ODRL policy allowing unrestricted K8SCluster creation) characteristics.
+	 */
+	@When("The provider creates a K8S Full product specification with credentials and policy config.")
+	public void createFullProductSpec() throws Exception {
+		productSpecFullId = createProductSpecWithPolicy("M&P K8S",
+				"https://mp-operation.org/policy/common/k8s-full", buildFullPolicyRefinements());
+	}
+
+	/**
+	 * Creates a Small product offering referencing the Small product specification.
+	 */
+	@When("The provider creates a Small product offering referencing the Small specification.")
+	public void createSmallProductOffering() throws Exception {
+		assertNotNull(productSpecSmallId, "The Small product spec must be created first.");
+		createProductOffering("M&P K8S Offering Small", productSpecSmallId);
+	}
+
+	/**
+	 * Creates a Full product offering referencing the Full product specification.
+	 */
+	@When("The provider creates a Full product offering referencing the Full specification.")
+	public void createFullProductOffering() throws Exception {
+		assertNotNull(productSpecFullId, "The Full product spec must be created first.");
+		createProductOffering("M&P K8S Offering", productSpecFullId);
+	}
+
+	/**
+	 * Verifies that exactly two product offerings are available at the provider's TMForum API.
+	 */
+	@Then("Two product offerings are available at the provider TMForum API.")
+	public void twoOfferingsAvailable() throws Exception {
+		Request offerRequest = new Request.Builder()
+				.get()
+				.url(MPOperationsEnvironment.TMF_DIRECT_ADDRESS + "/tmf-api/productCatalogManagement/v4/productOffering")
+				.build();
+		Response offerResponse = HTTP_CLIENT.newCall(offerRequest).execute();
+		try {
+			assertEquals(HttpStatus.SC_OK, offerResponse.code(), "The offerings should be returned.");
+			List<ProductOfferingVO> offers = OBJECT_MAPPER.readValue(
+					offerResponse.body().string(), new TypeReference<List<ProductOfferingVO>>() {});
+			assertEquals(2, offers.size(), "There should be exactly two product offerings (Small and Full).");
+		} finally {
+			offerResponse.body().close();
+		}
+	}
+
+	/**
+	 * Issues a user credential to the consumer representative via the consumer Keycloak.
+	 * The representative user (representative@consumer.org) is used for marketplace buying flows.
+	 */
+	@When("Fancy Marketplace representative issues a user credential.")
+	public void representativeIssuesUserCredential() throws Exception {
+		String accessToken = FancyMarketplaceEnvironment.loginToConsumerKeycloak(
+				FancyMarketplaceEnvironment.REPRESENTATIVE_USER_NAME);
+		fancyMarketplaceEmployeeWallet.getCredentialFromIssuer(
+				accessToken, FancyMarketplaceEnvironment.CONSUMER_KEYCLOAK_ADDRESS, USER_CREDENTIAL);
+	}
+
+	/**
+	 * Issues an operator credential to the consumer operator via the consumer Keycloak.
+	 */
+	@When("Fancy Marketplace operator issues an operator credential.")
+	public void operatorIssuesOperatorCredential() throws Exception {
+		String accessToken = FancyMarketplaceEnvironment.loginToConsumerKeycloak(OPERATOR_USER_NAME);
+		fancyMarketplaceEmployeeWallet.getCredentialFromIssuer(
+				accessToken, FancyMarketplaceEnvironment.CONSUMER_KEYCLOAK_ADDRESS, OPERATOR_CREDENTIAL);
+	}
+
+	/**
+	 * Registers Fancy Marketplace as an organization at M&P Operations using the representative's
+	 * user credential via the OID4VP-authenticated TMForum API endpoint.
+	 */
+	@When("Fancy Marketplace representative registers at M&P Operations.")
+	public void representativeRegistersAtMP() throws Exception {
+		String accessToken = getAccessTokenForFancyMarketplace(USER_CREDENTIAL, DEFAULT_SCOPE,
+				MPOperationsEnvironment.PROVIDER_API_ADDRESS);
+
+		CharacteristicVO didCharacteristic = new CharacteristicVO()
+				.name("did")
+				.value(FancyMarketplaceEnvironment.CONSUMER_DID);
+
+		OrganizationCreateVO organizationCreateVO = new OrganizationCreateVO()
+				.organizationType("Consumer")
+				.name("Fancy Marketplace Inc.")
+				.partyCharacteristic(List.of(didCharacteristic));
+
+		RequestBody organizationCreateBody = RequestBody.create(
+				OBJECT_MAPPER.writeValueAsString(organizationCreateVO),
+				okhttp3.MediaType.parse(MediaType.APPLICATION_JSON));
+		Request organizationCreateRequest = new Request.Builder()
+				.post(organizationCreateBody)
+				.url(MPOperationsEnvironment.TM_FORUM_API_ADDRESS + "/tmf-api/party/v4/organization")
+				.addHeader("Authorization", "Bearer " + accessToken)
+				.build();
+		Response organizationCreateResponse = HTTP_CLIENT.newCall(organizationCreateRequest).execute();
+		try {
+			assertEquals(HttpStatus.SC_CREATED, organizationCreateResponse.code(),
+					"The organization should have been created.");
+			fancyMarketplaceRegistration = OBJECT_MAPPER.readValue(
+					organizationCreateResponse.body().string(), OrganizationVO.class);
+		} finally {
+			organizationCreateResponse.body().close();
+		}
+	}
+
+	/**
+	 * Verifies that Fancy Marketplace is registered as an organization at M&P Operations.
+	 */
+	@Then("Fancy Marketplace is registered as an organization at M&P Operations.")
+	public void fmIsRegisteredOrganization() {
+		assertNotNull(fancyMarketplaceRegistration, "The Fancy Marketplace registration should exist.");
+		assertNotNull(fancyMarketplaceRegistration.getId(),
+				"The registration should have an ID.");
+	}
+
+	/**
+	 * Buys the first available product offering at M&P Operations on behalf of the
+	 * Fancy Marketplace representative: lists offerings, creates and completes a product order.
+	 */
+	@When("Fancy Marketplace representative buys the first available offering.")
+	public void representativeBuysFirstOffering() throws Exception {
+		assertNotNull(fancyMarketplaceRegistration,
+				"Fancy Marketplace must be registered before buying.");
+
+		String accessToken = getAccessTokenForFancyMarketplace(USER_CREDENTIAL, DEFAULT_SCOPE,
+				MPOperationsEnvironment.PROVIDER_API_ADDRESS);
+
+		// List offerings
+		Request offerRequest = new Request.Builder()
+				.get()
+				.url(MPOperationsEnvironment.TM_FORUM_API_ADDRESS
+						+ "/tmf-api/productCatalogManagement/v4/productOffering")
+				.addHeader("Authorization", "Bearer " + accessToken)
+				.build();
+		Response offerResponse = HTTP_CLIENT.newCall(offerRequest).execute();
+		assertEquals(HttpStatus.SC_OK, offerResponse.code(), "The offerings should be returned.");
+		List<ProductOfferingVO> offers = OBJECT_MAPPER.readValue(
+				offerResponse.body().string(), new TypeReference<List<ProductOfferingVO>>() {});
+		offerResponse.body().close();
+		assertFalse(offers.isEmpty(), "At least one offering should be available.");
+
+		String offerId = offers.get(0).getId();
+
+		// Create product order
+		ProductOfferingRefVO productOfferingRefVO = new ProductOfferingRefVO().id(offerId);
+		ProductOrderItemVO pod = new ProductOrderItemVO()
+				.id("marketplace-order-item")
+				.action(OrderItemActionTypeVO.ADD)
+				.productOffering(productOfferingRefVO);
+		RelatedPartyVO relatedPartyVO = new RelatedPartyVO()
+				.id(fancyMarketplaceRegistration.getId());
+		ProductOrderCreateVO poc = new ProductOrderCreateVO()
+				.productOrderItem(List.of(pod))
+				.relatedParty(List.of(relatedPartyVO));
+		RequestBody pocBody = RequestBody.create(
+				OBJECT_MAPPER.writeValueAsString(poc),
+				okhttp3.MediaType.parse(MediaType.APPLICATION_JSON));
+		Request pocRequest = new Request.Builder()
+				.post(pocBody)
+				.url(MPOperationsEnvironment.TM_FORUM_API_ADDRESS
+						+ "/tmf-api/productOrderingManagement/v4/productOrder")
+				.addHeader("Authorization", "Bearer " + accessToken)
+				.build();
+		Response pocResponse = HTTP_CLIENT.newCall(pocRequest).execute();
+		assertEquals(HttpStatus.SC_CREATED, pocResponse.code(),
+				"The product order should have been created.");
+		ProductOrderVO productOrderVO = OBJECT_MAPPER.readValue(
+				pocResponse.body().string(), ProductOrderVO.class);
+		pocResponse.body().close();
+
+		// Complete the order
+		ProductOrderUpdateVO productOrderUpdateVO = new ProductOrderUpdateVO()
+				.state(ProductOrderStateTypeVO.COMPLETED);
+		RequestBody updateBody = RequestBody.create(
+				OBJECT_MAPPER.writeValueAsString(productOrderUpdateVO),
+				okhttp3.MediaType.parse(MediaType.APPLICATION_JSON));
+		Request updateRequest = new Request.Builder()
+				.patch(updateBody)
+				.url(MPOperationsEnvironment.TM_FORUM_API_ADDRESS
+						+ "/tmf-api/productOrderingManagement/v4/productOrder/"
+						+ productOrderVO.getId())
+				.addHeader("Authorization", "Bearer " + accessToken)
+				.build();
+		Response updateResponse = HTTP_CLIENT.newCall(updateRequest).execute();
+		updateResponse.body().close();
+		assertEquals(HttpStatus.SC_OK, updateResponse.code(),
+				"The product order should have been completed.");
+	}
+
+	/**
+	 * Verifies that the Fancy Marketplace operator can create a K8S cluster with the specified
+	 * number of nodes. Waits for contract management propagation to complete.
+	 *
+	 * @see #createK8SClusterWithNodes(String, String, int)
+	 */
+	@Then("Fancy Marketplace operator can create a K8S cluster with {int} nodes.")
+	public void operatorCanCreateClusterWithNodes(int numNodes) throws Exception {
+		String entityId = numNodes <= 3 ? K8S_CLUSTER_ENTITY_ID : K8S_CLUSTER_BIG_ENTITY_ID;
+		Awaitility.await().atMost(Duration.ofSeconds(ORDER_PROPAGATION_TIMEOUT_SECONDS)).untilAsserted(() -> {
+			try {
+				String accessToken = getAccessTokenForFancyMarketplace(
+						OPERATOR_CREDENTIAL, OPERATOR_SCOPE, MPOperationsEnvironment.PROVIDER_API_ADDRESS);
+				Response creationResponse = createK8SClusterWithNodes(accessToken, entityId, numNodes);
+				try {
+					assertEquals(HttpStatus.SC_CREATED, creationResponse.code(),
+							String.format("The cluster with %d nodes should have been created.", numNodes));
+				} finally {
+					creationResponse.body().close();
+				}
+			} catch (Throwable t) {
+				throw new AssertionFailedError(String.format(
+						"Cluster creation with %d nodes failed: %s", numNodes, t.getMessage()));
+			}
+		});
+		createdEntities.add(entityId);
+	}
+
+	/**
+	 * Verifies that the Fancy Marketplace operator cannot create a K8S cluster with the specified
+	 * number of nodes (e.g., when restricted by the small offering policy).
+	 */
+	@Then("Fancy Marketplace operator cannot create a K8S cluster with {int} nodes.")
+	public void operatorCannotCreateClusterWithNodes(int numNodes) throws Exception {
+		String entityId = numNodes <= 3 ? K8S_CLUSTER_ENTITY_ID : K8S_CLUSTER_BIG_ENTITY_ID;
+		// Allow a brief pause for policy propagation, then verify rejection
+		Awaitility.await().atMost(Duration.ofSeconds(ORDER_PROPAGATION_TIMEOUT_SECONDS)).untilAsserted(() -> {
+			try {
+				String accessToken = getAccessTokenForFancyMarketplace(
+						OPERATOR_CREDENTIAL, OPERATOR_SCOPE, MPOperationsEnvironment.PROVIDER_API_ADDRESS);
+				Response creationResponse = createK8SClusterWithNodes(accessToken, entityId, numNodes);
+				try {
+					assertTrue(creationResponse.code() == HttpStatus.SC_FORBIDDEN
+									|| creationResponse.code() == HttpStatus.SC_UNAUTHORIZED,
+							String.format("Cluster creation with %d nodes should be forbidden, got %d.",
+									numNodes, creationResponse.code()));
+				} finally {
+					creationResponse.body().close();
+				}
+			} catch (Throwable t) {
+				throw new AssertionFailedError(String.format(
+						"Unexpected error checking cluster restriction with %d nodes: %s",
+						numNodes, t.getMessage()));
+			}
+		});
+	}
+
+	// --- Helper methods for marketplace flow ---
+
+	/**
+	 * Creates a product specification at the provider's TMForum API with both
+	 * credentialsConfig and policyConfig characteristics.
+	 *
+	 * @param specName      the name of the product specification
+	 * @param policyId      the ODRL policy ID (e.g., "https://mp-operation.org/policy/common/k8s-small")
+	 * @param targetRefinements the ODRL target refinement constraints for the policy
+	 * @return the created product specification ID
+	 */
+	private String createProductSpecWithPolicy(String specName, String policyId,
+			List<Map<String, Object>> targetRefinements) throws Exception {
+		// Build credentials config characteristic
+		Map<String, Object> credentialsValue = Map.of(
+				"credentialsType", "OperatorCredential",
+				"claims", List.of(
+						Map.of("name", "roles",
+								"path", "$.roles[?(@.target==\"" + MPOperationsEnvironment.PROVIDER_DID + "\")].names[*]",
+								"allowedValues", List.of("OPERATOR"))));
+
+		// Build ODRL policy for policyConfig
+		Map<String, Object> odrlPolicy = new LinkedHashMap<>();
+		odrlPolicy.put("@context", Map.of("odrl", "http://www.w3.org/ns/odrl/2/"));
+		odrlPolicy.put("@id", policyId);
+		odrlPolicy.put("odrl:uid", policyId);
+		odrlPolicy.put("@type", "odrl:Policy");
+
+		Map<String, Object> permission = new LinkedHashMap<>();
+		permission.put("odrl:assigner", "https://www.mp-operation.org/");
+		permission.put("odrl:target", Map.of(
+				"@type", "odrl:AssetCollection",
+				"odrl:source", "urn:asset",
+				"odrl:refinement", targetRefinements));
+		permission.put("odrl:assignee", Map.of(
+				"@type", "odrl:PartyCollection",
+				"odrl:source", "urn:user",
+				"odrl:refinement", Map.of(
+						"@type", "odrl:LogicalConstraint",
+						"odrl:and", List.of(
+								Map.of("@type", "odrl:Constraint",
+										"odrl:leftOperand", "vc:role",
+										"odrl:operator", "odrl:hasPart",
+										"odrl:rightOperand", Map.of("@value", "OPERATOR", "@type", "xsd:string")),
+								Map.of("@type", "odrl:Constraint",
+										"odrl:leftOperand", "vc:type",
+										"odrl:operator", "odrl:hasPart",
+										"odrl:rightOperand", Map.of("@value", "OperatorCredential", "@type", "xsd:string"))))));
+		permission.put("odrl:action", "odrl:use");
+		odrlPolicy.put("odrl:permission", permission);
+
+		ProductSpecificationCreateVO pscVo = new ProductSpecificationCreateVO()
+				.brand("M&P Operations")
+				.version("1.0.0")
+				.lifecycleStatus("ACTIVE")
+				.name(specName)
+				.productSpecCharacteristic(List.of(
+						new ProductSpecificationCharacteristicVO()
+								.id("credentialsConfig")
+								.name("Credentials Config")
+								.atSchemaLocation(URI.create(CREDENTIALS_CONFIG_SCHEMA))
+								.valueType("credentialsConfiguration")
+								.productSpecCharacteristicValue(List.of(
+										new CharacteristicValueSpecificationVO()
+												.isDefault(true)
+												.value(credentialsValue))),
+						new ProductSpecificationCharacteristicVO()
+								.id("policyConfig")
+								.name("Policy for creation of K8S clusters.")
+								.atSchemaLocation(URI.create(POLICY_CONFIG_SCHEMA))
+								.valueType("authorizationPolicy")
+								.productSpecCharacteristicValue(List.of(
+										new CharacteristicValueSpecificationVO()
+												.isDefault(true)
+												.value(odrlPolicy)))));
+
+		RequestBody specBody = RequestBody.create(
+				OBJECT_MAPPER.writeValueAsString(pscVo),
+				okhttp3.MediaType.parse(MediaType.APPLICATION_JSON));
+		Request specRequest = new Request.Builder()
+				.post(specBody)
+				.url(MPOperationsEnvironment.TMF_DIRECT_ADDRESS
+						+ "/tmf-api/productCatalogManagement/v4/productSpecification")
+				.build();
+		Response specResponse = HTTP_CLIENT.newCall(specRequest).execute();
+		try {
+			assertEquals(HttpStatus.SC_CREATED, specResponse.code(),
+					"The product specification should have been created.");
+			ProductSpecificationVO createdSpec = OBJECT_MAPPER.readValue(
+					specResponse.body().string(), ProductSpecificationVO.class);
+			return createdSpec.getId();
+		} finally {
+			specResponse.body().close();
+		}
+	}
+
+	/**
+	 * Builds the ODRL target refinement list for the "small" K8S policy,
+	 * which restricts entity type to K8SCluster and numNodes to 3.
+	 */
+	private List<Map<String, Object>> buildSmallPolicyRefinements() {
+		return List.of(
+				Map.of("@type", "odrl:Constraint",
+						"odrl:leftOperand", "ngsi-ld:entityType",
+						"odrl:operator", "odrl:eq",
+						"odrl:rightOperand", "K8SCluster"),
+				Map.of("@type", "odrl:Constraint",
+						"http:bodyValue", "$.numNodes.value",
+						"odrl:operator", "odrl:eq",
+						"odrl:rightOperand", "3"));
+	}
+
+	/**
+	 * Builds the ODRL target refinement list for the "full" K8S policy,
+	 * which only restricts entity type to K8SCluster (no numNodes restriction).
+	 */
+	private List<Map<String, Object>> buildFullPolicyRefinements() {
+		return List.of(
+				Map.of("@type", "odrl:Constraint",
+						"odrl:leftOperand", "ngsi-ld:entityType",
+						"odrl:operator", "odrl:eq",
+						"odrl:rightOperand", "K8SCluster"));
+	}
+
+	/**
+	 * Creates a product offering at the provider's TMForum API referencing the given specification.
+	 *
+	 * @param offeringName the name of the product offering
+	 * @param specId       the product specification ID to reference
+	 */
+	private void createProductOffering(String offeringName, String specId) throws Exception {
+		ProductOfferingCreateVO productOfferingCreate = new ProductOfferingCreateVO()
+				.lifecycleStatus("ACTIVE")
+				.name(offeringName)
+				.version("1.0.0")
+				.productSpecification(new ProductSpecificationRefVO().id(specId));
+		RequestBody offeringBody = RequestBody.create(
+				OBJECT_MAPPER.writeValueAsString(productOfferingCreate),
+				okhttp3.MediaType.parse(MediaType.APPLICATION_JSON));
+		Request offeringRequest = new Request.Builder()
+				.post(offeringBody)
+				.url(MPOperationsEnvironment.TMF_DIRECT_ADDRESS
+						+ "/tmf-api/productCatalogManagement/v4/productOffering")
+				.build();
+		Response offeringResponse = HTTP_CLIENT.newCall(offeringRequest).execute();
+		offeringResponse.body().close();
+		assertEquals(HttpStatus.SC_CREATED, offeringResponse.code(),
+				"The product offering should have been created.");
+	}
+
+	/**
+	 * Creates a K8S cluster entity with the specified number of nodes.
+	 *
+	 * @param accessToken the bearer token for authentication
+	 * @param entityId    the NGSI-LD entity ID
+	 * @param numNodes    the number of cluster nodes
+	 * @return the HTTP response from the creation request
+	 */
+	private Response createK8SClusterWithNodes(String accessToken, String entityId,
+			int numNodes) throws Exception {
+		Map<String, Object> clusterEntity = Map.of(
+				"type", "K8SCluster",
+				"id", entityId,
+				"name", Map.of("type", "Property", "value", "Fancy Marketplace Cluster"),
+				"numNodes", Map.of("type", "Property", "value", String.valueOf(numNodes)),
+				"k8sVersion", Map.of("type", "Property", "value", "1.26.0"));
+		RequestBody clusterBody = RequestBody.create(
+				OBJECT_MAPPER.writeValueAsString(clusterEntity),
+				okhttp3.MediaType.parse(MediaType.APPLICATION_JSON));
+		Request creationRequest = new Request.Builder()
+				.post(clusterBody)
+				.url(MPOperationsEnvironment.PROVIDER_API_ADDRESS + "/ngsi-ld/v1/entities")
+				.addHeader("Authorization", "Bearer " + accessToken)
+				.addHeader("Accept", "application/json")
+				.build();
+		return HTTP_CLIENT.newCall(creationRequest).execute();
 	}
 
 }
