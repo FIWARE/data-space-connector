@@ -10,8 +10,8 @@ Extend the existing Cucumber/BDD integration test framework in the `it/` directo
 Add new environment configuration classes that define the service endpoints specific to the `central` and `dsp` Maven profiles. These are analogous to the existing `MPOperationsEnvironment` and `FancyMarketplaceEnvironment` but contain URLs for the new services.
 
 **Files to create:**
-- `it/src/test/java/org/fiware/dataspace/it/components/CentralMarketplaceEnvironment.java` — Constants for central marketplace endpoints: `http://fancy-marketplace.127.0.0.1.nip.io:8080` (TMForum/marketplace API), `http://contract-management.127.0.0.1.nip.io:8080` (contract management)
-- `it/src/test/java/org/fiware/dataspace/it/components/DSPEnvironment.java` — Constants for DSP endpoints: DCP management API (`http://dsp-dcp-management.127.0.0.1.nip.io:8080`), OID4VC management API (`http://dsp-oid4vc-management.127.0.0.1.nip.io:8080`), DCP provider (`http://dcp-mp-operations.127.0.0.1.nip.io:8080`), OID4VC provider (`http://dsp-mp-operations.127.0.0.1.nip.io:8080`), IdentityHub management endpoints for consumer and provider, Vault endpoints for consumer and provider
+- `it/src/test/java/org/fiware/dataspace/it/components/CentralMarketplaceEnvironment.java` — Constants for central marketplace endpoints: `http://fancy-marketplace.127.0.0.1.nip.io` (TMForum/marketplace API), `http://contract-management.127.0.0.1.nip.io` (contract management)
+- `it/src/test/java/org/fiware/dataspace/it/components/DSPEnvironment.java` — Constants for DSP endpoints: DCP management API (`http://dsp-dcp-management.127.0.0.1.nip.io`), OID4VC management API (`http://dsp-oid4vc-management.127.0.0.1.nip.io`), DCP provider (`http://dcp-mp-operations.127.0.0.1.nip.io`), OID4VC provider (`http://dsp-mp-operations.127.0.0.1.nip.io`), IdentityHub management endpoints for consumer and provider, Vault endpoints for consumer and provider
 
 **Files to modify:**
 - `it/src/test/java/org/fiware/dataspace/it/components/MPOperationsEnvironment.java` — Add provider keycloak address constant (`https://keycloak-provider.127.0.0.1.nip.io`)
