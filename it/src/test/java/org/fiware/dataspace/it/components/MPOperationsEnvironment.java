@@ -15,6 +15,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 public abstract class MPOperationsEnvironment {
 
 	public static final String PROVIDER_DID = "did:web:mp-operations.org";
+	/** Base URL of the provider's Keycloak instance for credential issuance. */
+	public static final String PROVIDER_KEYCLOAK_ADDRESS = "https://keycloak-provider.127.0.0.1.nip.io";
 	public static final String PROVIDER_PAP_ADDRESS = "http://pap-provider.127.0.0.1.nip.io";
 	public static final String PROVIDER_API_ADDRESS = "http://mp-data-service.127.0.0.1.nip.io";
 	public static final String TM_FORUM_API_ADDRESS = "http://mp-tmf-api.127.0.0.1.nip.io";
