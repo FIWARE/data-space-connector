@@ -44,6 +44,11 @@ public class StepDefinitions {
 	private static final String OPERATOR_SCOPE = "operator";
 	private static final String GRANT_TYPE_VP_TOKEN = "vp_token";
 	private static final String RESPONSE_TYPE_DIRECT_POST = "direct_post";
+	private static final String ENERGY_REPORT_ENTITY_ID = "urn:ngsi-ld:EnergyReport:fms-1";
+	/** Timeout in seconds for policy propagation to OPA via the PAP. */
+	private static final int POLICY_PROPAGATION_TIMEOUT_SECONDS = 20;
+	/** Timeout in seconds for data access assertions that require async policy updates. */
+	private static final int DATA_ACCESS_TIMEOUT_SECONDS = 20;
 
 	private Wallet fancyMarketplaceEmployeeWallet;
 	private OrganizationVO fancyMarketplaceRegistration;
@@ -1000,6 +1005,255 @@ public class StepDefinitions {
 			sb.append((char) ch);
 		}
 		return sb.toString();
+	}
+
+	// --- LOCAL.MD: Trust Anchor Verification Steps ---
+
+	/**
+	 * Verifies that the trust anchor's TIR endpoint is reachable and responds successfully.
+	 */
+	@Given("The trust anchor TIR endpoint is available.")
+	public void checkTirEndpointAvailable() throws Exception {
+		Request tirRequest = new Request.Builder()
+				.get()
+				.url(TrustAnchorEnvironment.TIR_ADDRESS + "/v4/issuers")
+				.build();
+		Response tirResponse = HTTP_CLIENT.newCall(tirRequest).execute();
+		try {
+			assertEquals(HttpStatus.SC_OK, tirResponse.code(), "The TIR endpoint should be available.");
+		} finally {
+			tirResponse.body().close();
+		}
+	}
+
+	/**
+	 * Verifies that the M&P Operations DID is registered at the trust anchor's TIR.
+	 */
+	@Then("M&P Operations DID is registered at the trust anchor.")
+	public void checkMPDIDAtTrustAnchor() throws Exception {
+		Request didCheckRequest = new Request.Builder()
+				.url(TrustAnchorEnvironment.TIR_ADDRESS + "/v4/issuers/" + MPOperationsEnvironment.PROVIDER_DID)
+				.build();
+		Response tirResponse = HTTP_CLIENT.newCall(didCheckRequest).execute();
+		try {
+			assertEquals(HttpStatus.SC_OK, tirResponse.code(), "M&P Operations DID should be registered at the trust anchor.");
+		} finally {
+			tirResponse.body().close();
+		}
+	}
+
+	/**
+	 * Verifies that the Fancy Marketplace DID is registered at the trust anchor's TIR.
+	 */
+	@Then("Fancy Marketplace DID is registered at the trust anchor.")
+	public void checkFMDIDAtTrustAnchor() throws Exception {
+		Request didCheckRequest = new Request.Builder()
+				.url(TrustAnchorEnvironment.TIR_ADDRESS + "/v4/issuers/" + FancyMarketplaceEnvironment.CONSUMER_DID)
+				.build();
+		Response tirResponse = HTTP_CLIENT.newCall(didCheckRequest).execute();
+		try {
+			assertEquals(HttpStatus.SC_OK, tirResponse.code(), "Fancy Marketplace DID should be registered at the trust anchor.");
+		} finally {
+			tirResponse.body().close();
+		}
+	}
+
+	/**
+	 * Verifies that the TIR lists all registered issuers and the list is non-empty.
+	 */
+	@Then("The trust anchor lists all registered issuers.")
+	public void trustAnchorListsIssuers() throws Exception {
+		Request issuersRequest = new Request.Builder()
+				.get()
+				.url(TrustAnchorEnvironment.TIR_ADDRESS + "/v4/issuers")
+				.build();
+		Response issuersResponse = HTTP_CLIENT.newCall(issuersRequest).execute();
+		try {
+			assertEquals(HttpStatus.SC_OK, issuersResponse.code(), "The issuers list should be returned.");
+			String body = issuersResponse.body().string();
+			assertNotNull(body, "The issuers list response body should not be null.");
+			assertFalse(body.isEmpty(), "The issuers list should not be empty.");
+		} finally {
+			issuersResponse.body().close();
+		}
+	}
+
+	// --- LOCAL.MD: Credential Issuance Steps ---
+
+	/**
+	 * Verifies that the consumer Keycloak instance exposes the openid-credential-issuer well-known endpoint.
+	 */
+	@Given("The consumer Keycloak credential issuer is configured.")
+	public void checkConsumerKeycloakIssuerConfigured() throws Exception {
+		IssuerConfiguration issuerConfig = fancyMarketplaceEmployeeWallet
+				.getIssuerConfiguration(FancyMarketplaceEnvironment.CONSUMER_KEYCLOAK_ADDRESS);
+		assertNotNull(issuerConfig, "The issuer configuration should be returned.");
+		assertNotNull(issuerConfig.getCredentialEndpoint(), "The credential endpoint should be configured.");
+		assertFalse(issuerConfig.getCredentialConfigurationsSupported().isEmpty(),
+				"At least one credential configuration should be supported.");
+	}
+
+	/**
+	 * Issues a user credential to the consumer employee via the OID4VCI Same-Device flow.
+	 * This exercises the complete flow: Keycloak login -> offer URI -> pre-authorized code -> credential.
+	 */
+	@When("The consumer employee logs into Keycloak and receives a user credential.")
+	public void consumerEmployeeGetsUserCredential() throws Exception {
+		String accessToken = FancyMarketplaceEnvironment.loginToConsumerKeycloak(TEST_USER_NAME);
+		fancyMarketplaceEmployeeWallet.getCredentialFromIssuer(
+				accessToken, FancyMarketplaceEnvironment.CONSUMER_KEYCLOAK_ADDRESS, USER_CREDENTIAL);
+	}
+
+	/**
+	 * Verifies that the user credential was successfully stored in the wallet after issuance.
+	 */
+	@Then("The user credential is stored in the wallet.")
+	public void userCredentialIsStored() {
+		String credential = fancyMarketplaceEmployeeWallet.getStoredCredential(USER_CREDENTIAL);
+		assertNotNull(credential, "The user credential should be stored in the wallet.");
+		assertFalse(credential.isEmpty(), "The stored credential should not be empty.");
+	}
+
+	/**
+	 * Verifies that the credential issuer metadata contains supported credential configurations
+	 * including the user-credential type.
+	 */
+	@Then("The credential issuer metadata contains supported credential configurations.")
+	public void credentialIssuerMetadataContainsConfigurations() throws Exception {
+		IssuerConfiguration issuerConfig = fancyMarketplaceEmployeeWallet
+				.getIssuerConfiguration(FancyMarketplaceEnvironment.CONSUMER_KEYCLOAK_ADDRESS);
+		assertTrue(issuerConfig.getCredentialConfigurationsSupported().containsKey(USER_CREDENTIAL),
+				"The issuer should support the user-credential configuration.");
+	}
+
+	// --- LOCAL.MD: Policy and Entity Creation Steps ---
+
+	/**
+	 * Creates the energy report access policy at the provider's PAP endpoint.
+	 */
+	@When("The provider creates an energy report access policy at the PAP.")
+	public void providerCreatesEnergyReportPolicy() throws Exception {
+		createPolicyAtMP("energyReport");
+	}
+
+	/**
+	 * Creates an EnergyReport entity directly at the provider's Scorpio broker.
+	 */
+	@When("The provider creates an EnergyReport entity at Scorpio.")
+	public void providerCreatesEnergyReportEntity() throws Exception {
+		Map<String, Object> offerEntity = Map.of("type", "EnergyReport",
+				"id", ENERGY_REPORT_ENTITY_ID,
+				"name", Map.of("type", "Property", "value", "Standard Server"),
+				"consumption", Map.of("type", "Property", "value", "94"));
+		RequestBody requestBody = RequestBody.create(
+				OBJECT_MAPPER.writeValueAsString(offerEntity),
+				okhttp3.MediaType.parse(MediaType.APPLICATION_JSON));
+		Request creationRequest = new Request.Builder()
+				.url(MPOperationsEnvironment.SCORPIO_ADDRESS + "/ngsi-ld/v1/entities")
+				.post(requestBody)
+				.build();
+		Response creationResponse = HTTP_CLIENT.newCall(creationRequest).execute();
+		creationResponse.body().close();
+		createdEntities.add(ENERGY_REPORT_ENTITY_ID);
+	}
+
+	/**
+	 * Verifies that the energy report policy exists and is active at the provider PAP.
+	 */
+	@Then("The energy report policy is active at the provider PAP.")
+	public void energyReportPolicyIsActive() throws Exception {
+		Awaitility.await()
+				.atMost(Duration.ofSeconds(POLICY_PROPAGATION_TIMEOUT_SECONDS))
+				.untilAsserted(() -> {
+					Request getPolicies = new Request.Builder()
+							.url(MPOperationsEnvironment.PROVIDER_PAP_ADDRESS + "/policy")
+							.get().build();
+					Response policyResponse = HTTP_CLIENT.newCall(getPolicies).execute();
+					try {
+						assertEquals(HttpStatus.SC_OK, policyResponse.code(), "The PAP should return policies.");
+						String body = policyResponse.body().string();
+						assertTrue(body.contains("energyReport"),
+								"The energy report policy should be listed in the active policies.");
+					} finally {
+						policyResponse.body().close();
+					}
+				});
+	}
+
+	// --- LOCAL.MD: OpenID Configuration and Data Access Steps ---
+
+	/**
+	 * Verifies that the provider data service exposes a well-known openid-configuration endpoint
+	 * with the expected grant types and token endpoint.
+	 */
+	@Then("The provider data service exposes an openid-configuration endpoint.")
+	public void providerDataServiceExposesOpenIdConfig() throws Exception {
+		OpenIdConfiguration config = MPOperationsEnvironment.getOpenIDConfiguration(
+				MPOperationsEnvironment.PROVIDER_API_ADDRESS);
+		assertNotNull(config, "The openid-configuration should be returned.");
+		assertNotNull(config.getTokenEndpoint(), "A token endpoint should be provided.");
+		assertTrue(config.getGrantTypesSupported().contains(GRANT_TYPE_VP_TOKEN),
+				"The data service should support vp_token grant type.");
+	}
+
+	/**
+	 * Verifies that the Fancy Marketplace employee can exchange a user credential for an access token
+	 * via the OID4VP flow at the provider's data service.
+	 */
+	@Then("Fancy Marketplace employee can exchange the credential for an access token.")
+	public void fmEmployeeCanExchangeCredentialForToken() throws Exception {
+		String accessToken = getAccessTokenForFancyMarketplace(USER_CREDENTIAL, DEFAULT_SCOPE,
+				MPOperationsEnvironment.PROVIDER_API_ADDRESS);
+		assertNotNull(accessToken, "The access token should be returned.");
+		assertFalse(accessToken.isEmpty(), "The access token should not be empty.");
+	}
+
+	/**
+	 * Verifies that the Fancy Marketplace employee can access the EnergyReport entity
+	 * using the access token obtained via OID4VP.
+	 */
+	@Then("Fancy Marketplace employee can access the EnergyReport with the access token.")
+	public void fmEmployeeCanAccessEnergyReport() throws Exception {
+		Awaitility.await()
+				.atMost(Duration.ofSeconds(DATA_ACCESS_TIMEOUT_SECONDS))
+				.untilAsserted(() -> {
+					String accessToken = getAccessTokenForFancyMarketplace(USER_CREDENTIAL, DEFAULT_SCOPE,
+							MPOperationsEnvironment.PROVIDER_API_ADDRESS);
+					Request entityRequest = new Request.Builder()
+							.get()
+							.url(MPOperationsEnvironment.PROVIDER_API_ADDRESS + "/ngsi-ld/v1/entities/" + ENERGY_REPORT_ENTITY_ID)
+							.addHeader("Authorization", "Bearer " + accessToken)
+							.addHeader("Accept", "application/json")
+							.build();
+					Response entityResponse = HTTP_CLIENT.newCall(entityRequest).execute();
+					try {
+						assertEquals(HttpStatus.SC_OK, entityResponse.code(),
+								"The EnergyReport entity should be accessible with a valid token.");
+					} finally {
+						entityResponse.body().close();
+					}
+				});
+	}
+
+	// --- LOCAL.MD: Unauthenticated Access Rejection Step ---
+
+	/**
+	 * Verifies that an unauthenticated GET request to the provider data service is rejected with HTTP 401.
+	 */
+	@Then("An unauthenticated request to the provider data service returns 401.")
+	public void unauthenticatedRequestReturns401() throws Exception {
+		Request unauthenticatedRequest = new Request.Builder()
+				.get()
+				.url(MPOperationsEnvironment.PROVIDER_API_ADDRESS + "/ngsi-ld/v1/entities/" + ENERGY_REPORT_ENTITY_ID)
+				.addHeader("Accept", "application/json")
+				.build();
+		Response response = HTTP_CLIENT.newCall(unauthenticatedRequest).execute();
+		try {
+			assertEquals(HttpStatus.SC_UNAUTHORIZED, response.code(),
+					"An unauthenticated request should be rejected with 401.");
+		} finally {
+			response.body().close();
+		}
 	}
 
 }
