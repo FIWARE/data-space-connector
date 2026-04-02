@@ -14,7 +14,6 @@ public abstract class FancyMarketplaceEnvironment {
 	/** The base URL of the consumer's Keycloak identity provider. */
 	public static final String CONSUMER_KEYCLOAK_ADDRESS = "https://keycloak-consumer.127.0.0.1.nip.io";
 
-	/** The callback address for the consumer's Rainbow TPP (Trusted Participants Proxy). */
 	public static final String CONSUMER_TPP_ADDRESS = "http://rainbow-consumer.127.0.0.1.nip.io:8080/api/v1/callbacks";
 
 	private static final String TEST_REALM = "test-realm";
