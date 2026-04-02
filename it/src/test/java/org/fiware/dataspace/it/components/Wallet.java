@@ -9,6 +9,7 @@ import org.apache.http.HttpStatus;
 import org.bouncycastle.jce.interfaces.ECPublicKey;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
 import org.fiware.dataspace.it.components.model.Credential;
+import org.fiware.dataspace.it.components.model.Format;
 import org.fiware.dataspace.it.components.model.CredentialOffer;
 import org.fiware.dataspace.it.components.model.CredentialRequest;
 import org.fiware.dataspace.it.components.model.Grant;
@@ -67,6 +68,16 @@ public class Wallet {
 		did = walletKey.getKid();
 	}
 
+	/**
+	 * Retrieves a previously stored credential by its ID.
+	 *
+	 * @param credentialId the credential configuration ID used when the credential was issued
+	 * @return the raw credential string (JWT or SD-JWT), or {@code null} if not stored
+	 */
+	public String getStoredCredential(String credentialId) {
+		return credentialStorage.get(credentialId);
+	}
+
 	public String exchangeCredentialForToken(OpenIdConfiguration openIdConfiguration, String credentialId, String scope) throws Exception {
 		String vpToken = Base64.getUrlEncoder()
 				.withoutPadding()
@@ -113,12 +124,37 @@ public class Wallet {
 	}
 
 
+	/**
+	 * Retrieves a credential from the issuer using the default format (determined by the issuer configuration).
+	 *
+	 * @param userToken    the Keycloak access token for the user requesting the credential
+	 * @param issuerHost   the base URL of the Keycloak issuer (e.g., consumer or provider Keycloak address)
+	 * @param credentialId the credential configuration ID to request (e.g., "user-credential", "operator-credential")
+	 * @throws Exception if credential issuance fails
+	 */
 	public void getCredentialFromIssuer(String userToken, String issuerHost, String credentialId) throws Exception {
+		getCredentialFromIssuer(userToken, issuerHost, credentialId, null);
+	}
+
+	/**
+	 * Retrieves a credential from the issuer with an explicit format override.
+	 * <p>
+	 * This method supports requesting credentials in different formats such as {@code jwt_vc} or {@code vc+sd-jwt}.
+	 * When {@code format} is {@code null}, the format from the issuer's supported configuration is used.
+	 * This is needed for central marketplace flows where SD-JWT format is required for UserCredentials.
+	 *
+	 * @param userToken    the Keycloak access token for the user requesting the credential
+	 * @param issuerHost   the base URL of the Keycloak issuer (e.g., consumer or provider Keycloak address)
+	 * @param credentialId the credential configuration ID to request (e.g., "user-credential", "user-sd")
+	 * @param format       the credential format to request (e.g., "jwt_vc", "vc+sd-jwt"), or {@code null} to use the issuer default
+	 * @throws Exception if credential issuance fails
+	 */
+	public void getCredentialFromIssuer(String userToken, String issuerHost, String credentialId, String format) throws Exception {
 		IssuerConfiguration issuerConfiguration = getIssuerConfiguration(issuerHost);
 		OfferUri offerUri = getCredentialOfferUri(userToken, issuerHost, credentialId);
 		CredentialOffer credentialOffer = getCredentialOffer(userToken, offerUri);
 
-		var theCredential = getCredential(issuerConfiguration, credentialOffer);
+		var theCredential = getCredential(issuerConfiguration, credentialOffer, format);
 		credentialStorage.put(credentialId, theCredential);
 	}
 
@@ -178,7 +214,32 @@ public class Wallet {
 		return getAccessToken(openIdConfiguration.getTokenEndpoint(), preAuthorizedGrant.getPreAuthorizedCode());
 	}
 
+	/**
+	 * Retrieves a credential using the format from the issuer's supported configuration.
+	 *
+	 * @param issuerConfiguration the issuer's OpenID credential issuer configuration
+	 * @param credentialOffer     the credential offer containing pre-authorized code and configuration IDs
+	 * @return the raw credential string (JWT or SD-JWT)
+	 * @throws Exception if credential retrieval fails
+	 */
 	public String getCredential(IssuerConfiguration issuerConfiguration, CredentialOffer credentialOffer) throws Exception {
+		return getCredential(issuerConfiguration, credentialOffer, null);
+	}
+
+	/**
+	 * Retrieves a credential with an optional format override.
+	 * <p>
+	 * When {@code formatOverride} is provided, it overrides the format from the issuer's supported configuration.
+	 * This is useful for requesting credentials in a specific format like {@code vc+sd-jwt} when the issuer
+	 * supports multiple formats.
+	 *
+	 * @param issuerConfiguration the issuer's OpenID credential issuer configuration
+	 * @param credentialOffer     the credential offer containing pre-authorized code and configuration IDs
+	 * @param formatOverride      the format to use instead of the issuer default, or {@code null} to use the issuer default
+	 * @return the raw credential string (JWT or SD-JWT)
+	 * @throws Exception if credential retrieval fails
+	 */
+	public String getCredential(IssuerConfiguration issuerConfiguration, CredentialOffer credentialOffer, String formatOverride) throws Exception {
 		String accessToken = getTokenForOffer(issuerConfiguration, credentialOffer);
 
 		String credentialResponse = credentialOffer.getCredentialConfigurationIds()
@@ -186,7 +247,7 @@ public class Wallet {
 				.map(offeredCredentialId -> issuerConfiguration.getCredentialConfigurationsSupported().get(offeredCredentialId))
 				.map(supportedCredential -> {
 					try {
-						return requestOffer(accessToken, issuerConfiguration.getCredentialEndpoint(), supportedCredential);
+						return requestOffer(accessToken, issuerConfiguration.getCredentialEndpoint(), supportedCredential, formatOverride);
 					} catch (Exception e) {
 						return null;
 					}
@@ -197,10 +258,24 @@ public class Wallet {
 		return OBJECT_MAPPER.readValue(credentialResponse, Credential.class).getCredential();
 	}
 
-	private String requestOffer(String token, String credentialEndpoint, SupportedConfiguration offeredCredential) throws Exception {
+	/**
+	 * Sends a credential request to the issuer's credential endpoint.
+	 *
+	 * @param token              the access token obtained from the pre-authorized code exchange
+	 * @param credentialEndpoint the issuer's credential endpoint URL
+	 * @param offeredCredential  the supported credential configuration from the issuer
+	 * @param formatOverride     an optional format string to override the credential's default format, or {@code null}
+	 * @return the raw JSON response body containing the credential
+	 * @throws Exception if the HTTP request fails or returns a non-200 status
+	 */
+	private String requestOffer(String token, String credentialEndpoint, SupportedConfiguration offeredCredential, String formatOverride) throws Exception {
 		CredentialRequest credentialRequest = new CredentialRequest();
 		credentialRequest.setCredentialIdentifier(offeredCredential.getId());
-		credentialRequest.setFormat(offeredCredential.getFormat());
+		if (formatOverride != null) {
+			credentialRequest.setFormat(Format.fromString(formatOverride));
+		} else {
+			credentialRequest.setFormat(offeredCredential.getFormat());
+		}
 
 		RequestBody credentialRequestBody = RequestBody
 				.create(OBJECT_MAPPER.writeValueAsString(credentialRequest), okhttp3.MediaType.parse(MediaType.APPLICATION_JSON));
