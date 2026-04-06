@@ -1,3 +1,6 @@
+cert-manager:
+  enabled: false
+
 decentralizedIam:
   enabled: true
 
@@ -40,6 +43,15 @@ keycloak:
   ingress:
     enabled: true
     hostname: keycloak-consumer.127.0.0.1.nip.io
+    annotations:
+      cert-manager.io/cluster-issuer: "selfsigned-issuer"
+      cert-manager.io/private-key-algorithm: "ECDSA"
+      cert-manager.io/common-name: "keycloak-consumer.127.0.0.1.nip.io"
+    tls: true
+    extraTls:
+      - secretName: keycloak-consumer.127.0.0.1.nip.io-tls
+        hosts:
+          - keycloak-consumer.127.0.0.1.nip.io
   initContainers:
     - name: install-jades-issuer
       image: quay.io/fiware/keycloak-jades-vc-issuer:1.2.0
@@ -226,12 +238,8 @@ did:
   enabled: true
   config:
     server:
-      serverPort: "3001"
-      didType: "web"
       hostUrl: "http://did-consumer.127.0.0.1.nip.io"
-      outputFormat: "json_jwk"
-      keystorePasswordSecretName: "consumer-keystore"
-      keystorePasswordSecretKey: "password"
+      certPath: "/certs/tls.crt"
     generateKey:
       enabled: true
       keyTypeToGenerate: "EC"
@@ -240,17 +248,34 @@ did:
       locality: "Brussels"
       organization: "Fancy Marketplace Co."
       commonName: "www.fancy-marketplace.biz"
+  volumes:
+    - name: certs
+      secret:
+        secretName: did-consumer.127.0.0.1.nip.io-tls
+        items:
+          - key: tls.crt
+            path: tls.crt
+  volumeMounts:
+    - name: certs
+      mountPath: /certs
   ingress:
     enabled: true
     className: ""
     annotations:
       traefik.ingress.kubernetes.io/service.passhostheader: "true"
       traefik.ingress.kubernetes.io/router.tls: "true"
+      cert-manager.io/cluster-issuer: "selfsigned-issuer"
+      cert-manager.io/private-key-algorithm: "ECDSA"
+      cert-manager.io/common-name: "did-consumer.127.0.0.1.nip.io"
     hosts:
       - host: did-consumer.127.0.0.1.nip.io
         paths:
           - path: /
             pathType: ImplementationSpecific
+    tls:
+      - secretName: did-consumer.127.0.0.1.nip.io-tls
+        hosts:
+          - did-consumer.127.0.0.1.nip.io
 
 # register the consumer at the til. Only possible if it runs in the same environment and recommendable for demo deployments
 registration:

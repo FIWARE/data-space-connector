@@ -1,0 +1,17 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: signing-key
+  namespace: provider
+spec:
+  secretName: signing-key
+  issuerRef:
+    name: selfsigned-issuer
+    kind: ClusterIssuer
+    group: cert-manager.io
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+    encoding: PKCS8
+  dnsNames:
+    - mp-operations.org

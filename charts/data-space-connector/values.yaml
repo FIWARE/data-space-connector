@@ -283,7 +283,7 @@ keycloak:
   service:
     ports:
       http: 8080
-    extraPorts: 
+    extraPorts:
       - name: management
         port: 9000
         targetPort: 9000
@@ -304,7 +304,7 @@ keycloak:
       cpu: "1"
 
   # -- increase thresholds to prevent crashloops in low resource deployments
-  livenessProbe: 
+  livenessProbe:
     failureThreshold: 20
   readinessProbe:
     failureThreshold: 20
@@ -492,7 +492,7 @@ tm-forum-api:
       # -- address of the broker
       url: http://data-service-scorpio:9090
     contextUrl: https://raw.githubusercontent.com/SEAMWARE/fdsc-edc/refs/heads/main/schemas/odrl-context.jsonld
-    additionalEnvVars: 
+    additionalEnvVars:
       - name: API_EXTENSION_ENABLED
         value: "true"
       - name: GENERAL_NGSILDORQUERYVALUE
@@ -590,7 +590,7 @@ tm-forum-api:
         # -- name of the scope
         name: default
         # -- name of the default credential to be configured
-        credentialTypes: 
+        credentialTypes:
           - VerifiableCredential
         # -- needs to be updated for the concrete dataspace
         trustedParticipantsLists: http://tir.trust-anchor.org
@@ -886,9 +886,9 @@ fdsc-edc:
       ## configuration of the image to be used
       image:
         # -- cp image name
-        repository: quay.io/wi_stefan/fdsc-edc-controlplane-oid4vc
+        repository: quay.io/seamware/fdsc-edc-controlplane-oid4vc
         # -- tag of the image to be used
-        tag: 0.0.1-SNAPSHOT
+        tag: 0.1.4
         # -- specification of the image pull policy
         pullPolicy: Always
       # -- secrets for pulling images from a private repository
@@ -898,7 +898,7 @@ fdsc-edc:
       additionalLabels: { }
       # -- additional annotations for the deployment, if required
       additionalAnnotations: { }
-      
+
       # -- additional volume
       additionalVolumeMounts:
         - name: credential-repo
@@ -999,18 +999,18 @@ fdsc-edc:
           # -- algorithm to be used for signing the verifiable presentations
           signatureAlgorithm: ECDH-ES
           # -- key to be used for signing the presentations
-          key:  
+          key:
             # -- type of the key
             type: EC
             # -- path to the key
             path: oid4vp/private-key.pem
-        # -- folder of the credentials to be used for authentication 
+        # -- folder of the credentials to be used for authentication
         credentialsFolder: oid4vp/credentials
         # -- additional trust-anchors to be used for client identification(e.g. the verifier)
         trustAnchorsFolder:
         # -- claim used inside the jwts for identifying the organization
         organizationClaim: verifiableCredential.issuer
-        # -- configuration of the proxy to be used for OID4VP authentication        
+        # -- configuration of the proxy to be used for OID4VP authentication
         proxy:
           # -- should a proxy be used at all
           enabled: false
@@ -1033,7 +1033,7 @@ fdsc-edc:
         # -- configuration of the test identity service
         identity:
           enabled: false
-      
+
       # -- configuration of the TMForum extension
       tmfExtension:
         # -- should the extension be enabled
@@ -1061,7 +1061,7 @@ fdsc-edc:
         # -- should it be enabled
         enabled: true
         # -- host to be used for offering the transfer processes
-        transferHost: 
+        transferHost:
         # -- configuration to be used in case provisioning of DCP secured resources is supported
         dcp:
           # -- should it be enabled
@@ -1077,12 +1077,12 @@ fdsc-edc:
           # -- should OID4VC provisioning be enabled
           enabled: false
           # -- address of the credentials config service to be used
-          credentialsConfigAddress: 
+          credentialsConfigAddress:
           # -- external host of the verifier to be used for OID4VP on transfers
           verifierHost:
           # -- internal host of the verifier to be used for OID4VP on transfers, the external one can also be reused here
           verifierInternalHost:
-          # -- internal address of the open policy agent - to be used as PDP on the incoming routes 
+          # -- internal address of the open policy agent - to be used as PDP on the incoming routes
           opaHost: http://localhost:8181
           # -- host of the ODRL-PAP to register the policies
           odrlPapHost: http://odrl-pap:8080
@@ -1094,13 +1094,13 @@ fdsc-edc:
           token:
           # -- in case the route should use a proxy, configure it here
           httpsProxy:
-      
+
       ## -- configuration of the trusted issuers list to be use in case of DCP
       ebsiTir:
         ## -- should an ebsi-api based tir be used?
         enabled: false
         ## -- address to the trusted issuers list
-        tilAddress: 
+        tilAddress:
 
       ## -- configuration for dcp based authn/z
       dcp:
@@ -1125,11 +1125,11 @@ fdsc-edc:
         log:
           ## -- loglevel to be used
           level: DEBUG
-        # -- handling of edc internal json-ld resolution 
+        # -- handling of edc internal json-ld resolution
         jsonld:
-          https: 
+          https:
             enabled: true
-          http: 
+          http:
             enabled: trusted
       ## -- endpoints to be provided by the edc
       web:
@@ -1172,7 +1172,7 @@ credentials:
     # -- address of the keycloak
     address:
     # -- realm to be used
-    realm: 
+    realm:
     # -- clientId to be used for retrieval
     clientId:
     # -- username to get the credentials for
@@ -1184,12 +1184,12 @@ credentials:
   # -- configurations of the credentials to be retrieved
   configurations: []
     # -- id of the credentials config to be used
-    # - id: 
+    # - id:
     # -- format to request the credential in
       # format:
     # -- name of the file to store the credential at
       # targetFile:
-  
+
 identityhub:
   enabled: false
   image:
@@ -1459,3 +1459,26 @@ vault:
     paths:
       secret: /v1/secret
       health: /v1/sys/health
+
+# -- configuration for the cert-manager component (https://github.com/cert-manager/cert-manager/blob/master/deploy/charts/cert-manager/values.yaml)
+cert-manager:
+  enabled: false
+
+# -- configuration for additional resources to be deployed for cert-manager, like ClusterIssuers
+certManagerResources:
+  # -- Toggle for deploying additional ClusterIssuers and bootstrap resources.
+  # Set to true to automate certificate infrastructure after the subchart install.
+  enabled: false
+  # -- The namespace where cert-manager is deployed.
+  # Required to place the CA Secret for the 'selfsigned' mode.
+  namespace: cert-manager
+  # -- Type of certificate issuer to configure.
+  # "selfsigned": Generates a local self-signed CA (ideal for Dev/Internal labs).
+  # "prod": Configures Let's Encrypt Production issuer (real trusted SSL).
+  type: "prod"
+  # -- Email address for ACME registration (required for "prod" mode).
+  # Let's Encrypt will send expiration notifications to this address.
+  acmeEmail: "admins@example.com"
+  # -- The Ingress Class that cert-manager will use for HTTP-01 challenges (required for "prod" mode).
+  # Must match the 'ingressClassName' of your controller (e.g., nginx, traefik).
+  ingressClass: "nginx"

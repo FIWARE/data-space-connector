@@ -56,3 +56,9 @@ dependencies:
     condition: did.enabled
     version: 0.1.13
     repository: https://fiware.github.io/helm-charts
+  # cert-manager
+  - name: cert-manager
+    alias: cert-manager
+    condition: cert-manager.enabled
+    version: 1.20.0
+    repository: https://charts.jetstack.io

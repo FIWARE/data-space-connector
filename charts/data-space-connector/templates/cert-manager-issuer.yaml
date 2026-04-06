@@ -1,0 +1,66 @@
+{{- if .Values.certManagerResources.enabled }}
+
+{{- if eq .Values.certManagerResources.type "prod" }}
+# --- PRODUCTION (Let's Encrypt) ---
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: prod-issuer
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+spec:
+  acme:
+    email: {{ .Values.certManagerResources.acmeEmail }}
+    privateKeySecretRef:
+      name: letsencrypt-prod-privkey
+    server: https://acme-v02.api.letsencrypt.org/directory
+    solvers:
+    - http01:
+        ingress:
+          ingressClassName: {{ .Values.certManagerResources.ingressClass }}
+
+{{- else if eq .Values.certManagerResources.type "selfsigned" }}
+# --- SELF-SIGNED (only for testing purposes) ---
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: ca-issuer
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "1"
+spec:
+  selfSigned: {}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: selfsigned-ca
+  namespace: {{ .Values.certManagerResources.namespace | default "cert-manager" }}
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "2"
+spec:
+  isCA: true
+  commonName: selfsigned-ca
+  secretName: ca-secret
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+  issuerRef:
+    name: ca-issuer
+    kind: ClusterIssuer
+    group: cert-manager.io
+---
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: selfsigned-issuer
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "3"
+spec:
+  ca:
+    secretName: ca-secret
+{{- end }}
+
+{{- end }}

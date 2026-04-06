@@ -18,7 +18,7 @@ tm-forum-api:
 
 # scorpio as tmf backend, no public endpoint required
 scorpio:
-  enabled: true  
+  enabled: true
   resources:
     limits:
       cpu: "500m"
@@ -57,7 +57,7 @@ contract-management:
     holder:
       holderId: did:web:fancy-marketplace.biz
       keyType: EC
-      keyPath: /signing-key/client-pkcs8.key.pem
+      keyPath: signing-key/tls.key
       signatureAlgorithm: ECDH-ES
     proxyConfig:
       enabled: true
@@ -107,8 +107,8 @@ contract-management:
             echo "Keycloak is ready."
       # load the self-generated root ca into the java truststore
       - name: load-certs
-        image: quay.io/fiware/contract-management:3.3.5
-        command: ["/bin/sh", "-c", "/bin/import-ca.sh /certs-folder /root-ca/cacert.pem"]
+        image: "quay.io/seamware/fdsc-edc-controlplane-oid4vc:0.1.1"
+        command: ["/bin/sh", "-c", "/bin/import-ca.sh /certs-folder /root-ca/cacert.pem /opt/java/openjdk/lib/security/cacerts"]
         volumeMounts:
           - name: ca-certs-script
             mountPath: /bin/import-ca.sh
@@ -116,7 +116,8 @@ contract-management:
           - name: cacerts
             mountPath: /certs-folder/
           - name: root-ca
-            mountPath: /root-ca
+            mountPath: /root-ca/cacert.pem
+            subPath: ca.crt
       # get a credential to be used by the contract-management
       - name: get-credential
         image: quay.io/curl/curl:8.1.2
@@ -131,6 +132,9 @@ contract-management:
       - name: signing-key
         secret:
           secretName: signing-key
+          items:
+            - key: tls.key
+              path: tls.key
       - name: credentials-script
         configMap:
           name: credentials-script
@@ -143,20 +147,24 @@ contract-management:
         emptyDir: {}
       - name: root-ca
         secret:
-          secretName: root-ca
+          secretName: fancy-marketplace.biz-tls
+          items:
+            - key: ca.crt
+              path: ca.crt
       - name: cacerts
         emptyDir: {}
     additionalVolumeMounts:
       - name: credential-repo
         mountPath: /credential-repo
       - name: signing-key
-        mountPath: /signing-key
+        mountPath: /app/resources/signing-key/tls.key
+        subPath: tls.key
       # add the self generated root ca to the system truststore
       - name: root-ca
         mountPath: /etc/ssl/cacert.pem
-        subPath: cacert.pem
+        subPath: ca.crt
       - name: cacerts
-        mountPath: /usr/lib/jvm/java-21/lib/security/cacerts
+        mountPath: /opt/java/openjdk/lib/security/cacerts
         subPath: cacerts
   notification:
     enabled: true

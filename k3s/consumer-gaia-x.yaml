@@ -1,3 +1,6 @@
+cert-manager:
+  enabled: false
+
 scorpio:
   enabled: false
 tm-forum-api:
@@ -29,6 +32,15 @@ keycloak:
   ingress:
     enabled: true
     hostname: keycloak-consumer.127.0.0.1.nip.io
+    annotations:
+      cert-manager.io/cluster-issuer: "selfsigned-issuer"
+      cert-manager.io/private-key-algorithm: "ECDSA"
+      cert-manager.io/common-name: "keycloak-consumer.127.0.0.1.nip.io"
+    tls: true
+    extraTls:
+      - secretName: keycloak-consumer.127.0.0.1.nip.io-tls
+        hosts:
+          - keycloak-consumer.127.0.0.1.nip.io
   command:
     - /bin/bash
   args:
@@ -40,6 +52,30 @@ keycloak:
       /opt/bitnami/scripts/keycloak/entrypoint.sh
       /opt/bitnami/scripts/keycloak/run.sh
   initContainers:
+    - name: prepare-keystore
+      image: alpine/openssl:3.5.5
+      command: ["/bin/sh", "-c"]
+      args:
+        - |
+          openssl pkcs12 -export \
+            -in /certs-did/tls.crt \
+            -inkey /certs-did/tls.key \
+            -certfile /certs-did/ca.crt \
+            -out /did-material/cert.pfx \
+            -name "didPrivateKey" \
+            -passout env:STORE_PASS
+          chmod 644 /did-material/cert.pfx
+      env:
+      - name: "STORE_PASS"
+        valueFrom:
+          secretKeyRef:
+            name: keystore-password
+            key: password
+      volumeMounts:
+        - name: did-material
+          mountPath: /did-material
+        - name: did-priv-key
+          mountPath: /certs-did
     - name: register-at-tir
       image: curlimages/curl:8.18.0
       command:
@@ -73,7 +109,7 @@ keycloak:
     - name: did-material
       mountPath: "/etc/env"
       readOnly: true
-    - name: consumer-key
+    - name: did-priv-key
       mountPath: "/keys"
     - name: realms
       mountPath: /opt/bitnami/keycloak/data/import
@@ -87,10 +123,9 @@ keycloak:
       configMap:
         name: consumer-til-registration
         defaultMode: 0755
-    - name: consumer-key
+    - name: did-priv-key
       secret:
-        secretName: consumer-keystore
-        defaultMode: 0755
+        secretName: fancy-marketplace.biz-tls
   extraEnvVars:
     - name: KEYCLOAK_EXTRA_ARGS
       value: "--import-realm"
@@ -108,12 +143,12 @@ keycloak:
     - name: "STORE_PASS"
       valueFrom:
         secretKeyRef:
-          name: consumer-keystore
+          name: keystore-password
           key: password
   signingKey:
-    storePath: /keys/keystore.pfx
+    storePath: /did-material/cert.pfx
     storePassword: "${STORE_PASS}"
-    keyAlias: certificate
+    keyAlias: didPrivateKey
     keyPassword: "${STORE_PASS}"
     did: did:web:fancy-marketplace.biz
     keyAlgorithm: ES256
@@ -267,27 +302,37 @@ did:
   enabled: true
   config:
     server:
-      serverPort: "3000"
-      didType: "web"
       hostUrl: "http://fancy-marketplace.biz"
-      outputFormat: "json_jwk"
-      keystorePasswordSecretName: "consumer-keystore"
-      keystorePasswordSecretKey: "password"
+      certPath: "/certs/tls.crt"
     generateKey:
       enabled: false
     provideKeystore:
-      enabled: true
-      keystoreSecretName: "consumer-keystore"
-      keystoreSecretKey: "keystore-did.pfx"
-      keyType: "EC"
+      enabled: false
+  volumes:
+    - name: certs
+      secret:
+        secretName: fancy-marketplace.biz-tls
+        items:
+          - key: tls.crt
+            path: tls.crt
+  volumeMounts:
+    - name: certs
+      mountPath: /certs
   ingress:
     enabled: true
     className: ""
     annotations:
       traefik.ingress.kubernetes.io/service.passhostheader: "true"
       traefik.ingress.kubernetes.io/router.tls: "true"
+      cert-manager.io/cluster-issuer: "selfsigned-issuer"
+      cert-manager.io/private-key-algorithm: "ECDSA"
+      cert-manager.io/common-name: "fancy-marketplace.biz"
     hosts:
       - host: fancy-marketplace.biz
         paths:
           - path: /
             pathType: ImplementationSpecific
+    tls:
+      - secretName: fancy-marketplace.biz-tls
+        hosts:
+          - fancy-marketplace.biz
