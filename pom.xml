@@ -124,20 +124,6 @@
                 </configuration>
                 <executions>
                     <execution>
-                        <id>download-local-storage</id>
-                        <phase>prepare-package</phase>
-                        <goals>
-                            <goal>wget</goal>
-                        </goals>
-                        <configuration>
-                            <url>
-                                https://raw.githubusercontent.com/rancher/local-path-provisioner/v0.0.30/deploy/local-path-storage.yaml
-                            </url>
-                            <unpack>false</unpack>
-                            <outputDirectory>${project.build.directory}/k3s/infra</outputDirectory>
-                        </configuration>
-                    </execution>
-                    <execution>
                         <id>download-postgres-operator-config-crd</id>
                         <phase>prepare-package</phase>
                         <goals>
@@ -422,6 +408,7 @@
                 <version>${version.io.kokuwa.maven.k3s-plugin}</version>
                 <configuration>
                     <skip>true</skip>
+                    <disableLocalStorage>false</disableLocalStorage>
                     <portBindings>
                         <!-- Traefik http & https-->
                         <portBinding>8080:8080</portBinding>
