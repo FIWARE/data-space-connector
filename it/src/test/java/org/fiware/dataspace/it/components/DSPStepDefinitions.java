@@ -17,6 +17,7 @@ import okhttp3.Response;
 import org.apache.http.HttpStatus;
 import org.awaitility.Awaitility;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
+import org.fiware.dataspace.it.components.model.DataAddress;
 import org.fiware.dataspace.it.components.model.OpenIdConfiguration;
 import org.fiware.dataspace.tmf.model.*;
 import org.keycloak.common.crypto.CryptoIntegration;
@@ -177,6 +178,20 @@ public class DSPStepDefinitions {
 
     /** Tracks entity IDs created during DSP TMForum tests for cleanup. */
     private List<String> dspCreatedEntities = new ArrayList<>();
+
+    // --- DCP Protocol Flow State ---
+
+    /** The DCP catalog response JSON, populated during catalog request. */
+    private JsonNode dcpCatalogResponse;
+
+    /** The contract agreement ID from a finalized DCP negotiation. */
+    private String dcpAgreementId;
+
+    /** The transfer process ID from a started DCP transfer. */
+    private String dcpTransferId;
+
+    /** The EDR data address (endpoint + token) from a completed DCP transfer. */
+    private DataAddress dcpDataAddress;
 
     @Before("@dsp")
     public void setup() {
@@ -1098,6 +1113,278 @@ public class DSPStepDefinitions {
                         log.info("Consumer successfully accessed UptimeReport via operator credential.");
                     }
                 });
+    }
+
+    // ==================== DSP DCP Protocol Flow ====================
+
+    /**
+     * Requests the provider catalog via the DCP management API.
+     * Equivalent to step 1 of "Order through DSP" > "DCP" in DSP_INTEGRATION.md.
+     * <p>
+     * Uses the DCP management API address and the DCP provider DSP endpoint.
+     */
+    @When("The consumer requests the provider catalog via the DCP management API.")
+    public void theConsumerRequestsTheProviderCatalogViaDcp() throws Exception {
+        String counterPartyAddress = DCP_PROVIDER_ADDRESS + ":" + SERVICE_PORT + DSP_ENDPOINT_PATH;
+        dcpCatalogResponse = DSPManagementHelper.requestCatalog(
+                DCP_MANAGEMENT_API_ADDRESS,
+                PROVIDER_DID,
+                counterPartyAddress);
+        assertNotNull(dcpCatalogResponse, "DCP catalog response should not be null.");
+        log.info("DCP catalog response received: {}", dcpCatalogResponse.toString().substring(0,
+                Math.min(dcpCatalogResponse.toString().length(), 500)));
+    }
+
+    /**
+     * Verifies the DCP catalog contains at least one dataset with the expected DSP asset ID.
+     * The catalog is a DCAT structure; datasets appear under {@code dcat:dataset}.
+     */
+    @Then("The DCP catalog contains at least one dataset with the DSP asset.")
+    public void theDcpCatalogContainsAtLeastOneDataset() {
+        assertNotNull(dcpCatalogResponse, "DCP catalog response must have been retrieved first.");
+
+        // Look for datasets in the catalog - the EDC returns them under "dcat:dataset"
+        JsonNode datasets = dcpCatalogResponse.path("dcat:dataset");
+        if (datasets.isMissingNode()) {
+            // Also try "@graph" or direct array
+            datasets = dcpCatalogResponse.path("dataset");
+        }
+
+        boolean hasDataset;
+        if (datasets.isArray()) {
+            hasDataset = datasets.size() > 0;
+        } else if (!datasets.isMissingNode()) {
+            // Single dataset (not wrapped in array)
+            hasDataset = true;
+        } else {
+            hasDataset = false;
+        }
+
+        assertTrue(hasDataset, "DCP catalog should contain at least one dataset. Catalog: "
+                + dcpCatalogResponse.toString().substring(0,
+                Math.min(dcpCatalogResponse.toString().length(), 1000)));
+        log.info("DCP catalog contains dataset(s) with the DSP asset.");
+    }
+
+    /**
+     * Starts a contract negotiation via the DCP management API.
+     * Equivalent to step 2 of "Order through DSP" > "DCP" in DSP_INTEGRATION.md.
+     * <p>
+     * Extracts the offer ID from the catalog response and uses the contract policy
+     * documented in DSP_INTEGRATION.md (dayOfWeek constraint).
+     */
+    @When("The consumer starts a contract negotiation via the DCP management API.")
+    public void theConsumerStartsNegotiationViaDcp() throws Exception {
+        // First ensure we have a catalog; request one if needed
+        if (dcpCatalogResponse == null) {
+            theConsumerRequestsTheProviderCatalogViaDcp();
+        }
+
+        // Extract the offer ID from the catalog
+        String offerId = extractOfferIdFromCatalog(dcpCatalogResponse);
+        assertNotNull(offerId, "Should be able to extract an offer ID from the DCP catalog.");
+
+        // Build the contract policy matching DSP_INTEGRATION.md
+        ObjectNode policy = buildDcpContractPolicy(offerId);
+
+        String counterPartyAddress = DCP_PROVIDER_ADDRESS + ":" + SERVICE_PORT + DSP_ENDPOINT_PATH;
+        JsonNode negotiationResponse = DSPManagementHelper.startNegotiation(
+                DCP_MANAGEMENT_API_ADDRESS,
+                counterPartyAddress,
+                PROVIDER_DID,
+                offerId,
+                DSP_ASSET_ID,
+                policy);
+        assertNotNull(negotiationResponse, "Negotiation start response should not be null.");
+        log.info("DCP negotiation started: {}", negotiationResponse);
+    }
+
+    /**
+     * Waits for the DCP negotiation to reach the "FINALIZED" state and extracts the agreement ID.
+     * Equivalent to steps 3-4 of "Order through DSP" > "DCP" in DSP_INTEGRATION.md.
+     */
+    @When("The consumer waits for the DCP negotiation to be finalized.")
+    public void theConsumerWaitsForDcpNegotiationFinalized() throws Exception {
+        dcpAgreementId = DSPManagementHelper.waitForNegotiationFinalized(DCP_MANAGEMENT_API_ADDRESS);
+        assertNotNull(dcpAgreementId, "DCP agreement ID should not be null after negotiation is finalized.");
+        log.info("DCP negotiation finalized with agreement ID: {}", dcpAgreementId);
+    }
+
+    /**
+     * Verifies that a valid contract agreement ID was obtained from the DCP negotiation.
+     */
+    @Then("The DCP negotiation yields a valid contract agreement ID.")
+    public void theDcpNegotiationYieldsAValidAgreementId() {
+        assertNotNull(dcpAgreementId, "DCP agreement ID should have been set during negotiation.");
+        assertFalse(dcpAgreementId.isBlank(), "DCP agreement ID should not be blank.");
+        log.info("Verified DCP agreement ID: {}", dcpAgreementId);
+    }
+
+    /**
+     * Ensures the consumer has a finalized DCP contract agreement (prerequisite for transfer).
+     * If no agreement exists yet, runs the full negotiation flow.
+     */
+    @Given("The consumer has a finalized DCP contract agreement.")
+    public void theConsumerHasAFinalizedDcpContractAgreement() throws Exception {
+        if (dcpAgreementId == null || dcpAgreementId.isBlank()) {
+            theConsumerRequestsTheProviderCatalogViaDcp();
+            theConsumerStartsNegotiationViaDcp();
+            theConsumerWaitsForDcpNegotiationFinalized();
+        }
+        assertNotNull(dcpAgreementId, "A finalized DCP contract agreement ID is required.");
+        log.info("Consumer has finalized DCP contract agreement: {}", dcpAgreementId);
+    }
+
+    /**
+     * Starts a transfer process via the DCP management API using the agreement from negotiation.
+     * Equivalent to step 5 of "Order through DSP" > "DCP" in DSP_INTEGRATION.md.
+     */
+    @When("The consumer starts a transfer process via the DCP management API.")
+    public void theConsumerStartsTransferProcessViaDcp() throws Exception {
+        String counterPartyAddress = DCP_PROVIDER_ADDRESS + ":" + SERVICE_PORT + DSP_ENDPOINT_PATH;
+        JsonNode transferResponse = DSPManagementHelper.startTransferProcess(
+                DCP_MANAGEMENT_API_ADDRESS,
+                DSP_ASSET_ID,
+                PROVIDER_DID,
+                counterPartyAddress,
+                dcpAgreementId,
+                DSPManagementHelper.TRANSFER_TYPE_HTTP_DATA_PULL);
+        assertNotNull(transferResponse, "Transfer process start response should not be null.");
+        log.info("DCP transfer process started: {}", transferResponse);
+    }
+
+    /**
+     * Waits for the DCP transfer process to reach the "STARTED" state and extracts the transfer ID.
+     * Equivalent to steps 6-7 of "Order through DSP" > "DCP" in DSP_INTEGRATION.md.
+     */
+    @When("The consumer waits for the DCP transfer process to start.")
+    public void theConsumerWaitsForDcpTransferStarted() throws Exception {
+        dcpTransferId = DSPManagementHelper.waitForTransferStarted(DCP_MANAGEMENT_API_ADDRESS);
+        assertNotNull(dcpTransferId, "DCP transfer ID should not be null after transfer starts.");
+        log.info("DCP transfer process started with ID: {}", dcpTransferId);
+    }
+
+    /**
+     * Retrieves the EDR data address (endpoint URL and access token) from the DCP management API.
+     * Equivalent to step 7 of "Order through DSP" > "DCP" in DSP_INTEGRATION.md.
+     */
+    @Then("The consumer retrieves the EDR data address from the DCP management API.")
+    public void theConsumerRetrievesEdrDataAddressViaDcp() throws Exception {
+        assertNotNull(dcpTransferId, "A started DCP transfer ID is required to retrieve the data address.");
+        dcpDataAddress = DSPManagementHelper.getDataAddress(DCP_MANAGEMENT_API_ADDRESS, dcpTransferId);
+        assertNotNull(dcpDataAddress, "DCP data address should not be null.");
+        assertNotNull(dcpDataAddress.getEndpoint(), "DCP data address endpoint should not be null.");
+        assertNotNull(dcpDataAddress.getToken(), "DCP data address token should not be null.");
+        log.info("DCP data address retrieved: endpoint={}", dcpDataAddress.getEndpoint());
+    }
+
+    /**
+     * Accesses the UptimeReport entity via the DCP transfer endpoint using the provisioned token.
+     * Equivalent to step 8 of "Order through DSP" > "DCP" in DSP_INTEGRATION.md.
+     */
+    @Then("The consumer accesses the UptimeReport entity via the DCP transfer endpoint.")
+    public void theConsumerAccessesUptimeReportViaDcpTransfer() throws Exception {
+        assertNotNull(dcpDataAddress, "DCP data address must have been retrieved first.");
+        String entityUrl = dcpDataAddress.getEndpoint()
+                + "/ngsi-ld/v1/entities/" + UPTIME_REPORT_ENTITY_ID;
+        Request request = new Request.Builder()
+                .get()
+                .url(entityUrl)
+                .header("Content-Type", "application/json")
+                .header("Authorization", "Bearer " + dcpDataAddress.getToken())
+                .build();
+        try (Response response = HTTP_CLIENT.newCall(request).execute()) {
+            assertEquals(org.apache.http.HttpStatus.SC_OK, response.code(),
+                    String.format("Should be able to access UptimeReport via DCP transfer endpoint. Got status %d",
+                            response.code()));
+            String body = response.body().string();
+            JsonNode entity = OBJECT_MAPPER.readTree(body);
+            assertEquals(UPTIME_REPORT_ENTITY_ID, entity.get("id").asText(),
+                    "Returned entity ID should match the UptimeReport.");
+            log.info("Successfully accessed UptimeReport via DCP transfer endpoint at {}", entityUrl);
+        }
+    }
+
+    // ==================== DCP Helper Methods ====================
+
+    /**
+     * Extracts the first offer ID from a DCAT catalog response.
+     * The offer ID is typically found in {@code dcat:dataset[].odrl:hasPolicy.@id}
+     * or in the dataset's distribution offer reference.
+     *
+     * @param catalog the catalog JSON response
+     * @return the first offer ID found, or null if none found
+     */
+    private String extractOfferIdFromCatalog(JsonNode catalog) {
+        // Try dcat:dataset array
+        JsonNode datasets = catalog.path("dcat:dataset");
+        if (datasets.isMissingNode()) {
+            datasets = catalog.path("dataset");
+        }
+
+        JsonNode firstDataset;
+        if (datasets.isArray() && datasets.size() > 0) {
+            firstDataset = datasets.get(0);
+        } else if (!datasets.isMissingNode() && !datasets.isArray()) {
+            firstDataset = datasets;
+        } else {
+            log.warn("No datasets found in catalog to extract offer ID.");
+            return null;
+        }
+
+        // Look for the offer in odrl:hasPolicy
+        JsonNode hasPolicy = firstDataset.path("odrl:hasPolicy");
+        if (hasPolicy.isMissingNode()) {
+            hasPolicy = firstDataset.path("hasPolicy");
+        }
+
+        JsonNode policyNode;
+        if (hasPolicy.isArray() && hasPolicy.size() > 0) {
+            policyNode = hasPolicy.get(0);
+        } else if (!hasPolicy.isMissingNode() && !hasPolicy.isArray()) {
+            policyNode = hasPolicy;
+        } else {
+            log.warn("No policy found in dataset to extract offer ID.");
+            return null;
+        }
+
+        String offerId = policyNode.path("@id").asText(null);
+        if (offerId != null) {
+            log.info("Extracted offer ID from DCP catalog: {}", offerId);
+        }
+        return offerId;
+    }
+
+    /**
+     * Builds the contract policy for DCP negotiation as documented in DSP_INTEGRATION.md.
+     * The policy includes a dayOfWeek constraint matching the provider's contract policy.
+     *
+     * @param offerId the offer ID extracted from the catalog
+     * @return the policy as an ObjectNode
+     */
+    private ObjectNode buildDcpContractPolicy(String offerId) {
+        ObjectNode policy = OBJECT_MAPPER.createObjectNode();
+        policy.put("@context", "http://www.w3.org/ns/odrl.jsonld");
+        policy.put("@type", "Offer");
+        policy.put("@id", offerId);
+        policy.put("assigner", PROVIDER_DID);
+        policy.put("target", DSP_ASSET_ID);
+
+        // Permission with dayOfWeek constraint as documented in DSP_INTEGRATION.md
+        ObjectNode constraint = OBJECT_MAPPER.createObjectNode();
+        constraint.put("leftOperand", "odrl:dayOfWeek");
+        constraint.put("operator", "lt");
+        constraint.put("rightOperand", 6);
+
+        ObjectNode permission = OBJECT_MAPPER.createObjectNode();
+        permission.put("action", "use");
+        permission.set("constraint", constraint);
+
+        ArrayNode permissions = OBJECT_MAPPER.createArrayNode();
+        permissions.add(permission);
+        policy.set("permission", permissions);
+
+        return policy;
     }
 
     // ==================== DSP TMForum: Helper Methods ====================
