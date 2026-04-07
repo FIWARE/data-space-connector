@@ -83,3 +83,6 @@ vault:
 
 issuerservice:
   enabled: false
+
+cert-manager:
+  enabled: false

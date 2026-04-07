@@ -6,13 +6,6 @@ metadata:
 data:
   tls.yaml: |-
     tls:
-      stores:
-        default: {}
-      certificates:
-        - certFile: /ssl-certs/tls.crt
-          keyFile: /ssl-certs/tls.key
-          stores:
-            - default
       options:
         default:
           clientAuth:
