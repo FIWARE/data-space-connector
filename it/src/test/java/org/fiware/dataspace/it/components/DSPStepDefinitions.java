@@ -221,7 +221,7 @@ public class DSPStepDefinitions {
      * and cleans up stale DSP resources from previous runs.
      */
     @Before("@dsp")
-    public void setup() {
+    public void setup() throws Exception {
         CryptoIntegration.init(this.getClass().getClassLoader());
         Security.addProvider(new BouncyCastleProvider());
         dspWallet = new Wallet();

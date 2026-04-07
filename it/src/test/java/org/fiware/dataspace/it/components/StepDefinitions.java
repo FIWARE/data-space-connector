@@ -25,7 +25,6 @@ import java.net.URI;
 import java.security.Security;
 import java.time.Duration;
 import java.util.*;
-import java.util.LinkedHashMap;
 
 import static org.fiware.dataspace.it.components.FancyMarketplaceEnvironment.OPERATOR_USER_NAME;
 import static org.fiware.dataspace.it.components.FancyMarketplaceEnvironment.TEST_USER_NAME;
