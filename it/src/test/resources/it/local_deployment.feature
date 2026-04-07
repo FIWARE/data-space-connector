@@ -1,3 +1,4 @@
+@local
 Feature: The local deployment should support credential issuance and authenticated data access as described in LOCAL.MD.
 
   # This feature covers the basic data exchange flow from LOCAL.MD:
