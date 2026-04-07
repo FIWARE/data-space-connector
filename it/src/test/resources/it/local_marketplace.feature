@@ -1,3 +1,4 @@
+@local
 Feature: The local deployment should support marketplace buying and service access as described in LOCAL.MD.
 
   # This feature covers the LOCAL.MD "Buy access to a service offering" flow:

@@ -1,3 +1,4 @@
+@local
 Feature: The Data Space should support a basic data exchange between registered participants.
 
   Scenario: A registered consumer can retrieve data from a registered data provider.
