@@ -11,7 +11,7 @@ Feature: The Data Space should support a basic data exchange between registered 
 
   Scenario: A registered operator can create a k8s cluster.
     Given M&P Operations is registered as a participant in the data space.
-    And  M&P Operations offers a managed kubernetes.
+    And M&P Operations offers a managed kubernetes.
     And M&P Operations allows self-registration of organizations.
     And M&P Operations allows to buy its offerings.
     And M&P Operations allows operators to create clusters.
@@ -23,7 +23,12 @@ Feature: The Data Space should support a basic data exchange between registered 
     And Fancy Marketplace buys access to M&P's k8s services.
     Then Fancy Marketplace operators can create clusters.
 
-# TODO: Update to FDSC-EDC
+# NOTE: The Transfer Process Protocol scenario below has been superseded by the DSP
+# integration test feature files (dsp_identity_setup.feature, dsp_tmforum_ordering.feature,
+# dsp_dcp_flow.feature, dsp_oid4vc_flow.feature) which cover the full FDSC-EDC flow
+# including catalog browsing, contract negotiation, transfer processes, and data access
+# via both DCP and OID4VC protocols. See DSP_INTEGRATION.md for documentation.
+#
 #  Scenario: A registered operator can access reports through the Transfer Process Protocol.
 #    Given M&P Operations is registered as a participant in the data space.
 #    And M&P Operations offers detailed reports.

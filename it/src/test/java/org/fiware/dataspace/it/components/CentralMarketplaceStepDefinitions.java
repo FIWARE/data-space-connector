@@ -38,6 +38,18 @@ public class CentralMarketplaceStepDefinitions {
     /** HTTP port used by local services in the k3s deployment. */
     private static final int SERVICE_PORT = 8080;
 
+    /** TMForum API path for product order management. */
+    private static final String TMF_PRODUCT_ORDER_PATH = "/tmf-api/productOrderingManagement/v4/productOrder";
+
+    /** TMForum API path for product offering catalog management. */
+    private static final String TMF_PRODUCT_OFFERING_PATH = "/tmf-api/productCatalogManagement/v4/productOffering";
+
+    /** TMForum API path for product specification catalog management. */
+    private static final String TMF_PRODUCT_SPEC_PATH = "/tmf-api/productCatalogManagement/v4/productSpecification";
+
+    /** TMForum API path for party (organization) management. */
+    private static final String TMF_ORGANIZATION_PATH = "/tmf-api/party/v4/organization";
+
     private static final OkHttpClient HTTP_CLIENT = OK_HTTP_CLIENT;
 
     /**
@@ -88,13 +100,13 @@ public class CentralMarketplaceStepDefinitions {
     private void cleanUpCentralMarketplaceTMForum() {
         String marketplaceBase = MARKETPLACE_API_ADDRESS + ":" + SERVICE_PORT;
         cleanUpTMForumResourceList(marketplaceBase,
-                "/tmf-api/productOrderingManagement/v4/productOrder", "central marketplace orders");
+                TMF_PRODUCT_ORDER_PATH, "central marketplace orders");
         cleanUpTMForumResourceList(marketplaceBase,
-                "/tmf-api/productCatalogManagement/v4/productOffering", "central marketplace offerings");
+                TMF_PRODUCT_OFFERING_PATH, "central marketplace offerings");
         cleanUpTMForumResourceList(marketplaceBase,
-                "/tmf-api/productCatalogManagement/v4/productSpecification", "central marketplace specs");
+                TMF_PRODUCT_SPEC_PATH, "central marketplace specs");
         cleanUpTMForumResourceList(marketplaceBase,
-                "/tmf-api/party/v4/organization", "central marketplace organizations");
+                TMF_ORGANIZATION_PATH, "central marketplace organizations");
     }
 
     /**
@@ -104,13 +116,13 @@ public class CentralMarketplaceStepDefinitions {
      */
     private void cleanUpProviderTMForum() {
         cleanUpTMForumResourceList(TMF_DIRECT_ADDRESS,
-                "/tmf-api/productOrderingManagement/v4/productOrder", "provider orders");
+                TMF_PRODUCT_ORDER_PATH, "provider orders");
         cleanUpTMForumResourceList(TMF_DIRECT_ADDRESS,
-                "/tmf-api/productCatalogManagement/v4/productOffering", "provider offerings");
+                TMF_PRODUCT_OFFERING_PATH, "provider offerings");
         cleanUpTMForumResourceList(TMF_DIRECT_ADDRESS,
-                "/tmf-api/productCatalogManagement/v4/productSpecification", "provider specs");
+                TMF_PRODUCT_SPEC_PATH, "provider specs");
         cleanUpTMForumResourceList(TMF_DIRECT_ADDRESS,
-                "/tmf-api/party/v4/organization", "provider organizations");
+                TMF_ORGANIZATION_PATH, "provider organizations");
     }
 
     /**

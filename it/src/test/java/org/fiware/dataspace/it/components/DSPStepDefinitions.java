@@ -215,6 +215,11 @@ public class DSPStepDefinitions {
     /** The scope used for OID4VP authentication in OID4VC flows. */
     private static final String OPENID_SCOPE = "openid";
 
+    /**
+     * Setup hook executed before each {@code @dsp} scenario.
+     * Initializes cryptographic providers, creates a fresh Wallet instance,
+     * and cleans up stale DSP resources from previous runs.
+     */
     @Before("@dsp")
     public void setup() {
         CryptoIntegration.init(this.getClass().getClassLoader());

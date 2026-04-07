@@ -46,6 +46,9 @@ public class DSPManagementHelper {
     /** DSP protocol version used in all requests. */
     private static final String DSP_PROTOCOL = "dataspace-protocol-http:2025-1";
 
+    /** ODRL JSON-LD context URI used in policy objects. */
+    private static final String ODRL_CONTEXT = "http://www.w3.org/ns/odrl.jsonld";
+
     /** API path for catalog requests. */
     private static final String CATALOG_REQUEST_PATH = "/api/v1/management/v3/catalog/request";
 
@@ -176,7 +179,7 @@ public class DSPManagementHelper {
         // Ensure the policy has the required fields
         ObjectNode policyObj = policyNode.isObject() ? (ObjectNode) policyNode.deepCopy() : OBJECT_MAPPER.createObjectNode();
         if (!policyObj.has("@context")) {
-            policyObj.put("@context", "http://www.w3.org/ns/odrl.jsonld");
+            policyObj.put("@context", ODRL_CONTEXT);
         }
         if (!policyObj.has("@type")) {
             policyObj.put("@type", "Offer");
