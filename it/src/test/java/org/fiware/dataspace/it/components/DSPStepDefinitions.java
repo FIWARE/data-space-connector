@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import io.cucumber.java.After;
 import io.cucumber.java.Before;
 import io.cucumber.java.en.Given;
 import io.cucumber.java.en.Then;
@@ -19,6 +20,7 @@ import org.awaitility.Awaitility;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
 import org.fiware.dataspace.it.components.model.DataAddress;
 import org.fiware.dataspace.it.components.model.OpenIdConfiguration;
+import org.fiware.dataspace.it.components.model.Policy;
 import org.fiware.dataspace.tmf.model.*;
 import org.keycloak.common.crypto.CryptoIntegration;
 
@@ -218,7 +220,347 @@ public class DSPStepDefinitions {
         CryptoIntegration.init(this.getClass().getClassLoader());
         Security.addProvider(new BouncyCastleProvider());
         dspWallet = new Wallet();
+        log.info("DSP test setup: cleaning up stale resources.");
+        try {
+            cleanDspResources();
+        } catch (Exception e) {
+            log.warn("Error during DSP pre-test cleanup: {}", e.getMessage());
+        }
     }
+
+    /**
+     * Cleanup hook executed after each {@code @dsp} scenario.
+     * Removes all DSP-specific resources to ensure test isolation, including
+     * IdentityHub participants, Vault keys, TMForum resources, DSP management
+     * API resources, DCAT catalogs, agreements, PAP policies, and Scorpio entities.
+     */
+    @After("@dsp")
+    public void cleanUpDsp() {
+        log.info("DSP test cleanup: removing test resources.");
+        try {
+            cleanDspResources();
+        } catch (Exception e) {
+            log.warn("Error during DSP post-test cleanup: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * Cleans up all resources created during DSP tests.
+     * Each cleanup method handles its own exceptions to ensure partial failures
+     * do not prevent other resources from being cleaned.
+     */
+    private void cleanDspResources() {
+        cleanUpDspTMForum();
+        cleanUpDspPolicies();
+        cleanUpDspEntities();
+        cleanUpDspDcatCatalogs();
+        cleanUpDspAgreements();
+        cleanUpDspTIL();
+        cleanUpDspVaultKeys();
+        cleanUpDspIdentityHubParticipants();
+    }
+
+    /**
+     * Cleans up TMForum resources at the provider's direct TMForum API.
+     * Removes orders, offerings, specifications, catalogs, categories, and organizations.
+     */
+    private void cleanUpDspTMForum() {
+        cleanUpTMForumResourceList(TMF_DIRECT_ADDRESS,
+                "/tmf-api/productOrderingManagement/v4/productOrder", "DSP orders");
+        cleanUpTMForumResourceList(TMF_DIRECT_ADDRESS,
+                "/tmf-api/productCatalogManagement/v4/productOffering", "DSP offerings");
+        cleanUpTMForumResourceList(TMF_DIRECT_ADDRESS,
+                "/tmf-api/productCatalogManagement/v4/productSpecification", "DSP specs");
+        cleanUpTMForumResourceList(TMF_DIRECT_ADDRESS,
+                "/tmf-api/productCatalogManagement/v4/catalog", "DSP catalogs");
+        cleanUpTMForumResourceList(TMF_DIRECT_ADDRESS,
+                "/tmf-api/productCatalogManagement/v4/category", "DSP categories");
+        cleanUpTMForumResourceList(TMF_DIRECT_ADDRESS,
+                "/tmf-api/party/v4/organization", "DSP organizations");
+    }
+
+    /**
+     * Cleans up all policies from the provider's Policy Administration Point (PAP).
+     */
+    private void cleanUpDspPolicies() {
+        try {
+            Request getPolicies = new Request.Builder()
+                    .get()
+                    .url(PROVIDER_PAP_ADDRESS + "/policy")
+                    .build();
+            try (Response response = HTTP_CLIENT.newCall(getPolicies).execute()) {
+                okhttp3.ResponseBody responseBody = response.body();
+                if (responseBody == null || !response.isSuccessful()) {
+                    return;
+                }
+                String bodyString = responseBody.string();
+                List<Policy> policies;
+                try {
+                    policies = OBJECT_MAPPER.readValue(bodyString, new TypeReference<List<Policy>>() {});
+                } catch (Exception e) {
+                    log.warn("Could not parse policies response: {}", e.getMessage());
+                    return;
+                }
+                for (Policy policy : policies) {
+                    Request deleteRequest = new Request.Builder()
+                            .delete()
+                            .url(PROVIDER_PAP_ADDRESS + "/policy/" + policy.getId())
+                            .build();
+                    try (Response deleteResp = HTTP_CLIENT.newCall(deleteRequest).execute()) {
+                        log.debug("Deleted policy {}: status={}", policy.getId(), deleteResp.code());
+                    }
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Failed to clean up DSP policies: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * Cleans up entities created in Scorpio during DSP tests.
+     */
+    private void cleanUpDspEntities() {
+        for (String entityId : dspCreatedEntities) {
+            try {
+                Request deleteRequest = new Request.Builder()
+                        .delete()
+                        .url(SCORPIO_ADDRESS + "/ngsi-ld/v1/entities/" + entityId)
+                        .build();
+                try (Response resp = HTTP_CLIENT.newCall(deleteRequest).execute()) {
+                    log.debug("Deleted entity {}: status={}", entityId, resp.code());
+                }
+            } catch (Exception e) {
+                log.warn("Failed to clean up entity {}: {}", entityId, e.getMessage());
+            }
+        }
+        dspCreatedEntities.clear();
+    }
+
+    /**
+     * Cleans up DCAT catalogs from the provider's Rainbow instance.
+     */
+    private void cleanUpDspDcatCatalogs() {
+        try {
+            Request listRequest = new Request.Builder()
+                    .get()
+                    .url(RAINBOW_DIRECT_ADDRESS + "/api/v1/catalogs")
+                    .build();
+            try (Response response = HTTP_CLIENT.newCall(listRequest).execute()) {
+                okhttp3.ResponseBody responseBody = response.body();
+                if (responseBody == null || !response.isSuccessful()) {
+                    return;
+                }
+                String bodyString = responseBody.string();
+                List<java.util.Map<String, Object>> catalogs;
+                try {
+                    catalogs = OBJECT_MAPPER.readValue(bodyString,
+                            new TypeReference<List<java.util.Map<String, Object>>>() {});
+                } catch (Exception e) {
+                    log.warn("Could not parse DCAT catalogs: {}", e.getMessage());
+                    return;
+                }
+                for (java.util.Map<String, Object> catalog : catalogs) {
+                    Object id = catalog.get("id");
+                    if (id == null) continue;
+                    Request deleteRequest = new Request.Builder()
+                            .delete()
+                            .url(RAINBOW_DIRECT_ADDRESS + "/api/v1/catalogs/" + id)
+                            .build();
+                    try (Response resp = HTTP_CLIENT.newCall(deleteRequest).execute()) {
+                        log.debug("Deleted DCAT catalog {}: status={}", id, resp.code());
+                    }
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Failed to clean up DCAT catalogs: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * Cleans up agreements from the provider's Rainbow instance.
+     */
+    private void cleanUpDspAgreements() {
+        try {
+            Request listRequest = new Request.Builder()
+                    .get()
+                    .url(RAINBOW_DIRECT_ADDRESS + "/api/v1/agreements")
+                    .build();
+            try (Response response = HTTP_CLIENT.newCall(listRequest).execute()) {
+                okhttp3.ResponseBody responseBody = response.body();
+                if (responseBody == null || !response.isSuccessful()) {
+                    return;
+                }
+                String bodyString = responseBody.string();
+                List<java.util.Map<String, Object>> agreements;
+                try {
+                    agreements = OBJECT_MAPPER.readValue(bodyString,
+                            new TypeReference<List<java.util.Map<String, Object>>>() {});
+                } catch (Exception e) {
+                    log.warn("Could not parse agreements: {}", e.getMessage());
+                    return;
+                }
+                for (java.util.Map<String, Object> agreement : agreements) {
+                    Object id = agreement.get("agreementId");
+                    if (id == null) id = agreement.get("id");
+                    if (id == null) continue;
+                    Request deleteRequest = new Request.Builder()
+                            .delete()
+                            .url(RAINBOW_DIRECT_ADDRESS + "/api/v1/agreements/" + id)
+                            .build();
+                    try (Response resp = HTTP_CLIENT.newCall(deleteRequest).execute()) {
+                        log.debug("Deleted agreement {}: status={}", id, resp.code());
+                    }
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Failed to clean up agreements: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * Cleans up the consumer's TIL entry at the provider and restores baseline trust configuration.
+     */
+    private void cleanUpDspTIL() {
+        try {
+            Request deleteRequest = new Request.Builder()
+                    .delete()
+                    .url(TIL_DIRECT_ADDRESS + "/issuer/" + CONSUMER_DID)
+                    .build();
+            try (Response resp = HTTP_CLIENT.newCall(deleteRequest).execute()) {
+                log.debug("TIL cleanup for consumer DID: status={}", resp.code());
+            }
+
+            // Restore baseline TIL entry
+            String tilPayload = OBJECT_MAPPER.writeValueAsString(
+                    java.util.Map.of(
+                            "did", CONSUMER_DID,
+                            "credentials", java.util.List.of(
+                                    java.util.Map.of(
+                                            "credentialsType", "UserCredential",
+                                            "claims", java.util.List.of()))));
+            RequestBody body = RequestBody.create(tilPayload,
+                    okhttp3.MediaType.parse("application/json"));
+            Request postRequest = new Request.Builder()
+                    .post(body)
+                    .url(TIL_DIRECT_ADDRESS + "/issuer")
+                    .build();
+            try (Response resp = HTTP_CLIENT.newCall(postRequest).execute()) {
+                log.debug("TIL baseline restore: status={}", resp.code());
+            }
+        } catch (Exception e) {
+            log.warn("Failed to clean up DSP TIL entries: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * Cleans up keys inserted into the consumer and provider Vault instances during DSP tests.
+     */
+    private void cleanUpDspVaultKeys() {
+        deleteVaultKey(VAULT_CONSUMER_ADDRESS, IdentityHubHelper.DEFAULT_KEY_ALIAS);
+        deleteVaultKey(VAULT_PROVIDER_ADDRESS, IdentityHubHelper.DEFAULT_KEY_ALIAS);
+    }
+
+    /**
+     * Deletes a key from a Vault instance.
+     *
+     * @param vaultAddress the base URL of the Vault instance
+     * @param keyAlias     the alias of the key to delete
+     */
+    private void deleteVaultKey(String vaultAddress, String keyAlias) {
+        try {
+            Request deleteRequest = new Request.Builder()
+                    .delete()
+                    .url(vaultAddress + ":" + SERVICE_PORT + "/v1/secret/data/" + keyAlias)
+                    .addHeader("X-Vault-Token", IdentityHubHelper.VAULT_TOKEN)
+                    .build();
+            try (Response resp = HTTP_CLIENT.newCall(deleteRequest).execute()) {
+                log.debug("Vault key cleanup at {}/{}: status={}", vaultAddress, keyAlias, resp.code());
+            }
+        } catch (Exception e) {
+            log.warn("Failed to delete Vault key {}/{}: {}", vaultAddress, keyAlias, e.getMessage());
+        }
+    }
+
+    /**
+     * Cleans up participants registered in the consumer and provider IdentityHub instances.
+     * Uses the IdentityHub management API to list and delete participants.
+     */
+    private void cleanUpDspIdentityHubParticipants() {
+        deleteIdentityHubParticipant(IDENTITYHUB_MANAGEMENT_CONSUMER_ADDRESS, CONSUMER_DID);
+        deleteIdentityHubParticipant(IDENTITYHUB_MANAGEMENT_PROVIDER_ADDRESS, PROVIDER_DID);
+    }
+
+    /**
+     * Deletes a participant from an IdentityHub management API.
+     *
+     * @param managementAddress the base URL of the IdentityHub management API
+     * @param participantDid    the DID of the participant to delete
+     */
+    private void deleteIdentityHubParticipant(String managementAddress, String participantDid) {
+        try {
+            // URL-encode the DID for the path parameter
+            String encodedDid = java.net.URLEncoder.encode(participantDid, "UTF-8");
+            Request deleteRequest = new Request.Builder()
+                    .delete()
+                    .url(managementAddress + ":" + SERVICE_PORT
+                            + "/api/identity/v1alpha/participants/" + encodedDid)
+                    .addHeader("x-api-key", IdentityHubHelper.IDENTITY_HUB_API_KEY)
+                    .build();
+            try (Response resp = HTTP_CLIENT.newCall(deleteRequest).execute()) {
+                log.debug("IdentityHub participant cleanup {}: status={}", participantDid, resp.code());
+            }
+        } catch (Exception e) {
+            log.warn("Failed to delete IdentityHub participant {}: {}", participantDid, e.getMessage());
+        }
+    }
+
+    /**
+     * Generic helper to list and delete all TMForum resources at a given base URL and API path.
+     *
+     * @param baseUrl      the base URL of the TMForum API
+     * @param apiPath      the TMForum API path
+     * @param resourceName a human-readable name for logging purposes
+     */
+    private void cleanUpTMForumResourceList(String baseUrl, String apiPath, String resourceName) {
+        try {
+            Request listRequest = new Request.Builder()
+                    .get()
+                    .url(baseUrl + apiPath)
+                    .build();
+            try (Response response = HTTP_CLIENT.newCall(listRequest).execute()) {
+                okhttp3.ResponseBody responseBody = response.body();
+                if (responseBody == null || !response.isSuccessful()) {
+                    log.debug("No {} to clean up (status={})", resourceName, response.code());
+                    return;
+                }
+                String bodyString = responseBody.string();
+                List<java.util.Map<String, Object>> items;
+                try {
+                    items = OBJECT_MAPPER.readValue(bodyString,
+                            new TypeReference<List<java.util.Map<String, Object>>>() {});
+                } catch (Exception e) {
+                    log.warn("Could not parse {} list: {}", resourceName, e.getMessage());
+                    return;
+                }
+                for (java.util.Map<String, Object> item : items) {
+                    Object id = item.get("id");
+                    if (id == null) continue;
+                    Request deleteRequest = new Request.Builder()
+                            .delete()
+                            .url(baseUrl + apiPath + "/" + id)
+                            .build();
+                    try (Response deleteResp = HTTP_CLIENT.newCall(deleteRequest).execute()) {
+                        log.debug("Deleted {} {}: status={}", resourceName, id, deleteResp.code());
+                    }
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Failed to clean up {}: {}", resourceName, e.getMessage());
+        }
+    }
+
+    // ==================== Central Marketplace Step Definitions ====================
+    // Step definitions for @central scenarios will be added in Step 8.
 
     // ==================== Consumer Identity Setup ====================
 
