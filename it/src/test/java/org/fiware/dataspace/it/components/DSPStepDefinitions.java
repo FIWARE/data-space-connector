@@ -193,6 +193,26 @@ public class DSPStepDefinitions {
     /** The EDR data address (endpoint + token) from a completed DCP transfer. */
     private DataAddress dcpDataAddress;
 
+    // --- OID4VC Protocol Flow State ---
+
+    /** The OID4VC catalog response JSON, populated during catalog request. */
+    private JsonNode oid4vcCatalogResponse;
+
+    /** The transfer process ID from a started OID4VC transfer. */
+    private String oid4vcTransferId;
+
+    /** The EDR data address (endpoint + token) from a completed OID4VC transfer. */
+    private DataAddress oid4vcDataAddress;
+
+    /** The OID4VP access token obtained by exchanging a membership credential at the OID4VC endpoint. */
+    private String oid4vcAccessToken;
+
+    /** The OpenID configuration retrieved from the OID4VC transfer endpoint. */
+    private OpenIdConfiguration oid4vcEndpointOidcConfig;
+
+    /** The scope used for OID4VP authentication in OID4VC flows. */
+    private static final String OPENID_SCOPE = "openid";
+
     @Before("@dsp")
     public void setup() {
         CryptoIntegration.init(this.getClass().getClassLoader());
@@ -1302,6 +1322,252 @@ public class DSPStepDefinitions {
             assertEquals(UPTIME_REPORT_ENTITY_ID, entity.get("id").asText(),
                     "Returned entity ID should match the UptimeReport.");
             log.info("Successfully accessed UptimeReport via DCP transfer endpoint at {}", entityUrl);
+        }
+    }
+
+    // ==================== OID4VC Protocol Flow ====================
+
+    /**
+     * Requests the provider catalog via the OID4VC management API.
+     * Equivalent to step 1 of "Order through DSP" > "OID4VC" in DSP_INTEGRATION.md.
+     * <p>
+     * Uses the OID4VC management API address and the OID4VC provider DSP endpoint.
+     */
+    @When("The consumer requests the provider catalog via the OID4VC management API.")
+    public void theConsumerRequestsTheProviderCatalogViaOid4vc() throws Exception {
+        String counterPartyAddress = OID4VC_PROVIDER_ADDRESS + ":" + SERVICE_PORT + DSP_ENDPOINT_PATH;
+        oid4vcCatalogResponse = DSPManagementHelper.requestCatalog(
+                OID4VC_MANAGEMENT_API_ADDRESS,
+                PROVIDER_DID,
+                counterPartyAddress);
+        assertNotNull(oid4vcCatalogResponse, "OID4VC catalog response should not be null.");
+        log.info("OID4VC catalog response received: {}", oid4vcCatalogResponse.toString().substring(0,
+                Math.min(oid4vcCatalogResponse.toString().length(), 500)));
+    }
+
+    /**
+     * Verifies the OID4VC catalog contains at least one dataset with the expected DSP asset.
+     * The catalog structure is identical to the DCP catalog (DCAT format).
+     */
+    @Then("The OID4VC catalog contains at least one dataset with the DSP asset.")
+    public void theOid4vcCatalogContainsAtLeastOneDataset() {
+        assertNotNull(oid4vcCatalogResponse, "OID4VC catalog response must have been retrieved first.");
+
+        JsonNode datasets = oid4vcCatalogResponse.path("dcat:dataset");
+        if (datasets.isMissingNode()) {
+            datasets = oid4vcCatalogResponse.path("dataset");
+        }
+
+        boolean hasDataset;
+        if (datasets.isArray()) {
+            hasDataset = datasets.size() > 0;
+        } else if (!datasets.isMissingNode()) {
+            hasDataset = true;
+        } else {
+            hasDataset = false;
+        }
+
+        assertTrue(hasDataset, "OID4VC catalog should contain at least one dataset. Catalog: "
+                + oid4vcCatalogResponse.toString().substring(0,
+                Math.min(oid4vcCatalogResponse.toString().length(), 1000)));
+        log.info("OID4VC catalog contains dataset(s) with the DSP asset.");
+    }
+
+    /**
+     * Starts a transfer process via the OID4VC management API, reusing the agreement from DCP.
+     * Equivalent to step 2 of "Order through DSP" > "OID4VC" in DSP_INTEGRATION.md.
+     * <p>
+     * As documented, the OID4VC transfer includes a {@code dataDestination} with type
+     * {@code HttpProxy} and reuses the agreement negotiated via DCP.
+     */
+    @When("The consumer starts a transfer process via the OID4VC management API.")
+    public void theConsumerStartsTransferProcessViaOid4vc() throws Exception {
+        assertNotNull(dcpAgreementId, "A finalized DCP contract agreement is required for OID4VC transfer.");
+        String counterPartyAddress = OID4VC_PROVIDER_ADDRESS + ":" + SERVICE_PORT + DSP_ENDPOINT_PATH;
+        JsonNode transferResponse = DSPManagementHelper.startTransferProcessWithDataDestination(
+                OID4VC_MANAGEMENT_API_ADDRESS,
+                DSP_ASSET_ID,
+                PROVIDER_DID,
+                counterPartyAddress,
+                dcpAgreementId,
+                DSPManagementHelper.TRANSFER_TYPE_HTTP_DATA_PULL);
+        assertNotNull(transferResponse, "OID4VC transfer process start response should not be null.");
+        log.info("OID4VC transfer process started: {}", transferResponse);
+    }
+
+    /**
+     * Waits for the OID4VC transfer process to reach the "STARTED" state and extracts the transfer ID.
+     * Equivalent to steps 3-4 of "Order through DSP" > "OID4VC" in DSP_INTEGRATION.md.
+     */
+    @When("The consumer waits for the OID4VC transfer process to start.")
+    public void theConsumerWaitsForOid4vcTransferStarted() throws Exception {
+        oid4vcTransferId = DSPManagementHelper.waitForTransferStarted(OID4VC_MANAGEMENT_API_ADDRESS);
+        assertNotNull(oid4vcTransferId, "OID4VC transfer ID should not be null after transfer starts.");
+        log.info("OID4VC transfer process started with ID: {}", oid4vcTransferId);
+    }
+
+    /**
+     * Retrieves the EDR data address (endpoint URL and access token) from the OID4VC management API.
+     * Equivalent to step 4 of "Order through DSP" > "OID4VC" in DSP_INTEGRATION.md.
+     */
+    @Then("The consumer retrieves the EDR data address from the OID4VC management API.")
+    public void theConsumerRetrievesEdrDataAddressViaOid4vc() throws Exception {
+        assertNotNull(oid4vcTransferId, "A started OID4VC transfer ID is required to retrieve the data address.");
+        oid4vcDataAddress = DSPManagementHelper.getDataAddress(OID4VC_MANAGEMENT_API_ADDRESS, oid4vcTransferId);
+        assertNotNull(oid4vcDataAddress, "OID4VC data address should not be null.");
+        assertNotNull(oid4vcDataAddress.getEndpoint(), "OID4VC data address endpoint should not be null.");
+        log.info("OID4VC data address retrieved: endpoint={}", oid4vcDataAddress.getEndpoint());
+    }
+
+    /**
+     * Ensures the consumer has a started OID4VC transfer with an endpoint.
+     * If no transfer exists yet, runs the full OID4VC transfer setup flow (reusing the DCP agreement).
+     */
+    @Given("The consumer has a started OID4VC transfer with an endpoint.")
+    public void theConsumerHasAStartedOid4vcTransferWithEndpoint() throws Exception {
+        if (oid4vcDataAddress == null) {
+            // Ensure DCP agreement exists first
+            theConsumerHasAFinalizedDcpContractAgreement();
+            theConsumerStartsTransferProcessViaOid4vc();
+            theConsumerWaitsForOid4vcTransferStarted();
+            theConsumerRetrievesEdrDataAddressViaOid4vc();
+        }
+        assertNotNull(oid4vcDataAddress, "OID4VC data address must be available.");
+        assertNotNull(oid4vcDataAddress.getEndpoint(), "OID4VC endpoint must be available.");
+        log.info("Consumer has started OID4VC transfer with endpoint: {}", oid4vcDataAddress.getEndpoint());
+    }
+
+    /**
+     * Sends an unauthenticated request to the OID4VC transfer endpoint.
+     * Equivalent to step 5 of "Order through DSP" > "OID4VC" in DSP_INTEGRATION.md.
+     * The request should be rejected (401 or 403).
+     */
+    @When("The consumer requests the UptimeReport without authentication via the OID4VC endpoint.")
+    public void theConsumerRequestsUptimeReportWithoutAuthViaOid4vc() throws Exception {
+        assertNotNull(oid4vcDataAddress, "OID4VC data address must be available.");
+        // The unauthenticated request result is verified in the Then step.
+        // We just log that we're about to make the request.
+        log.info("Sending unauthenticated request to OID4VC endpoint: {}", oid4vcDataAddress.getEndpoint());
+    }
+
+    /**
+     * Verifies that the unauthenticated request to the OID4VC transfer endpoint is rejected.
+     * The service should respond with 401 Unauthorized or 403 Forbidden.
+     */
+    @Then("The unauthenticated OID4VC request is rejected.")
+    public void theUnauthenticatedOid4vcRequestIsRejected() throws Exception {
+        assertNotNull(oid4vcDataAddress, "OID4VC data address must be available.");
+        String entityUrl = oid4vcDataAddress.getEndpoint()
+                + "/ngsi-ld/v1/entities/" + UPTIME_REPORT_ENTITY_ID;
+        Request request = new Request.Builder()
+                .get()
+                .url(entityUrl)
+                .build();
+        try (Response response = HTTP_CLIENT.newCall(request).execute()) {
+            int statusCode = response.code();
+            assertTrue(statusCode == HttpStatus.SC_UNAUTHORIZED || statusCode == HttpStatus.SC_FORBIDDEN,
+                    String.format("Unauthenticated request should be rejected (401 or 403). Got status %d", statusCode));
+            log.info("Unauthenticated OID4VC request correctly rejected with status {} at {}", statusCode, entityUrl);
+        }
+    }
+
+    /**
+     * Requests the OpenID configuration from the OID4VC transfer endpoint.
+     * Equivalent to step 6 of "Order through DSP" > "OID4VC" in DSP_INTEGRATION.md.
+     */
+    @When("The consumer requests the openid-configuration from the OID4VC transfer endpoint.")
+    public void theConsumerRequestsOpenidConfigFromOid4vcEndpoint() throws Exception {
+        assertNotNull(oid4vcDataAddress, "OID4VC data address must be available.");
+        String oidcUrl = oid4vcDataAddress.getEndpoint() + "/.well-known/openid-configuration";
+        Request request = new Request.Builder()
+                .get()
+                .url(oidcUrl)
+                .build();
+        try (Response response = HTTP_CLIENT.newCall(request).execute()) {
+            assertTrue(response.isSuccessful(),
+                    String.format("OpenID configuration should be accessible at %s. Got status %d",
+                            oidcUrl, response.code()));
+            String body = response.body().string();
+            oid4vcEndpointOidcConfig = OBJECT_MAPPER.readValue(body, OpenIdConfiguration.class);
+            assertNotNull(oid4vcEndpointOidcConfig, "OpenID configuration should be parsed successfully.");
+            log.info("OpenID configuration retrieved from OID4VC endpoint at {}", oidcUrl);
+        }
+    }
+
+    /**
+     * Verifies the OpenID configuration response contains a token endpoint.
+     */
+    @Then("The openid-configuration response contains a token endpoint.")
+    public void theOpenidConfigContainsATokenEndpoint() {
+        assertNotNull(oid4vcEndpointOidcConfig, "OpenID configuration must have been retrieved first.");
+        assertNotNull(oid4vcEndpointOidcConfig.getTokenEndpoint(),
+                "OpenID configuration should contain a token_endpoint.");
+        assertFalse(oid4vcEndpointOidcConfig.getTokenEndpoint().isBlank(),
+                "Token endpoint should not be blank.");
+        log.info("OpenID configuration token endpoint: {}", oid4vcEndpointOidcConfig.getTokenEndpoint());
+    }
+
+    /**
+     * Obtains a membership credential from the consumer's Keycloak for OID4VC access.
+     * Equivalent to the first part of step 7 in "Order through DSP" > "OID4VC" in DSP_INTEGRATION.md:
+     * {@code ./doc/scripts/get_credential.sh https://keycloak-consumer.127.0.0.1.nip.io membership-credential employee}
+     * <p>
+     * Stores the credential in the DSP wallet for subsequent OID4VP token exchange.
+     */
+    @When("The consumer obtains a membership credential for OID4VC access.")
+    public void theConsumerObtainsMembershipCredentialForOid4vcAccess() throws Exception {
+        // Login as the employee user and store the credential in the wallet for OID4VP exchange
+        String accessToken = FancyMarketplaceEnvironment.loginToConsumerKeycloak(
+                MEMBERSHIP_CREDENTIAL_USERNAME + "@consumer.org");
+        dspWallet.getCredentialFromIssuer(accessToken, CONSUMER_KEYCLOAK_ADDRESS, MEMBERSHIP_CREDENTIAL_ID);
+        assertNotNull(dspWallet.getStoredCredential(MEMBERSHIP_CREDENTIAL_ID),
+                "Membership credential should be stored in the wallet.");
+        log.info("Consumer obtained membership credential for OID4VC access.");
+    }
+
+    /**
+     * Exchanges the membership credential for an access token via OID4VP at the OID4VC transfer endpoint.
+     * Equivalent to the second part of step 7 in "Order through DSP" > "OID4VC" in DSP_INTEGRATION.md:
+     * {@code ./doc/scripts/get_access_token_oid4vp.sh ${ENDPOINT} $MEMBERSHIP_CREDENTIAL openid}
+     */
+    @When("The consumer exchanges the membership credential for an access token via OID4VP at the OID4VC endpoint.")
+    public void theConsumerExchangesMembershipCredentialForTokenViaOid4vp() throws Exception {
+        assertNotNull(oid4vcDataAddress, "OID4VC data address must be available.");
+        oid4vcAccessToken = ScriptHelper.getAccessTokenViaOid4vp(
+                oid4vcDataAddress.getEndpoint(),
+                MEMBERSHIP_CREDENTIAL_ID,
+                OPENID_SCOPE,
+                dspWallet);
+        assertNotNull(oid4vcAccessToken, "OID4VP access token should not be null.");
+        assertFalse(oid4vcAccessToken.isBlank(), "OID4VP access token should not be blank.");
+        log.info("Consumer obtained OID4VP access token for OID4VC endpoint.");
+    }
+
+    /**
+     * Accesses the UptimeReport entity via the OID4VC transfer endpoint using the OID4VP access token.
+     * Equivalent to the last part of step 7 in "Order through DSP" > "OID4VC" in DSP_INTEGRATION.md.
+     */
+    @Then("The consumer accesses the UptimeReport entity via the OID4VC transfer endpoint with OID4VP token.")
+    public void theConsumerAccessesUptimeReportViaOid4vcWithOid4vpToken() throws Exception {
+        assertNotNull(oid4vcDataAddress, "OID4VC data address must be available.");
+        assertNotNull(oid4vcAccessToken, "OID4VP access token must be available.");
+        String entityUrl = oid4vcDataAddress.getEndpoint()
+                + "/ngsi-ld/v1/entities/" + UPTIME_REPORT_ENTITY_ID;
+        Request request = new Request.Builder()
+                .get()
+                .url(entityUrl)
+                .header("Content-Type", "application/json")
+                .header("Authorization", "Bearer " + oid4vcAccessToken)
+                .build();
+        try (Response response = HTTP_CLIENT.newCall(request).execute()) {
+            assertEquals(HttpStatus.SC_OK, response.code(),
+                    String.format("Should be able to access UptimeReport via OID4VC endpoint with OID4VP token. Got status %d",
+                            response.code()));
+            String body = response.body().string();
+            JsonNode entity = OBJECT_MAPPER.readTree(body);
+            assertEquals(UPTIME_REPORT_ENTITY_ID, entity.get("id").asText(),
+                    "Returned entity ID should match the UptimeReport.");
+            log.info("Successfully accessed UptimeReport via OID4VC transfer endpoint at {}", entityUrl);
         }
     }
 
