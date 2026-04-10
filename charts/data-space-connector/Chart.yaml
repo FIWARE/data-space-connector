@@ -54,7 +54,7 @@ dependencies:
   - name: did-helper
     alias: did
     condition: did.enabled
-    version: 0.1.13
+    version: 0.1.15
     repository: https://fiware.github.io/helm-charts
   # cert-manager
   - name: cert-manager
