@@ -17,7 +17,9 @@ specific flows and its deployment and integration with other frameworks.
   - [Contract Management](#contract-management)
   - [M2M Service Interaction](#m2m-service-interaction)
 - [Deployment / Integration](#deployment--integration)
-  - [Local deployment of Minimum Viable Dataspace (helm/k3s)](#local-deployment-of-minimum-viable-dataspace-helmk3s)
+  - [Quick Start Guide](#quick-start-guide)
+  - [Deployment by Role](#deployment-by-role)
+  - [Local Deployment (Maven)](#local-deployment-maven)
   - [Packet Delivery Company (ArgoCD)](#packet-delivery-company-argocd)
   - [Integration with AWS Garnet Framework (formerly AWS Smart Territory Framework)](#integration-with-aws-garnet-framework-formerly-aws-smart-territory-framework)
 
