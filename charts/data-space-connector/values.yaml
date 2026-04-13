@@ -1463,6 +1463,13 @@ vault:
 # -- configuration for the cert-manager component (https://github.com/cert-manager/cert-manager/blob/master/deploy/charts/cert-manager/values.yaml)
 cert-manager:
   enabled: false
+  startupapicheck:
+    # -- Hook annotations to ensure the cert-manager webhook is ready
+    # before creating Issuers/Certificates in the post-install hooks.
+    jobAnnotations:
+      "helm.sh/hook": post-install,post-upgrade
+      "helm.sh/hook-weight": "0"
+      "helm.sh/hook-delete-policy": hook-succeeded,before-hook-creation
 
 # -- configuration for additional resources to be deployed for cert-manager, like ClusterIssuers
 certManagerResources:

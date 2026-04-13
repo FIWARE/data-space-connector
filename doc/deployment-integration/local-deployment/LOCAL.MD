@@ -4,6 +4,8 @@ In order to support development and exploration of the FIWARE Data Space Connect
 provided as part of this repo.
 An alternative deployment guide, based on [MicroK8s](https://microk8s.io/) can be found here: https://github.com/cgonzalezITA/DSFiware-hackathon?tab=readme-ov-file#quick-deployment-from-scratch
 
+> **Note:** The Local Deployment is for **learning and development purposes only**. It deploys all the components of a data space together to show how they interact, not from the perspective of any specific role. For deploying the FIWARE DSC in a real environment, refer to the documentation that matches your organization's role in the data space: [Deployment by Role](../roles/README.md).
+
 ## Requirements
 
 Since the local deployment installs 2 connector instances and a trust-anchor, its recommended to use a strong enough machine. While 16Gb Ram might be enough, its recommended to have >24Gb available. The deployment is build and tested on Ubuntu, most other Linux distributions should work as well.
@@ -28,8 +30,7 @@ Issues revealed by the script are most likely due to incompatibility of your sys
 
 ## Quick Start
 
-> :warning: The local deployment uses [k3s](https://k3s.io/) and is currently only tested on linux.
-> Its not recommended to use it on Windows or Mac Systems.
+> :warning: The local deployment uses [k3s](https://k3s.io/) in a docker container and is currently only tested on linux and MacOS.
 
 > :warning: In current Linux installations, ```br_netfilter``` is disabled by default. That leads to networking issues inside the k3s cluster and will prevent the connector to start up properly. Make sure that its enabled via ```modprobe br_netfilter```. See [Stackoverflow](https://stackoverflow.com/questions/48148838/kube-dns-error-reply-from-unexpected-source/48151279#48151279) for more.
 
@@ -223,7 +224,7 @@ essentially 3 building blocks:
       configure policies in ODRL and provides them to the Open Policy Agent(translated into rego). It can be used to
       offer additional infromation to be taken into account.
 * Value creation:
-    * [TMForum API](https://github.com/FIWARE/tmforum-api): Implementation of the [TMForum APIs](https://www.tmforum.org/oda/open-apis/directory) 
+    * [TMForum API](https://github.com/FIWARE/tmforum-api): Implementation of the [TMForum APIs](https://www.tmforum.org/oda/open-apis/directory)
       to provide API's focused for offering, selling and buying data products and services.
     * [Contract Management](https://github.com/FIWARE/contract-management): Enables access to services and data when orders
       happend at the TMForum-API
@@ -242,7 +243,7 @@ The policy can be created at the PAP via:
 ```shell
   curl -s -X 'POST' http://pap-provider.127.0.0.1.nip.io:8080/policy \
     -H 'Content-Type: application/json' \
-    -d  '{ 
+    -d  '{
             "@context": {
               "dc": "http://purl.org/dc/elements/1.1/",
               "dct": "http://purl.org/dc/terms/",
@@ -411,13 +412,13 @@ Setup the header:
 Setup the payload:
 
 ```shell
-  export PAYLOAD=$(echo -n "{\"iss\": \"${HOLDER_DID}\", \"sub\": \"${HOLDER_DID}\", \"vp\": ${VERIFIABLE_PRESENTATION}}" | base64 -w0 | sed s/\+/-/g |sed 's/\//_/g' |  sed -E s/=+$//); echo Payload: ${PAYLOAD};   
+  export PAYLOAD=$(echo -n "{\"iss\": \"${HOLDER_DID}\", \"sub\": \"${HOLDER_DID}\", \"vp\": ${VERIFIABLE_PRESENTATION}}" | base64 -w0 | sed s/\+/-/g |sed 's/\//_/g' |  sed -E s/=+$//); echo Payload: ${PAYLOAD};
 ```
 
 Create the signature:
 
 ```shell
-  export SIGNATURE=$(echo -n "${JWT_HEADER}.${PAYLOAD}" | openssl dgst -sha256 -binary -sign cert/private-key.pem | base64 -w0 | sed s/\+/-/g | sed 's/\//_/g' | sed -E s/=+$//); echo Signature: ${SIGNATURE}; 
+  export SIGNATURE=$(echo -n "${JWT_HEADER}.${PAYLOAD}" | openssl dgst -sha256 -binary -sign cert/private-key.pem | base64 -w0 | sed s/\+/-/g | sed 's/\//_/g' | sed -E s/=+$//); echo Signature: ${SIGNATURE};
 ```
 
 Combine them to the JWT:
@@ -453,11 +454,11 @@ With that token, try to access the data again:
 
 ### Buy access to a service offering
 
-An essential use-case within Dataspaces is trading of data and digital services. The Minimum Viable Dataspace supports 
+An essential use-case within Dataspaces is trading of data and digital services. The Minimum Viable Dataspace supports
 such marketplace services as part of the Data Provider. In the scenario, M&P Operations will offer managed Kubernetes Clusters
-to other participants of the Dataspace. While every participant should be allowed to see the offerings, only those that are 
-registered as customers at M&P Operations and bought access should be allowed to create clusters. 
-The following steps will show how Fancy Marketplace views the available offerings of M&P Operations, then decides to buy 
+to other participants of the Dataspace. While every participant should be allowed to see the offerings, only those that are
+registered as customers at M&P Operations and bought access should be allowed to create clusters.
+The following steps will show how Fancy Marketplace views the available offerings of M&P Operations, then decides to buy
 managed Kubernetes Services from M&P Operations and creates the cluster itself.
 
 #### Offer creation
@@ -585,7 +586,7 @@ Since the offerings are handled through the TMForum APIs, the policies belong to
 Similar to the previous policy, it restricts access to a defined TMForum Resource(e.g. with `"odrl:leftOperand" : "tmf:resource"`), but allows
 creation of such through the action `"tmf:create"`. Additionaly, it restricts the assignee to have the role "REPRESENTATIVE" as part of its "LegalPersonCredential".
 
-3. Allow 'REPRESENTATIVES' to order products: 
+3. Allow 'REPRESENTATIVES' to order products:
 ```shell
   curl -s -X 'POST' http://pap-provider.127.0.0.1.nip.io:8080/policy \
     -H 'Content-Type: application/json' \
@@ -661,7 +662,7 @@ creation of such through the action `"tmf:create"`. Additionaly, it restricts th
         }'
 ```
 
-4. Allow "OPERATORS" to retrieve information about the clusters: 
+4. Allow "OPERATORS" to retrieve information about the clusters:
 
 ```shell
   curl -s -X 'POST' http://pap-provider.127.0.0.1.nip.io:8080/policy \
@@ -743,7 +744,7 @@ usually hidden behind a marketplace application, taking care of the concrete TMF
 In addition to the policies, an offering should be created. Similar to the broker access, the local deployment contains a direct
 ingress to the TMForum API for test and demo instrumentation. In production environments, this should never be accessible without an IAM framework in front.
 
-> :warning: This is a very simple demo product. Please check the [TMForum API Documentation](https://www.tmforum.org/oda/open-apis/directory/product-catalog-management-api-TMF620/v5.0.0) 
+> :warning: This is a very simple demo product. Please check the [TMForum API Documentation](https://www.tmforum.org/oda/open-apis/directory/product-catalog-management-api-TMF620/v5.0.0)
 > for all available options.
 
 The offer creation includes multiple steps:
@@ -756,7 +757,7 @@ export PROVIDER_DID="did:web:mp-operations.org"
 
 2. Create the product specification. The specification should contain the configuration of credentials to be trusted by the customer(in this case, "OperatorCredential" with the role "OPERATOR" for the target-service) and the policy to be created for the customer. In the example, we will offer 2 different types service: "small" and "full", where small restricts the cluster-size to be created:
 
-  1. "small": 
+  1. "small":
   ```shell
   export PRODUCT_SPEC_SMALL_ID=$(curl -X 'POST' http://tm-forum-api.127.0.0.1.nip.io:8080/tmf-api/productCatalogManagement/v4/productSpecification \
     -H 'Content-Type: application/json;charset=utf-8' \
@@ -861,7 +862,7 @@ export PROVIDER_DID="did:web:mp-operations.org"
     }" | jq '.id' -r ); echo ${PRODUCT_SPEC_SMALL_ID}
   ```
 
-  1. "full": 
+  1. "full":
   ```shell
   export PRODUCT_SPEC_FULL_ID=$(curl -X 'POST' http://tm-forum-api.127.0.0.1.nip.io:8080/tmf-api/productCatalogManagement/v4/productSpecification \
     -H 'Content-Type: application/json;charset=utf-8' \
@@ -975,7 +976,7 @@ export PROVIDER_DID="did:web:mp-operations.org"
       }
     }"| jq '.id' -r ); echo ${PRODUCT_OFFERING_SMALL_ID}
   ```
-  
+
   2. "small":
   ```shell
   export PRODUCT_OFFERING_FULL_ID=$(curl -X 'POST' http://tm-forum-api.127.0.0.1.nip.io:8080/tmf-api/productCatalogManagement/v4/productOffering \
@@ -992,10 +993,10 @@ export PROVIDER_DID="did:web:mp-operations.org"
 
 #### Credentials issuance at the consumer
 
-In order to buy and use the offering, the consumer "Fancy Marketplace" has to issue two credentials. One for accessing and 
-buying the offerings from the provider and one to actually carry out the cluster creation. For the ease of configuration, in the 
+In order to buy and use the offering, the consumer "Fancy Marketplace" has to issue two credentials. One for accessing and
+buying the offerings from the provider and one to actually carry out the cluster creation. For the ease of configuration, in the
 local environment the same user will take care of both actions. However, in a real use-case its possible to have different users
-taking care of that. The issuance process is the same as it can be found in the [Data Consumer Chapter](#the-data-consumer), therefor 
+taking care of that. The issuance process is the same as it can be found in the [Data Consumer Chapter](#the-data-consumer), therefor
 the steps are combined within a script:
 
 1. Get the LegalPersonCredential for the normal employee:
@@ -1013,7 +1014,7 @@ export OPERATOR_CREDENTIAL=$(./doc/scripts/get_credential.sh https://keycloak-co
 
 #### Buy access and create cluster
 
-With the credentials beeing issued, the employee of Fancy Marketplace now can buy and create the cluster. The authentication 
+With the credentials beeing issued, the employee of Fancy Marketplace now can buy and create the cluster. The authentication
 steps are equal to the description in the [OID4VP Authentication chapter](#authenticate-via-oid4vp), thus are combined within scripts.
 
 In order to prove that not every user can just create a cluster, try the following:
@@ -1028,7 +1029,7 @@ In order to prove that not every user can just create a cluster, try the followi
     -d '{
       "id": "urn:ngsi-ld:K8SCluster:fancy-marketplace",
       "type": "K8SCluster",
-      "name": { 
+      "name": {
         "type": "Property",
         "value": "Fancy Marketplace Cluster"
       },
@@ -1038,7 +1039,7 @@ In order to prove that not every user can just create a cluster, try the followi
       },
       "k8sVersion": {
         "type": "Property",
-        "value": "1.26.0"        
+        "value": "1.26.0"
       }
     }'
 ```
@@ -1066,15 +1067,15 @@ In order to prove that not every user can just create a cluster, try the followi
       \"partyCharacteristic\": [
         {
           \"name\": \"did\",
-          \"value\": \"${CONSUMER_DID}\" 
+          \"value\": \"${CONSUMER_DID}\"
         }
       ]
-    }" | jq '.id' -r); echo ${FANCY_MARKETPLACE_ID} 
+    }" | jq '.id' -r); echo ${FANCY_MARKETPLACE_ID}
 ```
 As a result of the operation, Fancy Marketplace Inc. is registered in M&P Operations customer system and has a customer id.
 
-5. Buy access. In order to buy access, a ProductOrder, referencing the offering from M&P Operations has to be created. A typical 
-marketplace implementation would take care of that and handle potential payments. For the sample use-case, we continue to communicate 
+5. Buy access. In order to buy access, a ProductOrder, referencing the offering from M&P Operations has to be created. A typical
+marketplace implementation would take care of that and handle potential payments. For the sample use-case, we continue to communicate
 with the TMForum-APIs directly.
   1. List offerings
   ```shell
@@ -1101,7 +1102,7 @@ with the TMForum-APIs directly.
             \"productOffering\": {
               \"id\" :  \"${OFFER_ID}\"
             }
-          }  
+          }
         ],
         \"relatedParty\": [
           {
@@ -1121,12 +1122,12 @@ with the TMForum-APIs directly.
             }" | jq .
   ```
 
-  Once the order is created, TMForum will notify the ContractManagement to create an entry in the TrustedIssuersList, 
-  allowing Fancy Marketplace to access M&P Operation's services with an ```Operator Credential``` 
+  Once the order is created, TMForum will notify the ContractManagement to create an entry in the TrustedIssuersList,
+  allowing Fancy Marketplace to access M&P Operation's services with an ```Operator Credential```
 
 6. Create a cluster as a Fancy Marketplace Operator with numNodes <= 3:
 ```shell
-  export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh http://mp-data-service.127.0.0.1.nip.io:8080 $OPERATOR_CREDENTIAL operator); echo $ACCESS_TOKEN 
+  export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh http://mp-data-service.127.0.0.1.nip.io:8080 $OPERATOR_CREDENTIAL operator); echo $ACCESS_TOKEN
   curl -X POST http://mp-data-service.127.0.0.1.nip.io:8080/ngsi-ld/v1/entities \
     -H 'Accept: */*' \
     -H 'Content-Type: application/json' \
@@ -1144,7 +1145,7 @@ with the TMForum-APIs directly.
       },
       "k8sVersion": {
         "type": "Property",
-        "value": "1.26.0"        
+        "value": "1.26.0"
       }
     }'
 ```
@@ -1177,7 +1178,7 @@ with the TMForum-APIs directly.
       },
       "k8sVersion": {
         "type": "Property",
-        "value": "1.26.0"        
+        "value": "1.26.0"
       }
     }'
 ```
@@ -1205,7 +1206,7 @@ with the TMForum-APIs directly.
             \"productOffering\": {
               \"id\" :  \"${OFFER_ID}\"
             }
-          }  
+          }
         ],
         \"relatedParty\": [
           {
@@ -1246,7 +1247,7 @@ with the TMForum-APIs directly.
       },
       "k8sVersion": {
         "type": "Property",
-        "value": "1.26.0"        
+        "value": "1.26.0"
       }
     }'
 ```
@@ -1256,7 +1257,7 @@ with the TMForum-APIs directly.
 All previous steps allowed essentially everyone to use the credentials issued, since the verification does not check if they belong to the holder presenting them.
 However, in a lot of usecases only the one that got the credential issued should be able to use it. Therfor, the [Verifier](../../../README.md#components) can be configured to check that the presenter is actually the lawful holder of the credential.
 
-To try it out, insert your holder did (```echo $HOLDER_DID```) into the mapper configuration of your consumer(e.g. [consumer.yaml](../../../k3s/consumer.yamlL234-L241)). Redeploy the connector and then try the following: 
+To try it out, insert your holder did (```echo $HOLDER_DID```) into the mapper configuration of your consumer(e.g. [consumer.yaml](../../../k3s/consumer.yamlL234-L241)). Redeploy the connector and then try the following:
 
 1. Configure holder verfifcation for a certain scope:
 ```shell
@@ -1299,11 +1300,11 @@ To try it out, insert your holder did (```echo $HOLDER_DID```) into the mapper c
                               "claim": "subject"
                           }
                       }
-                  ] 
+                  ]
               }
           }
       }'
-``` 
+```
 
 With that configuration, the providers service is only available for Operators with ```OperatorCredentials``` bound to there individual identity anymore. E.g. only if the claim ```subject``` contains the did that the [presentation was created with](#authenticate-via-oid4vp).
 
@@ -1366,7 +1367,7 @@ CRL_URI=http://localhost:3000/crl.pem" > output/config
 
 ### The Consumer
 
-Keycloak does currently not support the issuance of did:elsi compatible credentials. Therefor, it needs to be extended with the [keycloak-jades-vc-issuer](https://github.com/FIWARE/keycloak-jades-vc-issuer). It provides an implementation of the [SigningService-Interface](https://github.com/keycloak/keycloak/blob/main/services/src/main/java/org/keycloak/protocol/oid4vc/issuance/signing/SigningService.java), using the [Digitial Signature Service library](https://github.com/esig/dss). 
+Keycloak does currently not support the issuance of did:elsi compatible credentials. Therefor, it needs to be extended with the [keycloak-jades-vc-issuer](https://github.com/FIWARE/keycloak-jades-vc-issuer). It provides an implementation of the [SigningService-Interface](https://github.com/keycloak/keycloak/blob/main/services/src/main/java/org/keycloak/protocol/oid4vc/issuance/signing/SigningService.java), using the [Digitial Signature Service library](https://github.com/esig/dss).
 The standard local deployment needs to be changed in the following places:
 
 1. [Enable elsi-support](../../../k3s/consumer-elsi.yaml#L266)
@@ -1390,7 +1391,7 @@ The standard local deployment needs to be changed in the following places:
     keystore:
       keystore.p12: <THE_KEYSTORE_BASE_&$>
 ```
-This will load the keystore into a secret and configures the [realm](../../../charts/data-space-connector/templates/realm.yaml) to use did:elsi and load the key accordingly. 
+This will load the keystore into a secret and configures the [realm](../../../charts/data-space-connector/templates/realm.yaml) to use did:elsi and load the key accordingly.
 
 2. [Mount the store to keycloak](../../../k3s/consumer-elsi.yaml#L88-L105)
 ```yaml
@@ -1416,11 +1417,11 @@ This will load the keystore into a secret and configures the [realm](../../../ch
       volumeMounts:
         - name: providers
           mountPath: /target
-  # mount provider folder into keycloak 
+  # mount provider folder into keycloak
   extraVolumeMounts:
     - name: providers
       mountPath: /opt/bitnami/keycloak/providers/
-  # create an empty dir 
+  # create an empty dir
   extraVolumes:
     - name: providers
       emptyDir: {}
@@ -1438,13 +1439,13 @@ dss:
   # enable the dss-validation-service
   enabled: true
   # port of the health check endpoint.
-  health: 
+  health:
     port: 8080
   # in order to validate credentials, trust sources need to be configured
   trust:
     # trust sources can be [eIDAS Trusted Lists](https://eidas.ec.europa.eu/efda/trust-services/browse/eidas/tls)
     lists:
-      # refresh interval of the list 
+      # refresh interval of the list
       - refreshSeconds: 2
         # url of the concrete list to be used
         url: "https://ec.europa.eu/tools/lotl/eu-lotl.xml"
@@ -1453,11 +1454,11 @@ dss:
       - path: /keystores/store.jks
         type: jks
         password: password
-  # convinience to load a keystore into a secret for local environments 
+  # convinience to load a keystore into a secret for local environments
   keystores:
     store.jks: <KEYSTORE_CONTENT_BASE_64>
   # valid certificates require a valid CRL(certificate revocation list). For the local (test) use-case, this can be provided via static-website
-  deployment: 
+  deployment:
     additionalContainers:
       - name: crl-provider-static
         imagePullPolicy: IfNotPresent
@@ -1473,7 +1474,7 @@ dss:
   # allows to load a pem-encoded CRL to a secret for the local test case
   crl:
     enabled: true
-    secret: 
+    secret:
       crl.pem: <CRL_CONTENT_BASE_64>
 ```
 2. [Configure the verifier to use the dss-validation-service](../../../k3s/provider-elsi.yaml#L133)
@@ -1538,14 +1539,14 @@ Available ingresses:
 ### Participant Identity
 
 In a Data Space, every participant requires an identity. The FIWARE Data Space relies on [Decentralized Identifiers](https://www.w3.org/TR/did-core/)
-to identify its participants. While the concrete scheme to be used for a Data Space needs to be decided by its requirements, 
+to identify its participants. While the concrete scheme to be used for a Data Space needs to be decided by its requirements,
 the local installation uses [did:key](https://w3c-ccg.github.io/did-method-key/). While the did's are not well readable for humans,
 they are well-supported, can be resolved without any external interaction and can easily be generated within the deployment. That makes
-them a perfect fit for the local use-case. 
-All participants(e.g. the consumer and the participant) get a did generated on installation, by using the [did-helper](https://github.com/wistefan/did-helper). 
+them a perfect fit for the local use-case.
+All participants(e.g. the consumer and the participant) get a did generated on installation, by using the [did-helper](https://github.com/wistefan/did-helper).
 The identities and connected key-material is automatically distributed in the cluster and set in the componets that require it.
 
-In real world data spaces, the participants should rather use stabled identities, which can be [did:key](https://w3c-ccg.github.io/did-method-key/), but also 
+In real world data spaces, the participants should rather use stabled identities, which can be [did:key](https://w3c-ccg.github.io/did-method-key/), but also
 more organization-focused once like [did:web](https://w3c-ccg.github.io/did-method-web/) or [did:elsi](https://alastria.github.io/did-method-elsi/).
 
 ### Deployment
