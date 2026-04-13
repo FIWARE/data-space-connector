@@ -23,6 +23,7 @@ If release name contains chart name it will be used as a full name.
 {{- end -}}
 {{- end -}}
 {{- end -}}
+
 {{/*
 Create chart name and version as used by the chart label.
 */}}
@@ -39,24 +40,6 @@ Create the name of the service account to use
 {{- else -}}
     {{ default "default" .Values.did.serviceAccount.name }}
 {{- end -}}
-{{- end -}}
-
-{{/*
-Merge defaultRealmRoles and extraRealmRoles into a single list
-*/}}
-{{- define "dsc.realmRoles" -}}
-{{- $default := .Values.keycloak.realm.defaultRealmRoles | default list -}}
-{{- $extra := .Values.keycloak.realm.extraRealmRoles | default list -}}
-{{- concat $default $extra | toPrettyJson -}}
-{{- end -}}
-
-{{/*
-Merge defaultGroups and extraGroups into a single list
-*/}}
-{{- define "dsc.groups" -}}
-{{- $default := .Values.keycloak.realm.defaultGroups | default list -}}
-{{- $extra := .Values.keycloak.realm.extraGroups | default list -}}
-{{- concat $default $extra | toPrettyJson -}}
 {{- end -}}
 
 {{/*
