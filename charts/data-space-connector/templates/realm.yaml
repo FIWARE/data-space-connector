@@ -1,4 +1,4 @@
-{{- if .Values.keycloak.realm.import }}
+{{- if and .Values.keycloak.enabled .Values.keycloak.realm.import }}
 apiVersion: v1
 kind: ConfigMap
 metadata:
