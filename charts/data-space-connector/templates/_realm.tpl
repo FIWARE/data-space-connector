@@ -1,6 +1,6 @@
 {{/*
-Build realm attributes object. Resolves issuerDid from elsi/keycloak.issuerDid/fallback
-and merges extra attributes (string or map).
+Build realm attributes object. Resolves issuerDid from elsi/keycloak.issuerDid/fallback,
+merges extra attributes (string or map), and appends verifiable credential attributes.
 */}}
 {{- define "dsc.realmAttributes" -}}
 {{- $issuerDid := "${DID}" -}}
@@ -17,6 +17,8 @@ and merges extra attributes (string or map).
 {{- end -}}
 {{- $attrs = mergeOverwrite $attrs $extra -}}
 {{- end -}}
+{{- $vcAttrs := include "dsc.verifiableCredentials" . | fromJson -}}
+{{- $attrs = mergeOverwrite $attrs $vcAttrs -}}
 {{- $attrs | toPrettyJson -}}
 {{- end -}}
 
@@ -122,6 +124,25 @@ Merges defaultClients and clients.
 {{- $extra = printf "[%s]" (.Values.keycloak.realm.clients | trim) | fromJson -}}
 {{- end -}}
 {{- concat $default $extra | toPrettyJson -}}
+{{- end -}}
+
+{{/*
+Build a flat object of verifiable credential attributes from verifiableCredentials.
+Each entry is flattened as "vc.{key}.{attr}" = value.
+If the value is a map or list, it is serialized as a JSON string.
+*/}}
+{{- define "dsc.verifiableCredentials" -}}
+{{- $result := dict -}}
+{{- range $vcKey, $vcVal := .Values.keycloak.realm.verifiableCredentials | default dict -}}
+{{- range $attrKey, $attrVal := $vcVal -}}
+{{- $val := $attrVal -}}
+{{- if or (kindIs "map" $attrVal) (kindIs "slice" $attrVal) -}}
+{{- $val = $attrVal | toJson -}}
+{{- end -}}
+{{- $_ := set $result (printf "vc.%s.%s" $vcKey $attrKey) $val -}}
+{{- end -}}
+{{- end -}}
+{{- $result | toPrettyJson -}}
 {{- end -}}
 
 {{/*

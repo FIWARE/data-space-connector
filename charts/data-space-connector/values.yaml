@@ -1033,6 +1033,29 @@ keycloak:
       jwt-vc-builder:
         id: jwt-vc-builder
         name: jwt-vc
+    # -- Map of verifiable credentials supported by the realm. Each key is the credential name.
+    # -- ref: https://www.keycloak.org/docs/26.3.3/server_admin/index.html#attribute-breakdown
+    verifiableCredentials: {}
+      # fake-remove:
+      #   credential_signing_alg_values_supported: "ES256"
+      #   # -- Defines the VC forma
+      #   format: "vc+sd-jwt"
+      #   # -- Identifies the credential’s scope. This scope must exist as clientScope in the realm.
+      #   scope: "LegalPersonCredential"
+      #   # -- The Verifiable Credential Type (VCT)
+      #   vct: "LegalPersonCredential"
+      #   # -- proof types supported
+      #   # ref: https://github.com/keycloak/keycloak/blob/26.3.3/services/src/main/java/org/keycloak/protocol/oid4vc/model/ProofTypesSupported.java#L32
+      #   proof_types_supported: '{"jwt":{"proof_signing_alg_values_supported":["ES256"]}}'
+      #   # -- The type of the algorithm to be used for signing. Needs to fit the provided signing key.
+      #   # ref: https://github.com/keycloak/keycloak/blob/26.3.3/services/src/main/java/org/keycloak/protocol/oid4vc/model/CredentialBuildConfig.java#L36
+      #   credential_build_config.signing_algorithm: "ES256"
+      #   # -- The type of the token to be created. Will be used as `type` claim in the JWT-Header.
+      #   credential_build_config.token_jws_type: "vc+sd-jwt"
+      #   # -- List of claims to stay disclosed in the SD-JWT
+      #   credential_build_config.visible_claims: "roles,email"
+      #   # -- The number of decoys to be added to the SD-JWT. Decoys are claims with random values to increase the security of the credential. The more decoys, the more secure, but also the larger the credential. Choose wisely.
+      #   credential_build_config.decoys: "3"
   # -- configuration for the signing key to be used for issuing credentials
   # signingKey:
   # -- path to the keystore containing the signing key
