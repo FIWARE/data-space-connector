@@ -26,7 +26,11 @@ data:
         {{- end }}
         {{- if .Values.keycloak.realm.attributes -}}
         ,
+        {{- if kindIs "string" .Values.keycloak.realm.attributes }}
         {{- .Values.keycloak.realm.attributes | trim | nindent 8 }}
+        {{- else }}
+        {{ .Values.keycloak.realm.attributes | toPrettyJson | nindent 6 | trim | trimPrefix "{" | trimSuffix "}" | trim }}
+        {{- end }}
         {{- end }}
       },
       "sslRequired": "none",
@@ -77,9 +81,13 @@ data:
             "attributes": {}
           }
         ],
+        {{- if kindIs "string" .Values.keycloak.realm.clientRoles }}
         "client": {
           {{- .Values.keycloak.realm.clientRoles | trim | nindent 10 }}
         }
+        {{- else }}
+        "client": {{ .Values.keycloak.realm.clientRoles | toPrettyJson | indent 8 | trim }}
+        {{- end }}
       },
       "groups": [
         {
@@ -99,12 +107,20 @@ data:
           ]
         }
       ],
+      {{- if kindIs "string" .Values.keycloak.realm.users }}
       "users": [
         {{- .Values.keycloak.realm.users | trim | nindent 8 }}
-      ],
+      ]
+      {{- else }}
+      "users": {{ .Values.keycloak.realm.users | toPrettyJson | indent 6 | trim }},
+      {{- end }}
+      {{- if kindIs "string" .Values.keycloak.realm.clients }}
       "clients": [
         {{- .Values.keycloak.realm.clients | trim | nindent 8 }}
-      ],
+      ]
+      {{- else }}
+      "clients": {{ .Values.keycloak.realm.clients | toPrettyJson | indent 6 | trim }},
+      {{- end }}
       "clientScopes": [
         {
           "name": "basic",
@@ -599,7 +615,11 @@ data:
         }
         {{- if .Values.keycloak.realm.clientScopes -}}
         ,
+        {{- if kindIs "string" .Values.keycloak.realm.clientScopes }}
         {{- .Values.keycloak.realm.clientScopes | trim | nindent 8 }}
+        {{- else }}
+        {{ .Values.keycloak.realm.clientScopes | toPrettyJson | nindent 6 | trim | trimPrefix "[" | trimSuffix "]" | trim }}
+        {{- end }}
         {{- end }}
       ],
       "defaultDefaultClientScopes": [
