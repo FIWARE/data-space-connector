@@ -353,7 +353,7 @@ keycloak:
     displayNameHtml: ""
     sslRequired: none
     # -- realm attributes. Support string (old style) or key-value
-    attributes: {}
+    attributes:
     defaultClientScopes:
       - name: basic
         description: OpenID Connect scope for add all basic claims to the token
@@ -2073,3 +2073,7 @@ certManagerResources:
   # -- The Ingress Class that cert-manager will use for HTTP-01 challenges (required for "prod" mode).
   # Must match the 'ingressClassName' of your controller (e.g., nginx, traefik).
   ingressClass: "nginx"
+
+# -- list of extra Kubernetes manifests to deploy alongside the chart.
+# Each entry can be a string (raw YAML, supports Helm templating) or an object.
+extraManifests: []

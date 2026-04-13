@@ -62,7 +62,7 @@ clientScopes supports string (raw JSON elements) or list.
 {{- $default := .Values.keycloak.realm.defaultClientScopes | default list -}}
 {{- $extra := .Values.keycloak.realm.clientScopes | default list -}}
 {{- if kindIs "string" .Values.keycloak.realm.clientScopes -}}
-{{- $extra = printf "[%s]" (.Values.keycloak.realm.clientScopes | trim) | fromJson -}}
+{{- $extra = (printf "{\"list\":[%s]}" (.Values.keycloak.realm.clientScopes | trim) | fromJson).list -}}
 {{- end -}}
 {{- concat $default $extra | toPrettyJson -}}
 {{- end -}}
@@ -86,7 +86,7 @@ Render users as a JSON array. Supports string (raw JSON elements) or list.
 {{- define "dsc.users" -}}
 {{- $users := .Values.keycloak.realm.users | default list -}}
 {{- if kindIs "string" .Values.keycloak.realm.users -}}
-{{- $users = printf "[%s]" (.Values.keycloak.realm.users | trim) | fromJson -}}
+{{- $users = (printf "{\"list\":[%s]}" (.Values.keycloak.realm.users | trim) | fromJson).list -}}
 {{- end -}}
 {{- $users | toPrettyJson -}}
 {{- end -}}
@@ -99,7 +99,7 @@ Also extends each client's optionalClientScopes with all clientScope names.
 {{- $defaultScopes := .Values.keycloak.realm.defaultClientScopes | default list -}}
 {{- $extraScopes := .Values.keycloak.realm.clientScopes | default list -}}
 {{- if kindIs "string" .Values.keycloak.realm.clientScopes -}}
-{{- $extraScopes = printf "[%s]" (.Values.keycloak.realm.clientScopes | trim) | fromJson -}}
+{{- $extraScopes = (printf "{\"list\":[%s]}" (.Values.keycloak.realm.clientScopes | trim) | fromJson).list -}}
 {{- end -}}
 {{- $scopeNames := list -}}
 {{- range (concat $defaultScopes $extraScopes) -}}
@@ -121,7 +121,7 @@ Merges defaultClients and clients.
 {{- $default := (include "dsc.defaultClients" . | fromJson).list -}}
 {{- $extra := .Values.keycloak.realm.clients | default list -}}
 {{- if kindIs "string" .Values.keycloak.realm.clients -}}
-{{- $extra = printf "[%s]" (.Values.keycloak.realm.clients | trim) | fromJson -}}
+{{- $extra = (printf "{\"list\":[%s]}" (.Values.keycloak.realm.clients | trim) | fromJson).list -}}
 {{- end -}}
 {{- concat $default $extra | toPrettyJson -}}
 {{- end -}}
