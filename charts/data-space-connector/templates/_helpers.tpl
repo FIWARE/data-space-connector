@@ -42,6 +42,15 @@ Create the name of the service account to use
 {{- end -}}
 
 {{/*
+Merge defaultRealmRoles and extraRealmRoles into a single list
+*/}}
+{{- define "dsc.realmRoles" -}}
+{{- $default := .Values.keycloak.realm.defaultRealmRoles | default list -}}
+{{- $extra := .Values.keycloak.realm.extraRealmRoles | default list -}}
+{{- concat $default $extra | toPrettyJson -}}
+{{- end -}}
+
+{{/*
 Common labels
 */}}
 {{- define "dsc.labels" -}}

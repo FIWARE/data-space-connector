@@ -35,52 +35,7 @@ data:
       },
       "sslRequired": "none",
       "roles": {
-        "realm": [
-          {
-            "name": "offline_access",
-            "description": "${role_offline-access}",
-            "composite": false,
-            "clientRole": false,
-            "containerId": "test-realm",
-            "attributes": {}
-          },
-          {
-            "name": "uma_authorization",
-            "description": "${role_uma_authorization}",
-            "composite": false,
-            "clientRole": false,
-            "containerId": "test-realm",
-            "attributes": {}
-          },
-          {
-            "name": "user",
-            "description": "User privileges",
-            "composite": false,
-            "clientRole": false,
-            "containerId": "test-realm",
-            "attributes": {}
-          },
-          {
-            "name": "default-roles-test-realm",
-            "description": "${role_default-roles}",
-            "composite": true,
-            "composites": {
-              "realm": [
-                "offline_access",
-                "uma_authorization"
-              ],
-              "client": {
-                "account": [
-                  "view-profile",
-                  "manage-account"
-                ]
-              }
-            },
-            "clientRole": false,
-            "containerId": "test-realm",
-            "attributes": {}
-          }
-        ],
+        "realm": {{ include "dsc.realmRoles" . | indent 8 | trim }},
         {{- if kindIs "string" .Values.keycloak.realm.clientRoles }}
         "client": {
           {{- .Values.keycloak.realm.clientRoles | trim | nindent 10 }}
