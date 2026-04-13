@@ -474,6 +474,19 @@ keycloak:
     # -- extra realm roles to be added to the realm
     extraRealmRoles: []
 
+    defaultGroups:
+      - name: admin
+        path: /admin
+        realmRoles:
+          - user
+          - default-roles-test-realm
+      - name: consumer
+        path: /consumer
+        realmRoles:
+          - user
+          - default-roles-test-realm
+    extraGroups: []
+
   # -- configuration for the signing key to be used for issuing credentials
   # signingKey:
   # -- path to the keystore containing the signing key

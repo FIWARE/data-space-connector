@@ -51,6 +51,15 @@ Merge defaultRealmRoles and extraRealmRoles into a single list
 {{- end -}}
 
 {{/*
+Merge defaultGroups and extraGroups into a single list
+*/}}
+{{- define "dsc.groups" -}}
+{{- $default := .Values.keycloak.realm.defaultGroups | default list -}}
+{{- $extra := .Values.keycloak.realm.extraGroups | default list -}}
+{{- concat $default $extra | toPrettyJson -}}
+{{- end -}}
+
+{{/*
 Common labels
 */}}
 {{- define "dsc.labels" -}}

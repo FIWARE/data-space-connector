@@ -44,24 +44,7 @@ data:
         "client": {{ .Values.keycloak.realm.clientRoles | toPrettyJson | indent 8 | trim }}
         {{- end }}
       },
-      "groups": [
-        {
-          "name": "admin",
-          "path": "/admin",
-          "realmRoles": [
-            "user",
-            "default-roles-test-realm"
-          ]
-        },
-        {
-          "name": "consumer",
-          "path": "/consumer",
-          "realmRoles": [
-            "user",
-            "default-roles-test-realm"
-          ]
-        }
-      ],
+      "groups": {{ include "dsc.groups" . | indent 6 | trim }},
       {{- if kindIs "string" .Values.keycloak.realm.users }}
       "users": [
         {{- .Values.keycloak.realm.users | trim | nindent 8 }}
