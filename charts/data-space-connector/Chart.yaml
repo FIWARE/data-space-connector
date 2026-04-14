@@ -43,7 +43,7 @@ dependencies:
   # dsp
   - name: fdsc-edc
     condition: fdsc-edc.enabled
-    version: 0.1.3
+    version: 0.1.5
     repository: https://fiware.github.io/helm-charts
   - name: vault
     alias: vault

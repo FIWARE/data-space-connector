@@ -883,14 +883,6 @@ fdsc-edc:
           maxSurge: 1
           # -- number of pods that can be unavailable while updating
           maxUnavailable: 0
-      ## configuration of the image to be used
-      image:
-        # -- cp image name
-        repository: quay.io/seamware/fdsc-edc-controlplane-oid4vc
-        # -- tag of the image to be used
-        tag: 0.1.6
-        # -- specification of the image pull policy
-        pullPolicy: Always
       # -- secrets for pulling images from a private repository
       # ref: https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/
       imagePullSecrets: [ ]

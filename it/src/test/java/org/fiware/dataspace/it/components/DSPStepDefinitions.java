@@ -161,11 +161,6 @@ public class DSPStepDefinitions extends StepDefintions {
     private static final int POLICY_PROPAGATION_TIMEOUT_SECONDS = 15;
 
     /**
-     * EC key algorithm identifier used when loading private keys from PEM content.
-     */
-    private static final String EC_KEY_TYPE = "EC";
-
-    /**
      * The IdentityHub credential ID used when storing membership credentials.
      */
     private static final String IDENTITYHUB_CREDENTIAL_ID = "membership-credential";
@@ -634,12 +629,12 @@ public class DSPStepDefinitions extends StepDefintions {
     @When("The consumer private key is converted to JWK format.")
     public void theConsumerPrivateKeyIsConvertedToJwkFormat() throws Exception {
         assertNotNull(consumerPemContent, "Consumer PEM content must be available.");
-        PrivateKey privateKey = IdentityHubHelper.loadPrivateKeyFromPemContent(EC_KEY_TYPE, consumerPemContent);
+        PrivateKey privateKey = IdentityHubHelper.loadPrivateKeyFromPemContent(consumerPemContent);
 
         consumerJwk = IdentityHubHelper.asJWK(privateKey);
         // Verify it's valid JSON with expected EC key fields
         JsonNode jwkNode = OBJECT_MAPPER.readTree(consumerJwk);
-        assertEquals(EC_KEY_TYPE, jwkNode.get("kty").asText(), "Key type should be EC.");
+        assertEquals("EC", jwkNode.get("kty").asText(), "Key type should be EC.");
         assertEquals("P-256", jwkNode.get("crv").asText(), "Curve should be P-256.");
         assertTrue(jwkNode.has("d"), "JWK should contain private key component 'd'.");
         log.info("Consumer private key successfully converted to JWK format.");
@@ -707,11 +702,11 @@ public class DSPStepDefinitions extends StepDefintions {
     @When("The provider private key is converted to JWK format.")
     public void theProviderPrivateKeyIsConvertedToJwkFormat() throws Exception {
         assertNotNull(providerPemContent, "Provider PEM content must be available.");
-        PrivateKey privateKey = IdentityHubHelper.loadPrivateKeyFromPemContent(EC_KEY_TYPE, providerPemContent);
+        PrivateKey privateKey = IdentityHubHelper.loadPrivateKeyFromPemContent(providerPemContent);
         providerJwk = IdentityHubHelper.asJWK(privateKey);
         assertNotNull(providerJwk, "Provider JWK should not be null.");
         JsonNode jwkNode = OBJECT_MAPPER.readTree(providerJwk);
-        assertEquals(EC_KEY_TYPE, jwkNode.get("kty").asText(), "Key type should be EC.");
+        assertEquals("EC", jwkNode.get("kty").asText(), "Key type should be EC.");
         assertEquals("P-256", jwkNode.get("crv").asText(), "Curve should be P-256.");
         assertTrue(jwkNode.has("d"), "JWK should contain private key component 'd'.");
         log.info("Provider private key successfully converted to JWK format.");
