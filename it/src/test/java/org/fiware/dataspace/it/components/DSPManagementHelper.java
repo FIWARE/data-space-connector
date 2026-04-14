@@ -301,9 +301,8 @@ public class DSPManagementHelper {
                 .untilAsserted(() -> {
                     List<ContractNegotiation> negotiations = getNegotiations(managementApiAddress);
                     assertFalse(negotiations.isEmpty(), "Expected at least one negotiation");
-                    log.warn("Get negotiation {}", negotiationId);
+                    log.debug("Get negotiation {}", negotiationId);
                     ContractNegotiation finalized = negotiations.stream()
-                            .peek(n -> log.warn("The negotiation {}", n))
                             .filter(n -> n.getAtId().equals(negotiationId))
                             .findFirst()
                             .orElse(null);
@@ -495,9 +494,7 @@ public class DSPManagementHelper {
                     List<TransferProcess> transfers = getTransferProcesses(managementApiAddress);
                     assertFalse(transfers.isEmpty(), "Expected at least one transfer process");
 
-                    log.warn("Filter for transfer id {}", transferId);
                     TransferProcess started = transfers.stream()
-                            .peek(t -> log.warn("The transfer {}", t))
                             .filter(t -> t.getAtId().equals(transferId))
                             .findFirst()
                             .orElse(null);

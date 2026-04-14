@@ -345,22 +345,6 @@ public class DSPStepDefinitions extends StepDefintions {
         Thread.sleep(1000);
     }
 
-//    /**
-//     * Cleanup hook executed after each {@code @dsp} scenario.
-//     * Removes all DSP-specific resources to ensure test isolation, including
-//     * IdentityHub participants, Vault keys, TMForum resources, DSP management
-//     * API resources, DCAT catalogs, agreements, PAP policies, and Scorpio entities.
-//     */
-//    @After("@dsp")
-//    public void cleanUpDsp() {
-//        log.info("DSP test cleanup: removing test resources.");
-//        try {
-//            cleanDspResources();
-//        } catch (Exception e) {
-//            log.warn("Error during DSP post-test cleanup: {}", e.getMessage());
-//        }
-//    }
-
     /**
      * Cleans up all resources created during DSP tests.
      * Each cleanup method handles its own exceptions to ensure partial failures
@@ -615,7 +599,7 @@ public class DSPStepDefinitions extends StepDefintions {
                                 .addHeader("x-api-key", IdentityHubHelper.IDENTITY_HUB_API_KEY)
                                 .build();
                         try (Response resp = HTTP_CLIENT.newCall(credDelete).execute()) {
-                            log.warn("Deleted credential {} - code {}", credentialId, resp.code());
+                            log.debug("Deleted credential {} - code {}", credentialId, resp.code());
                         } catch (IOException e) {
                             log.warn("Failed to delete credential {}", credentialId, e);
                         }
@@ -628,7 +612,7 @@ public class DSPStepDefinitions extends StepDefintions {
                     .addHeader("x-api-key", IdentityHubHelper.IDENTITY_HUB_API_KEY)
                     .build();
             try (Response resp = HTTP_CLIENT.newCall(deleteRequest).execute()) {
-                log.warn("IdentityHub participant cleanup at {} {}: status={}", managementAddress, participantDid, resp.code());
+                log.debug("IdentityHub participant cleanup at {} {}: status={}", managementAddress, participantDid, resp.code());
             }
         } catch (Exception e) {
             log.warn("Failed to delete IdentityHub participant {}: {}", participantDid, e.getMessage());
@@ -2131,7 +2115,7 @@ public class DSPStepDefinitions extends StepDefintions {
         } else if (!datasets.isMissingNode() && !datasets.isArray()) {
             firstDataset = datasets;
         } else {
-            log.warn("No datasets found in catalog to extract offer ID.");
+            log.debug("No datasets found in catalog to extract offer ID.");
             return null;
         }
 
@@ -2147,7 +2131,7 @@ public class DSPStepDefinitions extends StepDefintions {
         } else if (!hasPolicy.isMissingNode() && !hasPolicy.isArray()) {
             policyNode = hasPolicy;
         } else {
-            log.warn("No policy found in dataset to extract offer ID.");
+            log.debug("No policy found in dataset to extract offer ID.");
             return null;
         }
 
