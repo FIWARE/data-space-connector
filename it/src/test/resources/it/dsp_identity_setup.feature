@@ -6,18 +6,18 @@ Feature: DSP identity setup for consumer and provider participants as described 
   # of DSP_INTEGRATION.md.
   #
   # Prerequisites: The local deployment must be created with `mvn clean deploy -Plocal,dsp`.
-  # The generated PEM keys at helpers/certs/out/client-{consumer,provider}/private/client-pkcs8.key.pem
-  # are used to register identities in the IdentityHub.
+  # The signing keys are managed by cert-manager and stored as Kubernetes TLS secrets
+  # (signing-key) in the consumer and provider namespaces.
 
   Scenario: Consumer identity is registered in IdentityHub.
-    Given The consumer private key PEM file is available.
+    Given The consumer private key is retrieved from the Kubernetes signing-key secret.
     When The consumer private key is converted to JWK format.
     And The consumer JWK is inserted into the consumer Vault.
     And The consumer participant is registered in the consumer IdentityHub.
     Then The consumer DID document is available at the well-known endpoint.
 
   Scenario: Provider identity is registered in IdentityHub.
-    Given The provider private key PEM file is available.
+    Given The provider private key is retrieved from the Kubernetes signing-key secret.
     When The provider private key is converted to JWK format.
     And The provider JWK is inserted into the provider Vault.
     And The provider participant is registered in the provider IdentityHub.

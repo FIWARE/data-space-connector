@@ -234,24 +234,42 @@ public class IdentityHubHelper {
                 throw new IllegalArgumentException("Private key not found: " + filename);
             }
 
-            // Read PEM file content
-            String pem =
-                    new String(is.readAllBytes(), StandardCharsets.UTF_8)
-                            .replaceAll("-----BEGIN (.*)-----", "")
-                            .replaceAll("-----END (.*)-----", "")
-                            .replaceAll("\\s", "");
-
-            // Base64 decode
-            byte[] decoded = Base64.getDecoder().decode(pem);
-
-            // Build key spec
-            PKCS8EncodedKeySpec keySpec = new PKCS8EncodedKeySpec(decoded);
-            KeyFactory keyFactory = KeyFactory.getInstance(keyType); // or "EC"
-            return keyFactory.generatePrivate(keySpec);
-        } catch (IOException | NoSuchAlgorithmException | InvalidKeySpecException e) {
+            String pemContent = new String(is.readAllBytes(), StandardCharsets.UTF_8);
+            return loadPrivateKeyFromPemContent(keyType, pemContent);
+        } catch (IOException e) {
             throw new IllegalArgumentException(
                     String.format(
                             "Was not able to load the private key with type %s from %s", keyType, filename),
+                    e);
+        }
+    }
+
+    /**
+     * Loads a PKCS#8-encoded private key from a PEM content string.
+     * <p>
+     * Strips PEM headers/footers and whitespace, Base64-decodes the key material,
+     * and constructs a {@link PrivateKey} of the specified type.
+     *
+     * @param keyType    the key algorithm (e.g., {@code "EC"})
+     * @param pemContent the PEM-encoded private key content as a string
+     * @return the decoded {@link PrivateKey}
+     * @throws IllegalArgumentException if the key cannot be parsed or decoded
+     */
+    public static PrivateKey loadPrivateKeyFromPemContent(String keyType, String pemContent) {
+        try {
+            String pem = pemContent
+                    .replaceAll("-----BEGIN (.*)-----", "")
+                    .replaceAll("-----END (.*)-----", "")
+                    .replaceAll("\\s", "");
+
+            byte[] decoded = Base64.getDecoder().decode(pem);
+
+            PKCS8EncodedKeySpec keySpec = new PKCS8EncodedKeySpec(decoded);
+            KeyFactory keyFactory = KeyFactory.getInstance(keyType);
+            return keyFactory.generatePrivate(keySpec);
+        } catch (NoSuchAlgorithmException | InvalidKeySpecException e) {
+            throw new IllegalArgumentException(
+                    String.format("Was not able to load the private key with type %s from PEM content", keyType),
                     e);
         }
     }

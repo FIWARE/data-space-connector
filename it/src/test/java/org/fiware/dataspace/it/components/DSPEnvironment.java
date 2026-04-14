@@ -64,6 +64,23 @@ public abstract class DSPEnvironment {
      */
     public static final String IDENTITYHUB_PROVIDER_ADDRESS = "http://identityhub-mp-operations.127.0.0.1.nip.io";
 
+    // --- Kubernetes secret configuration ---
+
+    /**
+     * Name of the cert-manager TLS secret containing the signing key in each namespace.
+     */
+    public static final String SIGNING_KEY_SECRET_NAME = "signing-key";
+
+    /**
+     * Kubernetes namespace for the consumer deployment.
+     */
+    public static final String CONSUMER_NAMESPACE = "consumer";
+
+    /**
+     * Kubernetes namespace for the provider deployment.
+     */
+    public static final String PROVIDER_NAMESPACE = "provider";
+
     // --- Vault endpoints ---
 
     /**

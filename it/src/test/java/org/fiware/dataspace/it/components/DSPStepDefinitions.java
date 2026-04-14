@@ -30,9 +30,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.security.PrivateKey;
 import java.security.Security;
 import java.time.Duration;
@@ -164,16 +161,9 @@ public class DSPStepDefinitions extends StepDefintions {
     private static final int POLICY_PROPAGATION_TIMEOUT_SECONDS = 15;
 
     /**
-     * Relative path from the project root to the consumer's PKCS#8 private key PEM file.
-     * This file is generated during the deployment process by {@code helpers/certs/generate-certs.sh}.
+     * EC key algorithm identifier used when loading private keys from PEM content.
      */
-    private static final String CONSUMER_KEY_PEM_PATH = "helpers/certs/out/client-consumer/private/client-pkcs8.key.pem";
-
-    /**
-     * Relative path from the project root to the provider's PKCS#8 private key PEM file.
-     * This file is generated during the deployment process by {@code helpers/certs/generate-certs.sh}.
-     */
-    private static final String PROVIDER_KEY_PEM_PATH = "helpers/certs/out/client-provider/private/client-pkcs8.key.pem";
+    private static final String EC_KEY_TYPE = "EC";
 
     /**
      * The IdentityHub credential ID used when storing membership credentials.
@@ -626,34 +616,30 @@ public class DSPStepDefinitions extends StepDefintions {
     // ==================== Consumer Identity Setup ====================
 
     /**
-     * Verifies that the consumer's PKCS#8 private key PEM file exists.
-     * This file is generated during the {@code mvn clean deploy -Plocal,dsp} process.
+     * Retrieves the consumer's PKCS#8 private key from the cert-manager {@code signing-key}
+     * Kubernetes secret in the {@code consumer} namespace.
      */
-    @Given("The consumer private key PEM file is available.")
-    public void theConsumerPrivateKeyPemFileIsAvailable() throws IOException {
-        Path pemPath = resolveProjectPath(CONSUMER_KEY_PEM_PATH);
-        assertTrue(Files.exists(pemPath),
-                "Consumer private key PEM file should exist at: " + pemPath.toAbsolutePath());
-        consumerPemContent = Files.readString(pemPath);
-        assertFalse(consumerPemContent.isBlank(), "Consumer PEM file should not be empty.");
-        log.info("Consumer private key PEM file is available at {}", pemPath);
+    @Given("The consumer private key is retrieved from the Kubernetes signing-key secret.")
+    public void theConsumerPrivateKeyIsRetrievedFromTheKubernetesSecret() throws Exception {
+        consumerPemContent = KubernetesHelper.fetchTlsKeyFromSecret(CONSUMER_NAMESPACE, SIGNING_KEY_SECRET_NAME);
+        assertFalse(consumerPemContent.isBlank(), "Consumer PEM content from Kubernetes secret should not be empty.");
+        log.info("Consumer private key retrieved from Kubernetes secret '{}' in namespace '{}'.",
+                SIGNING_KEY_SECRET_NAME, CONSUMER_NAMESPACE);
     }
 
     /**
      * Converts the consumer's PEM private key to JWK format using IdentityHubHelper.
-     * This is the Java equivalent of running {@code get-private-jwk-p-256.sh}.
+     * This is the Java equivalent of running {@code get-private-jwk-from-k8s-secret.sh}.
      */
     @When("The consumer private key is converted to JWK format.")
     public void theConsumerPrivateKeyIsConvertedToJwkFormat() throws Exception {
-        Path pemPath = resolveProjectPath(CONSUMER_KEY_PEM_PATH);
-        assertTrue(Files.exists(pemPath),
-                "Consumer private key PEM file should exist at: " + pemPath.toAbsolutePath());
-        PrivateKey privateKey = IdentityHubHelper.loadPrivateKey("EC", pemPath.toAbsolutePath().toString());
+        assertNotNull(consumerPemContent, "Consumer PEM content must be available.");
+        PrivateKey privateKey = IdentityHubHelper.loadPrivateKeyFromPemContent(EC_KEY_TYPE, consumerPemContent);
 
         consumerJwk = IdentityHubHelper.asJWK(privateKey);
         // Verify it's valid JSON with expected EC key fields
         JsonNode jwkNode = OBJECT_MAPPER.readTree(consumerJwk);
-        assertEquals("EC", jwkNode.get("kty").asText(), "Key type should be EC.");
+        assertEquals(EC_KEY_TYPE, jwkNode.get("kty").asText(), "Key type should be EC.");
         assertEquals("P-256", jwkNode.get("crv").asText(), "Curve should be P-256.");
         assertTrue(jwkNode.has("d"), "JWK should contain private key component 'd'.");
         log.info("Consumer private key successfully converted to JWK format.");
@@ -704,17 +690,15 @@ public class DSPStepDefinitions extends StepDefintions {
     // ==================== Provider Identity Setup ====================
 
     /**
-     * Verifies that the provider's PKCS#8 private key PEM file exists.
-     * This file is generated during the {@code mvn clean deploy -Plocal,dsp} process.
+     * Retrieves the provider's PKCS#8 private key from the cert-manager {@code signing-key}
+     * Kubernetes secret in the {@code provider} namespace.
      */
-    @Given("The provider private key PEM file is available.")
-    public void theProviderPrivateKeyPemFileIsAvailable() throws IOException {
-        Path pemPath = resolveProjectPath(PROVIDER_KEY_PEM_PATH);
-        assertTrue(Files.exists(pemPath),
-                "Provider private key PEM file should exist at: " + pemPath.toAbsolutePath());
-        providerPemContent = Files.readString(pemPath);
-        assertFalse(providerPemContent.isBlank(), "Provider PEM file should not be empty.");
-        log.info("Provider private key PEM file is available at {}", pemPath);
+    @Given("The provider private key is retrieved from the Kubernetes signing-key secret.")
+    public void theProviderPrivateKeyIsRetrievedFromTheKubernetesSecret() throws Exception {
+        providerPemContent = KubernetesHelper.fetchTlsKeyFromSecret(PROVIDER_NAMESPACE, SIGNING_KEY_SECRET_NAME);
+        assertFalse(providerPemContent.isBlank(), "Provider PEM content from Kubernetes secret should not be empty.");
+        log.info("Provider private key retrieved from Kubernetes secret '{}' in namespace '{}'.",
+                SIGNING_KEY_SECRET_NAME, PROVIDER_NAMESPACE);
     }
 
     /**
@@ -722,14 +706,12 @@ public class DSPStepDefinitions extends StepDefintions {
      */
     @When("The provider private key is converted to JWK format.")
     public void theProviderPrivateKeyIsConvertedToJwkFormat() throws Exception {
-        Path pemPath = resolveProjectPath(PROVIDER_KEY_PEM_PATH);
-        assertTrue(Files.exists(pemPath),
-                "Provider private key PEM file should exist at: " + pemPath.toAbsolutePath());
-        PrivateKey privateKey = IdentityHubHelper.loadPrivateKey("EC", pemPath.toAbsolutePath().toString());
+        assertNotNull(providerPemContent, "Provider PEM content must be available.");
+        PrivateKey privateKey = IdentityHubHelper.loadPrivateKeyFromPemContent(EC_KEY_TYPE, providerPemContent);
         providerJwk = IdentityHubHelper.asJWK(privateKey);
         assertNotNull(providerJwk, "Provider JWK should not be null.");
         JsonNode jwkNode = OBJECT_MAPPER.readTree(providerJwk);
-        assertEquals("EC", jwkNode.get("kty").asText(), "Key type should be EC.");
+        assertEquals(EC_KEY_TYPE, jwkNode.get("kty").asText(), "Key type should be EC.");
         assertEquals("P-256", jwkNode.get("crv").asText(), "Curve should be P-256.");
         assertTrue(jwkNode.has("d"), "JWK should contain private key component 'd'.");
         log.info("Provider private key successfully converted to JWK format.");
@@ -777,11 +759,11 @@ public class DSPStepDefinitions extends StepDefintions {
 
     /**
      * Sets up the consumer identity in IdentityHub as a prerequisite for credential issuance.
-     * Performs the full identity setup flow: read PEM, convert to JWK, insert into Vault, register participant.
+     * Performs the full identity setup flow: fetch key from k8s, convert to JWK, insert into Vault, register participant.
      */
     @Given("The consumer identity is registered in IdentityHub.")
     public void theConsumerIdentityIsRegisteredInIdentityHub() throws Exception {
-        theConsumerPrivateKeyPemFileIsAvailable();
+        theConsumerPrivateKeyIsRetrievedFromTheKubernetesSecret();
         theConsumerPrivateKeyIsConvertedToJwkFormat();
         theConsumerJwkIsInsertedIntoTheConsumerVault();
         theConsumerParticipantIsRegisteredInTheConsumerIdentityHub();
@@ -792,7 +774,7 @@ public class DSPStepDefinitions extends StepDefintions {
      */
     @Given("The provider identity is registered in IdentityHub.")
     public void theProviderIdentityIsRegisteredInIdentityHub() throws Exception {
-        theProviderPrivateKeyPemFileIsAvailable();
+        theProviderPrivateKeyIsRetrievedFromTheKubernetesSecret();
         theProviderPrivateKeyIsConvertedToJwkFormat();
         theProviderJwkIsInsertedIntoTheProviderVault();
         theProviderParticipantIsRegisteredInTheProviderIdentityHub();
@@ -1654,7 +1636,7 @@ public class DSPStepDefinitions extends StepDefintions {
 
     @Given("The consumer identity is properly setup.")
     public void setupConsumerIdentity() throws Exception {
-        theConsumerPrivateKeyPemFileIsAvailable();
+        theConsumerPrivateKeyIsRetrievedFromTheKubernetesSecret();
         theConsumerPrivateKeyIsConvertedToJwkFormat();
         theConsumerJwkIsInsertedIntoTheConsumerVault();
         theConsumerParticipantIsRegisteredInTheConsumerIdentityHub();
@@ -1665,7 +1647,7 @@ public class DSPStepDefinitions extends StepDefintions {
 
     @Given("The provider identity is properly setup.")
     public void setupProviderIdentity() throws Exception {
-        theProviderPrivateKeyPemFileIsAvailable();
+        theProviderPrivateKeyIsRetrievedFromTheKubernetesSecret();
         theProviderPrivateKeyIsConvertedToJwkFormat();
         theProviderJwkIsInsertedIntoTheProviderVault();
         theProviderParticipantIsRegisteredInTheProviderIdentityHub();
@@ -2390,24 +2372,4 @@ public class DSPStepDefinitions extends StepDefintions {
         }
     }
 
-    /**
-     * Resolves a relative path from the project root directory.
-     * Searches upward from the current working directory to find the project root
-     * (identified by the presence of the {@code pom.xml} file).
-     *
-     * @param relativePath the path relative to the project root
-     * @return the absolute path
-     */
-    private Path resolveProjectPath(String relativePath) {
-        // Try to find the project root by looking for the parent pom.xml
-        Path currentDir = Paths.get(System.getProperty("user.dir"));
-
-        // If we're in the 'it' subdirectory, go up one level
-        if (currentDir.endsWith("it") && Files.exists(currentDir.getParent().resolve("pom.xml"))) {
-            return currentDir.getParent().resolve(relativePath);
-        }
-
-        // Otherwise assume we're at the project root
-        return currentDir.resolve(relativePath);
-    }
 }
