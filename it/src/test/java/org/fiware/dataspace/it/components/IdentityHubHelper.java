@@ -12,6 +12,7 @@ import okhttp3.RequestBody;
 import okhttp3.Response;
 import org.bouncycastle.jce.interfaces.ECPrivateKey;
 import org.bouncycastle.jce.interfaces.ECPublicKey;
+import org.bouncycastle.asn1.pkcs.PrivateKeyInfo;
 import org.bouncycastle.openssl.PEMKeyPair;
 import org.bouncycastle.openssl.PEMParser;
 import org.bouncycastle.openssl.jcajce.JcaPEMKeyConverter;
@@ -24,12 +25,8 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.security.KeyFactory;
 import java.security.KeyPair;
-import java.security.NoSuchAlgorithmException;
 import java.security.PrivateKey;
-import java.security.spec.InvalidKeySpecException;
-import java.security.spec.PKCS8EncodedKeySpec;
 import java.util.Base64;
 
 import static org.fiware.dataspace.it.components.TestUtils.OBJECT_MAPPER;
@@ -235,7 +232,7 @@ public class IdentityHubHelper {
             }
 
             String pemContent = new String(is.readAllBytes(), StandardCharsets.UTF_8);
-            return loadPrivateKeyFromPemContent(keyType, pemContent);
+            return loadPrivateKeyFromPemContent(pemContent);
         } catch (IOException e) {
             throw new IllegalArgumentException(
                     String.format(
@@ -245,32 +242,31 @@ public class IdentityHubHelper {
     }
 
     /**
-     * Loads a PKCS#8-encoded private key from a PEM content string.
+     * Loads a private key from a PEM content string.
      * <p>
-     * Strips PEM headers/footers and whitespace, Base64-decodes the key material,
-     * and constructs a {@link PrivateKey} of the specified type.
+     * Supports both PKCS#8 ({@code BEGIN PRIVATE KEY}) and SEC1/traditional
+     * EC ({@code BEGIN EC PRIVATE KEY}) PEM formats via BouncyCastle's {@link PEMParser}.
      *
-     * @param keyType    the key algorithm (e.g., {@code "EC"})
      * @param pemContent the PEM-encoded private key content as a string
      * @return the decoded {@link PrivateKey}
      * @throws IllegalArgumentException if the key cannot be parsed or decoded
      */
-    public static PrivateKey loadPrivateKeyFromPemContent(String keyType, String pemContent) {
-        try {
-            String pem = pemContent
-                    .replaceAll("-----BEGIN (.*)-----", "")
-                    .replaceAll("-----END (.*)-----", "")
-                    .replaceAll("\\s", "");
+    public static PrivateKey loadPrivateKeyFromPemContent(String pemContent) {
+        try (PEMParser parser = new PEMParser(new StringReader(pemContent))) {
+            Object pemObject = parser.readObject();
+            JcaPEMKeyConverter converter = new JcaPEMKeyConverter();
 
-            byte[] decoded = Base64.getDecoder().decode(pem);
-
-            PKCS8EncodedKeySpec keySpec = new PKCS8EncodedKeySpec(decoded);
-            KeyFactory keyFactory = KeyFactory.getInstance(keyType);
-            return keyFactory.generatePrivate(keySpec);
-        } catch (NoSuchAlgorithmException | InvalidKeySpecException e) {
-            throw new IllegalArgumentException(
-                    String.format("Was not able to load the private key with type %s from PEM content", keyType),
-                    e);
+            if (pemObject instanceof PEMKeyPair) {
+                KeyPair keyPair = converter.getKeyPair((PEMKeyPair) pemObject);
+                return keyPair.getPrivate();
+            } else if (pemObject instanceof PrivateKeyInfo) {
+                return converter.getPrivateKey((PrivateKeyInfo) pemObject);
+            } else {
+                throw new IllegalArgumentException(
+                        "Unsupported PEM object type: " + (pemObject != null ? pemObject.getClass().getName() : "null"));
+            }
+        } catch (IOException e) {
+            throw new IllegalArgumentException("Failed to parse PEM content", e);
         }
     }
 
