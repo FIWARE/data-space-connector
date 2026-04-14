@@ -744,7 +744,7 @@ public class StandardStepDefinitions extends StepDefintions {
         Awaitility.await().atMost(Duration.ofSeconds(60)).untilAsserted(() -> {
             try {
                 String accessToken = getAccessTokenForFancyMarketplace(OPERATOR_CREDENTIAL, OPERATOR_SCOPE, MPOperationsEnvironment.PROVIDER_TPP_API_ADDRESS);
-                log.info("The token {}", accessToken);
+                log.debug("The token {}", accessToken);
                 String agreementId = getAgreementId(accessToken);
                 String consumerPid = "urn:uuid:" + UUID.randomUUID();
                 transferProcessId = requestTransfer(accessToken, consumerPid, agreementId);

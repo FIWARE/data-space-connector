@@ -319,7 +319,7 @@ public class DSPStepDefinitions extends StepDefintions {
         CryptoIntegration.init(this.getClass().getClassLoader());
         Security.addProvider(new BouncyCastleProvider());
         dspWallet = new Wallet();
-        log.info("DSP test setup: cleaning up stale resources.");
+        log.debug("DSP test setup: cleaning up stale resources.");
         try {
             cleanDspResources();
         } catch (Exception e) {
@@ -618,7 +618,7 @@ public class DSPStepDefinitions extends StepDefintions {
     public void theConsumerPrivateKeyIsRetrievedFromTheKubernetesSecret() throws Exception {
         consumerPemContent = KubernetesHelper.fetchTlsKeyFromSecret(CONSUMER_NAMESPACE, CONSUMER_SIGNING_KEY_SECRET_NAME);
         assertFalse(consumerPemContent.isBlank(), "Consumer PEM content from Kubernetes secret should not be empty.");
-        log.info("Consumer private key retrieved from Kubernetes secret '{}' in namespace '{}'.",
+        log.debug("Consumer private key retrieved from Kubernetes secret '{}' in namespace '{}'.",
                 CONSUMER_SIGNING_KEY_SECRET_NAME, CONSUMER_NAMESPACE);
     }
 
@@ -637,7 +637,7 @@ public class DSPStepDefinitions extends StepDefintions {
         assertEquals("EC", jwkNode.get("kty").asText(), "Key type should be EC.");
         assertEquals("P-256", jwkNode.get("crv").asText(), "Curve should be P-256.");
         assertTrue(jwkNode.has("d"), "JWK should contain private key component 'd'.");
-        log.info("Consumer private key successfully converted to JWK format.");
+        log.debug("Consumer private key successfully converted to JWK format.");
     }
 
     /**
@@ -650,7 +650,7 @@ public class DSPStepDefinitions extends StepDefintions {
                 VAULT_CONSUMER_ADDRESS,
                 IdentityHubHelper.DEFAULT_KEY_ALIAS,
                 consumerJwk);
-        log.info("Consumer JWK inserted into Vault at {}", VAULT_CONSUMER_ADDRESS);
+        log.debug("Consumer JWK inserted into Vault at {}", VAULT_CONSUMER_ADDRESS);
     }
 
     /**
@@ -666,7 +666,7 @@ public class DSPStepDefinitions extends StepDefintions {
                 IDENTITYHUB_CONSUMER_ADDRESS,
                 IdentityHubHelper.DEFAULT_KEY_ALIAS);
         IdentityHubHelper.registerParticipant(IDENTITYHUB_MANAGEMENT_CONSUMER_ADDRESS, participantPayload);
-        log.info("Consumer participant registered in IdentityHub at {}", IDENTITYHUB_MANAGEMENT_CONSUMER_ADDRESS);
+        log.debug("Consumer participant registered in IdentityHub at {}", IDENTITYHUB_MANAGEMENT_CONSUMER_ADDRESS);
     }
 
     /**
@@ -679,7 +679,7 @@ public class DSPStepDefinitions extends StepDefintions {
         // https://fancy-marketplace.biz/.well-known/did.json
         String didDocUrl = "https://fancy-marketplace.biz/.well-known/did.json";
         verifyDidDocument(didDocUrl, CONSUMER_DID);
-        log.info("Consumer DID document is available at {}", didDocUrl);
+        log.debug("Consumer DID document is available at {}", didDocUrl);
     }
 
     // ==================== Provider Identity Setup ====================
@@ -692,7 +692,7 @@ public class DSPStepDefinitions extends StepDefintions {
     public void theProviderPrivateKeyIsRetrievedFromTheKubernetesSecret() throws Exception {
         providerPemContent = KubernetesHelper.fetchTlsKeyFromSecret(PROVIDER_NAMESPACE, PROVIDER_SIGNING_KEY_SECRET_NAME);
         assertFalse(providerPemContent.isBlank(), "Provider PEM content from Kubernetes secret should not be empty.");
-        log.info("Provider private key retrieved from Kubernetes secret '{}' in namespace '{}'.",
+        log.debug("Provider private key retrieved from Kubernetes secret '{}' in namespace '{}'.",
                 PROVIDER_SIGNING_KEY_SECRET_NAME, PROVIDER_NAMESPACE);
     }
 
@@ -709,7 +709,7 @@ public class DSPStepDefinitions extends StepDefintions {
         assertEquals("EC", jwkNode.get("kty").asText(), "Key type should be EC.");
         assertEquals("P-256", jwkNode.get("crv").asText(), "Curve should be P-256.");
         assertTrue(jwkNode.has("d"), "JWK should contain private key component 'd'.");
-        log.info("Provider private key successfully converted to JWK format.");
+        log.debug("Provider private key successfully converted to JWK format.");
     }
 
     /**
@@ -722,7 +722,7 @@ public class DSPStepDefinitions extends StepDefintions {
                 VAULT_PROVIDER_ADDRESS,
                 IdentityHubHelper.DEFAULT_KEY_ALIAS,
                 providerJwk);
-        log.info("Provider JWK inserted into Vault at {}", VAULT_PROVIDER_ADDRESS);
+        log.debug("Provider JWK inserted into Vault at {}", VAULT_PROVIDER_ADDRESS);
     }
 
     /**
@@ -737,7 +737,7 @@ public class DSPStepDefinitions extends StepDefintions {
                 IDENTITYHUB_PROVIDER_ADDRESS,
                 IdentityHubHelper.DEFAULT_KEY_ALIAS);
         IdentityHubHelper.registerParticipant(IDENTITYHUB_MANAGEMENT_PROVIDER_ADDRESS, participantPayload);
-        log.info("Provider participant registered in IdentityHub at {}", IDENTITYHUB_MANAGEMENT_PROVIDER_ADDRESS);
+        log.debug("Provider participant registered in IdentityHub at {}", IDENTITYHUB_MANAGEMENT_PROVIDER_ADDRESS);
     }
 
     /**
@@ -747,7 +747,7 @@ public class DSPStepDefinitions extends StepDefintions {
     public void theProviderDidDocumentIsAvailableAtTheWellKnownEndpoint() throws Exception {
         String didDocUrl = "https://mp-operations.org/.well-known/did.json";
         verifyDidDocument(didDocUrl, PROVIDER_DID);
-        log.info("Provider DID document is available at {}", didDocUrl);
+        log.debug("Provider DID document is available at {}", didDocUrl);
     }
 
     // ==================== Membership Credential Issuance ====================
@@ -787,7 +787,7 @@ public class DSPStepDefinitions extends StepDefintions {
                 MEMBERSHIP_CREDENTIAL_USERNAME);
         assertNotNull(consumerMembershipCredential, "Consumer membership credential should not be null.");
         assertFalse(consumerMembershipCredential.isBlank(), "Consumer membership credential should not be blank.");
-        log.info("Consumer membership credential issued successfully from {}", CONSUMER_KEYCLOAK_ADDRESS);
+        log.debug("Consumer membership credential issued successfully from {}", CONSUMER_KEYCLOAK_ADDRESS);
     }
 
     /**
@@ -804,7 +804,7 @@ public class DSPStepDefinitions extends StepDefintions {
                 IDENTITYHUB_CREDENTIAL_ID,
                 consumerMembershipCredential,
                 vcContent);
-        log.info("Consumer membership credential inserted into IdentityHub at {}",
+        log.debug("Consumer membership credential inserted into IdentityHub at {}",
                 IDENTITYHUB_MANAGEMENT_CONSUMER_ADDRESS);
     }
 
@@ -819,7 +819,7 @@ public class DSPStepDefinitions extends StepDefintions {
                 MEMBERSHIP_CREDENTIAL_USERNAME);
         assertNotNull(providerMembershipCredential, "Provider membership credential should not be null.");
         assertFalse(providerMembershipCredential.isBlank(), "Provider membership credential should not be blank.");
-        log.info("Provider membership credential issued successfully from {}", PROVIDER_KEYCLOAK_ADDRESS);
+        log.debug("Provider membership credential issued successfully from {}", PROVIDER_KEYCLOAK_ADDRESS);
     }
 
     /**
@@ -835,7 +835,7 @@ public class DSPStepDefinitions extends StepDefintions {
                 IDENTITYHUB_CREDENTIAL_ID,
                 providerMembershipCredential,
                 vcContent);
-        log.info("Provider membership credential inserted into IdentityHub at {}",
+        log.debug("Provider membership credential inserted into IdentityHub at {}",
                 IDENTITYHUB_MANAGEMENT_PROVIDER_ADDRESS);
     }
 
@@ -879,7 +879,7 @@ public class DSPStepDefinitions extends StepDefintions {
             JsonNode tilEntry = OBJECT_MAPPER.readTree(body);
             assertEquals(CONSUMER_DID, tilEntry.get("did").asText(),
                     "TIL entry should contain the consumer DID.");
-            log.info("Consumer DID {} found in provider TIL at {}", CONSUMER_DID, tilUrl);
+            log.debug("Consumer DID {} found in provider TIL at {}", CONSUMER_DID, tilUrl);
         }
     }
 
@@ -906,7 +906,7 @@ public class DSPStepDefinitions extends StepDefintions {
             assertTrue(credentials.isArray(), "TIL credentials should be an array.");
             assertTrue(credentials.size() > 0, "TIL credentials should not be empty.");
 
-            log.info("Consumer {} is trusted for credentials at the provider TIL", CONSUMER_DID);
+            log.debug("Consumer {} is trusted for credentials at the provider TIL", CONSUMER_DID);
         }
     }
 
@@ -936,7 +936,7 @@ public class DSPStepDefinitions extends StepDefintions {
             assertTrue(response.isSuccessful() || response.code() == 409,
                     String.format("UptimeReport creation should succeed or already exist. Got status %d", response.code()));
             dspCreatedEntities.add(UPTIME_REPORT_ENTITY_ID);
-            log.info("UptimeReport entity created/exists at {}", SCORPIO_ADDRESS);
+            log.debug("UptimeReport entity created/exists at {}", SCORPIO_ADDRESS);
         }
     }
 
@@ -957,7 +957,7 @@ public class DSPStepDefinitions extends StepDefintions {
             JsonNode entityNode = OBJECT_MAPPER.readTree(body);
             assertEquals(UPTIME_REPORT_ENTITY_ID, entityNode.get("id").asText(),
                     "Entity ID should match the expected UptimeReport ID.");
-            log.info("UptimeReport entity verified in Scorpio: {}", UPTIME_REPORT_ENTITY_ID);
+            log.debug("UptimeReport entity verified in Scorpio: {}", UPTIME_REPORT_ENTITY_ID);
         }
     }
 
@@ -987,7 +987,7 @@ public class DSPStepDefinitions extends StepDefintions {
             CategoryVO category = OBJECT_MAPPER.readValue(response.body().string(), CategoryVO.class);
             dspCategoryId = category.getId();
             assertNotNull(dspCategoryId, "Category ID should not be null.");
-            log.info("DSP category created with ID: {}", dspCategoryId);
+            log.debug("DSP category created with ID: {}", dspCategoryId);
         }
     }
 
@@ -1014,7 +1014,7 @@ public class DSPStepDefinitions extends StepDefintions {
                 .build();
         try (Response response = HTTP_CLIENT.newCall(request).execute()) {
             assertEquals(HttpStatus.SC_CREATED, response.code(), "The catalog should have been created.");
-            log.info("DSP catalog created.");
+            log.debug("DSP catalog created.");
         }
     }
 
@@ -1150,7 +1150,7 @@ public class DSPStepDefinitions extends StepDefintions {
             JsonNode specResult = OBJECT_MAPPER.readTree(response.body().string());
             dspProductSpecId = specResult.get("id").asText();
             assertNotNull(dspProductSpecId, "Product spec ID should not be null.");
-            log.info("DSP product specification created with ID: {}", dspProductSpecId);
+            log.debug("DSP product specification created with ID: {}", dspProductSpecId);
         }
     }
 
@@ -1245,7 +1245,7 @@ public class DSPStepDefinitions extends StepDefintions {
             JsonNode offeringResult = OBJECT_MAPPER.readTree(response.body().string());
             dspProductOfferingId = offeringResult.get("id").asText();
             assertNotNull(dspProductOfferingId, "Offering ID should not be null.");
-            log.info("DSP product offering created with ID: {}", dspProductOfferingId);
+            log.debug("DSP product offering created with ID: {}", dspProductOfferingId);
         }
     }
 
@@ -1265,7 +1265,7 @@ public class DSPStepDefinitions extends StepDefintions {
                     response.body().string(), new TypeReference<List<ProductOfferingVO>>() {
                     });
             assertFalse(offerings.isEmpty(), "At least one offering should exist.");
-            log.info("Found {} DSP product offerings at TMForum API.", offerings.size());
+            log.debug("Found {} DSP product offerings at TMForum API.", offerings.size());
         }
     }
 
@@ -1306,7 +1306,7 @@ public class DSPStepDefinitions extends StepDefintions {
         // Allow time for policies to propagate
         Thread.sleep(POLICY_PROPAGATION_TIMEOUT_SECONDS * 1000L);
         assertFalse(dspCreatedPolicies.isEmpty(), "At least one policy should have been created.");
-        log.info("DSP TMForum access policies are active. Created {} policies.", dspCreatedPolicies.size());
+        log.debug("DSP TMForum access policies are active. Created {} policies.", dspCreatedPolicies.size());
     }
 
     // ==================== DSP TMForum: Composite Setup Steps ====================
@@ -1346,7 +1346,7 @@ public class DSPStepDefinitions extends StepDefintions {
     public void theConsumerObtainsARepresentativeCredentialForDspOrdering() throws Exception {
         String accessToken = FancyMarketplaceEnvironment.loginToConsumerKeycloak(REPRESENTATIVE_USER_NAME);
         dspWallet.getCredentialFromIssuer(accessToken, CONSUMER_KEYCLOAK_ADDRESS, USER_CREDENTIAL_ID);
-        log.info("Consumer obtained representative (user) credential for DSP ordering.");
+        log.debug("Consumer obtained representative (user) credential for DSP ordering.");
     }
 
     /**
@@ -1357,7 +1357,7 @@ public class DSPStepDefinitions extends StepDefintions {
     public void theConsumerObtainsAnOperatorCredentialForDspOrdering() throws Exception {
         String accessToken = FancyMarketplaceEnvironment.loginToConsumerKeycloak(OPERATOR_USER_NAME);
         dspWallet.getCredentialFromIssuer(accessToken, CONSUMER_KEYCLOAK_ADDRESS, OPERATOR_CREDENTIAL_ID);
-        log.info("Consumer obtained operator credential for DSP ordering.");
+        log.debug("Consumer obtained operator credential for DSP ordering.");
     }
 
     /**
@@ -1391,7 +1391,7 @@ public class DSPStepDefinitions extends StepDefintions {
             dspConsumerRegistration = OBJECT_MAPPER.readValue(
                     response.body().string(), OrganizationVO.class);
             assertNotNull(dspConsumerRegistration.getId(), "Organization ID should not be null.");
-            log.info("Consumer registered at provider marketplace with ID: {}",
+            log.debug("Consumer registered at provider marketplace with ID: {}",
                     dspConsumerRegistration.getId());
         }
     }
@@ -1422,7 +1422,7 @@ public class DSPStepDefinitions extends StepDefintions {
             assertFalse(offerings.isEmpty(), "At least one offering should exist.");
             offerId = offerings.get(0).getId();
             assertNotNull(offerId, "Offer ID should not be null.");
-            log.info("Found offering with ID: {}", offerId);
+            log.debug("Found offering with ID: {}", offerId);
         }
 
         // Create order
@@ -1455,7 +1455,7 @@ public class DSPStepDefinitions extends StepDefintions {
                     orderResponse.body().string(), ProductOrderVO.class);
             dspProductOrderId = order.getId();
             assertNotNull(dspProductOrderId, "Order ID should not be null.");
-            log.info("Product order created with ID: {}", dspProductOrderId);
+            log.debug("Product order created with ID: {}", dspProductOrderId);
         }
     }
 
@@ -1487,7 +1487,7 @@ public class DSPStepDefinitions extends StepDefintions {
                 .build();
         try (Response response = HTTP_CLIENT.newCall(updateRequest).execute()) {
             assertEquals(HttpStatus.SC_OK, response.code(), "Product order should have been updated to completed.");
-            log.info("Product order {} completed.", dspProductOrderId);
+            log.debug("Product order {} completed.", dspProductOrderId);
         }
     }
 
@@ -1518,7 +1518,7 @@ public class DSPStepDefinitions extends StepDefintions {
                         JsonNode entity = OBJECT_MAPPER.readTree(body);
                         assertEquals(UPTIME_REPORT_ENTITY_ID, entity.get("id").asText(),
                                 "Returned entity should be the UptimeReport.");
-                        log.info("Consumer successfully accessed UptimeReport via operator credential.");
+                        log.debug("Consumer successfully accessed UptimeReport via operator credential.");
                     }
                 });
     }
@@ -1539,7 +1539,7 @@ public class DSPStepDefinitions extends StepDefintions {
                 PROVIDER_DID,
                 counterPartyAddress);
         assertNotNull(dcpCatalogResponse, "DCP catalog response should not be null.");
-        log.info("DCP catalog response received: {}", dcpCatalogResponse.toString().substring(0,
+        log.debug("DCP catalog response received: {}", dcpCatalogResponse.toString().substring(0,
                 Math.min(dcpCatalogResponse.toString().length(), 500)));
     }
 
@@ -1571,7 +1571,7 @@ public class DSPStepDefinitions extends StepDefintions {
         assertTrue(hasDataset, "DCP catalog should contain at least one dataset. Catalog: "
                 + dcpCatalogResponse.toString().substring(0,
                 Math.min(dcpCatalogResponse.toString().length(), 1000)));
-        log.info("DCP catalog contains dataset(s) with the DSP asset.");
+        log.debug("DCP catalog contains dataset(s) with the DSP asset.");
     }
 
     /**
@@ -1604,7 +1604,7 @@ public class DSPStepDefinitions extends StepDefintions {
                 DSP_ASSET_ID,
                 policy);
         assertNotNull(negotiationResponse, "Negotiation start response should not be null.");
-        log.info("DCP negotiation started: {}", negotiationResponse);
+        log.debug("DCP negotiation started: {}", negotiationResponse);
         dcpNegotiationId = negotiationResponse.getId();
     }
 
@@ -1616,7 +1616,7 @@ public class DSPStepDefinitions extends StepDefintions {
     public void theConsumerWaitsForDcpNegotiationFinalized() throws Exception {
         dcpAgreementId = DSPManagementHelper.waitForNegotiationFinalized(DCP_MANAGEMENT_API_ADDRESS, dcpNegotiationId);
         assertNotNull(dcpAgreementId, "DCP agreement ID should not be null after negotiation is finalized.");
-        log.info("DCP negotiation finalized with agreement ID: {}", dcpAgreementId);
+        log.debug("DCP negotiation finalized with agreement ID: {}", dcpAgreementId);
     }
 
     /**
@@ -1626,7 +1626,7 @@ public class DSPStepDefinitions extends StepDefintions {
     public void theDcpNegotiationYieldsAValidAgreementId() {
         assertNotNull(dcpAgreementId, "DCP agreement ID should have been set during negotiation.");
         assertFalse(dcpAgreementId.isBlank(), "DCP agreement ID should not be blank.");
-        log.info("Verified DCP agreement ID: {}", dcpAgreementId);
+        log.debug("Verified DCP agreement ID: {}", dcpAgreementId);
     }
 
     @Given("The consumer identity is properly setup.")
@@ -1671,7 +1671,7 @@ public class DSPStepDefinitions extends StepDefintions {
             theConsumerWaitsForDcpNegotiationFinalized();
         }
         assertNotNull(dcpAgreementId, "A finalized DCP contract agreement ID is required.");
-        log.info("Consumer has finalized DCP contract agreement: {}", dcpAgreementId);
+        log.debug("Consumer has finalized DCP contract agreement: {}", dcpAgreementId);
     }
 
     /**
@@ -1700,7 +1700,7 @@ public class DSPStepDefinitions extends StepDefintions {
     public void theConsumerWaitsForDcpTransferStarted() throws Exception {
         DSPManagementHelper.waitForTransferStarted(DCP_MANAGEMENT_API_ADDRESS, dcpTransferId);
         assertNotNull(dcpTransferId, "DCP transfer ID should not be null after transfer starts.");
-        log.info("DCP transfer process started with ID: {}", dcpTransferId);
+        log.debug("DCP transfer process started with ID: {}", dcpTransferId);
     }
 
     /**
@@ -1714,7 +1714,7 @@ public class DSPStepDefinitions extends StepDefintions {
         assertNotNull(dcpDataAddress, "DCP data address should not be null.");
         assertNotNull(dcpDataAddress.getEndpoint(), "DCP data address endpoint should not be null.");
         assertNotNull(dcpDataAddress.getToken(), "DCP data address token should not be null.");
-        log.info("DCP data address retrieved: endpoint={}", dcpDataAddress.getEndpoint());
+        log.debug("DCP data address retrieved: endpoint={}", dcpDataAddress.getEndpoint());
     }
 
     /**
@@ -1740,7 +1740,7 @@ public class DSPStepDefinitions extends StepDefintions {
             JsonNode entity = OBJECT_MAPPER.readTree(body);
             assertEquals(UPTIME_REPORT_ENTITY_ID, entity.get("id").asText(),
                     "Returned entity ID should match the UptimeReport.");
-            log.info("Successfully accessed UptimeReport via DCP transfer endpoint at {}", entityUrl);
+            log.debug("Successfully accessed UptimeReport via DCP transfer endpoint at {}", entityUrl);
         }
     }
 
@@ -1774,7 +1774,7 @@ public class DSPStepDefinitions extends StepDefintions {
         assertTrue(hasDataset, "OID4VC catalog should contain at least one dataset. Catalog: "
                 + oid4vcCatalogResponse.toString().substring(0,
                 Math.min(oid4vcCatalogResponse.toString().length(), 1000)));
-        log.info("OID4VC catalog contains dataset(s) with the DSP asset.");
+        log.debug("OID4VC catalog contains dataset(s) with the DSP asset.");
     }
 
     /**
@@ -1803,7 +1803,7 @@ public class DSPStepDefinitions extends StepDefintions {
                 DSP_ASSET_ID,
                 policy);
         assertNotNull(negotiationResponse, "Negotiation start response should not be null.");
-        log.info("OID4VC negotiation started: {}", negotiationResponse);
+        log.debug("OID4VC negotiation started: {}", negotiationResponse);
         oid4vcNegotiationId = negotiationResponse.getId();
     }
 
@@ -1814,7 +1814,7 @@ public class DSPStepDefinitions extends StepDefintions {
     public void theConsumerWaitsForOid4VcNegotiationFinalized() throws Exception {
         oid4vcAgreementId = DSPManagementHelper.waitForNegotiationFinalized(OID4VC_MANAGEMENT_API_ADDRESS, oid4vcNegotiationId);
         assertNotNull(oid4vcAgreementId, "OID4VC agreement ID should not be null after negotiation is finalized.");
-        log.info("OID4VC negotiation finalized with agreement ID: {}", oid4vcAgreementId);
+        log.debug("OID4VC negotiation finalized with agreement ID: {}", oid4vcAgreementId);
     }
 
     /**
@@ -1824,7 +1824,7 @@ public class DSPStepDefinitions extends StepDefintions {
     public void theOid4VcNegotiationYieldsAValidAgreementId() {
         assertNotNull(oid4vcAgreementId, "OID4VC agreement ID should have been set during negotiation.");
         assertFalse(oid4vcAgreementId.isBlank(), "OID4VC agreement ID should not be blank.");
-        log.info("Verified OID4VC agreement ID: {}", oid4vcAgreementId);
+        log.debug("Verified OID4VC agreement ID: {}", oid4vcAgreementId);
     }
 
     /**
@@ -1840,7 +1840,7 @@ public class DSPStepDefinitions extends StepDefintions {
                 PROVIDER_DID,
                 counterPartyAddress);
         assertNotNull(oid4vcCatalogResponse, "OID4VC catalog response should not be null.");
-        log.info("OID4VC catalog response received: {}", oid4vcCatalogResponse.toString().substring(0,
+        log.debug("OID4VC catalog response received: {}", oid4vcCatalogResponse.toString().substring(0,
                 Math.min(oid4vcCatalogResponse.toString().length(), 500)));
     }
 
@@ -1863,7 +1863,7 @@ public class DSPStepDefinitions extends StepDefintions {
                 oid4vcAgreementId,
                 DSPManagementHelper.TRANSFER_TYPE_HTTP_DATA_PULL);
         assertNotNull(transferResponse, "OID4VC transfer process start response should not be null.");
-        log.info("OID4VC transfer process started: {}", transferResponse);
+        log.debug("OID4VC transfer process started: {}", transferResponse);
         oid4vcTransferId = transferResponse.getId();
     }
 
@@ -1875,7 +1875,7 @@ public class DSPStepDefinitions extends StepDefintions {
     public void theConsumerWaitsForOid4vcTransferStarted() throws Exception {
         DSPManagementHelper.waitForTransferStarted(OID4VC_MANAGEMENT_API_ADDRESS, oid4vcTransferId);
         assertNotNull(oid4vcTransferId, "OID4VC transfer ID should not be null after transfer starts.");
-        log.info("OID4VC transfer process started with ID: {}", oid4vcTransferId);
+        log.debug("OID4VC transfer process started with ID: {}", oid4vcTransferId);
     }
 
     /**
@@ -1888,7 +1888,7 @@ public class DSPStepDefinitions extends StepDefintions {
         oid4vcDataAddress = DSPManagementHelper.getDataAddress(OID4VC_MANAGEMENT_API_ADDRESS, oid4vcTransferId);
         assertNotNull(oid4vcDataAddress, "OID4VC data address should not be null.");
         assertNotNull(oid4vcDataAddress.getEndpoint(), "OID4VC data address endpoint should not be null.");
-        log.info("OID4VC data address retrieved: endpoint={}", oid4vcDataAddress.getEndpoint());
+        log.debug("OID4VC data address retrieved: endpoint={}", oid4vcDataAddress.getEndpoint());
     }
 
     /**
@@ -1906,7 +1906,7 @@ public class DSPStepDefinitions extends StepDefintions {
         }
         assertNotNull(oid4vcDataAddress, "OID4VC data address must be available.");
         assertNotNull(oid4vcDataAddress.getEndpoint(), "OID4VC endpoint must be available.");
-        log.info("Consumer has started OID4VC transfer with endpoint: {}", oid4vcDataAddress.getEndpoint());
+        log.debug("Consumer has started OID4VC transfer with endpoint: {}", oid4vcDataAddress.getEndpoint());
     }
 
     /**
@@ -1921,7 +1921,7 @@ public class DSPStepDefinitions extends StepDefintions {
             theConsumerWaitsForOid4VcNegotiationFinalized();
         }
         assertNotNull(oid4vcAgreementId, "A finalized OID4VC contract agreement ID is required.");
-        log.info("Consumer has finalized OID4VC contract agreement: {}", oid4vcAgreementId);
+        log.debug("Consumer has finalized OID4VC contract agreement: {}", oid4vcAgreementId);
     }
 
     /**
@@ -1934,7 +1934,7 @@ public class DSPStepDefinitions extends StepDefintions {
         assertNotNull(oid4vcDataAddress, "OID4VC data address must be available.");
         // The unauthenticated request result is verified in the Then step.
         // We just log that we're about to make the request.
-        log.info("Sending unauthenticated request to OID4VC endpoint: {}", oid4vcDataAddress.getEndpoint());
+        log.debug("Sending unauthenticated request to OID4VC endpoint: {}", oid4vcDataAddress.getEndpoint());
     }
 
     /**
@@ -1954,7 +1954,7 @@ public class DSPStepDefinitions extends StepDefintions {
             int statusCode = response.code();
             assertTrue(statusCode == HttpStatus.SC_UNAUTHORIZED || statusCode == HttpStatus.SC_FORBIDDEN,
                     String.format("Unauthenticated request should be rejected (401 or 403). Got status %d", statusCode));
-            log.info("Unauthenticated OID4VC request correctly rejected with status {} at {}", statusCode, entityUrl);
+            log.debug("Unauthenticated OID4VC request correctly rejected with status {} at {}", statusCode, entityUrl);
         }
     }
 
@@ -1977,7 +1977,7 @@ public class DSPStepDefinitions extends StepDefintions {
             String body = response.body().string();
             oid4vcEndpointOidcConfig = OBJECT_MAPPER.readValue(body, OpenIdConfiguration.class);
             assertNotNull(oid4vcEndpointOidcConfig, "OpenID configuration should be parsed successfully.");
-            log.info("OpenID configuration retrieved from OID4VC endpoint at {}", oidcUrl);
+            log.debug("OpenID configuration retrieved from OID4VC endpoint at {}", oidcUrl);
         }
     }
 
@@ -1991,7 +1991,7 @@ public class DSPStepDefinitions extends StepDefintions {
                 "OpenID configuration should contain a token_endpoint.");
         assertFalse(oid4vcEndpointOidcConfig.getTokenEndpoint().isBlank(),
                 "Token endpoint should not be blank.");
-        log.info("OpenID configuration token endpoint: {}", oid4vcEndpointOidcConfig.getTokenEndpoint());
+        log.debug("OpenID configuration token endpoint: {}", oid4vcEndpointOidcConfig.getTokenEndpoint());
     }
 
     /**
@@ -2009,7 +2009,7 @@ public class DSPStepDefinitions extends StepDefintions {
         dspWallet.getCredentialFromIssuer(accessToken, CONSUMER_KEYCLOAK_ADDRESS, MEMBERSHIP_CREDENTIAL_ID);
         assertNotNull(dspWallet.getStoredCredential(MEMBERSHIP_CREDENTIAL_ID),
                 "Membership credential should be stored in the wallet.");
-        log.info("Consumer obtained membership credential for OID4VC access.");
+        log.debug("Consumer obtained membership credential for OID4VC access.");
     }
 
     /**
@@ -2027,7 +2027,7 @@ public class DSPStepDefinitions extends StepDefintions {
                 dspWallet);
         assertNotNull(oid4vcAccessToken, "OID4VP access token should not be null.");
         assertFalse(oid4vcAccessToken.isBlank(), "OID4VP access token should not be blank.");
-        log.info("Consumer obtained OID4VP access token for OID4VC endpoint.");
+        log.debug("Consumer obtained OID4VP access token for OID4VC endpoint.");
     }
 
     /**
@@ -2054,7 +2054,7 @@ public class DSPStepDefinitions extends StepDefintions {
             JsonNode entity = OBJECT_MAPPER.readTree(body);
             assertEquals(UPTIME_REPORT_ENTITY_ID, entity.get("id").asText(),
                     "Returned entity ID should match the UptimeReport.");
-            log.info("Successfully accessed UptimeReport via OID4VC transfer endpoint at {}", entityUrl);
+            log.debug("Successfully accessed UptimeReport via OID4VC transfer endpoint at {}", entityUrl);
         }
     }
 
@@ -2114,7 +2114,7 @@ public class DSPStepDefinitions extends StepDefintions {
 
         String offerId = policyNode.path("@id").asText(null);
         if (offerId != null) {
-            log.info("Extracted offer ID from DCP catalog: {}", offerId);
+            log.debug("Extracted offer ID from DCP catalog: {}", offerId);
         }
         return offerId;
     }
@@ -2175,7 +2175,7 @@ public class DSPStepDefinitions extends StepDefintions {
             if (location != null) {
                 dspCreatedPolicies.add(location);
             }
-            log.info("Policy '{}' created at provider PAP.", policyName);
+            log.debug("Policy '{}' created at provider PAP.", policyName);
         }
     }
 
@@ -2335,7 +2335,7 @@ public class DSPStepDefinitions extends StepDefintions {
             String documentId = didDoc.get("id").asText();
             assertEquals(expectedDid, documentId,
                     "DID document id should match the expected DID.");
-            log.info("DID document verified at {} with id={}", didDocUrl, documentId);
+            log.debug("DID document verified at {} with id={}", didDocUrl, documentId);
         }
     }
 
@@ -2363,7 +2363,7 @@ public class DSPStepDefinitions extends StepDefintions {
             String body = response.body().string();
             assertNotNull(body, "Credentials response should not be null.");
             assertFalse(body.isBlank(), "Credentials response should not be blank.");
-            log.info("Credentials verified for participant {} at {}", participantDid, identityHubManagementAddress);
+            log.debug("Credentials verified for participant {} at {}", participantDid, identityHubManagementAddress);
         }
     }
 

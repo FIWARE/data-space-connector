@@ -67,7 +67,7 @@ public abstract class StepDefintions {
                 .url(MPOperationsEnvironment.TIL_DIRECT_ADDRESS + "/issuer")
                 .build();
         try (Response consumerResponse = HTTP_CLIENT.newCall(consumerCreate).execute()) {
-            log.info("Updated consumer - code {}", consumerResponse.code());
+            log.debug("Updated consumer - code {}", consumerResponse.code());
         }
 
         RequestBody providerCreateBody = RequestBody.create(OBJECT_MAPPER.writeValueAsString(providerTrustedIssuer), okhttp3.MediaType.parse(MediaType.APPLICATION_JSON));
@@ -76,7 +76,7 @@ public abstract class StepDefintions {
                 .url(MPOperationsEnvironment.TIL_DIRECT_ADDRESS + "/issuer")
                 .build();
         try (Response providerResponse = HTTP_CLIENT.newCall(providerCreate).execute()) {
-            log.info("Updated provider - code {}", providerResponse.code());
+            log.debug("Updated provider - code {}", providerResponse.code());
         }
 
         Request getTilEntries = new Request.Builder()
@@ -85,7 +85,7 @@ public abstract class StepDefintions {
                 .build();
         try (Response tilEntriesResponse = HTTP_CLIENT.newCall(getTilEntries).execute()) {
             String tilResponseBody = tilEntriesResponse.body().string();
-            log.warn("Consumer is registered: {}", tilResponseBody);
+            log.debug("Consumer is registered: {}", tilResponseBody);
         }
     }
 
@@ -97,7 +97,7 @@ public abstract class StepDefintions {
      * @param resourceName a human-readable name for logging purposes
      */
     protected void cleanUpTMForumResourceList(String baseUrl, String apiPath, String resourceName) {
-        log.warn("Clean {}", resourceName);
+        log.debug("Clean {}", resourceName);
         try {
             Request listRequest = new Request.Builder()
                     .get()
@@ -106,7 +106,7 @@ public abstract class StepDefintions {
             try (Response response = HTTP_CLIENT.newCall(listRequest).execute()) {
                 okhttp3.ResponseBody responseBody = response.body();
                 if (responseBody == null || !response.isSuccessful()) {
-                    log.warn("No {} to clean up (status={})", resourceName, response.code());
+                    log.debug("No {} to clean up (status={})", resourceName, response.code());
                     return;
                 }
                 String bodyString = responseBody.string();
@@ -127,7 +127,7 @@ public abstract class StepDefintions {
                             .url(baseUrl + apiPath + "/" + id)
                             .build();
                     try (Response deleteResp = HTTP_CLIENT.newCall(deleteRequest).execute()) {
-                        log.warn("Deleted {} {}: status={}", resourceName, id, deleteResp.code());
+                        log.debug("Deleted {} {}: status={}", resourceName, id, deleteResp.code());
                     }
                 }
             }

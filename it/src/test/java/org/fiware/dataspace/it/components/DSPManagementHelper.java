@@ -159,7 +159,7 @@ public class DSPManagementHelper {
 
         try (Response response = OK_HTTP_CLIENT.newCall(request).execute()) {
             String responseBody = response.body() != null ? response.body().string() : "";
-            log.info("Catalog request to {} returned status {}", url, response.code());
+            log.debug("Catalog request to {} returned status {}", url, response.code());
             if (!response.isSuccessful()) {
                 throw new RuntimeException(String.format(
                         "Catalog request failed with status %d: %s", response.code(), responseBody));
@@ -238,7 +238,7 @@ public class DSPManagementHelper {
 
         try (Response response = OK_HTTP_CLIENT.newCall(request).execute()) {
             String responseBody = response.body() != null ? response.body().string() : "";
-            log.info("Contract negotiation start at {} returned status {}", url, response.code());
+            log.debug("Contract negotiation start at {} returned status {}", url, response.code());
             if (!response.isSuccessful()) {
                 throw new RuntimeException(String.format(
                         "Contract negotiation start failed with status %d: %s", response.code(), responseBody));
@@ -316,7 +316,7 @@ public class DSPManagementHelper {
 
                     agreementId[0] = finalized.getContractAgreementId();
                     assertNotNull(agreementId[0], "Agreement ID should not be null when negotiation is finalized");
-                    log.info("Negotiation finalized with agreement ID: {}", agreementId[0]);
+                    log.debug("Negotiation finalized with agreement ID: {}", agreementId[0]);
                 });
 
         return agreementId[0];
@@ -367,7 +367,7 @@ public class DSPManagementHelper {
 
         try (Response response = OK_HTTP_CLIENT.newCall(request).execute()) {
             String responseBody = response.body() != null ? response.body().string() : "";
-            log.info("Transfer process start at {} returned status {} - body: {}", url, response.code(), responseBody);
+            log.debug("Transfer process start at {} returned status {} - body: {}", url, response.code(), responseBody);
             if (!response.isSuccessful()) {
                 throw new RuntimeException(String.format(
                         "Transfer process start failed with status %d: %s", response.code(), responseBody));
@@ -422,7 +422,7 @@ public class DSPManagementHelper {
 
         try (Response response = OK_HTTP_CLIENT.newCall(request).execute()) {
             String responseBody = response.body() != null ? response.body().string() : "";
-            log.info("Transfer process (OID4VC) start at {} returned status {}", url, response.code());
+            log.debug("Transfer process (OID4VC) start at {} returned status {}", url, response.code());
             if (!response.isSuccessful()) {
                 throw new RuntimeException(String.format(
                         "Transfer process start (OID4VC) failed with status %d: %s", response.code(), responseBody));
@@ -463,7 +463,7 @@ public class DSPManagementHelper {
 
         try (Response response = OK_HTTP_CLIENT.newCall(request).execute()) {
             String responseBody = response.body() != null ? response.body().string() : "[]";
-            log.info("Get transfer processes at {} returned status {}", url, response.code());
+            log.debug("Get transfer processes at {} returned status {}", url, response.code());
             if (!response.isSuccessful()) {
                 throw new RuntimeException(String.format(
                         "Get transfer processes failed with status %d: %s", response.code(), responseBody));
@@ -507,7 +507,7 @@ public class DSPManagementHelper {
                     assertTrue(STATE_STARTED.equalsIgnoreCase(started.getState()), "The transfer is not started.");
                     transferIds[0] = started.getAtId();
                     assertNotNull(transferIds[0], "Transfer ID (@id) should not be null when transfer is started");
-                    log.info("Transfer process started with ID: {}", transferIds[0]);
+                    log.debug("Transfer process started with ID: {}", transferIds[0]);
                 });
 
         return transferIds[0];
@@ -541,12 +541,12 @@ public class DSPManagementHelper {
 
                     try (Response response = OK_HTTP_CLIENT.newCall(request).execute()) {
                         String responseBody = response.body() != null ? response.body().string() : "";
-                        log.info("Get data address for transfer {} at {} returned status {}", transferId, url, response.code());
+                        log.debug("Get data address for transfer {} at {} returned status {}", transferId, url, response.code());
                         assertTrue(response.isSuccessful(), String.format(
                                 "Get data address failed with status %d: %s", response.code(), responseBody));
                         dataAddress[0] = OBJECT_MAPPER.readValue(responseBody, DataAddress.class);
                         assertNotNull(dataAddress[0].getEndpoint(), "Data address endpoint should not be null");
-                        log.info("Retrieved data address: endpoint={}", dataAddress[0].getEndpoint());
+                        log.debug("Retrieved data address: endpoint={}", dataAddress[0].getEndpoint());
                     }
                 });
         return dataAddress[0];
