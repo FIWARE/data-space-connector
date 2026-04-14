@@ -148,7 +148,7 @@ Assigns a **randomly generated** ID to the credential subject. Unlike `oid4vc-su
 | Property | Label | Type | Default | Description |
 |---|---|---|---|---|
 | `supportedCredentialTypes` | Supported Credential Types | String | `VerifiableCredential` | Comma-separated list of credential types this mapper applies to. |
-| `subjectProperty` | ID Property Name | String | `id` | The property name that will hold the generated ID. |
+| `subjectProperty` | ID Property Name | String | `id` | Name of the property to contain the generated id. |
 
 ### Example output
 
@@ -187,9 +187,9 @@ Maps a standard Keycloak user attribute directly into the `credentialSubject`. T
 | Property | Label | Type | Default | Description |
 |---|---|---|---|---|
 | `supportedCredentialTypes` | Supported Credential Types | String | `VerifiableCredential` | Comma-separated list of credential types this mapper applies to. |
-| `subjectProperty` | Attribute Property Name | String | — | The property name to use in the `credentialSubject` for this attribute. |
-| `userAttribute` | User Attribute | List | — | The user attribute to include. See options below. |
-| `aggregateAttributes` | Aggregate Attributes | Boolean | — | Whether to aggregate multi-valued user attributes. |
+| `subjectProperty` | Attribute Property Name | String | — | Property to add the user attribute to in the credential subject. |
+| `userAttribute` | User Attribute | List | — | The user attribute to be added to the credential subject. |
+| `aggregateAttributes` | Aggregate Attributes | Boolean | — | Should the mapper aggregate user attributes. |
 
 #### Available `userAttribute` options
 
@@ -245,6 +245,7 @@ Maps the roles assigned to a user into the `credentialSubject`, using the **clie
 |---|---|---|---|---|
 | `supportedCredentialTypes` | Supported Credential Types | String | `VerifiableCredential` | Comma-separated list of credential types this mapper applies to. |
 | `subjectProperty` | Roles Property Name | String | `roles` | The property name to use in the `credentialSubject` for the roles. |
+| `clientId` | Client ID | String | — | Property to configure the client to get the roles from. |
 
 ### Example output
 
@@ -270,7 +271,8 @@ Maps the roles assigned to a user into the `credentialSubject`, using the **clie
   "protocolMapper": "oid4vc-target-role-mapper",
   "config": {
     "supportedCredentialTypes": "VerifiableCredential",
-    "subjectProperty": "roles"
+    "subjectProperty": "roles",
+    "clientId": "did:web:my-did.example.org"
   }
 }
 ```
@@ -289,7 +291,7 @@ Allows setting a **hardcoded / static value** on any property of the `credential
 |---|---|---|---|---|
 | `supportedCredentialTypes` | Supported Credential Types | String | `VerifiableCredential` | Comma-separated list of credential types this mapper applies to. |
 | `subjectProperty` | Static Claim Property Name | String | — | The property name to set the static value on. |
-| `staticValue` | Static Claim Value | String | — | The static value to assign to the property. |
+| `staticValue` | Static Claim Value | String | — | Value to be set for the property. |
 
 ### Example output
 
@@ -330,8 +332,8 @@ Sets the **issuance date/time** claim in the credential subject. Supports trunca
 |---|---|---|---|---|
 | `supportedCredentialTypes` | Supported Credential Types | String | `VerifiableCredential` | Comma-separated list of credential types this mapper applies to. |
 | `subjectProperty` | Time Claim Name | String | `iat` | The property name for the issuance time claim. |
-| `truncateToTimeUnit` | Truncate To Time Unit | List | — | Truncates the timestamp to prevent correlation. See options below. |
-| `valueSource` | Source of Value | List | `COMPUTE` | Where to get the time value from. See options below. |
+| `truncateToTimeUnit` | Truncate To Time Unit | List | — | Truncate time to the first second of the MINUTES, HOURS, HALF_DAYS, DAYS, WEEKS, MONTHS or YEARS. Such as to prevent correlation of credentials based on this time value. |
+| `valueSource` | Source of Value | List | `COMPUTE` | Tells the protocol mapper where to get the information. For now: COMPUTE or VC. Default is COMPUTE, in which this protocol mapper computes the current time in seconds. With value `VC`, the time is read from the verifiable credential issuance date field. |
 
 #### `truncateToTimeUnit` options
 
