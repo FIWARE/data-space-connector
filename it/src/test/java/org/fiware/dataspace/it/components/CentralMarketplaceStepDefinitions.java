@@ -60,7 +60,7 @@ public class CentralMarketplaceStepDefinitions {
     public void setupCentral() {
         CryptoIntegration.init(this.getClass().getClassLoader());
         Security.addProvider(new BouncyCastleProvider());
-        log.info("Central marketplace test setup: cleaning up stale resources.");
+        log.debug("Central marketplace test setup: cleaning up stale resources.");
         try {
             cleanCentralResources();
         } catch (Exception e) {
@@ -74,7 +74,7 @@ public class CentralMarketplaceStepDefinitions {
      */
     @After("@central")
     public void cleanUpCentral() {
-        log.info("Central marketplace test cleanup: removing test resources.");
+        log.debug("Central marketplace test cleanup: removing test resources.");
         try {
             cleanCentralResources();
         } catch (Exception e) {

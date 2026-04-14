@@ -118,7 +118,7 @@ public class IdentityHubHelper {
             assertTrue(response.isSuccessful(),
                     String.format("Vault key insertion should succeed. Got status %d: %s",
                             response.code(), response.body() != null ? response.body().string() : "no body"));
-            log.info("Successfully inserted key '{}' into Vault at {}", keyAlias, vaultAddress);
+            log.debug("Successfully inserted key '{}' into Vault at {}", keyAlias, vaultAddress);
         }
     }
 
@@ -151,7 +151,7 @@ public class IdentityHubHelper {
             assertTrue(response.isSuccessful(),
                     String.format("Participant registration should succeed. Got status %d: %s",
                             response.code(), response.body() != null ? response.body().string() : "no body"));
-            log.info("Successfully registered participant at {}", identityHubManagementAddress);
+            log.debug("Successfully registered participant at {}", identityHubManagementAddress);
         }
     }
 
@@ -202,7 +202,7 @@ public class IdentityHubHelper {
             assertTrue(response.isSuccessful(),
                     String.format("Credential insertion should succeed. Got status %d: %s",
                             response.code(), response.body() != null ? response.body().string() : "no body"));
-            log.info("Successfully inserted credential '{}' for participant '{}' at {}",
+            log.debug("Successfully inserted credential '{}' for participant '{}' at {}",
                     credentialId, participantId, identityHubManagementAddress);
         }
     }

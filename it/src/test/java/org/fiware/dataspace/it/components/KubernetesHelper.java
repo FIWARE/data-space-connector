@@ -73,7 +73,7 @@ public class KubernetesHelper {
         byte[] decodedBytes = java.util.Base64.getDecoder().decode(base64Output);
         String pemContent = new String(decodedBytes, StandardCharsets.UTF_8);
 
-        log.info("Successfully fetched tls.key from secret '{}' in namespace '{}'.", secretName, namespace);
+        log.debug("Successfully fetched tls.key from secret '{}' in namespace '{}'.", secretName, namespace);
         return pemContent;
     }
 }

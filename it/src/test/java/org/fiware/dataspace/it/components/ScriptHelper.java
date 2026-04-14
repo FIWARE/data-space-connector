@@ -202,7 +202,7 @@ public class ScriptHelper {
                                 JsonNode credResult = OBJECT_MAPPER.readTree(credResponse.body().string());
                                 String credential = credResult.get("credential").asText();
                                 assertNotNull(credential, "Credential should not be null.");
-                                log.info("Successfully retrieved credential '{}' from {}", credentialConfigurationId, keycloakBaseUrl);
+                                log.debug("Successfully retrieved credential '{}' from {}", credentialConfigurationId, keycloakBaseUrl);
                                 return credential;
                             }
                         }
