@@ -17,7 +17,7 @@ merges extra attributes (string or map), and appends verifiable credential attri
 {{- end -}}
 {{- $attrs = mergeOverwrite $attrs $extra -}}
 {{- end -}}
-{{- $vcAttrs := include "dsc.verifiableCredentials" . | fromJson -}}
+{{- $vcAttrs := include "dsc.vcAttributes" . | fromJson -}}
 {{- $attrs = mergeOverwrite $attrs $vcAttrs -}}
 {{- $attrs | toPrettyJson -}}
 {{- end -}}
@@ -64,7 +64,8 @@ clientScopes supports string (raw JSON elements) or list.
 {{- if kindIs "string" .Values.keycloak.realm.clientScopes -}}
 {{- $extra = (printf "{\"list\":[%s]}" (.Values.keycloak.realm.clientScopes | trim) | fromJson).list -}}
 {{- end -}}
-{{- concat $default $extra | toPrettyJson -}}
+{{- $vcScopes := (include "dsc.vcClientScopes" . | fromJson).list -}}
+{{- concat $default $extra $vcScopes | toPrettyJson -}}
 {{- end -}}
 
 {{/*
@@ -131,10 +132,10 @@ Build a flat object of verifiable credential attributes from verifiableCredentia
 Each entry is flattened as "vc.{key}.{attr}" = value.
 If the value is a map or list, it is serialized as a JSON string.
 */}}
-{{- define "dsc.verifiableCredentials" -}}
+{{- define "dsc.vcAttributes" -}}
 {{- $result := dict -}}
 {{- range $vcKey, $vcVal := .Values.keycloak.realm.verifiableCredentials | default dict -}}
-{{- range $attrKey, $attrVal := $vcVal -}}
+{{- range $attrKey, $attrVal := $vcVal.attributes | default dict -}}
 {{- $val := $attrVal -}}
 {{- if or (kindIs "map" $attrVal) (kindIs "slice" $attrVal) -}}
 {{- $val = $attrVal | toJson -}}
@@ -143,6 +144,32 @@ If the value is a map or list, it is serialized as a JSON string.
 {{- end -}}
 {{- end -}}
 {{- $result | toPrettyJson -}}
+{{- end -}}
+
+{{/*
+Build a list of client scopes derived from verifiableCredentials.
+Each VC with a defined attributes.scope generates one client scope entry:
+  - name            → attributes.scope
+  - protocol        → openid-connect
+  - description     → "Client scope for the {vcKey} verifiable credential"
+  - protocolMappers → protocolMappers list (or empty list if not defined)
+Skipped when clientScope.create is explicitly set to false.
+*/}}
+{{- define "dsc.vcClientScopes" -}}
+{{- $scopes := list -}}
+{{- range $vcKey, $vcVal := .Values.keycloak.realm.verifiableCredentials | default dict -}}
+{{- $scope := ($vcVal.attributes | default dict).scope -}}
+{{- $create := dig "clientScope" "create" true $vcVal -}}
+{{- if and $scope $create -}}
+{{- $scopes = append $scopes (dict
+    "name" $scope
+    "protocol" "openid-connect"
+    "description" (printf "Client scope for the %s verifiable credential" $vcKey)
+    "protocolMappers" ($vcVal.protocolMappers | default list)
+) -}}
+{{- end -}}
+{{- end -}}
+{{- dict "list" $scopes | toPrettyJson -}}
 {{- end -}}
 
 {{/*
