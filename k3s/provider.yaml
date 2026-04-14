@@ -933,7 +933,7 @@ keycloak:
       name: realms
     - name: did-priv-key
       secret:
-        secretName: signing-key
+        secretName: mp-operations.org-tls
   issuerDid: did:web:mp-operations.org
   signingKey:
     storePath: /did-material/cert.pfx
@@ -1114,7 +1114,7 @@ keycloak:
     clientScopes: |
       {
         "name": "LegalPersonCredential",
-        "description": "OIDC4VC Scope, thahttps://github.com/wistefan/did-helpert adds all properties required for a user.",
+        "description": "OIDC4VC Scope, that adds all properties required for a user.",
         "protocol": "openid-connect",
         "attributes": {},
         "protocolMappers": [

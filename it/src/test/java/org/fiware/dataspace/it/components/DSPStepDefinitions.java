@@ -621,10 +621,10 @@ public class DSPStepDefinitions extends StepDefintions {
      */
     @Given("The consumer private key is retrieved from the Kubernetes signing-key secret.")
     public void theConsumerPrivateKeyIsRetrievedFromTheKubernetesSecret() throws Exception {
-        consumerPemContent = KubernetesHelper.fetchTlsKeyFromSecret(CONSUMER_NAMESPACE, SIGNING_KEY_SECRET_NAME);
+        consumerPemContent = KubernetesHelper.fetchTlsKeyFromSecret(CONSUMER_NAMESPACE, CONSUMER_SIGNING_KEY_SECRET_NAME);
         assertFalse(consumerPemContent.isBlank(), "Consumer PEM content from Kubernetes secret should not be empty.");
         log.info("Consumer private key retrieved from Kubernetes secret '{}' in namespace '{}'.",
-                SIGNING_KEY_SECRET_NAME, CONSUMER_NAMESPACE);
+                CONSUMER_SIGNING_KEY_SECRET_NAME, CONSUMER_NAMESPACE);
     }
 
     /**
@@ -695,10 +695,10 @@ public class DSPStepDefinitions extends StepDefintions {
      */
     @Given("The provider private key is retrieved from the Kubernetes signing-key secret.")
     public void theProviderPrivateKeyIsRetrievedFromTheKubernetesSecret() throws Exception {
-        providerPemContent = KubernetesHelper.fetchTlsKeyFromSecret(PROVIDER_NAMESPACE, SIGNING_KEY_SECRET_NAME);
+        providerPemContent = KubernetesHelper.fetchTlsKeyFromSecret(PROVIDER_NAMESPACE, PROVIDER_SIGNING_KEY_SECRET_NAME);
         assertFalse(providerPemContent.isBlank(), "Provider PEM content from Kubernetes secret should not be empty.");
         log.info("Provider private key retrieved from Kubernetes secret '{}' in namespace '{}'.",
-                SIGNING_KEY_SECRET_NAME, PROVIDER_NAMESPACE);
+                PROVIDER_SIGNING_KEY_SECRET_NAME, PROVIDER_NAMESPACE);
     }
 
     /**

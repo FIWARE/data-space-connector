@@ -67,9 +67,13 @@ public abstract class DSPEnvironment {
     // --- Kubernetes secret configuration ---
 
     /**
-     * Name of the cert-manager TLS secret containing the signing key in each namespace.
+     * Name of the cert-manager TLS secret containing the signing key for mp-operations.org
      */
-    public static final String SIGNING_KEY_SECRET_NAME = "signing-key";
+    public static final String PROVIDER_SIGNING_KEY_SECRET_NAME = "mp-operations.org-tls";
+    /**
+     * Name of the cert-manager TLS secret containing the signing key for fancy-marketplace.biz
+     */
+    public static final String CONSUMER_SIGNING_KEY_SECRET_NAME = "fancy-marketplace.biz-tls";
 
     /**
      * Kubernetes namespace for the consumer deployment.

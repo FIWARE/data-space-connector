@@ -102,7 +102,7 @@ fdsc-edc:
               done
               echo "Keycloak is ready."
         - name: load-certs
-          image: "quay.io/seamware/fdsc-edc-controlplane-oid4vc:0.1.6-PRE-10"
+          image: "quay.io/seamware/fdsc-edc-controlplane-oid4vc:0.1.6"
           command: ["/bin/sh", "-c", "/bin/import-ca.sh /certs-folder /root-ca/cacert.pem /opt/java/openjdk/lib/security/cacerts"]
           volumeMounts:
             - name: ca-certs-script
