@@ -102,13 +102,21 @@ Also extends each client's optionalClientScopes with all clientScope names.
 {{- if kindIs "string" .Values.keycloak.realm.clientScopes -}}
 {{- $extraScopes = (printf "{\"list\":[%s]}" (.Values.keycloak.realm.clientScopes | trim) | fromJson).list -}}
 {{- end -}}
+{{- $vcScopes := (include "dsc.vcClientScopes" . | fromJson).list -}}
 {{- $scopeNames := list -}}
-{{- range (concat $defaultScopes $extraScopes) -}}
+{{- range (concat $defaultScopes $extraScopes $vcScopes) -}}
 {{- $scopeNames = append $scopeNames (index . "name") -}}
 {{- end -}}
 {{- $clients := list -}}
 {{- range $key, $val := .Values.keycloak.realm.defaultClients | default dict -}}
-{{- $optScopes := concat ($val.optionalClientScopes | default list) $scopeNames | uniq -}}
+{{- $clientDefaultScopes := $val.defaultClientScopes | default list -}}
+{{- $optScopes := $val.optionalClientScopes | default list -}}
+{{- range $scopeNames -}}
+{{- if not (has . $clientDefaultScopes) -}}
+{{- $optScopes = append $optScopes . -}}
+{{- end -}}
+{{- end -}}
+{{- $optScopes = $optScopes | uniq -}}
 {{- $clients = append $clients (merge (dict "clientId" $key "optionalClientScopes" $optScopes) $val) -}}
 {{- end -}}
 {{- dict "list" $clients | toPrettyJson -}}
