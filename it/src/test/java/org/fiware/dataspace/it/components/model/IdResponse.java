@@ -7,18 +7,15 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 /**
- * Represents an ODRL policy returned by the PAP.
- *
  * @author <a href="https://github.com/wistefan">Stefan Wiedemann</a>
  */
 @NoArgsConstructor
 @AllArgsConstructor
 @Data
 @JsonIgnoreProperties(ignoreUnknown = true)
-public class Policy {
+public class IdResponse {
 
+    @JsonProperty("@id")
     private String id;
 
-    @JsonProperty("odrl:uid")
-    private String odrlUid;
 }

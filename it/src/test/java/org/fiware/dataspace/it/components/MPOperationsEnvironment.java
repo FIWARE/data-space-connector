@@ -28,6 +28,7 @@ public abstract class MPOperationsEnvironment {
 	public static final String SCORPIO_ADDRESS = "http://scorpio-provider.127.0.0.1.nip.io";
 	public static final String TMF_DIRECT_ADDRESS = "http://tm-forum-api.127.0.0.1.nip.io";
 	public static final String TIL_DIRECT_ADDRESS = "http://til-provider.127.0.0.1.nip.io";
+	public static final String CCS_DIRECT_ADDRESS = "http://provider-ccs.127.0.0.1.nip.io";
 	public static final String RAINBOW_DIRECT_ADDRESS = "http://rainbow-provider.127.0.0.1.nip.io";
 	public static final String OIDC_WELL_KNOWN_PATH = "/.well-known/openid-configuration";
 	private static final OkHttpClient HTTP_CLIENT = TestUtils.OK_HTTP_CLIENT;

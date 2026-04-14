@@ -19,13 +19,13 @@ public abstract class FancyMarketplaceEnvironment {
 	private static final String TEST_REALM = "test-realm";
 
 	/** The username for the standard employee test user at the consumer organization. */
-	public static final String TEST_USER_NAME = "employee@consumer.org";
+	public static final String TEST_USER_NAME = "employee";
 
 	/** The username for the operator test user at the consumer organization. */
-	public static final String OPERATOR_USER_NAME = "operator@consumer.org";
+	public static final String OPERATOR_USER_NAME = "operator";
 
 	/** The username for the representative test user at the consumer organization, used in marketplace flows. */
-	public static final String REPRESENTATIVE_USER_NAME = "representative@consumer.org";
+	public static final String REPRESENTATIVE_USER_NAME = "representative";
 
 	private static final String TEST_USER_PASSWORD = "test";
 

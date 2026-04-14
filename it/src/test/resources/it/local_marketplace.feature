@@ -20,7 +20,7 @@ Feature: The local deployment should support marketplace buying and service acce
     Given M&P Operations is registered as a participant in the data space.
     And Fancy Marketplace is registered as a participant in the data space.
     And M&P Operations allows self-registration of organizations.
-    When Fancy Marketplace representative issues a user credential.
+    When Fancy Marketplace issues a user credential to its employee.
     And Fancy Marketplace representative registers at M&P Operations.
     Then Fancy Marketplace is registered as an organization at M&P Operations.
 
@@ -29,11 +29,10 @@ Feature: The local deployment should support marketplace buying and service acce
     And Fancy Marketplace is registered as a participant in the data space.
     And M&P Operations allows self-registration of organizations.
     And M&P Operations allows to buy its offerings.
-    And M&P Operations allows operators to create clusters.
     When The provider creates a K8S Small product specification with credentials and policy config.
     And The provider creates a Small product offering referencing the Small specification.
-    And Fancy Marketplace representative issues a user credential.
-    And Fancy Marketplace operator issues an operator credential.
+    And Fancy Marketplace issues a user credential to its employee.
+    And Fancy Marketplace issues an operator credential to its employee.
     And Fancy Marketplace representative registers at M&P Operations.
     And Fancy Marketplace representative buys the first available offering.
     Then Fancy Marketplace operator can create a K8S cluster with 3 nodes.
@@ -44,11 +43,10 @@ Feature: The local deployment should support marketplace buying and service acce
     And Fancy Marketplace is registered as a participant in the data space.
     And M&P Operations allows self-registration of organizations.
     And M&P Operations allows to buy its offerings.
-    And M&P Operations allows operators to create clusters.
     When The provider creates a K8S Full product specification with credentials and policy config.
     And The provider creates a Full product offering referencing the Full specification.
-    And Fancy Marketplace representative issues a user credential.
-    And Fancy Marketplace operator issues an operator credential.
+    And Fancy Marketplace issues a user credential to its employee.
+    And Fancy Marketplace issues an operator credential to its employee.
     And Fancy Marketplace representative registers at M&P Operations.
     And Fancy Marketplace representative buys the first available offering.
     Then Fancy Marketplace operator can create a K8S cluster with 3 nodes.

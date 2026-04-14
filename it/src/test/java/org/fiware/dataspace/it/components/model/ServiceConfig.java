@@ -1,13 +1,12 @@
 package org.fiware.dataspace.it.components.model;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
 /**
- * Represents an ODRL policy returned by the PAP.
+ * Represents a Service configured in the CCS.
  *
  * @author <a href="https://github.com/wistefan">Stefan Wiedemann</a>
  */
@@ -15,10 +14,7 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 @Data
 @JsonIgnoreProperties(ignoreUnknown = true)
-public class Policy {
+public class ServiceConfig {
 
     private String id;
-
-    @JsonProperty("odrl:uid")
-    private String odrlUid;
 }

@@ -3,6 +3,7 @@ package org.fiware.dataspace.it.components;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.nimbusds.jose.jwk.ECKey;
 import lombok.extern.slf4j.Slf4j;
 import okhttp3.MediaType;
 import okhttp3.OkHttpClient;
@@ -15,9 +16,20 @@ import org.bouncycastle.openssl.PEMKeyPair;
 import org.bouncycastle.openssl.PEMParser;
 import org.bouncycastle.openssl.jcajce.JcaPEMKeyConverter;
 
+import java.io.IOException;
+import java.io.InputStream;
 import java.io.StringReader;
 import java.math.BigInteger;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.security.KeyFactory;
 import java.security.KeyPair;
+import java.security.NoSuchAlgorithmException;
+import java.security.PrivateKey;
+import java.security.spec.InvalidKeySpecException;
+import java.security.spec.PKCS8EncodedKeySpec;
 import java.util.Base64;
 
 import static org.fiware.dataspace.it.components.TestUtils.OBJECT_MAPPER;
@@ -36,25 +48,39 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @Slf4j
 public class IdentityHubHelper {
 
-    /** The IdentityHub management API path for participant operations. */
+    /**
+     * The IdentityHub management API path for participant operations.
+     */
     private static final String PARTICIPANTS_API_PATH = "/api/identity/v1alpha/participants";
 
-    /** The Vault KV secret engine path prefix for key storage. */
+    /**
+     * The Vault KV secret engine path prefix for key storage.
+     */
     private static final String VAULT_SECRET_PATH = "/v1/secret/data/";
 
-    /** API key for authenticating with the IdentityHub management API. */
+    /**
+     * API key for authenticating with the IdentityHub management API.
+     */
     public static final String IDENTITY_HUB_API_KEY = "c3VwZXItdXNlcg==.random";
 
-    /** Authentication token for the Vault instance. */
+    /**
+     * Authentication token for the Vault instance.
+     */
     public static final String VAULT_TOKEN = "root";
 
-    /** Default key alias used for participant key registration. */
+    /**
+     * Default key alias used for participant key registration.
+     */
     public static final String DEFAULT_KEY_ALIAS = "key-1";
 
-    /** JSON media type constant for HTTP requests. */
+    /**
+     * JSON media type constant for HTTP requests.
+     */
     private static final MediaType JSON = MediaType.parse("application/json");
 
-    /** The HTTP port used by IdentityHub and Vault services in the local deployment. */
+    /**
+     * The HTTP port used by IdentityHub and Vault services in the local deployment.
+     */
     private static final int SERVICE_PORT = 8080;
 
     private static final OkHttpClient HTTP_CLIENT = OK_HTTP_CLIENT;
@@ -144,10 +170,10 @@ public class IdentityHubHelper {
      * </pre>
      *
      * @param identityHubManagementAddress the base URL of the IdentityHub management API
-     * @param participantId               the DID of the participant (e.g., {@code did:web:fancy-marketplace.biz})
-     * @param credentialId                the credential identifier (e.g., {@code membership-credential})
-     * @param rawVc                       the raw JWT credential string
-     * @param credentialContent           the decoded VC content as a JSON string (the {@code .vc} claim from the JWT payload)
+     * @param participantId                the DID of the participant (e.g., {@code did:web:fancy-marketplace.biz})
+     * @param credentialId                 the credential identifier (e.g., {@code membership-credential})
+     * @param rawVc                        the raw JWT credential string
+     * @param credentialContent            the decoded VC content as a JSON string (the {@code .vc} claim from the JWT payload)
      * @throws Exception if the HTTP request fails or returns a non-success status
      */
     public static void insertCredential(String identityHubManagementAddress, String participantId,
@@ -184,45 +210,61 @@ public class IdentityHubHelper {
         }
     }
 
-    /**
-     * Converts a PEM-encoded EC private key (PKCS#8 format) to a JWK JSON string.
-     * <p>
-     * This is the Java equivalent of {@code doc/scripts/get-private-jwk-p-256.sh}.
-     * Extracts the P-256 curve parameters (x, y, d) and encodes them as Base64url
-     * values in a standard EC JWK.
-     *
-     * @param pemKeyContent the PEM key content as a string
-     * @return the JWK JSON string with fields: kty, crv, x, y, d
-     * @throws Exception if the key cannot be parsed or is not a P-256 EC key
-     */
-    public static String getPrivateKeyAsJwk(String pemKeyContent) throws Exception {
-        PEMParser pemParser = new PEMParser(new StringReader(pemKeyContent));
-        Object object = pemParser.readObject();
-        pemParser.close();
+    public static String asJWK(PrivateKey privateKey) throws Exception {
+        java.security.interfaces.ECPrivateKey ecPrivateKey = (java.security.interfaces.ECPrivateKey) privateKey;
+        // Derive public key from private key using BouncyCastle EC math
+        org.bouncycastle.jce.spec.ECNamedCurveParameterSpec bcSpec =
+                org.bouncycastle.jce.ECNamedCurveTable.getParameterSpec("P-256");
+        org.bouncycastle.math.ec.ECPoint bcPublicPoint = bcSpec.getG().multiply(ecPrivateKey.getS()).normalize();
+        java.security.spec.ECPoint publicPoint = new java.security.spec.ECPoint(
+                bcPublicPoint.getAffineXCoord().toBigInteger(),
+                bcPublicPoint.getAffineYCoord().toBigInteger());
+        java.security.interfaces.ECPublicKey ecPublicKey =
+                (java.security.interfaces.ECPublicKey) java.security.KeyFactory.getInstance("EC")
+                        .generatePublic(new java.security.spec.ECPublicKeySpec(publicPoint, ecPrivateKey.getParams()));
+        ECKey ecJwk = new ECKey.Builder(com.nimbusds.jose.jwk.Curve.P_256, ecPublicKey)
+                .privateKey(ecPrivateKey)
+                .build();
+        return ecJwk.toJSONString();
+    }
 
-        KeyPair keyPair;
-        JcaPEMKeyConverter converter = new JcaPEMKeyConverter().setProvider("BC");
-        if (object instanceof PEMKeyPair) {
-            keyPair = converter.getKeyPair((PEMKeyPair) object);
-        } else {
-            throw new IllegalArgumentException("Unsupported PEM format. Expected PEMKeyPair.");
+    public static PrivateKey loadPrivateKey(String keyType, String filename) {
+        try (InputStream is = openInputStream(filename)) {
+            if (is == null) {
+                throw new IllegalArgumentException("Private key not found: " + filename);
+            }
+
+            // Read PEM file content
+            String pem =
+                    new String(is.readAllBytes(), StandardCharsets.UTF_8)
+                            .replaceAll("-----BEGIN (.*)-----", "")
+                            .replaceAll("-----END (.*)-----", "")
+                            .replaceAll("\\s", "");
+
+            // Base64 decode
+            byte[] decoded = Base64.getDecoder().decode(pem);
+
+            // Build key spec
+            PKCS8EncodedKeySpec keySpec = new PKCS8EncodedKeySpec(decoded);
+            KeyFactory keyFactory = KeyFactory.getInstance(keyType); // or "EC"
+            return keyFactory.generatePrivate(keySpec);
+        } catch (IOException | NoSuchAlgorithmException | InvalidKeySpecException e) {
+            throw new IllegalArgumentException(
+                    String.format(
+                            "Was not able to load the private key with type %s from %s", keyType, filename),
+                    e);
         }
+    }
 
-        ECPublicKey publicKey = (ECPublicKey) keyPair.getPublic();
-        ECPrivateKey privateKey = (ECPrivateKey) keyPair.getPrivate();
-
-        BigInteger x = publicKey.getQ().getAffineXCoord().toBigInteger();
-        BigInteger y = publicKey.getQ().getAffineYCoord().toBigInteger();
-        BigInteger d = privateKey.getD();
-
-        ObjectNode jwk = OBJECT_MAPPER.createObjectNode();
-        jwk.put("kty", "EC");
-        jwk.put("crv", "P-256");
-        jwk.put("x", bigIntToBase64Url(x, 32));
-        jwk.put("y", bigIntToBase64Url(y, 32));
-        jwk.put("d", bigIntToBase64Url(d, 32));
-
-        return OBJECT_MAPPER.writeValueAsString(jwk);
+    private static InputStream openInputStream(String filepath) throws IOException {
+        Path path = Paths.get(filepath);
+        if (Files.isDirectory(path)) {
+            return null;
+        }
+        if (Files.exists(path)) {
+            return Files.newInputStream(path);
+        }
+        return null;
     }
 
     /**
@@ -231,10 +273,10 @@ public class IdentityHubHelper {
      * This is the Java equivalent of {@code doc/scripts/get-participant-create.sh}.
      * Creates a JSON structure with the participant's identity, public key, and service endpoints.
      *
-     * @param jwk                    the full JWK (including private key {@code d}) as a JSON string
-     * @param did                    the participant's DID (e.g., {@code did:web:fancy-marketplace.biz})
-     * @param identityHubAddress     the base URL of the participant's public IdentityHub (for credential service endpoint)
-     * @param keyAlias               the key alias (e.g., {@code key-1})
+     * @param jwk                the full JWK (including private key {@code d}) as a JSON string
+     * @param did                the participant's DID (e.g., {@code did:web:fancy-marketplace.biz})
+     * @param identityHubAddress the base URL of the participant's public IdentityHub (for credential service endpoint)
+     * @param keyAlias           the key alias (e.g., {@code key-1})
      * @return the participant creation JSON payload as a string
      * @throws Exception if JSON processing fails
      */

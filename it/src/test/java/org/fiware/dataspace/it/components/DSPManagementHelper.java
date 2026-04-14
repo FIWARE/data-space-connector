@@ -11,16 +11,15 @@ import okhttp3.Response;
 import org.awaitility.Awaitility;
 import org.fiware.dataspace.it.components.model.ContractNegotiation;
 import org.fiware.dataspace.it.components.model.DataAddress;
+import org.fiware.dataspace.it.components.model.IdResponse;
 import org.fiware.dataspace.it.components.model.TransferProcess;
 
 import java.time.Duration;
-import java.util.Collections;
 import java.util.List;
 
 import static org.fiware.dataspace.it.components.TestUtils.OBJECT_MAPPER;
 import static org.fiware.dataspace.it.components.TestUtils.OK_HTTP_CLIENT;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * Helper class for interacting with the FDSC-EDC Management API in the DSP deployment profile.
@@ -37,52 +36,84 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 @Slf4j
 public class DSPManagementHelper {
 
-    /** JSON media type for HTTP request bodies. */
+    /**
+     * JSON media type for HTTP request bodies.
+     */
     private static final MediaType JSON = MediaType.parse("application/json");
 
-    /** EDC Management API context URI. */
+    /**
+     * EDC Management API context URI.
+     */
     private static final String EDC_MANAGEMENT_CONTEXT = "https://w3id.org/edc/connector/management/v0.0.1";
 
-    /** DSP protocol version used in all requests. */
+    /**
+     * DSP protocol version used in all requests.
+     */
     private static final String DSP_PROTOCOL = "dataspace-protocol-http:2025-1";
 
-    /** ODRL JSON-LD context URI used in policy objects. */
+    /**
+     * ODRL JSON-LD context URI used in policy objects.
+     */
     private static final String ODRL_CONTEXT = "http://www.w3.org/ns/odrl.jsonld";
 
-    /** API path for catalog requests. */
+    /**
+     * API path for catalog requests.
+     */
     private static final String CATALOG_REQUEST_PATH = "/api/v1/management/v3/catalog/request";
 
-    /** API path for contract negotiation operations. */
+    /**
+     * API path for contract negotiation operations.
+     */
     private static final String CONTRACT_NEGOTIATIONS_PATH = "/api/v1/management/v3/contractnegotiations";
 
-    /** API path for querying contract negotiations. */
+    /**
+     * API path for querying contract negotiations.
+     */
     private static final String CONTRACT_NEGOTIATIONS_REQUEST_PATH = "/api/v1/management/v3/contractnegotiations/request";
 
-    /** API path for transfer process operations. */
+    /**
+     * API path for transfer process operations.
+     */
     private static final String TRANSFER_PROCESSES_PATH = "/api/v1/management/v3/transferprocesses";
 
-    /** API path for querying transfer processes. */
+    /**
+     * API path for querying transfer processes.
+     */
     private static final String TRANSFER_PROCESSES_REQUEST_PATH = "/api/v1/management/v3/transferprocesses/request";
 
-    /** API path prefix for EDR data address retrieval; append /{transferId}/dataaddress. */
+    /**
+     * API path prefix for EDR data address retrieval; append /{transferId}/dataaddress.
+     */
     private static final String EDRS_PATH_PREFIX = "/api/v1/management/v3/edrs/";
 
-    /** The HTTP port used by management API services in the local deployment. */
+    /**
+     * The HTTP port used by management API services in the local deployment.
+     */
     private static final int SERVICE_PORT = 8080;
 
-    /** Negotiation state indicating a finalized contract agreement. */
+    /**
+     * Negotiation state indicating a finalized contract agreement.
+     */
     private static final String STATE_FINALIZED = "FINALIZED";
 
-    /** Transfer process state indicating the transfer has started. */
+    /**
+     * Transfer process state indicating the transfer has started.
+     */
     private static final String STATE_STARTED = "STARTED";
 
-    /** Default timeout in seconds for polling negotiation and transfer states. */
+    /**
+     * Default timeout in seconds for polling negotiation and transfer states.
+     */
     private static final long DEFAULT_POLL_TIMEOUT_SECONDS = 120;
 
-    /** Default poll interval in seconds between state checks. */
+    /**
+     * Default poll interval in seconds between state checks.
+     */
     private static final long DEFAULT_POLL_INTERVAL_SECONDS = 3;
 
-    /** Transfer type for HTTP data pull transfers. */
+    /**
+     * Transfer type for HTTP data pull transfers.
+     */
     public static final String TRANSFER_TYPE_HTTP_DATA_PULL = "HttpData-PULL";
 
     private DSPManagementHelper() {
@@ -156,9 +187,9 @@ public class DSPManagementHelper {
      * @return the negotiation response as a parsed JSON tree
      * @throws Exception if the HTTP request fails or returns a non-success status
      */
-    public static JsonNode startNegotiation(String managementApiAddress, String counterPartyAddress,
-                                            String counterPartyId, String offerId, String assetId,
-                                            Object policy) throws Exception {
+    public static IdResponse startNegotiation(String managementApiAddress, String counterPartyAddress,
+                                              String counterPartyId, String offerId, String assetId,
+                                              Object policy) throws Exception {
         ObjectNode requestBody = OBJECT_MAPPER.createObjectNode();
         ArrayNode context = OBJECT_MAPPER.createArrayNode();
         context.add(EDC_MANAGEMENT_CONTEXT);
@@ -212,7 +243,7 @@ public class DSPManagementHelper {
                 throw new RuntimeException(String.format(
                         "Contract negotiation start failed with status %d: %s", response.code(), responseBody));
             }
-            return OBJECT_MAPPER.readTree(responseBody);
+            return OBJECT_MAPPER.readValue(responseBody, IdResponse.class);
         }
     }
 
@@ -241,7 +272,7 @@ public class DSPManagementHelper {
 
         try (Response response = OK_HTTP_CLIENT.newCall(request).execute()) {
             String responseBody = response.body() != null ? response.body().string() : "[]";
-            log.info("Get negotiations at {} returned status {}", url, response.code());
+            log.debug("Get negotiations at {} returned status {}", url, response.code());
             if (!response.isSuccessful()) {
                 throw new RuntimeException(String.format(
                         "Get negotiations failed with status %d: %s", response.code(), responseBody));
@@ -261,7 +292,7 @@ public class DSPManagementHelper {
      * @return the contract agreement ID from the finalized negotiation
      * @throws Exception if polling times out or no finalized negotiation is found
      */
-    public static String waitForNegotiationFinalized(String managementApiAddress) throws Exception {
+    public static String waitForNegotiationFinalized(String managementApiAddress, String negotiationId) throws Exception {
         final String[] agreementId = new String[1];
 
         Awaitility.await()
@@ -270,9 +301,10 @@ public class DSPManagementHelper {
                 .untilAsserted(() -> {
                     List<ContractNegotiation> negotiations = getNegotiations(managementApiAddress);
                     assertFalse(negotiations.isEmpty(), "Expected at least one negotiation");
-
+                    log.warn("Get negotiation {}", negotiationId);
                     ContractNegotiation finalized = negotiations.stream()
-                            .filter(n -> STATE_FINALIZED.equalsIgnoreCase(n.getState()))
+                            .peek(n -> log.warn("The negotiation {}", n))
+                            .filter(n -> n.getAtId().equals(negotiationId))
                             .findFirst()
                             .orElse(null);
 
@@ -281,6 +313,7 @@ public class DSPManagementHelper {
                                     STATE_FINALIZED,
                                     negotiations.stream().map(ContractNegotiation::getState)
                                             .reduce((a, b) -> a + ", " + b).orElse("none")));
+                    assertTrue(finalized.getState().equalsIgnoreCase(STATE_FINALIZED), "The negotiation should be finalized.");
 
                     agreementId[0] = finalized.getContractAgreementId();
                     assertNotNull(agreementId[0], "Agreement ID should not be null when negotiation is finalized");
@@ -309,9 +342,9 @@ public class DSPManagementHelper {
      * @return the transfer process response as a parsed JSON tree
      * @throws Exception if the HTTP request fails or returns a non-success status
      */
-    public static JsonNode startTransferProcess(String managementApiAddress, String assetId,
-                                                String counterPartyId, String counterPartyAddress,
-                                                String contractId, String transferType) throws Exception {
+    public static IdResponse startTransferProcess(String managementApiAddress, String assetId,
+                                                  String counterPartyId, String counterPartyAddress,
+                                                  String contractId, String transferType) throws Exception {
         ObjectNode requestBody = OBJECT_MAPPER.createObjectNode();
         ArrayNode context = OBJECT_MAPPER.createArrayNode();
         context.add(EDC_MANAGEMENT_CONTEXT);
@@ -335,12 +368,12 @@ public class DSPManagementHelper {
 
         try (Response response = OK_HTTP_CLIENT.newCall(request).execute()) {
             String responseBody = response.body() != null ? response.body().string() : "";
-            log.info("Transfer process start at {} returned status {}", url, response.code());
+            log.info("Transfer process start at {} returned status {} - body: {}", url, response.code(), responseBody);
             if (!response.isSuccessful()) {
                 throw new RuntimeException(String.format(
                         "Transfer process start failed with status %d: %s", response.code(), responseBody));
             }
-            return OBJECT_MAPPER.readTree(responseBody);
+            return OBJECT_MAPPER.readValue(responseBody, IdResponse.class);
         }
     }
 
@@ -359,9 +392,9 @@ public class DSPManagementHelper {
      * @return the transfer process response as a parsed JSON tree
      * @throws Exception if the HTTP request fails or returns a non-success status
      */
-    public static JsonNode startTransferProcessWithDataDestination(String managementApiAddress, String assetId,
-                                                                   String counterPartyId, String counterPartyAddress,
-                                                                   String contractId, String transferType) throws Exception {
+    public static IdResponse startTransferProcessWithDataDestination(String managementApiAddress, String assetId,
+                                                                     String counterPartyId, String counterPartyAddress,
+                                                                     String contractId, String transferType) throws Exception {
         ObjectNode requestBody = OBJECT_MAPPER.createObjectNode();
         ArrayNode context = OBJECT_MAPPER.createArrayNode();
         context.add(EDC_MANAGEMENT_CONTEXT);
@@ -395,7 +428,7 @@ public class DSPManagementHelper {
                 throw new RuntimeException(String.format(
                         "Transfer process start (OID4VC) failed with status %d: %s", response.code(), responseBody));
             }
-            return OBJECT_MAPPER.readTree(responseBody);
+            return OBJECT_MAPPER.readValue(responseBody, IdResponse.class);
         }
     }
 
@@ -452,8 +485,8 @@ public class DSPManagementHelper {
      * @return the transfer process ID from the started transfer
      * @throws Exception if polling times out or no started transfer is found
      */
-    public static String waitForTransferStarted(String managementApiAddress) throws Exception {
-        final String[] transferId = new String[1];
+    public static String waitForTransferStarted(String managementApiAddress, String transferId) throws Exception {
+        final String[] transferIds = new String[1];
 
         Awaitility.await()
                 .atMost(Duration.ofSeconds(DEFAULT_POLL_TIMEOUT_SECONDS))
@@ -462,8 +495,10 @@ public class DSPManagementHelper {
                     List<TransferProcess> transfers = getTransferProcesses(managementApiAddress);
                     assertFalse(transfers.isEmpty(), "Expected at least one transfer process");
 
+                    log.warn("Filter for transfer id {}", transferId);
                     TransferProcess started = transfers.stream()
-                            .filter(t -> STATE_STARTED.equalsIgnoreCase(t.getState()))
+                            .peek(t -> log.warn("The transfer {}", t))
+                            .filter(t -> t.getAtId().equals(transferId))
                             .findFirst()
                             .orElse(null);
 
@@ -472,13 +507,13 @@ public class DSPManagementHelper {
                                     STATE_STARTED,
                                     transfers.stream().map(TransferProcess::getState)
                                             .reduce((a, b) -> a + ", " + b).orElse("none")));
-
-                    transferId[0] = started.getAtId();
-                    assertNotNull(transferId[0], "Transfer ID (@id) should not be null when transfer is started");
-                    log.info("Transfer process started with ID: {}", transferId[0]);
+                    assertTrue(STATE_STARTED.equalsIgnoreCase(started.getState()), "The transfer is not started.");
+                    transferIds[0] = started.getAtId();
+                    assertNotNull(transferIds[0], "Transfer ID (@id) should not be null when transfer is started");
+                    log.info("Transfer process started with ID: {}", transferIds[0]);
                 });
 
-        return transferId[0];
+        return transferIds[0];
     }
 
     /**
@@ -496,23 +531,27 @@ public class DSPManagementHelper {
      */
     public static DataAddress getDataAddress(String managementApiAddress, String transferId) throws Exception {
         String url = managementApiAddress + ":" + SERVICE_PORT + EDRS_PATH_PREFIX + transferId + "/dataaddress";
-        Request request = new Request.Builder()
-                .url(url)
-                .get()
-                .header("Accept", "*/*")
-                .build();
+        final DataAddress[] dataAddress = new DataAddress[1];
+        Awaitility.await()
+                .atMost(Duration.ofSeconds(DEFAULT_POLL_TIMEOUT_SECONDS))
+                .pollInterval(Duration.ofSeconds(DEFAULT_POLL_INTERVAL_SECONDS))
+                .untilAsserted(() -> {
+                    Request request = new Request.Builder()
+                            .url(url)
+                            .get()
+                            .header("Accept", "*/*")
+                            .build();
 
-        try (Response response = OK_HTTP_CLIENT.newCall(request).execute()) {
-            String responseBody = response.body() != null ? response.body().string() : "";
-            log.info("Get data address for transfer {} at {} returned status {}", transferId, url, response.code());
-            if (!response.isSuccessful()) {
-                throw new RuntimeException(String.format(
-                        "Get data address failed with status %d: %s", response.code(), responseBody));
-            }
-            DataAddress dataAddress = OBJECT_MAPPER.readValue(responseBody, DataAddress.class);
-            assertNotNull(dataAddress.getEndpoint(), "Data address endpoint should not be null");
-            log.info("Retrieved data address: endpoint={}", dataAddress.getEndpoint());
-            return dataAddress;
-        }
+                    try (Response response = OK_HTTP_CLIENT.newCall(request).execute()) {
+                        String responseBody = response.body() != null ? response.body().string() : "";
+                        log.info("Get data address for transfer {} at {} returned status {}", transferId, url, response.code());
+                        assertTrue(response.isSuccessful(), String.format(
+                                "Get data address failed with status %d: %s", response.code(), responseBody));
+                        dataAddress[0] = OBJECT_MAPPER.readValue(responseBody, DataAddress.class);
+                        assertNotNull(dataAddress[0].getEndpoint(), "Data address endpoint should not be null");
+                        log.info("Retrieved data address: endpoint={}", dataAddress[0].getEndpoint());
+                    }
+                });
+        return dataAddress[0];
     }
 }

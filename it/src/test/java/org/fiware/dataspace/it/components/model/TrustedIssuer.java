@@ -1,13 +1,14 @@
 package org.fiware.dataspace.it.components.model;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.util.List;
+
 /**
- * Represents an ODRL policy returned by the PAP.
+ * Represents a trusted issuer
  *
  * @author <a href="https://github.com/wistefan">Stefan Wiedemann</a>
  */
@@ -15,10 +16,9 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 @Data
 @JsonIgnoreProperties(ignoreUnknown = true)
-public class Policy {
+public class TrustedIssuer {
 
-    private String id;
+    private String did;
+    private List<IssuerCredential> credentials;
 
-    @JsonProperty("odrl:uid")
-    private String odrlUid;
 }

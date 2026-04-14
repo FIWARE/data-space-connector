@@ -28,6 +28,8 @@ Feature: DSP TMForum ordering flow as described in DSP_INTEGRATION.md.
   Scenario: Consumer orders through TMForum in the DSP deployment.
     Given The provider creates demo data and offering for DSP.
     And The DSP TMForum access policies are in place.
+    And The consumer identity is properly setup.
+    And The provider identity is properly setup.
     When The consumer obtains a representative credential for DSP ordering.
     And The consumer obtains an operator credential for DSP ordering.
     And The consumer registers at the provider marketplace for DSP.

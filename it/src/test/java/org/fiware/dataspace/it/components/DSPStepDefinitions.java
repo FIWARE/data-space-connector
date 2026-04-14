@@ -4,8 +4,8 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import io.cucumber.java.After;
 import io.cucumber.java.Before;
+import io.cucumber.java.an.E;
 import io.cucumber.java.en.Given;
 import io.cucumber.java.en.Then;
 import io.cucumber.java.en.When;
@@ -17,19 +17,23 @@ import okhttp3.RequestBody;
 import okhttp3.Response;
 import org.apache.http.HttpStatus;
 import org.awaitility.Awaitility;
+import org.bouncycastle.jcajce.provider.asymmetric.ec.KeyFactorySpi;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
 import org.fiware.dataspace.it.components.model.DataAddress;
+import org.fiware.dataspace.it.components.model.DcpCredential;
 import org.fiware.dataspace.it.components.model.OpenIdConfiguration;
-import org.fiware.dataspace.it.components.model.Policy;
+import org.fiware.dataspace.it.components.model.IdResponse;
 import org.fiware.dataspace.tmf.model.*;
 import org.keycloak.common.crypto.CryptoIntegration;
 
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.security.PrivateKey;
 import java.security.Security;
 import java.time.Duration;
 import java.util.*;
@@ -37,7 +41,6 @@ import java.util.*;
 import static org.fiware.dataspace.it.components.DSPEnvironment.*;
 import static org.fiware.dataspace.it.components.FancyMarketplaceEnvironment.*;
 import static org.fiware.dataspace.it.components.MPOperationsEnvironment.*;
-import static org.fiware.dataspace.it.components.TestUtils.OBJECT_MAPPER;
 import static org.fiware.dataspace.it.components.TestUtils.OK_HTTP_CLIENT;
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -52,72 +55,112 @@ import static org.junit.jupiter.api.Assertions.*;
  * @see ScriptHelper
  */
 @Slf4j
-public class DSPStepDefinitions {
+public class DSPStepDefinitions extends StepDefintions {
 
-    /** HTTP port used by local services in the k3s deployment. */
-    private static final int SERVICE_PORT = 8080;
+    /**
+     * HTTP port used by local services in the k3s deployment.
+     */
+//    private static final int SERVICE_PORT = 8080;
 
-    /** The credential configuration ID for membership credentials in Keycloak. */
+    /**
+     * The credential configuration ID for membership credentials in Keycloak.
+     */
     private static final String MEMBERSHIP_CREDENTIAL_ID = "membership-credential";
 
-    /** The Keycloak username used for issuing membership credentials. */
+    /**
+     * The Keycloak username used for issuing membership credentials.
+     */
     private static final String MEMBERSHIP_CREDENTIAL_USERNAME = "employee";
 
     // --- DSP TMForum Ordering Constants ---
 
-    /** The credential configuration ID for user credentials (representative role). */
+    /**
+     * The credential configuration ID for user credentials (representative role).
+     */
     private static final String USER_CREDENTIAL_ID = "user-credential";
 
-    /** The credential configuration ID for operator credentials. */
+    /**
+     * The credential configuration ID for operator credentials.
+     */
     private static final String OPERATOR_CREDENTIAL_ID = "operator-credential";
 
-    /** The Keycloak username for the representative user who can buy products. */
+    /**
+     * The Keycloak username for the representative user who can buy products.
+     */
     private static final String REPRESENTATIVE_USERNAME = "representative";
 
-    /** The Keycloak username for the operator user who accesses data services. */
+    /**
+     * The Keycloak username for the operator user who accesses data services.
+     */
     private static final String OPERATOR_USERNAME = "operator";
 
-    /** The OAuth scope for default access (TMForum API operations). */
+    /**
+     * The OAuth scope for default access (TMForum API operations).
+     */
     private static final String DEFAULT_SCOPE = "default";
 
-    /** The OAuth scope for operator access (data service operations). */
+    /**
+     * The OAuth scope for operator access (data service operations).
+     */
     private static final String OPERATOR_SCOPE = "operator";
 
-    /** The entity ID for the UptimeReport created as demo data. */
+    /**
+     * The entity ID for the UptimeReport created as demo data.
+     */
     private static final String UPTIME_REPORT_ENTITY_ID = "urn:ngsi-ld:UptimeReport:fms-1";
 
-    /** The external asset ID used in the DSP product specification. */
+    /**
+     * The external asset ID used in the DSP product specification.
+     */
     private static final String DSP_ASSET_ID = "ASSET-1";
 
-    /** The external offering ID used in the DSP product offering. */
+    /**
+     * The external offering ID used in the DSP product offering.
+     */
     private static final String DSP_OFFER_EXTERNAL_ID = "OFFER-1";
 
-    /** The DCP endpoint path suffix for DSP protocol interactions. */
+    /**
+     * The DCP endpoint path suffix for DSP protocol interactions.
+     */
     private static final String DSP_ENDPOINT_PATH = "/api/dsp/2025-1";
 
-    /** The internal upstream address for the data service (Scorpio via K8s service). */
+    /**
+     * The internal upstream address for the data service (Scorpio via K8s service).
+     */
     private static final String DATA_SERVICE_UPSTREAM = "data-service-scorpio:9090";
 
-    /** Schema location for the TMForum credential configuration characteristic. */
+    /**
+     * Schema location for the TMForum credential configuration characteristic.
+     */
     private static final String CREDENTIALS_CONFIG_SCHEMA =
             "https://raw.githubusercontent.com/FIWARE/contract-management/refs/heads/main/schemas/credentials/credentialConfigCharacteristic.json";
 
-    /** Schema location for the TMForum ODRL policy configuration characteristic. */
+    /**
+     * Schema location for the TMForum ODRL policy configuration characteristic.
+     */
     private static final String POLICY_CONFIG_SCHEMA =
             "https://raw.githubusercontent.com/FIWARE/contract-management/refs/heads/policy-support/schemas/odrl/policyCharacteristic.json";
 
-    /** Schema location for the EDC external ID. */
+    /**
+     * Schema location for the EDC external ID.
+     */
     private static final String EXTERNAL_ID_SCHEMA =
             "https://raw.githubusercontent.com/wistefan/edc-dsc/refs/heads/init/schemas/external-id.json";
 
-    /** Schema location for the EDC contract definition. */
+    /**
+     * Schema location for the EDC contract definition.
+     */
     private static final String CONTRACT_DEFINITION_SCHEMA =
             "https://raw.githubusercontent.com/wistefan/edc-dsc/refs/heads/init/schemas/contract-definition.json";
 
-    /** Timeout in seconds for data access assertions that require async policy updates. */
+    /**
+     * Timeout in seconds for data access assertions that require async policy updates.
+     */
     private static final int DATA_ACCESS_TIMEOUT_SECONDS = 60;
 
-    /** Timeout in seconds for policy propagation. */
+    /**
+     * Timeout in seconds for policy propagation.
+     */
     private static final int POLICY_PROPAGATION_TIMEOUT_SECONDS = 15;
 
     /**
@@ -132,87 +175,153 @@ public class DSPStepDefinitions {
      */
     private static final String PROVIDER_KEY_PEM_PATH = "helpers/certs/out/client-provider/private/client-pkcs8.key.pem";
 
-    /** The IdentityHub credential ID used when storing membership credentials. */
+    /**
+     * The IdentityHub credential ID used when storing membership credentials.
+     */
     private static final String IDENTITYHUB_CREDENTIAL_ID = "membership-credential";
 
     private static final OkHttpClient HTTP_CLIENT = OK_HTTP_CLIENT;
 
-    /** The consumer's private key in JWK format, populated during identity setup. */
+    /**
+     * The consumer's private key in JWK format, populated during identity setup.
+     */
     private String consumerJwk;
 
-    /** The provider's private key in JWK format, populated during identity setup. */
+    /**
+     * The provider's private key in JWK format, populated during identity setup.
+     */
     private String providerJwk;
 
-    /** The consumer's PEM key content, read from the file system. */
+    /**
+     * The consumer's PEM key content, read from the file system.
+     */
     private String consumerPemContent;
 
-    /** The provider's PEM key content, read from the file system. */
+    /**
+     * The provider's PEM key content, read from the file system.
+     */
     private String providerPemContent;
 
-    /** The raw JWT membership credential for the consumer. */
+    /**
+     * The raw JWT membership credential for the consumer.
+     */
     private String consumerMembershipCredential;
 
-    /** The raw JWT membership credential for the provider. */
+    /**
+     * The raw JWT membership credential for the provider.
+     */
     private String providerMembershipCredential;
 
     // --- DSP TMForum Ordering State ---
 
-    /** The Wallet instance used for credential issuance and OID4VP token exchange. */
+    /**
+     * The Wallet instance used for credential issuance and OID4VP token exchange.
+     */
     private Wallet dspWallet;
 
-    /** The category ID created for DSP offerings. */
+    /**
+     * The category ID created for DSP offerings.
+     */
     private String dspCategoryId;
 
-    /** The product specification ID created for DSP offerings. */
+    /**
+     * The product specification ID created for DSP offerings.
+     */
     private String dspProductSpecId;
 
-    /** The product offering ID created for DSP. */
+    /**
+     * The product offering ID created for DSP.
+     */
     private String dspProductOfferingId;
 
-    /** The consumer's organization registration at the provider marketplace. */
+    /**
+     * The consumer's organization registration at the provider marketplace.
+     */
     private OrganizationVO dspConsumerRegistration;
 
-    /** The product order ID for the current DSP ordering flow. */
+    /**
+     * The product order ID for the current DSP ordering flow.
+     */
     private String dspProductOrderId;
 
-    /** Tracks policy IDs created during DSP TMForum tests for cleanup. */
+    /**
+     * Tracks policy IDs created during DSP TMForum tests for cleanup.
+     */
     private List<String> dspCreatedPolicies = new ArrayList<>();
 
-    /** Tracks entity IDs created during DSP TMForum tests for cleanup. */
+    /**
+     * Tracks entity IDs created during DSP TMForum tests for cleanup.
+     */
     private List<String> dspCreatedEntities = new ArrayList<>();
 
     // --- DCP Protocol Flow State ---
 
-    /** The DCP catalog response JSON, populated during catalog request. */
+    /**
+     * The DCP catalog response JSON, populated during catalog request.
+     */
     private JsonNode dcpCatalogResponse;
 
-    /** The contract agreement ID from a finalized DCP negotiation. */
+    /**
+     * The ID from the DCP negotiation.
+     */
+    private String dcpNegotiationId;
+
+    /**
+     * The ID from the OID4VC negotiation.
+     */
+    private String oid4vcNegotiationId;
+
+
+    /**
+     * The contract agreement ID from a finalized DCP negotiation.
+     */
     private String dcpAgreementId;
 
-    /** The transfer process ID from a started DCP transfer. */
+    /**
+     * The contract agreement ID from a finalized OID4VC negotiation.
+     */
+    private String oid4vcAgreementId;
+
+    /**
+     * The transfer process ID from a started DCP transfer.
+     */
     private String dcpTransferId;
 
-    /** The EDR data address (endpoint + token) from a completed DCP transfer. */
+    /**
+     * The EDR data address (endpoint + token) from a completed DCP transfer.
+     */
     private DataAddress dcpDataAddress;
 
     // --- OID4VC Protocol Flow State ---
 
-    /** The OID4VC catalog response JSON, populated during catalog request. */
+    /**
+     * The OID4VC catalog response JSON, populated during catalog request.
+     */
     private JsonNode oid4vcCatalogResponse;
 
-    /** The transfer process ID from a started OID4VC transfer. */
+    /**
+     * The transfer process ID from a started OID4VC transfer.
+     */
     private String oid4vcTransferId;
 
-    /** The EDR data address (endpoint + token) from a completed OID4VC transfer. */
+    /**
+     * The EDR data address (endpoint + token) from a completed OID4VC transfer.
+     */
     private DataAddress oid4vcDataAddress;
 
-    /** The OID4VP access token obtained by exchanging a membership credential at the OID4VC endpoint. */
+    /**
+     * The OID4VP access token obtained by exchanging a membership credential at the OID4VC endpoint.
+     */
     private String oid4vcAccessToken;
 
-    /** The OpenID configuration retrieved from the OID4VC transfer endpoint. */
+    /**
+     * The OpenID configuration retrieved from the OID4VC transfer endpoint.
+     */
     private OpenIdConfiguration oid4vcEndpointOidcConfig;
 
-    /** The scope used for OID4VP authentication in OID4VC flows. */
+    /**
+     * The scope used for OID4VP authentication in OID4VC flows.
+     */
     private static final String OPENID_SCOPE = "openid";
 
     /**
@@ -231,36 +340,39 @@ public class DSPStepDefinitions {
         } catch (Exception e) {
             log.warn("Error during DSP pre-test cleanup: {}", e.getMessage());
         }
+        prepareTil();
+        // give the system time to propagate the cleanups
+        Thread.sleep(1000);
     }
 
-    /**
-     * Cleanup hook executed after each {@code @dsp} scenario.
-     * Removes all DSP-specific resources to ensure test isolation, including
-     * IdentityHub participants, Vault keys, TMForum resources, DSP management
-     * API resources, DCAT catalogs, agreements, PAP policies, and Scorpio entities.
-     */
-    @After("@dsp")
-    public void cleanUpDsp() {
-        log.info("DSP test cleanup: removing test resources.");
-        try {
-            cleanDspResources();
-        } catch (Exception e) {
-            log.warn("Error during DSP post-test cleanup: {}", e.getMessage());
-        }
-    }
+//    /**
+//     * Cleanup hook executed after each {@code @dsp} scenario.
+//     * Removes all DSP-specific resources to ensure test isolation, including
+//     * IdentityHub participants, Vault keys, TMForum resources, DSP management
+//     * API resources, DCAT catalogs, agreements, PAP policies, and Scorpio entities.
+//     */
+//    @After("@dsp")
+//    public void cleanUpDsp() {
+//        log.info("DSP test cleanup: removing test resources.");
+//        try {
+//            cleanDspResources();
+//        } catch (Exception e) {
+//            log.warn("Error during DSP post-test cleanup: {}", e.getMessage());
+//        }
+//    }
 
     /**
      * Cleans up all resources created during DSP tests.
      * Each cleanup method handles its own exceptions to ensure partial failures
      * do not prevent other resources from being cleaned.
      */
-    private void cleanDspResources() {
+    private void cleanDspResources() throws Exception {
         cleanUpDspTMForum();
         cleanUpDspPolicies();
         cleanUpDspEntities();
         cleanUpDspDcatCatalogs();
         cleanUpDspAgreements();
-        cleanUpDspTIL();
+        cleanUpTIL();
         cleanUpDspVaultKeys();
         cleanUpDspIdentityHubParticipants();
     }
@@ -282,43 +394,14 @@ public class DSPStepDefinitions {
                 "/tmf-api/productCatalogManagement/v4/category", "DSP categories");
         cleanUpTMForumResourceList(TMF_DIRECT_ADDRESS,
                 "/tmf-api/party/v4/organization", "DSP organizations");
+        cleanUpTMForumResourceList(TMF_DIRECT_ADDRESS,
+                "/tmf-api/quote/v4/quote", "DSP quotes");
+        cleanUpTMForumResourceList(TMF_DIRECT_ADDRESS,
+                "/tmf-api/agreementManagement/v4/agreement", "DSP agreements");
     }
 
-    /**
-     * Cleans up all policies from the provider's Policy Administration Point (PAP).
-     */
     private void cleanUpDspPolicies() {
-        try {
-            Request getPolicies = new Request.Builder()
-                    .get()
-                    .url(PROVIDER_PAP_ADDRESS + "/policy")
-                    .build();
-            try (Response response = HTTP_CLIENT.newCall(getPolicies).execute()) {
-                okhttp3.ResponseBody responseBody = response.body();
-                if (responseBody == null || !response.isSuccessful()) {
-                    return;
-                }
-                String bodyString = responseBody.string();
-                List<Policy> policies;
-                try {
-                    policies = OBJECT_MAPPER.readValue(bodyString, new TypeReference<List<Policy>>() {});
-                } catch (Exception e) {
-                    log.warn("Could not parse policies response: {}", e.getMessage());
-                    return;
-                }
-                for (Policy policy : policies) {
-                    Request deleteRequest = new Request.Builder()
-                            .delete()
-                            .url(PROVIDER_PAP_ADDRESS + "/policy/" + policy.getId())
-                            .build();
-                    try (Response deleteResp = HTTP_CLIENT.newCall(deleteRequest).execute()) {
-                        log.debug("Deleted policy {}: status={}", policy.getId(), deleteResp.code());
-                    }
-                }
-            }
-        } catch (Exception e) {
-            log.warn("Failed to clean up DSP policies: {}", e.getMessage());
-        }
+        cleanUpPolicies(PROVIDER_PAP_ADDRESS);
     }
 
     /**
@@ -359,7 +442,8 @@ public class DSPStepDefinitions {
                 List<java.util.Map<String, Object>> catalogs;
                 try {
                     catalogs = OBJECT_MAPPER.readValue(bodyString,
-                            new TypeReference<List<java.util.Map<String, Object>>>() {});
+                            new TypeReference<List<java.util.Map<String, Object>>>() {
+                            });
                 } catch (Exception e) {
                     log.warn("Could not parse DCAT catalogs: {}", e.getMessage());
                     return;
@@ -399,7 +483,8 @@ public class DSPStepDefinitions {
                 List<java.util.Map<String, Object>> agreements;
                 try {
                     agreements = OBJECT_MAPPER.readValue(bodyString,
-                            new TypeReference<List<java.util.Map<String, Object>>>() {});
+                            new TypeReference<List<java.util.Map<String, Object>>>() {
+                            });
                 } catch (Exception e) {
                     log.warn("Could not parse agreements: {}", e.getMessage());
                     return;
@@ -475,7 +560,7 @@ public class DSPStepDefinitions {
         try {
             Request deleteRequest = new Request.Builder()
                     .delete()
-                    .url(vaultAddress + ":" + SERVICE_PORT + "/v1/secret/data/" + keyAlias)
+                    .url(vaultAddress + "/v1/secret/data/" + keyAlias)
                     .addHeader("X-Vault-Token", IdentityHubHelper.VAULT_TOKEN)
                     .build();
             try (Response resp = HTTP_CLIENT.newCall(deleteRequest).execute()) {
@@ -504,65 +589,52 @@ public class DSPStepDefinitions {
     private void deleteIdentityHubParticipant(String managementAddress, String participantDid) {
         try {
             // URL-encode the DID for the path parameter
-            String encodedDid = java.net.URLEncoder.encode(participantDid, "UTF-8");
+            String encodedDid = Base64.getEncoder().encodeToString(participantDid.getBytes(StandardCharsets.UTF_8));
+
+            // get all credentials, participant removal does not delete them
+            Request getCreds = new Request.Builder()
+                    .get()
+                    .url(managementAddress
+                            + "/api/identity/v1alpha/participants/" + encodedDid + "/credentials")
+                    .addHeader("x-api-key", IdentityHubHelper.IDENTITY_HUB_API_KEY)
+                    .build();
+            List<String> credentialIds = new ArrayList<>();
+            try (Response resp = HTTP_CLIENT.newCall(getCreds).execute()) {
+                OBJECT_MAPPER.readValue(resp.body().string(), new TypeReference<List<DcpCredential>>() {
+                        })
+                        .stream()
+                        .map(DcpCredential::getId)
+                        .forEach(credentialIds::add);
+            }
+            credentialIds
+                    .forEach(credentialId -> {
+                        Request credDelete = new Request.Builder()
+                                .delete()
+                                .url(managementAddress
+                                        + "/api/identity/v1alpha/participants/" + encodedDid + "/credentials/" + credentialId)
+                                .addHeader("x-api-key", IdentityHubHelper.IDENTITY_HUB_API_KEY)
+                                .build();
+                        try (Response resp = HTTP_CLIENT.newCall(credDelete).execute()) {
+                            log.warn("Deleted credential {} - code {}", credentialId, resp.code());
+                        } catch (IOException e) {
+                            log.warn("Failed to delete credential {}", credentialId, e);
+                        }
+                    });
+
             Request deleteRequest = new Request.Builder()
                     .delete()
-                    .url(managementAddress + ":" + SERVICE_PORT
+                    .url(managementAddress
                             + "/api/identity/v1alpha/participants/" + encodedDid)
                     .addHeader("x-api-key", IdentityHubHelper.IDENTITY_HUB_API_KEY)
                     .build();
             try (Response resp = HTTP_CLIENT.newCall(deleteRequest).execute()) {
-                log.debug("IdentityHub participant cleanup {}: status={}", participantDid, resp.code());
+                log.warn("IdentityHub participant cleanup at {} {}: status={}", managementAddress, participantDid, resp.code());
             }
         } catch (Exception e) {
             log.warn("Failed to delete IdentityHub participant {}: {}", participantDid, e.getMessage());
         }
     }
 
-    /**
-     * Generic helper to list and delete all TMForum resources at a given base URL and API path.
-     *
-     * @param baseUrl      the base URL of the TMForum API
-     * @param apiPath      the TMForum API path
-     * @param resourceName a human-readable name for logging purposes
-     */
-    private void cleanUpTMForumResourceList(String baseUrl, String apiPath, String resourceName) {
-        try {
-            Request listRequest = new Request.Builder()
-                    .get()
-                    .url(baseUrl + apiPath)
-                    .build();
-            try (Response response = HTTP_CLIENT.newCall(listRequest).execute()) {
-                okhttp3.ResponseBody responseBody = response.body();
-                if (responseBody == null || !response.isSuccessful()) {
-                    log.debug("No {} to clean up (status={})", resourceName, response.code());
-                    return;
-                }
-                String bodyString = responseBody.string();
-                List<java.util.Map<String, Object>> items;
-                try {
-                    items = OBJECT_MAPPER.readValue(bodyString,
-                            new TypeReference<List<java.util.Map<String, Object>>>() {});
-                } catch (Exception e) {
-                    log.warn("Could not parse {} list: {}", resourceName, e.getMessage());
-                    return;
-                }
-                for (java.util.Map<String, Object> item : items) {
-                    Object id = item.get("id");
-                    if (id == null) continue;
-                    Request deleteRequest = new Request.Builder()
-                            .delete()
-                            .url(baseUrl + apiPath + "/" + id)
-                            .build();
-                    try (Response deleteResp = HTTP_CLIENT.newCall(deleteRequest).execute()) {
-                        log.debug("Deleted {} {}: status={}", resourceName, id, deleteResp.code());
-                    }
-                }
-            }
-        } catch (Exception e) {
-            log.warn("Failed to clean up {}: {}", resourceName, e.getMessage());
-        }
-    }
 
     // ==================== Central Marketplace Step Definitions ====================
     // Step definitions for @central scenarios will be added in Step 8.
@@ -589,9 +661,12 @@ public class DSPStepDefinitions {
      */
     @When("The consumer private key is converted to JWK format.")
     public void theConsumerPrivateKeyIsConvertedToJwkFormat() throws Exception {
-        assertNotNull(consumerPemContent, "Consumer PEM content must be loaded first.");
-        consumerJwk = IdentityHubHelper.getPrivateKeyAsJwk(consumerPemContent);
-        assertNotNull(consumerJwk, "Consumer JWK should not be null.");
+        Path pemPath = resolveProjectPath(CONSUMER_KEY_PEM_PATH);
+        assertTrue(Files.exists(pemPath),
+                "Consumer private key PEM file should exist at: " + pemPath.toAbsolutePath());
+        PrivateKey privateKey = IdentityHubHelper.loadPrivateKey("EC", pemPath.toAbsolutePath().toString());
+
+        consumerJwk = IdentityHubHelper.asJWK(privateKey);
         // Verify it's valid JSON with expected EC key fields
         JsonNode jwkNode = OBJECT_MAPPER.readTree(consumerJwk);
         assertEquals("EC", jwkNode.get("kty").asText(), "Key type should be EC.");
@@ -663,8 +738,11 @@ public class DSPStepDefinitions {
      */
     @When("The provider private key is converted to JWK format.")
     public void theProviderPrivateKeyIsConvertedToJwkFormat() throws Exception {
-        assertNotNull(providerPemContent, "Provider PEM content must be loaded first.");
-        providerJwk = IdentityHubHelper.getPrivateKeyAsJwk(providerPemContent);
+        Path pemPath = resolveProjectPath(PROVIDER_KEY_PEM_PATH);
+        assertTrue(Files.exists(pemPath),
+                "Provider private key PEM file should exist at: " + pemPath.toAbsolutePath());
+        PrivateKey privateKey = IdentityHubHelper.loadPrivateKey("EC", pemPath.toAbsolutePath().toString());
+        providerJwk = IdentityHubHelper.asJWK(privateKey);
         assertNotNull(providerJwk, "Provider JWK should not be null.");
         JsonNode jwkNode = OBJECT_MAPPER.readTree(providerJwk);
         assertEquals("EC", jwkNode.get("kty").asText(), "Key type should be EC.");
@@ -825,7 +903,7 @@ public class DSPStepDefinitions {
      */
     @Then("The provider trusted issuers list contains the consumer DID.")
     public void theProviderTrustedIssuersListContainsTheConsumerDid() throws Exception {
-        String tilUrl = TIL_DIRECT_ADDRESS + ":" + SERVICE_PORT + "/issuer/" + CONSUMER_DID;
+        String tilUrl = TIL_DIRECT_ADDRESS + "/issuer/" + CONSUMER_DID;
         Request request = new Request.Builder()
                 .get()
                 .url(tilUrl)
@@ -850,7 +928,7 @@ public class DSPStepDefinitions {
      */
     @Then("The consumer is trusted for membership credentials at the provider.")
     public void theConsumerIsTrustedForMembershipCredentialsAtTheProvider() throws Exception {
-        String tilUrl = TIL_DIRECT_ADDRESS + ":" + SERVICE_PORT + "/issuer/" + CONSUMER_DID;
+        String tilUrl = TIL_DIRECT_ADDRESS + "/issuer/" + CONSUMER_DID;
         Request request = new Request.Builder()
                 .get()
                 .url(tilUrl)
@@ -889,7 +967,7 @@ public class DSPStepDefinitions {
                 okhttp3.MediaType.parse(MediaType.APPLICATION_JSON));
         Request request = new Request.Builder()
                 .post(body)
-                .url(SCORPIO_ADDRESS + ":" + SERVICE_PORT + "/ngsi-ld/v1/entities")
+                .url(SCORPIO_ADDRESS + "/ngsi-ld/v1/entities")
                 .header("Accept", "application/json")
                 .header("Content-Type", "application/json")
                 .build();
@@ -908,7 +986,7 @@ public class DSPStepDefinitions {
     public void theUptimeReportEntityExistsInScorpio() throws Exception {
         Request request = new Request.Builder()
                 .get()
-                .url(SCORPIO_ADDRESS + ":" + SERVICE_PORT + "/ngsi-ld/v1/entities/" + UPTIME_REPORT_ENTITY_ID)
+                .url(SCORPIO_ADDRESS + "/ngsi-ld/v1/entities/" + UPTIME_REPORT_ENTITY_ID)
                 .header("Accept", "application/json")
                 .build();
         try (Response response = HTTP_CLIENT.newCall(request).execute()) {
@@ -938,7 +1016,7 @@ public class DSPStepDefinitions {
                 okhttp3.MediaType.parse(MediaType.APPLICATION_JSON));
         Request request = new Request.Builder()
                 .post(body)
-                .url(TMF_DIRECT_ADDRESS + ":" + SERVICE_PORT
+                .url(TMF_DIRECT_ADDRESS
                         + "/tmf-api/productCatalogManagement/v4/category")
                 .header("accept", "application/json;charset=utf-8")
                 .header("Content-Type", "application/json;charset=utf-8")
@@ -968,7 +1046,7 @@ public class DSPStepDefinitions {
                 okhttp3.MediaType.parse(MediaType.APPLICATION_JSON));
         Request request = new Request.Builder()
                 .post(body)
-                .url(TMF_DIRECT_ADDRESS + ":" + SERVICE_PORT
+                .url(TMF_DIRECT_ADDRESS
                         + "/tmf-api/productCatalogManagement/v4/catalog")
                 .header("accept", "application/json;charset=utf-8")
                 .header("Content-Type", "application/json;charset=utf-8")
@@ -1045,13 +1123,13 @@ public class DSPStepDefinitions {
         characteristics.add(buildCharacteristic("dcp",
                 "Endpoint, that the service can be negotiated at via DCP.",
                 "endpointUrl",
-                DCP_PROVIDER_ADDRESS + ":" + SERVICE_PORT + DSP_ENDPOINT_PATH));
+                DCP_PROVIDER_ADDRESS + DSP_ENDPOINT_PATH));
 
         // OID4VC endpoint
         characteristics.add(buildCharacteristic("oid4vc",
                 "Endpoint, that the service can be negotiated at via OID4VC.",
                 "endpointUrl",
-                OID4VC_PROVIDER_ADDRESS + ":" + SERVICE_PORT + DSP_ENDPOINT_PATH));
+                OID4VC_PROVIDER_ADDRESS + DSP_ENDPOINT_PATH));
 
         // Upstream address
         characteristics.add(buildCharacteristic("upstreamAddress",
@@ -1100,7 +1178,7 @@ public class DSPStepDefinitions {
                 okhttp3.MediaType.parse(MediaType.APPLICATION_JSON));
         Request request = new Request.Builder()
                 .post(body)
-                .url(TMF_DIRECT_ADDRESS + ":" + SERVICE_PORT
+                .url(TMF_DIRECT_ADDRESS
                         + "/tmf-api/productCatalogManagement/v4/productSpecification")
                 .header("accept", "application/json;charset=utf-8")
                 .header("Content-Type", "application/json;charset=utf-8")
@@ -1195,7 +1273,7 @@ public class DSPStepDefinitions {
                 okhttp3.MediaType.parse(MediaType.APPLICATION_JSON));
         Request request = new Request.Builder()
                 .post(body)
-                .url(TMF_DIRECT_ADDRESS + ":" + SERVICE_PORT
+                .url(TMF_DIRECT_ADDRESS
                         + "/tmf-api/productCatalogManagement/v4/productOffering")
                 .header("accept", "application/json;charset=utf-8")
                 .header("Content-Type", "application/json;charset=utf-8")
@@ -1217,13 +1295,14 @@ public class DSPStepDefinitions {
     public void theDspProductOfferingIsAvailableAtTheTmForumApi() throws Exception {
         Request request = new Request.Builder()
                 .get()
-                .url(TMF_DIRECT_ADDRESS + ":" + SERVICE_PORT
+                .url(TMF_DIRECT_ADDRESS
                         + "/tmf-api/productCatalogManagement/v4/productOffering")
                 .build();
         try (Response response = HTTP_CLIENT.newCall(request).execute()) {
             assertEquals(HttpStatus.SC_OK, response.code(), "TMForum offering list should be accessible.");
             List<ProductOfferingVO> offerings = OBJECT_MAPPER.readValue(
-                    response.body().string(), new TypeReference<List<ProductOfferingVO>>() {});
+                    response.body().string(), new TypeReference<List<ProductOfferingVO>>() {
+                    });
             assertFalse(offerings.isEmpty(), "At least one offering should exist.");
             log.info("Found {} DSP product offerings at TMForum API.", offerings.size());
         }
@@ -1340,7 +1419,7 @@ public class DSPStepDefinitions {
                 okhttp3.MediaType.parse(MediaType.APPLICATION_JSON));
         Request request = new Request.Builder()
                 .post(body)
-                .url(TM_FORUM_API_ADDRESS + ":" + SERVICE_PORT + "/tmf-api/party/v4/organization")
+                .url(TM_FORUM_API_ADDRESS + "/tmf-api/party/v4/organization")
                 .header("Authorization", "Bearer " + accessToken)
                 .header("Accept", "*/*")
                 .header("Content-Type", "application/json")
@@ -1369,7 +1448,7 @@ public class DSPStepDefinitions {
         // List offerings
         Request offerRequest = new Request.Builder()
                 .get()
-                .url(TM_FORUM_API_ADDRESS + ":" + SERVICE_PORT
+                .url(TM_FORUM_API_ADDRESS
                         + "/tmf-api/productCatalogManagement/v4/productOffering")
                 .header("Authorization", "Bearer " + accessToken)
                 .build();
@@ -1377,7 +1456,8 @@ public class DSPStepDefinitions {
         try (Response offerResponse = HTTP_CLIENT.newCall(offerRequest).execute()) {
             assertEquals(HttpStatus.SC_OK, offerResponse.code(), "Offerings should be listed.");
             List<ProductOfferingVO> offerings = OBJECT_MAPPER.readValue(
-                    offerResponse.body().string(), new TypeReference<List<ProductOfferingVO>>() {});
+                    offerResponse.body().string(), new TypeReference<List<ProductOfferingVO>>() {
+                    });
             assertFalse(offerings.isEmpty(), "At least one offering should exist.");
             offerId = offerings.get(0).getId();
             assertNotNull(offerId, "Offer ID should not be null.");
@@ -1402,7 +1482,7 @@ public class DSPStepDefinitions {
                 okhttp3.MediaType.parse(MediaType.APPLICATION_JSON));
         Request orderRequest = new Request.Builder()
                 .post(orderBody)
-                .url(TM_FORUM_API_ADDRESS + ":" + SERVICE_PORT
+                .url(TM_FORUM_API_ADDRESS
                         + "/tmf-api/productOrderingManagement/v4/productOrder")
                 .header("Authorization", "Bearer " + accessToken)
                 .header("Accept", "*/*")
@@ -1438,7 +1518,7 @@ public class DSPStepDefinitions {
                 okhttp3.MediaType.parse(MediaType.APPLICATION_JSON));
         Request updateRequest = new Request.Builder()
                 .patch(updateBody)
-                .url(TM_FORUM_API_ADDRESS + ":" + SERVICE_PORT
+                .url(TM_FORUM_API_ADDRESS
                         + "/tmf-api/productOrderingManagement/v4/productOrder/" + dspProductOrderId)
                 .header("Authorization", "Bearer " + accessToken)
                 .header("accept", "application/json;charset=utf-8")
@@ -1465,9 +1545,9 @@ public class DSPStepDefinitions {
                             OPERATOR_CREDENTIAL_ID, OPERATOR_SCOPE, PROVIDER_API_ADDRESS);
                     Request reportRequest = new Request.Builder()
                             .get()
-                            .url(PROVIDER_API_ADDRESS + ":" + SERVICE_PORT
+                            .url(PROVIDER_API_ADDRESS
                                     + "/ngsi-ld/v1/entities/" + UPTIME_REPORT_ENTITY_ID)
-                            .header("Content-Type", "application/json")
+                            .header("Accept", "*/*")
                             .header("Authorization", "Bearer " + accessToken)
                             .build();
                     try (Response response = HTTP_CLIENT.newCall(reportRequest).execute()) {
@@ -1492,7 +1572,7 @@ public class DSPStepDefinitions {
      */
     @When("The consumer requests the provider catalog via the DCP management API.")
     public void theConsumerRequestsTheProviderCatalogViaDcp() throws Exception {
-        String counterPartyAddress = DCP_PROVIDER_ADDRESS + ":" + SERVICE_PORT + DSP_ENDPOINT_PATH;
+        String counterPartyAddress = DCP_PROVIDER_ADDRESS + DSP_ENDPOINT_PATH;
         dcpCatalogResponse = DSPManagementHelper.requestCatalog(
                 DCP_MANAGEMENT_API_ADDRESS,
                 PROVIDER_DID,
@@ -1554,8 +1634,8 @@ public class DSPStepDefinitions {
         // Build the contract policy matching DSP_INTEGRATION.md
         ObjectNode policy = buildDcpContractPolicy(offerId);
 
-        String counterPartyAddress = DCP_PROVIDER_ADDRESS + ":" + SERVICE_PORT + DSP_ENDPOINT_PATH;
-        JsonNode negotiationResponse = DSPManagementHelper.startNegotiation(
+        String counterPartyAddress = DCP_PROVIDER_ADDRESS + DSP_ENDPOINT_PATH;
+        IdResponse negotiationResponse = DSPManagementHelper.startNegotiation(
                 DCP_MANAGEMENT_API_ADDRESS,
                 counterPartyAddress,
                 PROVIDER_DID,
@@ -1564,6 +1644,7 @@ public class DSPStepDefinitions {
                 policy);
         assertNotNull(negotiationResponse, "Negotiation start response should not be null.");
         log.info("DCP negotiation started: {}", negotiationResponse);
+        dcpNegotiationId = negotiationResponse.getId();
     }
 
     /**
@@ -1572,7 +1653,7 @@ public class DSPStepDefinitions {
      */
     @When("The consumer waits for the DCP negotiation to be finalized.")
     public void theConsumerWaitsForDcpNegotiationFinalized() throws Exception {
-        dcpAgreementId = DSPManagementHelper.waitForNegotiationFinalized(DCP_MANAGEMENT_API_ADDRESS);
+        dcpAgreementId = DSPManagementHelper.waitForNegotiationFinalized(DCP_MANAGEMENT_API_ADDRESS, dcpNegotiationId);
         assertNotNull(dcpAgreementId, "DCP agreement ID should not be null after negotiation is finalized.");
         log.info("DCP negotiation finalized with agreement ID: {}", dcpAgreementId);
     }
@@ -1585,6 +1666,36 @@ public class DSPStepDefinitions {
         assertNotNull(dcpAgreementId, "DCP agreement ID should have been set during negotiation.");
         assertFalse(dcpAgreementId.isBlank(), "DCP agreement ID should not be blank.");
         log.info("Verified DCP agreement ID: {}", dcpAgreementId);
+    }
+
+    @Given("The consumer identity is properly setup.")
+    public void setupConsumerIdentity() throws Exception {
+        theConsumerPrivateKeyPemFileIsAvailable();
+        theConsumerPrivateKeyIsConvertedToJwkFormat();
+        theConsumerJwkIsInsertedIntoTheConsumerVault();
+        theConsumerParticipantIsRegisteredInTheConsumerIdentityHub();
+        theConsumerDidDocumentIsAvailableAtTheWellKnownEndpoint();
+        aMembershipCredentialIsIssuedForTheConsumerFromTheConsumerKeycloak();
+        theConsumerMembershipCredentialIsInsertedIntoTheConsumerIdentityHub();
+    }
+
+    @Given("The provider identity is properly setup.")
+    public void setupProviderIdentity() throws Exception {
+        theProviderPrivateKeyPemFileIsAvailable();
+        theProviderPrivateKeyIsConvertedToJwkFormat();
+        theProviderJwkIsInsertedIntoTheProviderVault();
+        theProviderParticipantIsRegisteredInTheProviderIdentityHub();
+        theProviderDidDocumentIsAvailableAtTheWellKnownEndpoint();
+        aMembershipCredentialIsIssuedForTheProviderFromTheProviderKeycloak();
+        theProviderMembershipCredentialIsInsertedIntoTheProviderIdentityHub();
+    }
+
+    @Given("The provider catalog is properly setup.")
+    public void setupProviderCatalog() throws Exception {
+        theProviderCreatesADemoCategoryForDspOfferings();
+        theProviderCreatesADemoCatalogForDspOfferings();
+        theProviderCreatesADspProductSpecification();
+        theProviderCreatesADspProductOfferingWithEdcTerms();
     }
 
     /**
@@ -1608,8 +1719,8 @@ public class DSPStepDefinitions {
      */
     @When("The consumer starts a transfer process via the DCP management API.")
     public void theConsumerStartsTransferProcessViaDcp() throws Exception {
-        String counterPartyAddress = DCP_PROVIDER_ADDRESS + ":" + SERVICE_PORT + DSP_ENDPOINT_PATH;
-        JsonNode transferResponse = DSPManagementHelper.startTransferProcess(
+        String counterPartyAddress = DCP_PROVIDER_ADDRESS + DSP_ENDPOINT_PATH;
+        IdResponse transferResponse = DSPManagementHelper.startTransferProcess(
                 DCP_MANAGEMENT_API_ADDRESS,
                 DSP_ASSET_ID,
                 PROVIDER_DID,
@@ -1617,7 +1728,7 @@ public class DSPStepDefinitions {
                 dcpAgreementId,
                 DSPManagementHelper.TRANSFER_TYPE_HTTP_DATA_PULL);
         assertNotNull(transferResponse, "Transfer process start response should not be null.");
-        log.info("DCP transfer process started: {}", transferResponse);
+        dcpTransferId = transferResponse.getId();
     }
 
     /**
@@ -1626,7 +1737,7 @@ public class DSPStepDefinitions {
      */
     @When("The consumer waits for the DCP transfer process to start.")
     public void theConsumerWaitsForDcpTransferStarted() throws Exception {
-        dcpTransferId = DSPManagementHelper.waitForTransferStarted(DCP_MANAGEMENT_API_ADDRESS);
+        DSPManagementHelper.waitForTransferStarted(DCP_MANAGEMENT_API_ADDRESS, dcpTransferId);
         assertNotNull(dcpTransferId, "DCP transfer ID should not be null after transfer starts.");
         log.info("DCP transfer process started with ID: {}", dcpTransferId);
     }
@@ -1657,8 +1768,8 @@ public class DSPStepDefinitions {
         Request request = new Request.Builder()
                 .get()
                 .url(entityUrl)
-                .header("Content-Type", "application/json")
-                .header("Authorization", "Bearer " + dcpDataAddress.getToken())
+                .addHeader("Accept", "*/*")
+                .addHeader("Authorization", "Bearer " + dcpDataAddress.getToken())
                 .build();
         try (Response response = HTTP_CLIENT.newCall(request).execute()) {
             assertEquals(org.apache.http.HttpStatus.SC_OK, response.code(),
@@ -1675,33 +1786,17 @@ public class DSPStepDefinitions {
     // ==================== OID4VC Protocol Flow ====================
 
     /**
-     * Requests the provider catalog via the OID4VC management API.
-     * Equivalent to step 1 of "Order through DSP" > "OID4VC" in DSP_INTEGRATION.md.
-     * <p>
-     * Uses the OID4VC management API address and the OID4VC provider DSP endpoint.
-     */
-    @When("The consumer requests the provider catalog via the OID4VC management API.")
-    public void theConsumerRequestsTheProviderCatalogViaOid4vc() throws Exception {
-        String counterPartyAddress = OID4VC_PROVIDER_ADDRESS + ":" + SERVICE_PORT + DSP_ENDPOINT_PATH;
-        oid4vcCatalogResponse = DSPManagementHelper.requestCatalog(
-                OID4VC_MANAGEMENT_API_ADDRESS,
-                PROVIDER_DID,
-                counterPartyAddress);
-        assertNotNull(oid4vcCatalogResponse, "OID4VC catalog response should not be null.");
-        log.info("OID4VC catalog response received: {}", oid4vcCatalogResponse.toString().substring(0,
-                Math.min(oid4vcCatalogResponse.toString().length(), 500)));
-    }
-
-    /**
-     * Verifies the OID4VC catalog contains at least one dataset with the expected DSP asset.
-     * The catalog structure is identical to the DCP catalog (DCAT format).
+     * Verifies the OID4VC catalog contains at least one dataset with the expected DSP asset ID.
+     * The catalog is a DCAT structure; datasets appear under {@code dcat:dataset}.
      */
     @Then("The OID4VC catalog contains at least one dataset with the DSP asset.")
-    public void theOid4vcCatalogContainsAtLeastOneDataset() {
+    public void theOID4VCCatalogContainsAtLeastOneDataset() {
         assertNotNull(oid4vcCatalogResponse, "OID4VC catalog response must have been retrieved first.");
 
+        // Look for datasets in the catalog - the EDC returns them under "dcat:dataset"
         JsonNode datasets = oid4vcCatalogResponse.path("dcat:dataset");
         if (datasets.isMissingNode()) {
+            // Also try "@graph" or direct array
             datasets = oid4vcCatalogResponse.path("dataset");
         }
 
@@ -1709,6 +1804,7 @@ public class DSPStepDefinitions {
         if (datasets.isArray()) {
             hasDataset = datasets.size() > 0;
         } else if (!datasets.isMissingNode()) {
+            // Single dataset (not wrapped in array)
             hasDataset = true;
         } else {
             hasDataset = false;
@@ -1721,6 +1817,73 @@ public class DSPStepDefinitions {
     }
 
     /**
+     * Starts a contract negotiation via the OID4VC management API.
+     */
+    @When("The consumer starts a contract negotiation via the OID4VC management API.")
+    public void theConsumerStartsNegotiationViaOid4vc() throws Exception {
+        // First ensure we have a catalog; request one if needed
+        if (oid4vcCatalogResponse == null) {
+            theConsumerRequestsTheProviderCatalogViaOid4vc();
+        }
+
+        // Extract the offer ID from the catalog
+        String offerId = extractOfferIdFromCatalog(oid4vcCatalogResponse);
+        assertNotNull(offerId, "Should be able to extract an offer ID from the OID4VC catalog.");
+
+        // Build the contract policy matching DSP_INTEGRATION.md
+        ObjectNode policy = buildDcpContractPolicy(offerId);
+
+        String counterPartyAddress = OID4VC_PROVIDER_ADDRESS + DSP_ENDPOINT_PATH;
+        IdResponse negotiationResponse = DSPManagementHelper.startNegotiation(
+                OID4VC_MANAGEMENT_API_ADDRESS,
+                counterPartyAddress,
+                PROVIDER_DID,
+                offerId,
+                DSP_ASSET_ID,
+                policy);
+        assertNotNull(negotiationResponse, "Negotiation start response should not be null.");
+        log.info("OID4VC negotiation started: {}", negotiationResponse);
+        oid4vcNegotiationId = negotiationResponse.getId();
+    }
+
+    /**
+     * Waits for the OID4VC negotiation to reach the "FINALIZED" state and extracts the agreement ID.
+     */
+    @When("The consumer waits for the OID4VC negotiation to be finalized.")
+    public void theConsumerWaitsForOid4VcNegotiationFinalized() throws Exception {
+        oid4vcAgreementId = DSPManagementHelper.waitForNegotiationFinalized(OID4VC_MANAGEMENT_API_ADDRESS, oid4vcNegotiationId);
+        assertNotNull(oid4vcAgreementId, "OID4VC agreement ID should not be null after negotiation is finalized.");
+        log.info("OID4VC negotiation finalized with agreement ID: {}", oid4vcAgreementId);
+    }
+
+    /**
+     * Verifies that a valid contract agreement ID was obtained from the DCP negotiation.
+     */
+    @Then("The OID4VC negotiation yields a valid contract agreement ID.")
+    public void theOid4VcNegotiationYieldsAValidAgreementId() {
+        assertNotNull(oid4vcAgreementId, "OID4VC agreement ID should have been set during negotiation.");
+        assertFalse(oid4vcAgreementId.isBlank(), "OID4VC agreement ID should not be blank.");
+        log.info("Verified OID4VC agreement ID: {}", oid4vcAgreementId);
+    }
+
+    /**
+     * Requests the provider catalog via the OID4VC management API.
+     * <p>
+     * Uses the OID4VC management API address and the OID4VC provider DSP endpoint.
+     */
+    @When("The consumer requests the provider catalog via the OID4VC management API.")
+    public void theConsumerRequestsTheProviderCatalogViaOid4vc() throws Exception {
+        String counterPartyAddress = OID4VC_PROVIDER_ADDRESS + DSP_ENDPOINT_PATH;
+        oid4vcCatalogResponse = DSPManagementHelper.requestCatalog(
+                OID4VC_MANAGEMENT_API_ADDRESS,
+                PROVIDER_DID,
+                counterPartyAddress);
+        assertNotNull(oid4vcCatalogResponse, "OID4VC catalog response should not be null.");
+        log.info("OID4VC catalog response received: {}", oid4vcCatalogResponse.toString().substring(0,
+                Math.min(oid4vcCatalogResponse.toString().length(), 500)));
+    }
+
+    /**
      * Starts a transfer process via the OID4VC management API, reusing the agreement from DCP.
      * Equivalent to step 2 of "Order through DSP" > "OID4VC" in DSP_INTEGRATION.md.
      * <p>
@@ -1729,17 +1892,18 @@ public class DSPStepDefinitions {
      */
     @When("The consumer starts a transfer process via the OID4VC management API.")
     public void theConsumerStartsTransferProcessViaOid4vc() throws Exception {
-        assertNotNull(dcpAgreementId, "A finalized DCP contract agreement is required for OID4VC transfer.");
-        String counterPartyAddress = OID4VC_PROVIDER_ADDRESS + ":" + SERVICE_PORT + DSP_ENDPOINT_PATH;
-        JsonNode transferResponse = DSPManagementHelper.startTransferProcessWithDataDestination(
+        assertNotNull(oid4vcAgreementId, "A finalized OID4VC contract agreement is required for OID4VC transfer.");
+        String counterPartyAddress = OID4VC_PROVIDER_ADDRESS + DSP_ENDPOINT_PATH;
+        IdResponse transferResponse = DSPManagementHelper.startTransferProcessWithDataDestination(
                 OID4VC_MANAGEMENT_API_ADDRESS,
                 DSP_ASSET_ID,
                 PROVIDER_DID,
                 counterPartyAddress,
-                dcpAgreementId,
+                oid4vcAgreementId,
                 DSPManagementHelper.TRANSFER_TYPE_HTTP_DATA_PULL);
         assertNotNull(transferResponse, "OID4VC transfer process start response should not be null.");
         log.info("OID4VC transfer process started: {}", transferResponse);
+        oid4vcTransferId = transferResponse.getId();
     }
 
     /**
@@ -1748,7 +1912,7 @@ public class DSPStepDefinitions {
      */
     @When("The consumer waits for the OID4VC transfer process to start.")
     public void theConsumerWaitsForOid4vcTransferStarted() throws Exception {
-        oid4vcTransferId = DSPManagementHelper.waitForTransferStarted(OID4VC_MANAGEMENT_API_ADDRESS);
+        DSPManagementHelper.waitForTransferStarted(OID4VC_MANAGEMENT_API_ADDRESS, oid4vcTransferId);
         assertNotNull(oid4vcTransferId, "OID4VC transfer ID should not be null after transfer starts.");
         log.info("OID4VC transfer process started with ID: {}", oid4vcTransferId);
     }
@@ -1782,6 +1946,21 @@ public class DSPStepDefinitions {
         assertNotNull(oid4vcDataAddress, "OID4VC data address must be available.");
         assertNotNull(oid4vcDataAddress.getEndpoint(), "OID4VC endpoint must be available.");
         log.info("Consumer has started OID4VC transfer with endpoint: {}", oid4vcDataAddress.getEndpoint());
+    }
+
+    /**
+     * Ensures the consumer has a finalized OID4VC contract agreement (prerequisite for transfer).
+     * If no agreement exists yet, runs the full negotiation flow.
+     */
+    @Given("The consumer has a finalized OID4VC contract agreement.")
+    public void theConsumerHasAFinalizedOid4VcContractAgreement() throws Exception {
+        if (oid4vcAgreementId == null || oid4vcAgreementId.isBlank()) {
+            theConsumerRequestsTheProviderCatalogViaOid4vc();
+            theConsumerStartsNegotiationViaOid4vc();
+            theConsumerWaitsForOid4VcNegotiationFinalized();
+        }
+        assertNotNull(oid4vcAgreementId, "A finalized OID4VC contract agreement ID is required.");
+        log.info("Consumer has finalized OID4VC contract agreement: {}", oid4vcAgreementId);
     }
 
     /**
@@ -1903,7 +2082,7 @@ public class DSPStepDefinitions {
         Request request = new Request.Builder()
                 .get()
                 .url(entityUrl)
-                .header("Content-Type", "application/json")
+                .header("Accept", "application/json")
                 .header("Authorization", "Bearer " + oid4vcAccessToken)
                 .build();
         try (Response response = HTTP_CLIENT.newCall(request).execute()) {
@@ -1916,6 +2095,17 @@ public class DSPStepDefinitions {
                     "Returned entity ID should match the UptimeReport.");
             log.info("Successfully accessed UptimeReport via OID4VC transfer endpoint at {}", entityUrl);
         }
+    }
+
+    @Given("An OID4VC Transfer Process is started.")
+    public void theOid4VcTransferProcessIsStarted() throws Exception {
+        setupConsumerIdentity();
+        setupProviderIdentity();
+        setupProviderCatalog();
+        theProviderCreatesAnUptimeReportEntity();
+        theConsumerHasAFinalizedOid4VcContractAgreement();
+        theConsumerStartsTransferProcessViaOid4vc();
+        theConsumerWaitsForOid4vcTransferStarted();
     }
 
     // ==================== DCP Helper Methods ====================
@@ -2014,7 +2204,7 @@ public class DSPStepDefinitions {
                 okhttp3.MediaType.parse(MediaType.APPLICATION_JSON));
         Request request = new Request.Builder()
                 .post(body)
-                .url(PROVIDER_PAP_ADDRESS + ":" + SERVICE_PORT + "/policy")
+                .url(PROVIDER_PAP_ADDRESS + "/policy")
                 .header("Content-Type", "application/json")
                 .build();
         try (Response response = HTTP_CLIENT.newCall(request).execute()) {
@@ -2046,15 +2236,15 @@ public class DSPStepDefinitions {
     /**
      * Gets an access token for the consumer via OID4VP exchange using the DSP wallet.
      *
-     * @param credentialId the credential ID in the wallet (e.g., {@code user-credential})
-     * @param scope        the OAuth scope to request
+     * @param credentialId  the credential ID in the wallet (e.g., {@code user-credential})
+     * @param scope         the OAuth scope to request
      * @param targetAddress the base URL of the service to authenticate against
      * @return the access token string
      * @throws Exception if the token exchange fails
      */
     private String getDspAccessToken(String credentialId, String scope, String targetAddress) throws Exception {
         OpenIdConfiguration oidcConfig = MPOperationsEnvironment.getOpenIDConfiguration(
-                targetAddress + ":" + SERVICE_PORT);
+                targetAddress);
         return dspWallet.exchangeCredentialForToken(oidcConfig, credentialId, scope);
     }
 
@@ -2165,7 +2355,7 @@ public class DSPStepDefinitions {
      * Verifies that a DID document is accessible at the given URL.
      * The request goes through the Squid proxy (as configured in TestUtils.OK_HTTP_CLIENT).
      *
-     * @param didDocUrl the full URL to the DID document (e.g., {@code https://fancy-marketplace.biz/.well-known/did.json})
+     * @param didDocUrl   the full URL to the DID document (e.g., {@code https://fancy-marketplace.biz/.well-known/did.json})
      * @param expectedDid the expected DID value in the document
      */
     private void verifyDidDocument(String didDocUrl, String expectedDid) throws Exception {
@@ -2193,11 +2383,11 @@ public class DSPStepDefinitions {
      * Queries the credentials endpoint of the IdentityHub management API.
      *
      * @param identityHubManagementAddress the base URL of the IdentityHub management API
-     * @param participantDid              the DID of the participant whose credentials to check
+     * @param participantDid               the DID of the participant whose credentials to check
      */
     private void verifyCredentialInIdentityHub(String identityHubManagementAddress, String participantDid) throws Exception {
         String base64ParticipantId = IdentityHubHelper.base64UrlEncode(participantDid);
-        String credentialsUrl = identityHubManagementAddress + ":" + SERVICE_PORT
+        String credentialsUrl = identityHubManagementAddress
                 + "/api/identity/v1alpha/participants/" + base64ParticipantId + "/credentials";
 
         Request request = new Request.Builder()
