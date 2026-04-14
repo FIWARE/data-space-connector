@@ -725,6 +725,47 @@ keycloak:
               access.token.claim: "true"
 
     # -- client scopes to be imported
+    # example
+    # - name: LegalPersonCredential
+    #   description: OIDC4VC Scope
+    #   protocol: openid-connect
+    #   attributes: {}
+    #   protocolMappers:
+    #     - name: context-mapper
+    #       protocol: oid4vc
+    #       protocolMapper: oid4vc-context-mapper
+    #       config:
+    #         context: https://www.w3.org/2018/credentials/v1
+    #         supportedCredentialTypes: VerifiableCredential,LegalPersonCredential,OperatorCredential
+    #     - name: email-mapper
+    #       protocol: oid4vc
+    #       protocolMapper: oid4vc-user-attribute-mapper
+    #       config:
+    #         subjectProperty: email
+    #         userAttribute: email
+    #         supportedCredentialTypes: LegalPersonCredential,OperatorCredential
+    #     - name: firstName-mapper
+    #       protocol: oid4vc
+    #       protocolMapper: oid4vc-user-attribute-mapper
+    #       config:
+    #         subjectProperty: firstName
+    #         userAttribute: firstName
+    #         supportedCredentialTypes: LegalPersonCredential,OperatorCredential
+    #     - name: lastName-mapper
+    #       protocol: oid4vc
+    #       protocolMapper: oid4vc-user-attribute-mapper
+    #       config:
+    #         subjectProperty: lastName
+    #         userAttribute: lastName
+    #         supportedCredentialTypes: LegalPersonCredential,OperatorCredential
+    #     - name: role-mapper
+    #       protocol: oid4vc
+    #       protocolMapper: oid4vc-target-role-mapper
+    #       config:
+    #         subjectProperty: roles
+    #         clientId: did:web:fancy-marketplace.biz
+    #         supportedCredentialTypes: LegalPersonCredential,OperatorCredential
+
     clientScopes: []
 
     # -- default client roles
