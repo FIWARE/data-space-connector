@@ -124,7 +124,7 @@ Also extends each client's optionalClientScopes with all clientScope names.
 
 {{/*
 Render clients as a JSON array. Supports string (raw JSON elements) or list.
-Merges defaultClients and clients.
+Merges defaultClients and clients. Extra clients override defaults with the same clientId.
 */}}
 {{- define "dsc.clients" -}}
 {{- $default := (include "dsc.defaultClients" . | fromJson).list -}}
@@ -132,7 +132,17 @@ Merges defaultClients and clients.
 {{- if kindIs "string" .Values.keycloak.realm.clients -}}
 {{- $extra = (printf "{\"list\":[%s]}" (.Values.keycloak.realm.clients | trim) | fromJson).list -}}
 {{- end -}}
-{{- concat $default $extra | toPrettyJson -}}
+{{- $extraIds := list -}}
+{{- range $extra -}}
+{{- $extraIds = append $extraIds .clientId -}}
+{{- end -}}
+{{- $merged := list -}}
+{{- range $default -}}
+{{- if not (has .clientId $extraIds) -}}
+{{- $merged = append $merged . -}}
+{{- end -}}
+{{- end -}}
+{{- concat $merged $extra | toPrettyJson -}}
 {{- end -}}
 
 {{/*

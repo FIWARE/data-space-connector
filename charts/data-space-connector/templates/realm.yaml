@@ -12,7 +12,7 @@ data:
       "id": "{{ .Values.keycloak.realm.name }}",
       "realm": "{{ .Values.keycloak.realm.name }}",
       "displayName": "{{ .Values.keycloak.realm.name }}",
-      "displayNameHtml": "{{ .Values.keycloak.realm.displayNameHtml | default (printf "<div class=\"kc-logo-text\"><span>%s</span></div>" .Values.keycloak.realm.name) }}",
+      "displayNameHtml": "{{ .Values.keycloak.realm.displayNameHtml | default (printf "<div class=\\\"kc-logo-text\\\"><span>%s</span></div>" .Values.keycloak.realm.name) }}",
       "verifiableCredentialsEnabled": true,
       "enabled": true,
       "attributes": {{ include "dsc.realmAttributes" . | indent 6 | trim }},

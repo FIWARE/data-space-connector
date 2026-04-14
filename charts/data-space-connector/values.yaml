@@ -769,13 +769,14 @@ keycloak:
     clientScopes: []
 
     # -- default client roles
-    defaultClientRoles:
+    defaultClientRoles: {}
+
+    # -- client roles to be imported - be aware the env vars can be used and will be replaced. Support string (old style) or key-value
+    clientRoles:
       ${DID}:
         - name: ADMIN
           description: Is allowed to do everything
           clientRole: true
-    # -- client roles to be imported - be aware the env vars can be used and will be replaced. Support string (old style) or key-value
-    clientRoles:
 
     defaultUsers: []
     # -- users to be imported - be aware the env vars can be used and will be replaced. Support string (old style) or array
@@ -1040,14 +1041,12 @@ keycloak:
     defaultDefaultClientScopes:
       - acr
       - roles
-      - role_list
       - email
       - web-origins
       - profile
     extraDefaultClientScopes: []
 
     defaultOptionalClientScopes:
-      - oid4vc_user_scope
       - microprofile-jwt
       - phone
       - address
@@ -1073,7 +1072,7 @@ keycloak:
         name: vc+sd-jwt
       jwt-vc-builder:
         id: jwt-vc-builder
-        name: jwt-vc
+        name: jwt_vc
     # -- Map of verifiable credentials supported by the realm. Each key is the credential name.
     # A clientScope is automatically generated from each credential's attributes.scope value.
     # Do NOT declare the same scope manually in clientScopes or defaultClientScopes to avoid duplicates.
