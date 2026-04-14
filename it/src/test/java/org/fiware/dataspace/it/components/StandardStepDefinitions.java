@@ -3,13 +3,10 @@ package org.fiware.dataspace.it.components;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.cucumber.java.After;
 import io.cucumber.java.Before;
-import io.cucumber.java.an.E;
 import io.cucumber.java.en.Given;
 import io.cucumber.java.en.Then;
 import io.cucumber.java.en.When;
-import io.cucumber.java.zh_cn.假如;
 import jakarta.ws.rs.core.MediaType;
 import lombok.extern.slf4j.Slf4j;
 import okhttp3.*;
@@ -21,7 +18,6 @@ import org.fiware.dataspace.tmf.model.*;
 import org.keycloak.common.crypto.CryptoIntegration;
 import org.opentest4j.AssertionFailedError;
 
-import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
@@ -31,16 +27,16 @@ import java.util.*;
 
 import static org.fiware.dataspace.it.components.FancyMarketplaceEnvironment.OPERATOR_USER_NAME;
 import static org.fiware.dataspace.it.components.FancyMarketplaceEnvironment.TEST_USER_NAME;
+import static org.fiware.dataspace.it.components.MPOperationsEnvironment.PROVIDER_PAP_ADDRESS;
+import static org.fiware.dataspace.it.components.MPOperationsEnvironment.TMF_DIRECT_ADDRESS;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * @author <a href="https://github.com/wistefan">Stefan Wiedemann</a>
  */
 @Slf4j
-public class StepDefinitions {
+public class StandardStepDefinitions extends StepDefintions {
 
-    private static final OkHttpClient HTTP_CLIENT = TestUtils.OK_HTTP_CLIENT;
-    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
     private static final String USER_CREDENTIAL = "user-credential";
     private static final String OPERATOR_CREDENTIAL = "operator-credential";
     private static final String DEFAULT_SCOPE = "default";
@@ -113,33 +109,6 @@ public class StepDefinitions {
         cleanUpAgreements();
     }
 
-    private void prepareTil() throws Exception {
-
-        IssuerCredential legalPersonCredential = new IssuerCredential("LegalPersonCredential", List.of());
-        IssuerCredential userCredential = new IssuerCredential("UserCredential", List.of());
-        IssuerCredential membershipCredential = new IssuerCredential("MembershipCredential", List.of());
-
-        TrustedIssuer consumerTrustedIssuer = new TrustedIssuer(FancyMarketplaceEnvironment.CONSUMER_DID, List.of(legalPersonCredential, userCredential, membershipCredential));
-        TrustedIssuer providerTrustedIssuer = new TrustedIssuer(MPOperationsEnvironment.PROVIDER_DID, List.of(legalPersonCredential));
-
-        RequestBody consumerCreateBody = RequestBody.create(OBJECT_MAPPER.writeValueAsString(consumerTrustedIssuer), okhttp3.MediaType.parse(MediaType.APPLICATION_JSON));
-        Request consumerCreate = new Request.Builder()
-                .post(consumerCreateBody)
-                .url(MPOperationsEnvironment.TIL_DIRECT_ADDRESS + "/issuer")
-                .build();
-        try (Response consumerResponse = HTTP_CLIENT.newCall(consumerCreate).execute()) {
-            log.info("Updated consumer - code {}", consumerResponse.code());
-        }
-
-        RequestBody providerCreateBody = RequestBody.create(OBJECT_MAPPER.writeValueAsString(providerTrustedIssuer), okhttp3.MediaType.parse(MediaType.APPLICATION_JSON));
-        Request providerCreate = new Request.Builder()
-                .post(providerCreateBody)
-                .url(MPOperationsEnvironment.TIL_DIRECT_ADDRESS + "/issuer")
-                .build();
-        try (Response providerResponse = HTTP_CLIENT.newCall(providerCreate).execute()) {
-            log.info("Updated provider - code {}", providerResponse.code());
-        }
-    }
 
     private void cleanUpDcatCatalog() throws Exception {
         Request catalogsRequest = new Request.Builder()
@@ -230,170 +199,23 @@ public class StepDefinitions {
                 });
     }
 
-    private void cleanUpTIL() throws Exception {
-        Request getTilEntries = new Request.Builder()
-                .get()
-                .url(MPOperationsEnvironment.TIL_DIRECT_ADDRESS + "/issuer")
-                .build();
-        List<String> trustedIssuers = new ArrayList<>();
-        try (Response tilEntriesResponse = HTTP_CLIENT.newCall(getTilEntries).execute()) {
-            String tilResponseBody = tilEntriesResponse.body().string();
-            TILResponse tilResponse = OBJECT_MAPPER.readValue(tilResponseBody, TILResponse.class);
-            tilResponse.getItems()
-                    .forEach(trustedIssuers::add);
-        }
-        trustedIssuers
-                .forEach(id -> {
-                    Request deletionRequest = new Request.Builder()
-                            .delete()
-                            .url(MPOperationsEnvironment.TIL_DIRECT_ADDRESS + "/issuer/" + id)
-                            .build();
-                    try (Response deletionResponse = HTTP_CLIENT.newCall(deletionRequest).execute()) {
-                        log.debug("Deleted {} - code {}", id, deletionResponse.code());
-                    } catch (IOException e) {
-                        log.warn("Was not able to delete issuer {}", id);
-                    }
-                });
-    }
-
     private void cleanUpTMForum() throws Exception {
-        Request offerRequest = new Request.Builder()
-                .get()
-                .url(MPOperationsEnvironment.TMF_DIRECT_ADDRESS + "/tmf-api/productCatalogManagement/v4/productOffering")
-                .build();
-        Response offerResponse = HTTP_CLIENT.newCall(offerRequest).execute();
-        assertEquals(HttpStatus.SC_OK, offerResponse.code(), "The offer should have been returend");
-        List<ProductOfferingVO> offers = OBJECT_MAPPER.readValue(offerResponse.body().string(), new TypeReference<List<ProductOfferingVO>>() {
-        });
-        offers.stream()
-                .map(ProductOfferingVO::getId)
-                .forEach(id -> {
-                    Request deletionRequest = new Request.Builder()
-                            .delete()
-                            .url(MPOperationsEnvironment.TMF_DIRECT_ADDRESS + "/tmf-api/productCatalogManagement/v4/productOffering/" + id)
-                            .build();
-                    try {
-                        HTTP_CLIENT.newCall(deletionRequest).execute();
-                    } catch (IOException e) {
-                        // ignore
-                    }
-                });
-        offerResponse.body().close();
 
-        Request specRequest = new Request.Builder()
-                .get()
-                .url(MPOperationsEnvironment.TMF_DIRECT_ADDRESS + "/tmf-api/productCatalogManagement/v4/productSpecification")
-                .build();
-        Response specResponse = HTTP_CLIENT.newCall(specRequest).execute();
-        assertEquals(HttpStatus.SC_OK, specResponse.code(), "The spec should have been returend");
-        List<ProductSpecificationVO> specs = OBJECT_MAPPER.readValue(specResponse.body().string(), new TypeReference<List<ProductSpecificationVO>>() {
-        });
-        specs.stream()
-                .map(ProductSpecificationVO::getId)
-                .forEach(id -> {
-                    Request deletionRequest = new Request.Builder()
-                            .delete()
-                            .url(MPOperationsEnvironment.TMF_DIRECT_ADDRESS + "/tmf-api/productCatalogManagement/v4/productSpecification/" + id)
-                            .build();
-                    try {
-                        HTTP_CLIENT.newCall(deletionRequest).execute();
-                    } catch (IOException e) {
-                        // ignore
-                    }
-                });
-        specResponse.body().close();
+        cleanUpTMForumResourceList(TMF_DIRECT_ADDRESS,
+                "/tmf-api/productCatalogManagement/v4/productOffering", "Standard offeringss");
+        cleanUpTMForumResourceList(TMF_DIRECT_ADDRESS,
+                "/tmf-api/productCatalogManagement/v4/productSpecification", "Standard specifications");
+        cleanUpTMForumResourceList(TMF_DIRECT_ADDRESS,
+                "/tmf-api/productOrderingManagement/v4/productOrder", "Standard orders");
+        cleanUpTMForumResourceList(TMF_DIRECT_ADDRESS,
+                "/tmf-api/agreementManagement/v4/agreement", "Standard agreements");
+        cleanUpTMForumResourceList(TMF_DIRECT_ADDRESS,
+                "/tmf-api/party/v4/organization", "Standard organizations");
 
-        Request orderRequest = new Request.Builder()
-                .get()
-                .url(MPOperationsEnvironment.TMF_DIRECT_ADDRESS + "/tmf-api/productOrderingManagement/v4/productOrder")
-                .build();
-        Response orderResponse = HTTP_CLIENT.newCall(orderRequest).execute();
-        assertEquals(HttpStatus.SC_OK, orderResponse.code(), "The spec should have been returend");
-        List<ProductOrderVO> orders = OBJECT_MAPPER.readValue(orderResponse.body().string(), new TypeReference<List<ProductOrderVO>>() {
-        });
-        orders.stream()
-                .map(ProductOrderVO::getId)
-                .forEach(id -> {
-                    Request deletionRequest = new Request.Builder()
-                            .delete()
-                            .url(MPOperationsEnvironment.TMF_DIRECT_ADDRESS + "/tmf-api/productOrderingManagement/v4/productOrder/" + id)
-                            .build();
-                    try {
-                        HTTP_CLIENT.newCall(deletionRequest).execute();
-                    } catch (IOException e) {
-                        // ignore
-                    }
-                });
-        orderResponse.body().close();
-
-        Request agreementsRequest = new Request.Builder()
-                .get()
-                .url(MPOperationsEnvironment.TMF_DIRECT_ADDRESS + "/tmf-api/productCatalogManagement/v4/productSpecification")
-                .build();
-        Response agreementsResponse = HTTP_CLIENT.newCall(agreementsRequest).execute();
-        assertEquals(HttpStatus.SC_OK, agreementsResponse.code(), "The spec should have been returend");
-        List<TMFAgreement> agreements = OBJECT_MAPPER.readValue(agreementsResponse.body().string(), new TypeReference<List<TMFAgreement>>() {
-        });
-        agreements.stream()
-                .map(TMFAgreement::getId)
-                .forEach(id -> {
-                    Request deletionRequest = new Request.Builder()
-                            .delete()
-                            .url(MPOperationsEnvironment.TMF_DIRECT_ADDRESS + "/tmf-api/agreementManagement/v4/agreement/" + id)
-                            .build();
-                    try {
-                        HTTP_CLIENT.newCall(deletionRequest).execute();
-                    } catch (IOException e) {
-                        // ignore
-                    }
-                });
-        orderResponse.body().close();
-
-        Request organizationRequest = new Request.Builder()
-                .get()
-                .url(MPOperationsEnvironment.TMF_DIRECT_ADDRESS + "/tmf-api/party/v4/organization")
-                .build();
-        Response organizationResponse = HTTP_CLIENT.newCall(organizationRequest).execute();
-        assertEquals(HttpStatus.SC_OK, organizationResponse.code(), "The spec should have been returend");
-        List<OrganizationVO> organizations = OBJECT_MAPPER.readValue(organizationResponse.body().string(), new TypeReference<List<OrganizationVO>>() {
-        });
-        organizations.stream()
-                .map(OrganizationVO::getId)
-                .forEach(id -> {
-                    Request deletionRequest = new Request.Builder()
-                            .delete()
-                            .url(MPOperationsEnvironment.TMF_DIRECT_ADDRESS + "/tmf-api/party/v4/organization/" + id)
-                            .build();
-                    try {
-                        HTTP_CLIENT.newCall(deletionRequest).execute();
-                    } catch (IOException e) {
-                        // ignore
-                    }
-                });
-        organizationResponse.body().close();
     }
 
     private void cleanUpPolicies() throws Exception {
-        Request getPolicies = new Request.Builder()
-                .url(MPOperationsEnvironment.PROVIDER_PAP_ADDRESS + "/policy")
-                .get().build();
-        Response policyResponse = HTTP_CLIENT.newCall(getPolicies).execute();
-        String bodyString = policyResponse.body().string();
-        List<Policy> policies = OBJECT_MAPPER.readValue(bodyString, new TypeReference<List<Policy>>() {
-        });
-
-        policies.forEach(policy -> {
-            Request deletionRequest = new Request.Builder()
-                    .url(MPOperationsEnvironment.PROVIDER_PAP_ADDRESS + "/policy/" + policy.getId())
-                    .delete()
-                    .build();
-            try (Response r = HTTP_CLIENT.newCall(deletionRequest).execute()) {
-                log.info("Deleted policy {}: {}", policy.getId(), r.code());
-            } catch (IOException e) {
-                // just log
-                log.warn("Was not able to clean up policy {}.", policy.getId());
-            }
-        });
+        super.cleanUpPolicies(PROVIDER_PAP_ADDRESS);
     }
 
     private static final List<String> WELL_KNOWN_ENTITY_IDS = List.of(
