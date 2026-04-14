@@ -933,7 +933,7 @@ keycloak:
       name: realms
     - name: did-priv-key
       secret:
-        secretName: mp-operations.org-tls
+        secretName: signing-key
   issuerDid: did:web:mp-operations.org
   signingKey:
     storePath: /did-material/cert.pfx
