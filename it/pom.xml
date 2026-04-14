@@ -514,6 +514,10 @@
                                 <phase>pre-integration-test</phase>
                             </execution>
                             <execution>
+                                <id>apply-cert-manager</id>
+                                <phase>pre-integration-test</phase>
+                            </execution>
+                            <execution>
                                 <id>apply-participants</id>
                                 <phase>pre-integration-test</phase>
                             </execution>

@@ -344,6 +344,23 @@
                             <additionalArguments>--name-template=postgres-operator --namespace=postgres-operator -f ${main.basedir}/k3s/postgres-operator.yaml</additionalArguments>
                         </configuration>
                     </execution>
+                    <!-- Cert-Manager operator as referenced in the DSC chart -->
+                    <execution>
+                        <id>template-dsc-cert-manager</id>
+                        <goals>
+                            <goal>init</goal>
+                            <goal>dependency-update</goal>
+                            <goal>template</goal>
+                        </goals>
+                        <phase>package</phase>
+                        <configuration>
+                            <chartDirectory>${project.build.directory}/charts/data-space-connector</chartDirectory>
+                            <skipTemplate>false</skipTemplate>
+                            <templateGenerateName>true</templateGenerateName>
+                            <templateOutputDir>${project.build.directory}/k3s/infra/cert-manager</templateOutputDir>
+                            <additionalArguments>--name-template=cert-manager --namespace=cert-manager -f ${main.basedir}/k3s/cert-manager.yaml</additionalArguments>
+                        </configuration>
+                    </execution>
                 </executions>
             </plugin>
             <!-- Workaround for https://github.com/apache/apisix-helm-chart/issues/949:
@@ -414,17 +431,6 @@
                         </configuration>
                     </execution>
                     <execution>
-                        <id>apply-certs</id>
-                        <phase>deploy</phase>
-                        <goals>
-                            <goal>apply</goal>
-                        </goals>
-                        <configuration>
-                            <manifests>${project.build.directory}/k3s/certs</manifests>
-                            <timeout>500</timeout>
-                        </configuration>
-                    </execution>
-                    <execution>
                         <id>apply-mongo-operator</id>
                         <phase>deploy</phase>
                         <goals>
@@ -458,6 +464,17 @@
                         </configuration>
                     </execution>
                     <execution>
+                        <id>apply-cert-manager</id>
+                        <phase>deploy</phase>
+                        <goals>
+                            <goal>apply</goal>
+                        </goals>
+                        <configuration>
+                            <manifests>${project.build.directory}/k3s/infra/cert-manager</manifests>
+                            <timeout>500</timeout>
+                        </configuration>
+                    </execution>
+                    <execution>
                         <id>apply-participants</id>
                         <phase>deploy</phase>
                         <goals>
@@ -477,28 +494,6 @@
             <id>local</id>
             <build>
                 <plugins>
-                    <plugin>
-                        <groupId>org.apache.maven.plugins</groupId>
-                        <artifactId>maven-antrun-plugin</artifactId>
-                        <version>1.8</version>
-                        <executions>
-                            <execution>
-                                <id>prepare-certificates</id>
-                                <phase>generate-test-sources</phase>
-                                <goals>
-                                    <goal>run</goal>
-                                </goals>
-                                <configuration>
-                                    <tasks>
-                                        <exec executable="/bin/bash">
-                                            <arg value="${main.basedir}/helpers/certs/generate-certs.sh" />
-                                            <arg value="${main.basedir}/k3s" />
-                                        </exec>
-                                    </tasks>
-                                </configuration>
-                            </execution>
-                        </executions>
-                    </plugin>
                     <plugin>
                         <groupId>io.github.download-maven-plugin</groupId>
                         <artifactId>download-maven-plugin</artifactId>

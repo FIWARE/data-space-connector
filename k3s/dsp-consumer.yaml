@@ -32,6 +32,9 @@ fdsc-edc:
         - name: signing-key
           secret:
             secretName: signing-key
+            items:
+              - key: tls.key
+                path: tls.key
         - name: credentials-script
           configMap:
             name: credentials-script
@@ -44,7 +47,10 @@ fdsc-edc:
           emptyDir: {}
         - name: root-ca
           secret:
-            secretName: root-ca
+            secretName: fancy-marketplace.biz-tls
+            items:
+              - key: ca.crt
+                path: ca.crt
         - name: cacerts
           emptyDir: {}
       additionalEnvVars:
@@ -54,7 +60,7 @@ fdsc-edc:
             -Dhttps.proxyPort=8888
             -Dhttp.proxyHost=squid-proxy.infra.svc.cluster.local
             -Dhttp.proxyPort=8888
-            -Dhttp.nonProxyHosts="*-vault|*.cluster.local"    
+            -Dhttp.nonProxyHosts="*-vault|*.cluster.local"
       initContainers:
         # helper container to wait for keycloak present in local deployments, to avoid cascading crash-loops
         - name: wait-for-keycloak
@@ -81,7 +87,8 @@ fdsc-edc:
             - name: cacerts
               mountPath: /certs-folder/
             - name: root-ca
-              mountPath: /root-ca
+              mountPath: /root-ca/cacert.pem
+              subPath: ca.crt
         # get a credential to be used by the contract-management
         - name: get-credential
           image: quay.io/curl/curl:8.1.2
@@ -113,7 +120,7 @@ fdsc-edc:
           id: did:web:fancy-marketplace.biz
           kid: did:web:fancy-marketplace.biz
           key:
-            path: /signing-key/client-pkcs8.key.pem
+            path: /signing-key/tls.key
         proxy:
           enabled: true
           host: squid-proxy.infra.svc.cluster.local
@@ -138,7 +145,7 @@ fdsc-edc:
           version: org.eclipse.tractusx.vc.type:MembershipCredential:read
 
 
-did: 
+did:
   enabled: false
 
 # edc requires keys directly addressed in the header, even if only one is used
@@ -150,26 +157,20 @@ keycloak:
 identityhub:
   enabled: true
   didIngress:
-    enabled: true
     annotations:
       traefik.ingress.kubernetes.io/service.passhostheader: "true"
       traefik.ingress.kubernetes.io/router.tls: "true"
-  endpoints:
-    identity:
-      authKeyAlias: "sup3r$3cr3t"
-  superuser:
-    key: c3VwZXItdXNlcg==.random
-  env:
-    JAVA_TOOL_OPTIONS: -Dhttps.proxyHost=squid-proxy.infra.svc.cluster.local -Dhttps.proxyPort=8888 -Dhttp.proxyHost=squid-proxy.infra.svc.cluster.local -Dhttp.proxyPort=8888 -Dhttp.nonProxyHosts="*-vault|*.cluster.local" -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=5005
-  didIngress:
-    enabled: true
-    annotations:
-      traefik.ingress.kubernetes.io/service.passhostheader: "true"
-      traefik.ingress.kubernetes.io/router.tls: "true"
+      cert-manager.io/cluster-issuer: "selfsigned-issuer"
+      cert-manager.io/private-key-algorithm: "ECDSA"
+      cert-manager.io/common-name: "fancy-marketplace.biz"
     hosts:
     - host: fancy-marketplace.biz
       paths:
         - /
+    tls:
+    - secretName: fancy-marketplace.biz-tls
+      hosts:
+        - fancy-marketplace.biz
   postgresql:
     host: postgres
     port: 5432
@@ -190,13 +191,16 @@ identityhub:
         defaultMode: 0755
     - name: root-ca
       secret:
-        secretName: root-ca
+        secretName: fancy-marketplace.biz-tls
+        items:
+          - key: ca.crt
+            path: ca.crt
     - name: cacerts
       emptyDir: {}
   initContainers:
     - name: load-certs
-      image: "quay.io/fiware/contract-management:3.3.5"
-      command: ["/bin/sh", "-c", "/bin/import-ca.sh /certs-folder /root-ca/cacert.pem"]
+      image: "quay.io/seamware/fdsc-edc-controlplane-oid4vc:0.1.1"
+      command: ["/bin/sh", "-c", "/bin/import-ca.sh /certs-folder /root-ca/cacert.pem /opt/java/openjdk/lib/security/cacerts"]
       volumeMounts:
         - name: ca-certs-script
           mountPath: /bin/import-ca.sh
@@ -204,7 +208,15 @@ identityhub:
         - name: cacerts
           mountPath: /certs-folder/
         - name: root-ca
-          mountPath: /root-ca
+          mountPath: /root-ca/cacert.pem
+          subPath: ca.crt
+  endpoints:
+    identity:
+      authKeyAlias: "sup3r$3cr3t"
+  superuser:
+    key: c3VwZXItdXNlcg==.random
+  env:
+    JAVA_TOOL_OPTIONS: -Dhttps.proxyHost=squid-proxy.infra.svc.cluster.local -Dhttps.proxyPort=8888 -Dhttp.proxyHost=squid-proxy.infra.svc.cluster.local -Dhttp.proxyPort=8888 -Dhttp.nonProxyHosts="*-vault|*.cluster.local" -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=5005
 
 # required to provide the secrets for identity hub
 vault:
