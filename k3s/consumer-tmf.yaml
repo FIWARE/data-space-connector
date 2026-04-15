@@ -92,7 +92,7 @@ contract-management:
     initContainers:
       - name: convert-signing-key
         image: alpine/openssl:3.5.5
-        command: ["sh", "-c", "openssl pkcs8 -topk8 -nocrypt -in /signing-key-raw/tls.key -out /signing-key/tls.key"]
+        command: ["sh", "-c", "openssl pkcs8 -topk8 -nocrypt -in /signing-key-raw/tls.key -out /signing-key/tls.key && chmod 644 /signing-key/tls.key"]
         volumeMounts:
           - name: signing-key-raw
             mountPath: /signing-key-raw
@@ -142,6 +142,7 @@ contract-management:
       - name: signing-key-raw
         secret:
           secretName: fancy-marketplace.biz-tls
+          defaultMode: 0755
       - name: credentials-script
         configMap:
           name: credentials-script
