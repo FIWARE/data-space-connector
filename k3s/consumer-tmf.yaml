@@ -165,7 +165,6 @@ contract-management:
         mountPath: /credential-repo
       - name: signing-key
         mountPath: /signing-key
-        subPath: tls.key
       # add the self generated root ca to the system truststore
       - name: root-ca
         mountPath: /etc/ssl/cacert.pem
