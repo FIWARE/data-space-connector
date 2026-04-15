@@ -7,7 +7,7 @@ dependencies:
   - name: decentralized-iam
     alias: decentralizedIam
     condition: decentralizedIam.enabled
-    version: 2.0.4
+    version: 2.0.5
     repository: https://fiware.github.io/decentralized-iam
   # data-service
   - name: scorpio-broker-aaio
