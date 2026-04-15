@@ -93,7 +93,7 @@ public class Wallet {
                 .build();
         Response tokenResponse = HTTP_CLIENT.newCall(tokenRequest).execute();
         try {
-            log.warn("Request at " + openIdConfiguration.getTokenEndpoint());
+            log.debug("Request at " + openIdConfiguration.getTokenEndpoint());
             assertEquals(HttpStatus.SC_OK, tokenResponse.code(), "A token should have been responded.");
             TokenResponse accessTokenResponse = OBJECT_MAPPER.readValue(tokenResponse.body().string(), TokenResponse.class);
             assertNotNull(accessTokenResponse.getAccessToken(), "The access token should have been returned.");
