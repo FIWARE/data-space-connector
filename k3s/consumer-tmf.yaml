@@ -57,7 +57,7 @@ contract-management:
     holder:
       holderId: did:web:fancy-marketplace.biz
       keyType: EC
-      keyPath: signing-key/tls.key
+      keyPath: /signing-key/tls.key
       signatureAlgorithm: ECDH-ES
     proxyConfig:
       enabled: true
@@ -90,6 +90,14 @@ contract-management:
   deployment:
     # init containers to be used for the local demo
     initContainers:
+      - name: convert-signing-key
+        image: alpine/openssl:3.5.5
+        command: ["sh", "-c", "openssl pkcs8 -topk8 -nocrypt -in /signing-key-raw/tls.key -out /signing-key/tls.key && chmod 644 /signing-key/tls.key"]
+        volumeMounts:
+          - name: signing-key-raw
+            mountPath: /signing-key-raw
+          - name: signing-key
+            mountPath: /signing-key
       # helper container to wait for keycloak present in local deployments, to avoid cascading crash-loops
       - name: wait-for-keycloak
         image: curlimages/curl:8.6.0
@@ -130,11 +138,11 @@ contract-management:
             mountPath: /credential-repo
     additionalVolumes:
       - name: signing-key
+        emptyDir: {}
+      - name: signing-key-raw
         secret:
-          secretName: signing-key
-          items:
-            - key: tls.key
-              path: tls.key
+          secretName: fancy-marketplace.biz-tls
+          defaultMode: 0755
       - name: credentials-script
         configMap:
           name: credentials-script
@@ -157,8 +165,7 @@ contract-management:
       - name: credential-repo
         mountPath: /credential-repo
       - name: signing-key
-        mountPath: /app/resources/signing-key/tls.key
-        subPath: tls.key
+        mountPath: /signing-key
       # add the self generated root ca to the system truststore
       - name: root-ca
         mountPath: /etc/ssl/cacert.pem

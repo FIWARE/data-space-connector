@@ -1,0 +1,20 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: traefik-default-tls
+  namespace: infra
+spec:
+  secretName: traefik-default-tls
+  issuerRef:
+    name: selfsigned-issuer
+    kind: ClusterIssuer
+    group: cert-manager.io
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+  dnsNames:
+    - "*.127.0.0.1.nip.io"
+    - "fancy-marketplace.biz"
+    - "*.fancy-marketplace.biz"
+    - "mp-operations.org"
+    - "*.mp-operations.org"

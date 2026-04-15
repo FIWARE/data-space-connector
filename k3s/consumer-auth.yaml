@@ -19,8 +19,6 @@ decentralizedIam:
     trusted-issuers-list:
       enabled: true
       deployment:
-        image:
-          tag: "0.8.0" # ToDo: remove when updating dependencies
         resources:
           limits:
             cpu: 300m

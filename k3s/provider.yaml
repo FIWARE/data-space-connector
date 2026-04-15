@@ -27,8 +27,6 @@ decentralizedIam:
               postgis: public
     trusted-issuers-list:
       deployment:
-        image:
-          tag: "0.8.0" # ToDo: remove when updating dependencies
         resources:
           limits:
             cpu: 300m
@@ -245,6 +243,9 @@ decentralizedIam:
           tirAddress: http://tir.127.0.0.1.nip.io/
           did: did:web:mp-operations.org
           supportedModes: ["byValue", "byReference"]
+          # required for the tests, can be longer in real world environments
+          tilCacheExpiry: 1
+          tirCacheExpiry: 1
           clientIdentification:
             keyPath: /signing-key/tls.key
             certificatePath: /signing-key/tls.crt
@@ -254,6 +255,7 @@ decentralizedIam:
           host: https://verifier.mp-operations.org
         configRepo:
           configEndpoint: http://credentials-config-service:8080
+          updateInterval: 1
         additionalVolumes:
           - name: signing-key
             secret:
@@ -1112,7 +1114,7 @@ keycloak:
     clientScopes: |
       {
         "name": "LegalPersonCredential",
-        "description": "OIDC4VC Scope, thahttps://github.com/wistefan/did-helpert adds all properties required for a user.",
+        "description": "OIDC4VC Scope, that adds all properties required for a user.",
         "protocol": "openid-connect",
         "attributes": {},
         "protocolMappers": [
