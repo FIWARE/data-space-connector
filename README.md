@@ -93,10 +93,11 @@ new release. Versioning follows [Semantic Versioning 2.0.0](https://semver.org/)
 contain breaking changes. Important releases will be listed below, with additional information linked:
 
 * [8.x.x](doc/release-notes/8-x.md) - Update the FIWARE Data Space Connector from 7.x.x to 8.x.x
+* [9.x.x](doc/release-notes/9-x.md) - :warning: **Breaking changes** - Upgrade the FIWARE Data Space Connector from 8.5.2 to 9.x.x
 
 
 ## Components
-The following diagram shows a logical overview of the different components of the FIWARE Data Space 
+The following diagram shows a logical overview of the different components of the FIWARE Data Space
 Connector.
 
 ![connector-components](doc/img/flows/Connector_Components.png)
