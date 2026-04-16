@@ -203,6 +203,38 @@ Each entry gets id and name from the key, providerId from .name.
 {{- end -}}
 
 {{/*
+Render the complete Keycloak realm as a JSON string.
+Values that contain Helm template expressions (e.g. {{ .Values.keycloak.realm.name }})
+are resolved by the caller via tpl.
+*/}}
+{{- define "dsc.realmJson" -}}
+{
+  "id": "{{ .Values.keycloak.realm.name }}",
+  "realm": "{{ .Values.keycloak.realm.name }}",
+  "displayName": "{{ .Values.keycloak.realm.name }}",
+  "displayNameHtml": "{{ .Values.keycloak.realm.displayNameHtml | default (printf "<div class=\\\"kc-logo-text\\\"><span>%s</span></div>" .Values.keycloak.realm.name) }}",
+  "verifiableCredentialsEnabled": true,
+  "enabled": true,
+  "attributes": {{ include "dsc.realmAttributes" . | indent 4 | trim }},
+  "sslRequired": {{ .Values.keycloak.realm.sslRequired | default "none" | quote }},
+  "roles": {
+    "realm": {{ include "dsc.realmRoles" . | indent 6 | trim }},
+    "client": {{ include "dsc.clientRoles" . | indent 6 | trim }}
+  },
+  "groups": {{ include "dsc.groups" . | indent 4 | trim }},
+  "users": {{ include "dsc.users" . | indent 4 | trim }},
+  "clients": {{ include "dsc.clients" . | indent 4 | trim }},
+  "clientScopes": {{ include "dsc.clientScopes" . | indent 4 | trim }},
+  "defaultDefaultClientScopes": {{ include "dsc.defaultDefaultClientScopes" . | indent 4 | trim }},
+  "defaultOptionalClientScopes": {{ include "dsc.defaultOptionalClientScopes" . | indent 4 | trim }},
+  "components": {
+    "org.keycloak.protocol.oid4vc.issuance.credentialbuilder.CredentialBuilder": {{ include "dsc.credentialBuilders" . | indent 6 | trim }},
+    "org.keycloak.keys.KeyProvider": {{ include "dsc.keyProviders" . | indent 6 | trim }}
+  }
+}
+{{- end -}}
+
+{{/*
 Build the KeyProvider list from defaultKeyProviders + extraKeyProviders
 and appends the signing key (elsi / signingKey / test-key fallback).
 */}}

@@ -8,28 +8,5 @@ metadata:
     {{- include "dsc.labels" . | nindent 4 }}
 data:
   {{ .Values.keycloak.realm.name }}-realm.json: |-
-    {
-      "id": "{{ .Values.keycloak.realm.name }}",
-      "realm": "{{ .Values.keycloak.realm.name }}",
-      "displayName": "{{ .Values.keycloak.realm.name }}",
-      "displayNameHtml": "{{ .Values.keycloak.realm.displayNameHtml | default (printf "<div class=\\\"kc-logo-text\\\"><span>%s</span></div>" .Values.keycloak.realm.name) }}",
-      "verifiableCredentialsEnabled": true,
-      "enabled": true,
-      "attributes": {{ include "dsc.realmAttributes" . | indent 6 | trim }},
-      "sslRequired": {{ .Values.keycloak.realm.sslRequired | default "none" | quote }},
-      "roles": {
-        "realm": {{ include "dsc.realmRoles" . | indent 8 | trim }},
-        "client": {{ include "dsc.clientRoles" . | indent 8 | trim }}
-      },
-      "groups": {{ include "dsc.groups" . | indent 6 | trim }},
-      "users": {{ include "dsc.users" . | indent 6 | trim }},
-      "clients": {{ include "dsc.clients" . | indent 6 | trim }},
-      "clientScopes": {{ include "dsc.clientScopes" . | indent 6 | trim }},
-      "defaultDefaultClientScopes": {{ include "dsc.defaultDefaultClientScopes" . | indent 6 | trim }},
-      "defaultOptionalClientScopes": {{ include "dsc.defaultOptionalClientScopes" . | indent 6 | trim }},
-      "components": {
-        "org.keycloak.protocol.oid4vc.issuance.credentialbuilder.CredentialBuilder": {{ include "dsc.credentialBuilders" . | indent 8 | trim }},
-        "org.keycloak.keys.KeyProvider": {{ include "dsc.keyProviders" . | indent 8 | trim }}
-      }
-    }
+    {{- tpl (include "dsc.realmJson" .) . | nindent 4 }}
 {{- end }}
