@@ -17,6 +17,7 @@ decentralizedIam:
   enabled: false
 
   vcAuthentication:
+    enabled: false
     postgres-operator:
       enabled: false
 
@@ -33,6 +34,7 @@ decentralizedIam:
       enabled: false
 
   odrlAuthorization:
+    enabled: false
     apisix:
       enabled: false
 
