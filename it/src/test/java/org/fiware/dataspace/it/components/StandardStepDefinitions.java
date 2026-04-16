@@ -202,7 +202,7 @@ public class StandardStepDefinitions extends StepDefintions {
     private void cleanUpTMForum() throws Exception {
 
         cleanUpTMForumResourceList(TMF_DIRECT_ADDRESS,
-                "/tmf-api/productCatalogManagement/v4/productOffering", "Standard offeringss");
+                "/tmf-api/productCatalogManagement/v4/productOffering", "Standard offerings");
         cleanUpTMForumResourceList(TMF_DIRECT_ADDRESS,
                 "/tmf-api/productCatalogManagement/v4/productSpecification", "Standard specifications");
         cleanUpTMForumResourceList(TMF_DIRECT_ADDRESS,

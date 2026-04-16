@@ -323,6 +323,7 @@ decentralizedIam:
         annotations:
           cert-manager.io/cluster-issuer: "selfsigned-issuer"
           cert-manager.io/private-key-algorithm: "ECDSA"
+          traefik.ingress.kubernetes.io/router.tls: "true"
         hosts:
           - host: mp-data-service.127.0.0.1.nip.io
             paths: ["/"]
@@ -380,6 +381,18 @@ decentralizedIam:
               uri: /services/data-service/.well-known/openid-configuration
         - uri: /.well-known/openid-configuration
           host: contract-management.127.0.0.1.nip.io
+          upstream:
+            nodes:
+              verifier:3000: 1
+            type: roundrobin
+          plugins:
+            proxy-rewrite:
+              uri: /services/contract-management/.well-known/openid-configuration
+        - uri: /*
+          host: contract-management.127.0.0.1.nip.io
+          priority: 100
+          vars:
+            - ["uri", "~~", "/\\.well-known/openid-configuration$"]
           upstream:
             nodes:
               verifier:3000: 1
@@ -661,7 +674,7 @@ tm-forum-api:
 
 contract-management:
   did: did:web:mp-operations.org
-  enableCentralMarketplace: false
+  enableCentralMarketplace: true
   enableOdrlPap: true
   enableRainbow: false
   services:

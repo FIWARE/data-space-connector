@@ -48,65 +48,98 @@ import static org.junit.jupiter.api.Assertions.*;
  * @see <a href="../../../../../../doc/CENTRAL_MARKETPLACE.md">Central Marketplace Integration Guide</a>
  */
 @Slf4j
-public class CentralMarketplaceStepDefinitions {
+public class CentralMarketplaceStepDefinitions extends StepDefintions {
 
-    private static final OkHttpClient HTTP_CLIENT = TestUtils.OK_HTTP_CLIENT;
-    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
-
-    /** Timeout in seconds for policy propagation at the central marketplace PAP. */
+    /**
+     * Timeout in seconds for policy propagation at the central marketplace PAP.
+     */
     private static final int POLICY_PROPAGATION_TIMEOUT_SECONDS = 20;
 
-    /** Timeout in seconds for contract management notification propagation after order completion. */
+    /**
+     * Timeout in seconds for contract management notification propagation after order completion.
+     */
     private static final int CONTRACT_PROPAGATION_TIMEOUT_SECONDS = 60;
 
-    /** The grant type for VP token exchange. */
+    /**
+     * The grant type for VP token exchange.
+     */
     private static final String GRANT_TYPE_VP_TOKEN = "vp_token";
 
-    /** The default scope used for user credential token exchange. */
+    /**
+     * The default scope used for user credential token exchange.
+     */
     private static final String DEFAULT_SCOPE = "default";
 
-    /** The operator scope used for operator credential token exchange. */
+    /**
+     * The operator scope used for operator credential token exchange.
+     */
     private static final String OPERATOR_SCOPE = "operator";
 
-    /** User credential configuration ID. */
+    /**
+     * User credential configuration ID.
+     */
     private static final String USER_CREDENTIAL = "user-credential";
 
-    /** Operator credential configuration ID. */
+    /**
+     * Operator credential configuration ID.
+     */
     private static final String OPERATOR_CREDENTIAL = "operator-credential";
 
-    /** Schema location for TMForum credential configuration characteristic. */
+    /**
+     * Schema location for TMForum credential configuration characteristic.
+     */
     private static final String CREDENTIALS_CONFIG_SCHEMA =
             "https://raw.githubusercontent.com/FIWARE/contract-management/refs/heads/main/schemas/credentials/credentialConfigCharacteristic.json";
 
-    /** Schema location for TMForum ODRL policy configuration characteristic. */
+    /**
+     * Schema location for TMForum ODRL policy configuration characteristic.
+     */
     private static final String POLICY_CONFIG_SCHEMA =
             "https://raw.githubusercontent.com/FIWARE/contract-management/refs/heads/policy-support/schemas/odrl/policyCharacteristic.json";
 
-    /** Wallet for the provider (M&P Operations) for marketplace interactions. */
+    /**
+     * Wallet for the provider (M&P Operations) for marketplace interactions.
+     */
     private Wallet providerWallet;
 
-    /** Wallet for the consumer (Fancy Marketplace) for marketplace interactions. */
+    /**
+     * Wallet for the consumer (Fancy Marketplace) for marketplace interactions.
+     */
     private Wallet consumerWallet;
 
-    /** Stores the provider organization ID after registration at the central marketplace. */
+    /**
+     * Stores the provider organization ID after registration at the central marketplace.
+     */
     private String providerOrganizationId;
 
-    /** Stores the consumer organization ID after registration at the central marketplace. */
+    /**
+     * Stores the consumer organization ID after registration at the central marketplace.
+     */
     private String consumerOrganizationId;
 
-    /** Stores the product specification ID created on the central marketplace. */
+    /**
+     * Stores the product specification ID created on the central marketplace.
+     */
     private String centralProductSpecId;
 
-    /** Stores the product offering ID created on the central marketplace. */
+    /**
+     * Stores the product offering ID created on the central marketplace.
+     */
     private String centralProductOfferingId;
 
-    /** Stores the listed offering ID when consumer browses the marketplace. */
+    /**
+     * Stores the listed offering ID when consumer browses the marketplace.
+     */
     private String listedOfferingId;
 
-    /** Tracks policies created at consumer PAP for cleanup. */
+    /**
+     * Tracks policies created at consumer PAP for cleanup.
+     */
     private final List<String> createdConsumerPolicies = new ArrayList<>();
 
-    /** Tracks policies created at provider PAP for cleanup. */
+    /**
+     * Tracks policies created at provider PAP for cleanup.
+     */
     private final List<String> createdProviderPolicies = new ArrayList<>();
 
     /**
@@ -126,19 +159,9 @@ public class CentralMarketplaceStepDefinitions {
         OBJECT_MAPPER.setSerializationInclusion(JsonInclude.Include.NON_EMPTY);
         log.debug("Central marketplace scenario setup: cleaning leftover resources from previous scenarios.");
         clean();
-    }
-
-    /**
-     * Cleans up resources after each central marketplace scenario.
-     *
-     * <p>Removes all objects created during the scenario to prevent interference with
-     * subsequent scenarios. Cleanup covers all TMForum entities, access policies, and
-     * trust list entries that may have been created.
-     */
-    @After("@central")
-    public void cleanUp() throws Exception {
-        log.debug("Central marketplace scenario teardown: cleaning resources created during scenario.");
-        clean();
+        prepareTil();
+        // allow the verifier to fetch the new config
+        Thread.sleep(3001);
     }
 
     /**
@@ -163,7 +186,7 @@ public class CentralMarketplaceStepDefinitions {
         cleanUpCentralMarketplaceTMForum();
         cleanUpConsumerPolicies();
         cleanUpProviderPolicies();
-        cleanUpProviderTIL();
+        cleanUpTIL();
         cleanUpProviderTMForum();
     }
 
@@ -174,7 +197,7 @@ public class CentralMarketplaceStepDefinitions {
      */
     private void cleanUpCentralMarketplaceTMForum() {
         try {
-            cleanUpTMForumResourcesAt(MARKETPLACE_API_ADDRESS);
+            cleanUpTMForumResourcesAt(CONSUMER_TMF_DIRECT_ADDRESS);
         } catch (Exception e) {
             log.warn("Failed to clean up central marketplace TMForum resources: {}", e.getMessage());
         }
@@ -185,7 +208,7 @@ public class CentralMarketplaceStepDefinitions {
      */
     private void cleanUpProviderTMForum() {
         try {
-            cleanUpTMForumResourcesAt(TMF_DIRECT_ADDRESS);
+            cleanUpTMForumResourcesAt(TM_FORUM_API_ADDRESS);
         } catch (Exception e) {
             log.warn("Failed to clean up provider TMForum resources: {}", e.getMessage());
         }
@@ -198,61 +221,24 @@ public class CentralMarketplaceStepDefinitions {
      */
     private void cleanUpTMForumResourcesAt(String tmfBaseAddress) throws Exception {
         // Clean offerings
-        deleteTMForumList(tmfBaseAddress,
+        cleanUpTMForumResourceList(tmfBaseAddress,
                 "/tmf-api/productCatalogManagement/v4/productOffering",
-                new TypeReference<List<ProductOfferingVO>>() {},
-                vo -> vo.getId(),
-                "/tmf-api/productCatalogManagement/v4/productOffering/");
+                "Central offerings");
 
         // Clean specs
-        deleteTMForumList(tmfBaseAddress,
+        cleanUpTMForumResourceList(tmfBaseAddress,
                 "/tmf-api/productCatalogManagement/v4/productSpecification",
-                new TypeReference<List<ProductSpecificationVO>>() {},
-                vo -> vo.getId(),
-                "/tmf-api/productCatalogManagement/v4/productSpecification/");
+                "Central specifications");
 
         // Clean orders
-        deleteTMForumList(tmfBaseAddress,
+        cleanUpTMForumResourceList(tmfBaseAddress,
                 "/tmf-api/productOrderingManagement/v4/productOrder",
-                new TypeReference<List<ProductOrderVO>>() {},
-                vo -> vo.getId(),
-                "/tmf-api/productOrderingManagement/v4/productOrder/");
+                "Central orders");
 
         // Clean organizations
-        deleteTMForumList(tmfBaseAddress,
+        cleanUpTMForumResourceList(tmfBaseAddress,
                 "/tmf-api/party/v4/organization",
-                new TypeReference<List<OrganizationVO>>() {},
-                vo -> vo.getId(),
-                "/tmf-api/party/v4/organization/");
-    }
-
-    /**
-     * Generic helper to list and delete TMForum resources.
-     */
-    private <T> void deleteTMForumList(String baseAddress, String listPath,
-                                       TypeReference<List<T>> typeRef,
-                                       java.util.function.Function<T, String> idExtractor,
-                                       String deletePath) {
-        try {
-            Request listRequest = new Request.Builder()
-                    .get()
-                    .url(baseAddress + listPath)
-                    .build();
-            try (Response listResponse = HTTP_CLIENT.newCall(listRequest).execute()) {
-                if (!listResponse.isSuccessful() || listResponse.body() == null) return;
-                List<T> items = OBJECT_MAPPER.readValue(listResponse.body().string(), typeRef);
-                for (T item : items) {
-                    String id = idExtractor.apply(item);
-                    Request deleteRequest = new Request.Builder()
-                            .delete()
-                            .url(baseAddress + deletePath + id)
-                            .build();
-                    try (Response ignored = HTTP_CLIENT.newCall(deleteRequest).execute()) {}
-                }
-            }
-        } catch (Exception e) {
-            log.warn("Failed to clean up {} at {}: {}", listPath, baseAddress, e.getMessage());
-        }
+                "Central organizations");
     }
 
     /**
@@ -282,43 +268,18 @@ public class CentralMarketplaceStepDefinitions {
             try (Response policyResponse = HTTP_CLIENT.newCall(getPolicies).execute()) {
                 if (!policyResponse.isSuccessful() || policyResponse.body() == null) return;
                 List<Policy> policies = OBJECT_MAPPER.readValue(
-                        policyResponse.body().string(), new TypeReference<List<Policy>>() {});
+                        policyResponse.body().string(), new TypeReference<List<Policy>>() {
+                        });
                 for (Policy policy : policies) {
                     Request deleteRequest = new Request.Builder()
                             .url(papAddress + "/policy/" + policy.getId())
                             .delete().build();
-                    try (Response ignored = HTTP_CLIENT.newCall(deleteRequest).execute()) {}
+                    try (Response ignored = HTTP_CLIENT.newCall(deleteRequest).execute()) {
+                    }
                 }
             }
         } catch (Exception e) {
             log.warn("Failed to clean up policies at {}: {}", papAddress, e.getMessage());
-        }
-    }
-
-    /**
-     * Cleans up the consumer TIL entry at the provider side to reset trust configuration.
-     */
-    private void cleanUpProviderTIL() {
-        try {
-            Request tilCleanRequest = new Request.Builder()
-                    .delete()
-                    .url(TIL_DIRECT_ADDRESS + "/issuer/" + CONSUMER_DID)
-                    .build();
-            HTTP_CLIENT.newCall(tilCleanRequest).execute().close();
-
-            Map<String, Object> tilConfig = Map.of(
-                    "did", CONSUMER_DID,
-                    "credentials", List.of(Map.of("credentialsType", "UserCredential", "claims", List.of())));
-            RequestBody tilUpdateBody = RequestBody.create(
-                    OBJECT_MAPPER.writeValueAsString(tilConfig),
-                    okhttp3.MediaType.parse(MediaType.APPLICATION_JSON));
-            Request tilUpdateRequest = new Request.Builder()
-                    .post(tilUpdateBody)
-                    .url(TIL_DIRECT_ADDRESS + "/issuer")
-                    .build();
-            HTTP_CLIENT.newCall(tilUpdateRequest).execute().close();
-        } catch (Exception e) {
-            log.warn("Failed to clean up provider TIL: {}", e.getMessage());
         }
     }
 
@@ -403,7 +364,8 @@ public class CentralMarketplaceStepDefinitions {
                         assertEquals(HttpStatus.SC_OK, policyResponse.code(),
                                 "The PAP should return policies.");
                         List<Policy> policies = OBJECT_MAPPER.readValue(
-                                policyResponse.body().string(), new TypeReference<List<Policy>>() {});
+                                policyResponse.body().string(), new TypeReference<List<Policy>>() {
+                                });
                         assertTrue(policies.size() >= 5,
                                 "At least 5 TMForum access policies should be registered at the marketplace PAP.");
                     } finally {
@@ -448,7 +410,7 @@ public class CentralMarketplaceStepDefinitions {
 
         // Build organization with contract management configuration
         Map<String, Object> contractManagementConfig = Map.of(
-                "address", CONTRACT_MANAGEMENT_ADDRESS + ":8080",
+                "address", CONTRACT_MANAGEMENT_ADDRESS,
                 "clientId", "contract-management",
                 "scope", List.of("external-marketplace"));
 
@@ -612,7 +574,8 @@ public class CentralMarketplaceStepDefinitions {
         try {
             assertEquals(HttpStatus.SC_OK, offerResponse.code(), "The offerings should be returned.");
             List<ProductOfferingVO> offers = OBJECT_MAPPER.readValue(
-                    offerResponse.body().string(), new TypeReference<List<ProductOfferingVO>>() {});
+                    offerResponse.body().string(), new TypeReference<List<ProductOfferingVO>>() {
+                    });
             assertEquals(1, offers.size(),
                     "There should be exactly one product offering at the central marketplace.");
         } finally {
@@ -707,7 +670,8 @@ public class CentralMarketplaceStepDefinitions {
         try {
             assertEquals(HttpStatus.SC_OK, offerResponse.code(), "The offerings should be returned.");
             List<ProductOfferingVO> offers = OBJECT_MAPPER.readValue(
-                    offerResponse.body().string(), new TypeReference<List<ProductOfferingVO>>() {});
+                    offerResponse.body().string(), new TypeReference<List<ProductOfferingVO>>() {
+                    });
             assertFalse(offers.isEmpty(), "At least one offering should be available at the central marketplace.");
             listedOfferingId = offers.get(0).getId();
             log.debug("Listed offering ID: {}", listedOfferingId);

@@ -18,7 +18,7 @@ public abstract class CentralMarketplaceEnvironment {
      * Base URL of the contract management service.
      * Handles contract lifecycle and notification flows between marketplace and provider.
      */
-    public static final String CONTRACT_MANAGEMENT_ADDRESS = "http://contract-management.127.0.0.1.nip.io";
+    public static final String CONTRACT_MANAGEMENT_ADDRESS = "https://contract-management.127.0.0.1.nip.io:443";
 
     /**
      * Base URL of the consumer's PAP (Policy Administration Point) for the central marketplace.
