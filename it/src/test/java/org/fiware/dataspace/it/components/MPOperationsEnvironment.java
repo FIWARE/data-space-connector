@@ -23,7 +23,7 @@ public abstract class MPOperationsEnvironment {
     public static final String PROVIDER_KEYCLOAK_ADDRESS = "https://keycloak-provider.127.0.0.1.nip.io";
     public static final String PROVIDER_PAP_ADDRESS = "http://pap-provider.127.0.0.1.nip.io";
     public static final String PROVIDER_API_ADDRESS = "https://mp-data-service.127.0.0.1.nip.io";
-    public static final String TM_FORUM_API_ADDRESS = "http://mp-tmf-api.127.0.0.1.nip.io";
+    public static final String TM_FORUM_API_ADDRESS = "https://mp-tmf-api.127.0.0.1.nip.io";
     // dataservice address with transfer process protocol enforcement
     public static final String PROVIDER_TPP_DATA_API_ADDRESS = "http://tpp-data-service.127.0.0.1.nip.io";
     public static final String PROVIDER_TPP_API_ADDRESS = "http://tpp-service.127.0.0.1.nip.io";
@@ -45,7 +45,6 @@ public abstract class MPOperationsEnvironment {
                 .build();
         Response wellKnownResponse = HTTP_CLIENT.newCall(wellKnownRequest).execute();
         try {
-            log.warn("The request: " + wellKnownRequest.toString());
             assertEquals(HttpStatus.SC_OK, wellKnownResponse.code(), "The oidc config should have been returned.");
             return OBJECT_MAPPER.readValue(wellKnownResponse.body().string(), OpenIdConfiguration.class);
         } finally {
