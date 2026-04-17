@@ -89,7 +89,7 @@ Register the Provider at the Marketplace, containing the address of the Contract
         {
             \"name\": \"contractManagement\",
             \"value\": {
-                \"address\": \"https://contract-management.127.0.0.1.nip.io\",
+                \"address\": \"https://contract-management.127.0.0.1.nip.io:443\",
                 \"clientId\":\"contract-management\",
                 \"scope\": [\"external-marketplace\"]  
             }
@@ -246,7 +246,7 @@ export CONSUMER_OPERATOR_CREDENTIAL=$(./doc/scripts/get_credential.sh https://ke
 Assert that access is not yet possible(e.g. the Consumer cannot get an AccessToken for the OperatorCredential):
 
 ```shell
-  export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh http://mp-data-service.127.0.0.1.nip.io $CONSUMER_OPERATOR_CREDENTIAL operator); echo ${ACCESS_TOKEN}
+export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh https://mp-data-service.127.0.0.1.nip.io $CONSUMER_OPERATOR_CREDENTIAL operator); echo ${ACCESS_TOKEN}
 ```
 
 Now register "fancy-marketplace.biz" as a Consumer at the Marketplace:
@@ -256,9 +256,9 @@ Register Fancy Marketplace as a Consumer
   # set the Consumer DID
   export CONSUMER_DID="did:web:fancy-marketplace.biz"
   # get an access token for the UserCredential
-  export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh http://fancy-marketplace.127.0.0.1.nip.io $CONSUMER_USER_CREDENTIAL default); echo ${ACCESS_TOKEN}
+  export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh https://fancy-marketplace.127.0.0.1.nip.io $CONSUMER_USER_CREDENTIAL default); echo ${ACCESS_TOKEN}
   # register fancy-marketplace.biz as an organization(no need for a contract-management address in the consumer)
-  export FANCY_MARKETPLACE_ID=$(curl -k -x localhost:8888 -X POST http://fancy-marketplace.127.0.0.1.nip.io/tmf-api/party/v4/organization \
+  export FANCY_MARKETPLACE_ID=$(curl -k -x localhost:8888 -X POST https://fancy-marketplace.127.0.0.1.nip.io/tmf-api/party/v4/organization \
     -H 'Accept: */*' \
     -H 'Content-Type: application/json' \
     -H "Authorization: Bearer ${ACCESS_TOKEN}" \

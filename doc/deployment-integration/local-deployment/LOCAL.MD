@@ -76,7 +76,7 @@ Get a list of the issuers:
 A new issuer could for example be registered via:
 
 ```shell
-  curl -k -x localhost:8888 -X POST http://til.127.0.0.1.nip.io/issuer \
+  curl -k -x localhost:8888 -X POST https://til.127.0.0.1.nip.io/issuer \
     --header 'Content-Type: application/json' \
     --data '{
       "did": "did:key:myKey",
@@ -325,13 +325,13 @@ Every required information for that flow can be retrieved via the standard endpo
 If you try to request the provider api without authentication, you will receive an 401:
 
 ```shell
-  curl -k -x localhost:8888 -s -X GET 'http://mp-data-service.127.0.0.1.nip.io/ngsi-ld/v1/entities/urn:ngsi-ld:EnergyReport:fms-1'
+  curl -k -x localhost:8888 -s -X GET 'https://mp-data-service.127.0.0.1.nip.io/ngsi-ld/v1/entities/urn:ngsi-ld:EnergyReport:fms-1'
 ```
 
 The normal flow is now to request the oidc-information at the well-known endpoint:
 
 ```shell
-  export TOKEN_ENDPOINT=$(curl -k -x localhost:8888 -s -X GET 'http://mp-data-service.127.0.0.1.nip.io/.well-known/openid-configuration' | jq -r '.token_endpoint'); echo $TOKEN_ENDPOINT
+  export TOKEN_ENDPOINT=$(curl -k -x localhost:8888 -s -X GET 'https://mp-data-service.127.0.0.1.nip.io/.well-known/openid-configuration' | jq -r '.token_endpoint'); echo $TOKEN_ENDPOINT
 ```
 
 In the response, the grant type `vp_token` will be present, indicating the support for the OID4VP authentication flow:
@@ -446,7 +446,7 @@ The vp_token can then be exchanged for the access-token
 With that token, try to access the data again:
 
 ```shell
-  curl -k -x localhost:8888 -s -X GET 'http://mp-data-service.127.0.0.1.nip.io/ngsi-ld/v1/entities/urn:ngsi-ld:EnergyReport:fms-1' \
+  curl -k -x localhost:8888 -s -X GET 'https://mp-data-service.127.0.0.1.nip.io/ngsi-ld/v1/entities/urn:ngsi-ld:EnergyReport:fms-1' \
     --header 'Accept: application/json' \
     --header "Authorization: Bearer ${DATA_SERVICE_ACCESS_TOKEN}"
 ```
@@ -1044,7 +1044,7 @@ In order to prove that not every user can just create a cluster, try the followi
 ```
 2. Try access with the OPERATOR_CREDENTIAL - no token will be returned:
 ```shell
-    ./doc/scripts/get_access_token_oid4vp.sh http://mp-data-service.127.0.0.1.nip.io $OPERATOR_CREDENTIAL operator
+    ./doc/scripts/get_access_token_oid4vp.sh https://mp-data-service.127.0.0.1.nip.io $OPERATOR_CREDENTIAL operator
 ```
 
 > :bulb: For easier access, the identity(in form of the did) of the consumer is available at ```https://did-consumer.127.0.0.1.nip.io/did-material/did.env```.
@@ -1079,7 +1079,7 @@ with the TMForum-APIs directly.
   1. List offerings
   ```shell
     export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh https://mp-data-service.127.0.0.1.nip.io $REP_CREDENTIAL default); echo $ACCESS_TOKEN
-    curl -X GET http://mp-tmf-api.127.0.0.1.nip.io:8080/tmf-api/productCatalogManagement/v4/productOffering -H "Authorization: Bearer ${ACCESS_TOKEN}" | jq .
+    curl -k -x localhost:8888 -X GET https://mp-tmf-api.127.0.0.1.nip.io/tmf-api/productCatalogManagement/v4/productOffering -H "Authorization: Bearer ${ACCESS_TOKEN}" | jq .
   ```
   2. To accept the offering, one has to be choosen and its id needs to be extracted. We will start with the "small" version:
   ```shell
