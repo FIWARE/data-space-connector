@@ -8,7 +8,7 @@ These services can be:
 - **APIs** — RESTful APIs, NGSI-LD endpoints or any other HTTP-based service
 - **Web applications** — applications that integrate with Verifiable Credentials via [OID4VC](https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html) for user authentication and authorization
 
-A provider also needs the ability to issue its own Verifiable Credentials (for its employees or services), so it includes all the components of a [Consumer](../consumer/README.md) plus additional authentication, authorization, and data service components.
+A provider may also needs the ability to issue its own Verifiable Credentials (for its employees or services), so it includes all the components of a [Consumer](../consumer/README.md) plus additional authentication, authorization, and data service components.
 
 ## Before you start
 
@@ -31,6 +31,8 @@ The provider needs the same base components as a consumer:
 - **Keycloak** — VC issuer for the provider's own users. For detailed configuration instructions, see the [Keycloak Configuration](../KEYCLOAK.md) guide.
 - **DID Helper** — publishes the provider's DID document
 - **Managed PostgreSQL** — database for IAM components
+
+> **Note:** If the data space uses the [Decentralized Claims Protocol (DCP)](https://eclipse-dataspace-dcp.github.io/decentralized-claims-protocol/v1.0.1/) (typically together with the [Dataspace Protocol](https://docs.internationaldataspaces.org/ids-knowledgebase/dataspace-protocol) via [FDSC-EDC](#fdsc-edc-dataspace-protocol)), the **DID Helper is replaced by the Identity Hub**, which serves the DID document (and the provider's credentials) as required by DCP. See the [Dataspace Protocol Integration Guide](../../../DSP_INTEGRATION.md) for details.
 
 ### Authentication: Verifiable Credential verification
 
@@ -65,7 +67,7 @@ The [TMForum API](https://github.com/FIWARE/tmforum-api) implements standardized
 
 ### Contract Management
 
-The [Contract Management](https://github.com/FIWARE/contract-management) component automates access control based on product orders. When a consumer purchases a product offering via the TMForum API, the Contract Management service automatically creates the corresponding ODRL access policies. Enable this when:
+The [Contract Management](https://github.com/FIWARE/contract-management) component automates access control based on product orders. When a consumer purchases a product offering via the TMForum API, Contract Management reacts to the order and, most importantly, **registers the consumer's DID in the provider's local Trusted Issuers List**, so the consumer's credentials are accepted at the provider when accessing the purchased service. Additionally, if the [Credentials Config Service](https://github.com/FIWARE/credentials-config-service) and the [ODRL-PAP](https://github.com/SEAMWARE/odrl-pap) are deployed, Contract Management also creates the matching credentials configuration and the ODRL access policies that encode the contract terms. Enable this when:
 - You use TMForum APIs for product ordering
 - Access should be granted/revoked automatically based on contracts
 - You need audit trails for data access agreements

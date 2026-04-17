@@ -34,14 +34,16 @@ Every participant in the data space needs a [Decentralized Identifier (DID)](htt
 
 The [DID Helper](https://github.com/SEAMWARE/did-helper) is a lightweight service that creates `did:key` or serves the consumer's [DID document](https://www.w3.org/TR/did-core/).
 
+> **Note:** If the data space uses the [Decentralized Claims Protocol (DCP)](https://eclipse-dataspace-dcp.github.io/decentralized-claims-protocol/v1.0.1/) (typically together with the [Dataspace Protocol](https://docs.internationaldataspaces.org/ids-knowledgebase/dataspace-protocol) via [FDSC-EDC](#fdsc-edc-dataspace-protocol)), the **DID Helper is replaced by the Identity Hub**, which serves the DID document (and the consumer's credentials) as required by DCP. See the [Dataspace Protocol Integration Guide](../../../DSP_INTEGRATION.md) for details.
+
 The DID document contains the consumer's public key, which providers use to verify that credentials were issued by this organization. The DID must be registered at the data space's Trust Anchor following the Data Space onboarding process.
 
 
 ## Optional components
 
-### FDSC-EDC (Dataspace Protocol)
+### Dataspace Protocol(FDSC-EDC and IdentityHub)
 
-If the data space requires compliance with the [Dataspace Protocol (DSP)](https://docs.internationaldataspaces.org/ids-knowledgebase/dataspace-protocol), the consumer can enable the Eclipse Dataspace Components connector. This adds support for standardized contract negotiation and data transfer protocols.
+If the data space requires compliance with the [Dataspace Protocol (DSP)](https://eclipse-dataspace-protocol-base.github.io/DataspaceProtocol/2025-1-err1/), the consumer can enable the Eclipse Dataspace Components connector. This adds support for standardized contract negotiation and data transfer protocols.
 
 Enable this when:
 - The data space mandates DSP compliance
@@ -210,7 +212,7 @@ helm install consumer fiware/data-space-connector \
 
 ### DID and key management
 
-- Use a registered domain name that your organization controls for the `did:web` identifier
+- Use a registered domain name that your organization controls for the [`did:web`](https://w3c-ccg.github.io/did-method-web/) identifier
 - Ensure the DID document is served over HTTPS with a valid certificate
 - Protect the private key associated with your DID — it is the foundation of your organization's identity in the data space. If compromised, an attacker could issue credentials on your behalf
 
@@ -218,7 +220,6 @@ helm install consumer fiware/data-space-connector \
 
 - Register your organization's DID at the data space's Trust Anchor before deploying
 - Coordinate with the Data Space Operator regarding:
-  - Which credential types your organization is allowed to issue
   - The Trust Anchor's TIR endpoint URL (needed for provider credential verification)
 
 ### Credential configuration
