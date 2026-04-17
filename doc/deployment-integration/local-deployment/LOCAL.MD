@@ -64,7 +64,7 @@ f.e. [Gaia-X Digital Clearing Houses](https://gaia-x.eu/gxdch)) and could be reu
 
 The local Data Spaces comes with the [FIWARE Trusted Issuers List](https://github.com/FIWARE/trusted-issuers-list) as a
 rather simple implementation of that API, providing CRUD functionality
-for Issuers and storage in an MySQL Database. After deployment, the API is available
+for Issuers and storage in a PSQL Database. After deployment, the API is available
 at ```http://tir.127.0.0.1.nip.io:8080```. Both participants
 are automatically registered as "Trusted Issuers" in the registry with their did's.
 
@@ -201,7 +201,7 @@ You will receive a jwt-encoded credential to be used within the data space.
 
 ### The Data Provider
 
-![Provider](../../img/local/provider.jpg)
+![Provider](../../img/local/provider.png)
 
 The Data Provider requires a couple of more components, in order to provide secure access to its data. It needs
 essentially 3 building blocks:

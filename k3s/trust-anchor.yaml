@@ -1,3 +1,6 @@
+postgres-operator:
+  enabled: false
+
 trusted-issuers-list:
   # -- it should work as the TrustedIssuersRegistry of the dataspace, thus we publish this api only
   ingress:
@@ -17,11 +20,3 @@ trusted-issuers-list:
       requests:
         cpu: 100m
         memory: 128Mi
-
-mysql:
-  primary:
-    persistence:
-      enabled: false
-  secondary:
-    persistence:
-      enabled: false
