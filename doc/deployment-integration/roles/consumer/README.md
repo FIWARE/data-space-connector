@@ -8,7 +8,7 @@ A Consumer is an organization that **retrieves data or services from other parti
 
 ## Before you start
 
-Before deploying, contact the **data space administrator** to initiate the onboarding process for your organization. The administrator will guide you through:
+Before deploying, contact the **Data Space Operator** to initiate the onboarding process for your organization. The Operator will guide you through:
 
 - The documentation and requirements needed to join the data space
 - Registration of your organization's DID at the Trust Anchor
@@ -217,7 +217,7 @@ helm install consumer fiware/data-space-connector \
 ### Trust Anchor registration
 
 - Register your organization's DID at the data space's Trust Anchor before deploying
-- Coordinate with the data space Admin regarding:
+- Coordinate with the Data Space Operator regarding:
   - Which credential types your organization is allowed to issue
   - The Trust Anchor's TIR endpoint URL (needed for provider credential verification)
 

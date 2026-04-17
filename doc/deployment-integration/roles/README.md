@@ -11,7 +11,7 @@ If you are new to the FIWARE DSC, start with the [Quick Start Guide](../quick-st
 | [**Consumer**](consumer/README.md) | Retrieves data or services from other participants. Needs the ability to issue Verifiable Credentials for its users. |
 | [**Provider**](provider/README.md) | Offers data or services to other participants. Needs to verify incoming credentials, enforce access policies, and host data services. |
 | [**Consumer + Provider**](consumer-provider/README.md) | Acts as both consumer and provider. This is the most common scenario in real-world data spaces. |
-| [**Admin**](admin/README.md) | Operates the shared trust infrastructure of the data space (Trust Anchor, Onboarding services, etc). This role is typically fulfilled by a neutral governance body, not by a data space participant. |
+| [**Operator**](operator/README.md) | Operates the shared trust infrastructure of the data space (Trust Anchor, Onboarding services, etc). This role is typically fulfilled by a neutral governance body, not by a data space participant. |
 
 ## Component matrix
 
@@ -27,7 +27,7 @@ The following table shows which components are required, optional, or not applic
             <th>Consumer</th>
             <th>Provider</th>
             <th>Consumer + Provider</th>
-            <th>Admin</th>
+            <th>Operator</th>
         </tr>
     </thead>
     <tbody>

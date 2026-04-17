@@ -12,7 +12,7 @@ A provider also needs the ability to issue its own Verifiable Credentials (for i
 
 ## Before you start
 
-Before deploying, contact the **data space administrator** to initiate the onboarding process for your organization. The administrator will guide you through:
+Before deploying, contact the **Data Space Operator** to initiate the onboarding process for your organization. The Operator will guide you through:
 
 - The documentation and requirements needed to join the data space
 - Registration of your organization's DID at the Trust Anchor

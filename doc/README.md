@@ -70,7 +70,7 @@ Documentation for deploying the FIWARE DSC according to your organization's role
   * [Consumer](./deployment-integration/roles/consumer/README.md)
   * [Provider](./deployment-integration/roles/provider/README.md)
   * [Consumer + Provider](./deployment-integration/roles/consumer-provider/README.md)
-  * [Admin (Data Space Governance)](./deployment-integration/roles/admin/README.md)
+  * [Operator (Data Space Governance)](./deployment-integration/roles/operator/README.md)
 
 ### Local Deployment (Maven)
 

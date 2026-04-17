@@ -1,16 +1,16 @@
-# Admin Role: Data Space Governance
+# Operator Role: Data Space Governance
 
 ## Overview
 
-The Admin role operates the **shared trust infrastructure** of the data space. Unlike consumer or provider roles, the Admin is not a participant in data exchange — it is the **neutral governance authority** that maintains the trust framework enabling all participants to interact securely.
+The Data Space Operator operates the **shared trust infrastructure** of the data space. Unlike consumer or provider roles, the Operator is not a participant in data exchange — it is the **neutral governance authority** that maintains the trust framework enabling all participants to interact securely.
 
-In a FIWARE Data Space, the Admin's primary responsibility is operating the **Trust Anchor**: the central registry where all trusted participants and their credentials are registered.
+In a FIWARE Data Space, the Operator's primary responsibility is operating the **Trust Anchor**: the central registry where all trusted participants and their credentials are registered.
 
 ## Onboarding new participants
 
 ### Participant onboarding
 
-The Admin is also responsible for the **onboarding of new organizations** into the data space. This process includes validating the required documentation and registering the organization in the Trust Anchor.
+The Operator is also responsible for the **onboarding of new organizations** into the data space. This process includes validating the required documentation and registering the organization in the Trust Anchor.
 
 1. Verify the organization's identity and legitimacy (out-of-band process)
 2. Register the organization's DID at the Trust Anchor
@@ -30,7 +30,7 @@ The [Trusted Issuers Registry](https://github.com/FIWARE/trusted-issuers-list) i
 
 ### Trusted Issuers List (TIL) management API
 
-The management interface allows the Admin to:
+The management interface allows the Operator to:
 - Register new participants (by their DID) as trusted issuers
 - Define which credential types each issuer is allowed to issue
 - Remove participants that are no longer trusted
@@ -39,7 +39,7 @@ The management interface allows the Admin to:
 
 The Trust Anchor requires an SQL database to persist the list of trusted issuers.
 
-**Important:** The Trust Anchor must have its own **dedicated database instance**, completely separate from any participant's infrastructure. Since the Admin is a neutral entity independent of any provider or consumer, sharing database infrastructure would compromise the neutrality and security of the trust registry.
+**Important:** The Trust Anchor must have its own **dedicated database instance**, completely separate from any participant's infrastructure. Since the Operator is a neutral entity independent of any provider or consumer, sharing database infrastructure would compromise the neutrality and security of the trust registry.
 
 ## Optional components
 
@@ -51,7 +51,7 @@ The [Onboarding Portal](https://github.com/SEAMWARE/On-Boarding-Portal/tree/main
 - Validating the organization's identity and DID
 - Registering the organization in the Trust Anchor upon approval
 
-The Onboarding Portal simplifies the Admin's work by replacing manual registration processes with a guided workflow. See the [Onboarding Portal documentation](https://github.com/SEAMWARE/On-Boarding-Portal/tree/main) for deployment and configuration details.
+The Onboarding Portal simplifies the Operator's work by replacing manual registration processes with a guided workflow. See the [Onboarding Portal documentation](https://github.com/SEAMWARE/On-Boarding-Portal/tree/main) for deployment and configuration details.
 
 ## Helm chart
 
@@ -88,7 +88,7 @@ The Trust Anchor should be deployed on **infrastructure managed independently** 
 
 - Use valid TLS certificates from a real CA (not self-signed)
 - The TIR read API (`/v4/issuers`) should be publicly accessible (participants need to query it)
-- The TIL management API (`/issuer`) must be **strictly restricted** — only authorized administrators should be able to register or remove issuers
+- The TIL management API (`/issuer`) must be **strictly restricted** — only authorized operators should be able to register or remove issuers
 
 ### Integration with trust frameworks
 
