@@ -11,7 +11,6 @@ decentralizedIam:
 
   # -- configuration for the vc-authentication to be deployed as part of the connector, see https://github.com/FIWARE/vc-authentication/tree/master
   vcAuthentication:
-
     ## Usage of the postgres-operator - see https://github.com/zalando/postgres-operator
     managedPostgres:
       # -- should it be enabled? Requires the postgres-operator CRDs to be installed before applying the chart
@@ -126,7 +125,6 @@ decentralizedIam:
 
   # configuration for the odrl-authorization to be deployed as part of the connector, see https://github.com/FIWARE/odrl-authorization/tree/master
   odrlAuthorization:
-
     # -- configuration for the odrl-pap to be deployed as part of the connector, see https://apisix.apache.org/
     apisix:
       ingress-controller:
@@ -225,14 +223,14 @@ scorpio:
 
   # -- additional init containers to be used for the dataplane
   #initContainers:
-    # -- curl container to register at the credentials config service
-    #- name: register-credential-config
-    #  image: quay.io/curl/curl:8.1.2
-    #  command: [ "/bin/sh", "-c", "/bin/init.sh" ]
-    #  volumeMounts:
-    #    - name: scorpio-registration
-    #      mountPath: /bin/init.sh
-    #      subPath: init.sh
+  # -- curl container to register at the credentials config service
+  #- name: register-credential-config
+  #  image: quay.io/curl/curl:8.1.2
+  #  command: [ "/bin/sh", "-c", "/bin/init.sh" ]
+  #  volumeMounts:
+  #    - name: scorpio-registration
+  #      mountPath: /bin/init.sh
+  #      subPath: init.sh
   # -- additonal volumes to be mounted for the dataplane
   additionalVolumes:
     - name: scorpio-registration
@@ -246,7 +244,7 @@ elsi:
   enabled: false
   # -- keystore to be used for signing the credentials
   # keystore:
-    # store.p12: <THE_ENCODED_CONTENT>
+  # store.p12: <THE_ENCODED_CONTENT>
   # -- the did to be used
   did:
   # -- algorithm of the signing key
@@ -331,17 +329,9 @@ keycloak:
       value: "--import-realm --health-enabled true"
     - name: KC_FEATURES
       value: "oid4vc-vci"
-    # keycloak admin password
-    - name: KC_ADMIN_PASSWORD
-      valueFrom:
-        secretKeyRef:
-          name: issuance-secret
-          key: keycloak-admin
     # set in accordance with the memory requests, will result in OOM otherwise
     - name: KC_HEAP_SIZE
       value: "1024m"
-    - name: KC_HEALTH_ENABLED
-      value: "true"
 
   # -- configuration of the realm to be imported
   realm:
@@ -351,132 +341,828 @@ keycloak:
     name: test-realm
     # -- frontend url to be used for the realm
     frontendURL: http://localhost:8080
-    # -- client roles to be imported - be aware the env vars can be used and will be replaced
-    clientRoles: |
-      "${DID}": [
-        {
-          "name": "ADMIN",
-          "description": "Is allowed to do everything",
-          "clientRole": true
-        }
-      ]
-    # -- users to be imported - be aware the env vars can be used and will be replaced
-    users: |
-      {
-        "username": "admin-user",
-        "enabled": true,
-        "email": "admin@provider.org",
-        "firstName": "Test",
-        "lastName": "Admin",
-        "credentials": [
-          {
-            "type": "password",
-            "value": "test"
-          }
-        ],
-        "clientRoles": {
-          "${DID}": [
-            "ADMIN"
-          ],
-          "account": [
-            "view-profile",
-            "manage-account"
-          ]
-        },
-        "groups": [
-        ]
-      }
-    # -- clients to be imported - be aware the env vars can be used and will be replaced
-    clients: |
-      {
-        "clientId": "${DID}",
-        "enabled": true,
-        "description": "Client to manage itself",
-        "surrogateAuthRequired": false,
-        "alwaysDisplayInConsole": false,
-        "clientAuthenticatorType": "client-secret",
-        "defaultRoles": [],
-        "redirectUris": [],
-        "webOrigins": [],
-        "notBefore": 0,
-        "bearerOnly": false,
-        "consentRequired": false,
-        "standardFlowEnabled": true,
-        "implicitFlowEnabled": false,
-        "directAccessGrantsEnabled": false,
-        "serviceAccountsEnabled": false,
-        "publicClient": false,
-        "frontchannelLogout": false,
-        "protocol": "oid4vc",
-        "attributes": {
-          "oid4vci.enabled": true,
-          "client.secret.creation.time": "1675260539",
-          "vc.natural-person.format": "jwt_vc",
-          "vc.natural-person.scope": "NaturalPersonCredential",
-          "vc.verifiable-credential.format": "jwt_vc",
-          "vc.verifiable-credential.scope": "VerifiableCredential"
-        },
-        "protocolMappers": [
-          {
-            "name": "target-role-mapper",
-            "protocol": "oid4vc",
-            "protocolMapper": "oid4vc-target-role-mapper",
-            "config": {
-              "subjectProperty": "roles",
-              "clientId": "${DID}",
-              "supportedCredentialTypes": "NaturalPersonCredential"
-            }
-          },
-          {
-            "name": "target-vc-role-mapper",
-            "protocol": "oid4vc",
-            "protocolMapper": "oid4vc-target-role-mapper",
-            "config": {
-              "subjectProperty": "roles",
-              "clientId": "${DID}",
-              "supportedCredentialTypes": "VerifiableCredential"
-            }
-          },
-          {
-            "name": "context-mapper",
-            "protocol": "oid4vc",
-            "protocolMapper": "oid4vc-context-mapper",
-            "config": {
-              "context": "https://www.w3.org/2018/credentials/v1",
-              "supportedCredentialTypes": "VerifiableCredential,NaturalPersonCredential"
-            }
-          },
-          {
-            "name": "email-mapper",
-            "protocol": "oid4vc",
-            "protocolMapper": "oid4vc-user-attribute-mapper",
-            "config": {
-              "subjectProperty": "email",
-              "userAttribute": "email",
-              "supportedCredentialTypes": "NaturalPersonCredential"
-            }
-          }
-        ],
-        "authenticationFlowBindingOverrides": {},
-        "fullScopeAllowed": true,
-        "nodeReRegistrationTimeout": -1,
-        "defaultClientScopes": [],
-        "optionalClientScopes": []
-      }
+    # -- custom displayNameHtml for the realm. If empty, defaults to "<div class="kc-logo-text"><span>{realm.name}</span></div>"
+    displayNameHtml: ""
+    sslRequired: none
+    # -- realm attributes. Support string (old style) or key-value
+    attributes:
+    defaultClientScopes:
+      - name: basic
+        description: OpenID Connect scope for add all basic claims to the token
+        protocol: openid-connect
+        attributes:
+          include.in.token.scope: "false"
+          display.on.consent.screen: "false"
+        protocolMappers:
+          - name: sub
+            protocol: openid-connect
+            protocolMapper: oidc-sub-mapper
+            consentRequired: false
+            config:
+              introspection.token.claim: "true"
+              access.token.claim: "true"
+          - name: auth_time
+            protocol: openid-connect
+            protocolMapper: oidc-usersessionmodel-note-mapper
+            consentRequired: false
+            config:
+              user.session.note: AUTH_TIME
+              id.token.claim: "true"
+              introspection.token.claim: "true"
+              access.token.claim: "true"
+              claim.name: auth_time
+              jsonType.label: long
+      - name: roles
+        description: OpenID Connect scope for add user roles to the access token
+        protocol: openid-connect
+        attributes:
+          include.in.token.scope: "false"
+          display.on.consent.screen: "true"
+          consent.screen.text: ${rolesScopeConsentText}
+        protocolMappers:
+          - name: audience resolve
+            protocol: openid-connect
+            protocolMapper: oidc-audience-resolve-mapper
+            consentRequired: false
+            config:
+              introspection.token.claim: "true"
+              access.token.claim: "true"
+          - name: realm roles
+            protocol: openid-connect
+            protocolMapper: oidc-usermodel-realm-role-mapper
+            consentRequired: false
+            config:
+              introspection.token.claim: "true"
+              multivalued: "true"
+              user.attribute: foo
+              access.token.claim: "true"
+              claim.name: realm_access.roles
+              jsonType.label: String
+          - name: client roles
+            protocol: openid-connect
+            protocolMapper: oidc-usermodel-client-role-mapper
+            consentRequired: false
+            config:
+              introspection.token.claim: "true"
+              multivalued: "true"
+              user.attribute: foo
+              access.token.claim: "true"
+              claim.name: resource_access.${client_id}.roles
+              jsonType.label: String
+      - name: offline_access
+        description: "OpenID Connect built-in scope: offline_access"
+        protocol: openid-connect
+        attributes:
+          consent.screen.text: ${offlineAccessScopeConsentText}
+          display.on.consent.screen: "true"
+      - name: microprofile-jwt
+        description: Microprofile - JWT built-in scope
+        protocol: openid-connect
+        attributes:
+          include.in.token.scope: "true"
+          display.on.consent.screen: "false"
+        protocolMappers:
+          - name: upn
+            protocol: openid-connect
+            protocolMapper: oidc-usermodel-property-mapper
+            consentRequired: false
+            config:
+              userinfo.token.claim: "true"
+              user.attribute: username
+              id.token.claim: "true"
+              access.token.claim: "true"
+              claim.name: upn
+              jsonType.label: String
+          - name: groups
+            protocol: openid-connect
+            protocolMapper: oidc-usermodel-realm-role-mapper
+            consentRequired: false
+            config:
+              multivalued: "true"
+              user.attribute: foo
+              id.token.claim: "true"
+              access.token.claim: "true"
+              claim.name: groups
+              jsonType.label: String
+      - name: email
+        description: "OpenID Connect built-in scope: email"
+        protocol: openid-connect
+        attributes:
+          include.in.token.scope: "true"
+          display.on.consent.screen: "true"
+          consent.screen.text: ${emailScopeConsentText}
+        protocolMappers:
+          - name: email
+            protocol: openid-connect
+            protocolMapper: oidc-usermodel-property-mapper
+            consentRequired: false
+            config:
+              userinfo.token.claim: "true"
+              user.attribute: email
+              id.token.claim: "true"
+              access.token.claim: "true"
+              claim.name: email
+              jsonType.label: String
+          - name: email verified
+            protocol: openid-connect
+            protocolMapper: oidc-usermodel-property-mapper
+            consentRequired: false
+            config:
+              userinfo.token.claim: "true"
+              user.attribute: emailVerified
+              id.token.claim: "true"
+              access.token.claim: "true"
+              claim.name: email_verified
+              jsonType.label: boolean
+      - name: phone
+        description: "OpenID Connect built-in scope: phone"
+        protocol: openid-connect
+        attributes:
+          include.in.token.scope: "true"
+          display.on.consent.screen: "true"
+          consent.screen.text: ${phoneScopeConsentText}
+        protocolMappers:
+          - name: phone number verified
+            protocol: openid-connect
+            protocolMapper: oidc-usermodel-attribute-mapper
+            consentRequired: false
+            config:
+              userinfo.token.claim: "true"
+              user.attribute: phoneNumberVerified
+              id.token.claim: "true"
+              access.token.claim: "true"
+              claim.name: phone_number_verified
+              jsonType.label: boolean
+          - name: phone number
+            protocol: openid-connect
+            protocolMapper: oidc-usermodel-attribute-mapper
+            consentRequired: false
+            config:
+              userinfo.token.claim: "true"
+              user.attribute: phoneNumber
+              id.token.claim: "true"
+              access.token.claim: "true"
+              claim.name: phone_number
+              jsonType.label: String
+      - name: address
+        description: "OpenID Connect built-in scope: address"
+        protocol: openid-connect
+        attributes:
+          include.in.token.scope: "true"
+          display.on.consent.screen: "true"
+          consent.screen.text: ${addressScopeConsentText}
+        protocolMappers:
+          - name: address
+            protocol: openid-connect
+            protocolMapper: oidc-address-mapper
+            consentRequired: false
+            config:
+              user.attribute.formatted: formatted
+              user.attribute.country: country
+              user.attribute.postal_code: postal_code
+              userinfo.token.claim: "true"
+              user.attribute.street: street
+              id.token.claim: "true"
+              user.attribute.region: region
+              access.token.claim: "true"
+              user.attribute.locality: locality
+      - name: profile
+        description: "OpenID Connect built-in scope: profile"
+        protocol: openid-connect
+        attributes:
+          include.in.token.scope: "true"
+          display.on.consent.screen: "true"
+          consent.screen.text: ${profileScopeConsentText}
+        protocolMappers:
+          - name: zoneinfo
+            protocol: openid-connect
+            protocolMapper: oidc-usermodel-attribute-mapper
+            consentRequired: false
+            config:
+              userinfo.token.claim: "true"
+              user.attribute: zoneinfo
+              id.token.claim: "true"
+              access.token.claim: "true"
+              claim.name: zoneinfo
+              jsonType.label: String
+          - name: nickname
+            protocol: openid-connect
+            protocolMapper: oidc-usermodel-attribute-mapper
+            consentRequired: false
+            config:
+              userinfo.token.claim: "true"
+              user.attribute: nickname
+              id.token.claim: "true"
+              access.token.claim: "true"
+              claim.name: nickname
+              jsonType.label: String
+          - name: profile
+            protocol: openid-connect
+            protocolMapper: oidc-usermodel-attribute-mapper
+            consentRequired: false
+            config:
+              userinfo.token.claim: "true"
+              user.attribute: profile
+              id.token.claim: "true"
+              access.token.claim: "true"
+              claim.name: profile
+              jsonType.label: String
+          - name: full name
+            protocol: openid-connect
+            protocolMapper: oidc-full-name-mapper
+            consentRequired: false
+            config:
+              id.token.claim: "true"
+              access.token.claim: "true"
+              userinfo.token.claim: "true"
+          - name: birthdate
+            protocol: openid-connect
+            protocolMapper: oidc-usermodel-attribute-mapper
+            consentRequired: false
+            config:
+              userinfo.token.claim: "true"
+              user.attribute: birthdate
+              id.token.claim: "true"
+              access.token.claim: "true"
+              claim.name: birthdate
+              jsonType.label: String
+          - name: family name
+            protocol: openid-connect
+            protocolMapper: oidc-usermodel-property-mapper
+            consentRequired: false
+            config:
+              userinfo.token.claim: "true"
+              user.attribute: lastName
+              id.token.claim: "true"
+              access.token.claim: "true"
+              claim.name: family_name
+              jsonType.label: String
+          - name: picture
+            protocol: openid-connect
+            protocolMapper: oidc-usermodel-attribute-mapper
+            consentRequired: false
+            config:
+              userinfo.token.claim: "true"
+              user.attribute: picture
+              id.token.claim: "true"
+              access.token.claim: "true"
+              claim.name: picture
+              jsonType.label: String
+          - name: website
+            protocol: openid-connect
+            protocolMapper: oidc-usermodel-attribute-mapper
+            consentRequired: false
+            config:
+              userinfo.token.claim: "true"
+              user.attribute: website
+              id.token.claim: "true"
+              access.token.claim: "true"
+              claim.name: website
+              jsonType.label: String
+          - name: locale
+            protocol: openid-connect
+            protocolMapper: oidc-usermodel-attribute-mapper
+            consentRequired: false
+            config:
+              userinfo.token.claim: "true"
+              user.attribute: locale
+              id.token.claim: "true"
+              access.token.claim: "true"
+              claim.name: locale
+              jsonType.label: String
+          - name: username
+            protocol: openid-connect
+            protocolMapper: oidc-usermodel-property-mapper
+            consentRequired: false
+            config:
+              userinfo.token.claim: "true"
+              user.attribute: username
+              id.token.claim: "true"
+              access.token.claim: "true"
+              claim.name: preferred_username
+              jsonType.label: String
+          - name: given name
+            protocol: openid-connect
+            protocolMapper: oidc-usermodel-property-mapper
+            consentRequired: false
+            config:
+              userinfo.token.claim: "true"
+              user.attribute: firstName
+              id.token.claim: "true"
+              access.token.claim: "true"
+              claim.name: given_name
+              jsonType.label: String
+          - name: updated at
+            protocol: openid-connect
+            protocolMapper: oidc-usermodel-attribute-mapper
+            consentRequired: false
+            config:
+              userinfo.token.claim: "true"
+              user.attribute: updatedAt
+              id.token.claim: "true"
+              access.token.claim: "true"
+              claim.name: updated_at
+              jsonType.label: String
+          - name: middle name
+            protocol: openid-connect
+            protocolMapper: oidc-usermodel-attribute-mapper
+            consentRequired: false
+            config:
+              userinfo.token.claim: "true"
+              user.attribute: middleName
+              id.token.claim: "true"
+              access.token.claim: "true"
+              claim.name: middle_name
+              jsonType.label: String
+          - name: gender
+            protocol: openid-connect
+            protocolMapper: oidc-usermodel-attribute-mapper
+            consentRequired: false
+            config:
+              userinfo.token.claim: "true"
+              user.attribute: gender
+              id.token.claim: "true"
+              access.token.claim: "true"
+              claim.name: gender
+              jsonType.label: String
+      - name: web-origins
+        description: OpenID Connect scope for add allowed web origins to the access token
+        protocol: openid-connect
+        attributes:
+          include.in.token.scope: "false"
+          display.on.consent.screen: "false"
+          consent.screen.text: ""
+        protocolMappers:
+          - name: allowed web origins
+            protocol: openid-connect
+            protocolMapper: oidc-allowed-origins-mapper
+            consentRequired: false
+            config: {}
+      - name: acr
+        description:
+          OpenID Connect scope for add acr (authentication context class
+          reference) to the token
+        protocol: openid-connect
+        attributes:
+          include.in.token.scope: "false"
+          display.on.consent.screen: "false"
+        protocolMappers:
+          - name: acr loa level
+            protocol: openid-connect
+            protocolMapper: oidc-acr-mapper
+            consentRequired: false
+            config:
+              id.token.claim: "true"
+              introspection.token.claim: "true"
+              access.token.claim: "true"
+
+    # -- client scopes to be imported
+    # example
+    # - name: LegalPersonCredential
+    #   description: OIDC4VC Scope
+    #   protocol: openid-connect
+    #   attributes: {}
+    #   protocolMappers:
+    #     - name: context-mapper
+    #       protocol: oid4vc
+    #       protocolMapper: oid4vc-context-mapper
+    #       config:
+    #         context: https://www.w3.org/2018/credentials/v1
+    #         supportedCredentialTypes: VerifiableCredential,LegalPersonCredential,OperatorCredential
+    #     - name: email-mapper
+    #       protocol: oid4vc
+    #       protocolMapper: oid4vc-user-attribute-mapper
+    #       config:
+    #         subjectProperty: email
+    #         userAttribute: email
+    #         supportedCredentialTypes: LegalPersonCredential,OperatorCredential
+    #     - name: firstName-mapper
+    #       protocol: oid4vc
+    #       protocolMapper: oid4vc-user-attribute-mapper
+    #       config:
+    #         subjectProperty: firstName
+    #         userAttribute: firstName
+    #         supportedCredentialTypes: LegalPersonCredential,OperatorCredential
+    #     - name: lastName-mapper
+    #       protocol: oid4vc
+    #       protocolMapper: oid4vc-user-attribute-mapper
+    #       config:
+    #         subjectProperty: lastName
+    #         userAttribute: lastName
+    #         supportedCredentialTypes: LegalPersonCredential,OperatorCredential
+    #     - name: role-mapper
+    #       protocol: oid4vc
+    #       protocolMapper: oid4vc-target-role-mapper
+    #       config:
+    #         subjectProperty: roles
+    #         clientId: did:web:fancy-marketplace.biz
+    #         supportedCredentialTypes: LegalPersonCredential,OperatorCredential
+
+    clientScopes: []
+
+    # -- default client roles
+    defaultClientRoles:
+      account:
+        - name: delete-account
+          description: ${role_delete-account}
+          composite: false
+          clientRole: true
+          attributes: {}
+        - name: view-consent
+          description: ${role_view-consent}
+          composite: false
+          clientRole: true
+          attributes: {}
+        - name: view-groups
+          description: ${role_view-groups}
+          composite: false
+          clientRole: true
+          attributes: {}
+        - name: manage-account
+          description: ${role_manage-account}
+          composite: true
+          composites:
+            client:
+              account:
+                - manage-account-links
+          clientRole: true
+          attributes: {}
+        - name: view-profile
+          description: ${role_view-profile}
+          composite: false
+          clientRole: true
+          attributes: {}
+        - name: view-applications
+          description: ${role_view-applications}
+          composite: false
+          clientRole: true
+          attributes: {}
+        - name: manage-consent
+          description: ${role_manage-consent}
+          composite: true
+          composites:
+            client:
+              account:
+                - view-consent
+          clientRole: true
+          attributes: {}
+        - name: manage-account-links
+          description: ${role_manage-account-links}
+          composite: false
+          clientRole: true
+          attributes: {}
+
+    # -- client roles to be imported - be aware the env vars can be used and will be replaced. Support string (old style) or key-value
+    clientRoles:
+      ${DID}:
+        - name: ADMIN
+          description: Is allowed to do everything
+          clientRole: true
+
+    defaultUsers: []
+    # -- users to be imported - be aware the env vars can be used and will be replaced. Support string (old style) or array
+    users:
+      - username: admin-user
+        enabled: true
+        email: admin@provider.org
+        firstName: Test
+        lastName: Admin
+        credentials:
+          - type: password
+            value: test
+        clientRoles:
+          ${DID}:
+            - ADMIN
+          account:
+            - view-profile
+            - manage-account
+        groups: []
+
+    # -- clients to be imported - be aware the env vars can be used and will be replaced. Support string (old style) or array
+    defaultClients:
+      account:
+        name: ${client_account}
+        rootUrl: ${authBaseUrl}
+        baseUrl: /realms/{{ .Values.keycloak.realm.name }}/account/
+        surrogateAuthRequired: false
+        enabled: true
+        alwaysDisplayInConsole: false
+        clientAuthenticatorType: client-secret
+        redirectUris:
+          - /realms/{{ .Values.keycloak.realm.name }}/account/*
+        webOrigins: []
+        notBefore: 0
+        bearerOnly: false
+        consentRequired: false
+        standardFlowEnabled: true
+        implicitFlowEnabled: false
+        directAccessGrantsEnabled: false
+        serviceAccountsEnabled: false
+        publicClient: true
+        frontchannelLogout: false
+        protocol: openid-connect
+        attributes:
+          realm_client: "false"
+          post.logout.redirect.uris: +
+        authenticationFlowBindingOverrides: {}
+        fullScopeAllowed: true
+        nodeReRegistrationTimeout: 0
+        defaultClientScopes:
+          - web-origins
+          - acr
+          - roles
+          - profile
+          - basic
+          - email
+        optionalClientScopes:
+          - address
+          - phone
+          - offline_access
+          - microprofile-jwt
+      account-console:
+        name: ${client_account-console}
+        rootUrl: ${authBaseUrl}
+        baseUrl: /realms/{{ .Values.keycloak.realm.name }}/account/
+        surrogateAuthRequired: false
+        enabled: true
+        alwaysDisplayInConsole: false
+        clientAuthenticatorType: client-secret
+        redirectUris:
+          - /realms/{{ .Values.keycloak.realm.name }}/account/*
+        webOrigins: []
+        notBefore: 0
+        bearerOnly: false
+        consentRequired: false
+        standardFlowEnabled: true
+        implicitFlowEnabled: false
+        directAccessGrantsEnabled: true
+        serviceAccountsEnabled: false
+        publicClient: true
+        frontchannelLogout: false
+        protocol: openid-connect
+        attributes:
+          realm_client: "false"
+          post.logout.redirect.uris: +
+          pkce.code.challenge.method: S256
+        authenticationFlowBindingOverrides: {}
+        fullScopeAllowed: true
+        nodeReRegistrationTimeout: 0
+        protocolMappers:
+          - id: 706c5202-1b03-4fad-a5b8-484287e941f8
+            name: audience resolve
+            protocol: openid-connect
+            protocolMapper: oidc-audience-resolve-mapper
+            consentRequired: false
+            config: {}
+        defaultClientScopes:
+          - web-origins
+          - acr
+          - roles
+          - profile
+          - basic
+          - email
+        optionalClientScopes:
+          - address
+          - phone
+          - offline_access
+          - microprofile-jwt
+      admin-cli:
+        name: ${client_admin-cli}
+        surrogateAuthRequired: false
+        enabled: true
+        alwaysDisplayInConsole: false
+        clientAuthenticatorType: client-secret
+        redirectUris: []
+        webOrigins: []
+        notBefore: 0
+        bearerOnly: false
+        consentRequired: false
+        standardFlowEnabled: false
+        implicitFlowEnabled: false
+        directAccessGrantsEnabled: true
+        serviceAccountsEnabled: false
+        publicClient: true
+        frontchannelLogout: false
+        protocol: openid-connect
+        attributes:
+          realm_client: "false"
+          client.use.lightweight.access.token.enabled: "true"
+        authenticationFlowBindingOverrides: {}
+        fullScopeAllowed: true
+        nodeReRegistrationTimeout: 0
+        protocolMappers:
+          - name: audience resolve
+            protocol: openid-connect
+            protocolMapper: oidc-audience-resolve-mapper
+            consentRequired: false
+            config: {}
+        defaultClientScopes:
+          - web-origins
+          - acr
+          - roles
+          - profile
+          - basic
+          - email
+        optionalClientScopes:
+          - address
+          - phone
+          - offline_access
+          - microprofile-jwt
+    clients:
+      - clientId: ${DID}
+        enabled: true
+        description: Client to manage itself
+        surrogateAuthRequired: false
+        alwaysDisplayInConsole: false
+        clientAuthenticatorType: client-secret
+        defaultRoles: []
+        redirectUris: []
+        webOrigins: []
+        notBefore: 0
+        bearerOnly: false
+        consentRequired: false
+        standardFlowEnabled: true
+        implicitFlowEnabled: false
+        directAccessGrantsEnabled: false
+        serviceAccountsEnabled: false
+        publicClient: false
+        frontchannelLogout: false
+        protocol: oid4vc
+        attributes:
+          oid4vci.enabled: true
+          client.secret.creation.time: "1675260539"
+          vc.natural-person.format: jwt_vc
+          vc.natural-person.scope: NaturalPersonCredential
+          vc.verifiable-credential.format: jwt_vc
+          vc.verifiable-credential.scope: VerifiableCredential
+        protocolMappers:
+          - name: target-role-mapper
+            protocol: oid4vc
+            protocolMapper: oid4vc-target-role-mapper
+            config:
+              subjectProperty: roles
+              clientId: ${DID}
+              supportedCredentialTypes: NaturalPersonCredential
+          - name: target-vc-role-mapper
+            protocol: oid4vc
+            protocolMapper: oid4vc-target-role-mapper
+            config:
+              subjectProperty: roles
+              clientId: ${DID}
+              supportedCredentialTypes: VerifiableCredential
+          - name: context-mapper
+            protocol: oid4vc
+            protocolMapper: oid4vc-context-mapper
+            config:
+              context: https://www.w3.org/2018/credentials/v1
+              supportedCredentialTypes: VerifiableCredential,NaturalPersonCredential
+          - name: email-mapper
+            protocol: oid4vc
+            protocolMapper: oid4vc-user-attribute-mapper
+            config:
+              subjectProperty: email
+              userAttribute: email
+              supportedCredentialTypes: NaturalPersonCredential
+        authenticationFlowBindingOverrides: {}
+        fullScopeAllowed: true
+        nodeReRegistrationTimeout: -1
+        defaultClientScopes: []
+        optionalClientScopes: []
+
+    # -- default realm roles
+    defaultRealmRoles:
+      - name: offline_access
+        description: ${role_offline-access}
+        composite: false
+        clientRole: false
+        attributes: {}
+      - name: uma_authorization
+        description: ${role_uma_authorization}
+        composite: false
+        clientRole: false
+        attributes: {}
+      - name: user
+        description: User privileges
+        composite: false
+        clientRole: false
+        attributes: {}
+      - name: default-roles-{{ .Values.keycloak.realm.name }}
+        description: ${role_default-roles}
+        composite: true
+        composites:
+          realm:
+            - offline_access
+            - uma_authorization
+          client:
+            account:
+              - view-profile
+              - manage-account
+        clientRole: false
+        attributes: {}
+    # -- extra realm roles to be added to the realm
+    extraRealmRoles: []
+
+    defaultGroups:
+      - name: admin
+        path: /admin
+        realmRoles:
+          - user
+          - default-roles-{{ .Values.keycloak.realm.name }}
+      - name: consumer
+        path: /consumer
+        realmRoles:
+          - user
+          - default-roles-{{ .Values.keycloak.realm.name }}
+    extraGroups: []
+
+    defaultDefaultClientScopes:
+      - acr
+      - roles
+      - email
+      - web-origins
+      - profile
+    extraDefaultClientScopes: []
+
+    defaultOptionalClientScopes:
+      - microprofile-jwt
+      - phone
+      - address
+      - offline_access
+    extraOptionalClientScopes: []
+
+    defaultKeyProviders:
+      - name: ecdh-generated
+        providerId: ecdh-generated
+        subComponents: {}
+        config:
+          ecGenerateCertificate: ["false"]
+          active: ["true"]
+          priority: ["0"]
+          ecdhAlgorithm: ["ECDH-ES"]
+          ecdhEllipticCurveKey: ["P-256"]
+          enabled: ["true"]
+    extraKeyProviders: []
+
+    credentialBuilder:
+      sd-jwt-builder:
+        id: sd-jwt-builder
+        name: vc+sd-jwt
+      jwt-vc-builder:
+        id: jwt-vc-builder
+        name: jwt_vc
+    # -- Map of verifiable credentials supported by the realm. Each key is the credential name.
+    # A clientScope is automatically generated from each credential's attributes.scope value.
+    # Do NOT declare the same scope manually in clientScopes or defaultClientScopes to avoid duplicates.
+    # To disable automatic clientScope creation for a specific credential, set clientScope.create: false inside the VC.
+    #
+    # -- ref: https://www.keycloak.org/docs/26.3.3/server_admin/index.html#attribute-breakdown
+    # verifiableCredentials:
+    #   LegalPersonCredential:
+    #     attributes:
+    #       credential_signing_alg_values_supported: "ES256"
+    #       # -- Defines the VC forma
+    #       format: "vc+sd-jwt"
+    #       # -- Identifies the credential’s scope. This scope must exist as clientScope in the realm.
+    #       scope: "LegalPersonCredential"
+    #       # -- The Verifiable Credential Type (VCT)
+    #       vct: "LegalPersonCredential"
+    #       # -- proof types supported
+    #       # ref: https://github.com/keycloak/keycloak/blob/26.3.3/services/src/main/java/org/keycloak/protocol/oid4vc/model/ProofTypesSupported.java#L32
+    #       proof_types_supported: '{"jwt":{"proof_signing_alg_values_supported":["ES256"]}}'
+    #       # -- The type of the algorithm to be used for signing. Needs to fit the provided signing key.
+    #       # ref: https://github.com/keycloak/keycloak/blob/26.3.3/services/src/main/java/org/keycloak/protocol/oid4vc/model/CredentialBuildConfig.java#L36
+    #       credential_build_config.signing_algorithm: "ES256"
+    #       # -- The type of the token to be created. Will be used as `type` claim in the JWT-Header.
+    #       credential_build_config.token_jws_type: "vc+sd-jwt"
+    #       # -- List of claims to stay disclosed in the SD-JWT
+    #       credential_build_config.visible_claims: "roles,email"
+    #       # -- The number of decoys to be added to the SD-JWT. Decoys are claims with random values to increase the security of the credential. The more decoys, the more secure, but also the larger the credential. Choose wisely.
+    #       credential_build_config.decoys: "3"
+    #     clientScope:
+    #       create: true
+    #     protocolMappers:
+    #       - name: context-mapper
+    #         protocol: oid4vc
+    #         protocolMapper: oid4vc-context-mapper
+    #         config:
+    #           context: https://www.w3.org/2018/credentials/v1
+    #           supportedCredentialTypes: LegalPersonCredential
+    verifiableCredentials: {}
+
   # -- configuration for the signing key to be used for issuing credentials
   # signingKey:
-    # -- path to the keystore containing the signing key
-    # storePath:
-    # -- password for the keystore containing the signing key
-    # storePassword:
-    # -- alias of the signing key
-    # keyAlias:
-    # -- password of the signing key
-    # keyPassword:
-    # -- algorithm of the signing key
-    # keyAlgorithm:
-    # -- did that the key belongs to
-    # did:
+  # -- path to the keystore containing the signing key
+  # storePath:
+  # -- password for the keystore containing the signing key
+  # storePassword:
+  # -- alias of the signing key
+  # keyAlias:
+  # -- password of the signing key
+  # keyPassword:
+  # -- algorithm of the signing key
+  # keyAlgorithm:
+  # -- did that the key belongs to
+  # did:
 
 ## configuration of the tm-forum-api - see https://github.com/FIWARE/helm-charts/tree/main/charts/tm-forum-api for details
 tm-forum-api:
@@ -509,7 +1195,6 @@ tm-forum-api:
     service:
       # -- name to be used for the proxy service.
       nameOverride: tm-forum-api
-
 
   # -- list of apis to be deployed
   # -- every api needs to define a name and image. Basepath is required when routes or ingress will be enabled. Beside that, they can overwrite the default-config by using the same keys.
@@ -596,7 +1281,6 @@ tm-forum-api:
         trustedParticipantsLists: http://tir.trust-anchor.org
         trustedIssuersLists: http://trusted-issuers-list:8080
 
-
 ## configuration of rainbow to provide integration with the Dataspace Protocol
 rainbow:
   # -- should rainbow be enabled
@@ -625,13 +1309,13 @@ rainbow:
     hosts: []
       ## provide a hosts and the paths that should be available
       # - host: localhost
-        # paths:
-        # - /
+      # paths:
+      # - /
     # -- configure the ingress' tls
     tls: []
       # - secretName: rainbow-tls
-        # hosts:
-          # - rainbow.fiware.org
+      # hosts:
+      # - rainbow.fiware.org
   # -- configuration of service access to rainbow
   service:
     # -- service type to be used
@@ -686,7 +1370,6 @@ contract-management:
     odrl:
       ## URL to the ODRL-PAP
       url: http://odrl-pap:8080
-
 
 # -- configuration for the did-helper, see https://github.com/wistefan/did-helper
 did:
@@ -761,7 +1444,6 @@ marketplace:
 
   # -- configuration for the charging backend
   bizEcosystemChargingBackend:
-
     existingSecret: mongodb-charging-password
 
     # -- max size to be used for the market
@@ -789,7 +1471,6 @@ marketplace:
     payment:
       method: None
 
-
     backup:
       enabled: false
 
@@ -810,7 +1491,6 @@ marketplace:
 
   # -- configuration for the logic proxy
   bizEcosystemLogicProxy:
-
     serviceAccount:
       create: true
 
@@ -822,7 +1502,6 @@ marketplace:
         repository: fiware/biz-ecosystem-logic-proxy
         tag: "11.15.0"
         pullPolicy: Always
-
 
     port: 8004
     nodeEnvironment: production
@@ -849,7 +1528,7 @@ fdsc-edc:
       # -- port to be used by the service
       port: 8081
       # -- additional annotations, if required
-      annotations: { }
+      annotations: {}
       # -- define the name of the service and avoid generating one
       serviceNameOverride: ""
       protocol:
@@ -893,11 +1572,11 @@ fdsc-edc:
         pullPolicy: Always
       # -- secrets for pulling images from a private repository
       # ref: https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/
-      imagePullSecrets: [ ]
+      imagePullSecrets: []
       # -- additional labels for the deployment, if required
-      additionalLabels: { }
+      additionalLabels: {}
       # -- additional annotations for the deployment, if required
-      additionalAnnotations: { }
+      additionalAnnotations: {}
 
       # -- additional volume
       additionalVolumeMounts:
@@ -943,13 +1622,13 @@ fdsc-edc:
       # memory: 128Mi
       # -- selector template
       # ref: https://kubernetes.io/docs/user-guide/node-selection/
-      nodeSelector: { }
+      nodeSelector: {}
       # -- tolerations template
       # ref: ref: https://kubernetes.io/docs/concepts/configuration/taint-and-toleration/
-      tolerations: [ ]
+      tolerations: []
       # -- affinity template
       # ref: https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#affinity-and-anti-affinity
-      affinity: { }
+      affinity: {}
       ## liveness and readiness probes
       # ref: https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/#container-probes
       livenessProbe:
@@ -963,11 +1642,10 @@ fdsc-edc:
         successThreshold: 1
         timeoutSeconds: 30
       # -- arguments to be set for the container
-      args: [ ]
+      args: []
       # -- command to be used for starting the container
-      command: [ ]
+      command: []
       # -- individual ports and paths
-
 
     ## pod autoscaling configuration, use for automatic scaling of the broker pods
     autoscaling:
@@ -975,7 +1653,7 @@ fdsc-edc:
       enabled: false
 
     # -- a list of additional env vars to be set
-    additonalEnvVars: [ ]
+    additonalEnvVars: []
 
     config:
       oauth:
@@ -1186,9 +1864,9 @@ credentials:
     # -- id of the credentials config to be used
     # - id:
     # -- format to request the credential in
-      # format:
+    # format:
     # -- name of the file to store the credential at
-      # targetFile:
+    # targetFile:
 
 identityhub:
   enabled: false
@@ -1337,7 +2015,6 @@ identityhub:
   #  - first-config-map
   #  - second-config-map
 
-
   # -- declare where to mount [volumes](https://kubernetes.io/docs/concepts/storage/volumes/) into the container
   volumeMounts: []
   # -- [volume](https://kubernetes.io/docs/concepts/storage/volumes/) directories
@@ -1448,7 +2125,7 @@ vault:
     dev:
       enabled: true
       devRootToken: "root"
-    postStart:    # must be set externally!
+    postStart: # must be set externally!
   hashicorp:
     url: "http://{{ .Release.Name }}-vault:8200"
     token: "root"
@@ -1489,3 +2166,7 @@ certManagerResources:
   # -- The Ingress Class that cert-manager will use for HTTP-01 challenges (required for "prod" mode).
   # Must match the 'ingressClassName' of your controller (e.g., nginx, traefik).
   ingressClass: "nginx"
+
+# -- list of extra Kubernetes manifests to deploy alongside the chart.
+# Each entry can be a string (raw YAML, supports Helm templating) or an object.
+extraManifests: []
