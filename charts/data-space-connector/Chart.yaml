@@ -7,7 +7,7 @@ dependencies:
   - name: decentralized-iam
     alias: decentralizedIam
     condition: decentralizedIam.enabled
-    version: 2.0.4
+    version: 2.0.5
     repository: https://fiware.github.io/decentralized-iam
   # data-service
   - name: scorpio-broker-aaio
@@ -23,7 +23,7 @@ dependencies:
   # contract management
   - name: tm-forum-api
     condition: tm-forum-api.enabled
-    version: 0.16.9
+    version: 0.16.10
     repository: https://fiware.github.io/helm-charts
   - name: contract-management
     condition: contract-management.enabled
