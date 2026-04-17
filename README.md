@@ -37,8 +37,10 @@ recipes.
   - [Marketplace Portal](#marketplace-portal)
   - [Integration with the Gaia-X Trust Framework](#integration-with-the-gaia-x-trust-framework)
 - [Deployment](#deployment)
-  - [Local Deployment](#local-deployment)
-  - [Deployment with Helm](#deployment-with-helm)
+  - [Quick Start Guide](#quick-start-guide)
+  - [Deployment by Role](#deployment-by-role)
+  - [Helm chart](#helm-chart)
+  - [Local Deployment (Maven)](#local-deployment-maven)
 - [Testing](#testing)
 - [Additional documentation and resources](#additional-documentation-and-resources)
 
@@ -461,29 +463,25 @@ Find out more in the dedicated [Gaia-X Integration Documentation](./doc/GAIA_X.M
 
 ## Deployment
 
-### Local Deployment
+### Quick Start Guide
 
-The FIWARE Data Space Connector Repository provides a local deployment of a Minimum Viable Dataspace.
-* Find a detailed documentation here: [Local Deployment](./doc/deployment-integration/local-deployment/LOCAL.MD)
+The Quick Start Guide helps you understand how a FIWARE DSC-based Data Space works by exploring the data space flows and the interaction between its components. To do so, it automatically deploys a minimal Data Space that is intended for learning and development purposes only, not for production.
 
-This deployment allows to easily spin up a minimum data space on a local machine using
-[Maven](https://maven.apache.org/) and [Docker](https://www.docker.com/) (with [k3s](https://k3s.io/)), and
-can be used to try out the connector, to get familiar with the different components and flows within the data space,
-or to perform tests with the different APIs provided.
+* [Quick Start Guide](./doc/deployment-integration/local-deployment/LOCAL.MD)
 
-Additional deployment profiles are available for specific trust frameworks:
+> **Note:** The Quick Start Guide is for **learning and development purposes only**. It deploys all the components of a data space together to show how they interact, not from the perspective of any specific role.
 
-```shell
-    # Default local deployment
-    mvn clean deploy -Plocal
-    # With Gaia-X trust framework integration
-    mvn clean deploy -Plocal,gaia-x
-    # With support for the Data Space Protocol
-    mvn clean deploy -Plocal,dsp
-```
+### Deployment by Role
 
+For deploying the FIWARE DSC in a real environment, refer to the documentation that matches your organization's role in the data space:
 
-### Deployment with Helm
+* [Deployment by Role](./doc/deployment-integration/roles/README.md) — Overview of all roles and their required components
+  * [Consumer](./doc/deployment-integration/roles/consumer/README.md) — Retrieves data from other participants
+  * [Provider](./doc/deployment-integration/roles/provider/README.md) — Offers data or services to other participants
+  * [Consumer + Provider](./doc/deployment-integration/roles/consumer-provider/README.md) — Acts as both (most common scenario)
+  * [Admin](./doc/deployment-integration/roles/admin/README.md) — Operates the data space trust infrastructure
+
+### Helm chart
 
 The Data-Space-Connector is a [Helm Umbrella-Chart](https://helm.sh/docs/howto/charts_tips_and_tricks/#complex-charts-with-many-dependencies), containing all the sub-charts of the different components and their dependencies. Its sources can be found
 [here](./charts/data-space-connector).
@@ -507,6 +505,21 @@ Example — changing the image tag of Keycloak:
 keycloak:
     image:
         tag: LATEST_GREATEST
+```
+
+### Local Deployment (Maven)
+
+For development and testing with all components, a Maven-based local deployment is also available. It automatically spins up a full data space using k3s and Docker:
+
+* [Local Deployment](./doc/deployment-integration/local-deployment/LOCAL.MD)
+
+```shell
+    # Default local deployment
+    mvn clean deploy -Plocal
+    # With Gaia-X trust framework integration
+    mvn clean deploy -Plocal,gaia-x
+    # With support for the Data Space Protocol
+    mvn clean deploy -Plocal,dsp
 ```
 
 
