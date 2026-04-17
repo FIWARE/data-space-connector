@@ -91,11 +91,11 @@ public abstract class DSPEnvironment {
      * Base URL of the consumer's Vault instance.
      * Used for inserting private keys needed by the IdentityHub.
      */
-    public static final String VAULT_CONSUMER_ADDRESS = "http://vault-fancy-marketplace.127.0.0.1.nip.io";
+    public static final String VAULT_CONSUMER_ADDRESS = "https://vault-fancy-marketplace.127.0.0.1.nip.io";
 
     /**
      * Base URL of the provider's Vault instance.
      * Used for inserting private keys needed by the IdentityHub.
      */
-    public static final String VAULT_PROVIDER_ADDRESS = "http://vault-mp-operations.127.0.0.1.nip.io";
+    public static final String VAULT_PROVIDER_ADDRESS = "https://vault-mp-operations.127.0.0.1.nip.io";
 }
