@@ -10,6 +10,11 @@ tm-forum-api:
   registration:
     enabled: false
   ingress:
+    annotations:
+      cert-manager.io/cluster-issuer: "selfsigned-issuer"
+      cert-manager.io/private-key-algorithm: "ECDSA"
+      cert-manager.io/common-name: "consumer-tmf.127.0.0.1.nip.io"
+      traefik.ingress.kubernetes.io/router.tls: "true"
     enabled: true
     hosts:
       - host: consumer-tmf.127.0.0.1.nip.io
