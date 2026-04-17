@@ -1839,6 +1839,23 @@ entries:
     version: 7.0.0
   trust-anchor:
   - apiVersion: v2
+    created: "2026-04-17T12:42:36.293956243Z"
+    dependencies:
+    - condition: trusted-issuers-list.enabled
+      name: trusted-issuers-list
+      repository: https://fiware.github.io/helm-charts
+      version: 0.16.0
+    - condition: postgres-operator.enabled
+      name: postgres-operator
+      repository: https://opensource.zalando.com/postgres-operator/charts/postgres-operator
+      version: 1.15.1
+    description: Umbrella Chart to provide a minimal trust anchor for a FIWARE Dataspace
+    digest: 199c5d37ad30db01b46241f06ca92c8735307299a111f735f17d04284ea7a164
+    name: trust-anchor
+    urls:
+    - https://github.com/FIWARE/data-space-connector/releases/download/trust-anchor-1.0.0/trust-anchor-1.0.0.tgz
+    version: 1.0.0
+  - apiVersion: v2
     created: "2026-02-25T15:40:34.743738747Z"
     dependencies:
     - condition: trusted-issuers-list.enabled
@@ -1889,4 +1906,4 @@ entries:
     urls:
     - https://github.com/FIWARE/data-space-connector/releases/download/trust-anchor-0.2.0/trust-anchor-0.2.0.tgz
     version: 0.2.0
-generated: "2026-04-16T10:35:13.75448589Z"
+generated: "2026-04-17T12:42:36.294017275Z"
