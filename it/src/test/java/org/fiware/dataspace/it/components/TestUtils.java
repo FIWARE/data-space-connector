@@ -33,8 +33,8 @@ import java.util.Map;
 @Slf4j
 public class TestUtils {
 
-	private static final String CONSUMER_DID_HELPER = "http://did-consumer.127.0.0.1.nip.io:8080";
-	private static final String PROVIDER_DID_HELPER = "http://did-provider.127.0.0.1.nip.io:8080";
+	private static final String CONSUMER_DID_HELPER = "https://did-consumer.127.0.0.1.nip.io:8080";
+	private static final String PROVIDER_DID_HELPER = "https://did-provider.127.0.0.1.nip.io:8080";
 	private static final String PRIVATE_KEY_PATH = "/did-material/private-key.pem";
 	private static final String DID_ENV_PATH = "/did-material/did.env";
 	private static final Integer SQUID_PORT = 8888;

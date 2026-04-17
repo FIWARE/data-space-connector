@@ -109,7 +109,7 @@ public class IdentityHubHelper {
 
         RequestBody body = RequestBody.create(OBJECT_MAPPER.writeValueAsString(payload), JSON);
         Request request = new Request.Builder()
-                .url(vaultAddress + ":" + SERVICE_PORT + VAULT_SECRET_PATH + keyAlias)
+                .url(vaultAddress + VAULT_SECRET_PATH + keyAlias)
                 .post(body)
                 .header("X-Vault-Token", VAULT_TOKEN)
                 .build();

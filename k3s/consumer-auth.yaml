@@ -34,6 +34,7 @@ decentralizedIam:
             cert-manager.io/cluster-issuer: "selfsigned-issuer"
             cert-manager.io/private-key-algorithm: "ECDSA"
             cert-manager.io/common-name: "til-consumer.127.0.0.1.nip.io"
+            traefik.ingress.kubernetes.io/router.tls: "true"
           hosts:
             - host: til-consumer.127.0.0.1.nip.io
               paths:
@@ -50,6 +51,7 @@ decentralizedIam:
           cert-manager.io/cluster-issuer: "selfsigned-issuer"
           cert-manager.io/private-key-algorithm: "ECDSA"
           cert-manager.io/common-name: "consumer-ccs.127.0.0.1.nip.io"
+          traefik.ingress.kubernetes.io/router.tls: "true"
         hosts:
           - host: consumer-ccs.127.0.0.1.nip.io
             paths:
@@ -72,7 +74,7 @@ decentralizedIam:
                 credentials:
                   - type: LegalPersonCredential
                     trustedParticipantsLists:
-                      - http://tir.127.0.0.1.nip.io
+                      - https://tir.127.0.0.1.nip.io
                     # we want that every participant can access the marketplace and register
                     trustedIssuersLists:
                       - "*"
@@ -99,7 +101,7 @@ decentralizedIam:
                 credentials:
                   - type: MembershipCredential
                     trustedParticipantsLists:
-                      - http://tir.127.0.0.1.nip.io
+                      - https://tir.127.0.0.1.nip.io
                     trustedIssuersLists:
                       - "*"
                     jwtInclusion:
@@ -134,7 +136,7 @@ decentralizedIam:
         logging:
           level: DEBUG
         verifier:
-          tirAddress: http://tir.127.0.0.1.nip.io/
+          tirAddress: https://tir.127.0.0.1.nip.io/
           did: did:web:fancy-marketplace.biz
           supportedModes: ["byValue", "byReference"]
           clientIdentification:
@@ -222,6 +224,7 @@ decentralizedIam:
         annotations:
           cert-manager.io/cluster-issuer: "selfsigned-issuer"
           cert-manager.io/private-key-algorithm: "ECDSA"
+          traefik.ingress.kubernetes.io/router.tls: "true"
         hosts:
           - host: fancy-marketplace.127.0.0.1.nip.io
             paths: ["/"]

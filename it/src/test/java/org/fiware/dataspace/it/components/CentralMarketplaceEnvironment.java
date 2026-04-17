@@ -12,7 +12,7 @@ public abstract class CentralMarketplaceEnvironment {
      * Base URL of the central marketplace TMForum API.
      * Used for product offering management, ordering, and organization registration.
      */
-    public static final String MARKETPLACE_API_ADDRESS = "http://fancy-marketplace.127.0.0.1.nip.io";
+    public static final String MARKETPLACE_API_ADDRESS = "https://fancy-marketplace.127.0.0.1.nip.io";
 
     /**
      * Base URL of the contract management service.
@@ -24,7 +24,7 @@ public abstract class CentralMarketplaceEnvironment {
      * Base URL of the consumer's PAP (Policy Administration Point) for the central marketplace.
      * Used to register TMForum access policies that restrict marketplace interactions to authorized roles.
      */
-    public static final String CONSUMER_PAP_ADDRESS = "http://pap-consumer.127.0.0.1.nip.io";
+    public static final String CONSUMER_PAP_ADDRESS = "https://pap-consumer.127.0.0.1.nip.io";
 
     /** Credential configuration ID for the SD-JWT format UserCredential used in central marketplace flows. */
     public static final String USER_SD_CREDENTIAL = "user-sd";

@@ -8,6 +8,7 @@ fdsc-edc:
       config:
         edc:
           hostname: dcp-fancy-marketplace.127.0.0.1.nip.io
+          dspCallback: https://dcp-fancy-marketplace.127.0.0.1.nip.io:443/api/dsp
     oid4vc:
       deployment:
         image:
@@ -16,6 +17,7 @@ fdsc-edc:
       config:
         edc:
           hostname: dsp-fancy-marketplace.127.0.0.1.nip.io
+          dspCallback: https://dsp-fancy-marketplace.127.0.0.1.nip.io:443/api/dsp
   common:
     deployment:
       additionalVolumeMounts:

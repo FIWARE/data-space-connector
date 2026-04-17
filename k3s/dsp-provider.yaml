@@ -9,6 +9,7 @@ fdsc-edc:
       config:
         edc:
           hostname: dcp-mp-operations.127.0.0.1.nip.io
+          dspCallback: https://dcp-mp-operations.127.0.0.1.nip.io:443/api/dsp
     oid4vc:
       deployment:
         image:
@@ -16,6 +17,7 @@ fdsc-edc:
       config:
         edc:
           hostname: dsp-mp-operations.127.0.0.1.nip.io
+          dspCallback: https://dsp-mp-operations.127.0.0.1.nip.io:443/api/dsp
         fdscTransfer:
           dcp:
             enabled: false

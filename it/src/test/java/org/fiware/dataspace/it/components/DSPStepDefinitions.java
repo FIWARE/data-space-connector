@@ -1045,7 +1045,7 @@ public class DSPStepDefinitions extends StepDefintions {
                                         "type", "MembershipCredential",
                                         "trustedParticipantsLists", List.of(Map.of(
                                                 "type", "ebsi",
-                                                "url", "http://tir.127.0.0.1.nip.io")),
+                                                "url", "https://tir.127.0.0.1.nip.io")),
                                         "trustedIssuersLists", List.of("http://trusted-issuers-list:8080"),
                                         "jwtInclusion", Map.of(
                                                 "enabled", true,
