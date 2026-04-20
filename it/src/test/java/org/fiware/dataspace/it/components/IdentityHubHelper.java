@@ -75,11 +75,6 @@ public class IdentityHubHelper {
      */
     private static final MediaType JSON = MediaType.parse("application/json");
 
-    /**
-     * The HTTP port used by IdentityHub and Vault services in the local deployment.
-     */
-    private static final int SERVICE_PORT = 8080;
-
     private static final OkHttpClient HTTP_CLIENT = OK_HTTP_CLIENT;
 
     private IdentityHubHelper() {
@@ -140,7 +135,7 @@ public class IdentityHubHelper {
     public static void registerParticipant(String identityHubManagementAddress, String participantJson) throws Exception {
         RequestBody body = RequestBody.create(participantJson, JSON);
         Request request = new Request.Builder()
-                .url(identityHubManagementAddress + ":" + SERVICE_PORT + PARTICIPANTS_API_PATH)
+                .url(identityHubManagementAddress + PARTICIPANTS_API_PATH)
                 .post(body)
                 .header("Accept", "*/*")
                 .header("x-api-key", IDENTITY_HUB_API_KEY)
@@ -188,8 +183,7 @@ public class IdentityHubHelper {
         payload.set("verifiableCredentialContainer", container);
 
         RequestBody body = RequestBody.create(OBJECT_MAPPER.writeValueAsString(payload), JSON);
-        String url = identityHubManagementAddress + ":" + SERVICE_PORT
-                + PARTICIPANTS_API_PATH + "/" + base64ParticipantId + "/credentials";
+        String url = identityHubManagementAddress + PARTICIPANTS_API_PATH + "/" + base64ParticipantId + "/credentials";
         Request request = new Request.Builder()
                 .url(url)
                 .post(body)
