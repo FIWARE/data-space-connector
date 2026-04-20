@@ -87,11 +87,6 @@ public class DSPManagementHelper {
     private static final String EDRS_PATH_PREFIX = "/api/v1/management/v3/edrs/";
 
     /**
-     * The HTTP port used by management API services in the local deployment.
-     */
-    private static final int SERVICE_PORT = 8080;
-
-    /**
      * Negotiation state indicating a finalized contract agreement.
      */
     private static final String STATE_FINALIZED = "FINALIZED";
@@ -148,7 +143,7 @@ public class DSPManagementHelper {
         requestBody.put("counterPartyAddress", counterPartyAddress);
         requestBody.set("querySpec", OBJECT_MAPPER.createObjectNode());
 
-        String url = managementApiAddress + ":" + SERVICE_PORT + CATALOG_REQUEST_PATH;
+        String url = managementApiAddress + CATALOG_REQUEST_PATH;
         RequestBody body = RequestBody.create(OBJECT_MAPPER.writeValueAsString(requestBody), JSON);
         Request request = new Request.Builder()
                 .url(url)
@@ -227,7 +222,7 @@ public class DSPManagementHelper {
 
         requestBody.set("policy", policyObj);
 
-        String url = managementApiAddress + ":" + SERVICE_PORT + CONTRACT_NEGOTIATIONS_PATH;
+        String url = managementApiAddress + CONTRACT_NEGOTIATIONS_PATH;
         RequestBody body = RequestBody.create(OBJECT_MAPPER.writeValueAsString(requestBody), JSON);
         Request request = new Request.Builder()
                 .url(url)
@@ -261,7 +256,7 @@ public class DSPManagementHelper {
      * @throws Exception if the HTTP request fails or returns a non-success status
      */
     public static List<ContractNegotiation> getNegotiations(String managementApiAddress) throws Exception {
-        String url = managementApiAddress + ":" + SERVICE_PORT + CONTRACT_NEGOTIATIONS_REQUEST_PATH;
+        String url = managementApiAddress + CONTRACT_NEGOTIATIONS_REQUEST_PATH;
         RequestBody body = RequestBody.create("", JSON);
         Request request = new Request.Builder()
                 .url(url)
@@ -356,7 +351,7 @@ public class DSPManagementHelper {
         requestBody.put("protocol", DSP_PROTOCOL);
         requestBody.put("transferType", transferType);
 
-        String url = managementApiAddress + ":" + SERVICE_PORT + TRANSFER_PROCESSES_PATH;
+        String url = managementApiAddress + TRANSFER_PROCESSES_PATH;
         RequestBody body = RequestBody.create(OBJECT_MAPPER.writeValueAsString(requestBody), JSON);
         Request request = new Request.Builder()
                 .url(url)
@@ -411,7 +406,7 @@ public class DSPManagementHelper {
         requestBody.put("protocol", DSP_PROTOCOL);
         requestBody.put("transferType", transferType);
 
-        String url = managementApiAddress + ":" + SERVICE_PORT + TRANSFER_PROCESSES_PATH;
+        String url = managementApiAddress + TRANSFER_PROCESSES_PATH;
         RequestBody body = RequestBody.create(OBJECT_MAPPER.writeValueAsString(requestBody), JSON);
         Request request = new Request.Builder()
                 .url(url)
@@ -452,7 +447,7 @@ public class DSPManagementHelper {
         requestBody.set("@context", context);
         requestBody.put("@type", "QuerySpec");
 
-        String url = managementApiAddress + ":" + SERVICE_PORT + TRANSFER_PROCESSES_REQUEST_PATH;
+        String url = managementApiAddress + TRANSFER_PROCESSES_REQUEST_PATH;
         RequestBody body = RequestBody.create(OBJECT_MAPPER.writeValueAsString(requestBody), JSON);
         Request request = new Request.Builder()
                 .url(url)
@@ -527,7 +522,7 @@ public class DSPManagementHelper {
      * @throws Exception if the HTTP request fails or returns a non-success status
      */
     public static DataAddress getDataAddress(String managementApiAddress, String transferId) throws Exception {
-        String url = managementApiAddress + ":" + SERVICE_PORT + EDRS_PATH_PREFIX + transferId + "/dataaddress";
+        String url = managementApiAddress + EDRS_PATH_PREFIX + transferId + "/dataaddress";
         final DataAddress[] dataAddress = new DataAddress[1];
         Awaitility.await()
                 .atMost(Duration.ofSeconds(DEFAULT_POLL_TIMEOUT_SECONDS))
