@@ -3,12 +3,12 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: {{ $tmf.registration.name }}
+  name: {{ $tmf.registration.name }}-job
   namespace: {{ $.Release.Namespace | quote }}
+  {{- if $tmf.registration.annotations }}
   annotations:
-    "helm.sh/hook": post-install
-    "helm.sh/hook-weight": "0"
-    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+    {{- toYaml $tmf.registration.annotations | nindent 4 }}
+  {{- end }}
   labels:
     {{- include "dsc.labels" . | nindent 4 }}
 spec:
@@ -16,18 +16,28 @@ spec:
     spec:
       containers:
         - name: register-credential-config
-          image: quay.io/curl/curl:8.1.2
-          command: [ "/bin/sh", "-c", "/bin/init.sh" ]
+          image: {{ $tmf.registration.image.repository }}:{{ $tmf.registration.image.tag }}
+          imagePullPolicy: {{ $tmf.registration.image.pullPolicy }}
+          command: {{- toYaml $tmf.registration.command | nindent 12 }}
+          {{- if $tmf.registration.extraEnvVars }}
+          env:
+            {{- toYaml $tmf.registration.extraEnvVars | nindent 12 }}
+          {{- end }}
           volumeMounts:
             - name: tm-forum-registration
               mountPath: /bin/init.sh
               subPath: init.sh
+            {{- if $tmf.registration.extraVolumeMounts }}
+            {{- toYaml $tmf.registration.extraVolumeMounts | nindent 12 }}
+            {{- end }}
       volumes:
         - name: tm-forum-registration
           configMap:
-            name: {{ $tmf.registration.name }}
+            name: {{ $tmf.registration.name }}-cm
             defaultMode: 0755
-
-      restartPolicy: Never
-  backoffLimit: 10
+        {{- if $tmf.registration.extraVolumes }}
+        {{- toYaml $tmf.registration.extraVolumes | nindent 8 }}
+        {{- end }}
+      restartPolicy: {{ $tmf.registration.restartPolicy }}
+  backoffLimit: {{ $tmf.registration.backoffLimit }}
 {{- end }}
