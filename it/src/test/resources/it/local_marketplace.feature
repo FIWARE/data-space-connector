@@ -6,7 +6,6 @@ Feature: The local deployment should support marketplace buying and service acce
   # - Consumer self-registers at provider marketplace
   # - Consumer buys access to provider offering and gains access
   # - Consumer with restricted (small) offering can only perform allowed operations
-  # Note: Holder Verification and EIDAS compliancy are excluded per ticket requirements.
 
   Scenario: Provider creates product offerings with credential and policy configuration.
     Given M&P Operations is registered as a participant in the data space.

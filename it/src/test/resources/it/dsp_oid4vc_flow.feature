@@ -9,11 +9,6 @@ Feature: DSP OID4VC protocol flow as described in DSP_INTEGRATION.md.
   # As documented, the OID4VC flow reuses the agreement negotiated via DCP rather than
   # running a full negotiation again - an agreement can be used independently from the
   # protocol it was negotiated under.
-  #
-  # Prerequisites:
-  # - The local deployment must be created with `mvn clean deploy -Plocal,dsp`.
-  # - Identity setup (dsp_identity_setup.feature), TMForum ordering (dsp_tmforum_ordering.feature),
-  #   and DCP flow (dsp_dcp_flow.feature) should be completed first.
 
   Scenario: Consumer reads the provider catalog via OID4VC management API.
     Given The consumer identity is properly setup.

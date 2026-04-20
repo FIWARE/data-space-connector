@@ -7,7 +7,6 @@ Feature: The local deployment should support credential issuance and authenticat
   # - Policy creation and data entity creation
   # - Authenticated data access via OID4VP token exchange
   # - Unauthenticated access rejection
-  # Note: Holder Verification and EIDAS compliancy are excluded per ticket requirements.
 
   Scenario: Trust anchor has both participants registered.
     Given The trust anchor TIR endpoint is available.

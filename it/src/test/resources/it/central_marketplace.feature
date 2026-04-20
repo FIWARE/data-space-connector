@@ -6,7 +6,6 @@ Feature: Central Marketplace integration as described in CENTRAL_MARKETPLACE.md.
   # operated by the consumer organization (fancy-marketplace.biz), with contract management
   # handling notification flows between the marketplace and the provider.
   #
-  # Deployment profile: mvn clean deploy -Plocal,central
   #
   # The flow:
   # 1. Prepare the marketplace with TMForum access policies

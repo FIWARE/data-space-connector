@@ -7,8 +7,8 @@
     "rdfs": "http://www.w3.org/2000/01/rdf-schema#",
     "skos": "http://www.w3.org/2004/02/skos/core#"
   },
-  "@id": "contractManagement",
-  "odrl:uid": "contractManagement",
+  "@id": "https://mp-operation.org/policy/common/contractManagement",
+  "odrl:uid": "https://mp-operation.org/policy/common/contractManagement",
   "@type": "odrl:Policy",
   "odrl:permission": {
     "odrl:assigner": {

@@ -7,8 +7,8 @@
     "rdfs": "http://www.w3.org/2000/01/rdf-schema#",
     "skos": "http://www.w3.org/2004/02/skos/core#"
   },
-  "@id": "catalogRead",
-  "odrl:uid": "catalogRead",
+  "@id": "https://mp-operation.org/policy/common/catalogRead",
+  "odrl:uid": "https://mp-operation.org/policy/common/catalogRead",
   "@type": "odrl:Policy",
   "odrl:permission": {
     "odrl:assigner": {

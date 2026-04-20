@@ -4,10 +4,6 @@ Feature: DSP identity setup for consumer and provider participants as described 
   # This feature covers the "Setup the consumer", "Setup the provider",
   # "Issue membership-credentials", and "Trusted Issuers List" sections
   # of DSP_INTEGRATION.md.
-  #
-  # Prerequisites: The local deployment must be created with `mvn clean deploy -Plocal,dsp`.
-  # The signing keys are managed by cert-manager and stored as Kubernetes TLS secrets
-  # (signing-key) in the consumer and provider namespaces.
 
   Scenario: Consumer identity is registered in IdentityHub.
     Given The consumer private key is retrieved from the Kubernetes signing-key secret.

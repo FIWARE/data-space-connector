@@ -4,9 +4,6 @@ Feature: DSP TMForum ordering flow as described in DSP_INTEGRATION.md.
   # This feature covers the "Prepare some data", "Prepare the offering",
   # "Order through TMForum", and data access verification sections
   # of DSP_INTEGRATION.md.
-  #
-  # Prerequisites: The local deployment must be created with `mvn clean deploy -Plocal,dsp`.
-  # Identity setup (covered in dsp_identity_setup.feature) should be completed first.
 
   Scenario: Provider creates demo data for the DSP offering.
     When The provider creates an UptimeReport entity in Scorpio for the DSP offering.

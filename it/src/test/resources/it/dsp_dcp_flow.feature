@@ -4,11 +4,6 @@ Feature: DSP DCP protocol flow as described in DSP_INTEGRATION.md.
   # This feature covers the "Order through DSP" > "DCP" section of DSP_INTEGRATION.md.
   # It exercises the full DCP-based Dataspace Protocol flow: catalog browsing, contract
   # negotiation, transfer process, EDR retrieval, and data access.
-  #
-  # Prerequisites:
-  # - The local deployment must be created with `mvn clean deploy -Plocal,dsp`.
-  # - Identity setup (dsp_identity_setup.feature) and TMForum ordering
-  #   (dsp_tmforum_ordering.feature) should be completed first.
 
   Scenario: Consumer reads the provider catalog via DCP management API.
     Given The consumer identity is properly setup.
