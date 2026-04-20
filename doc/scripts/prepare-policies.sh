@@ -2,7 +2,7 @@
 
 set -e
 
-curl -s -f -X 'POST' http://pap-provider.127.0.0.1.nip.io:8080/policy \
+curl -k -x localhost:8888 -s -f -X 'POST' https://pap-provider.127.0.0.1.nip.io/policy \
     -H 'Content-Type: application/json' \
     -d  '{
           "@context": {
@@ -43,7 +43,7 @@ curl -s -f -X 'POST' http://pap-provider.127.0.0.1.nip.io:8080/policy \
           }
         }'
 
-curl -s -f -X 'POST' http://pap-provider.127.0.0.1.nip.io:8080/policy \
+curl -k -x localhost:8888 -s -f -X 'POST' https://pap-provider.127.0.0.1.nip.io/policy \
     -H 'Content-Type: application/json' \
     -d  '{
           "@context": {
@@ -116,7 +116,7 @@ curl -s -f -X 'POST' http://pap-provider.127.0.0.1.nip.io:8080/policy \
           }
         }'
 
-curl -s -f -X 'POST' http://pap-provider.127.0.0.1.nip.io:8080/policy \
+curl -k -x localhost:8888 -s -f -X 'POST' https://pap-provider.127.0.0.1.nip.io/policy \
     -H 'Content-Type: application/json' \
     -d  '{
           "@context": {

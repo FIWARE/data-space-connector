@@ -102,16 +102,16 @@ export CONSUMER_JWK=$(./doc/scripts/get-private-jwk-from-k8s-secret.sh consumer 
 
 2. Insert the key into Vault:
 ```shell
-curl -X POST 'http://vault-fancy-marketplace.127.0.0.1.nip.io:8080/v1/secret/data/key-1' \
+curl -k -X POST -x localhost:8888 'https://vault-fancy-marketplace.127.0.0.1.nip.io/v1/secret/data/key-1' \
   --header 'X-Vault-Token: root' \
   --data "$(jq -n --arg content "$CONSUMER_JWK" '{data:{content:$content}}')"
 ```
 
 3. Insert the participants identity and public key into identity hub.
 ```shell
-export CONSUMER_PARTICIPANT=$(./doc/scripts/get-participant-create.sh "${CONSUMER_JWK}" did:web:fancy-marketplace.biz "http://identityhub-fancy-marketplace.127.0.0.1.nip.io" "key-1"); echo ${CONSUMER_PARTICIPANT} | jq .
-curl -X POST \
-  'http://identityhub-management-fancy-marketplace.127.0.0.1.nip.io:8080/api/identity/v1alpha/participants' \
+export CONSUMER_PARTICIPANT=$(./doc/scripts/get-participant-create.sh "${CONSUMER_JWK}" did:web:fancy-marketplace.biz "https://identityhub-fancy-marketplace.127.0.0.1.nip.io" "key-1"); echo ${CONSUMER_PARTICIPANT} | jq .
+curl -k -x localhost:8888 -X POST \
+  'https://identityhub-management-fancy-marketplace.127.0.0.1.nip.io/api/identity/v1alpha/participants' \
   --header 'Accept: */*' \
   --header 'x-api-key: c3VwZXItdXNlcg==.random' \
   --header 'Content-Type: application/json' \
@@ -134,16 +134,16 @@ export PROVIDER_JWK=$(./doc/scripts/get-private-jwk-from-k8s-secret.sh provider 
 
 2. Insert the key into Vault:
 ```shell
-curl -X POST 'http://vault-mp-operations.127.0.0.1.nip.io:8080/v1/secret/data/key-1' \
+curl -x localhost:8888 -k -X POST 'https://vault-mp-operations.127.0.0.1.nip.io/v1/secret/data/key-1' \
   --header 'X-Vault-Token: root' \
   --data "$(jq -n --arg content "$PROVIDER_JWK" '{data:{content:$content}}')"
 ```
 
 3. Insert the participants identity and public key into identity hub.
 ```shell
-export PROVIDER_PARTICIPANT=$(./doc/scripts/get-participant-create.sh "${PROVIDER_JWK}" "did:web:mp-operations.org" "http://identityhub-mp-operations.127.0.0.1.nip.io" "key-1"); echo ${PROVIDER_PARTICIPANT} | jq .
-curl -X POST \
-  'http://identityhub-management-mp-operations.127.0.0.1.nip.io:8080/api/identity/v1alpha/participants' \
+export PROVIDER_PARTICIPANT=$(./doc/scripts/get-participant-create.sh "${PROVIDER_JWK}" "did:web:mp-operations.org" "https://identityhub-mp-operations.127.0.0.1.nip.io" "key-1"); echo ${PROVIDER_PARTICIPANT} | jq .
+curl -x localhost:8888 -k -X POST \
+  'https://identityhub-management-mp-operations.127.0.0.1.nip.io/api/identity/v1alpha/participants' \
   --header 'Accept: */*' \
   --header 'x-api-key: c3VwZXItdXNlcg==.random' \
   --header 'Content-Type: application/json' \
@@ -170,8 +170,8 @@ export CONSUMER_CREDENTIAL_CONTENT=$(./doc/scripts/get-payload-from-jwt.sh "${CO
 
 2. Insert the credential into the identity hub:
 ```shell
-curl  -X POST \
-  'http://identityhub-management-fancy-marketplace.127.0.0.1.nip.io:8080/api/identity/v1alpha/participants/ZGlkOndlYjpmYW5jeS1tYXJrZXRwbGFjZS5iaXo/credentials' \
+curl -k -x localhost:8888 -X POST \
+  'https://identityhub-management-fancy-marketplace.127.0.0.1.nip.io/api/identity/v1alpha/participants/ZGlkOndlYjpmYW5jeS1tYXJrZXRwbGFjZS5iaXo/credentials' \
   --header 'Accept: */*' \
   --header 'x-api-key: c3VwZXItdXNlcg==.random' \
   --header 'Content-Type: application/json' \
@@ -197,8 +197,8 @@ export PROVIDER_CREDENTIAL_CONTENT=$(./doc/scripts/get-payload-from-jwt.sh "${PR
 
 2. Insert the credential into the identity hub:
 ```shell
-curl  -X POST \
-  'http://identityhub-management-mp-operations.127.0.0.1.nip.io:8080/api/identity/v1alpha/participants/ZGlkOndlYjptcC1vcGVyYXRpb25zLm9yZw/credentials' \
+curl -k -x localhost:8888 -X POST \
+  'https://identityhub-management-mp-operations.127.0.0.1.nip.io/api/identity/v1alpha/participants/ZGlkOndlYjptcC1vcGVyYXRpb25zLm9yZw/credentials' \
   --header 'Accept: */*' \
   --header 'x-api-key: c3VwZXItdXNlcg==.random' \
   --header 'Content-Type: application/json' \
@@ -218,7 +218,7 @@ curl  -X POST \
 Both participants are preconfigured to trust each other for membership credentials. All components(VCVerifier, FDSC-EDC Controlplane) use the same local trusted issuers list to verify issuers of credentials(check provider-side list for example):
 
 ```shell
-curl -X GET http://til-provider.127.0.0.1.nip.io:8080/issuer/did:web:fancy-marketplace.biz | jq .
+curl -k -x localhost:8888 -X GET https://til-provider.127.0.0.1.nip.io/issuer/did:web:fancy-marketplace.biz | jq .
 ```
 
 ### Prepare some data
@@ -226,7 +226,7 @@ curl -X GET http://til-provider.127.0.0.1.nip.io:8080/issuer/did:web:fancy-marke
 The Dataservice provided in the Demo Environment is an NGSI-LD Context Broker. In order to have some data available, an entity will be inserted directly. In the demo-scenario, the provider participant "mp-operations.org" offers hosting capabilities and offers detailed data about those machines. As example, we provide an uptime report:
 
 ```shell
-curl -X POST http://scorpio-provider.127.0.0.1.nip.io:8080/ngsi-ld/v1/entities \
+curl -k -x localhost:8888 -X POST https://scorpio-provider.127.0.0.1.nip.io/ngsi-ld/v1/entities \
   -H 'Accept: application/json' \
   -H 'Content-Type: application/json' \
   -d '{
@@ -249,8 +249,8 @@ The Demo - Offering  should be available for negotiation and usage through stand
 
 1. A category has to be created, in order to assing the offering to a catalog:
 ```shell
-export CATEGORY_ID=$(curl -X 'POST' \
-  'http://tm-forum-api.127.0.0.1.nip.io:8080/tmf-api/productCatalogManagement/v4/category' \
+export CATEGORY_ID=$(curl -k -x localhost:8888 -X 'POST' \
+  'https://tm-forum-api.127.0.0.1.nip.io/tmf-api/productCatalogManagement/v4/category' \
   -H 'accept: application/json;charset=utf-8' \
   -H 'Content-Type: application/json;charset=utf-8' \
   -d '{
@@ -261,8 +261,8 @@ export CATEGORY_ID=$(curl -X 'POST' \
 
 2. Create the catalog, that includes the category:
 ```shell
-export CATALOG_ID=$(curl -X 'POST' \
-  'http://tm-forum-api.127.0.0.1.nip.io:8080/tmf-api/productCatalogManagement/v4/catalog' \
+export CATALOG_ID=$(curl -k -x localhost:8888 -X 'POST' \
+  'https://tm-forum-api.127.0.0.1.nip.io/tmf-api/productCatalogManagement/v4/catalog' \
   -H 'accept: application/json;charset=utf-8' \
   -H 'Content-Type: application/json;charset=utf-8' \
   -d "{
@@ -278,8 +278,8 @@ export CATALOG_ID=$(curl -X 'POST' \
 
 3. Create the product specification:
 ```shell
-export PRODUCT_SPEC_ID=$(curl -X 'POST' \
-    'http://tm-forum-api.127.0.0.1.nip.io:8080/tmf-api/productCatalogManagement/v4/productSpecification' \
+export PRODUCT_SPEC_ID=$(curl -k -x localhost:8888 -X 'POST' \
+    'https://tm-forum-api.127.0.0.1.nip.io/tmf-api/productCatalogManagement/v4/productSpecification' \
     -H 'accept: application/json;charset=utf-8' \
     -H 'Content-Type: application/json;charset=utf-8' \
     -d '{
@@ -292,7 +292,7 @@ export PRODUCT_SPEC_ID=$(curl -X 'POST' \
                    "name":"Endpoint, that the service can be negotiated at via DCP.",
                    "valueType":"endpointUrl",
                    "productSpecCharacteristicValue": [{
-                      "value":"http://dcp-mp-operations.127.0.0.1.nip.io:8080/api/dsp/2025-1",
+                      "value":"https://dcp-mp-operations.127.0.0.1.nip.io/api/dsp/2025-1",
                       "isDefault": true
                    }]
                },{
@@ -300,7 +300,7 @@ export PRODUCT_SPEC_ID=$(curl -X 'POST' \
                    "name":"Endpoint, that the service can be negotiated at via OID4VC.",
                    "valueType":"endpointUrl",
                    "productSpecCharacteristicValue": [{
-                      "value":"http://dsp-mp-operations.127.0.0.1.nip.io:8080/api/dsp/2025-1",
+                      "value":"https://dsp-mp-operations.127.0.0.1.nip.io/api/dsp/2025-1",
                       "isDefault": true
                    }]
                },
@@ -358,7 +358,7 @@ export PRODUCT_SPEC_ID=$(curl -X 'POST' \
                                "trustedParticipantsLists": [
                                 {
                                   "type": "ebsi",
-                                  "url": "http://tir.127.0.0.1.nip.io"
+                                  "url": "https://tir.127.0.0.1.nip.io"
                                 }
                                ],
                                "trustedIssuersLists": ["http://trusted-issuers-list:8080"],
@@ -474,8 +474,8 @@ export PRODUCT_SPEC_ID=$(curl -X 'POST' \
 ```shell
 access_policy_id=$(uuidgen)
 contract_policy_id=$(uuidgen)
-curl -X 'POST' \
-    'http://tm-forum-api.127.0.0.1.nip.io:8080/tmf-api/productCatalogManagement/v4/productOffering' \
+curl -k -x localhost:8888 -X 'POST' \
+    'https://tm-forum-api.127.0.0.1.nip.io/tmf-api/productCatalogManagement/v4/productOffering' \
     -H 'accept: application/json;charset=utf-8' \
     -H 'Content-Type: application/json;charset=utf-8' \
     -d "{
@@ -550,8 +550,8 @@ export OPERATOR_CREDENTIAL=$(./doc/scripts/get_credential.sh https://keycloak-co
 
 ```shell
 export CONSUMER_DID="did:web:fancy-marketplace.biz"
-export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh http://mp-data-service.127.0.0.1.nip.io:8080 $REP_CREDENTIAL default); echo ${ACCESS_TOKEN}
-export FANCY_MARKETPLACE_ID=$(curl -X POST http://tm-forum-api.127.0.0.1.nip.io:8080/tmf-api/party/v4/organization \
+export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh https://mp-data-service.127.0.0.1.nip.io $REP_CREDENTIAL default); echo ${ACCESS_TOKEN}
+export FANCY_MARKETPLACE_ID=$(curl -k -x localhost:8888 -X POST https://tm-forum-api.127.0.0.1.nip.io/tmf-api/party/v4/organization \
 -H 'Accept: */*' \
 -H 'Content-Type: application/json' \
 -H "Authorization: Bearer ${ACCESS_TOKEN}" \
@@ -569,14 +569,14 @@ export FANCY_MARKETPLACE_ID=$(curl -X POST http://tm-forum-api.127.0.0.1.nip.io:
 4. Buy access through TMForum:
     1. List offerings
     ```shell
-        export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh http://mp-data-service.127.0.0.1.nip.io:8080 $REP_CREDENTIAL default); echo $ACCESS_TOKEN
-        curl -X GET http://tm-forum-api.127.0.0.1.nip.io:8080/tmf-api/productCatalogManagement/v4/productOffering -H "Authorization: Bearer ${ACCESS_TOKEN}" | jq .
+        export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh https://mp-data-service.127.0.0.1.nip.io $REP_CREDENTIAL default); echo $ACCESS_TOKEN
+        curl -k -x localhost:8888 -X GET https://tm-forum-api.127.0.0.1.nip.io/tmf-api/productCatalogManagement/v4/productOffering -H "Authorization: Bearer ${ACCESS_TOKEN}" | jq .
     ```
     2. Get offer Id and order it:
     ```shell
-        export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh http://mp-data-service.127.0.0.1.nip.io:8080 $REP_CREDENTIAL default); echo $ACCESS_TOKEN
-        export OFFER_ID=$(curl -X GET http://tm-forum-api.127.0.0.1.nip.io:8080/tmf-api/productCatalogManagement/v4/productOffering -H "Authorization: Bearer ${ACCESS_TOKEN}" | jq '.[0].id' -r); echo ${OFFER_ID}
-        export ORDER_ID=$(curl -X POST http://tm-forum-api.127.0.0.1.nip.io:8080/tmf-api/productOrderingManagement/v4/productOrder \
+        export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh https://mp-data-service.127.0.0.1.nip.io $REP_CREDENTIAL default); echo $ACCESS_TOKEN
+        export OFFER_ID=$(curl -k -x localhost:8888 -X GET https://tm-forum-api.127.0.0.1.nip.io/tmf-api/productCatalogManagement/v4/productOffering -H "Authorization: Bearer ${ACCESS_TOKEN}" | jq '.[0].id' -r); echo ${OFFER_ID}
+        export ORDER_ID=$(curl -k -x localhost:8888 -X POST https://tm-forum-api.127.0.0.1.nip.io/tmf-api/productOrderingManagement/v4/productOrder \
             -H 'Accept: */*' \
             -H 'Content-Type: application/json' \
             -H "Authorization: Bearer ${ACCESS_TOKEN}" \
@@ -598,9 +598,9 @@ export FANCY_MARKETPLACE_ID=$(curl -X POST http://tm-forum-api.127.0.0.1.nip.io:
     ```
     3. Complete the order:
     ```shell
-        curl -X 'PATCH' \
+        curl -k -x localhost:8888 -X 'PATCH' \
             -H "Authorization: Bearer ${ACCESS_TOKEN}" \
-            http://tm-forum-api.127.0.0.1.nip.io:8080/tmf-api/productOrderingManagement/v4/productOrder/${ORDER_ID} \
+            https://tm-forum-api.127.0.0.1.nip.io/tmf-api/productOrderingManagement/v4/productOrder/${ORDER_ID} \
             -H 'accept: application/json;charset=utf-8' \
             -H 'Content-Type: application/json;charset=utf-8' \
             -d "{
@@ -615,8 +615,8 @@ With that, the Data Space Connector will create:
 5. Access the entity:
 
 ```shell
-export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh http://mp-data-service.127.0.0.1.nip.io:8080 $OPERATOR_CREDENTIAL operator); echo $ACCESS_TOKEN
-curl  -X GET http://mp-data-service.127.0.0.1.nip.io:8080/ngsi-ld/v1/entities/urn:ngsi-ld:UptimeReport:fms-1 \
+export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh https://mp-data-service.127.0.0.1.nip.io $OPERATOR_CREDENTIAL operator); echo $ACCESS_TOKEN
+curl -k -x localhost:8888 -X GET https://mp-data-service.127.0.0.1.nip.io/ngsi-ld/v1/entities/urn:ngsi-ld:UptimeReport:fms-1 \
     --header 'Content-Type: application/json' \
     --header "Authorization: Bearer ${ACCESS_TOKEN}"
 ```
@@ -629,8 +629,8 @@ The same product now can be negotiatiated throught the Dataspace Protocol. The i
 
 1. Read the catalog:
 ```shell
-curl  -X POST \
-  'http://dsp-dcp-management.127.0.0.1.nip.io:8080/api/v1/management/v3/catalog/request' \
+curl -k -x localhost:8888 -X POST \
+  'https://dsp-dcp-management.127.0.0.1.nip.io/api/v1/management/v3/catalog/request' \
   --header 'Accept: */*' \
   --header 'Content-Type: application/json' \
   --data-raw '{
@@ -640,7 +640,7 @@ curl  -X POST \
         "@type": "CatalogRequestMessage",
         "protocol": "dataspace-protocol-http:2025-1",
         "counterPartyId": "did:web:mp-operations.org",
-        "counterPartyAddress": "http://dcp-mp-operations.127.0.0.1.nip.io:8080/api/dsp/2025-1",
+        "counterPartyAddress": "https://dcp-mp-operations.127.0.0.1.nip.io/api/dsp/2025-1",
         "querySpec": {
         }
     }' | jq .
@@ -648,8 +648,8 @@ curl  -X POST \
 
 2. Start the negotiation by selecting the offer:
 ```shell
-curl  -X POST \
-  'http://dsp-dcp-management.127.0.0.1.nip.io:8080/api/v1/management/v3/contractnegotiations' \
+curl -k -x localhost:8888 -X POST \
+  'https://dsp-dcp-management.127.0.0.1.nip.io/api/v1/management/v3/contractnegotiations' \
   --header 'Accept: */*' \
   --header 'Content-Type: application/json' \
   --data-raw '{
@@ -657,7 +657,7 @@ curl  -X POST \
             "https://w3id.org/edc/connector/management/v0.0.1"
         ],
         "@type": "ContractRequest",
-        "counterPartyAddress": "http://dcp-mp-operations.127.0.0.1.nip.io:8080/api/dsp/2025-1",
+        "counterPartyAddress": "https://dcp-mp-operations.127.0.0.1.nip.io/api/dsp/2025-1",
         "counterPartyId": "did:web:mp-operations.org",
         "protocol": "dataspace-protocol-http:2025-1",
         "policy": {
@@ -680,8 +680,8 @@ curl  -X POST \
 
 3. Check the negotiation state:
 ```shell
-curl  -X POST \
-  'http://dsp-dcp-management.127.0.0.1.nip.io:8080/api/v1/management/v3/contractnegotiations/request' \
+curl -k -x localhost:8888 -X POST \
+  'https://dsp-dcp-management.127.0.0.1.nip.io/api/v1/management/v3/contractnegotiations/request' \
   --header 'Accept: */*' \
   --header 'Content-Type: application/json' | jq .
 ```
@@ -689,16 +689,16 @@ curl  -X POST \
 4. When the state of the negotiation is "finalized", the agreement id can be retrieved:
 
 ```shell
-export AGREEMENT_ID=$(curl  -X POST \
-  'http://dsp-dcp-management.127.0.0.1.nip.io:8080/api/v1/management/v3/contractnegotiations/request' \
+export AGREEMENT_ID=$(curl -k -X POST \
+  'https://dsp-dcp-management.127.0.0.1.nip.io:8080/api/v1/management/v3/contractnegotiations/request' \
   --header 'Accept: */*' \
   --header 'Content-Type: application/json' | jq -r '.[0].contractAgreementId'); echo ${AGREEMENT_ID}
 ```
 
 5. With the aggreement, the transfer can be started:
 ```shell
-curl  -X POST \
-  'http://dsp-dcp-management.127.0.0.1.nip.io:8080/api/v1/management/v3/transferprocesses' \
+curl -k -x localhost:8888 -X POST \
+  'https://dsp-dcp-management.127.0.0.1.nip.io/api/v1/management/v3/transferprocesses' \
   --header 'Accept: */*' \
   --header 'Content-Type: application/json' \
   --data-raw "{
@@ -707,7 +707,7 @@ curl  -X POST \
     ],
     \"assetId\": \"ASSET-1\",
     \"counterPartyId\": \"did:web:mp-operations.org\",
-    \"counterPartyAddress\":  \"http://dcp-mp-operations.127.0.0.1.nip.io:8080/api/dsp/2025-1\",
+    \"counterPartyAddress\":  \"https://dcp-mp-operations.127.0.0.1.nip.io/api/dsp/2025-1\",
     \"connectorId\": \"did:web:mp-operations.org\",
     \"contractId\": \"${AGREEMENT_ID}\",
     \"protocol\": \"dataspace-protocol-http:2025-1\",
@@ -717,8 +717,8 @@ curl  -X POST \
 
 6. Retrieve the transfer state:
 ```shell
-curl  -X POST \
-  'http://dsp-dcp-management.127.0.0.1.nip.io:8080/api/v1/management/v3/transferprocesses/request' \
+curl -k -x localhost:8888 -X POST \
+  'https://dsp-dcp-management.127.0.0.1.nip.io/api/v1/management/v3/transferprocesses/request' \
   --header 'Accept: */*' \
   --header 'Content-Type: application/json' \
   --data-raw '{
@@ -729,21 +729,21 @@ curl  -X POST \
 
 7. Get the transfer Id and use it for retrieving endpoint-url and access-token:
 ```shell
-export TRANSFER_ID=$(curl -s -X POST \
-  'http://dsp-dcp-management.127.0.0.1.nip.io:8080/api/v1/management/v3/transferprocesses/request' \
+export TRANSFER_ID=$(curl -k -x localhost:8888 -s -X POST \
+  'https://dsp-dcp-management.127.0.0.1.nip.io/api/v1/management/v3/transferprocesses/request' \
   --header 'Accept: */*' \
   --header 'Content-Type: application/json' \
   --data-raw '{
     "@context": ["https://w3id.org/edc/connector/management/v0.0.1"],
     "@type": "QuerySpec"
   }' | jq -r '.[]."@id"'); echo Transfer ID: ${TRANSFER_ID}
-export ENDPOINT=$(curl -s -X GET "http://dsp-dcp-management.127.0.0.1.nip.io:8080/api/v1/management/v3/edrs/${TRANSFER_ID}/dataaddress" | jq -r .endpoint); echo Endpoint: ${ENDPOINT}
-export ACCESS_TOKEN=$(curl -s -X GET "http://dsp-dcp-management.127.0.0.1.nip.io:8080/api/v1/management/v3/edrs/${TRANSFER_ID}/dataaddress" | jq -r .token); echo Access Token: ${ACCESS_TOKEN}
+export ENDPOINT=$(curl -k -x localhost:8888 -s -X GET "https://dsp-dcp-management.127.0.0.1.nip.io/api/v1/management/v3/edrs/${TRANSFER_ID}/dataaddress" | jq -r .endpoint); echo Endpoint: ${ENDPOINT}
+export ACCESS_TOKEN=$(curl -k -x localhost:8888 -s -X GET "https://dsp-dcp-management.127.0.0.1.nip.io/api/v1/management/v3/edrs/${TRANSFER_ID}/dataaddress" | jq -r .token); echo Access Token: ${ACCESS_TOKEN}
 ```
 
 8. Access the service:
 ```shell
-curl -s -x localhost:8888 -X GET ${ENDPOINT}/ngsi-ld/v1/entities/urn:ngsi-ld:UptimeReport:fms-1 \
+curl -L -s -k -x localhost:8888 -X GET ${ENDPOINT}/ngsi-ld/v1/entities/urn:ngsi-ld:UptimeReport:fms-1 \
   --header 'Content-Type: application/json' \
   --header "Authorization: Bearer ${ACCESS_TOKEN}" | jq .
 ```
@@ -755,8 +755,8 @@ In order to use OID4VC, the management API of the OID4VC instance of the control
 
 1. Read the catalog:
 ```shell
-curl -s -X POST \
-  'http://dsp-oid4vc-management.127.0.0.1.nip.io:8080/api/v1/management/v3/catalog/request' \
+curl -k -x localhost:8888 -s -X POST \
+  'https://dsp-oid4vc-management.127.0.0.1.nip.io/api/v1/management/v3/catalog/request' \
   --header 'Accept: */*' \
   --header 'Content-Type: application/json' \
   --data-raw '{
@@ -766,7 +766,7 @@ curl -s -X POST \
         "@type": "CatalogRequestMessage",
         "protocol": "dataspace-protocol-http:2025-1",
         "counterPartyId": "did:web:mp-operations.org",
-        "counterPartyAddress": "http://dsp-mp-operations.127.0.0.1.nip.io:8080/api/dsp/2025-1",
+        "counterPartyAddress": "https://dsp-mp-operations.127.0.0.1.nip.io/api/dsp/2025-1",
         "querySpec": {
         }
     }' | jq .
@@ -774,8 +774,8 @@ curl -s -X POST \
 
 2. Request the transfer with the Agreement created via DCP:
 ```shell
-curl  -X POST \
-  'http://dsp-oid4vc-management.127.0.0.1.nip.io:8080/api/v1/management/v3/transferprocesses' \
+curl -k -x localhost:8888 -X POST \
+  'https://dsp-oid4vc-management.127.0.0.1.nip.io/api/v1/management/v3/transferprocesses' \
   --header 'Accept: */*' \
   --header 'Content-Type: application/json' \
   --data-raw "{
@@ -784,7 +784,7 @@ curl  -X POST \
     ],
     \"assetId\": \"ASSET-1\",
     \"counterPartyId\": \"did:web:mp-operations.org\",
-    \"counterPartyAddress\":  \"http://dsp-mp-operations.127.0.0.1.nip.io:8080/api/dsp/2025-1\",
+    \"counterPartyAddress\":  \"https://dsp-mp-operations.127.0.0.1.nip.io/api/dsp/2025-1\",
     \"connectorId\": \"did:web:mp-operations.org\",
     \"contractId\": \"${AGREEMENT_ID}\",
     \"dataDestination\": {
@@ -797,8 +797,8 @@ curl  -X POST \
 
 3. Get the transfer state:
 ```shell
-curl  -X POST \
-  'http://dsp-oid4vc-management.127.0.0.1.nip.io:8080/api/v1/management/v3/transferprocesses/request' \
+curl -k -x localhost:8888 -X POST \
+  'https://dsp-oid4vc-management.127.0.0.1.nip.io/api/v1/management/v3/transferprocesses/request' \
   --header 'Accept: */*' \
   --header 'Content-Type: application/json' \
   --data-raw '{
@@ -809,32 +809,32 @@ curl  -X POST \
 
 4. Retrieve the endpoint:
 ```shell
-export TRANSFER_ID=$(curl  -X POST \
-  'http://dsp-oid4vc-management.127.0.0.1.nip.io:8080/api/v1/management/v3/transferprocesses/request' \
+export TRANSFER_ID=$(curl -k -x localhost:8888 -X POST \
+  'https://dsp-oid4vc-management.127.0.0.1.nip.io/api/v1/management/v3/transferprocesses/request' \
   --header 'Accept: */*' \
   --header 'Content-Type: application/json' \
   --data-raw '{
     "@context": ["https://w3id.org/edc/connector/management/v0.0.1"],
     "@type": "QuerySpec"
   }' | jq -r '.[]."@id"'); echo ${TRANSFER_ID}
-export ENDPOINT=$(curl -X GET "http://dsp-oid4vc-management.127.0.0.1.nip.io:8080/api/v1/management/v3/edrs/${TRANSFER_ID}/dataaddress" | jq -r .endpoint); echo ${ENDPOINT}
+export ENDPOINT=$(curl -k -x localhost:8888 -X GET "https://dsp-oid4vc-management.127.0.0.1.nip.io/api/v1/management/v3/edrs/${TRANSFER_ID}/dataaddress" | jq -r .endpoint); echo ${ENDPOINT}
 ```
 
 5. Request without token fails:
 ```shell
-curl -x localhost:8888 -X GET ${ENDPOINT}/ngsi-ld/v1/entities/urn:ngsi-ld:UptimeReport:fms-1
+curl -k -x localhost:8888 -X GET ${ENDPOINT}/ngsi-ld/v1/entities/urn:ngsi-ld:UptimeReport:fms-1
 ```
 
 6. Request openid-configuration:
 ```shell
-curl -x localhost:8888 -X GET ${ENDPOINT}/.well-known/openid-configuration | jq .
+curl -k -x localhost:8888 -X GET ${ENDPOINT}/.well-known/openid-configuration | jq .
 ```
 
 7. Access via OID4VP:
 ```shell
 export MEMBERSHIP_CREDENTIAL=$(./doc/scripts/get_credential.sh https://keycloak-consumer.127.0.0.1.nip.io membership-credential employee)
 export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh ${ENDPOINT} $MEMBERSHIP_CREDENTIAL openid); echo Access Token: $ACCESS_TOKEN
-curl -x localhost:8888 -X GET ${ENDPOINT}/ngsi-ld/v1/entities/urn:ngsi-ld:UptimeReport:fms-1 \
+curl -k -x localhost:8888 -X GET ${ENDPOINT}/ngsi-ld/v1/entities/urn:ngsi-ld:UptimeReport:fms-1 \
   --header 'Content-Type: application/json' \
   --header "Authorization: Bearer ${ACCESS_TOKEN}" | jq .
 ```

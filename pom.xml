@@ -544,6 +544,20 @@
             <id>elsi</id>
             <build>
                 <plugins>
+                    <plugin>
+                        <groupId>io.github.download-maven-plugin</groupId>
+                        <artifactId>download-maven-plugin</artifactId>
+                        <version>2.0.0</version>
+                        <configuration>
+                            <skip>false</skip>
+                        </configuration>
+                    </plugin>
+                    <plugin>
+                        <artifactId>maven-resources-plugin</artifactId>
+                        <configuration>
+                            <skip>false</skip>
+                        </configuration>
+                    </plugin>
                     <!-- render the charts -->
                     <plugin>
                         <groupId>io.kokuwa.maven</groupId>
@@ -645,6 +659,20 @@
             <id>dsp</id>
             <build>
                 <plugins>
+                    <plugin>
+                        <groupId>io.github.download-maven-plugin</groupId>
+                        <artifactId>download-maven-plugin</artifactId>
+                        <version>2.0.0</version>
+                        <configuration>
+                            <skip>false</skip>
+                        </configuration>
+                    </plugin>
+                    <plugin>
+                        <artifactId>maven-resources-plugin</artifactId>
+                        <configuration>
+                            <skip>false</skip>
+                        </configuration>
+                    </plugin>
                     <!-- render the charts -->
                     <plugin>
                         <groupId>io.kokuwa.maven</groupId>
@@ -746,6 +774,20 @@
             <id>central</id>
             <build>
                 <plugins>
+                    <plugin>
+                        <groupId>io.github.download-maven-plugin</groupId>
+                        <artifactId>download-maven-plugin</artifactId>
+                        <version>2.0.0</version>
+                        <configuration>
+                            <skip>false</skip>
+                        </configuration>
+                    </plugin>
+                    <plugin>
+                        <artifactId>maven-resources-plugin</artifactId>
+                        <configuration>
+                            <skip>false</skip>
+                        </configuration>
+                    </plugin>
                     <!-- render the charts -->
                     <plugin>
                         <groupId>io.kokuwa.maven</groupId>
@@ -851,6 +893,20 @@
                                 </configuration>
                             </execution>
                         </executions>
+                    </plugin>
+                    <plugin>
+                        <groupId>io.github.download-maven-plugin</groupId>
+                        <artifactId>download-maven-plugin</artifactId>
+                        <version>2.0.0</version>
+                        <configuration>
+                            <skip>false</skip>
+                        </configuration>
+                    </plugin>
+                    <plugin>
+                        <artifactId>maven-resources-plugin</artifactId>
+                        <configuration>
+                            <skip>false</skip>
+                        </configuration>
                     </plugin>
                     <!-- render the charts -->
                     <plugin>
