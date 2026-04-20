@@ -1,3 +1,4 @@
+{{- if (eq .Values.identityhub.enabled true) }}
 #################################################################################
   #  Copyright (c) 2025 Cofinity-X
   #  Copyright (c) 2025 LKS Next
@@ -18,10 +19,6 @@
   #
   #  SPDX-License-Identifier: Apache-2.0
   #################################################################################
-
-
----
-{{- if (eq .Values.identityhub.enabled true) }}
 apiVersion: v1
 kind: ConfigMap
 metadata:

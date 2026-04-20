@@ -1,13 +1,13 @@
 apiVersion: v2
 name: trust-anchor
 description: Umbrella Chart to provide a minimal trust anchor for a FIWARE Dataspace
-version: 0.3.0
+version: 1.0.0
 dependencies:
   - name: trusted-issuers-list
     condition: trusted-issuers-list.enabled
     version: 0.16.0
     repository: https://fiware.github.io/helm-charts
-  - name: mysql
-    condition: mysql.enabled
-    version: 14.0.3
-    repository: https://charts.bitnami.com/bitnami
+  - name: postgres-operator
+    condition: postgres-operator.enabled
+    version: 1.15.1
+    repository: https://opensource.zalando.com/postgres-operator/charts/postgres-operator

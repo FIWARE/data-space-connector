@@ -1,3 +1,4 @@
+{{- if (eq .Values.identityhub.enabled true) }}
 #################################################################################
   #  Copyright (c) 2025 Cofinity-X
   #  Copyright (c) 2025 Contributors to the Eclipse Foundation
@@ -18,11 +19,7 @@
   #  SPDX-License-Identifier: Apache-2.0
   #################################################################################
 
-
----
-
 # this configmap contains all application configuration that is required by the identityhub runtime.
-{{- if (eq .Values.identityhub.enabled true) }}
 apiVersion: v1
 kind: ConfigMap
 metadata:

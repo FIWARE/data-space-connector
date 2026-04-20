@@ -4,8 +4,11 @@ CHARTS=$(pwd)/charts/*
 RETURN_VAL=0
 for chart in $CHARTS
 do
+ [ ! -d "${chart}" ] && continue
  ./bin/helm dependency build ${chart}
- ./bin/helm template ${chart} | kubeconform -strict
+ ./bin/helm template ${chart} | kubeconform -strict \
+   -schema-location default \
+   -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json'
 
  ret=$?
  if [ $ret -ne 0 ]; then

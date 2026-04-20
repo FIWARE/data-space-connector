@@ -17,7 +17,9 @@ specific flows and its deployment and integration with other frameworks.
   - [Contract Management](#contract-management)
   - [M2M Service Interaction](#m2m-service-interaction)
 - [Deployment / Integration](#deployment--integration)
-  - [Local deployment of Minimum Viable Dataspace (helm/k3s)](#local-deployment-of-minimum-viable-dataspace-helmk3s)
+  - [Quick Start Guide](#quick-start-guide)
+  - [Deployment by Role](#deployment-by-role)
+  - [Local Deployment (Maven)](#local-deployment-maven)
   - [Packet Delivery Company (ArgoCD)](#packet-delivery-company-argocd)
   - [Integration with AWS Garnet Framework (formerly AWS Smart Territory Framework)](#integration-with-aws-garnet-framework-formerly-aws-smart-territory-framework)
 
@@ -54,22 +56,29 @@ can be found here:
 
 ## Deployment / Integration
 
-### Local deployment of Minimum Viable Dataspace (helm/k3s)
+### Quick Start Guide
 
-This is an example of a "Minimum Viable Dataspace", consisting of a fictitious data service 
-provider called M&P Operations Inc. (using the FIWARE Data Space Connector), a data service consumer 
-called Fancy Marketplace Co. and the 
-data space's trust anchor.
+An automated minimal deployment of a complete data space (trust anchor + provider + consumer) for **learning and development purposes**. Its goal is not to show how to deploy each component individually, but to provide a running environment where you can explore the flows and understand how a FIWARE DSC-based Data Space works.
 
-The service is provided by the Scorpio Context via the NGSI-LD API, offering access to 
-energy report entities.
+* [Quick Start Guide](./deployment-integration/quick-start/README.md)
 
-The example uses [k3s](https://k3s.io/) and helm for deployment on a local machine.
+> **Note:** The Quick Start Guide is not intended for production deployments. For deploying in a real environment, see the role-based guides below.
 
-More information can be found here:
+### Deployment by Role
+
+Documentation for deploying the FIWARE DSC according to your organization's role in the data space. Each guide describes the required and optional components, architecture, and production considerations.
+
+* [Deployment by Role — Overview](./deployment-integration/roles/README.md)
+  * [Consumer](./deployment-integration/roles/consumer/README.md)
+  * [Provider](./deployment-integration/roles/provider/README.md)
+  * [Consumer + Provider](./deployment-integration/roles/consumer-provider/README.md)
+  * [Operator (Data Space Governance)](./deployment-integration/roles/operator/README.md)
+
+### Local Deployment (Maven)
+
+For development and testing, a Maven-based local deployment automatically spins up a full data space using k3s and Docker.
+
 * [Local Deployment](./deployment-integration/local-deployment/LOCAL.MD)
-
-
 
 ### Packet Delivery Company (ArgoCD)
 
@@ -82,9 +91,6 @@ The configuration can be found at the
 [fiware-gitops repository](https://github.com/FIWARE-Ops/fiware-gitops/tree/master/aws/dsba/packet-delivery/data-space-connector).
 
 **Note,** that this is currently being reworked and above repository does not contain the latest configuration.
-
-
-
 
 ### Integration with AWS Garnet Framework (formerly AWS Smart Territory Framework)
 
