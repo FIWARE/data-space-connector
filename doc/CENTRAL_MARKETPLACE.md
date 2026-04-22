@@ -8,14 +8,14 @@ Various Data Space Use-Cases require a solution for offering services through a 
 ![CENTRAL MARKETPLACE](./img/central_market.png)
 
 Integration of Participants into a Central Marketplace happens through the same mechanisms and components as the normal [marketplace integration](MARKETPLACE_INTEGRATION.md).
-Particpants offering their services on the Central Marketplace are required to provide an instance of the [ContractManagement](https://github.com/FIWARE/contract-management). The Central Marketplace also runs the Contract Management Component and manages Organizations, Products and Offerings through the TMForum API. 
+Particpants offering their services on the Central Marketplace are required to provide an instance of the [ContractManagement](https://github.com/FIWARE/contract-management). The Central Marketplace also runs the Contract Management Component and manages Organizations, Products and Offerings through the TMForum API.
 
 The basic flow of integration is as following:
 
 1. The Data Provider has to prepare its integration by:
 
     1.1. Register the Marketplace as a trusted-issuer of credentials used by the Contract Management
-    1.2. Register policies that allow the marketplace to send order notifications to the Contract-Management(see [allowContractManagement.json](../it/src/test/resources/policies/allowContractManagement.json) as an example) 
+    1.2. Register policies that allow the marketplace to send order notifications to the Contract-Management(see [allowContractManagement.json](../it/src/test/resources/policies/allowContractManagement.json) as an example)
     1.3 Provider has to register itself at the Central Marketplace as an Oranization, containing access information to the Contract Management
 
 2. Create Product Offering
@@ -28,19 +28,19 @@ The basic flow of integration is as following:
     4.2. Send order notifications to the Contract-Management(through PEP)
 
 5. Contract-Management activates the service:
-    
+
     5.1. Adds the customer to the trusted-issuers-list(according to the order)
     5.2. Creates the policies from the order
 
 ## Demo
 
-In order to run the Demo flows setup a local deployment via: 
+In order to run the Demo flows setup a local deployment via:
 
 ```shell
   mvn clean deploy -Plocal,central
 ```
 
-In the Demo-Scenario, the Consumer-Organization("fancy-marketplace.biz") also acts as the provider of the centralized marketplace, while the Provider-Organization("mp-operations.org") offers its services through that market. 
+In the Demo-Scenario, the Consumer-Organization("fancy-marketplace.biz") also acts as the provider of the centralized marketplace, while the Provider-Organization("mp-operations.org") offers its services through that market.
 
 ### Prepare the marketplace
 
@@ -84,18 +84,18 @@ Register the Provider at the Marketplace, containing the address of the Contract
       \"partyCharacteristic\": [
         {
             \"name\": \"did\",
-            \"value\": \"${PROVIDER_DID}\" 
+            \"value\": \"${PROVIDER_DID}\"
         },
         {
             \"name\": \"contractManagement\",
             \"value\": {
                 \"address\": \"http://contract-management.127.0.0.1.nip.io:8080\",
                 \"clientId\":\"contract-management\",
-                \"scope\": [\"external-marketplace\"]  
+                \"scope\": [\"external-marketplace\"]
             }
         }
       ]
-    }" | jq '.id' -r); echo ${MP_OPERATIONS_ID} 
+    }" | jq '.id' -r); echo ${MP_OPERATIONS_ID}
 ```
 
 ### Create the Offering [(Step 2)](#architecture)
@@ -230,14 +230,14 @@ Create product offering, referencing the product spec:
 
 ### Buy access to the offering [(Step 2)](#architecture)
 
-In order to keep the demo environment manageable, the Consumer-Organization will buy access to the Providers offering: 
+In order to keep the demo environment manageable, the Consumer-Organization will buy access to the Providers offering:
 
 Create a UserCredential for the consumer:
 
 ```shell
 export CONSUMER_USER_CREDENTIAL=$(./doc/scripts/get_credential.sh https://keycloak-consumer.127.0.0.1.nip.io user-sd employee vc+sd-jwt); echo ${CONSUMER_USER_CREDENTIAL}
 ```
-Create an OperatorCredential for the consumer: 
+Create an OperatorCredential for the consumer:
 
 ```shell
 export CONSUMER_OPERATOR_CREDENTIAL=$(./doc/scripts/get_credential.sh https://keycloak-consumer.127.0.0.1.nip.io operator-credential operator); echo ${CONSUMER_OPERATOR_CREDENTIAL}
@@ -267,10 +267,10 @@ Register Fancy Marketplace as a Consumer
       \"partyCharacteristic\": [
         {
           \"name\": \"did\",
-          \"value\": \"${CONSUMER_DID}\" 
+          \"value\": \"${CONSUMER_DID}\"
         }
       ]
-    }" | jq '.id' -r); echo ${FANCY_MARKETPLACE_ID} 
+    }" | jq '.id' -r); echo ${FANCY_MARKETPLACE_ID}
 ```
 
 List the offerings of the marketplace, only one should be registered at the moment:
@@ -302,7 +302,7 @@ Create an order for the offering:
           \"productOffering\": {
             \"id\" :  \"${OFFER_ID}\"
           }
-        }  
+        }
       ],
       \"relatedParty\": [
         {
@@ -324,10 +324,36 @@ Complete the order:
           }" | jq .
 ```
 
-Once the order is completed, the Contract Management of the Marketplace will send a notification to the Providers Contract Management, where the credential configuration and policies from the product will be applied to the Trusted Issuers List and the PAP. 
+Once the order is completed, the Contract Management of the Marketplace will send a notification to the Providers Contract Management, where the credential configuration and policies from the product will be applied to the Trusted Issuers List and the PAP.
 
 Now it should be possible to get an AccessToken for the Consumer's OperatorCredential:
 
 ```shell
   export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh http://mp-data-service.127.0.0.1.nip.io:8080 $CONSUMER_OPERATOR_CREDENTIAL operator); echo ${ACCESS_TOKEN}
 ```
+
+## Using the Marketplace UI
+
+The same flow described in the [Demo](#demo) section can be performed through the Marketplace UI (BAE) instead of using the TMForum APIs directly. This is the typical path for a real operator, and it only differs from the [standard marketplace UI flow](MARKETPLACE_INTEGRATION.md) in one place: the provider Organization must configure the Contract Management endpoint through its **Profile**, so that the Central Marketplace knows where to send the order notifications.
+
+### Prepare the provider [(Step 1)](#architecture)
+
+This step is the same as in the [API version](#prepare-the-provider-step-1). The only difference is that the last action — _Register the Provider at the Marketplace, containing the address of the Contract Management and the required clientId/scope for authentication_ — can be performed directly from the Marketplace UI instead of calling the TMForum API.
+
+Once logged in into the marketplace with a `LegalPersonCredential` containing the `REPRESENTATIVE` role, open the user menu and go to **Profile**. In the Organization form, fill in the Central Marketplace specific fields (equivalent to the `contractManagement` `partyCharacteristic` sent in the API flow):
+
+- **Contract Management Address**: URL of the provider's Contract Management (e.g. `https://provider-cm.dev.seamware.io:443`).
+- **Contract Management Client ID**: `contract-management`.
+- **Contract Management Scopes**: `external-marketplace`.
+
+![Central Marketplace UI - Profile](./img/central-marketplace-ui.png)
+
+### Create the Offering, Buy access and Process the order [(Steps 2–5)](#architecture)
+
+The remaining steps are identical to the standard UI flow and can be followed directly from [MARKETPLACE_INTEGRATION.md](MARKETPLACE_INTEGRATION.md):
+
+- Create the **Product Specification** and the **Product Offering** from the "My Offerings" section (see [Create the offering](MARKETPLACE_INTEGRATION.md#create-the-offering)).
+- Login as the consumer with the `UserCredential` and **buy access** through the cart (see [Buy access](MARKETPLACE_INTEGRATION.md#buy-access)).
+- **Process the order** from the provider's backoffice in "Product Order" → "As Provider" → "Review" (see [Process the order](MARKETPLACE_INTEGRATION.md#process-the-order)).
+
+Once the order is completed, the outcome is the same as in the API flow: the Central Marketplace's Contract Management notifies the provider's Contract Management, which updates the Trusted Issuers List and the PAP policies according to the product configuration.

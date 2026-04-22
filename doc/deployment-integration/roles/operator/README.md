@@ -55,6 +55,45 @@ The [Onboarding Portal](https://github.com/SEAMWARE/On-Boarding-Portal/tree/main
 
 The Onboarding Portal simplifies the Operator's work by replacing manual registration processes with a guided workflow. See the [Onboarding Portal documentation](https://github.com/SEAMWARE/On-Boarding-Portal/tree/main) for deployment and configuration details.
 
+### Central Marketplace
+
+Some data spaces run a **shared Central Marketplace** where providers publish offerings and consumers browse and purchase access. In a neutral governance model, the Operator is the natural host for such a marketplace, since it is already the non-participant entity trusted by every organization in the data space.
+
+> **Note:** The Central Marketplace is **not a Provider**. It does not host data services or protect them with a PAP; it only provides a catalog, an ordering API and a UI. Its role is to broker purchases and notify the actual data providers so they can enforce access on their own infrastructure.
+
+Hosting the Central Marketplace is **optional** and independent from operating the Trust Anchor. Both responsibilities can be concentrated in the same actor or split among different ones. In either case, the Central Marketplace must be deployed with its **own DID, its own database and its own Kubernetes namespace** — never sharing infrastructure with the Trust Anchor's TIR.
+
+#### Required components
+
+The Central Marketplace is deployed using the same `fiware/data-space-connector` Helm chart as a Provider, but with a specific subset of components enabled:
+
+| Component | Purpose |
+|-----------|---------|
+| **Keycloak** | Issues the `MarketplaceCredential` used by the marketplace to authenticate against each provider's Contract Management when sending order notifications. Uses its own realm and `did:web`. |
+| **DID Helper** | Publishes the marketplace's DID document. |
+| **TMForum API** | Hosts the shared catalog (products, offerings, orders, parties, agreements). |
+| **Scorpio Context Broker** | NGSI-LD backend for the TMForum API. Should not be exposed to participants as a data service. |
+| **Contract Management** | Configured in central-marketplace mode: `enableCentralMarketplace: true`, `enableOdrlPap: false`, `oid4vp.enabled: true`. On order completion, it authenticates with its `MarketplaceCredential` and notifies the provider's Contract Management. |
+| **Marketplace UI (BAE)** | Business API Ecosystem web portal (Logic Proxy + Charging Backend + APIs). Requires `BAE_LP_DATASPACE_ENABLED=true` and `BAE_LP_PURCHASE_ENABLED=true` for data space purchase flows. |
+| **VCVerifier + Credentials Config Service + Trusted Issuers List (local)** | Authenticate the providers (and users) that access the marketplace's catalog and ordering APIs. |
+
+The **ODRL-PAP, OPA and data-service protection** components that a Provider deploys are **not** needed in the Central Marketplace — the marketplace does not expose protected data services.
+
+#### Initial policies
+
+Before providers can publish offerings, the Operator must restrict access to the TMForum APIs of the marketplace so only authenticated users with the appropriate role can interact with them. A typical baseline policy allows only users carrying the `REPRESENTATIVE` role in their `LegalPersonCredential` to access the TMForum endpoints.
+
+See the end-to-end flow and the example script `prepare-central-market-policies.sh` in [CENTRAL_MARKETPLACE.md](../../../CENTRAL_MARKETPLACE.md).
+
+#### Database
+
+The Central Marketplace requires its **own dedicated SQL database**, separate from the Trust Anchor's database. It holds the Keycloak realm, the TMForum catalog (products, offerings, orders, agreements), the Contract Management state (notifications, retries) and the BAE user profiles and purchases.
+
+#### Reference
+
+- Architecture and end-to-end demo flow: [CENTRAL_MARKETPLACE.md](../../../CENTRAL_MARKETPLACE.md)
+- Local demo deployment: `mvn clean deploy -Plocal,central`
+
 ## Helm chart
 
 The Trust Anchor uses a dedicated Helm chart, separate from the participant chart:
