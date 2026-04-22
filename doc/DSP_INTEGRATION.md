@@ -690,7 +690,7 @@ curl -k -x localhost:8888 -X POST \
 
 ```shell
 export AGREEMENT_ID=$(curl -k -X POST \
-  'https://dsp-dcp-management.127.0.0.1.nip.io:8080/api/v1/management/v3/contractnegotiations/request' \
+  'https://dsp-dcp-management.127.0.0.1.nip.io/api/v1/management/v3/contractnegotiations/request' \
   --header 'Accept: */*' \
   --header 'Content-Type: application/json' | jq -r '.[0].contractAgreementId'); echo ${AGREEMENT_ID}
 ```
