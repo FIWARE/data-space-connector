@@ -71,19 +71,27 @@ The Central Marketplace is deployed using the same `fiware/data-space-connector`
 |-----------|---------|
 | **Keycloak** | Issues the credential used by the marketplace to authenticate against each provider's Contract Management when sending order notifications. Uses its own realm and `did:web`. In this documentation and in the shipped examples this credential is a `MarketplaceCredential`, but **the credential type is not fixed** — any type can be used as long as the marketplace's Keycloak issues it and the providers accept it (see [Authentication credential type](#authentication-credential-type)). |
 | **DID Helper** | Publishes the marketplace's DID document. |
-| **TMForum API** | Hosts the shared catalog (products, offerings, orders, parties, agreements). |
+| **TMForum API** | Hosts the shared catalog (products, offerings, orders, parties, agreements). All interactions with the marketplace (organization registration, product specification, offering, ordering and order completion) can be performed directly through this API — see the end-to-end flow in [CENTRAL_MARKETPLACE.md](../../../CENTRAL_MARKETPLACE.md). |
 | **Scorpio Context Broker** | NGSI-LD backend for the TMForum API. Should not be exposed to participants as a data service. |
 | **Contract Management** | Configured in central-marketplace mode: `enableCentralMarketplace: true`, `enableOdrlPap: false`, `oid4vp.enabled: true`. On order completion, it authenticates with the marketplace's credential and notifies the provider's Contract Management. |
-| **Marketplace UI (BAE)** | Business API Ecosystem web portal (Logic Proxy + Charging Backend + APIs). Requires `BAE_LP_DATASPACE_ENABLED=true` and `BAE_LP_PURCHASE_ENABLED=true` for data space purchase flows. |
 | **VCVerifier + Credentials Config Service + Trusted Issuers List (local)** | Authenticate the providers (and users) that access the marketplace's catalog and ordering APIs. |
 
 The **ODRL-PAP, OPA and data-service protection** components that a Provider deploys are **not** needed in the Central Marketplace — the marketplace does not expose protected data services.
 
+#### Optional components
+
+| Component | Purpose |
+|-----------|---------|
+| **Marketplace UI (BAE)** | Business API Ecosystem web portal (Logic Proxy + Charging Backend + APIs) on top of the TMForum API. Offers a user-friendly interface for participants to register, publish offerings and purchase access — all the same actions that can be performed directly through the TMForum APIs. Requires `BAE_LP_DATASPACE_ENABLED=true` and `BAE_LP_PURCHASE_ENABLED=true` for data space purchase flows, plus its own MongoDB. |
+
+> **Note:** The Marketplace UI is **not strictly required** for the Central Marketplace to be operational — a headless deployment (TMForum API + Contract Management only) is valid, and all the flows documented in [CENTRAL_MARKETPLACE.md](../../../CENTRAL_MARKETPLACE.md) can be driven exclusively through the TMForum APIs.
+> However, for **production deployments it is highly recommended** to deploy the UI, since it provides a usable experience for end-users (sellers publishing offerings, customers browsing and buying). A UI-less deployment is a reasonable choice only when the scenario is **purely machine-to-machine** and participants integrate directly with the TMForum APIs from their own systems.
+
 #### Database
 
-The Central Marketplace requires its **own dedicated SQL database**, separate from the Trust Anchor's database. It holds the Keycloak realm, the TMForum catalog (products, offerings, orders, agreements), the Contract Management state (notifications, retries) and the BAE user profiles and purchases.
+The Central Marketplace requires its **own dedicated SQL database**, separate from the Trust Anchor's database. It holds the Keycloak realm, the TMForum catalog (products, offerings, orders, agreements) and the Contract Management state (notifications, retries).
 
-In addition to the SQL database, the Marketplace UI's Charging Backend requires **MongoDB**. It can be deployed alongside the chart using the MongoDB Community Operator via `mongo-operator.enabled: true` and `managedMongo.enabled: true`.
+If the [Marketplace UI (BAE)](#optional-components) is also deployed, its Charging Backend additionally requires a **MongoDB** instance (used for the BAE user profiles and purchases). MongoDB can be deployed alongside the chart using the MongoDB Community Operator via `mongo-operator.enabled: true` and `managedMongo.enabled: true`. If the UI is not deployed, MongoDB is not needed.
 
 #### Deployment values
 
@@ -126,7 +134,7 @@ contract-management:
       tag: 3.3.8                            # minimum image required for central marketplace mode
 ```
 
-When a TMForum `ProductOrder` is completed, Contract Management inspects the `relatedParty` list of the underlying `ProductSpecification` to determine which participant is the provider — and therefore to which Contract Management it must send the activation notification. `organization.provider.role` configures the `relatedParty.role` value that Contract Management looks for. The chart default is `provider`, but the Marketplace UI (BAE) creates product specs where the provider is tagged with the role `seller`, so **when the Central Marketplace uses BAE, this value must be overridden to `seller`**. If the value does not match the role BAE writes, Contract Management will not be able to resolve the provider from the order and no notification will be sent.
+When a TMForum `ProductOrder` is completed, Contract Management inspects the `relatedParty` list of the underlying `ProductSpecification` to determine which participant is the provider — and therefore to which Contract Management it must send the activation notification. `organization.provider.role` configures the `relatedParty.role` value that Contract Management looks for. The chart default is `provider`, which matches the value written by clients that call the TMForum API directly (as in the [demo flow](../../../CENTRAL_MARKETPLACE.md#create-the-offering-step-2)). When the Marketplace UI (BAE) is deployed instead, it tags the provider with the role `seller`, so **in that case this value must be overridden to `seller`**. If the configured value does not match the role that clients write into `relatedParty`, Contract Management will not be able to resolve the provider from the order and no notification will be sent.
 
 **2. Enable the TMForum API and its NGSI-LD backend**
 
@@ -148,7 +156,9 @@ scorpio:
     enabled: false                          # NGSI-LD backend must not be publicly reachable
 ```
 
-**3. Enable the Marketplace UI (BAE)**
+**3. (Optional) Enable the Marketplace UI (BAE)**
+
+> The Marketplace UI is an [optional component](#optional-components): it is not required for the Central Marketplace to work, but highly recommended in production so that end-users get a usable web interface. For purely machine-to-machine scenarios, this whole block can be omitted and participants can interact directly with the TMForum API.
 
 The Business API Ecosystem is the web portal that participants use to publish offerings and purchase access. The Logic Proxy must be started with the data-space flags so SIOP login and purchase flows are enabled.
 
@@ -187,6 +197,8 @@ marketplace:
       - { name: BAE_LP_SIOP_PRIVATE_KEY_PEM, value: /certs-did/tls.key }
       - { name: BAE_LP_BILLING_ENGINE_URL,   value: "http://<release>-biz-ecosystem-charging-backend.<namespace>.svc.cluster.local:8006/charging/api/orderManagement/orders/preview/" }
 ```
+
+When this block is enabled, remember to also override `contract-management.organization.provider.role` to `seller` (see step 1), since BAE tags the provider with that role in the `ProductSpecification`'s `relatedParty`.
 
 **4. Issue the marketplace's authentication credential from Keycloak**
 
