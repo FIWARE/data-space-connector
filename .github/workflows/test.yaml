@@ -4,6 +4,17 @@ on: [push, pull_request]
 jobs:
   test:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: local
+            profiles: "test,local-test"
+          - name: central
+            profiles: "test,central,central-test"
+          - name: dsp
+            profiles: "test,dsp,dsp-test"
+    name: "Integration Test (${{ matrix.name }})"
 
     steps:
       - uses: actions/checkout@v5
@@ -17,10 +28,10 @@ jobs:
         run: |
           sudo modprobe br_netfilter
 
-      - name: Execute tests
+      - name: Execute tests (${{ matrix.name }})
         id: test
         run: |
-          mvn clean integration-test -Ptest
+          mvn clean integration-test -P${{ matrix.profiles }}
 
       - name: Post-mortem on failure
         if: failure()
