@@ -87,6 +87,124 @@ Enable the local marketplace when:
 
 > **Note:** The local Marketplace requires MongoDB in addition to the existing PostgreSQL. MongoDB can be deployed via the `fiware/data-space-connector` Helm chart using the MongoDB Community Operator.
 
+#### Participating in a Central Marketplace
+
+If the data space runs a shared [Central Marketplace](../../../CENTRAL_MARKETPLACE.md) hosted by another actor (typically the Data Space Operator), the provider publishes its offerings there and does **not** deploy the marketplace itself. However, the provider's DSC needs specific configuration so the Central Marketplace can reach the local Contract Management and trigger the activation flow after each purchase.
+
+> **Minimum versions**
+> - `fiware/data-space-connector` Helm chart ≥ **9.0.1**
+> - `fiware/contract-management` Helm chart ≥ **3.5.22**
+> - `contract-management` container image ≥ **3.3.8**
+
+The following configuration is required on the provider side. The example in [`k3s/provider.yaml`](../../../../k3s/provider.yaml) already includes all of the pieces below and can be used as a reference.
+
+**1. Enable and configure Contract Management in central-marketplace mode**
+
+```yaml
+contract-management:
+  enabled: true
+  enableCentralMarketplace: true          # react to order notifications coming from an external marketplace
+  enableOdrlPap: true                     # write ODRL policies to the local PAP on contract activation
+  did: <your-organization-DID>
+  til:
+    credentialType: <YourCredentialType>  # e.g. OperatorCredential — registered in the local TIL on activation
+  services:
+    odrl:
+      url: http://odrl-pap:8080
+    # ... TMForum URLs, trusted-issuers-list, etc.
+  notification:
+    enabled: true
+    host: contract-management
+  deployment:
+    image:
+      tag: 3.3.8                          # minimum image required for central marketplace mode
+```
+
+- `enableCentralMarketplace` activates the flow that reacts to order notifications coming from an external marketplace (instead of reacting to local orders only).
+- `enableOdrlPap: true` is required so that the ODRL policies attached to each purchased offering are installed in the provider's PAP when the contract is activated.
+- `til.credentialType` defines the credential type that Contract Management will register for each buyer in the local Trusted Issuers List when a purchase is completed.
+
+**2. Expose Contract Management externally through APISIX**
+
+The Central Marketplace sends order notifications to the provider's Contract Management over HTTPS, authenticating with its `MarketplaceCredential`. APISIX must expose the Contract Management on a dedicated host with the standard OIDC + OPA protection:
+
+```yaml
+decentralizedIam:
+  odrlAuthorization:
+    apisix:
+      ingress:
+        hosts:
+          - host: <your_contract_management_domain>    # e.g. provider-cm.example.org
+            paths: ["/"]
+      routes:
+        # Well-known endpoint for Contract Management — proxied to the verifier
+        - uri: /*/.well-known/openid-configuration
+          host: <your_contract_management_domain>
+          upstream:
+            nodes:
+              verifier:3000: 1
+            type: roundrobin
+          plugins:
+            proxy-rewrite:
+              uri: /services/contract-management/.well-known/openid-configuration
+        # Catch-all route to Contract Management, protected by VCVerifier + OPA
+        - uri: /*
+          host: <your_contract_management_domain>
+          upstream:
+            nodes:
+              contract-management:8080: 1
+            type: roundrobin
+          plugins:
+            openid-connect:
+              bearer_only: true
+              use_jwks: true
+              client_id: contract-management
+              client_secret: unused
+              ssl_verify: false
+              discovery: http://verifier:3000/services/contract-management/.well-known/openid-configuration
+            opa:
+              host: http://localhost:8181
+              policy: policy/main
+              with_body: true
+```
+
+**3. Register the Contract Management as a service in the Credentials Config Service**
+
+The VCVerifier needs to know which credential types to accept on the Contract Management host. Register the service with a dedicated OIDC scope (`external-marketplace`) that accepts the `MarketplaceCredential`:
+
+```yaml
+decentralizedIam:
+  vcAuthentication:
+    credentials-config-service:
+      registration:
+        enabled: true
+        services:
+          - id: contract-management
+            defaultOidcScope: "external-marketplace"
+            authorizationType: "DEEPLINK"
+            oidcScopes:
+              "external-marketplace":
+                credentials:
+                  - type: MarketplaceCredential
+                    trustedParticipantsLists:
+                      - <trust_anchor_tir_url>     # Trust Anchor's TIR endpoint
+                    trustedIssuersLists:
+                      - "*"                        # any issuer registered at the Trust Anchor
+                    jwtInclusion:
+                      enabled: true
+                      fullInclusion: true
+```
+
+`trustedIssuersLists: "*"` is intentional here: the marketplace's credential is issued by the marketplace itself, and the trust decision is delegated entirely to the Trust Anchor's TIR.
+
+**4. Register the `allowContractManagement` policy at the PAP**
+
+Before receiving the first notification, the provider must install a policy at its PAP granting the Central Marketplace access to the Contract Management endpoint. See [Prepare the provider (Step 1)](../../../CENTRAL_MARKETPLACE.md#prepare-the-provider-step-1) in the Central Marketplace documentation for the exact policy and the `curl` command.
+
+**5. Register the provider as an Organization at the Central Marketplace**
+
+The Central Marketplace needs to know the provider's Contract Management endpoint and the OIDC client to authenticate with. This registration can be done through the TMForum API (`partyCharacteristic.contractManagement`) or through the Marketplace UI (Profile form). See [Prepare the provider (Step 1)](../../../CENTRAL_MARKETPLACE.md#prepare-the-provider-step-1) and [Using the Marketplace UI](../../../CENTRAL_MARKETPLACE.md#using-the-marketplace-ui) in the Central Marketplace documentation for both variants.
+
 ### FDSC-EDC (Dataspace Protocol)
 
 Enable the Eclipse Dataspace Components connector for DSP compliance. See [DSP Integration](../../../DSP_INTEGRATION.md).
@@ -408,6 +526,14 @@ The following ingresses are useful for development but must **not** be publicly 
 
 - Define ODRL policies following the principle of least privilege
 - Consider versioning your policies (store them in version control and apply via CI/CD)
+
+### Central Marketplace integration
+
+If the provider participates in a [Central Marketplace](../../../CENTRAL_MARKETPLACE.md):
+
+- The Contract Management host exposed through APISIX must be reachable from the Central Marketplace over HTTPS with a valid certificate. The `contractManagement.address` registered in the provider's Organization at the marketplace must match this host exactly — no trailing paths, and the scheme/port used when registering must remain valid from the marketplace's network.
+- Coordinate version upgrades with the Central Marketplace operator: changes in the `contract-management` notification contract require both sides to be aligned. Keep the minimum versions noted in [Participating in a Central Marketplace](#participating-in-a-central-marketplace) as a floor.
+- Keep the local Trusted Issuers List aligned with the Central Marketplace's `MarketplaceCredential` issuer. If the marketplace rotates its DID, the provider will stop accepting notifications until the TIL and the Trust Anchor's TIR are updated.
 
 ### Upgrade strategy
 
