@@ -10,7 +10,7 @@ data:
   init.sh: |-
     {{- if .Values.registration.prepScript }}
     # Prep script
-    {{ .Values.registration.prepScript }} 
+    {{ .Values.registration.prepScript }}
     {{- end }}
     {{- $registration := .Values.registration}}
 
@@ -32,6 +32,6 @@ data:
       ]
     }"
     {{- end }}
-    
+
 
 {{- end }}

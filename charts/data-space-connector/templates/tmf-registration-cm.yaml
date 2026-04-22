@@ -3,7 +3,7 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: {{ $tmf.registration.name  }}
+  name: {{ $tmf.registration.name  }}-cm
   namespace: {{ $.Release.Namespace | quote }}
   labels:
     {{- include "dsc.labels" . | nindent 4 }}

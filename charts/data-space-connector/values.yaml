@@ -1264,6 +1264,20 @@ tm-forum-api:
     enabled: true
     # -- name to be used for the registration jobs
     name: tmf-api-registration
+    annotations:
+      "helm.sh/hook": post-install
+      "helm.sh/hook-weight": "0"
+      "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+    image:
+      repository: quay.io/curl/curl
+      tag: 8.1.2
+      pullPolicy: IfNotPresent
+    command: [ /bin/sh, -c, /bin/init.sh ]
+    extraEnvVars: []
+    extraVolumes: []
+    extraVolumeMounts: []
+    backoffLimit: 10
+    restartPolicy: Never
     # -- configuration to register the dataplane at the credentials-config-service
     ccs:
       # -- endpoint of the ccs to regsiter at
@@ -1378,6 +1392,26 @@ did:
 # -- configuration for registering a participant at the til. Allows to preconfigure trust-relationships on deployment
 registration:
   enabled: false
+  configMap: til-registration
+  prepScript: ""
+  image:
+    repository: quay.io/curl/curl
+    tag: 8.1.2
+    pullPolicy: IfNotPresent
+  command: [ /bin/sh, -c, /bin/init.sh ]
+  annotations:
+    "helm.sh/hook": post-install
+    "helm.sh/hook-weight": "0"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+  extraEnvVars: []
+  extraVolumes: []
+  extraVolumeMounts: []
+  # issuer:
+  # - did: ${DID}
+  #   credentialTypes:
+  #     - LegalPersonCredential
+  #     - OperatorCredential
+  issuer: []
 
 # -- configuration for the .well-known/data-space-configuration endpoint document
 dataSpaceConfig:
