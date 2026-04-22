@@ -2,8 +2,12 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: {{ .Values.registration.configMap }}
+  name: {{ .Values.registration.configMap }}-job
   namespace: {{ $.Release.Namespace | quote }}
+  {{- if .Values.registration.annotations }}
+  annotations:
+    {{- toYaml .Values.registration.annotations | nindent 4 }}
+  {{- end }}
   labels:
     {{- include "dsc.labels" . | nindent 4 }}
 spec:
@@ -11,18 +15,28 @@ spec:
     spec:
       containers:
         - name: register-credential-config
-          image: quay.io/curl/curl:8.1.2
-          command: [ "/bin/sh", "-c", "/bin/init.sh" ]
+          image: {{ .Values.registration.image.repository }}:{{ .Values.registration.image.tag }}
+          imagePullPolicy: {{ .Values.registration.image.pullPolicy }}
+          command: {{- toYaml .Values.registration.command | nindent 12 }}
+          {{- if .Values.registration.extraEnvVars }}
+          env:
+            {{- toYaml .Values.registration.extraEnvVars | nindent 12 }}
+          {{- end }}
           volumeMounts:
             - name: participant-registration
               mountPath: /bin/init.sh
               subPath: init.sh
+            {{- if .Values.registration.extraVolumeMounts }}
+            {{- toYaml .Values.registration.extraVolumeMounts | nindent 12 }}
+            {{- end }}
       volumes:
         - name: participant-registration
           configMap:
             name: {{ .Values.registration.configMap }}
             defaultMode: 0755
-
+        {{- if .Values.registration.extraVolumes }}
+        {{- toYaml .Values.registration.extraVolumes | nindent 8 }}
+        {{- end }}
       restartPolicy: Never
   backoffLimit: 10
 {{- end }}
