@@ -2,7 +2,7 @@ apiVersion: v2
 name: data-space-connector
 description: Umbrella Chart for the FIWARE Data Space Connector, combining all essential parts to be used by a participant.
 type: application
-version: 9.0.0
+version: 9.0.1
 dependencies:
   - name: decentralized-iam
     alias: decentralizedIam
@@ -27,7 +27,7 @@ dependencies:
     repository: https://fiware.github.io/helm-charts
   - name: contract-management
     condition: contract-management.enabled
-    version: 3.5.16
+    version: 3.5.22
     repository: https://fiware.github.io/helm-charts
   # marketplace
   - name: business-api-ecosystem
