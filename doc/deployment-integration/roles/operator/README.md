@@ -69,25 +69,181 @@ The Central Marketplace is deployed using the same `fiware/data-space-connector`
 
 | Component | Purpose |
 |-----------|---------|
-| **Keycloak** | Issues the `MarketplaceCredential` used by the marketplace to authenticate against each provider's Contract Management when sending order notifications. Uses its own realm and `did:web`. |
+| **Keycloak** | Issues the credential used by the marketplace to authenticate against each provider's Contract Management when sending order notifications. Uses its own realm and `did:web`. In this documentation and in the shipped examples this credential is a `MarketplaceCredential`, but **the credential type is not fixed** — any type can be used as long as the marketplace's Keycloak issues it and the providers accept it (see [Authentication credential type](#authentication-credential-type)). |
 | **DID Helper** | Publishes the marketplace's DID document. |
 | **TMForum API** | Hosts the shared catalog (products, offerings, orders, parties, agreements). |
 | **Scorpio Context Broker** | NGSI-LD backend for the TMForum API. Should not be exposed to participants as a data service. |
-| **Contract Management** | Configured in central-marketplace mode: `enableCentralMarketplace: true`, `enableOdrlPap: false`, `oid4vp.enabled: true`. On order completion, it authenticates with its `MarketplaceCredential` and notifies the provider's Contract Management. |
+| **Contract Management** | Configured in central-marketplace mode: `enableCentralMarketplace: true`, `enableOdrlPap: false`, `oid4vp.enabled: true`. On order completion, it authenticates with the marketplace's credential and notifies the provider's Contract Management. |
 | **Marketplace UI (BAE)** | Business API Ecosystem web portal (Logic Proxy + Charging Backend + APIs). Requires `BAE_LP_DATASPACE_ENABLED=true` and `BAE_LP_PURCHASE_ENABLED=true` for data space purchase flows. |
 | **VCVerifier + Credentials Config Service + Trusted Issuers List (local)** | Authenticate the providers (and users) that access the marketplace's catalog and ordering APIs. |
 
 The **ODRL-PAP, OPA and data-service protection** components that a Provider deploys are **not** needed in the Central Marketplace — the marketplace does not expose protected data services.
 
-#### Initial policies
-
-Before providers can publish offerings, the Operator must restrict access to the TMForum APIs of the marketplace so only authenticated users with the appropriate role can interact with them. A typical baseline policy allows only users carrying the `REPRESENTATIVE` role in their `LegalPersonCredential` to access the TMForum endpoints.
-
-See the end-to-end flow and the example script `prepare-central-market-policies.sh` in [CENTRAL_MARKETPLACE.md](../../../CENTRAL_MARKETPLACE.md).
-
 #### Database
 
 The Central Marketplace requires its **own dedicated SQL database**, separate from the Trust Anchor's database. It holds the Keycloak realm, the TMForum catalog (products, offerings, orders, agreements), the Contract Management state (notifications, retries) and the BAE user profiles and purchases.
+
+In addition to the SQL database, the Marketplace UI's Charging Backend requires **MongoDB**. It can be deployed alongside the chart using the MongoDB Community Operator via `mongo-operator.enabled: true` and `managedMongo.enabled: true`.
+
+#### Deployment values
+
+The Central Marketplace uses the `fiware/data-space-connector` Helm chart with a different subset of components enabled than a Provider. The snippets below show the key values required on top of a standard deployment — the full list of components (ingresses, TLS, Keycloak realm, credential definitions, etc.) follows the same patterns documented for the [Provider role](../provider/README.md#deployment). See also the local demo overlays in [`k3s/consumer.yaml`](../../../../k3s/consumer.yaml), [`k3s/consumer-auth.yaml`](../../../../k3s/consumer-auth.yaml) and [`k3s/consumer-tmf.yaml`](../../../../k3s/consumer-tmf.yaml) for a complete example.
+
+**1. Enable Contract Management in central-marketplace mode**
+
+This is the component that reacts to order completions in the marketplace and sends notifications to the provider's Contract Management authenticating with the marketplace's credential.
+
+```yaml
+contract-management:
+  enabled: true
+  did: <marketplace-DID>                    # e.g. did:web:did-central-marketplace.example.org
+  enableCentralMarketplace: true            # drive the flow from marketplace orders, not from local ones
+  enableOdrlPap: false                      # the marketplace does not run a local PAP
+  enableTrustedIssuersList: false           # the marketplace does not manage a TIL for participants
+  organization:
+    provider:
+      role: seller                          # see note below
+  oid4vp:
+    enabled: true                           # authenticate against providers using the marketplace's credential
+    credentialsFolder: /credential-repo
+    holder:
+      holderId: <marketplace-DID>
+      keyType: EC
+      keyPath: /app/resources/signing-key/tls.key
+      signatureAlgorithm: ECDH-ES
+  services:
+    product-order:    { url: http://tm-forum-api-svc:8080 }
+    party:            { url: http://tm-forum-api-svc:8080 }
+    product-catalog:  { url: http://tm-forum-api-svc:8080 }
+    service-catalog:  { url: http://tm-forum-api-svc:8080 }
+    tmforum-agreement-api: { url: http://tm-forum-api-svc:8080 }
+    quote:            { url: http://tm-forum-api-svc:8080 }
+  notification:
+    enabled: true
+    host: contract-management
+  deployment:
+    image:
+      tag: 3.3.8                            # minimum image required for central marketplace mode
+```
+
+When a TMForum `ProductOrder` is completed, Contract Management inspects the `relatedParty` list of the underlying `ProductSpecification` to determine which participant is the provider — and therefore to which Contract Management it must send the activation notification. `organization.provider.role` configures the `relatedParty.role` value that Contract Management looks for. The chart default is `provider`, but the Marketplace UI (BAE) creates product specs where the provider is tagged with the role `seller`, so **when the Central Marketplace uses BAE, this value must be overridden to `seller`**. If the value does not match the role BAE writes, Contract Management will not be able to resolve the provider from the order and no notification will be sent.
+
+**2. Enable the TMForum API and its NGSI-LD backend**
+
+The TMForum API hosts the shared catalog, orders and parties. It runs in `allInOne` mode on top of a Scorpio Context Broker that is not exposed publicly.
+
+```yaml
+tm-forum-api:
+  enabled: true
+  allInOne:
+    enabled: true
+  defaultConfig:
+    ngsiLd:
+      url: http://data-service-scorpio:9090
+
+scorpio:
+  enabled: true
+  fullnameOverride: data-service-scorpio
+  ingress:
+    enabled: false                          # NGSI-LD backend must not be publicly reachable
+```
+
+**3. Enable the Marketplace UI (BAE)**
+
+The Business API Ecosystem is the web portal that participants use to publish offerings and purchase access. The Logic Proxy must be started with the data-space flags so SIOP login and purchase flows are enabled.
+
+```yaml
+marketplace:
+  enabled: true
+  externalUrl: https://<marketplace-domain>
+  siop:
+    clientId: <marketplace-DID>
+    verifier:
+      host: https://<verifier-domain>
+      qrCodePath: /api/v2/loginQR
+      tokenPath: /token
+      jwksPath: /.well-known/jwks
+    allowedRoles: [seller, customer, admin]
+  bizEcosystemApis:
+    tmForum:
+      catalog:     { host: tm-forum-api-svc, port: 8080, path: /tmf-api/productCatalogManagement/v4 }
+      inventory:   { host: tm-forum-api-svc, port: 8080, path: /tmf-api/productInventory/v4 }
+      ordering:    { host: tm-forum-api-svc, port: 8080, path: /tmf-api/productOrderingManagement/v4 }
+      party:       { host: tm-forum-api-svc, port: 8080, path: /tmf-api/party/v4 }
+      # ... other TMForum sub-APIs (billing, usage, customer, resources, services, ...)
+  bizEcosystemLogicProxy:
+    ingress:
+      enabled: true
+      hosts:
+        - host: <marketplace-domain>
+          paths: ["/"]
+      tls:
+        - secretName: <marketplace-domain>-tls
+          hosts: [<marketplace-domain>]
+    additionalEnvVars:
+      - { name: BAE_LP_SIOP_IS_REDIRECTION, value: "true" }
+      - { name: BAE_LP_PURCHASE_ENABLED,     value: "true" }
+      - { name: BAE_LP_DATASPACE_ENABLED,    value: "true" }
+      - { name: BAE_LP_SIOP_PRIVATE_KEY_PEM, value: /certs-did/tls.key }
+      - { name: BAE_LP_BILLING_ENGINE_URL,   value: "http://<release>-biz-ecosystem-charging-backend.<namespace>.svc.cluster.local:8006/charging/api/orderManagement/orders/preview/" }
+```
+
+**4. Issue the marketplace's authentication credential from Keycloak**
+
+The Contract Management sends the notifications authenticated with a Verifiable Credential issued by the marketplace's own Keycloak. In this documentation and in the shipped examples this credential is a `MarketplaceCredential` (`format: jwt_vc`, `scope: MarketplaceCredential`, `vct: MarketplaceCredential`), and the `credentials` helper below fetches it into the pod so Contract Management can present it at each provider.
+
+```yaml
+credentials:
+  enabled: true
+  keycloak:
+    address: http://<release>-keycloak:8080
+    realm: <realm>
+    clientId: account-console
+    username: <user>
+    scope: openid
+    password: <password>
+  configurations:
+    - id: marketplace-credential
+      format: jwt_vc
+      targetFile: marketplace-credential.jwt
+```
+
+##### Authentication credential type
+
+The `MarketplaceCredential` type is **not mandatory** — it is simply the type used throughout this documentation, the [local demo](../../../CENTRAL_MARKETPLACE.md) and the shipped examples (see [`k3s/consumer.yaml`](../../../../k3s/consumer.yaml) Keycloak realm and [`k3s/provider.yaml`](../../../../k3s/provider.yaml) policies). Any credential type can be used as long as the three sides agree on it:
+
+1. **Keycloak (this realm)** must issue the chosen type — adjust `scope` and `vct` in the `verifiableCredentials.<id>` entry, the `id` under `credentials.configurations`, and the `targetFile` that Contract Management will read.
+2. **Central Marketplace CCS + PAP** uses that same type to let its Contract Management present it to providers. No extra configuration is typically needed here.
+3. **Each provider's CCS + PAP** must accept that type on the Contract Management endpoint (see step 3 and step 4 of [Participating in a Central Marketplace](../provider/README.md#participating-in-a-central-marketplace) — the `type` field in the `credentials-config-service` scope and the `allowContractManagement` policy at the PAP).
+
+If the type is changed, it must be changed consistently on all three sides or provider-side authentication will fail.
+
+**5. Authentication stack for the marketplace's own APIs**
+
+Providers and users accessing the catalog and ordering APIs authenticate via OID4VP against the marketplace's own VCVerifier + Credentials Config Service + local Trusted Issuers List. The values mirror those of a Provider ([see Provider role](../provider/README.md#deployment)), but the `credentials-config-service.registration` must expose a `LegalPersonCredential`-based scope for the catalog/ordering endpoints (so any registered participant can log in to publish or buy offerings).
+
+> **Note:** The Central Marketplace does **not** deploy the ODRL-PAP + OPA data-service-protection stack. Its only protected surface is the TMForum API behind APISIX with OID4VP auth.
+
+#### k3s/ reference values
+
+The local demo (`mvn clean deploy -Plocal,central`) deploys the Central Marketplace by reusing the consumer base chart together with two overlays that add the marketplace functionality. The same set of files can be used as a reference when preparing a production values file:
+
+| File | Description |
+|------|-------------|
+| [k3s/consumer.yaml](../../../../k3s/consumer.yaml) | Base values for the organization hosting the Central Marketplace (Keycloak, DID, database, etc.) |
+| [k3s/consumer-auth.yaml](../../../../k3s/consumer-auth.yaml) | Authentication stack (VCVerifier, Credentials Config Service, Trusted Issuers List, APISIX routes) required to protect the marketplace APIs |
+| [k3s/consumer-tmf.yaml](../../../../k3s/consumer-tmf.yaml) | TMForum API, Scorpio backend and Contract Management configured in central-marketplace mode (`enableCentralMarketplace: true`, `oid4vp.enabled: true`) |
+
+Deploying the Central Marketplace with the same layout:
+
+```shell
+helm install central-marketplace fiware/data-space-connector \
+  -n central-marketplace \
+  --create-namespace \
+  -f k3s/consumer.yaml \
+  -f k3s/consumer-auth.yaml \
+  -f k3s/consumer-tmf.yaml
+```
 
 #### Reference
 

@@ -313,7 +313,7 @@ Create an order for the offering:
 
 Complete the order:
 ```shell
-  export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh http://fancy-marketplace.127.0.0.1.nip.io:8080 $CONSUMER_USER_CREDENTIAL default); echo $ACCESS_TOKEN
+  export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh http://fancy-marketplace.127.0.0.1.nip.io:8080 $PROVIDER_USER_CREDENTIAL default); echo $ACCESS_TOKEN
   curl -X 'PATCH' \
       -H "Authorization: Bearer ${ACCESS_TOKEN}" \
       http://fancy-marketplace.127.0.0.1.nip.io:8080/tmf-api/productOrderingManagement/v4/productOrder/${ORDER_ID} \
