@@ -56,7 +56,7 @@ Create a policy, restricting access to the Contract Management to requests authe
 
 ```shell
 # Allow contract management access at the provider side
-curl -X 'POST' http://pap-provider.127.0.0.1.nip.io:8080/policy \
+curl -k -x localhost:8888 -X 'POST' https://pap-provider.127.0.0.1.nip.io/policy \
     -H 'Content-Type: application/json' \
     -d "$(cat ./it/src/test/resources/policies/allowContractManagement.json)"
 ```
@@ -73,9 +73,9 @@ Register the Provider at the Marketplace, containing the address of the Contract
   # set the Providers DID
   export PROVIDER_DID="did:web:mp-operations.org"
   # get an AccessToken for the Credential
-  export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh http://fancy-marketplace.127.0.0.1.nip.io:8080 $PROVIDER_USER_CREDENTIAL default); echo $ACCESS_TOKEN
+  export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh https://fancy-marketplace.127.0.0.1.nip.io $PROVIDER_USER_CREDENTIAL default); echo $ACCESS_TOKEN
   # create the organization at the providers TMForum
-  export MP_OPERATIONS_ID=$(curl -X POST http://fancy-marketplace.127.0.0.1.nip.io:8080/tmf-api/party/v4/organization \
+  export MP_OPERATIONS_ID=$(curl -k -x localhost:8888 -X POST https://fancy-marketplace.127.0.0.1.nip.io/tmf-api/party/v4/organization \
     -H 'Accept: */*' \
     -H 'Content-Type: application/json' \
     -H "Authorization: Bearer ${ACCESS_TOKEN}" \
@@ -89,7 +89,7 @@ Register the Provider at the Marketplace, containing the address of the Contract
         {
             \"name\": \"contractManagement\",
             \"value\": {
-                \"address\": \"http://contract-management.127.0.0.1.nip.io:8080\",
+                \"address\": \"https://contract-management.127.0.0.1.nip.io:443\",
                 \"clientId\":\"contract-management\",
                 \"scope\": [\"external-marketplace\"]  
             }
@@ -103,8 +103,8 @@ Register the Provider at the Marketplace, containing the address of the Contract
 Create product specification, referencing the provider:
 
 ```shell
-  export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh http://fancy-marketplace.127.0.0.1.nip.io:8080 $PROVIDER_USER_CREDENTIAL default); echo $ACCESS_TOKEN
-  export PRODUCT_SPEC=$(curl -X 'POST' http://fancy-marketplace.127.0.0.1.nip.io:8080/tmf-api/productCatalogManagement/v4/productSpecification \
+  export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh https://fancy-marketplace.127.0.0.1.nip.io $PROVIDER_USER_CREDENTIAL default); echo $ACCESS_TOKEN
+  export PRODUCT_SPEC=$(curl -k -x localhost:8888 -X 'POST' https://fancy-marketplace.127.0.0.1.nip.io/tmf-api/productCatalogManagement/v4/productSpecification \
   -H 'Accept: */*' \
   -H 'Content-Type: application/json;charset=utf-8' \
   -H "Authorization: Bearer ${ACCESS_TOKEN}" \
@@ -212,8 +212,8 @@ Create product specification, referencing the provider:
 Create product offering, referencing the product spec:
 
 ```shell
-  export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh http://fancy-marketplace.127.0.0.1.nip.io:8080 $PROVIDER_USER_CREDENTIAL default); echo $ACCESS_TOKEN
-  export PRODUCT_OFFERING_ID=$(curl -X 'POST' http://fancy-marketplace.127.0.0.1.nip.io:8080/tmf-api/productCatalogManagement/v4/productOffering \
+  export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh https://fancy-marketplace.127.0.0.1.nip.io $PROVIDER_USER_CREDENTIAL default); echo $ACCESS_TOKEN
+  export PRODUCT_OFFERING_ID=$(curl -k -x localhost:8888 -X 'POST' https://fancy-marketplace.127.0.0.1.nip.io/tmf-api/productCatalogManagement/v4/productOffering \
     -H 'Accept: */*' \
     -H 'Content-Type: application/json;charset=utf-8' \
     -H "Authorization: Bearer ${ACCESS_TOKEN}" \
@@ -246,7 +246,7 @@ export CONSUMER_OPERATOR_CREDENTIAL=$(./doc/scripts/get_credential.sh https://ke
 Assert that access is not yet possible(e.g. the Consumer cannot get an AccessToken for the OperatorCredential):
 
 ```shell
-  export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh http://mp-data-service.127.0.0.1.nip.io:8080 $CONSUMER_OPERATOR_CREDENTIAL operator); echo ${ACCESS_TOKEN}
+export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh https://mp-data-service.127.0.0.1.nip.io $CONSUMER_OPERATOR_CREDENTIAL operator); echo ${ACCESS_TOKEN}
 ```
 
 Now register "fancy-marketplace.biz" as a Consumer at the Marketplace:
@@ -256,9 +256,9 @@ Register Fancy Marketplace as a Consumer
   # set the Consumer DID
   export CONSUMER_DID="did:web:fancy-marketplace.biz"
   # get an access token for the UserCredential
-  export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh http://fancy-marketplace.127.0.0.1.nip.io:8080 $CONSUMER_USER_CREDENTIAL default); echo ${ACCESS_TOKEN}
+  export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh https://fancy-marketplace.127.0.0.1.nip.io $CONSUMER_USER_CREDENTIAL default); echo ${ACCESS_TOKEN}
   # register fancy-marketplace.biz as an organization(no need for a contract-management address in the consumer)
-  export FANCY_MARKETPLACE_ID=$(curl -X POST http://fancy-marketplace.127.0.0.1.nip.io:8080/tmf-api/party/v4/organization \
+  export FANCY_MARKETPLACE_ID=$(curl -k -x localhost:8888 -X POST https://fancy-marketplace.127.0.0.1.nip.io/tmf-api/party/v4/organization \
     -H 'Accept: */*' \
     -H 'Content-Type: application/json' \
     -H "Authorization: Bearer ${ACCESS_TOKEN}" \
@@ -276,21 +276,21 @@ Register Fancy Marketplace as a Consumer
 List the offerings of the marketplace, only one should be registered at the moment:
 
 ```shell
-  export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh http://fancy-marketplace.127.0.0.1.nip.io:8080 $CONSUMER_USER_CREDENTIAL default); echo $ACCESS_TOKEN
-  curl -X GET http://fancy-marketplace.127.0.0.1.nip.io:8080/tmf-api/productCatalogManagement/v4/productOffering -H "Authorization: Bearer ${ACCESS_TOKEN}" | jq .
+  export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh https://fancy-marketplace.127.0.0.1.nip.io $CONSUMER_USER_CREDENTIAL default); echo $ACCESS_TOKEN
+  curl -k -x localhost:8888 -X GET https://fancy-marketplace.127.0.0.1.nip.io/tmf-api/productCatalogManagement/v4/productOffering -H "Authorization: Bearer ${ACCESS_TOKEN}" | jq .
 ```
 
 
 Extract the OfferId from the TMForum API:
 ```shell
-  export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh http://fancy-marketplace.127.0.0.1.nip.io:8080 $CONSUMER_USER_CREDENTIAL default); echo $ACCESS_TOKEN
-  export OFFER_ID=$(curl -X GET http://fancy-marketplace.127.0.0.1.nip.io:8080/tmf-api/productCatalogManagement/v4/productOffering -H "Authorization: Bearer ${ACCESS_TOKEN}" | jq '.[0].id' -r); echo ${OFFER_ID}
+  export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh https://fancy-marketplace.127.0.0.1.nip.io $CONSUMER_USER_CREDENTIAL default); echo $ACCESS_TOKEN
+  export OFFER_ID=$(curl -k -x localhost:8888 -X GET https://fancy-marketplace.127.0.0.1.nip.io/tmf-api/productCatalogManagement/v4/productOffering -H "Authorization: Bearer ${ACCESS_TOKEN}" | jq '.[0].id' -r); echo ${OFFER_ID}
 ```
 
 Create an order for the offering:
 ```shell
-  export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh http://fancy-marketplace.127.0.0.1.nip.io:8080 $CONSUMER_USER_CREDENTIAL default); echo $ACCESS_TOKEN
-  export ORDER_ID=$(curl -X POST http://fancy-marketplace.127.0.0.1.nip.io:8080/tmf-api/productOrderingManagement/v4/productOrder \
+  export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh https://fancy-marketplace.127.0.0.1.nip.io $CONSUMER_USER_CREDENTIAL default); echo $ACCESS_TOKEN
+  export ORDER_ID=$(curl -k -x localhost:8888 -X POST https://fancy-marketplace.127.0.0.1.nip.io/tmf-api/productOrderingManagement/v4/productOrder \
   -H 'Accept: */*' \
   -H 'Content-Type: application/json' \
   -H "Authorization: Bearer ${ACCESS_TOKEN}" \
@@ -313,10 +313,10 @@ Create an order for the offering:
 
 Complete the order:
 ```shell
-  export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh http://fancy-marketplace.127.0.0.1.nip.io:8080 $CONSUMER_USER_CREDENTIAL default); echo $ACCESS_TOKEN
-  curl -X 'PATCH' \
+  export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh https://fancy-marketplace.127.0.0.1.nip.io $PROVIDER_USER_CREDENTIAL default); echo $ACCESS_TOKEN
+  curl -k -x localhost:8888 -X 'PATCH' \
       -H "Authorization: Bearer ${ACCESS_TOKEN}" \
-      http://fancy-marketplace.127.0.0.1.nip.io:8080/tmf-api/productOrderingManagement/v4/productOrder/${ORDER_ID} \
+      https://fancy-marketplace.127.0.0.1.nip.io/tmf-api/productOrderingManagement/v4/productOrder/${ORDER_ID} \
       -H 'accept: application/json;charset=utf-8' \
       -H 'Content-Type: application/json;charset=utf-8' \
       -d "{
@@ -329,5 +329,5 @@ Once the order is completed, the Contract Management of the Marketplace will sen
 Now it should be possible to get an AccessToken for the Consumer's OperatorCredential:
 
 ```shell
-  export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh http://mp-data-service.127.0.0.1.nip.io:8080 $CONSUMER_OPERATOR_CREDENTIAL operator); echo ${ACCESS_TOKEN}
+  export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh https://mp-data-service.127.0.0.1.nip.io $CONSUMER_OPERATOR_CREDENTIAL operator); echo ${ACCESS_TOKEN}
 ```

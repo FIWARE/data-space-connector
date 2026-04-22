@@ -32,6 +32,11 @@ data:
         address: ":443"
       http:
         address: ":8080"
+        http:
+          redirections:
+            entryPoint:
+              to: websecure
+              scheme: https
     tls:
       options:
         myTLSOption:
