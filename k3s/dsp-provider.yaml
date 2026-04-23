@@ -9,6 +9,7 @@ fdsc-edc:
       config:
         edc:
           hostname: dcp-mp-operations.127.0.0.1.nip.io
+          dspCallback: https://dcp-mp-operations.127.0.0.1.nip.io:443/api/dsp
     oid4vc:
       deployment:
         image:
@@ -16,6 +17,7 @@ fdsc-edc:
       config:
         edc:
           hostname: dsp-mp-operations.127.0.0.1.nip.io
+          dspCallback: https://dsp-mp-operations.127.0.0.1.nip.io:443/api/dsp
         fdscTransfer:
           dcp:
             enabled: false
@@ -54,11 +56,10 @@ fdsc-edc:
           subPath: cacerts
       additionalVolumes:
         - name: signing-key
+          emptyDir: {}
+        - name: signing-key-raw
           secret:
-            secretName: signing-key
-            items:
-              - key: tls.key
-                path: tls.key
+            secretName: mp-operations.org-tls
         - name: credentials-script
           configMap:
             name: credentials-script
@@ -86,6 +87,14 @@ fdsc-edc:
             -Dhttp.proxyPort=8888
             -Dhttp.nonProxyHosts="*-vault|*.cluster.local"
       initContainers:
+        - name: convert-signing-key
+          image: alpine/openssl:3.5.5
+          command: ["sh", "-c", "openssl pkcs8 -topk8 -nocrypt -in /signing-key-raw/tls.key -out /signing-key/tls.key"]
+          volumeMounts:
+            - name: signing-key-raw
+              mountPath: /signing-key-raw
+            - name: signing-key
+              mountPath: /signing-key
         # helper container to wait for keycloak present in local deployments, to avoid cascading crash-loops
         - name: wait-for-keycloak
           image: curlimages/curl:8.6.0
@@ -102,7 +111,7 @@ fdsc-edc:
               done
               echo "Keycloak is ready."
         - name: load-certs
-          image: "quay.io/seamware/fdsc-edc-controlplane-oid4vc:0.1.1"
+          image: "quay.io/seamware/fdsc-edc-controlplane-oid4vc:0.1.6"
           command: ["/bin/sh", "-c", "/bin/import-ca.sh /certs-folder /root-ca/cacert.pem /opt/java/openjdk/lib/security/cacerts"]
           volumeMounts:
             - name: ca-certs-script

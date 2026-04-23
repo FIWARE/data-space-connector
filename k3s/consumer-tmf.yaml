@@ -10,6 +10,11 @@ tm-forum-api:
   registration:
     enabled: false
   ingress:
+    annotations:
+      cert-manager.io/cluster-issuer: "selfsigned-issuer"
+      cert-manager.io/private-key-algorithm: "ECDSA"
+      cert-manager.io/common-name: "consumer-tmf.127.0.0.1.nip.io"
+      traefik.ingress.kubernetes.io/router.tls: "true"
     enabled: true
     hosts:
       - host: consumer-tmf.127.0.0.1.nip.io
@@ -57,39 +62,67 @@ contract-management:
     holder:
       holderId: did:web:fancy-marketplace.biz
       keyType: EC
-      keyPath: signing-key/tls.key
+      keyPath: /signing-key/tls.key
       signatureAlgorithm: ECDH-ES
     proxyConfig:
       enabled: true
       proxyHost: squid-proxy.infra.svc.cluster.local
       proxyPort: 8888
+  # All outbound Micronaut HTTP client calls go through squid so that
+  # *.127.0.0.1.nip.io ingress hosts (e.g. the provider's contract-management)
+  # are reachable. squid forwards to traefik-loadbalancer-in on port 80,
+  # and traefik routes by Host header — so in-cluster TMF calls must also use
+  # their ingress hostname (consumer-tmf.127.0.0.1.nip.io) instead of the
+  # ClusterIP service, otherwise the proxied request won't match any ingress.
+  additionalEnvVars:
+    - name: MICRONAUT_HTTP_CLIENT_PROXY_TYPE
+      value: "HTTP"
+    - name: MICRONAUT_HTTP_CLIENT_PROXY_ADDRESS
+      value: "squid-proxy.infra.svc.cluster.local:8888"
+    - name: LOGGER_LEVELS_ROOT
+      value: DEBUG
   services:
     ## Config for Trusted Issuers List
     trusted-issuers-list:
       ## URL of the Trusted Issuers List Service
-      url: http://trusted-issuers-list:8080
+      url: http://trusted-issuers-list.consumer.svc.cluster.local:8080
+
     ## Config for the TM Forum Service hosting the APIs
     product-order:
       ## URL of the TM Forum Service hosting the Product Ordering API
-      url: http://tm-forum-api-svc:8080
+      url: http://tm-forum-api-svc.consumer.svc.cluster.local:8080
+
     party:
       ## URL of the TM Forum Service hosting the Party API
-      url: http://tm-forum-api-svc:8080
+      url: http://tm-forum-api-svc.consumer.svc.cluster.local:8080
+
     product-catalog:
       ## URL of the TM Forum Service hosting the Product Catalog API
-      url: http://tm-forum-api-svc:8080
+      url: http://tm-forum-api-svc.consumer.svc.cluster.local:8080
+
     service-catalog:
       ## URL of the TM Forum Service hosting the Service Catalog API
-      url: http://tm-forum-api-svc:8080
+      url: http://tm-forum-api-svc.consumer.svc.cluster.local:8080
+
     tmforum-agreement-api:
       ## URL of the TM Forum Service hosting the Agreement API
-      url: http://tm-forum-api-svc:8080
+      url: http://tm-forum-api-svc.consumer.svc.cluster.local:8080
+
     quote:
       ## URL for TM Forum Service hosting the Quote API
-      url: http://tm-forum-api-svc:8080
+      url: http://tm-forum-api-svc.consumer.svc.cluster.local:8080
+
   deployment:
     # init containers to be used for the local demo
     initContainers:
+      - name: convert-signing-key
+        image: alpine/openssl:3.5.5
+        command: ["sh", "-c", "openssl pkcs8 -topk8 -nocrypt -in /signing-key-raw/tls.key -out /signing-key/tls.key && chmod 644 /signing-key/tls.key"]
+        volumeMounts:
+          - name: signing-key-raw
+            mountPath: /signing-key-raw
+          - name: signing-key
+            mountPath: /signing-key
       # helper container to wait for keycloak present in local deployments, to avoid cascading crash-loops
       - name: wait-for-keycloak
         image: curlimages/curl:8.6.0
@@ -130,11 +163,11 @@ contract-management:
             mountPath: /credential-repo
     additionalVolumes:
       - name: signing-key
+        emptyDir: {}
+      - name: signing-key-raw
         secret:
-          secretName: signing-key
-          items:
-            - key: tls.key
-              path: tls.key
+          secretName: fancy-marketplace.biz-tls
+          defaultMode: 0755
       - name: credentials-script
         configMap:
           name: credentials-script
@@ -157,8 +190,7 @@ contract-management:
       - name: credential-repo
         mountPath: /credential-repo
       - name: signing-key
-        mountPath: /app/resources/signing-key/tls.key
-        subPath: tls.key
+        mountPath: /signing-key
       # add the self generated root ca to the system truststore
       - name: root-ca
         mountPath: /etc/ssl/cacert.pem
@@ -166,6 +198,10 @@ contract-management:
       - name: cacerts
         mountPath: /opt/java/openjdk/lib/security/cacerts
         subPath: cacerts
+      # Red Hat JDK uses a different truststore path                                                                                                                                               
+      - name: cacerts                                                                                                                                                                              
+        mountPath: /etc/pki/ca-trust/extracted/java/cacerts                                                                                                                                        
+        subPath: cacerts        
   notification:
     enabled: true
     host: contract-management

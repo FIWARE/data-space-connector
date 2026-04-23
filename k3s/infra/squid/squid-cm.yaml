@@ -26,13 +26,17 @@ data:
     request_header_access Authorization allow all
     
     # configure squid as forward proxy to traefik
-    cache_peer traefik-loadbalancer-in.infra.svc.cluster.local parent 80 0 no-query originserver name=traefik-http login=PASSTHRU 
+    cache_peer traefik-loadbalancer-in.infra.svc.cluster.local parent 80 0 no-query originserver name=traefik-http login=PASSTHRU
     cache_peer traefik-loadbalancer-in.infra.svc.cluster.local parent 443 0 no-query originserver ssl name=traefik-https login=PASSTHRU
 
     # Restrict cache_peer to CONNECT method for HTTPS requests
     acl CONNECT method CONNECT
     cache_peer_access traefik-https allow CONNECT
     cache_peer_access traefik-http allow all
+
+    # Allow direct connections to cluster-internal services
+    acl cluster_local dstdomain .svc.cluster.local
+    always_direct allow cluster_local
 
     # Prevent direct connections to remote servers; enforce use of cache peers
     never_direct allow all
