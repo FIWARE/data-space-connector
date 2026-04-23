@@ -8,14 +8,14 @@ Various Data Space Use-Cases require a solution for offering services through a 
 ![CENTRAL MARKETPLACE](./img/central_market.png)
 
 Integration of Participants into a Central Marketplace happens through the same mechanisms and components as the normal [marketplace integration](MARKETPLACE_INTEGRATION.md).
-Particpants offering their services on the Central Marketplace are required to provide an instance of the [ContractManagement](https://github.com/FIWARE/contract-management). The Central Marketplace also runs the Contract Management Component and manages Organizations, Products and Offerings through the TMForum API. 
+Particpants offering their services on the Central Marketplace are required to provide an instance of the [ContractManagement](https://github.com/FIWARE/contract-management). The Central Marketplace also runs the Contract Management Component and manages Organizations, Products and Offerings through the TMForum API.
 
 The basic flow of integration is as following:
 
 1. The Data Provider has to prepare its integration by:
 
     1.1. Register the Marketplace as a trusted-issuer of credentials used by the Contract Management
-    1.2. Register policies that allow the marketplace to send order notifications to the Contract-Management(see [allowContractManagement.json](../it/src/test/resources/policies/allowContractManagement.json) as an example) 
+    1.2. Register policies that allow the marketplace to send order notifications to the Contract-Management(see [allowContractManagement.json](../it/src/test/resources/policies/allowContractManagement.json) as an example)
     1.3 Provider has to register itself at the Central Marketplace as an Oranization, containing access information to the Contract Management
 
 2. Create Product Offering
@@ -28,19 +28,19 @@ The basic flow of integration is as following:
     4.2. Send order notifications to the Contract-Management(through PEP)
 
 5. Contract-Management activates the service:
-    
+
     5.1. Adds the customer to the trusted-issuers-list(according to the order)
     5.2. Creates the policies from the order
 
 ## Demo
 
-In order to run the Demo flows setup a local deployment via: 
+In order to run the Demo flows setup a local deployment via:
 
 ```shell
   mvn clean deploy -Plocal,central
 ```
 
-In the Demo-Scenario, the Consumer-Organization("fancy-marketplace.biz") also acts as the provider of the centralized marketplace, while the Provider-Organization("mp-operations.org") offers its services through that market. 
+In the Demo-Scenario, the Consumer-Organization("fancy-marketplace.biz") also acts as the provider of the centralized marketplace, while the Provider-Organization("mp-operations.org") offers its services through that market.
 
 ### Prepare the marketplace
 
@@ -56,7 +56,7 @@ Create a policy, restricting access to the Contract Management to requests authe
 
 ```shell
 # Allow contract management access at the provider side
-curl -X 'POST' http://pap-provider.127.0.0.1.nip.io:8080/policy \
+curl -k -x localhost:8888 -X 'POST' https://pap-provider.127.0.0.1.nip.io/policy \
     -H 'Content-Type: application/json' \
     -d "$(cat ./it/src/test/resources/policies/allowContractManagement.json)"
 ```
@@ -73,9 +73,9 @@ Register the Provider at the Marketplace, containing the address of the Contract
   # set the Providers DID
   export PROVIDER_DID="did:web:mp-operations.org"
   # get an AccessToken for the Credential
-  export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh http://fancy-marketplace.127.0.0.1.nip.io:8080 $PROVIDER_USER_CREDENTIAL default); echo $ACCESS_TOKEN
+  export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh https://fancy-marketplace.127.0.0.1.nip.io $PROVIDER_USER_CREDENTIAL default); echo $ACCESS_TOKEN
   # create the organization at the providers TMForum
-  export MP_OPERATIONS_ID=$(curl -X POST http://fancy-marketplace.127.0.0.1.nip.io:8080/tmf-api/party/v4/organization \
+  export MP_OPERATIONS_ID=$(curl -k -x localhost:8888 -X POST https://fancy-marketplace.127.0.0.1.nip.io/tmf-api/party/v4/organization \
     -H 'Accept: */*' \
     -H 'Content-Type: application/json' \
     -H "Authorization: Bearer ${ACCESS_TOKEN}" \
@@ -84,18 +84,18 @@ Register the Provider at the Marketplace, containing the address of the Contract
       \"partyCharacteristic\": [
         {
             \"name\": \"did\",
-            \"value\": \"${PROVIDER_DID}\" 
+            \"value\": \"${PROVIDER_DID}\"
         },
         {
             \"name\": \"contractManagement\",
             \"value\": {
-                \"address\": \"http://contract-management.127.0.0.1.nip.io:8080\",
+                \"address\": \"https://contract-management.127.0.0.1.nip.io:443\",
                 \"clientId\":\"contract-management\",
-                \"scope\": [\"external-marketplace\"]  
+                \"scope\": [\"external-marketplace\"]
             }
         }
       ]
-    }" | jq '.id' -r); echo ${MP_OPERATIONS_ID} 
+    }" | jq '.id' -r); echo ${MP_OPERATIONS_ID}
 ```
 
 ### Create the Offering [(Step 2)](#architecture)
@@ -103,8 +103,8 @@ Register the Provider at the Marketplace, containing the address of the Contract
 Create product specification, referencing the provider:
 
 ```shell
-  export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh http://fancy-marketplace.127.0.0.1.nip.io:8080 $PROVIDER_USER_CREDENTIAL default); echo $ACCESS_TOKEN
-  export PRODUCT_SPEC=$(curl -X 'POST' http://fancy-marketplace.127.0.0.1.nip.io:8080/tmf-api/productCatalogManagement/v4/productSpecification \
+  export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh https://fancy-marketplace.127.0.0.1.nip.io $PROVIDER_USER_CREDENTIAL default); echo $ACCESS_TOKEN
+  export PRODUCT_SPEC=$(curl -k -x localhost:8888 -X 'POST' https://fancy-marketplace.127.0.0.1.nip.io/tmf-api/productCatalogManagement/v4/productSpecification \
   -H 'Accept: */*' \
   -H 'Content-Type: application/json;charset=utf-8' \
   -H "Authorization: Bearer ${ACCESS_TOKEN}" \
@@ -212,8 +212,8 @@ Create product specification, referencing the provider:
 Create product offering, referencing the product spec:
 
 ```shell
-  export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh http://fancy-marketplace.127.0.0.1.nip.io:8080 $PROVIDER_USER_CREDENTIAL default); echo $ACCESS_TOKEN
-  export PRODUCT_OFFERING_ID=$(curl -X 'POST' http://fancy-marketplace.127.0.0.1.nip.io:8080/tmf-api/productCatalogManagement/v4/productOffering \
+  export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh https://fancy-marketplace.127.0.0.1.nip.io $PROVIDER_USER_CREDENTIAL default); echo $ACCESS_TOKEN
+  export PRODUCT_OFFERING_ID=$(curl -k -x localhost:8888 -X 'POST' https://fancy-marketplace.127.0.0.1.nip.io/tmf-api/productCatalogManagement/v4/productOffering \
     -H 'Accept: */*' \
     -H 'Content-Type: application/json;charset=utf-8' \
     -H "Authorization: Bearer ${ACCESS_TOKEN}" \
@@ -230,14 +230,14 @@ Create product offering, referencing the product spec:
 
 ### Buy access to the offering [(Step 2)](#architecture)
 
-In order to keep the demo environment manageable, the Consumer-Organization will buy access to the Providers offering: 
+In order to keep the demo environment manageable, the Consumer-Organization will buy access to the Providers offering:
 
 Create a UserCredential for the consumer:
 
 ```shell
 export CONSUMER_USER_CREDENTIAL=$(./doc/scripts/get_credential.sh https://keycloak-consumer.127.0.0.1.nip.io user-sd employee vc+sd-jwt); echo ${CONSUMER_USER_CREDENTIAL}
 ```
-Create an OperatorCredential for the consumer: 
+Create an OperatorCredential for the consumer:
 
 ```shell
 export CONSUMER_OPERATOR_CREDENTIAL=$(./doc/scripts/get_credential.sh https://keycloak-consumer.127.0.0.1.nip.io operator-credential operator); echo ${CONSUMER_OPERATOR_CREDENTIAL}
@@ -246,7 +246,7 @@ export CONSUMER_OPERATOR_CREDENTIAL=$(./doc/scripts/get_credential.sh https://ke
 Assert that access is not yet possible(e.g. the Consumer cannot get an AccessToken for the OperatorCredential):
 
 ```shell
-  export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh http://mp-data-service.127.0.0.1.nip.io:8080 $CONSUMER_OPERATOR_CREDENTIAL operator); echo ${ACCESS_TOKEN}
+export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh https://mp-data-service.127.0.0.1.nip.io $CONSUMER_OPERATOR_CREDENTIAL operator); echo ${ACCESS_TOKEN}
 ```
 
 Now register "fancy-marketplace.biz" as a Consumer at the Marketplace:
@@ -256,9 +256,9 @@ Register Fancy Marketplace as a Consumer
   # set the Consumer DID
   export CONSUMER_DID="did:web:fancy-marketplace.biz"
   # get an access token for the UserCredential
-  export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh http://fancy-marketplace.127.0.0.1.nip.io:8080 $CONSUMER_USER_CREDENTIAL default); echo ${ACCESS_TOKEN}
+  export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh https://fancy-marketplace.127.0.0.1.nip.io $CONSUMER_USER_CREDENTIAL default); echo ${ACCESS_TOKEN}
   # register fancy-marketplace.biz as an organization(no need for a contract-management address in the consumer)
-  export FANCY_MARKETPLACE_ID=$(curl -X POST http://fancy-marketplace.127.0.0.1.nip.io:8080/tmf-api/party/v4/organization \
+  export FANCY_MARKETPLACE_ID=$(curl -k -x localhost:8888 -X POST https://fancy-marketplace.127.0.0.1.nip.io/tmf-api/party/v4/organization \
     -H 'Accept: */*' \
     -H 'Content-Type: application/json' \
     -H "Authorization: Bearer ${ACCESS_TOKEN}" \
@@ -267,30 +267,30 @@ Register Fancy Marketplace as a Consumer
       \"partyCharacteristic\": [
         {
           \"name\": \"did\",
-          \"value\": \"${CONSUMER_DID}\" 
+          \"value\": \"${CONSUMER_DID}\"
         }
       ]
-    }" | jq '.id' -r); echo ${FANCY_MARKETPLACE_ID} 
+    }" | jq '.id' -r); echo ${FANCY_MARKETPLACE_ID}
 ```
 
 List the offerings of the marketplace, only one should be registered at the moment:
 
 ```shell
-  export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh http://fancy-marketplace.127.0.0.1.nip.io:8080 $CONSUMER_USER_CREDENTIAL default); echo $ACCESS_TOKEN
-  curl -X GET http://fancy-marketplace.127.0.0.1.nip.io:8080/tmf-api/productCatalogManagement/v4/productOffering -H "Authorization: Bearer ${ACCESS_TOKEN}" | jq .
+  export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh https://fancy-marketplace.127.0.0.1.nip.io $CONSUMER_USER_CREDENTIAL default); echo $ACCESS_TOKEN
+  curl -k -x localhost:8888 -X GET https://fancy-marketplace.127.0.0.1.nip.io/tmf-api/productCatalogManagement/v4/productOffering -H "Authorization: Bearer ${ACCESS_TOKEN}" | jq .
 ```
 
 
 Extract the OfferId from the TMForum API:
 ```shell
-  export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh http://fancy-marketplace.127.0.0.1.nip.io:8080 $CONSUMER_USER_CREDENTIAL default); echo $ACCESS_TOKEN
-  export OFFER_ID=$(curl -X GET http://fancy-marketplace.127.0.0.1.nip.io:8080/tmf-api/productCatalogManagement/v4/productOffering -H "Authorization: Bearer ${ACCESS_TOKEN}" | jq '.[0].id' -r); echo ${OFFER_ID}
+  export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh https://fancy-marketplace.127.0.0.1.nip.io $CONSUMER_USER_CREDENTIAL default); echo $ACCESS_TOKEN
+  export OFFER_ID=$(curl -k -x localhost:8888 -X GET https://fancy-marketplace.127.0.0.1.nip.io/tmf-api/productCatalogManagement/v4/productOffering -H "Authorization: Bearer ${ACCESS_TOKEN}" | jq '.[0].id' -r); echo ${OFFER_ID}
 ```
 
 Create an order for the offering:
 ```shell
-  export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh http://fancy-marketplace.127.0.0.1.nip.io:8080 $CONSUMER_USER_CREDENTIAL default); echo $ACCESS_TOKEN
-  export ORDER_ID=$(curl -X POST http://fancy-marketplace.127.0.0.1.nip.io:8080/tmf-api/productOrderingManagement/v4/productOrder \
+  export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh https://fancy-marketplace.127.0.0.1.nip.io $CONSUMER_USER_CREDENTIAL default); echo $ACCESS_TOKEN
+  export ORDER_ID=$(curl -k -x localhost:8888 -X POST https://fancy-marketplace.127.0.0.1.nip.io/tmf-api/productOrderingManagement/v4/productOrder \
   -H 'Accept: */*' \
   -H 'Content-Type: application/json' \
   -H "Authorization: Bearer ${ACCESS_TOKEN}" \
@@ -302,7 +302,7 @@ Create an order for the offering:
           \"productOffering\": {
             \"id\" :  \"${OFFER_ID}\"
           }
-        }  
+        }
       ],
       \"relatedParty\": [
         {
@@ -313,10 +313,10 @@ Create an order for the offering:
 
 Complete the order:
 ```shell
-  export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh http://fancy-marketplace.127.0.0.1.nip.io:8080 $CONSUMER_USER_CREDENTIAL default); echo $ACCESS_TOKEN
+  export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh http://fancy-marketplace.127.0.0.1.nip.io:8080 $PROVIDER_USER_CREDENTIAL default); echo $ACCESS_TOKEN
   curl -X 'PATCH' \
       -H "Authorization: Bearer ${ACCESS_TOKEN}" \
-      http://fancy-marketplace.127.0.0.1.nip.io:8080/tmf-api/productOrderingManagement/v4/productOrder/${ORDER_ID} \
+      https://fancy-marketplace.127.0.0.1.nip.io/tmf-api/productOrderingManagement/v4/productOrder/${ORDER_ID} \
       -H 'accept: application/json;charset=utf-8' \
       -H 'Content-Type: application/json;charset=utf-8' \
       -d "{
@@ -324,10 +324,36 @@ Complete the order:
           }" | jq .
 ```
 
-Once the order is completed, the Contract Management of the Marketplace will send a notification to the Providers Contract Management, where the credential configuration and policies from the product will be applied to the Trusted Issuers List and the PAP. 
+Once the order is completed, the Contract Management of the Marketplace will send a notification to the Providers Contract Management, where the credential configuration and policies from the product will be applied to the Trusted Issuers List and the PAP.
 
 Now it should be possible to get an AccessToken for the Consumer's OperatorCredential:
 
 ```shell
-  export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh http://mp-data-service.127.0.0.1.nip.io:8080 $CONSUMER_OPERATOR_CREDENTIAL operator); echo ${ACCESS_TOKEN}
+  export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh https://mp-data-service.127.0.0.1.nip.io $CONSUMER_OPERATOR_CREDENTIAL operator); echo ${ACCESS_TOKEN}
 ```
+
+## Using the Marketplace UI
+
+The same flow described in the [Demo](#demo) section can be performed through the Marketplace UI (BAE) instead of using the TMForum APIs directly. This is the typical path for a real operator, and it only differs from the [standard marketplace UI flow](MARKETPLACE_INTEGRATION.md) in one place: the provider Organization must configure the Contract Management endpoint through its **Profile**, so that the Central Marketplace knows where to send the order notifications.
+
+### Prepare the provider [(Step 1)](#architecture)
+
+This step is the same as in the [API version](#prepare-the-provider-step-1). The only difference is that the last action — _Register the Provider at the Marketplace, containing the address of the Contract Management and the required clientId/scope for authentication_ — can be performed directly from the Marketplace UI instead of calling the TMForum API.
+
+Once logged in into the marketplace with a `LegalPersonCredential` containing the `REPRESENTATIVE` role, open the user menu and go to **Profile**. In the Organization form, fill in the Central Marketplace specific fields (equivalent to the `contractManagement` `partyCharacteristic` sent in the API flow):
+
+- **Contract Management Address**: URL of the provider's Contract Management (e.g. `https://provider-cm.dev.seamware.io:443`).
+- **Contract Management Client ID**: `contract-management`.
+- **Contract Management Scopes**: `external-marketplace`.
+
+![Central Marketplace UI - Profile](./img/central-marketplace-ui.png)
+
+### Create the Offering, Buy access and Process the order [(Steps 2–5)](#architecture)
+
+The remaining steps are identical to the standard UI flow and can be followed directly from [MARKETPLACE_INTEGRATION.md](MARKETPLACE_INTEGRATION.md):
+
+- Create the **Product Specification** and the **Product Offering** from the "My Offerings" section (see [Create the offering](MARKETPLACE_INTEGRATION.md#create-the-offering)).
+- Login as the consumer with the `UserCredential` and **buy access** through the cart (see [Buy access](MARKETPLACE_INTEGRATION.md#buy-access)).
+- **Process the order** from the provider's backoffice in "Product Order" → "As Provider" → "Review" (see [Process the order](MARKETPLACE_INTEGRATION.md#process-the-order)).
+
+Once the order is completed, the outcome is the same as in the API flow: the Central Marketplace's Contract Management notifies the provider's Contract Management, which updates the Trusted Issuers List and the PAP policies according to the product configuration.

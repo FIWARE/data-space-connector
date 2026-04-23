@@ -27,8 +27,6 @@ decentralizedIam:
               postgis: public
     trusted-issuers-list:
       deployment:
-        image:
-          tag: "0.8.0" # ToDo: remove when updating dependencies
         resources:
           limits:
             cpu: 300m
@@ -44,6 +42,7 @@ decentralizedIam:
             cert-manager.io/cluster-issuer: "selfsigned-issuer"
             cert-manager.io/private-key-algorithm: "ECDSA"
             cert-manager.io/common-name: "til-provider.127.0.0.1.nip.io"
+            traefik.ingress.kubernetes.io/router.tls: "true"
           hosts:
             - host: til-provider.127.0.0.1.nip.io
               paths:
@@ -59,6 +58,7 @@ decentralizedIam:
           cert-manager.io/cluster-issuer: "selfsigned-issuer"
           cert-manager.io/private-key-algorithm: "ECDSA"
           cert-manager.io/common-name: "provider-ccs.127.0.0.1.nip.io"
+          traefik.ingress.kubernetes.io/router.tls: "true"
         hosts:
           - host: provider-ccs.127.0.0.1.nip.io
             paths:
@@ -78,7 +78,7 @@ decentralizedIam:
                 credentials:
                   - type: OperatorCredential
                     trustedParticipantsLists:
-                      - http://tir.127.0.0.1.nip.io
+                      - https://tir.127.0.0.1.nip.io
                     trustedIssuersLists:
                       - http://trusted-issuers-list:8080
                     jwtInclusion:
@@ -92,7 +92,7 @@ decentralizedIam:
                 credentials:
                   - type: LegalPersonCredential
                     trustedParticipantsLists:
-                      - http://tir.127.0.0.1.nip.io
+                      - https://tir.127.0.0.1.nip.io
                     trustedIssuersLists:
                       - http://trusted-issuers-list:8080
                     jwtInclusion:
@@ -121,7 +121,7 @@ decentralizedIam:
                 credentials:
                   - type: UserCredential
                     trustedParticipantsLists:
-                      - http://tir.127.0.0.1.nip.io
+                      - https://tir.127.0.0.1.nip.io
                     trustedIssuersLists:
                       - http://trusted-issuers-list:8080
                     jwtInclusion:
@@ -139,7 +139,7 @@ decentralizedIam:
                 credentials:
                   - type: LegalPersonCredential
                     trustedParticipantsLists:
-                      - http://tir.127.0.0.1.nip.io
+                      - https://tir.127.0.0.1.nip.io
                     trustedIssuersLists:
                       - http://trusted-issuers-list:8080
                     jwtInclusion:
@@ -164,7 +164,7 @@ decentralizedIam:
                 credentials:
                   - type: OperatorCredential
                     trustedParticipantsLists:
-                      - http://tir.127.0.0.1.nip.io
+                      - https://tir.127.0.0.1.nip.io
                     trustedIssuersLists:
                       - http://trusted-issuers-list:8080
                     jwtInclusion:
@@ -186,7 +186,7 @@ decentralizedIam:
                 credentials:
                   - type: MembershipCredential
                     trustedParticipantsLists:
-                      - http://tir.127.0.0.1.nip.io
+                      - https://tir.127.0.0.1.nip.io
                     trustedIssuersLists:
                       - "*"
                     jwtInclusion:
@@ -208,7 +208,7 @@ decentralizedIam:
                 credentials:
                   - type: MarketplaceCredential
                     trustedParticipantsLists:
-                      - http://tir.127.0.0.1.nip.io
+                      - https://tir.127.0.0.1.nip.io
                     trustedIssuersLists:
                       - "*"
                     jwtInclusion:
@@ -242,9 +242,12 @@ decentralizedIam:
         logging:
           level: DEBUG
         verifier:
-          tirAddress: http://tir.127.0.0.1.nip.io/
+          tirAddress: https://tir.127.0.0.1.nip.io/
           did: did:web:mp-operations.org
           supportedModes: ["byValue", "byReference"]
+          # required for the tests, can be longer in real world environments
+          tilCacheExpiry: 1
+          tirCacheExpiry: 1
           clientIdentification:
             keyPath: /signing-key/tls.key
             certificatePath: /signing-key/tls.crt
@@ -254,6 +257,7 @@ decentralizedIam:
           host: https://verifier.mp-operations.org
         configRepo:
           configEndpoint: http://credentials-config-service:8080
+          updateInterval: 1
         additionalVolumes:
           - name: signing-key
             secret:
@@ -321,6 +325,7 @@ decentralizedIam:
         annotations:
           cert-manager.io/cluster-issuer: "selfsigned-issuer"
           cert-manager.io/private-key-algorithm: "ECDSA"
+          traefik.ingress.kubernetes.io/router.tls: "true"
         hosts:
           - host: mp-data-service.127.0.0.1.nip.io
             paths: ["/"]
@@ -378,6 +383,18 @@ decentralizedIam:
               uri: /services/data-service/.well-known/openid-configuration
         - uri: /.well-known/openid-configuration
           host: contract-management.127.0.0.1.nip.io
+          upstream:
+            nodes:
+              verifier:3000: 1
+            type: roundrobin
+          plugins:
+            proxy-rewrite:
+              uri: /services/contract-management/.well-known/openid-configuration
+        - uri: /*
+          host: contract-management.127.0.0.1.nip.io
+          priority: 100
+          vars:
+            - ["uri", "~~", "/\\.well-known/openid-configuration$"]
           upstream:
             nodes:
               verifier:3000: 1
@@ -539,6 +556,7 @@ decentralizedIam:
           cert-manager.io/cluster-issuer: "selfsigned-issuer"
           cert-manager.io/private-key-algorithm: "ECDSA"
           cert-manager.io/common-name: "pap-provider.127.0.0.1.nip.io"
+          traefik.ingress.kubernetes.io/router.tls: "true"
         hosts:
           - host: pap-provider.127.0.0.1.nip.io
             paths:
@@ -625,6 +643,8 @@ scorpio:
       cert-manager.io/cluster-issuer: "selfsigned-issuer"
       cert-manager.io/private-key-algorithm: "ECDSA"
       cert-manager.io/common-name: "scorpio-provider.127.0.0.1.nip.io"
+      traefik.ingress.kubernetes.io/router.tls: "true"
+      
     hosts:
       - host: scorpio-provider.127.0.0.1.nip.io
         paths:
@@ -648,6 +668,7 @@ tm-forum-api:
       cert-manager.io/cluster-issuer: "selfsigned-issuer"
       cert-manager.io/private-key-algorithm: "ECDSA"
       cert-manager.io/common-name: "tm-forum-api.127.0.0.1.nip.io"
+      traefik.ingress.kubernetes.io/router.tls: "true"
     hosts:
       - host: tm-forum-api.127.0.0.1.nip.io
         paths:
@@ -659,7 +680,7 @@ tm-forum-api:
 
 contract-management:
   did: did:web:mp-operations.org
-  enableCentralMarketplace: false
+  enableCentralMarketplace: true
   enableOdrlPap: true
   enableRainbow: false
   services:
@@ -1112,7 +1133,7 @@ keycloak:
     clientScopes: |
       {
         "name": "LegalPersonCredential",
-        "description": "OIDC4VC Scope, thahttps://github.com/wistefan/did-helpert adds all properties required for a user.",
+        "description": "OIDC4VC Scope, that adds all properties required for a user.",
         "protocol": "openid-connect",
         "attributes": {},
         "protocolMappers": [

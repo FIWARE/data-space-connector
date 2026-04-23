@@ -1606,14 +1606,6 @@ fdsc-edc:
           maxSurge: 1
           # -- number of pods that can be unavailable while updating
           maxUnavailable: 0
-      ## configuration of the image to be used
-      image:
-        # -- cp image name
-        repository: quay.io/seamware/fdsc-edc-controlplane-oid4vc
-        # -- tag of the image to be used
-        tag: 0.1.4
-        # -- specification of the image pull policy
-        pullPolicy: Always
       # -- secrets for pulling images from a private repository
       # ref: https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/
       imagePullSecrets: []
@@ -1647,7 +1639,12 @@ fdsc-edc:
             defaultMode: 0755
         - name: credential-repo
           emptyDir: {}
+        # -- signing-key holds the PKCS#8-converted private key, written by the convert-signing-key init container
         - name: signing-key
+          emptyDir: {}
+        # -- signing-key-raw holds the cert-manager TLS secret whose EC key is in SEC1 format;
+        # override secretName per participant (e.g. fancy-marketplace.biz-tls or mp-operations.org-tls)
+        - name: signing-key-raw
           secret:
             secretName: signing-key
         - name: root-ca
@@ -1655,6 +1652,17 @@ fdsc-edc:
             secretName: root-ca
         - name: cacerts
           emptyDir: {}
+      # -- init containers for the fdsc-edc deployment
+      initContainers:
+        # -- converts the SEC1 EC private key from the cert-manager TLS secret to PKCS#8 format
+        - name: convert-signing-key
+          image: alpine/openssl:3.5.5
+          command: ["sh", "-c", "openssl pkcs8 -topk8 -nocrypt -in /signing-key-raw/tls.key -out /signing-key/tls.key"]
+          volumeMounts:
+            - name: signing-key-raw
+              mountPath: /signing-key-raw
+            - name: signing-key
+              mountPath: /signing-key
       ## cp resource requests and limits, we leave the default empty to make that a concious choice by the user.
       ## for the autoscaling to make sense, you should configure this.
       # resources:

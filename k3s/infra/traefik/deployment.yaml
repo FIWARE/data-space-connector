@@ -50,6 +50,12 @@ spec:
             runAsGroup: 10001
             readOnlyRootFilesystem: true
           volumeMounts:
+            - mountPath: "/ssl-certs/tls.key"
+              name: tls-cert
+              subPath: tls.key
+            - mountPath: "/ssl-certs/tls.crt"
+              name: tls-cert
+              subPath: tls.crt
             - mountPath: "/config/tls.yaml"
               name: tls-config
               subPath: tls.yaml
@@ -57,6 +63,9 @@ spec:
               name: config
               subPath: traefik.yaml
       volumes:
+        - name: tls-cert
+          secret:
+            secretName: traefik-default-tls
         - name: tls-config
           configMap:
             name: tls-config
