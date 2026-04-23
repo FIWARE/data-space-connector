@@ -102,11 +102,19 @@ Merges `service.name=<service>` with the user-supplied
 {{/*
 Render the standard OpenTelemetry environment-variable block as a list of
 `name:` / `value:` entries suitable for splicing into a container's
-`env:` list. The helper renders nothing when `tracing.enabled` is false,
-so the call site stays a no-op for untraced deployments.
+`env:` list. The helper renders nothing when tracing is disabled, so the
+call site stays a no-op for untraced deployments.
+
+By default the gate is the global `tracing.enabled` value. Callers that
+carry a per-component override (e.g. `identityhub.tracing.enabled`) can
+pass an explicit `enabled` key in the argument dict; when present, its
+value is authoritative and the global flag is ignored. This keeps the
+"default inherits the global toggle" contract while still letting a
+component opt in or out independently.
 
 Usage:
   {{- include "dsc.otel.env" (dict "ctx" . "service" "identityhub") | nindent 12 }}
+  {{- include "dsc.otel.env" (dict "ctx" . "service" "identityhub" "enabled" true) | nindent 12 }}
 
 The helper emits these vars (per OpenTelemetry SDK environment spec):
   OTEL_SERVICE_NAME
@@ -124,7 +132,11 @@ The helper emits these vars (per OpenTelemetry SDK environment spec):
 {{- $ctx := .ctx -}}
 {{- $service := .service -}}
 {{- $tracing := $ctx.Values.tracing | default dict -}}
-{{- if (get $tracing "enabled") -}}
+{{- $enabled := get . "enabled" -}}
+{{- if kindIs "invalid" $enabled -}}
+{{- $enabled = get $tracing "enabled" -}}
+{{- end -}}
+{{- if $enabled -}}
 {{- $exporter := get $tracing "exporter" | default dict -}}
 {{- $otlp := get $exporter "otlp" | default dict -}}
 {{- $protocol := get $otlp "protocol" | default "grpc" -}}

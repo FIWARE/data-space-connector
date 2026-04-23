@@ -1,4 +1,33 @@
 {{- if .Values.identityhub.enabled }}
+{{- /*
+Resolve the effective tracing state for the IdentityHub workload.
+`identityhub.tracing.enabled` takes precedence when explicitly set;
+otherwise the component inherits the global `tracing.enabled` toggle.
+The Java agent init container is only injected when both tracing is
+enabled and `identityhub.tracing.javaagent.enabled` is true, so operators
+can turn auto-instrumentation off per-component without disabling the
+OTEL env vars.
+*/ -}}
+{{- $ihTracing := .Values.identityhub.tracing | default dict -}}
+{{- $otelEnabled := .Values.tracing.enabled -}}
+{{- /* Only apply the per-component override when the value is explicitly
+     set. `hasKey` returns true for present-but-null keys, so we must use
+     `kindIs "invalid"` to detect the "inherit from global" case. */ -}}
+{{- $ihOverride := get $ihTracing "enabled" -}}
+{{- if not (kindIs "invalid" $ihOverride) -}}
+{{- $otelEnabled = $ihOverride -}}
+{{- end -}}
+{{- if kindIs "invalid" $otelEnabled -}}{{- $otelEnabled = false -}}{{- end -}}
+{{- $otelServiceName := default "identityhub" (get $ihTracing "serviceName") -}}
+{{- $otelAgent := get $ihTracing "javaagent" | default dict -}}
+{{- $otelAgentEnabled := true -}}
+{{- $otelAgentOverride := get $otelAgent "enabled" -}}
+{{- if not (kindIs "invalid" $otelAgentOverride) -}}{{- $otelAgentEnabled = $otelAgentOverride -}}{{- end -}}
+{{- $otelInjectAgent := and $otelEnabled $otelAgentEnabled -}}
+{{- $otelAgentImage := default "ghcr.io/open-telemetry/opentelemetry-java-instrumentation/autoinstrumentation-java:2.11.0" (get $otelAgent "image") -}}
+{{- $otelAgentPullPolicy := default "IfNotPresent" (get $otelAgent "pullPolicy") -}}
+{{- $otelJavaToolOption := "-javaagent:/otel-agent/opentelemetry-javaagent.jar" -}}
+{{- $otelUserJto := default "" (get (default dict .Values.identityhub.env) "JAVA_TOOL_OPTIONS") -}}
 #
   #  Copyright (c) 2025 Cofinity-X
   #  Copyright (c) 2025 LKS Next
@@ -55,8 +84,25 @@ spec:
       serviceAccountName: default
       securityContext:
         {{- toYaml .Values.identityhub.podSecurityContext | nindent 8 }}
-      {{- if .Values.identityhub.initContainers }}
+      {{- if or .Values.identityhub.initContainers $otelInjectAgent }}
       initContainers:
+        {{- if $otelInjectAgent }}
+        # tracing: copy the OpenTelemetry Java agent JAR from the
+        # pinned upstream image into the shared `otel-agent` volume so
+        # the main container can attach it via `JAVA_TOOL_OPTIONS`.
+        - name: otel-agent-init
+          image: {{ $otelAgentImage | quote }}
+          imagePullPolicy: {{ $otelAgentPullPolicy }}
+          command:
+            - cp
+            - /javaagent.jar
+            - /otel-agent/opentelemetry-javaagent.jar
+          securityContext:
+            {{- toYaml .Values.identityhub.securityContext | nindent 12 }}
+          volumeMounts:
+            - name: otel-agent
+              mountPath: /otel-agent
+        {{- end }}
         {{- with .Values.identityhub.initContainers }}
           {{- toYaml . | nindent 8 }}
         {{- end }}
@@ -172,10 +218,25 @@ spec:
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.identityhub.superuser.existingSecret }}
-                  key: {{ .Values.identityhub.superuser.existingSecretKeyKey }}                
+                  key: {{ .Values.identityhub.superuser.existingSecretKeyKey }}
               {{- else }}
               value: {{ .Values.identityhub.superuser.key | quote }}
               {{- end }}
+            {{- if $otelInjectAgent }}
+            # tracing: attach the OpenTelemetry Java agent to the JVM.
+            # Any user-provided JAVA_TOOL_OPTIONS value is preserved by
+            # concatenation; the final list skips the user entry below
+            # to keep env-var names unique.
+            - name: JAVA_TOOL_OPTIONS
+              value: {{ (printf "%s %s" $otelJavaToolOption $otelUserJto) | trim | quote }}
+            {{- end }}
+            {{- if $otelEnabled }}
+            # tracing: standard OpenTelemetry SDK environment variables
+            # (service name, exporter endpoint, sampler, ...). Rendered
+            # by the shared `dsc.otel.env` helper so every traced
+            # component sees the same surface.
+            {{- include "dsc.otel.env" (dict "ctx" . "service" $otelServiceName "enabled" $otelEnabled) | nindent 12 }}
+            {{- end }}
 
             ######################################
             ## Additional environment variables ##
@@ -186,8 +247,12 @@ spec:
                 {{- tpl (toYaml $value) $ | nindent 16 }}
           {{- end }}
           {{- range $key, $value := .Values.identityhub.env }}
+            {{- /* When tracing is on we already emitted JAVA_TOOL_OPTIONS
+                 (with the user value concatenated); skip the duplicate. */}}
+            {{- if not (and $otelInjectAgent (eq $key "JAVA_TOOL_OPTIONS")) }}
             - name: {{ $key | quote }}
               value: {{ $value | quote }}
+            {{- end }}
           {{- end }}
           {{- if or .Values.identityhub.envSecretNames .Values.identityhub.envConfigMapNames }}
           envFrom:
@@ -213,6 +278,13 @@ spec:
               subPath: logging.properties
             - name: logs
               mountPath: {{ .Values.identityhub.logging.path }}
+            {{- if $otelInjectAgent }}
+            # tracing: read-only view of the `otel-agent` volume seeded
+            # by the `otel-agent-init` init container.
+            - name: otel-agent
+              mountPath: /otel-agent
+              readOnly: true
+            {{- end }}
             {{- if .Values.identityhub.additionalVolumeMounts }}
             {{- with .Values.identityhub.additionalVolumeMounts }}
             {{- toYaml . | nindent 12 }}
@@ -223,6 +295,13 @@ spec:
         {{- with .Values.identityhub.additionalVolumes }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
+        {{- end }}
+        {{- if $otelInjectAgent }}
+        # tracing: shared scratch volume that holds the copy of
+        # `opentelemetry-javaagent.jar` produced by the init container.
+        - name: otel-agent
+          emptyDir:
+            sizeLimit: 32Mi
         {{- end }}
         - name: "configuration"
           configMap:
