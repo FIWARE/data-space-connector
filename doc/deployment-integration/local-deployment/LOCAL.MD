@@ -71,13 +71,13 @@ are automatically registered as "Trusted Issuers" in the registry with their did
 Get a list of the issuers:
 
 ```shell
-    curl -X GET http://tir.127.0.0.1.nip.io:8080/v4/issuers | jq .
+    curl -k -x localhost:8888 -X GET https://tir.127.0.0.1.nip.io/v4/issuers | jq .
 ```
 
 A new issuer could for example be registered via:
 
 ```shell
-  curl -X POST http://til.127.0.0.1.nip.io:8080/issuer \
+  curl -k -x localhost:8888 -X POST https://til.127.0.0.1.nip.io/issuer \
     --header 'Content-Type: application/json' \
     --data '{
       "did": "did:key:myKey",
@@ -241,7 +241,7 @@ It allows every participant to access entities of type ```EnergyReport```.
 The policy can be created at the PAP via:
 
 ```shell
-  curl -s -X 'POST' http://pap-provider.127.0.0.1.nip.io:8080/policy \
+  curl -k -x localhost:8888 -s -X 'POST' https://pap-provider.127.0.0.1.nip.io/policy \
     -H 'Content-Type: application/json' \
     -d  '{
             "@context": {
@@ -284,12 +284,12 @@ The policy can be created at the PAP via:
 ```
 
 Data can be created through the NGSI-LD API itself. In order to make interaction easier, its directly available through
-an ingress at ```http://scorpio-provider.127.0.0.1.nip.io/ngsi-ld/v1```. In
+an ingress at ```https://scorpio-provider.127.0.0.1.nip.io/ngsi-ld/v1```. In
 real environments, no endpoint should be publicly available without beeing protected by the authorization framework.
 Create an entity via:
 
 ```shell
-  curl -s -X POST http://scorpio-provider.127.0.0.1.nip.io:8080/ngsi-ld/v1/entities \
+  curl -k -x localhost:8888 -s -X POST https://scorpio-provider.127.0.0.1.nip.io/ngsi-ld/v1/entities \
     -H 'Accept: application/json' \
     -H 'Content-Type: application/json' \
     -d '{
@@ -326,13 +326,13 @@ Every required information for that flow can be retrieved via the standard endpo
 If you try to request the provider api without authentication, you will receive an 401:
 
 ```shell
-  curl -s -X GET 'http://mp-data-service.127.0.0.1.nip.io:8080/ngsi-ld/v1/entities/urn:ngsi-ld:EnergyReport:fms-1'
+  curl -k -x localhost:8888 -s -X GET 'https://mp-data-service.127.0.0.1.nip.io/ngsi-ld/v1/entities/urn:ngsi-ld:EnergyReport:fms-1'
 ```
 
 The normal flow is now to request the oidc-information at the well-known endpoint:
 
 ```shell
-  export TOKEN_ENDPOINT=$(curl -s -X GET 'http://mp-data-service.127.0.0.1.nip.io:8080/.well-known/openid-configuration' | jq -r '.token_endpoint'); echo $TOKEN_ENDPOINT
+  export TOKEN_ENDPOINT=$(curl -k -x localhost:8888 -s -X GET 'https://mp-data-service.127.0.0.1.nip.io/.well-known/openid-configuration' | jq -r '.token_endpoint'); echo $TOKEN_ENDPOINT
 ```
 
 In the response, the grant type `vp_token` will be present, indicating the support for the OID4VP authentication flow:
@@ -447,7 +447,7 @@ The vp_token can then be exchanged for the access-token
 With that token, try to access the data again:
 
 ```shell
-  curl -s -X GET 'http://mp-data-service.127.0.0.1.nip.io:8080/ngsi-ld/v1/entities/urn:ngsi-ld:EnergyReport:fms-1' \
+  curl -k -x localhost:8888 -s -X GET 'https://mp-data-service.127.0.0.1.nip.io/ngsi-ld/v1/entities/urn:ngsi-ld:EnergyReport:fms-1' \
     --header 'Accept: application/json' \
     --header "Authorization: Bearer ${DATA_SERVICE_ACCESS_TOKEN}"
 ```
@@ -467,7 +467,7 @@ Similar to the interactions required for making the energy reports available, M&
 Since the offerings are handled through the TMForum APIs, the policies belong to them:
 1. Allow every authenticated participant to read offerings:
 ```shell
-  curl -s -X 'POST' http://pap-provider.127.0.0.1.nip.io:8080/policy \
+  curl -k -x localhost:8888 -s -X 'POST' https://pap-provider.127.0.0.1.nip.io/policy \
     -H 'Content-Type: application/json' \
     -d  '{
           "@context": {
@@ -510,7 +510,7 @@ Since the offerings are handled through the TMForum APIs, the policies belong to
 ```
 2. Allow 'REPRESENTATIVES' of authenticated participants to register as customer at M&P Operations:
 ```shell
-  curl -s -X 'POST' http://pap-provider.127.0.0.1.nip.io:8080/policy \
+  curl -k -x localhost:8888 -s -X 'POST' https://pap-provider.127.0.0.1.nip.io/policy \
     -H 'Content-Type: application/json' \
     -d  '{
           "@context": {
@@ -588,7 +588,7 @@ creation of such through the action `"tmf:create"`. Additionaly, it restricts th
 
 3. Allow 'REPRESENTATIVES' to order products:
 ```shell
-  curl -s -X 'POST' http://pap-provider.127.0.0.1.nip.io:8080/policy \
+  curl -k -x localhost:8888 -s -X 'POST' https://pap-provider.127.0.0.1.nip.io/policy \
     -H 'Content-Type: application/json' \
     -d  '{
           "@context": {
@@ -665,7 +665,7 @@ creation of such through the action `"tmf:create"`. Additionaly, it restricts th
 4. Allow "OPERATORS" to retrieve information about the clusters:
 
 ```shell
-  curl -s -X 'POST' http://pap-provider.127.0.0.1.nip.io:8080/policy \
+  curl -k -x localhost:8888 -s -X 'POST' https://pap-provider.127.0.0.1.nip.io/policy \
     -H 'Content-Type: application/json' \
     -d  '{
               "@context": {
@@ -759,7 +759,7 @@ export PROVIDER_DID="did:web:mp-operations.org"
 
   1. "small":
   ```shell
-  export PRODUCT_SPEC_SMALL_ID=$(curl -X 'POST' http://tm-forum-api.127.0.0.1.nip.io:8080/tmf-api/productCatalogManagement/v4/productSpecification \
+  export PRODUCT_SPEC_SMALL_ID=$(curl -k -x localhost:8888 -X 'POST' https://tm-forum-api.127.0.0.1.nip.io/tmf-api/productCatalogManagement/v4/productSpecification \
     -H 'Content-Type: application/json;charset=utf-8' \
     -d "{
       \"brand\": \"M&P Operations\",
@@ -864,7 +864,7 @@ export PROVIDER_DID="did:web:mp-operations.org"
 
   1. "full":
   ```shell
-  export PRODUCT_SPEC_FULL_ID=$(curl -X 'POST' http://tm-forum-api.127.0.0.1.nip.io:8080/tmf-api/productCatalogManagement/v4/productSpecification \
+  export PRODUCT_SPEC_FULL_ID=$(curl -k -x localhost:8888 -X 'POST' https://tm-forum-api.127.0.0.1.nip.io/tmf-api/productCatalogManagement/v4/productSpecification \
     -H 'Content-Type: application/json;charset=utf-8' \
     -d "{
       \"brand\": \"M&P Operations\",
@@ -965,7 +965,7 @@ export PROVIDER_DID="did:web:mp-operations.org"
 
   1. "small":
   ```shell
-  export PRODUCT_OFFERING_SMALL_ID=$(curl -X 'POST' http://tm-forum-api.127.0.0.1.nip.io:8080/tmf-api/productCatalogManagement/v4/productOffering \
+  export PRODUCT_OFFERING_SMALL_ID=$(curl -k -x localhost:8888 -X 'POST' https://tm-forum-api.127.0.0.1.nip.io/tmf-api/productCatalogManagement/v4/productOffering \
     -H 'Content-Type: application/json;charset=utf-8' \
     -d "{
       \"version\": \"1.0.0\",
@@ -979,7 +979,7 @@ export PROVIDER_DID="did:web:mp-operations.org"
 
   2. "small":
   ```shell
-  export PRODUCT_OFFERING_FULL_ID=$(curl -X 'POST' http://tm-forum-api.127.0.0.1.nip.io:8080/tmf-api/productCatalogManagement/v4/productOffering \
+  export PRODUCT_OFFERING_FULL_ID=$(curl -k -x localhost:8888 -X 'POST' https://tm-forum-api.127.0.0.1.nip.io/tmf-api/productCatalogManagement/v4/productOffering \
     -H 'Content-Type: application/json;charset=utf-8' \
     -d "{
       \"version\": \"1.0.0\",
@@ -1021,8 +1021,8 @@ In order to prove that not every user can just create a cluster, try the followi
 
 1. Try creation with the USER_CREDENTIAL - it should result in a 403
 ```shell
-  export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh http://mp-data-service.127.0.0.1.nip.io:8080 $USER_CREDENTIAL default); echo ${ACCESS_TOKEN}
-  curl -X POST http://mp-data-service.127.0.0.1.nip.io:8080/ngsi-ld/v1/entities \
+  export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh https://mp-data-service.127.0.0.1.nip.io $USER_CREDENTIAL default); echo ${ACCESS_TOKEN}
+  curl -k -x localhost:8888 -X POST https://mp-data-service.127.0.0.1.nip.io/ngsi-ld/v1/entities \
     -H 'Accept: */*' \
     -H 'Content-Type: application/json' \
     -H "Authorization: Bearer ${ACCESS_TOKEN}" \
@@ -1045,10 +1045,10 @@ In order to prove that not every user can just create a cluster, try the followi
 ```
 2. Try access with the OPERATOR_CREDENTIAL - no token will be returned:
 ```shell
-    ./doc/scripts/get_access_token_oid4vp.sh http://mp-data-service.127.0.0.1.nip.io:8080 $OPERATOR_CREDENTIAL operator
+    ./doc/scripts/get_access_token_oid4vp.sh https://mp-data-service.127.0.0.1.nip.io $OPERATOR_CREDENTIAL operator
 ```
 
-> :bulb: For easier access, the identity(in form of the did) of the consumer is available at ```http://did-consumer.127.0.0.1.nip.io:8080/did-material/did.env```.
+> :bulb: For easier access, the identity(in form of the did) of the consumer is available at ```https://did-consumer.127.0.0.1.nip.io/did-material/did.env```.
 
 3. Export the Fancy Marketplace's did:
 ```shell
@@ -1057,8 +1057,8 @@ In order to prove that not every user can just create a cluster, try the followi
 
 4. Register Fancy Marketplace at M&P Operations(as representative, e.g. use the REP_CREDENTIAL):
 ```shell
-  export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh http://mp-data-service.127.0.0.1.nip.io:8080 $REP_CREDENTIAL default); echo ${ACCESS_TOKEN}
-  export FANCY_MARKETPLACE_ID=$(curl -X POST http://mp-tmf-api.127.0.0.1.nip.io:8080/tmf-api/party/v4/organization \
+  export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh https://mp-data-service.127.0.0.1.nip.io $REP_CREDENTIAL default); echo ${ACCESS_TOKEN}
+  export FANCY_MARKETPLACE_ID=$(curl -k -x localhost:8888 -X POST https://mp-tmf-api.127.0.0.1.nip.io/tmf-api/party/v4/organization \
     -H 'Accept: */*' \
     -H 'Content-Type: application/json' \
     -H "Authorization: Bearer ${ACCESS_TOKEN}" \
@@ -1079,18 +1079,18 @@ marketplace implementation would take care of that and handle potential payments
 with the TMForum-APIs directly.
   1. List offerings
   ```shell
-    export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh http://mp-data-service.127.0.0.1.nip.io:8080 $REP_CREDENTIAL default); echo $ACCESS_TOKEN
-    curl -X GET http://mp-tmf-api.127.0.0.1.nip.io:8080/tmf-api/productCatalogManagement/v4/productOffering -H "Authorization: Bearer ${ACCESS_TOKEN}" | jq .
+    export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh https://mp-data-service.127.0.0.1.nip.io $REP_CREDENTIAL default); echo $ACCESS_TOKEN
+    curl -k -x localhost:8888 -X GET https://mp-tmf-api.127.0.0.1.nip.io/tmf-api/productCatalogManagement/v4/productOffering -H "Authorization: Bearer ${ACCESS_TOKEN}" | jq .
   ```
   2. To accept the offering, one has to be choosen and its id needs to be extracted. We will start with the "small" version:
   ```shell
-    export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh http://mp-data-service.127.0.0.1.nip.io:8080 $REP_CREDENTIAL default); echo $ACCESS_TOKEN
-    export OFFER_ID=$(curl -X GET http://mp-tmf-api.127.0.0.1.nip.io:8080/tmf-api/productCatalogManagement/v4/productOffering -H "Authorization: Bearer ${ACCESS_TOKEN}" | jq '.[0].id' -r); echo ${OFFER_ID}
+    export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh https://mp-data-service.127.0.0.1.nip.io $REP_CREDENTIAL default); echo $ACCESS_TOKEN
+    export OFFER_ID=$(curl -k -x localhost:8888 -X GET https://mp-tmf-api.127.0.0.1.nip.io/tmf-api/productCatalogManagement/v4/productOffering -H "Authorization: Bearer ${ACCESS_TOKEN}" | jq '.[0].id' -r); echo ${OFFER_ID}
   ```
   3. Create the order:
   ```shell
-    export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh http://mp-data-service.127.0.0.1.nip.io:8080 $REP_CREDENTIAL default); echo $ACCESS_TOKEN
-    export ORDER_ID=$(curl -X POST http://mp-tmf-api.127.0.0.1.nip.io:8080/tmf-api/productOrderingManagement/v4/productOrder \
+    export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh https://mp-data-service.127.0.0.1.nip.io $REP_CREDENTIAL default); echo $ACCESS_TOKEN
+    export ORDER_ID=$(curl -k -x localhost:8888 -X POST https://mp-tmf-api.127.0.0.1.nip.io/tmf-api/productOrderingManagement/v4/productOrder \
     -H 'Accept: */*' \
     -H 'Content-Type: application/json' \
     -H "Authorization: Bearer ${ACCESS_TOKEN}" \
@@ -1112,9 +1112,9 @@ with the TMForum-APIs directly.
   ```
   4. Complete the order:
   ```shell
-    curl -X 'PATCH' \
+    curl -k -x localhost:8888 -X 'PATCH' \
         -H "Authorization: Bearer ${ACCESS_TOKEN}" \
-        http://tm-forum-api.127.0.0.1.nip.io:8080/tmf-api/productOrderingManagement/v4/productOrder/${ORDER_ID} \
+        https://tm-forum-api.127.0.0.1.nip.io/tmf-api/productOrderingManagement/v4/productOrder/${ORDER_ID} \
         -H 'accept: application/json;charset=utf-8' \
         -H 'Content-Type: application/json;charset=utf-8' \
         -d "{
@@ -1127,8 +1127,8 @@ with the TMForum-APIs directly.
 
 6. Create a cluster as a Fancy Marketplace Operator with numNodes <= 3:
 ```shell
-  export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh http://mp-data-service.127.0.0.1.nip.io:8080 $OPERATOR_CREDENTIAL operator); echo $ACCESS_TOKEN
-  curl -X POST http://mp-data-service.127.0.0.1.nip.io:8080/ngsi-ld/v1/entities \
+  export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh https://mp-data-service.127.0.0.1.nip.io $OPERATOR_CREDENTIAL operator); echo $ACCESS_TOKEN 
+  curl -k -x localhost:8888 -X POST https://mp-data-service.127.0.0.1.nip.io/ngsi-ld/v1/entities \
     -H 'Accept: */*' \
     -H 'Content-Type: application/json' \
     -H "Authorization: Bearer ${ACCESS_TOKEN}" \
@@ -1152,16 +1152,16 @@ with the TMForum-APIs directly.
 
 7. Verify that it now exists:
 ```shell
-  export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh http://mp-data-service.127.0.0.1.nip.io:8080 $OPERATOR_CREDENTIAL operator)
-  curl -X GET http://mp-data-service.127.0.0.1.nip.io:8080/ngsi-ld/v1/entities/urn:ngsi-ld:K8SCluster:fancy-marketplace \
+  export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh https://mp-data-service.127.0.0.1.nip.io $OPERATOR_CREDENTIAL operator)
+  curl -k -x localhost:8888 -X GET https://mp-data-service.127.0.0.1.nip.io/ngsi-ld/v1/entities/urn:ngsi-ld:K8SCluster:fancy-marketplace \
     -H 'Accept: */*' \
     -H "Authorization: Bearer ${ACCESS_TOKEN}"
 ```
 
 8. Try to create a bigger one -> it will fail.
 ```shell
-  export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh http://mp-data-service.127.0.0.1.nip.io:8080 $OPERATOR_CREDENTIAL operator)
-  curl -X POST http://mp-data-service.127.0.0.1.nip.io:8080/ngsi-ld/v1/entities \
+  export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh https://mp-data-service.127.0.0.1.nip.io $OPERATOR_CREDENTIAL operator)
+  curl -k -x localhost:8888 -X POST https://mp-data-service.127.0.0.1.nip.io/ngsi-ld/v1/entities \
     -H 'Accept: */*' \
     -H 'Content-Type: application/json' \
     -H "Authorization: Bearer ${ACCESS_TOKEN}" \
@@ -1187,14 +1187,14 @@ with the TMForum-APIs directly.
 
   1. Get offer id:
   ```shell
-      export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh http://mp-data-service.127.0.0.1.nip.io:8080 $REP_CREDENTIAL default); echo $ACCESS_TOKEN
-      export OFFER_ID=$(curl -X GET http://mp-tmf-api.127.0.0.1.nip.io:8080/tmf-api/productCatalogManagement/v4/productOffering -H "Authorization: Bearer ${ACCESS_TOKEN}" | jq '.[1].id' -r); echo ${OFFER_ID}
+      export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh https://mp-data-service.127.0.0.1.nip.io $REP_CREDENTIAL default); echo $ACCESS_TOKEN
+      export OFFER_ID=$(curl -k -x localhost:8888 -X GET https://mp-tmf-api.127.0.0.1.nip.io/tmf-api/productCatalogManagement/v4/productOffering -H "Authorization: Bearer ${ACCESS_TOKEN}" | jq '.[1].id' -r); echo ${OFFER_ID}
   ```
 
   2. Create the order:
   ```shell
-    export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh http://mp-data-service.127.0.0.1.nip.io:8080 $REP_CREDENTIAL default); echo $ACCESS_TOKEN
-    export ORDER_ID=$(curl -X POST http://mp-tmf-api.127.0.0.1.nip.io:8080/tmf-api/productOrderingManagement/v4/productOrder \
+    export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh https://mp-data-service.127.0.0.1.nip.io $REP_CREDENTIAL default); echo $ACCESS_TOKEN
+    export ORDER_ID=$(curl -k -x localhost:8888 -X POST https://mp-tmf-api.127.0.0.1.nip.io/tmf-api/productOrderingManagement/v4/productOrder \
     -H 'Accept: */*' \
     -H 'Content-Type: application/json' \
     -H "Authorization: Bearer ${ACCESS_TOKEN}" \
@@ -1217,9 +1217,9 @@ with the TMForum-APIs directly.
 
   3. Complete the order:
     ```shell
-  curl -X 'PATCH' \
+  curl -k -x localhost:8888 -X 'PATCH' \
       -H "Authorization: Bearer ${ACCESS_TOKEN}" \
-      http://tm-forum-api.127.0.0.1.nip.io:8080/tmf-api/productOrderingManagement/v4/productOrder/${ORDER_ID} \
+      https://tm-forum-api.127.0.0.1.nip.io/tmf-api/productOrderingManagement/v4/productOrder/${ORDER_ID} \
       -H 'accept: application/json;charset=utf-8' \
       -H 'Content-Type: application/json;charset=utf-8' \
       -d "{
@@ -1229,8 +1229,8 @@ with the TMForum-APIs directly.
 
 10. Try to create again -> success:
 ```shell
-  export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh http://mp-data-service.127.0.0.1.nip.io:8080 $OPERATOR_CREDENTIAL operator); echo $ACCESS_TOKEN
-  curl -X POST http://mp-data-service.127.0.0.1.nip.io:8080/ngsi-ld/v1/entities \
+  export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh https://mp-data-service.127.0.0.1.nip.io $OPERATOR_CREDENTIAL operator); echo $ACCESS_TOKEN
+  curl -k -x localhost:8888 -X POST https://mp-data-service.127.0.0.1.nip.io/ngsi-ld/v1/entities \
     -H 'Accept: */*' \
     -H 'Content-Type: application/json' \
     -H "Authorization: Bearer ${ACCESS_TOKEN}" \
@@ -1261,8 +1261,8 @@ To try it out, insert your holder did (```echo $HOLDER_DID```) into the mapper c
 
 1. Configure holder verfifcation for a certain scope:
 ```shell
-  curl -v -X 'PUT' \
-    'http://provider-ccs.127.0.0.1.nip.io:8080/service/data-service' \
+  curl -k -x localhost:8888 -v -X 'PUT' \
+    'https://provider-ccs.127.0.0.1.nip.io/service/data-service' \
     -H 'accept: application/json' \
     -H 'Content-Type: application/json' \
     -d '{
@@ -1310,12 +1310,12 @@ With that configuration, the providers service is only available for Operators w
 
 If you now try to get an `ACCESS_TOKEN` with the `USER_CREDENTIAL`, it will fail(since it does not contain the `subject`):
 ```shell
-  ./doc/scripts/get_access_token_oid4vp.sh http://mp-data-service.127.0.0.1.nip.io:8080 $USER_CREDENTIAL default
+  ./doc/scripts/get_access_token_oid4vp.sh https://mp-data-service.127.0.0.1.nip.io $USER_CREDENTIAL default
 ```
 
 When using the `OPERATOR_CREDENTIAL`, it will work:
 ```shell
-  ./doc/scripts/get_access_token_oid4vp.sh http://mp-data-service.127.0.0.1.nip.io:8080 $OPERATOR_CREDENTIAL operator
+  ./doc/scripts/get_access_token_oid4vp.sh https://mp-data-service.127.0.0.1.nip.io $OPERATOR_CREDENTIAL operator
 ```
 
 ## eIDAS compliancy
@@ -1501,7 +1501,7 @@ Once everything is properly configured, the Dataspace can be deployed locally vi
 The interaction is the same as in all previously described steps - see [Demo Interactions](#demo-interactions). The most visible difference is in the credential.
 Get one via:
 ```shell
- export ELSI_CREDENTIAL=$(./doc/scripts/get_credential.sh http://keycloak-consumer.127.0.0.1.nip.io:8080 user-credential); echo ${ELSI_CREDENTIAL}
+ export ELSI_CREDENTIAL=$(./doc/scripts/get_credential.sh https://keycloak-consumer.127.0.0.1.nip.io user-credential); echo ${ELSI_CREDENTIAL}
 ```
 Now it can be inspected f.e. on [jwt.io](https://jwt.io/). The certificate chain should be included in the jwt-headers and the issuer is the configured `did:elsi`
 
@@ -1523,13 +1523,13 @@ Available ingresses:
 
 | URL                                              | Proxy URL                                  | Component                                                                  | Participant  | Comment                                                                             | Only for Demo                                        |
 |--------------------------------------------------|--------------------------------------------|----------------------------------------------------------------------------|--------------|-------------------------------------------------------------------------------------|------------------------------------------------------|
-| http://tir.127.0.0.1.nip.io:8080/                | http://tir.127.0.0.1.nip.io/               | [Trusted Issuers Registry](https://github.com/FIWARE/trusted-issuers-list) | Trust Anchor | Provides the list of trusted issuers                                                | no                                                   |
-| http://til.127.0.0.1.nip.io:8080/                | http://til.127.0.0.1.nip.io/               | [Trusted Issuers List API](https://github.com/FIWARE/trusted-issuers-list) | Trust Anchor | Create,Update,Delete functionality for the Trusted Issuers Registry                 | should not be publicly available in real data spaces |
-| http://keycloak-consumer.127.0.0.1.nip.io:8080/  | https://keycloak-consumer.127.0.0.1.nip.io | [Keycloak](https://github.com/keycloak/keycloak)                           | Consumer     | Issues credentials on behalf of the consumer                                        | no                                                   |
+| https://tir.127.0.0.1.nip.io:8443/                | https://tir.127.0.0.1.nip.io/               | [Trusted Issuers Registry](https://github.com/FIWARE/trusted-issuers-list) | Trust Anchor | Provides the list of trusted issuers                                                | no                                                   |
+| https://til.127.0.0.1.nip.io:8443/                | https://til.127.0.0.1.nip.io/               | [Trusted Issuers List API](https://github.com/FIWARE/trusted-issuers-list) | Trust Anchor | Create,Update,Delete functionality for the Trusted Issuers Registry                 | should not be publicly available in real data spaces |
+| https://keycloak-consumer.127.0.0.1.nip.io:8443/  | https://keycloak-consumer.127.0.0.1.nip.io | [Keycloak](https://github.com/keycloak/keycloak)                           | Consumer     | Issues credentials on behalf of the consumer                                        | no                                                   |
 | https://marketplace.127.0.0.1.nip.io:8443/       | https://marketplace.127.0.0.1.nip.io | [BAE Marketplace](https://github.com/FIWARE-TMForum/business-ecosystem-logic-proxy)                    | Provider     | Provide marketplace functionality                                                   | no                                                   |
-| http://keycloak-provider.127.0.0.1.nip.io:8080/  | https://keycloak-provider.127.0.0.1.nip.io | [Keycloak](https://github.com/keycloak/keycloak)                           | Provider     | Issues credentials on behalf of the provider                                        | no                                                   |
-| http://did-consumer.127.0.0.1.nip.io:8080/       | http://did-consumer.127.0.0.1.nip.io/      | [did-helper](https://github.com/wistefan/did-helper)                       | Consumer     | Helper to provide access to the consumers did and key material                      | yes, should never be public                          |
-| http://mp-data-service.127.0.0.1.nip.io:8080/    | http://mp-data-service.127.0.0.1.nip.io/   | [Apisix](https://apisix.apache.org/)                                       | Provider     | ApiGateway to be used as entry point to all secured services, f.e. the data-service | no                                                   |
+| https://keycloak-provider.127.0.0.1.nip.io:8443/  | https://keycloak-provider.127.0.0.1.nip.io | [Keycloak](https://github.com/keycloak/keycloak)                           | Provider     | Issues credentials on behalf of the provider                                        | no                                                   |
+| http://did-consumer.127.0.0.1.nip.io:8080/       | https://did-consumer.127.0.0.1.nip.io/      | [did-helper](https://github.com/wistefan/did-helper)                       | Consumer     | Helper to provide access to the consumers did and key material                      | yes, should never be public                          |
+| https://mp-data-service.127.0.0.1.nip.io:8443/    | http://mp-data-service.127.0.0.1.nip.io/   | [Apisix](https://apisix.apache.org/)                                       | Provider     | ApiGateway to be used as entry point to all secured services, f.e. the data-service | no                                                   |
 | https://provider-verifier.127.0.0.1.nip.io:8443/ | https://provider-verifier.io               | [VCVerifier](https://github.com/FIWARE/VCVerifier)                         | Provider     | Authentication endpoint, used for authenticating through VerifiableCredentials      | no                                                   |
 | http://did-provider.127.0.0.1.nip.io:8080/       | http://did-provider.127.0.0.1.nip.io/      | [did-helper](https://github.com/wistefan/did-helper)                       | Provider     | Helper to provide access to the providers did and key material                      | yes, should never be public                          |
 | http://scorpio-provider.127.0.0.1.nip.io:8080/   | http://scorpio-provider.127.0.0.1.nip.io/  | [Scorpio ContextBroker](https://github.com/ScorpioBroker/ScorpioBroker)    | Provider     | Provides direct access to the context broker, to be used for test setup.            | yes, should only be available through the PEP        |
