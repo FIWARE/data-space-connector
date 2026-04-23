@@ -62,3 +62,8 @@ dependencies:
     condition: cert-manager.enabled
     version: 1.20.0
     repository: https://charts.jetstack.io
+  # observability - OpenTelemetry Collector for distributed tracing (opt-in)
+  - name: opentelemetry-collector
+    condition: opentelemetry-collector.enabled
+    version: 0.152.0
+    repository: https://open-telemetry.github.io/opentelemetry-helm-charts

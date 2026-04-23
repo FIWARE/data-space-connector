@@ -2212,3 +2212,109 @@ certManagerResources:
 # -- list of extra Kubernetes manifests to deploy alongside the chart.
 # Each entry can be a string (raw YAML, supports Helm templating) or an object.
 extraManifests: []
+
+# -- global distributed-tracing configuration used by every component that
+# supports OpenTelemetry. The values under this block are fed into the
+# `dsc.otel.env` template helper and rendered as the standard `OTEL_*`
+# environment variables on each workload. Flipping `tracing.enabled` off
+# disables tracing everywhere; per-component toggles live under each
+# subchart's `tracing:` key and default to the global value.
+tracing:
+  # -- global on/off switch for OpenTelemetry tracing across the data-space
+  # connector. When false, no `OTEL_*` env vars are injected and the
+  # `opentelemetry-collector` subchart stays disabled by default.
+  enabled: false
+  # -- OTLP exporter configuration used by every traced workload. The
+  # default endpoint targets the in-cluster OpenTelemetry Collector
+  # deployed by this umbrella chart; override to point at an external
+  # collector or directly at a backend (Tempo, Jaeger, Honeycomb, ...).
+  exporter:
+    otlp:
+      # -- OTLP endpoint the workloads export spans to. The default targets
+      # the bundled collector service
+      # (`<release>-opentelemetry-collector:4317`).
+      endpoint: ""
+      # -- OTLP protocol: `grpc` (default, port 4317) or `http/protobuf`
+      # (port 4318). Must match the collector's listening protocol.
+      protocol: "grpc"
+      # -- disable TLS on the OTLP exporter. Set to false and configure
+      # the collector / backend with certificates for production.
+      insecure: true
+  # -- trace sampler name, passed as `OTEL_TRACES_SAMPLER`. Accepts any
+  # value supported by the OpenTelemetry SDK: `always_on`, `always_off`,
+  # `traceidratio`, `parentbased_always_on`, `parentbased_traceidratio`.
+  sampler: "parentbased_traceidratio"
+  # -- argument for the sampler, passed as `OTEL_TRACES_SAMPLER_ARG`. For
+  # ratio-based samplers this is the sampling probability in [0.0, 1.0].
+  samplerArg: "1.0"
+  # -- extra resource attributes merged into `OTEL_RESOURCE_ATTRIBUTES`
+  # for every traced workload. Service-specific attributes (such as
+  # `service.name`) are added automatically by the helper.
+  resourceAttributes: {}
+  #   deployment.environment: "production"
+  #   service.namespace: "dsc"
+  # -- propagators to use, passed as `OTEL_PROPAGATORS`. Comma-separated
+  # list; see
+  # https://opentelemetry.io/docs/languages/sdk-configuration/general/#otel_propagators
+  propagators: "tracecontext,baggage"
+
+# -- values passed to the bundled `opentelemetry-collector` subchart
+# (chart: open-telemetry/opentelemetry-collector). The collector is only
+# rendered when `opentelemetry-collector.enabled` is true; by default it
+# stays off so existing deployments are unaffected. When `tracing.enabled`
+# is flipped on, operators typically also flip `opentelemetry-collector.enabled`
+# on to get an in-cluster collector reachable on port 4317/4318.
+opentelemetry-collector:
+  # -- toggle the bundled OpenTelemetry Collector subchart. Keep false
+  # when pointing `tracing.exporter.otlp.endpoint` at an external
+  # collector.
+  enabled: false
+  # -- deployment topology for the collector. Valid values are
+  # `deployment`, `daemonset`, and `statefulset`. `deployment` is the
+  # right default for a dedicated, shared collector workload.
+  mode: deployment
+  # -- number of collector replicas when `mode=deployment`.
+  replicaCount: 1
+  # -- the chart requires an image repository to be set explicitly; we
+  # use the upstream contrib image so extra exporters (Tempo, Jaeger,
+  # Honeycomb, ...) are available out of the box.
+  image:
+    repository: otel/opentelemetry-collector-contrib
+  # -- CPU / memory resources for the collector. Sized for small
+  # deployments; raise for production traffic.
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+  # -- collector pipeline configuration. The defaults enable OTLP gRPC
+  # (4317) and HTTP (4318) receivers, a batch + memory_limiter processor
+  # chain, and a `debug` exporter so traces are visible in the collector
+  # logs with zero external dependencies. Step 10 of the tracing roadmap
+  # extends this with commented-out examples for Tempo / Jaeger /
+  # Honeycomb exporters.
+  config:
+    receivers:
+      otlp:
+        protocols:
+          grpc:
+            endpoint: ${env:MY_POD_IP}:4317
+          http:
+            endpoint: ${env:MY_POD_IP}:4318
+    processors:
+      batch: {}
+      memory_limiter:
+        check_interval: 5s
+        limit_percentage: 80
+        spike_limit_percentage: 25
+    exporters:
+      debug:
+        verbosity: basic
+    service:
+      pipelines:
+        traces:
+          receivers: [otlp]
+          processors: [memory_limiter, batch]
+          exporters: [debug]
