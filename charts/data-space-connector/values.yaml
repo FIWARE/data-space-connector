@@ -83,6 +83,9 @@ decentralizedIam:
       m2m:
         # -- we do not need authentication here
         authEnabled: false
+      deployment:
+        image:
+          tag: 6.11.0-pre-81
 
     # -- configuration for the credentials-config-service to be deployed as part of the connector, see https://github.com/FIWARE/helm-charts/tree/main/charts/credentials-config-service for all options
     credentials-config-service:
@@ -129,6 +132,13 @@ decentralizedIam:
     apisix:
       ingress-controller:
         enabled: false
+
+      podAnnotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: /apisix/prometheus/metrics
+        prometheus.io/port: "9091"
+      prometheus:
+        enabled: true
 
     # -- configuration for the odrl-pap to be deployed as part of the connector, see https://github.com/FIWARE/helm-charts/tree/main/charts/odrl-pap for all options
     odrl-pap:
@@ -2204,3 +2214,8 @@ certManagerResources:
 # -- list of extra Kubernetes manifests to deploy alongside the chart.
 # Each entry can be a string (raw YAML, supports Helm templating) or an object.
 extraManifests: []
+
+prometheus:
+  enabled: false
+grafana:
+  enabled: false

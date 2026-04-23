@@ -1277,3 +1277,19 @@ identityhub:
 
 vault:
   enabled: false
+
+grafana:
+  enabled: true
+  ingress:
+    enabled: true
+    annotations:
+      traefik.ingress.kubernetes.io/router.tls: "true"
+      cert-manager.io/cluster-issuer: "selfsigned-issuer"
+      cert-manager.io/private-key-algorithm: "ECDSA"
+      cert-manager.io/common-name: "grafana.127.0.0.1.nip.io"
+    hosts:
+      - grafana.127.0.0.1.nip.io
+    tls:
+      - secretName: grafana.127.0.0.1.nip.io-tls
+        hosts:
+          - grafana.127.0.0.1.nip.io

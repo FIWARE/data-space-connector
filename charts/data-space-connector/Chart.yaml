@@ -62,3 +62,11 @@ dependencies:
     condition: cert-manager.enabled
     version: 1.20.0
     repository: https://charts.jetstack.io
+  - name: prometheus
+    condition: prometheus.enabled
+    version: 29.2.1
+    repository: https://prometheus-community.github.io/helm-charts
+  - name: grafana
+    condition: grafana.enabled
+    version: 12.1.1
+    repository: https://grafana-community.github.io/helm-charts

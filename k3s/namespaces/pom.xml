@@ -310,9 +310,9 @@
                             <additionalArguments>--name-template=trust-anchor --namespace=trust-anchor -f ${main.basedir}/k3s/trust-anchor.yaml</additionalArguments>
                         </configuration>
                     </execution>
-                     <!-- Prometheus stack as referenced in the DSC chart -->
+                     <!-- Prometheus CRDs as referenced in the DSC chart -->
                     <execution>
-                        <id>template-dsc-prometheus</id>
+                        <id>template-dsc-prometheus-crd</id>
                         <goals>
                             <goal>init</goal>
                             <goal>dependency-update</goal>
@@ -323,8 +323,8 @@
                             <chartDirectory>${project.build.directory}/charts/data-space-connector</chartDirectory>
                             <skipTemplate>false</skipTemplate>
                             <templateGenerateName>true</templateGenerateName>
-                            <templateOutputDir>${project.build.directory}/k3s/infra/prometheus</templateOutputDir>
-                            <additionalArguments>--name-template=prometheus --namespace=monitoring -f ${main.basedir}/k3s/prometheus.yaml</additionalArguments>
+                            <templateOutputDir>${project.build.directory}/k3s/infra/prometheus-crd</templateOutputDir>
+                            <additionalArguments>--name-template=prometheus-crd --namespace=prometheus-crd -f ${main.basedir}/k3s/prometheus-crd.yaml</additionalArguments>
                         </configuration>
                     </execution>
                     <!-- Mongo operator as referenced in the DSC chart -->
@@ -426,7 +426,6 @@
                 <configuration>
                     <skip>true</skip>
                     <disableLocalStorage>false</disableLocalStorage>
-                    <portKubeApi>7443</portKubeApi>                                                                                                                                                                            
                     <portBindings>
                         <!-- Traefik http & https-->
                         <portBinding>8080:8080</portBinding>
@@ -489,17 +488,6 @@
                         </goals>
                         <configuration>
                             <manifests>${project.build.directory}/k3s/infra/cert-manager</manifests>
-                            <timeout>500</timeout>
-                        </configuration>
-                    </execution>
-                    <execution>
-                        <id>apply-prometheus</id>
-                        <phase>deploy</phase>
-                        <goals>
-                            <goal>apply</goal>
-                        </goals>
-                        <configuration>
-                            <manifests>${project.build.directory}/k3s/infra/prometheus</manifests>
                             <timeout>500</timeout>
                         </configuration>
                     </execution>

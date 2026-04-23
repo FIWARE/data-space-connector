@@ -84,3 +84,9 @@ vault:
 
 issuerservice:
   enabled: false
+
+prometheus:
+  enabled: false
+
+prometheus-operator-crds:
+  enabled: false

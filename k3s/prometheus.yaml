@@ -1,17 +1,18 @@
-mongo-operator:
+prometheus:
   enabled: true
-  database:
-    namespace: provider
-  operator:
-    watchNamespace: "*"
-    resources:
-      limits:
-        cpu: 300m
-        memory: 1Gi
-      requests:
-        cpu: 100m
-        memory: 200Mi
+  prometheus-node-exporter:
+    enabled: false
+  kube-state-metrics:
+    enabled: false
+  prometheus-pushgateway:
+    enabled: false
+  alertmanager:
+    enabled: false
+prometheus-operator-crds:
+  enabled: false
 
+mongo-operator:
+  enabled: false
 
 decentralizedIam:
   enabled: false
@@ -87,10 +88,4 @@ issuerservice:
   enabled: false
 
 cert-manager:
-  enabled: false
-
-prometheus:
-  enabled: false
-
-prometheus-operator-crds:
   enabled: false
