@@ -3,12 +3,16 @@
 ## Overview
 Introduce end-to-end distributed tracing across the FIWARE Data Space Connector
 (DSC) by deploying an OpenTelemetry (OTEL) Collector as an optional subchart of
-the `data-space-connector` umbrella chart and wiring every first-party workload
-(IdentityHub, fdsc-edc, Rainbow, and the DSC-owned job runners) to export
-traces through the OTLP endpoint. Trace configuration is exposed via
-`values.yaml` so operators can plug any OTLP-compatible backend (Jaeger,
-Tempo, Honeycomb, etc.) and toggle tracing per component without forking
-the chart.
+the `data-space-connector` umbrella chart and wiring the first-party workloads
+(IdentityHub, fdsc-edc) plus the third-party subcharts that ship with native
+OTEL support to export traces through the OTLP endpoint. Trace configuration
+is exposed via `values.yaml` so operators can plug any OTLP-compatible backend
+(Jaeger, Tempo, Honeycomb, etc.) and toggle tracing per component without
+forking the chart.
+
+Rainbow and the short-lived registration jobs are intentionally excluded from
+this plan: Rainbow is slated for removal in a future release, and batch jobs
+do not need to be traced.
 
 ## Steps
 
@@ -127,96 +131,153 @@ Acceptance criteria:
 - With tracing disabled the fdsc-edc rendering is byte-identical to
   `main`.
 
-### Step 4: Instrument Rainbow deployment with OTEL
-Goal: trace the Rainbow DSP implementation (`quay.io/wi_stefan/rainbow`).
+### Step 4: Wire the keycloak subchart for OTEL
+Goal: pass tracing configuration down to the keycloak subchart without
+modifying the upstream chart.
 
 Files affected:
-- `charts/data-space-connector/templates/rainbow-deployment.yaml`
-- `charts/data-space-connector/values.yaml` (rainbow section)
-
-Actions:
-- Add a `rainbow.tracing` block to `values.yaml`
-  (`enabled`, `serviceName`, inherited exporter settings).
-- In the deployment template, when tracing is enabled append the
-  standard `OTEL_*` env vars to both the `rainbow-init` and `rainbow`
-  containers using the `dsc.otel.env` helper. Rainbow is written in
-  Rust and honours the upstream OTLP SDK environment variables (no
-  Java agent needed).
-- Leave the hard-coded `DB_*` env block untouched; add the tracing
-  vars after it.
-
-Acceptance criteria:
-- With tracing enabled, the rainbow pod spec shows OTEL env vars in both
-  containers.
-- With tracing disabled the rainbow pod spec is unchanged.
-
-### Step 5: Instrument registration jobs with OTEL
-Goal: trace the short-lived batch jobs the chart creates
-(`participant-registration-job.yaml`, `tmf-registration-job.yaml`,
-`dataplane-registration.yaml`, `rainbow-registration.yaml`,
-`participant-registration.yaml`).
-
-Files affected:
-- `charts/data-space-connector/templates/participant-registration-job.yaml`
-- `charts/data-space-connector/templates/tmf-registration-job.yaml`
-- `charts/data-space-connector/templates/dataplane-registration.yaml`
-- `charts/data-space-connector/templates/rainbow-registration.yaml`
-- `charts/data-space-connector/templates/participant-registration.yaml`
-- `charts/data-space-connector/values.yaml`
-
-Actions:
-- When `tracing.enabled` is true, inject `OTEL_*` env vars into each
-  job's container via the `dsc.otel.env` helper with a
-  job-specific `service.name` (e.g. `participant-registration-job`).
-- For Java-based jobs that go through the identityhub image, reuse the
-  same Java agent init container pattern as Step 2 via a shared partial
-  (`dsc.otel.javaInit`).
-- Curl-based shell jobs only get the OTLP propagation headers via the
-  `W3C traceparent` env (they do not emit spans themselves); document
-  this limitation.
-
-Acceptance criteria:
-- Each job, when rendered with tracing enabled, carries the expected
-  OTEL env vars.
-- `helm template` output with tracing disabled is unchanged.
-
-### Step 6: Wire subchart components (keycloak, scorpio, tm-forum-api, contract-management, marketplace, decentralizedIam)
-Goal: pass tracing configuration down to the third-party subcharts
-that already support OTEL natively, without modifying those charts.
-
-Files affected:
-- `charts/data-space-connector/values.yaml`
+- `charts/data-space-connector/values.yaml` (keycloak section)
 - `charts/data-space-connector/templates/_helpers.tpl`
 
 Actions:
-- For each subchart, add conditional value overrides under its
-  namespaced key when `tracing.enabled` is true. Specifically:
-  - `keycloak.extraEnvVars` – append `OTEL_*` env vars and enable
-    `KC_TRACING_ENABLED=true` (Keycloak 25+ native OTEL support).
-  - `scorpio.env` – add `QUARKUS_OTEL_*` vars (`QUARKUS_OTEL_ENABLED`,
-    `QUARKUS_OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`,
-    `QUARKUS_OTEL_SERVICE_NAME`).
-  - `tm-forum-api.extraEnv` / `contract-management.extraEnv` /
-    `marketplace.extraEnv` – append standard `OTEL_*` vars; note in
-    comments that the upstream charts must expose an `extraEnv`-style
-    hook (if they do not, raise an upstream issue and leave the block
-    commented out with a TODO referencing ticket #28).
-  - `decentralizedIam` – propagate `tracing` block as a passthrough
-    value so the dependent IAM chart can consume it if it adds
-    support.
-- Use Helm's nested-values override mechanism: define defaults here and
-  let the values merge into the subcharts at install time.
-- Provide a single `dsc.otel.extraEnv` helper that returns a YAML list
-  suitable for `extraEnv`/`extraEnvVars` blocks.
+- Under the `keycloak:` key, add a conditional `extraEnvVars` override
+  that is only rendered when `tracing.enabled` is true and appends the
+  `OTEL_*` env vars plus `KC_TRACING_ENABLED=true` (Keycloak 25+ native
+  OTEL support).
+- Set `OTEL_SERVICE_NAME=keycloak` (overridable via
+  `keycloak.tracing.serviceName`).
+- Provide the `dsc.otel.extraEnv` helper that returns a YAML list
+  suitable for `extraEnvVars` blocks so this and the later subchart
+  steps can share it.
+- Document every new value with a `# --` helm-docs compatible comment.
 
 Acceptance criteria:
-- Rendering the umbrella chart with `tracing.enabled=true` produces
-  pods (in the subcharts that expose `extraEnv`-like hooks) with the
-  correct OTEL env vars.
-- With `tracing.enabled=false`, no subchart values are overridden.
-- Comments clearly mark any subchart that currently lacks a hook.
+- `helm template tracing.enabled=true` renders the keycloak StatefulSet
+  with `KC_TRACING_ENABLED=true` plus the standard OTEL env vars.
+- With `tracing.enabled=false`, the keycloak values are untouched
+  (byte-identical rendering vs `main`).
+- `helm lint` passes.
 
-### Step 7: Add default OpenTelemetry Collector pipeline and export examples
+### Step 5: Wire the scorpio subchart for OTEL
+Goal: enable Quarkus-native OTEL tracing on the scorpio subchart.
+
+Files affected:
+- `charts/data-space-connector/values.yaml` (scorpio section)
+
+Actions:
+- Under the `scorpio:` key, add a conditional `env` override gated on
+  `tracing.enabled` that appends the Quarkus OTEL variables:
+  - `QUARKUS_OTEL_ENABLED=true`
+  - `QUARKUS_OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` derived from
+    `tracing.exporter.otlp.endpoint`.
+  - `QUARKUS_OTEL_EXPORTER_OTLP_TRACES_PROTOCOL` derived from
+    `tracing.exporter.otlp.protocol`.
+  - `QUARKUS_OTEL_SERVICE_NAME=scorpio` (overridable via
+    `scorpio.tracing.serviceName`).
+- Document every new value with a `# --` helm-docs compatible comment.
+
+Acceptance criteria:
+- `helm template tracing.enabled=true` shows the scorpio deployment
+  carrying the `QUARKUS_OTEL_*` env vars.
+- With `tracing.enabled=false`, the scorpio rendering is unchanged.
+
+### Step 6: Wire the tm-forum-api subchart for OTEL
+Goal: expose OTEL configuration to the tm-forum-api subchart via its
+`extraEnv` hook.
+
+Files affected:
+- `charts/data-space-connector/values.yaml` (tm-forum-api section)
+
+Actions:
+- Under the `tm-forum-api:` key, add a conditional `extraEnv` override
+  gated on `tracing.enabled` that appends the standard `OTEL_*` env
+  vars (service name defaulting to `tm-forum-api`, overridable via
+  `tm-forum-api.tracing.serviceName`).
+- Reuse the `dsc.otel.extraEnv` helper introduced in Step 4.
+- Verify the upstream tm-forum-api chart exposes an `extraEnv`-style
+  hook; if it does not, raise an upstream issue and leave the block
+  commented out with a TODO referencing ticket #28.
+- Document every new value with a `# --` helm-docs compatible comment.
+
+Acceptance criteria:
+- `helm template tracing.enabled=true` shows the tm-forum-api pod(s)
+  carrying the standard `OTEL_*` env vars (or, if the upstream hook is
+  missing, a clearly commented TODO in `values.yaml`).
+- With `tracing.enabled=false`, the tm-forum-api rendering is unchanged.
+
+### Step 7: Wire the contract-management subchart for OTEL
+Goal: expose OTEL configuration to the contract-management subchart via
+its `extraEnv` hook.
+
+Files affected:
+- `charts/data-space-connector/values.yaml` (contract-management section)
+
+Actions:
+- Under the `contract-management:` key, add a conditional `extraEnv`
+  override gated on `tracing.enabled` that appends the standard
+  `OTEL_*` env vars (service name defaulting to `contract-management`,
+  overridable via `contract-management.tracing.serviceName`).
+- Reuse the `dsc.otel.extraEnv` helper.
+- Verify the upstream contract-management chart exposes an
+  `extraEnv`-style hook; if it does not, raise an upstream issue and
+  leave the block commented out with a TODO referencing ticket #28.
+- Document every new value with a `# --` helm-docs compatible comment.
+
+Acceptance criteria:
+- `helm template tracing.enabled=true` shows the contract-management
+  pod(s) carrying the standard `OTEL_*` env vars (or, if the upstream
+  hook is missing, a clearly commented TODO in `values.yaml`).
+- With `tracing.enabled=false`, the contract-management rendering is
+  unchanged.
+
+### Step 8: Wire the marketplace subchart for OTEL
+Goal: expose OTEL configuration to the marketplace subchart via its
+`extraEnv` hook.
+
+Files affected:
+- `charts/data-space-connector/values.yaml` (marketplace section)
+
+Actions:
+- Under the `marketplace:` key, add a conditional `extraEnv` override
+  gated on `tracing.enabled` that appends the standard `OTEL_*` env
+  vars (service name defaulting to `marketplace`, overridable via
+  `marketplace.tracing.serviceName`).
+- Reuse the `dsc.otel.extraEnv` helper.
+- Verify the upstream marketplace chart exposes an `extraEnv`-style
+  hook; if it does not, raise an upstream issue and leave the block
+  commented out with a TODO referencing ticket #28.
+- Document every new value with a `# --` helm-docs compatible comment.
+
+Acceptance criteria:
+- `helm template tracing.enabled=true` shows the marketplace pod(s)
+  carrying the standard `OTEL_*` env vars (or, if the upstream hook is
+  missing, a clearly commented TODO in `values.yaml`).
+- With `tracing.enabled=false`, the marketplace rendering is unchanged.
+
+### Step 9: Wire the decentralizedIam subchart for OTEL
+Goal: propagate tracing configuration to the decentralizedIam subchart
+as a passthrough so the dependent IAM chart can consume it.
+
+Files affected:
+- `charts/data-space-connector/values.yaml` (decentralizedIam section)
+
+Actions:
+- Under the `decentralizedIam:` key, add a `tracing` passthrough block
+  that mirrors the global `tracing.*` values when `tracing.enabled` is
+  true. If the upstream chart adds direct support for tracing, the
+  values flow through without further work; if not, the passthrough
+  has no effect.
+- Document in `values.yaml` that this is a forward-compatible
+  passthrough and reference the upstream chart version that needs to
+  land tracing support.
+
+Acceptance criteria:
+- `helm template tracing.enabled=true` shows the decentralizedIam
+  values carrying the tracing passthrough.
+- With `tracing.enabled=false`, the decentralizedIam rendering is
+  unchanged.
+
+### Step 10: Add default OpenTelemetry Collector pipeline and export examples
 Goal: ship a working default Collector pipeline and documented export
 examples for common backends.
 
@@ -248,7 +309,7 @@ Acceptance criteria:
 - Defaults only write to the `debug` exporter so no external network
   calls happen out of the box.
 
-### Step 8: Documentation for OTEL tracing
+### Step 11: Documentation for OTEL tracing
 Goal: describe how to enable tracing and connect a backend.
 
 Files affected:
@@ -263,7 +324,8 @@ Actions:
   - How to enable tracing (`--set tracing.enabled=true`).
   - How to point at an external backend
     (`tracing.exporter.otlp.endpoint`, TLS, auth header).
-  - Per-component notes (Java agent, Rust SDK, Quarkus, Keycloak).
+  - Per-component notes (Java agent for IdentityHub/fdsc-edc, Quarkus
+    for scorpio, Keycloak native OTEL, subchart `extraEnv` hooks).
   - Troubleshooting (checking Collector logs, common env var typos).
 - Link the new page from `doc/README.md` under a new "Observability"
   section.
@@ -275,7 +337,7 @@ Acceptance criteria:
 - No screenshots or external assets added in this iteration (keeps PR
   small).
 
-### Step 9: Integration test / CI verification
+### Step 12: Integration test / CI verification
 Goal: catch regressions in the new tracing surface automatically.
 
 Files affected:
@@ -285,7 +347,7 @@ Files affected:
 Actions:
 - Add a helm-unittest suite under
   `charts/data-space-connector/tests/tracing_test.yaml` that asserts:
-  - With `tracing.enabled=false`, the identityhub, rainbow, and fdsc-edc
+  - With `tracing.enabled=false`, the identityhub and fdsc-edc
     manifests do NOT contain `OTEL_EXPORTER_OTLP_ENDPOINT`.
   - With `tracing.enabled=true`, each of those manifests DOES contain
     `OTEL_EXPORTER_OTLP_ENDPOINT` and `OTEL_SERVICE_NAME`.
@@ -302,7 +364,7 @@ Acceptance criteria:
 - Tests use table/parameterised inputs where practical (per repo code
   quality rules).
 
-### Step 10: Release notes and chart version bump
+### Step 13: Release notes and chart version bump
 Goal: make the change discoverable and version-compliant.
 
 Files affected:
