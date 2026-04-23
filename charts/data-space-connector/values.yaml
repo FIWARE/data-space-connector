@@ -2158,6 +2158,41 @@ identityhub:
       password:
       existingSecret: ih.postgres.credentials.postgresql.acid.zalan.do
       existingSecretPasswordKey: password
+  # -- distributed-tracing configuration for the IdentityHub component.
+  # Values here override or complement the global `tracing:` block. When
+  # tracing is active the deployment gains an init container that copies
+  # the OpenTelemetry Java auto-instrumentation agent into a shared
+  # volume, mounts the volume read-only into the IdentityHub container,
+  # prepends `-javaagent:/otel-agent/opentelemetry-javaagent.jar` to
+  # `JAVA_TOOL_OPTIONS`, and receives the standard `OTEL_*` SDK
+  # environment variables rendered by the `dsc.otel.env` helper.
+  tracing:
+    # -- toggle OpenTelemetry tracing on the IdentityHub workload. Leave
+    # unset (default) to inherit `tracing.enabled` from the global
+    # block; set to `true` / `false` to override.
+    enabled:
+    # -- logical service name exposed as `OTEL_SERVICE_NAME` and recorded
+    # as `service.name` on every span emitted by this workload.
+    serviceName: identityhub
+    # -- OpenTelemetry Java auto-instrumentation agent configuration.
+    # The agent JAR is shipped as a container image and copied into a
+    # shared `emptyDir` volume (`otel-agent`) by an init container; the
+    # main container then mounts the volume read-only and the JVM picks
+    # the agent up via `JAVA_TOOL_OPTIONS`.
+    javaagent:
+      # -- toggle the Java agent init container. Disable to run the
+      # IdentityHub without auto-instrumentation (e.g. when the runtime
+      # already carries the agent or manual SDK instrumentation is
+      # used). Only meaningful when `identityhub.tracing.enabled` (or
+      # the global `tracing.enabled`) is true.
+      enabled: true
+      # -- container image providing the OpenTelemetry Java agent JAR
+      # at `/javaagent.jar`. Pinned to a stable upstream release so
+      # behaviour is reproducible across chart versions.
+      image: "ghcr.io/open-telemetry/opentelemetry-java-instrumentation/autoinstrumentation-java:2.11.0"
+      # -- [Kubernetes image pull policy](https://kubernetes.io/docs/concepts/containers/images/#image-pull-policy)
+      # for the agent init container.
+      pullPolicy: IfNotPresent
 
 vault:
   enabled: false
