@@ -75,3 +75,8 @@ dependencies:
     condition: grafana.enabled
     version: 12.1.1
     repository: https://grafana-community.github.io/helm-charts
+  # observability - OpenTelemetry Collector for distributed tracing (opt-in)
+  - name: opentelemetry-collector
+    condition: opentelemetry-collector.enabled
+    version: 0.152.0
+    repository: https://open-telemetry.github.io/opentelemetry-helm-charts
