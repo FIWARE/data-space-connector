@@ -32,6 +32,7 @@ decentralizedIam:
           enabled: true
           annotations:
             cert-manager.io/cluster-issuer: "selfsigned-issuer"
+            cert-manager.io/alt-names: "til-consumer.127.0.0.1.nip.io"
             cert-manager.io/private-key-algorithm: "ECDSA"
             cert-manager.io/common-name: "til-consumer.127.0.0.1.nip.io"
             traefik.ingress.kubernetes.io/router.tls: "true"
@@ -50,6 +51,7 @@ decentralizedIam:
         annotations:
           cert-manager.io/cluster-issuer: "selfsigned-issuer"
           cert-manager.io/private-key-algorithm: "ECDSA"
+          cert-manager.io/alt-names: "consumer-ccs.127.0.0.1.nip.io"
           cert-manager.io/common-name: "consumer-ccs.127.0.0.1.nip.io"
           traefik.ingress.kubernetes.io/router.tls: "true"
         hosts:
@@ -123,6 +125,7 @@ decentralizedIam:
           traefik.ingress.kubernetes.io/router.tls: "true"
           cert-manager.io/cluster-issuer: "selfsigned-issuer"
           cert-manager.io/private-key-algorithm: "ECDSA"
+          cert-manager.io/alt-names: "verifier.fancy-marketplace.biz"
           cert-manager.io/common-name: "verifier.fancy-marketplace.biz"
         tls:
           - hosts:
@@ -352,6 +355,7 @@ decentralizedIam:
           cert-manager.io/cluster-issuer: "selfsigned-issuer"
           cert-manager.io/private-key-algorithm: "ECDSA"
           cert-manager.io/common-name: "pap-consumer.127.0.0.1.nip.io"
+          cert-manager.io/alt-names: "pap-consumer.127.0.0.1.nip.io"
           traefik.ingress.kubernetes.io/router.tls: "true"
         enabled: true
         hosts:

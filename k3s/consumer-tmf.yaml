@@ -14,6 +14,7 @@ tm-forum-api:
       cert-manager.io/cluster-issuer: "selfsigned-issuer"
       cert-manager.io/private-key-algorithm: "ECDSA"
       cert-manager.io/common-name: "consumer-tmf.127.0.0.1.nip.io"
+      cert-manager.io/alt-names: "consumer-tmf.127.0.0.1.nip.io"
       traefik.ingress.kubernetes.io/router.tls: "true"
     enabled: true
     hosts:

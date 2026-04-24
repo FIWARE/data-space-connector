@@ -1,0 +1,14 @@
+{{- if and .Values.grafana.enabled (index .Values.grafana "sidecar" "dashboards" "enabled") }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-apisix-routes
+  namespace: {{ $.Release.Namespace | quote }}
+  labels:
+    {{- $label := (index .Values.grafana "sidecar" "dashboards" "label") | default "grafana_dashboard" }}
+    {{- $value := (index .Values.grafana "sidecar" "dashboards" "labelValue") | default "1" }}
+    {{ $label }}: {{ $value | quote }}
+data:
+  apisix-routes.json: |-
+{{ .Files.Get "dashboards/apisix-routes.json" | indent 4 }}
+{{- end }}

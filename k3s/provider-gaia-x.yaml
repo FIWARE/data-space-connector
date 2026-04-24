@@ -36,6 +36,7 @@ decentralizedIam:
             cert-manager.io/cluster-issuer: "selfsigned-issuer"
             cert-manager.io/private-key-algorithm: "ECDSA"
             cert-manager.io/common-name: "til-provider.127.0.0.1.nip.io"
+            cert-manager.io/alt-names: "til-provider.127.0.0.1.nip.io"
             traefik.ingress.kubernetes.io/router.tls: "true"
           hosts:
             - host: til-provider.127.0.0.1.nip.io
@@ -53,6 +54,7 @@ decentralizedIam:
           cert-manager.io/cluster-issuer: "selfsigned-issuer"
           cert-manager.io/private-key-algorithm: "ECDSA"
           cert-manager.io/common-name: "provider-ccs.127.0.0.1.nip.io"
+          cert-manager.io/alt-names: "provider-ccs.127.0.0.1.nip.io"
         hosts:
           - host: provider-ccs.127.0.0.1.nip.io
             paths:
@@ -69,6 +71,7 @@ decentralizedIam:
           cert-manager.io/cluster-issuer: "selfsigned-issuer"
           cert-manager.io/private-key-algorithm: "ECDSA"
           cert-manager.io/common-name: "provider-verifier.127.0.0.1.nip.io"
+          cert-manager.io/alt-names: "provider-verifier.127.0.0.1.nip.io"
         hosts:
           - host: provider-verifier.127.0.0.1.nip.io
             paths:
@@ -153,6 +156,7 @@ decentralizedIam:
             cert-manager.io/cluster-issuer: "selfsigned-issuer"
             cert-manager.io/private-key-algorithm: "ECDSA"
             cert-manager.io/common-name: "mp-data-service.127.0.0.1.nip.io"
+            cert-manager.io/alt-names: "mp-data-service.127.0.0.1.nip.io"
           tls: true
           extraTls:
             - secretName: mp-data-service.127.0.0.1.nip.io-tls
@@ -241,6 +245,7 @@ decentralizedIam:
           cert-manager.io/cluster-issuer: "selfsigned-issuer"
           cert-manager.io/private-key-algorithm: "ECDSA"
           cert-manager.io/common-name: "pap-provider.127.0.0.1.nip.io"
+          cert-manager.io/alt-names: "pap-provider.127.0.0.1.nip.io"
         hosts:
           - host: pap-provider.127.0.0.1.nip.io
             paths:
@@ -283,6 +288,7 @@ did:
       cert-manager.io/cluster-issuer: "selfsigned-issuer"
       cert-manager.io/private-key-algorithm: "ECDSA"
       cert-manager.io/common-name: "did-provider.127.0.0.1.nip.io"
+      cert-manager.io/alt-names: "did-provider.127.0.0.1.nip.io"
     hosts:
       - host: did-provider.127.0.0.1.nip.io
         paths:
@@ -312,6 +318,7 @@ scorpio:
       cert-manager.io/cluster-issuer: "selfsigned-issuer"
       cert-manager.io/private-key-algorithm: "ECDSA"
       cert-manager.io/common-name: "scorpio-provider.127.0.0.1.nip.io"
+      cert-manager.io/alt-names: "scorpio-provider.127.0.0.1.nip.io"
     hosts:
       - host: scorpio-provider.127.0.0.1.nip.io
         paths:
@@ -359,6 +366,7 @@ tm-forum-api:
       cert-manager.io/cluster-issuer: "selfsigned-issuer"
       cert-manager.io/private-key-algorithm: "ECDSA"
       cert-manager.io/common-name: "tm-forum-api.127.0.0.1.nip.io"
+      cert-manager.io/alt-names: "tm-forum-api.127.0.0.1.nip.io"
     hosts:
       - host: tm-forum-api.127.0.0.1.nip.io
         paths:

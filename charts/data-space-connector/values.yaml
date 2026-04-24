@@ -137,8 +137,19 @@ decentralizedIam:
         prometheus.io/scrape: "true"
         prometheus.io/path: /apisix/prometheus/metrics
         prometheus.io/port: "9091"
-      prometheus:
-        enabled: true
+      apisix:
+        prometheus:
+          enabled: true
+
+      plugins:
+        - prometheus
+
+      pluginAttrs:
+        prometheus:
+          export_addr:
+            ip: "0.0.0.0"
+            port: 9091
+
 
     # -- configuration for the odrl-pap to be deployed as part of the connector, see https://github.com/FIWARE/helm-charts/tree/main/charts/odrl-pap for all options
     odrl-pap:
@@ -2227,3 +2238,5 @@ prometheus:
   enabled: false
 grafana:
   enabled: false
+  adminUser: admin
+  adminPassword: password

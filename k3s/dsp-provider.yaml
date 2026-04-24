@@ -220,6 +220,7 @@ identityhub:
       cert-manager.io/cluster-issuer: "selfsigned-issuer"
       cert-manager.io/private-key-algorithm: "ECDSA"
       cert-manager.io/common-name: "mp-operations.org"
+      cert-manager.io/alt-names: "mp-operations.org"
     hosts:
     - host: mp-operations.org
       paths:

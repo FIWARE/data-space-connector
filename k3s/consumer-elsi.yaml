@@ -46,6 +46,7 @@ keycloak:
     annotations:
       cert-manager.io/cluster-issuer: "selfsigned-issuer"
       cert-manager.io/private-key-algorithm: "ECDSA"
+      cert-manager.io/alt-names: "keycloak-consumer.127.0.0.1.nip.io"
       cert-manager.io/common-name: "keycloak-consumer.127.0.0.1.nip.io"
     tls: true
     extraTls:
@@ -266,6 +267,7 @@ did:
       traefik.ingress.kubernetes.io/router.tls: "true"
       cert-manager.io/cluster-issuer: "selfsigned-issuer"
       cert-manager.io/private-key-algorithm: "ECDSA"
+      cert-manager.io/alt-names: "did-consumer.127.0.0.1.nip.io"
       cert-manager.io/common-name: "did-consumer.127.0.0.1.nip.io"
     hosts:
       - host: did-consumer.127.0.0.1.nip.io

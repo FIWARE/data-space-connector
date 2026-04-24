@@ -172,6 +172,7 @@ identityhub:
       cert-manager.io/cluster-issuer: "selfsigned-issuer"
       cert-manager.io/private-key-algorithm: "ECDSA"
       cert-manager.io/common-name: "fancy-marketplace.biz"
+      cert-manager.io/alt-names: "fancy-marketplace.biz"
     hosts:
     - host: fancy-marketplace.biz
       paths:
