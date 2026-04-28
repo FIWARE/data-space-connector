@@ -313,3 +313,40 @@ Usage (from values tooling, not from a template):
 {{- include "dsc.otel.env" (dict "ctx" . "service" $serviceName "enabled" true) }}
 {{- end -}}
 {{- end -}}
+
+{{/*
+Render the OpenTelemetry environment-variable block as a YAML list for
+the `contract-management` subchart. contract-management is a Micronaut
+(Java) application that supports the standard `OTEL_*` SDK environment
+variables. Because contract-management is a third-party subchart whose
+templates are not owned by this umbrella chart, the env vars must live in
+the static `values.yaml` under `contract-management.additionalEnvVars`.
+
+This helper exists as a *reference implementation* so operators and CI
+scripts can generate the correct env-var block dynamically. For example,
+to produce the block and inspect it during development:
+
+  helm template . --show-only templates/_helpers.tpl \
+    --set tracing.enabled=true \
+    -x <(echo '{{- include "dsc.otel.contractManagement.envList" . -}}')
+
+The output is a list of standard `OTEL_*` `name:` / `value:` entries
+suitable for appending to `additionalEnvVars`.
+
+Usage (from values tooling, not from a template):
+  {{- include "dsc.otel.contractManagement.envList" . }}
+*/}}
+{{- define "dsc.otel.contractManagement.envList" -}}
+{{- $tracing := .Values.tracing | default dict -}}
+{{- $cmTracing := (index .Values "contract-management").tracing | default dict -}}
+{{- $enabled := get $cmTracing "enabled" -}}
+{{- if kindIs "invalid" $enabled -}}
+{{- $enabled = get $tracing "enabled" -}}
+{{- end -}}
+{{- if $enabled -}}
+{{- $serviceName := default "contract-management" (get $cmTracing "serviceName") -}}
+- name: OTEL_SDK_DISABLED
+  value: "false"
+{{- include "dsc.otel.env" (dict "ctx" . "service" $serviceName "enabled" true) }}
+{{- end -}}
+{{- end -}}

@@ -1482,6 +1482,25 @@ contract-management:
   # -- should it be enabled? set to false if one outside the chart is used.
   enabled: true
   fullnameOverride: contract-management
+  # -- distributed-tracing configuration for the contract-management subchart.
+  # contract-management is a Micronaut (Java) application that supports the
+  # standard OpenTelemetry SDK environment variables. Because
+  # contract-management is a third-party subchart whose templates are not
+  # owned by this umbrella chart, tracing is wired through the subchart's
+  # `additionalEnvVars` extension point. The SDK disable flag
+  # (`OTEL_SDK_DISABLED`) is set to `true` by default so tracing has no
+  # runtime effect until explicitly enabled. To activate tracing, override
+  # the env vars below (or pass
+  # `--set contract-management.additionalEnvVars[0].value=false`)
+  # together with `--set tracing.enabled=true`.
+  tracing:
+    # -- toggle OpenTelemetry tracing on the contract-management workload.
+    # Leave unset (default) to inherit `tracing.enabled` from the global
+    # block; set to `true` / `false` to override.
+    enabled:
+    # -- logical service name exposed as `OTEL_SERVICE_NAME` and recorded
+    # as the service identity on every span emitted by contract-management.
+    serviceName: contract-management
   til:
     credentialType: OperatorCredential
   services:
@@ -1514,6 +1533,47 @@ contract-management:
     odrl:
       ## URL to the ODRL-PAP
       url: http://odrl-pap:8080
+  # -- additional environment variables for the contract-management container.
+  # The OpenTelemetry SDK vars below are included by default with
+  # `OTEL_SDK_DISABLED=true` so the SDK skips initialisation. When
+  # overriding, include all entries below to keep tracing functional
+  # (adjust the endpoint to match your release name or external collector):
+  #   - name: OTEL_SDK_DISABLED
+  #     value: "false"
+  #   - name: OTEL_EXPORTER_OTLP_ENDPOINT
+  #     value: "http://<release>-opentelemetry-collector:4317"
+  additionalEnvVars:
+    # -- OpenTelemetry SDK disable flag. Set to "false" to enable
+    # tracing. When "true" the OTEL SDK is completely deactivated so
+    # the remaining OTEL_* vars below are inert.
+    - name: OTEL_SDK_DISABLED
+      value: "true"
+    # -- OTEL service name. Override via
+    # `contract-management.tracing.serviceName`.
+    - name: OTEL_SERVICE_NAME
+      value: "contract-management"
+    # -- OTLP endpoint. Adjust to match your release name or external
+    # collector.
+    - name: OTEL_EXPORTER_OTLP_ENDPOINT
+      value: ""
+    # -- OTLP protocol (`grpc` | `http/protobuf`).
+    - name: OTEL_EXPORTER_OTLP_PROTOCOL
+      value: "grpc"
+    # -- trace sampler name.
+    - name: OTEL_TRACES_SAMPLER
+      value: "parentbased_traceidratio"
+    # -- trace sampler argument (sampling probability).
+    - name: OTEL_TRACES_SAMPLER_ARG
+      value: "1.0"
+    # -- propagators for distributed context propagation.
+    - name: OTEL_PROPAGATORS
+      value: "tracecontext,baggage"
+    # -- disable metrics exporter (traces-only configuration).
+    - name: OTEL_METRICS_EXPORTER
+      value: "none"
+    # -- disable logs exporter (traces-only configuration).
+    - name: OTEL_LOGS_EXPORTER
+      value: "none"
 
 # -- configuration for the did-helper, see https://github.com/wistefan/did-helper
 did:
