@@ -50,6 +50,12 @@ dependencies:
     condition: vault.enabled
     version: 0.29.1
     repository: https://helm.releases.hashicorp.com
+  # dashboard
+  - name: fdsc-dashboard
+    alias: dashboard
+    condition: dashboard.enabled
+    version: 0.0.1
+    repository: https://fiware.github.io/helm-charts
   # did-helper
   - name: did-helper
     alias: did

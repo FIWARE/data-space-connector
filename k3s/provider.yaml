@@ -1013,95 +1013,76 @@ keycloak:
       "vc.operator-credential.format": "vc+sd-jwt",
       "vc.operator-credential.scope": "OperatorCredential",
       "vc.operator-credential.vct": "OperatorCredential"
-    clientRoles: |
-      "did:web:fancy-marketplace.biz": [
-        {
-          "name": "customer",
-          "description": "Is allowed to see offers etc.",
+    clientRoles:
+      "did:web:mp-operations.org": 
+        - "name": "admin"
+          "description": "admin role to be used when operating the provider."
+          "clientRole": true    
+      "did:web:fancy-marketplace.biz":
+        - "name": "customer"
+          "description": "Is allowed to see offers etc."
           "clientRole": true
-        },
-        {
-          "name": "OPERATOR",
-          "description": "Is allowed to operate clusters.",
+        - "name": "OPERATOR"
+          "description": "Is allowed to operate clusters."
           "clientRole": true
-        },
-        {
-          "name": "REPRESENTATIVE",
-          "description": "Is allowed to register.",
+        - "name": "REPRESENTATIVE"
+          "description": "Is allowed to register."
           "clientRole": true
-        }],
-      "account": [
-        {
-          "name": "delete-account",
-          "description": "${role_delete-account}",
-          "composite": false,
-          "clientRole": true,
+      "account": 
+        - "name": "delete-account"
+          "description": "${role_delete-account}"
+          "composite": false
+          "clientRole": true
           "attributes": {}
-        },
-        {
-          "name": "view-consent",
-          "description": "${role_view-consent}",
-          "composite": false,
-          "clientRole": true,
+        - "name": "view-consent"
+          "description": "${role_view-consent}"
+          "composite": false
+          "clientRole": true
           "attributes": {}
-        },
-        {
-          "name": "view-groups",
-          "description": "${role_view-groups}",
-          "composite": false,
-          "clientRole": true,
+        - "name": "view-groups"
+          "description": "${role_view-groups}"
+          "composite": false
+          "clientRole": true
           "attributes": {}
-        },
-        {
-          "name": "manage-account",
-          "description": "${role_manage-account}",
-          "composite": true,
+        - "name": "manage-account"
+          "description": "${role_manage-account}"
+          "composite": true
           "composites": {
             "client": {
               "account": [
                 "manage-account-links"
               ]
             }
-          },
-          "clientRole": true,
+          }
+          "clientRole": true
           "attributes": {}
-        },
-        {
-          "name": "view-profile",
-          "description": "${role_view-profile}",
-          "composite": false,
-          "clientRole": true,
+        - "name": "view-profile"
+          "description": "${role_view-profile}"
+          "composite": false
+          "clientRole": true
           "attributes": {}
-        },
-        {
-          "name": "view-applications",
-          "description": "${role_view-applications}",
-          "composite": false,
-          "clientRole": true,
+        - "name": "view-applications"
+          "description": "${role_view-applications}"
+          "composite": false
+          "clientRole": true
           "attributes": {}
-        },
-        {
-          "name": "manage-consent",
-          "description": "${role_manage-consent}",
-          "composite": true,
+        - "name": "manage-consent"
+          "description": "${role_manage-consent}"
+          "composite": true
           "composites": {
             "client": {
               "account": [
                 "view-consent"
               ]
             }
-          },
-          "clientRole": true,
+          }
+          "clientRole": true
           "attributes": {}
-        },
-        {
-          "name": "manage-account-links",
-          "description": "${role_manage-account-links}",
-          "composite": false,
-          "clientRole": true,
+        - "name": "manage-account-links"
+          "description": "${role_manage-account-links}"
+          "composite": false
+          "clientRole": true
           "attributes": {}
-        }
-      ]
     users: |
       {
         "username": "employee",
@@ -1129,6 +1110,29 @@ keycloak:
         "groups": [
             "/consumer"
         ]
+      },
+      {
+        "username": "admin",
+        "enabled": true,
+        "email": "admin@provider.org",
+        "firstName": "Test",
+        "lastName": "Admin",
+        "credentials": [
+          {
+            "type": "password",
+            "value": "test"
+          }
+        ],
+        "clientRoles": {
+          "did:web:mp-operations.org": [
+            "admin"
+          ],
+          "account": [
+            "view-profile",
+            "manage-account"
+          ]
+        },
+        "groups": []
       }
     clientScopes: |
       {
@@ -1253,6 +1257,32 @@ keycloak:
       nodeReRegistrationTimeout: -1
       defaultClientScopes: []
       optionalClientScopes: []
+    - clientId: did:web:mp-operations.org
+      description: Client to connect internal operations services
+      surrogateAuthRequired: false
+      alwaysDisplayInConsole: false
+      clientAuthenticatorType: client-secret
+      defaultRoles: []
+      redirectUris: []
+      webOrigins: []
+      notBefore: 0
+      bearerOnly: false
+      consentRequired: false
+      standardFlowEnabled: true
+      implicitFlowEnabled: false
+      directAccessGrantsEnabled: false
+      serviceAccountsEnabled: false
+      publicClient: false
+      frontchannelLogout: false
+      protocol: openid-connect
+      attributes:
+        client.secret.creation.time: "1675260539"
+      protocolMappers: []
+      authenticationFlowBindingOverrides: {}
+      fullScopeAllowed: true
+      nodeReRegistrationTimeout: -1
+      defaultClientScopes: []
+      optionalClientScopes: []
 
 # helper component to initialize the trusted issuers list
 registration:
@@ -1289,6 +1319,41 @@ credentials:
       format: jwt_vc
       targetFile: membership-credential.jwt
 
+dashboard:
+  ingress:
+    enabled: true
+    annotations:
+      cert-manager.io/cluster-issuer: "selfsigned-issuer"
+      cert-manager.io/private-key-algorithm: "ECDSA"
+      cert-manager.io/common-name: "dashboard-provider.127.0.0.1.nip.io"
+      cert-manager.io/alt-names: "dashboard-provider.127.0.0.1.nip.io"
+      traefik.ingress.kubernetes.io/router.tls: "true"
+
+    hosts:
+      - host: dashboard-provider.127.0.0.1.nip.io
+        paths:
+          - "/"
+    tls:
+      - secretName: dashboard-provider.127.0.0.1.nip.io-tls
+        hosts:
+          - dashboard-provider.127.0.0.1.nip.io
+  apiUrls:
+    til: http://trusted-issuers-list:8080
+    tir: https://tir.127.0.0.1.nip.io
+    ccs: http://credentials-config-service:8080
+    odrl: http://odrl-pap:8080
+  auth:
+    config:
+      providers:
+        - id: keycloak
+          issuer: https://keycloak-provider.127.0.0.1.nip.io/realms/test-realm
+          clientId: did:web:mp-operations.org
+          scopes: ["openid", "profile"]
+          rolesClaimPath: "realm_access.roles"
+          roleMapping:
+            fdsc-admin": "admin"
+            fdsc-viewer": "viewer"
+          silentRenew: true
 
 fdsc-edc:
   enabled: false
@@ -1298,3 +1363,4 @@ identityhub:
 
 vault:
   enabled: false
+

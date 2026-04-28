@@ -2212,3 +2212,7 @@ certManagerResources:
 # -- list of extra Kubernetes manifests to deploy alongside the chart.
 # Each entry can be a string (raw YAML, supports Helm templating) or an object.
 extraManifests: []
+
+# -- dashboard for operating the FIWARE Data Space Connector
+dashboard:
+  enabled: true

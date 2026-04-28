@@ -409,6 +409,7 @@
                 <configuration>
                     <skip>true</skip>
                     <disableLocalStorage>false</disableLocalStorage>
+                    <kubeApiPort>7443</kubeApiPort>
                     <portBindings>
                         <!-- Traefik http & https-->
                         <portBinding>8080:8080</portBinding>
