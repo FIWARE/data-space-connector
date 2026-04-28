@@ -182,3 +182,40 @@ Usage:
 {{- define "dsc.otel.extraEnv" -}}
 {{- include "dsc.otel.env" . -}}
 {{- end -}}
+
+{{/*
+Render the OpenTelemetry environment-variable block as a YAML list for
+the `fdsc-edc` subchart. Because fdsc-edc is a third-party subchart
+whose templates are not owned by this umbrella chart, the env vars
+cannot be injected via template includes – they must live in the static
+`values.yaml` under `fdsc-edc.common.deployment.additionalEnvVars`.
+
+This helper exists as a *reference implementation* so operators and CI
+scripts can generate the correct env-var block dynamically.  For
+example, to produce the block and inspect it during development:
+
+  helm template . --show-only templates/_helpers.tpl \
+    --set tracing.enabled=true \
+    -x <(echo '{{- include "dsc.otel.fdscEdc.envList" . -}}')
+
+The output is a list of `name:` / `value:` entries identical to those
+emitted by `dsc.otel.env` for the IdentityHub workload, prefixed with
+the `JAVA_TOOL_OPTIONS` entry that loads the Java agent.
+
+Usage (from values tooling, not from a template):
+  {{- include "dsc.otel.fdscEdc.envList" . }}
+*/}}
+{{- define "dsc.otel.fdscEdc.envList" -}}
+{{- $tracing := .Values.tracing | default dict -}}
+{{- $fdscTracing := (index .Values "fdsc-edc").tracing | default dict -}}
+{{- $enabled := get $fdscTracing "enabled" -}}
+{{- if kindIs "invalid" $enabled -}}
+{{- $enabled = get $tracing "enabled" -}}
+{{- end -}}
+{{- if $enabled -}}
+{{- $serviceName := default "fdsc-edc" (get $fdscTracing "serviceName") -}}
+- name: JAVA_TOOL_OPTIONS
+  value: "-javaagent:/otel-agent/opentelemetry-javaagent.jar"
+{{- include "dsc.otel.env" (dict "ctx" . "service" $serviceName "enabled" true) }}
+{{- end -}}
+{{- end -}}

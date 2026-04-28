@@ -1569,6 +1569,48 @@ marketplace:
     propagateToken: true
 
 fdsc-edc:
+  # -- distributed-tracing configuration for the fdsc-edc workload.
+  # Because fdsc-edc is a third-party subchart whose templates are not
+  # owned by this umbrella chart, tracing is wired through the subchart's
+  # extension points (`additionalEnvVars`, `initContainers`,
+  # `additionalVolumes`, `additionalVolumeMounts`) rather than conditional
+  # template blocks. The tracing entries are included in the default
+  # `common.deployment` lists below, so every fdsc-edc deployment
+  # automatically carries the OpenTelemetry Java agent and the standard
+  # `OTEL_*` SDK env vars.  Operators who override these lists must merge
+  # the tracing entries manually; see the inline comments for a
+  # ready-to-copy snippet.
+  # NOTE: since `fdsc-edc.deployment` defaults to an empty map, no
+  # fdsc-edc pods are rendered unless the operator explicitly defines at
+  # least one deployment entry; the default chart output is therefore
+  # unaffected.
+  tracing:
+    # -- toggle OpenTelemetry tracing on the fdsc-edc workload. Leave
+    # unset (default) to inherit `tracing.enabled` from the global
+    # block; set to `true` / `false` to override.
+    enabled:
+    # -- logical service name exposed as `OTEL_SERVICE_NAME` and recorded
+    # as `service.name` on every span emitted by this workload.
+    serviceName: fdsc-edc
+    # -- OpenTelemetry Java auto-instrumentation agent configuration.
+    # The agent JAR is shipped as a container image and copied into a
+    # shared `emptyDir` volume (`otel-agent`) by an init container; the
+    # main container then mounts the volume read-only and the JVM picks
+    # the agent up via `JAVA_TOOL_OPTIONS`.
+    javaagent:
+      # -- toggle the Java agent init container. Disable to run fdsc-edc
+      # without auto-instrumentation (e.g. when the runtime already
+      # carries the agent or manual SDK instrumentation is used). Only
+      # meaningful when `fdsc-edc.tracing.enabled` (or the global
+      # `tracing.enabled`) is true.
+      enabled: true
+      # -- container image providing the OpenTelemetry Java agent JAR
+      # at `/javaagent.jar`. Pinned to a stable upstream release so
+      # behaviour is reproducible across chart versions.
+      image: "ghcr.io/open-telemetry/opentelemetry-java-instrumentation/autoinstrumentation-java:2.11.0"
+      # -- [Kubernetes image pull policy](https://kubernetes.io/docs/concepts/containers/images/#image-pull-policy)
+      # for the agent init container.
+      pullPolicy: IfNotPresent
   common:
     ## configuration for the k8s service to access cp
     service:
@@ -1619,7 +1661,73 @@ fdsc-edc:
       # -- additional annotations for the deployment, if required
       additionalAnnotations: {}
 
-      # -- additional volume
+      # -- additional environment variables for the fdsc-edc containers.
+      # The subchart template renders these via
+      # `$cfg.deployment.additionalEnvVars`.
+      # When overriding, include the tracing entries below to keep
+      # OpenTelemetry instrumentation functional (adjust the endpoint to
+      # match your release name or external collector):
+      #   - name: JAVA_TOOL_OPTIONS
+      #     value: "-javaagent:/otel-agent/opentelemetry-javaagent.jar"
+      #   - name: OTEL_SERVICE_NAME
+      #     value: "fdsc-edc"
+      #   - name: OTEL_EXPORTER_OTLP_ENDPOINT
+      #     value: "http://<release>-opentelemetry-collector:4317"
+      #   - name: OTEL_EXPORTER_OTLP_PROTOCOL
+      #     value: "grpc"
+      #   - name: OTEL_EXPORTER_OTLP_INSECURE
+      #     value: "true"
+      #   - name: OTEL_TRACES_SAMPLER
+      #     value: "parentbased_traceidratio"
+      #   - name: OTEL_TRACES_SAMPLER_ARG
+      #     value: "1.0"
+      #   - name: OTEL_PROPAGATORS
+      #     value: "tracecontext,baggage"
+      #   - name: OTEL_RESOURCE_ATTRIBUTES
+      #     value: "service.name=fdsc-edc"
+      #   - name: OTEL_METRICS_EXPORTER
+      #     value: "none"
+      #   - name: OTEL_LOGS_EXPORTER
+      #     value: "none"
+      additionalEnvVars:
+        # tracing: attach the OpenTelemetry Java agent to the JVM.
+        # Any user-provided JAVA_TOOL_OPTIONS value should be
+        # concatenated after the agent flag to preserve both.
+        - name: JAVA_TOOL_OPTIONS
+          value: "-javaagent:/otel-agent/opentelemetry-javaagent.jar"
+        # tracing: standard OpenTelemetry SDK environment variables.
+        # These mirror the settings from the global `tracing` section.
+        # Adjust `OTEL_EXPORTER_OTLP_ENDPOINT` to match your deployment
+        # – the default targets the bundled collector using a release
+        # name of "dsc"; override when the Helm release name differs or
+        # an external collector is used.
+        - name: OTEL_SERVICE_NAME
+          value: "fdsc-edc"
+        - name: OTEL_EXPORTER_OTLP_ENDPOINT
+          value: ""
+        - name: OTEL_EXPORTER_OTLP_PROTOCOL
+          value: "grpc"
+        - name: OTEL_EXPORTER_OTLP_INSECURE
+          value: "true"
+        - name: OTEL_TRACES_SAMPLER
+          value: "parentbased_traceidratio"
+        - name: OTEL_TRACES_SAMPLER_ARG
+          value: "1.0"
+        - name: OTEL_PROPAGATORS
+          value: "tracecontext,baggage"
+        - name: OTEL_RESOURCE_ATTRIBUTES
+          value: "service.name=fdsc-edc"
+        - name: OTEL_METRICS_EXPORTER
+          value: "none"
+        - name: OTEL_LOGS_EXPORTER
+          value: "none"
+
+      # -- additional volume mounts for the fdsc-edc containers.
+      # When overriding, include the `otel-agent` entry below to keep
+      # tracing functional:
+      #   - name: otel-agent
+      #     mountPath: /otel-agent
+      #     readOnly: true
       additionalVolumeMounts:
         - name: credential-repo
           mountPath: /credential-repo
@@ -1632,7 +1740,17 @@ fdsc-edc:
         - name: cacerts
           mountPath: /usr/lib/jvm/java-21/lib/security/cacerts
           subPath: cacerts
-      # -- additional volumes to be added for the containers
+        # tracing: read-only view of the `otel-agent` volume seeded
+        # by the `otel-agent-init` init container.
+        - name: otel-agent
+          mountPath: /otel-agent
+          readOnly: true
+      # -- additional volumes to be added for the fdsc-edc containers.
+      # When overriding, include the `otel-agent` entry below to keep
+      # tracing functional:
+      #   - name: otel-agent
+      #     emptyDir:
+      #       sizeLimit: 32Mi
       additionalVolumes:
         - name: marketplace-credential-script
           configMap:
@@ -1657,7 +1775,27 @@ fdsc-edc:
             secretName: root-ca
         - name: cacerts
           emptyDir: {}
-      # -- init containers for the fdsc-edc deployment
+        # tracing: shared scratch volume that holds the copy of
+        # `opentelemetry-javaagent.jar` produced by the init container.
+        - name: otel-agent
+          emptyDir:
+            sizeLimit: 32Mi
+      # -- init containers for the fdsc-edc deployment.
+      # When overriding, include the `otel-agent-init` entry below to
+      # keep tracing functional:
+      #   - name: otel-agent-init
+      #     image: "ghcr.io/open-telemetry/opentelemetry-java-instrumentation/autoinstrumentation-java:2.11.0"
+      #     imagePullPolicy: IfNotPresent
+      #     command: ["cp", "/javaagent.jar", "/otel-agent/opentelemetry-javaagent.jar"]
+      #     securityContext:
+      #       runAsNonRoot: true
+      #       readOnlyRootFilesystem: true
+      #       allowPrivilegeEscalation: false
+      #       capabilities:
+      #         drop: [ALL]
+      #     volumeMounts:
+      #       - name: otel-agent
+      #         mountPath: /otel-agent
       initContainers:
         # -- converts the SEC1 EC private key from the cert-manager TLS secret to PKCS#8 format
         - name: convert-signing-key
@@ -1668,6 +1806,26 @@ fdsc-edc:
               mountPath: /signing-key-raw
             - name: signing-key
               mountPath: /signing-key
+        # tracing: copy the OpenTelemetry Java agent JAR from the
+        # pinned upstream image into the shared `otel-agent` volume so
+        # the main container can attach it via `JAVA_TOOL_OPTIONS`.
+        - name: otel-agent-init
+          image: "ghcr.io/open-telemetry/opentelemetry-java-instrumentation/autoinstrumentation-java:2.11.0"
+          imagePullPolicy: IfNotPresent
+          command:
+            - cp
+            - /javaagent.jar
+            - /otel-agent/opentelemetry-javaagent.jar
+          securityContext:
+            runAsNonRoot: true
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - name: otel-agent
+              mountPath: /otel-agent
       ## cp resource requests and limits, we leave the default empty to make that a concious choice by the user.
       ## for the autoscaling to make sense, you should configure this.
       # resources:
