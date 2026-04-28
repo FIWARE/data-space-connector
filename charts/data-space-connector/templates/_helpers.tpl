@@ -276,3 +276,40 @@ Usage (from values tooling, not from a template):
   value: {{ $protocol | quote }}
 {{- end -}}
 {{- end -}}
+
+{{/*
+Render the OpenTelemetry environment-variable block as a YAML list for
+the `tm-forum-api` subchart. tm-forum-api is a Java application that
+supports the standard `OTEL_*` SDK environment variables. Because
+tm-forum-api is a third-party subchart whose templates are not owned by
+this umbrella chart, the env vars must live in the static `values.yaml`
+under `tm-forum-api.defaultConfig.additionalEnvVars`.
+
+This helper exists as a *reference implementation* so operators and CI
+scripts can generate the correct env-var block dynamically. For example,
+to produce the block and inspect it during development:
+
+  helm template . --show-only templates/_helpers.tpl \
+    --set tracing.enabled=true \
+    -x <(echo '{{- include "dsc.otel.tmForumApi.envList" . -}}')
+
+The output is a list of standard `OTEL_*` `name:` / `value:` entries
+suitable for appending to `defaultConfig.additionalEnvVars`.
+
+Usage (from values tooling, not from a template):
+  {{- include "dsc.otel.tmForumApi.envList" . }}
+*/}}
+{{- define "dsc.otel.tmForumApi.envList" -}}
+{{- $tracing := .Values.tracing | default dict -}}
+{{- $tmfTracing := (index .Values "tm-forum-api").tracing | default dict -}}
+{{- $enabled := get $tmfTracing "enabled" -}}
+{{- if kindIs "invalid" $enabled -}}
+{{- $enabled = get $tracing "enabled" -}}
+{{- end -}}
+{{- if $enabled -}}
+{{- $serviceName := default "tm-forum-api" (get $tmfTracing "serviceName") -}}
+- name: OTEL_SDK_DISABLED
+  value: "false"
+{{- include "dsc.otel.env" (dict "ctx" . "service" $serviceName "enabled" true) }}
+{{- end -}}
+{{- end -}}
