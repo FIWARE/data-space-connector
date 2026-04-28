@@ -1249,6 +1249,27 @@ tm-forum-api:
   # -- All TM Forum APIs in a single deployment, using the all-in-one image. This is recommended for testing and development, but not for production use. When set to false, every API will be deployed separately, allowing for more flexibility and scalability.
   allInOne:
     enabled: false
+
+  # -- distributed-tracing configuration for the tm-forum-api subchart.
+  # tm-forum-api is a Java application that supports the standard
+  # OpenTelemetry SDK environment variables. Because tm-forum-api is a
+  # third-party subchart whose templates are not owned by this umbrella
+  # chart, tracing is wired through the subchart's
+  # `defaultConfig.additionalEnvVars` extension point. The SDK disable
+  # flag (`OTEL_SDK_DISABLED`) is set to `true` by default so tracing has
+  # no runtime effect until explicitly enabled. To activate tracing,
+  # override the env vars below (or pass
+  # `--set tm-forum-api.defaultConfig.additionalEnvVars[4].value=false`)
+  # together with `--set tracing.enabled=true`.
+  tracing:
+    # -- toggle OpenTelemetry tracing on the tm-forum-api workload. Leave
+    # unset (default) to inherit `tracing.enabled` from the global
+    # block; set to `true` / `false` to override.
+    enabled:
+    # -- logical service name exposed as `OTEL_SERVICE_NAME` and recorded
+    # as the service identity on every span emitted by tm-forum-api.
+    serviceName: tm-forum-api
+
   ## configuration to be used by every api-deployment if nothing specific is provided.
   defaultConfig:
     # --  ngsi-ld broker connection information
@@ -1265,6 +1286,37 @@ tm-forum-api:
         value: ","
       - name: GENERAL_ENCLOSEQUERY
         value: "false"
+      # -- OpenTelemetry SDK disable flag. Set to "false" to enable
+      # tracing. When "true" the OTEL SDK is completely deactivated so
+      # the remaining OTEL_* vars below are inert.
+      - name: OTEL_SDK_DISABLED
+        value: "true"
+      # -- OTEL service name. Override via
+      # `tm-forum-api.tracing.serviceName`.
+      - name: OTEL_SERVICE_NAME
+        value: "tm-forum-api"
+      # -- OTLP endpoint. Adjust to match your release name or external
+      # collector.
+      - name: OTEL_EXPORTER_OTLP_ENDPOINT
+        value: ""
+      # -- OTLP protocol (`grpc` | `http/protobuf`).
+      - name: OTEL_EXPORTER_OTLP_PROTOCOL
+        value: "grpc"
+      # -- trace sampler name.
+      - name: OTEL_TRACES_SAMPLER
+        value: "parentbased_traceidratio"
+      # -- trace sampler argument (sampling probability).
+      - name: OTEL_TRACES_SAMPLER_ARG
+        value: "1.0"
+      # -- propagators for distributed context propagation.
+      - name: OTEL_PROPAGATORS
+        value: "tracecontext,baggage"
+      # -- disable metrics exporter (traces-only configuration).
+      - name: OTEL_METRICS_EXPORTER
+        value: "none"
+      # -- disable logs exporter (traces-only configuration).
+      - name: OTEL_LOGS_EXPORTER
+        value: "none"
   # enable the api proxy
   apiProxy:
     enabled: true
