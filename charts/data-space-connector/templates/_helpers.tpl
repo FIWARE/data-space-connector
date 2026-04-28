@@ -232,3 +232,47 @@ Usage (from values tooling, not from a template):
 {{- include "dsc.otel.env" (dict "ctx" . "service" $serviceName "enabled" true) }}
 {{- end -}}
 {{- end -}}
+
+{{/*
+Render the OpenTelemetry environment-variable block as a YAML list for
+the `scorpio` subchart. Because scorpio is a Quarkus application, it
+uses `QUARKUS_OTEL_*` configuration properties rather than the standard
+`OTEL_*` SDK env vars. The helper reads the global `tracing` block and
+the per-component `scorpio.tracing` overrides.
+
+This helper exists as a *reference implementation* so operators and CI
+scripts can generate the correct env-var block dynamically. For example,
+to produce the block and inspect it during development:
+
+  helm template . --show-only templates/_helpers.tpl \
+    --set tracing.enabled=true \
+    -x <(echo '{{- include "dsc.otel.scorpio.envList" . -}}')
+
+The output is a list of Quarkus-specific `name:` / `value:` entries that
+map to the standard OpenTelemetry SDK configuration.
+
+Usage (from values tooling, not from a template):
+  {{- include "dsc.otel.scorpio.envList" . }}
+*/}}
+{{- define "dsc.otel.scorpio.envList" -}}
+{{- $tracing := .Values.tracing | default dict -}}
+{{- $scorpioTracing := .Values.scorpio.tracing | default dict -}}
+{{- $enabled := get $scorpioTracing "enabled" -}}
+{{- if kindIs "invalid" $enabled -}}
+{{- $enabled = get $tracing "enabled" -}}
+{{- end -}}
+{{- if $enabled -}}
+{{- $serviceName := default "scorpio" (get $scorpioTracing "serviceName") -}}
+{{- $exporter := get $tracing "exporter" | default dict -}}
+{{- $otlp := get $exporter "otlp" | default dict -}}
+{{- $protocol := get $otlp "protocol" | default "grpc" -}}
+- name: QUARKUS_OTEL_ENABLED
+  value: "true"
+- name: QUARKUS_OTEL_EXPORTER_OTLP_TRACES_ENDPOINT
+  value: {{ include "dsc.otel.endpoint" . | quote }}
+- name: QUARKUS_OTEL_SERVICE_NAME
+  value: {{ $serviceName | quote }}
+- name: QUARKUS_OTEL_EXPORTER_OTLP_TRACES_PROTOCOL
+  value: {{ $protocol | quote }}
+{{- end -}}
+{{- end -}}

@@ -246,6 +246,54 @@ scorpio:
         name: scorpio-registration
         defaultMode: 0755
 
+  # -- distributed-tracing configuration for the scorpio subchart.
+  # Scorpio is a Quarkus application with native OpenTelemetry support.
+  # Because scorpio is a third-party subchart whose templates are not
+  # owned by this umbrella chart, tracing is wired through the subchart's
+  # `additionalEnvVars` extension point rather than conditional template
+  # blocks. The Quarkus OTEL runtime gate (`QUARKUS_OTEL_ENABLED`) is set
+  # to `false` by default so tracing has no runtime effect until
+  # explicitly enabled. To activate tracing, override the env vars below
+  # (or pass `--set scorpio.additionalEnvVars[0].value=true`) together
+  # with `--set tracing.enabled=true`.
+  tracing:
+    # -- toggle OpenTelemetry tracing on the scorpio workload. Leave
+    # unset (default) to inherit `tracing.enabled` from the global
+    # block; set to `true` / `false` to override.
+    enabled:
+    # -- logical service name exposed as `QUARKUS_OTEL_SERVICE_NAME` and
+    # recorded as the service identity on every span emitted by scorpio.
+    serviceName: scorpio
+  # -- additional environment variables for the scorpio container.
+  # The Quarkus OpenTelemetry vars below are included by default with
+  # `QUARKUS_OTEL_ENABLED=false` so the runtime skips OTEL
+  # initialisation. When overriding, include all entries below to keep
+  # tracing functional (adjust the endpoint to match your release name
+  # or external collector):
+  #   - name: QUARKUS_OTEL_ENABLED
+  #     value: "true"
+  #   - name: QUARKUS_OTEL_EXPORTER_OTLP_TRACES_ENDPOINT
+  #     value: "http://<release>-opentelemetry-collector:4317"
+  #   - name: QUARKUS_OTEL_EXPORTER_OTLP_TRACES_PROTOCOL
+  #     value: "grpc"
+  #   - name: QUARKUS_OTEL_SERVICE_NAME
+  #     value: "scorpio"
+  additionalEnvVars:
+    # -- Quarkus OTEL runtime gate. Set to "true" to enable tracing.
+    - name: QUARKUS_OTEL_ENABLED
+      value: "false"
+    # -- OTLP traces endpoint. Adjust to match your release name or
+    # external collector.
+    - name: QUARKUS_OTEL_EXPORTER_OTLP_TRACES_ENDPOINT
+      value: ""
+    # -- OTLP protocol (`grpc` | `http/protobuf`).
+    - name: QUARKUS_OTEL_EXPORTER_OTLP_TRACES_PROTOCOL
+      value: "grpc"
+    # -- Quarkus OTEL service name. Override via
+    # `scorpio.tracing.serviceName`.
+    - name: QUARKUS_OTEL_SERVICE_NAME
+      value: "scorpio"
+
 # -- configuration to issue credentials, using a did:elsi
 elsi:
   # -- should a did:elsi be used
