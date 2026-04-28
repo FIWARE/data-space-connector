@@ -184,6 +184,19 @@ Usage:
 {{- end -}}
 
 {{/*
+Name of the ConfigMap that carries the OTEL tracing env vars for the
+Keycloak StatefulSet. Used by the `keycloak-tracing-cm.yaml` template
+and referenced from the umbrella chart's `keycloak.extraEnvVarsCM`
+value (which the Bitnami chart processes through `tpl`).
+
+Usage (in templates):
+  {{ include "dsc.otel.keycloak.cmName" . }}
+*/}}
+{{- define "dsc.otel.keycloak.cmName" -}}
+{{- printf "%s-keycloak-tracing" .Release.Name -}}
+{{- end -}}
+
+{{/*
 Render the OpenTelemetry environment-variable block as a YAML list for
 the `fdsc-edc` subchart. Because fdsc-edc is a third-party subchart
 whose templates are not owned by this umbrella chart, the env vars

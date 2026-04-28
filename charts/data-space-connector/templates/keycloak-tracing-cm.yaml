@@ -1,0 +1,75 @@
+{{- if .Values.keycloak.enabled }}
+{{- /*
+ConfigMap providing OpenTelemetry tracing environment variables for the
+Keycloak StatefulSet. The Bitnami Keycloak subchart references this
+ConfigMap via the `extraEnvVarsCM` value hook, which injects every key
+as an environment variable through `envFrom.configMapRef`.
+
+When tracing is disabled the ConfigMap is created but contains no data
+entries, so no environment variables are added to the container and the
+runtime behaviour is unchanged.
+
+The tracing gate follows the same inheritance pattern used by other
+first-party workloads: an explicit `keycloak.tracing.enabled` value
+takes precedence; otherwise the component inherits the global
+`tracing.enabled` toggle.
+*/ -}}
+{{- $keycloakTracing := .Values.keycloak.tracing | default dict -}}
+{{- $otelEnabled := (.Values.tracing | default dict).enabled | default false -}}
+{{- $kcOverride := get $keycloakTracing "enabled" -}}
+{{- if not (kindIs "invalid" $kcOverride) -}}
+{{-   $otelEnabled = $kcOverride -}}
+{{- end -}}
+{{- if kindIs "invalid" $otelEnabled -}}{{- $otelEnabled = false -}}{{- end -}}
+{{- $serviceName := default "keycloak" (get $keycloakTracing "serviceName") -}}
+{{- $tracing := .Values.tracing | default dict -}}
+{{- $exporter := get $tracing "exporter" | default dict -}}
+{{- $otlp := get $exporter "otlp" | default dict -}}
+{{- $protocol := get $otlp "protocol" | default "grpc" -}}
+{{- $insecure := get $otlp "insecure" -}}
+{{- if kindIs "invalid" $insecure -}}{{- $insecure = true -}}{{- end -}}
+{{- $sampler := get $tracing "sampler" | default "parentbased_traceidratio" -}}
+{{- $samplerArg := get $tracing "samplerArg" | default "1.0" -}}
+{{- $propagators := get $tracing "propagators" | default "tracecontext,baggage" -}}
+#################################################################################
+  #  Copyright (c) 2025 Cofinity-X
+  #  Copyright (c) 2025 Contributors to the Eclipse Foundation
+  #
+  #  See the NOTICE file(s) distributed with this work for additional
+  #  information regarding copyright ownership.
+  #
+  #  This program and the accompanying materials are made available under the
+  #  terms of the Apache License, Version 2.0 which is available at
+  #  https://www.apache.org/licenses/LICENSE-2.0.
+  #
+  #  Unless required by applicable law or agreed to in writing, software
+  #  distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+  #  WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+  #  License for the specific language governing permissions and limitations
+  #  under the License.
+  #
+  #  SPDX-License-Identifier: Apache-2.0
+  #################################################################################
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "dsc.otel.keycloak.cmName" . }}
+  namespace: {{ .Release.Namespace | default "default" | quote }}
+  labels:
+    {{- include "dsc.labels" . | nindent 4 }}
+{{- if $otelEnabled }}
+data:
+  # Keycloak 25+ native OpenTelemetry support toggle
+  KC_TRACING_ENABLED: "true"
+  OTEL_SERVICE_NAME: {{ $serviceName | quote }}
+  OTEL_EXPORTER_OTLP_ENDPOINT: {{ include "dsc.otel.endpoint" . | quote }}
+  OTEL_EXPORTER_OTLP_PROTOCOL: {{ $protocol | quote }}
+  OTEL_EXPORTER_OTLP_INSECURE: {{ ternary "true" "false" $insecure | quote }}
+  OTEL_TRACES_SAMPLER: {{ $sampler | quote }}
+  OTEL_TRACES_SAMPLER_ARG: {{ $samplerArg | quote }}
+  OTEL_PROPAGATORS: {{ $propagators | quote }}
+  OTEL_RESOURCE_ATTRIBUTES: {{ include "dsc.otel.resourceAttributes" (dict "ctx" . "service" $serviceName) | quote }}
+  OTEL_METRICS_EXPORTER: "none"
+  OTEL_LOGS_EXPORTER: "none"
+{{- end }}
+{{- end }}
