@@ -379,8 +379,6 @@ decentralizedIam:
               verifier:3000: 1
             type: roundrobin
           plugins:
-            cors:
-              allow_origins: "*"
             proxy-rewrite:
               uri: /services/data-service/.well-known/openid-configuration
         - uri: /.well-known/openid-configuration
