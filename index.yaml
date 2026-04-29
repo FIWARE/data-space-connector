@@ -2,6 +2,72 @@ apiVersion: v1
 entries:
   data-space-connector:
   - apiVersion: v2
+    created: "2026-04-29T12:58:11.005493579Z"
+    dependencies:
+    - alias: decentralizedIam
+      condition: decentralizedIam.enabled
+      name: decentralized-iam
+      repository: https://fiware.github.io/decentralized-iam
+      version: 2.0.5
+    - alias: scorpio
+      condition: scorpio.enabled
+      name: scorpio-broker-aaio
+      repository: https://fiware.github.io/helm-charts
+      version: 0.4.12
+    - condition: keycloak.enabled
+      name: keycloak
+      repository: oci://registry-1.docker.io/bitnamicharts
+      version: 25.2.0
+    - condition: tm-forum-api.enabled
+      name: tm-forum-api
+      repository: https://fiware.github.io/helm-charts
+      version: 0.16.10
+    - condition: contract-management.enabled
+      name: contract-management
+      repository: https://fiware.github.io/helm-charts
+      version: 3.5.22
+    - alias: marketplace
+      condition: marketplace.enabled
+      name: business-api-ecosystem
+      repository: https://fiware.github.io/helm-charts
+      version: 0.11.26
+    - alias: mongo-operator
+      condition: mongo-operator.enabled
+      name: community-operator
+      repository: https://mongodb.github.io/helm-charts
+      version: 0.13.0
+    - condition: fdsc-edc.enabled
+      name: fdsc-edc
+      repository: https://fiware.github.io/helm-charts
+      version: 0.1.8
+    - alias: vault
+      condition: vault.enabled
+      name: vault
+      repository: https://helm.releases.hashicorp.com
+      version: 0.29.1
+    - condition: fdsc-dashboard.enabled
+      name: fdsc-dashboard
+      repository: https://fiware.github.io/helm-charts
+      version: 0.3.0
+    - alias: did
+      condition: did.enabled
+      name: did-helper
+      repository: https://fiware.github.io/helm-charts
+      version: 0.1.15
+    - alias: cert-manager
+      condition: cert-manager.enabled
+      name: cert-manager
+      repository: https://charts.jetstack.io
+      version: 1.20.0
+    description: Umbrella Chart for the FIWARE Data Space Connector, combining all
+      essential parts to be used by a participant.
+    digest: 56cee0a7a7f50c72d6e166582105db641b9b40fb22f3eb6127cdf3c3cd1ca4e5
+    name: data-space-connector
+    type: application
+    urls:
+    - https://github.com/FIWARE/data-space-connector/releases/download/data-space-connector-9.0.2/data-space-connector-9.0.2.tgz
+    version: 9.0.2
+  - apiVersion: v2
     created: "2026-04-22T10:54:44.026476951Z"
     dependencies:
     - alias: decentralizedIam
@@ -1968,4 +2034,4 @@ entries:
     urls:
     - https://github.com/FIWARE/data-space-connector/releases/download/trust-anchor-0.2.0/trust-anchor-0.2.0.tgz
     version: 0.2.0
-generated: "2026-04-22T10:54:44.02671346Z"
+generated: "2026-04-29T12:58:11.005733611Z"
