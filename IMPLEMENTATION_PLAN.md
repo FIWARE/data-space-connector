@@ -369,18 +369,26 @@ Goal: make the change discoverable and version-compliant.
 
 Files affected:
 - `charts/data-space-connector/Chart.yaml`
-- `doc/release-notes/` (new file, following existing naming)
-- `README.md` (values table regeneration if helm-docs is used)
+- `doc/release-notes/9-x.md` (appended to existing 9.x release notes)
+- `README.md` (release information section updated)
 
 Actions:
-- Bump `version` in `Chart.yaml` to the next minor (e.g. `9.1.0`) as
-  per semver since functionality is additive.
-- Add a release note entry under `doc/release-notes/` following the
-  style of existing entries (scan latest file for conventions).
-- Regenerate the values table in the top-level `README.md` via
-  `helm-docs` (keep diff minimal – run only inside the chart path).
+- Bump `version` in `Chart.yaml` to `9.1.0` (semver minor for additive
+  functionality).
+- Append an "OpenTelemetry Distributed Tracing (9.1.0)" section to the
+  existing `doc/release-notes/9-x.md` following the convention of one
+  file per major version series.
+- Add a 9.1.0 sub-bullet under the 9.x.x release entry in the top-level
+  `README.md` Release Information section.
+
+Note: The plan originally called for helm-docs regeneration, but the
+repository does not use helm-docs and has no chart-level README.md with
+a generated values table. Instead, the new `tracing.*` keys are
+documented directly in the release notes and in the observability guide
+created in Step 11.
 
 Acceptance criteria:
-- `Chart.yaml` version matches the release note filename.
-- `README.md` values table reflects the new `tracing.*` keys.
-- No existing release notes are modified.
+- `Chart.yaml` version is `9.1.0`.
+- `doc/release-notes/9-x.md` contains the new tracing section.
+- Top-level `README.md` references the new version.
+- No existing release notes sections are modified.

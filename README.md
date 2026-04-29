@@ -96,6 +96,7 @@ contain breaking changes. Important releases will be listed below, with addition
 
 * [8.x.x](doc/release-notes/8-x.md) - Update the FIWARE Data Space Connector from 7.x.x to 8.x.x
 * [9.x.x](doc/release-notes/9-x.md) - :warning: **Breaking changes** - Upgrade the FIWARE Data Space Connector from 8.5.2 to 9.x.x
+  * **9.1.0** — Optional end-to-end [OpenTelemetry distributed tracing](doc/deployment-integration/observability/README.md) across all DSC components
 
 
 ## Components
