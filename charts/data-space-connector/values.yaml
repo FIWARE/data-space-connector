@@ -2214,5 +2214,5 @@ certManagerResources:
 extraManifests: []
 
 # -- dashboard for operating the FIWARE Data Space Connector
-dashboard:
-  enabled: true
+fdsc-dashboard:
+  enabled: false
