@@ -9,6 +9,37 @@ issuance:
 decentralizedIam:
   enabled: true
 
+  # -- forward-compatible tracing passthrough for the decentralizedIam subchart.
+  # These values mirror the global `tracing.*` block and are passed as-is to
+  # the upstream vc-authentication / FIWARE IAM chart. The upstream chart does
+  # not yet consume them; once it lands native OpenTelemetry support (see
+  # https://github.com/FIWARE/vc-authentication), these values will flow
+  # through without further umbrella-chart modifications. Until then, the
+  # passthrough has no runtime effect.
+  tracing:
+    # -- toggle OpenTelemetry tracing for the decentralizedIam components.
+    # Leave unset (default) to inherit `tracing.enabled` from the global
+    # block; set to `true` / `false` to override independently.
+    enabled:
+    # -- OTLP exporter configuration passed through to the IAM subchart.
+    exporter:
+      otlp:
+        # -- OTLP endpoint for the IAM components. Defaults to the global
+        # `tracing.exporter.otlp.endpoint` value when empty.
+        endpoint: ""
+        # -- OTLP protocol: `grpc` (default, port 4317) or `http/protobuf`
+        # (port 4318).
+        protocol: "grpc"
+        # -- disable TLS on the OTLP exporter.
+        insecure: true
+    # -- trace sampler name, mirrored from the global `tracing.sampler`.
+    sampler: "parentbased_traceidratio"
+    # -- argument for the sampler, mirrored from the global
+    # `tracing.samplerArg`.
+    samplerArg: "1.0"
+    # -- propagators list, mirrored from the global `tracing.propagators`.
+    propagators: "tracecontext,baggage"
+
   # -- configuration for the vc-authentication to be deployed as part of the connector, see https://github.com/FIWARE/vc-authentication/tree/master
   vcAuthentication:
     ## Usage of the postgres-operator - see https://github.com/zalando/postgres-operator
