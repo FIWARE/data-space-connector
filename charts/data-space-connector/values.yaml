@@ -1650,6 +1650,25 @@ marketplace:
   # (e.g. via External Secrets Operator, Sealed Secrets, SOPS, or an out-of-band `kubectl apply`).
   generatePasswords: true
 
+  # -- distributed-tracing configuration for the marketplace workload.
+  # Because marketplace (business-api-ecosystem) is a third-party subchart
+  # whose templates are not owned by this umbrella chart, tracing is wired
+  # through the subchart's extension points (`extraEnvVars` for the Charging
+  # Backend and `additionalEnvVars` for the Logic Proxy). The SDK disable
+  # flag (`OTEL_SDK_DISABLED`) is set to `true` by default so tracing has no
+  # runtime effect until explicitly enabled. To activate tracing, override
+  # the env vars below (or pass
+  # `--set marketplace.bizEcosystemChargingBackend.extraEnvVars[0].value=false`)
+  # together with `--set tracing.enabled=true`.
+  tracing:
+    # -- toggle OpenTelemetry tracing on the marketplace workload.
+    # Leave unset (default) to inherit `tracing.enabled` from the global
+    # block; set to `true` / `false` to override.
+    enabled:
+    # -- logical service name exposed as `OTEL_SERVICE_NAME` and recorded
+    # as the service identity on every span emitted by marketplace components.
+    serviceName: marketplace
+
   # -- should the tmforum deployed together with the marketplace?
   bizEcosystemApis:
     enabled: false
@@ -1717,6 +1736,48 @@ marketplace:
       user: charging
       secretKey: password
 
+    # -- additional environment variables for the Charging Backend container.
+    # The OpenTelemetry SDK vars below are included by default with
+    # `OTEL_SDK_DISABLED=true` so the SDK skips initialisation. When
+    # overriding, include all entries below to keep tracing functional
+    # (adjust the endpoint to match your release name or external collector):
+    #   - name: OTEL_SDK_DISABLED
+    #     value: "false"
+    #   - name: OTEL_EXPORTER_OTLP_ENDPOINT
+    #     value: "http://<release>-opentelemetry-collector:4317"
+    extraEnvVars:
+      # -- OpenTelemetry SDK disable flag. Set to "false" to enable
+      # tracing. When "true" the OTEL SDK is completely deactivated so
+      # the remaining OTEL_* vars below are inert.
+      - name: OTEL_SDK_DISABLED
+        value: "true"
+      # -- OTEL service name. Override via
+      # `marketplace.tracing.serviceName`.
+      - name: OTEL_SERVICE_NAME
+        value: "marketplace"
+      # -- OTLP endpoint. Adjust to match your release name or external
+      # collector.
+      - name: OTEL_EXPORTER_OTLP_ENDPOINT
+        value: ""
+      # -- OTLP protocol (`grpc` | `http/protobuf`).
+      - name: OTEL_EXPORTER_OTLP_PROTOCOL
+        value: "grpc"
+      # -- trace sampler name.
+      - name: OTEL_TRACES_SAMPLER
+        value: "parentbased_traceidratio"
+      # -- trace sampler argument (sampling probability).
+      - name: OTEL_TRACES_SAMPLER_ARG
+        value: "1.0"
+      # -- propagators for distributed context propagation.
+      - name: OTEL_PROPAGATORS
+        value: "tracecontext,baggage"
+      # -- disable metrics exporter (traces-only configuration).
+      - name: OTEL_METRICS_EXPORTER
+        value: "none"
+      # -- disable logs exporter (traces-only configuration).
+      - name: OTEL_LOGS_EXPORTER
+        value: "none"
+
   oauth:
     provider: "vc"
 
@@ -1749,6 +1810,48 @@ marketplace:
       enabled: true
     initContainers: false
     propagateToken: true
+
+    # -- additional environment variables for the Logic Proxy container.
+    # The OpenTelemetry SDK vars below are included by default with
+    # `OTEL_SDK_DISABLED=true` so the SDK skips initialisation. When
+    # overriding, include all entries below to keep tracing functional
+    # (adjust the endpoint to match your release name or external collector):
+    #   - name: OTEL_SDK_DISABLED
+    #     value: "false"
+    #   - name: OTEL_EXPORTER_OTLP_ENDPOINT
+    #     value: "http://<release>-opentelemetry-collector:4317"
+    additionalEnvVars:
+      # -- OpenTelemetry SDK disable flag. Set to "false" to enable
+      # tracing. When "true" the OTEL SDK is completely deactivated so
+      # the remaining OTEL_* vars below are inert.
+      - name: OTEL_SDK_DISABLED
+        value: "true"
+      # -- OTEL service name. Override via
+      # `marketplace.tracing.serviceName`.
+      - name: OTEL_SERVICE_NAME
+        value: "marketplace"
+      # -- OTLP endpoint. Adjust to match your release name or external
+      # collector.
+      - name: OTEL_EXPORTER_OTLP_ENDPOINT
+        value: ""
+      # -- OTLP protocol (`grpc` | `http/protobuf`).
+      - name: OTEL_EXPORTER_OTLP_PROTOCOL
+        value: "grpc"
+      # -- trace sampler name.
+      - name: OTEL_TRACES_SAMPLER
+        value: "parentbased_traceidratio"
+      # -- trace sampler argument (sampling probability).
+      - name: OTEL_TRACES_SAMPLER_ARG
+        value: "1.0"
+      # -- propagators for distributed context propagation.
+      - name: OTEL_PROPAGATORS
+        value: "tracecontext,baggage"
+      # -- disable metrics exporter (traces-only configuration).
+      - name: OTEL_METRICS_EXPORTER
+        value: "none"
+      # -- disable logs exporter (traces-only configuration).
+      - name: OTEL_LOGS_EXPORTER
+        value: "none"
 
 fdsc-edc:
   # -- distributed-tracing configuration for the fdsc-edc workload.
