@@ -1,0 +1,469 @@
+# Observability: Distributed Tracing with OpenTelemetry
+
+The FIWARE Data Space Connector ships with built-in support for
+[OpenTelemetry](https://opentelemetry.io/) (OTEL) distributed tracing.
+When enabled, every instrumented component exports trace spans through the
+[OTLP](https://opentelemetry.io/docs/specs/otlp/) protocol to an
+in-cluster OpenTelemetry Collector, which can then forward them to any
+OTLP-compatible backend (Jaeger, Grafana Tempo, Honeycomb, etc.).
+
+Tracing is **disabled by default** and is strictly opt-in. Enabling it
+adds no external network dependencies unless you configure a remote
+backend exporter.
+
+---
+
+<!-- ToC created with: https://github.com/thlorenz/doctoc -->
+<!-- Update with: doctoc README.md -->
+
+<details>
+<summary><strong>Table of Contents</strong></summary>
+
+- [Architecture](#architecture)
+- [Enabling Tracing](#enabling-tracing)
+  - [Minimal Setup](#minimal-setup)
+  - [Connecting an External Backend](#connecting-an-external-backend)
+  - [TLS and Authentication](#tls-and-authentication)
+- [Configuration Reference](#configuration-reference)
+  - [Global Tracing Values](#global-tracing-values)
+  - [OpenTelemetry Collector Values](#opentelemetry-collector-values)
+- [Per-Component Notes](#per-component-notes)
+  - [IdentityHub (Java Agent)](#identityhub-java-agent)
+  - [fdsc-edc (Java Agent)](#fdsc-edc-java-agent)
+  - [Keycloak (Native OTEL)](#keycloak-native-otel)
+  - [Scorpio (Quarkus Native OTEL)](#scorpio-quarkus-native-otel)
+  - [tm-forum-api, contract-management, marketplace (Subchart extraEnv)](#tm-forum-api-contract-management-marketplace-subchart-extraenv)
+  - [decentralizedIam (Forward-Compatible Passthrough)](#decentralizediam-forward-compatible-passthrough)
+- [Excluded Components](#excluded-components)
+- [Troubleshooting](#troubleshooting)
+
+</details>
+
+---
+
+
+## Architecture
+
+The following diagram shows how trace data flows from the instrumented
+workloads through the OpenTelemetry Collector to an external backend:
+
+```mermaid
+flowchart LR
+    subgraph DSC["FIWARE Data Space Connector (Kubernetes)"]
+        IH["IdentityHub<br/>(Java Agent)"]
+        EDC["fdsc-edc<br/>(Java Agent)"]
+        KC["Keycloak<br/>(Native OTEL)"]
+        SC["Scorpio<br/>(Quarkus OTEL)"]
+        TMF["tm-forum-api<br/>(OTEL env)"]
+        CM["contract-mgmt<br/>(OTEL env)"]
+        MKT["marketplace<br/>(OTEL env)"]
+        COLL["OpenTelemetry<br/>Collector"]
+    end
+
+    BE["External Backend<br/>(Tempo / Jaeger / Honeycomb)"]
+
+    IH  -->|OTLP gRPC :4317| COLL
+    EDC -->|OTLP gRPC :4317| COLL
+    KC  -->|OTLP gRPC :4317| COLL
+    SC  -->|OTLP gRPC :4317| COLL
+    TMF -->|OTLP gRPC :4317| COLL
+    CM  -->|OTLP gRPC :4317| COLL
+    MKT -->|OTLP gRPC :4317| COLL
+
+    COLL -->|OTLP| BE
+```
+
+**Key points:**
+
+- All workloads send spans to the **in-cluster Collector** via OTLP gRPC
+  (port 4317) or OTLP HTTP (port 4318).
+- The Collector batches, enriches, and forwards spans to the configured
+  backend exporter(s).
+- By default, the Collector only writes to the `debug` exporter (stdout
+  logs), so **no external calls are made** until you add a backend.
+
+
+## Enabling Tracing
+
+### Minimal Setup
+
+Enable tracing globally with a single value:
+
+```bash
+helm upgrade --install my-dsc dsc/data-space-connector \
+  --set tracing.enabled=true
+```
+
+Or in your `values.yaml`:
+
+```yaml
+tracing:
+  enabled: true
+```
+
+This will:
+1. Deploy the OpenTelemetry Collector as a Deployment inside the release.
+2. Inject `OTEL_*` environment variables into all instrumented workloads.
+3. Attach the Java agent init container to IdentityHub and fdsc-edc.
+4. Route all spans to the Collector's `debug` exporter (visible in
+   Collector pod logs).
+
+### Connecting an External Backend
+
+To forward spans to an external OTLP-compatible backend, override the
+Collector's exporter configuration. The `values.yaml` ships with
+commented-out examples for Grafana Tempo, Jaeger, and Honeycomb.
+
+**Example: Grafana Tempo**
+
+```yaml
+tracing:
+  enabled: true
+
+opentelemetry-collector:
+  config:
+    exporters:
+      otlp/tempo:
+        endpoint: "tempo.monitoring.svc.cluster.local:4317"
+        tls:
+          insecure: true
+    service:
+      pipelines:
+        traces:
+          exporters:
+            - debug
+            - otlp/tempo
+```
+
+**Example: Jaeger (OTLP native, v1.35+)**
+
+```yaml
+tracing:
+  enabled: true
+
+opentelemetry-collector:
+  config:
+    exporters:
+      otlp/jaeger:
+        endpoint: "jaeger-collector.monitoring.svc.cluster.local:4317"
+        tls:
+          insecure: true
+    service:
+      pipelines:
+        traces:
+          exporters:
+            - debug
+            - otlp/jaeger
+```
+
+**Example: Honeycomb (SaaS)**
+
+```yaml
+tracing:
+  enabled: true
+
+opentelemetry-collector:
+  config:
+    exporters:
+      otlp/honeycomb:
+        endpoint: "api.honeycomb.io:443"
+        headers:
+          x-honeycomb-team: "${env:HONEYCOMB_API_KEY}"
+    service:
+      pipelines:
+        traces:
+          exporters:
+            - otlp/honeycomb
+```
+
+### TLS and Authentication
+
+For production backends that require TLS:
+
+```yaml
+opentelemetry-collector:
+  config:
+    exporters:
+      otlp/secure-backend:
+        endpoint: "traces.example.com:443"
+        tls:
+          insecure: false
+          # Optionally provide custom CA:
+          # ca_file: /etc/otel/ca.pem
+        headers:
+          Authorization: "Bearer <token>"
+```
+
+To inject secrets as environment variables into the Collector pod, use the
+upstream chart's `extraEnvs` mechanism:
+
+```yaml
+opentelemetry-collector:
+  extraEnvs:
+    - name: HONEYCOMB_API_KEY
+      valueFrom:
+        secretKeyRef:
+          name: honeycomb-credentials
+          key: api-key
+```
+
+
+## Configuration Reference
+
+### Global Tracing Values
+
+These values live under the `tracing:` key in `values.yaml` and control
+the `OTEL_*` environment variables injected into every instrumented
+workload.
+
+| Value | Default | Description |
+|---|---|---|
+| `tracing.enabled` | `false` | Global on/off switch for distributed tracing. |
+| `tracing.exporter.otlp.endpoint` | `""` (auto-computed) | OTLP endpoint URL. When empty, defaults to `http://<release>-opentelemetry-collector:4317`. |
+| `tracing.exporter.otlp.protocol` | `"grpc"` | OTLP transport protocol (`grpc` or `http/protobuf`). |
+| `tracing.exporter.otlp.insecure` | `true` | Disable TLS verification for the OTLP exporter (in-cluster default). |
+| `tracing.sampler` | `"parentbased_traceidratio"` | Trace sampler strategy. |
+| `tracing.samplerArg` | `"1.0"` | Sampler argument (e.g., `"0.1"` for 10% sampling). |
+| `tracing.resourceAttributes` | `{}` | Map of extra OTEL resource attributes added to every span. |
+| `tracing.propagators` | `"tracecontext,baggage"` | Context propagation formats (W3C Trace Context + Baggage by default). |
+
+### OpenTelemetry Collector Values
+
+These values live under the `opentelemetry-collector:` key. The full
+upstream chart documentation is at
+[open-telemetry/opentelemetry-helm-charts](https://github.com/open-telemetry/opentelemetry-helm-charts/tree/main/charts/opentelemetry-collector).
+
+| Value | Default | Description |
+|---|---|---|
+| `opentelemetry-collector.enabled` | `false` | Deploy the bundled Collector (automatically set to `true` when `tracing.enabled=true`). |
+| `opentelemetry-collector.mode` | `"deployment"` | Collector topology (`deployment`, `daemonset`, or `statefulset`). |
+| `opentelemetry-collector.replicaCount` | `1` | Number of Collector replicas. |
+| `opentelemetry-collector.resources.requests.cpu` | `"100m"` | CPU request. |
+| `opentelemetry-collector.resources.requests.memory` | `"128Mi"` | Memory request. |
+| `opentelemetry-collector.resources.limits.cpu` | `"500m"` | CPU limit. |
+| `opentelemetry-collector.resources.limits.memory` | `"512Mi"` | Memory limit. |
+
+The default pipeline processes spans through:
+`memory_limiter` -> `resource` -> `batch` -> `debug` exporter.
+
+
+## Per-Component Notes
+
+Each component integrates with OpenTelemetry differently depending on its
+runtime and the extension points available in its subchart.
+
+### IdentityHub (Java Agent)
+
+**Instrumentation method:** OpenTelemetry Java auto-instrumentation agent
+injected via init container.
+
+When `tracing.enabled=true` and `identityhub.tracing.javaagent.enabled=true`
+(the default), an init container copies the Java agent JAR into a shared
+`emptyDir` volume (`otel-agent`), which is mounted read-only into the
+IdentityHub container. The agent is activated by appending
+`-javaagent:/otel-agent/opentelemetry-javaagent.jar` to `JAVA_TOOL_OPTIONS`.
+
+**Per-component overrides:**
+
+```yaml
+identityhub:
+  tracing:
+    # enabled: true  # inherits from tracing.enabled
+    serviceName: "identityhub"
+    javaagent:
+      enabled: true
+      image: "ghcr.io/open-telemetry/opentelemetry-java-instrumentation/autoinstrumentation-java:2.11.0"
+      pullPolicy: "IfNotPresent"
+```
+
+### fdsc-edc (Java Agent)
+
+**Instrumentation method:** Same Java auto-instrumentation agent as
+IdentityHub, injected via the subchart's `initContainers`,
+`additionalVolumes`, and `additionalVolumeMounts` extension points.
+
+**Per-component overrides:**
+
+```yaml
+fdsc-edc:
+  tracing:
+    # enabled: true  # inherits from tracing.enabled
+    serviceName: "fdsc-edc"
+    javaagent:
+      enabled: true
+      image: "ghcr.io/open-telemetry/opentelemetry-java-instrumentation/autoinstrumentation-java:2.11.0"
+      pullPolicy: "IfNotPresent"
+```
+
+> **Note:** If you override `fdsc-edc.common.additonalEnvVars`,
+> `initContainers`, or volume settings, you must manually merge the
+> tracing entries. See the inline comments in `values.yaml` for a
+> ready-to-copy snippet.
+
+### Keycloak (Native OTEL)
+
+**Instrumentation method:** Keycloak 25+ has built-in OpenTelemetry
+support activated by setting `KC_TRACING_ENABLED=true`.
+
+When tracing is enabled, the umbrella chart injects `KC_TRACING_ENABLED`
+plus the standard `OTEL_*` environment variables through the Keycloak
+subchart's `extraEnvVars` hook.
+
+**Per-component overrides:**
+
+```yaml
+keycloak:
+  tracing:
+    # enabled: true  # inherits from tracing.enabled
+    serviceName: "keycloak"
+```
+
+### Scorpio (Quarkus Native OTEL)
+
+**Instrumentation method:** Scorpio runs on Quarkus, which provides
+native OTEL integration via `QUARKUS_OTEL_*` environment variables.
+
+When tracing is enabled, the umbrella chart injects Quarkus-specific
+variables (`QUARKUS_OTEL_ENABLED=true`,
+`QUARKUS_OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`, etc.) through the
+Scorpio subchart's `env` hook.
+
+**Per-component overrides:**
+
+```yaml
+scorpio:
+  tracing:
+    # enabled: true  # inherits from tracing.enabled
+    serviceName: "scorpio"
+```
+
+### tm-forum-api, contract-management, marketplace (Subchart extraEnv)
+
+**Instrumentation method:** Standard `OTEL_*` environment variables
+injected through each subchart's `extraEnv` or `additionalEnvVars` hook.
+
+These components receive the same set of environment variables:
+`OTEL_SERVICE_NAME`, `OTEL_EXPORTER_OTLP_ENDPOINT`,
+`OTEL_EXPORTER_OTLP_PROTOCOL`, `OTEL_TRACES_SAMPLER`,
+`OTEL_TRACES_SAMPLER_ARG`, `OTEL_PROPAGATORS`,
+`OTEL_RESOURCE_ATTRIBUTES`, `OTEL_METRICS_EXPORTER=none`, and
+`OTEL_LOGS_EXPORTER=none`.
+
+**Per-component overrides:**
+
+```yaml
+tm-forum-api:
+  tracing:
+    serviceName: "tm-forum-api"
+
+contract-management:
+  tracing:
+    serviceName: "contract-management"
+
+marketplace:
+  tracing:
+    serviceName: "marketplace"
+```
+
+### decentralizedIam (Forward-Compatible Passthrough)
+
+The `decentralizedIam` subchart receives a `tracing` passthrough block
+that mirrors the global `tracing.*` values. This is a **forward-compatible**
+mechanism: if the upstream decentralizedIam chart adds direct tracing
+support in the future, the values will flow through automatically without
+changes to the umbrella chart.
+
+Currently, the passthrough has no effect on the rendered manifests unless
+the upstream chart consumes it.
+
+
+## Excluded Components
+
+The following components are **not instrumented** by this tracing
+integration:
+
+| Component | Reason |
+|---|---|
+| **Rainbow** | Slated for removal in a future release. |
+| **Registration jobs** (participant-registration, tmf-registration, dataplane-registration, rainbow-registration) | Short-lived batch jobs that do not benefit from continuous tracing. |
+| **MongoDB** | Database-level tracing is handled by the application drivers, not the server. |
+| **HashiCorp Vault** | Infrastructure component; tracing is configured independently if needed. |
+| **cert-manager** | Cluster-level operator; out of scope for application tracing. |
+
+
+## Troubleshooting
+
+### Verify the Collector is Running
+
+```bash
+kubectl get pods -l app.kubernetes.io/name=opentelemetry-collector
+```
+
+The Collector pod should be in `Running` state. Check its logs for the
+startup message:
+
+```bash
+kubectl logs -l app.kubernetes.io/name=opentelemetry-collector --tail=50
+```
+
+Look for: `"Everything is ready. Begin running and processing data."`
+
+### Verify Spans are Being Received
+
+With the default `debug` exporter, spans appear in the Collector's
+stdout. Increase verbosity for more detail:
+
+```yaml
+opentelemetry-collector:
+  config:
+    exporters:
+      debug:
+        verbosity: "detailed"
+```
+
+### Common Issues
+
+| Symptom | Likely Cause | Fix |
+|---|---|---|
+| No spans in Collector logs | Workload not sending to Collector endpoint | Check that `OTEL_EXPORTER_OTLP_ENDPOINT` is set on the pod: `kubectl exec <pod> -- env \| grep OTEL` |
+| `connection refused` on port 4317 | Collector not deployed or wrong Service name | Verify `tracing.enabled=true` and the Collector Service exists: `kubectl get svc -l app.kubernetes.io/name=opentelemetry-collector` |
+| Java agent not loading | Init container image pull failure | Check init container status: `kubectl describe pod <identityhub-pod>` and verify the image reference in `identityhub.tracing.javaagent.image` |
+| Spans reach Collector but not backend | Exporter misconfigured | Check Collector logs for export errors. Verify the exporter endpoint, TLS settings, and auth headers. |
+| `QUARKUS_OTEL_ENABLED` not taking effect | Scorpio image does not include OTEL extension | Ensure the Scorpio image version includes the `quarkus-opentelemetry` extension. |
+| High memory usage on Collector | Too many spans, batch too large | Tune `batch.send_batch_size` and `memory_limiter.limit_percentage` in the Collector config. |
+| Partial traces (missing spans) | Sampling rate too low or propagation mismatch | Verify `tracing.samplerArg` (set to `"1.0"` for 100%) and `tracing.propagators` matches across all components. |
+
+### Checking OTEL Environment Variables on a Pod
+
+To verify that a specific workload has the correct tracing configuration:
+
+```bash
+# IdentityHub
+kubectl exec deploy/<release>-identityhub -- env | grep OTEL
+
+# Keycloak
+kubectl exec sts/<release>-keycloak -- env | grep -E "OTEL|KC_TRACING"
+
+# Scorpio
+kubectl exec deploy/<release>-scorpio -- env | grep -E "OTEL|QUARKUS_OTEL"
+```
+
+### Reducing Trace Volume in Production
+
+For high-traffic deployments, reduce sampling to avoid overwhelming the
+backend:
+
+```yaml
+tracing:
+  samplerArg: "0.1"   # Sample 10% of traces
+```
+
+Or use the `parentbased_always_off` sampler on specific components while
+keeping the global sampler on:
+
+```yaml
+scorpio:
+  tracing:
+    # Component-level override via subchart env
+    serviceName: "scorpio"
+```

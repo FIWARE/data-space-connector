@@ -92,6 +92,12 @@ The configuration can be found at the
 
 **Note,** that this is currently being reworked and above repository does not contain the latest configuration.
 
+### Observability
+
+Documentation for enabling distributed tracing across the FIWARE DSC using OpenTelemetry, including how to connect external backends (Jaeger, Tempo, Honeycomb) and per-component configuration notes.
+
+* [Distributed Tracing with OpenTelemetry](./deployment-integration/observability/README.md)
+
 ### Integration with AWS Garnet Framework (formerly AWS Smart Territory Framework)
 
 This is an example of a data service provider that is integrated with the 
