@@ -350,3 +350,45 @@ Usage (from values tooling, not from a template):
 {{- include "dsc.otel.env" (dict "ctx" . "service" $serviceName "enabled" true) }}
 {{- end -}}
 {{- end -}}
+
+{{/*
+Render the OpenTelemetry environment-variable block as a YAML list for
+the `marketplace` subchart. The marketplace (business-api-ecosystem) is
+composed of two main components – the Charging Backend (Python/Django)
+and the Logic Proxy (Node.js) – each with its own env-var extension
+point (`extraEnvVars` and `additionalEnvVars` respectively). Both
+components support the standard `OTEL_*` SDK environment variables.
+
+Because marketplace is a third-party subchart whose templates are not
+owned by this umbrella chart, the env vars must live in the static
+`values.yaml` under `marketplace.bizEcosystemChargingBackend.extraEnvVars`
+and `marketplace.bizEcosystemLogicProxy.additionalEnvVars`.
+
+This helper exists as a *reference implementation* so operators and CI
+scripts can generate the correct env-var block dynamically. For example,
+to produce the block and inspect it during development:
+
+  helm template . --show-only templates/_helpers.tpl \
+    --set tracing.enabled=true \
+    -x <(echo '{{- include "dsc.otel.marketplace.envList" . -}}')
+
+The output is a list of standard `OTEL_*` `name:` / `value:` entries
+suitable for appending to the marketplace subcomponent env-var hooks.
+
+Usage (from values tooling, not from a template):
+  {{- include "dsc.otel.marketplace.envList" . }}
+*/}}
+{{- define "dsc.otel.marketplace.envList" -}}
+{{- $tracing := .Values.tracing | default dict -}}
+{{- $mktTracing := .Values.marketplace.tracing | default dict -}}
+{{- $enabled := get $mktTracing "enabled" -}}
+{{- if kindIs "invalid" $enabled -}}
+{{- $enabled = get $tracing "enabled" -}}
+{{- end -}}
+{{- if $enabled -}}
+{{- $serviceName := default "marketplace" (get $mktTracing "serviceName") -}}
+- name: OTEL_SDK_DISABLED
+  value: "false"
+{{- include "dsc.otel.env" (dict "ctx" . "service" $serviceName "enabled" true) }}
+{{- end -}}
+{{- end -}}
