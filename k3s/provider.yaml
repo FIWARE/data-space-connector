@@ -1014,6 +1014,13 @@ keycloak:
       "vc.operator-credential.scope": "OperatorCredential",
       "vc.operator-credential.vct": "OperatorCredential"
     clientRoles: |
+      "did:web:mp-operations.org": [
+        {
+          "name": "admin",
+          "description": "admin role to be used when operating the provider.",
+          "clientRole": true
+        }
+      ],    
       "did:web:fancy-marketplace.biz": [
         {
           "name": "customer",
@@ -1129,6 +1136,29 @@ keycloak:
         "groups": [
             "/consumer"
         ]
+      },
+      {
+        "username": "admin",
+        "enabled": true,
+        "email": "admin@provider.org",
+        "firstName": "Test",
+        "lastName": "Admin",
+        "credentials": [
+          {
+            "type": "password",
+            "value": "test"
+          }
+        ],
+        "clientRoles": {
+          "did:web:mp-operations.org": [
+            "admin"
+          ],
+          "account": [
+            "view-profile",
+            "manage-account"
+          ]
+        },
+        "groups": []
       }
     clientScopes: |
       {
@@ -1253,6 +1283,36 @@ keycloak:
       nodeReRegistrationTimeout: -1
       defaultClientScopes: []
       optionalClientScopes: []
+    - clientId: did:web:mp-operations.org
+      description: Client to connect internal operations services
+      surrogateAuthRequired: false
+      alwaysDisplayInConsole: false
+      clientAuthenticatorType: client-secret
+      defaultRoles: []
+      redirectUris: [
+        "https://dashboard-provider.127.0.0.1.nip.io/callback/keycloak"
+      ]
+      webOrigins: [
+        "https://dashboard-provider.127.0.0.1.nip.io"
+      ]
+      notBefore: 0
+      bearerOnly: false
+      consentRequired: false
+      standardFlowEnabled: true
+      implicitFlowEnabled: false
+      directAccessGrantsEnabled: false
+      serviceAccountsEnabled: false
+      publicClient: true
+      frontchannelLogout: false
+      protocol: openid-connect
+      attributes:
+        client.secret.creation.time: "1675260539"
+      protocolMappers: []
+      authenticationFlowBindingOverrides: {}
+      fullScopeAllowed: true
+      nodeReRegistrationTimeout: -1
+      defaultClientScopes: ["openid", "profile"]
+      optionalClientScopes: []
 
 # helper component to initialize the trusted issuers list
 registration:
@@ -1289,7 +1349,43 @@ credentials:
       format: jwt_vc
       targetFile: membership-credential.jwt
 
+fdsc-dashboard:
+  enabled: true
+  ingress:
+    enabled: true
+    annotations:
+      cert-manager.io/cluster-issuer: "selfsigned-issuer"
+      cert-manager.io/private-key-algorithm: "ECDSA"
+      cert-manager.io/common-name: "dashboard-provider.127.0.0.1.nip.io"
+      cert-manager.io/alt-names: "dashboard-provider.127.0.0.1.nip.io"
+      traefik.ingress.kubernetes.io/router.tls: "true"
 
+    hosts:
+      - host: dashboard-provider.127.0.0.1.nip.io
+        paths:
+          - "/"
+    tls:
+      - secretName: dashboard-provider.127.0.0.1.nip.io-tls
+        hosts:
+          - dashboard-provider.127.0.0.1.nip.io
+  apiUrls:
+    til: http://trusted-issuers-list:8080
+    ccs: http://credentials-config-service:8080
+    odrl: http://odrl-pap:8080
+  auth:
+    config:
+      providers:
+        - id: keycloak
+          displayName: Keycloak
+          issuer: https://keycloak-provider.127.0.0.1.nip.io/realms/test-realm
+          clientId: did:web:mp-operations.org
+          scopes: ["openid", "profile"]
+          rolesClaimPath: "realm_access.roles"
+          roleMapping:
+            fdsc-admin: "admin"
+            fdsc-viewer: "viewer"
+          silentRenew: true
+      
 fdsc-edc:
   enabled: false
 
@@ -1298,3 +1394,4 @@ identityhub:
 
 vault:
   enabled: false
+
