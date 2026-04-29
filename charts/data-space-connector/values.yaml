@@ -2823,11 +2823,10 @@ opentelemetry-collector:
       cpu: 100m
       memory: 128Mi
   # -- collector pipeline configuration. The defaults enable OTLP gRPC
-  # (4317) and HTTP (4318) receivers, a batch + memory_limiter processor
-  # chain, and a `debug` exporter so traces are visible in the collector
-  # logs with zero external dependencies. Step 10 of the tracing roadmap
-  # extends this with commented-out examples for Tempo / Jaeger /
-  # Honeycomb exporters.
+  # (4317) and HTTP (4318) receivers, a batch + memory_limiter + resource
+  # processor chain, and a `debug` exporter so traces are visible in the
+  # collector logs with zero external dependencies. See the commented-out
+  # examples below for connecting to Tempo, Jaeger, or Honeycomb.
   config:
     receivers:
       otlp:
@@ -2837,17 +2836,117 @@ opentelemetry-collector:
           http:
             endpoint: ${env:MY_POD_IP}:4318
     processors:
-      batch: {}
+      # -- batch processor groups spans before export to reduce network
+      # overhead. Defaults are suitable for most workloads.
+      batch:
+        send_batch_size: 512
+        timeout: 5s
+        send_batch_max_size: 1024
+      # -- memory_limiter prevents the collector from consuming unbounded
+      # memory under load. The percentage-based limits adapt to the pod's
+      # memory limit automatically.
       memory_limiter:
         check_interval: 5s
         limit_percentage: 80
         spike_limit_percentage: 25
+      # -- resource processor injects deployment-level attributes into
+      # every span. Add custom attributes here for your organisation.
+      resource:
+        attributes:
+          - key: deployment.environment
+            value: "development"
+            action: upsert
+          - key: service.namespace
+            value: "fiware-dsc"
+            action: upsert
     exporters:
+      # -- debug exporter writes spans to the collector's stdout. Safe
+      # default that works out of the box with no external dependencies.
+      # Set `verbosity: detailed` to see full span payloads.
       debug:
         verbosity: basic
+      ## -------------------------------------------------------------------
+      ## Example: OTLP exporter to an external backend
+      ## Uncomment and configure ONE of the blocks below (or add your own).
+      ## Then add the exporter name to `service.pipelines.traces.exporters`.
+      ## -------------------------------------------------------------------
+      ##
+      ## -- OTLP exporter to Grafana Tempo (gRPC).
+      ## Replace <TEMPO_HOST> with the Tempo distributor address.
+      # otlp/tempo:
+      #   endpoint: "<TEMPO_HOST>:4317"
+      #   tls:
+      #     insecure: true
+      ##
+      ## -- OTLP exporter to a generic Jaeger backend (gRPC).
+      ## Jaeger v2+ supports native OTLP ingestion on port 4317.
+      # otlp/jaeger:
+      #   endpoint: "<JAEGER_HOST>:4317"
+      #   tls:
+      #     insecure: true
+      ##
+      ## -- OTLP exporter to Honeycomb (gRPC with API key header).
+      # otlp/honeycomb:
+      #   endpoint: "api.honeycomb.io:443"
+      #   headers:
+      #     "x-honeycomb-team": "<YOUR_HONEYCOMB_API_KEY>"
+      #     "x-honeycomb-dataset": "fiware-dsc"
     service:
       pipelines:
         traces:
           receivers: [otlp]
-          processors: [memory_limiter, batch]
+          processors: [memory_limiter, resource, batch]
           exporters: [debug]
+          ## To export to a backend, add its exporter name to the list:
+          ## exporters: [debug, otlp/tempo]
+  ## -------------------------------------------------------------------
+  ## Collector configuration examples
+  ## -------------------------------------------------------------------
+  ##
+  ## 1) Point at an external Grafana Tempo instance:
+  ##
+  ##    opentelemetry-collector:
+  ##      enabled: true
+  ##      config:
+  ##        exporters:
+  ##          otlp/tempo:
+  ##            endpoint: "tempo-distributor.monitoring:4317"
+  ##            tls:
+  ##              insecure: true
+  ##        service:
+  ##          pipelines:
+  ##            traces:
+  ##              receivers: [otlp]
+  ##              processors: [memory_limiter, resource, batch]
+  ##              exporters: [debug, otlp/tempo]
+  ##
+  ## 2) Enable the Jaeger receiver (Thrift Compact on port 6831) in
+  ##    addition to OTLP so legacy Jaeger-instrumented services can
+  ##    report traces to the same collector:
+  ##
+  ##    opentelemetry-collector:
+  ##      enabled: true
+  ##      config:
+  ##        receivers:
+  ##          jaeger:
+  ##            protocols:
+  ##              thrift_compact:
+  ##                endpoint: ${env:MY_POD_IP}:6831
+  ##        service:
+  ##          pipelines:
+  ##            traces:
+  ##              receivers: [otlp, jaeger]
+  ##              processors: [memory_limiter, resource, batch]
+  ##              exporters: [debug]
+  ##
+  ## 3) Switch workloads to HTTP/protobuf instead of gRPC:
+  ##
+  ##    tracing:
+  ##      enabled: true
+  ##      exporter:
+  ##        otlp:
+  ##          protocol: "http/protobuf"
+  ##          endpoint: "http://<release>-opentelemetry-collector:4318"
+  ##
+  ##    The collector already listens on both 4317 (gRPC) and 4318 (HTTP)
+  ##    by default, so only the workload-side values need to change.
