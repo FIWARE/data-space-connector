@@ -907,6 +907,27 @@
                         <configuration>
                             <skip>false</skip>
                         </configuration>
+                        <executions>
+                            <!-- Copy gaia-x-only infra (gx-registry + Kubo) into target/k3s so that
+                                 the deploy-phase apply-participants picks them up. This is gated to
+                                 the gaia-x profile so the registry is not deployed in default/local
+                                 stacks. -->
+                            <execution>
+                                <id>copy-resources-gaia-x-infra</id>
+                                <phase>prepare-package</phase>
+                                <goals>
+                                    <goal>copy-resources</goal>
+                                </goals>
+                                <configuration>
+                                    <outputDirectory>${project.build.directory}/k3s/gaia-x-infra</outputDirectory>
+                                    <resources>
+                                        <resource>
+                                            <directory>${main.basedir}/k3s/gaia-x-infra</directory>
+                                        </resource>
+                                    </resources>
+                                </configuration>
+                            </execution>
+                        </executions>
                     </plugin>
                     <!-- render the charts -->
                     <plugin>
