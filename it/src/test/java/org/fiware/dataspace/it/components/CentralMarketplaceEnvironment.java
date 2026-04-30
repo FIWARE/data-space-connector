@@ -29,8 +29,8 @@ public abstract class CentralMarketplaceEnvironment {
     /** Credential configuration ID for the SD-JWT format UserCredential used in central marketplace flows. */
     public static final String USER_SD_CREDENTIAL = "user-sd";
 
-    /** The SD-JWT credential format string. */
-    public static final String SD_JWT_FORMAT = "vc+sd-jwt";
+    /** The SD-JWT credential format string (KC 26.4+ value, see Format enum). */
+    public static final String SD_JWT_FORMAT = "dc+sd-jwt";
 
     /** The credential configuration ID for the provider's LegalPersonCredential. */
     public static final String PROVIDER_USER_CREDENTIAL = "user-credential";

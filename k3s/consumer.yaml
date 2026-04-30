@@ -2,8 +2,6 @@ cert-manager:
   enabled: false
 
 keycloak:
-  metrics:
-    enabled: true
   resources:
     requests:
       cpu: "100m"
@@ -11,15 +9,21 @@ keycloak:
       cpu: "500m"
   ingress:
     enabled: true
-    hostname: keycloak-consumer.127.0.0.1.nip.io
     annotations:
       traefik.ingress.kubernetes.io/router.tls: "true"
       cert-manager.io/cluster-issuer: "selfsigned-issuer"
       cert-manager.io/private-key-algorithm: "ECDSA"
       cert-manager.io/common-name: "keycloak-consumer.127.0.0.1.nip.io"
-    pathType: Prefix
-    tls: true
-  initContainers:
+    hosts:
+      - host: keycloak-consumer.127.0.0.1.nip.io
+        paths:
+          - path: /
+            pathType: Prefix
+    tls:
+      - secretName: keycloak-consumer.127.0.0.1.nip.io-tls
+        hosts:
+          - keycloak-consumer.127.0.0.1.nip.io
+  extraInitContainers:
     - name: prepare-keystore
       image: alpine/openssl:3.5.5
       command: ["/bin/sh", "-c"]
@@ -56,7 +60,7 @@ keycloak:
   extraVolumeMounts:
     - mountPath: /did-material
       name: did-material
-    - mountPath: /opt/bitnami/keycloak/data/import
+    - mountPath: /opt/keycloak/data/import
       name: realms
   extraVolumes:
     - emptyDir: {}
@@ -75,21 +79,9 @@ keycloak:
     keyPassword: "${STORE_PASS}"
     did: did:web:fancy-marketplace.biz
     keyAlgorithm: ES256
+  # extraEnvVars replaces the umbrella list, so KC_HEAP_SIZE has to be repeated here.
+  # STORE_PASS is consumed by the realm.json key-provider config (see signingKey above).
   extraEnvVars:
-    - name: KEYCLOAK_EXTRA_ARGS
-      value: "--import-realm"
-    - name: KC_FEATURES
-      value: "oid4vc-vci"
-    # enable health endpoints
-    - name: KC_HEALTH_ENABLED
-      value: "true"
-    # keycloak admin password
-    - name: KC_ADMIN_PASSWORD
-      valueFrom:
-        secretKeyRef:
-          name: issuance-secret
-          key: keycloak-admin
-    # set in accordance with the memory requests, will result in OOM otherwise
     - name: KC_HEAP_SIZE
       value: "1024m"
     - name: "STORE_PASS"
@@ -101,53 +93,307 @@ keycloak:
     frontendUrl: https://keycloak-consumer.127.0.0.1.nip.io
     import: true
     name: test-realm
-    attributes: |
-      "issuerDid": "did:web:fancy-marketplace.biz",
-      "vc.user-sd.credential_signing_alg_values_supported": "ES256",
-      "vc.user-sd.credential_build_config.signing_algorithm": "ES256",
-      "vc.user-sd.credential_build_config.token_jws_type": "vc+sd-jwt",
-      "vc.user-sd.credential_build_config.proof_types_supported": "{\"jwt\":{\"proof_signing_alg_values_supported\":[\"ES256\"]}}",
-      "vc.user-sd.format": "vc+sd-jwt",
-      "vc.user-sd.scope": "LegalPersonCredential",
-      "vc.user-sd.vct": "LegalPersonCredential",
-      "vc.user-sd.credential_build_config.visible_claims": "roles,email",
-      "vc.user-sd.credential_build_config.decoys": "0",
-      "vc.user-credential.credential_signing_alg_values_supported": "ES256",
-      "vc.user-credential.credential_build_config.signing_algorithm": "ES256",
-      "vc.user-credential.credential_build_config.token_jws_type": "JWT",
-      "vc.user-credential.credential_build_config.proof_types_supported": "{\"jwt\":{\"proof_signing_alg_values_supported\":[\"ES256\"]}}",
-      "vc.user-credential.format": "jwt_vc",
-      "vc.user-credential.scope": "UserCredential",
-      "vc.user-credential.vct": "UserCredential",
-      "vc.legal-person-credential.credential_signing_alg_values_supported": "ES256",
-      "vc.legal-person-credential.credential_build_config.signing_algorithm": "ES256",
-      "vc.legal-person-credential.credential_build_config.token_jws_type": "JWT",
-      "vc.legal-person-credential.credential_build_config.proof_types_supported": "{\"jwt\":{\"proof_signing_alg_values_supported\":[\"ES256\"]}}",
-      "vc.legal-person-credential.format": "jwt_vc",
-      "vc.legal-person-credential.scope": "LegalPersonCredential",
-      "vc.legal-person-credential.vct": "LegalPersonCredential",
-      "vc.membership-credential.credential_signing_alg_values_supported": "ES256",
-      "vc.membership-credential.credential_build_config.signing_algorithm": "ES256",
-      "vc.membership-credential.credential_build_config.token_jws_type": "JWT",
-      "vc.membership-credential.format": "jwt_vc",
-      "vc.membership-credential.scope": "MembershipCredential",
-      "vc.membership-credential.vct": "MembershipCredential",
-      "vc.marketplace-credential.credential_signing_alg_values_supported": "ES256",
-      "vc.marketplace-credential.credential_build_config.signing_algorithm": "ES256",
-      "vc.marketplace-credential.credential_build_config.token_jws_type": "JWT",
-      "vc.marketplace-credential.format": "jwt_vc",
-      "vc.marketplace-credential.scope": "MarketplaceCredential",
-      "vc.marketplace-credential.vct": "MarketplaceCredential",
-      "vc.verifiable-credential.format": "vc+sd-jwt",
-      "vc.verifiable-credential.scope": "VerifiableCredential",
-      "vc.verifiable-credential.vct": "VerifiableCredential",
-      "vc.operator-credential.credential_signing_alg_values_supported": "ES256",
-      "vc.operator-credential.credential_build_config.signing_algorithm": "ES256",
-      "vc.operator-credential.credential_build_config.token_jws_type": "JWT",
-      "vc.operator-credential.credential_build_config.proof_types_supported": "{\"jwt\":{\"proof_signing_alg_values_supported\":[\"ES256\"]}}",
-      "vc.operator-credential.format": "jwt_vc",
-      "vc.operator-credential.scope": "OperatorCredential",
-      "vc.operator-credential.vct": "OperatorCredential"
+    attributes:
+      issuerDid: "did:web:fancy-marketplace.biz"
+    # -- VCs migrated to the post-KC 26.4 OID4VC model: each entry renders one
+    # ClientScope with protocol "oid4vc". Attributes are attached to the scope
+    # itself (auto-prefixed with `vc.`); protocolMappers belong to the scope
+    # (no more legacy `supportedCredentialTypes` filtering — every mapper
+    # listed under a VC applies only to that VC's scope).
+    verifiableCredentials:
+      user-sd:
+        attributes:
+          format: "dc+sd-jwt"
+          verifiable_credential_type: "LegalPersonCredential"
+          credential_signing_alg: "ES256"
+          credential_build_config.token_jws_type: "dc+sd-jwt"
+          # KC 26.6.1 SD-JWT red list (iss, iat, nbf, exp, cnf, vct, status) MUST
+          # stay disclosed; including them avoids `UndisclosedClaims contains red
+          # listed claim names`. roles/email are the domain-specific visible claims.
+          credential_build_config.sd_jwt.visible_claims: "iss,iat,nbf,exp,cnf,vct,status,roles,email"
+          sd_jwt.number_of_decoys: "0"
+          binding_required: "true"
+          binding_required_proof_types: "jwt"
+        protocolMappers:
+          - name: context-mapper-usd
+            protocol: oid4vc
+            protocolMapper: oid4vc-context-mapper
+            config:
+              context: https://www.w3.org/2018/credentials/v1
+          - name: email-mapper-usd
+            protocol: oid4vc
+            protocolMapper: oid4vc-user-attribute-mapper
+            config:
+              claim.name: email
+              userAttribute: email
+          - name: firstName-mapper-usd
+            protocol: oid4vc
+            protocolMapper: oid4vc-user-attribute-mapper
+            config:
+              claim.name: firstName
+              userAttribute: firstName
+          - name: lastName-mapper-usd
+            protocol: oid4vc
+            protocolMapper: oid4vc-user-attribute-mapper
+            config:
+              claim.name: lastName
+              userAttribute: lastName
+          # Single target-role-mapper per VC (KC 26.4+ does not allow two mappers
+          # with the same claim.name in the same scope). user-sd is presented to
+          # the consumer-local marketplace (organization_did=fancy-marketplace.biz),
+          # so the role array carries that target.
+          - name: role-mapper-marketplace-usd
+            protocol: oid4vc
+            protocolMapper: oid4vc-target-role-mapper
+            config:
+              claim.name: roles
+              clientId: did:web:fancy-marketplace.biz
+      user-credential:
+        attributes:
+          format: "jwt_vc_json"
+          verifiable_credential_type: "UserCredential"
+          credential_signing_alg: "ES256"
+          credential_build_config.token_jws_type: "JWT"
+          binding_required: "true"
+          binding_required_proof_types: "jwt"
+        protocolMappers:
+          - name: context-mapper-uc
+            protocol: oid4vc
+            protocolMapper: oid4vc-context-mapper
+            config:
+              context: https://www.w3.org/2018/credentials/v1
+          - name: email-mapper-uc
+            protocol: oid4vc
+            protocolMapper: oid4vc-user-attribute-mapper
+            config:
+              claim.name: email
+              userAttribute: email
+          - name: firstName-mapper-uc
+            protocol: oid4vc
+            protocolMapper: oid4vc-user-attribute-mapper
+            config:
+              claim.name: firstName
+              userAttribute: firstName
+          - name: lastName-mapper-uc
+            protocol: oid4vc
+            protocolMapper: oid4vc-user-attribute-mapper
+            config:
+              claim.name: lastName
+              userAttribute: lastName
+          - name: role-mapper-marketplace-uc
+            protocol: oid4vc
+            protocolMapper: oid4vc-target-role-mapper
+            config:
+              claim.name: roles
+              clientId: did:web:fancy-marketplace.biz
+      legal-person-credential:
+        attributes:
+          format: "jwt_vc_json"
+          verifiable_credential_type: "LegalPersonCredential"
+          credential_signing_alg: "ES256"
+          credential_build_config.token_jws_type: "JWT"
+          binding_required: "true"
+          binding_required_proof_types: "jwt"
+        protocolMappers:
+          - name: context-mapper-lpc
+            protocol: oid4vc
+            protocolMapper: oid4vc-context-mapper
+            config:
+              context: https://www.w3.org/2018/credentials/v1
+          - name: email-mapper-lpc
+            protocol: oid4vc
+            protocolMapper: oid4vc-user-attribute-mapper
+            config:
+              claim.name: email
+              userAttribute: email
+          - name: firstName-mapper-lpc
+            protocol: oid4vc
+            protocolMapper: oid4vc-user-attribute-mapper
+            config:
+              claim.name: firstName
+              userAttribute: firstName
+          - name: lastName-mapper-lpc
+            protocol: oid4vc
+            protocolMapper: oid4vc-user-attribute-mapper
+            config:
+              claim.name: lastName
+              userAttribute: lastName
+          - name: subject-mapper-lpc
+            protocol: oid4vc
+            protocolMapper: oid4vc-static-claim-mapper
+            config:
+              claim.name: subject
+              staticValue: did:key:zDnaeiVpxCT7ARwqLndbWiCeGG2YZXvLfWFs1cGPgKUe8GPLe
+          - name: street-mapper-lpc
+            protocol: oid4vc
+            protocolMapper: oid4vc-static-claim-mapper
+            config:
+              claim.name: street
+              staticValue: Main Street
+          - name: streetNumber-mapper-lpc
+            protocol: oid4vc
+            protocolMapper: oid4vc-static-claim-mapper
+            config:
+              claim.name: streetNumber
+              staticValue: "10"
+          - name: city-mapper-lpc
+            protocol: oid4vc
+            protocolMapper: oid4vc-static-claim-mapper
+            config:
+              claim.name: city
+              staticValue: Berlin
+          - name: region-mapper-lpc
+            protocol: oid4vc
+            protocolMapper: oid4vc-static-claim-mapper
+            config:
+              claim.name: region
+              staticValue: Berlin
+          - name: country-mapper-lpc
+            protocol: oid4vc
+            protocolMapper: oid4vc-static-claim-mapper
+            config:
+              claim.name: country
+              staticValue: DE
+          - name: zipcode-mapper-lpc
+            protocol: oid4vc
+            protocolMapper: oid4vc-static-claim-mapper
+            config:
+              claim.name: zipcode
+              staticValue: "10115"
+          - name: role-mapper-marketplace-lpc
+            protocol: oid4vc
+            protocolMapper: oid4vc-target-role-mapper
+            config:
+              claim.name: roles
+              clientId: did:web:fancy-marketplace.biz
+      membership-credential:
+        attributes:
+          format: "jwt_vc_json"
+          verifiable_credential_type: "MembershipCredential"
+          credential_signing_alg: "ES256"
+          credential_build_config.token_jws_type: "JWT"
+        protocolMappers:
+          - name: context-mapper-mc
+            protocol: oid4vc
+            protocolMapper: oid4vc-context-mapper
+            config:
+              context: https://www.w3.org/2018/credentials/v1
+          - name: id-mapper-mc
+            protocol: oid4vc
+            protocolMapper: oid4vc-static-claim-mapper
+            config:
+              claim.name: id
+              staticValue: did:web:fancy-marketplace.biz
+          - name: membership-type-mapper-mc
+            protocol: oid4vc
+            protocolMapper: oid4vc-static-claim-mapper
+            config:
+              claim.name: membershipType
+              staticValue: FullMember
+      marketplace-credential:
+        attributes:
+          format: "jwt_vc_json"
+          verifiable_credential_type: "MarketplaceCredential"
+          credential_signing_alg: "ES256"
+          credential_build_config.token_jws_type: "JWT"
+        protocolMappers:
+          - name: context-mapper-mpc
+            protocol: oid4vc
+            protocolMapper: oid4vc-context-mapper
+            config:
+              context: https://www.w3.org/2018/credentials/v1
+          - name: email-mapper-mpc
+            protocol: oid4vc
+            protocolMapper: oid4vc-user-attribute-mapper
+            config:
+              claim.name: email
+              userAttribute: email
+          - name: firstName-mapper-mpc
+            protocol: oid4vc
+            protocolMapper: oid4vc-user-attribute-mapper
+            config:
+              claim.name: firstName
+              userAttribute: firstName
+          - name: lastName-mapper-mpc
+            protocol: oid4vc
+            protocolMapper: oid4vc-user-attribute-mapper
+            config:
+              claim.name: lastName
+              userAttribute: lastName
+          - name: role-mapper-marketplace-mpc
+            protocol: oid4vc
+            protocolMapper: oid4vc-target-role-mapper
+            config:
+              claim.name: roles
+              clientId: did:web:fancy-marketplace.biz
+      verifiable-credential:
+        attributes:
+          format: "dc+sd-jwt"
+          verifiable_credential_type: "VerifiableCredential"
+        protocolMappers:
+          - name: context-mapper-vc
+            protocol: oid4vc
+            protocolMapper: oid4vc-context-mapper
+            config:
+              context: https://www.w3.org/2018/credentials/v1
+          - name: email-mapper-vc
+            protocol: oid4vc
+            protocolMapper: oid4vc-user-attribute-mapper
+            config:
+              claim.name: email
+              userAttribute: email
+          - name: firstName-mapper-vc
+            protocol: oid4vc
+            protocolMapper: oid4vc-user-attribute-mapper
+            config:
+              claim.name: firstName
+              userAttribute: firstName
+          - name: role-mapper-marketplace-vc
+            protocol: oid4vc
+            protocolMapper: oid4vc-target-role-mapper
+            config:
+              claim.name: roles
+              clientId: did:web:fancy-marketplace.biz
+      operator-credential:
+        attributes:
+          format: "jwt_vc_json"
+          verifiable_credential_type: "OperatorCredential"
+          credential_signing_alg: "ES256"
+          credential_build_config.token_jws_type: "JWT"
+          binding_required: "true"
+          binding_required_proof_types: "jwt"
+        protocolMappers:
+          - name: context-mapper-oc
+            protocol: oid4vc
+            protocolMapper: oid4vc-context-mapper
+            config:
+              context: https://www.w3.org/2018/credentials/v1
+          - name: email-mapper-oc
+            protocol: oid4vc
+            protocolMapper: oid4vc-user-attribute-mapper
+            config:
+              claim.name: email
+              userAttribute: email
+          - name: firstName-mapper-oc
+            protocol: oid4vc
+            protocolMapper: oid4vc-user-attribute-mapper
+            config:
+              claim.name: firstName
+              userAttribute: firstName
+          - name: lastName-mapper-oc
+            protocol: oid4vc
+            protocolMapper: oid4vc-user-attribute-mapper
+            config:
+              claim.name: lastName
+              userAttribute: lastName
+          # operator-credential is presented to the provider's data service
+          # (organization_did=mp-operations.org), so the role array carries that target.
+          - name: role-mapper-oc
+            protocol: oid4vc
+            protocolMapper: oid4vc-target-role-mapper
+            config:
+              claim.name: roles
+              clientId: did:web:mp-operations.org
     clientRoles: |
       "did:web:mp-operations.org": [
         {
@@ -163,6 +409,11 @@ keycloak:
         {
           "name": "OPERATOR",
           "description": "Is allowed to operate clusters.",
+          "clientRole": true
+        },
+        {
+          "name": "REPRESENTATIVE",
+          "description": "Is allowed to register.",
           "clientRole": true
         }],
       "did:web:fancy-marketplace.biz": [
@@ -324,386 +575,6 @@ keycloak:
             "/consumer"
         ]
       }
-    clientScopes: |
-      {
-        "name": "LegalPersonCredential",
-        "description": "OIDC4VC Scope, that adds all properties required for a user.",
-        "protocol": "openid-connect",
-        "attributes": {
-          "include.in.token.scope": "false",
-          "display.on.consent.screen": "false"
-        },
-        "protocolMappers": [
-          {
-            "name": "context-mapper",
-            "protocol": "oid4vc",
-            "protocolMapper": "oid4vc-context-mapper",
-            "config": {
-              "context": "https://www.w3.org/2018/credentials/v1",
-              "supportedCredentialTypes": "VerifiableCredential,LegalPersonCredential,OperatorCredential,UserCredential"
-            }
-          },
-          {
-            "name": "email-mapper",
-            "protocol": "oid4vc",
-            "protocolMapper": "oid4vc-user-attribute-mapper",
-            "config": {
-              "subjectProperty": "email",
-              "userAttribute": "email",
-              "supportedCredentialTypes": "LegalPersonCredential,OperatorCredential,UserCredential"
-            }
-          },
-          {
-            "name": "firstName-mapper",
-            "protocol": "oid4vc",
-            "protocolMapper": "oid4vc-user-attribute-mapper",
-            "config": {
-              "subjectProperty": "firstName",
-              "userAttribute": "firstName",
-              "supportedCredentialTypes": "LegalPersonCredential,OperatorCredential,UserCredential"
-            }
-          },
-          {
-            "name": "subject-mapper",
-            "protocol": "oid4vc",
-            "protocolMapper": "oid4vc-static-claim-mapper",
-            "config": {
-              "subjectProperty": "subject",
-              "staticValue": "did:key:zDnaeiVpxCT7ARwqLndbWiCeGG2YZXvLfWFs1cGPgKUe8GPLe",
-              "supportedCredentialTypes": "LegalPersonCredential"
-            }
-          },
-          {
-            "name": "street-mapper",
-            "protocol": "oid4vc",
-            "protocolMapper": "oid4vc-static-claim-mapper",
-            "config": {
-              "subjectProperty": "street",
-              "staticValue": "Main Street",
-              "supportedCredentialTypes": "LegalPersonCredential"
-            }
-          },
-          {
-            "name": "lastName-mapper",
-            "protocol": "oid4vc",
-            "protocolMapper": "oid4vc-user-attribute-mapper",
-            "config": {
-              "subjectProperty": "lastName",
-              "userAttribute": "lastName",
-              "supportedCredentialTypes": "LegalPersonCredential,OperatorCredential"
-            }
-          },
-          {
-            "name": "role-mapper",
-            "protocol": "oid4vc",
-            "protocolMapper": "oid4vc-target-role-mapper",
-            "config": {
-              "subjectProperty": "roles",
-              "clientId": "did:web:mp-operations.org",
-              "supportedCredentialTypes": "LegalPersonCredential,OperatorCredential,UserCredential"
-            }
-          },
-          {
-            "name": "role-mapper-marketplace",
-            "protocol": "oid4vc",
-            "protocolMapper": "oid4vc-target-role-mapper",
-            "config": {
-              "subjectProperty": "roles",
-              "clientId": "did:web:fancy-marketplace.biz",
-              "supportedCredentialTypes": "LegalPersonCredential,OperatorCredential,UserCredential"
-            }
-          },
-          {
-            "name": "streetNumber-mapper",
-            "protocol": "oid4vc",
-            "protocolMapper": "oid4vc-static-claim-mapper",
-            "config": {
-              "subjectProperty": "streetNumber",
-              "staticValue": "10",
-              "supportedCredentialTypes": "LegalPersonCredential"
-            }
-          },
-          {
-            "name": "city-mapper",
-            "protocol": "oid4vc",
-            "protocolMapper": "oid4vc-static-claim-mapper",
-            "config": {
-              "subjectProperty": "city",
-              "staticValue": "Dresden",
-              "supportedCredentialTypes": "LegalPersonCredential"
-            }
-          },
-          {
-            "name": "region-mapper",
-            "protocol": "oid4vc",
-            "protocolMapper": "oid4vc-static-claim-mapper",
-            "config": {
-              "subjectProperty": "region",
-              "staticValue": "Saxony",
-              "supportedCredentialTypes": "LegalPersonCredential"
-            }
-          },
-          {
-            "name": "country-mapper",
-            "protocol": "oid4vc",
-            "protocolMapper": "oid4vc-static-claim-mapper",
-            "config": {
-              "subjectProperty": "country",
-              "staticValue": "Germany",
-              "supportedCredentialTypes": "LegalPersonCredential"
-            }
-          },
-          {
-            "name": "zipcode-mapper",
-            "protocol": "oid4vc",
-            "protocolMapper": "oid4vc-static-claim-mapper",
-            "config": {
-              "subjectProperty": "zipcode",
-              "staticValue": "01169",
-              "supportedCredentialTypes": "LegalPersonCredential"
-            }
-          }
-        ]
-      },
-      {
-        "name": "UserCredential",
-        "description": "OIDC4VC Scope, that adds all properties required for a user.",
-        "protocol": "openid-connect",
-        "attributes": {},
-        "protocolMappers": [
-          {
-            "name": "context-mapper-uc",
-            "protocol": "oid4vc",
-            "protocolMapper": "oid4vc-context-mapper",
-            "config": {
-              "context": "https://www.w3.org/2018/credentials/v1",
-              "supportedCredentialTypes": "UserCredential"
-            }
-          },
-          {
-            "name": "email-mapper-uc",
-            "protocol": "oid4vc",
-            "protocolMapper": "oid4vc-user-attribute-mapper",
-            "config": {
-              "subjectProperty": "email",
-              "userAttribute": "email",
-              "supportedCredentialTypes": "UserCredential"
-            }
-          },
-          {
-            "name": "firstName-mapper-uc",
-            "protocol": "oid4vc",
-            "protocolMapper": "oid4vc-user-attribute-mapper",
-            "config": {
-              "subjectProperty": "firstName",
-              "userAttribute": "firstName",
-              "supportedCredentialTypes": "UserCredential"
-            }
-          },
-          {
-            "name": "subject-mapper-uc",
-            "protocol": "oid4vc",
-            "protocolMapper": "oid4vc-static-claim-mapper",
-            "config": {
-              "subjectProperty": "id",
-              "staticValue": "did:web:fancy-marketplace.biz",
-              "supportedCredentialTypes": "UserCredential"
-            }
-          },
-          {
-            "name": "street-mapper-uc",
-            "protocol": "oid4vc",
-            "protocolMapper": "oid4vc-static-claim-mapper",
-            "config": {
-              "subjectProperty": "street",
-              "staticValue": "Main Street",
-              "supportedCredentialTypes": "UserCredential"
-            }
-          },
-          {
-            "name": "lastName-mapper-uc",
-            "protocol": "oid4vc",
-            "protocolMapper": "oid4vc-user-attribute-mapper",
-            "config": {
-              "subjectProperty": "lastName",
-              "userAttribute": "lastName",
-              "supportedCredentialTypes": "UserCredential"
-            }
-          },
-          {
-            "name": "role-mapper-uc",
-            "protocol": "oid4vc",
-            "protocolMapper": "oid4vc-target-role-mapper",
-            "config": {
-              "subjectProperty": "roles",
-              "clientId": "did:web:mp-operations.org",
-              "supportedCredentialTypes": "UserCredential"
-            }
-          },
-          {
-            "name": "streetNumber-mapper-uc",
-            "protocol": "oid4vc",
-            "protocolMapper": "oid4vc-static-claim-mapper",
-            "config": {
-              "subjectProperty": "streetNumber",
-              "staticValue": "10",
-              "supportedCredentialTypes": "UserCredential"
-            }
-          },
-          {
-            "name": "city-mapper-uc",
-            "protocol": "oid4vc",
-            "protocolMapper": "oid4vc-static-claim-mapper",
-            "config": {
-              "subjectProperty": "city",
-              "staticValue": "Dresden",
-              "supportedCredentialTypes": "UserCredential"
-            }
-          },
-          {
-            "name": "region-mapper-uc",
-            "protocol": "oid4vc",
-            "protocolMapper": "oid4vc-static-claim-mapper",
-            "config": {
-              "subjectProperty": "region",
-              "staticValue": "Saxony",
-              "supportedCredentialTypes": "UserCredential"
-            }
-          },
-          {
-            "name": "country-mapper-uc",
-            "protocol": "oid4vc",
-            "protocolMapper": "oid4vc-static-claim-mapper",
-            "config": {
-              "subjectProperty": "country",
-              "staticValue": "Germany",
-              "supportedCredentialTypes": "UserCredential"
-            }
-          },
-          {
-            "name": "zipcode-mapper-uc",
-            "protocol": "oid4vc",
-            "protocolMapper": "oid4vc-static-claim-mapper",
-            "config": {
-              "subjectProperty": "zipcode",
-              "staticValue": "01169",
-              "supportedCredentialTypes": "UserCredential"
-            }
-          }
-        ]
-      },
-      {
-        "name": "OperatorCredential",
-        "description": "OIDC4VC Scope, that adds all properties required for a user.",
-        "protocol": "openid-connect",
-        "attributes": {},
-        "protocolMappers": [
-          {
-            "name": "context-mapper-oc",
-            "protocol": "oid4vc",
-            "protocolMapper": "oid4vc-context-mapper",
-            "config": {
-              "context": "https://www.w3.org/2018/credentials/v1",
-              "supportedCredentialTypes": "VerifiableCredential,LegalPersonCredential,OperatorCredential,UserCredential"
-            }
-          },
-          {
-            "name": "email-mapper-oc",
-            "protocol": "oid4vc",
-            "protocolMapper": "oid4vc-user-attribute-mapper",
-            "config": {
-              "subjectProperty": "email",
-              "userAttribute": "email",
-              "supportedCredentialTypes": "LegalPersonCredential,OperatorCredential,UserCredential"
-            }
-          },
-          {
-            "name": "firstName-mapper-oc",
-            "protocol": "oid4vc",
-            "protocolMapper": "oid4vc-user-attribute-mapper",
-            "config": {
-              "subjectProperty": "firstName",
-              "userAttribute": "firstName",
-              "supportedCredentialTypes": "LegalPersonCredential,OperatorCredential,UserCredential"
-            }
-          },
-          {
-            "name": "role-mapper-oc",
-            "protocol": "oid4vc",
-            "protocolMapper": "oid4vc-target-role-mapper",
-            "config": {
-              "subjectProperty": "roles",
-              "clientId": "did:web:mp-operations.org",
-              "supportedCredentialTypes": "LegalPersonCredential,OperatorCredential,UserCredential"
-            }
-          },
-          {
-            "name": "subject-mapper-uc",
-            "protocol": "oid4vc",
-            "protocolMapper": "oid4vc-static-claim-mapper",
-            "config": {
-              "subjectProperty": "subject",
-              "staticValue": "did:key:zDnaeiVpxCT7ARwqLndbWiCeGG2YZXvLfWFs1cGPgKUe8GPLe",
-              "supportedCredentialTypes": "UserCredential"
-            }
-          }
-        ]
-      },
-      {
-        "name": "MarketplaceCredential",
-        "description": "Scope to produce a credential intended for m2m-access as a marketplace.",
-        "protocol": "openid-connect",
-        "attributes": {},
-        "protocolMappers": [
-          {
-            "name": "context-mapper-oc",
-            "protocol": "oid4vc",
-            "protocolMapper": "oid4vc-context-mapper",
-            "config": {
-              "context": "https://www.w3.org/2018/credentials/v1",
-              "supportedCredentialTypes": "MarketplaceCredential"
-            }
-          }
-        ]
-      },
-      {
-        "name": "MembershipCredential",
-        "description": "Scope to produce a credential intended for m2m-access as a marketplace.",
-        "protocol": "openid-connect",
-        "attributes": {},
-        "protocolMappers": [
-          {
-            "name": "context-mapper-mc",
-            "protocol": "oid4vc",
-            "protocolMapper": "oid4vc-context-mapper",
-            "config": {
-              "context": "https://www.w3.org/2018/credentials/v1",
-              "supportedCredentialTypes": "MembershipCredential"
-            }
-          },
-          {
-            "name": "subject-mapper-mc-id",
-            "protocol": "oid4vc",
-            "protocolMapper": "oid4vc-static-claim-mapper",
-            "config": {
-              "subjectProperty": "id",
-              "staticValue": "did:web:fancy-marketplace.biz",
-              "supportedCredentialTypes": "MembershipCredential"
-            }
-          },
-          {
-            "name": "subject-mapper-mc-type",
-            "protocol": "oid4vc",
-            "protocolMapper": "oid4vc-static-claim-mapper",
-            "config": {
-              "subjectProperty": "membershipType",
-              "staticValue": "FullMember",
-              "supportedCredentialTypes": "MembershipCredential"
-            }
-          }
-        ]
-      }
-
     clients:
       - clientId: did:web:mp-operations.org
         enabled: true

@@ -1,14 +1,24 @@
 {{/*
+Resolve the issuer DID from elsi.did / keycloak.issuerDid / "${DID}" fallback.
+Used by both the realm-level `issuerDid` attribute and the per-VC `vc.issuer_did`
+ClientScope attribute (KC 26.4+ — drives the JWT `iss` claim of issued credentials).
+*/}}
+{{- define "dsc.issuerDid" -}}
+{{- if eq .Values.elsi.enabled true -}}
+{{- .Values.elsi.did -}}
+{{- else if .Values.keycloak.issuerDid -}}
+{{- .Values.keycloak.issuerDid -}}
+{{- else -}}
+${DID}
+{{- end -}}
+{{- end -}}
+
+{{/*
 Build realm attributes object. Resolves issuerDid from elsi/keycloak.issuerDid/fallback,
 merges extra attributes (string or map), and appends verifiable credential attributes.
 */}}
 {{- define "dsc.realmAttributes" -}}
-{{- $issuerDid := "${DID}" -}}
-{{- if eq .Values.elsi.enabled true -}}
-{{- $issuerDid = .Values.elsi.did -}}
-{{- else if .Values.keycloak.issuerDid -}}
-{{- $issuerDid = .Values.keycloak.issuerDid -}}
-{{- end -}}
+{{- $issuerDid := include "dsc.issuerDid" . -}}
 {{- $attrs := dict "frontendUrl" (.Values.keycloak.realm.frontendUrl | default "") "issuerDid" $issuerDid -}}
 {{- if .Values.keycloak.realm.attributes -}}
 {{- $extra := .Values.keycloak.realm.attributes -}}
@@ -17,8 +27,6 @@ merges extra attributes (string or map), and appends verifiable credential attri
 {{- end -}}
 {{- $attrs = mergeOverwrite $attrs $extra -}}
 {{- end -}}
-{{- $vcAttrs := include "dsc.vcAttributes" . | fromJson -}}
-{{- $attrs = mergeOverwrite $attrs $vcAttrs -}}
 {{- $attrs | toPrettyJson -}}
 {{- end -}}
 
@@ -146,60 +154,58 @@ Merges defaultClients and clients. Extra clients override defaults with the same
 {{- end -}}
 
 {{/*
-Build a flat object of verifiable credential attributes from verifiableCredentials.
-Each entry is flattened as "vc.{key}.{attr}" = value.
-If the value is a map or list, it is serialized as a JSON string.
+Build a list of client scopes derived from verifiableCredentials.
+Each VC entry generates one client scope with protocol "oid4vc" and the VC's
+attributes attached to the scope itself (the VC name is the scope name).
+Attribute keys are auto-prefixed with `vc.` if the user did not write them
+prefixed already. Map / slice attribute values are JSON-encoded.
+
+Defaults applied when the user does not set them explicitly:
+  - `vc.issuer_did` is filled from `dsc.issuerDid` (elsi.did / keycloak.issuerDid / "${DID}").
+  - `vc.supported_credential_types` is filled with the value of `vc.verifiable_credential_type`
+    when only the latter is provided. The two attributes serve different
+    purposes in KC 26.4+ (one drives the SD-JWT `vct` claim and the metadata
+    `vct` field; the other drives the JWT_VC_JSON `type` array and the
+    metadata `credential_definition.type`), but in the typical DSC setup they
+    carry the same VCT name, so deriving the second from the first avoids
+    repetition. To use different values, set both keys explicitly under
+    `verifiableCredentials.<key>.attributes`.
+
+ref: https://github.com/keycloak/keycloak/blob/26.6.1/server-spi-private/src/main/java/org/keycloak/models/oid4vci/CredentialScopeModel.java
+Skipped when clientScope.create is explicitly set to false.
 */}}
-{{- define "dsc.vcAttributes" -}}
-{{- $result := dict -}}
+{{- define "dsc.vcClientScopes" -}}
+{{- $scopes := list -}}
+{{- $defaultIssuerDid := include "dsc.issuerDid" . -}}
 {{- range $vcKey, $vcVal := .Values.keycloak.realm.verifiableCredentials | default dict -}}
+{{- $create := dig "clientScope" "create" true $vcVal -}}
+{{- if $create -}}
+{{- $attrs := dict "include.in.token.scope" "true" "display.on.consent.screen" "false" "vc.issuer_did" $defaultIssuerDid -}}
 {{- range $attrKey, $attrVal := $vcVal.attributes | default dict -}}
 {{- $val := $attrVal -}}
 {{- if or (kindIs "map" $attrVal) (kindIs "slice" $attrVal) -}}
 {{- $val = $attrVal | toJson -}}
 {{- end -}}
-{{- $_ := set $result (printf "vc.%s.%s" $vcKey $attrKey) $val -}}
+{{- $key := $attrKey -}}
+{{- if not (hasPrefix "vc." $attrKey) -}}
+{{- $key = printf "vc.%s" $attrKey -}}
 {{- end -}}
+{{- $_ := set $attrs $key (printf "%v" $val) -}}
 {{- end -}}
-{{- $result | toPrettyJson -}}
+{{/* Derive vc.supported_credential_types from vc.verifiable_credential_type when not set. See header comment above. */}}
+{{- if and (not (hasKey $attrs "vc.supported_credential_types")) (hasKey $attrs "vc.verifiable_credential_type") -}}
+{{- $_ := set $attrs "vc.supported_credential_types" (index $attrs "vc.verifiable_credential_type") -}}
 {{- end -}}
-
-{{/*
-Build a list of client scopes derived from verifiableCredentials.
-Each VC with a defined attributes.scope generates one client scope entry:
-  - name            → attributes.scope
-  - protocol        → openid-connect
-  - description     → "Client scope for the {vcKey} verifiable credential"
-  - protocolMappers → protocolMappers list (or empty list if not defined)
-Skipped when clientScope.create is explicitly set to false.
-*/}}
-{{- define "dsc.vcClientScopes" -}}
-{{- $scopes := list -}}
-{{- range $vcKey, $vcVal := .Values.keycloak.realm.verifiableCredentials | default dict -}}
-{{- $scope := ($vcVal.attributes | default dict).scope -}}
-{{- $create := dig "clientScope" "create" true $vcVal -}}
-{{- if and $scope $create -}}
 {{- $scopes = append $scopes (dict
-    "name" $scope
-    "protocol" "openid-connect"
-    "description" (printf "Client scope for the %s verifiable credential" $vcKey)
+    "name" $vcKey
+    "protocol" "oid4vc"
+    "description" (printf "Client scope for issuing the %s verifiable credential" $vcKey)
+    "attributes" $attrs
     "protocolMappers" ($vcVal.protocolMappers | default list)
 ) -}}
 {{- end -}}
 {{- end -}}
 {{- dict "list" $scopes | toPrettyJson -}}
-{{- end -}}
-
-{{/*
-Transform credentialBuilder (map keyed by builder name) into a list for Keycloak components.
-Each entry gets id and name from the key, providerId from .name.
-*/}}
-{{- define "dsc.credentialBuilders" -}}
-{{- $builders := list -}}
-{{- range $key, $val := .Values.keycloak.realm.credentialBuilder | default dict -}}
-{{- $builders = append $builders (dict "id" $key "name" $key "providerId" $val.name) -}}
-{{- end -}}
-{{- $builders | toPrettyJson -}}
 {{- end -}}
 
 {{/*
@@ -228,7 +234,6 @@ are resolved by the caller via tpl.
   "defaultDefaultClientScopes": {{ include "dsc.defaultDefaultClientScopes" . | indent 4 | trim }},
   "defaultOptionalClientScopes": {{ include "dsc.defaultOptionalClientScopes" . | indent 4 | trim }},
   "components": {
-    "org.keycloak.protocol.oid4vc.issuance.credentialbuilder.CredentialBuilder": {{ include "dsc.credentialBuilders" . | indent 6 | trim }},
     "org.keycloak.keys.KeyProvider": {{ include "dsc.keyProviders" . | indent 6 | trim }}
   }
 }
