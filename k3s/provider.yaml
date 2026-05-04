@@ -1291,12 +1291,10 @@ keycloak:
       clientAuthenticatorType: client-secret
       defaultRoles: []
       redirectUris: [
-        "https://apisix-provider.127.0.0.1.nip.io/ui/callback",
         "https://dashboard-provider.127.0.0.1.nip.io/callback/keycloak"
       ]
       webOrigins: [
-        "https://dashboard-provider.127.0.0.1.nip.io",
-        "https://apisix-provider.127.0.0.1.nip.io"
+        "https://dashboard-provider.127.0.0.1.nip.io"
       ]
       notBefore: 0
       bearerOnly: false
