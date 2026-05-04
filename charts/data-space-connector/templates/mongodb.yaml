@@ -38,7 +38,7 @@ spec:
 {{- if .Values.marketplace.enabled }}
   {{- $chargingUser := dict "name" .Values.marketplace.bizEcosystemChargingBackend.db.user "db" .Values.marketplace.bizEcosystemChargingBackend.db.database "passwordSecretRef" (dict "name" "mongodb-charging-password") "scramCredentialsSecretName" "mongodb-charging-password" "roles" (list (dict "name" "readWrite" "db" .Values.marketplace.bizEcosystemChargingBackend.db.database)) }}
   {{- $finalUsers = append $finalUsers $chargingUser }}
-  
+
   {{- $proxyUser := dict "name" .Values.marketplace.bizEcosystemLogicProxy.db.user "db" .Values.marketplace.bizEcosystemLogicProxy.db.database "passwordSecretRef" (dict "name" "mongodb-belp-password") "scramCredentialsSecretName" "mongodb-belp-password" "roles" (list (dict "name" "readWrite" "db" .Values.marketplace.bizEcosystemLogicProxy.db.database)) }}
   {{- $finalUsers = append $finalUsers $proxyUser }}
 {{- end }}
@@ -55,7 +55,7 @@ spec:
 {{ toYaml . | nindent 4 }}
 {{- end }}
 
-{{- if and .Values.marketplace.generatePasswords }}
+{{- if and .Values.marketplace.generatePasswords .Release.IsInstall }}
 ---
 apiVersion: v1
 kind: Secret
