@@ -258,41 +258,37 @@ elsi:
   # -- password of the key
   keyPassword:
 
-## configuration of the keycloak - see https://github.com/bitnami/charts/tree/main/bitnami/keycloak for details
+## configuration of the keycloak - see https://github.com/CloudPirates-io/helm-charts/tree/main/charts/keycloak for details
 keycloak:
-  kubeVersion: 1.34-1
   # -- should it be enabled? set to false if one outside the chart is used.
   enabled: true
-  global:
-    security:
-      # allow the image from the legacy repo
-      allowInsecureImages: true
-  # -- configuration of the used image
-  image:
-    # -- repository where the image is held, see https://github.com/bitnami/charts/issues/35164 for further info
-    repository: bitnamilegacy/keycloak
-  # -- disable the security context, required by the current quarkus container, will be solved in the future chart versions of keycloak
-  containerSecurityContext:
-    enabled: false
-  proxyHeaders: xforwarded
-  proxy: edge
+  # -- keycloak server configuration
+  keycloak:
+    # -- admin user. password is read from the secret referenced by `existingSecret`
+    adminUser: keycloak-admin
+    existingSecret: issuance-secret
+    secretKeys:
+      adminPasswordKey: keycloak-admin
+    # -- proxy headers used when TLS is terminated at an upstream ingress/proxy
+    proxyHeaders: xforwarded
+  # -- TLS terminated at the ingress; the container does not serve HTTPS itself
   tls:
     enabled: false
   service:
-    ports:
-      http: 8080
-    extraPorts:
-      - name: management
-        port: 9000
-        targetPort: 9000
-  # -- authentication config for keycloak
-  auth:
-    existingSecret: issuance-secret
-    passwordSecretKey: keycloak-admin
-    adminUser: keycloak-admin
+    httpPort: 8080
+  # -- expose the management/health port (9000) via a dedicated metrics service
+  metrics:
+    enabled: true
+  # -- enable Keycloak features. `oid4vc-vci-preauth-code` is a separate
+  # experimental sub-feature added in KC 26.4+ that gates the
+  # pre-authorized_code grant on /create-credential-offer.
+  features:
+    enabled:
+      - oid4vc-vci
+      - oid4vc-vci-preauth-code
 
   # -- sets memory requests for keycloak
-  # increased above the bitnami defaults to prevent OOMs in linux kernel >=6.14
+  # increased above the chart defaults to prevent OOMs in linux kernel >=6.14
   resources:
     requests:
       memory: "500Mi"
@@ -307,28 +303,28 @@ keycloak:
   readinessProbe:
     failureThreshold: 20
 
-  # -- should the db be deployed as part of the keycloak chart
-  postgresql:
+  # -- the chart ships an embedded postgres subchart; disable it and use the external db below
+  postgres:
     enabled: false
-  # -- host of the external db to be used
-  externalDatabase:
+  # -- external db connection details. when `existingSecret` is set the chart reads
+  # both username and password from it via `secretKeys.{usernameKey,passwordKey}`,
+  # so the keys must match what the postgres operator (Zalando) writes: `username` / `password`.
+  database:
     host: postgres
-    database: keycloakdb
-    user: postgres
+    name: keycloakdb
+    username: postgres
     existingSecret: postgres.postgres.credentials.postgresql.acid.zalan.do
-    existingSecretPasswordKey: password
+    secretKeys:
+      usernameKey: username
+      passwordKey: password
 
-  # -- extra volumes to be mounted
+  # -- mount the realm ConfigMap rendered by the umbrella chart at the official import path
   extraVolumeMounts:
     - name: realms
-      mountPath: /opt/bitnami/keycloak/data/import
+      mountPath: /opt/keycloak/data/import
 
-  # -- extra env vars to be set. we require them at the moment, since some of the chart config mechanisms only work with the bitnami-image
+  # -- extra env vars to be set
   extraEnvVars:
-    - name: KEYCLOAK_EXTRA_ARGS
-      value: "--import-realm --health-enabled true"
-    - name: KC_FEATURES
-      value: "oid4vc-vci"
     # set in accordance with the memory requests, will result in OOM otherwise
     - name: KC_HEAP_SIZE
       value: "1024m"
@@ -716,48 +712,9 @@ keycloak:
               introspection.token.claim: "true"
               access.token.claim: "true"
 
-    # -- client scopes to be imported
-    # example
-    # - name: LegalPersonCredential
-    #   description: OIDC4VC Scope
-    #   protocol: openid-connect
-    #   attributes: {}
-    #   protocolMappers:
-    #     - name: context-mapper
-    #       protocol: oid4vc
-    #       protocolMapper: oid4vc-context-mapper
-    #       config:
-    #         context: https://www.w3.org/2018/credentials/v1
-    #         supportedCredentialTypes: VerifiableCredential,LegalPersonCredential,OperatorCredential
-    #     - name: email-mapper
-    #       protocol: oid4vc
-    #       protocolMapper: oid4vc-user-attribute-mapper
-    #       config:
-    #         subjectProperty: email
-    #         userAttribute: email
-    #         supportedCredentialTypes: LegalPersonCredential,OperatorCredential
-    #     - name: firstName-mapper
-    #       protocol: oid4vc
-    #       protocolMapper: oid4vc-user-attribute-mapper
-    #       config:
-    #         subjectProperty: firstName
-    #         userAttribute: firstName
-    #         supportedCredentialTypes: LegalPersonCredential,OperatorCredential
-    #     - name: lastName-mapper
-    #       protocol: oid4vc
-    #       protocolMapper: oid4vc-user-attribute-mapper
-    #       config:
-    #         subjectProperty: lastName
-    #         userAttribute: lastName
-    #         supportedCredentialTypes: LegalPersonCredential,OperatorCredential
-    #     - name: role-mapper
-    #       protocol: oid4vc
-    #       protocolMapper: oid4vc-target-role-mapper
-    #       config:
-    #         subjectProperty: roles
-    #         clientId: did:web:fancy-marketplace.biz
-    #         supportedCredentialTypes: LegalPersonCredential,OperatorCredential
-
+    # -- extra non-VC client scopes to be imported. For VC scopes, use
+    # `verifiableCredentials.<name>` further below — each entry there
+    # renders a `protocol: oid4vc` ClientScope with its own protocolMappers.
     clientScopes: []
 
     # -- default client roles
@@ -904,6 +861,11 @@ keycloak:
           realm_client: "false"
           post.logout.redirect.uris: +
           pkce.code.challenge.method: S256
+          # KC 26.4+ (PR keycloak#39768): the bearer token used to call
+          # /protocol/oid4vc/create-credential-offer must come from a client
+          # with `oid4vci.enabled=true`. The IT wallet logs in via account-console,
+          # so opt this default client into OID4VCI.
+          oid4vci.enabled: "true"
         authenticationFlowBindingOverrides: {}
         fullScopeAllowed: true
         nodeReRegistrationTimeout: 0
@@ -987,42 +949,15 @@ keycloak:
         serviceAccountsEnabled: false
         publicClient: false
         frontchannelLogout: false
-        protocol: oid4vc
+        # KC 26.4+: clients keep `protocol: openid-connect` and opt into VC issuance
+        # via the `oid4vci.enabled` attribute. Mappers and credential metadata move
+        # to the per-VC ClientScopes (rendered from `realm.verifiableCredentials`),
+        # which `dsc.defaultClients` auto-extends into the client's optionalClientScopes.
+        protocol: openid-connect
         attributes:
-          oid4vci.enabled: true
+          oid4vci.enabled: "true"
           client.secret.creation.time: "1675260539"
-          vc.natural-person.format: jwt_vc
-          vc.natural-person.scope: NaturalPersonCredential
-          vc.verifiable-credential.format: jwt_vc
-          vc.verifiable-credential.scope: VerifiableCredential
-        protocolMappers:
-          - name: target-role-mapper
-            protocol: oid4vc
-            protocolMapper: oid4vc-target-role-mapper
-            config:
-              subjectProperty: roles
-              clientId: ${DID}
-              supportedCredentialTypes: NaturalPersonCredential
-          - name: target-vc-role-mapper
-            protocol: oid4vc
-            protocolMapper: oid4vc-target-role-mapper
-            config:
-              subjectProperty: roles
-              clientId: ${DID}
-              supportedCredentialTypes: VerifiableCredential
-          - name: context-mapper
-            protocol: oid4vc
-            protocolMapper: oid4vc-context-mapper
-            config:
-              context: https://www.w3.org/2018/credentials/v1
-              supportedCredentialTypes: VerifiableCredential,NaturalPersonCredential
-          - name: email-mapper
-            protocol: oid4vc
-            protocolMapper: oid4vc-user-attribute-mapper
-            config:
-              subjectProperty: email
-              userAttribute: email
-              supportedCredentialTypes: NaturalPersonCredential
+        protocolMappers: []
         authenticationFlowBindingOverrides: {}
         fullScopeAllowed: true
         nodeReRegistrationTimeout: -1
@@ -1103,50 +1038,70 @@ keycloak:
           enabled: ["true"]
     extraKeyProviders: []
 
-    credentialBuilder:
-      sd-jwt-builder:
-        id: sd-jwt-builder
-        name: vc+sd-jwt
-      jwt-vc-builder:
-        id: jwt-vc-builder
-        name: jwt_vc
-    # -- Map of verifiable credentials supported by the realm. Each key is the credential name.
-    # A clientScope is automatically generated from each credential's attributes.scope value.
-    # Do NOT declare the same scope manually in clientScopes or defaultClientScopes to avoid duplicates.
-    # To disable automatic clientScope creation for a specific credential, set clientScope.create: false inside the VC.
+    # -- Map of verifiable credentials supported by the realm. Each key is the
+    # credential (and ClientScope) name. The chart renders one ClientScope per
+    # entry with protocol "oid4vc" and the entry's `attributes` attached to it.
+    # Attribute keys are auto-prefixed with `vc.` if the user didn't already.
+    # Set `clientScope.create: false` to skip ClientScope generation for an entry.
     #
-    # -- ref: https://www.keycloak.org/docs/26.3.3/server_admin/index.html#attribute-breakdown
+    # ref: https://github.com/keycloak/keycloak/blob/26.6.1/server-spi-private/src/main/java/org/keycloak/models/oid4vci/CredentialScopeModel.java
+    # NOTE: this model is the post-26.4 redesign (PR keycloak#39768). The pre-26.4
+    # `vc.{name}.*` realm-attribute scheme and `components.CredentialBuilder`
+    # block were removed. Format strings also changed: `jwt_vc` -> `jwt_vc_json`,
+    # `vc+sd-jwt` -> `dc+sd-jwt`.
+    #
     # verifiableCredentials:
     #   LegalPersonCredential:
     #     attributes:
-    #       credential_signing_alg_values_supported: "ES256"
-    #       # -- Defines the VC forma
-    #       format: "vc+sd-jwt"
-    #       # -- Identifies the credential’s scope. This scope must exist as clientScope in the realm.
-    #       scope: "LegalPersonCredential"
-    #       # -- The Verifiable Credential Type (VCT)
-    #       vct: "LegalPersonCredential"
-    #       # -- proof types supported
-    #       # ref: https://github.com/keycloak/keycloak/blob/26.3.3/services/src/main/java/org/keycloak/protocol/oid4vc/model/ProofTypesSupported.java#L32
-    #       proof_types_supported: '{"jwt":{"proof_signing_alg_values_supported":["ES256"]}}'
-    #       # -- The type of the algorithm to be used for signing. Needs to fit the provided signing key.
-    #       # ref: https://github.com/keycloak/keycloak/blob/26.3.3/services/src/main/java/org/keycloak/protocol/oid4vc/model/CredentialBuildConfig.java#L36
-    #       credential_build_config.signing_algorithm: "ES256"
-    #       # -- The type of the token to be created. Will be used as `type` claim in the JWT-Header.
+    #       # -- VC format (e.g. "dc+sd-jwt", "jwt_vc_json"). Maps to vc.format
+    #       format: "dc+sd-jwt"
+    #       # -- VC type URI. Maps to vc.verifiable_credential_type (drives the
+    #       # SD-JWT `vct` claim and the metadata `vct` field). When
+    #       # `supported_credential_types` is not set explicitly below, the
+    #       # template uses this same value for it (which drives the
+    #       # JWT_VC_JSON `type` array and the metadata `credential_definition.type`).
+    #       # Set `supported_credential_types` explicitly only if you need a
+    #       # different VCT in the JWT_VC_JSON `type` array.
+    #       verifiable_credential_type: "LegalPersonCredential"
+    #       # -- Signing algorithm. Maps to vc.credential_signing_alg
+    #       credential_signing_alg: "ES256"
+    #       # -- `typ` of the JWS header. Maps to vc.credential_build_config.token_jws_type
     #       credential_build_config.token_jws_type: "vc+sd-jwt"
-    #       # -- List of claims to stay disclosed in the SD-JWT
-    #       credential_build_config.visible_claims: "roles,email"
-    #       # -- The number of decoys to be added to the SD-JWT. Decoys are claims with random values to increase the security of the credential. The more decoys, the more secure, but also the larger the credential. Choose wisely.
-    #       credential_build_config.decoys: "3"
+    #       # -- Claims kept disclosed in the SD-JWT. KC 26.4+ enforces a "red list"
+    #       # of standard claims that must NOT be undisclosed (iss, iat, nbf, exp,
+    #       # cnf, vct, status). Always include those if you override this list,
+    #       # otherwise issuance fails with `UndisclosedClaims contains red listed
+    #       # claim names`.
+    #       credential_build_config.sd_jwt.visible_claims: "iss,iat,nbf,exp,cnf,vct,status,roles,email"
+    #       # -- Number of SD-JWT decoys
+    #       sd_jwt.number_of_decoys: "3"
+    #       # -- Whether holder binding is required
+    #       binding_required: "true"
+    #       # -- Allowed proof types (CSV)
+    #       binding_required_proof_types: "jwt"
     #     clientScope:
     #       create: true
+    #     # -- protocolMappers belong to this scope only. KC 26.4+ removed the
+    #     # legacy `supportedCredentialTypes` filter; mapper-to-VC association
+    #     # is now structural. Renamed: `subjectProperty` -> `claim.name`.
     #     protocolMappers:
     #       - name: context-mapper
     #         protocol: oid4vc
     #         protocolMapper: oid4vc-context-mapper
     #         config:
     #           context: https://www.w3.org/2018/credentials/v1
-    #           supportedCredentialTypes: LegalPersonCredential
+    #       - name: email-mapper
+    #         protocol: oid4vc
+    #         protocolMapper: oid4vc-user-attribute-mapper
+    #         config:
+    #           claim.name: email
+    #           userAttribute: email
+    #       - name: role-mapper
+    #         protocol: oid4vc
+    #         protocolMapper: oid4vc-target-role-mapper
+    #         config:
+    #           claim.name: roles
+    #           clientId: did:web:my-client.example.org
     verifiableCredentials: {}
 
   # -- configuration for the signing key to be used for issuing credentials
