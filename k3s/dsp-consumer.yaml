@@ -81,7 +81,7 @@ fdsc-edc:
               set -e
               echo "Waiting for Keycloak to become ready..."
 
-              until curl -sf http://consumer-keycloak:9000/health/ready > /dev/null; do
+              until curl -sf http://consumer-keycloak-metrics:9000/health/ready > /dev/null; do
                 echo "Keycloak not ready yet, retrying..."
                 sleep 5
               done
