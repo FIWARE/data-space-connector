@@ -180,12 +180,12 @@ keycloak:
             config:
               claim.name: lastName
               userAttribute: lastName
-          - name: role-mapper-marketplace-uc
+          - name: role-mapper-marketplace-mp
             protocol: oid4vc
             protocolMapper: oid4vc-target-role-mapper
             config:
               claim.name: roles
-              clientId: did:web:fancy-marketplace.biz
+              clientId: did:web:mp-operations.org
       legal-person-credential:
         attributes:
           format: "jwt_vc_json"
@@ -265,7 +265,7 @@ keycloak:
             protocolMapper: oid4vc-target-role-mapper
             config:
               claim.name: roles
-              clientId: did:web:fancy-marketplace.biz
+              clientId: did:web:fmp-operations.org
       membership-credential:
         attributes:
           format: "jwt_vc_json"
