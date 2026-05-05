@@ -2234,6 +2234,9 @@ certManagerResources:
 # Each entry can be a string (raw YAML, supports Helm templating) or an object.
 extraManifests: []
 
+# -- dashboard for operating the FIWARE Data Space Connector
+fdsc-dashboard:
+  enabled: false
 prometheus:
   enabled: false
 grafana:
