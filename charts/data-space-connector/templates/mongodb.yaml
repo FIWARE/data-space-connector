@@ -62,6 +62,8 @@ kind: Secret
 metadata:
   name: mongodb-admin-password
   namespace: {{ $.Release.Namespace | quote }}
+  annotations:
+    helm.sh/resource-policy: keep
 type: Opaque
 data:
   password: {{ randAlphaNum 30 | b64enc | quote }}
@@ -71,6 +73,8 @@ kind: Secret
 metadata:
   name: mongodb-charging-password
   namespace: {{ $.Release.Namespace | quote }}
+  annotations:
+    helm.sh/resource-policy: keep
 type: Opaque
 data:
   {{ .Values.marketplace.bizEcosystemChargingBackend.db.secretKey }}: {{ randAlphaNum 30 | b64enc | quote }}
@@ -80,6 +84,8 @@ kind: Secret
 metadata:
   name: mongodb-belp-password
   namespace: {{ $.Release.Namespace | quote }}
+  annotations:
+    helm.sh/resource-policy: keep
 type: Opaque
 data:
   {{ .Values.marketplace.bizEcosystemLogicProxy.db.secretKey }}: {{ randAlphaNum 30 | b64enc | quote }}
