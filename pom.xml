@@ -18,7 +18,7 @@
 
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <version.io.kokuwa.maven.k3s-plugin>2.1.0</version.io.kokuwa.maven.k3s-plugin>
-        <version.io.kokuwa.helm-maven-plugin>6.13.0</version.io.kokuwa.helm-maven-plugin>
+        <version.io.kokuwa.helm-maven-plugin>6.17.0</version.io.kokuwa.helm-maven-plugin>
         <version.org.apache.maven.plugins.maven-install>3.1.1</version.org.apache.maven.plugins.maven-install>
         <version.org.apache.maven.plugins.maven-source>2.4</version.org.apache.maven.plugins.maven-source>
         <version.org.apache.maven.plugins.maven-jar>3.3.0</version.org.apache.maven.plugins.maven-jar>

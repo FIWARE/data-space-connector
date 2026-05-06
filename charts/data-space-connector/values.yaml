@@ -1405,7 +1405,14 @@ managedMongo:
 marketplace:
   enabled: false
 
-  # -- should a password for the database connection of marketplace components be generated in the cluster
+  # -- should random passwords for the database connection of marketplace components be generated in the cluster.
+  # When `true` (and on `helm install` only) the chart creates `mongodb-admin-password`, `mongodb-charging-password`
+  # and `mongodb-belp-password` Secrets with random values. The Secrets are annotated with
+  # `helm.sh/resource-policy: keep` so they survive `helm upgrade` and `helm uninstall` and the passwords are
+  # never rotated by Helm. This is convenient for local/demo deployments but NOT recommended for production:
+  # since the Secrets are annotated as kept, Helm will not adopt or update them, and re-installs may collide
+  # with stale Secrets. For production, set this to `false` and provide the three Secrets externally
+  # (e.g. via External Secrets Operator, Sealed Secrets, SOPS, or an out-of-band `kubectl apply`).
   generatePasswords: true
 
   # -- should the tmforum deployed together with the marketplace?
