@@ -1,17 +1,45 @@
-# OID4VC Protocol Mappers — Keycloak 26.3.3
+# OID4VC Protocol Mappers — Keycloak 26.6.1
 
-> **Feature flag required:** `KC_FEATURES=oid4vc-vci`
+> **Feature flags required:** `keycloak.features.enabled` must contain both
+> `oid4vc-vci` and (since KC 26.4+) `oid4vc-vci-preauth-code` for the
+> pre-authorized_code grant to work.
 >
-> **`name` field:** A free-form identifier you choose to recognize the mapper within Keycloak. It has no functional impact — use any value that is meaningful to you (e.g. `"my-email-mapper"`, `"context-w3c"`, etc.).
->
-> All mappers share a common property: `supportedCredentialTypes` — a comma-separated list of credential types the mapper applies to. Defaults to `VerifiableCredential`.
+> **`name` field:** A free-form identifier you choose to recognise the mapper
+> within Keycloak. It has no functional impact — use any value that is
+> meaningful to you (e.g. `"my-email-mapper"`, `"context-w3c"`, etc.). KC requires
+> the `name` to be unique within a single ClientScope.
+
+## Changes since 26.3.3
+
+KC 26.4 redesigned the OID4VCI realm model
+([keycloak/keycloak#39768](https://github.com/keycloak/keycloak/pull/39768)).
+The mapper-level changes that affect the examples below:
+
+- **`supportedCredentialTypes` is removed from every mapper config.**
+  Mapper-to-credential association is now structural: each mapper belongs
+  to exactly one ClientScope, and that ClientScope is the credential. To
+  apply the same mapper logic to several VCs, declare the mapper once
+  under each VC's `protocolMappers` list.
+- **`subjectProperty` was renamed to `claim.name`** on every mapper that
+  had it (`oid4vc-user-attribute-mapper`, `oid4vc-target-role-mapper`,
+  `oid4vc-static-claim-mapper`, `oid4vc-generated-id-mapper`,
+  `oid4vc-issued-at-time-claim-mapper`).
+- **`oid4vc-subject-id-mapper`** uses `claim.name` plus `userAttribute`
+  (the legacy `subjectIdProperty` is gone).
+- **`oid4vc-vc-type-mapper` is deprecated.** The Verifiable Credential Type
+  is now a ClientScope attribute (`vc.verifiable_credential_type`) instead of
+  a per-credential mapper.
+
+The mappers themselves still live in the realm under
+`keycloak.realm.verifiableCredentials.<name>.protocolMappers`; the DSC
+chart renders one ClientScope (with `protocol: "oid4vc"`) per VC entry.
 
 ---
 
 ## Table of Contents
 
 - [oid4vc-context-mapper](#oid4vc-context-mapper)
-- [oid4vc-vc-type-mapper](#oid4vc-vc-type-mapper)
+- [oid4vc-vc-type-mapper (deprecated)](#oid4vc-vc-type-mapper-deprecated)
 - [oid4vc-subject-id-mapper](#oid4vc-subject-id-mapper)
 - [oid4vc-generated-id-mapper](#oid4vc-generated-id-mapper)
 - [oid4vc-user-attribute-mapper](#oid4vc-user-attribute-mapper)
@@ -31,7 +59,6 @@ Assigns a `@context` entry to the Verifiable Credential. This is required by the
 
 | Property | Label | Type | Default | Description |
 |---|---|---|---|---|
-| `supportedCredentialTypes` | Supported Credential Types | String | `VerifiableCredential` | Comma-separated list of credential types this mapper applies to. |
 | `context` | Verifiable Credentials Context | String | `https://www.w3.org/2018/credentials/v1` | The context URL to assign to the credential. |
 
 ### Example output
@@ -47,53 +74,43 @@ Assigns a `@context` entry to the Verifiable Credential. This is required by the
 
 ### Usage example
 
-```json
-{
-  "name": "context-mapper",
-  "protocol": "oid4vc",
-  "protocolMapper": "oid4vc-context-mapper",
-  "config": {
-    "supportedCredentialTypes": "VerifiableCredential",
-    "context": "https://www.w3.org/2018/credentials/v1"
-  }
-}
+```yaml
+- name: context-mapper
+  protocol: oid4vc
+  protocolMapper: oid4vc-context-mapper
+  config:
+    context: https://www.w3.org/2018/credentials/v1
 ```
 
 ---
 
-## oid4vc-vc-type-mapper
+## oid4vc-vc-type-mapper (deprecated)
+
+> :warning: **Deprecated in KC 26.4+.** The Verifiable Credential Type is now
+> a ClientScope attribute (`vc.verifiable_credential_type`), not a per-mapper
+> setting. The DSC chart populates it from
+> `keycloak.realm.verifiableCredentials.<name>.attributes.verifiable_credential_type`
+> and also auto-derives `vc.supported_credential_types` from it (controlling
+> the `type` array of JWT-VC JSON credentials). Do not declare this mapper in
+> new realms; the section is kept here only for users migrating from 26.3.
 
 **Name:** Credential Type Mapper
 
-Assigns an additional `type` entry to the Verifiable Credential. Use this to declare specific credential types beyond the base `VerifiableCredential`.
+(Legacy) Assigned an additional `type` entry to the Verifiable Credential. Use
+the ClientScope attribute below instead.
 
-### Properties
+### Replacement (10.x)
 
-| Property | Label | Type | Default | Description |
-|---|---|---|---|---|
-| `supportedCredentialTypes` | Supported Credential Types | String | `VerifiableCredential` | Comma-separated list of credential types this mapper applies to. |
-| `vcTypeProperty` | Verifiable Credential Type | String | — | The type value to add to the credential's `type` array. |
-
-### Example output
-
-```json
-{
-  "type": ["VerifiableCredential", "EmployeeCredential"]
-}
-```
-
-### Usage example
-
-```json
-{
-  "name": "vc-type-mapper",
-  "protocol": "oid4vc",
-  "protocolMapper": "oid4vc-vc-type-mapper",
-  "config": {
-    "supportedCredentialTypes": "VerifiableCredential",
-    "vcTypeProperty": "EmployeeCredential"
-  }
-}
+```yaml
+keycloak:
+  realm:
+    verifiableCredentials:
+      EmployeeCredential:
+        attributes:
+          verifiable_credential_type: "EmployeeCredential"
+          # supported_credential_types is auto-derived from the line above;
+          # set it explicitly only if you need a different value in the
+          # JWT-VC JSON `type` array than the SD-JWT `vct`.
 ```
 
 ---
@@ -102,14 +119,14 @@ Assigns an additional `type` entry to the Verifiable Credential. Use this to dec
 
 **Name:** CredentialSubject ID Mapper
 
-Assigns an `id` to the `credentialSubject`. If no specific value is configured, a randomly generated ID is used.
+Assigns an `id` to the `credentialSubject` based on a configured user attribute (e.g. the user's DID, username, email, or the internal Keycloak user ID).
 
 ### Properties
 
 | Property | Label | Type | Default | Description |
 |---|---|---|---|---|
-| `supportedCredentialTypes` | Supported Credential Types | String | `VerifiableCredential` | Comma-separated list of credential types this mapper applies to. |
-| `subjectIdProperty` | ID Property Name | String | `id` | The property name that will hold the subject ID. |
+| `claim.name` | Subject ID Property Name | String | `id` | The property name that will hold the subject ID inside `credentialSubject`. |
+| `userAttribute` | User Attribute | List | `did` | Which user attribute supplies the value. Allowed: `did`, `username`, `email`, `id`. |
 
 ### Example output
 
@@ -123,16 +140,13 @@ Assigns an `id` to the `credentialSubject`. If no specific value is configured, 
 
 ### Usage example
 
-```json
-{
-  "name": "subject-id-mapper",
-  "protocol": "oid4vc",
-  "protocolMapper": "oid4vc-subject-id-mapper",
-  "config": {
-    "supportedCredentialTypes": "VerifiableCredential",
-    "subjectIdProperty": "id"
-  }
-}
+```yaml
+- name: subject-id-mapper
+  protocol: oid4vc
+  protocolMapper: oid4vc-subject-id-mapper
+  config:
+    claim.name: id
+    userAttribute: did
 ```
 
 ---
@@ -141,14 +155,15 @@ Assigns an `id` to the `credentialSubject`. If no specific value is configured, 
 
 **Name:** Generated ID Mapper
 
-Assigns a **randomly generated** ID to the credential subject. Unlike `oid4vc-subject-id-mapper`, this always generates a new ID — useful when you don't want to expose the user's actual identifier.
+Assigns a **randomly generated** ID to the credential subject. Unlike
+`oid4vc-subject-id-mapper`, this always generates a new ID — useful when
+you don't want to expose the user's actual identifier.
 
 ### Properties
 
 | Property | Label | Type | Default | Description |
 |---|---|---|---|---|
-| `supportedCredentialTypes` | Supported Credential Types | String | `VerifiableCredential` | Comma-separated list of credential types this mapper applies to. |
-| `subjectProperty` | ID Property Name | String | `id` | Name of the property to contain the generated id. |
+| `claim.name` | ID Property Name | String | `id` | Name of the property to contain the generated id. |
 
 ### Example output
 
@@ -162,16 +177,12 @@ Assigns a **randomly generated** ID to the credential subject. Unlike `oid4vc-su
 
 ### Usage example
 
-```json
-{
-  "name": "generated-id-mapper",
-  "protocol": "oid4vc",
-  "protocolMapper": "oid4vc-generated-id-mapper",
-  "config": {
-    "supportedCredentialTypes": "VerifiableCredential",
-    "subjectProperty": "id"
-  }
-}
+```yaml
+- name: generated-id-mapper
+  protocol: oid4vc
+  protocolMapper: oid4vc-generated-id-mapper
+  config:
+    claim.name: id
 ```
 
 ---
@@ -186,10 +197,9 @@ Maps a standard Keycloak user attribute directly into the `credentialSubject`. T
 
 | Property | Label | Type | Default | Description |
 |---|---|---|---|---|
-| `supportedCredentialTypes` | Supported Credential Types | String | `VerifiableCredential` | Comma-separated list of credential types this mapper applies to. |
-| `subjectProperty` | Attribute Property Name | String | — | Property to add the user attribute to in the credential subject. |
+| `claim.name` | Attribute Property Name | String | — | Property to add the user attribute to in the credential subject. |
 | `userAttribute` | User Attribute | List | — | The user attribute to be added to the credential subject. |
-| `aggregateAttributes` | Aggregate Attributes | Boolean | — | Should the mapper aggregate user attributes. |
+| `aggregateAttributes` | Aggregate Attributes | Boolean | `false` | Should the mapper aggregate user attributes. |
 
 #### Available `userAttribute` options
 
@@ -217,18 +227,14 @@ Maps a standard Keycloak user attribute directly into the `credentialSubject`. T
 
 > 💡 Create one mapper per attribute you want to include.
 
-```json
-{
-  "name": "user-email-mapper",
-  "protocol": "oid4vc",
-  "protocolMapper": "oid4vc-user-attribute-mapper",
-  "config": {
-    "supportedCredentialTypes": "VerifiableCredential",
-    "subjectProperty": "email",
-    "userAttribute": "email",
-    "aggregateAttributes": "false"
-  }
-}
+```yaml
+- name: user-email-mapper
+  protocol: oid4vc
+  protocolMapper: oid4vc-user-attribute-mapper
+  config:
+    claim.name: email
+    userAttribute: email
+    aggregateAttributes: "false"
 ```
 
 ---
@@ -237,14 +243,15 @@ Maps a standard Keycloak user attribute directly into the `credentialSubject`. T
 
 **Name:** Target-Role Mapper
 
-Maps the roles assigned to a user into the `credentialSubject`, using the **client ID as the target context**. Useful for expressing authorization roles within a credential.
+Maps the roles assigned to a user into the `credentialSubject`, using the
+**client ID as the target context**. Useful for expressing authorization roles
+within a credential.
 
 ### Properties
 
 | Property | Label | Type | Default | Description |
 |---|---|---|---|---|
-| `supportedCredentialTypes` | Supported Credential Types | String | `VerifiableCredential` | Comma-separated list of credential types this mapper applies to. |
-| `subjectProperty` | Roles Property Name | String | `roles` | The property name to use in the `credentialSubject` for the roles. |
+| `claim.name` | Roles Property Name | String | `roles` | The property name to use in the `credentialSubject` for the roles. |
 | `clientId` | Client ID | String | — | Property to configure the client to get the roles from. |
 
 ### Example output
@@ -254,8 +261,8 @@ Maps the roles assigned to a user into the `credentialSubject`, using the **clie
   "credentialSubject": {
     "roles": [
       {
-        "target": "my-client-id",
-        "roles": ["admin", "editor"]
+        "target": "did:web:my-client.example.org",
+        "names": ["admin", "editor"]
       }
     ]
   }
@@ -264,18 +271,21 @@ Maps the roles assigned to a user into the `credentialSubject`, using the **clie
 
 ### Usage example
 
-```json
-{
-  "name": "target-role-mapper",
-  "protocol": "oid4vc",
-  "protocolMapper": "oid4vc-target-role-mapper",
-  "config": {
-    "supportedCredentialTypes": "VerifiableCredential",
-    "subjectProperty": "roles",
-    "clientId": "did:web:my-did.example.org"
-  }
-}
+```yaml
+- name: target-role-mapper
+  protocol: oid4vc
+  protocolMapper: oid4vc-target-role-mapper
+  config:
+    claim.name: roles
+    clientId: did:web:my-client.example.org
 ```
+
+> :warning: KC 26.4+ does not allow two `oid4vc-target-role-mapper` mappers with
+> the same `claim.name` in the same scope (the realm import will fail with
+> `Duplicate key [credentialSubject, roles]`). Pick one target per VC, or use
+> distinct claim names. Note that the FIWARE vcverifier and the chart's
+> ODRL/OPA helpers look for `credentialSubject.roles[*].target` by default,
+> so deviating from the `roles` claim name requires a matching policy update.
 
 ---
 
@@ -283,14 +293,16 @@ Maps the roles assigned to a user into the `credentialSubject`, using the **clie
 
 **Name:** Static Claim Mapper
 
-Allows setting a **hardcoded / static value** on any property of the `credentialSubject`. Useful for adding fixed metadata that doesn't vary per user, such as a schema version or issuer identifier.
+Allows setting a **hardcoded / static value** on any property of the
+`credentialSubject`. Useful for adding fixed metadata that doesn't vary per
+user, such as a schema version, an issuer-side identifier or a fixed
+membership type.
 
 ### Properties
 
 | Property | Label | Type | Default | Description |
 |---|---|---|---|---|
-| `supportedCredentialTypes` | Supported Credential Types | String | `VerifiableCredential` | Comma-separated list of credential types this mapper applies to. |
-| `subjectProperty` | Static Claim Property Name | String | — | The property name to set the static value on. |
+| `claim.name` | Static Claim Property Name | String | — | The property name to set the static value on. |
 | `staticValue` | Static Claim Value | String | — | Value to be set for the property. |
 
 ### Example output
@@ -305,17 +317,13 @@ Allows setting a **hardcoded / static value** on any property of the `credential
 
 ### Usage example
 
-```json
-{
-  "name": "static-claim-mapper",
-  "protocol": "oid4vc",
-  "protocolMapper": "oid4vc-static-claim-mapper",
-  "config": {
-    "supportedCredentialTypes": "VerifiableCredential",
-    "subjectProperty": "schemaVersion",
-    "staticValue": "1.0"
-  }
-}
+```yaml
+- name: static-claim-mapper
+  protocol: oid4vc
+  protocolMapper: oid4vc-static-claim-mapper
+  config:
+    claim.name: schemaVersion
+    staticValue: "1.0"
 ```
 
 ---
@@ -324,16 +332,17 @@ Allows setting a **hardcoded / static value** on any property of the `credential
 
 **Name:** Issuance Date Claim Mapper
 
-Sets the **issuance date/time** claim in the credential subject. Supports truncation to larger time units to prevent user correlation based on precise timestamps — a useful privacy measure.
+Sets the **issuance date/time** claim in the credential subject. Supports
+truncation to larger time units to prevent user correlation based on precise
+timestamps — a useful privacy measure.
 
 ### Properties
 
 | Property | Label | Type | Default | Description |
 |---|---|---|---|---|
-| `supportedCredentialTypes` | Supported Credential Types | String | `VerifiableCredential` | Comma-separated list of credential types this mapper applies to. |
-| `subjectProperty` | Time Claim Name | String | `iat` | The property name for the issuance time claim. |
-| `truncateToTimeUnit` | Truncate To Time Unit | List | — | Truncate time to the first second of the MINUTES, HOURS, HALF_DAYS, DAYS, WEEKS, MONTHS or YEARS. Such as to prevent correlation of credentials based on this time value. |
-| `valueSource` | Source of Value | List | `COMPUTE` | Tells the protocol mapper where to get the information. For now: COMPUTE or VC. Default is COMPUTE, in which this protocol mapper computes the current time in seconds. With value `VC`, the time is read from the verifiable credential issuance date field. |
+| `claim.name` | Time Claim Name | String | `iat` | The property name for the issuance time claim. |
+| `truncateToTimeUnit` | Truncate To Time Unit | List | — | Truncate time to the first second of the chosen unit. Such as to prevent correlation of credentials based on this time value. |
+| `valueSource` | Source of Value | List | `COMPUTE` | Tells the protocol mapper where to get the information. |
 
 #### `truncateToTimeUnit` options
 
@@ -366,18 +375,14 @@ Sets the **issuance date/time** claim in the credential subject. Supports trunca
 
 ### Usage example
 
-```json
-{
-  "name": "issued-at-time-mapper",
-  "protocol": "oid4vc",
-  "protocolMapper": "oid4vc-issued-at-time-claim-mapper",
-  "config": {
-    "supportedCredentialTypes": "VerifiableCredential",
-    "subjectProperty": "iat",
-    "valueSource": "COMPUTE",
-    "truncateToTimeUnit": "HOURS"
-  }
-}
+```yaml
+- name: issued-at-time-mapper
+  protocol: oid4vc
+  protocolMapper: oid4vc-issued-at-time-claim-mapper
+  config:
+    claim.name: iat
+    valueSource: COMPUTE
+    truncateToTimeUnit: HOURS
 ```
 
 ---
@@ -387,10 +392,10 @@ Sets the **issuance date/time** claim in the credential subject. Supports trunca
 | Mapper ID | Purpose |
 |---|---|
 | `oid4vc-context-mapper` | Add `@context` URL(s) to the credential |
-| `oid4vc-vc-type-mapper` | Add a custom `type` to the credential |
-| `oid4vc-subject-id-mapper` | Set the subject `id` (fixed or random) |
+| `oid4vc-subject-id-mapper` | Set the subject `id` from a chosen user attribute |
 | `oid4vc-generated-id-mapper` | Always generate a new random subject `id` |
 | `oid4vc-user-attribute-mapper` | Map user profile attributes to the subject |
-| `oid4vc-target-role-mapper` | Map client roles to the subject |
+| `oid4vc-target-role-mapper` | Map client roles (per `clientId`) to the subject |
 | `oid4vc-static-claim-mapper` | Set a hardcoded value on any subject property |
 | `oid4vc-issued-at-time-claim-mapper` | Set the issuance timestamp (with optional truncation) |
+| ~~`oid4vc-vc-type-mapper`~~ | *Deprecated in 26.4+* — use the scope attribute `vc.verifiable_credential_type` instead |

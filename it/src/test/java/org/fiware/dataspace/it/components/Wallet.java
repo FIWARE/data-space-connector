@@ -52,7 +52,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 public class Wallet {
 
     private static final String OPENID_CREDENTIAL_ISSUER_PATH = "/realms/test-realm/.well-known/openid-credential-issuer";
-    private static final String CREDENTIAL_OFFER_URI_PATH = "/realms/test-realm/protocol/oid4vc/credential-offer-uri";
+    private static final String CREDENTIAL_OFFER_URI_PATH = "/realms/test-realm/protocol/oid4vc/create-credential-offer";
     private static final String OID_WELL_KNOWN_PATH = "/.well-known/openid-configuration";
     private static final String PRE_AUTHORIZED_GRANT_TYPE = "urn:ietf:params:oauth:grant-type:pre-authorized_code";
 
@@ -140,14 +140,14 @@ public class Wallet {
     /**
      * Retrieves a credential from the issuer with an explicit format override.
      * <p>
-     * This method supports requesting credentials in different formats such as {@code jwt_vc} or {@code vc+sd-jwt}.
+     * This method supports requesting credentials in different formats such as {@code jwt_vc_json} or {@code dc+sd-jwt}.
      * When {@code format} is {@code null}, the format from the issuer's supported configuration is used.
      * This is needed for central marketplace flows where SD-JWT format is required for UserCredentials.
      *
      * @param userToken    the Keycloak access token for the user requesting the credential
      * @param issuerHost   the base URL of the Keycloak issuer (e.g., consumer or provider Keycloak address)
      * @param credentialId the credential configuration ID to request (e.g., "user-credential", "user-sd")
-     * @param format       the credential format to request (e.g., "jwt_vc", "vc+sd-jwt"), or {@code null} to use the issuer default
+     * @param format       the credential format to request (e.g., "jwt_vc_json", "dc+sd-jwt"), or {@code null} to use the issuer default
      * @throws Exception if credential issuance fails
      */
     public void getCredentialFromIssuer(String userToken, String issuerHost, String credentialId, String format) throws Exception {
@@ -176,8 +176,13 @@ public class Wallet {
 
     public OfferUri getCredentialOfferUri(String keycloakJwt, String issuerHost, String credentialConfigId) throws Exception {
 
+        // KC 26.4+: `pre_authorized` defaults to false on /create-credential-offer.
+        // The wallet flow consumes the pre-authorized_code grant from the offer, so
+        // we have to opt in explicitly.
         Request request = new Request.Builder()
-                .url(issuerHost + CREDENTIAL_OFFER_URI_PATH + "?credential_configuration_id=" + credentialConfigId)
+                .url(issuerHost + CREDENTIAL_OFFER_URI_PATH
+                        + "?credential_configuration_id=" + credentialConfigId
+                        + "&pre_authorized=true")
                 .get()
                 .header("Authorization", "Bearer " + keycloakJwt)
                 .build();
@@ -192,9 +197,12 @@ public class Wallet {
 
     public CredentialOffer getCredentialOffer(String keycloakJwt, OfferUri offerUri) throws Exception {
 
+        // KC 26.4+: the credential offer endpoint is `/credential-offer/{nonce}`,
+        // so the nonce must be appended with a `/` separator. Older KC versions
+        // returned the nonce already prefixed with `/`; 26.6.1 returns it bare.
         Request uriRequest = new Request.Builder()
                 .get()
-                .url(offerUri.getIssuer() + offerUri.getNonce())
+                .url(offerUri.getIssuer() + "/" + offerUri.getNonce())
                 .header("Authorization", "Bearer " + keycloakJwt)
                 .build();
 
@@ -245,10 +253,9 @@ public class Wallet {
 
         String credentialResponse = credentialOffer.getCredentialConfigurationIds()
                 .stream()
-                .map(offeredCredentialId -> issuerConfiguration.getCredentialConfigurationsSupported().get(offeredCredentialId))
-                .map(supportedCredential -> {
+                .map(offeredCredentialId -> {
                     try {
-                        return requestOffer(accessToken, issuerConfiguration.getCredentialEndpoint(), supportedCredential, formatOverride);
+                        return requestOffer(accessToken, issuerConfiguration.getCredentialEndpoint(), offeredCredentialId);
                     } catch (Exception e) {
                         return null;
                     }
@@ -256,7 +263,7 @@ public class Wallet {
                 .filter(Objects::nonNull)
                 .findFirst()
                 .get();
-        return OBJECT_MAPPER.readValue(credentialResponse, Credential.class).getCredential();
+        return OBJECT_MAPPER.readValue(credentialResponse, Credential.class).resolveCredential();
     }
 
     /**
@@ -269,14 +276,15 @@ public class Wallet {
      * @return the raw JSON response body containing the credential
      * @throws Exception if the HTTP request fails or returns a non-200 status
      */
-    private String requestOffer(String token, String credentialEndpoint, SupportedConfiguration offeredCredential, String formatOverride) throws Exception {
+    private String requestOffer(String token, String credentialEndpoint, String credentialConfigurationId) throws Exception {
+        // KC 26.4+ /credential body must carry credential_configuration_id (or
+        // credential_identifier). Format is no longer an input — it's implied
+        // by the configuration. The formatOverride parameter on the public
+        // getCredential method is kept for caller compatibility but is unused
+        // here; format selection happens by picking a configuration whose
+        // `vc.format` already matches what the caller wants.
         CredentialRequest credentialRequest = new CredentialRequest();
-        credentialRequest.setCredentialIdentifier(offeredCredential.getId());
-        if (formatOverride != null) {
-            credentialRequest.setFormat(Format.fromString(formatOverride));
-        } else {
-            credentialRequest.setFormat(offeredCredential.getFormat());
-        }
+        credentialRequest.setCredentialConfigurationId(credentialConfigurationId);
 
         RequestBody credentialRequestBody = RequestBody
                 .create(OBJECT_MAPPER.writeValueAsString(credentialRequest), okhttp3.MediaType.parse(MediaType.APPLICATION_JSON));
