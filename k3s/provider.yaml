@@ -326,6 +326,7 @@ decentralizedIam:
           cert-manager.io/cluster-issuer: "selfsigned-issuer"
           cert-manager.io/private-key-algorithm: "ECDSA"
           traefik.ingress.kubernetes.io/router.tls: "true"
+          cert-manager.io/alt-names: "mp-data-service.127.0.0.1.nip.io,tpp-data-service.127.0.0.1.nip.io,tpp-service.127.0.0.1.nip.io,mp-tmf-api.127.0.0.1.nip.io,contract-management.127.0.0.1.nip.io,dsp-mp-operations.127.0.0.1.nip.io,dcp-mp-operations.127.0.0.1.nip.io,identityhub-mp-operations.127.0.0.1.nip.io,identityhub-management-mp-operations.127.0.0.1.nip.io,vault-mp-operations.127.0.0.1.nip.io"
         hosts:
           - host: mp-data-service.127.0.0.1.nip.io
             paths: ["/"]
@@ -1307,11 +1308,22 @@ keycloak:
       protocol: openid-connect
       attributes:
         client.secret.creation.time: "1675260539"
-      protocolMappers: []
+      protocolMappers:
+        - name: "client-roles-id-token"
+          protocol: openid-connect
+          protocolMapper: oidc-usermodel-client-role-mapper
+          consentRequired: false
+          config:
+            multivalued: "true"
+            usermodel.clientRoleMapping.clientId: "did:web:mp-operations.org"
+            id.token.claim: "true"
+            access.token.claim: "false"
+            claim.name: "client_roles"
+            jsonType.label: "String"
       authenticationFlowBindingOverrides: {}
       fullScopeAllowed: true
       nodeReRegistrationTimeout: -1
-      defaultClientScopes: ["openid", "profile"]
+      defaultClientScopes: ["openid", "profile", "roles"]
       optionalClientScopes: []
 
 # helper component to initialize the trusted issuers list
@@ -1368,6 +1380,10 @@ fdsc-dashboard:
       - secretName: dashboard-provider.127.0.0.1.nip.io-tls
         hosts:
           - dashboard-provider.127.0.0.1.nip.io
+  apisix:
+    enabled: true
+    dashboardUrl: http://provider-apisix-admin:9180/ui
+    adminKey: admin
   apiUrls:
     til: http://trusted-issuers-list:8080
     ccs: http://credentials-config-service:8080
@@ -1379,11 +1395,10 @@ fdsc-dashboard:
           displayName: Keycloak
           issuer: https://keycloak-provider.127.0.0.1.nip.io/realms/test-realm
           clientId: did:web:mp-operations.org
-          scopes: ["openid", "profile"]
-          rolesClaimPath: "realm_access.roles"
+          scopes: ["openid", "profile", "roles"]
+          rolesClaimPath: "client_roles"
           roleMapping:
-            fdsc-admin: "admin"
-            fdsc-viewer: "viewer"
+            admin: "admin"
           silentRenew: true
       
 fdsc-edc:
