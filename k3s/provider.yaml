@@ -42,6 +42,7 @@ decentralizedIam:
             cert-manager.io/cluster-issuer: "selfsigned-issuer"
             cert-manager.io/private-key-algorithm: "ECDSA"
             cert-manager.io/common-name: "til-provider.127.0.0.1.nip.io"
+            cert-manager.io/alt-names: "til-provider.127.0.0.1.nip.io"
             traefik.ingress.kubernetes.io/router.tls: "true"
           hosts:
             - host: til-provider.127.0.0.1.nip.io
@@ -58,6 +59,7 @@ decentralizedIam:
           cert-manager.io/cluster-issuer: "selfsigned-issuer"
           cert-manager.io/private-key-algorithm: "ECDSA"
           cert-manager.io/common-name: "provider-ccs.127.0.0.1.nip.io"
+          cert-manager.io/alt-names: "provider-ccs.127.0.0.1.nip.io"
           traefik.ingress.kubernetes.io/router.tls: "true"
         hosts:
           - host: provider-ccs.127.0.0.1.nip.io
@@ -230,6 +232,7 @@ decentralizedIam:
           cert-manager.io/cluster-issuer: "selfsigned-issuer"
           cert-manager.io/private-key-algorithm: "ECDSA"
           cert-manager.io/common-name: "verifier.mp-operations.org"
+          cert-manager.io/alt-names: "verifier.mp-operations.org"
         tls:
           - hosts:
               - verifier.mp-operations.org
@@ -557,6 +560,7 @@ decentralizedIam:
           cert-manager.io/cluster-issuer: "selfsigned-issuer"
           cert-manager.io/private-key-algorithm: "ECDSA"
           cert-manager.io/common-name: "pap-provider.127.0.0.1.nip.io"
+          cert-manager.io/alt-names: "pap-provider.127.0.0.1.nip.io"
           traefik.ingress.kubernetes.io/router.tls: "true"
         hosts:
           - host: pap-provider.127.0.0.1.nip.io
@@ -606,6 +610,7 @@ did:
       cert-manager.io/cluster-issuer: "selfsigned-issuer"
       cert-manager.io/private-key-algorithm: "ECDSA"
       cert-manager.io/common-name: "mp-operations.org"
+      cert-manager.io/alt-names: "mp-operations.org"
     hosts:
       - host: mp-operations.org
         paths:
@@ -644,6 +649,7 @@ scorpio:
       cert-manager.io/cluster-issuer: "selfsigned-issuer"
       cert-manager.io/private-key-algorithm: "ECDSA"
       cert-manager.io/common-name: "scorpio-provider.127.0.0.1.nip.io"
+      cert-manager.io/alt-names: "scorpio-provider.127.0.0.1.nip.io"
       traefik.ingress.kubernetes.io/router.tls: "true"
       
     hosts:
@@ -669,6 +675,7 @@ tm-forum-api:
       cert-manager.io/cluster-issuer: "selfsigned-issuer"
       cert-manager.io/private-key-algorithm: "ECDSA"
       cert-manager.io/common-name: "tm-forum-api.127.0.0.1.nip.io"
+      cert-manager.io/alt-names: "tm-forum-api.127.0.0.1.nip.io"
       traefik.ingress.kubernetes.io/router.tls: "true"
     hosts:
       - host: tm-forum-api.127.0.0.1.nip.io
@@ -865,6 +872,7 @@ marketplace:
         cert-manager.io/cluster-issuer: "selfsigned-issuer"
         cert-manager.io/private-key-algorithm: "ECDSA"
         cert-manager.io/common-name: "marketplace.127.0.0.1.nip.io"
+        cert-manager.io/alt-names: "marketplace.127.0.0.1.nip.io"
       hosts:
         - host: marketplace.127.0.0.1.nip.io
           paths:
@@ -906,6 +914,7 @@ keycloak:
     hostname: keycloak-provider.127.0.0.1.nip.io
     annotations:
       traefik.ingress.kubernetes.io/router.tls: "true"
+      cert-manager.io/alt-names: "keycloak-provider.127.0.0.1.nip.io"
       cert-manager.io/cluster-issuer: "selfsigned-issuer"
       cert-manager.io/private-key-algorithm: "ECDSA"
       cert-manager.io/common-name: "keycloak-provider.127.0.0.1.nip.io"
@@ -1380,6 +1389,11 @@ fdsc-dashboard:
       - secretName: dashboard-provider.127.0.0.1.nip.io-tls
         hosts:
           - dashboard-provider.127.0.0.1.nip.io
+  grafana:
+    enabled: true
+    url: http://provider-grafana:80
+    panelsJson: "[{\"title\":\"\",\"path\":\"/d/apisix-routes/apisix-routes?orgId=1&from=now-1h&to=now&timezone=browser&var-datasource=PBFA97CFB590B2093&var-route=$__all&var-service=$__all&refresh=30s\",\"span\":12}]"
+
   apisix:
     enabled: true
     dashboardUrl: http://provider-apisix-admin:9180/ui
@@ -1410,3 +1424,41 @@ identityhub:
 vault:
   enabled: false
 
+grafana:
+  enabled: true
+  grafana.ini:
+    server:
+      root_url: "%(protocol)s://%(domain)s/api/grafana"
+      serve_from_sub_path: true
+    security:
+      allow_embedding: true
+    auth.proxy:
+      enabled: true
+      header_name: X-WEBAUTH-USER
+      header_property: username
+      auto_sign_up: true
+      enable_login_token: true
+  # the above configuration delegates auth to the proxy(e.g. the fdsc-dashboard). Do not enable the grafana ingress without additional auth measures
+  ingress:
+    enabled: false
+
+  # sidecar that auto-imports dashboards from ConfigMaps labeled `grafana_dashboard: "1"`
+  sidecar:
+    dashboards:
+      enabled: true
+      label: grafana_dashboard
+      labelValue: "1"
+      searchNamespace: ALL
+      folderAnnotation: grafana_folder
+      provider:
+        foldersFromFilesStructure: true
+
+  datasources:
+    datasources.yaml:
+      apiVersion: 1
+      datasources:
+      - name: Prometheus
+        type: prometheus
+        url: http://prometheus-server.monitoring.svc.cluster.local
+        access: proxy
+      isDefault: true

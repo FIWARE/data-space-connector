@@ -10,6 +10,7 @@ trusted-issuers-list:
         cert-manager.io/cluster-issuer: "selfsigned-issuer"
         cert-manager.io/private-key-algorithm: "ECDSA"
         cert-manager.io/common-name: "tir.127.0.0.1.nip.io"
+        cert-manager.io/alt-names: "tir.127.0.0.1.nip.io"
       enabled: true
       hosts:
         - host: tir.127.0.0.1.nip.io
@@ -19,6 +20,7 @@ trusted-issuers-list:
         cert-manager.io/cluster-issuer: "selfsigned-issuer"
         cert-manager.io/private-key-algorithm: "ECDSA"
         cert-manager.io/common-name: "til.127.0.0.1.nip.io"
+        cert-manager.io/alt-names: "til.127.0.0.1.nip.io"
       enabled: true
       hosts:
         - host: til.127.0.0.1.nip.io
