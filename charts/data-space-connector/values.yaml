@@ -130,6 +130,14 @@ decentralizedIam:
       ingress-controller:
         enabled: false
 
+      podAnnotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: /apisix/prometheus/metrics
+        prometheus.io/port: "9091"
+      apisix:
+        prometheus:
+          enabled: true
+
     # -- configuration for the odrl-pap to be deployed as part of the connector, see https://github.com/FIWARE/helm-charts/tree/main/charts/odrl-pap for all options
     odrl-pap:
       # -- should it be enabled? set to false if one outside the chart is used.
@@ -2222,4 +2230,10 @@ extraManifests: []
 
 # -- dashboard for operating the FIWARE Data Space Connector
 fdsc-dashboard:
+  enabled: false
+
+prometheus:
+  enabled: false
+
+grafana:
   enabled: false

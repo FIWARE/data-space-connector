@@ -12,6 +12,7 @@ metadata:
     cert-manager.io/cluster-issuer: "selfsigned-issuer"
     cert-manager.io/private-key-algorithm: "ECDSA"
     cert-manager.io/common-name: "registry.127.0.0.1.nip.io"
+    cert-manager.io/alt-names: "registry.127.0.0.1.nip.io"
 spec:
   tls:
     - secretName: registry.127.0.0.1.nip.io-tls
