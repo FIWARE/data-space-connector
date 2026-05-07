@@ -418,3 +418,17 @@ Usage:
 {{- define "dsc.otel.collectorConfigName" -}}
 {{- printf "%s-otel-collector-config" .Release.Name -}}
 {{- end -}}
+
+{{/*
+HTTP query endpoint of the bundled Grafana Tempo service. Used by the
+grafana-tempo-datasource-cm.yaml template to auto-provision Tempo as a
+Grafana datasource when both `tempo.enabled=true` and
+`grafana.enabled=true`. Port 3200 is the Tempo HTTP API used by Grafana
+for trace queries.
+
+Usage:
+  {{ include "dsc.tempo.queryEndpoint" . }}  → "http://<release>-tempo:3200"
+*/}}
+{{- define "dsc.tempo.queryEndpoint" -}}
+{{- printf "http://%s-tempo:3200" .Release.Name -}}
+{{- end -}}
