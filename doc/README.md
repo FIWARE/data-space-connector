@@ -97,6 +97,7 @@ The configuration can be found at the
 Documentation for enabling distributed tracing across the FIWARE DSC using OpenTelemetry, including how to connect external backends (Jaeger, Tempo, Honeycomb) and per-component configuration notes.
 
 * [Distributed Tracing with OpenTelemetry](./deployment-integration/observability/README.md)
+* [Grafana Tempo Backend (In-Cluster)](./deployment-integration/observability/README.md#grafana-tempo-backend-in-cluster) -- Deploy Tempo and Grafana as optional subcharts for a turnkey trace-storage and visualisation stack with zero-config auto-wiring.
 
 ### Integration with AWS Garnet Framework (formerly AWS Smart Territory Framework)
 

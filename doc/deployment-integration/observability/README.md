@@ -24,6 +24,12 @@ backend exporter.
   - [Minimal Setup](#minimal-setup)
   - [Connecting an External Backend](#connecting-an-external-backend)
   - [TLS and Authentication](#tls-and-authentication)
+- [Grafana Tempo Backend (In-Cluster)](#grafana-tempo-backend-in-cluster)
+  - [Full-Stack Quick Start](#full-stack-quick-start)
+  - [How the Auto-Wiring Works](#how-the-auto-wiring-works)
+  - [Using an External Tempo Instance](#using-an-external-tempo-instance)
+  - [Production Considerations](#production-considerations)
+  - [Verifying Traces in Grafana](#verifying-traces-in-grafana)
 - [Configuration Reference](#configuration-reference)
   - [Global Tracing Values](#global-tracing-values)
   - [OpenTelemetry Collector Values](#opentelemetry-collector-values)
@@ -206,6 +212,270 @@ opentelemetry-collector:
           name: honeycomb-credentials
           key: api-key
 ```
+
+
+## Grafana Tempo Backend (In-Cluster)
+
+The chart includes optional **Grafana Tempo** and **Grafana** subchart
+dependencies that deploy a complete trace-storage and visualisation stack
+inside the cluster. When enabled, the OpenTelemetry Collector is
+automatically configured to export spans to Tempo, and Grafana is
+automatically provisioned with Tempo as a datasource -- no manual
+pipeline configuration required.
+
+```mermaid
+flowchart LR
+    subgraph DSC["FIWARE Data Space Connector (Kubernetes)"]
+        IH["IdentityHub<br/>(Java Agent)"]
+        EDC["fdsc-edc<br/>(Java Agent)"]
+        KC["Keycloak<br/>(Native OTEL)"]
+        SC["Scorpio<br/>(Quarkus OTEL)"]
+        TMF["tm-forum-api<br/>(OTEL env)"]
+        CM["contract-mgmt<br/>(OTEL env)"]
+        MKT["marketplace<br/>(OTEL env)"]
+        COLL["OpenTelemetry<br/>Collector"]
+        TEMPO["Grafana Tempo<br/>(Trace Storage)"]
+        GRAF["Grafana<br/>(Dashboard)"]
+    end
+
+    IH  -->|OTLP gRPC :4317| COLL
+    EDC -->|OTLP gRPC :4317| COLL
+    KC  -->|OTLP gRPC :4317| COLL
+    SC  -->|OTLP gRPC :4317| COLL
+    TMF -->|OTLP gRPC :4317| COLL
+    CM  -->|OTLP gRPC :4317| COLL
+    MKT -->|OTLP gRPC :4317| COLL
+
+    COLL  -->|OTLP gRPC :4317| TEMPO
+    TEMPO -->|HTTP :3200| GRAF
+```
+
+### Full-Stack Quick Start
+
+Enable the entire tracing pipeline with three values:
+
+```yaml
+tracing:
+  enabled: true
+
+tempo:
+  enabled: true
+
+grafana:
+  enabled: true
+```
+
+Or via `--set` flags:
+
+```bash
+helm upgrade --install my-dsc dsc/data-space-connector \
+  --set tracing.enabled=true \
+  --set tempo.enabled=true \
+  --set grafana.enabled=true
+```
+
+This will:
+1. Deploy the OpenTelemetry Collector and inject `OTEL_*` env vars into
+   all workloads (same as [Minimal Setup](#minimal-setup)).
+2. Deploy Grafana Tempo as an in-cluster trace backend.
+3. Auto-configure the Collector to export spans to Tempo via the
+   `otlp/tempo` exporter (in addition to the default `debug` exporter).
+4. Deploy Grafana with the datasource sidecar enabled.
+5. Auto-provision a Grafana datasource pointing at Tempo, so traces
+   are visible in the Grafana UI immediately.
+
+### How the Auto-Wiring Works
+
+The integration between the Collector, Tempo, and Grafana is handled
+automatically by the umbrella chart's templates:
+
+- **Collector -> Tempo:** When `tempo.enabled=true`, the chart renders a
+  custom Collector ConfigMap (`otel-collector-config-cm.yaml`) that takes
+  the user's `opentelemetry-collector.config` values as a base and
+  injects an `otlp/tempo` exporter targeting
+  `http://<release>-tempo:4317`. The exporter is also appended to the
+  `service.pipelines.traces.exporters` list. Any exporters you define
+  (including the default `debug` exporter) are preserved.
+
+- **Tempo -> Grafana:** When both `tempo.enabled=true` and
+  `grafana.enabled=true`, the chart renders a datasource ConfigMap
+  (`grafana-tempo-datasource-cm.yaml`) labelled with
+  `grafana_datasource: "1"`. The Grafana sidecar automatically detects
+  this ConfigMap and provisions Tempo as a datasource at
+  `http://<release>-tempo:3200`.
+
+You do not need to manually edit the Collector pipeline or create
+Grafana datasources. However, you can still override any of these
+values if you need custom configuration.
+
+### Using an External Tempo Instance
+
+If you already operate a Tempo instance outside the cluster (or in
+another namespace), disable the bundled Tempo subchart and point the
+Collector at your external endpoint manually:
+
+```yaml
+tracing:
+  enabled: true
+
+# Do NOT enable the bundled Tempo subchart
+tempo:
+  enabled: false
+
+# Point the Collector at your external Tempo
+opentelemetry-collector:
+  config:
+    exporters:
+      otlp/tempo:
+        endpoint: "tempo.monitoring.svc.cluster.local:4317"
+        tls:
+          insecure: true
+    service:
+      pipelines:
+        traces:
+          exporters:
+            - debug
+            - otlp/tempo
+```
+
+If your external Tempo requires TLS or authentication, see
+[TLS and Authentication](#tls-and-authentication) for examples.
+
+To connect Grafana to an external Tempo, disable the auto-provisioned
+datasource (by leaving `tempo.enabled=false`) and configure the
+datasource manually in Grafana or through a custom datasource
+ConfigMap.
+
+### Production Considerations
+
+The default configuration uses local filesystem storage for Tempo and
+ephemeral storage for Grafana, which is suitable for development and
+testing. For production deployments, consider the following adjustments:
+
+**Tempo storage backend:**
+
+By default, Tempo stores traces on the local filesystem. For production,
+configure an object-storage backend (S3, GCS, or Azure Blob Storage):
+
+```yaml
+tempo:
+  enabled: true
+  tempo:
+    storage:
+      trace:
+        backend: s3
+        s3:
+          bucket: my-tempo-traces
+          endpoint: s3.amazonaws.com
+          region: eu-west-1
+          access_key: "${S3_ACCESS_KEY}"
+          secret_key: "${S3_SECRET_KEY}"
+```
+
+Refer to the
+[Tempo storage configuration](https://grafana.com/docs/tempo/latest/configuration/#storage)
+documentation for all supported backends and options.
+
+**Tempo retention:**
+
+The default trace retention is `48h`. Adjust for your compliance and
+cost requirements:
+
+```yaml
+tempo:
+  tempo:
+    retention: 168h   # 7 days
+```
+
+**Grafana persistence:**
+
+Enable a PersistentVolumeClaim for Grafana to preserve dashboards and
+settings across pod restarts:
+
+```yaml
+grafana:
+  persistence:
+    enabled: true
+    size: 1Gi
+```
+
+**Grafana admin password:**
+
+The default admin password is `"admin"`. Override it for any
+non-development environment:
+
+```yaml
+grafana:
+  adminPassword: "a-strong-secret"
+```
+
+**Ingress:**
+
+To expose Grafana outside the cluster, enable ingress on the Grafana
+subchart:
+
+```yaml
+grafana:
+  ingress:
+    enabled: true
+    hosts:
+      - grafana.example.com
+    tls:
+      - secretName: grafana-tls
+        hosts:
+          - grafana.example.com
+```
+
+### Verifying Traces in Grafana
+
+After deploying the full stack, follow these steps to confirm traces are
+flowing end-to-end:
+
+1. **Check Tempo readiness:**
+
+   ```bash
+   kubectl get pods -l app.kubernetes.io/name=tempo
+   ```
+
+   The Tempo pod should be in `Running` state.
+
+2. **Check Grafana readiness:**
+
+   ```bash
+   kubectl get pods -l app.kubernetes.io/name=grafana
+   ```
+
+3. **Port-forward to Grafana:**
+
+   ```bash
+   kubectl port-forward svc/<release>-grafana 3000:80
+   ```
+
+   Open `http://localhost:3000` in your browser (default credentials:
+   `admin` / `admin`).
+
+4. **Open the Explore view:** Navigate to **Explore** in the left
+   sidebar and select the **Tempo** datasource from the dropdown.
+
+5. **Search for traces:** Use the **Search** tab to find recent traces
+   by service name, duration, or status. If workloads are actively
+   handling requests, you should see traces appearing within seconds.
+
+6. **If no traces appear:**
+   - Verify the Collector is running and receiving spans (see
+     [Troubleshooting](#troubleshooting)).
+   - Check the Collector logs for export errors to the Tempo endpoint:
+     ```bash
+     kubectl logs -l app.kubernetes.io/name=opentelemetry-collector --tail=50 | grep -i "error\|failed"
+     ```
+   - Verify the Tempo pod is healthy:
+     ```bash
+     kubectl logs -l app.kubernetes.io/name=tempo --tail=50
+     ```
+   - Confirm the Grafana datasource was auto-provisioned:
+     ```bash
+     kubectl get configmap -l grafana_datasource=1
+     ```
 
 
 ## Configuration Reference
