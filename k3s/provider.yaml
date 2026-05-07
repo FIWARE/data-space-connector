@@ -1390,9 +1390,8 @@ fdsc-dashboard:
         hosts:
           - dashboard-provider.127.0.0.1.nip.io
   grafana:
-    enabled: true
+    enabled: false
     url: http://provider-grafana:80
-    panelsJson: "[{\"title\":\"\",\"path\":\"/d/apisix-routes/apisix-routes?orgId=1&from=now-1h&to=now&timezone=browser&var-datasource=PBFA97CFB590B2093&var-route=$__all&var-service=$__all&refresh=30s\",\"span\":12}]"
 
   apisix:
     enabled: true
@@ -1423,42 +1422,3 @@ identityhub:
 
 vault:
   enabled: false
-
-grafana:
-  enabled: true
-  grafana.ini:
-    server:
-      root_url: "%(protocol)s://%(domain)s/api/grafana"
-      serve_from_sub_path: true
-    security:
-      allow_embedding: true
-    auth.proxy:
-      enabled: true
-      header_name: X-WEBAUTH-USER
-      header_property: username
-      auto_sign_up: true
-      enable_login_token: true
-  # the above configuration delegates auth to the proxy(e.g. the fdsc-dashboard). Do not enable the grafana ingress without additional auth measures
-  ingress:
-    enabled: false
-
-  # sidecar that auto-imports dashboards from ConfigMaps labeled `grafana_dashboard: "1"`
-  sidecar:
-    dashboards:
-      enabled: true
-      label: grafana_dashboard
-      labelValue: "1"
-      searchNamespace: ALL
-      folderAnnotation: grafana_folder
-      provider:
-        foldersFromFilesStructure: true
-
-  datasources:
-    datasources.yaml:
-      apiVersion: 1
-      datasources:
-      - name: Prometheus
-        type: prometheus
-        url: http://prometheus-server.monitoring.svc.cluster.local
-        access: proxy
-      isDefault: true
