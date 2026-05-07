@@ -2,7 +2,7 @@ apiVersion: v2
 name: data-space-connector
 description: Umbrella Chart for the FIWARE Data Space Connector, combining all essential parts to be used by a participant.
 type: application
-version: 9.1.0
+version: 9.0.3
 dependencies:
   - name: decentralized-iam
     alias: decentralizedIam
@@ -50,6 +50,11 @@ dependencies:
     condition: vault.enabled
     version: 0.29.1
     repository: https://helm.releases.hashicorp.com
+  # dashboard
+  - name: fdsc-dashboard
+    condition: fdsc-dashboard.enabled
+    version: 0.6.1
+    repository: https://fiware.github.io/helm-charts
   # did-helper
   - name: did-helper
     alias: did
@@ -67,3 +72,11 @@ dependencies:
     condition: opentelemetry-collector.enabled
     version: 0.152.0
     repository: https://open-telemetry.github.io/opentelemetry-helm-charts
+  - name: prometheus
+    condition: prometheus.enabled
+    version: 29.2.1
+    repository: https://prometheus-community.github.io/helm-charts
+  - name: grafana
+    condition: grafana.enabled
+    version: 12.1.1
+    repository: https://grafana-community.github.io/helm-charts

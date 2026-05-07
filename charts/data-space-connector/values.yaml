@@ -161,6 +161,24 @@ decentralizedIam:
       ingress-controller:
         enabled: false
 
+      podAnnotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: /apisix/prometheus/metrics
+        prometheus.io/port: "9091"
+      apisix:
+        prometheus:
+          enabled: true
+
+      plugins:
+        - prometheus
+
+      pluginAttrs:
+        prometheus:
+          export_addr:
+            ip: "0.0.0.0"
+            port: 9091
+
+
     # -- configuration for the odrl-pap to be deployed as part of the connector, see https://github.com/FIWARE/helm-charts/tree/main/charts/odrl-pap for all options
     odrl-pap:
       # -- should it be enabled? set to false if one outside the chart is used.
@@ -1663,7 +1681,14 @@ managedMongo:
 marketplace:
   enabled: false
 
-  # -- should a password for the database connection of marketplace components be generated in the cluster
+  # -- should random passwords for the database connection of marketplace components be generated in the cluster.
+  # When `true` (and on `helm install` only) the chart creates `mongodb-admin-password`, `mongodb-charging-password`
+  # and `mongodb-belp-password` Secrets with random values. The Secrets are annotated with
+  # `helm.sh/resource-policy: keep` so they survive `helm upgrade` and `helm uninstall` and the passwords are
+  # never rotated by Helm. This is convenient for local/demo deployments but NOT recommended for production:
+  # since the Secrets are annotated as kept, Helm will not adopt or update them, and re-installs may collide
+  # with stale Secrets. For production, set this to `false` and provide the three Secrets externally
+  # (e.g. via External Secrets Operator, Sealed Secrets, SOPS, or an out-of-band `kubectl apply`).
   generatePasswords: true
 
   # -- distributed-tracing configuration for the marketplace workload.
@@ -2926,3 +2951,13 @@ opentelemetry-collector:
   ##
   ##    The collector already listens on both 4317 (gRPC) and 4318 (HTTP)
   ##    by default, so only the workload-side values need to change.
+
+# -- dashboard for operating the FIWARE Data Space Connector
+fdsc-dashboard:
+  enabled: false
+
+prometheus:
+  enabled: false
+
+grafana:
+  enabled: false

@@ -1,0 +1,47 @@
+{{- if and .Values.decentralizedIam.enabled (index .Values.decentralizedIam.odrlAuthorization.apisix "apisix" "prometheus" "enabled") .Values.decentralizedIam.odrlAuthorization.apisix.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: apisix-prometheus-global-rule
+  namespace: {{ $.Release.Namespace | quote }}
+  annotations:
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+spec:
+  ttlSecondsAfterFinished: 300
+  backoffLimit: 10
+  template:
+    spec:
+      restartPolicy: Never
+      initContainers:
+        - name: wait-for-apisix
+          image: quay.io/curl/curl:8.1.2
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/sh
+            - -c
+            - |
+              until curl -so /dev/null -w "%{http_code}" http://{{ .Release.Name }}-apisix-admin:9180/apisix/admin/routes | grep -qE "^(200|401|403)"; do
+                echo "Waiting for APISIX admin API..."
+                sleep 5
+              done
+      containers:
+        - name: register-global-rule
+          image: quay.io/curl/curl:8.1.2
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: API_KEY
+              value: "admin"
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -e
+              curl -k -f -X PUT \
+                http://{{ .Release.Name }}-apisix-admin:9180/apisix/admin/global_rules/prometheus \
+                --header "X-API-KEY: ${API_KEY}" \
+                --header 'Content-Type: application/json' \
+                --data-raw '{"plugins":{"prometheus":{"prefer_name":false}}}'
+              echo
+              echo "Prometheus plugin enabled as global rule."
+{{- end }}
