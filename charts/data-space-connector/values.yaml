@@ -83,9 +83,6 @@ decentralizedIam:
       m2m:
         # -- we do not need authentication here
         authEnabled: false
-      deployment:
-        image:
-          tag: 6.11.0-pre-81
 
     # -- configuration for the credentials-config-service to be deployed as part of the connector, see https://github.com/FIWARE/helm-charts/tree/main/charts/credentials-config-service for all options
     credentials-config-service:
