@@ -3007,3 +3007,42 @@ tempo:
     requests:
       cpu: 100m
       memory: 256Mi
+
+# -- values passed to the bundled `grafana` subchart
+# (chart: grafana/grafana). Grafana provides an in-cluster dashboard for
+# trace visualisation. When both `grafana.enabled` and `tempo.enabled` are
+# true, a Tempo datasource is auto-provisioned via a sidecar so operators
+# can browse traces immediately.
+grafana:
+  # -- toggle the bundled Grafana subchart. When enabled, deploys a
+  # Grafana instance for trace visualisation. Keep false when using an
+  # external Grafana deployment or when dashboards are not needed.
+  enabled: false
+  # -- Grafana admin password. Override this value in production
+  # deployments; the default is intentionally insecure for local
+  # development and testing only.
+  adminPassword: "admin"
+  sidecar:
+    datasources:
+      # -- enable the Kubernetes sidecar that watches for ConfigMaps
+      # labelled `grafana_datasource` and auto-provisions them as
+      # Grafana datasources. Required for automatic Tempo datasource
+      # registration.
+      enabled: true
+      # -- label that the sidecar watches for on ConfigMaps. ConfigMaps
+      # with this label set to "1" are imported as datasource definitions.
+      label: grafana_datasource
+  persistence:
+    # -- enable persistent storage for Grafana. Disabled by default for
+    # lightweight dev/test deployments. Enable and configure a
+    # storageClass for production to survive pod restarts.
+    enabled: false
+  # -- CPU / memory resources for the Grafana pod. Sized for small
+  # deployments; raise limits for production traffic volumes.
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi

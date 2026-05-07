@@ -85,3 +85,8 @@ dependencies:
     condition: tempo.enabled
     version: 1.24.4
     repository: https://grafana.github.io/helm-charts
+  # observability - Grafana dashboard for trace visualisation (opt-in)
+  - name: grafana
+    condition: grafana.enabled
+    version: 10.5.15
+    repository: https://grafana.github.io/helm-charts
