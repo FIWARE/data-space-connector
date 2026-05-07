@@ -1,394 +1,303 @@
-# Implementation Plan: OpenTelemetry Tracing in FIWARE Data Space Connector
+# Implementation Plan: Grafana Tempo Integration with the OpenTelemetry Integration
 
 ## Overview
-Introduce end-to-end distributed tracing across the FIWARE Data Space Connector
-(DSC) by deploying an OpenTelemetry (OTEL) Collector as an optional subchart of
-the `data-space-connector` umbrella chart and wiring the first-party workloads
-(IdentityHub, fdsc-edc) plus the third-party subcharts that ship with native
-OTEL support to export traces through the OTLP endpoint. Trace configuration
-is exposed via `values.yaml` so operators can plug any OTLP-compatible backend
-(Jaeger, Tempo, Honeycomb, etc.) and toggle tracing per component without
-forking the chart.
-
-Rainbow and the short-lived registration jobs are intentionally excluded from
-this plan: Rainbow is slated for removal in a future release, and batch jobs
-do not need to be traced.
+Build on the existing OpenTelemetry tracing infrastructure (added in 9.1.0 /
+ticket-28) to provide a turnkey **Grafana Tempo** trace-storage backend and a
+**Grafana** dashboard for trace visualisation, both deployed as optional
+subchart dependencies.  When Tempo is enabled the OTEL Collector pipeline is
+auto-wired to export spans to Tempo; when Grafana is also enabled it is
+auto-provisioned with Tempo as a datasource.  The operator experience is:
+```yaml
+tracing:
+  enabled: true
+tempo:
+  enabled: true
+grafana:
+  enabled: true
+```
+and the full stack (workloads -> Collector -> Tempo -> Grafana) works out of
+the box with zero additional configuration.
 
 ## Steps
 
-### Step 1: Add OpenTelemetry Collector subchart and global tracing values
-Goal: give the umbrella chart a single source of truth for tracing
-configuration and a self-contained Collector that everything can point at.
+### Step 1: Add Grafana Tempo subchart dependency and values
 
-Files affected:
+**Goal:** deploy Grafana Tempo as an optional in-cluster trace backend.
+
+**Files affected:**
 - `charts/data-space-connector/Chart.yaml`
 - `charts/data-space-connector/values.yaml`
-- `charts/data-space-connector/templates/_helpers.tpl` (new or extended)
 
-Actions:
-- Add an `opentelemetry-collector` dependency (chart
-  `open-telemetry/opentelemetry-collector`, pinned version) to
-  `Chart.yaml`, gated by `opentelemetry-collector.enabled`.
-- Introduce a top-level `tracing:` block in `values.yaml` with:
-  - `tracing.enabled` (default `false`) – global on/off switch.
-  - `tracing.exporter.otlp.endpoint` (default
-    `http://{{ .Release.Name }}-opentelemetry-collector:4317`).
-  - `tracing.exporter.otlp.protocol` (`grpc` | `http/protobuf`, default
-    `grpc`).
-  - `tracing.exporter.otlp.insecure` (default `true`).
-  - `tracing.sampler` (`parentbased_traceidratio`) and
-    `tracing.samplerArg` (default `1.0`).
-  - `tracing.resourceAttributes` (map merged into `OTEL_RESOURCE_ATTRIBUTES`).
-  - `tracing.propagators` (default `tracecontext,baggage`).
-- Add a `dsc.otel.env` template helper in `_helpers.tpl` that renders the
-  common `OTEL_*` environment variables block from the `tracing.*` values,
-  so each deployment template can include it with a single
-  `{{- include "dsc.otel.env" (dict "ctx" . "service" "identityhub") | nindent N }}`.
-- Add default Collector configuration under
-  `opentelemetry-collector:` in `values.yaml` (receivers: OTLP gRPC+HTTP;
-  processors: batch, memory_limiter; exporters: debug + OTLP to an
-  operator-provided backend; pipelines for traces only in this iteration).
-- Document every new value with a `# --` helm-docs compatible comment.
+**Actions:**
+- Add `grafana/tempo` (chart `tempo`, pinned to `1.24.4`, repo
+  `https://grafana.github.io/helm-charts`) as a dependency in `Chart.yaml`,
+  gated by `tempo.enabled`.
+- Add a `tempo:` values block at the end of `values.yaml` (after the
+  `opentelemetry-collector:` section) with:
+  - `tempo.enabled: false` (default off).
+  - `tempo.tempo.retention: 48h` (sensible default trace retention).
+  - `tempo.tempo.receivers.otlp.protocols.grpc.endpoint: "0.0.0.0:4317"` and
+    `http.endpoint: "0.0.0.0:4318"` -- Tempo listens for OTLP directly.
+  - `tempo.tempo.storage.trace.backend: local` with
+    `local.path: /var/tempo/traces` and `wal.path: /var/tempo/wal`
+    (single-binary local storage, suitable for dev/test; operators override
+    for S3/GCS in production).
+  - Minimal resource requests (`cpu: 100m`, `memory: 256Mi`) and limits
+    (`cpu: 500m`, `memory: 1Gi`).
+  - Disable receivers the DSC does not use (Jaeger, OpenCensus) to keep the
+    Tempo surface minimal; only OTLP gRPC + HTTP are enabled.
+- Document every new value with a `# --` helm-docs-compatible comment.
+- Run `helm dependency update charts/data-space-connector` successfully.
 
-Acceptance criteria:
-- `helm template` renders cleanly with `tracing.enabled=false` (no Collector,
-  no OTEL env vars on existing pods) and with `tracing.enabled=true`
-  (Collector workload rendered, OTEL env vars injected on the workloads
-  covered by later steps).
-- `helm dependency update` succeeds.
-- No existing values are renamed; the change is strictly additive.
-
-### Step 2: Instrument IdentityHub deployment with OTEL
-Goal: emit traces from the EDC IdentityHub component.
-
-Files affected:
-- `charts/data-space-connector/templates/identityhub-deployment.yaml`
-- `charts/data-space-connector/values.yaml` (identityhub section)
-
-Actions:
-- Add an `identityhub.tracing` block in `values.yaml` with:
-  - `identityhub.tracing.enabled` (default inherits `tracing.enabled`
-    via the helper).
-  - `identityhub.tracing.javaagent.enabled` (default `true`).
-  - `identityhub.tracing.javaagent.image` (default
-    `ghcr.io/open-telemetry/opentelemetry-java-instrumentation/autoinstrumentation-java:<pinned>`).
-  - `identityhub.tracing.serviceName` (default `identityhub`).
-- Extend the deployment template to, when tracing is enabled:
-  - Add an init container that copies the OpenTelemetry Java agent JAR
-    into a shared `emptyDir` volume (`otel-agent`) mounted at
-    `/otel-agent`.
-  - Mount that volume read-only into the IdentityHub container.
-  - Append `-javaagent:/otel-agent/opentelemetry-javaagent.jar` to
-    `JAVA_TOOL_OPTIONS` (env var; preserve any user-provided value by
-    concatenating).
-  - Inject the `OTEL_*` env vars via the `dsc.otel.env` helper
-    (`OTEL_SERVICE_NAME`, `OTEL_EXPORTER_OTLP_ENDPOINT`,
-    `OTEL_EXPORTER_OTLP_PROTOCOL`, `OTEL_TRACES_SAMPLER`,
-    `OTEL_TRACES_SAMPLER_ARG`, `OTEL_PROPAGATORS`,
-    `OTEL_RESOURCE_ATTRIBUTES`, `OTEL_METRICS_EXPORTER=none`,
-    `OTEL_LOGS_EXPORTER=none`).
-- Keep existing `env:` / `envValueFrom` / `envConfigMapNames` blocks
-  intact – the new vars are appended.
-
-Acceptance criteria:
-- With `tracing.enabled=true`, `helm template` shows the init container,
-  the `otel-agent` volume, and the OTEL env vars on the identityhub pod.
-- With `tracing.enabled=false`, the rendered manifest is unchanged
-  compared to `main`.
+**Acceptance criteria:**
+- `helm dependency update` pulls the `tempo` chart.
+- `helm template` with `tempo.enabled=false` does not render any Tempo
+  resources.
+- `helm template` with `tempo.enabled=true` renders a Tempo StatefulSet and
+  Service.
 - `helm lint` passes.
+- No existing values are renamed or removed.
 
-### Step 3: Instrument fdsc-edc (EDC control/data plane) with OTEL
-Goal: trace the EDC-based connector deployed by the `fdsc-edc` subchart.
+---
 
-Files affected:
-- `charts/data-space-connector/values.yaml` (fdsc-edc section)
-- `charts/data-space-connector/templates/_helpers.tpl`
+### Step 2: Add Grafana subchart dependency and values
 
-Actions:
-- Extend the `fdsc-edc` values with tracing configuration that maps the
-  upstream subchart's extension points:
-  - Use `fdsc-edc.common.additonalEnvVars` (existing list) to inject the
-    `OTEL_*` environment variables.
-  - Use `fdsc-edc.common.deployment.initContainers` and
-    `additionalVolumes` / `additionalVolumeMounts` to mount the
-    OpenTelemetry Java agent the same way as Step 2.
-  - Add a `fdsc-edc.tracing` toggle documented in `values.yaml` and a
-    `dsc.otel.fdscEdc` helper that emits the values diff to be merged
-    into the subchart values when tracing is enabled (the umbrella chart
-    can only influence the subchart via its values; no template files are
-    owned here).
-- Document in `values.yaml` that if the operator overrides
-  `additonalEnvVars` / `initContainers` they must merge the tracing
-  entries manually; provide a ready-to-copy snippet in the comments.
-- Verify the EDC runtime in the pinned `fdsc-edc` image picks up
-  `JAVA_TOOL_OPTIONS` (add an `EDC_` equivalent override via
-  `additonalEnvVars` if the startup script does not forward
-  `JAVA_TOOL_OPTIONS`).
+**Goal:** deploy Grafana as an optional in-cluster dashboard for trace
+visualisation.
 
-Acceptance criteria:
-- `helm template` with tracing enabled renders an fdsc-edc pod carrying
-  the OTEL agent init container, shared volume, and OTEL env vars.
-- With tracing disabled the fdsc-edc rendering is byte-identical to
-  `main`.
-
-### Step 4: Wire the keycloak subchart for OTEL
-Goal: pass tracing configuration down to the keycloak subchart without
-modifying the upstream chart.
-
-Files affected:
-- `charts/data-space-connector/values.yaml` (keycloak section)
-- `charts/data-space-connector/templates/_helpers.tpl`
-
-Actions:
-- Under the `keycloak:` key, add a conditional `extraEnvVars` override
-  that is only rendered when `tracing.enabled` is true and appends the
-  `OTEL_*` env vars plus `KC_TRACING_ENABLED=true` (Keycloak 25+ native
-  OTEL support).
-- Set `OTEL_SERVICE_NAME=keycloak` (overridable via
-  `keycloak.tracing.serviceName`).
-- Provide the `dsc.otel.extraEnv` helper that returns a YAML list
-  suitable for `extraEnvVars` blocks so this and the later subchart
-  steps can share it.
-- Document every new value with a `# --` helm-docs compatible comment.
-
-Acceptance criteria:
-- `helm template tracing.enabled=true` renders the keycloak StatefulSet
-  with `KC_TRACING_ENABLED=true` plus the standard OTEL env vars.
-- With `tracing.enabled=false`, the keycloak values are untouched
-  (byte-identical rendering vs `main`).
-- `helm lint` passes.
-
-### Step 5: Wire the scorpio subchart for OTEL
-Goal: enable Quarkus-native OTEL tracing on the scorpio subchart.
-
-Files affected:
-- `charts/data-space-connector/values.yaml` (scorpio section)
-
-Actions:
-- Under the `scorpio:` key, add a conditional `env` override gated on
-  `tracing.enabled` that appends the Quarkus OTEL variables:
-  - `QUARKUS_OTEL_ENABLED=true`
-  - `QUARKUS_OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` derived from
-    `tracing.exporter.otlp.endpoint`.
-  - `QUARKUS_OTEL_EXPORTER_OTLP_TRACES_PROTOCOL` derived from
-    `tracing.exporter.otlp.protocol`.
-  - `QUARKUS_OTEL_SERVICE_NAME=scorpio` (overridable via
-    `scorpio.tracing.serviceName`).
-- Document every new value with a `# --` helm-docs compatible comment.
-
-Acceptance criteria:
-- `helm template tracing.enabled=true` shows the scorpio deployment
-  carrying the `QUARKUS_OTEL_*` env vars.
-- With `tracing.enabled=false`, the scorpio rendering is unchanged.
-
-### Step 6: Wire the tm-forum-api subchart for OTEL
-Goal: expose OTEL configuration to the tm-forum-api subchart via its
-`extraEnv` hook.
-
-Files affected:
-- `charts/data-space-connector/values.yaml` (tm-forum-api section)
-
-Actions:
-- Under the `tm-forum-api:` key, add a conditional `extraEnv` override
-  gated on `tracing.enabled` that appends the standard `OTEL_*` env
-  vars (service name defaulting to `tm-forum-api`, overridable via
-  `tm-forum-api.tracing.serviceName`).
-- Reuse the `dsc.otel.extraEnv` helper introduced in Step 4.
-- Verify the upstream tm-forum-api chart exposes an `extraEnv`-style
-  hook; if it does not, raise an upstream issue and leave the block
-  commented out with a TODO referencing ticket #28.
-- Document every new value with a `# --` helm-docs compatible comment.
-
-Acceptance criteria:
-- `helm template tracing.enabled=true` shows the tm-forum-api pod(s)
-  carrying the standard `OTEL_*` env vars (or, if the upstream hook is
-  missing, a clearly commented TODO in `values.yaml`).
-- With `tracing.enabled=false`, the tm-forum-api rendering is unchanged.
-
-### Step 7: Wire the contract-management subchart for OTEL
-Goal: expose OTEL configuration to the contract-management subchart via
-its `extraEnv` hook.
-
-Files affected:
-- `charts/data-space-connector/values.yaml` (contract-management section)
-
-Actions:
-- Under the `contract-management:` key, add a conditional `extraEnv`
-  override gated on `tracing.enabled` that appends the standard
-  `OTEL_*` env vars (service name defaulting to `contract-management`,
-  overridable via `contract-management.tracing.serviceName`).
-- Reuse the `dsc.otel.extraEnv` helper.
-- Verify the upstream contract-management chart exposes an
-  `extraEnv`-style hook; if it does not, raise an upstream issue and
-  leave the block commented out with a TODO referencing ticket #28.
-- Document every new value with a `# --` helm-docs compatible comment.
-
-Acceptance criteria:
-- `helm template tracing.enabled=true` shows the contract-management
-  pod(s) carrying the standard `OTEL_*` env vars (or, if the upstream
-  hook is missing, a clearly commented TODO in `values.yaml`).
-- With `tracing.enabled=false`, the contract-management rendering is
-  unchanged.
-
-### Step 8: Wire the marketplace subchart for OTEL
-Goal: expose OTEL configuration to the marketplace subchart via its
-`extraEnv` hook.
-
-Files affected:
-- `charts/data-space-connector/values.yaml` (marketplace section)
-
-Actions:
-- Under the `marketplace:` key, add a conditional `extraEnv` override
-  gated on `tracing.enabled` that appends the standard `OTEL_*` env
-  vars (service name defaulting to `marketplace`, overridable via
-  `marketplace.tracing.serviceName`).
-- Reuse the `dsc.otel.extraEnv` helper.
-- Verify the upstream marketplace chart exposes an `extraEnv`-style
-  hook; if it does not, raise an upstream issue and leave the block
-  commented out with a TODO referencing ticket #28.
-- Document every new value with a `# --` helm-docs compatible comment.
-
-Acceptance criteria:
-- `helm template tracing.enabled=true` shows the marketplace pod(s)
-  carrying the standard `OTEL_*` env vars (or, if the upstream hook is
-  missing, a clearly commented TODO in `values.yaml`).
-- With `tracing.enabled=false`, the marketplace rendering is unchanged.
-
-### Step 9: Wire the decentralizedIam subchart for OTEL
-Goal: propagate tracing configuration to the decentralizedIam subchart
-as a passthrough so the dependent IAM chart can consume it.
-
-Files affected:
-- `charts/data-space-connector/values.yaml` (decentralizedIam section)
-
-Actions:
-- Under the `decentralizedIam:` key, add a `tracing` passthrough block
-  that mirrors the global `tracing.*` values when `tracing.enabled` is
-  true. If the upstream chart adds direct support for tracing, the
-  values flow through without further work; if not, the passthrough
-  has no effect.
-- Document in `values.yaml` that this is a forward-compatible
-  passthrough and reference the upstream chart version that needs to
-  land tracing support.
-
-Acceptance criteria:
-- `helm template tracing.enabled=true` shows the decentralizedIam
-  values carrying the tracing passthrough.
-- With `tracing.enabled=false`, the decentralizedIam rendering is
-  unchanged.
-
-### Step 10: Add default OpenTelemetry Collector pipeline and export examples
-Goal: ship a working default Collector pipeline and documented export
-examples for common backends.
-
-Files affected:
+**Files affected:**
+- `charts/data-space-connector/Chart.yaml`
 - `charts/data-space-connector/values.yaml`
 
-Actions:
-- Populate the `opentelemetry-collector:` values block with:
-  - `mode: deployment`, `replicaCount: 1`.
-  - `config.receivers.otlp` on `0.0.0.0:4317` (gRPC) and
-    `0.0.0.0:4318` (HTTP).
-  - `config.processors.batch`, `memory_limiter`, `resource`.
-  - `config.exporters.debug` (verbosity `basic`) and a commented-out
-    `otlp/backend` block with placeholders for Tempo/Jaeger/Honeycomb.
-  - `config.service.pipelines.traces` wiring receivers → processors →
-    exporters.
-  - Resource limits suitable for small deployments
-    (`requests: 100m/128Mi`, `limits: 500m/512Mi`).
-- Add inline examples (commented YAML) showing how to:
-  - Point at an external Tempo via `otlp/tempo`.
-  - Enable Jaeger via an additional `jaeger` receiver.
-  - Switch to HTTP protocol by overriding
-    `tracing.exporter.otlp.protocol=http/protobuf`.
+**Actions:**
+- Add `grafana/grafana` (pinned to `10.5.15`, repo
+  `https://grafana.github.io/helm-charts`) as a dependency in `Chart.yaml`,
+  gated by `grafana.enabled`.
+- Add a `grafana:` values block at the end of `values.yaml` (after the
+  `tempo:` section) with:
+  - `grafana.enabled: false` (default off).
+  - `grafana.sidecar.datasources.enabled: true` -- enable the k8s-sidecar
+    that watches for ConfigMaps labelled `grafana_datasource` and
+    auto-provisions them as Grafana datasources.
+  - `grafana.sidecar.datasources.label: grafana_datasource` (default label).
+  - Sensible resource requests (`cpu: 100m`, `memory: 128Mi`) and limits
+    (`cpu: 500m`, `memory: 512Mi`).
+  - `grafana.persistence.enabled: false` (no PVC by default; operators
+    enable for production).
+  - `grafana.adminPassword` -- set a documented default (e.g. `"admin"`)
+    with a clear `# --` comment instructing operators to override.
+- Document every new value with a `# --` helm-docs-compatible comment.
+- Run `helm dependency update charts/data-space-connector` successfully.
 
-Acceptance criteria:
-- `helm dependency update && helm template` with
-  `tracing.enabled=true` yields a Collector Deployment that starts
-  and logs `"Everything is ready. Begin running and processing data."`.
-- Defaults only write to the `debug` exporter so no external network
-  calls happen out of the box.
+**Acceptance criteria:**
+- `helm dependency update` pulls the `grafana` chart.
+- `helm template` with `grafana.enabled=false` does not render any Grafana
+  resources.
+- `helm template` with `grafana.enabled=true` renders a Grafana Deployment
+  and Service with the datasource sidecar container present.
+- `helm lint` passes.
+- No existing values are renamed or removed.
 
-### Step 11: Documentation for OTEL tracing
-Goal: describe how to enable tracing and connect a backend.
+---
 
-Files affected:
-- `doc/README.md`
-- `doc/deployment-integration/` (new `observability/README.md`)
-- `README.md` (top-level, short mention + link)
+### Step 3: Create Collector ConfigMap template with auto-wired Tempo pipeline
 
-Actions:
-- Create `doc/deployment-integration/observability/README.md` covering:
-  - Architecture diagram (text-based, using existing Mermaid
-    conventions from `doc/flows/`).
-  - How to enable tracing (`--set tracing.enabled=true`).
-  - How to point at an external backend
-    (`tracing.exporter.otlp.endpoint`, TLS, auth header).
-  - Per-component notes (Java agent for IdentityHub/fdsc-edc, Quarkus
-    for scorpio, Keycloak native OTEL, subchart `extraEnv` hooks).
-  - Troubleshooting (checking Collector logs, common env var typos).
-- Link the new page from `doc/README.md` under a new "Observability"
-  section.
-- Add a one-paragraph summary + link to the top-level `README.md`.
+**Goal:** when Tempo is enabled, automatically configure the OTEL Collector
+to export spans to the in-cluster Tempo instance -- no manual collector config
+required.
 
-Acceptance criteria:
-- All links resolve, Markdown passes `markdownlint` (if configured in
-  CI).
-- No screenshots or external assets added in this iteration (keeps PR
-  small).
+**Files affected:**
+- `charts/data-space-connector/templates/otel-collector-config-cm.yaml` (new)
+- `charts/data-space-connector/templates/_helpers.tpl`
+- `charts/data-space-connector/values.yaml`
 
-### Step 12: Integration test / CI verification
-Goal: catch regressions in the new tracing surface automatically.
+**Actions:**
+- Create `otel-collector-config-cm.yaml`:
+  - Renders a ConfigMap (key: `relay`, as required by the OTEL Collector
+    subchart) only when `tracing.enabled=true`.
+  - Reads the user's `opentelemetry-collector.config` values as the base
+    pipeline definition (receivers, processors, exporters, service).
+  - When `tempo.enabled=true`, appends an `otlp/tempo` exporter block with
+    `endpoint: http://<release>-tempo:4317` (computed via a helper) and
+    `tls.insecure: true`, and adds `otlp/tempo` to the
+    `service.pipelines.traces.exporters` list.
+  - When `tempo.enabled=false`, renders the config as-is (identical to what
+    the subchart would produce from values).
+  - Include the Apache-2.0 license header.
+- Add `dsc.tempo.endpoint` helper in `_helpers.tpl` that returns
+  `http://<release>-tempo:4317` (the OTLP gRPC endpoint of the bundled
+  Tempo service).
+- Update `values.yaml`:
+  - Set `opentelemetry-collector.configMap.create: false` so the subchart
+    does not create its own ConfigMap.
+  - Set `opentelemetry-collector.configMap.existingName` to our custom
+    ConfigMap name (template-rendered, e.g.
+    `"{{ .Release.Name }}-otel-collector-config"`; the subchart's
+    `existingName` field supports template content).
+- Update the inline comments in the `opentelemetry-collector.config` block
+  to note that the actual ConfigMap is generated by
+  `otel-collector-config-cm.yaml` and the `otlp/tempo` exporter is
+  auto-injected when `tempo.enabled=true`.
 
-Files affected:
-- `.github/workflows/test.yaml`
-- `it/` (new helm-unittest or goss test files)
+**Acceptance criteria:**
+- `helm template` with `tracing.enabled=true, tempo.enabled=false` renders
+  a ConfigMap with the same pipeline as before (debug exporter only).
+- `helm template` with `tracing.enabled=true, tempo.enabled=true` renders
+  a ConfigMap whose `relay` key includes the `otlp/tempo` exporter
+  targeting `http://<release>-tempo:4317` and `otlp/tempo` appears in
+  `service.pipelines.traces.exporters`.
+- `helm template` with `tracing.enabled=false` does NOT render the
+  ConfigMap.
+- `helm lint` passes.
 
-Actions:
-- Add a helm-unittest suite under
-  `charts/data-space-connector/tests/tracing_test.yaml` that asserts:
-  - With `tracing.enabled=false`, the identityhub and fdsc-edc
-    manifests do NOT contain `OTEL_EXPORTER_OTLP_ENDPOINT`.
-  - With `tracing.enabled=true`, each of those manifests DOES contain
-    `OTEL_EXPORTER_OTLP_ENDPOINT` and `OTEL_SERVICE_NAME`.
-  - With `tracing.enabled=true`, a Deployment named
-    `*-opentelemetry-collector` is rendered.
-- Extend `.github/workflows/test.yaml` to run `helm unittest` on the
-  chart (install via the official action) as a new job step.
-- Keep the existing integration tests untouched.
+---
 
-Acceptance criteria:
-- The new unittest suite passes locally via
-  `helm unittest charts/data-space-connector`.
-- The CI job defined in `test.yaml` passes on a clean checkout.
-- Tests use table/parameterised inputs where practical (per repo code
+### Step 4: Create Grafana Tempo datasource auto-provisioning template
+
+**Goal:** when both Grafana and Tempo are enabled, automatically provision
+Tempo as a Grafana datasource so operators see traces in the Grafana UI
+immediately.
+
+**Files affected:**
+- `charts/data-space-connector/templates/grafana-tempo-datasource-cm.yaml` (new)
+- `charts/data-space-connector/templates/_helpers.tpl`
+
+**Actions:**
+- Create `grafana-tempo-datasource-cm.yaml`:
+  - Renders a ConfigMap only when both `grafana.enabled=true` AND
+    `tempo.enabled=true`.
+  - Labels the ConfigMap with `grafana_datasource: "1"` so the Grafana
+    sidecar picks it up automatically.
+  - Data key `tempo-datasource.yaml` contains:
+    ```yaml
+    apiVersion: 1
+    datasources:
+      - name: Tempo
+        type: tempo
+        access: proxy
+        url: http://<release>-tempo:3200
+        isDefault: true
+        editable: true
+    ```
+    (URL computed via a helper referencing the Tempo HTTP query endpoint on
+    port 3200.)
+  - Include the Apache-2.0 license header.
+- Add `dsc.tempo.queryEndpoint` helper in `_helpers.tpl` that returns
+  `http://<release>-tempo:3200` (the Tempo HTTP API endpoint used by
+  Grafana for queries).
+
+**Acceptance criteria:**
+- `helm template` with `grafana.enabled=true, tempo.enabled=true` renders
+  the datasource ConfigMap with the correct label and Tempo URL.
+- `helm template` with `grafana.enabled=false` OR `tempo.enabled=false`
+  does NOT render the datasource ConfigMap.
+- `helm lint` passes.
+
+---
+
+### Step 5: Helm unittest tests for Tempo and Grafana integration
+
+**Goal:** catch regressions in the new Tempo/Grafana surface automatically.
+
+**Files affected:**
+- `charts/data-space-connector/tests/tempo_test.yaml` (new)
+
+**Actions:**
+- Create a helm-unittest suite that asserts:
+  - **Collector ConfigMap tests:**
+    - With `tracing.enabled=false`: the `otel-collector-config-cm` is NOT
+      rendered.
+    - With `tracing.enabled=true, tempo.enabled=false`: the ConfigMap IS
+      rendered and does NOT contain `otlp/tempo` in the `relay` key.
+    - With `tracing.enabled=true, tempo.enabled=true`: the ConfigMap IS
+      rendered and DOES contain `otlp/tempo` exporter with the correct
+      Tempo endpoint.
+  - **Grafana datasource ConfigMap tests:**
+    - With `grafana.enabled=false, tempo.enabled=true`: the datasource
+      ConfigMap is NOT rendered.
+    - With `grafana.enabled=true, tempo.enabled=false`: the datasource
+      ConfigMap is NOT rendered.
+    - With `grafana.enabled=true, tempo.enabled=true`: the datasource
+      ConfigMap IS rendered with `grafana_datasource` label and correct
+      Tempo query URL.
+- Use table/parameterised test inputs where practical (per repo code
   quality rules).
+- Verify tests pass locally via `helm unittest charts/data-space-connector`.
 
-### Step 13: Release notes and chart version bump
-Goal: make the change discoverable and version-compliant.
+**Acceptance criteria:**
+- All new tests pass locally.
+- Tests are idempotent and do not depend on external state.
+- Existing `tracing_test.yaml` tests continue to pass unchanged.
 
-Files affected:
+---
+
+### Step 6: Update observability documentation
+
+**Goal:** document the Grafana Tempo integration end-to-end.
+
+**Files affected:**
+- `doc/deployment-integration/observability/README.md`
+- `doc/README.md`
+
+**Actions:**
+- Expand `doc/deployment-integration/observability/README.md` with a new
+  section **"Grafana Tempo Backend (In-Cluster)"** covering:
+  - Architecture diagram update (Mermaid): add Tempo and Grafana to the
+    existing flow (`Collector -> Tempo -> Grafana`).
+  - How to enable the full stack:
+    ```yaml
+    tracing:
+      enabled: true
+    tempo:
+      enabled: true
+    grafana:
+      enabled: true
+    ```
+  - Explanation that the Collector->Tempo and Tempo->Grafana wiring is
+    automatic when the respective subcharts are enabled.
+  - How to use an **external Tempo** instance (disable the subchart, point
+    the collector at the external endpoint -- same as existing docs but with
+    a clear distinction).
+  - Production considerations: Tempo storage backends (S3, GCS, Azure),
+    Tempo retention, Grafana persistence, ingress configuration.
+  - Troubleshooting: checking Tempo readiness, verifying traces appear in
+    Grafana.
+- Add a new ToC entry in the observability doc.
+- Link the Tempo section from `doc/README.md` under the existing
+  "Observability" entry.
+
+**Acceptance criteria:**
+- All internal links resolve.
+- Existing documentation sections are unmodified except for new additions.
+- No screenshots or external assets added (keeps PR small).
+
+---
+
+### Step 7: Release notes and chart version bump
+
+**Goal:** make the Grafana Tempo integration discoverable and version-
+compliant.
+
+**Files affected:**
 - `charts/data-space-connector/Chart.yaml`
-- `doc/release-notes/9-x.md` (appended to existing 9.x release notes)
-- `README.md` (release information section updated)
+- `doc/release-notes/9-x.md`
+- `CLAUDE.md`
 
-Actions:
-- Bump `version` in `Chart.yaml` to `9.1.0` (semver minor for additive
-  functionality).
-- Append an "OpenTelemetry Distributed Tracing (9.1.0)" section to the
-  existing `doc/release-notes/9-x.md` following the convention of one
-  file per major version series.
-- Add a 9.1.0 sub-bullet under the 9.x.x release entry in the top-level
-  `README.md` Release Information section.
+**Actions:**
+- Bump `version` in `Chart.yaml` from `9.1.0` to `9.2.0` (semver minor
+  for additive functionality).
+- Append a "Grafana Tempo Integration (9.2.0)" section to
+  `doc/release-notes/9-x.md` following the existing convention. Cover:
+  - New optional dependencies (`tempo`, `grafana`).
+  - Auto-wired Collector->Tempo pipeline.
+  - Auto-provisioned Grafana datasource.
+  - New values keys added.
+  - No breaking changes; fully opt-in.
+- Update `CLAUDE.md` to reflect the new subchart dependencies, new template
+  files, new test file, and the updated chart version.
 
-Note: The plan originally called for helm-docs regeneration, but the
-repository does not use helm-docs and has no chart-level README.md with
-a generated values table. Instead, the new `tracing.*` keys are
-documented directly in the release notes and in the observability guide
-created in Step 11.
-
-Acceptance criteria:
-- `Chart.yaml` version is `9.1.0`.
-- `doc/release-notes/9-x.md` contains the new tracing section.
-- Top-level `README.md` references the new version.
+**Acceptance criteria:**
+- `Chart.yaml` version is `9.2.0`.
+- `doc/release-notes/9-x.md` contains the new Tempo integration section.
 - No existing release notes sections are modified.
+- `helm lint` passes.
