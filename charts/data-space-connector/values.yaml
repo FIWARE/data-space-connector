@@ -138,16 +138,6 @@ decentralizedIam:
         prometheus:
           enabled: true
 
-      plugins:
-        - prometheus
-
-      pluginAttrs:
-        prometheus:
-          export_addr:
-            ip: "0.0.0.0"
-            port: 9091
-
-
     # -- configuration for the odrl-pap to be deployed as part of the connector, see https://github.com/FIWARE/helm-charts/tree/main/charts/odrl-pap for all options
     odrl-pap:
       # -- should it be enabled? set to false if one outside the chart is used.
