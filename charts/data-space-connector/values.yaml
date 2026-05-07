@@ -2950,3 +2950,60 @@ opentelemetry-collector:
   ##
   ##    The collector already listens on both 4317 (gRPC) and 4318 (HTTP)
   ##    by default, so only the workload-side values need to change.
+
+# -- values passed to the bundled `tempo` subchart
+# (chart: grafana/tempo). Tempo provides an in-cluster trace storage backend
+# that the OpenTelemetry Collector can export spans to. When `tempo.enabled`
+# is true a Tempo single-binary instance is deployed; operators can query
+# stored traces via Grafana or the Tempo HTTP API on port 3200.
+tempo:
+  # -- toggle the bundled Grafana Tempo subchart. When enabled, deploys a
+  # single-binary Tempo instance for trace storage. Keep false when using
+  # an external trace backend (e.g. hosted Tempo, Jaeger, Honeycomb).
+  enabled: false
+  tempo:
+    # -- trace retention period. Traces older than this value are
+    # automatically purged. Increase for production workloads.
+    retention: 48h
+    # -- receiver configuration for Tempo. Only OTLP gRPC and HTTP are
+    # enabled; Jaeger and OpenCensus receivers are disabled to minimise
+    # the attack surface.
+    receivers:
+      otlp:
+        protocols:
+          grpc:
+            # -- OTLP gRPC listen address for Tempo.
+            endpoint: "0.0.0.0:4317"
+          http:
+            # -- OTLP HTTP listen address for Tempo.
+            endpoint: "0.0.0.0:4318"
+      jaeger:
+        protocols:
+          # -- Jaeger Thrift HTTP receiver -- disabled.
+          thrift_http: null
+          # -- Jaeger gRPC receiver -- disabled.
+          grpc: null
+      opencensus: null
+    # -- trace storage configuration. Defaults to local filesystem storage
+    # suitable for development and testing. For production, override with
+    # an S3, GCS, or Azure backend; see the Tempo documentation at
+    # https://grafana.com/docs/tempo/latest/configuration/storage/
+    storage:
+      trace:
+        # -- storage backend type. Supported values: local, s3, gcs, azure.
+        backend: local
+        local:
+          # -- filesystem path for completed trace blocks (local backend).
+          path: /var/tempo/traces
+        wal:
+          # -- filesystem path for the write-ahead log (local backend).
+          path: /var/tempo/wal
+  # -- CPU / memory resources for the Tempo pod. Sized for small
+  # deployments; raise limits for production traffic volumes.
+  resources:
+    limits:
+      cpu: 500m
+      memory: 1Gi
+    requests:
+      cpu: 100m
+      memory: 256Mi

@@ -80,3 +80,8 @@ dependencies:
     condition: opentelemetry-collector.enabled
     version: 0.152.0
     repository: https://open-telemetry.github.io/opentelemetry-helm-charts
+  # observability - Grafana Tempo for trace storage backend (opt-in)
+  - name: tempo
+    condition: tempo.enabled
+    version: 1.24.4
+    repository: https://grafana.github.io/helm-charts
