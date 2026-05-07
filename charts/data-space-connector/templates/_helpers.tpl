@@ -392,3 +392,29 @@ Usage (from values tooling, not from a template):
 {{- include "dsc.otel.env" (dict "ctx" . "service" $serviceName "enabled" true) }}
 {{- end -}}
 {{- end -}}
+
+{{/*
+OTLP gRPC endpoint of the bundled Grafana Tempo service. Used by the
+otel-collector-config-cm.yaml template to auto-wire the Collector→Tempo
+pipeline when `tempo.enabled=true`. The service name follows the upstream
+Tempo chart convention of `<release>-tempo`.
+
+Usage:
+  {{ include "dsc.tempo.endpoint" . }}  → "http://<release>-tempo:4317"
+*/}}
+{{- define "dsc.tempo.endpoint" -}}
+{{- printf "http://%s-tempo:4317" .Release.Name -}}
+{{- end -}}
+
+{{/*
+Name of the ConfigMap that carries the OTEL Collector pipeline
+configuration (key: `relay`). Referenced by the opentelemetry-collector
+subchart via `configMap.existingName` and rendered by
+otel-collector-config-cm.yaml.
+
+Usage:
+  {{ include "dsc.otel.collectorConfigName" . }}
+*/}}
+{{- define "dsc.otel.collectorConfigName" -}}
+{{- printf "%s-otel-collector-config" .Release.Name -}}
+{{- end -}}
