@@ -1453,15 +1453,6 @@ grafana:
       provider:
         foldersFromFilesStructure: true
 
-  dashboards:
-    default:
-      apisix-dashboard:
-        gnetId: 11719          # Dashboard ID from grafana.com
-        revision: 7         # Optional, defaults to latest
-        datasource: Prometheus
-      apisix:
-        url: https://grafana.com/api/dashboards/11719/revisions/7/download
-        datasource: Prometheus
   datasources:
     datasources.yaml:
       apiVersion: 1
