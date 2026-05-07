@@ -68,6 +68,3 @@ registration:
 
 cert-manager:
   enabled: false
-
-prometheus:
-  enabled: false

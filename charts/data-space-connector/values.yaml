@@ -2234,9 +2234,9 @@ extraManifests: []
 # -- dashboard for operating the FIWARE Data Space Connector
 fdsc-dashboard:
   enabled: false
+
 prometheus:
   enabled: false
+
 grafana:
   enabled: false
-  adminUser: admin
-  adminPassword: password
