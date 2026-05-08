@@ -65,6 +65,10 @@ data:
   OTEL_EXPORTER_OTLP_ENDPOINT: {{ include "dsc.otel.endpoint" . | quote }}
   OTEL_EXPORTER_OTLP_PROTOCOL: {{ $protocol | quote }}
   OTEL_EXPORTER_OTLP_INSECURE: {{ ternary "true" "false" $insecure | quote }}
+  # Quarkus-specific env vars required because Keycloak's Quarkus runtime
+  # does not read the standard OTEL_EXPORTER_OTLP_ENDPOINT for traces.
+  QUARKUS_OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: {{ include "dsc.otel.endpoint" . | quote }}
+  QUARKUS_OTEL_EXPORTER_OTLP_TRACES_PROTOCOL: {{ $protocol | quote }}
   OTEL_TRACES_SAMPLER: {{ $sampler | quote }}
   OTEL_TRACES_SAMPLER_ARG: {{ $samplerArg | quote }}
   OTEL_PROPAGATORS: {{ $propagators | quote }}

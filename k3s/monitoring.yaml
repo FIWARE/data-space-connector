@@ -1,9 +1,13 @@
 grafana:
   enabled: true
+
+  adminUser: admin
+  adminPassword: password
+
   grafana.ini:
-    server:
-      root_url: "%(protocol)s://%(domain)s/api/grafana"
-      serve_from_sub_path: true
+    #server:
+      #root_url: "%(protocol)s://%(domain)s/api/grafana"
+      #serve_from_sub_path: true
     security:
       allow_embedding: true
     auth.proxy:
@@ -26,6 +30,15 @@ grafana:
       folderAnnotation: grafana_folder
       provider:
         foldersFromFilesStructure: true
+    datasources:
+      # -- enable the Kubernetes sidecar that watches for ConfigMaps
+      # labelled `grafana_datasource` and auto-provisions them as
+      # Grafana datasources. Required for automatic Tempo datasource
+      # registration.
+      enabled: true
+      # -- label that the sidecar watches for on ConfigMaps. ConfigMaps
+      # with this label set to "1" are imported as datasource definitions.
+      label: grafana_datasource
 
   datasources:
     datasources.yaml:
@@ -85,3 +98,47 @@ fdsc-dashboard:
   grafana:
     enabled: true
     panelsJson: "[{\"title\":\"\",\"path\":\"/d/apisix-routes/apisix-routes?orgId=1&from=now-1h&to=now&timezone=browser&var-datasource=PBFA97CFB590B2093&var-route=$__all&var-service=$__all&refresh=30s\",\"span\":12}]"
+
+tracing:
+  enabled: true
+  autoInstrumentation:
+    enabled: true
+
+tempo:
+  enabled: true
+
+opentelemetry-operator:
+  enabled: true
+
+opentelemetry-collector:
+  enabled: true
+
+# Auto-instrumentation via OTel Operator: the operator's mutating webhook
+# reads these annotations and injects the appropriate language agent into
+# the pod at creation time. Static OTEL_* env vars are removed because
+# the operator injects them from the Instrumentation CR.
+scorpio:
+  podAnnotations:
+    instrumentation.opentelemetry.io/inject-java: "true"
+
+tm-forum-api:
+  defaultConfig:
+    additionalAnnotations:
+      instrumentation.opentelemetry.io/inject-java: "true"
+    additionalEnvVars:
+      - name: API_EXTENSION_ENABLED
+        value: "true"
+      - name: GENERAL_NGSILDORQUERYVALUE
+        value: ","
+      - name: GENERAL_NGSILDORQUERYKEY
+        value: ","
+      - name: GENERAL_ENCLOSEQUERY
+        value: "false"
+
+contract-management:
+  deployment:
+    additionalAnnotations:
+      instrumentation.opentelemetry.io/inject-java: "true"
+  additionalEnvVars:
+    - name: LOGGER_LEVELS_ROOT
+      value: DEBUG

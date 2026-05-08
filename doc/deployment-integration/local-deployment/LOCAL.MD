@@ -1261,7 +1261,7 @@ To try it out, insert your holder did (```echo $HOLDER_DID```) into the mapper c
 
 1. Configure holder verfifcation for a certain scope:
 ```shell
-  curl -k -x localhost:8888 -v -X 'PUT' \
+  curl -k -x localhost:8888 -X 'PUT' \
     'https://provider-ccs.127.0.0.1.nip.io/service/data-service' \
     -H 'accept: application/json' \
     -H 'Content-Type: application/json' \

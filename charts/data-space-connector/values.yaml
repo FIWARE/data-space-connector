@@ -1923,7 +1923,7 @@ fdsc-edc:
       # -- container image providing the OpenTelemetry Java agent JAR
       # at `/javaagent.jar`. Pinned to a stable upstream release so
       # behaviour is reproducible across chart versions.
-      image: "ghcr.io/open-telemetry/opentelemetry-java-instrumentation/autoinstrumentation-java:2.11.0"
+      image: "ghcr.io/open-telemetry/opentelemetry-operator/autoinstrumentation-java:2.11.0"
       # -- [Kubernetes image pull policy](https://kubernetes.io/docs/concepts/containers/images/#image-pull-policy)
       # for the agent init container.
       pullPolicy: IfNotPresent
@@ -2100,7 +2100,7 @@ fdsc-edc:
       # When overriding, include the `otel-agent-init` entry below to
       # keep tracing functional:
       #   - name: otel-agent-init
-      #     image: "ghcr.io/open-telemetry/opentelemetry-java-instrumentation/autoinstrumentation-java:2.11.0"
+      #     image: "ghcr.io/open-telemetry/opentelemetry-operator/autoinstrumentation-java:2.11.0"
       #     imagePullPolicy: IfNotPresent
       #     command: ["cp", "/javaagent.jar", "/otel-agent/opentelemetry-javaagent.jar"]
       #     securityContext:
@@ -2126,7 +2126,7 @@ fdsc-edc:
         # pinned upstream image into the shared `otel-agent` volume so
         # the main container can attach it via `JAVA_TOOL_OPTIONS`.
         - name: otel-agent-init
-          image: "ghcr.io/open-telemetry/opentelemetry-java-instrumentation/autoinstrumentation-java:2.11.0"
+          image: "ghcr.io/open-telemetry/opentelemetry-operator/autoinstrumentation-java:2.11.0"
           imagePullPolicy: IfNotPresent
           command:
             - cp
@@ -2678,7 +2678,7 @@ identityhub:
       # -- container image providing the OpenTelemetry Java agent JAR
       # at `/javaagent.jar`. Pinned to a stable upstream release so
       # behaviour is reproducible across chart versions.
-      image: "ghcr.io/open-telemetry/opentelemetry-java-instrumentation/autoinstrumentation-java:2.11.0"
+      image: "ghcr.io/open-telemetry/opentelemetry-operator/autoinstrumentation-java:2.11.0"
       # -- [Kubernetes image pull policy](https://kubernetes.io/docs/concepts/containers/images/#image-pull-policy)
       # for the agent init container.
       pullPolicy: IfNotPresent
@@ -2746,6 +2746,7 @@ prometheus:
 
 grafana:
   enabled: false
+  
 # -- global distributed-tracing configuration used by every component that
 # supports OpenTelemetry. The values under this block are fed into the
 # `dsc.otel.env` template helper and rendered as the standard `OTEL_*`
@@ -2790,6 +2791,69 @@ tracing:
   # list; see
   # https://opentelemetry.io/docs/languages/sdk-configuration/general/#otel_propagators
   propagators: "tracecontext,baggage"
+  # -- auto-instrumentation via the OpenTelemetry Operator. When enabled,
+  # renders an `Instrumentation` CR that the Operator's mutating webhook
+  # uses to inject language-specific agents into annotated pods. Requires
+  # `opentelemetry-operator.enabled: true` and cert-manager.
+  autoInstrumentation:
+    # -- master gate for auto-instrumentation. When true, the chart renders
+    # the `Instrumentation` CR. Pods still need the matching
+    # `instrumentation.opentelemetry.io/inject-<lang>: "true"` annotation
+    # to be instrumented.
+    enabled: false
+    # -- Java auto-instrumentation agent settings.
+    java:
+      # -- container image for the Java auto-instrumentation agent init
+      # container injected by the Operator.
+      image: "ghcr.io/open-telemetry/opentelemetry-operator/autoinstrumentation-java:2.11.0"
+    # -- Python auto-instrumentation agent settings.
+    python:
+      # -- container image for the Python auto-instrumentation agent init
+      # container injected by the Operator.
+      image: "ghcr.io/open-telemetry/opentelemetry-operator/autoinstrumentation-python:0.52b1"
+    # -- Node.js auto-instrumentation agent settings.
+    nodejs:
+      # -- container image for the Node.js auto-instrumentation agent init
+      # container injected by the Operator.
+      image: "ghcr.io/open-telemetry/opentelemetry-operator/autoinstrumentation-nodejs:0.57.0"
+
+# -- values passed to the bundled `opentelemetry-operator` subchart
+# (chart: open-telemetry/opentelemetry-operator). The operator provides
+# Kubernetes-native auto-instrumentation by injecting language-specific
+# agents into annotated pods via a mutating webhook. Requires cert-manager
+# for webhook certificate management.
+opentelemetry-operator:
+  # -- toggle the bundled OpenTelemetry Operator subchart. When enabled,
+  # deploys the operator which watches for `Instrumentation` CRs and
+  # injects auto-instrumentation agents into annotated pods.
+  enabled: false
+  # -- admission webhook configuration. Both policies must be `Ignore`
+  # when the operator and workloads are deployed in the same Helm
+  # release, because the pod injection webhook (`mpod.kb.io`)
+  # intercepts ALL pod creation — including the operator's own pods —
+  # creating a circular dependency with `Fail`. On first install, pods
+  # created before the operator is ready will lack injection; a
+  # `kubectl rollout restart` of the annotated deployments resolves
+  # this. Subsequent upgrades work without restart because the operator
+  # is already running.
+  admissionWebhooks:
+    failurePolicy: Ignore
+    pods:
+      failurePolicy: Ignore
+  # -- operator manager configuration.
+  manager:
+    # -- collector image used by the operator when creating
+    # OpenTelemetryCollector CRs. Required by the chart since v0.86.0.
+    collectorImage:
+      repository: "otel/opentelemetry-collector-contrib"
+    # -- resource limits for the operator manager pod.
+    resources:
+      limits:
+        cpu: 200m
+        memory: 256Mi
+      requests:
+        cpu: 100m
+        memory: 128Mi
 
 # -- values passed to the bundled `opentelemetry-collector` subchart
 # (chart: open-telemetry/opentelemetry-collector). The collector is only
@@ -2855,6 +2919,16 @@ opentelemetry-collector:
         send_batch_size: 512
         timeout: 5s
         send_batch_max_size: 1024
+      # -- filter processor drops noisy spans that are not useful for
+      # debugging (health/readiness probes, Prometheus scrapes). Uses
+      # the OTTL (OpenTelemetry Transformation Language) syntax supported
+      # by the contrib collector image.
+      filter/healthcheck:
+        error_mode: ignore
+        traces:
+          span:
+            - 'IsMatch(attributes["url.path"], ".*/health.*") or IsMatch(attributes["url.path"], ".*/ready.*") or IsMatch(attributes["url.path"], ".*/prometheus.*")'
+            - 'IsMatch(attributes["http.target"], ".*/health.*") or IsMatch(attributes["http.target"], ".*/ready.*") or IsMatch(attributes["http.target"], ".*/prometheus.*")'
       # -- memory_limiter prevents the collector from consuming unbounded
       # memory under load. The percentage-based limits adapt to the pod's
       # memory limit automatically.
@@ -2908,7 +2982,7 @@ opentelemetry-collector:
       pipelines:
         traces:
           receivers: [otlp]
-          processors: [memory_limiter, resource, batch]
+          processors: [memory_limiter, filter/healthcheck, resource, batch]
           exporters: [debug]
           ## To export to a backend, add its exporter name to the list:
           ## exporters: [debug, otlp/tempo]
@@ -3020,42 +3094,3 @@ tempo:
     requests:
       cpu: 100m
       memory: 256Mi
-
-# -- values passed to the bundled `grafana` subchart
-# (chart: grafana/grafana). Grafana provides an in-cluster dashboard for
-# trace visualisation. When both `grafana.enabled` and `tempo.enabled` are
-# true, a Tempo datasource is auto-provisioned via a sidecar so operators
-# can browse traces immediately.
-grafana:
-  # -- toggle the bundled Grafana subchart. When enabled, deploys a
-  # Grafana instance for trace visualisation. Keep false when using an
-  # external Grafana deployment or when dashboards are not needed.
-  enabled: false
-  # -- Grafana admin password. Override this value in production
-  # deployments; the default is intentionally insecure for local
-  # development and testing only.
-  adminPassword: "admin"
-  sidecar:
-    datasources:
-      # -- enable the Kubernetes sidecar that watches for ConfigMaps
-      # labelled `grafana_datasource` and auto-provisions them as
-      # Grafana datasources. Required for automatic Tempo datasource
-      # registration.
-      enabled: true
-      # -- label that the sidecar watches for on ConfigMaps. ConfigMaps
-      # with this label set to "1" are imported as datasource definitions.
-      label: grafana_datasource
-  persistence:
-    # -- enable persistent storage for Grafana. Disabled by default for
-    # lightweight dev/test deployments. Enable and configure a
-    # storageClass for production to survive pod restarts.
-    enabled: false
-  # -- CPU / memory resources for the Grafana pod. Sized for small
-  # deployments; raise limits for production traffic volumes.
-  resources:
-    limits:
-      cpu: 500m
-      memory: 512Mi
-    requests:
-      cpu: 100m
-      memory: 128Mi

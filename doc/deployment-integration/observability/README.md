@@ -40,6 +40,14 @@ backend exporter.
   - [Scorpio (Quarkus Native OTEL)](#scorpio-quarkus-native-otel)
   - [tm-forum-api, contract-management, marketplace (Subchart extraEnv)](#tm-forum-api-contract-management-marketplace-subchart-extraenv)
   - [decentralizedIam (Forward-Compatible Passthrough)](#decentralizediam-forward-compatible-passthrough)
+- [Auto-Instrumentation via OpenTelemetry Operator](#auto-instrumentation-via-opentelemetry-operator)
+  - [Why Auto-Instrumentation?](#why-auto-instrumentation)
+  - [Prerequisites](#prerequisites)
+  - [Enabling Auto-Instrumentation](#enabling-auto-instrumentation)
+  - [Per-Workload Annotations](#per-workload-annotations)
+  - [Interaction with Static OTEL Env Vars](#interaction-with-static-otel-env-vars)
+  - [Which Approach to Use](#which-approach-to-use)
+  - [Auto-Instrumentation Configuration Reference](#auto-instrumentation-configuration-reference)
 - [Excluded Components](#excluded-components)
 - [Troubleshooting](#troubleshooting)
 
@@ -598,6 +606,12 @@ variables (`QUARKUS_OTEL_ENABLED=true`,
 `QUARKUS_OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`, etc.) through the
 Scorpio subchart's `env` hook.
 
+> **Note:** The current Scorpio container image (`scorpiobroker/all-in-one-runner:java-4.1.10`)
+> does not include the `quarkus-opentelemetry` extension, so the static
+> env vars have no effect. Use
+> [auto-instrumentation via the OTel Operator](#auto-instrumentation-via-opentelemetry-operator)
+> to inject the Java agent into Scorpio pods.
+
 **Per-component overrides:**
 
 ```yaml
@@ -618,6 +632,11 @@ These components receive the same set of environment variables:
 `OTEL_TRACES_SAMPLER_ARG`, `OTEL_PROPAGATORS`,
 `OTEL_RESOURCE_ATTRIBUTES`, `OTEL_METRICS_EXPORTER=none`, and
 `OTEL_LOGS_EXPORTER=none`.
+
+> **Note:** These subcharts do not bundle an OTEL SDK, so the static
+> env vars alone will not produce traces. Use
+> [auto-instrumentation via the OTel Operator](#auto-instrumentation-via-opentelemetry-operator)
+> to inject the appropriate language agent.
 
 **Per-component overrides:**
 
@@ -645,6 +664,138 @@ changes to the umbrella chart.
 
 Currently, the passthrough has no effect on the rendered manifests unless
 the upstream chart consumes it.
+
+
+## Auto-Instrumentation via OpenTelemetry Operator
+
+The chart includes an optional **OpenTelemetry Operator** subchart that
+enables Kubernetes-native auto-instrumentation. The operator injects
+language-specific agents (Java, Python, Node.js) into pods at creation
+time via a mutating admission webhook, removing the need for the
+application image to bundle an OTEL SDK or agent.
+
+### Why Auto-Instrumentation?
+
+Several third-party subcharts cannot emit traces through static `OTEL_*`
+environment variables alone because their container images do not include
+an OpenTelemetry SDK or agent:
+
+| Subchart | Runtime | Limitation |
+|---|---|---|
+| **Scorpio** | Quarkus (Java) | Image does not include the `quarkus-opentelemetry` extension; `QUARKUS_OTEL_ENABLED=true` is silently ignored. |
+| **tm-forum-api** | Micronaut (Java) | No OTEL SDK or Java agent present; `OTEL_SDK_DISABLED=false` has no effect. |
+| **contract-management** | Micronaut (Java) | Same as tm-forum-api. |
+| **marketplace** (charging backend) | Python | No OTEL SDK bundled. |
+| **marketplace** (logic proxy) | Node.js | No OTEL SDK bundled. |
+
+The OpenTelemetry Operator solves this by injecting the appropriate
+language agent as an init container, which copies the agent into a
+shared volume. The operator also sets the necessary `OTEL_*` environment
+variables from the `Instrumentation` custom resource.
+
+### Prerequisites
+
+1. **cert-manager** must be installed. The operator's webhook TLS
+   certificates are managed by cert-manager. The umbrella chart includes
+   cert-manager as an optional dependency (`cert-manager.enabled: true`),
+   or you can use an external installation.
+
+2. **OpenTelemetry Operator** must be enabled
+   (`opentelemetry-operator.enabled: true`). This deploys the operator
+   and registers the `Instrumentation` CRD.
+
+### Enabling Auto-Instrumentation
+
+Enable the operator and auto-instrumentation with these values:
+
+```yaml
+tracing:
+  enabled: true
+  autoInstrumentation:
+    enabled: true
+
+opentelemetry-operator:
+  enabled: true
+```
+
+This renders an `Instrumentation` CR in the release namespace. The CR
+defines the exporter endpoint (pointing at the in-cluster Collector),
+sampler, propagators, and agent images. Pods must still be annotated
+to opt in to injection (see below).
+
+### Per-Workload Annotations
+
+The operator's webhook only instruments pods that carry the appropriate
+annotation. Add the annotation through each subchart's pod annotation
+extension point:
+
+```yaml
+# Java workloads
+scorpio:
+  podAnnotations:
+    instrumentation.opentelemetry.io/inject-java: "true"
+
+tm-forum-api:
+  defaultConfig:
+    additionalAnnotations:
+      instrumentation.opentelemetry.io/inject-java: "true"
+
+contract-management:
+  deployment:
+    additionalAnnotations:
+      instrumentation.opentelemetry.io/inject-java: "true"
+
+# Python workload
+marketplace:
+  bizEcosystemChargingBackend:
+    deployment:
+      podAnnotations:
+        instrumentation.opentelemetry.io/inject-python: "true"
+
+# Node.js workload
+marketplace:
+  bizEcosystemLogicProxy:
+    statefulset:
+      podAnnotations:
+        instrumentation.opentelemetry.io/inject-nodejs: "true"
+```
+
+Without the operator webhook installed, these annotations are harmless
+no-ops.
+
+### Interaction with Static OTEL Env Vars
+
+When using auto-instrumentation, the operator injects `OTEL_*`
+environment variables from the `Instrumentation` CR. If the pod also
+has static `OTEL_*` env vars from `additionalEnvVars`, the two sets may
+conflict (container-level env vars take precedence over operator-injected
+ones).
+
+**Recommendation:** When enabling auto-instrumentation for a workload,
+remove the static `OTEL_*` env vars from that workload's
+`additionalEnvVars`, keeping only non-OTEL entries (e.g.,
+`API_EXTENSION_ENABLED` for tm-forum-api, `LOGGER_LEVELS_ROOT` for
+contract-management). See `k3s/monitoring.yaml` for a working example.
+
+### Which Approach to Use
+
+| Scenario | Recommended Approach |
+|---|---|
+| App image has built-in OTEL support (e.g., Keycloak) | Static env vars via `tracing.enabled` |
+| App image has the OTEL Java agent bundled (e.g., IdentityHub, fdsc-edc) | Init container injection via `tracing.javaagent.enabled` |
+| App image has **no** OTEL SDK or agent (e.g., Scorpio, tm-forum-api) | **OTel Operator auto-instrumentation** |
+| Mixed deployment with multiple languages | OTel Operator (supports Java, Python, Node.js from a single `Instrumentation` CR) |
+
+### Auto-Instrumentation Configuration Reference
+
+| Value | Default | Description |
+|---|---|---|
+| `tracing.autoInstrumentation.enabled` | `false` | Master gate for the `Instrumentation` CR. |
+| `tracing.autoInstrumentation.java.image` | `ghcr.io/.../autoinstrumentation-java:2.11.0` | Java agent image injected by the operator. |
+| `tracing.autoInstrumentation.python.image` | `ghcr.io/.../autoinstrumentation-python:0.52b1` | Python agent image injected by the operator. |
+| `tracing.autoInstrumentation.nodejs.image` | `ghcr.io/.../autoinstrumentation-nodejs:0.57.0` | Node.js agent image injected by the operator. |
+| `opentelemetry-operator.enabled` | `false` | Deploy the OTel Operator subchart. |
+| `opentelemetry-operator.manager.resources` | 100m/128Mi req, 200m/256Mi lim | Operator manager pod resources. |
 
 
 ## Excluded Components

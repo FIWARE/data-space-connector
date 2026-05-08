@@ -2,7 +2,7 @@ apiVersion: v2
 name: data-space-connector
 description: Umbrella Chart for the FIWARE Data Space Connector, combining all essential parts to be used by a participant.
 type: application
-version: 9.2.0
+version: 9.3.0
 dependencies:
   - name: decentralized-iam
     alias: decentralizedIam
@@ -27,7 +27,7 @@ dependencies:
     repository: https://fiware.github.io/helm-charts
   - name: contract-management
     condition: contract-management.enabled
-    version: 3.5.22
+    version: 3.5.28
     repository: https://fiware.github.io/helm-charts
   # marketplace
   - name: business-api-ecosystem
@@ -75,6 +75,11 @@ dependencies:
     condition: grafana.enabled
     version: 12.1.1
     repository: https://grafana-community.github.io/helm-charts
+  # observability - OpenTelemetry Operator for auto-instrumentation (opt-in)
+  - name: opentelemetry-operator
+    condition: opentelemetry-operator.enabled
+    version: 0.86.0
+    repository: https://open-telemetry.github.io/opentelemetry-helm-charts
   # observability - OpenTelemetry Collector for distributed tracing (opt-in)
   - name: opentelemetry-collector
     condition: opentelemetry-collector.enabled
@@ -84,9 +89,4 @@ dependencies:
   - name: tempo
     condition: tempo.enabled
     version: 1.24.4
-    repository: https://grafana.github.io/helm-charts
-  # observability - Grafana dashboard for trace visualisation (opt-in)
-  - name: grafana
-    condition: grafana.enabled
-    version: 10.5.15
     repository: https://grafana.github.io/helm-charts
