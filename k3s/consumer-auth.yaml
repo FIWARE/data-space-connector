@@ -10,7 +10,6 @@ registration:
       credentialTypes:
         - MembershipCredential
 
-
 decentralizedIam:
   vcAuthentication:
     postgres-operator:
@@ -54,6 +53,7 @@ decentralizedIam:
           cert-manager.io/cluster-issuer: "selfsigned-issuer"
           cert-manager.io/private-key-algorithm: "ECDSA"
           cert-manager.io/common-name: "verifier.fancy-marketplace.biz"
+          cert-manager.io/alt-names: "verifier.fancy-marketplace.biz"
         tls:
           - hosts:
               - verifier.fancy-marketplace.biz
@@ -128,7 +128,7 @@ decentralizedIam:
                       multiple: true
                       meta:
                         type_values:
-                          - MembershipCredential
+                          - [MembershipCredential]
       deployment:
         logging:
           level: DEBUG
@@ -141,12 +141,8 @@ decentralizedIam:
             certificatePath: /signing-key/tls.crt
             requestKeyAlgorithm: ES256
             id: x509_san_dns:verifier.fancy-marketplace.biz
-        database:
-
         server:
           host: https://verifier.fancy-marketplace.biz
-        configRepo:
-          configEndpoint: http://verifier:8090
         additionalVolumes:
           - name: signing-key
             secret:
