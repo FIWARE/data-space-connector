@@ -225,7 +225,7 @@ scorpio:
     # -- should the automatic registration of scorpio be enabled
     enabled: false
     # -- endpoint of the ccs to regsiter at
-    endpoint: http://credentials-config-service:8080
+    endpoint: http://verifier:8090
     # -- configmap to get the registration information from
     configMap: scorpio-registration
 
@@ -1289,7 +1289,7 @@ tm-forum-api:
     # -- configuration to register the dataplane at the credentials-config-service
     ccs:
       # -- endpoint of the ccs to regsiter at
-      endpoint: http://credentials-config-service:8080
+      endpoint: http://verifier:8090
       # -- service id of the data-service to be used
       id: tmf-api
       # -- default scope to be created for the data plane
@@ -1349,7 +1349,7 @@ rainbow:
     # -- should the registration at the credentials-config-service be enabled
     enabled: false
     # -- endpoint of the ccs to regsiter at
-    endpoint: http://credentials-config-service:8080
+    endpoint: http://verifier:8090
     # -- configmap to get the registration information from
     configMap: rainbow-registration
     # -- service id of the data-service to be used
