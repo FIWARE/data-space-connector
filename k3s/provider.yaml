@@ -147,6 +147,8 @@ decentralizedIam:
                 curl -X 'POST' 'http://tir.trust-anchor.svc.cluster.local:8080/issuer' -H 'Content-Type: application/json' -d "{\"did\": \"did:web:mp-operations.org\", \"credentials\": []}"
       registration:
         enabled: true
+        job:
+          activeDeadlineSeconds: null
         services:
           - id: tpp-service
             defaultOidcScope: "operator"

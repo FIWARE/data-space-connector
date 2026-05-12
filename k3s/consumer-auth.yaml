@@ -79,6 +79,8 @@ decentralizedIam:
               - consumer-ccs.127.0.0.1.nip.io
       registration:
         enabled: true
+        job:
+          activeDeadlineSeconds:
         services:
           - id: tm-forum
             defaultOidcScope: "default"
