@@ -80,7 +80,11 @@ decentralizedIam:
       registration:
         enabled: true
         job:
-          activeDeadlineSeconds:
+          initContainers:
+            waitForHost:
+              enabled: true
+              path: /health
+          activeDeadlineSeconds: null
         services:
           - id: tm-forum
             defaultOidcScope: "default"

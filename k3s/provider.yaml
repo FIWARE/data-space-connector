@@ -148,6 +148,10 @@ decentralizedIam:
       registration:
         enabled: true
         job:
+          initContainers:
+            waitForHost:
+              enabled: true
+              path: /health
           activeDeadlineSeconds: null
         services:
           - id: tpp-service
