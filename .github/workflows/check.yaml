@@ -74,10 +74,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
       - name: Comment PR
-        uses: thollander/actions-comment-pull-request@v3.0.0
-        with:
-          message: "Please apply one of the following labels to the PR: 'patch', 'minor', 'major'."
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh pr comment ${{ github.event.pull_request.number }} \
+            --body "Please apply one of the following labels to the PR: 'patch', 'minor', 'major'."
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   prepare-release:
     needs: ["check-labels", "comment"]
