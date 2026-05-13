@@ -60,9 +60,10 @@ jobs:
           TARGET_PATHS: "./README.md,./doc/README.md"
           COMMIT_MESSAGE: "Update ToC"
 
-      - uses: "marvinpinto/action-automatic-releases@latest"
-        with:
-          repo_token: "${{ secrets.GITHUB_TOKEN }}"
-          automatic_release_tag: ${{ needs.generate-version.outputs.version }}
-          prerelease: true
-          title: ${{ needs.generate-version.outputs.version }}
+      - name: Create pre-release
+        run: |
+          gh release create ${{ needs.generate-version.outputs.version }} \
+            --title "${{ needs.generate-version.outputs.version }}" \
+            --prerelease
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
