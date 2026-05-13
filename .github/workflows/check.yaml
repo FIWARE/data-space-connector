@@ -171,7 +171,5 @@ jobs:
 
       - name: Push changes
         continue-on-error: true
-        uses: ad-m/github-push-action@master
-        with:
-          directory: current-branch
-          branch: ${{ github.head_ref }}
+        working-directory: current-branch
+        run: git push origin HEAD:${{ github.head_ref }}
