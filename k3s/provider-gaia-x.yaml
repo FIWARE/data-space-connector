@@ -46,22 +46,6 @@ decentralizedIam:
               hosts:
                 - til-provider.127.0.0.1.nip.io
 
-    credentials-config-service:
-      ingress:
-        enabled: true
-        annotations:
-          cert-manager.io/cluster-issuer: "selfsigned-issuer"
-          cert-manager.io/private-key-algorithm: "ECDSA"
-          cert-manager.io/common-name: "provider-ccs.127.0.0.1.nip.io"
-        hosts:
-          - host: provider-ccs.127.0.0.1.nip.io
-            paths:
-              - "/"
-        tls:
-          - secretName: provider-ccs.127.0.0.1.nip.io-tls
-            hosts:
-              - provider-ccs.127.0.0.1.nip.io
-
     vcverifier:
       ingress:
         enabled: true
@@ -77,6 +61,20 @@ decentralizedIam:
           - secretName: provider-verifier.127.0.0.1.nip.io-tls
             hosts:
               - provider-verifier.127.0.0.1.nip.io
+      configIngress:
+        enabled: true
+        annotations:
+          cert-manager.io/cluster-issuer: "selfsigned-issuer"
+          cert-manager.io/private-key-algorithm: "ECDSA"
+          cert-manager.io/common-name: "provider-ccs.127.0.0.1.nip.io"
+        hosts:
+          - host: provider-ccs.127.0.0.1.nip.io
+            paths:
+              - "/"
+        tls:
+          - secretName: provider-ccs.127.0.0.1.nip.io-tls
+            hosts:
+              - provider-ccs.127.0.0.1.nip.io
       deployment:
         logging:
           level: DEBUG
@@ -86,7 +84,7 @@ decentralizedIam:
         server:
           host: https://provider-verifier.127.0.0.1.nip.io:8080
         configRepo:
-          configEndpoint: http://credentials-config-service:8080
+          configEndpoint: http://verifier:8090
         additionalVolumes:
           - name: root-ca
             emptyDir: {}
@@ -137,7 +135,7 @@ decentralizedIam:
                 curl -X 'POST' 'http://tir.trust-anchor.svc.cluster.local:8080/issuer' -H 'Content-Type: application/json' -d "{\"did\": \"did:web:did-provider.127.0.0.1.nip.io\", \"credentials\": []}"
 
   odrlAuthorization:
-  
+
     apisix:
       etcd:
         replicaCount: 1

@@ -299,7 +299,7 @@ decentralizedIam:
         server:
           host: https://<your_verifier_domain>
         configRepo:
-          configEndpoint: http://credentials-config-service:8080
+          configEndpoint: http://verifier:8090
 
     # Credentials Config Service — defines which credential types are accepted
     credentials-config-service:
