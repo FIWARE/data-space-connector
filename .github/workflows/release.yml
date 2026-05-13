@@ -22,21 +22,12 @@ jobs:
             java-version: '17'
             distribution: temurin
 
-        - id: pr
-          uses: actions-ecosystem/action-get-merged-pull-request@v1.0.1
-          with:
-            github_token: ${{ secrets.GITHUB_TOKEN }}
-
         - name: Match semver label via bash
           id: match-label-bash
           run: |
-            LABELS=$(cat <<-END
-            ${{ steps.pr.outputs.labels }}
-            END
-            )
-            IFS='\n' read -ra LABEL <<< "$LABELS"
-            for i in "${LABEL[@]}"; do
-                echo $i
+            LABELS=$(gh pr list --state merged --base main --limit 1 --json labels \
+              --jq '.[] | .labels[].name')
+            for i in $LABELS; do
                 case $i in
                     # Will just use the first occurence
                     'major'|'minor'|'patch')
@@ -44,6 +35,8 @@ jobs:
                         break
                 esac
             done
+          env:
+            GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           
         - uses: zwaldowski/semver-release-action@v2
           with:
