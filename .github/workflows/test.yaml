@@ -25,6 +25,14 @@ jobs:
           distribution: temurin
           cache: maven
 
+      - name: Cache Helm
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache/helm
+          key: helm-${{ runner.os }}-${{ hashFiles('**/Chart.yaml', '**/Chart.lock') }}
+          restore-keys: |
+            helm-${{ runner.os }}-
+
       - name: Ensure br_netfilter is enabled.
         run: |
           sudo modprobe br_netfilter
