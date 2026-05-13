@@ -33,14 +33,38 @@ jobs:
           restore-keys: |
             helm-${{ runner.os }}-
 
+      # registry only supports one upstream per instance, so a separate
+      # mirror and cache directory is required for each registry.
+      - name: Cache registry mirrors
+        uses: actions/cache@v5
+        with:
+          path: |
+            /tmp/registry-cache/dockerhub
+            /tmp/registry-cache/quay
+          key: registry-${{ matrix.name }}-${{ hashFiles('k3s/**/*.yaml', 'charts/**/values.yaml') }}
+          restore-keys: |
+            registry-${{ matrix.name }}-
+
       - name: Ensure br_netfilter is enabled.
         run: |
           sudo modprobe br_netfilter
 
+      - name: Start registry mirrors
+        run: |
+          mkdir -p /tmp/registry-cache/dockerhub /tmp/registry-cache/quay
+          docker run -d -p 5000:5000 \
+            -e REGISTRY_PROXY_REMOTEURL=https://registry-1.docker.io \
+            -v /tmp/registry-cache/dockerhub:/var/lib/registry \
+            --name mirror-dockerhub registry:3
+          docker run -d -p 5001:5000 \
+            -e REGISTRY_PROXY_REMOTEURL=https://quay.io \
+            -v /tmp/registry-cache/quay:/var/lib/registry \
+            --name mirror-quay registry:3
+
       - name: Execute tests (${{ matrix.name }})
         id: test
         run: |
-          mvn clean integration-test -P${{ matrix.profiles }}
+          mvn clean integration-test -P${{ matrix.profiles }},ci
 
       - name: Post-mortem on failure
         if: failure()

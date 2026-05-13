@@ -1,0 +1,7 @@
+mirrors:
+  docker.io:
+    endpoint:
+      - "http://172.17.0.1:5000"
+  quay.io:
+    endpoint:
+      - "http://172.17.0.1:5001"
