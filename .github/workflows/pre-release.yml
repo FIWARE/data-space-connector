@@ -20,7 +20,7 @@ jobs:
       plain-version: ${{ steps.out.outputs.plain-version }}
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
 
       - id: bump
         uses: zwaldowski/match-label-action@v1
@@ -52,7 +52,7 @@ jobs:
 
     steps:
 
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
 
       - name: Generate Table of contents
         uses: technote-space/toc-generator@v4
