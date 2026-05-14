@@ -14,6 +14,25 @@ metadata:
 spec:
   template:
     spec:
+      {{- if or $tmf.registration.initContainers.waitForHost.enabled $tmf.registration.extraInitContainers }}
+      initContainers:
+        {{- if $tmf.registration.initContainers.waitForHost.enabled }}
+        - name: wait-for-host
+          image: {{ $tmf.registration.initContainers.waitForHost.image.repository }}:{{ $tmf.registration.initContainers.waitForHost.image.tag }}
+          imagePullPolicy: {{ $tmf.registration.initContainers.waitForHost.image.pullPolicy }}
+          command:
+            - /bin/sh
+            - -c
+            - |
+              until curl -sf "{{ $tmf.registration.ccs.endpoint }}{{ $tmf.registration.initContainers.waitForHost.path }}"; do
+                echo "Waiting for {{ $tmf.registration.ccs.endpoint }}{{ $tmf.registration.initContainers.waitForHost.path }}..."
+                sleep {{ $tmf.registration.initContainers.waitForHost.interval }}
+              done
+        {{- end }}
+        {{- if $tmf.registration.extraInitContainers }}
+        {{- toYaml $tmf.registration.extraInitContainers | nindent 8 }}
+        {{- end }}
+      {{- end }}
       containers:
         - name: register-credential-config
           image: {{ $tmf.registration.image.repository }}:{{ $tmf.registration.image.tag }}

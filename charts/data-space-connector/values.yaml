@@ -1286,6 +1286,27 @@ tm-forum-api:
     extraVolumeMounts: []
     backoffLimit: 10
     restartPolicy: Never
+    initContainers:
+      waitForHost:
+        # -- enable the wait-for-host init container
+        enabled: enable
+        # -- path to append to the derived HOST when polling (e.g. /health)
+        path: /health
+        # -- seconds to wait between attempts
+        interval: 5
+        # -- image used for the curl-based wait container
+        image:
+          # -- image repository
+          repository: quay.io/curl/curl
+          # -- image tag
+          tag: 8.1.2
+          # -- image pull policy
+          pullPolicy: IfNotPresent
+    # -- extra init containers appended verbatim to the pod spec (after waitForHost)
+    extraInitContainers: []
+    # - name: my-init
+    #   image: busybox
+    #   command: ["sh", "-c", "echo hello"]
     # -- configuration to register the dataplane at the credentials-config-service
     ccs:
       # -- endpoint of the ccs to regsiter at
