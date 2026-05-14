@@ -1435,6 +1435,24 @@ registration:
   extraEnvVars: []
   extraVolumes: []
   extraVolumeMounts: []
+  initContainers:
+    waitForHost:
+      # -- enable the wait-for-host init container
+      enabled: enable
+      # -- path to append to the derived HOST when polling (e.g. /issuer)
+      path: /issuer
+      # -- seconds to wait between attempts
+      interval: 5
+      # -- image used for the curl-based wait container
+      image:
+        # -- image repository
+        repository: quay.io/curl/curl
+        # -- image tag
+        tag: 8.1.2
+        # -- image pull policy
+        pullPolicy: IfNotPresent
+  # -- extra init containers appended verbatim to the pod spec (after waitForHost)
+  extraInitContainers: []
   # issuer:
   # - did: ${DID}
   #   credentialTypes:

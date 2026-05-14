@@ -13,24 +13,53 @@ data:
     {{ .Values.registration.prepScript }}
     {{- end }}
     {{- $registration := .Values.registration}}
+    {{- $values := .Values }}
 
-    {{- $values := .Values -}}
+    log() {
+      level="$1"
+      msg="$2"
+      ts=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+      echo "[${level}] ${ts} ${msg}"
+    }
+
+    register_issuer() {
+      HOST="{{ $registration.til }}"
+      id="$1"
+      body="$2"
+
+      log "INFO" "Registering issuer '${id}' at ${HOST}/issuer"
+      body_file=$(mktemp)
+      http_code=$(curl -s -o "${body_file}" -w "%{http_code}" \
+        -X POST "${HOST}/issuer" \
+        -H 'accept: */*' \
+        -H 'Content-Type: application/json' \
+        -d "${body}" || echo "000")
+
+      log "INFO" "POST ${HOST}/issuer [${id}] -> HTTP ${http_code}"
+
+      if [ "${http_code}" = "409" ]; then
+        log "WARN" "Issuer '${id}' already exists, skipping"
+      elif [ "${http_code}" -lt 200 ] || [ "${http_code}" -ge 300 ]; then
+        log "ERROR" "Registration of '${id}' failed with HTTP ${http_code}"
+        echo "$(cat "${body_file}")"
+        rm -f "${body_file}"
+        exit 1
+      fi
+      rm -f "${body_file}"
+    }
+
     {{- range $index, $issuer := .Values.registration.issuer }}
-    curl -v -f -X 'POST' \
-      '{{ $registration.til }}/issuer' \
-      -H 'accept: */*' \
-      -H 'Content-Type: application/json' \
-      -d "{
-      \"did\": \"{{ $issuer.did }}\",
-      \"credentials\": [
+    register_issuer '{{ $issuer.did }}' '{
+      "did": "{{ $issuer.did }}",
+      "credentials": [
         {{- $last := sub (len $issuer.credentialTypes) 1 -}}
         {{- range $index, $credentialType := $issuer.credentialTypes }}
-          {
-            \"credentialsType\": \"{{ $credentialType }}\"
-          }{{- if lt $index $last }},{{ end }}
+        {
+          "credentialsType": "{{ $credentialType }}"
+        }{{- if lt $index $last }},{{ end }}
         {{- end }}
       ]
-    }"
+    }'
     {{- end }}
 
 

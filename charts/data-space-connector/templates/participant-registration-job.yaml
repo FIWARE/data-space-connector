@@ -13,6 +13,25 @@ metadata:
 spec:
   template:
     spec:
+      {{- if or .Values.registration.initContainers.waitForHost.enabled .Values.registration.extraInitContainers }}
+      initContainers:
+        {{- if .Values.registration.initContainers.waitForHost.enabled }}
+        - name: wait-for-host
+          image: {{ .Values.registration.initContainers.waitForHost.image.repository }}:{{ .Values.registration.initContainers.waitForHost.image.tag }}
+          imagePullPolicy: {{ .Values.registration.initContainers.waitForHost.image.pullPolicy }}
+          command:
+            - /bin/sh
+            - -c
+            - |
+              until curl -sf "{{ .Values.registration.til }}{{ .Values.registration.initContainers.waitForHost.path }}"; do
+                echo "Waiting for {{ .Values.registration.til }}{{ .Values.registration.initContainers.waitForHost.path }}..."
+                sleep {{ .Values.registration.initContainers.waitForHost.interval }}
+              done
+        {{- end }}
+        {{- if .Values.registration.extraInitContainers }}
+        {{- toYaml .Values.registration.extraInitContainers | nindent 8 }}
+        {{- end }}
+      {{- end }}
       containers:
         - name: register-credential-config
           image: {{ .Values.registration.image.repository }}:{{ .Values.registration.image.tag }}
