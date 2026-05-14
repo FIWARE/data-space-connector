@@ -1855,16 +1855,22 @@ public class DSPStepDefinitions extends StepDefintions {
     public void theConsumerStartsTransferProcessViaOid4vc() throws Exception {
         assertNotNull(oid4vcAgreementId, "A finalized OID4VC contract agreement is required for OID4VC transfer.");
         String counterPartyAddress = OID4VC_PROVIDER_ADDRESS + DSP_ENDPOINT_PATH;
-        IdResponse transferResponse = DSPManagementHelper.startTransferProcessWithDataDestination(
-                OID4VC_MANAGEMENT_API_ADDRESS,
-                DSP_ASSET_ID,
-                PROVIDER_DID,
-                counterPartyAddress,
-                oid4vcAgreementId,
-                DSPManagementHelper.TRANSFER_TYPE_HTTP_DATA_PULL);
-        assertNotNull(transferResponse, "OID4VC transfer process start response should not be null.");
-        log.debug("OID4VC transfer process started: {}", transferResponse);
-        oid4vcTransferId = transferResponse.getId();
+        // The provider's EDC may not have persisted the agreement yet when the consumer sees FINALIZED;
+        // retry until it is available (race condition between distributed EDC state machines).
+        final IdResponse[] transferResponse = {null};
+        Awaitility.await()
+                .atMost(Duration.ofSeconds(60))
+                .pollInterval(Duration.ofSeconds(3))
+                .untilAsserted(() -> transferResponse[0] = DSPManagementHelper.startTransferProcessWithDataDestination(
+                        OID4VC_MANAGEMENT_API_ADDRESS,
+                        DSP_ASSET_ID,
+                        PROVIDER_DID,
+                        counterPartyAddress,
+                        oid4vcAgreementId,
+                        DSPManagementHelper.TRANSFER_TYPE_HTTP_DATA_PULL));
+        assertNotNull(transferResponse[0], "OID4VC transfer process start response should not be null.");
+        log.debug("OID4VC transfer process started: {}", transferResponse[0]);
+        oid4vcTransferId = transferResponse[0].getId();
     }
 
     /**
@@ -2020,11 +2026,18 @@ public class DSPStepDefinitions extends StepDefintions {
     @When("The consumer exchanges the membership credential for an access token via OID4VP at the OID4VC endpoint.")
     public void theConsumerExchangesMembershipCredentialForTokenViaOid4vp() throws Exception {
         assertNotNull(oid4vcDataAddress, "OID4VC data address must be available.");
-        oid4vcAccessToken = ScriptHelper.getAccessTokenViaOid4vp(
-                oid4vcDataAddress.getEndpoint(),
-                MEMBERSHIP_CREDENTIAL_ID,
-                OPENID_SCOPE,
-                dspWallet);
+        // The data plane may not have registered the service with the verifier immediately after
+        // the transfer reaches STARTED; retry until the token endpoint is ready.
+        final String[] token = {null};
+        Awaitility.await()
+                .atMost(Duration.ofSeconds(60))
+                .pollInterval(Duration.ofSeconds(3))
+                .untilAsserted(() -> token[0] = ScriptHelper.getAccessTokenViaOid4vp(
+                        oid4vcDataAddress.getEndpoint(),
+                        MEMBERSHIP_CREDENTIAL_ID,
+                        OPENID_SCOPE,
+                        dspWallet));
+        oid4vcAccessToken = token[0];
         assertNotNull(oid4vcAccessToken, "OID4VP access token should not be null.");
         assertFalse(oid4vcAccessToken.isBlank(), "OID4VP access token should not be blank.");
         log.debug("Consumer obtained OID4VP access token for OID4VC endpoint.");
