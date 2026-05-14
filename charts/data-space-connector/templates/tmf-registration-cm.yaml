@@ -9,12 +9,42 @@ metadata:
     {{- include "dsc.labels" . | nindent 4 }}
 data:
   init.sh: |-
+    log() {
+      level="$1"
+      msg="$2"
+      ts=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+      echo "[${level}] ${ts} ${msg}"
+    }
+
+    register_service() {
+
+      HOST="{{ $tmf.registration.ccs.endpoint }}"
+      id="$1"
+      body="$2"
+
+      log "INFO" "Registering service '${id}' at ${HOST}/service"
+      body_file=$(mktemp)
+      http_code=$(curl -s -o "${body_file}" -w "%{http_code}" \
+        -X POST "${HOST}/service" \
+        -H 'accept: */*' \
+        -H 'Content-Type: application/json' \
+        -d "${body}" || echo "000")
+
+      log "INFO" "POST ${HOST}/service [${id}] -> HTTP ${http_code}"
+
+      if [ "${http_code}" = "409" ]; then
+        log "WARN" "Service '${id}' already exists, skipping"
+      elif [ "${http_code}" -lt 200 ] || [ "${http_code}" -ge 300 ]; then
+        log "ERROR" "Registration of '${id}' failed with HTTP ${http_code}"
+        echo "$(cat "${body_file}")"
+        rm -f "${body_file}"
+        exit 1
+      fi
+      rm -f "${body_file}"
+    }
+
     # credentials config service registration
-    curl -X 'POST' \
-      '{{ $tmf.registration.ccs.endpoint }}/service' \
-      -H 'accept: */*' \
-      -H 'Content-Type: application/json' \
-      -d '{
+    register_service {{ $tmf.registration.ccs.id | quote }} '{
       "id": {{ $tmf.registration.ccs.id | quote }},
       "defaultOidcScope": {{ $tmf.registration.ccs.defaultOidcScope.name | quote }},
       {{- if and ($tmf.registration.ccs.defaultOidcScope.credentialType) ($tmf.registration.ccs.defaultOidcScope.trustedParticipantsLists) ($tmf.registration.ccs.defaultOidcScope.trustedIssuersLists) -}}
