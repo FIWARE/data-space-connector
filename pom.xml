@@ -285,7 +285,6 @@
                         <id>template-dsc-consumer</id>
                         <goals>
                             <goal>init</goal>
-                            <goal>dependency-update</goal>
                             <goal>template</goal>
                         </goals>
                         <phase>package</phase>
@@ -318,7 +317,6 @@
                         <id>template-dsc-mongo-operator</id>
                         <goals>
                             <goal>init</goal>
-                            <goal>dependency-update</goal>
                             <goal>template</goal>
                         </goals>
                         <phase>package</phase>
@@ -335,7 +333,6 @@
                         <id>template-dsc-postgres-operator</id>
                         <goals>
                             <goal>init</goal>
-                            <goal>dependency-update</goal>
                             <goal>template</goal>
                         </goals>
                         <phase>package</phase>
@@ -352,7 +349,6 @@
                         <id>template-dsc-cert-manager</id>
                         <goals>
                             <goal>init</goal>
-                            <goal>dependency-update</goal>
                             <goal>template</goal>
                         </goals>
                         <phase>package</phase>
@@ -591,7 +587,6 @@
                                 <id>template-dsc-consumer</id>
                                 <goals>
                                     <goal>init</goal>
-                                    <goal>dependency-update</goal>
                                     <goal>template</goal>
                                 </goals>
                                 <phase>package</phase>
@@ -624,7 +619,6 @@
                                 <id>template-dsc-mongo-operator</id>
                                 <goals>
                                     <goal>init</goal>
-                                    <goal>dependency-update</goal>
                                     <goal>template</goal>
                                 </goals>
                                 <phase>package</phase>
@@ -641,7 +635,6 @@
                                 <id>template-dsc-postgres-operator</id>
                                 <goals>
                                     <goal>init</goal>
-                                    <goal>dependency-update</goal>
                                     <goal>template</goal>
                                 </goals>
                                 <phase>package</phase>
@@ -706,7 +699,6 @@
                                 <id>template-dsc-consumer</id>
                                 <goals>
                                     <goal>init</goal>
-                                    <goal>dependency-update</goal>
                                     <goal>template</goal>
                                 </goals>
                                 <phase>package</phase>
@@ -739,7 +731,6 @@
                                 <id>template-dsc-mongo-operator</id>
                                 <goals>
                                     <goal>init</goal>
-                                    <goal>dependency-update</goal>
                                     <goal>template</goal>
                                 </goals>
                                 <phase>package</phase>
@@ -756,7 +747,6 @@
                                 <id>template-dsc-postgres-operator</id>
                                 <goals>
                                     <goal>init</goal>
-                                    <goal>dependency-update</goal>
                                     <goal>template</goal>
                                 </goals>
                                 <phase>package</phase>
@@ -821,7 +811,6 @@
                                 <id>template-dsc-consumer</id>
                                 <goals>
                                     <goal>init</goal>
-                                    <goal>dependency-update</goal>
                                     <goal>template</goal>
                                 </goals>
                                 <phase>package</phase>
@@ -854,7 +843,6 @@
                                 <id>template-dsc-mongo-operator</id>
                                 <goals>
                                     <goal>init</goal>
-                                    <goal>dependency-update</goal>
                                     <goal>template</goal>
                                 </goals>
                                 <phase>package</phase>
@@ -941,7 +929,6 @@
                                 <id>template-dsc-consumer</id>
                                 <goals>
                                     <goal>init</goal>
-                                    <goal>dependency-update</goal>
                                     <goal>template</goal>
                                 </goals>
                                 <phase>package</phase>
@@ -974,7 +961,6 @@
                                 <id>template-dsc-mongo-operator</id>
                                 <goals>
                                     <goal>init</goal>
-                                    <goal>dependency-update</goal>
                                     <goal>template</goal>
                                 </goals>
                                 <phase>package</phase>
@@ -991,7 +977,6 @@
                                 <id>template-dsc-postgres-operator</id>
                                 <goals>
                                     <goal>init</goal>
-                                    <goal>dependency-update</goal>
                                     <goal>template</goal>
                                 </goals>
                                 <phase>package</phase>
