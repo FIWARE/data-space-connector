@@ -10,7 +10,6 @@ registration:
       credentialTypes:
         - MembershipCredential
 
-
 decentralizedIam:
   vcAuthentication:
     postgres-operator:
@@ -45,8 +44,26 @@ decentralizedIam:
               hosts:
                 - til-consumer.127.0.0.1.nip.io
     credentials-config-service:
+      enabled: false
+    vcverifier:
       enabled: true
       ingress:
+        enabled: true
+        annotations:
+          traefik.ingress.kubernetes.io/router.tls: "true"
+          cert-manager.io/cluster-issuer: "selfsigned-issuer"
+          cert-manager.io/private-key-algorithm: "ECDSA"
+          cert-manager.io/common-name: "verifier.fancy-marketplace.biz"
+          cert-manager.io/alt-names: "verifier.fancy-marketplace.biz"
+        tls:
+          - hosts:
+              - verifier.fancy-marketplace.biz
+            secretName: verifier.fancy-marketplace.biz-tls
+        hosts:
+          - host: verifier.fancy-marketplace.biz
+            paths:
+              - "/"
+      configIngress:
         enabled: true
         annotations:
           cert-manager.io/cluster-issuer: "selfsigned-issuer"
@@ -62,11 +79,14 @@ decentralizedIam:
           - secretName: consumer-ccs.127.0.0.1.nip.io-tls
             hosts:
               - consumer-ccs.127.0.0.1.nip.io
-      additionalEnvVars:
-        - name: FLYWAY_DATASOURCES_DEFAULT_LOCATIONS
-          value: classpath:db/migration/common,classpath:db/migration/mysql
       registration:
         enabled: true
+        job:
+          initContainers:
+            waitForHost:
+              enabled: true
+              path: /health
+          activeDeadlineSeconds: null
         services:
           - id: tm-forum
             defaultOidcScope: "default"
@@ -149,8 +169,6 @@ decentralizedIam:
             id: x509_san_dns:verifier.fancy-marketplace.biz
         server:
           host: https://verifier.fancy-marketplace.biz
-        configRepo:
-          configEndpoint: http://credentials-config-service:8080
         additionalVolumes:
           - name: signing-key
             secret:

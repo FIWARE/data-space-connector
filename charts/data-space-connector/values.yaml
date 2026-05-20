@@ -79,15 +79,23 @@ decentralizedIam:
       enabled: true
       # -- allows to set a fixed name for the services
       fullnameOverride: verifier
-      # -- configuration for the m2m flow, in case the tir is requiring authentication
-      m2m:
-        # -- we do not need authentication here
-        authEnabled: false
-
+      deployment:
+        # -- configuration for the m2m flow, in case the tir is requiring authentication
+        m2m:
+          # -- we do not need authentication here
+          authEnabled: false
+        database:
+          name: ccsdb
+          host: postgres
+          type: postgres
+          existingSecret:
+            name: postgres.postgres.credentials.postgresql.acid.zalan.do
+            usernameKey: username
+            passwordKey: password
     # -- configuration for the credentials-config-service to be deployed as part of the connector, see https://github.com/FIWARE/helm-charts/tree/main/charts/credentials-config-service for all options
     credentials-config-service:
       # -- should it be enabled? set to false if one outside the chart is used.
-      enabled: true
+      enabled: false
       # -- allows to set a fixed name for the services
       fullnameOverride: credentials-config-service
       # -- connection to the database
@@ -225,7 +233,7 @@ scorpio:
     # -- should the automatic registration of scorpio be enabled
     enabled: false
     # -- endpoint of the ccs to regsiter at
-    endpoint: http://credentials-config-service:8080
+    endpoint: http://verifier:8090
     # -- configmap to get the registration information from
     configMap: scorpio-registration
 
@@ -1289,7 +1297,7 @@ tm-forum-api:
     # -- configuration to register the dataplane at the credentials-config-service
     ccs:
       # -- endpoint of the ccs to regsiter at
-      endpoint: http://credentials-config-service:8080
+      endpoint: http://verifier:8090
       # -- service id of the data-service to be used
       id: tmf-api
       # -- default scope to be created for the data plane
@@ -1349,7 +1357,7 @@ rainbow:
     # -- should the registration at the credentials-config-service be enabled
     enabled: false
     # -- endpoint of the ccs to regsiter at
-    endpoint: http://credentials-config-service:8080
+    endpoint: http://verifier:8090
     # -- configmap to get the registration information from
     configMap: rainbow-registration
     # -- service id of the data-service to be used

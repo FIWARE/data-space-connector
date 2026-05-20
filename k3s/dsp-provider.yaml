@@ -23,7 +23,7 @@ fdsc-edc:
             enabled: false
           oid4vc:
             enabled: true
-            credentialsConfigAddress: http://credentials-config-service.provider.svc.cluster.local:8080
+            credentialsConfigAddress: http://verifier.provider.svc.cluster.local:8090
             verifierHost: https://verifier.mp-operations.org
             verifierInternalHost: verifier.provider.svc.cluster.local:3000
             opaHost: http://localhost:8181

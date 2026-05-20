@@ -50,7 +50,7 @@ decentralizedIam:
         server:
           host: https://provider-verifier.127.0.0.1.nip.io:8080
         configRepo:
-          configEndpoint: http://credentials-config-service:8080
+          configEndpoint: http://verifier:8090
         elsi:
           enabled: true
           validationEndpoint:
@@ -96,7 +96,7 @@ decentralizedIam:
           - path: /keystores/store.jks
             type: jks
             password: password
-      deployment: 
+      deployment:
         additionalContainers:
           - name: crl-provider-static
             imagePullPolicy: IfNotPresent
@@ -109,11 +109,11 @@ decentralizedIam:
           - name: crl-provider-json
             secret:
               secretName: crl-provider
-      health: 
+      health:
         port: 8080
       crl:
         enabled: true
-        secret: 
+        secret:
           crl.pem: LS0tLS1CRUdJTiBYNTA5IENSTC0tLS0tCk1JSURuRENDQVlRQ0FRRXdEUVlKS29aSWh2Y05BUUVMQlFBd1pERUxNQWtHQTFVRUJoTUNSRVV4RHpBTkJnTlYKQkFnTUJrSmxjbXhwYmpFU01CQUdBMVVFQ2d3SlJrbFhRVkpGSUVOQk1SSXdFQVlEVlFRRERBbEdTVmRCVWtVdApRMEV4SERBYUJna3Foa2lHOXcwQkNRRVdEV05oUUdacGQyRnlaUzV2Y21jWERUSTFNREV4TXpFeU16VXpObG9YCkRUSTFNREl4TWpFeU16VXpObG93SnpBbEFoUlM2Y1lJTE5pOGZUVGR5NEJDYlFMVys2aXJ6UmNOTWpVd01URXoKTVRJek5UTTJXcUNCd2pDQnZ6Q0Jyd1lEVlIwakJJR25NSUdrZ0JTNEN3U21nRHlmd3oyalZFMm1hZkZSRUVtdQpmS0dCaUtTQmhUQ0JnakVMTUFrR0ExVUVCaE1DUkVVeER6QU5CZ05WQkFnTUJrSmxjbXhwYmpFUE1BMEdBMVVFCkJ3d0dRbVZ5YkdsdU1SSXdFQVlEVlFRS0RBbEdTVmRCVWtVZ1EwRXhFakFRQmdOVkJBTU1DVVpKVjBGU1JTMUQKUVRFY01Cb0dDU3FHU0liM0RRRUpBUllOWTJGQVptbDNZWEpsTG05eVp6RUxNQWtHQTFVRUJSTUNNREdDQVFFdwpDd1lEVlIwVUJBUUNBaEFCTUEwR0NTcUdTSWIzRFFFQkN3VUFBNElDQVFBdmFQTEpNbWh2MEM2cnA2eXF0a3JYCnZOT3BYNGlOdGVscUNnREpwTG5TYlhndTVJb1dtWFZHeVdFbldNUHkycytsbktnRW5hZmxEazYrdlNxbkp4cmYKcnNXMEZ5VzFaR2dGVDIrNVZRU1I3dXVXWUp3VmtacnM4THdOM3JuQVpuZzdnbWhNYjZqNk9mU2JEV3pBWjVsZApPOWx2cDBCR3lid2pqMmowOUJ3ZXFYK2ZLbHNXMFg3QSt4VWJjRDNKemJDd1lHRHNrc1YrckJNY3RHaEp0cEdkCi9VbFI4bWozcGNjT3RFRHQ4dTR2ZGpPNFlCcERaQ0pZNUxnUjdUZUNDdHgyZFRlck91Wm9hNXdTZFl0eVBybEoKSngzL0s3ckZld0hKaUFZMTl3K3JNWC9IVFN3RTVPMjVESDFabHBKUVVTRDJvR05laE4rTVRuYnZUNk5lKzlkUQpTRmlQbFVKVEZZZGtlTjhoZVR6bUFPR2VOSmdTQ1k5c2VRcEwwMFRvK3VMc2ZCcHZtdnhiRDZOdEJ4NGxtWk9jCjVnZ2NNc3A0aGlWeXFiaW9aTXdaUHZnL3NnUDJFODhTSUdSamJ3dGN1cVVPdHorYUdjZFYxekNvZVRqOEFvTEYKem4wYU9rSWhORVdOUHVJeFc5bHQvNXo4ZThjUmt4UVh0UkdobmpjeWpqWFVEbHZSQ1pCY0pLazZINFlYaFNLdQpsdHhjQ2luVVNpVlB0eFA2ak5FYVlEVzQrdzRkMnNWeFlXVi9tc1d3T1lPaEtOdUErRVBINTVnUHc1d08vci95CjRqc0gwUVhMNGtncmZZS01kSzIzUEJiV0FjaWh0eS8yWGhua1ZlOS91SWtWV2NWVGhmVDlVVkVQaENFSWJhWEIKbXp3akw5SmpIYlI5WFMrWnk5YWxzUT09Ci0tLS0tRU5EIFg1MDkgQ1JMLS0tLS0K
 
   odrlAuthorization:
