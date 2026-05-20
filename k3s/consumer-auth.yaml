@@ -197,7 +197,7 @@ decentralizedIam:
                       multiple: true
                       meta:
                         type_values:
-                          - ["MembershipCredential"]
+                          - [MembershipCredential]
     
   odrlAuthorization:
     # authorized access to tmforum
