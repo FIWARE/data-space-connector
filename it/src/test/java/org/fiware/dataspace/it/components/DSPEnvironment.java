@@ -36,6 +36,20 @@ public abstract class DSPEnvironment {
      */
     public static final String OID4VC_PROVIDER_ADDRESS = "https://dsp-mp-operations.127.0.0.1.nip.io";
 
+    // --- Provider Management API endpoints ---
+
+    /**
+     * Base URL of the provider's DCP management API.
+     * Used for cleaning up provider-side transfer processes between test scenarios.
+     */
+    public static final String PROVIDER_DCP_MANAGEMENT_API_ADDRESS = "https://provider-dcp-management.127.0.0.1.nip.io";
+
+    /**
+     * Base URL of the provider's OID4VC management API.
+     * Used for cleaning up provider-side transfer processes between test scenarios.
+     */
+    public static final String PROVIDER_OID4VC_MANAGEMENT_API_ADDRESS = "https://provider-oid4vc-management.127.0.0.1.nip.io";
+
     // --- IdentityHub Management endpoints ---
 
     /**

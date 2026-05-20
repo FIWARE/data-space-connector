@@ -326,8 +326,8 @@ public class DSPStepDefinitions extends StepDefintions {
             log.warn("Error during DSP pre-test cleanup: {}", e.getMessage());
         }
         prepareTil();
-        // give the system time to propagate cleanups and transfer deprovisioning
-        Thread.sleep(3000);
+        // give the system time to propagate cleanups and complete provider-side deprovisioning
+        Thread.sleep(5000);
     }
 
     /**
@@ -336,7 +336,6 @@ public class DSPStepDefinitions extends StepDefintions {
      * do not prevent other resources from being cleaned.
      */
     private void cleanDspResources() throws Exception {
-        cleanUpEdcTransfers();
         cleanUpDspTMForum();
         cleanUpDspPolicies();
         cleanUpDspEntities();
@@ -345,16 +344,6 @@ public class DSPStepDefinitions extends StepDefintions {
         cleanUpTIL();
         cleanUpDspVaultKeys();
         cleanUpDspIdentityHubParticipants();
-    }
-
-    /**
-     * Terminates outstanding transfer processes in both DCP and OID4VC EDC controlplanes.
-     * Leftover transfers from previous scenarios can cause provisioning conflicts
-     * (e.g., stale APISIX routes or credentials-config entries).
-     */
-    private void cleanUpEdcTransfers() {
-        DSPManagementHelper.terminateAllTransfers(DCP_MANAGEMENT_API_ADDRESS);
-        DSPManagementHelper.terminateAllTransfers(OID4VC_MANAGEMENT_API_ADDRESS);
     }
 
     /**
@@ -386,22 +375,29 @@ public class DSPStepDefinitions extends StepDefintions {
 
     /**
      * Cleans up entities created in Scorpio during DSP tests.
+     * Deletes the well-known UptimeReport entity directly (Cucumber creates new step definition
+     * instances per scenario, so the per-instance tracking list is always empty at cleanup time).
      */
     private void cleanUpDspEntities() {
+        deleteScorpioEntity(UPTIME_REPORT_ENTITY_ID);
         for (String entityId : dspCreatedEntities) {
-            try {
-                Request deleteRequest = new Request.Builder()
-                        .delete()
-                        .url(SCORPIO_ADDRESS + "/ngsi-ld/v1/entities/" + entityId)
-                        .build();
-                try (Response resp = HTTP_CLIENT.newCall(deleteRequest).execute()) {
-                    log.debug("Deleted entity {}: status={}", entityId, resp.code());
-                }
-            } catch (Exception e) {
-                log.warn("Failed to clean up entity {}: {}", entityId, e.getMessage());
-            }
+            deleteScorpioEntity(entityId);
         }
         dspCreatedEntities.clear();
+    }
+
+    private void deleteScorpioEntity(String entityId) {
+        try {
+            Request deleteRequest = new Request.Builder()
+                    .delete()
+                    .url(SCORPIO_ADDRESS + "/ngsi-ld/v1/entities/" + entityId)
+                    .build();
+            try (Response resp = HTTP_CLIENT.newCall(deleteRequest).execute()) {
+                log.debug("Deleted entity {}: status={}", entityId, resp.code());
+            }
+        } catch (Exception e) {
+            log.warn("Failed to clean up entity {}: {}", entityId, e.getMessage());
+        }
     }
 
     /**
