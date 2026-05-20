@@ -327,7 +327,7 @@ public class DSPStepDefinitions extends StepDefintions {
         }
         prepareTil();
         // give the system time to propagate cleanups and complete provider-side deprovisioning
-        Thread.sleep(5000);
+        Thread.sleep(1000);
     }
 
     /**
