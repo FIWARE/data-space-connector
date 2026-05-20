@@ -136,86 +136,8 @@ decentralizedIam:
                       multiple: true
                       meta:
                         type_values:
-                          - MembershipCredential
-    vcverifier:
-      enabled: true
-      ingress:
-        enabled: true
-        annotations:
-          traefik.ingress.kubernetes.io/router.tls: "true"
-          cert-manager.io/cluster-issuer: "selfsigned-issuer"
-          cert-manager.io/private-key-algorithm: "ECDSA"
-          cert-manager.io/alt-names: "verifier.fancy-marketplace.biz"
-          cert-manager.io/common-name: "verifier.fancy-marketplace.biz"
-        tls:
-          - hosts:
-              - verifier.fancy-marketplace.biz
-            secretName: verifier.fancy-marketplace.biz-tls
-        hosts:
-          - host: verifier.fancy-marketplace.biz
-            paths:
-              - "/"
-      deployment:
-        logging:
-          level: DEBUG
-        verifier:
-          tirAddress: https://tir.127.0.0.1.nip.io/
-          did: did:web:fancy-marketplace.biz
-          supportedModes: ["byValue", "byReference"]
-          clientIdentification:
-            keyPath: /signing-key/tls.key
-            certificatePath: /signing-key/tls.crt
-            requestKeyAlgorithm: ES256
-            id: x509_san_dns:verifier.fancy-marketplace.biz
-        server:
-          host: https://verifier.fancy-marketplace.biz
-        additionalVolumes:
-          - name: signing-key
-            secret:
-              secretName: verifier.fancy-marketplace.biz-tls
-          # add the cert-manager CA to the system truststore
-          - name: root-ca
-            emptyDir: {}
-        additionalVolumeMounts:
-          - name: signing-key
-            mountPath: /signing-key
-          # add the cert-manager CA to the system truststore
-          - name: root-ca
-            mountPath: /etc/ssl/cert.pem
-            subPath: cert.pem
-        additionalEnvVars:
-          - name: HTTPS_PROXY
-            value: "http://squid-proxy.infra.svc.cluster.local:8888"
-          - name: HTTP_PROXY
-            value: "http://squid-proxy.infra.svc.cluster.local:8888"
-          - name: NO_PROXY
-            value: "credentials-config-service,w3.org,trusted-issuers-list"
-        initContainers:
-          # add the cert-manager CA to the system truststore
-          - name: add-root-ca
-            image: alpine:3.21.3
-            command:
-              - /bin/sh
-            args:
-              - -c
-              - |
-                #!/bin/sh
-                cp /etc/ssl/cert.pem /root-ca/cert.pem
-                cat /root-ca/cacert.pem >> /root-ca/cert.pem
-            volumeMounts:
-              - name: root-ca
-                mountPath: /root-ca
-              - name: signing-key
-                mountPath: /root-ca/cacert.pem
-                subPath: ca.crt
-          - name: register-at-tir
-            image: curlimages/curl:8.18.0
-            command:
-              - /bin/sh
-            args:
-              - -ec
-              - |
-                curl -X 'POST' 'http://tir.trust-anchor.svc.cluster.local:8080/issuer' -H 'Content-Type: application/json' -d "{\"did\": \"did:web:fancy-marketplace.biz\", \"credentials\": []}"
+                          - ["MembershipCredential"]
+    
   odrlAuthorization:
     # authorized access to tmforum
     apisix:
