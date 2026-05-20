@@ -60,6 +60,7 @@ decentralizedIam:
           cert-manager.io/cluster-issuer: "selfsigned-issuer"
           cert-manager.io/private-key-algorithm: "ECDSA"
           cert-manager.io/common-name: "verifier.mp-operations.org"
+          cert-manager.io/alt-names: "verifier.mp-operations.org"
         tls:
           - hosts:
               - verifier.mp-operations.org
@@ -307,84 +308,8 @@ decentralizedIam:
                       multiple: true
                       meta:
                         type_values:
-                          - MarketplaceCredential
-    vcverifier:
-      ingress:
-        enabled: true
-        annotations:
-          traefik.ingress.kubernetes.io/router.tls: "true"
-          cert-manager.io/cluster-issuer: "selfsigned-issuer"
-          cert-manager.io/private-key-algorithm: "ECDSA"
-          cert-manager.io/common-name: "verifier.mp-operations.org"
-          cert-manager.io/alt-names: "verifier.mp-operations.org"
-        tls:
-          - hosts:
-              - verifier.mp-operations.org
-            secretName: verifier.mp-operations.org-tls
-        hosts:
-          - host: verifier.mp-operations.org
-            paths:
-              - "/"
-      deployment:
-        logging:
-          level: DEBUG
-        verifier:
-          tirAddress: https://tir.127.0.0.1.nip.io/
-          did: did:web:mp-operations.org
-          supportedModes: ["byValue", "byReference"]
-          # required for the tests, can be longer in real world environments
-          tilCacheExpiry: 1
-          tirCacheExpiry: 1
-          clientIdentification:
-            keyPath: /signing-key/tls.key
-            certificatePath: /signing-key/tls.crt
-            requestKeyAlgorithm: ES256
-            id: x509_san_dns:verifier.mp-operations.org
-        server:
-          host: https://verifier.mp-operations.org
-        configRepo:
-          configEndpoint: http://credentials-config-service:8080
-          updateInterval: 1
-        additionalVolumes:
-          - name: signing-key
-            secret:
-              secretName: verifier.mp-operations.org-tls
-          # add the cert-manager CA to the system truststore
-          - name: root-ca
-            emptyDir: {}
-        additionalVolumeMounts:
-          - name: signing-key
-            mountPath: /signing-key
-          # add the cert-manager CA to the system truststore
-          - name: root-ca
-            mountPath: /etc/ssl/cert.pem
-            subPath: cert.pem
-        additionalEnvVars:
-          - name: HTTPS_PROXY
-            value: "http://squid-proxy.infra.svc.cluster.local:8888"
-          - name: HTTP_PROXY
-            value: "http://squid-proxy.infra.svc.cluster.local:8888"
-          - name: NO_PROXY
-            value: "credentials-config-service,w3.org,trusted-issuers-list"
-        initContainers:
-          # add the cert-manager CA to the system truststore
-          - name: add-root-ca
-            image: alpine:3.21.3
-            command: ["sh", "-c", "cat /etc/ssl/cert.pem /tmp/ca.crt > /root-ca/cert.pem"]
-            volumeMounts:
-              - name: root-ca
-                mountPath: /root-ca
-              - name: signing-key
-                mountPath: /tmp/ca.crt
-                subPath: ca.crt
-          - name: register-at-tir
-            image: curlimages/curl:8.18.0
-            command:
-              - /bin/sh
-            args:
-              - -ec
-              - |
-                curl -X 'POST' 'http://tir.trust-anchor.svc.cluster.local:8080/issuer' -H 'Content-Type: application/json' -d "{\"did\": \"did:web:mp-operations.org\", \"credentials\": []}"
+                          - ["MarketplaceCredential"]
+    
   odrlAuthorization:
     apisix:
       etcd:
