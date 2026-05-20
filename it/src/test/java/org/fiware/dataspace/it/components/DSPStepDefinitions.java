@@ -326,8 +326,8 @@ public class DSPStepDefinitions extends StepDefintions {
             log.warn("Error during DSP pre-test cleanup: {}", e.getMessage());
         }
         prepareTil();
-        // give the system time to propagate the cleanups
-        Thread.sleep(1000);
+        // give the system time to propagate cleanups and transfer deprovisioning
+        Thread.sleep(3000);
     }
 
     /**
@@ -336,6 +336,7 @@ public class DSPStepDefinitions extends StepDefintions {
      * do not prevent other resources from being cleaned.
      */
     private void cleanDspResources() throws Exception {
+        cleanUpEdcTransfers();
         cleanUpDspTMForum();
         cleanUpDspPolicies();
         cleanUpDspEntities();
@@ -344,6 +345,16 @@ public class DSPStepDefinitions extends StepDefintions {
         cleanUpTIL();
         cleanUpDspVaultKeys();
         cleanUpDspIdentityHubParticipants();
+    }
+
+    /**
+     * Terminates outstanding transfer processes in both DCP and OID4VC EDC controlplanes.
+     * Leftover transfers from previous scenarios can cause provisioning conflicts
+     * (e.g., stale APISIX routes or credentials-config entries).
+     */
+    private void cleanUpEdcTransfers() {
+        DSPManagementHelper.terminateAllTransfers(DCP_MANAGEMENT_API_ADDRESS);
+        DSPManagementHelper.terminateAllTransfers(OID4VC_MANAGEMENT_API_ADDRESS);
     }
 
     /**

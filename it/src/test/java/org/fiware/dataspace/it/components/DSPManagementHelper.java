@@ -499,7 +499,9 @@ public class DSPManagementHelper {
                                     STATE_STARTED,
                                     transfers.stream().map(TransferProcess::getState)
                                             .reduce((a, b) -> a + ", " + b).orElse("none")));
-                    assertTrue(STATE_STARTED.equalsIgnoreCase(started.getState()), "The transfer is not started.");
+                    assertTrue(STATE_STARTED.equalsIgnoreCase(started.getState()),
+                            String.format("Transfer %s is in state '%s', expected '%s'.",
+                                    transferId, started.getState(), STATE_STARTED));
                     transferIds[0] = started.getAtId();
                     assertNotNull(transferIds[0], "Transfer ID (@id) should not be null when transfer is started");
                     log.debug("Transfer process started with ID: {}", transferIds[0]);
@@ -545,5 +547,58 @@ public class DSPManagementHelper {
                     }
                 });
         return dataAddress[0];
+    }
+
+    /**
+     * Terminates all transfer processes at the given management API.
+     * Retrieves the current list of transfers and sends a terminate request for each
+     * that is not already in a terminal state.
+     *
+     * @param managementApiAddress the base URL of the management API
+     */
+    public static void terminateAllTransfers(String managementApiAddress) {
+        try {
+            List<TransferProcess> transfers = getTransferProcesses(managementApiAddress);
+            for (TransferProcess transfer : transfers) {
+                String state = transfer.getState();
+                if ("COMPLETED".equalsIgnoreCase(state) || "TERMINATED".equalsIgnoreCase(state)
+                        || "DEPROVISIONED".equalsIgnoreCase(state)) {
+                    continue;
+                }
+                terminateTransfer(managementApiAddress, transfer.getAtId());
+            }
+        } catch (Exception e) {
+            log.warn("Failed to terminate transfers at {}: {}", managementApiAddress, e.getMessage());
+        }
+    }
+
+    /**
+     * Terminates a single transfer process by ID.
+     *
+     * @param managementApiAddress the base URL of the management API
+     * @param transferId           the transfer process ID to terminate
+     */
+    private static void terminateTransfer(String managementApiAddress, String transferId) {
+        try {
+            ObjectNode requestBody = OBJECT_MAPPER.createObjectNode();
+            ArrayNode context = OBJECT_MAPPER.createArrayNode();
+            context.add(EDC_MANAGEMENT_CONTEXT);
+            requestBody.set("@context", context);
+            requestBody.put("reason", "cleanup between test scenarios");
+
+            String url = managementApiAddress + TRANSFER_PROCESSES_PATH + "/" + transferId + "/terminate";
+            RequestBody body = RequestBody.create(OBJECT_MAPPER.writeValueAsString(requestBody), JSON);
+            Request request = new Request.Builder()
+                    .url(url)
+                    .post(body)
+                    .header("Content-Type", "application/json")
+                    .build();
+
+            try (Response response = OK_HTTP_CLIENT.newCall(request).execute()) {
+                log.debug("Terminate transfer {} at {}: status={}", transferId, url, response.code());
+            }
+        } catch (Exception e) {
+            log.warn("Failed to terminate transfer {}: {}", transferId, e.getMessage());
+        }
     }
 }
