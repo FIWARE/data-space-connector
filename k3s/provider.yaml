@@ -88,6 +88,8 @@ decentralizedIam:
       deployment:
         logging:
           level: DEBUG
+        configRepo:
+          updateInterval: 1
         verifier:
           tirAddress: https://tir.127.0.0.1.nip.io/
           did: did:web:mp-operations.org

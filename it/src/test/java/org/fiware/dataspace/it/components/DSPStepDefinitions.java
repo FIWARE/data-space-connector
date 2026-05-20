@@ -2027,14 +2027,18 @@ public class DSPStepDefinitions extends StepDefintions {
     @When("The consumer exchanges the membership credential for an access token via OID4VP at the OID4VC endpoint.")
     public void theConsumerExchangesMembershipCredentialForTokenViaOid4vp() throws Exception {
         assertNotNull(oid4vcDataAddress, "OID4VC data address must be available.");
-        oid4vcAccessToken = ScriptHelper.getAccessTokenViaOid4vp(
-                oid4vcDataAddress.getEndpoint(),
-                MEMBERSHIP_CREDENTIAL_ID,
-                OPENID_SCOPE,
-                dspWallet);
-        assertNotNull(oid4vcAccessToken, "OID4VP access token should not be null.");
-        assertFalse(oid4vcAccessToken.isBlank(), "OID4VP access token should not be blank.");
-        log.debug("Consumer obtained OID4VP access token for OID4VC endpoint.");
+        Awaitility.await()
+                .until(() -> {
+                    oid4vcAccessToken = ScriptHelper.getAccessTokenViaOid4vp(
+                            oid4vcDataAddress.getEndpoint(),
+                            MEMBERSHIP_CREDENTIAL_ID,
+                            OPENID_SCOPE,
+                            dspWallet);
+                    assertNotNull(oid4vcAccessToken, "OID4VP access token should not be null.");
+                    assertFalse(oid4vcAccessToken.isBlank(), "OID4VP access token should not be blank.");
+                    log.debug("Consumer obtained OID4VP access token for OID4VC endpoint.");
+                    return true;
+                });
     }
 
     /**
