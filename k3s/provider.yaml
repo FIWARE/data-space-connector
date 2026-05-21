@@ -42,6 +42,7 @@ decentralizedIam:
             cert-manager.io/cluster-issuer: "selfsigned-issuer"
             cert-manager.io/private-key-algorithm: "ECDSA"
             cert-manager.io/common-name: "til-provider.127.0.0.1.nip.io"
+            cert-manager.io/alt-names: "til-provider.127.0.0.1.nip.io"
             traefik.ingress.kubernetes.io/router.tls: "true"
           hosts:
             - host: til-provider.127.0.0.1.nip.io
@@ -59,6 +60,7 @@ decentralizedIam:
           cert-manager.io/cluster-issuer: "selfsigned-issuer"
           cert-manager.io/private-key-algorithm: "ECDSA"
           cert-manager.io/common-name: "verifier.mp-operations.org"
+          cert-manager.io/alt-names: "verifier.mp-operations.org"
         tls:
           - hosts:
               - verifier.mp-operations.org
@@ -73,6 +75,7 @@ decentralizedIam:
           cert-manager.io/cluster-issuer: "selfsigned-issuer"
           cert-manager.io/private-key-algorithm: "ECDSA"
           cert-manager.io/common-name: "provider-ccs.127.0.0.1.nip.io"
+          cert-manager.io/alt-names: "provider-ccs.127.0.0.1.nip.io"
           traefik.ingress.kubernetes.io/router.tls: "true"
         hosts:
           - host: provider-ccs.127.0.0.1.nip.io
@@ -99,7 +102,6 @@ decentralizedIam:
             id: x509_san_dns:verifier.mp-operations.org
         server:
           host: https://verifier.mp-operations.org
-          updateInterval: 1
         additionalVolumes:
           - name: signing-key
             secret:
@@ -305,7 +307,8 @@ decentralizedIam:
                       multiple: true
                       meta:
                         type_values:
-                          - [MarketplaceCredential]
+                          - ["MarketplaceCredential"]
+    
   odrlAuthorization:
     apisix:
       etcd:
@@ -334,7 +337,7 @@ decentralizedIam:
           cert-manager.io/cluster-issuer: "selfsigned-issuer"
           cert-manager.io/private-key-algorithm: "ECDSA"
           traefik.ingress.kubernetes.io/router.tls: "true"
-          cert-manager.io/alt-names: "mp-data-service.127.0.0.1.nip.io,tpp-data-service.127.0.0.1.nip.io,tpp-service.127.0.0.1.nip.io,mp-tmf-api.127.0.0.1.nip.io,contract-management.127.0.0.1.nip.io,dsp-mp-operations.127.0.0.1.nip.io,dcp-mp-operations.127.0.0.1.nip.io,identityhub-mp-operations.127.0.0.1.nip.io,identityhub-management-mp-operations.127.0.0.1.nip.io,vault-mp-operations.127.0.0.1.nip.io"
+          cert-manager.io/alt-names: "mp-data-service.127.0.0.1.nip.io,tpp-data-service.127.0.0.1.nip.io,tpp-service.127.0.0.1.nip.io,mp-tmf-api.127.0.0.1.nip.io,contract-management.127.0.0.1.nip.io,dsp-mp-operations.127.0.0.1.nip.io,dcp-mp-operations.127.0.0.1.nip.io,identityhub-mp-operations.127.0.0.1.nip.io,identityhub-management-mp-operations.127.0.0.1.nip.io,vault-mp-operations.127.0.0.1.nip.io,provider-oid4vc-management.127.0.0.1.nip.io,provider-dcp-management.127.0.0.1.nip.io"
         hosts:
           - host: mp-data-service.127.0.0.1.nip.io
             paths: ["/"]
@@ -356,6 +359,10 @@ decentralizedIam:
             paths: ["/"]
           - host: vault-mp-operations.127.0.0.1.nip.io
             paths: ["/"]
+          - host: provider-oid4vc-management.127.0.0.1.nip.io
+            paths: ["/"]
+          - host: provider-dcp-management.127.0.0.1.nip.io
+            paths: ["/"]
         tls:
           - secretName: apisix-provider-tls
             hosts:
@@ -369,6 +376,8 @@ decentralizedIam:
               - identityhub-mp-operations.127.0.0.1.nip.io
               - identityhub-management-mp-operations.127.0.0.1.nip.io
               - vault-mp-operations.127.0.0.1.nip.io
+              - provider-oid4vc-management.127.0.0.1.nip.io
+              - provider-dcp-management.127.0.0.1.nip.io
       catchAllRoute:
         enabled: false
       routes:
@@ -551,6 +560,18 @@ decentralizedIam:
               policy: policy/main
               with_body: true
         - uri: /*
+          host: provider-oid4vc-management.127.0.0.1.nip.io
+          upstream:
+            nodes:
+              provider-fdsc-edc-oid4vc:8085: 1
+            type: roundrobin
+        - uri: /*
+          host: provider-dcp-management.127.0.0.1.nip.io
+          upstream:
+            nodes:
+              provider-fdsc-edc-dcp:8085: 1
+            type: roundrobin
+        - uri: /*
           host: vault-mp-operations.127.0.0.1.nip.io
           upstream:
             nodes:
@@ -565,6 +586,7 @@ decentralizedIam:
           cert-manager.io/cluster-issuer: "selfsigned-issuer"
           cert-manager.io/private-key-algorithm: "ECDSA"
           cert-manager.io/common-name: "pap-provider.127.0.0.1.nip.io"
+          cert-manager.io/alt-names: "pap-provider.127.0.0.1.nip.io"
           traefik.ingress.kubernetes.io/router.tls: "true"
         hosts:
           - host: pap-provider.127.0.0.1.nip.io
@@ -614,6 +636,7 @@ did:
       cert-manager.io/cluster-issuer: "selfsigned-issuer"
       cert-manager.io/private-key-algorithm: "ECDSA"
       cert-manager.io/common-name: "mp-operations.org"
+      cert-manager.io/alt-names: "mp-operations.org"
     hosts:
       - host: mp-operations.org
         paths:
@@ -652,6 +675,7 @@ scorpio:
       cert-manager.io/cluster-issuer: "selfsigned-issuer"
       cert-manager.io/private-key-algorithm: "ECDSA"
       cert-manager.io/common-name: "scorpio-provider.127.0.0.1.nip.io"
+      cert-manager.io/alt-names: "scorpio-provider.127.0.0.1.nip.io"
       traefik.ingress.kubernetes.io/router.tls: "true"
 
     hosts:
@@ -677,6 +701,7 @@ tm-forum-api:
       cert-manager.io/cluster-issuer: "selfsigned-issuer"
       cert-manager.io/private-key-algorithm: "ECDSA"
       cert-manager.io/common-name: "tm-forum-api.127.0.0.1.nip.io"
+      cert-manager.io/alt-names: "tm-forum-api.127.0.0.1.nip.io"
       traefik.ingress.kubernetes.io/router.tls: "true"
     hosts:
       - host: tm-forum-api.127.0.0.1.nip.io
@@ -873,6 +898,7 @@ marketplace:
         cert-manager.io/cluster-issuer: "selfsigned-issuer"
         cert-manager.io/private-key-algorithm: "ECDSA"
         cert-manager.io/common-name: "marketplace.127.0.0.1.nip.io"
+        cert-manager.io/alt-names: "marketplace.127.0.0.1.nip.io"
       hosts:
         - host: marketplace.127.0.0.1.nip.io
           paths:
@@ -914,6 +940,7 @@ keycloak:
     hostname: keycloak-provider.127.0.0.1.nip.io
     annotations:
       traefik.ingress.kubernetes.io/router.tls: "true"
+      cert-manager.io/alt-names: "keycloak-provider.127.0.0.1.nip.io"
       cert-manager.io/cluster-issuer: "selfsigned-issuer"
       cert-manager.io/private-key-algorithm: "ECDSA"
       cert-manager.io/common-name: "keycloak-provider.127.0.0.1.nip.io"
@@ -1385,6 +1412,10 @@ fdsc-dashboard:
       - secretName: dashboard-provider.127.0.0.1.nip.io-tls
         hosts:
           - dashboard-provider.127.0.0.1.nip.io
+  grafana:
+    enabled: false
+    url: http://provider-grafana:80
+
   apisix:
     enabled: true
     dashboardUrl: http://provider-apisix-admin:9180/ui

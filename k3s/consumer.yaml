@@ -16,6 +16,7 @@ keycloak:
       traefik.ingress.kubernetes.io/router.tls: "true"
       cert-manager.io/cluster-issuer: "selfsigned-issuer"
       cert-manager.io/private-key-algorithm: "ECDSA"
+      cert-manager.io/alt-names: "keycloak-consumer.127.0.0.1.nip.io"
       cert-manager.io/common-name: "keycloak-consumer.127.0.0.1.nip.io"
     pathType: Prefix
     tls: true
@@ -786,6 +787,7 @@ did:
       cert-manager.io/cluster-issuer: "selfsigned-issuer"
       cert-manager.io/private-key-algorithm: "ECDSA"
       cert-manager.io/common-name: "fancy-marketplace.biz"
+      cert-manager.io/alt-names: "fancy-marketplace.biz"
     hosts:
       - host: fancy-marketplace.biz
         paths:
