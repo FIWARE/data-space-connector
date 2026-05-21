@@ -313,6 +313,7 @@
                             <additionalArguments>--name-template=trust-anchor --namespace=trust-anchor -f ${main.basedir}/k3s/trust-anchor.yaml</additionalArguments>
                         </configuration>
                     </execution>
+            
                     <!-- Mongo operator as referenced in the DSC chart -->
                     <execution>
                         <id>template-dsc-mongo-operator</id>
@@ -866,6 +867,92 @@
                                     <additionalArguments>--name-template=mongo-operator --namespace=mongo-operator -f ${main.basedir}/k3s/mongo-operator.yaml</additionalArguments>
                                 </configuration>
                             </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+
+        <profile>
+            <id>monitoring</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>io.github.download-maven-plugin</groupId>
+                        <artifactId>download-maven-plugin</artifactId>
+                        <version>2.0.0</version>
+                        <configuration>
+                            <skip>false</skip>
+                        </configuration>
+                    </plugin>
+                    <plugin>
+                        <artifactId>maven-resources-plugin</artifactId>
+                        <configuration>
+                            <skip>false</skip>
+                        </configuration>
+                    </plugin>
+                    <plugin>
+                        <groupId>io.kokuwa.maven</groupId>
+                        <artifactId>k3s-maven-plugin</artifactId>
+                        <version>${version.io.kokuwa.maven.k3s-plugin}</version>
+                        <executions>
+                            <execution>
+                                <id>apply-prometheus</id>
+                                <phase>deploy</phase>
+                                <goals>
+                                    <goal>apply</goal>
+                                </goals>
+                                <configuration>
+                                    <manifests>${project.build.directory}/k3s/infra/prometheus</manifests>
+                                    <timeout>500</timeout>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+
+                    <!-- render the charts -->
+                    <plugin>
+                        <groupId>io.kokuwa.maven</groupId>
+                        <artifactId>helm-maven-plugin</artifactId>
+                        <version>${version.io.kokuwa.helm-maven-plugin}</version>
+                        <configuration>
+                            <skip>false</skip>
+                        </configuration>
+                        <executions>
+                            <!-- Prometheus stack as referenced in the DSC chart -->
+                            <execution>
+                                <id>template-dsc-prometheus</id>
+                                <goals>
+                                    <goal>init</goal>
+                                    <goal>dependency-update</goal>
+                                    <goal>template</goal>
+                                </goals>
+                                <phase>package</phase>
+                                <configuration>
+                                    <chartDirectory>${project.build.directory}/charts/data-space-connector</chartDirectory>
+                                    <skipTemplate>false</skipTemplate>
+                                    <templateGenerateName>true</templateGenerateName>
+                                    <templateOutputDir>${project.build.directory}/k3s/infra/prometheus</templateOutputDir>
+                                    <additionalArguments>--name-template=prometheus --namespace=monitoring -f ${main.basedir}/k3s/prometheus.yaml</additionalArguments>
+                                </configuration>
+                            </execution>
+                            <execution>
+                                <id>template-dsc-provider</id>
+                                <goals>
+                                    <goal>init</goal>
+                                    <goal>dependency-update</goal>
+                                    <goal>template</goal>
+                                </goals>
+                                <phase>package</phase>
+                                <configuration>
+                                    <chartDirectory>${project.build.directory}/charts/data-space-connector</chartDirectory>
+                                    <skipTemplate>false</skipTemplate>
+                                    <templateGenerateName>true</templateGenerateName>
+                                    <templateOutputDir>${project.build.directory}/k3s/dsc-provider</templateOutputDir>
+                                    <additionalArguments>--name-template=provider --namespace=provider -f ${main.basedir}/k3s/provider.yaml -f ${main.basedir}/k3s/monitoring.yaml</additionalArguments>
+                                </configuration>
+                            </execution>
+                           
                         </executions>
                     </plugin>
                 </plugins>

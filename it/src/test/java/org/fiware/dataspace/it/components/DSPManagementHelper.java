@@ -102,9 +102,17 @@ public class DSPManagementHelper {
     private static final long DEFAULT_POLL_TIMEOUT_SECONDS = 120;
 
     /**
+     * Timeout in seconds for waiting on transfer termination during cleanup.
+     */
+    private static final long TERMINATION_TIMEOUT_SECONDS = 30;
+
+    /**
      * Default poll interval in seconds between state checks.
      */
     private static final long DEFAULT_POLL_INTERVAL_SECONDS = 3;
+
+    private static final java.util.Set<String> TERMINAL_STATES = java.util.Set.of(
+            "COMPLETED", "TERMINATED", "DEPROVISIONED");
 
     /**
      * Transfer type for HTTP data pull transfers.
@@ -499,7 +507,9 @@ public class DSPManagementHelper {
                                     STATE_STARTED,
                                     transfers.stream().map(TransferProcess::getState)
                                             .reduce((a, b) -> a + ", " + b).orElse("none")));
-                    assertTrue(STATE_STARTED.equalsIgnoreCase(started.getState()), "The transfer is not started.");
+                    assertTrue(STATE_STARTED.equalsIgnoreCase(started.getState()),
+                            String.format("Transfer %s is in state '%s', expected '%s'.",
+                                    transferId, started.getState(), STATE_STARTED));
                     transferIds[0] = started.getAtId();
                     assertNotNull(transferIds[0], "Transfer ID (@id) should not be null when transfer is started");
                     log.debug("Transfer process started with ID: {}", transferIds[0]);

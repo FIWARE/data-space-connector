@@ -21,6 +21,9 @@ base64url_encode() {
   openssl base64 -A | tr '+/' '-_' | tr -d '='
 }
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/convert_ec.sh"
+
 # Encode header
 header_b64=$(printf "%s" "$header" | base64url_encode)
 
@@ -30,9 +33,10 @@ payload_b64=$(printf "%s" "$payload" | base64url_encode)
 # Create signature input
 signing_input="${header_b64}.${payload_b64}"
 
-# Sign the input using the ES256 private key
+# Sign the input using the ES256 private key, converting DER to raw R||S format
 signature_b64=$(printf "%s" "$signing_input" \
   | openssl dgst -sha256 -binary -sign cert/private-key.pem \
+  | convert_ec \
   | base64url_encode)
 
 # Assemble the final JWT
