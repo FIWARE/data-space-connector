@@ -80,6 +80,9 @@ decentralizedIam:
       # -- allows to set a fixed name for the services
       fullnameOverride: verifier
       deployment:
+        image:
+          tag: 6.12.9-PRE-104
+          pullPolicy: Always
         # -- configuration for the m2m flow, in case the tir is requiring authentication
         m2m:
           # -- we do not need authentication here
