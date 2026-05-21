@@ -91,11 +91,38 @@ Merges defaultClientRoles and clientRoles using mergeOverwrite (clientRoles wins
 
 {{/*
 Render users as a JSON array. Supports string (raw JSON elements) or list.
+
+When `keycloak.realm.wallets.issueCredentialsToUsers` is true, any user that
+does NOT already declare its own `verifiableCredentials` array gets one
+auto-populated with the name of every entry under
+`keycloak.realm.verifiableCredentials`. Keycloak then auto-issues those
+credentials at first login.
+
+Users that DO declare their own `verifiableCredentials` are left untouched
+— fine-grained per-user control is preserved (set the array to `[]` to opt
+that user out entirely).
 */}}
 {{- define "dsc.users" -}}
 {{- $users := .Values.keycloak.realm.users | default list -}}
 {{- if kindIs "string" .Values.keycloak.realm.users -}}
 {{- $users = (printf "{\"list\":[%s]}" (.Values.keycloak.realm.users | trim) | fromJson).list -}}
+{{- end -}}
+{{- $w := .Values.keycloak.realm.wallets | default dict -}}
+{{- if $w.issueCredentialsToUsers -}}
+{{- $allVcs := .Values.keycloak.realm.verifiableCredentials | default dict -}}
+{{- $autoVcs := list -}}
+{{- range $k, $_ := $allVcs -}}
+{{- $autoVcs = append $autoVcs (dict "credentialScopeName" $k) -}}
+{{- end -}}
+{{- $augmented := list -}}
+{{- range $u := $users -}}
+{{- if hasKey $u "verifiableCredentials" -}}
+{{- $augmented = append $augmented $u -}}
+{{- else -}}
+{{- $augmented = append $augmented (merge $u (dict "verifiableCredentials" $autoVcs)) -}}
+{{- end -}}
+{{- end -}}
+{{- $users = $augmented -}}
 {{- end -}}
 {{- $users | toPrettyJson -}}
 {{- end -}}
@@ -131,10 +158,62 @@ Also extends each client's optionalClientScopes with all clientScope names.
 {{- end -}}
 
 {{/*
+Lissi + EUDI Wallet preset clients. Returns an empty list unless
+`keycloak.realm.wallets.enabled` is true. Every per-wallet leaf
+(clientId, name, description, redirectUri, attributes) is read from
+values.yaml so it can be overridden by the deployer without touching
+this template.
+*/}}
+{{- define "dsc.walletClients" -}}
+{{- $clients := list -}}
+{{- $w := .Values.keycloak.realm.wallets | default dict -}}
+{{- if $w.enabled -}}
+{{- $lissi := $w.lissi | default dict -}}
+{{- $eudi  := $w.eudi  | default dict -}}
+{{- $clients = list
+    (dict "clientId" $lissi.clientId
+          "name" $lissi.name
+          "description" $lissi.description
+          "enabled" true
+          "publicClient" true
+          "standardFlowEnabled" true
+          "directAccessGrantsEnabled" false
+          "implicitFlowEnabled" false
+          "serviceAccountsEnabled" false
+          "redirectUris" (list $lissi.redirectUri)
+          "webOrigins" (list "+")
+          "protocol" "openid-connect"
+          "attributes" ($lissi.attributes | default dict)
+          "fullScopeAllowed" true
+          "defaultClientScopes" (list "web-origins" "acr" "roles" "profile" "basic" "email")
+          "optionalClientScopes" (list "OperatorCredential" "LegalPersonCredential"))
+    (dict "clientId" $eudi.clientId
+          "name" $eudi.name
+          "description" $eudi.description
+          "enabled" true
+          "publicClient" true
+          "standardFlowEnabled" true
+          "directAccessGrantsEnabled" false
+          "implicitFlowEnabled" false
+          "serviceAccountsEnabled" false
+          "redirectUris" (list $eudi.redirectUri)
+          "webOrigins" (list "+")
+          "protocol" "openid-connect"
+          "attributes" ($eudi.attributes | default dict)
+          "fullScopeAllowed" true
+          "defaultClientScopes" (list "web-origins" "acr" "roles" "profile" "basic" "email")
+          "optionalClientScopes" (list "OperatorCredential" "LegalPersonCredential")) -}}
+{{- end -}}
+{{- dict "list" $clients | toPrettyJson -}}
+{{- end -}}
+
+{{/*
 Render clients as a JSON array. Supports string (raw JSON elements) or list.
-Merges defaultClients and clients. Extra clients override defaults with the same clientId.
+Merges walletClients (wallet preset), defaultClients, and user-supplied clients.
+User-supplied clients override defaults / wallet entries that share their clientId.
 */}}
 {{- define "dsc.clients" -}}
+{{- $wallet := (include "dsc.walletClients" . | fromJson).list -}}
 {{- $default := (include "dsc.defaultClients" . | fromJson).list -}}
 {{- $extra := .Values.keycloak.realm.clients | default list -}}
 {{- if kindIs "string" .Values.keycloak.realm.clients -}}
@@ -145,7 +224,7 @@ Merges defaultClients and clients. Extra clients override defaults with the same
 {{- $extraIds = append $extraIds .clientId -}}
 {{- end -}}
 {{- $merged := list -}}
-{{- range $default -}}
+{{- range (concat $wallet $default) -}}
 {{- if not (has .clientId $extraIds) -}}
 {{- $merged = append $merged . -}}
 {{- end -}}

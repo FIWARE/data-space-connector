@@ -279,6 +279,16 @@ keycloak:
       adminPasswordKey: keycloak-admin
     # -- proxy headers used when TLS is terminated at an upstream ingress/proxy
     proxyHeaders: xforwarded
+  # -- SEAMWARE-published Keycloak image. This is the official Keycloak source
+  # built on top of the 26.6.2 tag with the patch from upstream main that
+  # restores the OID4VCI QR generation endpoint. The vanilla 26.6.2 image is
+  # missing that fix — see https://github.com/keycloak/keycloak/issues/44623
+  # (#issuecomment-4376937817 confirms the fix is only in main as of this
+  # writing). Swap back to the upstream image once 26.6.3 / 26.7 lands.
+  image:
+    registry: quay.io
+    repository: seamware/keycloak
+    tag: "26.6.2"
   # -- TLS terminated at the ingress; the container does not serve HTTPS itself
   tls:
     enabled: false
@@ -1111,6 +1121,57 @@ keycloak:
     #           claim.name: roles
     #           clientId: did:web:my-client.example.org
     verifiableCredentials: {}
+
+    # -- Wallet preset — opinionated, off by default. Turn `enabled` on to
+    # ship a realm with the OIDC clients that Lissi (iOS/Android) and the
+    # EUDI Reference Wallet (iOS/Android) need. Every wallet-specific value
+    # below has a default; override any leaf without redefining the whole
+    # client (e.g. `wallets.lissi.clientId: foo` changes just that field).
+    #
+    # This flag DOES NOT define the credentials the realm issues — that is
+    # the deployer's job via `keycloak.realm.verifiableCredentials` above
+    # (each entry there becomes an OID4VC client scope rendered by
+    # `dsc.vcClientScopes`).
+    wallets:
+      # -- Master toggle. When true, the chart adds the Lissi + EUDI public
+      # OIDC clients (see `lissi.*` / `eudi.*` below). It does NOT touch
+      # `verifiableCredentials` — if you want SD-JWT VC issuance to work,
+      # declare the credentials there as well.
+      enabled: false
+      # -- Global flag. When true, users in `keycloak.realm.users` that do
+      # NOT already declare their own `verifiableCredentials` get an
+      # auto-populated array with the name of every entry in
+      # `keycloak.realm.verifiableCredentials`. Keycloak then auto-issues
+      # those credentials at first login, avoiding the manual "Issue
+      # credential" admin step. Users that DO declare an explicit
+      # `verifiableCredentials` array are left untouched — set it to `[]`
+      # to opt that user out entirely. If `verifiableCredentials` is empty,
+      # turning this flag on is a no-op.
+      issueCredentialsToUsers: false
+      # -- Lissi defaults. The clientId is what the Lissi iOS/Android app
+      # currently looks for in the realm — override only if Lissi rotates it.
+      lissi:
+        clientId: 9c481dc3-2ad0-4fe0-881d-c32ad02fe0fc
+        name: "Lissi ID Wallet"
+        description: "Hardcoded clientId expected by the Lissi ID Wallet (iOS/Android)."
+        redirectUri: https://oob.lissi.io/vci-cb
+        attributes:
+          oid4vci.enabled: "true"
+          post.logout.redirect.uris: "+"
+          pkce.code.challenge.method: "S256"
+      # -- EUDI Reference Wallet (.DEV variant) defaults. PAR + DPoP + PKCE
+      # S256 are mandatory for the wallet's OID4VCI flow.
+      eudi:
+        clientId: wallet-dev
+        name: "EUDI Reference Wallet (dev)"
+        description: "Public client used by EUDI Reference Wallet (.DEV variant). PKCE + PAR + DPoP-bound access tokens."
+        redirectUri: eu.europa.ec.euidi://authorization
+        attributes:
+          oid4vci.enabled: "true"
+          post.logout.redirect.uris: "+"
+          pkce.code.challenge.method: "S256"
+          require.pushed.authorization.requests: "true"
+          dpop.bound.access.tokens: "true"
 
   # -- configuration for the signing key to be used for issuing credentials
   # signingKey:
