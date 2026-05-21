@@ -326,7 +326,7 @@ public class DSPStepDefinitions extends StepDefintions {
             log.warn("Error during DSP pre-test cleanup: {}", e.getMessage());
         }
         prepareTil();
-        // give the system time to propagate cleanups and complete provider-side deprovisioning
+        // give the system time to propagate the cleanups
         Thread.sleep(1000);
     }
 
@@ -375,29 +375,22 @@ public class DSPStepDefinitions extends StepDefintions {
 
     /**
      * Cleans up entities created in Scorpio during DSP tests.
-     * Deletes the well-known UptimeReport entity directly (Cucumber creates new step definition
-     * instances per scenario, so the per-instance tracking list is always empty at cleanup time).
      */
     private void cleanUpDspEntities() {
-        deleteScorpioEntity(UPTIME_REPORT_ENTITY_ID);
         for (String entityId : dspCreatedEntities) {
-            deleteScorpioEntity(entityId);
+            try {
+                Request deleteRequest = new Request.Builder()
+                        .delete()
+                        .url(SCORPIO_ADDRESS + "/ngsi-ld/v1/entities/" + entityId)
+                        .build();
+                try (Response resp = HTTP_CLIENT.newCall(deleteRequest).execute()) {
+                    log.debug("Deleted entity {}: status={}", entityId, resp.code());
+                }
+            } catch (Exception e) {
+                log.warn("Failed to clean up entity {}: {}", entityId, e.getMessage());
+            }
         }
         dspCreatedEntities.clear();
-    }
-
-    private void deleteScorpioEntity(String entityId) {
-        try {
-            Request deleteRequest = new Request.Builder()
-                    .delete()
-                    .url(SCORPIO_ADDRESS + "/ngsi-ld/v1/entities/" + entityId)
-                    .build();
-            try (Response resp = HTTP_CLIENT.newCall(deleteRequest).execute()) {
-                log.debug("Deleted entity {}: status={}", entityId, resp.code());
-            }
-        } catch (Exception e) {
-            log.warn("Failed to clean up entity {}: {}", entityId, e.getMessage());
-        }
     }
 
     /**
@@ -2027,18 +2020,14 @@ public class DSPStepDefinitions extends StepDefintions {
     @When("The consumer exchanges the membership credential for an access token via OID4VP at the OID4VC endpoint.")
     public void theConsumerExchangesMembershipCredentialForTokenViaOid4vp() throws Exception {
         assertNotNull(oid4vcDataAddress, "OID4VC data address must be available.");
-        Awaitility.await()
-                .until(() -> {
-                    oid4vcAccessToken = ScriptHelper.getAccessTokenViaOid4vp(
-                            oid4vcDataAddress.getEndpoint(),
-                            MEMBERSHIP_CREDENTIAL_ID,
-                            OPENID_SCOPE,
-                            dspWallet);
-                    assertNotNull(oid4vcAccessToken, "OID4VP access token should not be null.");
-                    assertFalse(oid4vcAccessToken.isBlank(), "OID4VP access token should not be blank.");
-                    log.debug("Consumer obtained OID4VP access token for OID4VC endpoint.");
-                    return true;
-                });
+        oid4vcAccessToken = ScriptHelper.getAccessTokenViaOid4vp(
+                oid4vcDataAddress.getEndpoint(),
+                MEMBERSHIP_CREDENTIAL_ID,
+                OPENID_SCOPE,
+                dspWallet);
+        assertNotNull(oid4vcAccessToken, "OID4VP access token should not be null.");
+        assertFalse(oid4vcAccessToken.isBlank(), "OID4VP access token should not be blank.");
+        log.debug("Consumer obtained OID4VP access token for OID4VC endpoint.");
     }
 
     /**

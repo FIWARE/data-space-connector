@@ -88,8 +88,6 @@ decentralizedIam:
       deployment:
         logging:
           level: DEBUG
-        configRepo:
-          updateInterval: 1
         verifier:
           tirAddress: https://tir.127.0.0.1.nip.io/
           did: did:web:mp-operations.org
@@ -104,7 +102,6 @@ decentralizedIam:
             id: x509_san_dns:verifier.mp-operations.org
         server:
           host: https://verifier.mp-operations.org
-          updateInterval: 1
         additionalVolumes:
           - name: signing-key
             secret:
