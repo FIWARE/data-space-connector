@@ -1062,7 +1062,7 @@ keycloak:
     # Attribute keys are auto-prefixed with `vc.` if the user didn't already.
     # Set `clientScope.create: false` to skip ClientScope generation for an entry.
     #
-    # ref: https://github.com/keycloak/keycloak/blob/26.6.1/server-spi-private/src/main/java/org/keycloak/models/oid4vci/CredentialScopeModel.java
+    # ref: https://github.com/keycloak/keycloak/blob/26.6.2/server-spi-private/src/main/java/org/keycloak/models/oid4vci/CredentialScopeModel.java
     # NOTE: this model is the post-26.4 redesign (PR keycloak#39768). The pre-26.4
     # `vc.{name}.*` realm-attribute scheme and `components.CredentialBuilder`
     # block were removed. Format strings also changed: `jwt_vc` -> `jwt_vc_json`,

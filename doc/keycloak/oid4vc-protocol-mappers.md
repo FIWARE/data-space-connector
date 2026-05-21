@@ -1,4 +1,4 @@
-# OID4VC Protocol Mappers — Keycloak 26.6.1
+# OID4VC Protocol Mappers — Keycloak 26.6.2
 
 > **Feature flags required:** `keycloak.features.enabled` must contain both
 > `oid4vc-vci` and (since KC 26.4+) `oid4vc-vci-preauth-code` for the

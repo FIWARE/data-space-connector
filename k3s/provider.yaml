@@ -998,7 +998,7 @@ keycloak:
           verifiable_credential_type: "LegalPersonCredential"
           credential_signing_alg: "ES256"
           credential_build_config.token_jws_type: "dc+sd-jwt"
-          # KC 26.6.1 SD-JWT red list (iss, iat, nbf, exp, cnf, vct, status) MUST
+          # KC 26.6.2 SD-JWT red list (iss, iat, nbf, exp, cnf, vct, status) MUST
           # stay disclosed; including them avoids `UndisclosedClaims contains red
           # listed claim names`. roles/email are the domain-specific visible claims.
           credential_build_config.sd_jwt.visible_claims: "iss,iat,nbf,exp,cnf,vct,status,roles,email"
