@@ -51,8 +51,23 @@ decentralizedIam:
             - secretName: til-provider.127.0.0.1.nip.io-tls
               hosts:
                 - til-provider.127.0.0.1.nip.io
-    credentials-config-service:
+    vcverifier:
       ingress:
+        enabled: true
+        annotations:
+          traefik.ingress.kubernetes.io/router.tls: "true"
+          cert-manager.io/cluster-issuer: "selfsigned-issuer"
+          cert-manager.io/private-key-algorithm: "ECDSA"
+          cert-manager.io/common-name: "verifier.mp-operations.org"
+        tls:
+          - hosts:
+              - verifier.mp-operations.org
+            secretName: verifier.mp-operations.org-tls
+        hosts:
+          - host: verifier.mp-operations.org
+            paths:
+              - "/"
+      configIngress:
         enabled: true
         annotations:
           cert-manager.io/cluster-issuer: "selfsigned-issuer"
@@ -67,8 +82,77 @@ decentralizedIam:
           - secretName: provider-ccs.127.0.0.1.nip.io-tls
             hosts:
               - provider-ccs.127.0.0.1.nip.io
+      deployment:
+        logging:
+          level: DEBUG
+        verifier:
+          tirAddress: https://tir.127.0.0.1.nip.io/
+          did: did:web:mp-operations.org
+          supportedModes: ["byValue", "byReference"]
+          # required for the tests, can be longer in real world environments
+          tilCacheExpiry: 1
+          tirCacheExpiry: 1
+          clientIdentification:
+            keyPath: /signing-key/tls.key
+            certificatePath: /signing-key/tls.crt
+            requestKeyAlgorithm: ES256
+            id: x509_san_dns:verifier.mp-operations.org
+        server:
+          host: https://verifier.mp-operations.org
+          updateInterval: 1
+        additionalVolumes:
+          - name: signing-key
+            secret:
+              secretName: verifier.mp-operations.org-tls
+          # add the cert-manager CA to the system truststore
+          - name: root-ca
+            emptyDir: {}
+        additionalVolumeMounts:
+          - name: signing-key
+            mountPath: /signing-key
+          # add the cert-manager CA to the system truststore
+          - name: root-ca
+            mountPath: /etc/ssl/cert.pem
+            subPath: cert.pem
+        additionalEnvVars:
+          - name: HTTPS_PROXY
+            value: "http://squid-proxy.infra.svc.cluster.local:8888"
+          - name: HTTP_PROXY
+            value: "http://squid-proxy.infra.svc.cluster.local:8888"
+          - name: NO_PROXY
+            value: "credentials-config-service,w3.org,trusted-issuers-list"
+        initContainers:
+          # add the cert-manager CA to the system truststore
+          - name: add-root-ca
+            image: alpine:3.21.3
+            command:
+              [
+                "sh",
+                "-c",
+                "cat /etc/ssl/cert.pem /tmp/ca.crt > /root-ca/cert.pem",
+              ]
+            volumeMounts:
+              - name: root-ca
+                mountPath: /root-ca
+              - name: signing-key
+                mountPath: /tmp/ca.crt
+                subPath: ca.crt
+          - name: register-at-tir
+            image: curlimages/curl:8.18.0
+            command:
+              - /bin/sh
+            args:
+              - -ec
+              - |
+                curl -X 'POST' 'http://tir.trust-anchor.svc.cluster.local:8080/issuer' -H 'Content-Type: application/json' -d "{\"did\": \"did:web:mp-operations.org\", \"credentials\": []}"
       registration:
         enabled: true
+        job:
+          initContainers:
+            waitForHost:
+              enabled: true
+              path: /health
+          activeDeadlineSeconds: null
         services:
           - id: tpp-service
             defaultOidcScope: "operator"
@@ -134,7 +218,7 @@ decentralizedIam:
                       multiple: true
                       meta:
                         type_values:
-                          - UserCredential
+                          - [UserCredential]
               "legal":
                 credentials:
                   - type: LegalPersonCredential
@@ -177,7 +261,7 @@ decentralizedIam:
                       multiple: true
                       meta:
                         type_values:
-                          - OperatorCredential
+                          - [OperatorCredential]
           - id: dsp
             defaultOidcScope: "openid"
             authorizationType: "DEEPLINK"
@@ -199,7 +283,7 @@ decentralizedIam:
                       multiple: true
                       meta:
                         type_values:
-                          - MembershipCredential
+                          - [MembershipCredential]
           - id: contract-management
             defaultOidcScope: "external-marketplace"
             authorizationType: "DEEPLINK"
@@ -221,83 +305,7 @@ decentralizedIam:
                       multiple: true
                       meta:
                         type_values:
-                          - MarketplaceCredential
-    vcverifier:
-      ingress:
-        enabled: true
-        annotations:
-          traefik.ingress.kubernetes.io/router.tls: "true"
-          cert-manager.io/cluster-issuer: "selfsigned-issuer"
-          cert-manager.io/private-key-algorithm: "ECDSA"
-          cert-manager.io/common-name: "verifier.mp-operations.org"
-        tls:
-          - hosts:
-              - verifier.mp-operations.org
-            secretName: verifier.mp-operations.org-tls
-        hosts:
-          - host: verifier.mp-operations.org
-            paths:
-              - "/"
-      deployment:
-        logging:
-          level: DEBUG
-        verifier:
-          tirAddress: https://tir.127.0.0.1.nip.io/
-          did: did:web:mp-operations.org
-          supportedModes: ["byValue", "byReference"]
-          # required for the tests, can be longer in real world environments
-          tilCacheExpiry: 1
-          tirCacheExpiry: 1
-          clientIdentification:
-            keyPath: /signing-key/tls.key
-            certificatePath: /signing-key/tls.crt
-            requestKeyAlgorithm: ES256
-            id: x509_san_dns:verifier.mp-operations.org
-        server:
-          host: https://verifier.mp-operations.org
-        configRepo:
-          configEndpoint: http://credentials-config-service:8080
-          updateInterval: 1
-        additionalVolumes:
-          - name: signing-key
-            secret:
-              secretName: verifier.mp-operations.org-tls
-          # add the cert-manager CA to the system truststore
-          - name: root-ca
-            emptyDir: {}
-        additionalVolumeMounts:
-          - name: signing-key
-            mountPath: /signing-key
-          # add the cert-manager CA to the system truststore
-          - name: root-ca
-            mountPath: /etc/ssl/cert.pem
-            subPath: cert.pem
-        additionalEnvVars:
-          - name: HTTPS_PROXY
-            value: "http://squid-proxy.infra.svc.cluster.local:8888"
-          - name: HTTP_PROXY
-            value: "http://squid-proxy.infra.svc.cluster.local:8888"
-          - name: NO_PROXY
-            value: "credentials-config-service,w3.org,trusted-issuers-list"
-        initContainers:
-          # add the cert-manager CA to the system truststore
-          - name: add-root-ca
-            image: alpine:3.21.3
-            command: ["sh", "-c", "cat /etc/ssl/cert.pem /tmp/ca.crt > /root-ca/cert.pem"]
-            volumeMounts:
-              - name: root-ca
-                mountPath: /root-ca
-              - name: signing-key
-                mountPath: /tmp/ca.crt
-                subPath: ca.crt
-          - name: register-at-tir
-            image: curlimages/curl:8.18.0
-            command:
-              - /bin/sh
-            args:
-              - -ec
-              - |
-                curl -X 'POST' 'http://tir.trust-anchor.svc.cluster.local:8080/issuer' -H 'Content-Type: application/json' -d "{\"did\": \"did:web:mp-operations.org\", \"credentials\": []}"
+                          - [MarketplaceCredential]
   odrlAuthorization:
     apisix:
       etcd:
@@ -645,7 +653,7 @@ scorpio:
       cert-manager.io/private-key-algorithm: "ECDSA"
       cert-manager.io/common-name: "scorpio-provider.127.0.0.1.nip.io"
       traefik.ingress.kubernetes.io/router.tls: "true"
-      
+
     hosts:
       - host: scorpio-provider.127.0.0.1.nip.io
         paths:
@@ -932,11 +940,11 @@ keycloak:
             -passout env:STORE_PASS
           chmod 644 /did-material/cert.pfx
       env:
-      - name: "STORE_PASS"
-        valueFrom:
-          secretKeyRef:
-            name: keystore-password
-            key: password
+        - name: "STORE_PASS"
+          valueFrom:
+            secretKeyRef:
+              name: keystore-password
+              key: password
       volumeMounts:
         - name: did-material
           mountPath: /did-material
@@ -1158,7 +1166,7 @@ keycloak:
           "description": "admin role to be used when operating the provider.",
           "clientRole": true
         }
-      ],    
+      ],
       "did:web:fancy-marketplace.biz": [
         {
           "name": "customer",
@@ -1309,74 +1317,71 @@ keycloak:
         "groups": []
       }
     clients:
-    - clientId: did:web:fancy-marketplace.biz
-      enabled: true
-      description: Client to connect test.org
-      surrogateAuthRequired: false
-      alwaysDisplayInConsole: false
-      clientAuthenticatorType: client-secret
-      defaultRoles: []
-      redirectUris: []
-      webOrigins: []
-      notBefore: 0
-      bearerOnly: false
-      consentRequired: false
-      standardFlowEnabled: true
-      implicitFlowEnabled: false
-      directAccessGrantsEnabled: false
-      serviceAccountsEnabled: false
-      publicClient: false
-      frontchannelLogout: false
-      protocol: openid-connect
-      attributes:
-        client.secret.creation.time: "1675260539"
-      protocolMappers: []
-      authenticationFlowBindingOverrides: {}
-      fullScopeAllowed: true
-      nodeReRegistrationTimeout: -1
-      defaultClientScopes: []
-      optionalClientScopes: []
-    - clientId: did:web:mp-operations.org
-      description: Client to connect internal operations services
-      surrogateAuthRequired: false
-      alwaysDisplayInConsole: false
-      clientAuthenticatorType: client-secret
-      defaultRoles: []
-      redirectUris: [
-        "https://dashboard-provider.127.0.0.1.nip.io/callback/keycloak"
-      ]
-      webOrigins: [
-        "https://dashboard-provider.127.0.0.1.nip.io"
-      ]
-      notBefore: 0
-      bearerOnly: false
-      consentRequired: false
-      standardFlowEnabled: true
-      implicitFlowEnabled: false
-      directAccessGrantsEnabled: false
-      serviceAccountsEnabled: false
-      publicClient: true
-      frontchannelLogout: false
-      protocol: openid-connect
-      attributes:
-        client.secret.creation.time: "1675260539"
-      protocolMappers:
-        - name: "client-roles-id-token"
-          protocol: openid-connect
-          protocolMapper: oidc-usermodel-client-role-mapper
-          consentRequired: false
-          config:
-            multivalued: "true"
-            usermodel.clientRoleMapping.clientId: "did:web:mp-operations.org"
-            id.token.claim: "true"
-            access.token.claim: "false"
-            claim.name: "client_roles"
-            jsonType.label: "String"
-      authenticationFlowBindingOverrides: {}
-      fullScopeAllowed: true
-      nodeReRegistrationTimeout: -1
-      defaultClientScopes: ["openid", "profile", "roles"]
-      optionalClientScopes: []
+      - clientId: did:web:fancy-marketplace.biz
+        enabled: true
+        description: Client to connect test.org
+        surrogateAuthRequired: false
+        alwaysDisplayInConsole: false
+        clientAuthenticatorType: client-secret
+        defaultRoles: []
+        redirectUris: []
+        webOrigins: []
+        notBefore: 0
+        bearerOnly: false
+        consentRequired: false
+        standardFlowEnabled: true
+        implicitFlowEnabled: false
+        directAccessGrantsEnabled: false
+        serviceAccountsEnabled: false
+        publicClient: false
+        frontchannelLogout: false
+        protocol: openid-connect
+        attributes:
+          client.secret.creation.time: "1675260539"
+        protocolMappers: []
+        authenticationFlowBindingOverrides: {}
+        fullScopeAllowed: true
+        nodeReRegistrationTimeout: -1
+        defaultClientScopes: []
+        optionalClientScopes: []
+      - clientId: did:web:mp-operations.org
+        description: Client to connect internal operations services
+        surrogateAuthRequired: false
+        alwaysDisplayInConsole: false
+        clientAuthenticatorType: client-secret
+        defaultRoles: []
+        redirectUris:
+          ["https://dashboard-provider.127.0.0.1.nip.io/callback/keycloak"]
+        webOrigins: ["https://dashboard-provider.127.0.0.1.nip.io"]
+        notBefore: 0
+        bearerOnly: false
+        consentRequired: false
+        standardFlowEnabled: true
+        implicitFlowEnabled: false
+        directAccessGrantsEnabled: false
+        serviceAccountsEnabled: false
+        publicClient: true
+        frontchannelLogout: false
+        protocol: openid-connect
+        attributes:
+          client.secret.creation.time: "1675260539"
+        protocolMappers:
+          - name: "client-roles-id-token"
+            protocol: openid-connect
+            protocolMapper: oidc-usermodel-client-role-mapper
+            consentRequired: false
+            config:
+              multivalued: "true"
+              usermodel.clientRoleMapping.clientId: "did:web:mp-operations.org"
+              id.token.claim: "true"
+              access.token.claim: "false"
+              claim.name: "client_roles"
+              jsonType.label: "String"
+        authenticationFlowBindingOverrides: {}
+        fullScopeAllowed: true
+        nodeReRegistrationTimeout: -1
+        defaultClientScopes: ["openid", "profile", "roles"]
+        optionalClientScopes: []
 
 # helper component to initialize the trusted issuers list
 registration:
@@ -1438,7 +1443,7 @@ fdsc-dashboard:
     adminKey: admin
   apiUrls:
     til: http://trusted-issuers-list:8080
-    ccs: http://credentials-config-service:8080
+    ccs: http://verifier:8090
     odrl: http://odrl-pap:8080
   auth:
     config:
@@ -1452,13 +1457,9 @@ fdsc-dashboard:
           roleMapping:
             admin: "admin"
           silentRenew: true
-      
-fdsc-edc:
-  enabled: false
 
 identityhub:
   enabled: false
 
 vault:
   enabled: false
-
