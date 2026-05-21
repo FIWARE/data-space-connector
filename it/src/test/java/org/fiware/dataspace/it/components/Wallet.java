@@ -214,7 +214,7 @@ public class Wallet {
         return credentialOffer;
     }
 
-    public String getTokenForOffer(IssuerConfiguration issuerConfiguration, CredentialOffer credentialOffer) throws Exception {
+    public TokenResponse getTokenForOffer(IssuerConfiguration issuerConfiguration, CredentialOffer credentialOffer) throws Exception {
         String authorizationServer = issuerConfiguration.getAuthorizationServers().get(0);
         OpenIdConfiguration openIdConfiguration = getOpenIdConfiguration(authorizationServer);
         assertTrue(openIdConfiguration.getGrantTypesSupported().contains(PRE_AUTHORIZED_GRANT_TYPE), "The grant type should actually be supported by the authorization server.");
@@ -249,13 +249,32 @@ public class Wallet {
      * @throws Exception if credential retrieval fails
      */
     public String getCredential(IssuerConfiguration issuerConfiguration, CredentialOffer credentialOffer, String formatOverride) throws Exception {
-        String accessToken = getTokenForOffer(issuerConfiguration, credentialOffer);
+        TokenResponse tokenResponse = getTokenForOffer(issuerConfiguration, credentialOffer);
+        String accessToken = tokenResponse.getAccessToken();
 
-        String credentialResponse = credentialOffer.getCredentialConfigurationIds()
-                .stream()
-                .map(offeredCredentialId -> {
+        // KC main / SEAMWARE-patched 26.6.2 (keycloak/keycloak#47404): the
+        // /credential endpoint now requires `credential_identifier` rather
+        // than `credential_configuration_id`. The valid identifiers for the
+        // session are returned by the token endpoint under
+        // `authorization_details[].credential_identifiers`. Fall back to the
+        // configurationId-based body for older Keycloak versions that do not
+        // populate that field.
+        List<String> credentialIdentifiers = tokenResponse.getAuthorizationDetails() == null
+                ? List.of()
+                : tokenResponse.getAuthorizationDetails().stream()
+                        .filter(d -> d.getCredentialIdentifiers() != null)
+                        .flatMap(d -> d.getCredentialIdentifiers().stream())
+                        .toList();
+
+        List<String> requestKeys = credentialIdentifiers.isEmpty()
+                ? credentialOffer.getCredentialConfigurationIds()
+                : credentialIdentifiers;
+        boolean useIdentifier = !credentialIdentifiers.isEmpty();
+
+        String credentialResponse = requestKeys.stream()
+                .map(key -> {
                     try {
-                        return requestOffer(accessToken, issuerConfiguration.getCredentialEndpoint(), offeredCredentialId);
+                        return requestOffer(accessToken, issuerConfiguration.getCredentialEndpoint(), key, useIdentifier);
                     } catch (Exception e) {
                         return null;
                     }
@@ -271,20 +290,20 @@ public class Wallet {
      *
      * @param token              the access token obtained from the pre-authorized code exchange
      * @param credentialEndpoint the issuer's credential endpoint URL
-     * @param offeredCredential  the supported credential configuration from the issuer
-     * @param formatOverride     an optional format string to override the credential's default format, or {@code null}
+     * @param requestKey         either a `credential_identifier` (KC main) or a
+     *                           `credential_configuration_id` (older KC)
+     * @param useIdentifier      {@code true} to send `credential_identifier`,
+     *                           {@code false} to send `credential_configuration_id`
      * @return the raw JSON response body containing the credential
      * @throws Exception if the HTTP request fails or returns a non-200 status
      */
-    private String requestOffer(String token, String credentialEndpoint, String credentialConfigurationId) throws Exception {
-        // KC 26.4+ /credential body must carry credential_configuration_id (or
-        // credential_identifier). Format is no longer an input — it's implied
-        // by the configuration. The formatOverride parameter on the public
-        // getCredential method is kept for caller compatibility but is unused
-        // here; format selection happens by picking a configuration whose
-        // `vc.format` already matches what the caller wants.
+    private String requestOffer(String token, String credentialEndpoint, String requestKey, boolean useIdentifier) throws Exception {
         CredentialRequest credentialRequest = new CredentialRequest();
-        credentialRequest.setCredentialConfigurationId(credentialConfigurationId);
+        if (useIdentifier) {
+            credentialRequest.setCredentialIdentifier(requestKey);
+        } else {
+            credentialRequest.setCredentialConfigurationId(requestKey);
+        }
 
         RequestBody credentialRequestBody = RequestBody
                 .create(OBJECT_MAPPER.writeValueAsString(credentialRequest), okhttp3.MediaType.parse(MediaType.APPLICATION_JSON));
@@ -303,7 +322,7 @@ public class Wallet {
         return offer;
     }
 
-    public String getAccessToken(String tokenEndpoint, String preAuthorizedCode) throws Exception {
+    public TokenResponse getAccessToken(String tokenEndpoint, String preAuthorizedCode) throws Exception {
         RequestBody requestBody = new FormBody.Builder()
                 .add("grant_type", PRE_AUTHORIZED_GRANT_TYPE)
                 .add("pre-authorized_code", preAuthorizedCode)
@@ -316,9 +335,9 @@ public class Wallet {
         Response tokenResponse = HTTP_CLIENT.newCall(tokenRequest).execute();
         assertEquals(HttpStatus.SC_OK, tokenResponse.code(), "A valid token should have been returned.");
 
-        String accessToken = OBJECT_MAPPER.readValue(tokenResponse.body().string(), TokenResponse.class).getAccessToken();
+        TokenResponse parsed = OBJECT_MAPPER.readValue(tokenResponse.body().string(), TokenResponse.class);
         tokenResponse.body().close();
-        return accessToken;
+        return parsed;
     }
 
     public OpenIdConfiguration getOpenIdConfiguration(String authorizationServer) throws Exception {

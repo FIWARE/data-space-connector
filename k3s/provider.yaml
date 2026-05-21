@@ -986,6 +986,13 @@ keycloak:
     frontendUrl: https://keycloak-provider.127.0.0.1.nip.io
     import: true
     name: test-realm
+    # -- KC main (carried by SEAMWARE 26.6.2 patched image) ties /create-credential-offer
+    # to a per-user `verifiableCredentials` list — without it the endpoint answers
+    # 400 invalid_credential_offer_request "User 'X' does not have verifiable credential 'Y'".
+    # `issueCredentialsToUsers` auto-populates every user with the full set of VCs
+    # declared in `realm.verifiableCredentials` below.
+    wallets:
+      issueCredentialsToUsers: true
     # -- VCs migrated to the post-KC 26.4 OID4VC model: each entry renders one
     # ClientScope with protocol "oid4vc". Attributes are attached to the scope
     # itself (auto-prefixed with `vc.`); protocolMappers belong to the scope

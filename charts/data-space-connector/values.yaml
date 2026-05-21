@@ -297,13 +297,19 @@ keycloak:
   # -- expose the management/health port (9000) via a dedicated metrics service
   metrics:
     enabled: true
-  # -- enable Keycloak features. `oid4vc-vci-preauth-code` is a separate
-  # experimental sub-feature added in KC 26.4+ that gates the
-  # pre-authorized_code grant on /create-credential-offer.
+  # -- enable Keycloak features. Beyond the base `oid4vc-vci` we need two
+  # sub-features that KC main split out from the original flag:
+  #   * `oid4vc-vci-preauth-code` (KC 26.4+) — gates the pre-authorized_code
+  #     grant on /create-credential-offer.
+  #   * `oid4vc-vci-rest-credential-offer` (KC main, present in the SEAMWARE
+  #     patched 26.6.2 image) — gates the /create-credential-offer REST
+  #     endpoint itself. Without it Keycloak answers
+  #     `403 invalid_client: "REST credential offer functionality is not enabled"`.
   features:
     enabled:
       - oid4vc-vci
       - oid4vc-vci-preauth-code
+      - oid4vc-vci-rest-credential-offer
 
   # -- sets memory requests for keycloak
   # increased above the chart defaults to prevent OOMs in linux kernel >=6.14
