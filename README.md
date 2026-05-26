@@ -25,6 +25,7 @@ recipes.
 - [Components](#components)
 - [Description of modules and interaction flows](#description-of-modules-and-interaction-flows)
   - [OID4VC-based Authentication Framework](#oid4vc-based-authentication-framework)
+    - [Wallet compatibility](#wallet-compatibility)
     - [Service invocation (H2M)](#service-invocation-h2m)
     - [Service invocation (M2M)](#service-invocation-m2m)
   - [Authorization Framework](#authorization-framework)
@@ -96,6 +97,7 @@ contain breaking changes. Important releases will be listed below, with addition
 
 * [8.x.x](doc/release-notes/8-x.md) - Update the FIWARE Data Space Connector from 7.x.x to 8.x.x
 * [9.x.x](doc/release-notes/9-x.md) - :warning: **Breaking changes** - Upgrade the FIWARE Data Space Connector from 8.5.2 to 9.x.x
+* [10.x.x](doc/release-notes/10-x.md) - :warning: **Breaking changes** - Keycloak chart migration (Bitnami → CloudPirates), Keycloak 26.6.2 and OID4VCI realm model rewrite
 
 
 ## Components
@@ -220,6 +222,35 @@ The framework consists of the following components:
   (identified by their DID) that are considered trusted issuers of certain classes of VCs containing certain
   roles/claims. Provides an [EBSI Trusted Issuers Registry](https://api-pilot.ebsi.eu/docs/apis/trusted-issuers-registry)
   compatible API
+
+The credential issuer on the consumer side is **[Keycloak 26.6.2](https://www.keycloak.org/)** (deployed via the
+[CloudPirates Keycloak chart](https://github.com/CloudPirates-io/helm-charts/tree/main/charts/keycloak)). Its OID4VCI
+implementation follows [OID4VCI Draft 15](https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html)
+(realm model redesign in [keycloak/keycloak#39768](https://github.com/keycloak/keycloak/pull/39768)). Roles to be embedded
+in VCs are declared as Keycloak **client roles** per target organization (DID-keyed clients) and projected into the
+`credentialSubject.roles[*]` claim of each issued VC via the `oid4vc-target-role-mapper`.
+
+#### Wallet compatibility
+
+The chart ships an opinionated preset (`keycloak.realm.wallets.enabled: true`, off by default) that registers the OIDC
+clients required by the wallets validated against this release:
+
+| Wallet | Platform | Tested version | OIDC requirements | Recommended for |
+|---|---|---|---|---|
+| [Lissi ID Wallet](https://lissi.id/) | iOS | 3.1.3 | PKCE S256 | **Production** |
+| [Lissi ID Wallet](https://lissi.id/) | Android | 3.1.1 | PKCE S256 | **Production** |
+| EUDI Reference Wallet (forked .DEV build, [app](https://github.com/vramperez/eudi-app-ios-wallet-ui) + [lib](https://github.com/vramperez/eudi-lib-ios-wallet-kit)) | iOS | — | PAR + DPoP + PKCE S256 | Development / local testing |
+
+> **Lissi** is the recommended wallet for production deployments.
+>
+> **EUDI Reference Wallet**: the upstream EUDI iOS app/lib is **not** compatible with the OID4VCI Draft 15 model that
+> Keycloak 26.6.2 ships. The forks linked above (a) implement the Draft 15 issuance flow against the current Keycloak
+> endpoints and (b) accept self-signed TLS certificates, which is what makes them usable for local k3s development.
+> Do not use them in production.
+
+The preset registers only the OIDC clients — credentials are still declared by the deployer under
+`keycloak.realm.verifiableCredentials`. See [release notes 10.x](./doc/release-notes/10-x.md#wallet-compatibility) for
+the full setup.
 
 
 #### Service invocation (H2M)
