@@ -14,6 +14,7 @@ import org.fiware.dataspace.it.components.model.DataAddress;
 import org.fiware.dataspace.it.components.model.IdResponse;
 import org.fiware.dataspace.it.components.model.TransferProcess;
 
+import java.net.SocketTimeoutException;
 import java.time.Duration;
 import java.util.List;
 
@@ -274,6 +275,9 @@ public class DSPManagementHelper {
             }
             return OBJECT_MAPPER.readValue(responseBody,
                     OBJECT_MAPPER.getTypeFactory().constructCollectionType(List.class, ContractNegotiation.class));
+        } catch (SocketTimeoutException e) {
+            log.warn("Socket Timeout.", e);
+            return List.of();
         }
     }
 

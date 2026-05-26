@@ -151,6 +151,9 @@ decentralizedIam:
 
     # -- configuration for the odrl-pap to be deployed as part of the connector, see https://github.com/FIWARE/helm-charts/tree/main/charts/odrl-pap for all options
     odrl-pap:
+      deployment:
+        image:
+          tag: 1.4.6-PRE-48
       # -- should it be enabled? set to false if one outside the chart is used.
       enabled: true
       # -- allows to set a fixed name for the services
