@@ -168,16 +168,30 @@ public class ScriptHelper {
                                     tokenResponse.body().string(), TokenResponse.class);
                             String accessToken = token.getAccessToken();
 
-                            // Step 5: Request credential. KC 26.4+ expects
-                            // `credential_configuration_id` in the body (not the legacy
-                            // `credential_identifier`). The legacy `format` field is no
-                            // longer accepted; format is implied by the configuration.
+                            // Step 5: Request credential. KC main / SEAMWARE-patched 26.6.2
+                            // (keycloak/keycloak#47404) requires `credential_identifier`
+                            // taken from `authorization_details[].credential_identifiers`
+                            // of the token response. Older Keycloaks accept
+                            // `credential_configuration_id` instead — fall back to that
+                            // when `authorization_details` is not present.
                             String credentialEndpoint = issuerConfig.get("credential_endpoint").asText();
                             String offeredConfigId = credentialOffer.get("credential_configuration_ids")
                                     .get(0).asText();
+                            String credentialIdentifier = token.getAuthorizationDetails() == null
+                                    ? null
+                                    : token.getAuthorizationDetails().stream()
+                                            .filter(d -> d.getCredentialIdentifiers() != null
+                                                    && !d.getCredentialIdentifiers().isEmpty())
+                                            .map(d -> d.getCredentialIdentifiers().get(0))
+                                            .findFirst()
+                                            .orElse(null);
 
                             com.fasterxml.jackson.databind.node.ObjectNode credReq = OBJECT_MAPPER.createObjectNode();
-                            credReq.put("credential_configuration_id", offeredConfigId);
+                            if (credentialIdentifier != null) {
+                                credReq.put("credential_identifier", credentialIdentifier);
+                            } else {
+                                credReq.put("credential_configuration_id", offeredConfigId);
+                            }
 
                             RequestBody credBody = RequestBody.create(
                                     OBJECT_MAPPER.writeValueAsString(credReq),
