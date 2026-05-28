@@ -689,7 +689,7 @@ curl -k -x localhost:8888 -X POST \
 4. When the state of the negotiation is "finalized", the agreement id can be retrieved:
 
 ```shell
-export AGREEMENT_ID=$(curl -k -X POST \
+export AGREEMENT_ID=$(curl -x localhost:8888 -k -X POST \
   'https://dsp-dcp-management.127.0.0.1.nip.io/api/v1/management/v3/contractnegotiations/request' \
   --header 'Accept: */*' \
   --header 'Content-Type: application/json' | jq -r '.[0].contractAgreementId'); echo ${AGREEMENT_ID}
