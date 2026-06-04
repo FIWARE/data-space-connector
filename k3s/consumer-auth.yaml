@@ -375,11 +375,11 @@ credentials:
     password: test
   configurations:
     - id: marketplace-credential
-      format: jwt_vc
+      format: jwt_vc_json
       targetFile: marketplace-credential.jwt
     - id: membership-credential
-      format: jwt_vc
+      format: jwt_vc_json
       targetFile: membership-credential.jwt
     - id: legal-person-credential
-      format: jwt_vc
+      format: jwt_vc_json
       targetFile: legal-person-credential.jwt

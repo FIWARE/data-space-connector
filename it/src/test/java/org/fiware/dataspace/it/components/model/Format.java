@@ -33,14 +33,16 @@ public enum Format {
     LDP_VC("ldp_vc"),
 
     /**
-     * JWT-Credentials {@see https://identity.foundation/jwt-vc-presentation-profile/}
+     * JWT-Credentials {@see https://identity.foundation/jwt-vc-presentation-profile/}.
+     * Renamed from "jwt_vc" to "jwt_vc_json" in Keycloak 26.4+ (PR keycloak#39768).
      */
-    JWT_VC("jwt_vc"),
+    JWT_VC("jwt_vc_json"),
 
     /**
-     * SD-JWT-Credentials {@see https://drafts.oauth.net/oauth-sd-jwt-vc/draft-ietf-oauth-sd-jwt-vc.html}
+     * SD-JWT-Credentials {@see https://drafts.oauth.net/oauth-sd-jwt-vc/draft-ietf-oauth-sd-jwt-vc.html}.
+     * Renamed from "vc+sd-jwt" to "dc+sd-jwt" in Keycloak 26.4+ (PR keycloak#39768).
      */
-    SD_JWT_VC("vc+sd-jwt");
+    SD_JWT_VC("dc+sd-jwt");
 
     private String value;
 

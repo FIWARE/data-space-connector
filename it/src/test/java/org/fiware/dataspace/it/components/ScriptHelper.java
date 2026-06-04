@@ -40,8 +40,8 @@ public class ScriptHelper {
     /** Path to the OpenID Credential Issuer well-known configuration. */
     private static final String OPENID_CREDENTIAL_ISSUER_PATH = "/realms/test-realm/.well-known/openid-credential-issuer";
 
-    /** Path to request a credential offer URI from Keycloak. */
-    private static final String CREDENTIAL_OFFER_URI_PATH = "/realms/test-realm/protocol/oid4vc/credential-offer-uri";
+    /** Path to request a credential offer from Keycloak (KC 26.4+ — was `credential-offer-uri`). */
+    private static final String CREDENTIAL_OFFER_URI_PATH = "/realms/test-realm/protocol/oid4vc/create-credential-offer";
 
     /** Path to the OpenID Connect well-known configuration. */
     private static final String OIDC_WELL_KNOWN_PATH = "/.well-known/openid-configuration";
@@ -99,9 +99,11 @@ public class ScriptHelper {
         // Step 1: Get Keycloak user token
         String userToken = getKeycloakToken(keycloakBaseUrl, username, TEST_USER_PASSWORD);
 
-        // Step 2: Request credential offer URI
+        // Step 2: Request credential offer URI. KC 26.4+ defaults pre_authorized=false on
+        // /create-credential-offer, so opt in explicitly to get a pre-authorized_code grant.
         String offerUriUrl = keycloakBaseUrl + CREDENTIAL_OFFER_URI_PATH
-                + "?credential_configuration_id=" + credentialConfigurationId;
+                + "?credential_configuration_id=" + credentialConfigurationId
+                + "&pre_authorized=true";
         Request offerUriRequest = new Request.Builder()
                 .get()
                 .url(offerUriUrl)
@@ -113,10 +115,11 @@ public class ScriptHelper {
             String issuer = offerUri.get("issuer").asText();
             String nonce = offerUri.get("nonce").asText();
 
-            // Step 3: Get credential offer
+            // Step 3: Get credential offer. KC 26.4+ requires `/` between
+            // issuer and nonce (path is `/credential-offer/{nonce}`).
             Request offerRequest = new Request.Builder()
                     .get()
-                    .url(issuer + nonce)
+                    .url(issuer + "/" + nonce)
                     .header("Authorization", "Bearer " + userToken)
                     .build();
             try (Response offerResponse = HTTP_CLIENT.newCall(offerRequest).execute()) {
@@ -165,27 +168,29 @@ public class ScriptHelper {
                                     tokenResponse.body().string(), TokenResponse.class);
                             String accessToken = token.getAccessToken();
 
-                            // Step 5: Request credential
+                            // Step 5: Request credential. KC main / SEAMWARE-patched 26.6.2
+                            // (keycloak/keycloak#47404) requires `credential_identifier`
+                            // taken from `authorization_details[].credential_identifiers`
+                            // of the token response. Older Keycloaks accept
+                            // `credential_configuration_id` instead — fall back to that
+                            // when `authorization_details` is not present.
                             String credentialEndpoint = issuerConfig.get("credential_endpoint").asText();
-                            String credentialIdentifier = credentialOffer.get("credential_configuration_ids")
+                            String offeredConfigId = credentialOffer.get("credential_configuration_ids")
                                     .get(0).asText();
+                            String credentialIdentifier = token.getAuthorizationDetails() == null
+                                    ? null
+                                    : token.getAuthorizationDetails().stream()
+                                            .filter(d -> d.getCredentialIdentifiers() != null
+                                                    && !d.getCredentialIdentifiers().isEmpty())
+                                            .map(d -> d.getCredentialIdentifiers().get(0))
+                                            .findFirst()
+                                            .orElse(null);
 
-                            // Determine format
-                            String credFormat = format;
-                            if (credFormat == null) {
-                                JsonNode supportedConfig = issuerConfig
-                                        .get("credential_configurations_supported")
-                                        .get(credentialIdentifier);
-                                if (supportedConfig != null && supportedConfig.has("format")) {
-                                    credFormat = supportedConfig.get("format").asText();
-                                }
-                            }
-
-                            // Build credential request
                             com.fasterxml.jackson.databind.node.ObjectNode credReq = OBJECT_MAPPER.createObjectNode();
-                            credReq.put("credential_identifier", credentialIdentifier);
-                            if (credFormat != null) {
-                                credReq.put("format", credFormat);
+                            if (credentialIdentifier != null) {
+                                credReq.put("credential_identifier", credentialIdentifier);
+                            } else {
+                                credReq.put("credential_configuration_id", offeredConfigId);
                             }
 
                             RequestBody credBody = RequestBody.create(
@@ -200,7 +205,15 @@ public class ScriptHelper {
                             try (Response credResponse = HTTP_CLIENT.newCall(credRequest).execute()) {
                                 assertEquals(HttpStatus.SC_OK, credResponse.code(), "Credential request should succeed.");
                                 JsonNode credResult = OBJECT_MAPPER.readTree(credResponse.body().string());
-                                String credential = credResult.get("credential").asText();
+                                // KC 26.4+ wraps the credential in {"credentials":[{"credential":"..."}]}.
+                                // Older KC versions returned a flat {"credential":"..."}; accept both.
+                                JsonNode credNode = credResult.path("credentials").path(0).path("credential");
+                                if (credNode.isMissingNode() || credNode.isNull()) {
+                                    credNode = credResult.path("credential");
+                                }
+                                String credential = credNode.isMissingNode() || credNode.isNull()
+                                        ? null
+                                        : credNode.asText();
                                 assertNotNull(credential, "Credential should not be null.");
                                 log.debug("Successfully retrieved credential '{}' from {}", credentialConfigurationId, keycloakBaseUrl);
                                 return credential;
