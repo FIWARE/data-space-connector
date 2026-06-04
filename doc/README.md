@@ -21,6 +21,7 @@ specific flows and its deployment and integration with other frameworks.
   - [Deployment by Role](#deployment-by-role)
   - [Local Deployment (Maven)](#local-deployment-maven)
   - [Packet Delivery Company (ArgoCD)](#packet-delivery-company-argocd)
+  - [Observability](#observability)
   - [Integration with AWS Garnet Framework (formerly AWS Smart Territory Framework)](#integration-with-aws-garnet-framework-formerly-aws-smart-territory-framework)
 
 <!-- END doctoc generated TOC please keep comment here to allow auto update -->
