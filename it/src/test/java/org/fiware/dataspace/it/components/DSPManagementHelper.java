@@ -14,6 +14,7 @@ import org.fiware.dataspace.it.components.model.DataAddress;
 import org.fiware.dataspace.it.components.model.IdResponse;
 import org.fiware.dataspace.it.components.model.TransferProcess;
 
+import java.net.SocketTimeoutException;
 import java.time.Duration;
 import java.util.List;
 
@@ -274,6 +275,41 @@ public class DSPManagementHelper {
             }
             return OBJECT_MAPPER.readValue(responseBody,
                     OBJECT_MAPPER.getTypeFactory().constructCollectionType(List.class, ContractNegotiation.class));
+        } catch (SocketTimeoutException e) {
+            log.warn("Socket Timeout.", e);
+            return List.of();
+        }
+    }
+
+    /**
+     * Retrieves a single contract negotiation by ID from the DSP Management API.
+     *
+     * @param managementApiAddress the base URL of the management API
+     * @param negotiationId        the {@code @id} of the negotiation to retrieve
+     * @return the {@link ContractNegotiation}, or {@code null} if the request fails or times out
+     * @throws Exception if the HTTP request returns a non-success status
+     */
+    public static ContractNegotiation getNegotiation(String managementApiAddress,
+                                                     String negotiationId) throws Exception {
+        String url = managementApiAddress + CONTRACT_NEGOTIATIONS_PATH + "/" + negotiationId;
+        Request request = new Request.Builder()
+                .url(url)
+                .get()
+                .header("Accept", "*/*")
+                .build();
+
+        try (Response response = OK_HTTP_CLIENT.newCall(request).execute()) {
+            String responseBody = response.body() != null ? response.body().string() : "";
+            log.debug("Get negotiation {} at {} returned status {}", negotiationId, url, response.code());
+            if (!response.isSuccessful()) {
+                throw new RuntimeException(String.format(
+                        "Get negotiation %s failed with status %d: %s",
+                        negotiationId, response.code(), responseBody));
+            }
+            return OBJECT_MAPPER.readValue(responseBody, ContractNegotiation.class);
+        } catch (SocketTimeoutException e) {
+            log.warn("Socket Timeout fetching negotiation {}.", negotiationId, e);
+            return null;
         }
     }
 
@@ -294,22 +330,15 @@ public class DSPManagementHelper {
                 .atMost(Duration.ofSeconds(DEFAULT_POLL_TIMEOUT_SECONDS))
                 .pollInterval(Duration.ofSeconds(DEFAULT_POLL_INTERVAL_SECONDS))
                 .untilAsserted(() -> {
-                    List<ContractNegotiation> negotiations = getNegotiations(managementApiAddress);
-                    assertFalse(negotiations.isEmpty(), "Expected at least one negotiation");
-                    log.debug("Get negotiation {}", negotiationId);
-                    ContractNegotiation finalized = negotiations.stream()
-                            .filter(n -> n.getAtId().equals(negotiationId))
-                            .findFirst()
-                            .orElse(null);
+                    ContractNegotiation negotiation = getNegotiation(managementApiAddress, negotiationId);
+                    assertNotNull(negotiation,
+                            String.format("Negotiation %s not found.", negotiationId));
+                    log.debug("Negotiation {} is in state {}", negotiationId, negotiation.getState());
+                    assertTrue(negotiation.getState().equalsIgnoreCase(STATE_FINALIZED),
+                            String.format("Expected negotiation %s in state '%s', but was '%s'.",
+                                    negotiationId, STATE_FINALIZED, negotiation.getState()));
 
-                    assertNotNull(finalized,
-                            String.format("Expected a negotiation in state '%s', but found states: %s",
-                                    STATE_FINALIZED,
-                                    negotiations.stream().map(ContractNegotiation::getState)
-                                            .reduce((a, b) -> a + ", " + b).orElse("none")));
-                    assertTrue(finalized.getState().equalsIgnoreCase(STATE_FINALIZED), "The negotiation should be finalized.");
-
-                    agreementId[0] = finalized.getContractAgreementId();
+                    agreementId[0] = negotiation.getContractAgreementId();
                     assertNotNull(agreementId[0], "Agreement ID should not be null when negotiation is finalized");
                     log.debug("Negotiation finalized with agreement ID: {}", agreementId[0]);
                 });
@@ -469,15 +498,46 @@ public class DSPManagementHelper {
     }
 
     /**
-     * Polls the transfer process state until it reaches "STARTED" and returns the transfer ID.
-     * <p>
-     * Uses Awaitility to poll the transfer processes endpoint with a configurable timeout.
-     * Once a transfer is in the "STARTED" state, extracts and returns the transfer ID
-     * (from the {@code @id} field).
+     * Retrieves a single transfer process by ID from the DSP Management API.
      *
      * @param managementApiAddress the base URL of the management API
+     * @param transferId           the {@code @id} of the transfer process to retrieve
+     * @return the {@link TransferProcess}, or {@code null} if the request times out
+     * @throws Exception if the HTTP request returns a non-success status
+     */
+    public static TransferProcess getTransferProcess(String managementApiAddress,
+                                                     String transferId) throws Exception {
+        String url = managementApiAddress + TRANSFER_PROCESSES_PATH + "/" + transferId;
+        Request request = new Request.Builder()
+                .url(url)
+                .get()
+                .header("Accept", "*/*")
+                .build();
+
+        try (Response response = OK_HTTP_CLIENT.newCall(request).execute()) {
+            String responseBody = response.body() != null ? response.body().string() : "";
+            log.debug("Get transfer process {} at {} returned status {}", transferId, url, response.code());
+            if (!response.isSuccessful()) {
+                throw new RuntimeException(String.format(
+                        "Get transfer process %s failed with status %d: %s",
+                        transferId, response.code(), responseBody));
+            }
+            return OBJECT_MAPPER.readValue(responseBody, TransferProcess.class);
+        } catch (SocketTimeoutException e) {
+            log.warn("Socket Timeout fetching transfer process {}.", transferId, e);
+            return null;
+        }
+    }
+
+    /**
+     * Polls the transfer process state until it reaches "STARTED" and returns the transfer ID.
+     * <p>
+     * Uses Awaitility to poll the specific transfer process endpoint with a configurable timeout.
+     *
+     * @param managementApiAddress the base URL of the management API
+     * @param transferId           the {@code @id} of the transfer process to poll
      * @return the transfer process ID from the started transfer
-     * @throws Exception if polling times out or no started transfer is found
+     * @throws Exception if polling times out or the transfer is not found
      */
     public static String waitForTransferStarted(String managementApiAddress, String transferId) throws Exception {
         final String[] transferIds = new String[1];
@@ -486,21 +546,14 @@ public class DSPManagementHelper {
                 .atMost(Duration.ofSeconds(DEFAULT_POLL_TIMEOUT_SECONDS))
                 .pollInterval(Duration.ofSeconds(DEFAULT_POLL_INTERVAL_SECONDS))
                 .untilAsserted(() -> {
-                    List<TransferProcess> transfers = getTransferProcesses(managementApiAddress);
-                    assertFalse(transfers.isEmpty(), "Expected at least one transfer process");
-
-                    TransferProcess started = transfers.stream()
-                            .filter(t -> t.getAtId().equals(transferId))
-                            .findFirst()
-                            .orElse(null);
-
-                    assertNotNull(started,
-                            String.format("Expected a transfer in state '%s', but found states: %s",
-                                    STATE_STARTED,
-                                    transfers.stream().map(TransferProcess::getState)
-                                            .reduce((a, b) -> a + ", " + b).orElse("none")));
-                    assertTrue(STATE_STARTED.equalsIgnoreCase(started.getState()), "The transfer is not started.");
-                    transferIds[0] = started.getAtId();
+                    TransferProcess transfer = getTransferProcess(managementApiAddress, transferId);
+                    assertNotNull(transfer,
+                            String.format("Transfer process %s not found.", transferId));
+                    log.debug("Transfer process {} is in state {}", transferId, transfer.getState());
+                    assertTrue(STATE_STARTED.equalsIgnoreCase(transfer.getState()),
+                            String.format("Expected transfer %s in state '%s', but was '%s'.",
+                                    transferId, STATE_STARTED, transfer.getState()));
+                    transferIds[0] = transfer.getAtId();
                     assertNotNull(transferIds[0], "Transfer ID (@id) should not be null when transfer is started");
                     log.debug("Transfer process started with ID: {}", transferIds[0]);
                 });

@@ -1042,7 +1042,7 @@ public class DSPStepDefinitions extends StepDefintions {
                 "oidcScopes", Map.of(
                         "openid", Map.of(
                                 "credentials", List.of(Map.of(
-                                        "type", "MembershipCredential",
+                                        "type", "OperatorCredential",
                                         "trustedParticipantsLists", List.of(Map.of(
                                                 "type", "ebsi",
                                                 "url", "https://tir.127.0.0.1.nip.io")),
@@ -1053,10 +1053,10 @@ public class DSPStepDefinitions extends StepDefintions {
                                 "dcql", Map.of(
                                         "credentials", List.of(Map.of(
                                                 "id", "legal-person-query",
-                                                "format", "jwt_vc_json",
+                                                "format", "vc+sd-jwt",
                                                 "multiple", false,
                                                 "meta", Map.of(
-                                                        "type_values", List.of(List.of("MembershipCredential")))))))));
+                                                        "vct_values", List.of("OperatorCredential"))))))));
 
         // Build credentials config value
         Map<String, Object> credentialsConfig = Map.of(
@@ -1219,7 +1219,10 @@ public class DSPStepDefinitions extends StepDefintions {
         ObjectNode constraint = OBJECT_MAPPER.createObjectNode();
         constraint.put("leftOperand", "odrl:dayOfWeek");
         constraint.put("operator", "lt");
-        constraint.put("rightOperand", 6);
+        ObjectNode roValue = OBJECT_MAPPER.createObjectNode();
+        roValue.put("@value", 6);
+        roValue.put("@type", "xsd:integer");
+        constraint.set("rightOperand", roValue);
         contractPerm.set("constraint", constraint);
         contractPermissions.add(contractPerm);
         contractPolicy.set("permission", contractPermissions);
@@ -2001,14 +2004,14 @@ public class DSPStepDefinitions extends StepDefintions {
      * <p>
      * Stores the credential in the DSP wallet for subsequent OID4VP token exchange.
      */
-    @When("The consumer obtains a membership credential for OID4VC access.")
+    @When("The consumer obtains an operator credential for OID4VC access.")
     public void theConsumerObtainsMembershipCredentialForOid4vcAccess() throws Exception {
         // Login as the employee user and store the credential in the wallet for OID4VP exchange
         String accessToken = FancyMarketplaceEnvironment.loginToConsumerKeycloak(
-                MEMBERSHIP_CREDENTIAL_USERNAME + "@consumer.org");
-        dspWallet.getCredentialFromIssuer(accessToken, CONSUMER_KEYCLOAK_ADDRESS, MEMBERSHIP_CREDENTIAL_ID);
-        assertNotNull(dspWallet.getStoredCredential(MEMBERSHIP_CREDENTIAL_ID),
-                "Membership credential should be stored in the wallet.");
+                OPERATOR_USER_NAME);
+        dspWallet.getCredentialFromIssuer(accessToken, CONSUMER_KEYCLOAK_ADDRESS, OPERATOR_CREDENTIAL_ID);
+        assertNotNull(dspWallet.getStoredCredential(OPERATOR_CREDENTIAL_ID),
+                "Operator credential should be stored in the wallet.");
         log.debug("Consumer obtained membership credential for OID4VC access.");
     }
 
@@ -2017,12 +2020,12 @@ public class DSPStepDefinitions extends StepDefintions {
      * Equivalent to the second part of step 7 in "Order through DSP" > "OID4VC" in DSP_INTEGRATION.md:
      * {@code ./doc/scripts/get_access_token_oid4vp.sh ${ENDPOINT} $MEMBERSHIP_CREDENTIAL openid}
      */
-    @When("The consumer exchanges the membership credential for an access token via OID4VP at the OID4VC endpoint.")
+    @When("The consumer exchanges the operator credential for an access token via OID4VP at the OID4VC endpoint.")
     public void theConsumerExchangesMembershipCredentialForTokenViaOid4vp() throws Exception {
         assertNotNull(oid4vcDataAddress, "OID4VC data address must be available.");
         oid4vcAccessToken = ScriptHelper.getAccessTokenViaOid4vp(
                 oid4vcDataAddress.getEndpoint(),
-                MEMBERSHIP_CREDENTIAL_ID,
+                OPERATOR_CREDENTIAL_ID,
                 OPENID_SCOPE,
                 dspWallet);
         assertNotNull(oid4vcAccessToken, "OID4VP access token should not be null.");
@@ -2138,7 +2141,10 @@ public class DSPStepDefinitions extends StepDefintions {
         ObjectNode constraint = OBJECT_MAPPER.createObjectNode();
         constraint.put("leftOperand", "odrl:dayOfWeek");
         constraint.put("operator", "lt");
-        constraint.put("rightOperand", 6);
+        ObjectNode roValue = OBJECT_MAPPER.createObjectNode();
+        roValue.put("@value", 6);
+        roValue.put("@type", "xsd:integer");
+        constraint.set("rightOperand", roValue);
 
         ObjectNode permission = OBJECT_MAPPER.createObjectNode();
         permission.put("action", "use");

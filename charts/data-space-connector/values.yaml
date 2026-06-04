@@ -80,6 +80,9 @@ decentralizedIam:
       # -- allows to set a fixed name for the services
       fullnameOverride: verifier
       deployment:
+        image:
+          tag: 6.12.9-PRE-104
+          pullPolicy: Always
         # -- configuration for the m2m flow, in case the tir is requiring authentication
         m2m:
           # -- we do not need authentication here
@@ -137,6 +140,14 @@ decentralizedIam:
     apisix:
       ingress-controller:
         enabled: false
+
+      podAnnotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: /apisix/prometheus/metrics
+        prometheus.io/port: "9091"
+      apisix:
+        prometheus:
+          enabled: true
 
     # -- configuration for the odrl-pap to be deployed as part of the connector, see https://github.com/FIWARE/helm-charts/tree/main/charts/odrl-pap for all options
     odrl-pap:
@@ -2252,4 +2263,10 @@ extraManifests: []
 
 # -- dashboard for operating the FIWARE Data Space Connector
 fdsc-dashboard:
+  enabled: false
+
+prometheus:
+  enabled: false
+
+grafana:
   enabled: false
