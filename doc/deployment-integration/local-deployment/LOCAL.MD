@@ -163,8 +163,8 @@ Get the credentials issuer information:
 Get a credential offer uri(for the `user-credential), using the retrieved AccessToken:
 
 ```shell
-  export OFFER_URI=$(curl -s -k -x localhost:8888 -X GET 'https://keycloak-consumer.127.0.0.1.nip.io/realms/test-realm/protocol/oid4vc/credential-offer-uri?credential_configuration_id=user-credential' \
-    --header "Authorization: Bearer ${ACCESS_TOKEN}" | jq '"\(.issuer)\(.nonce)"' -r); echo ${OFFER_URI}
+  export OFFER_URI=$(curl -s -k -x localhost:8888 -X GET 'https://keycloak-consumer.127.0.0.1.nip.io/realms/test-realm/protocol/oid4vc/create-credential-offer?credential_configuration_id=user-credential&pre_authorized=true' \
+    --header "Authorization: Bearer ${ACCESS_TOKEN}" | jq '"\(.issuer)/\(.nonce)"' -r); echo ${OFFER_URI}
 ```
 
 Use the offer uri(e.g. the `issuer`and `nonce` fields), to retrieve the actual offer:
@@ -192,9 +192,8 @@ Use the returned access token to get the actual credential:
     --header 'Content-Type: application/json' \
     --header "Authorization: Bearer ${CREDENTIAL_ACCESS_TOKEN}" \
     --data "{
-              \"credential_identifier\": \"user-credential\",
-              \"format\":\"jwt_vc\"
-            }" | jq '.credential' -r); echo ${VERIFIABLE_CREDENTIAL}
+              \"credential_configuration_id\": \"user-credential\"
+            }" | jq '.credentials[0].credential' -r); echo ${VERIFIABLE_CREDENTIAL}
 ```
 
 You will receive a jwt-encoded credential to be used within the data space.
@@ -415,10 +414,11 @@ Setup the payload:
   export PAYLOAD=$(echo -n "{\"iss\": \"${HOLDER_DID}\", \"sub\": \"${HOLDER_DID}\", \"vp\": ${VERIFIABLE_PRESENTATION}}" | base64 -w0 | sed s/\+/-/g |sed 's/\//_/g' |  sed -E s/=+$//); echo Payload: ${PAYLOAD};
 ```
 
-Create the signature:
+Create the signature. Note: OpenSSL produces ECDSA signatures in DER format, but JWS requires raw R||S format (64 bytes for P-256). The `convert_ec` function from `doc/scripts/convert_ec.sh` handles this conversion:
 
 ```shell
-  export SIGNATURE=$(echo -n "${JWT_HEADER}.${PAYLOAD}" | openssl dgst -sha256 -binary -sign cert/private-key.pem | base64 -w0 | sed s/\+/-/g | sed 's/\//_/g' | sed -E s/=+$//); echo Signature: ${SIGNATURE};
+  source doc/scripts/convert_ec.sh
+  export SIGNATURE=$(echo -n "${JWT_HEADER}.${PAYLOAD}" | openssl dgst -sha256 -binary -sign cert/private-key.pem | convert_ec | base64 -w0 | sed s/\+/-/g | sed 's/\//_/g' | sed -E s/=+$//); echo Signature: ${SIGNATURE};
 ```
 
 Combine them to the JWT:

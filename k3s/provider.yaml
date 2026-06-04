@@ -52,8 +52,24 @@ decentralizedIam:
             - secretName: til-provider.127.0.0.1.nip.io-tls
               hosts:
                 - til-provider.127.0.0.1.nip.io
-    credentials-config-service:
+    vcverifier:
       ingress:
+        enabled: true
+        annotations:
+          traefik.ingress.kubernetes.io/router.tls: "true"
+          cert-manager.io/cluster-issuer: "selfsigned-issuer"
+          cert-manager.io/private-key-algorithm: "ECDSA"
+          cert-manager.io/common-name: "verifier.mp-operations.org"
+          cert-manager.io/alt-names: "verifier.mp-operations.org"
+        tls:
+          - hosts:
+              - verifier.mp-operations.org
+            secretName: verifier.mp-operations.org-tls
+        hosts:
+          - host: verifier.mp-operations.org
+            paths:
+              - "/"
+      configIngress:
         enabled: true
         annotations:
           cert-manager.io/cluster-issuer: "selfsigned-issuer"
@@ -69,8 +85,76 @@ decentralizedIam:
           - secretName: provider-ccs.127.0.0.1.nip.io-tls
             hosts:
               - provider-ccs.127.0.0.1.nip.io
+      deployment:
+        logging:
+          level: DEBUG
+        verifier:
+          tirAddress: https://tir.127.0.0.1.nip.io/
+          did: did:web:mp-operations.org
+          supportedModes: ["byValue", "byReference"]
+          # required for the tests, can be longer in real world environments
+          tilCacheExpiry: 1
+          tirCacheExpiry: 1
+          clientIdentification:
+            keyPath: /signing-key/tls.key
+            certificatePath: /signing-key/tls.crt
+            requestKeyAlgorithm: ES256
+            id: x509_san_dns:verifier.mp-operations.org
+        server:
+          host: https://verifier.mp-operations.org
+        additionalVolumes:
+          - name: signing-key
+            secret:
+              secretName: verifier.mp-operations.org-tls
+          # add the cert-manager CA to the system truststore
+          - name: root-ca
+            emptyDir: {}
+        additionalVolumeMounts:
+          - name: signing-key
+            mountPath: /signing-key
+          # add the cert-manager CA to the system truststore
+          - name: root-ca
+            mountPath: /etc/ssl/cert.pem
+            subPath: cert.pem
+        additionalEnvVars:
+          - name: HTTPS_PROXY
+            value: "http://squid-proxy.infra.svc.cluster.local:8888"
+          - name: HTTP_PROXY
+            value: "http://squid-proxy.infra.svc.cluster.local:8888"
+          - name: NO_PROXY
+            value: "credentials-config-service,w3.org,trusted-issuers-list"
+        initContainers:
+          # add the cert-manager CA to the system truststore
+          - name: add-root-ca
+            image: alpine:3.21.3
+            command:
+              [
+                "sh",
+                "-c",
+                "cat /etc/ssl/cert.pem /tmp/ca.crt > /root-ca/cert.pem",
+              ]
+            volumeMounts:
+              - name: root-ca
+                mountPath: /root-ca
+              - name: signing-key
+                mountPath: /tmp/ca.crt
+                subPath: ca.crt
+          - name: register-at-tir
+            image: curlimages/curl:8.18.0
+            command:
+              - /bin/sh
+            args:
+              - -ec
+              - |
+                curl -X 'POST' 'http://tir.trust-anchor.svc.cluster.local:8080/issuer' -H 'Content-Type: application/json' -d "{\"did\": \"did:web:mp-operations.org\", \"credentials\": []}"
       registration:
         enabled: true
+        job:
+          initContainers:
+            waitForHost:
+              enabled: true
+              path: /health
+          activeDeadlineSeconds: null
         services:
           - id: tpp-service
             defaultOidcScope: "operator"
@@ -103,7 +187,7 @@ decentralizedIam:
                 dcql:
                   credentials:
                     - id: legal-person-query
-                      format: "vc+sd-jwt"
+                      format: "dc+sd-jwt"
                       multiple: false
                       claims:
                         - id: name-claim
@@ -136,7 +220,7 @@ decentralizedIam:
                       multiple: true
                       meta:
                         type_values:
-                          - UserCredential
+                          - [UserCredential]
               "legal":
                 credentials:
                   - type: LegalPersonCredential
@@ -150,7 +234,7 @@ decentralizedIam:
                 dcql:
                   credentials:
                     - id: legal-person-query
-                      format: "vc+sd-jwt"
+                      format: "dc+sd-jwt"
                       multiple: false
                       claims:
                         - id: name-claim
@@ -179,7 +263,7 @@ decentralizedIam:
                       multiple: true
                       meta:
                         type_values:
-                          - OperatorCredential
+                          - [OperatorCredential]
           - id: dsp
             defaultOidcScope: "openid"
             authorizationType: "DEEPLINK"
@@ -201,7 +285,7 @@ decentralizedIam:
                       multiple: true
                       meta:
                         type_values:
-                          - MembershipCredential
+                          - [MembershipCredential]
           - id: contract-management
             defaultOidcScope: "external-marketplace"
             authorizationType: "DEEPLINK"
@@ -223,84 +307,8 @@ decentralizedIam:
                       multiple: true
                       meta:
                         type_values:
-                          - MarketplaceCredential
-    vcverifier:
-      ingress:
-        enabled: true
-        annotations:
-          traefik.ingress.kubernetes.io/router.tls: "true"
-          cert-manager.io/cluster-issuer: "selfsigned-issuer"
-          cert-manager.io/private-key-algorithm: "ECDSA"
-          cert-manager.io/common-name: "verifier.mp-operations.org"
-          cert-manager.io/alt-names: "verifier.mp-operations.org"
-        tls:
-          - hosts:
-              - verifier.mp-operations.org
-            secretName: verifier.mp-operations.org-tls
-        hosts:
-          - host: verifier.mp-operations.org
-            paths:
-              - "/"
-      deployment:
-        logging:
-          level: DEBUG
-        verifier:
-          tirAddress: https://tir.127.0.0.1.nip.io/
-          did: did:web:mp-operations.org
-          supportedModes: ["byValue", "byReference"]
-          # required for the tests, can be longer in real world environments
-          tilCacheExpiry: 1
-          tirCacheExpiry: 1
-          clientIdentification:
-            keyPath: /signing-key/tls.key
-            certificatePath: /signing-key/tls.crt
-            requestKeyAlgorithm: ES256
-            id: x509_san_dns:verifier.mp-operations.org
-        server:
-          host: https://verifier.mp-operations.org
-        configRepo:
-          configEndpoint: http://credentials-config-service:8080
-          updateInterval: 1
-        additionalVolumes:
-          - name: signing-key
-            secret:
-              secretName: verifier.mp-operations.org-tls
-          # add the cert-manager CA to the system truststore
-          - name: root-ca
-            emptyDir: {}
-        additionalVolumeMounts:
-          - name: signing-key
-            mountPath: /signing-key
-          # add the cert-manager CA to the system truststore
-          - name: root-ca
-            mountPath: /etc/ssl/cert.pem
-            subPath: cert.pem
-        additionalEnvVars:
-          - name: HTTPS_PROXY
-            value: "http://squid-proxy.infra.svc.cluster.local:8888"
-          - name: HTTP_PROXY
-            value: "http://squid-proxy.infra.svc.cluster.local:8888"
-          - name: NO_PROXY
-            value: "credentials-config-service,w3.org,trusted-issuers-list"
-        initContainers:
-          # add the cert-manager CA to the system truststore
-          - name: add-root-ca
-            image: alpine:3.21.3
-            command: ["sh", "-c", "cat /etc/ssl/cert.pem /tmp/ca.crt > /root-ca/cert.pem"]
-            volumeMounts:
-              - name: root-ca
-                mountPath: /root-ca
-              - name: signing-key
-                mountPath: /tmp/ca.crt
-                subPath: ca.crt
-          - name: register-at-tir
-            image: curlimages/curl:8.18.0
-            command:
-              - /bin/sh
-            args:
-              - -ec
-              - |
-                curl -X 'POST' 'http://tir.trust-anchor.svc.cluster.local:8080/issuer' -H 'Content-Type: application/json' -d "{\"did\": \"did:web:mp-operations.org\", \"credentials\": []}"
+                          - ["MarketplaceCredential"]
+    
   odrlAuthorization:
     apisix:
       etcd:
@@ -329,7 +337,7 @@ decentralizedIam:
           cert-manager.io/cluster-issuer: "selfsigned-issuer"
           cert-manager.io/private-key-algorithm: "ECDSA"
           traefik.ingress.kubernetes.io/router.tls: "true"
-          cert-manager.io/alt-names: "mp-data-service.127.0.0.1.nip.io,tpp-data-service.127.0.0.1.nip.io,tpp-service.127.0.0.1.nip.io,mp-tmf-api.127.0.0.1.nip.io,contract-management.127.0.0.1.nip.io,dsp-mp-operations.127.0.0.1.nip.io,dcp-mp-operations.127.0.0.1.nip.io,identityhub-mp-operations.127.0.0.1.nip.io,identityhub-management-mp-operations.127.0.0.1.nip.io,vault-mp-operations.127.0.0.1.nip.io"
+          cert-manager.io/alt-names: "mp-data-service.127.0.0.1.nip.io,tpp-data-service.127.0.0.1.nip.io,tpp-service.127.0.0.1.nip.io,mp-tmf-api.127.0.0.1.nip.io,contract-management.127.0.0.1.nip.io,dsp-mp-operations.127.0.0.1.nip.io,dcp-mp-operations.127.0.0.1.nip.io,identityhub-mp-operations.127.0.0.1.nip.io,identityhub-management-mp-operations.127.0.0.1.nip.io,vault-mp-operations.127.0.0.1.nip.io,provider-oid4vc-management.127.0.0.1.nip.io,provider-dcp-management.127.0.0.1.nip.io"
         hosts:
           - host: mp-data-service.127.0.0.1.nip.io
             paths: ["/"]
@@ -351,6 +359,10 @@ decentralizedIam:
             paths: ["/"]
           - host: vault-mp-operations.127.0.0.1.nip.io
             paths: ["/"]
+          - host: provider-oid4vc-management.127.0.0.1.nip.io
+            paths: ["/"]
+          - host: provider-dcp-management.127.0.0.1.nip.io
+            paths: ["/"]
         tls:
           - secretName: apisix-provider-tls
             hosts:
@@ -364,6 +376,8 @@ decentralizedIam:
               - identityhub-mp-operations.127.0.0.1.nip.io
               - identityhub-management-mp-operations.127.0.0.1.nip.io
               - vault-mp-operations.127.0.0.1.nip.io
+              - provider-oid4vc-management.127.0.0.1.nip.io
+              - provider-dcp-management.127.0.0.1.nip.io
       catchAllRoute:
         enabled: false
       routes:
@@ -546,6 +560,18 @@ decentralizedIam:
               policy: policy/main
               with_body: true
         - uri: /*
+          host: provider-oid4vc-management.127.0.0.1.nip.io
+          upstream:
+            nodes:
+              provider-fdsc-edc-oid4vc:8085: 1
+            type: roundrobin
+        - uri: /*
+          host: provider-dcp-management.127.0.0.1.nip.io
+          upstream:
+            nodes:
+              provider-fdsc-edc-dcp:8085: 1
+            type: roundrobin
+        - uri: /*
           host: vault-mp-operations.127.0.0.1.nip.io
           upstream:
             nodes:
@@ -651,7 +677,7 @@ scorpio:
       cert-manager.io/common-name: "scorpio-provider.127.0.0.1.nip.io"
       cert-manager.io/alt-names: "scorpio-provider.127.0.0.1.nip.io"
       traefik.ingress.kubernetes.io/router.tls: "true"
-      
+
     hosts:
       - host: scorpio-provider.127.0.0.1.nip.io
         paths:
@@ -911,20 +937,22 @@ keycloak:
       cpu: "500m"
   ingress:
     enabled: true
-    hostname: keycloak-provider.127.0.0.1.nip.io
     annotations:
       traefik.ingress.kubernetes.io/router.tls: "true"
       cert-manager.io/alt-names: "keycloak-provider.127.0.0.1.nip.io"
       cert-manager.io/cluster-issuer: "selfsigned-issuer"
       cert-manager.io/private-key-algorithm: "ECDSA"
       cert-manager.io/common-name: "keycloak-provider.127.0.0.1.nip.io"
-    pathType: Prefix
-    tls: true
-    extraTls:
-      - hosts:
+    hosts:
+      - host: keycloak-provider.127.0.0.1.nip.io
+        paths:
+          - path: /
+            pathType: Prefix
+    tls:
+      - secretName: keycloak-provider.127.0.0.1.nip.io-tls
+        hosts:
           - keycloak-provider.127.0.0.1.nip.io
-        secretName: keycloak-provider.127.0.0.1.nip.io-tls
-  initContainers:
+  extraInitContainers:
     - name: prepare-keystore
       image: alpine/openssl:3.5.5
       command: ["/bin/sh", "-c"]
@@ -939,11 +967,11 @@ keycloak:
             -passout env:STORE_PASS
           chmod 644 /did-material/cert.pfx
       env:
-      - name: "STORE_PASS"
-        valueFrom:
-          secretKeyRef:
-            name: keystore-password
-            key: password
+        - name: "STORE_PASS"
+          valueFrom:
+            secretKeyRef:
+              name: keystore-password
+              key: password
       volumeMounts:
         - name: did-material
           mountPath: /did-material
@@ -952,7 +980,7 @@ keycloak:
   extraVolumeMounts:
     - mountPath: /did-material
       name: did-material
-    - mountPath: /opt/bitnami/keycloak/data/import
+    - mountPath: /opt/keycloak/data/import
       name: realms
   extraVolumes:
     - emptyDir: {}
@@ -971,18 +999,9 @@ keycloak:
     keyPassword: "${STORE_PASS}"
     did: did:web:mp-operations.org
     keyAlgorithm: ES256
+  # extraEnvVars replaces the umbrella list, so KC_HEAP_SIZE has to be repeated here.
+  # STORE_PASS is consumed by the realm.json key-provider config (see signingKey above).
   extraEnvVars:
-    - name: KEYCLOAK_EXTRA_ARGS
-      value: "--import-realm"
-    - name: KC_FEATURES
-      value: "oid4vc-vci"
-    # keycloak admin password
-    - name: KC_ADMIN_PASSWORD
-      valueFrom:
-        secretKeyRef:
-          name: issuance-secret
-          key: keycloak-admin
-    # set in accordance with the memory requests, will result in OOM otherwise
     - name: KC_HEAP_SIZE
       value: "1024m"
     - name: "STORE_PASS"
@@ -994,35 +1013,186 @@ keycloak:
     frontendUrl: https://keycloak-provider.127.0.0.1.nip.io
     import: true
     name: test-realm
-    attributes: |
-      "vc.user-sd.credential_signing_alg_values_supported": "ES256",
-      "vc.user-sd.credential_build_config.signing_algorithm": "ES256",
-      "vc.user-sd.credential_build_config.token_jws_type": "vc+sd-jwt",
-      "vc.user-sd.credential_build_config.proof_types_supported": "{\"jwt\":{\"proof_signing_alg_values_supported\":[\"ES256\"]}}",
-      "vc.user-sd.format": "vc+sd-jwt",
-      "vc.user-sd.scope": "LegalPersonCredential",
-      "vc.user-sd.vct": "LegalPersonCredential",
-      "vc.user-sd.credential_build_config.visible_claims": "roles,email",
-      "vc.user-sd.credential_build_config.decoys": "3",
-      "vc.user-credential.credential_signing_alg_values_supported": "ES256",
-      "vc.user-credential.credential_build_config.signing_algorithm": "ES256",
-      "vc.user-credential.credential_build_config.token_jws_type": "JWT",
-      "vc.user-credential.credential_build_config.proof_types_supported": "{\"jwt\":{\"proof_signing_alg_values_supported\":[\"ES256\"]}}",
-      "vc.user-credential.format": "jwt_vc",
-      "vc.user-credential.scope": "LegalPersonCredential",
-      "vc.user-credential.vct": "LegalPersonCredential",
-      "vc.membership-credential.credential_signing_alg_values_supported": "ES256",
-      "vc.membership-credential.credential_build_config.signing_algorithm": "ES256",
-      "vc.membership-credential.credential_build_config.token_jws_type": "JWT",
-      "vc.membership-credential.format": "jwt_vc",
-      "vc.membership-credential.scope": "MembershipCredential",
-      "vc.membership-credential.vct": "MembershipCredential",
-      "vc.verifiable-credential.format": "vc+sd-jwt",
-      "vc.verifiable-credential.scope": "VerifiableCredential",
-      "vc.verifiable-credential.vct": "VerifiableCredential",
-      "vc.operator-credential.format": "vc+sd-jwt",
-      "vc.operator-credential.scope": "OperatorCredential",
-      "vc.operator-credential.vct": "OperatorCredential"
+    # -- KC main (carried by SEAMWARE 26.6.2 patched image) ties /create-credential-offer
+    # to a per-user `verifiableCredentials` list — without it the endpoint answers
+    # 400 invalid_credential_offer_request "User 'X' does not have verifiable credential 'Y'".
+    # `issueCredentialsToUsers` auto-populates every user with the full set of VCs
+    # declared in `realm.verifiableCredentials` below.
+    wallets:
+      issueCredentialsToUsers: true
+    # -- VCs migrated to the post-KC 26.4 OID4VC model: each entry renders one
+    # ClientScope with protocol "oid4vc". Attributes are attached to the scope
+    # itself (auto-prefixed with `vc.`); protocolMappers belong to the scope
+    # (no more legacy `supportedCredentialTypes` filtering — every mapper
+    # listed under a VC applies only to that VC's scope).
+    verifiableCredentials:
+      user-sd:
+        attributes:
+          format: "dc+sd-jwt"
+          verifiable_credential_type: "LegalPersonCredential"
+          credential_signing_alg: "ES256"
+          credential_build_config.token_jws_type: "dc+sd-jwt"
+          # KC 26.6.2 SD-JWT red list (iss, iat, nbf, exp, cnf, vct, status) MUST
+          # stay disclosed; including them avoids `UndisclosedClaims contains red
+          # listed claim names`. roles/email are the domain-specific visible claims.
+          credential_build_config.sd_jwt.visible_claims: "iss,iat,nbf,exp,cnf,vct,status,roles,email"
+          sd_jwt.number_of_decoys: "3"
+          binding_required: "true"
+          binding_required_proof_types: "jwt"
+        protocolMappers:
+          - name: context-mapper-usd
+            protocol: oid4vc
+            protocolMapper: oid4vc-context-mapper
+            config:
+              context: https://www.w3.org/2018/credentials/v1
+          - name: email-mapper-usd
+            protocol: oid4vc
+            protocolMapper: oid4vc-user-attribute-mapper
+            config:
+              claim.name: email
+              userAttribute: email
+          - name: firstName-mapper-usd
+            protocol: oid4vc
+            protocolMapper: oid4vc-user-attribute-mapper
+            config:
+              claim.name: firstName
+              userAttribute: firstName
+          - name: lastName-mapper-usd
+            protocol: oid4vc
+            protocolMapper: oid4vc-user-attribute-mapper
+            config:
+              claim.name: lastName
+              userAttribute: lastName
+          - name: role-mapper-marketplace-usd
+            protocol: oid4vc
+            protocolMapper: oid4vc-target-role-mapper
+            config:
+              claim.name: roles
+              clientId: did:web:fancy-marketplace.biz
+      user-credential:
+        attributes:
+          format: "jwt_vc_json"
+          verifiable_credential_type: "LegalPersonCredential"
+          credential_signing_alg: "ES256"
+          credential_build_config.token_jws_type: "JWT"
+          binding_required: "true"
+          binding_required_proof_types: "jwt"
+        protocolMappers:
+          - name: context-mapper-uc
+            protocol: oid4vc
+            protocolMapper: oid4vc-context-mapper
+            config:
+              context: https://www.w3.org/2018/credentials/v1
+          - name: email-mapper-uc
+            protocol: oid4vc
+            protocolMapper: oid4vc-user-attribute-mapper
+            config:
+              claim.name: email
+              userAttribute: email
+          - name: firstName-mapper-uc
+            protocol: oid4vc
+            protocolMapper: oid4vc-user-attribute-mapper
+            config:
+              claim.name: firstName
+              userAttribute: firstName
+          - name: lastName-mapper-uc
+            protocol: oid4vc
+            protocolMapper: oid4vc-user-attribute-mapper
+            config:
+              claim.name: lastName
+              userAttribute: lastName
+          - name: role-mapper-marketplace-uc
+            protocol: oid4vc
+            protocolMapper: oid4vc-target-role-mapper
+            config:
+              claim.name: roles
+              clientId: did:web:fancy-marketplace.biz
+      membership-credential:
+        attributes:
+          format: "jwt_vc_json"
+          verifiable_credential_type: "MembershipCredential"
+          credential_signing_alg: "ES256"
+          credential_build_config.token_jws_type: "JWT"
+        protocolMappers:
+          - name: context-mapper-mc
+            protocol: oid4vc
+            protocolMapper: oid4vc-context-mapper
+            config:
+              context: https://www.w3.org/2018/credentials/v1
+          - name: id-mapper-mc
+            protocol: oid4vc
+            protocolMapper: oid4vc-static-claim-mapper
+            config:
+              claim.name: id
+              staticValue: did:web:mp-operations.org
+          - name: membership-type-mapper-mc
+            protocol: oid4vc
+            protocolMapper: oid4vc-static-claim-mapper
+            config:
+              claim.name: membershipType
+              staticValue: FullMember
+      verifiable-credential:
+        attributes:
+          format: "dc+sd-jwt"
+          verifiable_credential_type: "VerifiableCredential"
+        protocolMappers:
+          - name: context-mapper-vc
+            protocol: oid4vc
+            protocolMapper: oid4vc-context-mapper
+            config:
+              context: https://www.w3.org/2018/credentials/v1
+          - name: email-mapper-vc
+            protocol: oid4vc
+            protocolMapper: oid4vc-user-attribute-mapper
+            config:
+              claim.name: email
+              userAttribute: email
+          - name: firstName-mapper-vc
+            protocol: oid4vc
+            protocolMapper: oid4vc-user-attribute-mapper
+            config:
+              claim.name: firstName
+              userAttribute: firstName
+          - name: role-mapper-marketplace-vc
+            protocol: oid4vc
+            protocolMapper: oid4vc-target-role-mapper
+            config:
+              claim.name: roles
+              clientId: did:web:fancy-marketplace.biz
+      operator-credential:
+        attributes:
+          format: "dc+sd-jwt"
+          verifiable_credential_type: "OperatorCredential"
+        protocolMappers:
+          - name: context-mapper-oc
+            protocol: oid4vc
+            protocolMapper: oid4vc-context-mapper
+            config:
+              context: https://www.w3.org/2018/credentials/v1
+          - name: email-mapper-oc
+            protocol: oid4vc
+            protocolMapper: oid4vc-user-attribute-mapper
+            config:
+              claim.name: email
+              userAttribute: email
+          - name: firstName-mapper-oc
+            protocol: oid4vc
+            protocolMapper: oid4vc-user-attribute-mapper
+            config:
+              claim.name: firstName
+              userAttribute: firstName
+          - name: lastName-mapper-oc
+            protocol: oid4vc
+            protocolMapper: oid4vc-user-attribute-mapper
+            config:
+              claim.name: lastName
+              userAttribute: lastName
+          - name: role-mapper-marketplace-oc
+            protocol: oid4vc
+            protocolMapper: oid4vc-target-role-mapper
+            config:
+              claim.name: roles
+              clientId: did:web:fancy-marketplace.biz
     clientRoles: |
       "did:web:mp-operations.org": [
         {
@@ -1030,7 +1200,7 @@ keycloak:
           "description": "admin role to be used when operating the provider.",
           "clientRole": true
         }
-      ],    
+      ],
       "did:web:fancy-marketplace.biz": [
         {
           "name": "customer",
@@ -1045,6 +1215,16 @@ keycloak:
         {
           "name": "REPRESENTATIVE",
           "description": "Is allowed to register.",
+          "clientRole": true
+        },
+        {
+          "name": "seller",
+          "description": "Marketplace seller role.",
+          "clientRole": true
+        },
+        {
+          "name": "admin",
+          "description": "Administrator role.",
           "clientRole": true
         }],
       "account": [
@@ -1170,170 +1350,72 @@ keycloak:
         },
         "groups": []
       }
-    clientScopes: |
-      {
-        "name": "LegalPersonCredential",
-        "description": "OIDC4VC Scope, that adds all properties required for a user.",
-        "protocol": "openid-connect",
-        "attributes": {},
-        "protocolMappers": [
-          {
-            "name": "context-mapper",
-            "protocol": "oid4vc",
-            "protocolMapper": "oid4vc-context-mapper",
-            "config": {
-              "context": "https://www.w3.org/2018/credentials/v1",
-              "supportedCredentialTypes": "VerifiableCredential,LegalPersonCredential,OperatorCredential"
-            }
-          },
-          {
-            "name": "email-mapper",
-            "protocol": "oid4vc",
-            "protocolMapper": "oid4vc-user-attribute-mapper",
-            "config": {
-              "subjectProperty": "email",
-              "userAttribute": "email",
-              "supportedCredentialTypes": "LegalPersonCredential,OperatorCredential"
-            }
-          },
-          {
-            "name": "firstName-mapper",
-            "protocol": "oid4vc",
-            "protocolMapper": "oid4vc-user-attribute-mapper",
-            "config": {
-              "subjectProperty": "firstName",
-              "userAttribute": "firstName",
-              "supportedCredentialTypes": "LegalPersonCredential,OperatorCredential"
-            }
-          },
-          {
-            "name": "lastName-mapper",
-            "protocol": "oid4vc",
-            "protocolMapper": "oid4vc-user-attribute-mapper",
-            "config": {
-              "subjectProperty": "lastName",
-              "userAttribute": "lastName",
-              "supportedCredentialTypes": "LegalPersonCredential,OperatorCredential"
-            }
-          },
-          {
-            "name": "role-mapper",
-            "protocol": "oid4vc",
-            "protocolMapper": "oid4vc-target-role-mapper",
-            "config": {
-              "subjectProperty": "roles",
-              "clientId": "did:web:fancy-marketplace.biz",
-              "supportedCredentialTypes": "LegalPersonCredential,OperatorCredential"
-            }
-          }
-        ]
-      },
-      {
-        "name": "MembershipCredential",
-        "description": "Scope to produce a credential intended for m2m-access as a marketplace.",
-        "protocol": "openid-connect",
-        "attributes": {},
-        "protocolMappers": [
-          {
-            "name": "context-mapper-mc",
-            "protocol": "oid4vc",
-            "protocolMapper": "oid4vc-context-mapper",
-            "config": {
-              "context": "https://www.w3.org/2018/credentials/v1",
-              "supportedCredentialTypes": "MembershipCredential"
-            }
-          },
-          {
-            "name": "subject-mapper-mc-id",
-            "protocol": "oid4vc",
-            "protocolMapper": "oid4vc-static-claim-mapper",
-            "config": {
-              "subjectProperty": "id",
-              "staticValue": "did:web:mp-operations.org",
-              "supportedCredentialTypes": "MembershipCredential"
-            }
-          },
-          {
-            "name": "subject-mapper-mc-type",
-            "protocol": "oid4vc",
-            "protocolMapper": "oid4vc-static-claim-mapper",
-            "config": {
-              "subjectProperty": "membershipType",
-              "staticValue": "FullMember",
-              "supportedCredentialTypes": "MembershipCredential"
-            }
-          }
-        ]
-      }
     clients:
-    - clientId: did:web:fancy-marketplace.biz
-      enabled: true
-      description: Client to connect test.org
-      surrogateAuthRequired: false
-      alwaysDisplayInConsole: false
-      clientAuthenticatorType: client-secret
-      defaultRoles: []
-      redirectUris: []
-      webOrigins: []
-      notBefore: 0
-      bearerOnly: false
-      consentRequired: false
-      standardFlowEnabled: true
-      implicitFlowEnabled: false
-      directAccessGrantsEnabled: false
-      serviceAccountsEnabled: false
-      publicClient: false
-      frontchannelLogout: false
-      protocol: openid-connect
-      attributes:
-        client.secret.creation.time: "1675260539"
-      protocolMappers: []
-      authenticationFlowBindingOverrides: {}
-      fullScopeAllowed: true
-      nodeReRegistrationTimeout: -1
-      defaultClientScopes: []
-      optionalClientScopes: []
-    - clientId: did:web:mp-operations.org
-      description: Client to connect internal operations services
-      surrogateAuthRequired: false
-      alwaysDisplayInConsole: false
-      clientAuthenticatorType: client-secret
-      defaultRoles: []
-      redirectUris: [
-        "https://dashboard-provider.127.0.0.1.nip.io/callback/keycloak"
-      ]
-      webOrigins: [
-        "https://dashboard-provider.127.0.0.1.nip.io"
-      ]
-      notBefore: 0
-      bearerOnly: false
-      consentRequired: false
-      standardFlowEnabled: true
-      implicitFlowEnabled: false
-      directAccessGrantsEnabled: false
-      serviceAccountsEnabled: false
-      publicClient: true
-      frontchannelLogout: false
-      protocol: openid-connect
-      attributes:
-        client.secret.creation.time: "1675260539"
-      protocolMappers:
-        - name: "client-roles-id-token"
-          protocol: openid-connect
-          protocolMapper: oidc-usermodel-client-role-mapper
-          consentRequired: false
-          config:
-            multivalued: "true"
-            usermodel.clientRoleMapping.clientId: "did:web:mp-operations.org"
-            id.token.claim: "true"
-            access.token.claim: "false"
-            claim.name: "client_roles"
-            jsonType.label: "String"
-      authenticationFlowBindingOverrides: {}
-      fullScopeAllowed: true
-      nodeReRegistrationTimeout: -1
-      defaultClientScopes: ["openid", "profile", "roles"]
-      optionalClientScopes: []
+      - clientId: did:web:fancy-marketplace.biz
+        enabled: true
+        description: Client to connect test.org
+        surrogateAuthRequired: false
+        alwaysDisplayInConsole: false
+        clientAuthenticatorType: client-secret
+        defaultRoles: []
+        redirectUris: []
+        webOrigins: []
+        notBefore: 0
+        bearerOnly: false
+        consentRequired: false
+        standardFlowEnabled: true
+        implicitFlowEnabled: false
+        directAccessGrantsEnabled: false
+        serviceAccountsEnabled: false
+        publicClient: false
+        frontchannelLogout: false
+        protocol: openid-connect
+        attributes:
+          client.secret.creation.time: "1675260539"
+        protocolMappers: []
+        authenticationFlowBindingOverrides: {}
+        fullScopeAllowed: true
+        nodeReRegistrationTimeout: -1
+        defaultClientScopes: []
+        optionalClientScopes: []
+      - clientId: did:web:mp-operations.org
+        description: Client to connect internal operations services
+        surrogateAuthRequired: false
+        alwaysDisplayInConsole: false
+        clientAuthenticatorType: client-secret
+        defaultRoles: []
+        redirectUris:
+          ["https://dashboard-provider.127.0.0.1.nip.io/callback/keycloak"]
+        webOrigins: ["https://dashboard-provider.127.0.0.1.nip.io"]
+        notBefore: 0
+        bearerOnly: false
+        consentRequired: false
+        standardFlowEnabled: true
+        implicitFlowEnabled: false
+        directAccessGrantsEnabled: false
+        serviceAccountsEnabled: false
+        publicClient: true
+        frontchannelLogout: false
+        protocol: openid-connect
+        attributes:
+          client.secret.creation.time: "1675260539"
+        protocolMappers:
+          - name: "client-roles-id-token"
+            protocol: openid-connect
+            protocolMapper: oidc-usermodel-client-role-mapper
+            consentRequired: false
+            config:
+              multivalued: "true"
+              usermodel.clientRoleMapping.clientId: "did:web:mp-operations.org"
+              id.token.claim: "true"
+              access.token.claim: "false"
+              claim.name: "client_roles"
+              jsonType.label: "String"
+        authenticationFlowBindingOverrides: {}
+        fullScopeAllowed: true
+        nodeReRegistrationTimeout: -1
+        defaultClientScopes: ["openid", "profile", "roles"]
+        optionalClientScopes: []
 
 # helper component to initialize the trusted issuers list
 registration:
@@ -1399,7 +1481,7 @@ fdsc-dashboard:
     adminKey: admin
   apiUrls:
     til: http://trusted-issuers-list:8080
-    ccs: http://credentials-config-service:8080
+    ccs: http://verifier:8090
     odrl: http://odrl-pap:8080
   auth:
     config:
@@ -1413,9 +1495,6 @@ fdsc-dashboard:
           roleMapping:
             admin: "admin"
           silentRenew: true
-      
-fdsc-edc:
-  enabled: false
 
 identityhub:
   enabled: false

@@ -11,8 +11,8 @@ access_token=$(curl -s -k -x localhost:8888 -X POST "$1/realms/test-realm/protoc
   --data scope=openid \
   --data password=test | jq '.access_token' -r)
 
-offer_uri=$(curl -s -k -x localhost:8888 -X GET "$1/realms/test-realm/protocol/oid4vc/credential-offer-uri?credential_configuration_id=$2" \
-  --header "Authorization: Bearer ${access_token}" | jq '"\(.issuer)\(.nonce)"' -r)
+offer_uri=$(curl -s -k -x localhost:8888 -X GET "$1/realms/test-realm/protocol/oid4vc/create-credential-offer?credential_configuration_id=$2&pre_authorized=true" \
+  --header "Authorization: Bearer ${access_token}" | jq '"\(.issuer)/\(.nonce)"' -r)
 
 export pre_authorized_code=$(curl -s -k -x localhost:8888 -X GET ${offer_uri} \
   --header "Authorization: Bearer ${access_token}" | jq '.grants."urn:ietf:params:oauth:grant-type:pre-authorized_code"."pre-authorized_code"' -r)
@@ -27,4 +27,4 @@ curl -s -k -x localhost:8888 -X POST "$1/realms/test-realm/protocol/oid4vc/crede
   --header 'Accept: */*' \
   --header 'Content-Type: application/json' \
   --header "Authorization: Bearer ${credential_access_token}" \
-  --data "{\"credential_identifier\":\"$2\", \"format\":\"$format\"}" | jq '.credential' -r
+  --data "{\"credential_configuration_id\":\"$2\"}" | jq '.credentials[0].credential' -r

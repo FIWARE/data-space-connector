@@ -14,6 +14,8 @@ fdsc-edc:
       deployment:
         image:
           repository: quay.io/seamware/fdsc-edc-controlplane-oid4vc
+          tag: 0.2.0-PRE-12
+          pullPolicy: Always
       config:
         edc:
           hostname: dsp-mp-operations.127.0.0.1.nip.io
@@ -23,7 +25,7 @@ fdsc-edc:
             enabled: false
           oid4vc:
             enabled: true
-            credentialsConfigAddress: http://credentials-config-service.provider.svc.cluster.local:8080
+            credentialsConfigAddress: http://verifier.provider.svc.cluster.local:8090
             verifierHost: https://verifier.mp-operations.org
             verifierInternalHost: verifier.provider.svc.cluster.local:3000
             opaHost: http://localhost:8181
@@ -86,6 +88,7 @@ fdsc-edc:
             -Dhttp.proxyHost=squid-proxy.infra.svc.cluster.local
             -Dhttp.proxyPort=8888
             -Dhttp.nonProxyHosts="*-vault|*.cluster.local"
+            -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=5005
       initContainers:
         - name: convert-signing-key
           image: alpine/openssl:3.5.5
@@ -105,11 +108,39 @@ fdsc-edc:
               set -e
               echo "Waiting for Keycloak to become ready..."
 
-              until curl -sf http://provider-keycloak:9000/health/ready > /dev/null; do
+              until curl -sf http://provider-keycloak-metrics:9000/health/ready > /dev/null; do
                 echo "Keycloak not ready yet, retrying..."
                 sleep 5
               done
               echo "Keycloak is ready."
+        - name: wait-for-odrl-pap
+          image: curlimages/curl:8.6.0
+          command:
+            - sh
+            - -c
+            - |
+              set -e
+              echo "Waiting for ODRL PAP to become ready..."
+
+              until curl -sf http://odrl-pap.provider.svc.cluster.local:8080/policy > /dev/null; do
+                echo "ODRL PAP not ready yet, retrying..."
+                sleep 5
+              done
+              echo "ODRL PAP is ready."
+        - name: wait-for-til
+          image: curlimages/curl:8.6.0
+          command:
+            - sh
+            - -c
+            - |
+              set -e
+              echo "Waiting for Trusted Issuers List to become ready..."
+
+              until curl -sf http://trusted-issuers-list.provider.svc.cluster.local:8080/issuer > /dev/null; do
+                echo "TIL not ready yet, retrying..."
+                sleep 5
+              done
+              echo "Trusted Issuers List is ready."
         - name: load-certs
           image: "quay.io/seamware/fdsc-edc-controlplane-oid4vc:0.1.6"
           command: ["/bin/sh", "-c", "/bin/import-ca.sh /certs-folder /root-ca/cacert.pem /opt/java/openjdk/lib/security/cacerts"]
@@ -170,6 +201,7 @@ fdsc-edc:
           token: admin
           # -- in case the route should use a proxy, configure it here
           httpsProxy: http://squid-proxy.infra.svc.cluster.local:8888
+      additionalProperties: "edc.http.client.timeout.connect=60\n    edc.http.client.timeout.read=120"
       dcp:
         enabled: true
         scopes:
@@ -185,19 +217,11 @@ did:
   enabled: false
 
 keycloak:
-  metrics:
-    enabled: true
+  # `--import-realm` is auto-added by the umbrella when realm.import: true,
+  # KC_FEATURES is configured through `keycloak.features.enabled` in the umbrella,
+  # and KC_ADMIN_PASSWORD is handled by `keycloak.keycloak.existingSecret`.
+  # Only genuinely custom env vars (heap tuning, secrets templated into the realm) belong here.
   extraEnvVars:
-    - name: KEYCLOAK_EXTRA_ARGS
-      value: "--import-realm"
-    - name: KC_FEATURES
-      value: "oid4vc-vci"
-    # keycloak admin password
-    - name: KC_ADMIN_PASSWORD
-      valueFrom:
-        secretKeyRef:
-          name: issuance-secret
-          key: keycloak-admin
     # set in accordance with the memory requests, will result in OOM otherwise
     - name: KC_HEAP_SIZE
       value: "1024m"

@@ -3,6 +3,7 @@ package org.fiware.dataspace.it.components;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
+import okhttp3.Interceptor;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.Response;
@@ -14,10 +15,12 @@ import org.keycloak.crypto.KeyWrapper;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.X509TrustManager;
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.StringReader;
 import java.net.InetSocketAddress;
 import java.net.Proxy;
+import java.net.SocketTimeoutException;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.security.KeyManagementException;
@@ -38,6 +41,8 @@ public class TestUtils {
 	private static final String PRIVATE_KEY_PATH = "/did-material/private-key.pem";
 	private static final String DID_ENV_PATH = "/did-material/did.env";
 	private static final Integer SQUID_PORT = 8888;
+	private static final int SOCKET_TIMEOUT_MAX_RETRIES = 3;
+	private static final long SOCKET_TIMEOUT_BASE_DELAY_MS = 1000;
 
 	public static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
@@ -53,6 +58,7 @@ public class TestUtils {
 					.proxy(getHttpProxy())
 					.followRedirects(false)
 					.sslSocketFactory(getTrustAllContext().getSocketFactory(), getTrustAllManager())
+					.addInterceptor(socketTimeoutRetryInterceptor())
 					.build();
 		} catch (KeyManagementException e) {
 			throw new RuntimeException(e);
@@ -65,6 +71,36 @@ public class TestUtils {
 		// prevent instantiation
 	}
 
+
+	/**
+	 * Creates an OkHttp interceptor that retries requests on {@link SocketTimeoutException}
+	 * with exponential backoff (1s, 2s, 4s).
+	 */
+	private static Interceptor socketTimeoutRetryInterceptor() {
+		return chain -> {
+			Request request = chain.request();
+			IOException lastException = null;
+			for (int attempt = 0; attempt <= SOCKET_TIMEOUT_MAX_RETRIES; attempt++) {
+				try {
+					return chain.proceed(request);
+				} catch (SocketTimeoutException e) {
+					lastException = e;
+					if (attempt < SOCKET_TIMEOUT_MAX_RETRIES) {
+						long delay = SOCKET_TIMEOUT_BASE_DELAY_MS * (1L << attempt);
+						log.warn("SocketTimeoutException on attempt {} for {} {}, retrying in {}ms",
+								attempt + 1, request.method(), request.url(), delay);
+						try {
+							Thread.sleep(delay);
+						} catch (InterruptedException ie) {
+							Thread.currentThread().interrupt();
+							throw e;
+						}
+					}
+				}
+			}
+			throw lastException;
+		};
+	}
 
 	private static Proxy getHttpProxy() {
 		return new Proxy(Proxy.Type.HTTP, new InetSocketAddress("127.0.0.1", SQUID_PORT));

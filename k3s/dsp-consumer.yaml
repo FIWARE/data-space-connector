@@ -13,6 +13,8 @@ fdsc-edc:
       deployment:
         image:
           repository: quay.io/seamware/fdsc-edc-controlplane-oid4vc
+          tag: 0.2.0-PRE-12
+          pullPolicy: Always
       service: {}
       config:
         edc:
@@ -62,6 +64,7 @@ fdsc-edc:
             -Dhttp.proxyHost=squid-proxy.infra.svc.cluster.local
             -Dhttp.proxyPort=8888
             -Dhttp.nonProxyHosts="*-vault|*.cluster.local"
+            -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=5005
       initContainers:
         - name: convert-signing-key
           image: alpine/openssl:3.5.5
@@ -81,11 +84,25 @@ fdsc-edc:
               set -e
               echo "Waiting for Keycloak to become ready..."
 
-              until curl -sf http://consumer-keycloak:9000/health/ready > /dev/null; do
+              until curl -sf http://consumer-keycloak-metrics:9000/health/ready > /dev/null; do
                 echo "Keycloak not ready yet, retrying..."
                 sleep 5
               done
               echo "Keycloak is ready."
+        - name: wait-for-til
+          image: curlimages/curl:8.6.0
+          command:
+            - sh
+            - -c
+            - |
+              set -e
+              echo "Waiting for Trusted Issuers List to become ready..."
+
+              until curl -sf http://trusted-issuers-list.consumer.svc.cluster.local:8080/issuer > /dev/null; do
+                echo "TIL not ready yet, retrying..."
+                sleep 5
+              done
+              echo "Trusted Issuers List is ready."
         - name: load-certs
           image: "quay.io/seamware/fdsc-edc-controlplane-oid4vc:0.1.1"
           command: ["/bin/sh", "-c", "/bin/import-ca.sh /certs-folder /root-ca/cacert.pem /opt/java/openjdk/lib/security/cacerts"]
