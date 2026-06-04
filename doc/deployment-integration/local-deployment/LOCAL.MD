@@ -414,10 +414,11 @@ Setup the payload:
   export PAYLOAD=$(echo -n "{\"iss\": \"${HOLDER_DID}\", \"sub\": \"${HOLDER_DID}\", \"vp\": ${VERIFIABLE_PRESENTATION}}" | base64 -w0 | sed s/\+/-/g |sed 's/\//_/g' |  sed -E s/=+$//); echo Payload: ${PAYLOAD};
 ```
 
-Create the signature:
+Create the signature. Note: OpenSSL produces ECDSA signatures in DER format, but JWS requires raw R||S format (64 bytes for P-256). The `convert_ec` function from `doc/scripts/convert_ec.sh` handles this conversion:
 
 ```shell
-  export SIGNATURE=$(echo -n "${JWT_HEADER}.${PAYLOAD}" | openssl dgst -sha256 -binary -sign cert/private-key.pem | base64 -w0 | sed s/\+/-/g | sed 's/\//_/g' | sed -E s/=+$//); echo Signature: ${SIGNATURE};
+  source doc/scripts/convert_ec.sh
+  export SIGNATURE=$(echo -n "${JWT_HEADER}.${PAYLOAD}" | openssl dgst -sha256 -binary -sign cert/private-key.pem | convert_ec | base64 -w0 | sed s/\+/-/g | sed 's/\//_/g' | sed -E s/=+$//); echo Signature: ${SIGNATURE};
 ```
 
 Combine them to the JWT:

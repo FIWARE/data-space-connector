@@ -31,6 +31,7 @@ decentralizedIam:
           enabled: true
           annotations:
             cert-manager.io/cluster-issuer: "selfsigned-issuer"
+            cert-manager.io/alt-names: "til-consumer.127.0.0.1.nip.io"
             cert-manager.io/private-key-algorithm: "ECDSA"
             cert-manager.io/common-name: "til-consumer.127.0.0.1.nip.io"
             traefik.ingress.kubernetes.io/router.tls: "true"
@@ -67,6 +68,7 @@ decentralizedIam:
         annotations:
           cert-manager.io/cluster-issuer: "selfsigned-issuer"
           cert-manager.io/private-key-algorithm: "ECDSA"
+          cert-manager.io/alt-names: "consumer-ccs.127.0.0.1.nip.io"
           cert-manager.io/common-name: "consumer-ccs.127.0.0.1.nip.io"
           traefik.ingress.kubernetes.io/router.tls: "true"
         hosts:
@@ -77,64 +79,6 @@ decentralizedIam:
           - secretName: consumer-ccs.127.0.0.1.nip.io-tls
             hosts:
               - consumer-ccs.127.0.0.1.nip.io
-      registration:
-        enabled: true
-        job:
-          initContainers:
-            waitForHost:
-              enabled: true
-              path: /health
-          activeDeadlineSeconds: null
-        services:
-          - id: tm-forum
-            defaultOidcScope: "default"
-            authorizationType: "DEEPLINK"
-            oidcScopes:
-              "default":
-                credentials:
-                  - type: LegalPersonCredential
-                    trustedParticipantsLists:
-                      - https://tir.127.0.0.1.nip.io
-                    # we want that every participant can access the marketplace and register
-                    trustedIssuersLists:
-                      - "*"
-                    jwtInclusion:
-                      enabled: true
-                      fullInclusion: true
-                dcql:
-                  credentials:
-                    - id: legal-person-query
-                      format: "dc+sd-jwt"
-                      multiple: false
-                      claims:
-                        - id: roles-claim
-                          path:
-                            - roles
-                      meta:
-                        vct_values:
-                          - LegalPersonCredential
-          - id: dsp
-            defaultOidcScope: "openid"
-            authorizationType: "DEEPLINK"
-            oidcScopes:
-              "openid":
-                credentials:
-                  - type: MembershipCredential
-                    trustedParticipantsLists:
-                      - https://tir.127.0.0.1.nip.io
-                    trustedIssuersLists:
-                      - "*"
-                    jwtInclusion:
-                      enabled: true
-                      fullInclusion: true
-                dcql:
-                  credentials:
-                    - id: mc-query
-                      format: "jwt_vc_json"
-                      multiple: true
-                      meta:
-                        type_values:
-                          - [MembershipCredential]
       deployment:
         logging:
           level: DEBUG
@@ -196,6 +140,65 @@ decentralizedIam:
               - -ec
               - |
                 curl -X 'POST' 'http://tir.trust-anchor.svc.cluster.local:8080/issuer' -H 'Content-Type: application/json' -d "{\"did\": \"did:web:fancy-marketplace.biz\", \"credentials\": []}"
+      registration:
+        enabled: true
+        job:
+          initContainers:
+            waitForHost:
+              enabled: true
+              path: /health
+          activeDeadlineSeconds: null
+        services:
+          - id: tm-forum
+            defaultOidcScope: "default"
+            authorizationType: "DEEPLINK"
+            oidcScopes:
+              "default":
+                credentials:
+                  - type: LegalPersonCredential
+                    trustedParticipantsLists:
+                      - https://tir.127.0.0.1.nip.io
+                    # we want that every participant can access the marketplace and register
+                    trustedIssuersLists:
+                      - "*"
+                    jwtInclusion:
+                      enabled: true
+                      fullInclusion: true
+                dcql:
+                  credentials:
+                    - id: legal-person-query
+                      format: "vc+sd-jwt"
+                      multiple: false
+                      claims:
+                        - id: roles-claim
+                          path:
+                            - roles
+                      meta:
+                        vct_values:
+                          - LegalPersonCredential
+          - id: dsp
+            defaultOidcScope: "openid"
+            authorizationType: "DEEPLINK"
+            oidcScopes:
+              "openid":
+                credentials:
+                  - type: MembershipCredential
+                    trustedParticipantsLists:
+                      - https://tir.127.0.0.1.nip.io
+                    trustedIssuersLists:
+                      - "*"
+                    jwtInclusion:
+                      enabled: true
+                      fullInclusion: true
+                dcql:
+                  credentials:
+                    - id: mc-query
+                      format: "jwt_vc_json"
+                      multiple: true
+                      meta:
+                        type_values:
+                          - [MembershipCredential]
+    
   odrlAuthorization:
     # authorized access to tmforum
     apisix:
@@ -353,6 +356,7 @@ decentralizedIam:
           cert-manager.io/cluster-issuer: "selfsigned-issuer"
           cert-manager.io/private-key-algorithm: "ECDSA"
           cert-manager.io/common-name: "pap-consumer.127.0.0.1.nip.io"
+          cert-manager.io/alt-names: "pap-consumer.127.0.0.1.nip.io"
           traefik.ingress.kubernetes.io/router.tls: "true"
         enabled: true
         hosts:

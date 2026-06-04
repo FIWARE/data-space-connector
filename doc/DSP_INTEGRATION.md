@@ -354,7 +354,7 @@ export PRODUCT_SPEC_ID=$(curl -k -x localhost:8888 -X 'POST' \
                          "openid": {
                            "credentials": [
                              {
-                               "type": "MembershipCredential",
+                               "type": "OperatorCredential",
                                "trustedParticipantsLists": [
                                 {
                                   "type": "ebsi",
@@ -372,10 +372,10 @@ export PRODUCT_SPEC_ID=$(curl -k -x localhost:8888 -X 'POST' \
                              "credentials": [
                                {
                                  "id": "legal-person-query",
-                                 "format": "jwt_vc_json",
+                                 "format": "vc+sd-jwt",
                                  "multiple": false,
                                  "meta": {
-                                   "type_values": [["MembershipCredential"]]
+                                   "vct_values": ["OperatorCredential"]
                                  }
                                }
                              ]
@@ -408,7 +408,7 @@ export PRODUCT_SPEC_ID=$(curl -k -x localhost:8888 -X 'POST' \
                 },
                 {
                     "id": "policyConfig",
-                    "name": "Policy for creation of K8S clusters.",
+                    "name": "Policy for reading the entities.",
                     "@schemaLocation": "https://raw.githubusercontent.com/FIWARE/contract-management/refs/heads/policy-support/schemas/odrl/policyCharacteristic.json",
                     "valueType": "authorizationPolicy",
                     "productSpecCharacteristicValue": [
@@ -516,7 +516,10 @@ curl -k -x localhost:8888 -X 'POST' \
                     \"constraint\": {
                       \"leftOperand\": \"odrl:dayOfWeek\",
                       \"operator\": \"lt\",
-                      \"rightOperand\": 6
+                      \"rightOperand\": {
+                        \"@value\": 6,
+                        \"@type\": \"xsd:integer\"
+                      }
                     }
                 }],
                 \"@type\":  \"Offer\"
@@ -670,7 +673,10 @@ curl -k -x localhost:8888 -X POST \
               "constraint": {
                 "leftOperand": "odrl:dayOfWeek",
                 "operator": "lt",
-                "rightOperand": 6
+                "rightOperand": {
+                  "@value": 6,
+                  "@type": "xsd:integer"
+                }
               }
             }],
             "target": "ASSET-1"
@@ -689,7 +695,7 @@ curl -k -x localhost:8888 -X POST \
 4. When the state of the negotiation is "finalized", the agreement id can be retrieved:
 
 ```shell
-export AGREEMENT_ID=$(curl -x localhost:8888 -k -X POST \
+export AGREEMENT_ID=$(curl -k -x localhost:8888 -X POST \
   'https://dsp-dcp-management.127.0.0.1.nip.io/api/v1/management/v3/contractnegotiations/request' \
   --header 'Accept: */*' \
   --header 'Content-Type: application/json' | jq -r '.[0].contractAgreementId'); echo ${AGREEMENT_ID}
@@ -832,8 +838,8 @@ curl -k -x localhost:8888 -X GET ${ENDPOINT}/.well-known/openid-configuration | 
 
 7. Access via OID4VP:
 ```shell
-export MEMBERSHIP_CREDENTIAL=$(./doc/scripts/get_credential.sh https://keycloak-consumer.127.0.0.1.nip.io membership-credential employee)
-export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh ${ENDPOINT} $MEMBERSHIP_CREDENTIAL openid); echo Access Token: $ACCESS_TOKEN
+export OPERATOR_CREDENTIAL=$(./doc/scripts/get_credential.sh https://keycloak-consumer.127.0.0.1.nip.io operator-credential operator)
+export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh ${ENDPOINT} $OPERATOR_CREDENTIAL openid); echo Access Token: $ACCESS_TOKEN
 curl -k -x localhost:8888 -X GET ${ENDPOINT}/ngsi-ld/v1/entities/urn:ngsi-ld:UptimeReport:fms-1 \
   --header 'Content-Type: application/json' \
   --header "Authorization: Bearer ${ACCESS_TOKEN}" | jq .
