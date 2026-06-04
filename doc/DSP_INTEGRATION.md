@@ -408,7 +408,7 @@ export PRODUCT_SPEC_ID=$(curl -k -x localhost:8888 -X 'POST' \
                 },
                 {
                     "id": "policyConfig",
-                    "name": "Policy for creation of K8S clusters.",
+                    "name": "Policy for reading the entities.",
                     "@schemaLocation": "https://raw.githubusercontent.com/FIWARE/contract-management/refs/heads/policy-support/schemas/odrl/policyCharacteristic.json",
                     "valueType": "authorizationPolicy",
                     "productSpecCharacteristicValue": [

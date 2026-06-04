@@ -1130,7 +1130,7 @@ public class DSPStepDefinitions extends StepDefintions {
         ObjectNode policyChar = buildObjectCharacteristic("policyConfig",
                 "Policy for creation of K8S clusters.", "authorizationPolicy", policyConfig);
         policyChar.put("@schemaLocation", POLICY_CONFIG_SCHEMA);
-       // characteristics.add(policyChar);
+        characteristics.add(policyChar);
 
         specJson.set("productSpecCharacteristic", characteristics);
 
