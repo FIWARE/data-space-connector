@@ -7,7 +7,7 @@ dependencies:
   - name: decentralized-iam
     alias: decentralizedIam
     condition: decentralizedIam.enabled
-    version: 2.0.12
+    version: 2.0.14
     repository: https://fiware.github.io/decentralized-iam
   # data-service
   - name: scorpio-broker-aaio
@@ -43,7 +43,7 @@ dependencies:
   # dsp
   - name: fdsc-edc
     condition: fdsc-edc.enabled
-    version: 0.2.4
+    version: 0.2.7
     repository: https://fiware.github.io/helm-charts
   - name: vault
     alias: vault

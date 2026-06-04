@@ -41,6 +41,6 @@ Feature: DSP OID4VC protocol flow as described in DSP_INTEGRATION.md.
   Scenario: Consumer accesses data via OID4VP authentication through OID4VC transfer.
     Given An OID4VC Transfer Process is started.
     And The consumer retrieves the EDR data address from the OID4VC management API.
-    When The consumer obtains a membership credential for OID4VC access.
-    And The consumer exchanges the membership credential for an access token via OID4VP at the OID4VC endpoint.
+    When The consumer obtains an operator credential for OID4VC access.
+    And The consumer exchanges the operator credential for an access token via OID4VP at the OID4VC endpoint.
     Then The consumer accesses the UptimeReport entity via the OID4VC transfer endpoint with OID4VP token.
