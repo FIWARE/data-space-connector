@@ -142,3 +142,117 @@ contract-management:
   additionalEnvVars:
     - name: LOGGER_LEVELS_ROOT
       value: DEBUG
+
+decentralizedIam:
+  vcAuthentication:
+    trusted-issuers-list:
+      deployment:
+        additionalAnnotations:
+          instrumentation.opentelemetry.io/inject-java: "true"
+  odrlAuthorization:
+    odrl-pap:
+      deployment:
+        additionalAnnotations:
+          instrumentation.opentelemetry.io/inject-java: "true"
+    # APISIX native OpenTelemetry plugin: traces are produced by the
+    # built-in Lua plugin, not by the Kubernetes OTel Operator.
+    # opentelemetry is NOT in APISIX's default plugin list, so it must
+    # be added explicitly. Setting apisix.plugins overrides the entire
+    # default list, so all needed plugins must be listed here.
+    # pluginAttrs configures the collector connection. A global rule is
+    # registered via the admin API so the plugin runs on every route
+    # (see apisix-otel-global-rule-job.yaml).
+    apisix:
+      apisix:
+        plugins:
+          - real-ip
+          - client-control
+          - proxy-control
+          - request-id
+          - zipkin
+          - ext-plugin-pre-req
+          - fault-injection
+          - mocking
+          - serverless-pre-function
+          - cors
+          - ip-restriction
+          - ua-restriction
+          - referer-restriction
+          - csrf
+          - uri-blocker
+          - request-validation
+          - multi-auth
+          - openid-connect
+          - wolf-rbac
+          - ldap-auth
+          - hmac-auth
+          - basic-auth
+          - jwt-auth
+          - key-auth
+          - consumer-restriction
+          - forward-auth
+          - opa
+          - authz-keycloak
+          - proxy-cache
+          - body-transformer
+          - proxy-mirror
+          - proxy-rewrite
+          - workflow
+          - api-breaker
+          - limit-conn
+          - limit-count
+          - limit-req
+          - gzip
+          - traffic-split
+          - redirect
+          - response-rewrite
+          - grpc-transcode
+          - grpc-web
+          - public-api
+          - prometheus
+          - datadog
+          - echo
+          - http-logger
+          - skywalking-logger
+          - tcp-logger
+          - kafka-logger
+          - syslog
+          - udp-logger
+          - file-logger
+          - clickhouse-logger
+          - ext-plugin-post-req
+          - ext-plugin-post-resp
+          - opentelemetry
+        pluginAttrs:
+          opentelemetry:
+            resource:
+              service.name: apisix
+            collector:
+              address: provider-opentelemetry-collector:4317
+              request_timeout: 3
+            trace_id_source: x-request-id
+            batch_span_processor:
+              max_queue_size: 1024
+              batch_timeout: 2
+              inactive_timeout: 1
+              max_export_batch_size: 16
+
+marketplace:
+  bizEcosystemChargingBackend:
+    deployment:
+      additionalAnnotations:
+        instrumentation.opentelemetry.io/inject-python: "true"
+    extraEnvVars:
+      - name: OTEL_SDK_DISABLED
+        value: "false"
+      - name: OTEL_SERVICE_NAME
+        value: "marketplace-charging-backend"
+  bizEcosystemLogicProxy:
+    statefulset:
+      additionalAnnotations:
+        instrumentation.opentelemetry.io/inject-nodejs: "true"
+    additionalEnvVars:
+      - name: OTEL_SDK_DISABLED
+        value: "false"
+      - name: OTEL_SERVICE_NAME
+        value: "marketplace-logic-proxy"

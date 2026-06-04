@@ -1,0 +1,135 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/helm-unittest/helm-unittest/main/schema/helm-testsuite.json
+#
+# Copyright (c) 2025 Cofinity-X
+# Copyright (c) 2025 Contributors to the Eclipse Foundation
+#
+# See the NOTICE file(s) distributed with this work for additional
+# information regarding copyright ownership.
+#
+# This program and the accompanying materials are made available under the
+# terms of the Apache License, Version 2.0 which is available at
+# https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+# WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+# License for the specific language governing permissions and limitations
+# under the License.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# ---------------------------------------------------------------------------
+# Helm-unittest suite for the APISIX OpenTelemetry global rule Job.
+#
+# The Job registers an APISIX global rule that enables the built-in
+# opentelemetry plugin on every route via the APISIX admin API.
+# ---------------------------------------------------------------------------
+suite: OpenTelemetry tracing - APISIX global rule Job
+templates:
+  - templates/apisix-otel-global-rule-job.yaml
+tests:
+  # ==========================================================================
+  # Rendering gate
+  # ==========================================================================
+
+  - it: should not render when tracing is disabled
+    set:
+      tracing.enabled: false
+      decentralizedIam.enabled: true
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should not render when decentralizedIam is disabled
+    set:
+      tracing.enabled: true
+      decentralizedIam.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should render when both tracing and decentralizedIam are enabled
+    set:
+      tracing.enabled: true
+      decentralizedIam.enabled: true
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: Job
+
+  # ==========================================================================
+  # Helm hook annotations
+  # ==========================================================================
+
+  - it: should be a post-install/post-upgrade hook
+    set:
+      tracing.enabled: true
+      decentralizedIam.enabled: true
+    asserts:
+      - equal:
+          path: metadata.annotations["helm.sh/hook"]
+          value: "post-install,post-upgrade"
+
+  - it: should have hook-delete-policy before-hook-creation and hook-succeeded
+    set:
+      tracing.enabled: true
+      decentralizedIam.enabled: true
+    asserts:
+      - equal:
+          path: metadata.annotations["helm.sh/hook-delete-policy"]
+          value: "before-hook-creation,hook-succeeded"
+
+  - it: should run after the otel-restart hook (weight 10 > 5)
+    set:
+      tracing.enabled: true
+      decentralizedIam.enabled: true
+    asserts:
+      - equal:
+          path: metadata.annotations["helm.sh/hook-weight"]
+          value: "10"
+
+  # ==========================================================================
+  # Pod security
+  # ==========================================================================
+
+  - it: should enforce strict security context
+    set:
+      tracing.enabled: true
+      decentralizedIam.enabled: true
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.runAsNonRoot
+          value: true
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.readOnlyRootFilesystem
+          value: true
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.allowPrivilegeEscalation
+          value: false
+      - contains:
+          path: spec.template.spec.containers[0].securityContext.capabilities.drop
+          content: "ALL"
+
+  # ==========================================================================
+  # Admin API key
+  # ==========================================================================
+
+  - it: should use custom admin key when configured
+    set:
+      tracing.enabled: true
+      decentralizedIam.enabled: true
+      decentralizedIam.odrlAuthorization.apisix.apisix.admin.credentials.admin: my-secret-key
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].args[0]
+          pattern: 'API_KEY="my-secret-key"'
+
+  - it: should use default admin key when not configured
+    set:
+      tracing.enabled: true
+      decentralizedIam.enabled: true
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].args[0]
+          pattern: 'API_KEY="edd1c9f034335f136f87ad84b625c8f1"'

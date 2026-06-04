@@ -70,7 +70,7 @@ spec:
   java:
     image: {{ $java.image | default "ghcr.io/open-telemetry/opentelemetry-operator/autoinstrumentation-java:2.11.0" | quote }}
   python:
-    image: {{ $python.image | default "ghcr.io/open-telemetry/opentelemetry-operator/autoinstrumentation-python:0.52b1" | quote }}
+    image: {{ $python.image | default "ghcr.io/open-telemetry/opentelemetry-operator/autoinstrumentation-python:0.54b0" | quote }}
   nodejs:
-    image: {{ $nodejs.image | default "ghcr.io/open-telemetry/opentelemetry-operator/autoinstrumentation-nodejs:0.57.0" | quote }}
+    image: {{ $nodejs.image | default "ghcr.io/open-telemetry/opentelemetry-operator/autoinstrumentation-nodejs:0.75.0" | quote }}
 {{- end }}
