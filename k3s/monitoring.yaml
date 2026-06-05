@@ -1,9 +1,6 @@
 grafana:
   enabled: true
 
-  adminUser: admin
-  adminPassword: password
-
   grafana.ini:
     #server:
       #root_url: "%(protocol)s://%(domain)s/api/grafana"
