@@ -58,7 +58,7 @@ jobs:
       - name: Execute tests (${{ matrix.name }})
         id: test
         run: |
-          mvn clean integration-test -P${{ matrix.profiles }}
+          mvn clean integration-test -P${{ matrix.profiles }} -Dhelm.version=3.17.3
 
       - name: Post-mortem on failure
         if: failure()
