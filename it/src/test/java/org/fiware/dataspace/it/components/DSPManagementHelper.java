@@ -100,7 +100,7 @@ public class DSPManagementHelper {
     /**
      * Default timeout in seconds for polling negotiation and transfer states.
      */
-    private static final long DEFAULT_POLL_TIMEOUT_SECONDS = 120;
+    private static final long DEFAULT_POLL_TIMEOUT_SECONDS = 150;
 
     /**
      * Default poll interval in seconds between state checks.

@@ -580,6 +580,7 @@ specific flows and its deployment and integration with other frameworks:
 * [Service Interaction (M2M)](./doc/flows/service-interaction-m2m)
 * [Contract Management flows](./doc/flows/contract-management)
 * [Local Deployment](./doc/deployment-integration/local-deployment/LOCAL.MD)
+* [Distributed Tracing (OpenTelemetry)](./doc/deployment-integration/observability/README.md) — Enable end-to-end distributed tracing across all DSC components using OpenTelemetry, with support for Jaeger, Grafana Tempo, Honeycomb, and other OTLP-compatible backends
 * [Additional documentation](./doc)
 * [Ongoing Work](./doc/ONGOING_WORK.md)
 
