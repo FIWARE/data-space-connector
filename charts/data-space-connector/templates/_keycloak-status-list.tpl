@@ -97,3 +97,42 @@ Usage in keycloak values (evaluated by common.tplvalues.render):
 - name: providers
   mountPath: /opt/keycloak/providers
 {{- end -}}
+
+{{/*
+Generate the oid4vc-status-list-claim-mapper protocol mapper JSON block
+for a given credential type. This mapper enables credential revocation
+via the Token Status List specification by embedding status list claims
+into issued Verifiable Credentials.
+
+Include this mapper in the protocolMappers array of any client scope
+that represents a credential type you want to make revocable.
+
+The template accepts a dict with a "credentialType" key specifying which
+credential type the mapper applies to (e.g., "LegalPersonCredential").
+
+Usage in keycloak.realm.clientScopes (raw JSON string in values.yaml):
+  "protocolMappers": [
+    ... existing mappers ...,
+    {
+      "name": "status-list-claim-mapper",
+      "protocol": "oid4vc",
+      "protocolMapper": "oid4vc-status-list-claim-mapper",
+      "config": {
+        "supportedCredentialTypes": "LegalPersonCredential"
+      }
+    }
+  ]
+
+Usage from a Helm template context (e.g., within tpl-processed values):
+  {{- include "dsc.keycloak.tokenStatusList.claimMapper" (dict "credentialType" "LegalPersonCredential") }}
+*/}}
+{{- define "dsc.keycloak.tokenStatusList.claimMapper" -}}
+{
+  "name": "status-list-claim-mapper",
+  "protocol": "oid4vc",
+  "protocolMapper": "oid4vc-status-list-claim-mapper",
+  "config": {
+    "supportedCredentialTypes": "{{ .credentialType }}"
+  }
+}
+{{- end -}}

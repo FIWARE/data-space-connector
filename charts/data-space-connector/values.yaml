@@ -1295,6 +1295,33 @@ keycloak:
     initContainer:
       # -- container image used for the init container (must have curl available)
       image: curlimages/curl:8.18.0
+    # -- URL of the status-list-server for credential revocation (e.g., http://status-list-server:8081).
+    # -- Injected as the "status-list-server-url" realm attribute.
+    serverUrl: ""
+    # -- optional issuer prefix for the token status list.
+    # -- If empty, the plugin auto-generates a UUID as the issuer prefix.
+    issuerPrefix: ""
+    # -- whether status list inclusion is mandatory for credential issuance.
+    # -- When true, credentials cannot be issued without a status list entry.
+    mandatory: false
+    # -- maximum number of entries per status list
+    maxEntries: 10000
+    # -- timeout in milliseconds for status list issuance calls to the status-list-server
+    issuanceTimeout: 10000
+    # -- timeout in milliseconds for issuer registration with the status-list-server
+    registrationTimeout: 30000
+    # -- number of retries for issuer registration with the status-list-server
+    registrationRetries: 1
+    # -- cooldown in milliseconds between issuer registration retries
+    registrationCooldown: 60000
+    # -- number of failures before the circuit breaker opens, disabling status list calls temporarily
+    circuitBreakerFailureThreshold: 5
+    # -- list of credential type names that should include the oid4vc-status-list-claim-mapper.
+    # -- These credential types will be revocable via the token status list.
+    # -- Example: ["LegalPersonCredential", "OperatorCredential"]
+    # -- Use the dsc.keycloak.tokenStatusList.claimMapper helper template to generate the
+    # -- protocol mapper JSON for each credential type in your client scope definitions.
+    credentialTypes: []
 
 ## configuration of the tm-forum-api - see https://github.com/FIWARE/helm-charts/tree/main/charts/tm-forum-api for details
 tm-forum-api:
