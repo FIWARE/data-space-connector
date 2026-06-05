@@ -58,11 +58,29 @@ keycloak:
         - |
           #!/bin/sh
           curl -X 'POST' 'http://tir.trust-anchor.svc.cluster.local:8080/issuer' -H 'Content-Type: application/json' -d "{\"did\": \"did:web:fancy-marketplace.biz\", \"credentials\": []}"
+    # download the token-status-list plugin JAR from Maven Central into the providers volume
+    - name: download-token-status-plugin
+      image: curlimages/curl:8.18.0
+      imagePullPolicy: IfNotPresent
+      command:
+        - /bin/sh
+      args:
+        - -ec
+        - |
+          PLUGIN_URL="https://repo1.maven.org/maven2/io/github/adorsys-gis/keycloak-token-status-plugin/0.2.0/keycloak-token-status-plugin-0.2.0.jar"
+          echo "Downloading token-status-list plugin from ${PLUGIN_URL}"
+          curl -sSL -o /providers/keycloak-token-status-plugin-0.2.0.jar "${PLUGIN_URL}"
+          echo "Plugin downloaded successfully"
+      volumeMounts:
+        - name: providers
+          mountPath: /providers
   extraVolumeMounts:
     - mountPath: /did-material
       name: did-material
     - mountPath: /opt/keycloak/data/import
       name: realms
+    - name: providers
+      mountPath: /opt/keycloak/providers
   extraVolumes:
     - emptyDir: {}
       name: did-material
@@ -72,6 +90,8 @@ keycloak:
     - name: did-priv-key
       secret:
         secretName: fancy-marketplace.biz-tls
+    - name: providers
+      emptyDir: {}
   issuerDid: did:web:fancy-marketplace.biz
   signingKey:
     storePath: /did-material/cert.pfx
@@ -80,6 +100,15 @@ keycloak:
     keyPassword: "${STORE_PASS}"
     did: did:web:fancy-marketplace.biz
     keyAlgorithm: ES256
+  # token-status-list plugin configuration for credential revocation
+  tokenStatusList:
+    enabled: true
+    # in-cluster URL of the status-list-server
+    serverUrl: "http://status-list-server:8081"
+    # credential types that should be revocable via the token status list
+    credentialTypes:
+      - LegalPersonCredential
+      - OperatorCredential
   # extraEnvVars replaces the umbrella list, so KC_HEAP_SIZE has to be repeated here.
   # STORE_PASS is consumed by the realm.json key-provider config (see signingKey above).
   extraEnvVars:
@@ -789,8 +818,11 @@ decentralizedIam:
         users:
           ngb:
             - createdb
+          statuslist:
+            - createdb
         databases:
           ngb: ngb
+          statuslistdb: statuslist
         preparedDatabases:
           ngb:
             extensions:
@@ -813,6 +845,35 @@ identityhub:
 
 vault:
   enabled: false
+
+# status-list-server for credential revocation (Token Status List specification)
+statusListServer:
+  enabled: true
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    limits:
+      cpu: "250m"
+      memory: "256Mi"
+  postgresql:
+    host: "postgres"
+    port: "5432"
+    database: "statuslistdb"
+    auth:
+      username: "statuslist"
+      # use the Zalando Postgres Operator auto-generated credentials secret
+      existingSecret: "statuslist.postgres.credentials.postgresql.acid.zalan.do"
+      existingSecretPasswordKey: "password"
+  redis:
+    enabled: true
+    resources:
+      requests:
+        cpu: "50m"
+        memory: "64Mi"
+      limits:
+        cpu: "100m"
+        memory: "128Mi"
 
 scorpio:
   enabled: false
