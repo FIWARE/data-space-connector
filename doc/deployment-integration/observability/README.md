@@ -654,18 +654,6 @@ marketplace:
     serviceName: "marketplace"
 ```
 
-### decentralizedIam (Forward-Compatible Passthrough)
-
-The `decentralizedIam` subchart receives a `tracing` passthrough block
-that mirrors the global `tracing.*` values. This is a **forward-compatible**
-mechanism: if the upstream decentralizedIam chart adds direct tracing
-support in the future, the values will flow through automatically without
-changes to the umbrella chart.
-
-Currently, the passthrough has no effect on the rendered manifests unless
-the upstream chart consumes it.
-
-
 ## Auto-Instrumentation via OpenTelemetry Operator
 
 The chart includes an optional **OpenTelemetry Operator** subchart that
