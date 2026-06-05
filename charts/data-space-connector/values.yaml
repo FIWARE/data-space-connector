@@ -1274,6 +1274,28 @@ keycloak:
   # -- did that the key belongs to
   # did:
 
+  # -- Configuration for the token-status-list Keycloak plugin (keycloak-token-status-plugin).
+  # -- Enables credential revocation via the Token Status List specification (RFC draft-ietf-oauth-status-list).
+  # -- See https://github.com/ADORSYS-GIS/token-status-link for plugin documentation.
+  # -- Should be enabled alongside statusListServer.enabled for a complete revocation setup.
+  tokenStatusList:
+    # -- should the token-status-list plugin be loaded into Keycloak
+    enabled: false
+    # -- configuration of the plugin JAR to download from Maven Central
+    plugin:
+      # -- Maven group ID of the keycloak-token-status-plugin
+      groupId: io.github.adorsys-gis
+      # -- Maven artifact ID of the keycloak-token-status-plugin
+      artifactId: keycloak-token-status-plugin
+      # -- version of the keycloak-token-status-plugin to download
+      version: "0.2.0"
+      # -- base URL of the Maven repository to download the plugin JAR from
+      mavenBaseUrl: https://repo1.maven.org/maven2
+    # -- configuration of the init container that downloads the plugin JAR at pod startup
+    initContainer:
+      # -- container image used for the init container (must have curl available)
+      image: curlimages/curl:8.18.0
+
 ## configuration of the tm-forum-api - see https://github.com/FIWARE/helm-charts/tree/main/charts/tm-forum-api for details
 tm-forum-api:
   # -- should it be enabled? set to false if one outside the chart is used.
