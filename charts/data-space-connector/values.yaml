@@ -268,7 +268,7 @@ scorpio:
     # -- toggle OpenTelemetry tracing on the scorpio workload. Leave
     # unset (default) to inherit `tracing.enabled` from the global
     # block; set to `true` / `false` to override.
-    enabled: false
+    enabled:
     # -- logical service name exposed as `QUARKUS_OTEL_SERVICE_NAME` and
     # recorded as the service identity on every span emitted by scorpio.
     serviceName: scorpio
@@ -426,7 +426,7 @@ keycloak:
     # -- toggle OpenTelemetry tracing on Keycloak. Leave unset (default)
     # to inherit `tracing.enabled` from the global block; set to `true`
     # / `false` to override independently.
-    enabled: false
+    enabled:
     # -- logical service name exposed as `OTEL_SERVICE_NAME` and recorded
     # as `service.name` on every span emitted by Keycloak.
     serviceName: keycloak
@@ -1295,7 +1295,7 @@ tm-forum-api:
     # -- toggle OpenTelemetry tracing on the tm-forum-api workload. Leave
     # unset (default) to inherit `tracing.enabled` from the global
     # block; set to `true` / `false` to override.
-    enabled: false
+    enabled:
     # -- logical service name exposed as `OTEL_SERVICE_NAME` and recorded
     # as the service identity on every span emitted by tm-forum-api.
     serviceName: tm-forum-api
@@ -1527,7 +1527,7 @@ contract-management:
     # -- toggle OpenTelemetry tracing on the contract-management workload.
     # Leave unset (default) to inherit `tracing.enabled` from the global
     # block; set to `true` / `false` to override.
-    enabled: false
+    enabled:
     # -- logical service name exposed as `OTEL_SERVICE_NAME` and recorded
     # as the service identity on every span emitted by contract-management.
     serviceName: contract-management
@@ -1694,7 +1694,7 @@ marketplace:
     # -- toggle OpenTelemetry tracing on the marketplace workload.
     # Leave unset (default) to inherit `tracing.enabled` from the global
     # block; set to `true` / `false` to override.
-    enabled: false
+    enabled:
     # -- logical service name exposed as `OTEL_SERVICE_NAME` and recorded
     # as the service identity on every span emitted by marketplace components.
     serviceName: marketplace
@@ -1903,7 +1903,7 @@ fdsc-edc:
     # -- toggle OpenTelemetry tracing on the fdsc-edc workload. Leave
     # unset (default) to inherit `tracing.enabled` from the global
     # block; set to `true` / `false` to override.
-    enabled: false
+    enabled:
     # -- logical service name exposed as `OTEL_SERVICE_NAME` and recorded
     # as `service.name` on every span emitted by this workload.
     serviceName: fdsc-edc
@@ -2658,7 +2658,7 @@ identityhub:
     # -- toggle OpenTelemetry tracing on the IdentityHub workload. Leave
     # unset (default) to inherit `tracing.enabled` from the global
     # block; set to `true` / `false` to override.
-    enabled: false
+    enabled:
     # -- logical service name exposed as `OTEL_SERVICE_NAME` and recorded
     # as `service.name` on every span emitted by this workload.
     serviceName: identityhub
