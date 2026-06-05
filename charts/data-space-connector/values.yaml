@@ -1507,8 +1507,12 @@ tm-forum-api:
         trustedIssuersLists: http://trusted-issuers-list:8080
 
 
-## configuration of the status-list-server for Token Status List (RFC) support
-## see https://github.com/adorsys/status-list-server
+## Configuration of the status-list-server for Token Status List (RFC draft-ietf-oauth-status-list) support.
+## Provides credential revocation infrastructure for Verifiable Credentials issued by Keycloak.
+## See https://github.com/adorsys/status-list-server for upstream documentation.
+## NOTE: For a complete revocation setup, also enable keycloak.tokenStatusList.enabled
+## and set keycloak.tokenStatusList.serverUrl to point to this server
+## (e.g., http://status-list-server:8081 for in-cluster access).
 statusListServer:
   # -- should the status-list-server be deployed? Enable alongside keycloak.tokenStatusList to provide credential revocation support.
   enabled: false
