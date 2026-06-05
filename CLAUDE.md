@@ -6,7 +6,7 @@ Umbrella Helm chart that packages all components a participant needs to join a F
 ## Tech Stack
 - Language: YAML (Helm templates), Shell scripts for helpers
 - Build: Helm 3 (umbrella chart with subchart dependencies)
-- Framework: Kubernetes, Bitnami Keycloak 25.2.0, Zalando Postgres Operator
+- Framework: Kubernetes, [CloudPirates Keycloak chart](https://github.com/CloudPirates-io/helm-charts/tree/main/charts/keycloak), Zalando Postgres Operator
 - Test: k3s-based integration tests (see `it/` directory), Maven for test orchestration (`pom.xml`)
 
 ## Project Structure
@@ -62,10 +62,10 @@ mvn verify -f pom.xml
 - Realm attributes, client roles, users, clients, and client scopes are injected from `values.yaml` as raw JSON strings using Helm's `nindent` and `trim`
 - The `realm.yaml` template has extension points: `keycloak.realm.attributes` (line 27-30), `keycloak.realm.clientScopes` (line 600-603) for additional JSON
 - k3s YAML files are plain Helm values overrides (used with `helm install -f`)
-- Keycloak uses Bitnami's legacy image with `containerSecurityContext.enabled: false`
+- Keycloak uses the CloudPirates Keycloak chart (upstream switched from Bitnami) with `containerSecurityContext.enabled: false`
 - PostgreSQL is managed via Zalando Postgres Operator (CRD-based), not in-chart Bitnami postgres
 - Database credentials stored in auto-generated secret: `postgres.postgres.credentials.postgresql.acid.zalan.do`
-- Bitnami Keycloak chart supports `initContainers`, `extraVolumes`, `extraVolumeMounts`, `extraEnvVars` for extension
+- CloudPirates Keycloak chart supports `extraInitContainers`, `extraVolumes`, `extraVolumeMounts`, `extraEnvVars` for extension; providers path is `/opt/keycloak/providers`
 
 ## Important Files
 - `charts/data-space-connector/Chart.yaml` — Subchart dependency declarations

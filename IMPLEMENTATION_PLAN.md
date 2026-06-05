@@ -43,11 +43,11 @@ Integrate the [Token Status List](https://datatracker.ietf.org/doc/draft-ietf-oa
   - `keycloak.tokenStatusList.plugin.version: <latest-release-version>` (to be determined from Maven Central)
   - `keycloak.tokenStatusList.plugin.mavenBaseUrl: https://repo1.maven.org/maven2` (configurable Maven repo URL)
   - Document these values with Helm-style comments.
-- `charts/data-space-connector/values.yaml` — Update the default `keycloak.extraVolumeMounts` to conditionally include a providers volume mount at `/opt/bitnami/keycloak/providers`.
+- `charts/data-space-connector/values.yaml` — Update the default `keycloak.extraVolumeMounts` to conditionally include a providers volume mount at `/opt/keycloak/providers`.
 - `charts/data-space-connector/values.yaml` — Update the default `keycloak.extraVolumes` to conditionally include an `emptyDir` volume for providers.
 - `charts/data-space-connector/templates/realm.yaml` — No changes needed in this step.
 
-**Implementation approach:** Since the Bitnami Keycloak chart supports `initContainers`, `extraVolumes`, and `extraVolumeMounts` as values, and because the k3s examples already demonstrate overriding these (e.g., `k3s/consumer.yaml` line 14-36), the plugin loading mechanism will be documented for use in the k3s values files. A new helper template will be created to generate the initContainer spec and volume mounts.
+**Implementation approach:** Since the [CloudPirates Keycloak chart](https://github.com/CloudPirates-io/helm-charts/tree/main/charts/keycloak) supports `extraInitContainers`, `extraVolumes`, and `extraVolumeMounts` as values, and because the k3s examples already demonstrate overriding these (e.g., `k3s/consumer.yaml` line 14-36), the plugin loading mechanism will be documented for use in the k3s values files. A new helper template will be created to generate the initContainer spec and volume mounts. The CloudPirates chart also provides `preserveProviders` flag that controls the emptyDir mount over `/opt/keycloak/providers`.
 
 **New file:**
 - `charts/data-space-connector/templates/_keycloak-status-list.tpl` — A Helm helper template that generates:
@@ -57,7 +57,7 @@ Integrate the [Token Status List](https://datatracker.ietf.org/doc/draft-ietf-oa
   These helpers can be included in k3s values files or used via the values.yaml defaults when `keycloak.tokenStatusList.enabled` is true.
 
 **Acceptance criteria:**
-- When `keycloak.tokenStatusList.enabled: true`, the Keycloak pod starts with an init container that downloads the correct JAR version from Maven Central to `/opt/bitnami/keycloak/providers/`.
+- When `keycloak.tokenStatusList.enabled: true`, the Keycloak pod starts with an init container that downloads the correct JAR version from Maven Central to `/opt/keycloak/providers/`.
 - The JAR download URL is configurable (Maven coordinates and base URL).
 - When `keycloak.tokenStatusList.enabled: false` (default), no init container is added and Keycloak functions identically to before.
 - The existing `extraVolumeMounts` (realm import) is preserved and not broken by the new volume mount.
@@ -115,7 +115,7 @@ Integrate the [Token Status List](https://datatracker.ietf.org/doc/draft-ietf-oa
   - Add the PostgreSQL database and user for the status-list-server to the managed Postgres config.
   - Enable `keycloak.tokenStatusList.enabled: true`.
   - Set `keycloak.tokenStatusList.serverUrl` to the in-cluster status-list-server service URL.
-  - Update the `keycloak.initContainers` to include the JAR download init container (alongside the existing TIR registration init container).
+  - Update the `keycloak.extraInitContainers` to include the JAR download init container (alongside the existing TIR registration init container).
   - Update `keycloak.extraVolumeMounts` and `keycloak.extraVolumes` to include the providers directory volume.
   - Add `oid4vc-status-list-claim-mapper` to relevant credential type client scopes (e.g., `LegalPersonCredential`, `OperatorCredential`) within `keycloak.realm.clientScopes`.
   - Add status-list realm attributes to `keycloak.realm.attributes`.
