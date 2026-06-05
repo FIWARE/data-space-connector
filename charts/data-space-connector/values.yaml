@@ -9,37 +9,6 @@ issuance:
 decentralizedIam:
   enabled: true
 
-  # -- forward-compatible tracing passthrough for the decentralizedIam subchart.
-  # These values mirror the global `tracing.*` block and are passed as-is to
-  # the upstream vc-authentication / FIWARE IAM chart. The upstream chart does
-  # not yet consume them; once it lands native OpenTelemetry support (see
-  # https://github.com/FIWARE/vc-authentication), these values will flow
-  # through without further umbrella-chart modifications. Until then, the
-  # passthrough has no runtime effect.
-  tracing:
-    # -- toggle OpenTelemetry tracing for the decentralizedIam components.
-    # Leave unset (default) to inherit `tracing.enabled` from the global
-    # block; set to `true` / `false` to override independently.
-    enabled:
-    # -- OTLP exporter configuration passed through to the IAM subchart.
-    exporter:
-      otlp:
-        # -- OTLP endpoint for the IAM components. Defaults to the global
-        # `tracing.exporter.otlp.endpoint` value when empty.
-        endpoint: ""
-        # -- OTLP protocol: `grpc` (default, port 4317) or `http/protobuf`
-        # (port 4318).
-        protocol: "grpc"
-        # -- disable TLS on the OTLP exporter.
-        insecure: true
-    # -- trace sampler name, mirrored from the global `tracing.sampler`.
-    sampler: "parentbased_traceidratio"
-    # -- argument for the sampler, mirrored from the global
-    # `tracing.samplerArg`.
-    samplerArg: "1.0"
-    # -- propagators list, mirrored from the global `tracing.propagators`.
-    propagators: "tracecontext,baggage"
-
   # -- configuration for the vc-authentication to be deployed as part of the connector, see https://github.com/FIWARE/vc-authentication/tree/master
   vcAuthentication:
     ## Usage of the postgres-operator - see https://github.com/zalando/postgres-operator
@@ -299,7 +268,7 @@ scorpio:
     # -- toggle OpenTelemetry tracing on the scorpio workload. Leave
     # unset (default) to inherit `tracing.enabled` from the global
     # block; set to `true` / `false` to override.
-    enabled:
+    enabled: false
     # -- logical service name exposed as `QUARKUS_OTEL_SERVICE_NAME` and
     # recorded as the service identity on every span emitted by scorpio.
     serviceName: scorpio
@@ -457,7 +426,7 @@ keycloak:
     # -- toggle OpenTelemetry tracing on Keycloak. Leave unset (default)
     # to inherit `tracing.enabled` from the global block; set to `true`
     # / `false` to override independently.
-    enabled:
+    enabled: false
     # -- logical service name exposed as `OTEL_SERVICE_NAME` and recorded
     # as `service.name` on every span emitted by Keycloak.
     serviceName: keycloak
@@ -1326,7 +1295,7 @@ tm-forum-api:
     # -- toggle OpenTelemetry tracing on the tm-forum-api workload. Leave
     # unset (default) to inherit `tracing.enabled` from the global
     # block; set to `true` / `false` to override.
-    enabled:
+    enabled: false
     # -- logical service name exposed as `OTEL_SERVICE_NAME` and recorded
     # as the service identity on every span emitted by tm-forum-api.
     serviceName: tm-forum-api
@@ -1558,7 +1527,7 @@ contract-management:
     # -- toggle OpenTelemetry tracing on the contract-management workload.
     # Leave unset (default) to inherit `tracing.enabled` from the global
     # block; set to `true` / `false` to override.
-    enabled:
+    enabled: false
     # -- logical service name exposed as `OTEL_SERVICE_NAME` and recorded
     # as the service identity on every span emitted by contract-management.
     serviceName: contract-management
@@ -1725,7 +1694,7 @@ marketplace:
     # -- toggle OpenTelemetry tracing on the marketplace workload.
     # Leave unset (default) to inherit `tracing.enabled` from the global
     # block; set to `true` / `false` to override.
-    enabled:
+    enabled: false
     # -- logical service name exposed as `OTEL_SERVICE_NAME` and recorded
     # as the service identity on every span emitted by marketplace components.
     serviceName: marketplace
@@ -1934,7 +1903,7 @@ fdsc-edc:
     # -- toggle OpenTelemetry tracing on the fdsc-edc workload. Leave
     # unset (default) to inherit `tracing.enabled` from the global
     # block; set to `true` / `false` to override.
-    enabled:
+    enabled: false
     # -- logical service name exposed as `OTEL_SERVICE_NAME` and recorded
     # as `service.name` on every span emitted by this workload.
     serviceName: fdsc-edc
@@ -2689,7 +2658,7 @@ identityhub:
     # -- toggle OpenTelemetry tracing on the IdentityHub workload. Leave
     # unset (default) to inherit `tracing.enabled` from the global
     # block; set to `true` / `false` to override.
-    enabled:
+    enabled: false
     # -- logical service name exposed as `OTEL_SERVICE_NAME` and recorded
     # as `service.name` on every span emitted by this workload.
     serviceName: identityhub
