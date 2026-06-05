@@ -1,0 +1,103 @@
+{{- if .Values.statusListServer.enabled }}
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: status-list-server
+  namespace: {{ $.Release.Namespace | quote }}
+  labels:
+    {{ include "dsc.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: status-list-server
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: status-list-server
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+      serviceAccountName: default
+      containers:
+        - name: status-list-server
+          imagePullPolicy: {{ .Values.statusListServer.image.pullPolicy }}
+          image: "{{ .Values.statusListServer.image.repository }}:{{ .Values.statusListServer.image.tag }}"
+          ports:
+            - name: http
+              containerPort: {{ .Values.statusListServer.containerPort }}
+              protocol: TCP
+          env:
+            - name: RUST_LOG
+              value: {{ .Values.statusListServer.env.rustLog | quote }}
+            - name: APP_ENV
+              value: {{ .Values.statusListServer.env.appEnv | quote }}
+            - name: APP_SERVER__HOST
+              value: {{ .Values.statusListServer.env.serverHost | quote }}
+            - name: APP_SERVER__PORT
+              value: {{ .Values.statusListServer.containerPort | quote }}
+            {{- if .Values.statusListServer.env.serverDomain }}
+            - name: APP_SERVER__DOMAIN
+              value: {{ .Values.statusListServer.env.serverDomain | quote }}
+            {{- end }}
+            - name: APP_SERVER__ENABLE_METRICS
+              value: {{ .Values.statusListServer.env.enableMetrics | quote }}
+            - name: APP_CACHE__TTL
+              value: {{ .Values.statusListServer.env.cacheTtl | quote }}
+            - name: APP_CACHE__MAX_CAPACITY
+              value: {{ .Values.statusListServer.env.cacheMaxCapacity | quote }}
+            {{- if .Values.statusListServer.postgresql.url }}
+            - name: APP_DATABASE__URL
+              value: {{ .Values.statusListServer.postgresql.url | quote }}
+            {{- else }}
+            - name: APP_DATABASE__URL
+              {{- if and .Values.statusListServer.postgresql.auth.existingSecret .Values.statusListServer.postgresql.auth.existingSecretPasswordKey }}
+              value: "postgres://{{ .Values.statusListServer.postgresql.auth.username }}:$(DB_PASSWORD)@{{ .Values.statusListServer.postgresql.host }}:{{ .Values.statusListServer.postgresql.port }}/{{ .Values.statusListServer.postgresql.database }}"
+              {{- else if .Values.statusListServer.postgresql.auth.password }}
+              value: "postgres://{{ .Values.statusListServer.postgresql.auth.username }}:{{ .Values.statusListServer.postgresql.auth.password }}@{{ .Values.statusListServer.postgresql.host }}:{{ .Values.statusListServer.postgresql.port }}/{{ .Values.statusListServer.postgresql.database }}"
+              {{- else }}
+              value: "postgres://{{ .Values.statusListServer.postgresql.auth.username }}@{{ .Values.statusListServer.postgresql.host }}:{{ .Values.statusListServer.postgresql.port }}/{{ .Values.statusListServer.postgresql.database }}"
+              {{- end }}
+            {{- end }}
+            {{- if and .Values.statusListServer.postgresql.auth.existingSecret .Values.statusListServer.postgresql.auth.existingSecretPasswordKey }}
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.statusListServer.postgresql.auth.existingSecret }}
+                  key: {{ .Values.statusListServer.postgresql.auth.existingSecretPasswordKey }}
+            {{- end }}
+            {{- if .Values.statusListServer.redis.uri }}
+            - name: APP_REDIS__URI
+              value: {{ .Values.statusListServer.redis.uri | quote }}
+            {{- else if .Values.statusListServer.redis.enabled }}
+            - name: APP_REDIS__URI
+              value: "redis://status-list-redis:6379"
+            {{- end }}
+            - name: APP_REDIS__REQUIRE_CLIENT_AUTH
+              value: {{ .Values.statusListServer.redis.requireClientAuth | quote }}
+            - name: APP_REDIS__CERT_CACHE_TTL
+              value: {{ .Values.statusListServer.redis.certCacheTtl | quote }}
+            - name: APP_REDIS__SECRETS_CACHE_TTL
+              value: {{ .Values.statusListServer.redis.secretsCacheTtl | quote }}
+          {{- with .Values.statusListServer.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 15
+            timeoutSeconds: 3
+            failureThreshold: 5
+{{- end }}

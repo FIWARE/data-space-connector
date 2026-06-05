@@ -1457,6 +1457,122 @@ tm-forum-api:
         trustedParticipantsLists: http://tir.trust-anchor.org
         trustedIssuersLists: http://trusted-issuers-list:8080
 
+
+## configuration of the status-list-server for Token Status List (RFC) support
+## see https://github.com/adorsys/status-list-server
+statusListServer:
+  # -- should the status-list-server be deployed? Enable alongside keycloak.tokenStatusList to provide credential revocation support.
+  enabled: false
+  image:
+    # -- container image repository for the status-list-server
+    repository: ghcr.io/adorsys/status-list-server
+    # -- container image tag
+    tag: latest
+    # -- image pull policy
+    pullPolicy: IfNotPresent
+  service:
+    # -- Kubernetes Service type
+    serviceType: ClusterIP
+    # -- service port (external)
+    port: 8081
+  # -- container port the status-list-server listens on
+  containerPort: 8000
+  # -- resource requests and limits for the status-list-server container
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "250m"
+    limits:
+      memory: "512Mi"
+      cpu: "500m"
+  # -- environment variables controlling the status-list-server application
+  env:
+    # -- Rust log level (e.g., info, debug, warn)
+    rustLog: "info"
+    # -- application environment (e.g., development, production)
+    appEnv: "production"
+    # -- host address the server binds to
+    serverHost: "0.0.0.0"
+    # -- domain name used by the server for status list URLs
+    serverDomain: ""
+    # -- whether to enable the Prometheus metrics endpoint
+    enableMetrics: "false"
+    # -- in-memory cache TTL in seconds
+    cacheTtl: "300"
+    # -- in-memory cache maximum capacity (number of entries)
+    cacheMaxCapacity: "1000"
+  # -- PostgreSQL database configuration for the status-list-server
+  postgresql:
+    # -- database connection URL in the format postgres://user:password@host:port/dbname
+    # -- if set, this takes precedence over individual host/port/database/username fields
+    url: ""
+    # -- database host (used when url is empty)
+    host: "postgres"
+    # -- database port
+    port: "5432"
+    # -- database name
+    database: "statuslistdb"
+    auth:
+      # -- database username
+      username: "statuslist"
+      # -- database password (used when existingSecret is empty)
+      password: ""
+      # -- name of an existing Secret containing the database password
+      existingSecret: ""
+      # -- key within the existing Secret that holds the password
+      existingSecretPasswordKey: "password"
+  # -- Redis configuration for the status-list-server
+  redis:
+    # -- should an in-chart Redis instance be deployed? Disable when pointing to an external Redis.
+    enabled: true
+    # -- Redis connection URI (e.g., redis://redis:6379). When redis.enabled is true, defaults to the in-chart Redis service.
+    uri: ""
+    # -- whether Redis requires client certificate authentication
+    requireClientAuth: "false"
+    # -- TTL in seconds for certificate cache entries in Redis
+    certCacheTtl: "3600"
+    # -- TTL in seconds for secrets cache entries in Redis
+    secretsCacheTtl: "300"
+    image:
+      # -- Redis container image repository
+      repository: redis
+      # -- Redis container image tag
+      tag: "7"
+      # -- Redis image pull policy
+      pullPolicy: IfNotPresent
+    # -- resource requests and limits for the in-chart Redis container
+    resources:
+      requests:
+        memory: "128Mi"
+        cpu: "100m"
+      limits:
+        memory: "256Mi"
+        cpu: "250m"
+  # -- ingress configuration for external access to the status-list-server
+  ingress:
+    # -- should the ingress be enabled
+    enabled: false
+    # -- annotations to be added to the ingress
+    annotations: {}
+      # kubernetes.io/ingress.class: "ambassador"
+      # kubernetes.io/tls-acme: "true"
+      # ingress.kubernetes.io/ssl-redirect: "true"
+    # -- ingress class name
+    className: ""
+    # -- all hosts to be provided
+    hosts: []
+      ## provide hosts and the paths that should be available
+      # - host: status-list.example.com
+      #   paths:
+      #     - /
+    # -- configure the ingress' TLS
+    tls: []
+      # - secretName: status-list-tls
+      #   hosts:
+      #     - status-list.example.com
+
+
+
 ## configuration of rainbow to provide integration with the Dataspace Protocol
 rainbow:
   # -- should rainbow be enabled
