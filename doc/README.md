@@ -21,6 +21,7 @@ specific flows and its deployment and integration with other frameworks.
   - [Deployment by Role](#deployment-by-role)
   - [Local Deployment (Maven)](#local-deployment-maven)
   - [Packet Delivery Company (ArgoCD)](#packet-delivery-company-argocd)
+  - [Observability](#observability)
   - [Integration with AWS Garnet Framework (formerly AWS Smart Territory Framework)](#integration-with-aws-garnet-framework-formerly-aws-smart-territory-framework)
 
 <!-- END doctoc generated TOC please keep comment here to allow auto update -->
@@ -91,6 +92,13 @@ The configuration can be found at the
 [fiware-gitops repository](https://github.com/FIWARE-Ops/fiware-gitops/tree/master/aws/dsba/packet-delivery/data-space-connector).
 
 **Note,** that this is currently being reworked and above repository does not contain the latest configuration.
+
+### Observability
+
+Documentation for enabling distributed tracing across the FIWARE DSC using OpenTelemetry, including how to connect external backends (Jaeger, Tempo, Honeycomb) and per-component configuration notes.
+
+* [Distributed Tracing with OpenTelemetry](./deployment-integration/observability/README.md)
+* [Grafana Tempo Backend (In-Cluster)](./deployment-integration/observability/README.md#grafana-tempo-backend-in-cluster) -- Deploy Tempo and Grafana as optional subcharts for a turnkey trace-storage and visualisation stack with zero-config auto-wiring.
 
 ### Integration with AWS Garnet Framework (formerly AWS Smart Territory Framework)
 

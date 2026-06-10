@@ -1,0 +1,189 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/helm-unittest/helm-unittest/main/schema/helm-testsuite.json
+#
+# Copyright (c) 2025 Cofinity-X
+# Copyright (c) 2025 Contributors to the Eclipse Foundation
+#
+# See the NOTICE file(s) distributed with this work for additional
+# information regarding copyright ownership.
+#
+# This program and the accompanying materials are made available under the
+# terms of the Apache License, Version 2.0 which is available at
+# https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+# WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+# License for the specific language governing permissions and limitations
+# under the License.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# ---------------------------------------------------------------------------
+# Helm-unittest suite for the Keycloak tracing ConfigMap.
+#
+# The ConfigMap is injected into the Bitnami Keycloak subchart via the
+# `extraEnvVarsCM` hook and provides OTEL_* / QUARKUS_OTEL_* / KC_*
+# environment variables for Keycloak's built-in tracing support.
+# ---------------------------------------------------------------------------
+suite: OpenTelemetry tracing - Keycloak ConfigMap
+templates:
+  - templates/keycloak-tracing-cm.yaml
+tests:
+  # ==========================================================================
+  # Rendering gate
+  # ==========================================================================
+
+  - it: should not render when keycloak is disabled
+    set:
+      keycloak.enabled: false
+      tracing.enabled: true
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should render an empty-data ConfigMap when tracing is disabled
+    set:
+      keycloak.enabled: true
+      tracing.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: ConfigMap
+      - isNull:
+          path: data
+
+  - it: should render data entries when tracing is enabled
+    set:
+      keycloak.enabled: true
+      tracing.enabled: true
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: ConfigMap
+      - isNotNull:
+          path: data
+
+  # ==========================================================================
+  # Keycloak-specific env vars
+  # ==========================================================================
+
+  - it: should set KC_TRACING_ENABLED to true when tracing is on
+    set:
+      keycloak.enabled: true
+      tracing.enabled: true
+    asserts:
+      - equal:
+          path: data.KC_TRACING_ENABLED
+          value: "true"
+
+  - it: should set OTEL_SERVICE_NAME to keycloak by default
+    set:
+      keycloak.enabled: true
+      tracing.enabled: true
+    asserts:
+      - equal:
+          path: data.OTEL_SERVICE_NAME
+          value: "keycloak"
+
+  - it: should use custom service name when keycloak.tracing.serviceName is set
+    set:
+      keycloak.enabled: true
+      tracing.enabled: true
+      keycloak.tracing.serviceName: my-keycloak
+    asserts:
+      - equal:
+          path: data.OTEL_SERVICE_NAME
+          value: "my-keycloak"
+
+  # ==========================================================================
+  # Standard OTEL env vars
+  # ==========================================================================
+
+  - it: should set default OTLP endpoint
+    set:
+      keycloak.enabled: true
+      tracing.enabled: true
+    asserts:
+      - equal:
+          path: data.OTEL_EXPORTER_OTLP_ENDPOINT
+          value: "http://RELEASE-NAME-opentelemetry-collector:4317"
+
+  - it: should use custom OTLP endpoint when configured
+    set:
+      keycloak.enabled: true
+      tracing.enabled: true
+      tracing.exporter.otlp.endpoint: "http://external-collector:4317"
+    asserts:
+      - equal:
+          path: data.OTEL_EXPORTER_OTLP_ENDPOINT
+          value: "http://external-collector:4317"
+
+  - it: should set gRPC protocol by default
+    set:
+      keycloak.enabled: true
+      tracing.enabled: true
+    asserts:
+      - equal:
+          path: data.OTEL_EXPORTER_OTLP_PROTOCOL
+          value: "grpc"
+
+  - it: should disable metrics and logs exporters
+    set:
+      keycloak.enabled: true
+      tracing.enabled: true
+    asserts:
+      - equal:
+          path: data.OTEL_METRICS_EXPORTER
+          value: "none"
+      - equal:
+          path: data.OTEL_LOGS_EXPORTER
+          value: "none"
+
+  # ==========================================================================
+  # Quarkus-specific env vars
+  # ==========================================================================
+
+  - it: should set Quarkus OTEL traces endpoint
+    set:
+      keycloak.enabled: true
+      tracing.enabled: true
+    asserts:
+      - equal:
+          path: data.QUARKUS_OTEL_EXPORTER_OTLP_TRACES_ENDPOINT
+          value: "http://RELEASE-NAME-opentelemetry-collector:4317"
+
+  - it: should set Quarkus OTEL traces protocol
+    set:
+      keycloak.enabled: true
+      tracing.enabled: true
+    asserts:
+      - equal:
+          path: data.QUARKUS_OTEL_EXPORTER_OTLP_TRACES_PROTOCOL
+          value: "grpc"
+
+  # ==========================================================================
+  # Per-component override
+  # ==========================================================================
+
+  - it: should enable tracing via keycloak.tracing.enabled even when global is off
+    set:
+      keycloak.enabled: true
+      tracing.enabled: false
+      keycloak.tracing.enabled: true
+    asserts:
+      - equal:
+          path: data.KC_TRACING_ENABLED
+          value: "true"
+      - isNotNull:
+          path: data.OTEL_EXPORTER_OTLP_ENDPOINT
+
+  - it: should disable tracing via keycloak.tracing.enabled even when global is on
+    set:
+      keycloak.enabled: true
+      tracing.enabled: true
+      keycloak.tracing.enabled: false
+    asserts:
+      - isNull:
+          path: data

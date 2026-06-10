@@ -1,0 +1,252 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/helm-unittest/helm-unittest/main/schema/helm-testsuite.json
+#
+# Copyright (c) 2025 Cofinity-X
+# Copyright (c) 2025 Contributors to the Eclipse Foundation
+#
+# See the NOTICE file(s) distributed with this work for additional
+# information regarding copyright ownership.
+#
+# This program and the accompanying materials are made available under the
+# terms of the Apache License, Version 2.0 which is available at
+# https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+# WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+# License for the specific language governing permissions and limitations
+# under the License.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# ---------------------------------------------------------------------------
+# Helm-unittest suite for the Tempo and Grafana integration surface.
+#
+# Covers two templates added by the Grafana Tempo integration feature:
+#   - otel-collector-config-cm.yaml: Collector ConfigMap with auto-wired
+#     Tempo pipeline (otlp/tempo exporter injected when tempo.enabled=true).
+#   - grafana-tempo-datasource-cm.yaml: Grafana datasource auto-provisioning
+#     ConfigMap (rendered only when both grafana.enabled AND tempo.enabled).
+# ---------------------------------------------------------------------------
+suite: Tempo and Grafana integration
+templates:
+  - templates/otel-collector-config-cm.yaml
+  - templates/grafana-tempo-datasource-cm.yaml
+tests:
+  # ==========================================================================
+  # Collector ConfigMap — tracing disabled
+  # ==========================================================================
+
+  - it: should not render collector ConfigMap when tracing is disabled
+    templates:
+      - templates/otel-collector-config-cm.yaml
+    set:
+      tracing.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  # ==========================================================================
+  # Collector ConfigMap — tracing enabled, basic rendering
+  # ==========================================================================
+
+  - it: should render collector ConfigMap when tracing is enabled
+    templates:
+      - templates/otel-collector-config-cm.yaml
+    set:
+      tracing.enabled: true
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: ConfigMap
+
+  - it: should use correct collector ConfigMap name
+    templates:
+      - templates/otel-collector-config-cm.yaml
+    set:
+      tracing.enabled: true
+    asserts:
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-otel-collector-config
+
+  # ==========================================================================
+  # Collector ConfigMap — tracing enabled, tempo disabled
+  # ==========================================================================
+
+  - it: should not contain otlp/tempo exporter when tempo is disabled
+    templates:
+      - templates/otel-collector-config-cm.yaml
+    set:
+      tracing.enabled: true
+      tempo.enabled: false
+      opentelemetry-collector.config.exporters.debug.verbosity: basic
+      opentelemetry-collector.config.service.pipelines.traces.exporters:
+        - debug
+    asserts:
+      - notMatchRegex:
+          path: data.relay
+          pattern: "otlp/tempo"
+
+  # ==========================================================================
+  # Collector ConfigMap — tracing enabled, tempo enabled
+  # ==========================================================================
+
+  - it: should contain otlp/tempo exporter when tempo is enabled
+    templates:
+      - templates/otel-collector-config-cm.yaml
+    set:
+      tracing.enabled: true
+      tempo.enabled: true
+      opentelemetry-collector.config.exporters.debug.verbosity: basic
+      opentelemetry-collector.config.service.pipelines.traces.exporters:
+        - debug
+    asserts:
+      - matchRegex:
+          path: data.relay
+          pattern: "otlp/tempo"
+
+  - it: should target correct Tempo gRPC endpoint in otlp/tempo exporter
+    templates:
+      - templates/otel-collector-config-cm.yaml
+    set:
+      tracing.enabled: true
+      tempo.enabled: true
+    asserts:
+      - matchRegex:
+          path: data.relay
+          pattern: "http://RELEASE-NAME-tempo:4317"
+
+  - it: should set TLS insecure for Tempo exporter
+    templates:
+      - templates/otel-collector-config-cm.yaml
+    set:
+      tracing.enabled: true
+      tempo.enabled: true
+    asserts:
+      - matchRegex:
+          path: data.relay
+          pattern: "insecure: true"
+
+  - it: should add otlp/tempo to traces pipeline exporters list
+    templates:
+      - templates/otel-collector-config-cm.yaml
+    set:
+      tracing.enabled: true
+      tempo.enabled: true
+      opentelemetry-collector.config.exporters.debug.verbosity: basic
+      opentelemetry-collector.config.service.pipelines.traces.exporters:
+        - debug
+    asserts:
+      - matchRegex:
+          path: data.relay
+          pattern: "- otlp/tempo"
+
+  - it: should preserve existing debug exporter when tempo is enabled
+    templates:
+      - templates/otel-collector-config-cm.yaml
+    set:
+      tracing.enabled: true
+      tempo.enabled: true
+      opentelemetry-collector.config.exporters.debug.verbosity: basic
+      opentelemetry-collector.config.service.pipelines.traces.exporters:
+        - debug
+    asserts:
+      - matchRegex:
+          path: data.relay
+          pattern: "debug"
+      - matchRegex:
+          path: data.relay
+          pattern: "otlp/tempo"
+
+  # ==========================================================================
+  # Grafana datasource ConfigMap — not rendered (parameterised negatives)
+  # ==========================================================================
+
+  - it: should not render datasource ConfigMap when grafana is disabled
+    templates:
+      - templates/grafana-tempo-datasource-cm.yaml
+    set:
+      grafana.enabled: false
+      tempo.enabled: true
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should not render datasource ConfigMap when tempo is disabled
+    templates:
+      - templates/grafana-tempo-datasource-cm.yaml
+    set:
+      grafana.enabled: true
+      tempo.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should not render datasource ConfigMap when both are disabled
+    templates:
+      - templates/grafana-tempo-datasource-cm.yaml
+    set:
+      grafana.enabled: false
+      tempo.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  # ==========================================================================
+  # Grafana datasource ConfigMap — rendered
+  # ==========================================================================
+
+  - it: should render datasource ConfigMap when both grafana and tempo are enabled
+    templates:
+      - templates/grafana-tempo-datasource-cm.yaml
+    set:
+      grafana.enabled: true
+      tempo.enabled: true
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: ConfigMap
+
+  - it: should use correct datasource ConfigMap name
+    templates:
+      - templates/grafana-tempo-datasource-cm.yaml
+    set:
+      grafana.enabled: true
+      tempo.enabled: true
+    asserts:
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-grafana-tempo-datasource
+
+  - it: should have grafana_datasource label set to 1
+    templates:
+      - templates/grafana-tempo-datasource-cm.yaml
+    set:
+      grafana.enabled: true
+      tempo.enabled: true
+    asserts:
+      - equal:
+          path: metadata.labels.grafana_datasource
+          value: "1"
+
+  - it: should contain correctly configured Tempo datasource with query URL, type and default flag
+    templates:
+      - templates/grafana-tempo-datasource-cm.yaml
+    set:
+      grafana.enabled: true
+      tempo.enabled: true
+    asserts:
+      - equal:
+          path: data
+          value:
+            tempo-datasource.yaml: |
+              apiVersion: 1
+              datasources:
+                - name: Tempo
+                  type: tempo
+                  access: proxy
+                  url: http://RELEASE-NAME-tempo:3200
+                  isDefault: true
+                  editable: true

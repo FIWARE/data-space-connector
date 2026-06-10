@@ -1,0 +1,90 @@
+{{- if and .Values.tracing.enabled .Values.decentralizedIam.enabled }}
+{{- /*
+Post-install/post-upgrade hook that registers an APISIX global rule
+enabling the built-in opentelemetry plugin on every route. The plugin's
+collector connection is configured separately via
+`decentralizedIam.odrlAuthorization.apisix.apisix.pluginAttrs.opentelemetry`
+in the APISIX subchart values.
+
+APISIX stores global rules in etcd, so they survive pod restarts but not
+a full etcd wipe. The hook is idempotent (PUT creates or replaces).
+*/ -}}
+{{- $apisixAdmin := printf "%s-apisix-admin" .Release.Name -}}
+{{- $apisixCreds := (((.Values.decentralizedIam).odrlAuthorization).apisix).apisix | default dict -}}
+{{- $adminKey := (($apisixCreds).admin).credentials | default dict -}}
+{{- $apiKey := $adminKey.admin | default "edd1c9f034335f136f87ad84b625c8f1" -}}
+#################################################################################
+  #  Copyright (c) 2025 Cofinity-X
+  #  Copyright (c) 2025 Contributors to the Eclipse Foundation
+  #
+  #  See the NOTICE file(s) distributed with this work for additional
+  #  information regarding copyright ownership.
+  #
+  #  This program and the accompanying materials are made available under the
+  #  terms of the Apache License, Version 2.0 which is available at
+  #  https://www.apache.org/licenses/LICENSE-2.0.
+  #
+  #  Unless required by applicable law or agreed to in writing, software
+  #  distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+  #  WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+  #  License for the specific language governing permissions and limitations
+  #  under the License.
+  #
+  #  SPDX-License-Identifier: Apache-2.0
+  #################################################################################
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ .Release.Name }}-apisix-otel-rule
+  namespace: {{ .Release.Namespace | default "default" | quote }}
+  labels:
+    {{- include "dsc.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "10"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 5
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: apisix-otel-rule
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: register-rule
+          image: bitnami/kubectl:latest
+          command: ["/bin/bash", "-c"]
+          args:
+            - |
+              APISIX_ADMIN="http://{{ $apisixAdmin }}:9180"
+              API_KEY="{{ $apiKey }}"
+
+              echo "Waiting for APISIX admin API..."
+              until curl -sf -o /dev/null "$APISIX_ADMIN/apisix/admin/routes" \
+                -H "X-API-KEY: $API_KEY"; do
+                sleep 5
+              done
+              echo "APISIX admin API ready."
+
+              echo "Registering opentelemetry global rule..."
+              HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+                -X PUT "$APISIX_ADMIN/apisix/admin/global_rules/otel-tracing" \
+                -H "X-API-KEY: $API_KEY" \
+                -H "Content-Type: application/json" \
+                -d '{"plugins":{"opentelemetry":{}}}')
+
+              if [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 300 ]; then
+                echo "Global rule registered (HTTP $HTTP_CODE)."
+              else
+                echo "Failed to register global rule (HTTP $HTTP_CODE)."
+                exit 1
+              fi
+          securityContext:
+            runAsNonRoot: true
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+{{- end }}

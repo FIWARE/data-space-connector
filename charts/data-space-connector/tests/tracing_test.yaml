@@ -1,0 +1,360 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/helm-unittest/helm-unittest/main/schema/helm-testsuite.json
+#
+# Copyright (c) 2025 Cofinity-X
+# Copyright (c) 2025 Contributors to the Eclipse Foundation
+#
+# See the NOTICE file(s) distributed with this work for additional
+# information regarding copyright ownership.
+#
+# This program and the accompanying materials are made available under the
+# terms of the Apache License, Version 2.0 which is available at
+# https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+# WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+# License for the specific language governing permissions and limitations
+# under the License.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# ---------------------------------------------------------------------------
+# Helm-unittest suite for the OpenTelemetry tracing surface.
+#
+# Covers the identityhub-deployment.yaml template which is the primary
+# first-party workload with conditional OTEL injection.  fdsc-edc tracing
+# is wired through static values.yaml overrides to the subchart (no
+# template-level toggle), and the opentelemetry-collector is a subchart
+# whose rendering is verified separately via `helm template` in CI.
+# ---------------------------------------------------------------------------
+suite: OpenTelemetry tracing - IdentityHub deployment
+templates:
+  - templates/identityhub-deployment.yaml
+# Enable identityhub for all tests; individual tests override as needed.
+set:
+  identityhub.enabled: true
+tests:
+  # ==========================================================================
+  # Tracing disabled (default)
+  # ==========================================================================
+
+  - it: should not render any document when identityhub is disabled
+    set:
+      identityhub.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should not contain OTEL env vars when tracing is disabled
+    set:
+      tracing.enabled: false
+    asserts:
+      - isKind:
+          of: Deployment
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OTEL_EXPORTER_OTLP_ENDPOINT
+          any: true
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OTEL_SERVICE_NAME
+          any: true
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OTEL_EXPORTER_OTLP_PROTOCOL
+          any: true
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OTEL_TRACES_SAMPLER
+          any: true
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OTEL_METRICS_EXPORTER
+          any: true
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OTEL_LOGS_EXPORTER
+          any: true
+
+  - it: should not have OTEL init container or volume when tracing is disabled
+    set:
+      tracing.enabled: false
+    asserts:
+      - isNull:
+          path: spec.template.spec.initContainers
+      - notContains:
+          path: spec.template.spec.volumes
+          content:
+            name: otel-agent
+          any: true
+
+  # ==========================================================================
+  # Tracing enabled - env vars
+  # ==========================================================================
+
+  - it: should contain OTEL_EXPORTER_OTLP_ENDPOINT when tracing is enabled
+    set:
+      tracing.enabled: true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OTEL_EXPORTER_OTLP_ENDPOINT
+            value: "http://RELEASE-NAME-opentelemetry-collector:4317"
+          any: true
+
+  - it: should contain OTEL_SERVICE_NAME set to identityhub when tracing is enabled
+    set:
+      tracing.enabled: true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OTEL_SERVICE_NAME
+            value: "identityhub"
+          any: true
+
+  - it: should inject all standard OTEL SDK env vars when tracing is enabled
+    set:
+      tracing.enabled: true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OTEL_EXPORTER_OTLP_PROTOCOL
+            value: "grpc"
+          any: true
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OTEL_EXPORTER_OTLP_INSECURE
+            value: "true"
+          any: true
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OTEL_TRACES_SAMPLER
+            value: "parentbased_traceidratio"
+          any: true
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OTEL_TRACES_SAMPLER_ARG
+            value: "1.0"
+          any: true
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OTEL_PROPAGATORS
+            value: "tracecontext,baggage"
+          any: true
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OTEL_RESOURCE_ATTRIBUTES
+          any: true
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OTEL_METRICS_EXPORTER
+            value: "none"
+          any: true
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OTEL_LOGS_EXPORTER
+            value: "none"
+          any: true
+
+  # ==========================================================================
+  # Tracing enabled - Java agent init container and volumes
+  # ==========================================================================
+
+  - it: should inject otel-agent-init container when tracing is enabled
+    set:
+      tracing.enabled: true
+    asserts:
+      - contains:
+          path: spec.template.spec.initContainers
+          content:
+            name: otel-agent-init
+          any: true
+
+  - it: should create otel-agent emptyDir volume when tracing is enabled
+    set:
+      tracing.enabled: true
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: otel-agent
+            emptyDir:
+              sizeLimit: 32Mi
+          any: true
+
+  - it: should mount otel-agent volume read-only in the main container
+    set:
+      tracing.enabled: true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: otel-agent
+            mountPath: /otel-agent
+            readOnly: true
+          any: true
+
+  - it: should set JAVA_TOOL_OPTIONS with javaagent flag when tracing is enabled
+    set:
+      tracing.enabled: true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: JAVA_TOOL_OPTIONS
+          any: true
+
+  # ==========================================================================
+  # Per-component override: identityhub.tracing.enabled
+  # ==========================================================================
+
+  - it: should enable tracing per-component even when global tracing is off
+    set:
+      tracing.enabled: false
+      identityhub.tracing.enabled: true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OTEL_EXPORTER_OTLP_ENDPOINT
+          any: true
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OTEL_SERVICE_NAME
+            value: "identityhub"
+          any: true
+      - contains:
+          path: spec.template.spec.initContainers
+          content:
+            name: otel-agent-init
+          any: true
+
+  - it: should disable tracing per-component even when global tracing is on
+    set:
+      tracing.enabled: true
+      identityhub.tracing.enabled: false
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OTEL_EXPORTER_OTLP_ENDPOINT
+          any: true
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OTEL_SERVICE_NAME
+          any: true
+      - isNull:
+          path: spec.template.spec.initContainers
+
+  # ==========================================================================
+  # Configuration overrides
+  # ==========================================================================
+
+  - it: should use a custom service name when configured
+    set:
+      tracing.enabled: true
+      identityhub.tracing.serviceName: my-custom-identityhub
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OTEL_SERVICE_NAME
+            value: "my-custom-identityhub"
+          any: true
+
+  - it: should use a custom OTLP endpoint when configured
+    set:
+      tracing.enabled: true
+      tracing.exporter.otlp.endpoint: "http://external-collector:4317"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OTEL_EXPORTER_OTLP_ENDPOINT
+            value: "http://external-collector:4317"
+          any: true
+
+  - it: should use http/protobuf protocol when configured
+    set:
+      tracing.enabled: true
+      tracing.exporter.otlp.protocol: "http/protobuf"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OTEL_EXPORTER_OTLP_PROTOCOL
+            value: "http/protobuf"
+          any: true
+
+  - it: should pass custom sampler settings
+    set:
+      tracing.enabled: true
+      tracing.sampler: "always_on"
+      tracing.samplerArg: "0.5"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OTEL_TRACES_SAMPLER
+            value: "always_on"
+          any: true
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OTEL_TRACES_SAMPLER_ARG
+            value: "0.5"
+          any: true
+
+  # ==========================================================================
+  # Java agent toggle (independent of tracing env vars)
+  # ==========================================================================
+
+  - it: should skip init container but keep OTEL env vars when javaagent is disabled
+    set:
+      tracing.enabled: true
+      identityhub.tracing.javaagent.enabled: false
+    asserts:
+      # OTEL env vars should still be present
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OTEL_EXPORTER_OTLP_ENDPOINT
+          any: true
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OTEL_SERVICE_NAME
+          any: true
+      # No init container
+      - isNull:
+          path: spec.template.spec.initContainers
+      # No JAVA_TOOL_OPTIONS (no agent to attach)
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: JAVA_TOOL_OPTIONS
+          any: true
+      # No otel-agent volume
+      - notContains:
+          path: spec.template.spec.volumes
+          content:
+            name: otel-agent
+          any: true
