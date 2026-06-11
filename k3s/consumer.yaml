@@ -280,6 +280,9 @@ keycloak:
           verifiable_credential_type: "MembershipCredential"
           credential_signing_alg: "ES256"
           credential_build_config.token_jws_type: "JWT"
+          binding_required: "true"
+          binding_required_proof_types: "jwt"
+          cryptographic_binding_methods_supported: "jwk"
         protocolMappers:
           - name: context-mapper-mc
             protocol: oid4vc
@@ -304,6 +307,9 @@ keycloak:
           verifiable_credential_type: "MarketplaceCredential"
           credential_signing_alg: "ES256"
           credential_build_config.token_jws_type: "JWT"
+          binding_required: "true"
+          binding_required_proof_types: "jwt"
+          cryptographic_binding_methods_supported: "jwk"
         protocolMappers:
           - name: context-mapper-mpc
             protocol: oid4vc
