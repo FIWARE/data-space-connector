@@ -59,7 +59,7 @@ dependencies:
   - name: did-helper
     alias: did
     condition: did.enabled
-    version: 0.1.15
+    version: 0.1.20
     repository: oci://quay.io/fiware/helm-charts
   # cert-manager
   - name: cert-manager
@@ -71,7 +71,7 @@ dependencies:
   - name: vc-operator
     alias: vc-operator
     condition: vc-operator.enabled
-    version: 0.0.1
+    version: 0.1.2
     repository: oci://quay.io/seamware/helm-charts
   - name: prometheus
     condition: prometheus.enabled
