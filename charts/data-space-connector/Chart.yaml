@@ -13,8 +13,8 @@ dependencies:
   - name: scorpio-broker-aaio
     alias: scorpio
     condition: scorpio.enabled
-    repository: https://fiware.github.io/helm-charts
-    version: 0.4.12
+    repository: oci://quay.io/fiware/helm-charts
+    version: 0.4.15
   # issuance
   - name: keycloak
     condition: keycloak.enabled
@@ -23,18 +23,18 @@ dependencies:
   # contract management
   - name: tm-forum-api
     condition: tm-forum-api.enabled
-    version: 0.16.10
-    repository: https://fiware.github.io/helm-charts
+    version: 0.17.10
+    repository: oci://quay.io/fiware/helm-charts
   - name: contract-management
     condition: contract-management.enabled
-    version: 3.5.28
-    repository: https://fiware.github.io/helm-charts
+    version: 3.5.31
+    repository: oci://quay.io/fiware/helm-charts
   # marketplace
   - name: business-api-ecosystem
     alias: marketplace
     condition: marketplace.enabled
-    version: 0.11.32
-    repository: https://fiware.github.io/helm-charts
+    version: 1.0.2
+    repository: oci://quay.io/fiware/helm-charts
   - name: community-operator
     alias: mongo-operator
     condition: mongo-operator.enabled
@@ -43,8 +43,8 @@ dependencies:
   # dsp
   - name: fdsc-edc
     condition: fdsc-edc.enabled
-    version: 0.2.9
-    repository: https://fiware.github.io/helm-charts
+    version: 0.2.10
+    repository: oci://quay.io/fiware/helm-charts
   - name: vault
     alias: vault
     condition: vault.enabled
@@ -53,20 +53,26 @@ dependencies:
   # dashboard
   - name: fdsc-dashboard
     condition: fdsc-dashboard.enabled
-    version: 0.6.1
-    repository: https://fiware.github.io/helm-charts
+    version: 0.6.3
+    repository: oci://quay.io/fiware/helm-charts
   # did-helper
   - name: did-helper
     alias: did
     condition: did.enabled
     version: 0.1.15
-    repository: https://fiware.github.io/helm-charts
+    repository: oci://quay.io/fiware/helm-charts
   # cert-manager
   - name: cert-manager
     alias: cert-manager
     condition: cert-manager.enabled
-    version: 1.20.0
+    version: v1.20.0
     repository: https://charts.jetstack.io
+  # vc-operator
+  - name: vc-operator
+    alias: vc-operator
+    condition: vc-operator.enabled
+    version: 0.0.1
+    repository: oci://quay.io/seamware/helm-charts
   - name: prometheus
     condition: prometheus.enabled
     version: 29.2.1

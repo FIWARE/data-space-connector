@@ -30,6 +30,7 @@
         <k3s.kubeApi.port>6443</k3s.kubeApi.port>
 
         <main.basedir>${project.basedir}</main.basedir>
+        
     </properties>
 
     <build>
@@ -476,6 +477,17 @@
                         </goals>
                         <configuration>
                             <manifests>${project.build.directory}/k3s/infra/cert-manager</manifests>
+                            <timeout>500</timeout>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>apply-vc-operator-crds</id>
+                        <phase>deploy</phase>
+                        <goals>
+                            <goal>apply</goal>
+                        </goals>
+                        <configuration>
+                            <manifests>${project.build.directory}/k3s/infra/vc-operator-crds</manifests>
                             <timeout>500</timeout>
                         </configuration>
                     </execution>
