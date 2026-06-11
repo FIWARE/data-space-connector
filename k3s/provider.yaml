@@ -1359,15 +1359,6 @@ keycloak:
         "groups": []
       },
       {
-        "username": "service-account-contract-management",
-        "enabled": true,
-        "serviceAccountClientId": "contract-management",
-        "verifiableCredentials": [
-          {"credentialScopeName": "marketplace-credential"},
-          {"credentialScopeName": "legal-person-credential"}
-        ]
-      },
-      {
         "username": "service-account-fdsc-edc",
         "enabled": true,
         "serviceAccountClientId": "fdsc-edc",
