@@ -1732,10 +1732,6 @@ marketplace:
     serviceAccount:
       create: false
 
-    # -- configuration of the charging backend to be deployed
-    deployment:
-      image:
-        tag: 10.5.0
 
     # -- should plugin support be enabled
     plugins:
@@ -1817,13 +1813,6 @@ marketplace:
       create: true
 
     existingSecret: mongodb-belp-password
-
-    # -- image to be used for the statefulset
-    statefulset:
-      image:
-        repository: fiware/biz-ecosystem-logic-proxy
-        tag: "11.15.0"
-        pullPolicy: Always
 
     port: 8004
     nodeEnvironment: production

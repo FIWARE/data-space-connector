@@ -842,9 +842,6 @@ marketplace:
       - OPERATOR
   externalUrl: https://marketplace.127.0.0.1.nip.io
   bizEcosystemChargingBackend:
-    deployment:
-      image:
-        tag: 11.3.1
     extraEnvVars:
       - name: BAE_CB_CUSTOMER_BILL
         value: "http://tm-forum-api-svc:8080/tmf-api/customerBillManagement/v4"
