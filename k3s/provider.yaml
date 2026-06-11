@@ -1076,9 +1076,6 @@ keycloak:
           verifiable_credential_type: "LegalPersonCredential"
           credential_signing_alg: "ES256"
           credential_build_config.token_jws_type: "JWT"
-          binding_required: "true"
-          binding_required_proof_types: "jwt"
-          cryptographic_binding_methods_supported: "jwk"
         protocolMappers:
           - name: context-mapper-uc
             protocol: oid4vc
@@ -1115,9 +1112,6 @@ keycloak:
           verifiable_credential_type: "MembershipCredential"
           credential_signing_alg: "ES256"
           credential_build_config.token_jws_type: "JWT"
-          binding_required: "true"
-          binding_required_proof_types: "jwt"
-          cryptographic_binding_methods_supported: "jwk"
         protocolMappers:
           - name: context-mapper-mc
             protocol: oid4vc
@@ -1499,8 +1493,7 @@ vcCredentials:
           targetFile: membership-credential.jwt
           renewBefore: 5m
           holderBinding:
-            enabled: true
-            keySecretName: fdsc-edc-holder-key
+            enabled: false
 
 vc-operator:
   enabled: true

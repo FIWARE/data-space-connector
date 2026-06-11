@@ -384,8 +384,7 @@ vcCredentials:
           targetFile: marketplace-credential.jwt
           renewBefore: 5m
           holderBinding:
-            enabled: true
-            keySecretName: contract-management-holder-key
+            enabled: false
         - name: consumer-legal-person-credential
           credentialType: legal-person-credential
           format: jwt_vc_json
@@ -394,8 +393,7 @@ vcCredentials:
           targetFile: legal-person-credential.jwt
           renewBefore: 5m
           holderBinding:
-            enabled: true
-            keySecretName: contract-management-holder-key
+            enabled: false
     - name: consumer-fdsc-edc-issuer
       issuerURL: http://consumer-keycloak:8080/realms/test-realm
       issuerType: keycloak
@@ -413,8 +411,7 @@ vcCredentials:
           targetFile: membership-credential.jwt
           renewBefore: 5m
           holderBinding:
-            enabled: true
-            keySecretName: fdsc-edc-holder-key
+            enabled: false
 
 vc-operator:
   enabled: true
