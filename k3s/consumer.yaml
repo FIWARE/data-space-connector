@@ -123,7 +123,7 @@ keycloak:
           # payload with default decoys, which wipes the cnf claim added by
           # addKeyBinding() after initial credential body construction.
           sd_jwt.number_of_decoys: "5"
-          binding_required: "true"
+          binding_required: "false"
           binding_required_proof_types: "jwt"
           cryptographic_binding_methods_supported: "jwk"
         protocolMappers:
