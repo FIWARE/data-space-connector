@@ -2416,7 +2416,7 @@ vcCredentials:
 # -- vc-operator subchart configuration
 vc-operator:
   enabled: false
-
+  
 identityhub:
   enabled: false
   image:
