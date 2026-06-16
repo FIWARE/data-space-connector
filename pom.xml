@@ -481,17 +481,6 @@
                         </configuration>
                     </execution>
                     <execution>
-                        <id>apply-vc-operator-crds</id>
-                        <phase>deploy</phase>
-                        <goals>
-                            <goal>apply</goal>
-                        </goals>
-                        <configuration>
-                            <manifests>${project.build.directory}/k3s/infra/vc-operator-crds</manifests>
-                            <timeout>500</timeout>
-                        </configuration>
-                    </execution>
-                    <execution>
                         <id>apply-participants</id>
                         <phase>deploy</phase>
                         <goals>
