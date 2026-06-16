@@ -673,7 +673,6 @@ keycloak:
         fullScopeAllowed: true
         nodeReRegistrationTimeout: -1
         defaultClientScopes: []
-        optionalClientScopes: []
         optionalClientScopes:  ["user-credential", "legal-person-credential"]
       - clientId: contract-management
         enabled: true

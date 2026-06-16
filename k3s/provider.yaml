@@ -1451,7 +1451,6 @@ keycloak:
         fullScopeAllowed: true
         nodeReRegistrationTimeout: -1
         defaultClientScopes: []
-        optionalClientScopes: []
         optionalClientScopes: ["membership-credential"]
 
 # helper component to initialize the trusted issuers list
