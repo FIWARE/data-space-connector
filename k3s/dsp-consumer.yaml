@@ -13,8 +13,6 @@ fdsc-edc:
       deployment:
         image:
           repository: quay.io/seamware/fdsc-edc-controlplane-oid4vc
-          tag: 0.2.0-PRE-12
-          pullPolicy: Always
       service: {}
       config:
         edc:
@@ -32,22 +30,28 @@ fdsc-edc:
         - name: cacerts
           mountPath: /opt/java/openjdk/lib/security/cacerts
           subPath: cacerts
+        - name: did-material
+          mountPath: /did-material
       additionalVolumes:
         - name: signing-key
+          emptyDir: {}
+        - name: did-material
           emptyDir: {}
         - name: signing-key-raw
           secret:
             secretName: fancy-marketplace.biz-tls
-        - name: credentials-script
-          configMap:
-            name: credentials-script
-            defaultMode: 0755
         - name: ca-certs-script
           configMap:
             name: ca-certs-script
             defaultMode: 0755
         - name: credential-repo
-          emptyDir: {}
+          projected:
+            sources:
+              - secret:
+                  name: vc-fdsc-edc-credential
+                  items:
+                    - key: credential
+                      path: membership-credential.jwt
         - name: root-ca
           secret:
             secretName: fancy-marketplace.biz-tls
@@ -115,16 +119,6 @@ fdsc-edc:
             - name: root-ca
               mountPath: /root-ca/cacert.pem
               subPath: ca.crt
-        # get a credential to be used by the contract-management
-        - name: get-credential
-          image: quay.io/curl/curl:8.1.2
-          command: ["/bin/sh", "-c", "/bin/get-credential.sh /credential-repo"]
-          volumeMounts:
-            - name: credentials-script
-              mountPath: /bin/get-credential.sh
-              subPath: get-credential.sh
-            - name: credential-repo
-              mountPath: /credential-repo
     config:
       issuerId: did:web:fancy-marketplace.biz
       ebsiTir:
@@ -248,24 +242,3 @@ identityhub:
 # required to provide the secrets for identity hub
 vault:
   enabled: true
-
-# setup script for importing credentials to fdsc-edc and contract management
-credentials:
-  enabled: true
-  keycloak:
-    address: http://consumer-keycloak:8080
-    realm: test-realm
-    clientId: account-console
-    username: employee
-    scope: openid
-    password: test
-  configurations:
-    - id: marketplace-credential
-      format: jwt_vc
-      targetFile: marketplace-credential.jwt
-    - id: membership-credential
-      format: jwt_vc
-      targetFile: membership-credential.jwt
-    - id: legal-person-credential
-      format: jwt_vc
-      targetFile: legal-person-credential.jwt

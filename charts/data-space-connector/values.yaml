@@ -1732,10 +1732,6 @@ marketplace:
     serviceAccount:
       create: false
 
-    # -- configuration of the charging backend to be deployed
-    deployment:
-      image:
-        tag: 10.5.0
 
     # -- should plugin support be enabled
     plugins:
@@ -1817,13 +1813,6 @@ marketplace:
       create: true
 
     existingSecret: mongodb-belp-password
-
-    # -- image to be used for the statefulset
-    statefulset:
-      image:
-        repository: fiware/biz-ecosystem-logic-proxy
-        tag: "11.15.0"
-        pullPolicy: Always
 
     port: 8004
     nodeEnvironment: production
@@ -2371,33 +2360,63 @@ fdsc-edc:
           token: "root"
           timeout: 30
 
-# -- helper script to retrieve credentials for applications
-credentials:
-  # -- should the script be enabled
+# -- vc-operator managed credentials (replacement for the legacy credentials script)
+vcCredentials:
+  # -- should vc-operator credential management be enabled
   enabled: false
-  # -- config of the keycloak to get credentials from
-  keycloak:
-    # -- address of the keycloak
-    address:
-    # -- realm to be used
-    realm:
-    # -- clientId to be used for retrieval
-    clientId:
-    # -- username to get the credentials for
-    username:
-    # -- scope to be used for the client
-    scope:
-    # -- password to authenticate with at keycloak
-    password:
-  # -- configurations of the credentials to be retrieved
-  configurations: []
-    # -- id of the credentials config to be used
-    # - id:
-    # -- format to request the credential in
-    # format:
-    # -- name of the file to store the credential at
-    # targetFile:
+  # -- configuration of the CredentialIssuer (Keycloak OID4VCI endpoint)
+  issuer:
+    # -- name of the CredentialIssuer resource
+    name: keycloak-issuer
+    # -- base URL of the OID4VCI issuer (e.g. http://<keycloak>:8080/realms/<realm>)
+    issuerURL: ""
+    # -- issuer implementation type ("generic" or "keycloak")
+    issuerType: keycloak
+    # -- override the token endpoint URL (required when the issuer metadata does not include token_endpoint directly)
+    tokenURL: ""
+  # -- authentication secret for the CredentialIssuer (OAuth 2.0 client credentials)
+  auth:
+    # -- name of the Secret to create
+    secretName: vc-operator-auth
+    # -- OAuth 2.0 client_id registered in Keycloak
+    clientId: ""
+    # -- OAuth 2.0 client_secret for the above client
+    clientSecret: ""
+    # -- reference to an existing secret (if set, clientId/clientSecret are ignored)
+    existingSecret: ""
+  # -- list of VerifiableCredentialRequest resources to create
+  requests: []
+    # -- name of the VCR resource
+    # - name:
+    #   -- credential type to request (must match one of the issuer's supported types)
+    #   credentialType:
+    #   -- credential format (jwt_vc_json, ldp_vc, jwt_vc, vc+sd-jwt)
+    #   format: jwt_vc_json
+    #   -- name of the target Secret for storing the credential
+    #   targetSecretName:
+    #   -- key in the target Secret (defaults to "credential")
+    #   targetSecretKey: credential
+    #   -- filename when the secret is projected as a volume (for backward compatibility)
+    #   targetFile:
+    #   -- duration before expiry to trigger renewal (e.g. 5m, 1h)
+    #   renewBefore: 5m
+    #   -- additional issuer-specific claims
+    #   additionalClaims: {}
+    #   -- holder binding configuration (enables proof-of-possession during OID4VCI issuance)
+    #   holderBinding:
+    #     -- enable holder binding for this credential request
+    #     enabled: false
+    #     -- name of the Secret to create for the holder's ECDSA P-256 private key (auto-generated with tls.key entry)
+    #     keySecretName:
+    #     -- reference to an existing Secret (if set, key generation is skipped)
+    #     existingKeySecret: ""
+    #     -- optional DID URL for the proof JWT kid header; when omitted the operator embeds the full JWK
+    #     holderDID: ""
 
+# -- vc-operator subchart configuration
+vc-operator:
+  enabled: false
+  
 identityhub:
   enabled: false
   image:
