@@ -14,8 +14,6 @@ fdsc-edc:
       deployment:
         image:
           repository: quay.io/seamware/fdsc-edc-controlplane-oid4vc
-          tag: 0.2.0-PRE-12
-          pullPolicy: Always
       config:
         edc:
           hostname: dsp-mp-operations.127.0.0.1.nip.io
@@ -62,16 +60,18 @@ fdsc-edc:
         - name: signing-key-raw
           secret:
             secretName: mp-operations.org-tls
-        - name: credentials-script
-          configMap:
-            name: credentials-script
-            defaultMode: 0755
         - name: ca-certs-script
           configMap:
             name: ca-certs-script
             defaultMode: 0755
         - name: credential-repo
-          emptyDir: {}
+          projected:
+            sources:
+              - secret:
+                  name: vc-fdsc-edc-credential
+                  items:
+                    - key: credential
+                      path: membership-credential.jwt
         - name: root-ca
           secret:
             secretName: mp-operations.org-tls
@@ -153,16 +153,6 @@ fdsc-edc:
             - name: root-ca
               mountPath: /root-ca/cacert.pem
               subPath: ca.crt
-        # get a credential to be used by the contract-management
-        - name: get-credential
-          image: quay.io/curl/curl:8.1.2
-          command: ["/bin/sh", "-c", "/bin/get-credential.sh /credential-repo"]
-          volumeMounts:
-            - name: credentials-script
-              mountPath: /bin/get-credential.sh
-              subPath: get-credential.sh
-            - name: credential-repo
-              mountPath: /credential-repo
     config:
       issuerId: did:web:mp-operations.org
       ebsiTir:

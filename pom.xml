@@ -30,6 +30,7 @@
         <k3s.kubeApi.port>6443</k3s.kubeApi.port>
 
         <main.basedir>${project.basedir}</main.basedir>
+        
     </properties>
 
     <build>

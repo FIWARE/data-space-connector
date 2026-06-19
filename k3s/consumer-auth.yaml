@@ -143,11 +143,15 @@ decentralizedIam:
       registration:
         enabled: true
         job:
+          # Use a long TTL so the Job persists until the k3s-maven-plugin
+          # has verified its completion. The default 120s races with the
+          # plugin's parallel wait loop in CI.
+          ttlSecondsAfterFinished: 86400
           initContainers:
             waitForHost:
               enabled: true
               path: /health
-          activeDeadlineSeconds: null
+          activeDeadlineSeconds: 1500
         services:
           - id: tm-forum
             defaultOidcScope: "default"
@@ -364,22 +368,77 @@ decentralizedIam:
             paths:
               - "/"
 
-credentials:
+vcCredentials:
   enabled: true
-  keycloak:
-    address: http://consumer-keycloak:8080
-    realm: test-realm
-    clientId: account-console
-    username: employee
-    scope: openid
-    password: test
-  configurations:
-    - id: marketplace-credential
-      format: jwt_vc_json
-      targetFile: marketplace-credential.jwt
-    - id: membership-credential
-      format: jwt_vc_json
-      targetFile: membership-credential.jwt
-    - id: legal-person-credential
-      format: jwt_vc_json
-      targetFile: legal-person-credential.jwt
+  issuers:
+    - name: consumer-contract-management-issuer
+      issuerURL: http://consumer-keycloak:8080/realms/test-realm
+      issuerType: keycloak
+      tokenURL: http://consumer-keycloak:8080/realms/test-realm/protocol/openid-connect/token
+      auth:
+        secretName: consumer-contract-management-client-auth
+        clientId: contract-management
+        clientSecret: contract-management-client-secret
+      requests:
+        - name: consumer-marketplace-credential
+          credentialType: marketplace-credential
+          format: jwt_vc_json
+          targetSecretName: vc-marketplace-credential
+          targetSecretKey: credential
+          targetFile: marketplace-credential.jwt
+          renewBefore: 5m
+          holderBinding:
+            enabled: false
+        - name: consumer-legal-person-credential
+          credentialType: legal-person-credential
+          format: jwt_vc_json
+          targetSecretName: vc-legal-person-credential
+          targetSecretKey: credential
+          targetFile: legal-person-credential.jwt
+          renewBefore: 5m
+          holderBinding:
+            enabled: false
+    - name: consumer-fdsc-edc-issuer
+      issuerURL: http://consumer-keycloak:8080/realms/test-realm
+      issuerType: keycloak
+      tokenURL: http://consumer-keycloak:8080/realms/test-realm/protocol/openid-connect/token
+      auth:
+        secretName: consumer-fdsc-edc-client-auth
+        clientId: fdsc-edc
+        clientSecret: fdsc-edc-client-secret
+      requests:
+        - name: consumer-fdsc-edc-credential
+          credentialType: membership-credential
+          format: jwt_vc_json
+          targetSecretName: vc-fdsc-edc-credential
+          targetSecretKey: credential
+          targetFile: membership-credential.jwt
+          renewBefore: 5m
+          holderBinding:
+            enabled: false
+
+vc-operator:
+  enabled: true
+  watchNamespaces:
+    - consumer
+  extraEnvVars:
+    - name: HTTPS_PROXY
+      value: "http://squid-proxy.infra.svc.cluster.local:8888"
+    - name: HTTP_PROXY
+      value: "http://squid-proxy.infra.svc.cluster.local:8888"
+    - name: NO_PROXY
+      value: "consumer-keycloak,*.cluster.local,*.svc,10.0.0.0/8"
+    - name: SSL_CERT_FILE
+      value: "/etc/ssl/certs/ca.crt"
+  extraVolumeMounts:
+    - name: root-ca
+      mountPath: /etc/ssl/certs/ca.crt
+      subPath: ca.crt
+      readOnly: true
+  extraVolumes:
+    - name: root-ca
+      secret:
+        secretName: fancy-marketplace.biz-tls
+        items:
+          - key: ca.crt
+            path: ca.crt

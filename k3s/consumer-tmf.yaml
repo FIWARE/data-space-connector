@@ -152,16 +152,6 @@ contract-management:
           - name: root-ca
             mountPath: /root-ca/cacert.pem
             subPath: ca.crt
-      # get a credential to be used by the contract-management
-      - name: get-credential
-        image: quay.io/curl/curl:8.1.2
-        command: ["/bin/sh", "-c", "/bin/get-credential.sh /credential-repo"]
-        volumeMounts:
-          - name: credentials-script
-            mountPath: /bin/get-credential.sh
-            subPath: get-credential.sh
-          - name: credential-repo
-            mountPath: /credential-repo
     additionalVolumes:
       - name: signing-key
         emptyDir: {}
@@ -169,16 +159,23 @@ contract-management:
         secret:
           secretName: fancy-marketplace.biz-tls
           defaultMode: 0755
-      - name: credentials-script
-        configMap:
-          name: credentials-script
-          defaultMode: 0755
       - name: ca-certs-script
         configMap:
           name: ca-certs-script
           defaultMode: 0755
       - name: credential-repo
-        emptyDir: {}
+        projected:
+          sources:
+            - secret:
+                name: vc-marketplace-credential
+                items:
+                  - key: credential
+                    path: marketplace-credential.jwt
+            - secret:
+                name: vc-legal-person-credential
+                items:
+                  - key: credential
+                    path: legal-person-credential.jwt
       - name: root-ca
         secret:
           secretName: fancy-marketplace.biz-tls

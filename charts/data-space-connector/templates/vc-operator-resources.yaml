@@ -1,0 +1,142 @@
+{{- if .Values.vcCredentials.enabled }}
+{{/*
+  Build a unified issuers list. When the new multi-issuer field
+  (vcCredentials.issuers) is provided, use it directly. Otherwise
+  fall back to the legacy single-issuer fields (issuer + auth + requests)
+  so existing values files keep working without changes.
+*/}}
+{{- $issuers := list }}
+{{- if .Values.vcCredentials.issuers }}
+  {{- $issuers = .Values.vcCredentials.issuers }}
+{{- else }}
+  {{- $legacy := dict
+        "name"       .Values.vcCredentials.issuer.name
+        "issuerURL"  .Values.vcCredentials.issuer.issuerURL
+        "issuerType" (.Values.vcCredentials.issuer.issuerType | default "keycloak")
+        "tokenURL"   .Values.vcCredentials.issuer.tokenURL
+        "auth"       .Values.vcCredentials.auth
+        "requests"   .Values.vcCredentials.requests
+  }}
+  {{- $issuers = list $legacy }}
+{{- end }}
+{{/*
+  Holder Binding Key Secrets — one per unique keySecretName across all
+  issuers/requests that have holderBinding.enabled=true and no
+  existingKeySecret. Generates an ECDSA P-256 private key and persists
+  it across upgrades via lookup. Deduplicated so that multiple requests
+  sharing a keySecretName produce only one Secret.
+*/}}
+{{- $generatedKeys := dict }}
+{{- range $issuer := $issuers }}
+{{- range $req := $issuer.requests }}
+{{- if and $req.holderBinding $req.holderBinding.enabled (not $req.holderBinding.existingKeySecret) }}
+{{- $secretName := $req.holderBinding.keySecretName }}
+{{- if not (hasKey $generatedKeys $secretName) }}
+{{- $_ := set $generatedKeys $secretName true }}
+{{- $existingSecret := lookup "v1" "Secret" $.Release.Namespace $secretName }}
+{{- $privateKey := "" }}
+{{- if and $existingSecret $existingSecret.data (index $existingSecret.data "tls.key") }}
+  {{- $privateKey = index $existingSecret.data "tls.key" | b64dec }}
+{{- else }}
+  {{- $privateKey = genPrivateKey "ecdsa" }}
+{{- end }}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ $secretName }}
+  namespace: {{ $.Release.Namespace | quote }}
+  labels:
+    {{ include "dsc.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: holder-binding-key
+type: Opaque
+stringData:
+  tls.key: |
+    {{- $privateKey | nindent 4 }}
+---
+{{- end }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- range $issuer := $issuers }}
+{{/*
+  Auth Secret — only created when no existing secret is referenced.
+  Contains OAuth 2.0 client_id / client_secret for the vc-operator to
+  authenticate against the token endpoint.
+*/}}
+{{- if not $issuer.auth.existingSecret }}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ $issuer.auth.secretName }}
+  namespace: {{ $.Release.Namespace | quote }}
+  labels:
+    {{ include "dsc.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: vc-operator-auth
+type: Opaque
+stringData:
+  client_id: {{ $issuer.auth.clientId | quote }}
+  client_secret: {{ $issuer.auth.clientSecret | quote }}
+---
+{{- end }}
+{{/*
+  CredentialIssuer — tells the vc-operator where the OID4VCI issuer lives
+  and which secret to use for authentication.
+*/}}
+apiVersion: vc.vc-operator.io/v1alpha1
+kind: CredentialIssuer
+metadata:
+  name: {{ $issuer.name }}
+  namespace: {{ $.Release.Namespace | quote }}
+  labels:
+    {{ include "dsc.labels" $ | nindent 4 }}
+spec:
+  issuerURL: {{ $issuer.issuerURL | quote }}
+  issuerType: {{ $issuer.issuerType | default "keycloak" | quote }}
+  authSecretRef:
+    name: {{ $issuer.auth.existingSecret | default $issuer.auth.secretName }}
+  {{- if $issuer.tokenURL }}
+  tokenURL: {{ $issuer.tokenURL | quote }}
+  {{- end }}
+{{/*
+  VerifiableCredentialRequests — one per entry in the issuer's requests list.
+  Each request declares a credential type to obtain, the format, and where
+  to store the resulting credential (Kubernetes Secret).
+*/}}
+{{- range $req := $issuer.requests }}
+---
+apiVersion: vc.vc-operator.io/v1alpha1
+kind: VerifiableCredentialRequest
+metadata:
+  name: {{ $req.name }}
+  namespace: {{ $.Release.Namespace | quote }}
+  labels:
+    {{ include "dsc.labels" $ | nindent 4 }}
+spec:
+  issuerRef:
+    name: {{ $issuer.name }}
+  credentialType: {{ $req.credentialType | quote }}
+  format: {{ $req.format | default "jwt_vc_json" | quote }}
+  storageType: kubernetes
+  targetSecretRef:
+    name: {{ $req.targetSecretName }}
+    key: {{ $req.targetSecretKey | default "credential" }}
+  renewBefore: {{ $req.renewBefore | default "5m" }}
+  {{- if $req.additionalClaims }}
+  additionalClaims:
+    {{- range $k, $v := $req.additionalClaims }}
+    {{ $k }}: {{ $v | quote }}
+    {{- end }}
+  {{- end }}
+  {{- if $req.holderBinding }}
+  {{- if $req.holderBinding.enabled }}
+  holderKeyRef:
+    name: {{ $req.holderBinding.existingKeySecret | default $req.holderBinding.keySecretName }}
+  {{- if $req.holderBinding.holderDID }}
+  holderDID: {{ $req.holderBinding.holderDID | quote }}
+  {{- end }}
+  {{- end }}
+  {{- end }}
+{{- end }}
+---
+{{- end }}
+{{- end }}

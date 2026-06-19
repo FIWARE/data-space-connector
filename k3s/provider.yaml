@@ -150,11 +150,15 @@ decentralizedIam:
       registration:
         enabled: true
         job:
+          # Use a long TTL so the Job persists until the k3s-maven-plugin
+          # has verified its completion. The default 120s races with the
+          # plugin's parallel wait loop in CI.
+          ttlSecondsAfterFinished: 86400
           initContainers:
             waitForHost:
               enabled: true
               path: /health
-          activeDeadlineSeconds: null
+          activeDeadlineSeconds: 1500
         services:
           - id: tpp-service
             defaultOidcScope: "operator"
@@ -601,6 +605,7 @@ decentralizedIam:
       transfers:
         host: http://rainbow-provider.127.0.0.1.nip.io:8080
         path: transfers
+
 postgresql:
   primary:
     resourcesPreset: none
@@ -646,6 +651,7 @@ did:
       - secretName: mp-operations.org-tls
         hosts:
           - mp-operations.org
+
 dataSpaceConfig:
   enabled: true
   serviceType: ClusterIP
@@ -686,6 +692,7 @@ scorpio:
       - secretName: scorpio-provider.127.0.0.1.nip.io-tls
         hosts:
           - scorpio-provider.127.0.0.1.nip.io
+          
 tm-forum-api:
   defaultConfig:
     contextUrl: https://uri.etsi.org/ngsi-ld/v1/ngsi-ld-core-context.jsonld
@@ -839,9 +846,6 @@ marketplace:
       - OPERATOR
   externalUrl: https://marketplace.127.0.0.1.nip.io
   bizEcosystemChargingBackend:
-    deployment:
-      image:
-        tag: 11.3.1
     extraEnvVars:
       - name: BAE_CB_CUSTOMER_BILL
         value: "http://tm-forum-api-svc:8080/tmf-api/customerBillManagement/v4"
@@ -1037,8 +1041,9 @@ keycloak:
           # listed claim names`. roles/email are the domain-specific visible claims.
           credential_build_config.sd_jwt.visible_claims: "iss,iat,nbf,exp,cnf,vct,status,roles,email"
           sd_jwt.number_of_decoys: "3"
-          binding_required: "true"
+          binding_required: "false"
           binding_required_proof_types: "jwt"
+          cryptographic_binding_methods_supported: "jwk"
         protocolMappers:
           - name: context-mapper-usd
             protocol: oid4vc
@@ -1075,8 +1080,6 @@ keycloak:
           verifiable_credential_type: "LegalPersonCredential"
           credential_signing_alg: "ES256"
           credential_build_config.token_jws_type: "JWT"
-          binding_required: "true"
-          binding_required_proof_types: "jwt"
         protocolMappers:
           - name: context-mapper-uc
             protocol: oid4vc
@@ -1349,6 +1352,14 @@ keycloak:
           ]
         },
         "groups": []
+      },
+      {
+        "username": "service-account-fdsc-edc",
+        "enabled": true,
+        "serviceAccountClientId": "fdsc-edc",
+        "verifiableCredentials": [
+          {"credentialScopeName": "membership-credential"}
+        ]
       }
     clients:
       - clientId: did:web:fancy-marketplace.biz
@@ -1390,15 +1401,16 @@ keycloak:
         notBefore: 0
         bearerOnly: false
         consentRequired: false
-        standardFlowEnabled: true
+        standardFlowEnabled: false
         implicitFlowEnabled: false
         directAccessGrantsEnabled: false
-        serviceAccountsEnabled: false
-        publicClient: true
+        serviceAccountsEnabled: true
+        publicClient: false
         frontchannelLogout: false
         protocol: openid-connect
         attributes:
           client.secret.creation.time: "1675260539"
+          oid4vci.enabled: "true"
         protocolMappers:
           - name: "client-roles-id-token"
             protocol: openid-connect
@@ -1416,6 +1428,34 @@ keycloak:
         nodeReRegistrationTimeout: -1
         defaultClientScopes: ["openid", "profile", "roles"]
         optionalClientScopes: []
+      - clientId: fdsc-edc
+        enabled: true
+        description: Client to connect itself
+        surrogateAuthRequired: false
+        alwaysDisplayInConsole: false
+        clientAuthenticatorType: client-secret
+        secret: fdsc-edc-client-secret
+        defaultRoles: []
+        redirectUris: []
+        webOrigins: []
+        notBefore: 0
+        bearerOnly: false
+        consentRequired: false
+        standardFlowEnabled: false
+        implicitFlowEnabled: false
+        directAccessGrantsEnabled: false
+        serviceAccountsEnabled: true
+        publicClient: false
+        frontchannelLogout: false
+        protocol: openid-connect
+        attributes:
+          client.secret.creation.time: "1675260539"
+          oid4vci.enabled: "true"
+        authenticationFlowBindingOverrides: {}
+        fullScopeAllowed: true
+        nodeReRegistrationTimeout: -1
+        defaultClientScopes: []
+        optionalClientScopes: ["membership-credential"]
 
 # helper component to initialize the trusted issuers list
 registration:
@@ -1432,25 +1472,57 @@ registration:
         - UserCredential
         - MembershipCredential
   prepScript: export $(curl -f -X GET did-helper:3002/did-material/did.env)
+
 fdsc-edc:
   enabled: false
 
-credentials:
+vcCredentials:
   enabled: true
-  keycloak:
-    address: http://provider-keycloak:8080
-    realm: test-realm
-    clientId: account-console
-    username: employee
-    scope: openid
-    password: test
-  configurations:
-    - id: user-credential
-      format: jwt_vc
-      targetFile: user-credential.jwt
-    - id: membership-credential
-      format: jwt_vc
-      targetFile: membership-credential.jwt
+  issuers:
+    - name: provider-fdsc-edc-issuer
+      issuerURL: http://provider-keycloak:8080/realms/test-realm
+      issuerType: keycloak
+      tokenURL: http://provider-keycloak:8080/realms/test-realm/protocol/openid-connect/token
+      auth:
+        secretName: provider-fdsc-edc-client-auth
+        clientId: fdsc-edc
+        clientSecret: fdsc-edc-client-secret
+      requests:
+        - name: provider-fdsc-edc-credential
+          credentialType: membership-credential
+          format: jwt_vc_json
+          targetSecretName: vc-fdsc-edc-credential
+          targetSecretKey: credential
+          targetFile: membership-credential.jwt
+          renewBefore: 5m
+          holderBinding:
+            enabled: false
+
+vc-operator:
+  enabled: true
+  watchNamespaces:
+    - provider
+  extraEnvVars:
+    - name: HTTPS_PROXY
+      value: "http://squid-proxy.infra.svc.cluster.local:8888"
+    - name: HTTP_PROXY
+      value: "http://squid-proxy.infra.svc.cluster.local:8888"
+    - name: NO_PROXY
+      value: "provider-keycloak,*.cluster.local,*.svc,10.0.0.0/8"
+    - name: SSL_CERT_FILE
+      value: "/etc/ssl/certs/ca.crt"
+  extraVolumeMounts:
+    - name: root-ca
+      mountPath: /etc/ssl/certs/ca.crt
+      subPath: ca.crt
+      readOnly: true
+  extraVolumes:
+    - name: root-ca
+      secret:
+        secretName: mp-operations.org-tls
+        items:
+          - key: ca.crt
+            path: ca.crt
 
 fdsc-dashboard:
   enabled: true
