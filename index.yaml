@@ -2,6 +2,97 @@ apiVersion: v1
 entries:
   data-space-connector:
   - apiVersion: v2
+    created: "2026-06-19T12:08:32.546249949Z"
+    dependencies:
+    - alias: decentralizedIam
+      condition: decentralizedIam.enabled
+      name: decentralized-iam
+      repository: https://fiware.github.io/decentralized-iam
+      version: 2.0.15
+    - alias: scorpio
+      condition: scorpio.enabled
+      name: scorpio-broker-aaio
+      repository: oci://quay.io/fiware/helm-charts
+      version: 0.4.15
+    - condition: keycloak.enabled
+      name: keycloak
+      repository: oci://registry-1.docker.io/cloudpirates
+      version: 0.21.7
+    - condition: tm-forum-api.enabled
+      name: tm-forum-api
+      repository: oci://quay.io/fiware/helm-charts
+      version: 0.17.10
+    - condition: contract-management.enabled
+      name: contract-management
+      repository: oci://quay.io/fiware/helm-charts
+      version: 3.5.31
+    - alias: marketplace
+      condition: marketplace.enabled
+      name: business-api-ecosystem
+      repository: oci://quay.io/fiware/helm-charts
+      version: 1.0.4
+    - alias: mongo-operator
+      condition: mongo-operator.enabled
+      name: community-operator
+      repository: https://mongodb.github.io/helm-charts
+      version: 0.13.0
+    - condition: fdsc-edc.enabled
+      name: fdsc-edc
+      repository: oci://quay.io/fiware/helm-charts
+      version: 0.2.10
+    - alias: vault
+      condition: vault.enabled
+      name: vault
+      repository: https://helm.releases.hashicorp.com
+      version: 0.29.1
+    - condition: fdsc-dashboard.enabled
+      name: fdsc-dashboard
+      repository: oci://quay.io/fiware/helm-charts
+      version: 0.6.3
+    - alias: did
+      condition: did.enabled
+      name: did-helper
+      repository: oci://quay.io/fiware/helm-charts
+      version: 0.1.20
+    - alias: cert-manager
+      condition: cert-manager.enabled
+      name: cert-manager
+      repository: https://charts.jetstack.io
+      version: v1.20.0
+    - alias: vc-operator
+      condition: vc-operator.enabled
+      name: vc-operator
+      repository: oci://quay.io/seamware/helm-charts
+      version: 0.1.3
+    - condition: prometheus.enabled
+      name: prometheus
+      repository: https://prometheus-community.github.io/helm-charts
+      version: 29.2.1
+    - condition: grafana.enabled
+      name: grafana
+      repository: https://grafana-community.github.io/helm-charts
+      version: 12.1.1
+    - condition: opentelemetry-operator.enabled
+      name: opentelemetry-operator
+      repository: https://open-telemetry.github.io/opentelemetry-helm-charts
+      version: 0.86.0
+    - condition: opentelemetry-collector.enabled
+      name: opentelemetry-collector
+      repository: https://open-telemetry.github.io/opentelemetry-helm-charts
+      version: 0.152.0
+    - condition: tempo.enabled
+      name: tempo
+      repository: https://grafana.github.io/helm-charts
+      version: 1.24.4
+    description: Umbrella Chart for the FIWARE Data Space Connector, combining all
+      essential parts to be used by a participant.
+    digest: 8f29d2bc81045eabc1986f14246f965b829c041528d050a5107e498bd87dccc8
+    name: data-space-connector
+    type: application
+    urls:
+    - https://github.com/FIWARE/data-space-connector/releases/download/data-space-connector-10.3.0/data-space-connector-10.3.0.tgz
+    version: 10.3.0
+  - apiVersion: v2
     created: "2026-05-28T07:26:18.628525616Z"
     dependencies:
     - alias: decentralizedIam
@@ -2298,4 +2389,4 @@ entries:
     urls:
     - https://github.com/FIWARE/data-space-connector/releases/download/trust-anchor-0.2.0/trust-anchor-0.2.0.tgz
     version: 0.2.0
-generated: "2026-05-28T07:26:18.62882639Z"
+generated: "2026-06-19T12:08:32.546469901Z"
