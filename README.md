@@ -44,6 +44,7 @@ recipes.
   - [Local Deployment (Maven)](#local-deployment-maven)
 - [Testing](#testing)
 - [Additional documentation and resources](#additional-documentation-and-resources)
+- [Funding](#funding)
 
 <!-- END doctoc generated TOC please keep comment here to allow auto update -->
 
