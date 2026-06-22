@@ -9,7 +9,8 @@ here; this repo is packaging and integration glue.
 ## Tech Stack
 - Packaging: Helm 3 (umbrella chart with subchart dependencies).
 - Components deployed: EDC-based IdentityHub (Java 21), fdsc-edc (Java 21),
-  Rainbow DSP (Rust), Keycloak 25.x, Scorpio Broker (Quarkus/Java),
+  Rainbow DSP (Rust), Keycloak 26.6.x (CloudPirates chart; SEAMWARE-patched
+  image `quay.io/seamware/keycloak:26.6.3`), Scorpio Broker (Quarkus/Java),
   TMForum API (Java), Contract Management, Business API Ecosystem, MongoDB,
   HashiCorp Vault, cert-manager, OpenTelemetry Collector.
 - Build / Release: GitHub Actions (`.github/workflows/`), helm package +
@@ -118,6 +119,25 @@ The chart already has a full OTEL tracing integration (chart version 9.1.0):
   `existingName` field is tpl-rendered so template expressions work.
   The ConfigMap **must** use the key `relay` for the collector config YAML.
 - Tracing tests live in `charts/data-space-connector/tests/tracing_test.yaml`.
+
+## Keycloak / OID4VCI wallet issuance (10.x)
+10.x migrated Keycloak to the CloudPirates chart + KC 26.6.x with the post-26.4
+OID4VCI model. Hard-won gotchas (full detail in `doc/release-notes/10-x.md`):
+- **Image:** use `quay.io/seamware/keycloak:26.6.3` — it carries the Liquibase
+  changeset `26.7.0-verifiable-credential` (fixes `column ... version does not
+  exist` when reusing a pre-26.4 DB) plus the OID4VCI QR-endpoint fix.
+- **Credential encryption:** the issuer advertises request + response encryption.
+  Wallets that encrypt must set the JWE `kid` and must not send a top-level `alg`
+  in `credential_response_encryption`; the EUDI wallet needs
+  `eudi-lib-ios-openid4vci-swift` ≥ 0.40.0. Lissi does not encrypt (unaffected).
+  Response encryption is not disableable via config (RSA token key always offers RSA-OAEP).
+- **DCQL:** `jwt_vc_json` uses `meta.type_values` (array of string arrays);
+  sd-jwt uses `meta.vct_values` (flat array); `credential_sets` must be non-null.
+- **Realm import:** KC does not re-import an existing realm — recreate it to apply
+  `keycloak.realm.*` changes. Bitnami→CloudPirates upgrades need the keycloak
+  StatefulSet deleted (immutable-field change).
+- **Wallet preset + per-user VCs:** `keycloak.realm.wallets` (Lissi/EUDI clients);
+  `wallets.issueCredentialsToUsers: true` auto-assigns realm VCs to declared users.
 
 ## Important Files
 - `charts/data-space-connector/Chart.yaml` -- dependency graph (current
