@@ -451,6 +451,22 @@ decentralizedIam:
           storageClass: "" # Use default storage class or specify one
 ```
 
+### Credential encryption & wallet interop
+
+The chart ships `quay.io/seamware/keycloak:26.6.3`. Two things to know:
+
+- **Database migration:** 26.6.3 carries the Liquibase changeset `26.7.0-verifiable-credential`
+  (adds the `version` column to the custom `USER_VER_CREDENTIAL` table). Reusing a pre-26.4 database
+  with an older image fails at issuance with `column ... version does not exist`. Also remember
+  Keycloak does **not** re-import an existing realm — recreate the realm to apply `realm.*` changes.
+- **OID4VCI credential encryption:** the issuer metadata advertises `credential_request_encryption`
+  (driven by the `ecdh-generated` key in `realm.defaultKeyProviders`) and `credential_response_encryption`
+  (RSA-OAEP via the realm's RSA key, not removable). Wallets that encrypt must put the `kid` in the
+  request JWE header and must not send a top-level `alg` in `credential_response_encryption`. The
+  EUDI reference wallet needs `eudi-lib-ios-openid4vci-swift` **≥ 0.40.0**; Lissi does not encrypt
+  and is unaffected. See [release-notes/10-x.md](../../release-notes/10-x.md) → *Credential
+  request/response encryption (JWE)* for the full details and error signatures.
+
 ### Complete example
 
 A complete working example with multiple credential types, users, and clients is available at [k3s/consumer.yaml](../../../k3s/consumer.yaml). This file is intended for local development and testing. For production deployments, replace test values (passwords, DIDs, domains) with your real configuration.
