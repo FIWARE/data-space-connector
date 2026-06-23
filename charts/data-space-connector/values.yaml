@@ -366,16 +366,18 @@ keycloak:
       adminPasswordKey: keycloak-admin
     # -- proxy headers used when TLS is terminated at an upstream ingress/proxy
     proxyHeaders: xforwarded
-  # -- SEAMWARE-published Keycloak image. This is the official Keycloak source
-  # built on top of the 26.6.2 tag with the patch from upstream main that
-  # restores the OID4VCI QR generation endpoint. The vanilla 26.6.2 image is
-  # missing that fix — see https://github.com/keycloak/keycloak/issues/44623
-  # (#issuecomment-4376937817 confirms the fix is only in main as of this
-  # writing). Swap back to the upstream image once 26.6.3 / 26.7 lands.
+  # -- SEAMWARE-published Keycloak image, built on the official Keycloak 26.6.x
+  # source. On top of the OID4VCI QR-generation endpoint fix (missing from vanilla
+  # 26.6.2 — see https://github.com/keycloak/keycloak/issues/44623), the 26.6.3 tag
+  # also carries the Liquibase changeset `26.7.0-verifiable-credential`, which adds
+  # the `version` column to the custom `USER_VER_CREDENTIAL` table. Without it,
+  # reusing a pre-26.4 database fails at issuance with `column ... version does not
+  # exist` (see release-notes/10-x.md). Swap back to the upstream image once these
+  # fixes land in a vanilla release.
   image:
     registry: quay.io
     repository: seamware/keycloak
-    tag: "26.6.2"
+    tag: "26.6.3"
   # -- TLS terminated at the ingress; the container does not serve HTTPS itself
   tls:
     enabled: false
@@ -2481,7 +2483,7 @@ vcCredentials:
 # -- vc-operator subchart configuration
 vc-operator:
   enabled: false
-  
+
 identityhub:
   enabled: false
   image:
@@ -2829,7 +2831,7 @@ prometheus:
 
 grafana:
   enabled: false
-  
+
 # -- global distributed-tracing configuration used by every component that
 # supports OpenTelemetry. The values under this block are fed into the
 # `dsc.otel.env` template helper and rendered as the standard `OTEL_*`
