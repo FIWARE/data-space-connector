@@ -5,6 +5,7 @@ fdsc-edc:
       deployment:
         image:
           repository: quay.io/seamware/fdsc-edc-controlplane-dcp
+      service: {}
       config:
         edc:
           hostname: dcp-fancy-marketplace.127.0.0.1.nip.io
@@ -67,7 +68,7 @@ fdsc-edc:
             -Dhttps.proxyPort=8888
             -Dhttp.proxyHost=squid-proxy.infra.svc.cluster.local
             -Dhttp.proxyPort=8888
-            -Dhttp.nonProxyHosts="*-vault|*.cluster.local"
+            -Dhttp.nonProxyHosts="*-vault|*.cluster.local|odrl-pap|trusted-issuers-list|contract-management"
             -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=5005
       initContainers:
         - name: convert-signing-key
@@ -237,7 +238,7 @@ identityhub:
   superuser:
     key: c3VwZXItdXNlcg==.random
   env:
-    JAVA_TOOL_OPTIONS: -Dhttps.proxyHost=squid-proxy.infra.svc.cluster.local -Dhttps.proxyPort=8888 -Dhttp.proxyHost=squid-proxy.infra.svc.cluster.local -Dhttp.proxyPort=8888 -Dhttp.nonProxyHosts="*-vault|*.cluster.local" -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=5005
+    JAVA_TOOL_OPTIONS: -Dhttps.proxyHost=squid-proxy.infra.svc.cluster.local -Dhttps.proxyPort=8888 -Dhttp.proxyHost=squid-proxy.infra.svc.cluster.local -Dhttp.proxyPort=8888 -Dhttp.nonProxyHosts="*-vault|*.cluster.local|odrl-pap|trusted-issuers-list|contract-management" -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=5005
 
 # required to provide the secrets for identity hub
 vault:

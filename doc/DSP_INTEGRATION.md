@@ -508,20 +508,33 @@ curl -k -x localhost:8888 -X 'POST' \
                 \"@type\":  \"Offer\"
               },
               \"contractPolicy\": {
-                \"@context\": \"http://www.w3.org/ns/odrl.jsonld\",
+                \"@context\": [
+                  \"http://www.w3.org/ns/odrl.jsonld\",
+                  \"https://w3id.org/dspace/2024/1/context.json\"
+                ],
                 \"odrl:uid\": \"${contract_policy_id}\",
                 \"assigner\": \"did:web:mp-operations.org\",
-                \"permission\": [{
-                    \"action\":  \"use\",
-                    \"constraint\": {
-                      \"leftOperand\": \"odrl:dayOfWeek\",
-                      \"operator\": \"lt\",
-                      \"rightOperand\": {
-                        \"@value\": 6,
-                        \"@type\": \"xsd:integer\"
+                \"permission\": [
+                  {
+                      \"action\":  \"use\",
+                      \"constraint\": {
+                        \"leftOperand\": \"odrl:dayOfWeek\",
+                        \"operator\": \"lt\",
+                        \"rightOperand\": {
+                          \"@value\": 6,
+                          \"@type\": \"xsd:integer\"
+                        }
                       }
-                    }
-                }],
+                  },
+                  {
+                      \"action\":  \"use\",
+                      \"constraint\": {
+                        \"leftOperand\": \"dspace:membershipType\",
+                        \"operator\": \"eq\",
+                        \"rightOperand\":\"FullMember\"
+                      }
+                  }
+                ],
                 \"@type\":  \"Offer\"
               }
           }]
@@ -624,6 +637,159 @@ curl -k -x localhost:8888 -X GET https://mp-data-service.127.0.0.1.nip.io/ngsi-l
     --header "Authorization: Bearer ${ACCESS_TOKEN}"
 ```
 
+### Policy Evaluation in DSP Flows
+
+The FDSC-EDC evaluates ODRL policies at multiple points during DSP interactions. Understanding these evaluation points is essential for designing policies that control catalog visibility, contract negotiation, and data transfer independently.
+
+#### Two-Layer Evaluation Architecture
+
+The EDC policy engine evaluates policies at two distinct layers:
+
+**Layer 1 — Pre-Authentication (`request.*` scopes)**
+
+Runs *before* the counter-party's token and Verifiable Credentials are verified. Only DSP message metadata is available (counter-party address, message type, process IDs). This layer determines which VC scopes to request from the counter-party's credential service.
+
+**Layer 2 — Post-Authentication (`catalog`, `contract.negotiation`, `transfer.process` scopes)**
+
+Runs *after* the counter-party's token has been verified and a `ParticipantAgent` has been created from the verified Verifiable Credentials. The ODRL-PAP validator is registered at this layer and receives the full participant identity and all verified credential claims.
+
+```
+Incoming DSP Request (e.g., catalog request)
+│
+├─ Layer 1: Pre-Authentication
+│   └─ Determines VC scopes to request (no credentials available yet)
+│
+├─ Token verification + VC validation
+│   └─ Creates ParticipantAgent with identity + verified claims
+│
+└─ Layer 2: Post-Authentication
+    ├─ catalog scope:             Controls asset visibility
+    ├─ contract.negotiation scope: Controls whether negotiation succeeds
+    └─ transfer.process scope:    Controls whether transfer is allowed
+```
+
+#### Access Policy vs. Contract Policy
+
+Each product offering defines two separate ODRL policies through the `productOfferingTerm`:
+
+| Policy | EDC Scope | Purpose |
+|--------|-----------|---------|
+| **Access Policy** | `catalog` | Controls whether an asset appears in the catalog for a given consumer. If the access policy denies, the consumer will not see the offer at all. |
+| **Contract Policy** | `contract.negotiation` | Controls whether a consumer can successfully negotiate a contract. The offer is visible but negotiation will be rejected if the contract policy denies. |
+
+Both policies can reference the consumer's verified credentials (identity, VerifiableCredential claims) because they are evaluated at Layer 2.
+
+#### Policy Context: What the PAP Receives
+
+When the FDSC-EDC calls the ODRL-PAP for policy evaluation, it sends a `ValidationRequest` containing:
+
+- **`policy`**: The ODRL policy in expanded JSON-LD form
+- **`jsonInput.payload.scope`**: The evaluation scope (`catalog`, `contract.negotiation`, or `transfer.process`)
+- **`jsonInput.subject.identity`**: The authenticated counter-party's DID
+- **`jsonInput.subject.claims.vc`**: Array of verified VerifiableCredentials
+- **`additionalContexts`**: Optional JSON-LD context overrides for term remapping
+
+This means Rego policies at the PAP can make decisions based on the consumer's actual credentials — credential type, claim values, issuer, expiration, etc. See the [ODRL-PAP Rego documentation](https://github.com/SEAMWARE/odrl-pap/blob/main/doc/REGO.md) for details on implementing policy rules and the mapping between ODRL operands and Rego methods.
+
+#### Configuring Policy Evaluation
+
+The FDSC-EDC provides two configuration mechanisms that control how policies are processed and at which evaluation points they apply.
+
+##### Additional Contexts
+
+The FDSC-EDC can include additional JSON-LD contexts in every PAP validation request. These control how ODRL policy terms are compacted during JSON-LD processing, allowing the PAP to route terms like `odrl:use` to protocol-specific Rego implementations (e.g., `dspace:use`).
+
+The contexts are loaded at startup from a JSON file configured via:
+
+```properties
+odrlPap.policy.additionalContextsPath=/etc/edc/additional-contexts.json
+```
+
+**Example**: Remap `odrl:use` to `dspace:use` inside `odrl:action`:
+
+```json
+[
+  {
+    "odrl:action": {
+      "@id": "http://www.w3.org/ns/odrl/2/action",
+      "@type": "@id",
+      "@context": {
+        "odrl": null,
+        "dspace": { "@id": "http://www.w3.org/ns/odrl/2/", "@prefix": true }
+      }
+    }
+  }
+]
+```
+
+After JSON-LD expand-then-compact, a permission with `"action": "use"` will be compacted to `"action": "dspace:use"`, allowing the PAP to map it to the correct Rego rule via `mapping.json`.
+
+> **Important**: `"odrl": null` is required in the scoped context. Without it, both prefixes map to the same namespace IRI and the compactor may still choose `odrl`. `"@type": "@id"` is also required for prefix compaction to apply to the values.
+
+For more details on the JSON-LD scoped context mechanism, see the [FDSC-EDC additional contexts documentation](https://github.com/SEAMWARE/fdsc-edc/blob/ticket-36/work/policy-extension/additional-contexts.md).
+
+##### Scope Mappings
+
+By default, ODRL permissions that include a constraint are evaluated at all three Layer 2 scopes. Scope mappings allow restricting specific constraints to only the scopes where they are meaningful:
+
+```properties
+odrlPap.policy.scopeMappingsPath=/etc/edc/scope-mappings.json
+```
+
+**Example**: Evaluate `dayOfWeek` only during transfer, `membershipType` only during negotiation:
+
+```json
+{
+  "mappings": [
+    {
+      "match": {
+        "http://www.w3.org/ns/odrl/2/leftOperand":
+          "http://www.w3.org/ns/odrl/2/dayOfWeek"
+      },
+      "scopes": ["transfer.process"]
+    },
+    {
+      "match": {
+        "http://www.w3.org/ns/odrl/2/leftOperand":
+          "https://w3id.org/dspace/2024/1/membershipType"
+      },
+      "scopes": ["contract.negotiation"]
+    }
+  ]
+}
+```
+
+Permissions without a matching scope mapping are sent to the PAP at every Layer 2 evaluation point.
+
+##### Including Scope in the Permission
+
+Instead of relying on external scope-mapping configuration, policy authors can include the scope directly in the ODRL permission using `dspace:scope`. This makes the policy self-contained — the evaluation point is explicit in the policy definition and travels with it.
+
+When the `dspace:scope` property is included in a permission, the FDSC-EDC uses it directly instead of consulting the scope mappings file. The permission is only sent to the PAP when the current evaluation scope matches the declared scope.
+
+```json
+{
+  "permission": [{
+    "action": "use",
+    "dspace:scope": "transfer.process",
+    "constraint": {
+      "leftOperand": "odrl:dayOfWeek",
+      "operator": "lt",
+      "rightOperand": {
+        "@value": 6,
+        "@type": "xsd:integer"
+      }
+    }
+  }]
+}
+```
+
+This approach is useful when:
+- The policy needs to be portable between connectors with different scope mapping configurations
+- The evaluation point is inherent to the constraint's semantics and should travel with the policy, not be configured externally
+
+For more details on the policy context and what information is available at each evaluation layer, see the [FDSC-EDC policy context documentation](https://github.com/SEAMWARE/fdsc-edc/blob/ticket-36/work/policy-extension/policy-context.md).
+
 ### Order through DSP
 
 The same product now can be negotiatiated throught the Dataspace Protocol. The interactions will be controlled throught he management API of the FDSC-EDC Controlplane, authentication is done by the connector's and cannot be related to the actual actor.
@@ -664,7 +830,10 @@ curl -k -x localhost:8888 -X POST \
         "counterPartyId": "did:web:mp-operations.org",
         "protocol": "dataspace-protocol-http:2025-1",
         "policy": {
-            "@context": "http://www.w3.org/ns/odrl.jsonld",
+            "@context": [
+              "http://www.w3.org/ns/odrl.jsonld",
+              "https://w3id.org/dspace/2024/1/context.json"
+            ],    
             "@type": "Offer",
             "@id": "OFFER-1:ASSET-1:123",
             "assigner": "did:web:mp-operations.org",
@@ -677,8 +846,16 @@ curl -k -x localhost:8888 -X POST \
                   "@value": 6,
                   "@type": "xsd:integer"
                 }
+              }},
+              {
+                "action": "use",
+                  "constraint": {
+                    "leftOperand": "dspace:membershipType",
+                    "operator": "eq",
+                    "rightOperand": "FullMember"
+                  }
               }
-            }],
+            ],
             "target": "ASSET-1"
         }
     }' | jq .
@@ -753,6 +930,407 @@ curl -L -s -k -x localhost:8888 -X GET ${ENDPOINT}/ngsi-ld/v1/entities/urn:ngsi-
   --header 'Content-Type: application/json' \
   --header "Authorization: Bearer ${ACCESS_TOKEN}" | jq .
 ```
+
+#### Advanced Policy Scenarios
+
+The following scenarios demonstrate additional policy capabilities of the FDSC-EDC. They build on the existing demo setup and assume all previous steps (identity setup, credential issuance, data preparation, offering creation) have been completed.
+
+The ODRL operands used in these scenarios (`dspace:credentialType`, `dspace:membershipStatus`, etc.) require corresponding Rego implementations in the ODRL-PAP. See the [ODRL-PAP Rego documentation](https://github.com/SEAMWARE/odrl-pap/blob/main/doc/REGO.md) for details on implementing and registering policy rules.
+
+##### Scenario A: Offer Not Visible Due to Access Policy
+
+This scenario creates an offer that is invisible to the consumer because the access policy requires a `PremiumPartnerCredential` that the consumer does not hold. The access policy is evaluated at the `catalog` scope — when the provider builds the catalog response, each asset's access policy is checked against the consumer's verified credentials. Assets that fail are excluded from the response entirely.
+
+1. Create a product specification for a restricted asset:
+```shell
+export RESTRICTED_SPEC_ID=$(curl -k -x localhost:8888 -X 'POST' \
+    'https://tm-forum-api.127.0.0.1.nip.io/tmf-api/productCatalogManagement/v4/productSpecification' \
+    -H 'accept: application/json;charset=utf-8' \
+    -H 'Content-Type: application/json;charset=utf-8' \
+    -d '{
+           "name": "Restricted Spec",
+           "externalId": "ASSET-2",
+           "@schemaLocation": "https://raw.githubusercontent.com/wistefan/edc-dsc/refs/heads/init/schemas/external-id.json",
+           "productSpecCharacteristic": [
+               {
+                   "id": "dcp",
+                   "name":"Endpoint, that the service can be negotiated at via DCP.",
+                   "valueType":"endpointUrl",
+                   "productSpecCharacteristicValue": [{
+                      "value":"https://dcp-mp-operations.127.0.0.1.nip.io/api/dsp/2025-1",
+                      "isDefault": true
+                   }]
+               },
+               {
+                   "id": "upstreamAddress",
+                   "name":"Address of the upstream serving the data",
+                   "valueType":"upstreamAddress",
+                   "productSpecCharacteristicValue": [{
+                       "value":"data-service-scorpio:9090",
+                       "isDefault": true
+                   }]
+               }
+           ]
+    }' | jq '.id' -r); echo ${RESTRICTED_SPEC_ID}
+```
+
+2. Create the offering with a restrictive access policy requiring a `PremiumPartnerCredential`:
+```shell
+restricted_access_policy_id=$(uuidgen)
+restricted_contract_policy_id=$(uuidgen)
+curl -k -x localhost:8888 -X 'POST' \
+    'https://tm-forum-api.127.0.0.1.nip.io/tmf-api/productCatalogManagement/v4/productOffering' \
+    -H 'accept: application/json;charset=utf-8' \
+    -H 'Content-Type: application/json;charset=utf-8' \
+    -d "{
+          \"name\": \"Premium Partner Offering\",
+          \"description\": \"Only visible to premium partners\",
+          \"isBundle\": false,
+          \"isSellable\": true,
+          \"lifecycleStatus\": \"Active\",
+          \"@schemaLocation\": \"https://raw.githubusercontent.com/wistefan/edc-dsc/refs/heads/init/schemas/external-id.json\",
+          \"externalId\": \"OFFER-2\",
+          \"productSpecification\":
+              {
+                  \"id\": \"${RESTRICTED_SPEC_ID}\",
+                  \"name\":\"Restricted Spec\"
+              },
+          \"category\": [{
+              \"id\": \"${CATEGORY_ID}\"
+          }],
+          \"productOfferingTerm\": [
+          {
+              \"name\": \"edc:contractDefinition\",
+              \"@schemaLocation\": \"https://raw.githubusercontent.com/wistefan/edc-dsc/refs/heads/init/schemas/contract-definition.json\",
+              \"accessPolicy\": {
+                \"@context\": [
+                  \"http://www.w3.org/ns/odrl.jsonld\",
+                  \"https://w3id.org/dspace/2024/1/context.json\"
+                ],
+                \"odrl:uid\": \"${restricted_access_policy_id}\",
+                \"assigner\": \"did:web:mp-operations.org\",
+                \"permission\": [{
+                    \"action\":  \"use\",
+                    \"constraint\": {
+                      \"leftOperand\": \"dspace:credentialType\",
+                      \"operator\": \"eq\",
+                      \"rightOperand\": \"PremiumPartnerCredential\"
+                    }
+                }],
+                \"@type\":  \"Offer\"
+              },
+              \"contractPolicy\": {
+                \"@context\": \"http://www.w3.org/ns/odrl.jsonld\",
+                \"odrl:uid\": \"${restricted_contract_policy_id}\",
+                \"assigner\": \"did:web:mp-operations.org\",
+                \"permission\": [{
+                    \"action\":  \"use\"
+                }],
+                \"@type\":  \"Offer\"
+              }
+          }]
+        }" | jq .
+```
+
+3. Request the catalog from the consumer side. The consumer only holds a `MembershipCredential`, not a `PremiumPartnerCredential`, so ASSET-2 will not appear:
+```shell
+curl -k -x localhost:8888 -X POST \
+  'https://dsp-dcp-management.127.0.0.1.nip.io/api/v1/management/v3/catalog/request' \
+  --header 'Accept: */*' \
+  --header 'Content-Type: application/json' \
+  --data-raw '{
+        "@context": [
+            "https://w3id.org/edc/connector/management/v0.0.1"
+        ],
+        "@type": "CatalogRequestMessage",
+        "protocol": "dataspace-protocol-http:2025-1",
+        "counterPartyId": "did:web:mp-operations.org",
+        "counterPartyAddress": "https://dcp-mp-operations.127.0.0.1.nip.io/api/dsp/2025-1",
+        "querySpec": {
+        }
+    }' | jq .
+```
+
+The result will show only ASSET-1 (from the original offering). ASSET-2 is filtered out at the `catalog` scope because the access policy evaluation determined the consumer lacks the required credential.
+
+##### Scenario B: Offer Visible but Not Contractable (Contract Policy)
+
+This scenario creates an offer that appears in the catalog (permissive access policy) but cannot be negotiated because the contract policy requires a specific claim value the consumer's credential does not satisfy. This pattern is useful for "browse-only" catalogs where providers want consumers to discover offerings and understand the requirements before acquiring the necessary credentials.
+
+1. Create a product specification:
+```shell
+export VISIBLE_SPEC_ID=$(curl -k -x localhost:8888 -X 'POST' \
+    'https://tm-forum-api.127.0.0.1.nip.io/tmf-api/productCatalogManagement/v4/productSpecification' \
+    -H 'accept: application/json;charset=utf-8' \
+    -H 'Content-Type: application/json;charset=utf-8' \
+    -d '{
+           "name": "Visible But Restricted Spec",
+           "externalId": "ASSET-3",
+           "@schemaLocation": "https://raw.githubusercontent.com/wistefan/edc-dsc/refs/heads/init/schemas/external-id.json",
+           "productSpecCharacteristic": [
+               {
+                   "id": "dcp",
+                   "name":"Endpoint, that the service can be negotiated at via DCP.",
+                   "valueType":"endpointUrl",
+                   "productSpecCharacteristicValue": [{
+                      "value":"https://dcp-mp-operations.127.0.0.1.nip.io/api/dsp/2025-1",
+                      "isDefault": true
+                   }]
+               },
+               {
+                   "id": "upstreamAddress",
+                   "name":"Address of the upstream serving the data",
+                   "valueType":"upstreamAddress",
+                   "productSpecCharacteristicValue": [{
+                       "value":"data-service-scorpio:9090",
+                       "isDefault": true
+                   }]
+               }
+           ]
+    }' | jq '.id' -r); echo ${VISIBLE_SPEC_ID}
+```
+
+2. Create the offering with an open access policy but a restrictive contract policy requiring `membershipStatus` to be `"premium"`:
+```shell
+visible_access_policy_id=$(uuidgen)
+visible_contract_policy_id=$(uuidgen)
+curl -k -x localhost:8888 -X 'POST' \
+    'https://tm-forum-api.127.0.0.1.nip.io/tmf-api/productCatalogManagement/v4/productOffering' \
+    -H 'accept: application/json;charset=utf-8' \
+    -H 'Content-Type: application/json;charset=utf-8' \
+    -d "{
+          \"name\": \"Browse-Only Offering\",
+          \"description\": \"Visible to all, contractable only by premium members\",
+          \"isBundle\": false,
+          \"isSellable\": true,
+          \"lifecycleStatus\": \"Active\",
+          \"@schemaLocation\": \"https://raw.githubusercontent.com/wistefan/edc-dsc/refs/heads/init/schemas/external-id.json\",
+          \"externalId\": \"OFFER-3\",
+          \"productSpecification\":
+              {
+                  \"id\": \"${VISIBLE_SPEC_ID}\",
+                  \"name\":\"Visible But Restricted Spec\"
+              },
+          \"category\": [{
+              \"id\": \"${CATEGORY_ID}\"
+          }],
+          \"productOfferingTerm\": [
+          {
+              \"name\": \"edc:contractDefinition\",
+              \"@schemaLocation\": \"https://raw.githubusercontent.com/wistefan/edc-dsc/refs/heads/init/schemas/contract-definition.json\",
+              \"accessPolicy\": {
+                \"@context\": \"http://www.w3.org/ns/odrl.jsonld\",
+                \"odrl:uid\": \"${visible_access_policy_id}\",
+                \"assigner\": \"did:web:mp-operations.org\",
+                \"permission\": [{
+                    \"action\":  \"use\"
+                }],
+                \"@type\":  \"Offer\"
+              },
+              \"contractPolicy\": {
+                \"@context\": [
+                  \"http://www.w3.org/ns/odrl.jsonld\",
+                  \"https://w3id.org/dspace/2024/1/context.json\"
+                ],
+                \"odrl:uid\": \"${visible_contract_policy_id}\",
+                \"assigner\": \"did:web:mp-operations.org\",
+                \"permission\": [{
+                    \"action\":  \"use\",
+                    \"constraint\": {
+                      \"leftOperand\": \"dspace:membershipStatus\",
+                      \"operator\": \"eq\",
+                      \"rightOperand\": \"premium\"
+                    }
+                }],
+                \"@type\":  \"Offer\"
+              }
+          }]
+        }" | jq .
+```
+
+3. Request the catalog — ASSET-3 will appear alongside ASSET-1:
+```shell
+curl -k -x localhost:8888 -X POST \
+  'https://dsp-dcp-management.127.0.0.1.nip.io/api/v1/management/v3/catalog/request' \
+  --header 'Accept: */*' \
+  --header 'Content-Type: application/json' \
+  --data-raw '{
+        "@context": [
+            "https://w3id.org/edc/connector/management/v0.0.1"
+        ],
+        "@type": "CatalogRequestMessage",
+        "protocol": "dataspace-protocol-http:2025-1",
+        "counterPartyId": "did:web:mp-operations.org",
+        "counterPartyAddress": "https://dcp-mp-operations.127.0.0.1.nip.io/api/dsp/2025-1",
+        "querySpec": {
+        }
+    }' | jq .
+```
+
+4. Attempt to negotiate ASSET-3 — the negotiation will be rejected:
+```shell
+curl -k -x localhost:8888 -X POST \
+  'https://dsp-dcp-management.127.0.0.1.nip.io/api/v1/management/v3/contractnegotiations' \
+  --header 'Accept: */*' \
+  --header 'Content-Type: application/json' \
+  --data-raw '{
+        "@context": [
+            "https://w3id.org/edc/connector/management/v0.0.1"
+        ],
+        "@type": "ContractRequest",
+        "counterPartyAddress": "https://dcp-mp-operations.127.0.0.1.nip.io/api/dsp/2025-1",
+        "counterPartyId": "did:web:mp-operations.org",
+        "protocol": "dataspace-protocol-http:2025-1",
+        "policy": {
+            "@context": [
+              "http://www.w3.org/ns/odrl.jsonld",
+              "https://w3id.org/dspace/2024/1/context.json"
+            ],
+            "@type": "Offer",
+            "@id": "OFFER-3:ASSET-3:456",
+            "assigner": "did:web:mp-operations.org",
+            "permission": [{
+              "action": "use",
+              "constraint": {
+                "leftOperand": "dspace:membershipStatus",
+                "operator": "eq",
+                "rightOperand": "premium"
+              }
+            }],
+            "target": "ASSET-3"
+        }
+    }' | jq .
+```
+
+5. Check the negotiation state — it will show `TERMINATED` (rejected):
+```shell
+curl -k -x localhost:8888 -X POST \
+  'https://dsp-dcp-management.127.0.0.1.nip.io/api/v1/management/v3/contractnegotiations/request' \
+  --header 'Accept: */*' \
+  --header 'Content-Type: application/json' | jq '.[] | select(.state == "TERMINATED")'
+```
+
+The consumer can browse the offer (access policy allows it) but cannot form a contract because the contract policy requires `membershipStatus == "premium"`, which the consumer's `MembershipCredential` does not satisfy.
+
+##### Scenario C: Explicit Scope Declaration in Policy
+
+The original demo offering uses external scope-mapping configuration (see [Scope Mappings](#scope-mappings)) to control which permissions are evaluated at which scope. This scenario demonstrates the alternative approach: including the scope directly in the ODRL permission using `dspace:scope`.
+
+This makes the policy self-documenting — the evaluation point is part of the policy itself rather than an external configuration concern.
+
+1. Create a product specification:
+```shell
+export SCOPED_SPEC_ID=$(curl -k -x localhost:8888 -X 'POST' \
+    'https://tm-forum-api.127.0.0.1.nip.io/tmf-api/productCatalogManagement/v4/productSpecification' \
+    -H 'accept: application/json;charset=utf-8' \
+    -H 'Content-Type: application/json;charset=utf-8' \
+    -d '{
+           "name": "Scoped Policy Spec",
+           "externalId": "ASSET-4",
+           "@schemaLocation": "https://raw.githubusercontent.com/wistefan/edc-dsc/refs/heads/init/schemas/external-id.json",
+           "productSpecCharacteristic": [
+               {
+                   "id": "dcp",
+                   "name":"Endpoint, that the service can be negotiated at via DCP.",
+                   "valueType":"endpointUrl",
+                   "productSpecCharacteristicValue": [{
+                      "value":"https://dcp-mp-operations.127.0.0.1.nip.io/api/dsp/2025-1",
+                      "isDefault": true
+                   }]
+               },
+               {
+                   "id": "upstreamAddress",
+                   "name":"Address of the upstream serving the data",
+                   "valueType":"upstreamAddress",
+                   "productSpecCharacteristicValue": [{
+                       "value":"data-service-scorpio:9090",
+                       "isDefault": true
+                   }]
+               }
+           ]
+    }' | jq '.id' -r); echo ${SCOPED_SPEC_ID}
+```
+
+2. Create the offering with explicit scopes in the contract policy permissions. Note how each permission declares its own `dspace:scope` instead of relying on the scope-mappings configuration:
+```shell
+scoped_access_policy_id=$(uuidgen)
+scoped_contract_policy_id=$(uuidgen)
+curl -k -x localhost:8888 -X 'POST' \
+    'https://tm-forum-api.127.0.0.1.nip.io/tmf-api/productCatalogManagement/v4/productOffering' \
+    -H 'accept: application/json;charset=utf-8' \
+    -H 'Content-Type: application/json;charset=utf-8' \
+    -d "{
+          \"name\": \"Scoped Policy Offering\",
+          \"description\": \"Uses explicit scope in permissions\",
+          \"isBundle\": false,
+          \"isSellable\": true,
+          \"lifecycleStatus\": \"Active\",
+          \"@schemaLocation\": \"https://raw.githubusercontent.com/wistefan/edc-dsc/refs/heads/init/schemas/external-id.json\",
+          \"externalId\": \"OFFER-4\",
+          \"productSpecification\":
+              {
+                  \"id\": \"${SCOPED_SPEC_ID}\",
+                  \"name\":\"Scoped Policy Spec\"
+              },
+          \"category\": [{
+              \"id\": \"${CATEGORY_ID}\"
+          }],
+          \"productOfferingTerm\": [
+          {
+              \"name\": \"edc:contractDefinition\",
+              \"@schemaLocation\": \"https://raw.githubusercontent.com/wistefan/edc-dsc/refs/heads/init/schemas/contract-definition.json\",
+              \"accessPolicy\": {
+                \"@context\": \"http://www.w3.org/ns/odrl.jsonld\",
+                \"odrl:uid\": \"${scoped_access_policy_id}\",
+                \"assigner\": \"did:web:mp-operations.org\",
+                \"permission\": [{
+                    \"action\":  \"use\"
+                }],
+                \"@type\":  \"Offer\"
+              },
+              \"contractPolicy\": {
+                \"@context\": [
+                  \"http://www.w3.org/ns/odrl.jsonld\",
+                  \"https://w3id.org/dspace/2024/1/context.json\"
+                ],
+                \"odrl:uid\": \"${scoped_contract_policy_id}\",
+                \"assigner\": \"did:web:mp-operations.org\",
+                \"permission\": [
+                  {
+                      \"action\":  \"use\",
+                      \"dspace:scope\": \"transfer.process\",
+                      \"constraint\": {
+                        \"leftOperand\": \"odrl:dayOfWeek\",
+                        \"operator\": \"lt\",
+                        \"rightOperand\": {
+                          \"@value\": 6,
+                          \"@type\": \"xsd:integer\"
+                        }
+                      }
+                  },
+                  {
+                      \"action\":  \"use\",
+                      \"dspace:scope\": \"contract.negotiation\",
+                      \"constraint\": {
+                        \"leftOperand\": \"dspace:membershipType\",
+                        \"operator\": \"eq\",
+                        \"rightOperand\":\"FullMember\"
+                      }
+                  }
+                ],
+                \"@type\":  \"Offer\"
+              }
+          }]
+        }" | jq .
+```
+
+Compared to the original offering (OFFER-1), this achieves the same behavior:
+- `dayOfWeek` is only checked during transfer
+- `membershipType` is only checked during negotiation
+
+The difference is that these constraints are explicit in the policy itself, making the policy portable. A different FDSC-EDC instance does not need matching entries in its `scope-mappings.json` to correctly evaluate this policy.
+
+3. The negotiation and transfer flow follows the same steps as the original DCP flow (steps 1–8 above), substituting `OFFER-4`, `ASSET-4`, and the corresponding offer ID from the catalog response.
 
 ### OID4VC
 
