@@ -59,7 +59,7 @@ dependencies:
   - name: did-helper
     alias: did
     condition: did.enabled
-    version: 0.1.20
+    version: 0.1.21
     repository: oci://quay.io/fiware/helm-charts
   # cert-manager
   - name: cert-manager
