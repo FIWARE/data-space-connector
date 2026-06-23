@@ -346,7 +346,7 @@ keycloak:
   image:
     registry: quay.io
     repository: seamware/keycloak
-    tag: "26.6.2"
+    tag: "26.6.3"
   # -- TLS terminated at the ingress; the container does not serve HTTPS itself
   tls:
     enabled: false
