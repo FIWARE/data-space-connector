@@ -150,11 +150,15 @@ decentralizedIam:
       registration:
         enabled: true
         job:
+          # Use a long TTL so the Job persists until the k3s-maven-plugin
+          # has verified its completion. The default 120s races with the
+          # plugin's parallel wait loop in CI.
+          ttlSecondsAfterFinished: 86400
           initContainers:
             waitForHost:
               enabled: true
               path: /health
-          activeDeadlineSeconds: null
+          activeDeadlineSeconds: 1500
         services:
           - id: tpp-service
             defaultOidcScope: "operator"
@@ -1451,7 +1455,6 @@ keycloak:
         fullScopeAllowed: true
         nodeReRegistrationTimeout: -1
         defaultClientScopes: []
-        optionalClientScopes: []
         optionalClientScopes: ["membership-credential"]
 
 # helper component to initialize the trusted issuers list

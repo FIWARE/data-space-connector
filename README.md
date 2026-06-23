@@ -44,6 +44,7 @@ recipes.
   - [Local Deployment (Maven)](#local-deployment-maven)
 - [Testing](#testing)
 - [Additional documentation and resources](#additional-documentation-and-resources)
+- [Funding](#funding)
 
 <!-- END doctoc generated TOC please keep comment here to allow auto update -->
 
@@ -588,3 +589,18 @@ specific flows and its deployment and integration with other frameworks:
 Additional resources about the FIWARE Data Space Connector and Data Spaces in general:
 * [FIWARE Data Spaces](https://github.com/fiwARE/data-spaces)
 * [FIWARE Webinar about Data Spaces, its roles and components (by Stefan Wiedemann)](https://www.youtube.com/watch?v=hm5qMlhpK0g)
+
+## Funding
+
+<p>
+  <img src="doc/img/LogoPRTR.png" alt="Plan de Recuperación, Transformación y Resiliencia" height="55">
+  <img src="doc/img/FundedbytheEU.png" alt="Funded by the European Union" height="55">
+</p>
+
+Part of the development of this connector has been supported by the **DSIRE – Data Spaces Interoperability and Reusable Enablers** project, grant file no. **TSI-100130-2024-158**, awarded to **SEAMWARE / SEAMLESS MIDDLEWARE TECHNOLOGIES S.L.**
+
+DSIRE is funded by the Spanish Ministry for Digital Transformation and Public Administration, through the State Secretariat for Digitalisation and Artificial Intelligence (SEDIA), under the 2024 call for technological products and services for data spaces, within Spain’s Recovery, Transformation and Resilience Plan (PRTR).
+
+**Funded by the European Union – NextGenerationEU.**
+
+Views and opinions expressed are those of the author(s) only and do not necessarily reflect those of the European Union or the European Commission. Neither the European Union nor the European Commission can be held responsible for them.
