@@ -87,6 +87,8 @@ Enable the local marketplace when:
 
 > **Note:** The local Marketplace requires MongoDB in addition to the existing PostgreSQL. MongoDB can be deployed via the `fiware/data-space-connector` Helm chart using the MongoDB Community Operator.
 
+> **Note:** To create **DSP-compatible** products and offerings (i.e. offerings whose data is exchanged over the Dataspace Protocol — see [FDSC-EDC (Dataspace Protocol)](#fdsc-edc-dataspace-protocol)) through the local marketplace UI, the BAE Logic Proxy must be deployed with `BAE_LP_DSP_ENABLED=true`, set under `marketplace.bizEcosystemLogicProxy.additionalEnvVars`. This flag exposes the DSP-specific fields in the offering-creation forms; omit it for a marketplace that only brokers classic FIWARE offerings. See [Using the BAE Marketplace](../../../DSP_INTEGRATION.md#using-the-bae-marketplace) in the DSP Integration documentation.
+
 #### Participating in a Central Marketplace
 
 If the data space runs a shared [Central Marketplace](../../../CENTRAL_MARKETPLACE.md) hosted by another actor (typically the Data Space Operator), the provider publishes its offerings there and does **not** deploy the marketplace itself. However, the provider's DSC needs specific configuration so the Central Marketplace can reach the local Contract Management and trigger the activation flow after each purchase.

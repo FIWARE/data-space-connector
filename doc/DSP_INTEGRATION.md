@@ -245,7 +245,11 @@ curl -k -x localhost:8888 -X POST https://scorpio-provider.127.0.0.1.nip.io/ngsi
 
 ### Prepare the offering
 
-The Demo - Offering  should be available for negotiation and usage through standard TMForum mechanisms and through DSP. There for all offerings are managed through TMForum-Standard APIs. In the Demo they are requested directly, while in real-world use-cases they most likely will be used through graphical interfaces like the [BAE Marketplace](https://github.com/FIWARE-TMForum/Business-API-Ecosystem).
+The Demo - Offering  should be available for negotiation and usage through standard TMForum mechanisms and through DSP.
+
+There for all offerings are managed through TMForum-Standard APIs. In the Demo they are requested directly, while in real-world use-cases they most likely will be used through graphical interfaces like the [BAE Marketplace](https://github.com/FIWARE-TMForum/Business-API-Ecosystem).
+
+#### Using TMForum APIs
 
 1. A category has to be created, in order to assing the offering to a catalog:
 ```shell
@@ -290,6 +294,7 @@ export PRODUCT_SPEC_ID=$(curl -k -x localhost:8888 -X 'POST' \
                 {
                    "id": "dcp",
                    "name":"Endpoint, that the service can be negotiated at via DCP.",
+                   "description": "Endpoint, that the service can be negotiated at via DCP.",
                    "valueType":"endpointUrl",
                    "productSpecCharacteristicValue": [{
                       "value":"https://dcp-mp-operations.127.0.0.1.nip.io/api/dsp/2025-1",
@@ -298,6 +303,7 @@ export PRODUCT_SPEC_ID=$(curl -k -x localhost:8888 -X 'POST' \
                },{
                    "id": "oid4vc",
                    "name":"Endpoint, that the service can be negotiated at via OID4VC.",
+                   "description": "Endpoint, that the service can be negotiated at via OID4VC.",
                    "valueType":"endpointUrl",
                    "productSpecCharacteristicValue": [{
                       "value":"https://dsp-mp-operations.127.0.0.1.nip.io/api/dsp/2025-1",
@@ -311,14 +317,6 @@ export PRODUCT_SPEC_ID=$(curl -k -x localhost:8888 -X 'POST' \
                    "productSpecCharacteristicValue": [{
                        "value":"data-service-scorpio:9090",
                        "isDefault": true
-                   }]
-               },
-               {
-                   "id": "endpointDescription",
-                   "name":"Service Endpoint Description",
-                   "valueType":"endpointDescription",
-                   "productSpecCharacteristicValue": [{
-                       "value":"The Demo Service"
                    }]
                },
                {
@@ -529,9 +527,27 @@ curl -k -x localhost:8888 -X 'POST' \
 ```
 
 
+
+
+#### Using the BAE Marketplace
+
+> :warning: The BAE Marketplace is not enabled in the deployment used for these tests, in order to keep the deployment minimal. The steps below are provided for reference only; in this environment, use the TMForum API approach described in the previous section.
+
+To be able to use the BAE Marketplace for creating DSP-compatible products and offerings, that Marketplace must have been deployed with the configuration required to support the creation of offerings with the characteristics needed for DSP integration (see the [documentation on deployment configuration by role](https://github.com/FIWARE/data-space-connector/blob/main/doc/deployment-integration/roles/README.md) for more information).
+
+
+Once you have logged into the Marketplace with a user from the provider organization, you simply need to create a new Product Specification, marking DSP compatibility and filling in the mandatory characteristics with the same values shown in the example of creation through APIs in the previous section.
+
+![BAE Marketplace DSP Product Specification Toggle](./img/BAE_MP_ProductSpec_DSP_Toggle.png)
+![BAE Marketplace DSP Product Specification Configuration](./img/BAE_MP_ProductSpec_DSP_Config.png)
+
+Afterwards, you must create the new Offer, also marking DSP compatibility and selecting the product specification created in the previous step. In the policies section, you must create two policies, one for access and one for contract, with the same values as those shown in the example of creation through APIs.
+
+![BAE Marketplace DSP Offer Configuration](./img/BAE_MP_Offer_DSP_Config.png)
+
 ### Order through TMForum
 
-> :bulb: While the purchase-process happens through direct API-Calls here, GUI solutions like the BAE-Marketplace can mask all those interactions.
+#### Using TMForum APIs
 
 The TMForum APIs are secured by the PEP(Apisix). In order to allow access, we need to put policies to allow that in place:
 ```shell
@@ -544,12 +560,12 @@ In order to interact with the TMForum and buy access, a couple of credentials ar
 ```shell
 export REP_CREDENTIAL=$(./doc/scripts/get_credential.sh https://keycloak-consumer.127.0.0.1.nip.io user-credential representative); echo ${REP_CREDENTIAL}
 ```
-2. The OperatorCredential for the operator allowed to use the product and access the service:
+1. The OperatorCredential for the operator allowed to use the product and access the service:
 ```shell
 export OPERATOR_CREDENTIAL=$(./doc/scripts/get_credential.sh https://keycloak-consumer.127.0.0.1.nip.io operator-credential operator); echo ${OPERATOR_CREDENTIAL}
 ```
 
-3. Register the consumer in the marketplace:
+1. Register the consumer in the marketplace:
 
 ```shell
 export CONSUMER_DID="did:web:fancy-marketplace.biz"
@@ -623,6 +639,10 @@ curl -k -x localhost:8888 -X GET https://mp-data-service.127.0.0.1.nip.io/ngsi-l
     --header 'Content-Type: application/json' \
     --header "Authorization: Bearer ${ACCESS_TOKEN}"
 ```
+
+#### Using the BAE Marketplace
+
+To acquire the offering through the BAE Marketplace, you need to access the marketplace's graphical interface and simply follow the same steps as for purchasing any offering, but selecting the offering created in the previous step.
 
 ### Order through DSP
 
