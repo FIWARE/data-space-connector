@@ -194,7 +194,7 @@ Usage (in templates):
   {{ include "dsc.otel.keycloak.secretName" . }}
 */}}
 {{- define "dsc.otel.keycloak.secretName" -}}
-{{- printf "%s-keycloak-tracing" .Release.Name -}}
+dsc-keycloak-tracing
 {{- end -}}
 
 {{/*

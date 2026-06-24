@@ -443,7 +443,7 @@ keycloak:
   # chart hook). The default points at the tracing Secret created by
   # `keycloak-tracing-secret.yaml`; when tracing is disabled the Secret
   # exists but is empty, so no extra env vars are added.
-  extraEnvVarsSecret: "{{ .Release.Name }}-keycloak-tracing"
+  extraEnvVarsSecret: "dsc-keycloak-tracing"
 
   # -- distributed-tracing configuration for Keycloak (25+ native OTEL).
   # When enabled, a Secret with the standard `OTEL_*` env vars and
