@@ -805,6 +805,7 @@ This approach is useful when:
 - The evaluation point is inherent to the constraint's semantics and should travel with the policy, not be configured externally
 
 For more details on the policy context and what information is available at each evaluation layer, see the [FDSC-EDC policy context documentation](https://github.com/SEAMWARE/fdsc-edc/blob/ticket-36/work/policy-extension/policy-context.md).
+
 #### Using the BAE Marketplace
 
 To acquire the offering through the BAE Marketplace, you need to access the marketplace's graphical interface and simply follow the same steps as for purchasing any offering, but selecting the offering created in the previous step.
