@@ -792,7 +792,7 @@ For more details on the policy context and what information is available at each
 
 ### Order through DSP
 
-The same product now can be negotiatiated throught the Dataspace Protocol. The interactions will be controlled throught he management API of the FDSC-EDC Controlplane, authentication is done by the connector's and cannot be related to the actual actor.
+The same product now can be negotiated through the Dataspace Protocol. The interactions will be controlled through the management API of the FDSC-EDC Controlplane, authentication is done by the connector's and cannot be related to the actual actor.
 
 #### DCP
 
