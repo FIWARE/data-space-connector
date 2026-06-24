@@ -93,6 +93,11 @@ public class DSPManagementHelper {
     private static final String STATE_FINALIZED = "FINALIZED";
 
     /**
+     * Negotiation state indicating the negotiation was rejected/terminated.
+     */
+    private static final String STATE_TERMINATED = "TERMINATED";
+
+    /**
      * Transfer process state indicating the transfer has started.
      */
     private static final String STATE_STARTED = "STARTED";
@@ -344,6 +349,34 @@ public class DSPManagementHelper {
                 });
 
         return agreementId[0];
+    }
+
+    /**
+     * Polls the contract negotiation state until it reaches "TERMINATED".
+     * <p>
+     * Used for verifying that policy-rejected negotiations are correctly handled.
+     * When a consumer's credentials do not satisfy the provider's contract policy,
+     * the negotiation will be terminated by the provider.
+     *
+     * @param managementApiAddress the base URL of the management API
+     * @param negotiationId        the {@code @id} of the negotiation to poll
+     * @throws Exception if polling times out or the negotiation is not found
+     */
+    public static void waitForNegotiationTerminated(String managementApiAddress,
+                                                    String negotiationId) throws Exception {
+        Awaitility.await()
+                .atMost(Duration.ofSeconds(DEFAULT_POLL_TIMEOUT_SECONDS))
+                .pollInterval(Duration.ofSeconds(DEFAULT_POLL_INTERVAL_SECONDS))
+                .untilAsserted(() -> {
+                    ContractNegotiation negotiation = getNegotiation(managementApiAddress, negotiationId);
+                    assertNotNull(negotiation,
+                            String.format("Negotiation %s not found.", negotiationId));
+                    log.debug("Negotiation {} is in state {}", negotiationId, negotiation.getState());
+                    assertTrue(STATE_TERMINATED.equalsIgnoreCase(negotiation.getState()),
+                            String.format("Expected negotiation %s in state '%s', but was '%s'.",
+                                    negotiationId, STATE_TERMINATED, negotiation.getState()));
+                    log.debug("Negotiation {} terminated as expected.", negotiationId);
+                });
     }
 
     /**
