@@ -194,11 +194,14 @@ marketplace:
       - { name: BAE_LP_SIOP_IS_REDIRECTION, value: "true" }
       - { name: BAE_LP_PURCHASE_ENABLED,     value: "true" }
       - { name: BAE_LP_DATASPACE_ENABLED,    value: "true" }
+      - { name: BAE_LP_DSP_ENABLED,          value: "true" }
       - { name: BAE_LP_SIOP_PRIVATE_KEY_PEM, value: /certs-did/tls.key }
       - { name: BAE_LP_BILLING_ENGINE_URL,   value: "http://<release>-biz-ecosystem-charging-backend.<namespace>.svc.cluster.local:8006/charging/api/orderManagement/orders/preview/" }
 ```
 
 When this block is enabled, remember to also override `contract-management.organization.provider.role` to `seller` (see step 1), since BAE tags the provider with that role in the `ProductSpecification`'s `relatedParty`.
+
+`BAE_LP_DSP_ENABLED=true` is **optional** and only required when providers must be able to create **DSP-compatible** product specifications and offerings (i.e. offerings whose data is exchanged over the Dataspace Protocol) through the Marketplace UI. It exposes the DSP-specific fields in the offering-creation forms. Omit it for a marketplace that only brokers classic FIWARE offerings. See [Using the BAE Marketplace](../../../DSP_INTEGRATION.md#using-the-bae-marketplace) in the DSP Integration documentation.
 
 **4. Issue the marketplace's authentication credential from Keycloak**
 
