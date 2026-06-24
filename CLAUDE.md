@@ -107,7 +107,7 @@ The chart already has a full OTEL tracing integration (chart version 9.1.0):
 - `_helpers.tpl` has six helpers: `dsc.otel.defaultEndpoint`,
   `dsc.otel.endpoint`, `dsc.otel.resourceAttributes`, `dsc.otel.env`,
   plus per-subchart variants (`dsc.otel.scorpio.envList`,
-  `dsc.otel.fdscEdc.envList`, `dsc.otel.keycloak.cmName`, etc.).
+  `dsc.otel.fdscEdc.envList`, `dsc.otel.keycloak.secretName`, etc.).
 - The Collector currently uses the **subchart's built-in ConfigMap**
   (`opentelemetry-collector.configMap.create: true` is the default) with
   a `debug` exporter only. Commented-out examples for Tempo, Jaeger, and
