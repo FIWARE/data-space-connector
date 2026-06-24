@@ -151,10 +151,6 @@ decentralizedIam:
       # -- should it be enabled? set to false if one outside the chart is used.
       enabled: true
       deployment:
-        image:
-          repository: quay.io/wi_stefan/odrl-pap
-          tag: local-amd64
-          pullPolicy: Always
         # -- OPA sidecar deployed as a native Kubernetes sidecar (init container with restartPolicy: Always), available at localhost:8181
         initContainers:
           - name: open-policy-agent
