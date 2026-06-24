@@ -1,3 +1,7 @@
+
+marketplace:
+  # not required in the dsp case
+  enabled: false
 fdsc-edc:
   enabled: true
   deployment:
