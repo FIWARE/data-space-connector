@@ -15,14 +15,21 @@ TARGET_DIR="${1:?Usage: $0 <directory>}"
 
 find "$TARGET_DIR" -name '*.yaml' -print0 | while IFS= read -r -d '' file; do
     awk '
-    /^---/ { is_deployment = 0; patched = 0 }
+    /^---/ { is_deployment = 0; patched_deploy = 0; is_job = 0; patched_job = 0 }
     /^kind: Deployment/ { is_deployment = 1 }
-    /^spec:/ && is_deployment && !patched {
+    /^kind: Job/ { is_job = 1 }
+    /^  activeDeadlineSeconds:/ && is_job { next }
+    /^spec:/ && is_deployment && !patched_deploy {
         print
         print "  progressDeadlineSeconds: 1500"
         patched = 1
         next
     }
+    /^spec:/ && is_job && !patched_job {
+        print
+        print "  activeDeadlineSeconds: 1500"
+        patched_job = 1
+        next
     { print }
     ' "$file" > "$file.tmp" && mv "$file.tmp" "$file"
 done
