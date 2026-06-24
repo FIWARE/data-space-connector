@@ -150,6 +150,34 @@ decentralizedIam:
     odrl-pap:
       # -- should it be enabled? set to false if one outside the chart is used.
       enabled: true
+      deployment:
+        # -- OPA sidecar deployed as a native Kubernetes sidecar (init container with restartPolicy: Always), available at localhost:8181
+        initContainers:
+          - name: open-policy-agent
+            restartPolicy: Always
+            image: openpolicyagent/opa:1.11.0
+            imagePullPolicy: IfNotPresent
+            ports:
+              - name: opa-http
+                containerPort: 8181
+                protocol: TCP
+            args:
+              - "run"
+              - "--ignore=.*"
+              - "--server"
+              - "-l"
+              - "debug"
+              - "-c"
+              - "/config/opa.yaml"
+              - "--addr"
+              - "0.0.0.0:8181"
+            volumeMounts:
+              - name: opa-config
+                mountPath: /config
+        additionalVolumes:
+          - name: opa-config
+            configMap:
+              name: opa-config
       # -- allows to set a fixed name for the services
       fullnameOverride: odrl-pap
       # -- connection to the database
@@ -163,7 +191,6 @@ decentralizedIam:
           enabled: true
           name: postgres.postgres.credentials.postgresql.acid.zalan.do
           key: password
-
     # -- configuration for the open-policy-agent to be deployed as part of the connector fulfilling the role of the PDP, as a sidecar to apisix
     opa:
       # -- should an opa sidecar be deployed to apisix
@@ -2314,6 +2341,40 @@ fdsc-edc:
           transfer:
           ## -- scope for the version endpoint
           version:
+
+      ## -- configuration for the ODRL PAP policy enforcement
+      odrlPap:
+        policy:
+          ## -- should ODRL policy enforcement be enabled
+          enabled: true
+          ## -- host of the ODRL PAP
+          host: http://odrl-pap:8080
+          ## -- additional JSON-LD contexts for ODRL policy evaluation, rendered as JSON and mounted as a ConfigMap
+          additionalContexts: [
+            {
+              "odrl:action": {
+                "@id": "http://www.w3.org/ns/odrl/2/action",
+                "@type": "@id",
+                "@context": {
+                  "odrl": null,
+                  "dspace": { "@id": "http://www.w3.org/ns/odrl/2/", "@prefix": true }
+                }
+              }
+            }
+          ]
+          ## -- scope mappings for ODRL constraint-to-scope resolution, rendered as JSON and mounted as a ConfigMap
+          scopeMappings: {
+            "mappings": [
+              {
+                "match": { "http://www.w3.org/ns/odrl/2/leftOperand": "http://www.w3.org/ns/odrl/2/dayOfWeek" },
+                "scopes": ["transfer.process"]
+              },
+              {
+                "match": { "http://www.w3.org/ns/odrl/2/leftOperand": "https://w3id.org/dspace/2024/1/membershipType" },
+                "scopes": ["contract.negotiation", "catalog"]
+              }
+            ]
+          }
 
       ## -- general configuration for the edc
       edc:

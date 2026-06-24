@@ -91,7 +91,7 @@ fdsc-edc:
             -Dhttps.proxyPort=8888
             -Dhttp.proxyHost=squid-proxy.infra.svc.cluster.local
             -Dhttp.proxyPort=8888
-            -Dhttp.nonProxyHosts="*-vault|*.cluster.local"
+            -Dhttp.nonProxyHosts="*-vault|*.cluster.local|odrl-pap|trusted-issuers-list|contract-management"
             -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=5005
       initContainers:
         - name: convert-signing-key
@@ -204,6 +204,37 @@ fdsc-edc:
           transfer: org.eclipse.tractusx.vc.type:MembershipCredential:read
           version: org.eclipse.tractusx.vc.type:MembershipCredential:read
 
+decentralizedIam:
+  odrlAuthorization:
+    odrl-pap:
+      deployment:
+        initContainers:
+          - name: open-policy-agent
+            restartPolicy: Always
+            image: openpolicyagent/opa:1.11.0
+            imagePullPolicy: IfNotPresent
+            ports:
+              - name: opa-http
+                containerPort: 8181
+                protocol: TCP
+            args:
+              - "run"
+              - "--ignore=.*"
+              - "--server"
+              - "-l"
+              - "debug"
+              - "-c"
+              - "/config/opa.yaml"
+              - "--addr"
+              - "0.0.0.0:8181"
+            volumeMounts:
+              - name: opa-config
+                mountPath: /config
+        additionalVolumes:
+          - name: opa-config
+            configMap:
+              name: opa-config
+
 vault:
   enabled: true
 
@@ -292,4 +323,4 @@ identityhub:
   superuser:
     key: c3VwZXItdXNlcg==.random
   env:
-    JAVA_TOOL_OPTIONS: -Dhttps.proxyHost=squid-proxy.infra.svc.cluster.local -Dhttps.proxyPort=8888 -Dhttp.proxyHost=squid-proxy.infra.svc.cluster.local -Dhttp.proxyPort=8888 -Dhttp.nonProxyHosts="*-vault|*.cluster.local" -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=5005
+    JAVA_TOOL_OPTIONS: -Dhttps.proxyHost=squid-proxy.infra.svc.cluster.local -Dhttps.proxyPort=8888 -Dhttp.proxyHost=squid-proxy.infra.svc.cluster.local -Dhttp.proxyPort=8888 -Dhttp.nonProxyHosts="*-vault|*.cluster.local|odrl-pap|trusted-issuers-list|contract-management" -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=5005
