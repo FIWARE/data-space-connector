@@ -35,6 +35,11 @@ find "$TARGET_DIR" -name '*.yaml' -print0 | while IFS= read -r -d '' file; do
         pj = 1
         next
     }
+    /^spec:/ && is_job && !patched_job {
+        print
+        print "  activeDeadlineSeconds: 1500"
+        patched_job = 1
+        next
     { print }
     ' "$file" > "$file.tmp" && mv "$file.tmp" "$file"
 done
