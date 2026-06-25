@@ -432,7 +432,7 @@
                                 </goals>
                                 <configuration>
                                     <tasks>
-                                        <exec executable="/bin/bash">
+                                        <exec executable="/bin/bash" failonerror="true">
                                             <arg value="${parent.dir}/k3s/ci-post-render.sh" />
                                             <arg value="${project.build.directory}/k3s" />
                                         </exec>
