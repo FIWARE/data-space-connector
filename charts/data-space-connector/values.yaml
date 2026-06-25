@@ -438,19 +438,18 @@ keycloak:
     - name: KC_HEAP_SIZE
       value: "1024m"
 
-  # -- name of a ConfigMap whose keys are injected as environment variables
-  # via `envFrom.configMapRef` in the Keycloak StatefulSet. The value is
-  # processed by Bitnami's `tpl` function so it may contain Go template
-  # expressions. The default points at the tracing ConfigMap created by
-  # `keycloak-tracing-cm.yaml`; when tracing is disabled the ConfigMap
+  # -- name of a Secret whose keys are injected as environment variables
+  # via `envFrom.secretRef` in the Keycloak StatefulSet (CloudPirates
+  # chart hook). The default points at the tracing Secret created by
+  # `keycloak-tracing-secret.yaml`; when tracing is disabled the Secret
   # exists but is empty, so no extra env vars are added.
-  extraEnvVarsCM: "{{ .Release.Name }}-keycloak-tracing"
+  extraEnvVarsSecret: "dsc-keycloak-tracing"
 
   # -- distributed-tracing configuration for Keycloak (25+ native OTEL).
-  # When enabled, a ConfigMap with the standard `OTEL_*` env vars and
+  # When enabled, a Secret with the standard `OTEL_*` env vars and
   # `KC_TRACING_ENABLED=true` is created and injected via
-  # `extraEnvVarsCM`. No upstream Keycloak chart modifications are needed
-  # because the env vars are delivered through the `envFrom` hook.
+  # `extraEnvVarsSecret`. No upstream Keycloak chart modifications are
+  # needed because the env vars are delivered through the `envFrom` hook.
   tracing:
     # -- toggle OpenTelemetry tracing on Keycloak. Leave unset (default)
     # to inherit `tracing.enabled` from the global block; set to `true`

@@ -66,9 +66,6 @@ fdsc-dashboard:
       - secretName: dashboard-provider.127.0.0.1.nip.io-tls
         hosts:
           - dashboard-provider.127.0.0.1.nip.io
-  grafana:
-    enabled: false
-    url: http://provider-grafana:80
 
   apisix:
     enabled: true
@@ -91,9 +88,9 @@ fdsc-dashboard:
             admin: "admin"
           silentRenew: true
 
-fdsc-dashboard:
   grafana:
     enabled: true
+    url: http://provider-grafana:80
     panelsJson: "[{\"title\":\"\",\"path\":\"/d/apisix-routes/apisix-routes?orgId=1&from=now-1h&to=now&timezone=browser&var-datasource=PBFA97CFB590B2093&var-route=$__all&var-service=$__all&refresh=30s\",\"span\":12}]"
 
 tracing:
