@@ -232,8 +232,26 @@ done
 ok "Transfer STARTED."
 
 # ---- Step 4: EDR (endpoint + token) -----------------------------------------
+# The EDR is provisioned asynchronously once the transfer reaches STARTED, so
+# the data address may briefly return 404 (ObjectNotFound). Poll until it shows
+# up (or until POLL_TIMEOUT), tolerating 404 but failing fast on other errors.
 step "4/4  Fetching EDR data address"
-EDR=$(api GET "/edrs/${TP_ID}/dataaddress")
+EDR=""
+deadline=$(( $(date +%s) + POLL_TIMEOUT )); notified=""
+while :; do
+  resp=$(curl -sS -X GET "${MGMT}/edrs/${TP_ID}/dataaddress" \
+    -H 'Accept: */*' -w $'\n%{http_code}') || die "curl failed: GET /edrs/${TP_ID}/dataaddress"
+  code="${resp##*$'\n'}"; body="${resp%$'\n'*}"
+  if [ "$code" -ge 200 ] && [ "$code" -lt 300 ]; then
+    EDR="$body"; break
+  fi
+  if [ "$code" != "404" ]; then
+    log "$body"; die "GET /edrs/${TP_ID}/dataaddress -> HTTP $code"
+  fi
+  [ -z "$notified" ] && { log "  EDR not ready yet (404), polling until it is provisioned..."; notified=1; }
+  [ "$(date +%s)" -lt "$deadline" ] || die "Timed out (${POLL_TIMEOUT}s) waiting for the EDR data address."
+  sleep "$POLL_INTERVAL"
+done
 ENDPOINT=$(printf '%s' "$EDR" | jq -r '.endpoint // empty')
 ACCESS_TOKEN=$(printf '%s' "$EDR" | jq -r '.token // .authorization // empty')
 [ -n "$ENDPOINT" ] || die "EDR has no endpoint."
