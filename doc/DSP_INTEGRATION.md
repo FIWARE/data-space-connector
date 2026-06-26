@@ -816,6 +816,34 @@ The same product now can be negotiated through the Dataspace Protocol. The inter
 
 #### DCP
 
+> :bulb: **Automated walk-through.** The manual steps below (catalog → contract
+> negotiation → transfer process → EDR) can be run end-to-end with the helper
+> script [`dsp-consume.sh`](./scripts/dsp-consume.sh). It requests the catalog,
+> lets you pick a dataset and offer, polls the negotiation until `FINALIZED`,
+> optionally starts the transfer, polls it until `STARTED`, and finally prints
+> the data endpoint and access token.
+>
+> The script talks to the consumer EDC management API directly (no proxy, TLS
+> verification on), so expose it via a port-forward first:
+>
+> ```shell
+> kubectl port-forward svc/consumer-fdsc-edc-dcp 8085:8085
+> ```
+>
+> Then run it with the provider DSP endpoint, the local management base and the
+> provider DID:
+>
+> ```shell
+> ./doc/scripts/dsp-consume.sh \
+>   https://dcp-mp-operations.127.0.0.1.nip.io/api/dsp/2025-1 \
+>   http://localhost:8085/api/v1/management/v3 \
+>   did:web:mp-operations.org
+> ```
+>
+> Run `./doc/scripts/dsp-consume.sh --help` for the full argument and environment
+> reference (transfer type, protocol, poll timeout/interval). The steps below
+> document the same flow performed by hand.
+
 1. Read the catalog:
 ```shell
 curl -k -x localhost:8888 -X POST \
