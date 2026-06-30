@@ -108,3 +108,58 @@ jobs:
             files: |
               LICENSE
 
+    oci-release:
+      name: "Publish OCI artifact"
+      needs: ["deploy"]
+      runs-on: ubuntu-latest
+
+      steps:
+        - uses: actions/checkout@v5
+
+        - name: Install Helm
+          uses: azure/setup-helm@v4
+
+        - name: Get chart version
+          id: version
+          run: |
+            CHART_VERSION=$(grep '^version:' charts/data-space-connector/Chart.yaml | awk '{print $2}')
+            echo "version=$CHART_VERSION" >> $GITHUB_OUTPUT
+
+        - name: Login to quay.io
+          run: helm registry login quay.io -u ${{ secrets.QUAY_USERNAME }} -p ${{ secrets.QUAY_PASSWORD }}
+
+        - name: Check if version already exists
+          id: check
+          run: |
+            if helm show chart oci://quay.io/fiware/helm-charts/data-space-connector --version ${{ steps.version.outputs.version }} > /dev/null 2>&1; then
+              echo "exists=true" >> $GITHUB_OUTPUT
+              echo "Version ${{ steps.version.outputs.version }} already exists in quay.io, skipping push"
+            else
+              echo "exists=false" >> $GITHUB_OUTPUT
+              echo "Version ${{ steps.version.outputs.version }} not found in quay.io, will publish"
+            fi
+
+        - name: Add Helm repositories
+          if: steps.check.outputs.exists == 'false'
+          run: |
+            helm repo add fiware-iam https://fiware.github.io/decentralized-iam
+            helm repo add mongodb https://mongodb.github.io/helm-charts
+            helm repo add hashicorp https://helm.releases.hashicorp.com
+            helm repo add jetstack https://charts.jetstack.io
+            helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+            helm repo add grafana-community https://grafana-community.github.io/helm-charts
+            helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm-charts
+            helm repo add grafana https://grafana.github.io/helm-charts
+
+        - name: Build dependencies
+          if: steps.check.outputs.exists == 'false'
+          run: helm dependency update charts/data-space-connector
+
+        - name: Package chart
+          if: steps.check.outputs.exists == 'false'
+          run: helm package charts/data-space-connector
+
+        - name: Push OCI artifact
+          if: steps.check.outputs.exists == 'false'
+          run: helm push data-space-connector-${{ steps.version.outputs.version }}.tgz oci://quay.io/fiware/helm-charts
+
