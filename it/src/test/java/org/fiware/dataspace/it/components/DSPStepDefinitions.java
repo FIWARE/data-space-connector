@@ -1800,7 +1800,7 @@ public class DSPStepDefinitions extends StepDefintions {
         dcpDataAddress = DSPManagementHelper.getDataAddress(DCP_MANAGEMENT_API_ADDRESS, dcpTransferId);
         assertNotNull(dcpDataAddress, "DCP data address should not be null.");
         assertNotNull(dcpDataAddress.getEndpoint(), "DCP data address endpoint should not be null.");
-        assertNotNull(dcpDataAddress.getToken(), "DCP data address token should not be null.");
+        assertNotNull(dcpDataAddress.getAuthorization(), "DCP data address authorization should not be null.");
         log.debug("DCP data address retrieved: endpoint={}", dcpDataAddress.getEndpoint());
     }
 
@@ -1817,7 +1817,7 @@ public class DSPStepDefinitions extends StepDefintions {
                 .get()
                 .url(entityUrl)
                 .addHeader("Accept", "*/*")
-                .addHeader("Authorization", "Bearer " + dcpDataAddress.getToken())
+                .addHeader("Authorization", "Bearer " + dcpDataAddress.getAuthorization())
                 .build();
         try (Response response = HTTP_CLIENT.newCall(request).execute()) {
             assertEquals(org.apache.http.HttpStatus.SC_OK, response.code(),
@@ -2738,8 +2738,8 @@ public class DSPStepDefinitions extends StepDefintions {
                 "Data address for " + SCOPED_ASSET_ID + " should not be null.");
         assertNotNull(scopedDataAddress.getEndpoint(),
                 "Endpoint for " + SCOPED_ASSET_ID + " should not be null.");
-        assertNotNull(scopedDataAddress.getToken(),
-                "Token for " + SCOPED_ASSET_ID + " should not be null.");
+        assertNotNull(scopedDataAddress.getAuthorization(),
+                "Authorization for " + SCOPED_ASSET_ID + " should not be null.");
 
         String entityUrl = scopedDataAddress.getEndpoint()
                 + "/ngsi-ld/v1/entities/" + UPTIME_REPORT_ENTITY_ID;
@@ -2747,7 +2747,7 @@ public class DSPStepDefinitions extends StepDefintions {
                 .get()
                 .url(entityUrl)
                 .addHeader("Accept", "*/*")
-                .addHeader("Authorization", "Bearer " + scopedDataAddress.getToken())
+                .addHeader("Authorization", "Bearer " + scopedDataAddress.getAuthorization())
                 .build();
         try (Response response = HTTP_CLIENT.newCall(request).execute()) {
             assertEquals(org.apache.http.HttpStatus.SC_OK, response.code(),
