@@ -424,6 +424,21 @@
                                     </tasks>
                                 </configuration>
                             </execution>
+                            <execution>
+                                <id>patch-progress-deadline</id>
+                                <phase>process-test-classes</phase>
+                                <goals>
+                                    <goal>run</goal>
+                                </goals>
+                                <configuration>
+                                    <tasks>
+                                        <exec executable="/bin/bash" failonerror="true">
+                                            <arg value="${parent.dir}/k3s/ci-post-render.sh" />
+                                            <arg value="${project.build.directory}/k3s" />
+                                        </exec>
+                                    </tasks>
+                                </configuration>
+                            </execution>
                         </executions>
                     </plugin>
 

@@ -165,6 +165,48 @@ public class DSPStepDefinitions extends StepDefintions {
      */
     private static final String IDENTITYHUB_CREDENTIAL_ID = "membership-credential";
 
+    // --- Advanced Policy Scenario Constants ---
+
+    /**
+     * The external asset ID for the access-policy-restricted product spec (Scenario A).
+     */
+    private static final String RESTRICTED_ASSET_ID = "ASSET-2";
+
+    /**
+     * The external offering ID for the access-policy-restricted offering (Scenario A).
+     */
+    private static final String RESTRICTED_OFFER_EXTERNAL_ID = "OFFER-2";
+
+    /**
+     * The external asset ID for the browse-only product spec (Scenario B).
+     */
+    private static final String BROWSE_ONLY_ASSET_ID = "ASSET-3";
+
+    /**
+     * The external offering ID for the browse-only offering (Scenario B).
+     */
+    private static final String BROWSE_ONLY_OFFER_EXTERNAL_ID = "OFFER-3";
+
+    /**
+     * The external asset ID for the scoped-policy product spec (Scenario C).
+     */
+    private static final String SCOPED_ASSET_ID = "ASSET-4";
+
+    /**
+     * The external offering ID for the scoped-policy offering (Scenario C).
+     */
+    private static final String SCOPED_OFFER_EXTERNAL_ID = "OFFER-4";
+
+    /**
+     * The Dataspace Protocol JSON-LD context URI for dspace-prefixed terms.
+     */
+    private static final String DSPACE_CONTEXT = "https://w3id.org/dspace/2024/1/context.json";
+
+    /**
+     * The ODRL JSON-LD context URI.
+     */
+    private static final String ODRL_CONTEXT = "http://www.w3.org/ns/odrl.jsonld";
+
     private static final OkHttpClient HTTP_CLIENT = OK_HTTP_CLIENT;
 
     /**
@@ -308,6 +350,48 @@ public class DSPStepDefinitions extends StepDefintions {
      * The scope used for OID4VP authentication in OID4VC flows.
      */
     private static final String OPENID_SCOPE = "openid";
+
+    // --- Advanced Policy Scenario State ---
+
+    /**
+     * The product specification ID for the restricted asset (Scenario A).
+     */
+    private String restrictedSpecId;
+
+    /**
+     * The product specification ID for the browse-only asset (Scenario B).
+     */
+    private String browseOnlySpecId;
+
+    /**
+     * The product specification ID for the scoped-policy asset (Scenario C).
+     */
+    private String scopedSpecId;
+
+    /**
+     * The negotiation ID for the browse-only asset (Scenario B).
+     */
+    private String browseOnlyNegotiationId;
+
+    /**
+     * The negotiation ID for the scoped-policy asset (Scenario C).
+     */
+    private String scopedNegotiationId;
+
+    /**
+     * The agreement ID from the scoped-policy negotiation (Scenario C).
+     */
+    private String scopedAgreementId;
+
+    /**
+     * The transfer process ID for the scoped-policy asset (Scenario C).
+     */
+    private String scopedTransferId;
+
+    /**
+     * The EDR data address for the scoped-policy transfer (Scenario C).
+     */
+    private DataAddress scopedDataAddress;
 
     /**
      * Setup hook executed before each {@code @dsp} scenario.
@@ -1716,7 +1800,7 @@ public class DSPStepDefinitions extends StepDefintions {
         dcpDataAddress = DSPManagementHelper.getDataAddress(DCP_MANAGEMENT_API_ADDRESS, dcpTransferId);
         assertNotNull(dcpDataAddress, "DCP data address should not be null.");
         assertNotNull(dcpDataAddress.getEndpoint(), "DCP data address endpoint should not be null.");
-        assertNotNull(dcpDataAddress.getToken(), "DCP data address token should not be null.");
+        assertNotNull(dcpDataAddress.getAuthorization(), "DCP data address authorization should not be null.");
         log.debug("DCP data address retrieved: endpoint={}", dcpDataAddress.getEndpoint());
     }
 
@@ -1733,7 +1817,7 @@ public class DSPStepDefinitions extends StepDefintions {
                 .get()
                 .url(entityUrl)
                 .addHeader("Accept", "*/*")
-                .addHeader("Authorization", "Bearer " + dcpDataAddress.getToken())
+                .addHeader("Authorization", "Bearer " + dcpDataAddress.getAuthorization())
                 .build();
         try (Response response = HTTP_CLIENT.newCall(request).execute()) {
             assertEquals(org.apache.http.HttpStatus.SC_OK, response.code(),
@@ -2072,6 +2156,612 @@ public class DSPStepDefinitions extends StepDefintions {
         theConsumerWaitsForOid4vcTransferStarted();
     }
 
+    // ==================== Advanced Policy Scenarios ====================
+
+    // --- Scenario A: Offer Not Visible Due to Access Policy ---
+
+    /**
+     * Creates a product specification for the restricted asset (ASSET-2).
+     * Only includes DCP endpoint and upstream address characteristics.
+     * Equivalent to Scenario A, step 1 in DSP_INTEGRATION.md "Advanced Policy Scenarios".
+     */
+    @Given("The provider creates a restricted product spec with asset ASSET-2.")
+    public void theProviderCreatesARestrictedProductSpec() throws Exception {
+        restrictedSpecId = createSimpleDcpProductSpec(RESTRICTED_ASSET_ID, "Restricted Spec");
+        log.debug("Restricted product spec created with ID: {}", restrictedSpecId);
+    }
+
+    /**
+     * Creates an offering with a restrictive access policy requiring PremiumPartnerCredential.
+     * The consumer does not hold this credential, so the asset will be filtered from the catalog.
+     * Equivalent to Scenario A, step 2 in DSP_INTEGRATION.md "Advanced Policy Scenarios".
+     */
+    @Given("The provider creates a premium partner offering with restrictive access policy.")
+    public void theProviderCreatesAPremiumPartnerOffering() throws Exception {
+        assertNotNull(restrictedSpecId, "Restricted product spec must be created first.");
+        assertNotNull(dspCategoryId, "Category must be created first.");
+
+        String accessPolicyId = UUID.randomUUID().toString();
+        String contractPolicyId = UUID.randomUUID().toString();
+
+        ObjectNode offering = OBJECT_MAPPER.createObjectNode();
+        offering.put("name", "Premium Partner Offering");
+        offering.put("description", "Only visible to premium partners");
+        offering.put("isBundle", false);
+        offering.put("isSellable", true);
+        offering.put("lifecycleStatus", "Active");
+        offering.put("@schemaLocation", EXTERNAL_ID_SCHEMA);
+        offering.put("externalId", RESTRICTED_OFFER_EXTERNAL_ID);
+
+        ObjectNode specRef = OBJECT_MAPPER.createObjectNode();
+        specRef.put("id", restrictedSpecId);
+        specRef.put("name", "Restricted Spec");
+        offering.set("productSpecification", specRef);
+
+        ArrayNode categories = OBJECT_MAPPER.createArrayNode();
+        ObjectNode catRef = OBJECT_MAPPER.createObjectNode();
+        catRef.put("id", dspCategoryId);
+        categories.add(catRef);
+        offering.set("category", categories);
+
+        ArrayNode terms = OBJECT_MAPPER.createArrayNode();
+        ObjectNode term = OBJECT_MAPPER.createObjectNode();
+        term.put("name", "edc:contractDefinition");
+        term.put("@schemaLocation", CONTRACT_DEFINITION_SCHEMA);
+
+        // Access policy: requires PremiumPartnerCredential (consumer doesn't hold this)
+        ObjectNode accessPolicy = OBJECT_MAPPER.createObjectNode();
+        ArrayNode apContext = OBJECT_MAPPER.createArrayNode();
+        apContext.add(ODRL_CONTEXT);
+        apContext.add(DSPACE_CONTEXT);
+        accessPolicy.set("@context", apContext);
+        accessPolicy.put("odrl:uid", accessPolicyId);
+        accessPolicy.put("assigner", PROVIDER_DID);
+        ArrayNode apPermissions = OBJECT_MAPPER.createArrayNode();
+        ObjectNode apPerm = OBJECT_MAPPER.createObjectNode();
+        apPerm.put("action", "use");
+        ObjectNode apConstraint = OBJECT_MAPPER.createObjectNode();
+        apConstraint.put("leftOperand", "dspace:credentialType");
+        apConstraint.put("operator", "eq");
+        apConstraint.put("rightOperand", "PremiumPartnerCredential");
+        apPerm.set("constraint", apConstraint);
+        apPermissions.add(apPerm);
+        accessPolicy.set("permission", apPermissions);
+        accessPolicy.put("@type", "Offer");
+        term.set("accessPolicy", accessPolicy);
+
+        // Contract policy: simple "use" (no constraints)
+        ObjectNode contractPolicy = OBJECT_MAPPER.createObjectNode();
+        contractPolicy.put("@context", ODRL_CONTEXT);
+        contractPolicy.put("odrl:uid", contractPolicyId);
+        contractPolicy.put("assigner", PROVIDER_DID);
+        ArrayNode cpPermissions = OBJECT_MAPPER.createArrayNode();
+        ObjectNode cpPerm = OBJECT_MAPPER.createObjectNode();
+        cpPerm.put("action", "use");
+        cpPermissions.add(cpPerm);
+        contractPolicy.set("permission", cpPermissions);
+        contractPolicy.put("@type", "Offer");
+        term.set("contractPolicy", contractPolicy);
+
+        terms.add(term);
+        offering.set("productOfferingTerm", terms);
+
+        RequestBody body = RequestBody.create(
+                OBJECT_MAPPER.writeValueAsString(offering),
+                okhttp3.MediaType.parse(MediaType.APPLICATION_JSON));
+        Request request = new Request.Builder()
+                .post(body)
+                .url(TMF_DIRECT_ADDRESS
+                        + "/tmf-api/productCatalogManagement/v4/productOffering")
+                .header("accept", "application/json;charset=utf-8")
+                .header("Content-Type", "application/json;charset=utf-8")
+                .build();
+        try (Response response = HTTP_CLIENT.newCall(request).execute()) {
+            assertTrue(response.isSuccessful(),
+                    String.format("Premium partner offering should have been created. Got status %d",
+                            response.code()));
+            log.debug("Premium partner offering created for asset {}", RESTRICTED_ASSET_ID);
+        }
+    }
+
+    /**
+     * Verifies that the restricted asset (ASSET-2) does not appear in the DCP catalog.
+     * The access policy requires PremiumPartnerCredential which the consumer does not hold.
+     */
+    @Then("The DCP catalog does not contain asset ASSET-2.")
+    public void theDcpCatalogDoesNotContainAsset2() {
+        assertNotNull(dcpCatalogResponse, "DCP catalog response must have been retrieved first.");
+        JsonNode dataset = findDatasetByAssetId(dcpCatalogResponse, RESTRICTED_ASSET_ID);
+        assertNull(dataset,
+                "Asset " + RESTRICTED_ASSET_ID + " should NOT appear in the catalog because the "
+                        + "access policy requires PremiumPartnerCredential. Catalog: "
+                        + dcpCatalogResponse.toString().substring(0,
+                        Math.min(dcpCatalogResponse.toString().length(), 1000)));
+        log.debug("Confirmed: asset {} is correctly filtered from the catalog.", RESTRICTED_ASSET_ID);
+    }
+
+    // --- Scenario B: Offer Visible but Not Contractable ---
+
+    /**
+     * Creates a product specification for the browse-only asset (ASSET-3).
+     * Only includes DCP endpoint and upstream address characteristics.
+     * Equivalent to Scenario B, step 1 in DSP_INTEGRATION.md "Advanced Policy Scenarios".
+     */
+    @Given("The provider creates a browse-only product spec with asset ASSET-3.")
+    public void theProviderCreatesABrowseOnlyProductSpec() throws Exception {
+        browseOnlySpecId = createSimpleDcpProductSpec(BROWSE_ONLY_ASSET_ID,
+                "Visible But Restricted Spec");
+        log.debug("Browse-only product spec created with ID: {}", browseOnlySpecId);
+    }
+
+    /**
+     * Creates an offering with an open access policy but a restrictive contract policy
+     * requiring membershipStatus == "premium". The consumer can see the offer but cannot negotiate.
+     * Equivalent to Scenario B, step 2 in DSP_INTEGRATION.md "Advanced Policy Scenarios".
+     */
+    @Given("The provider creates a browse-only offering with restrictive contract policy.")
+    public void theProviderCreatesABrowseOnlyOffering() throws Exception {
+        assertNotNull(browseOnlySpecId, "Browse-only product spec must be created first.");
+        assertNotNull(dspCategoryId, "Category must be created first.");
+
+        String accessPolicyId = UUID.randomUUID().toString();
+        String contractPolicyId = UUID.randomUUID().toString();
+
+        ObjectNode offering = OBJECT_MAPPER.createObjectNode();
+        offering.put("name", "Browse-Only Offering");
+        offering.put("description", "Visible to all, contractable only by premium members");
+        offering.put("isBundle", false);
+        offering.put("isSellable", true);
+        offering.put("lifecycleStatus", "Active");
+        offering.put("@schemaLocation", EXTERNAL_ID_SCHEMA);
+        offering.put("externalId", BROWSE_ONLY_OFFER_EXTERNAL_ID);
+
+        ObjectNode specRef = OBJECT_MAPPER.createObjectNode();
+        specRef.put("id", browseOnlySpecId);
+        specRef.put("name", "Visible But Restricted Spec");
+        offering.set("productSpecification", specRef);
+
+        ArrayNode categories = OBJECT_MAPPER.createArrayNode();
+        ObjectNode catRef = OBJECT_MAPPER.createObjectNode();
+        catRef.put("id", dspCategoryId);
+        categories.add(catRef);
+        offering.set("category", categories);
+
+        ArrayNode terms = OBJECT_MAPPER.createArrayNode();
+        ObjectNode term = OBJECT_MAPPER.createObjectNode();
+        term.put("name", "edc:contractDefinition");
+        term.put("@schemaLocation", CONTRACT_DEFINITION_SCHEMA);
+
+        // Access policy: simple "use" (open to all)
+        ObjectNode accessPolicy = OBJECT_MAPPER.createObjectNode();
+        accessPolicy.put("@context", ODRL_CONTEXT);
+        accessPolicy.put("odrl:uid", accessPolicyId);
+        accessPolicy.put("assigner", PROVIDER_DID);
+        ArrayNode apPermissions = OBJECT_MAPPER.createArrayNode();
+        ObjectNode apPerm = OBJECT_MAPPER.createObjectNode();
+        apPerm.put("action", "use");
+        apPermissions.add(apPerm);
+        accessPolicy.set("permission", apPermissions);
+        accessPolicy.put("@type", "Offer");
+        term.set("accessPolicy", accessPolicy);
+
+        // Contract policy: requires membershipStatus == "premium"
+        ObjectNode contractPolicy = OBJECT_MAPPER.createObjectNode();
+        ArrayNode cpContext = OBJECT_MAPPER.createArrayNode();
+        cpContext.add(ODRL_CONTEXT);
+        cpContext.add(DSPACE_CONTEXT);
+        contractPolicy.set("@context", cpContext);
+        contractPolicy.put("odrl:uid", contractPolicyId);
+        contractPolicy.put("assigner", PROVIDER_DID);
+        ArrayNode cpPermissions = OBJECT_MAPPER.createArrayNode();
+        ObjectNode cpPerm = OBJECT_MAPPER.createObjectNode();
+        cpPerm.put("action", "use");
+        ObjectNode cpConstraint = OBJECT_MAPPER.createObjectNode();
+        cpConstraint.put("leftOperand", "dspace:membershipStatus");
+        cpConstraint.put("operator", "eq");
+        cpConstraint.put("rightOperand", "premium");
+        cpPerm.set("constraint", cpConstraint);
+        cpPermissions.add(cpPerm);
+        contractPolicy.set("permission", cpPermissions);
+        contractPolicy.put("@type", "Offer");
+        term.set("contractPolicy", contractPolicy);
+
+        terms.add(term);
+        offering.set("productOfferingTerm", terms);
+
+        RequestBody body = RequestBody.create(
+                OBJECT_MAPPER.writeValueAsString(offering),
+                okhttp3.MediaType.parse(MediaType.APPLICATION_JSON));
+        Request request = new Request.Builder()
+                .post(body)
+                .url(TMF_DIRECT_ADDRESS
+                        + "/tmf-api/productCatalogManagement/v4/productOffering")
+                .header("accept", "application/json;charset=utf-8")
+                .header("Content-Type", "application/json;charset=utf-8")
+                .build();
+        try (Response response = HTTP_CLIENT.newCall(request).execute()) {
+            assertTrue(response.isSuccessful(),
+                    String.format("Browse-only offering should have been created. Got status %d",
+                            response.code()));
+            log.debug("Browse-only offering created for asset {}", BROWSE_ONLY_ASSET_ID);
+        }
+    }
+
+    /**
+     * Verifies that the browse-only asset (ASSET-3) appears in the DCP catalog.
+     * The access policy is permissive, so the asset should be visible.
+     */
+    @Then("The DCP catalog contains asset ASSET-3.")
+    public void theDcpCatalogContainsAsset3() {
+        assertNotNull(dcpCatalogResponse, "DCP catalog response must have been retrieved first.");
+        JsonNode dataset = findDatasetByAssetId(dcpCatalogResponse, BROWSE_ONLY_ASSET_ID);
+        assertNotNull(dataset,
+                "Asset " + BROWSE_ONLY_ASSET_ID
+                        + " should appear in the catalog (access policy is permissive). Catalog: "
+                        + dcpCatalogResponse.toString().substring(0,
+                        Math.min(dcpCatalogResponse.toString().length(), 1000)));
+        log.debug("Confirmed: asset {} is visible in the catalog.", BROWSE_ONLY_ASSET_ID);
+    }
+
+    /**
+     * Starts a contract negotiation for the browse-only asset (ASSET-3).
+     * The contract policy requires membershipStatus == "premium", which the consumer
+     * does not satisfy, so this negotiation should ultimately be rejected.
+     * Equivalent to Scenario B, step 4 in DSP_INTEGRATION.md "Advanced Policy Scenarios".
+     */
+    @When("The consumer starts a contract negotiation for asset ASSET-3.")
+    public void theConsumerStartsNegotiationForAsset3() throws Exception {
+        assertNotNull(dcpCatalogResponse, "DCP catalog must have been retrieved first.");
+        JsonNode dataset = findDatasetByAssetId(dcpCatalogResponse, BROWSE_ONLY_ASSET_ID);
+        assertNotNull(dataset, "Asset " + BROWSE_ONLY_ASSET_ID + " must be in the catalog.");
+
+        String offerId = extractOfferIdFromDataset(dataset);
+        assertNotNull(offerId, "Should be able to extract an offer ID for " + BROWSE_ONLY_ASSET_ID);
+
+        // Build contract policy matching the offering's contract policy
+        ObjectNode policy = OBJECT_MAPPER.createObjectNode();
+        ArrayNode pContext = OBJECT_MAPPER.createArrayNode();
+        pContext.add(ODRL_CONTEXT);
+        pContext.add(DSPACE_CONTEXT);
+        policy.set("@context", pContext);
+        policy.put("@type", "Offer");
+        policy.put("@id", offerId);
+        policy.put("assigner", PROVIDER_DID);
+        policy.put("target", BROWSE_ONLY_ASSET_ID);
+
+        ObjectNode constraint = OBJECT_MAPPER.createObjectNode();
+        constraint.put("leftOperand", "dspace:membershipStatus");
+        constraint.put("operator", "eq");
+        constraint.put("rightOperand", "premium");
+
+        ObjectNode permission = OBJECT_MAPPER.createObjectNode();
+        permission.put("action", "use");
+        permission.set("constraint", constraint);
+
+        ArrayNode permissions = OBJECT_MAPPER.createArrayNode();
+        permissions.add(permission);
+        policy.set("permission", permissions);
+
+        String counterPartyAddress = DCP_PROVIDER_ADDRESS + DSP_ENDPOINT_PATH;
+        IdResponse negotiationResponse = DSPManagementHelper.startNegotiation(
+                DCP_MANAGEMENT_API_ADDRESS,
+                counterPartyAddress,
+                PROVIDER_DID,
+                offerId,
+                BROWSE_ONLY_ASSET_ID,
+                policy);
+        assertNotNull(negotiationResponse, "Negotiation start response should not be null.");
+        browseOnlyNegotiationId = negotiationResponse.getId();
+        log.debug("Started negotiation {} for asset {}", browseOnlyNegotiationId, BROWSE_ONLY_ASSET_ID);
+    }
+
+    /**
+     * Verifies that the contract negotiation for the browse-only asset (ASSET-3) is terminated.
+     * The provider rejects the negotiation because the consumer's credentials do not satisfy
+     * the contract policy (membershipStatus != "premium").
+     * Equivalent to Scenario B, step 5 in DSP_INTEGRATION.md "Advanced Policy Scenarios".
+     */
+    @Then("The contract negotiation for asset ASSET-3 is terminated.")
+    public void theNegotiationForAsset3IsTerminated() throws Exception {
+        assertNotNull(browseOnlyNegotiationId,
+                "Negotiation for " + BROWSE_ONLY_ASSET_ID + " must have been started.");
+        DSPManagementHelper.waitForNegotiationTerminated(
+                DCP_MANAGEMENT_API_ADDRESS, browseOnlyNegotiationId);
+        log.debug("Confirmed: negotiation {} for asset {} was terminated (rejected).",
+                browseOnlyNegotiationId, BROWSE_ONLY_ASSET_ID);
+    }
+
+    // --- Scenario C: Explicit Scope Declaration in Policy ---
+
+    /**
+     * Creates a product specification for the scoped-policy asset (ASSET-4).
+     * Only includes DCP endpoint and upstream address characteristics.
+     * Equivalent to Scenario C, step 1 in DSP_INTEGRATION.md "Advanced Policy Scenarios".
+     */
+    @Given("The provider creates a scoped-policy product spec with asset ASSET-4.")
+    public void theProviderCreatesAScopedPolicyProductSpec() throws Exception {
+        scopedSpecId = createSimpleDcpProductSpec(SCOPED_ASSET_ID, "Scoped Policy Spec");
+        log.debug("Scoped-policy product spec created with ID: {}", scopedSpecId);
+    }
+
+    /**
+     * Creates an offering with explicit dspace:scope declarations in the contract policy permissions.
+     * The dayOfWeek constraint is scoped to transfer.process and membershipType to contract.negotiation.
+     * This makes the policy self-documenting without relying on external scope-mapping configuration.
+     * Equivalent to Scenario C, step 2 in DSP_INTEGRATION.md "Advanced Policy Scenarios".
+     */
+    @Given("The provider creates an offering with explicit scope declarations in contract policy.")
+    public void theProviderCreatesAnOfferingWithExplicitScopeDeclarations() throws Exception {
+        assertNotNull(scopedSpecId, "Scoped-policy product spec must be created first.");
+        assertNotNull(dspCategoryId, "Category must be created first.");
+
+        String accessPolicyId = UUID.randomUUID().toString();
+        String contractPolicyId = UUID.randomUUID().toString();
+
+        ObjectNode offering = OBJECT_MAPPER.createObjectNode();
+        offering.put("name", "Scoped Policy Offering");
+        offering.put("description", "Uses explicit scope in permissions");
+        offering.put("isBundle", false);
+        offering.put("isSellable", true);
+        offering.put("lifecycleStatus", "Active");
+        offering.put("@schemaLocation", EXTERNAL_ID_SCHEMA);
+        offering.put("externalId", SCOPED_OFFER_EXTERNAL_ID);
+
+        ObjectNode specRef = OBJECT_MAPPER.createObjectNode();
+        specRef.put("id", scopedSpecId);
+        specRef.put("name", "Scoped Policy Spec");
+        offering.set("productSpecification", specRef);
+
+        ArrayNode categories = OBJECT_MAPPER.createArrayNode();
+        ObjectNode catRef = OBJECT_MAPPER.createObjectNode();
+        catRef.put("id", dspCategoryId);
+        categories.add(catRef);
+        offering.set("category", categories);
+
+        ArrayNode terms = OBJECT_MAPPER.createArrayNode();
+        ObjectNode term = OBJECT_MAPPER.createObjectNode();
+        term.put("name", "edc:contractDefinition");
+        term.put("@schemaLocation", CONTRACT_DEFINITION_SCHEMA);
+
+        // Access policy: simple "use" (open to all)
+        ObjectNode accessPolicy = OBJECT_MAPPER.createObjectNode();
+        accessPolicy.put("@context", ODRL_CONTEXT);
+        accessPolicy.put("odrl:uid", accessPolicyId);
+        accessPolicy.put("assigner", PROVIDER_DID);
+        ArrayNode apPermissions = OBJECT_MAPPER.createArrayNode();
+        ObjectNode apPerm = OBJECT_MAPPER.createObjectNode();
+        apPerm.put("action", "use");
+        apPermissions.add(apPerm);
+        accessPolicy.set("permission", apPermissions);
+        accessPolicy.put("@type", "Offer");
+        term.set("accessPolicy", accessPolicy);
+
+        // Contract policy: two permissions with explicit dspace:scope
+        ObjectNode contractPolicy = OBJECT_MAPPER.createObjectNode();
+        ArrayNode cpContext = OBJECT_MAPPER.createArrayNode();
+        cpContext.add(ODRL_CONTEXT);
+        cpContext.add(DSPACE_CONTEXT);
+        contractPolicy.set("@context", cpContext);
+        contractPolicy.put("odrl:uid", contractPolicyId);
+        contractPolicy.put("assigner", PROVIDER_DID);
+
+        ArrayNode cpPermissions = OBJECT_MAPPER.createArrayNode();
+
+        // Permission 1: dayOfWeek < 6, scoped to transfer.process
+        ObjectNode transferPerm = OBJECT_MAPPER.createObjectNode();
+        transferPerm.put("action", "use");
+        transferPerm.put("dspace:scope", "transfer.process");
+        ObjectNode dowConstraint = OBJECT_MAPPER.createObjectNode();
+        dowConstraint.put("leftOperand", "odrl:dayOfWeek");
+        dowConstraint.put("operator", "lt");
+        ObjectNode dowRightOperand = OBJECT_MAPPER.createObjectNode();
+        dowRightOperand.put("@value", 6);
+        dowRightOperand.put("@type", "xsd:integer");
+        dowConstraint.set("rightOperand", dowRightOperand);
+        transferPerm.set("constraint", dowConstraint);
+        cpPermissions.add(transferPerm);
+
+        // Permission 2: membershipType == "FullMember", scoped to contract.negotiation
+        ObjectNode negotiationPerm = OBJECT_MAPPER.createObjectNode();
+        negotiationPerm.put("action", "use");
+        negotiationPerm.put("dspace:scope", "contract.negotiation");
+        ObjectNode memberConstraint = OBJECT_MAPPER.createObjectNode();
+        memberConstraint.put("leftOperand", "dspace:membershipType");
+        memberConstraint.put("operator", "eq");
+        memberConstraint.put("rightOperand", "FullMember");
+        negotiationPerm.set("constraint", memberConstraint);
+        cpPermissions.add(negotiationPerm);
+
+        contractPolicy.set("permission", cpPermissions);
+        contractPolicy.put("@type", "Offer");
+        term.set("contractPolicy", contractPolicy);
+
+        terms.add(term);
+        offering.set("productOfferingTerm", terms);
+
+        RequestBody body = RequestBody.create(
+                OBJECT_MAPPER.writeValueAsString(offering),
+                okhttp3.MediaType.parse(MediaType.APPLICATION_JSON));
+        Request request = new Request.Builder()
+                .post(body)
+                .url(TMF_DIRECT_ADDRESS
+                        + "/tmf-api/productCatalogManagement/v4/productOffering")
+                .header("accept", "application/json;charset=utf-8")
+                .header("Content-Type", "application/json;charset=utf-8")
+                .build();
+        try (Response response = HTTP_CLIENT.newCall(request).execute()) {
+            assertTrue(response.isSuccessful(),
+                    String.format("Scoped-policy offering should have been created. Got status %d",
+                            response.code()));
+            log.debug("Scoped-policy offering created for asset {}", SCOPED_ASSET_ID);
+        }
+    }
+
+    /**
+     * Verifies that the scoped-policy asset (ASSET-4) appears in the DCP catalog.
+     */
+    @Then("The DCP catalog contains asset ASSET-4.")
+    public void theDcpCatalogContainsAsset4() {
+        assertNotNull(dcpCatalogResponse, "DCP catalog response must have been retrieved first.");
+        JsonNode dataset = findDatasetByAssetId(dcpCatalogResponse, SCOPED_ASSET_ID);
+        assertNotNull(dataset,
+                "Asset " + SCOPED_ASSET_ID + " should appear in the catalog. Catalog: "
+                        + dcpCatalogResponse.toString().substring(0,
+                        Math.min(dcpCatalogResponse.toString().length(), 1000)));
+        log.debug("Confirmed: asset {} is visible in the catalog.", SCOPED_ASSET_ID);
+    }
+
+    /**
+     * Starts a contract negotiation for the scoped-policy asset (ASSET-4) via DCP.
+     * The policy includes explicit dspace:scope declarations matching the offering.
+     */
+    @When("The consumer negotiates a contract for asset ASSET-4 via DCP.")
+    public void theConsumerNegotiatesAsset4ViaDcp() throws Exception {
+        assertNotNull(dcpCatalogResponse, "DCP catalog must have been retrieved first.");
+        JsonNode dataset = findDatasetByAssetId(dcpCatalogResponse, SCOPED_ASSET_ID);
+        assertNotNull(dataset, "Asset " + SCOPED_ASSET_ID + " must be in the catalog.");
+
+        String offerId = extractOfferIdFromDataset(dataset);
+        assertNotNull(offerId, "Should be able to extract an offer ID for " + SCOPED_ASSET_ID);
+
+        // Build contract policy with explicit scope declarations
+        ObjectNode policy = OBJECT_MAPPER.createObjectNode();
+        ArrayNode pContext = OBJECT_MAPPER.createArrayNode();
+        pContext.add(ODRL_CONTEXT);
+        pContext.add(DSPACE_CONTEXT);
+        policy.set("@context", pContext);
+        policy.put("@type", "Offer");
+        policy.put("@id", offerId);
+        policy.put("assigner", PROVIDER_DID);
+        policy.put("target", SCOPED_ASSET_ID);
+
+        ArrayNode permissions = OBJECT_MAPPER.createArrayNode();
+
+        // dayOfWeek < 6 scoped to transfer.process
+        ObjectNode transferPerm = OBJECT_MAPPER.createObjectNode();
+        transferPerm.put("action", "use");
+        transferPerm.put("dspace:scope", "transfer.process");
+        ObjectNode dowConstraint = OBJECT_MAPPER.createObjectNode();
+        dowConstraint.put("leftOperand", "odrl:dayOfWeek");
+        dowConstraint.put("operator", "lt");
+        ObjectNode dowRightOperand = OBJECT_MAPPER.createObjectNode();
+        dowRightOperand.put("@value", 6);
+        dowRightOperand.put("@type", "xsd:integer");
+        dowConstraint.set("rightOperand", dowRightOperand);
+        transferPerm.set("constraint", dowConstraint);
+        permissions.add(transferPerm);
+
+        // membershipType == "FullMember" scoped to contract.negotiation
+        ObjectNode negotiationPerm = OBJECT_MAPPER.createObjectNode();
+        negotiationPerm.put("action", "use");
+        negotiationPerm.put("dspace:scope", "contract.negotiation");
+        ObjectNode memberConstraint = OBJECT_MAPPER.createObjectNode();
+        memberConstraint.put("leftOperand", "dspace:membershipType");
+        memberConstraint.put("operator", "eq");
+        memberConstraint.put("rightOperand", "FullMember");
+        negotiationPerm.set("constraint", memberConstraint);
+        permissions.add(negotiationPerm);
+
+        policy.set("permission", permissions);
+
+        String counterPartyAddress = DCP_PROVIDER_ADDRESS + DSP_ENDPOINT_PATH;
+        IdResponse negotiationResponse = DSPManagementHelper.startNegotiation(
+                DCP_MANAGEMENT_API_ADDRESS,
+                counterPartyAddress,
+                PROVIDER_DID,
+                offerId,
+                SCOPED_ASSET_ID,
+                policy);
+        assertNotNull(negotiationResponse, "Negotiation start response should not be null.");
+        scopedNegotiationId = negotiationResponse.getId();
+        log.debug("Started negotiation {} for asset {}", scopedNegotiationId, SCOPED_ASSET_ID);
+    }
+
+    /**
+     * Waits for the ASSET-4 negotiation to reach FINALIZED state.
+     */
+    @When("The consumer waits for the ASSET-4 negotiation to be finalized.")
+    public void theConsumerWaitsForAsset4NegotiationFinalized() throws Exception {
+        assertNotNull(scopedNegotiationId,
+                "Negotiation for " + SCOPED_ASSET_ID + " must have been started.");
+        scopedAgreementId = DSPManagementHelper.waitForNegotiationFinalized(
+                DCP_MANAGEMENT_API_ADDRESS, scopedNegotiationId);
+        assertNotNull(scopedAgreementId,
+                "Agreement ID for " + SCOPED_ASSET_ID + " should not be null.");
+        log.debug("Negotiation {} finalized with agreement ID: {}",
+                scopedNegotiationId, scopedAgreementId);
+    }
+
+    /**
+     * Starts a transfer process for the scoped-policy asset (ASSET-4) via DCP.
+     */
+    @When("The consumer starts a transfer for asset ASSET-4 via DCP.")
+    public void theConsumerStartsTransferForAsset4() throws Exception {
+        assertNotNull(scopedAgreementId,
+                "Agreement for " + SCOPED_ASSET_ID + " must exist.");
+        String counterPartyAddress = DCP_PROVIDER_ADDRESS + DSP_ENDPOINT_PATH;
+        IdResponse transferResponse = DSPManagementHelper.startTransferProcess(
+                DCP_MANAGEMENT_API_ADDRESS,
+                SCOPED_ASSET_ID,
+                PROVIDER_DID,
+                counterPartyAddress,
+                scopedAgreementId,
+                DSPManagementHelper.TRANSFER_TYPE_HTTP_DATA_PULL);
+        assertNotNull(transferResponse, "Transfer process start response should not be null.");
+        scopedTransferId = transferResponse.getId();
+        log.debug("Started transfer {} for asset {}", scopedTransferId, SCOPED_ASSET_ID);
+    }
+
+    /**
+     * Waits for the ASSET-4 transfer process to reach STARTED state.
+     */
+    @When("The consumer waits for the ASSET-4 transfer to start.")
+    public void theConsumerWaitsForAsset4TransferStarted() throws Exception {
+        assertNotNull(scopedTransferId,
+                "Transfer for " + SCOPED_ASSET_ID + " must have been started.");
+        DSPManagementHelper.waitForTransferStarted(DCP_MANAGEMENT_API_ADDRESS, scopedTransferId);
+        log.debug("Transfer {} for asset {} is started.", scopedTransferId, SCOPED_ASSET_ID);
+    }
+
+    /**
+     * Retrieves the EDR data address for ASSET-4 and accesses the UptimeReport entity.
+     * Combines EDR retrieval and data access verification in a single step to keep
+     * the feature file concise while fully validating the scoped-policy transfer.
+     */
+    @Then("The consumer retrieves the EDR and accesses UptimeReport via the ASSET-4 transfer.")
+    public void theConsumerAccessesUptimeReportViaAsset4Transfer() throws Exception {
+        assertNotNull(scopedTransferId,
+                "Transfer for " + SCOPED_ASSET_ID + " must have been started.");
+        scopedDataAddress = DSPManagementHelper.getDataAddress(
+                DCP_MANAGEMENT_API_ADDRESS, scopedTransferId);
+        assertNotNull(scopedDataAddress,
+                "Data address for " + SCOPED_ASSET_ID + " should not be null.");
+        assertNotNull(scopedDataAddress.getEndpoint(),
+                "Endpoint for " + SCOPED_ASSET_ID + " should not be null.");
+        assertNotNull(scopedDataAddress.getAuthorization(),
+                "Authorization for " + SCOPED_ASSET_ID + " should not be null.");
+
+        String entityUrl = scopedDataAddress.getEndpoint()
+                + "/ngsi-ld/v1/entities/" + UPTIME_REPORT_ENTITY_ID;
+        Request request = new Request.Builder()
+                .get()
+                .url(entityUrl)
+                .addHeader("Accept", "*/*")
+                .addHeader("Authorization", "Bearer " + scopedDataAddress.getAuthorization())
+                .build();
+        try (Response response = HTTP_CLIENT.newCall(request).execute()) {
+            assertEquals(org.apache.http.HttpStatus.SC_OK, response.code(),
+                    String.format("Should be able to access UptimeReport via scoped-policy "
+                            + "transfer endpoint. Got status %d", response.code()));
+            String body = response.body().string();
+            JsonNode entity = OBJECT_MAPPER.readTree(body);
+            assertEquals(UPTIME_REPORT_ENTITY_ID, entity.get("id").asText(),
+                    "Returned entity ID should match the UptimeReport.");
+            log.debug("Successfully accessed UptimeReport via scoped-policy transfer at {}",
+                    entityUrl);
+        }
+    }
+
     // ==================== DCP Helper Methods ====================
 
     /**
@@ -2155,6 +2845,115 @@ public class DSPStepDefinitions extends StepDefintions {
         policy.set("permission", permissions);
 
         return policy;
+    }
+
+    // ==================== Advanced Policy: Helper Methods ====================
+
+    /**
+     * Creates a simple DCP-only product specification with the given asset ID.
+     * Includes only the DCP endpoint and upstream address characteristics,
+     * matching the pattern used by Scenarios A, B, and C in the Advanced Policy Scenarios.
+     *
+     * @param assetId  the external asset ID (e.g., ASSET-2, ASSET-3, ASSET-4)
+     * @param specName the display name for the specification
+     * @return the created product specification ID
+     * @throws Exception if creation fails
+     */
+    private String createSimpleDcpProductSpec(String assetId, String specName) throws Exception {
+        ObjectNode specJson = OBJECT_MAPPER.createObjectNode();
+        specJson.put("name", specName);
+        specJson.put("@schemaLocation", EXTERNAL_ID_SCHEMA);
+        specJson.put("externalId", assetId);
+
+        ArrayNode characteristics = OBJECT_MAPPER.createArrayNode();
+        characteristics.add(buildCharacteristic("dcp",
+                "Endpoint, that the service can be negotiated at via DCP.",
+                "endpointUrl",
+                DCP_PROVIDER_ADDRESS + DSP_ENDPOINT_PATH));
+        characteristics.add(buildCharacteristic("upstreamAddress",
+                "Address of the upstream serving the data",
+                "upstreamAddress",
+                DATA_SERVICE_UPSTREAM));
+        specJson.set("productSpecCharacteristic", characteristics);
+
+        RequestBody body = RequestBody.create(
+                OBJECT_MAPPER.writeValueAsString(specJson),
+                okhttp3.MediaType.parse(MediaType.APPLICATION_JSON));
+        Request request = new Request.Builder()
+                .post(body)
+                .url(TMF_DIRECT_ADDRESS
+                        + "/tmf-api/productCatalogManagement/v4/productSpecification")
+                .header("accept", "application/json;charset=utf-8")
+                .header("Content-Type", "application/json;charset=utf-8")
+                .build();
+        try (Response response = HTTP_CLIENT.newCall(request).execute()) {
+            assertEquals(org.apache.http.HttpStatus.SC_CREATED, response.code(),
+                    "Product specification for " + assetId + " should have been created.");
+            JsonNode specResult = OBJECT_MAPPER.readTree(response.body().string());
+            return specResult.get("id").asText();
+        }
+    }
+
+    /**
+     * Finds a dataset in the DCAT catalog by its asset ID.
+     * Searches through the {@code dcat:dataset} array for a dataset whose {@code @id}
+     * matches the given asset ID.
+     *
+     * @param catalog the catalog JSON response from the DSP management API
+     * @param assetId the asset ID to search for (e.g., ASSET-2)
+     * @return the dataset JSON node if found, or {@code null} if the asset is not in the catalog
+     */
+    private JsonNode findDatasetByAssetId(JsonNode catalog, String assetId) {
+        JsonNode datasets = catalog.path("dcat:dataset");
+        if (datasets.isMissingNode()) {
+            datasets = catalog.path("dataset");
+        }
+
+        if (datasets.isArray()) {
+            for (JsonNode dataset : datasets) {
+                String datasetId = dataset.path("@id").asText(null);
+                if (assetId.equals(datasetId)) {
+                    return dataset;
+                }
+            }
+        } else if (!datasets.isMissingNode()) {
+            String datasetId = datasets.path("@id").asText(null);
+            if (assetId.equals(datasetId)) {
+                return datasets;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Extracts the offer ID from a specific dataset node in the catalog.
+     * Looks in {@code odrl:hasPolicy} for the {@code @id} field of the first policy.
+     *
+     * @param dataset the dataset node from the DCAT catalog
+     * @return the offer ID, or {@code null} if no policy is found
+     */
+    private String extractOfferIdFromDataset(JsonNode dataset) {
+        JsonNode hasPolicy = dataset.path("odrl:hasPolicy");
+        if (hasPolicy.isMissingNode()) {
+            hasPolicy = dataset.path("hasPolicy");
+        }
+
+        JsonNode policyNode;
+        if (hasPolicy.isArray() && hasPolicy.size() > 0) {
+            policyNode = hasPolicy.get(0);
+        } else if (!hasPolicy.isMissingNode() && !hasPolicy.isArray()) {
+            policyNode = hasPolicy;
+        } else {
+            log.debug("No policy found in dataset to extract offer ID.");
+            return null;
+        }
+
+        String offerId = policyNode.path("@id").asText(null);
+        if (offerId != null) {
+            log.debug("Extracted offer ID from dataset: {}", offerId);
+        }
+        return offerId;
     }
 
     // ==================== DSP TMForum: Helper Methods ====================
