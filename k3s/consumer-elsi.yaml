@@ -14,6 +14,11 @@ decentralizedIam:
       config:
         volume:
           storageClass: "local-path"
+        users:
+          statuslist:
+            - createdb
+        databases:
+          statuslistdb: statuslist
 
     vcverifier:
       enabled: false
@@ -38,6 +43,35 @@ tm-forum-api:
   enabled: false
 contract-management:
   enabled: false
+
+# status-list-server for credential revocation (Token Status List specification)
+statusListServer:
+  enabled: true
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    limits:
+      cpu: "250m"
+      memory: "256Mi"
+  postgresql:
+    host: "postgres"
+    port: "5432"
+    database: "statuslistdb"
+    auth:
+      username: "statuslist"
+      # use the Zalando Postgres Operator auto-generated credentials secret
+      existingSecret: "statuslist.postgres.credentials.postgresql.acid.zalan.do"
+      existingSecretPasswordKey: "password"
+  redis:
+    enabled: true
+    resources:
+      requests:
+        cpu: "50m"
+        memory: "64Mi"
+      limits:
+        cpu: "100m"
+        memory: "128Mi"
 
 keycloak:
   ingress:
@@ -71,6 +105,22 @@ keycloak:
         - -ec
         - |
           curl -X 'POST' 'http://tir.trust-anchor.svc.cluster.local:8080/issuer' -H 'Content-Type: application/json' -d "{\"did\": \"did:elsi:VATDE-1234567\", \"credentials\": []}"
+    # download the token-status-list plugin JAR from Maven Central into the providers volume
+    - name: download-token-status-plugin
+      image: curlimages/curl:8.18.0
+      imagePullPolicy: IfNotPresent
+      command:
+        - /bin/sh
+      args:
+        - -ec
+        - |
+          PLUGIN_URL="https://repo1.maven.org/maven2/io/github/adorsys-gis/keycloak-token-status-plugin/0.2.0/keycloak-token-status-plugin-0.2.0.jar"
+          echo "Downloading token-status-list plugin from ${PLUGIN_URL}"
+          curl -sSL -o /target/keycloak-token-status-plugin-0.2.0.jar "${PLUGIN_URL}"
+          echo "Plugin downloaded successfully"
+      volumeMounts:
+        - name: providers
+          mountPath: /target
     - name: register-at-til
       image: quay.io/curl/curl:8.1.2
       command:
@@ -87,6 +137,14 @@ keycloak:
         - name: consumer-til-registration
           mountPath: /bin/init.sh
           subPath: init.sh
+  # token-status-list plugin configuration for credential revocation
+  tokenStatusList:
+    enabled: true
+    # in-cluster URL of the status-list-server
+    serverUrl: "http://status-list-server:8081"
+    # credential types that should be revocable via the token status list
+    credentialTypes:
+      - OperatorCredential
   extraVolumeMounts:
     - name: elsi-trust-store
       mountPath: /trust-store
@@ -260,6 +318,10 @@ keycloak:
             config:
               claim.name: roles
               clientId: did:web:did-provider.127.0.0.1.nip.io
+          - name: status-list-claim-mapper-oc
+            protocol: oid4vc
+            protocolMapper: oid4vc-status-list-claim-mapper
+            config: {}
       verifiable-credential:
         attributes:
           format: "jwt_vc_json"
