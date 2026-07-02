@@ -347,6 +347,8 @@ keycloak:
     registry: quay.io
     repository: seamware/keycloak
     tag: "26.6.3"
+  # -- @param preserveProviders Disable mounting an emptyDir over /opt/keycloak/providers, preserving the providers bundled in the image.
+  preserveProviders: true
   # -- TLS terminated at the ingress; the container does not serve HTTPS itself
   tls:
     enabled: false
@@ -411,18 +413,36 @@ keycloak:
     - name: KC_HEAP_SIZE
       value: "1024m"
 
-  # -- name of a ConfigMap whose keys are injected as environment variables
-  # via `envFrom.configMapRef` in the Keycloak StatefulSet. The value is
-  # processed by Bitnami's `tpl` function so it may contain Go template
-  # expressions. The default points at the tracing ConfigMap created by
-  # `keycloak-tracing-cm.yaml`; when tracing is disabled the ConfigMap
-  # exists but is empty, so no extra env vars are added.
-  extraEnvVarsCM: "{{ .Release.Name }}-keycloak-tracing"
+  # -- name of a Secret whose keys are injected as environment variables
+  # via `envFrom.secretRef` in the Keycloak StatefulSet. The default
+  # points at the Secret created by `keycloak-env-secret.yaml`; when no
+  # features (tracing, proxy) are enabled the Secret exists but is empty,
+  # so no extra env vars are added.
+  extraEnvVarsSecret: "dsc-keycloak-env"
+
+  # -- HTTP forward proxy configuration for outbound requests from Keycloak.
+  # When enabled, the standard HTTPS_PROXY / HTTP_PROXY / NO_PROXY env vars
+  # and the Keycloak SPI proxy mapping are injected via the extra-env ConfigMap.
+  # The token-status-list plugin reads these env vars to route requests
+  # to the status-list-server through the proxy.
+  proxy:
+    # -- toggle proxy injection for Keycloak
+    enabled: false
+    # -- proxy URL used for HTTPS connections (e.g. http://squid-proxy.infra.svc.cluster.local:8888)
+    httpsProxy: ""
+    # -- proxy URL used for plain HTTP connections (defaults to httpsProxy if empty)
+    httpProxy: ""
+    # -- comma-separated list of hosts/domains that should bypass the proxy
+    noProxy: "localhost,*.cluster.local,*.svc"
+    # -- Keycloak SPI proxy mapping regex applied to the built-in HTTP client
+    # (KC_SPI_CONNECTIONS_HTTP_CLIENT_DEFAULT_PROXY_MAPPINGS).
+    # Leave empty to skip the SPI mapping.
+    spiProxyMappings: ""
 
   # -- distributed-tracing configuration for Keycloak (25+ native OTEL).
   # When enabled, a ConfigMap with the standard `OTEL_*` env vars and
   # `KC_TRACING_ENABLED=true` is created and injected via
-  # `extraEnvVarsCM`. No upstream Keycloak chart modifications are needed
+  # `extraEnvVarsSecret`. No upstream Keycloak chart modifications are needed
   # because the env vars are delivered through the `envFrom` hook.
   tracing:
     # -- toggle OpenTelemetry tracing on Keycloak. Leave unset (default)
@@ -1284,11 +1304,11 @@ keycloak:
     # -- configuration of the plugin JAR to download from Maven Central
     plugin:
       # -- Maven group ID of the keycloak-token-status-plugin
-      groupId: io.github.adorsys-gis
+      groupId: io.github.wistefan
       # -- Maven artifact ID of the keycloak-token-status-plugin
       artifactId: keycloak-token-status-plugin
       # -- version of the keycloak-token-status-plugin to download
-      version: "0.2.0"
+      version: "0.3.2"
       # -- base URL of the Maven repository to download the plugin JAR from
       mavenBaseUrl: https://repo1.maven.org/maven2
     # -- configuration of the init container that downloads the plugin JAR at pod startup
@@ -1303,7 +1323,7 @@ keycloak:
     issuerPrefix: ""
     # -- whether status list inclusion is mandatory for credential issuance.
     # -- When true, credentials cannot be issued without a status list entry.
-    mandatory: false
+    mandatory: true
     # -- maximum number of entries per status list
     maxEntries: 10000
     # -- timeout in milliseconds for status list issuance calls to the status-list-server
@@ -1316,6 +1336,11 @@ keycloak:
     registrationCooldown: 60000
     # -- number of failures before the circuit breaker opens, disabling status list calls temporarily
     circuitBreakerFailureThreshold: 5
+    # -- when true, the plugin accepts any TLS certificate from the status-list-server (insecure, use for development only)
+    tlsTrustAll: false
+    # -- path to a PEM-encoded CA certificate file mounted into the Keycloak container for verifying
+    # -- the status-list-server's TLS certificate. Leave empty to use the JVM default trust store.
+    tlsCaCertPath: ""
     # -- list of credential type names that should include the oid4vc-status-list-claim-mapper.
     # -- These credential types will be revocable via the token status list.
     # -- Example: ["LegalPersonCredential", "OperatorCredential"]
@@ -1518,11 +1543,11 @@ statusListServer:
   enabled: false
   image:
     # -- container image repository for the status-list-server
-    repository: ghcr.io/adorsys/status-list-server
+    repository: quay.io/wi_stefan/status-list-server
     # -- container image tag
-    tag: latest
+    tag: 1.0.1
     # -- image pull policy
-    pullPolicy: IfNotPresent
+    pullPolicy: Always
   service:
     # -- Kubernetes Service type
     serviceType: ClusterIP
@@ -1601,6 +1626,17 @@ statusListServer:
       limits:
         memory: "256Mi"
         cpu: "250m"
+  # -- signing key and certificate chain configuration for token signing.
+  # -- Mount an externally managed Secret (e.g. from cert-manager) containing tls.key and tls.crt.
+  # -- When enabled, the built-in ACME certificate manager is bypassed entirely.
+  # -- Files are re-read on each request so cert-manager rotation is picked up without a pod restart.
+  signing:
+    # -- should the signing key secret be mounted?
+    enabled: false
+    # -- name of the Kubernetes Secret containing tls.key and tls.crt (e.g. created by cert-manager)
+    secretName: "signing-key"
+    # -- mount path inside the container for the signing secret
+    mountPath: "/signing"
   # -- ingress configuration for external access to the status-list-server
   ingress:
     # -- should the ingress be enabled
@@ -2929,7 +2965,7 @@ extraManifests: []
 # -- dashboard for operating the FIWARE Data Space Connector
 fdsc-dashboard:
   enabled: false
-
+      
 prometheus:
   enabled: false
 

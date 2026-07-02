@@ -41,6 +41,12 @@ merges extra attributes (string or map), and appends verifiable credential attri
 {{- if .Values.keycloak.tokenStatusList.issuerPrefix -}}
 {{- $_ := set $statusListAttrs "status-list-issuer-prefix" .Values.keycloak.tokenStatusList.issuerPrefix -}}
 {{- end -}}
+{{- if .Values.keycloak.tokenStatusList.tlsTrustAll -}}
+{{- $_ := set $statusListAttrs "status-list-tls-trust-all" (.Values.keycloak.tokenStatusList.tlsTrustAll | toString) -}}
+{{- end -}}
+{{- if .Values.keycloak.tokenStatusList.tlsCaCertPath -}}
+{{- $_ := set $statusListAttrs "status-list-tls-ca-cert-path" .Values.keycloak.tokenStatusList.tlsCaCertPath -}}
+{{- end -}}
 {{- $attrs = mergeOverwrite $attrs $statusListAttrs -}}
 {{- end -}}
 {{- $attrs | toPrettyJson -}}

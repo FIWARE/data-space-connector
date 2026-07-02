@@ -47,6 +47,13 @@ spec:
               value: {{ .Values.statusListServer.env.cacheTtl | quote }}
             - name: APP_CACHE__MAX_CAPACITY
               value: {{ .Values.statusListServer.env.cacheMaxCapacity | quote }}
+            {{- if and .Values.statusListServer.postgresql.auth.existingSecret .Values.statusListServer.postgresql.auth.existingSecretPasswordKey }}
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.statusListServer.postgresql.auth.existingSecret }}
+                  key: {{ .Values.statusListServer.postgresql.auth.existingSecretPasswordKey }}
+            {{- end }}
             {{- if .Values.statusListServer.postgresql.url }}
             - name: APP_DATABASE__URL
               value: {{ .Values.statusListServer.postgresql.url | quote }}
@@ -59,13 +66,6 @@ spec:
               {{- else }}
               value: "postgres://{{ .Values.statusListServer.postgresql.auth.username }}@{{ .Values.statusListServer.postgresql.host }}:{{ .Values.statusListServer.postgresql.port }}/{{ .Values.statusListServer.postgresql.database }}"
               {{- end }}
-            {{- end }}
-            {{- if and .Values.statusListServer.postgresql.auth.existingSecret .Values.statusListServer.postgresql.auth.existingSecretPasswordKey }}
-            - name: DB_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.statusListServer.postgresql.auth.existingSecret }}
-                  key: {{ .Values.statusListServer.postgresql.auth.existingSecretPasswordKey }}
             {{- end }}
             {{- if .Values.statusListServer.redis.uri }}
             - name: APP_REDIS__URI
@@ -80,6 +80,18 @@ spec:
               value: {{ .Values.statusListServer.redis.certCacheTtl | quote }}
             - name: APP_REDIS__SECRETS_CACHE_TTL
               value: {{ .Values.statusListServer.redis.secretsCacheTtl | quote }}
+            {{- if .Values.statusListServer.signing.enabled }}
+            - name: APP_SERVER__SIGNING__KEY_FILE
+              value: "{{ .Values.statusListServer.signing.mountPath }}/tls.key"
+            - name: APP_SERVER__SIGNING__CERT_FILE
+              value: "{{ .Values.statusListServer.signing.mountPath }}/tls.crt"
+            {{- end }}
+          {{- if .Values.statusListServer.signing.enabled }}
+          volumeMounts:
+            - name: signing-key
+              mountPath: {{ .Values.statusListServer.signing.mountPath }}
+              readOnly: true
+          {{- end }}
           {{- with .Values.statusListServer.resources }}
           resources:
             {{- toYaml . | nindent 12 }}
@@ -100,4 +112,10 @@ spec:
             periodSeconds: 15
             timeoutSeconds: 3
             failureThreshold: 5
+      {{- if .Values.statusListServer.signing.enabled }}
+      volumes:
+        - name: signing-key
+          secret:
+            secretName: {{ .Values.statusListServer.signing.secretName }}
+      {{- end }}
 {{- end }}

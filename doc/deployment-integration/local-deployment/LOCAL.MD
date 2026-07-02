@@ -177,11 +177,16 @@ Use the offer uri(e.g. the `issuer`and `nonce` fields), to retrieve the actual o
 Exchange the pre-authorized code from the offer with an AccessToken at the authorization server:
 
 ```shell
-  export CREDENTIAL_ACCESS_TOKEN=$(curl -s -k -x localhost:8888 -X POST https://keycloak-consumer.127.0.0.1.nip.io/realms/test-realm/protocol/openid-connect/token \
+  token_response=$(curl -s -k -x localhost:8888 -X POST https://keycloak-consumer.127.0.0.1.nip.io/realms/test-realm/protocol/openid-connect/token \
     --header 'Accept: */*' \
     --header 'Content-Type: application/x-www-form-urlencoded' \
     --data grant_type=urn:ietf:params:oauth:grant-type:pre-authorized_code \
-    --data pre-authorized_code=${PRE_AUTHORIZED_CODE} | jq '.access_token' -r); echo ${CREDENTIAL_ACCESS_TOKEN}
+    --data pre-authorized_code=${PRE_AUTHORIZED_CODE})
+  export CREDENTIAL_ACCESS_TOKEN=$(echo $token_response | jq '.access_token' -r); echo ${CREDENTIAL_ACCESS_TOKEN}
+  export CREDENTIAL_IDENTIFIER=$(echo "${token_response}" | jq -r '
+    .authorization_details[]? |
+    select(.credential_identifiers != null and (.credential_identifiers | length) > 0) |
+    .credential_identifiers[0]' | head -n 1); echo ${CREDENTIAL_IDENTIFIER}
 ```
 
 Use the returned access token to get the actual credential:
@@ -192,7 +197,7 @@ Use the returned access token to get the actual credential:
     --header 'Content-Type: application/json' \
     --header "Authorization: Bearer ${CREDENTIAL_ACCESS_TOKEN}" \
     --data "{
-              \"credential_configuration_id\": \"user-credential\"
+              \"credential_identifier\": \"${CREDENTIAL_IDENTIFIER}\"
             }" | jq '.credentials[0].credential' -r); echo ${VERIFIABLE_CREDENTIAL}
 ```
 
@@ -1561,3 +1566,7 @@ In order to build a concrete deployment, [maven](https://maven.apache.org/) exec
 4. Spin up the cluster
 5. Apply the infrastructure resources to the cluster, via `kubectl apply`
 6. Apply the charts to the cluster, via `kubectl apply`
+
+# Trust local certificate
+kubectl get secret ca-secret -n cert-manager -o jsonpath='{.data.tls\.crt}' | base64 -d > local-ca.crt 
+  open chrome://settings/certificates → "Authorities" → Import local-ca.crt and tick "Trust this certificate for identifying websites". Same effect, just the UI path.

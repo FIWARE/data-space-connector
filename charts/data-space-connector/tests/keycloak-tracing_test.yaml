@@ -19,15 +19,15 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 # ---------------------------------------------------------------------------
-# Helm-unittest suite for the Keycloak tracing ConfigMap.
+# Helm-unittest suite for the Keycloak env Secret.
 #
-# The ConfigMap is injected into the Bitnami Keycloak subchart via the
-# `extraEnvVarsCM` hook and provides OTEL_* / QUARKUS_OTEL_* / KC_*
-# environment variables for Keycloak's built-in tracing support.
+# The Secret is injected into the CloudPirates Keycloak subchart via the
+# `extraEnvVarsSecret` hook and provides OTEL_* / QUARKUS_OTEL_* / KC_*
+# environment variables for tracing and proxy configuration.
 # ---------------------------------------------------------------------------
-suite: OpenTelemetry tracing - Keycloak ConfigMap
+suite: Keycloak env Secret (tracing + proxy)
 templates:
-  - templates/keycloak-tracing-cm.yaml
+  - templates/keycloak-env-secret.yaml
 tests:
   # ==========================================================================
   # Rendering gate
@@ -41,7 +41,7 @@ tests:
       - hasDocuments:
           count: 0
 
-  - it: should render an empty-data ConfigMap when tracing is disabled
+  - it: should render an empty Secret when tracing and proxy are disabled
     set:
       keycloak.enabled: true
       tracing.enabled: false
@@ -49,11 +49,11 @@ tests:
       - hasDocuments:
           count: 1
       - isKind:
-          of: ConfigMap
+          of: Secret
       - isNull:
-          path: data
+          path: stringData
 
-  - it: should render data entries when tracing is enabled
+  - it: should render stringData entries when tracing is enabled
     set:
       keycloak.enabled: true
       tracing.enabled: true
@@ -61,9 +61,9 @@ tests:
       - hasDocuments:
           count: 1
       - isKind:
-          of: ConfigMap
+          of: Secret
       - isNotNull:
-          path: data
+          path: stringData
 
   # ==========================================================================
   # Keycloak-specific env vars
@@ -75,7 +75,7 @@ tests:
       tracing.enabled: true
     asserts:
       - equal:
-          path: data.KC_TRACING_ENABLED
+          path: stringData.KC_TRACING_ENABLED
           value: "true"
 
   - it: should set OTEL_SERVICE_NAME to keycloak by default
@@ -84,7 +84,7 @@ tests:
       tracing.enabled: true
     asserts:
       - equal:
-          path: data.OTEL_SERVICE_NAME
+          path: stringData.OTEL_SERVICE_NAME
           value: "keycloak"
 
   - it: should use custom service name when keycloak.tracing.serviceName is set
@@ -94,7 +94,7 @@ tests:
       keycloak.tracing.serviceName: my-keycloak
     asserts:
       - equal:
-          path: data.OTEL_SERVICE_NAME
+          path: stringData.OTEL_SERVICE_NAME
           value: "my-keycloak"
 
   # ==========================================================================
@@ -107,7 +107,7 @@ tests:
       tracing.enabled: true
     asserts:
       - equal:
-          path: data.OTEL_EXPORTER_OTLP_ENDPOINT
+          path: stringData.OTEL_EXPORTER_OTLP_ENDPOINT
           value: "http://RELEASE-NAME-opentelemetry-collector:4317"
 
   - it: should use custom OTLP endpoint when configured
@@ -117,7 +117,7 @@ tests:
       tracing.exporter.otlp.endpoint: "http://external-collector:4317"
     asserts:
       - equal:
-          path: data.OTEL_EXPORTER_OTLP_ENDPOINT
+          path: stringData.OTEL_EXPORTER_OTLP_ENDPOINT
           value: "http://external-collector:4317"
 
   - it: should set gRPC protocol by default
@@ -126,7 +126,7 @@ tests:
       tracing.enabled: true
     asserts:
       - equal:
-          path: data.OTEL_EXPORTER_OTLP_PROTOCOL
+          path: stringData.OTEL_EXPORTER_OTLP_PROTOCOL
           value: "grpc"
 
   - it: should disable metrics and logs exporters
@@ -135,10 +135,10 @@ tests:
       tracing.enabled: true
     asserts:
       - equal:
-          path: data.OTEL_METRICS_EXPORTER
+          path: stringData.OTEL_METRICS_EXPORTER
           value: "none"
       - equal:
-          path: data.OTEL_LOGS_EXPORTER
+          path: stringData.OTEL_LOGS_EXPORTER
           value: "none"
 
   # ==========================================================================
@@ -151,7 +151,7 @@ tests:
       tracing.enabled: true
     asserts:
       - equal:
-          path: data.QUARKUS_OTEL_EXPORTER_OTLP_TRACES_ENDPOINT
+          path: stringData.QUARKUS_OTEL_EXPORTER_OTLP_TRACES_ENDPOINT
           value: "http://RELEASE-NAME-opentelemetry-collector:4317"
 
   - it: should set Quarkus OTEL traces protocol
@@ -160,7 +160,7 @@ tests:
       tracing.enabled: true
     asserts:
       - equal:
-          path: data.QUARKUS_OTEL_EXPORTER_OTLP_TRACES_PROTOCOL
+          path: stringData.QUARKUS_OTEL_EXPORTER_OTLP_TRACES_PROTOCOL
           value: "grpc"
 
   # ==========================================================================
@@ -174,16 +174,70 @@ tests:
       keycloak.tracing.enabled: true
     asserts:
       - equal:
-          path: data.KC_TRACING_ENABLED
+          path: stringData.KC_TRACING_ENABLED
           value: "true"
       - isNotNull:
-          path: data.OTEL_EXPORTER_OTLP_ENDPOINT
+          path: stringData.OTEL_EXPORTER_OTLP_ENDPOINT
 
   - it: should disable tracing via keycloak.tracing.enabled even when global is on
     set:
       keycloak.enabled: true
       tracing.enabled: true
       keycloak.tracing.enabled: false
+      keycloak.proxy.enabled: false
     asserts:
       - isNull:
-          path: data
+          path: stringData
+
+  # ==========================================================================
+  # Proxy env vars
+  # ==========================================================================
+
+  - it: should render proxy env vars when proxy is enabled
+    set:
+      keycloak.enabled: true
+      keycloak.proxy.enabled: true
+      keycloak.proxy.httpsProxy: "http://squid:8888"
+    asserts:
+      - isKind:
+          of: Secret
+      - equal:
+          path: stringData.HTTPS_PROXY
+          value: "http://squid:8888"
+      - equal:
+          path: stringData.HTTP_PROXY
+          value: "http://squid:8888"
+      - equal:
+          path: stringData.NO_PROXY
+          value: "localhost,*.cluster.local,*.svc"
+
+  - it: should set SPI proxy mappings when configured
+    set:
+      keycloak.enabled: true
+      keycloak.proxy.enabled: true
+      keycloak.proxy.httpsProxy: "http://squid:8888"
+      keycloak.proxy.spiProxyMappings: ".*\\.nip\\.io;http://squid:8888"
+    asserts:
+      - equal:
+          path: stringData.KC_SPI_CONNECTIONS_HTTP_CLIENT_DEFAULT_PROXY_MAPPINGS
+          value: ".*\\.nip\\.io;http://squid:8888"
+
+  - it: should not render proxy vars when proxy is disabled
+    set:
+      keycloak.enabled: true
+      keycloak.proxy.enabled: false
+    asserts:
+      - isNull:
+          path: stringData.HTTPS_PROXY
+
+  - it: should render both tracing and proxy when both are enabled
+    set:
+      keycloak.enabled: true
+      tracing.enabled: true
+      keycloak.proxy.enabled: true
+      keycloak.proxy.httpsProxy: "http://squid:8888"
+    asserts:
+      - isNotNull:
+          path: stringData.KC_TRACING_ENABLED
+      - isNotNull:
+          path: stringData.HTTPS_PROXY

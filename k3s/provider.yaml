@@ -993,9 +993,9 @@ keycloak:
       args:
         - -ec
         - |
-          PLUGIN_URL="https://repo1.maven.org/maven2/io/github/adorsys-gis/keycloak-token-status-plugin/0.2.0/keycloak-token-status-plugin-0.2.0.jar"
+          PLUGIN_URL="https://github.com/wistefan/token-status-link/releases/download/v0.3.7/keycloak-token-status-plugin-0.3.7.jar"
           echo "Downloading token-status-list plugin from ${PLUGIN_URL}"
-          curl -sSL -o /providers/keycloak-token-status-plugin-0.2.0.jar "${PLUGIN_URL}"
+          curl -sSL -o /providers/keycloak-token-status-plugin-0.3.7.jar "${PLUGIN_URL}"
           echo "Plugin downloaded successfully"
       volumeMounts:
         - name: providers
@@ -1030,10 +1030,20 @@ keycloak:
   tokenStatusList:
     enabled: true
     # in-cluster URL of the status-list-server
-    serverUrl: "http://status-list-server:8081"
+    serverUrl: "https://provider-status-list.127.0.0.1.nip.io"
+    # trust self-signed certificates from cert-manager's selfsigned-issuer
+    tlsTrustAll: true
     # credential types that should be revocable via the token status list
     credentialTypes:
       - LegalPersonCredential
+      - OperatorCredential
+      - MembershipCredential
+      - VerifiableCredential
+  proxy:
+    enabled: true
+    httpsProxy: "http://squid-proxy.infra.svc.cluster.local:8888"
+    noProxy: "localhost,*.cluster.local,*.svc"
+    spiProxyMappings: ".*\\.127\\.0\\.0\\.1\\.nip\\.io;http://squid-proxy.infra.svc.cluster.local:8888"
   # extraEnvVars replaces the umbrella list, so KC_HEAP_SIZE has to be repeated here.
   # STORE_PASS is consumed by the realm.json key-provider config (see signingKey above).
   extraEnvVars:
@@ -1105,6 +1115,9 @@ keycloak:
             config:
               claim.name: roles
               clientId: did:web:fancy-marketplace.biz
+          - name: usd-list-claim-mapper
+            protocol: oid4vc
+            protocolMapper: oid4vc-status-list-claim-mapper
       user-credential:
         attributes:
           format: "jwt_vc_json"
@@ -1141,6 +1154,9 @@ keycloak:
             config:
               claim.name: roles
               clientId: did:web:fancy-marketplace.biz
+          - name: uc-list-claim-mapper
+            protocol: oid4vc
+            protocolMapper: oid4vc-status-list-claim-mapper
       membership-credential:
         attributes:
           format: "jwt_vc_json"
@@ -1165,6 +1181,9 @@ keycloak:
             config:
               claim.name: membershipType
               staticValue: FullMember
+          - name: membership-list-claim-mapper
+            protocol: oid4vc
+            protocolMapper: oid4vc-status-list-claim-mapper
       verifiable-credential:
         attributes:
           format: "dc+sd-jwt"
@@ -1193,6 +1212,9 @@ keycloak:
             config:
               claim.name: roles
               clientId: did:web:fancy-marketplace.biz
+          - name: marketplace-list-claim-mapper
+            protocol: oid4vc
+            protocolMapper: oid4vc-status-list-claim-mapper
       operator-credential:
         attributes:
           format: "dc+sd-jwt"
@@ -1227,6 +1249,9 @@ keycloak:
             config:
               claim.name: roles
               clientId: did:web:fancy-marketplace.biz
+          - name: oc-list-claim-mapper
+            protocol: oid4vc
+            protocolMapper: oid4vc-status-list-claim-mapper
     clientRoles: |
       "did:web:mp-operations.org": [
         {
@@ -1373,6 +1398,9 @@ keycloak:
             "value": "test"
           }
         ],
+        "realmRoles": [
+          "realm-admin"
+        ],
         "clientRoles": {
           "did:web:mp-operations.org": [
             "admin"
@@ -1498,11 +1526,11 @@ keycloak:
         notBefore: 0
         bearerOnly: false
         consentRequired: false
-        standardFlowEnabled: false
+        standardFlowEnabled: true
         implicitFlowEnabled: false
         directAccessGrantsEnabled: false
         serviceAccountsEnabled: true
-        publicClient: false
+        publicClient: true
         frontchannelLogout: false
         protocol: openid-connect
         attributes:
@@ -1624,6 +1652,27 @@ vc-operator:
 # status-list-server for credential revocation (Token Status List specification)
 statusListServer:
   enabled: true
+  signing:
+    enabled: true
+    secretName: "signing-key"
+  env:
+    serverDomain: "provider-status-list.127.0.0.1.nip.io"
+  ingress:
+    enabled: true
+    annotations:
+      cert-manager.io/cluster-issuer: "selfsigned-issuer"
+      cert-manager.io/private-key-algorithm: "ECDSA"
+      cert-manager.io/common-name: "provider-status-list.127.0.0.1.nip.io"
+      cert-manager.io/alt-names: "provider-status-list.127.0.0.1.nip.io"
+      traefik.ingress.kubernetes.io/router.tls: "true"
+    hosts:
+      - host: provider-status-list.127.0.0.1.nip.io
+        paths:
+          - "/"
+    tls:
+      - secretName: provider-status-list.127.0.0.1.nip.io-tls
+        hosts:
+          - provider-status-list.127.0.0.1.nip.io
   resources:
     requests:
       cpu: "100m"
@@ -1693,6 +1742,9 @@ fdsc-dashboard:
           roleMapping:
             admin: "admin"
           silentRenew: true
+  keycloak:
+    url: http://provider-keycloak:8080
+
 
 identityhub:
   enabled: false

@@ -184,16 +184,21 @@ Usage:
 {{- end -}}
 
 {{/*
-Name of the ConfigMap that carries the OTEL tracing env vars for the
-Keycloak StatefulSet. Used by the `keycloak-tracing-cm.yaml` template
-and referenced from the umbrella chart's `keycloak.extraEnvVarsCM`
-value (which the Bitnami chart processes through `tpl`).
+Name of the Secret that carries extra environment variables (tracing,
+proxy, etc.) for the Keycloak StatefulSet. Used by the
+`keycloak-env-secret.yaml` template and referenced from the umbrella
+chart's `keycloak.extraEnvVarsSecret` value.
 
 Usage (in templates):
-  {{ include "dsc.otel.keycloak.cmName" . }}
+  {{ include "dsc.keycloak.envSecretName" . }}
 */}}
+{{- define "dsc.keycloak.envSecretName" -}}
+dsc-keycloak-env
+{{- end -}}
+
+{{/* Keep the old name as an alias for backwards compatibility */}}
 {{- define "dsc.otel.keycloak.cmName" -}}
-{{- printf "%s-keycloak-tracing" .Release.Name -}}
+{{- include "dsc.keycloak.envSecretName" . -}}
 {{- end -}}
 
 {{/*
