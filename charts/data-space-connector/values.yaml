@@ -1664,6 +1664,20 @@ statusListServer:
     secretName: "signing-key"
     # -- mount path inside the container for the signing secret
     mountPath: "/signing"
+    # -- issuer to be used for getting the signing key
+    issuer:
+      # -- name of the issuer to be used
+      name:
+      # -- kind of the issuer to be used
+      kind: ClusterIssuer
+      # -- alogorithm to be used for the cert
+      algorithm: ECDSA
+      # -- size of the key to be used
+      size: 256
+      # -- encoding of the certificate
+      encoding: PKCS8
+      # -- dns names to be included in the certificate
+      dnsNames: []
   # -- ingress configuration for external access to the status-list-server
   ingress:
     # -- should the ingress be enabled

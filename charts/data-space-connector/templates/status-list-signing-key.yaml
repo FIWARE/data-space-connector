@@ -1,0 +1,19 @@
+{{- if .Values.statusListServer.enabled .Values.statusListServer.signing.enabled }}
+
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ .Values.statusListServer.signing.secretName }}
+  namespace: {{ $.Release.Namespace | quote }}
+spec:
+  secretName: {{ .Values.statusListServer.signing.secretName }}
+  issuerRef:
+    name: {{ .Values.statusListServer.signing.issuer.name }}
+    kind: {{ .Values.statusListServer.signing.issuer.kind }}
+    group: cert-manager.io
+  privateKey:
+    algorithm: {{ .Values.statusListServer.signing.issuer.algorithm }}
+    size: {{ .Values.statusListServer.signing.issuer.size }}
+    encoding: {{ .Values.statusListServer.signing.issuer.encoding }}
+  dnsNames: {{ .Values.statusListServer.signing.issuer.dnsNames }}
+{{- end }}

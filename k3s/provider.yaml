@@ -1655,6 +1655,9 @@ statusListServer:
   signing:
     enabled: true
     secretName: "signing-key"
+    issuer:
+      dnsNames: ["mp-operations.org"]
+      name: selfsigned-issuer
   env:
     serverDomain: "provider-status-list.127.0.0.1.nip.io"
   ingress:

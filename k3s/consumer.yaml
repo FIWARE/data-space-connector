@@ -916,6 +916,9 @@ statusListServer:
   signing:
     enabled: true
     secretName: "signing-key"
+    issuer:
+      dnsNames: ["fancy-marketplace.biz"]
+      name: selfsigned-issuer
   env:
     serverDomain: "consumer-status-list.127.0.0.1.nip.io"
   ingress:
