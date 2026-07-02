@@ -1,0 +1,44 @@
+{{- if and .Values.statusListServer.enabled .Values.statusListServer.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: status-list-server
+  namespace: {{ $.Release.Namespace | quote }}
+  labels:
+    {{- include "dsc.labels" . | nindent 4 }}
+  {{- if .Values.statusListServer.ingress.annotations }}
+  annotations:
+    {{- with .Values.statusListServer.ingress.annotations }}
+      {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- end }}
+spec:
+  {{- if .Values.statusListServer.ingress.className }}
+  ingressClassName: {{ .Values.statusListServer.ingress.className }}
+  {{- end }}
+  {{- if .Values.statusListServer.ingress.tls }}
+  tls:
+    {{- range .Values.statusListServer.ingress.tls }}
+    - hosts:
+      {{- range .hosts }}
+        - {{ . | quote }}
+      {{- end }}
+      secretName: {{ .secretName }}
+    {{- end }}
+  {{- end }}
+  rules:
+  {{- range .Values.statusListServer.ingress.hosts }}
+    - host: {{ .host | quote }}
+      http:
+        paths:
+        {{- range .paths }}
+        - path: {{ . }}
+          pathType: Prefix
+          backend:
+            service:
+              name: status-list-server
+              port:
+                number: {{ $.Values.statusListServer.service.port }}
+        {{- end }}
+  {{- end }}
+{{- end }}

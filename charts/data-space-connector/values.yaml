@@ -374,6 +374,8 @@ keycloak:
     registry: quay.io
     repository: seamware/keycloak
     tag: "26.6.3"
+  # -- @param preserveProviders Disable mounting an emptyDir over /opt/keycloak/providers, preserving the providers bundled in the image.
+  preserveProviders: true
   # -- TLS terminated at the ingress; the container does not serve HTTPS itself
   tls:
     enabled: false
@@ -439,17 +441,36 @@ keycloak:
       value: "1024m"
 
   # -- name of a Secret whose keys are injected as environment variables
-  # via `envFrom.secretRef` in the Keycloak StatefulSet (CloudPirates
-  # chart hook). The default points at the tracing Secret created by
-  # `keycloak-tracing-secret.yaml`; when tracing is disabled the Secret
-  # exists but is empty, so no extra env vars are added.
-  extraEnvVarsSecret: "dsc-keycloak-tracing"
+  # via `envFrom.secretRef` in the Keycloak StatefulSet. The default
+  # points at the Secret created by `keycloak-env-secret.yaml`; when no
+  # features (tracing, proxy) are enabled the Secret exists but is empty,
+  # so no extra env vars are added.
+  extraEnvVarsSecret: "dsc-keycloak-env"
+
+  # -- HTTP forward proxy configuration for outbound requests from Keycloak.
+  # When enabled, the standard HTTPS_PROXY / HTTP_PROXY / NO_PROXY env vars
+  # and the Keycloak SPI proxy mapping are injected via the extra-env ConfigMap.
+  # The token-status-list plugin reads these env vars to route requests
+  # to the status-list-server through the proxy.
+  proxy:
+    # -- toggle proxy injection for Keycloak
+    enabled: false
+    # -- proxy URL used for HTTPS connections (e.g. http://squid-proxy.infra.svc.cluster.local:8888)
+    httpsProxy: ""
+    # -- proxy URL used for plain HTTP connections (defaults to httpsProxy if empty)
+    httpProxy: ""
+    # -- comma-separated list of hosts/domains that should bypass the proxy
+    noProxy: "localhost,*.cluster.local,*.svc"
+    # -- Keycloak SPI proxy mapping regex applied to the built-in HTTP client
+    # (KC_SPI_CONNECTIONS_HTTP_CLIENT_DEFAULT_PROXY_MAPPINGS).
+    # Leave empty to skip the SPI mapping.
+    spiProxyMappings: ""
 
   # -- distributed-tracing configuration for Keycloak (25+ native OTEL).
   # When enabled, a Secret with the standard `OTEL_*` env vars and
   # `KC_TRACING_ENABLED=true` is created and injected via
-  # `extraEnvVarsSecret`. No upstream Keycloak chart modifications are
-  # needed because the env vars are delivered through the `envFrom` hook.
+  # `extraEnvVarsSecret`. No upstream Keycloak chart modifications are needed
+  # because the env vars are delivered through the `envFrom` hook.
   tracing:
     # -- toggle OpenTelemetry tracing on Keycloak. Leave unset (default)
     # to inherit `tracing.enabled` from the global block; set to `true`
@@ -1300,6 +1321,60 @@ keycloak:
   # -- did that the key belongs to
   # did:
 
+  # -- Configuration for the token-status-list Keycloak plugin (keycloak-token-status-plugin).
+  # -- Enables credential revocation via the Token Status List specification (RFC draft-ietf-oauth-status-list).
+  # -- See https://github.com/ADORSYS-GIS/token-status-link for plugin documentation.
+  # -- Should be enabled alongside statusListServer.enabled for a complete revocation setup.
+  tokenStatusList:
+    # -- should the token-status-list plugin be loaded into Keycloak
+    enabled: false
+    # -- configuration of the plugin JAR to download from Maven Central
+    plugin:
+      # -- Maven group ID of the keycloak-token-status-plugin
+      groupId: io.github.wistefan
+      # -- Maven artifact ID of the keycloak-token-status-plugin
+      artifactId: keycloak-token-status-plugin
+      # -- version of the keycloak-token-status-plugin to download
+      version: "0.3.2"
+      # -- base URL of the Maven repository to download the plugin JAR from
+      mavenBaseUrl: https://repo1.maven.org/maven2
+    # -- configuration of the init container that downloads the plugin JAR at pod startup
+    initContainer:
+      # -- container image used for the init container (must have curl available)
+      image: curlimages/curl:8.18.0
+    # -- URL of the status-list-server for credential revocation (e.g., http://status-list-server:8081).
+    # -- Injected as the "status-list-server-url" realm attribute.
+    serverUrl: ""
+    # -- optional issuer prefix for the token status list.
+    # -- If empty, the plugin auto-generates a UUID as the issuer prefix.
+    issuerPrefix: ""
+    # -- whether status list inclusion is mandatory for credential issuance.
+    # -- When true, credentials cannot be issued without a status list entry.
+    mandatory: true
+    # -- maximum number of entries per status list
+    maxEntries: 10000
+    # -- timeout in milliseconds for status list issuance calls to the status-list-server
+    issuanceTimeout: 10000
+    # -- timeout in milliseconds for issuer registration with the status-list-server
+    registrationTimeout: 30000
+    # -- number of retries for issuer registration with the status-list-server
+    registrationRetries: 1
+    # -- cooldown in milliseconds between issuer registration retries
+    registrationCooldown: 60000
+    # -- number of failures before the circuit breaker opens, disabling status list calls temporarily
+    circuitBreakerFailureThreshold: 5
+    # -- when true, the plugin accepts any TLS certificate from the status-list-server (insecure, use for development only)
+    tlsTrustAll: false
+    # -- path to a PEM-encoded CA certificate file mounted into the Keycloak container for verifying
+    # -- the status-list-server's TLS certificate. Leave empty to use the JVM default trust store.
+    tlsCaCertPath: ""
+    # -- list of credential type names that should include the oid4vc-status-list-claim-mapper.
+    # -- These credential types will be revocable via the token status list.
+    # -- Example: ["LegalPersonCredential", "OperatorCredential"]
+    # -- Use the dsc.keycloak.tokenStatusList.claimMapper helper template to generate the
+    # -- protocol mapper JSON for each credential type in your client scope definitions.
+    credentialTypes: []
+
 ## configuration of the tm-forum-api - see https://github.com/FIWARE/helm-charts/tree/main/charts/tm-forum-api for details
 tm-forum-api:
   # -- should it be enabled? set to false if one outside the chart is used.
@@ -1482,6 +1557,151 @@ tm-forum-api:
         # -- needs to be updated for the concrete dataspace
         trustedParticipantsLists: http://tir.trust-anchor.org
         trustedIssuersLists: http://trusted-issuers-list:8080
+
+
+## Configuration of the status-list-server for Token Status List (RFC draft-ietf-oauth-status-list) support.
+## Provides credential revocation infrastructure for Verifiable Credentials issued by Keycloak.
+## See https://github.com/adorsys/status-list-server for upstream documentation.
+## NOTE: For a complete revocation setup, also enable keycloak.tokenStatusList.enabled
+## and set keycloak.tokenStatusList.serverUrl to point to this server
+## (e.g., http://status-list-server:8081 for in-cluster access).
+statusListServer:
+  # -- should the status-list-server be deployed? Enable alongside keycloak.tokenStatusList to provide credential revocation support.
+  enabled: false
+  image:
+    # -- container image repository for the status-list-server
+    repository: quay.io/wi_stefan/status-list-server
+    # -- container image tag
+    tag: 1.0.1
+    # -- image pull policy
+    pullPolicy: Always
+  service:
+    # -- Kubernetes Service type
+    serviceType: ClusterIP
+    # -- service port (external)
+    port: 8081
+  # -- container port the status-list-server listens on
+  containerPort: 8000
+  # -- resource requests and limits for the status-list-server container
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "250m"
+    limits:
+      memory: "512Mi"
+      cpu: "500m"
+  # -- environment variables controlling the status-list-server application
+  env:
+    # -- Rust log level (e.g., info, debug, warn)
+    rustLog: "info"
+    # -- application environment (e.g., development, production)
+    appEnv: "production"
+    # -- host address the server binds to
+    serverHost: "0.0.0.0"
+    # -- domain name used by the server for status list URLs
+    serverDomain: ""
+    # -- whether to enable the Prometheus metrics endpoint
+    enableMetrics: "false"
+    # -- in-memory cache TTL in seconds
+    cacheTtl: "300"
+    # -- in-memory cache maximum capacity (number of entries)
+    cacheMaxCapacity: "1000"
+  # -- PostgreSQL database configuration for the status-list-server
+  postgresql:
+    # -- database connection URL in the format postgres://user:password@host:port/dbname
+    # -- if set, this takes precedence over individual host/port/database/username fields
+    url: ""
+    # -- database host (used when url is empty)
+    host: "postgres"
+    # -- database port
+    port: "5432"
+    # -- database name
+    database: "statuslistdb"
+    auth:
+      # -- database username
+      username: "statuslist"
+      # -- database password (used when existingSecret is empty)
+      password: ""
+      # -- name of an existing Secret containing the database password
+      existingSecret: ""
+      # -- key within the existing Secret that holds the password
+      existingSecretPasswordKey: "password"
+  # -- Redis configuration for the status-list-server
+  redis:
+    # -- should an in-chart Redis instance be deployed? Disable when pointing to an external Redis.
+    enabled: true
+    # -- Redis connection URI (e.g., redis://redis:6379). When redis.enabled is true, defaults to the in-chart Redis service.
+    uri: ""
+    # -- whether Redis requires client certificate authentication
+    requireClientAuth: "false"
+    # -- TTL in seconds for certificate cache entries in Redis
+    certCacheTtl: "3600"
+    # -- TTL in seconds for secrets cache entries in Redis
+    secretsCacheTtl: "300"
+    image:
+      # -- Redis container image repository
+      repository: redis
+      # -- Redis container image tag
+      tag: "7"
+      # -- Redis image pull policy
+      pullPolicy: IfNotPresent
+    # -- resource requests and limits for the in-chart Redis container
+    resources:
+      requests:
+        memory: "128Mi"
+        cpu: "100m"
+      limits:
+        memory: "256Mi"
+        cpu: "250m"
+  # -- signing key and certificate chain configuration for token signing.
+  # -- Mount an externally managed Secret (e.g. from cert-manager) containing tls.key and tls.crt.
+  # -- When enabled, the built-in ACME certificate manager is bypassed entirely.
+  # -- Files are re-read on each request so cert-manager rotation is picked up without a pod restart.
+  signing:
+    # -- should the signing key secret be mounted?
+    enabled: false
+    # -- name of the Kubernetes Secret containing tls.key and tls.crt (e.g. created by cert-manager)
+    secretName: "signing-key"
+    # -- mount path inside the container for the signing secret
+    mountPath: "/signing"
+    # -- issuer to be used for getting the signing key
+    issuer:
+      # -- name of the issuer to be used
+      name:
+      # -- kind of the issuer to be used
+      kind: ClusterIssuer
+      # -- alogorithm to be used for the cert
+      algorithm: ECDSA
+      # -- size of the key to be used
+      size: 256
+      # -- encoding of the certificate
+      encoding: PKCS8
+      # -- dns names to be included in the certificate
+      dnsNames: []
+  # -- ingress configuration for external access to the status-list-server
+  ingress:
+    # -- should the ingress be enabled
+    enabled: false
+    # -- annotations to be added to the ingress
+    annotations: {}
+      # kubernetes.io/ingress.class: "ambassador"
+      # kubernetes.io/tls-acme: "true"
+      # ingress.kubernetes.io/ssl-redirect: "true"
+    # -- ingress class name
+    className: ""
+    # -- all hosts to be provided
+    hosts: []
+      ## provide hosts and the paths that should be available
+      # - host: status-list.example.com
+      #   paths:
+      #     - /
+    # -- configure the ingress' TLS
+    tls: []
+      # - secretName: status-list-tls
+      #   hosts:
+      #     - status-list.example.com
+
+
 
 ## configuration of rainbow to provide integration with the Dataspace Protocol
 rainbow:
@@ -2820,7 +3040,7 @@ extraManifests: []
 # -- dashboard for operating the FIWARE Data Space Connector
 fdsc-dashboard:
   enabled: false
-
+      
 prometheus:
   enabled: false
 
