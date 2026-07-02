@@ -253,7 +253,7 @@ while :; do
   sleep "$POLL_INTERVAL"
 done
 ENDPOINT=$(printf '%s' "$EDR" | jq -r '.endpoint // empty')
-ACCESS_TOKEN=$(printf '%s' "$EDR" | jq -r '.token // .authorization // empty')
+ACCESS_TOKEN=$(printf '%s' "$EDR" | jq -r '.authorization // .token // empty')
 [ -n "$ENDPOINT" ] || die "EDR has no endpoint."
 [ -n "$ACCESS_TOKEN" ] || die "EDR has no token."
 

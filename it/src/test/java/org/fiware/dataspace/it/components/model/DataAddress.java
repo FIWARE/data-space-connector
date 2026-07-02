@@ -19,5 +19,5 @@ public class DataAddress {
     private String endpoint;
 
     /** The access token to authenticate against the data service endpoint. */
-    private String token;
+    private String authorization;
 }

@@ -320,6 +320,24 @@ export PRODUCT_SPEC_ID=$(curl -k -x localhost:8888 -X 'POST' \
                    }]
                },
                {
+                   "id": "transferType",
+                   "name":"DSP transfer type advertised as the catalog distribution format (only HttpData-PULL is supported; defaults to it when omitted)",
+                   "valueType":"transferType",
+                   "productSpecCharacteristicValue": [{
+                       "value":"HttpData-PULL",
+                       "isDefault": true
+                   }]
+               },
+               {
+                   "id": "transferPath",
+                   "name":"Path appended to the transfer endpoint returned in the EDR, so the consumer receives a ready-to-use URL",
+                   "valueType":"transferPath",
+                   "productSpecCharacteristicValue": [{
+                       "value":"/ngsi-ld/v1/entities/urn:ngsi-ld:UptimeReport:fms-1",
+                       "isDefault": true
+                   }]
+               },
+               {
                    "id": "targetSpecification",
                    "name":"Detailed specification of the ODRL target. Allows to over services via OID4VC",
                    "valueType":"targetSpecification",
@@ -467,6 +485,11 @@ export PRODUCT_SPEC_ID=$(curl -k -x localhost:8888 -X 'POST' \
         }]
     }' | jq '.id' -r); echo ${PRODUCT_SPEC_ID}
 ```
+
+> **On `transferType` / `HttpData-PULL`.** The catalog distribution `transferType` is
+> configurable through the `transferType` product-spec characteristic, but the current
+> implementation only supports `HttpData-PULL`. When the characteristic is omitted,
+> `HttpData-PULL` is used as the default.
 
 4. Create the coresponding offering. It includes the policies required to make it accessible through DSP:
 ```shell
@@ -969,12 +992,12 @@ export TRANSFER_ID=$(curl -k -x localhost:8888 -s -X POST \
     "@type": "QuerySpec"
   }' | jq -r '.[]."@id"'); echo Transfer ID: ${TRANSFER_ID}
 export ENDPOINT=$(curl -k -x localhost:8888 -s -X GET "https://dsp-dcp-management.127.0.0.1.nip.io/api/v1/management/v3/edrs/${TRANSFER_ID}/dataaddress" | jq -r .endpoint); echo Endpoint: ${ENDPOINT}
-export ACCESS_TOKEN=$(curl -k -x localhost:8888 -s -X GET "https://dsp-dcp-management.127.0.0.1.nip.io/api/v1/management/v3/edrs/${TRANSFER_ID}/dataaddress" | jq -r .token); echo Access Token: ${ACCESS_TOKEN}
+export ACCESS_TOKEN=$(curl -k -x localhost:8888 -s -X GET "https://dsp-dcp-management.127.0.0.1.nip.io/api/v1/management/v3/edrs/${TRANSFER_ID}/dataaddress" | jq -r .authorization); echo Access Token: ${ACCESS_TOKEN}
 ```
 
 8. Access the service:
 ```shell
-curl -L -s -k -x localhost:8888 -X GET ${ENDPOINT}/ngsi-ld/v1/entities/urn:ngsi-ld:UptimeReport:fms-1 \
+curl -L -s -k -x localhost:8888 -X GET ${ENDPOINT} \
   --header 'Content-Type: application/json' \
   --header "Authorization: Bearer ${ACCESS_TOKEN}" | jq .
 ```
@@ -1454,7 +1477,7 @@ export ENDPOINT=$(curl -k -x localhost:8888 -X GET "https://dsp-oid4vc-managemen
 
 5. Request without token fails:
 ```shell
-curl -k -x localhost:8888 -X GET ${ENDPOINT}/ngsi-ld/v1/entities/urn:ngsi-ld:UptimeReport:fms-1
+curl -k -x localhost:8888 -X GET ${ENDPOINT}
 ```
 
 6. Request openid-configuration:
@@ -1466,7 +1489,7 @@ curl -k -x localhost:8888 -X GET ${ENDPOINT}/.well-known/openid-configuration | 
 ```shell
 export OPERATOR_CREDENTIAL=$(./doc/scripts/get_credential.sh https://keycloak-consumer.127.0.0.1.nip.io operator-credential operator)
 export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh ${ENDPOINT} $OPERATOR_CREDENTIAL openid); echo Access Token: $ACCESS_TOKEN
-curl -k -x localhost:8888 -X GET ${ENDPOINT}/ngsi-ld/v1/entities/urn:ngsi-ld:UptimeReport:fms-1 \
+curl -k -x localhost:8888 -X GET ${ENDPOINT} \
   --header 'Content-Type: application/json' \
   --header "Authorization: Bearer ${ACCESS_TOKEN}" | jq .
 ```
