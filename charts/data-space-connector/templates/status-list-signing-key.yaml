@@ -1,4 +1,4 @@
-{{- if .Values.statusListServer.enabled .Values.statusListServer.signing.enabled }}
+{{- if and .Values.statusListServer.enabled .Values.statusListServer.signing.enabled }}
 
 apiVersion: cert-manager.io/v1
 kind: Certificate
