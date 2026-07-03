@@ -58,11 +58,29 @@ keycloak:
         - |
           #!/bin/sh
           curl -X 'POST' 'http://tir.trust-anchor.svc.cluster.local:8080/issuer' -H 'Content-Type: application/json' -d "{\"did\": \"did:web:fancy-marketplace.biz\", \"credentials\": []}"
+    # download the token-status-list plugin JAR from Maven Central into the providers volume
+    - name: download-token-status-plugin
+      image: curlimages/curl:8.18.0
+      imagePullPolicy: IfNotPresent
+      command:
+        - /bin/sh
+      args:
+        - -ec
+        - |
+          PLUGIN_URL="https://github.com/wistefan/token-status-link/releases/download/v0.3.7/keycloak-token-status-plugin-0.3.7.jar"
+          echo "Downloading token-status-list plugin from ${PLUGIN_URL}"
+          curl -sSL -o /providers/keycloak-token-status-plugin-0.3.7.jar "${PLUGIN_URL}"
+          echo "Plugin downloaded successfully"
+      volumeMounts:
+        - name: providers
+          mountPath: /providers
   extraVolumeMounts:
     - mountPath: /did-material
       name: did-material
     - mountPath: /opt/keycloak/data/import
       name: realms
+    - name: providers
+      mountPath: /opt/keycloak/providers
   extraVolumes:
     - emptyDir: {}
       name: did-material
@@ -72,6 +90,8 @@ keycloak:
     - name: did-priv-key
       secret:
         secretName: fancy-marketplace.biz-tls
+    - name: providers
+      emptyDir: {}
   issuerDid: did:web:fancy-marketplace.biz
   signingKey:
     storePath: /did-material/cert.pfx
@@ -80,6 +100,26 @@ keycloak:
     keyPassword: "${STORE_PASS}"
     did: did:web:fancy-marketplace.biz
     keyAlgorithm: ES256
+  # token-status-list plugin configuration for credential revocation
+  tokenStatusList:
+    enabled: true
+    # in-cluster URL of the status-list-server
+    serverUrl: "https://consumer-status-list.127.0.0.1.nip.io"
+    # trust self-signed certificates from cert-manager's selfsigned-issuer
+    tlsTrustAll: true
+    # credential types that should be revocable via the token status list
+    credentialTypes:
+      - LegalPersonCredential
+      - OperatorCredential
+      - UserCredential
+      - MembershipCredential
+      - MarketplaceCredential
+      - VerifiableCredential
+  proxy:
+    enabled: true
+    httpsProxy: "http://squid-proxy.infra.svc.cluster.local:8888"
+    noProxy: "localhost,*.cluster.local,*.svc"
+    spiProxyMappings: ".*\\.127\\.0\\.0\\.1\\.nip\\.io;http://squid-proxy.infra.svc.cluster.local:8888"
   # extraEnvVars replaces the umbrella list, so KC_HEAP_SIZE has to be repeated here.
   # STORE_PASS is consumed by the realm.json key-provider config (see signingKey above).
   extraEnvVars:
@@ -160,6 +200,9 @@ keycloak:
             config:
               claim.name: roles
               clientId: did:web:fancy-marketplace.biz
+          - name: usd-list-claim-mapper
+            protocol: oid4vc
+            protocolMapper: oid4vc-status-list-claim-mapper
       user-credential:
         attributes:
           format: "jwt_vc_json"
@@ -196,6 +239,11 @@ keycloak:
             config:
               claim.name: roles
               clientId: did:web:mp-operations.org
+          - name: mp-list-claim-mapper
+            protocol: oid4vc
+            protocolMapper: oid4vc-status-list-claim-mapper
+            config:
+              metadata.claim.paths: firstName, lastName
       legal-person-credential:
         attributes:
           format: "jwt_vc_json"
@@ -274,6 +322,9 @@ keycloak:
             config:
               claim.name: roles
               clientId: did:web:mp-operations.org
+          - name: lpc-list-claim-mapper
+            protocol: oid4vc
+            protocolMapper: oid4vc-status-list-claim-mapper
       membership-credential:
         attributes:
           format: "jwt_vc_json"
@@ -298,6 +349,9 @@ keycloak:
             config:
               claim.name: membershipType
               staticValue: FullMember
+          - name: mc-list-claim-mapper
+            protocol: oid4vc
+            protocolMapper: oid4vc-status-list-claim-mapper
       marketplace-credential:
         attributes:
           format: "jwt_vc_json"
@@ -334,6 +388,9 @@ keycloak:
             config:
               claim.name: roles
               clientId: did:web:fancy-marketplace.biz
+          - name: mpc-list-claim-mapper
+            protocol: oid4vc
+            protocolMapper: oid4vc-status-list-claim-mapper
       verifiable-credential:
         attributes:
           format: "dc+sd-jwt"
@@ -362,6 +419,9 @@ keycloak:
             config:
               claim.name: roles
               clientId: did:web:fancy-marketplace.biz
+          - name: vc-list-claim-mapper
+            protocol: oid4vc
+            protocolMapper: oid4vc-status-list-claim-mapper
       operator-credential:
         attributes:
           format: "jwt_vc_json"
@@ -400,6 +460,9 @@ keycloak:
             config:
               claim.name: roles
               clientId: did:web:mp-operations.org
+          - name: oc-list-claim-mapper
+            protocol: oid4vc
+            protocolMapper: oid4vc-status-list-claim-mapper
     clientRoles: |
       "did:web:mp-operations.org": [
         {
@@ -605,6 +668,35 @@ keycloak:
         "verifiableCredentials": [
           {"credentialScopeName": "membership-credential"}
         ]
+      },
+      {
+        "username": "admin",
+        "enabled": true,
+        "email": "admin@consumer.org",
+        "firstName": "Test",
+        "lastName": "Admin",
+        "credentials": [
+          {
+            "type": "password",
+            "value": "test"
+          }
+        ],
+        "realmRoles": [
+          "realm-admin"
+        ],
+        "clientRoles": {
+          "did:web:fancy-marketplace.biz": [
+            "admin"
+          ],
+          "account": [
+            "view-profile",
+            "manage-account"
+          ],
+          "realm-management": [
+            "realm-admin"
+          ]
+        },
+        "groups": []
       }
     clients:
       - clientId: did:web:mp-operations.org
@@ -642,16 +734,17 @@ keycloak:
         alwaysDisplayInConsole: false
         clientAuthenticatorType: client-secret
         defaultRoles: []
-        redirectUris: []
-        webOrigins: []
+        redirectUris:
+          ["https://dashboard-consumer.127.0.0.1.nip.io/callback/keycloak"]
+        webOrigins: ["https://dashboard-consumer.127.0.0.1.nip.io"]
         notBefore: 0
         bearerOnly: false
         consentRequired: false
-        standardFlowEnabled: false
+        standardFlowEnabled: true
         implicitFlowEnabled: false
         directAccessGrantsEnabled: false
         serviceAccountsEnabled: true
-        publicClient: false
+        publicClient: true
         frontchannelLogout: false
         protocol: openid-connect
         attributes:
@@ -672,7 +765,7 @@ keycloak:
         authenticationFlowBindingOverrides: {}
         fullScopeAllowed: true
         nodeReRegistrationTimeout: -1
-        defaultClientScopes: []
+        defaultClientScopes: ["openid", "profile", "roles"]
         optionalClientScopes:  ["user-credential", "legal-person-credential"]
       - clientId: contract-management
         enabled: true
@@ -789,8 +882,11 @@ decentralizedIam:
         users:
           ngb:
             - createdb
+          statuslist:
+            - createdb
         databases:
           ngb: ngb
+          statuslistdb: statuslist
         preparedDatabases:
           ngb:
             extensions:
@@ -814,5 +910,102 @@ identityhub:
 vault:
   enabled: false
 
+# status-list-server for credential revocation (Token Status List specification)
+statusListServer:
+  enabled: true
+  signing:
+    enabled: true
+    secretName: "signing-key"
+    issuer:
+      dnsNames: ["fancy-marketplace.biz"]
+      name: selfsigned-issuer
+  env:
+    serverDomain: "consumer-status-list.127.0.0.1.nip.io"
+  ingress:
+    enabled: true
+    annotations:
+      cert-manager.io/cluster-issuer: "selfsigned-issuer"
+      cert-manager.io/private-key-algorithm: "ECDSA"
+      cert-manager.io/common-name: "consumer-status-list.127.0.0.1.nip.io"
+      cert-manager.io/alt-names: "consumer-status-list.127.0.0.1.nip.io"
+      traefik.ingress.kubernetes.io/router.tls: "true"
+    hosts:
+      - host: consumer-status-list.127.0.0.1.nip.io
+        paths:
+          - "/"
+    tls:
+      - secretName: consumer-status-list.127.0.0.1.nip.io-tls
+        hosts:
+          - consumer-status-list.127.0.0.1.nip.io
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    limits:
+      cpu: "250m"
+      memory: "256Mi"
+  postgresql:
+    host: "postgres"
+    port: "5432"
+    database: "statuslistdb"
+    auth:
+      username: "statuslist"
+      # use the Zalando Postgres Operator auto-generated credentials secret
+      existingSecret: "statuslist.postgres.credentials.postgresql.acid.zalan.do"
+      existingSecretPasswordKey: "password"
+  redis:
+    enabled: true
+    resources:
+      requests:
+        cpu: "50m"
+        memory: "64Mi"
+      limits:
+        cpu: "100m"
+        memory: "128Mi"
+
 scorpio:
   enabled: false
+
+fdsc-dashboard:
+  enabled: true
+  ingress:
+    enabled: true
+    annotations:
+      cert-manager.io/cluster-issuer: "selfsigned-issuer"
+      cert-manager.io/private-key-algorithm: "ECDSA"
+      cert-manager.io/common-name: "dashboard-consumer.127.0.0.1.nip.io"
+      cert-manager.io/alt-names: "dashboard-consumer.127.0.0.1.nip.io"
+      traefik.ingress.kubernetes.io/router.tls: "true"
+
+    hosts:
+      - host: dashboard-consumer.127.0.0.1.nip.io
+        paths:
+          - "/"
+    tls:
+      - secretName: dashboard-consumer.127.0.0.1.nip.io-tls
+        hosts:
+          - dashboard-consumer.127.0.0.1.nip.io
+  grafana:
+    enabled: false
+
+  apisix:
+    enabled: false
+
+  apiUrls:
+    til: http://trusted-issuers-list:8080
+    ccs: http://verifier:8090
+    odrl: http://odrl-pap:8080
+  auth:
+    config:
+      providers:
+        - id: keycloak
+          displayName: Keycloak
+          issuer: https://keycloak-consumer.127.0.0.1.nip.io/realms/test-realm
+          clientId: did:web:fancy-marketplace.biz
+          scopes: ["openid", "profile", "roles"]
+          rolesClaimPath: "client_roles"
+          roleMapping:
+            admin: "admin"
+          silentRenew: true
+  keycloak:
+    url: http://consumer-keycloak:8080
