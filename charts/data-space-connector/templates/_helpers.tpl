@@ -184,17 +184,21 @@ Usage:
 {{- end -}}
 
 {{/*
-Name of the Secret that carries the OTEL tracing env vars for the
-Keycloak StatefulSet. Used by the `keycloak-tracing-secret.yaml`
-template and referenced from the umbrella chart's
-`keycloak.extraEnvVarsSecret` value (which the CloudPirates chart
-injects via `envFrom.secretRef`).
+Name of the Secret that carries extra environment variables (tracing,
+proxy, etc.) for the Keycloak StatefulSet. Used by the
+`keycloak-env-secret.yaml` template and referenced from the umbrella
+chart's `keycloak.extraEnvVarsSecret` value.
 
 Usage (in templates):
-  {{ include "dsc.otel.keycloak.secretName" . }}
+  {{ include "dsc.keycloak.envSecretName" . }}
 */}}
-{{- define "dsc.otel.keycloak.secretName" -}}
-dsc-keycloak-tracing
+{{- define "dsc.keycloak.envSecretName" -}}
+dsc-keycloak-env
+{{- end -}}
+
+{{/* Keep the old name as an alias for backwards compatibility */}}
+{{- define "dsc.otel.keycloak.cmName" -}}
+{{- include "dsc.keycloak.envSecretName" . -}}
 {{- end -}}
 
 {{/*

@@ -1,0 +1,19 @@
+{{- if .Values.statusListServer.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: status-list-server
+  namespace: {{ $.Release.Namespace | quote }}
+  labels:
+    {{ include "dsc.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.statusListServer.service.serviceType }}
+  ports:
+    - port: {{ .Values.statusListServer.service.port }}
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: status-list-server
+    app.kubernetes.io/instance: {{ .Release.Name }}
+{{- end }}

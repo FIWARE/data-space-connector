@@ -27,6 +27,28 @@ merges extra attributes (string or map), and appends verifiable credential attri
 {{- end -}}
 {{- $attrs = mergeOverwrite $attrs $extra -}}
 {{- end -}}
+{{- if .Values.keycloak.tokenStatusList.enabled -}}
+{{- $statusListAttrs := dict
+    "status-list-enabled" "true"
+    "status-list-server-url" (.Values.keycloak.tokenStatusList.serverUrl | toString)
+    "status-list-mandatory" (.Values.keycloak.tokenStatusList.mandatory | toString)
+    "status-list-max-entries" (.Values.keycloak.tokenStatusList.maxEntries | toString)
+    "status-list-issuance-timeout" (.Values.keycloak.tokenStatusList.issuanceTimeout | toString)
+    "status-list-registration-timeout" (.Values.keycloak.tokenStatusList.registrationTimeout | toString)
+    "status-list-registration-retries" (.Values.keycloak.tokenStatusList.registrationRetries | toString)
+    "status-list-registration-cooldown" (.Values.keycloak.tokenStatusList.registrationCooldown | toString)
+    "status-list-circuit-breaker-failure-threshold" (.Values.keycloak.tokenStatusList.circuitBreakerFailureThreshold | toString) -}}
+{{- if .Values.keycloak.tokenStatusList.issuerPrefix -}}
+{{- $_ := set $statusListAttrs "status-list-issuer-prefix" .Values.keycloak.tokenStatusList.issuerPrefix -}}
+{{- end -}}
+{{- if .Values.keycloak.tokenStatusList.tlsTrustAll -}}
+{{- $_ := set $statusListAttrs "status-list-tls-trust-all" (.Values.keycloak.tokenStatusList.tlsTrustAll | toString) -}}
+{{- end -}}
+{{- if .Values.keycloak.tokenStatusList.tlsCaCertPath -}}
+{{- $_ := set $statusListAttrs "status-list-tls-ca-cert-path" .Values.keycloak.tokenStatusList.tlsCaCertPath -}}
+{{- end -}}
+{{- $attrs = mergeOverwrite $attrs $statusListAttrs -}}
+{{- end -}}
 {{- $attrs | toPrettyJson -}}
 {{- end -}}
 

@@ -1,15 +1,15 @@
 # yaml-language-server: $schema=https://raw.githubusercontent.com/helm-unittest/helm-unittest/main/schema/helm-testsuite.json
 #
 # ---------------------------------------------------------------------------
-# Helm-unittest suite for the Keycloak tracing Secret.
+# Helm-unittest suite for the Keycloak env Secret.
 #
 # The Secret is injected into the CloudPirates Keycloak subchart via the
 # `extraEnvVarsSecret` hook and provides OTEL_* / QUARKUS_OTEL_* / KC_*
-# environment variables for Keycloak's built-in tracing support.
+# environment variables for tracing and proxy configuration.
 # ---------------------------------------------------------------------------
-suite: OpenTelemetry tracing - Keycloak Secret
+suite: Keycloak env Secret (tracing + proxy)
 templates:
-  - templates/keycloak-tracing-secret.yaml
+  - templates/keycloak-env-secret.yaml
 tests:
   # ==========================================================================
   # Rendering gate
@@ -23,7 +23,7 @@ tests:
       - hasDocuments:
           count: 0
 
-  - it: should render an empty-data Secret when tracing is disabled
+  - it: should render an empty Secret when tracing and proxy are disabled
     set:
       keycloak.enabled: true
       tracing.enabled: false
@@ -166,6 +166,60 @@ tests:
       keycloak.enabled: true
       tracing.enabled: true
       keycloak.tracing.enabled: false
+      keycloak.proxy.enabled: false
     asserts:
       - isNull:
           path: stringData
+
+  # ==========================================================================
+  # Proxy env vars
+  # ==========================================================================
+
+  - it: should render proxy env vars when proxy is enabled
+    set:
+      keycloak.enabled: true
+      keycloak.proxy.enabled: true
+      keycloak.proxy.httpsProxy: "http://squid:8888"
+    asserts:
+      - isKind:
+          of: Secret
+      - equal:
+          path: stringData.HTTPS_PROXY
+          value: "http://squid:8888"
+      - equal:
+          path: stringData.HTTP_PROXY
+          value: "http://squid:8888"
+      - equal:
+          path: stringData.NO_PROXY
+          value: "localhost,*.cluster.local,*.svc"
+
+  - it: should set SPI proxy mappings when configured
+    set:
+      keycloak.enabled: true
+      keycloak.proxy.enabled: true
+      keycloak.proxy.httpsProxy: "http://squid:8888"
+      keycloak.proxy.spiProxyMappings: ".*\\.nip\\.io;http://squid:8888"
+    asserts:
+      - equal:
+          path: stringData.KC_SPI_CONNECTIONS_HTTP_CLIENT_DEFAULT_PROXY_MAPPINGS
+          value: ".*\\.nip\\.io;http://squid:8888"
+
+  - it: should not render proxy vars when proxy is disabled
+    set:
+      keycloak.enabled: true
+      keycloak.proxy.enabled: false
+    asserts:
+      - isNull:
+          path: stringData.HTTPS_PROXY
+
+  - it: should render both tracing and proxy when both are enabled
+    set:
+      keycloak.enabled: true
+      tracing.enabled: true
+      keycloak.proxy.enabled: true
+      keycloak.proxy.httpsProxy: "http://squid:8888"
+    asserts:
+      - isNotNull:
+          path: stringData.KC_TRACING_ENABLED
+      - isNotNull:
+          path: stringData.HTTPS_PROXY
