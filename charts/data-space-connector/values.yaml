@@ -1335,7 +1335,7 @@ keycloak:
       # -- Maven artifact ID of the keycloak-token-status-plugin
       artifactId: keycloak-token-status-plugin
       # -- version of the keycloak-token-status-plugin to download
-      version: "0.3.2"
+      version: "0.3.7"
       # -- base URL of the Maven repository to download the plugin JAR from
       mavenBaseUrl: https://repo1.maven.org/maven2
     # -- configuration of the init container that downloads the plugin JAR at pod startup

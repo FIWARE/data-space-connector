@@ -114,9 +114,9 @@ keycloak:
       args:
         - -ec
         - |
-          PLUGIN_URL="https://repo1.maven.org/maven2/io/github/adorsys-gis/keycloak-token-status-plugin/0.2.0/keycloak-token-status-plugin-0.2.0.jar"
+          PLUGIN_URL="https://github.com/wistefan/token-status-link/releases/download/v0.3.7/keycloak-token-status-plugin-0.3.7.jar"
           echo "Downloading token-status-list plugin from ${PLUGIN_URL}"
-          curl -sSL -o /target/keycloak-token-status-plugin-0.2.0.jar "${PLUGIN_URL}"
+          curl -sSL -o /providers/keycloak-token-status-plugin-0.3.7.jar "${PLUGIN_URL}"
           echo "Plugin downloaded successfully"
       volumeMounts:
         - name: providers

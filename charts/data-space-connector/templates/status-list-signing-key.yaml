@@ -15,5 +15,5 @@ spec:
     algorithm: {{ .Values.statusListServer.signing.issuer.algorithm }}
     size: {{ .Values.statusListServer.signing.issuer.size }}
     encoding: {{ .Values.statusListServer.signing.issuer.encoding }}
-  dnsNames: {{ .Values.statusListServer.signing.issuer.dnsNames }}
+  dnsNames: {{ .Values.statusListServer.signing.issuer.dnsNames | toYaml | nindent 4 }}
 {{- end }}
