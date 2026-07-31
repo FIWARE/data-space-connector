@@ -1380,8 +1380,9 @@ The standard local deployment needs to be changed in the following places:
   elsi:
     # enable the usage of did:elsi
     enabled: true
-    # configure the path inside the keyloak container, where the signing key-store is located
-    storePath: /trust-store/keystore.p12
+    # configure the path inside the keyloak container, where the signing key-store is located.
+    # since KC 26.6.4 the java-keystore provider only reads from /opt/keycloak/data/<realm-name>
+    storePath: /opt/keycloak/data/test-realm/keystore.p12
     # password of the keystore
     storePassword: password
     # alias of the key inside the store
