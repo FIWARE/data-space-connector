@@ -33,7 +33,7 @@ dependencies:
   - name: business-api-ecosystem
     alias: marketplace
     condition: marketplace.enabled
-    version: 1.0.4
+    version: 1.1.0
     repository: oci://quay.io/fiware/helm-charts
   - name: community-operator
     alias: mongo-operator
