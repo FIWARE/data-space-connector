@@ -75,7 +75,7 @@ dependencies:
     repository: oci://quay.io/seamware/helm-charts
   - name: prometheus
     condition: prometheus.enabled
-    version: 29.2.1
+    version: 29.23.1
     repository: https://prometheus-community.github.io/helm-charts
   - name: grafana
     condition: grafana.enabled
