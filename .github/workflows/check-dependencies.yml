@@ -1,0 +1,49 @@
+name: Check Chart Dependencies
+
+on:
+  workflow_dispatch:
+    inputs:
+      reviewers:
+        description: 'GitHub usernames to request review from (comma-separated)'
+        required: true
+        type: string
+        default: 'mortega5'
+  schedule:
+    - cron: '0 6 * * 3'
+
+jobs:
+
+  check-dependencies:
+    name: "Check dependent chart versions"
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '>=1.17.0'
+
+      - name: Install yq and crane
+        run: |
+          go install github.com/mikefarah/yq/v4@latest
+          go install github.com/google/go-containerregistry/cmd/crane@latest
+          yq --version
+          crane version
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Check dependencies and open PRs
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REVIEWERS: ${{ github.event.inputs.reviewers || 'mortega5' }}
+        run: ./.github/scripts/check-dependencies.sh
