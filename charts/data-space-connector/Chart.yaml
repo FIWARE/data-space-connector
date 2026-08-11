@@ -65,7 +65,7 @@ dependencies:
   - name: cert-manager
     alias: cert-manager
     condition: cert-manager.enabled
-    version: v1.20.0
+    version: v1.21.1
     repository: https://charts.jetstack.io
   # vc-operator
   - name: vc-operator
