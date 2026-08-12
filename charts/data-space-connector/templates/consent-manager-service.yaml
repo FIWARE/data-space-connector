@@ -1,0 +1,20 @@
+{{- if and .Values.consentManagement.enabled .Values.consentManagement.consentManager.enabled }}
+{{- $cm := .Values.consentManagement.consentManager }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: consent-manager
+  namespace: {{ $.Release.Namespace | quote }}
+  labels:
+    {{ include "dsc.labels" . | nindent 4 }}
+spec:
+  type: {{ $cm.service.type }}
+  ports:
+    - port: {{ $cm.service.port }}
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: consent-manager
+    app.kubernetes.io/instance: {{ .Release.Name }}
+{{- end }}

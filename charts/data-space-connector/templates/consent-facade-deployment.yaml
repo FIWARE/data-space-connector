@@ -1,0 +1,95 @@
+{{- if and .Values.consentManagement.enabled .Values.consentManagement.consentFacade.enabled }}
+{{- $f := .Values.consentManagement.consentFacade }}
+{{- $selfUrl := $f.selfUrl | default (printf "http://consent-facade:%v" $f.service.port) }}
+# The Micronaut consent-facade: serves the contract-service API the consent-manager
+# consumes, projected from the DSC TMForum APIs. All TMForum client URLs point at
+# `tmfApiUrl`; the per-api paths are baked into the image (application.yaml).
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: consent-facade
+  namespace: {{ $.Release.Namespace | quote }}
+  labels:
+    {{ include "dsc.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: consent-facade
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: consent-facade
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+      serviceAccountName: default
+      securityContext:
+        {{- toYaml $f.podSecurityContext | nindent 8 }}
+      containers:
+        - name: consent-facade
+          securityContext:
+            {{- toYaml $f.securityContext | nindent 12 }}
+          imagePullPolicy: {{ $f.image.pullPolicy }}
+          image: "{{ $f.image.repository }}:{{ $f.image.tag }}"
+          ports:
+            - name: http
+              containerPort: {{ $f.containerPort }}
+              protocol: TCP
+            # Micronaut serves the management endpoints (incl. /health) on a
+            # separate port (endpoints.all.port in the image's application.yaml).
+            - name: management
+              containerPort: {{ $f.managementPort }}
+              protocol: TCP
+          env:
+            - name: MICRONAUT_SERVER_PORT
+              value: {{ $f.containerPort | quote }}
+            # public base url written into the contracts' catalog / self-description links
+            - name: FACADE_SELF_URL
+              value: {{ $selfUrl | quote }}
+            # point every TMForum client at the DSC tm-forum-api (paths from the image)
+            - name: MICRONAUT_HTTP_SERVICES_PRODUCT_ORDER_URL
+              value: {{ $f.tmfApiUrl | quote }}
+            - name: MICRONAUT_HTTP_SERVICES_PRODUCT_CATALOG_URL
+              value: {{ $f.tmfApiUrl | quote }}
+            - name: MICRONAUT_HTTP_SERVICES_PRODUCT_INVENTORY_URL
+              value: {{ $f.tmfApiUrl | quote }}
+            - name: MICRONAUT_HTTP_SERVICES_PARTY_URL
+              value: {{ $f.tmfApiUrl | quote }}
+            - name: MICRONAUT_HTTP_SERVICES_AGREEMENT_URL
+              value: {{ $f.tmfApiUrl | quote }}
+            ######################################
+            ## Additional environment variables ##
+            ######################################
+          {{- range $key, $value := $f.envValueFrom }}
+            - name: {{ $key | quote }}
+              valueFrom:
+                {{- tpl (toYaml $value) $ | nindent 16 }}
+          {{- end }}
+          {{- range $key, $value := $f.env }}
+            - name: {{ $key | quote }}
+              value: {{ $value | quote }}
+          {{- end }}
+          # the JVM needs a writable /tmp while the root filesystem is read-only
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: management
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: management
+            initialDelaySeconds: 20
+            periodSeconds: 20
+          resources:
+            {{- toYaml $f.resources | nindent 12 }}
+      volumes:
+        - name: tmp
+          emptyDir: {}
+{{- end }}

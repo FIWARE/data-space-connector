@@ -1,0 +1,133 @@
+{{- if and .Values.consentManagement.enabled .Values.consentManagement.consentManager.enabled }}
+{{- $cm := .Values.consentManagement.consentManager }}
+{{- $facadePort := .Values.consentManagement.consentFacade.service.port }}
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: consent-manager
+  namespace: {{ $.Release.Namespace | quote }}
+  labels:
+    {{ include "dsc.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: consent-manager
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: consent-manager
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+      serviceAccountName: default
+      securityContext:
+        {{- toYaml $cm.podSecurityContext | nindent 8 }}
+      containers:
+        - name: consent-manager
+          securityContext:
+            {{- toYaml $cm.securityContext | nindent 12 }}
+          imagePullPolicy: {{ $cm.image.pullPolicy }}
+          image: "{{ $cm.image.repository }}:{{ $cm.image.tag }}"
+          ports:
+            - name: http
+              containerPort: {{ $cm.containerPort }}
+              protocol: TCP
+          env:
+            - name: NODE_ENV
+              value: "production"
+            - name: PORT
+              value: {{ $cm.containerPort | quote }}
+            - name: API_PREFIX
+              value: {{ $cm.apiPrefix | quote }}
+            - name: APP_ENDPOINT
+              value: {{ $cm.appEndpoint | default (printf "http://consent-manager:%v" $cm.service.port) | quote }}
+            - name: URL
+              value: {{ $cm.appEndpoint | default (printf "http://consent-manager:%v" $cm.service.port) | quote }}
+            # contract lookups are served by the facade (derives notices from TMForum)
+            - name: CONTRACT_SERVICE_BASE_URL
+              value: {{ $cm.contractServiceBaseUrl | default (printf "http://consent-facade:%v" $facadePort) | quote }}
+            - name: SESSION_COOKIE_NAME
+              value: "consentmanagersessid"
+            - name: SALT_ROUNDS
+              value: "10"
+            - name: OAUTH_TOKEN_EXPIRES_IN
+              value: "1h"
+            # -- session/jwt/oauth secrets + the consent key (injected by the facade)
+            - name: SESSION_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $cm.secret.name }}
+                  key: sessionSecret
+            - name: JWT_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $cm.secret.name }}
+                  key: jwtSecret
+            - name: OAUTH_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $cm.secret.name }}
+                  key: oauthSecret
+            - name: X_VISIONSTRUST_CONSENT_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $cm.secret.name }}
+                  key: {{ $cm.secret.consentKeyKey }}
+            # -- MongoDB connection (replica set required)
+            {{- if $cm.mongo.uri }}
+            - name: MONGO_URI
+              value: {{ $cm.mongo.uri | quote }}
+            {{- else }}
+            - name: CM_MONGO_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $cm.mongo.auth.existingSecret }}
+                  key: {{ $cm.mongo.auth.existingSecretPasswordKey }}
+            - name: MONGO_URI
+              value: "mongodb://{{ $cm.mongo.username }}:$(CM_MONGO_PASSWORD)@{{ $cm.mongo.host }}:{{ $cm.mongo.port }}/{{ $cm.mongo.database }}?replicaSet={{ $cm.mongo.replicaSet }}"
+            {{- end }}
+            ######################################
+            ## Additional environment variables ##
+            ######################################
+          {{- range $key, $value := $cm.envValueFrom }}
+            - name: {{ $key | quote }}
+              valueFrom:
+                {{- tpl (toYaml $value) $ | nindent 16 }}
+          {{- end }}
+          {{- range $key, $value := $cm.env }}
+            - name: {{ $key | quote }}
+              value: {{ $value | quote }}
+          {{- end }}
+          {{- if or $cm.envSecretNames $cm.envConfigMapNames }}
+          envFrom:
+          {{- range $value := $cm.envSecretNames }}
+            - secretRef:
+                name: {{ $value | quote }}
+          {{- end }}
+          {{- range $value := $cm.envConfigMapNames }}
+            - configMapRef:
+                name: {{ $value | quote }}
+          {{- end }}
+          {{- end }}
+          # writable dirs required because the root filesystem is read-only.
+          # The consent-manager writes winston rotating logs to two compiled
+          # paths (dist/src/logs and dist/src/libs/logs); mount emptyDirs there.
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: logs
+              mountPath: /usr/src/app/dist/src/logs
+            - name: logs-all
+              mountPath: /usr/src/app/dist/src/libs/logs
+          resources:
+            {{- toYaml $cm.resources | nindent 12 }}
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: logs
+          emptyDir: {}
+        - name: logs-all
+          emptyDir: {}
+{{- end }}

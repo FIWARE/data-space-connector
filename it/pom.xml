@@ -351,6 +351,37 @@
                 </plugins>
             </build>
         </profile>
+        <!-- consent local deploy (root `consent` profile): like `local`, the it
+             module must not re-template/re-apply on top of the root deploy — a
+             second helm render regenerates the etcd hook Job's token and its
+             immutable pod template then conflicts on re-apply. -->
+        <profile>
+            <id>consent</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <artifactId>maven-resources-plugin</artifactId>
+                        <configuration>
+                            <skip>true</skip>
+                        </configuration>
+                    </plugin>
+                    <plugin>
+                        <groupId>io.kokuwa.maven</groupId>
+                        <artifactId>helm-maven-plugin</artifactId>
+                        <configuration>
+                            <skip>true</skip>
+                        </configuration>
+                    </plugin>
+                    <plugin>
+                        <groupId>io.kokuwa.maven</groupId>
+                        <artifactId>k3s-maven-plugin</artifactId>
+                        <configuration>
+                            <skip>true</skip>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
         <!-- Test filter profiles: use these to run only tests for a specific deployment profile -->
         <profile>
             <id>local-test</id>

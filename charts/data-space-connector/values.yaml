@@ -151,6 +151,9 @@ decentralizedIam:
       # -- should it be enabled? set to false if one outside the chart is used.
       enabled: true
       deployment:
+        image:
+          tag: 1.5.0-PRE-55
+          pullPolicy: Always
         # -- OPA sidecar deployed as a native Kubernetes sidecar (init container with restartPolicy: Always), available at localhost:8181
         initContainers:
           - name: open-policy-agent
@@ -3394,3 +3397,172 @@ tempo:
     requests:
       cpu: 100m
       memory: 256Mi
+
+# -- Consent Management (ISO/IEC TS 27560) -- optional. Deploys the consent-manager,
+# the TMForum-backed consent-facade it derives privacy notices from, and the secrets they
+# need. Enforcement (odrl-pap) is a separate increment. See CONSENT_MANAGEMENT_PLAN.md
+# section 13. All resources are gated by `consentManagement.enabled`.
+consentManagement:
+  # -- should consent management be deployed
+  enabled: false
+
+  # -- the consent-manager service (VisionsOfficial/consent-manager, ISO 27560)
+  consentManager:
+    # -- deploy the consent-manager. In the central-authority topology it runs in
+    # the trust-anchor (not the provider), so the provider sets this false while
+    # keeping the consent-facade.
+    enabled: true
+    # -- override for CONTRACT_SERVICE_BASE_URL (the consent-facade). Empty =>
+    # http://consent-facade:<port> (same namespace). Set to a cross-namespace FQDN
+    # (e.g. http://consent-facade.provider.svc.cluster.local:8080) when the
+    # consent-manager and consent-facade live in different namespaces.
+    contractServiceBaseUrl: ""
+    image:
+      # -- repository of the consent-manager image (built & imported locally, see plan 13.2)
+      repository: consent-manager
+      # -- tag of the consent-manager image
+      tag: local
+      # -- image pull policy
+      pullPolicy: IfNotPresent
+    # -- api prefix served by the consent-manager
+    apiPrefix: /v1
+    # -- port the consent-manager listens on
+    containerPort: 3000
+    service:
+      # -- kubernetes service type (keep internal -- backlog UF-1)
+      type: ClusterIP
+      # -- service port
+      port: 3000
+    # -- application base url (APP_ENDPOINT/URL), defaults to the in-cluster service
+    appEndpoint: ""
+    mongo:
+      # -- full MongoDB connection string (must include the replica set). If set, overrides the parts below.
+      uri: ""
+      # -- mongodb host (managed-mongo service by default)
+      host: mongodb-svc
+      # -- mongodb port
+      port: 27017
+      # -- database name
+      database: consent
+      # -- username
+      username: consent
+      # -- replica set name (the managed MongoDBCommunity resource name)
+      replicaSet: mongodb
+      auth:
+        # -- secret holding the mongo password (shared with the managed-mongo consent user)
+        existingSecret: mongodb-consent-password
+        # -- key within the secret holding the mongo password
+        existingSecretPasswordKey: password
+    # -- session/JWT/OAuth/consent-key secret. Generated in-cluster when generate=true.
+    secret:
+      # -- name of the secret
+      name: consent-manager-secret
+      # -- generate the secret (session/jwt/oauth/consentKey/mongoPassword) in-cluster
+      generate: true
+      # -- key holding the consent key (X_VISIONSTRUST_CONSENT_KEY), injected by the facade
+      consentKeyKey: consentKey
+    # -- extra environment variables (map)
+    env: {}
+    # -- "valueFrom" environment variable references (map, name templated)
+    envValueFrom: {}
+    # -- additional secrets to load as env (list of secret names)
+    envSecretNames: []
+    # -- additional config maps to load as env (list of config map names)
+    envConfigMapNames: []
+    # -- pod security context
+    podSecurityContext:
+      seccompProfile:
+        type: RuntimeDefault
+      runAsUser: 10100
+      runAsGroup: 10100
+      fsGroup: 10100
+    # -- container security context
+    securityContext:
+      capabilities:
+        drop:
+          - ALL
+        add: []
+      readOnlyRootFilesystem: true
+      allowPrivilegeEscalation: false
+      runAsNonRoot: true
+      runAsUser: 10100
+    # -- cpu/memory resources
+    resources:
+      limits:
+        cpu: 500m
+        memory: 512Mi
+      requests:
+        cpu: 100m
+        memory: 128Mi
+
+  # -- the Micronaut consent-facade (Java) that projects the DSC TMForum
+  # agreements/catalog/party into the contract-service API the consent-manager
+  # consumes (github.com/wistefan/consent-facade); it reads the TMForum api
+  # configured via `tmfApiUrl`.
+  consentFacade:
+    # -- should the consent-facade be deployed
+    enabled: true
+    image:
+      # -- repository of the consent-facade image
+      repository: quay.io/wi_stefan/consent-facade
+      # -- image tag
+      tag: "0.0.1"
+      # -- image pull policy
+      pullPolicy: IfNotPresent
+    # -- port the facade listens on
+    containerPort: 8080
+    # -- port the Micronaut management endpoints (incl. /health) listen on
+    # (matches endpoints.all.port in the image's application.yaml)
+    managementPort: 9090
+    service:
+      # -- kubernetes service type
+      type: ClusterIP
+      # -- service port
+      port: 8080
+    # -- base url of the TMForum api the facade reads (the DSC tm-forum-api). All
+    # of the facade's TMForum clients (product-ordering/-catalog/-inventory, party,
+    # agreement) are pointed here; the per-api paths come from the image defaults.
+    tmfApiUrl: http://tm-forum-api-svc:8080
+    # -- public base url the facade writes into the contracts' catalog/self-description
+    # links. Defaults to the in-cluster service (http://consent-facade:<port>).
+    selfUrl: ""
+    # -- extra environment variables (map)
+    env: {}
+    # -- "valueFrom" environment variable references (map, name templated)
+    envValueFrom: {}
+    # -- pod security context
+    podSecurityContext:
+      seccompProfile:
+        type: RuntimeDefault
+      runAsNonRoot: true
+      runAsUser: 185
+      runAsGroup: 0
+    # -- container security context
+    securityContext:
+      capabilities:
+        drop:
+          - ALL
+        add: []
+      readOnlyRootFilesystem: true
+      allowPrivilegeEscalation: false
+      runAsNonRoot: true
+      runAsUser: 185
+    # -- cpu/memory resources
+    resources:
+      limits:
+        cpu: 500m
+        memory: 512Mi
+      requests:
+        cpu: 100m
+        memory: 256Mi
+
+  # -- the shared consent key (X_VISIONSTRUST_CONSENT_KEY). The consent-manager
+  # validates it and the authority's APISIX facade injects it on the caller's
+  # behalf (see the facade route in k3s/consent-trust-anchor.yaml). Seeded into
+  # consent-manager-secret under `consentManager.secret.consentKeyKey`.
+  #
+  # Enforcement is the APISIX consent-filter plugin (the canonical, only path).
+  # The odrl-pap `consent:hasValidConsent` PIP is not used - the consent decision
+  # is made by the plugin against the consent-manager, so a response containing
+  # data for several subjects can be gated per-subject in the response phase.
+  consentKey: "changeme-consent-key"

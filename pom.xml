@@ -436,6 +436,27 @@
                             <manifests>${project.build.directory}/k3s/namespaces</manifests>
                         </configuration>
                     </execution>
+                    <!-- Import locally-built images into the k3s containerd *before* the
+                         manifests that reference them are applied. It must run after
+                         create-namespaces (k3s is up) and before apply-participants (which
+                         waits for the referencing pods to become Ready). Skipped by default
+                         (skipImage=true); the consent profile enables it (skipImage=false)
+                         for the consent-manager:local image it builds. Ordering relies on
+                         same-phase executions running in POM declaration order, so this must
+                         stay ahead of the apply-* executions. -->
+                    <execution>
+                        <id>import-consent-manager-image</id>
+                        <phase>deploy</phase>
+                        <goals>
+                            <goal>image</goal>
+                        </goals>
+                        <configuration>
+                            <skipImage>true</skipImage>
+                            <dockerImages>
+                                <dockerImage>consent-manager:local</dockerImage>
+                            </dockerImages>
+                        </configuration>
+                    </execution>
                     <execution>
                         <id>apply-mongo-operator</id>
                         <phase>deploy</phase>
@@ -527,6 +548,155 @@
                         <configuration>
                             <skip>false</skip>
                         </configuration>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-compiler-plugin</artifactId>
+                        <configuration>
+                            <skip>true</skip>
+                        </configuration>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-failsafe-plugin</artifactId>
+                        <version>${version.org.apache.maven.plugins.maven-failsafe}</version>
+                        <configuration>
+                            <skip>true</skip>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+        <profile>
+            <!-- Local deploy of the consent-management scenario: the standard local
+                 provider/consumer stack plus the consent overlay layered onto the
+                 provider template (`-f k3s/provider.yaml -f k3s/consent-provider.yaml`).
+                 Mirrors the `local` profile; additionally builds + imports the
+                 consent-manager image (both consent-specific). Run standalone:
+                 `mvn verify -Pconsent`. -->
+            <id>consent</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>io.github.download-maven-plugin</groupId>
+                        <artifactId>download-maven-plugin</artifactId>
+                        <version>2.0.0</version>
+                        <configuration>
+                            <skip>false</skip>
+                        </configuration>
+                    </plugin>
+                    <plugin>
+                        <artifactId>maven-resources-plugin</artifactId>
+                        <configuration>
+                            <skip>false</skip>
+                        </configuration>
+                    </plugin>
+                    <plugin>
+                        <groupId>io.kokuwa.maven</groupId>
+                        <artifactId>helm-maven-plugin</artifactId>
+                        <configuration>
+                            <skip>false</skip>
+                        </configuration>
+                        <executions>
+                            <!-- override only the provider template to layer the consent
+                                 overlay; every other template execution is inherited
+                                 (merged by id) from the base build. -->
+                            <execution>
+                                <id>template-dsc-provider</id>
+                                <goals>
+                                    <goal>init</goal>
+                                    <goal>dependency-update</goal>
+                                    <goal>template</goal>
+                                </goals>
+                                <phase>package</phase>
+                                <configuration>
+                                    <chartDirectory>${project.build.directory}/charts/data-space-connector</chartDirectory>
+                                    <skipTemplate>false</skipTemplate>
+                                    <templateGenerateName>true</templateGenerateName>
+                                    <templateOutputDir>${project.build.directory}/k3s/dsc-provider</templateOutputDir>
+                                    <additionalArguments>--name-template=provider --namespace=provider -f ${main.basedir}/k3s/provider.yaml -f ${main.basedir}/k3s/consent-provider.yaml --skip-tests</additionalArguments>
+                                </configuration>
+                            </execution>
+                            <!-- the consent-manager + its APISIX facade + managed Mongo run in the
+                                 trust-anchor namespace (central authority) as a 2nd release of the
+                                 DSC umbrella chart, via k3s/consent-trust-anchor.yaml. -->
+                            <execution>
+                                <id>template-consent-authority</id>
+                                <goals>
+                                    <goal>init</goal>
+                                    <goal>dependency-update</goal>
+                                    <goal>template</goal>
+                                </goals>
+                                <phase>package</phase>
+                                <configuration>
+                                    <chartDirectory>${project.build.directory}/charts/data-space-connector</chartDirectory>
+                                    <skipTemplate>false</skipTemplate>
+                                    <templateGenerateName>true</templateGenerateName>
+                                    <templateOutputDir>${project.build.directory}/k3s/consent-authority</templateOutputDir>
+                                    <additionalArguments>--name-template=consent-authority --namespace=trust-anchor -f ${main.basedir}/k3s/consent-trust-anchor.yaml --skip-tests</additionalArguments>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <plugin>
+                        <groupId>io.kokuwa.maven</groupId>
+                        <artifactId>k3s-maven-plugin</artifactId>
+                        <configuration>
+                            <skip>false</skip>
+                        </configuration>
+                        <executions>
+                            <!-- enable the base import-consent-manager-image execution
+                                 (declared before the apply-* steps). Merged by id onto the
+                                 base execution, so it keeps the base's early position; here
+                                 we only flip skipImage=false so the image is loaded into k3s
+                                 before apply-participants waits on the consent-manager pod. -->
+                            <execution>
+                                <id>import-consent-manager-image</id>
+                                <phase>deploy</phase>
+                                <goals>
+                                    <goal>image</goal>
+                                </goals>
+                                <configuration>
+                                    <skipImage>false</skipImage>
+                                    <dockerImages>
+                                        <dockerImage>consent-manager:local</dockerImage>
+                                    </dockerImages>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <!-- build the consent-manager image (see docker/consent-manager)
+                         before it is imported into k3s in the deploy phase.
+                         Local-only: the image is not published to a registry. -->
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-antrun-plugin</artifactId>
+                        <version>1.8</version>
+                        <!-- build only in the root module (docker/ lives there);
+                             not inherited by the `it` submodule where main.basedir
+                             resolves to an antrun-unresolvable ${project.parent.basedir} -->
+                        <inherited>false</inherited>
+                        <executions>
+                            <execution>
+                                <id>build-consent-manager-image</id>
+                                <phase>package</phase>
+                                <goals>
+                                    <goal>run</goal>
+                                </goals>
+                                <configuration>
+                                    <tasks>
+                                        <exec executable="docker" failonerror="true">
+                                            <arg value="build"/>
+                                            <arg value="-t"/>
+                                            <arg value="consent-manager:local"/>
+                                            <arg value="-f"/>
+                                            <arg value="${main.basedir}/docker/consent-manager/Dockerfile"/>
+                                            <arg value="${main.basedir}/docker/consent-manager"/>
+                                        </exec>
+                                    </tasks>
+                                </configuration>
+                            </execution>
+                        </executions>
                     </plugin>
                     <plugin>
                         <groupId>org.apache.maven.plugins</groupId>

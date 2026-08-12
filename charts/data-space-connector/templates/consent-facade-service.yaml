@@ -1,0 +1,20 @@
+{{- if and .Values.consentManagement.enabled .Values.consentManagement.consentFacade.enabled }}
+{{- $f := .Values.consentManagement.consentFacade }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: consent-facade
+  namespace: {{ $.Release.Namespace | quote }}
+  labels:
+    {{ include "dsc.labels" . | nindent 4 }}
+spec:
+  type: {{ $f.service.type }}
+  ports:
+    - port: {{ $f.service.port }}
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: consent-facade
+    app.kubernetes.io/instance: {{ .Release.Name }}
+{{- end }}

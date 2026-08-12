@@ -1,0 +1,167 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/helm-unittest/helm-unittest/main/schema/helm-testsuite.json
+#
+# ---------------------------------------------------------------------------
+# Helm-unittest suite for the Consent Management components:
+# consent-manager (deployment/service/secret) + consent-facade
+# (deployment/service). All gated by consentManagement.enabled.
+# ---------------------------------------------------------------------------
+suite: Consent Management - deployable components
+templates:
+  - templates/consent-manager-deployment.yaml
+  - templates/consent-manager-service.yaml
+  - templates/consent-manager-secret.yaml
+  - templates/consent-facade-deployment.yaml
+  - templates/consent-facade-service.yaml
+tests:
+  # ==========================================================================
+  # Disabled by default -> nothing renders
+  # ==========================================================================
+  - it: renders nothing when consentManagement is disabled (default)
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  # ==========================================================================
+  # consent-manager deployment
+  # ==========================================================================
+  - it: renders the consent-manager deployment when enabled
+    template: templates/consent-manager-deployment.yaml
+    set:
+      consentManagement.enabled: true
+    asserts:
+      - isKind:
+          of: Deployment
+      - equal:
+          path: metadata.name
+          value: consent-manager
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: "consent-manager:local"
+
+  - it: applies the strict security context
+    template: templates/consent-manager-deployment.yaml
+    set:
+      consentManagement.enabled: true
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.readOnlyRootFilesystem
+          value: true
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.runAsNonRoot
+          value: true
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.allowPrivilegeEscalation
+          value: false
+      - contains:
+          path: spec.template.spec.containers[0].securityContext.capabilities.drop
+          content: ALL
+
+  - it: points contract lookups at the consent-facade and builds the mongo uri
+    template: templates/consent-manager-deployment.yaml
+    set:
+      consentManagement.enabled: true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: CONTRACT_SERVICE_BASE_URL
+            value: "http://consent-facade:8080"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: MONGO_URI
+            value: "mongodb://consent:$(CM_MONGO_PASSWORD)@mongodb-svc:27017/consent?replicaSet=mongodb"
+
+  - it: uses an explicit mongo.uri when provided
+    template: templates/consent-manager-deployment.yaml
+    set:
+      consentManagement.enabled: true
+      consentManagement.consentManager.mongo.uri: "mongodb://x:y@host:27017/consent?replicaSet=rs0"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: MONGO_URI
+            value: "mongodb://x:y@host:27017/consent?replicaSet=rs0"
+
+  # ==========================================================================
+  # secret
+  # ==========================================================================
+  - it: generates the consent-manager secret with all keys
+    template: templates/consent-manager-secret.yaml
+    set:
+      consentManagement.enabled: true
+    asserts:
+      - isKind:
+          of: Secret
+      - isNotNullOrEmpty:
+          path: data.sessionSecret
+      - isNotNullOrEmpty:
+          path: data.jwtSecret
+      - isNotNullOrEmpty:
+          path: data.oauthSecret
+      - isNotNullOrEmpty:
+          path: data.consentKey
+
+  # ==========================================================================
+  # consent-facade
+  # ==========================================================================
+  - it: renders the consent-facade deployment when enabled
+    template: templates/consent-facade-deployment.yaml
+    set:
+      consentManagement.enabled: true
+    asserts:
+      - isKind:
+          of: Deployment
+      - equal:
+          path: metadata.name
+          value: consent-facade
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: "quay.io/wi_stefan/consent-facade:0.0.1"
+
+  - it: wires every TMForum client at the DSC tm-forum-api and sets its self url
+    template: templates/consent-facade-deployment.yaml
+    set:
+      consentManagement.enabled: true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: MICRONAUT_HTTP_SERVICES_AGREEMENT_URL
+            value: "http://tm-forum-api-svc:8080"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: MICRONAUT_HTTP_SERVICES_PARTY_URL
+            value: "http://tm-forum-api-svc:8080"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: FACADE_SELF_URL
+            value: "http://consent-facade:8080"
+
+  - it: renders the consent-facade service
+    template: templates/consent-facade-service.yaml
+    set:
+      consentManagement.enabled: true
+    asserts:
+      - isKind:
+          of: Service
+      - equal:
+          path: metadata.name
+          value: consent-facade
+      - equal:
+          path: spec.ports[0].port
+          value: 8080
+
+  - it: does not render the consent-facade when its subcomponent is disabled
+    templates:
+      - templates/consent-facade-deployment.yaml
+      - templates/consent-facade-service.yaml
+    set:
+      consentManagement.enabled: true
+      consentManagement.consentFacade.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0

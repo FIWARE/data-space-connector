@@ -1,0 +1,102 @@
+# ---------------------------------------------------------------------------
+# Consent management overlay.
+#
+# Layered on top of k3s/provider.yaml by the `consent` maven profile
+# (`-f k3s/provider.yaml -f k3s/consent-provider.yaml`), exactly the way
+# k3s/dsp-provider.yaml layers the DSP scenario. It carries the consent
+# *components* and their APISIX wiring so consent is opt-in:
+#   * consent-manager + consent-facade (consentManagement.*)
+#   * the external Go consent-plugin runner attached to APISIX
+#     (odrlAuthorization.apisix.apisix.extPlugin + the init container that
+#      stages the runner binary + its shared volume)
+#
+# NOTE: the `mp-data-service-consent` route and its ingress host stay in
+# provider.yaml (base), just like the DSP scenario's routes/hosts do. helm
+# REPLACES list values, so a single route/ingress entry cannot be overlaid
+# onto the shared `routes`/`ingress.hosts` lists without duplicating them.
+# That route is inert until this overlay enables the plugin runner and the
+# consent-manager it calls.
+# ---------------------------------------------------------------------------
+
+decentralizedIam:
+  odrlAuthorization:
+    apisix:
+      apisix:
+        # external plugin runner (consent-plugin), started by APISIX as a subprocess.
+        # APISIX spawns the runner with a *fixed* environment (only PATH,
+        # APISIX_LISTEN_ADDRESS, ...), so the participant client secret cannot be
+        # delivered to it via the container env. Instead the launch command reads
+        # it from the mounted secret file and exports it (CONSENT_CLIENT_SECRET, the
+        # runner's env fallback for client_secret) before exec'ing the runner -
+        # keeping the secret out of the route config (etcd). `exec` preserves the
+        # pid so APISIX's runner supervision still works.
+        extPlugin:
+          enabled: true
+          cmd:
+            - /bin/sh
+            - -c
+            - export CONSENT_CLIENT_SECRET="$(cat /consent-secret/clientSecret)"; exec /ext-plugin/go-runner
+      # consent-plugin (external Go plugin) run by APISIX as a subprocess. The
+      # statically-linked runner binary is staged into a shared volume by an init
+      # container from the plugin image; APISIX spawns it and manages the socket.
+      extraInitContainers:
+        - name: install-consent-plugin
+          image: quay.io/wi_stefan/consent-plugin:0.0.1
+          imagePullPolicy: Always
+          command: ["/bin/sh", "-c", "cp /app/go-runner /ext-plugin/go-runner"]
+          volumeMounts:
+            - name: ext-plugin-bin
+              mountPath: /ext-plugin
+      extraVolumeMounts:
+        - name: ext-plugin-bin
+          mountPath: /ext-plugin
+        # the participant client secret, read by the launch command above
+        - name: consent-plugin-secret
+          mountPath: /consent-secret
+          readOnly: true
+      # NOTE: helm REPLACES list values, so the odrl-authorization defaults
+      # (tpp-policy + opa-config, mounted by the OPA sidecar) are re-included here
+      # alongside the ext-plugin binary volume.
+      extraVolumes:
+        - name: tpp-policy
+          configMap:
+            name: tpp-policy
+        - name: opa-config
+          configMap:
+            name: opa-config
+        - name: ext-plugin-bin
+          emptyDir: {}
+        - name: consent-plugin-secret
+          secret:
+            secretName: consent-plugin-credentials
+
+# consent management (ISO/IEC TS 27560) - consent-manager + consent-facade.
+# The facade reads the provider's tm-forum-api; mongo uses the managed replica set.
+consentManagement:
+  enabled: true
+  # the consent-manager now runs in the trust-anchor (the central authority, see
+  # k3s/consent-trust-anchor.yaml); the provider keeps only the consent-facade.
+  # Consent is enforced solely by the APISIX consent-filter plugin (canonical
+  # path); there is no odrl-pap PIP wiring here, and the provider does not hold
+  # the consent key (the consent-manager + its facade do, at the trust-anchor).
+  consentManager:
+    enabled: false
+
+# the consent-plugin's participant client secret. Mounted as a file into the
+# provider APISIX container and exported as env CONSENT_CLIENT_SECRET by the
+# ext-plugin launch command (see above), so it is not stored as plaintext in the
+# route config / etcd. POC value matching the demo participant seeded by
+# doc/scripts/consent_grant.sh (clientSecret "demo"); source it from Vault / an
+# external secret store in production.
+extraManifests:
+  - |
+    apiVersion: v1
+    kind: Secret
+    metadata:
+      name: consent-plugin-credentials
+      # helm template does not inject the namespace; set it explicitly so the
+      # apply does not drop this into the default namespace.
+      namespace: {{ .Release.Namespace }}
+    type: Opaque
+    stringData:
+      clientSecret: "demo"
