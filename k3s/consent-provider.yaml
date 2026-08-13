@@ -81,15 +81,27 @@ consentManagement:
   # the consent key (the consent-manager + its facade do, at the trust-anchor).
   consentManager:
     enabled: false
+  consentFacade:
+    # public base url the facade writes into the contracts' catalog/self-description
+    # links and reports as its own address. It MUST be the fully-qualified,
+    # cross-namespace service name (not the short "consent-facade"): the
+    # consent-manager runs in the trust-anchor namespace and dereferences these
+    # URLs, so it has to resolve the facade in the provider namespace. The chart
+    # default ("") falls back to the short name, which only resolves in-namespace.
+    selfUrl: "http://consent-facade.provider.svc.cluster.local:8080"
+  # the consent-plugin's participant client secret, mounted as a file into the
+  # provider APISIX container and exported as env CONSENT_CLIENT_SECRET by the
+  # ext-plugin launch command, so it is not stored as plaintext in the route
+  # config / etcd. For the demo a literal Secret is created below; in production
+  # set create=false and provide a Secret named consent-plugin-credentials
+  # externally (e.g. Vault-synced via external-secrets) with the same key.
+  pluginCredentials:
+    create: true
+    clientSecret: "demo"
 
-# the consent-plugin's participant client secret. Mounted as a file into the
-# provider APISIX container and exported as env CONSENT_CLIENT_SECRET by the
-# ext-plugin launch command (see above), so it is not stored as plaintext in the
-# route config / etcd. POC value matching the demo participant seeded by
-# doc/scripts/consent_grant.sh (clientSecret "demo"); source it from Vault / an
-# external secret store in production.
 extraManifests:
   - |
+    {{- if .Values.consentManagement.pluginCredentials.create }}
     apiVersion: v1
     kind: Secret
     metadata:
@@ -99,4 +111,5 @@ extraManifests:
       namespace: {{ .Release.Namespace }}
     type: Opaque
     stringData:
-      clientSecret: "demo"
+      clientSecret: {{ .Values.consentManagement.pluginCredentials.clientSecret | quote }}
+    {{- end }}
