@@ -59,6 +59,26 @@ spec:
               value: {{ $f.tmfApiUrl | quote }}
             - name: MICRONAUT_HTTP_SERVICES_AGREEMENT_URL
               value: {{ $f.tmfApiUrl | quote }}
+            {{- if $f.persistentRegistry.enabled }}
+            {{- $pr := $f.persistentRegistry }}
+            # PostgreSQL-backed provider registry + /providers admin API (multi-provider, §11.8);
+            # the schema is created by the facade's Flyway migration on first start
+            - name: FACADE_PROVIDER_REGISTRY_PERSISTENT
+              value: "true"
+            - name: DATASOURCES_DEFAULT_URL
+              value: {{ printf "jdbc:postgresql://%s:%v/%s" $pr.database.host (toString $pr.database.port) $pr.database.name | quote }}
+            - name: DATASOURCES_DEFAULT_USERNAME
+              value: {{ $pr.database.username | quote }}
+            - name: DATASOURCES_DEFAULT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $pr.database.existingSecret.name | quote }}
+                  key: {{ $pr.database.existingSecret.key | quote }}
+            - name: DATASOURCES_DEFAULT_DIALECT
+              value: "POSTGRES"
+            - name: FLYWAY_DATASOURCES_DEFAULT_ENABLED
+              value: "true"
+            {{- end }}
             ######################################
             ## Additional environment variables ##
             ######################################

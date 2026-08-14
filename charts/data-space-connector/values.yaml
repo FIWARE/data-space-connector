@@ -3526,6 +3526,31 @@ consentManagement:
     # -- public base url the facade writes into the contracts' catalog/self-description
     # links. Defaults to the in-cluster service (http://consent-facade:<port>).
     selfUrl: ""
+    # persistent, database-backed provider registry (multi-provider, REQUIREMENTS.md §11.8).
+    # When enabled the facade manages providers at runtime through the /providers admin API,
+    # backed by PostgreSQL (the schema is created by the facade's Flyway migration on first
+    # start, seeded from the static providers). Off by default - the single-provider consent
+    # demo needs only the static config. When enabling, provision the database first: add
+    # `providerregistrydb: postgres` to
+    # decentralizedIam.vcAuthentication.managedPostgres.config.databases (the shared cluster).
+    persistentRegistry:
+      # -- enable the PostgreSQL-backed provider registry + /providers admin API
+      enabled: false
+      database:
+        # -- database host (the shared managed-postgres service)
+        host: postgres
+        # -- database port
+        port: 5432
+        # -- database name (must exist; provision via managedPostgres.config.databases)
+        name: providerregistrydb
+        # -- database user
+        username: postgres
+        # -- existing secret holding the db password (postgres-operator credentials secret)
+        existingSecret:
+          # -- secret name
+          name: postgres.postgres.credentials.postgresql.acid.zalan.do
+          # -- key within the secret holding the password
+          key: password
     # -- extra environment variables (map)
     env: {}
     # -- "valueFrom" environment variable references (map, name templated)
