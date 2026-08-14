@@ -3508,7 +3508,7 @@ consentManagement:
       # -- image tag
       tag: "0.0.1"
       # -- image pull policy
-      pullPolicy: IfNotPresent
+      pullPolicy: Always
     # -- port the facade listens on
     containerPort: 8080
     # -- port the Micronaut management endpoints (incl. /health) listen on

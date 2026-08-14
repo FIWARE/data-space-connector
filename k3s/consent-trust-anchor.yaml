@@ -178,6 +178,12 @@ consentManagement:
     email: "provider@mp-operation.org"
     did: "did:web:mp-operations.org"
     clientID: "consent-demo-provider"
+    # the participant client secret. For the demo a literal Secret
+    # (provider-participant-credentials) is created below; in production set
+    # credentialsSecretCreate=false and provide it externally (Vault-synced,
+    # same name/key). MUST match the provider plugin's consent-plugin-credentials.
+    credentialsSecretCreate: true
+    clientSecret: "demo"
     # the backing TMForum organization (provider party API) the selfDescriptionURL
     # dereferences to; find-or-created by name so the SD is stable across runs.
     orgName: "Consent Demo Provider"
@@ -195,8 +201,8 @@ consentManagement:
 # participant's legalName (the token's `participant_name` claim), signed with the
 # shared JWT_SECRET_KEY the consent-manager issues all tokens with. It is
 # idempotent (PUT), so it also re-syncs consumers after an apisix/etcd reset. At
-# first deploy the participant set is usually empty (a no-op); consent_grant.sh
-# provisions the consumer for each participant it registers, so a real authority's
+# first deploy the participant set is usually empty (a no-op); the register Job
+# provisions the consumer for the participant it registers, so a real authority's
 # registration path is what drives this. jwt-auth on the facade route then rejects
 # any request whose token's participant_name has no matching consumer.
 extraManifests:
@@ -269,7 +275,7 @@ extraManifests:
   # equal the provider consent-filter plugin's client secret (consent-plugin-
   # credentials in the provider namespace) so the plugin can log in as it.
   - |
-    {{- if .Values.consentManagement.providerParticipant.enabled }}
+    {{- if and .Values.consentManagement.providerParticipant.enabled .Values.consentManagement.providerParticipant.credentialsSecretCreate }}
     apiVersion: v1
     kind: Secret
     metadata:
@@ -277,7 +283,7 @@ extraManifests:
       namespace: {{ .Release.Namespace }}
     type: Opaque
     stringData:
-      clientSecret: "demo"
+      clientSecret: {{ .Values.consentManagement.providerParticipant.clientSecret | quote }}
     {{- end }}
   # --- register the provider participant at deploy time (item 3) ---------------
   # Runs the consent-manager image to (1) find-or-create the backing TMForum org
@@ -285,7 +291,7 @@ extraManifests:
   # participant via the consent-manager's real POST /v1/participants API
   # (idempotent: 201 new / 409 exists), and (3) provision its jwt-auth consumer.
   # This makes the provider participant a deploy artifact rather than a per-run
-  # side effect of consent_grant.sh.
+  # side effect of the grant flow.
   - |
     {{- if .Values.consentManagement.providerParticipant.enabled }}
     apiVersion: batch/v1

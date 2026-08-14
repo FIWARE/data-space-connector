@@ -490,7 +490,7 @@ decentralizedIam:
         # /participants/login for a participant token and derives the provider
         # self-description from /participants/me — so no per-seed token/SD wiring is
         # needed. The demo participant and its client credentials are created by
-        # doc/scripts/consent_grant.sh (client_id "consent-demo-provider").
+        # the deploy-time register Job (client_id "consent-demo-provider").
         # `client_secret` is NOT in this route conf: it is delivered to the plugin
         # runner via the APISIX container env CONSENT_CLIENT_SECRET, sourced from the
         # consent-plugin-credentials Secret (see k3s/consent-provider.yaml). No
