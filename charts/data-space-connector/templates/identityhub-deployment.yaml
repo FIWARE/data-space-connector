@@ -203,6 +203,16 @@ spec:
               {{- else }}
               value: {{ .Values.identityhub.superuser.key | quote }}
               {{- end }}
+            {{- if .Values.vault.hashicorp.existingSecret }}
+            # The vault token as an env var instead of a ConfigMap entry. identityhub-cm.yaml omits
+            # the property entirely in this case: leaving an empty one behind would be resolved as
+            # an empty token rather than falling through to this value.
+            - name: EDC_VAULT_HASHICORP_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.vault.hashicorp.existingSecret }}
+                  key: {{ .Values.vault.hashicorp.existingSecretTokenKey }}
+            {{- end }}
             {{- if $otelInjectAgent }}
             # tracing: attach the OpenTelemetry Java agent to the JVM.
             # Any user-provided JAVA_TOOL_OPTIONS value is preserved by

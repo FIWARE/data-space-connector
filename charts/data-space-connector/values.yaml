@@ -3067,24 +3067,83 @@ identityhub:
       pullPolicy: IfNotPresent
 
 vault:
+  # -- should the bundled HashiCorp Vault be deployed. The identityhub and fdsc-edc need a vault to
+  # hold the participant's signing key and the STS client secret; set this to false only to point
+  # them at a vault managed outside this chart (via `vault.hashicorp.url`).
   enabled: false
+  # -- should the vault agent injector be deployed. Not used by any component of this chart.
   injector:
     enabled: false
   server:
+    # -- development mode: in-memory storage, auto-unsealed, single replica, HTTP only, and a fixed
+    # root token. Convenient for local deployments and the integration tests, and NOT usable in
+    # production: every restart of the vault pod loses the participant's signing key, the
+    # identityhub super-user credential, the STS client secret and the transfer signing key that
+    # fdsc-edc generates for itself, which takes the DCP lane down until the bootstrap Job re-runs.
+    # For production set `vault.production.enabled: true`, which turns this off.
     dev:
       enabled: true
       devRootToken: "root"
-    postStart: # must be set externally!
+    # -- lifecycle postStart hook of the vault pod. Used by `vault.production` to unseal on start;
+    # leave unset otherwise.
+    postStart:
+  # -- how the components of this chart reach vault. These keys are read by the umbrella's own
+  # templates (the identityhub) and mirrored into `fdsc-edc.common.config.vault.hashicorp`; they are
+  # not understood by the HashiCorp subchart itself.
   hashicorp:
+    # -- address of the vault instance
     url: "http://{{ .Release.Name }}-vault:8200"
+    # -- vault token, in clear. Rendered into a ConfigMap, so anyone who can read ConfigMaps in the
+    # namespace can read it: acceptable for a dev deployment with a dev-mode vault, not for
+    # production. Use `existingSecret` instead, which injects it as an environment variable and
+    # keeps it out of the ConfigMap entirely.
     token: "root"
+    # -- name of a Secret holding the vault token. Takes precedence over `token`.
+    existingSecret: ""
+    # -- key within that Secret holding the token
+    existingSecretTokenKey: token
+    # -- timeout to be used when talking to vault
     timeout: 30
     healthCheck:
+      # -- should the vault health check be enabled
       enabled: true
+      # -- should a standby vault be considered healthy
       standbyOk: true
     paths:
+      # -- base path of the KV v2 secret engine
       secret: /v1/secret
+      # -- path of the health endpoint
       health: /v1/sys/health
+  # -- production mode for the bundled vault: persistent storage plus automatic unsealing, so the
+  # participant's identity survives a pod restart without an operator typing unseal keys.
+  #
+  # Two caveats, both deliberate and neither hidden:
+  #
+  #   * The unseal keys and the initial root token are stored in a Kubernetes Secret in this
+  #     namespace. That is what makes an unattended restart recover on its own, and it means the
+  #     cluster's Secret store is as trusted as the vault it unseals. Set `autoUnseal: false` to
+  #     keep the keys out of the cluster and unseal by hand instead.
+  #   * Initialisation happens exactly once, on the first start of an empty vault. The resulting
+  #     Secret is annotated `helm.sh/resource-policy: keep`, so it survives uninstall - deleting it
+  #     while the storage volume still exists leaves a vault nobody can unseal.
+  production:
+    # -- should vault run with persistent storage and be unsealed automatically
+    enabled: false
+    # -- number of key shares to split the master key into
+    secretShares: 1
+    # -- number of key shares required to unseal
+    secretThreshold: 1
+    # -- should the chart initialise vault and unseal it automatically. When false, the operator
+    # must run `vault operator init` and `vault operator unseal` after every start.
+    autoUnseal: true
+    # -- name of the Secret the unseal keys and the root token are written to
+    secretName: vault-unseal-keys
+    # -- image used by the init/unseal job, defaults to the vault image itself
+    image:
+      repository: hashicorp/vault
+      tag: "1.18.1"
+      # -- [Kubernetes image pull policy](https://kubernetes.io/docs/concepts/containers/images/#image-pull-policy) to use
+      pullPolicy: IfNotPresent
 
 # -- configuration for the cert-manager component (https://github.com/cert-manager/cert-manager/blob/master/deploy/charts/cert-manager/values.yaml)
 cert-manager:
