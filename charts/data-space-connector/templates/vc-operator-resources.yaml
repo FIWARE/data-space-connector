@@ -136,6 +136,29 @@ spec:
   {{- end }}
   {{- end }}
   {{- end }}
+  {{- if and $req.identityHub $req.identityHub.enabled }}
+  {{/*
+    Also publish the credential into the identityhub's own credential store, on
+    issuance and on every renewal. Without it the identityhub keeps serving the
+    copy it was handed at deploy time, which then expires on its own schedule and
+    takes the DCP lane down with nothing having changed in the cluster.
+
+    Every address defaults to what identityhub.bootstrap already declares, so a
+    participant provisioned by this chart needs nothing here but `enabled: true`.
+  */}}
+  identityHub:
+    url: {{ $req.identityHub.url | default (include "dsc.identityhub.identityApi" $) | quote }}
+    participantId: {{ $req.identityHub.participantId | default $.Values.identityhub.bootstrap.did | quote }}
+    credentialId: {{ $req.identityHub.credentialId | default $req.credentialType | quote }}
+    {{/*
+      The operator reads the api key from a Secret, so a plain
+      identityhub.superuser.key is not enough here - there is nothing to
+      reference. Fail loudly rather than render a dangling reference.
+    */}}
+    apiKeyRef:
+      name: {{ $req.identityHub.apiKeySecret | default $.Values.identityhub.superuser.existingSecret | required "publishing to the identityhub needs the super-user api key in a Secret: set identityhub.superuser.existingSecret, or the request's identityHub.apiKeySecret" | quote }}
+      key: {{ $req.identityHub.apiKeySecretKey | default $.Values.identityhub.superuser.existingSecretKeyKey | required "publishing to the identityhub needs the key within the api key Secret: set identityhub.superuser.existingSecretKeyKey, or the request's identityHub.apiKeySecretKey" | quote }}
+  {{- end }}
 {{- end }}
 ---
 {{- end }}

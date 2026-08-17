@@ -21,7 +21,10 @@ keycloak:
 identityhub:
   enabled: true
   superuser:
-    key: "c3VwZXItdXNlcg==.ci-only-not-a-real-key"
+    # from a Secret rather than a plain value: the vc-operator reads the api key from one, and a
+    # plaintext api key in values has the same problem as a plaintext vault token
+    existingSecret: identityhub-secret
+    existingSecretKeyKey: superuser
   # exercises the truststore init container and the ConfigMap it reads
   customCaCerts:
     ci-ca.pem: |

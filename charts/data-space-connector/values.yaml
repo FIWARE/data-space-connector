@@ -2698,6 +2698,20 @@ vcCredentials:
     #     existingKeySecret: ""
     #     -- optional DID URL for the proof JWT kid header; when omitted the operator embeds the full JWK
     #     holderDID: ""
+    #   -- also publish the credential into the identityhub's own credential store, on issuance and
+    #   on every renewal. Needed for any credential a DCP connector presents: the identityhub keeps
+    #   its own copy, and one pushed only at deploy time expires on its own schedule and takes the
+    #   DCP lane down with nothing having changed in the cluster.
+    #   identityHub:
+    #     -- should the credential be published to the identityhub
+    #     enabled: false
+    #     -- the rest default to what identityhub.bootstrap already declares, so a participant
+    #     provisioned by this chart needs nothing here beyond `enabled: true`
+    #     url: ""
+    #     participantId: ""
+    #     credentialId: ""
+    #     apiKeySecret: ""
+    #     apiKeySecretKey: ""
 
 # -- vc-operator subchart configuration
 vc-operator:
