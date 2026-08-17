@@ -1,0 +1,58 @@
+# Values used by CI to render the EDC / Dataspace-Protocol part of the chart.
+#
+# Everything under identityhub, vault, fdsc-edc and vcCredentials is disabled by default, so a
+# render with default values emits none of it and neither `helm template` nor `kubeconform` ever
+# sees those templates. This file turns the whole lane on so that it is schema-validated on every
+# pull request. It is not a deployable configuration - hostnames and secrets are placeholders.
+identityhub:
+  enabled: true
+  superuser:
+    key: "c3VwZXItdXNlcg==.ci-only-not-a-real-key"
+  endpoints:
+    identity:
+      authKeyAlias: super-user-apikey
+  bootstrap:
+    enabled: true
+    did: did:web:ci.example.org
+    credentialServiceUrl: https://ci.example.org
+    identityKey:
+      secretName: ci.example.org-tls
+    stsClientSecret:
+      existingSecret: identityhub-secret
+    kidCheck:
+      enabled: true
+      keycloakUrl: http://ci-keycloak:8080
+      realm: ci
+    credential:
+      secretName: vc-fdsc-edc-credential
+    # Rendered too: the rotation Job is opt-in at runtime but has to keep passing validation.
+    rotation:
+      enabled: true
+
+vault:
+  enabled: true
+  server:
+    dev:
+      enabled: false
+    standalone:
+      enabled: true
+  hashicorp:
+    # exercises the branch that keeps the token out of the ConfigMap
+    existingSecret: vault-token
+  production:
+    enabled: true
+
+vcCredentials:
+  enabled: true
+  issuer:
+    issuerURL: http://ci-keycloak:8080/realms/ci
+    tokenURL: http://ci-keycloak:8080/realms/ci/protocol/openid-connect/token
+  auth:
+    clientId: ci-client
+    clientSecret: ci-secret
+  requests:
+    - name: fdsc-edc-credential
+      credentialType: membership-credential
+      targetSecretName: vc-fdsc-edc-credential
+      identityHub:
+        enabled: true
