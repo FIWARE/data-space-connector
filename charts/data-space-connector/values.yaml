@@ -155,7 +155,7 @@ decentralizedIam:
         initContainers:
           - name: open-policy-agent
             restartPolicy: Always
-            image: openpolicyagent/opa:1.11.0
+            image: openpolicyagent/opa:1.19.0
             imagePullPolicy: IfNotPresent
             ports:
               - name: opa-http
