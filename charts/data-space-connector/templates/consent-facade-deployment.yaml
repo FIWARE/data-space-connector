@@ -27,6 +27,43 @@ spec:
       serviceAccountName: default
       securityContext:
         {{- toYaml $f.podSecurityContext | nindent 8 }}
+      {{- if $f.oid4vp.enabled }}
+      {{- $o := $f.oid4vp }}
+      initContainers:
+        # cert-manager stores the tls private key in SEC1 (EC PRIVATE KEY); the
+        # OID4VP holder signing service needs it as PKCS#8 (PRIVATE KEY).
+        - name: convert-signing-key
+          image: {{ $o.opensslImage | quote }}
+          command: ["/bin/sh", "-c"]
+          args:
+            - openssl pkcs8 -topk8 -nocrypt -in /signing-key-raw/tls.key -out /signing-key/tls.key && chmod 640 /signing-key/tls.key
+          securityContext:
+            {{- toYaml $f.securityContext | nindent 12 }}
+          volumeMounts:
+            - name: signing-key-raw
+              mountPath: /signing-key-raw
+            - name: signing-key
+              mountPath: /signing-key
+        # import the cluster CA (dsc-ca = the tls secret's ca.crt) into a copy of
+        # the JVM truststore, mounted over $JAVA_HOME/lib/security/cacerts below, so
+        # both the OID4VP client (java.net.http) and the Netty TM Forum clients trust
+        # the provider's self-signed ingress. Uses the facade image (has keytool).
+        - name: import-dsc-ca
+          image: "{{ $f.image.repository }}:{{ $f.image.tag }}"
+          imagePullPolicy: {{ $f.image.pullPolicy }}
+          command: ["/bin/sh", "-c"]
+          args:
+            # the image's cacerts is mode 0444; make the copy writable so keytool can
+            # add the CA (and so a retry can overwrite it after a restart)
+            - cp /usr/lib/jvm/java-21/lib/security/cacerts /cacerts/cacerts && chmod 0644 /cacerts/cacerts && /usr/lib/jvm/java-21/bin/keytool -importcert -noprompt -alias dsc-ca -file /root-ca/ca.crt -keystore /cacerts/cacerts -storepass changeit
+          securityContext:
+            {{- toYaml $f.securityContext | nindent 12 }}
+          volumeMounts:
+            - name: root-ca
+              mountPath: /root-ca
+            - name: cacerts
+              mountPath: /cacerts
+      {{- end }}
       containers:
         - name: consent-facade
           securityContext:
@@ -79,6 +116,50 @@ spec:
             - name: FLYWAY_DATASOURCES_DEFAULT_ENABLED
               value: "true"
             {{- end }}
+            {{- if $f.oid4vp.enabled }}
+            {{- $o := $f.oid4vp }}
+            # OID4VP: present a verifiable credential (holder did:web) to obtain an
+            # access token for the provider's OID4VP-protected TM Forum api. The
+            # holder signing key + credentials come from the volumes below.
+            - name: OID4VP_ENABLED
+              value: "true"
+            # point the JVM default SSLContext (used by both the OID4VP java.net.http
+            # client and the Netty TM Forum clients) at the dsc-ca-augmented truststore
+            - name: JAVA_TOOL_OPTIONS
+              value: "-Djavax.net.ssl.trustStore=/opt/truststore/cacerts -Djavax.net.ssl.trustStorePassword=changeit"
+            - name: OID4VP_HOLDER_HOLDER_ID
+              value: {{ $o.holder.id | quote }}
+            - name: OID4VP_HOLDER_KEY_TYPE
+              value: {{ $o.holder.keyType | quote }}
+            - name: OID4VP_HOLDER_KEY_PATH
+              value: {{ $o.holder.keyPath | quote }}
+            - name: OID4VP_HOLDER_SIGNATURE_ALGORITHM
+              value: {{ $o.holder.signatureAlgorithm | quote }}
+            - name: OID4VP_CREDENTIALS_FOLDER
+              value: {{ $o.credentialsFolder | quote }}
+            - name: OID4VP_CLIENT_ID
+              value: {{ $o.clientId | quote }}
+            # Micronaut binds a comma-separated env value to the List property
+            # (avoids bracketed env names, which Kubernetes rejects)
+            - name: OID4VP_SCOPES
+              value: {{ join "," $o.scopes | quote }}
+            - name: OID4VP_TRUST_ANCHORS
+              value: {{ join "," $o.trustAnchors | quote }}
+            {{- if $o.proxy.enabled }}
+            - name: OID4VP_PROXY_HOST
+              value: {{ $o.proxy.host | quote }}
+            - name: OID4VP_PROXY_PORT
+              value: {{ $o.proxy.port | quote }}
+            # the generated TM Forum clients (Netty) reach the provider's external
+            # ingress host through the same forward proxy
+            {{- range $svc := (list "PRODUCT_ORDER" "PRODUCT_CATALOG" "PRODUCT_INVENTORY" "PARTY" "AGREEMENT") }}
+            - name: {{ printf "MICRONAUT_HTTP_SERVICES_%s_PROXY_TYPE" $svc | quote }}
+              value: "HTTP"
+            - name: {{ printf "MICRONAUT_HTTP_SERVICES_%s_PROXY_ADDRESS" $svc | quote }}
+              value: {{ printf "%s:%v" $o.proxy.host (toString $o.proxy.port) | quote }}
+            {{- end }}
+            {{- end }}
+            {{- end }}
             ######################################
             ## Additional environment variables ##
             ######################################
@@ -95,6 +176,27 @@ spec:
           volumeMounts:
             - name: tmp
               mountPath: /tmp
+            {{- if $f.oid4vp.enabled }}
+            # the PKCS#8 holder signing key (converted by the init container)
+            - name: signing-key
+              mountPath: /signing-key
+              readOnly: true
+            # the issued credential(s) presented over OID4VP
+            - name: credential-repo
+              mountPath: {{ $f.oid4vp.credentialsFolder | quote }}
+              readOnly: true
+            # the cluster CA as a PEM trust anchor for client identification
+            - name: root-ca
+              mountPath: /etc/ssl/cacert.pem
+              subPath: ca.crt
+              readOnly: true
+            # the CA-augmented truststore. Mounted as a plain directory (no subPath,
+            # which would make kubelet pre-create a root-owned path the uid-185 init
+            # container cannot write); the JVM is pointed at it via JAVA_TOOL_OPTIONS.
+            - name: cacerts
+              mountPath: /opt/truststore
+              readOnly: true
+            {{- end }}
           readinessProbe:
             httpGet:
               path: /health
@@ -112,4 +214,39 @@ spec:
       volumes:
         - name: tmp
           emptyDir: {}
+        {{- if $f.oid4vp.enabled }}
+        {{- $o := $f.oid4vp }}
+        # raw SEC1 signing key from the participant's cert-manager tls secret
+        - name: signing-key-raw
+          secret:
+            secretName: {{ $o.didSecretName | quote }}
+            items:
+              - key: tls.key
+                path: tls.key
+            defaultMode: 0640
+        # the PKCS#8 key the convert-signing-key init container writes here
+        - name: signing-key
+          emptyDir: {}
+        # the cluster CA (dsc-ca) from the same tls secret's ca.crt
+        - name: root-ca
+          secret:
+            secretName: {{ $o.didSecretName | quote }}
+            items:
+              - key: ca.crt
+                path: ca.crt
+        # the CA-augmented JVM truststore built by the import-dsc-ca init container
+        - name: cacerts
+          emptyDir: {}
+        # the issued credential(s) projected from their secrets into one folder
+        - name: credential-repo
+          projected:
+            sources:
+              {{- range $o.credentials }}
+              - secret:
+                  name: {{ .secretName | quote }}
+                  items:
+                    - key: {{ .secretKey | quote }}
+                      path: {{ .fileName | quote }}
+              {{- end }}
+        {{- end }}
 {{- end }}

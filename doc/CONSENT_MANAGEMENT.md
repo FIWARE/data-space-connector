@@ -1,26 +1,152 @@
 ## Consent Management
 
-Some data spaces require that access to personal data is backed by the **explicit consent** of the data subject, recorded in an auditable way. The Data Space Connector can deploy an optional consent-management layer based on the [Prometheus-X / Visions consent-manager](https://github.com/VisionsOfficial/consent-manager), producing [ISO/IEC TS 27560](https://www.iso.org/standard/80392.html) consent records, and enforce them at the gateway through the existing ODRL/OPA authorization stack. The full design, its blockers and the backlog of deferred fixes are documented in [CONSENT_MANAGEMENT_PLAN.md](../CONSENT_MANAGEMENT_PLAN.md).
+Some data spaces require that access to personal data is backed by the **explicit consent** of the data subject, recorded in an auditable way. The Data Space Connector can deploy an optional consent-management layer based on the [Prometheus-X / Visions consent-manager](https://github.com/VisionsOfficial/consent-manager), producing [ISO/IEC TS 27560](https://www.iso.org/standard/80392.html) consent records, and enforce them at the gateway through the existing ODRL/OPA authorization stack.
 
-> :warning: The consent-management integration is a **proof-of-concept** (see the `UF-1..UF-14` backlog in the plan). The shared consent key and participant token are POC-grade, the consent-manager runs **unmodified** in the trust-anchor (central authority) namespace and is kept cluster-internal (no ingress). Do not use this configuration as-is in production.
+> :warning: This is a **reference integration**: the consent-manager runs **unmodified** and is kept cluster-internal (no ingress), and the demo uses example credentials. Before production use, harden the credentials, expose the data-subject consent UI over ingress + TLS + auth, and run the authority in its own environment.
+
+## Architecture
+
+Consent management spans **two namespaces**: a central **authority** (the trust-anchor - it knows all participants; in real deployments the consent-manager is operated by such a central authority, typically in its own environment) and the **provider** that serves the personal data.
+
+```mermaid
+flowchart LR
+  consumer([Data consumer])
+
+  subgraph authority["Authority — trust-anchor namespace (release: consent-authority)"]
+    direction TB
+    facade["APISIX facade<br/>/consent-manager/* — jwt-auth, injects consent key"]
+    cm["consent-manager<br/>records &amp; receipts"]
+    cf["consent-facade<br/>TMForum → contract-service"]
+    mongo[("MongoDB<br/>replica set")]
+    facade --> cm
+    cm --- mongo
+    cm -->|CONTRACT_SERVICE_BASE_URL| cf
+  end
+
+  subgraph provider["Provider namespace"]
+    direction TB
+    apisix["Provider APISIX<br/>mp-data-service-consent route"]
+    opa["OPA / odrl-pap<br/>credential authz"]
+    plugin["consent-filter plugin<br/>consent gate, response phase"]
+    mptmf["mp-tmf-api<br/>OID4VP-protected"]
+    tmf["tm-forum-api"]
+    scorpio[("Scorpio broker<br/>personal data")]
+    apisix --> opa
+    apisix --> plugin
+    apisix --> scorpio
+    mptmf --> tmf
+  end
+
+  consumer -->|OID4VP access token| apisix
+  plugin -->|"two-call consent check<br/>(participant JWT)"| facade
+  cf -->|"OID4VP-authenticated reads<br/>(as did:web:dataspace-authority.org)"| mptmf
+```
 
 ### Components
 
-Consent management is deployed across **two namespaces** - a central **authority**
-(the trust-anchor, which knows all participants; in real deployments the consent-manager
-is run by such a central authority) and the **provider**.
+**Authority** (trust-anchor namespace, deployed as a second umbrella-chart release `consent-authority` via [`k3s/consent-trust-anchor.yaml`](../k3s/consent-trust-anchor.yaml)):
 
-**Trust-anchor (central authority)** - a second release of the DSC umbrella chart
-named `consent-authority`, via [`k3s/consent-trust-anchor.yaml`](../k3s/consent-trust-anchor.yaml):
+* **consent-manager** (`consent-manager:3000`) - stores and serves the consent records/receipts (Node/MongoDB) on a managed MongoDB replica set. It derives its privacy notices from the contract-service API the consent-facade serves (`CONTRACT_SERVICE_BASE_URL` → `consent-facade.trust-anchor.svc.cluster.local`). Run **unmodified**.
+* **APISIX facade** - an internal APISIX in front of the consent-manager (route `/consent-manager/*`). It authenticates callers **per participant** (`jwt-auth`, keyed on the token's `participant_name`) and **injects** the shared consent key server-side, so callers present only their own participant JWT and never hold the consent key. Not exposed via ingress.
+* **consent-facade** (`consent-facade:8080`) - a Micronaut service ([wistefan/consent-facade](https://github.com/wistefan/consent-facade)) that projects a provider's TMForum APIs (agreements, catalog, party) into the contract-service API the consent-manager consumes: bilateral contracts, catalog self-descriptions, and participant self-descriptions at `/participants/{tmforum-org-id}`. It runs at the authority so it can front **multiple providers**, authenticating its outbound TMForum reads to each provider's OID4VP-protected `mp-tmf-api` as `did:web:dataspace-authority.org`.
+* **consent secret** (`consent-manager-secret`) - the session/JWT/OAuth secrets and the shared consent key.
 
-* **consent-manager** (`consent-manager:3000`) - stores and serves the consent records/receipts (Node/MongoDB), on a managed MongoDB replica set (dedicated `consent` database). It points at the consent-facade (now in the same namespace) via `CONTRACT_SERVICE_BASE_URL` (`consent-facade.trust-anchor.svc.cluster.local`).
-* an internal **APISIX facade** in front of the consent-manager (route `/consent-manager/*`) that authenticates callers **per participant** (`jwt-auth`, keyed on the token's `participant_name`) and injects the shared consent key server-side - so callers authenticate with their own participant JWT and never hold the consent key. Not exposed via ingress (roadmap item 1).
-* the **consent-facade** (`consent-facade:8080`) - a Micronaut service ([wistefan/consent-facade](https://github.com/wistefan/consent-facade)) that projects a provider's TMForum APIs (agreements, catalog, party) into the contract-service API the consent-manager consumes: bilateral contracts, catalog self-descriptions, and participant self-descriptions at `/participants/{tmforum-org-id}` (party API). It runs at the authority so it can front **multiple providers**, authenticating its outbound TMForum calls to each provider's OID4VP-protected api (as `did:web:dataspace-authority.org`). It replaces the POC node `contract-facade` (plan §10, backlog `UF-10`).
-* a **consent secret** carrying the session/JWT/oauth secrets and the shared consent key.
+**Provider** (the [`k3s/consent-provider.yaml`](../k3s/consent-provider.yaml) overlay):
 
-**Provider**:
+* **consent-filter plugin** - an APISIX external plugin on the `mp-data-service-consent` route. It is the **canonical (and only) consent-enforcement path**: OPA/odrl-pap authorizes each request on the presented *credential*, and the plugin then gates on the data subject's *consent* by calling the authority's consent-manager (through the facade).
 
-* the **consent-filter APISIX plugin** on the `mp-data-service-consent` route, which calls the authority's consent-manager (through its facade at `consent-authority-apisix-gateway.trust-anchor`) to gate access. This plugin is the **canonical (and only) consent-enforcement path** - OPA/odrl-pap still authorizes each request on the presented *credential*, but the *consent* decision is made by the plugin.
+### Trust & authentication
+
+* **Callers → consent-manager**: every `/consent-manager/*` call goes through the authority facade, which validates a **per-participant JWT** (`jwt-auth`; one APISIX consumer per participant, keyed on `participant_name`, signed with the consent-manager's `JWT_SECRET_KEY`) and injects the shared consent key downstream. `/participants/login` is exempt (it issues the token). Participants obtain their token by logging in with their `clientID`/`clientSecret`.
+* **consent-facade → provider TMForum**: the facade authenticates its reads to the provider's OID4VP-protected `mp-tmf-api` by presenting a verifiable credential (holder `did:web:dataspace-authority.org`, an `OperatorCredential`) over OID4VP; the provider's verifier issues an access token, and the request passes the route's `openid-connect` (authn) and OPA (authz) checks.
+* **Consumer → personal data**: two gates on the `mp-data-service-consent` route - OPA authorizes the credential, then the consent-filter plugin (in the response phase) gates on consent.
+
+The detailed component diagram (drawio source [`consent.drawio`](img/consent/consent.drawio)):
+
+![consent architecture](./img/consent/consent.png)
+
+## Flows
+
+The [Demo](#demo-consent-gated-access-to-personal-data) below walks these through as executable steps.
+
+### Granting consent
+
+A participant (acting for the data subject) records a granted consent. Every consent-manager call goes through the authority facade with a participant JWT; the privacy notice is projected by the consent-facade from a TM Forum agreement.
+
+```mermaid
+sequenceDiagram
+  actor op as Operator (subject + provider)
+  participant fac as Authority APISIX facade
+  participant cm as consent-manager
+  participant cf as consent-facade
+  participant tmf as Provider TMForum (mp-tmf-api)
+
+  op->>fac: POST /participants/login (clientID/secret)
+  fac-->>op: participant JWT
+  op->>tmf: seed agreement (offering, spec, purpose)
+  op->>fac: POST /users/register (Bearer) — subject on both sides
+  op->>fac: POST /users/identifier/search (Bearer) → x-user-key
+  op->>fac: GET /consents/{did}/{providerSD}/{consumerSD} (Bearer + x-user-key)
+  fac->>cm: forward (consent key injected)
+  cm->>cf: fetch bilateral contract / privacy notice
+  cf->>tmf: OID4VP-authenticated reads (agreement → offering → spec)
+  cf-->>cm: privacy notice (data + purposes)
+  cm-->>op: privacy notice
+  op->>fac: POST /consents {event: given} (Bearer + x-user-key)
+  fac->>cm: forward (consent key injected)
+  cm-->>op: 201 — consent receipt (recordId)
+```
+
+### Consent-gated data access
+
+A consumer reads personal data through the `mp-data-service-consent` route. OPA authorizes the credential; the consent-filter plugin then decides on consent in the response phase, so the decision can be made per data subject in the body.
+
+```mermaid
+sequenceDiagram
+  actor cons as Data consumer
+  participant apisix as Provider APISIX (consent route)
+  participant opa as OPA / odrl-pap
+  participant scorpio as Scorpio (personal data)
+  participant plugin as consent-filter plugin
+  participant fac as Authority facade
+  participant cm as consent-manager
+
+  cons->>apisix: GET /entities/{PersonalProfile} (OID4VP access token)
+  apisix->>opa: authorize on credential
+  opa-->>apisix: allow
+  apisix->>scorpio: read entities
+  scorpio-->>apisix: personal data
+  apisix->>plugin: consent check (response phase, per subject)
+  plugin->>fac: identifier/search + list consents (participant JWT)
+  fac->>cm: forward (consent key injected)
+  cm-->>plugin: consent status
+  alt a granted consent exists
+    plugin-->>cons: 200 + data
+  else no / withdrawn consent
+    plugin-->>cons: 403
+  end
+```
+
+### Authenticated projection (consent-facade → provider)
+
+When the consent-facade reads a provider's TMForum data (to serve self-descriptions and project privacy notices) it authenticates with a verifiable credential over OID4VP - the same protection any cross-organisation data access uses.
+
+```mermaid
+sequenceDiagram
+  participant cf as consent-facade (did:web:dataspace-authority.org)
+  participant mptmf as Provider mp-tmf-api (APISIX)
+  participant ver as Provider verifier
+  participant tmf as tm-forum-api
+
+  cf->>mptmf: GET /tmf-api/... (no token)
+  mptmf-->>cf: 401
+  cf->>ver: OID4VP — present OperatorCredential presentation
+  ver-->>cf: access token
+  cf->>mptmf: GET /tmf-api/... (Bearer)
+  Note over mptmf: openid-connect (authn) + OPA (authz)
+  mptmf->>tmf: proxied read
+  tmf-->>cf: TMForum data
+```
 
 ### Enabling
 
@@ -81,7 +207,7 @@ never hold the consent key. Port-forward the facade and set the same `$CM` base 
 >     })();'
 > ```
 
-An identity in the consent-manager is a **`UserIdentifier`** - a record that binds an **e-mail** to a **participant** (`attachedParticipant`). The consent-manager keys its lookup and cross-participant matching on that `email` field, so the DSC simply uses the **access-token `sub` as-is** as the value (for the PoC we assume `sub` *is* the identifier - it may be a `did:key:…` or a real e-mail; either is stored verbatim). A consent record is thus tied to whatever `sub` appears in the presented credential's access token. Reconciling on the dedicated `identifier` field instead is `UF-3` (needs consent-manager changes; deferred/upstream).
+An identity in the consent-manager is a **`UserIdentifier`** - a record that binds an **e-mail** to a **participant** (`attachedParticipant`). The consent-manager keys its lookup and cross-participant matching on that `email` field, so the DSC uses the **access-token `sub` as-is** as the value (it may be a `did:key:…` or a real e-mail; either is stored verbatim). A consent record is thus tied to whatever `sub` appears in the presented credential's access token.
 
 #### Registering a user identity (must happen before it can be resolved)
 
@@ -105,7 +231,7 @@ The `identifier/search` call below only finds a `UserIdentifier` that has been *
 
 The `email` is the holder DID; a throw-away one can be minted with the [did-helper](https://github.com/wistefan/did-helper) (`docker run -v $(pwd)/cert:/cert quay.io/wi_stefan/did-helper:0.1.1`, then read `cert/did.json`). The PDI `User` account itself is created with `POST /v1/users/signup`, and a background matcher links identifiers that share an e-mail across participants.
 
-> :warning: **In the DSC POC nothing registers users automatically.** Identity bootstrapping - creating the provider/consumer participants and registering each holder's DID - is deferred (backlog `UF-1`/`UF-2`/`UF-3`) and the consent-manager is deployed **empty**, so out of the box `identifier/search` returns `userIdentifierExists: false`. The [Demo](#demo-consent-gated-access-to-personal-data) below performs this registration through the consent-manager API - it registers the provider/consumer participants and the subject's `UserIdentifier` (`email` = the holder DID) before recording the granted consent.
+> :warning: **Nothing registers users automatically.** The consent-manager is deployed **empty**, so out of the box `identifier/search` returns `userIdentifierExists: false`. The [Demo](#demo-consent-gated-access-to-personal-data) below performs this bootstrap through the consent-manager API - it registers the provider/consumer participants and the subject's `UserIdentifier` (`email` = the holder DID) before recording the granted consent.
 
 Once an identity is registered, the consent-filter plugin that gates access resolves and checks consent with a **two-call chain** against the consent-manager:
 
@@ -146,7 +272,7 @@ The intended end-to-end behaviour is:
 2. Grant consent for the holder DID in the consent-manager (see above) &rarr; the same request now returns **200**.
 3. Revoke the consent &rarr; the request returns **403** again.
 
-> :bulb: **Status.** The consent-filter plugin implements the two-call check directly and gates the `mp-data-service-consent` route end to end (grant → 200 / revoke → 403, see [`verify_consent_flow.sh`](scripts/verify_consent_flow.sh)); the surrounding user-bootstrap flow it relies on is still POC-grade (`UF-1..UF-14`).
+> :bulb: The consent-filter plugin implements the two-call check directly and gates the `mp-data-service-consent` route end to end (grant → 200 / revoke → 403, see [`verify_consent_flow.sh`](scripts/verify_consent_flow.sh)).
 
 > :warning: A full local bring-up of the provider **with** consent management is resource-hungry; the &ge;24 GB recommendation in the [Requirements](#requirements) applies.
 
@@ -178,7 +304,7 @@ This walkthrough shows the core consent story end to end: a data subject publish
 
 > :bulb: **Two enforcement layers.** The `mp-data-service-consent` route runs each request through **two** gates: first OPA (fed by odrl-pap) authorizes the call on the presented *credential*, then the custom **consent-filter** APISIX plugin gates it on the data subject's *consent* by calling the consent-manager. This walkthrough exercises exactly that split - OPA must **allow** the `PersonalProfile` read (step 0) so that the **plugin** is the component that denies the access when no consent exists and permits it once consent is granted. The data requests therefore target the plugin-enforced host `mp-data-service-consent.127.0.0.1.nip.io`; the access token is still obtained from `mp-data-service.127.0.0.1.nip.io`, which serves the OIDC discovery.
 
-> :bulb: Step **1** (publishing data) and step **3** (grant/revoke consent, via the consent-manager API) are verified against the live cluster. Steps **0/2/4** exercise the OPA-allow + consent-plugin path; the plugin performs the two-call check against the consent-manager, and the user-bootstrap flow it relies on is POC-grade (`UF-1..UF-14`).
+> :bulb: Step **1** (publishing data) and step **3** (grant/revoke consent, via the consent-manager API) are verified against the live cluster. Steps **0/2/4** exercise the OPA-allow + consent-plugin path, where the plugin performs the two-call check against the consent-manager.
 
 **Prerequisites.** Deploy the data space with consent management enabled (`mvn clean deploy -Pconsent`, see [Enabling](#enabling)). All commands below are run from the repository root. The grant step reaches the consent-manager and TM Forum API through `kubectl port-forward`, so point `KUBECONFIG` at the local cluster:
 
@@ -466,70 +592,3 @@ again. Access follows the subject's consent in real time:
 (Re-running the grant in step 3e issues a fresh `granted` consent, so access is allowed again.)
 
 > :bulb: To run this whole check in one shot, use [`./doc/scripts/verify_consent_flow.sh`](scripts/verify_consent_flow.sh) - it issues the token, then drives the same give-consent API to grant → assert `200`, revoke → assert `403`, re-grant → assert `200`, and exits non-zero on any failure. Needs the `cert/` holder identity from the prerequisites above.
-
-
-### Arch
-
-- check consent on response, filter response for data to be included/excluded
-  - data needs to be flagged as personal/subject-to-consent
-  - 
-
-#### Contract Facade
-
-- provide "Agreement" from TMForum in form Prometheus-X Contract Format
-- filter for "Agreement" by participant ID(consumer, provider) - id to ask needs to be did
-
-
-![consent-arch](./img/consent/consent.png)
-
-## From PoC to production: open steps
-
-The current integration is a **proof-of-concept**. The steps below take it to a production-ready state. They extend the `UF-1..UF-14` backlog in [`CONSENT_MANAGEMENT_PLAN.md`](../CONSENT_MANAGEMENT_PLAN.md) §13.4 (referenced as `UF-n`) with what this integration surfaced. Rough priority: **P0** blocks any non-demo use, **P1** is needed for a real deployment, **P2** is hardening.
-
-### 1. Authentication & subject identity (P0)
-- **Real participant auth** instead of the single global `x-visionstrust-consent-key` shared secret and the `x-user-key`/query-param/base64-payload shortcuts in the consent-manager (`UF-1`). The consent-manager stays **unmodified**; the extra auth is added by the **APISIX facade in front of it** at the authority (route `/consent-manager/*`, upstream `consent-manager:3000`, in [`k3s/consent-trust-anchor.yaml`](../k3s/consent-trust-anchor.yaml)), which callers reach cross-namespace at `consent-authority-apisix-gateway.trust-anchor`.
-  - **Done (config-only hardening):** every `/consent-manager/*` call requires a **per-participant JWT** (`jwt-auth`, keyed on the token's `participant_name`; one consumer per participant provisioned by the reconcile Job), and the facade **injects** the `x-visionstrust-consent-key` server-side - so callers authenticate as themselves and never hold the shared consent key. The `x-user-key` subject selector is **forwarded** behind that auth (a participant can name the subject of a grant); replacing it by deriving the subject from the token `sub` is the remaining part of `UF-1`. The consent-filter plugin's `consent_api_url` points at `http://consent-authority-apisix-gateway.trust-anchor.svc.cluster.local/consent-manager`. The facade's APISIX is internal (ingress off), so it is not directly reachable from outside.
-  - **Done (participant-JWT validation) — verified live:** the facade requires a valid **participant JWT** on every call except `/participants/login` (APISIX `jwt-auth`, keyed on the token's `participant_name` via a consumer whose HS256 secret is the consent-manager's `JWT_SECRET_KEY`); the plugin now sends the token on call 1 too. Verified end-to-end: missing/tampered token → **401** at the facade (before the consent-manager), login stays open, and the full grant→**200** / revoke→**403** flow works. Baked into [`k3s/consent-trust-anchor.yaml`](../k3s/consent-trust-anchor.yaml) (login-exempt route + `jwt-auth` on the facade route + a consumer-reconcile Job, one consumer per participant).
-  - **Done (secret ref):** the consent key injected by the facade is sourced from `consent-manager-secret` (mounted as env `CONSENT_KEY`, referenced in the route header as `$env://CONSENT_KEY`, resolved by APISIX at runtime) - no literal in git or etcd. Verified live.
-  - **Done (credentials out of the route conf):** the plugin's `consent_key` is now **optional** (the facade injects it and overrides anything sent), so it is dropped from the provider route conf; the participant `client_secret` is no longer in the route conf either - the plugin reads it from env `CONSENT_CLIENT_SECRET`. APISIX spawns the ext-plugin runner with a *fixed* environment, so the container env never reaches it: the `consent-plugin-credentials` Secret is instead mounted as a file and the runner launch command `export`s it before `exec`ing the runner. `client_id` (not secret) stays in the conf. Verified live.
-  - **Done (consumer per participant):** the authority provisions a jwt-auth **consumer per participant**, not one hardcoded consumer, keyed on the participant's `legalName` (the token's `participant_name`) and signed with the shared `JWT_SECRET_KEY`. The deploy **reconcile Job** ([`k3s/consent-trust-anchor.yaml`](../k3s/consent-trust-anchor.yaml)) runs the consent-manager image to enumerate *all* participants and PUT a consumer for each - idempotent, so it also re-syncs after an apisix/etcd reset (empty/no-op on a fresh deploy); the deploy-time register Job additionally provisions the provider's consumer when it registers the participant.
-  - **Not applicable — no NetworkPolicy:** in a real deployment the consent-manager and its gateway are run by the **central authority in a separate cluster**, reached over the network (with the participant token) - they are not co-located with the provider, so a same-cluster lockdown is meaningless. The in-cluster trust-anchor deployment here is only a PoC stand-in for that external authority.
-- **Identity = the access-token `sub`, taken as-is (accepted for the PoC).** The plugin uses the token's `sub` verbatim as the consent-manager identifier (stored in `UserIdentifier.email`), and the consent is seeded for the same value - so **no consent-manager change is needed** and it works whether `sub` is a `did:key:…` or a real e-mail. Revisiting this - reconciling on the `identifier` field so a DID and a real e-mail can coexist (`UF-3`), and setting the receipt `piiPrincipalId` to the DID rather than a Mongo ObjectId (`UF-5`) - *would* require consent-manager changes (the lookup, the matcher and the model all key on `email`), so it is **deferred/upstream**, not a DSC task.
-- **Consistent `sub`**: the value the consent is granted for must equal the access-token `sub` the verifier issues. The demo grants for the token's `sub` directly (step 3 of the walkthrough); a real deployment needs the verifier ↔ credential ↔ consent-manager to agree on one canonical subject value.
-
-### 2. Consent lifecycle & data-subject UX (P0/P1)
-- **Real give/withdraw flow.** Grant and withdraw now run through the consent-manager's **real give-consent API** driven by a privacy notice the facade projects from a TM Forum agreement (no direct Mongo writes; see the Demo). Remaining: the agreement is seeded for the demo (production has the Marketplace/EDC negotiate it), and the **PDI consent UI** (`/consents/pdi/iframe`) still needs to be exposed to data subjects over **ingress + TLS + auth** (ClusterIP-only today, `UF-1`).
-- **Consent expiry** (`UF-6`): honor `validityDuration`, compute expiry, transition `status → expired`; the plugin must then also reject expired (it currently checks only `status == "granted"`). Blocked upstream: the `Consent` model has an `"expired"` status but no `validityDuration`/expiry timestamp, so expiry would have to come from the privacy notice (the facade flow).
-
-### 3. Contract projection & participant registration (P1)
-- **Complete the consent-facade** TMForum → Prometheus-X projection (agreements/bilaterals/service-offerings/data-resources); it is currently a scaffold and the consent-manager derives its notices/consents from it (`UF-10`, see [Contract Facade](#contract-facade) and the facade repo's `REQUIREMENTS.md`).
-- **Done — register the provider participant at deploy time.** A deploy Job ([`k3s/consent-trust-anchor.yaml`](../k3s/consent-trust-anchor.yaml), `providerParticipant`) runs the consent-manager image to (1) find-or-create the backing TMForum organization at the provider (so the `selfDescriptionURL` is stable across runs), (2) register the participant via the consent-manager's **real `POST /v1/participants` API** (idempotent: 201 new / 409 exists - no direct Mongo write), and (3) provision its jwt-auth consumer. The participant is now a **deploy artifact**, not a per-run side effect of the grant flow. Verified live: the Job registers the org/participant/consumer and the plugin authenticates as it (grant → 200). `clientID`/`clientSecret` are config (`clientSecret` from the `provider-participant-credentials` Secret) and must match the provider plugin's credentials.
-  - **Remaining:** a *fully fixed* `selfDescriptionURL` (independent of the TMForum-generated org id) needs the consent-facade to serve a well-known provider SD - folded into the facade projection (next bullet). Today the SD is stable-by-find-or-create, not a fixed constant.
-- **Complete the consent-facade** TMForum → Prometheus-X projection (agreements/bilaterals/service-offerings/data-resources); it is currently a scaffold and the consent-manager derives its notices/consents from it (`UF-10`, see [Contract Facade](#contract-facade) and the facade repo's `REQUIREMENTS.md`).
-
-### 4. Enforcement architecture (P1)
-- **Done — canonical enforcement path chosen: the APISIX consent-filter plugin.** The odrl-pap `consent:hasValidConsent` PIP path was never wired (empty `files/consent-pip/`, no template/registration job) and has been removed - the `enforcement` values block is gone, its only real output (the shared `consentKey`) is relocated to `consentManagement.consentKey`. odrl-pap/OPA authorizes the *credential*; the plugin decides *consent*. (The `UF-2` two-call shape stays as-is in the plugin.)
-- **Kept in `post-resp` (deliberate):** the check stays in the response phase, not `pre-req` - a personal-data read can return entities for several data subjects, so gating on the response allows a per-subject decision in the body (a `pre-req` block can only see the caller's token). Personal-data routes are **fail-closed** (`fail_open: false` on `mp-data-service-consent`).
-- **Per-order wiring.** In a full deployment `contract-management` should create the service, its policy **and** the protected route together per product order; the `mp-data-service-consent` route is static/manual today.
-- **Flag what is personal.** Define which entity types/attributes are subject to consent (see [Arch](#arch)) so the gate knows what to enforce (and, if field-level consent is wanted, what to filter).
-
-### 5. Secrets & configuration (P0)
-- **Done:** no consent secret sits in an APISIX route conf anymore. (1) The authority facade's consent key is a `$env://CONSENT_KEY` **secret ref** from `consent-manager-secret` (APISIX resolves `$env://` inside `proxy-rewrite` headers). (2) The provider plugin's `consent_key` is gone (the facade injects it). (3) The participant `client_secret` moved out of the `mp-data-service-consent` route conf into env `CONSENT_CLIENT_SECRET`. Note two APISIX quirks that shaped this: `ext-plugin` conf has no `$env://` resolution (unlike `proxy-rewrite`), *and* APISIX spawns the runner with a fixed env, so the container env doesn't reach it - the `consent-plugin-credentials` Secret is mounted as a file and the runner launch command exports it before `exec`ing the runner.
-- **Done (external sourcing):** all three consent Secrets can be provided by an external store (Vault / external-secrets) instead of the git literals - set `consentManagement.consentManager.secret.generate: false` (consent-manager-secret) and `consentManagement.pluginCredentials.create: false` / `consentManagement.providerParticipant.credentialsSecretCreate: false` (the credential Secrets), then supply Secrets of the same name/keys externally. The literals remain the **demo** default (`demo` / `changeme-consent-key`).
-- **Remaining (ops):** wire the actual external-secrets/Vault sync and rotation in a real deployment, and use non-demo credentials - a deployment/operations task, not chart code.
-
-### 6. Packaging & release (P1) — `UF-11`, `UF-12`, `UF-14`
-- **Publish official, version-pinned images** for consent-manager, consent-facade and consent-plugin (today: locally built / `quay.io/wi_stefan/*:0.0.1`, `imagePullPolicy: Always`), with the strict pod `securityContext` and `Secret`-based config (`UF-11`).
-- **Done (MongoDB):** the managed mongo is a `MongoDBCommunity` **ReplicaSet** (`type: ReplicaSet`, single member by default), which satisfies the consent-manager's replica-set requirement (`UF-14`) - the CM connects with `?replicaSet=mongodb`. Bump `members` to 3 for production. Standalone is not offered (the CM needs a replica set for transactions/change streams).
-- **`contract-agent` dependency**: the paywalled gitpkg dep is repointed to `VisionsOfficial/contract-consent-agent` in the DSC Dockerfile (`UF-12`) — upstream this properly.
-
-### 7. Receipts, audit & compliance (P1/P2) — `UF-4..UF-9`, `UF-13`
-- **Fix the ISO/IEC TS 27560 receipt path**: DPV serialization (`UF-4`), `eventState` taxonomy (`UF-7`), remove dead Kantara code (`UF-8`), fix the broken `toReceipt()` (`UF-9`).
-- **Clarify the inverted `getUserConsents` `receipt=true` semantics** the plugin relies on to read raw `status` (`UF-13`).
-- **Done (access audit log):** the consent-filter plugin emits an **access-decision audit event** per request to the OpenTelemetry Collector (OTLP/HTTP log record, marked `service.name=consent-access-audit`), async + best-effort, routed to a dedicated `logs/audit` pipeline/sink separate from traces (see [Access audit log](#access-audit-log)). Config: `audit_enabled` / `audit_otlp_endpoint` on the route. **Remaining:** the durable/immutable sink itself (WORM / OpenSearch / immudb) is a deployment choice, not baked in; and the **consent-record receipt** persistence/exposure (TS 27560, above) is separate and upstream.
-
-### 8. Plugin hardening & tests (P2)
-- **Done:** the mutex-held-across-HTTP login is gone. The token/SD cache is keyed per participant with a per-entry lock; the global map lock is held only to get-or-create the entry, so a token refresh for one participant no longer serializes requests for others, and concurrent first requests for the same participant coalesce onto a single login (double-checked). Covered by a `-race` concurrency test (20 goroutines → 1 login / 1 `/me`).
-- **Done:** removed the now-dead `internal/filter` package (superseded by the coarse allow/deny gate).
-- **Done (runnable e2e check):** [`doc/scripts/verify_consent_flow.sh`](scripts/verify_consent_flow.sh) drives the full path (issue OID4VP token → grant → assert **200** → revoke → assert **403** → re-grant → assert **200**) and exits non-zero on the first failed assertion, so it can gate CI or serve as a smoke test. Verified live (3/3).
-  - **Remaining:** fold it into the `it/` Cucumber suite so it auto-runs in the `-Pconsent` pipeline (incl. `cert/` holder bootstrap), instead of being invoked manually.

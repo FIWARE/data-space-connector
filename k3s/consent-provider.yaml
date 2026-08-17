@@ -81,14 +81,13 @@ consentManagement:
   # the consent key (the consent-manager + its facade do, at the trust-anchor).
   consentManager:
     enabled: false
+  # The consent-facade now runs at the AUTHORITY (k3s/consent-trust-anchor.yaml),
+  # not the provider: it is built to front multiple providers and authenticates to
+  # each provider's OID4VP-protected TM Forum api (mp-tmf-api) as the dataspace
+  # authority (did:web:dataspace-authority.org). The provider therefore no longer
+  # deploys it; it keeps only the APISIX consent-plugin wiring below.
   consentFacade:
-    # public base url the facade writes into the contracts' catalog/self-description
-    # links and reports as its own address. It MUST be the fully-qualified,
-    # cross-namespace service name (not the short "consent-facade"): the
-    # consent-manager runs in the trust-anchor namespace and dereferences these
-    # URLs, so it has to resolve the facade in the provider namespace. The chart
-    # default ("") falls back to the short name, which only resolves in-namespace.
-    selfUrl: "http://consent-facade.provider.svc.cluster.local:8080"
+    enabled: false
   # the consent-plugin's participant client secret, mounted as a file into the
   # provider APISIX container and exported as env CONSENT_CLIENT_SECRET by the
   # ext-plugin launch command, so it is not stored as plaintext in the route
@@ -113,3 +112,36 @@ extraManifests:
     stringData:
       clientSecret: {{ .Values.consentManagement.pluginCredentials.clientSecret | quote }}
     {{- end }}
+  # --- authorize the consent-facade's cross-org reads at the odrl-pap -----------
+  # The facade (at the authority) authenticates to mp-tmf-api over OID4VP and passes
+  # the openid-connect check, but the route's OPA/ODRL layer default-denies without a
+  # matching policy. This registers an ODRL policy permitting *read* of /tmf-api to any
+  # holder of an OperatorCredential (the credential the authority presents), so the
+  # facade can project the provider's TM Forum data. Idempotent (re-POST is tolerated).
+  - |
+    apiVersion: batch/v1
+    kind: Job
+    metadata:
+      name: {{ .Release.Name }}-authorize-facade-tmf-read
+      namespace: {{ .Release.Namespace }}
+    spec:
+      ttlSecondsAfterFinished: 86400
+      backoffLimit: 10
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: register-policy
+              image: curlimages/curl:8.18.0
+              command: ["/bin/sh", "-ec"]
+              args:
+                - |
+                  echo "waiting for odrl-pap..."
+                  until curl -sf http://odrl-pap:8080/policy > /dev/null; do sleep 5; done
+                  cat > /tmp/policy.json <<'JSON'
+                  {"@context":{"odrl":"http://www.w3.org/ns/odrl/2/","xsd":"http://www.w3.org/2001/XMLSchema#"},"@id":"https://mp-operation.org/policy/authority/tmfApiRead","odrl:uid":"https://mp-operation.org/policy/authority/tmfApiRead","@type":"odrl:Policy","odrl:permission":{"odrl:assigner":{"@id":"https://www.mp-operation.org/"},"odrl:target":{"@type":"odrl:AssetCollection","odrl:source":"urn:asset","odrl:refinement":[{"@type":"odrl:Constraint","odrl:leftOperand":"http:path","odrl:operator":{"@id":"http:isInPath"},"odrl:rightOperand":"/tmf-api"}]},"odrl:assignee":{"@type":"odrl:PartyCollection","odrl:source":"urn:user","odrl:refinement":{"@type":"odrl:Constraint","odrl:leftOperand":{"@id":"vc:type"},"odrl:operator":{"@id":"odrl:hasPart"},"odrl:rightOperand":{"@value":"OperatorCredential","@type":"xsd:string"}}},"odrl:action":{"@id":"odrl:read"}}}
+                  JSON
+                  code=$(curl -s -o /tmp/out -w '%{http_code}' -X POST http://odrl-pap:8080/policy -H 'Content-Type: application/json' --data @/tmp/policy.json)
+                  echo "odrl-pap POST /policy -> HTTP $code"; cat /tmp/out
+                  # 2xx = created; a conflict on re-run is fine (policy already present)
+                  case "$code" in 2*) exit 0;; 409) echo "already registered"; exit 0;; *) exit 1;; esac

@@ -3399,9 +3399,9 @@ tempo:
       memory: 256Mi
 
 # -- Consent Management (ISO/IEC TS 27560) -- optional. Deploys the consent-manager,
-# the TMForum-backed consent-facade it derives privacy notices from, and the secrets they
-# need. Enforcement (odrl-pap) is a separate increment. See CONSENT_MANAGEMENT_PLAN.md
-# section 13. All resources are gated by `consentManagement.enabled`.
+# the TMForum-backed consent-facade it derives privacy notices from, and the secrets
+# they need. See doc/CONSENT_MANAGEMENT.md for the architecture and flows. All
+# resources are gated by `consentManagement.enabled`.
 consentManagement:
   # -- should consent management be deployed
   enabled: false
@@ -3551,6 +3551,66 @@ consentManagement:
           name: postgres.postgres.credentials.postgresql.acid.zalan.do
           # -- key within the secret holding the password
           key: password
+    # OID4VP authentication of the facade's outbound TM Forum calls
+    # (implementation-plan.md). Because the facade runs at the authority and reads
+    # a *provider's* OID4VP-protected TM Forum api cross-organisation, it presents a
+    # verifiable credential (holder did:web:...) to obtain an access token. The
+    # holder signing key and the cluster CA (dsc-ca) are taken from the participant's
+    # cert-manager `<domain>-tls` secret (`didSecretName`); the issued credential(s)
+    # are projected from their secrets into `credentialsFolder`. Off by default - a
+    # same-organisation deployment reads the tm-forum-api unauthenticated.
+    oid4vp:
+      # -- enable OID4VP authentication of the facade's outbound TM Forum calls
+      enabled: false
+      # -- name of the participant's cert-manager tls secret. Its `tls.key` is the
+      # did:web signing key (converted to PKCS#8 by an init container) and its
+      # `ca.crt` is the cluster CA (dsc-ca) imported into the JVM truststore.
+      didSecretName: dataspace-authority.org-tls
+      holder:
+        # -- the holder DID presented in the verifiable presentation (this
+        # participant's did:web identity)
+        id: "did:web:dataspace-authority.org"
+        # -- holder key type
+        keyType: EC
+        # -- path the PKCS#8 signing key is mounted at (converted from
+        # `didSecretName`'s tls.key by the convert-signing-key init container)
+        keyPath: /signing-key/tls.key
+        # -- algorithm used to sign the presentation
+        signatureAlgorithm: ECDH-ES
+      # -- folder the credentials to present are read from (the projected credential
+      # secrets, see `credentials`)
+      credentialsFolder: /credential-repo
+      # -- OID4VP client_id presented to the provider's authorization endpoint. This
+      # is the target provider's registered verifier SERVICE id (not the holder DID) -
+      # the verifier looks the service up by client_id. For the DSC TM Forum api the
+      # registered service is `tmf-api`.
+      clientId: "tmf-api"
+      # -- OID4VP scopes requested for TM Forum access
+      scopes:
+        - default
+      # -- trust anchors (PEM paths) added on top of the system truststore for
+      # client identification (the verifier's chain); the imported dsc-ca lives here
+      trustAnchors:
+        - /etc/ssl/cacert.pem
+      # -- credential secrets projected into `credentialsFolder`, issued by the
+      # authority's keycloak via the vc-operator. Each entry:
+      # secretName/secretKey -> fileName written into the folder.
+      credentials:
+        - secretName: vc-operator-credential
+          secretKey: credential
+          fileName: operator-credential.jwt
+      proxy:
+        # -- route the OID4VP flow and the TM Forum calls through a forward proxy.
+        # Needed in-cluster to reach a provider's *external* ingress host: the squid
+        # proxy resolves the ingress that otherwise points at 127.0.0.1.
+        enabled: false
+        # -- proxy host
+        host: squid-proxy.infra.svc.cluster.local
+        # -- proxy port
+        port: 8888
+      # -- openssl image used by the init container to convert the SEC1 signing key
+      # to the PKCS#8 the OID4VP holder expects
+      opensslImage: alpine/openssl:3.5.5
     # -- extra environment variables (map)
     env: {}
     # -- "valueFrom" environment variable references (map, name templated)

@@ -15,8 +15,263 @@
 # --- everything the connector normally deploys, off -------------------------
 scorpio:
   enabled: false
+# --- OID4VP credential issuer for did:web:dataspace-authority.org --------------
+# Self-contained Keycloak issuer (mirrors the consumer issuer) that mints a
+# verifiable OperatorCredential for the consent-facade running in this release.
+# Adapted from k3s/consumer.yaml; trimmed to just the operator-credential scope
+# and the contract-management service-account client that requests it.
 keycloak:
-  enabled: false
+  enabled: true
+  # -- distinct name so the Service/StatefulSet are `authority-keycloak`
+  # (referenced by vcCredentials/vc-operator issuerURL below).
+  fullnameOverride: authority-keycloak
+  # -- EMBEDDED postgres. The external Zalando DB the umbrella defaults to is not
+  # available in the trust-anchor namespace, so enable the keycloak subchart's
+  # bundled postgres. With postgres.enabled=true the subchart auto-wires the JDBC
+  # URL (`jdbc:postgresql://<release>-postgres:5432/keycloak`), the `postgres`
+  # username and the password from the generated `<release>-postgres` secret -
+  # the external `database.*` block is ignored entirely in that branch. We only
+  # blank `database.existingSecret` so nothing dangling references the missing
+  # Zalando secret.
+  postgres:
+    enabled: true
+  database:
+    existingSecret: ""
+  resources:
+    requests:
+      cpu: "100m"
+    limits:
+      cpu: "500m"
+  ingress:
+    enabled: true
+    annotations:
+      traefik.ingress.kubernetes.io/router.tls: "true"
+      cert-manager.io/cluster-issuer: "selfsigned-issuer"
+      cert-manager.io/private-key-algorithm: "ECDSA"
+      cert-manager.io/alt-names: "keycloak-authority.127.0.0.1.nip.io"
+      cert-manager.io/common-name: "keycloak-authority.127.0.0.1.nip.io"
+    hosts:
+      - host: keycloak-authority.127.0.0.1.nip.io
+        paths:
+          - path: /
+            pathType: Prefix
+    tls:
+      - secretName: keycloak-authority.127.0.0.1.nip.io-tls
+        hosts:
+          - keycloak-authority.127.0.0.1.nip.io
+  extraInitContainers:
+    - name: prepare-keystore
+      image: alpine/openssl:3.5.5
+      command: ["/bin/sh", "-c"]
+      args:
+        - |
+          openssl pkcs12 -export \
+            -in /certs-did/tls.crt \
+            -inkey /certs-did/tls.key \
+            -certfile /certs-did/ca.crt \
+            -out /did-material/cert.pfx \
+            -name "didPrivateKey" \
+            -passout env:STORE_PASS
+          chmod 644 /did-material/cert.pfx
+      env:
+      - name: "STORE_PASS"
+        valueFrom:
+          secretKeyRef:
+            name: keystore-password
+            key: password
+      volumeMounts:
+        - name: did-material
+          mountPath: /did-material
+        - name: did-priv-key
+          mountPath: /certs-did
+    - name: register-at-tir
+      image: curlimages/curl:8.18.0
+      command:
+        - /bin/sh
+      args:
+        - -ec
+        - |
+          #!/bin/sh
+          curl -X 'POST' 'http://tir.trust-anchor.svc.cluster.local:8080/issuer' -H 'Content-Type: application/json' -d "{\"did\": \"did:web:dataspace-authority.org\", \"credentials\": []}"
+  extraVolumeMounts:
+    - mountPath: /did-material
+      name: did-material
+    - mountPath: /opt/keycloak/data/import
+      name: realms
+    - name: providers
+      mountPath: /opt/keycloak/providers
+  extraVolumes:
+    - emptyDir: {}
+      name: did-material
+    - configMap:
+        name: authority-realm-realm
+      name: realms
+    - name: did-priv-key
+      secret:
+        secretName: dataspace-authority.org-tls
+    - name: providers
+      emptyDir: {}
+  issuerDid: did:web:dataspace-authority.org
+  signingKey:
+    storePath: /did-material/cert.pfx
+    storePassword: "${STORE_PASS}"
+    keyAlias: didPrivateKey
+    keyPassword: "${STORE_PASS}"
+    did: did:web:dataspace-authority.org
+    keyAlgorithm: ES256
+  proxy:
+    enabled: true
+    httpsProxy: "http://squid-proxy.infra.svc.cluster.local:8888"
+    noProxy: "localhost,*.cluster.local,*.svc"
+    spiProxyMappings: ".*\\.127\\.0\\.0\\.1\\.nip\\.io;http://squid-proxy.infra.svc.cluster.local:8888"
+  # extraEnvVars replaces the umbrella list, so KC_HEAP_SIZE has to be repeated here.
+  # STORE_PASS is consumed by the realm.json key-provider config (see signingKey above).
+  extraEnvVars:
+    - name: KC_HEAP_SIZE
+      value: "1024m"
+    - name: "STORE_PASS"
+      valueFrom:
+        secretKeyRef:
+          name: keystore-password
+          key: password
+  realm:
+    frontendUrl: https://keycloak-authority.127.0.0.1.nip.io
+    import: true
+    name: authority-realm
+    attributes:
+      issuerDid: "did:web:dataspace-authority.org"
+    # -- only the operator-credential scope is needed to mint the
+    # OperatorCredential for the consent-facade. Status-list mapper dropped
+    # (no token-status-list plugin / tokenStatusList at the authority).
+    verifiableCredentials:
+      operator-credential:
+        attributes:
+          format: "jwt_vc_json"
+          verifiable_credential_type: "OperatorCredential"
+          credential_signing_alg: "ES256"
+          credential_build_config.token_jws_type: "JWT"
+        protocolMappers:
+          - name: context-mapper-oc
+            protocol: oid4vc
+            protocolMapper: oid4vc-context-mapper
+            config:
+              context: https://www.w3.org/2018/credentials/v1
+          - name: email-mapper-oc
+            protocol: oid4vc
+            protocolMapper: oid4vc-user-attribute-mapper
+            config:
+              claim.name: email
+              userAttribute: email
+          - name: firstName-mapper-oc
+            protocol: oid4vc
+            protocolMapper: oid4vc-user-attribute-mapper
+            config:
+              claim.name: firstName
+              userAttribute: firstName
+          - name: lastName-mapper-oc
+            protocol: oid4vc
+            protocolMapper: oid4vc-user-attribute-mapper
+            config:
+              claim.name: lastName
+              userAttribute: lastName
+          # operator-credential is presented to the provider's data service
+          # (organization_did=mp-operations.org), so the role array carries that target.
+          - name: role-mapper-oc
+            protocol: oid4vc
+            protocolMapper: oid4vc-target-role-mapper
+            config:
+              claim.name: roles
+              clientId: did:web:mp-operations.org
+    # -- roles for the role-mapper-oc target client. did:web:mp-operations.org
+    # must exist as a client (defined below) for these role definitions and the
+    # service-account role assignment to import cleanly.
+    clientRoles: |
+      "did:web:mp-operations.org": [
+        {
+          "name": "OPERATOR",
+          "description": "Is allowed to operate clusters.",
+          "clientRole": true
+        },
+        {
+          "name": "REPRESENTATIVE",
+          "description": "Is allowed to register.",
+          "clientRole": true
+        }]
+    users: |
+      {
+        "username": "service-account-contract-management",
+        "enabled": true,
+        "serviceAccountClientId": "contract-management",
+        "clientRoles": {
+          "did:web:mp-operations.org": [
+            "REPRESENTATIVE"
+          ]
+        },
+        "verifiableCredentials": [
+          {"credentialScopeName": "operator-credential"}
+        ]
+      }
+    clients:
+      # -- target client for the operator-credential role mapper. Minimal
+      # service-account client; its roles (above) are what the OperatorCredential
+      # `roles` claim is populated from.
+      - clientId: did:web:mp-operations.org
+        enabled: true
+        description: Client to connect mp-operations.org
+        surrogateAuthRequired: false
+        alwaysDisplayInConsole: false
+        clientAuthenticatorType: client-secret
+        defaultRoles: []
+        redirectUris: []
+        webOrigins: []
+        notBefore: 0
+        bearerOnly: false
+        consentRequired: false
+        standardFlowEnabled: true
+        implicitFlowEnabled: false
+        directAccessGrantsEnabled: false
+        serviceAccountsEnabled: true
+        publicClient: false
+        frontchannelLogout: false
+        secret: kpWxZn7LgcWT84AzS3aS5X5URmL0FC0Q
+        protocol: openid-connect
+        attributes:
+          client.secret.creation.time: "1675260539"
+        protocolMappers: []
+        authenticationFlowBindingOverrides: {}
+        fullScopeAllowed: true
+        nodeReRegistrationTimeout: -1
+        defaultClientScopes: []
+        optionalClientScopes: []
+      # -- the client the vc-operator authenticates as to request the credential.
+      - clientId: contract-management
+        enabled: true
+        description: Client representing the contract-management
+        surrogateAuthRequired: false
+        alwaysDisplayInConsole: false
+        clientAuthenticatorType: client-secret
+        secret: contract-management-client-secret
+        defaultRoles: []
+        redirectUris: []
+        webOrigins: []
+        notBefore: 0
+        bearerOnly: false
+        consentRequired: false
+        standardFlowEnabled: false
+        implicitFlowEnabled: false
+        directAccessGrantsEnabled: false
+        serviceAccountsEnabled: true
+        publicClient: false
+        frontchannelLogout: false
+        protocol: openid-connect
+        attributes:
+          client.secret.creation.time: "1675260539"
+          oid4vci.enabled: "true"
+        authenticationFlowBindingOverrides: {}
+        fullScopeAllowed: true
+        nodeReRegistrationTimeout: -1
+        defaultClientScopes: []
+        optionalClientScopes: ["operator-credential"]
 tm-forum-api:
   enabled: false
 contract-management:
@@ -29,11 +284,43 @@ fdsc-dashboard:
   enabled: false
 vault:
   enabled: false
+# --- did:web:dataspace-authority.org did-helper (serves the DID document) ------
 did:
-  enabled: false
+  enabled: true
+  config:
+    server:
+      hostUrl: "http://dataspace-authority.org"
+      certPath: "/certs/tls.crt"
+  volumes:
+    - name: certs
+      secret:
+        secretName: dataspace-authority.org-tls
+        items:
+          - key: tls.crt
+            path: tls.crt
+  volumeMounts:
+    - name: certs
+      mountPath: /certs
+  ingress:
+    enabled: true
+    className: ""
+    annotations:
+      traefik.ingress.kubernetes.io/service.passhostheader: "true"
+      traefik.ingress.kubernetes.io/router.tls: "true"
+      cert-manager.io/cluster-issuer: "selfsigned-issuer"
+      cert-manager.io/private-key-algorithm: "ECDSA"
+      cert-manager.io/common-name: "dataspace-authority.org"
+      cert-manager.io/alt-names: "dataspace-authority.org"
+    hosts:
+      - host: dataspace-authority.org
+        paths:
+          - path: /
+            pathType: ImplementationSpecific
+    tls:
+      - secretName: dataspace-authority.org-tls
+        hosts:
+          - dataspace-authority.org
 cert-manager:
-  enabled: false
-vc-operator:
   enabled: false
 prometheus:
   enabled: false
@@ -51,10 +338,60 @@ identityhub:
   enabled: false
 dataSpaceConfig:
   enabled: false
-# no keycloak here -> no issuance secrets needed
+# the authority-keycloak issuer needs the generated admin secret (issuance-secret)
 issuance:
   generatePasswords:
-    enabled: false
+    enabled: true
+
+# --- vc-operator: reconciles the OperatorCredential into a secret --------------
+vc-operator:
+  enabled: true
+  watchNamespaces:
+    - trust-anchor
+  extraEnvVars:
+    - name: HTTPS_PROXY
+      value: "http://squid-proxy.infra.svc.cluster.local:8888"
+    - name: HTTP_PROXY
+      value: "http://squid-proxy.infra.svc.cluster.local:8888"
+    - name: NO_PROXY
+      value: "authority-keycloak,*.cluster.local,*.svc,10.0.0.0/8"
+    - name: SSL_CERT_FILE
+      value: "/etc/ssl/certs/ca.crt"
+  extraVolumeMounts:
+    - name: root-ca
+      mountPath: /etc/ssl/certs/ca.crt
+      subPath: ca.crt
+      readOnly: true
+  extraVolumes:
+    - name: root-ca
+      secret:
+        secretName: dataspace-authority.org-tls
+        items:
+          - key: ca.crt
+            path: ca.crt
+
+# --- vcCredentials: the OperatorCredential request for the consent-facade -------
+vcCredentials:
+  enabled: true
+  issuers:
+    - name: authority-operator-issuer
+      issuerURL: http://authority-keycloak:8080/realms/authority-realm
+      issuerType: keycloak
+      tokenURL: http://authority-keycloak:8080/realms/authority-realm/protocol/openid-connect/token
+      auth:
+        secretName: authority-contract-management-client-auth
+        clientId: contract-management
+        clientSecret: contract-management-client-secret
+      requests:
+        - name: authority-operator-credential
+          credentialType: operator-credential
+          format: jwt_vc_json
+          targetSecretName: vc-operator-credential
+          targetSecretKey: credential
+          targetFile: operator-credential.jwt
+          renewBefore: 5m
+          holderBinding:
+            enabled: false
 
 # --- APISIX only, out of decentralized-iam (internal facade in front of the CM)
 decentralizedIam:
@@ -113,7 +450,12 @@ decentralizedIam:
       #  * /participants/login is exempt (it issues the token) - higher priority.
       #  * everything else requires a valid *participant JWT* (jwt-auth, keyed on
       #    the token's participant_name via the consumer registered below), then
-      #    injects the consent key server-side and strips the x-user-key shortcut.
+      #    injects the consent key server-side. Callers therefore authenticate
+      #    per-participant with their JWT and never hold the shared consent key.
+      #    The x-user-key subject selector is forwarded: it now sits behind the
+      #    per-participant jwt-auth (no longer an unauthenticated shortcut), so a
+      #    participant can name the subject of a grant. Deriving the subject from
+      #    the token `sub` instead of a caller-supplied header is the rest of UF-1.
       # Matched on uri only (no host); this apisix is internal (ingress off).
       routes:
         - uri: /consent-manager/v1/participants/login
@@ -143,8 +485,6 @@ decentralizedIam:
               headers:
                 set:
                   x-visionstrust-consent-key: "$env://CONSENT_KEY"
-                remove:
-                  - x-user-key
     # the PAP/PDP are not needed at the authority
     odrl-pap:
       enabled: false
@@ -155,15 +495,33 @@ mongo-operator:
 managedMongo:
   enabled: true
 
-# --- the consent-manager (the consent-facade lives at the provider) ---------
+# --- the consent-manager + the consent-facade (both at the authority) --------
 consentManagement:
   enabled: true
   consentManager:
     enabled: true
-    # the consent-facade lives at the provider (cross-namespace)
-    contractServiceBaseUrl: "http://consent-facade.provider.svc.cluster.local:8080"
+    # the consent-facade now runs in this (authority) namespace
+    contractServiceBaseUrl: "http://consent-facade.trust-anchor.svc.cluster.local:8080"
+  # The consent-facade runs at the authority (it fronts multiple providers) and
+  # authenticates its outbound TM Forum calls to each provider's OID4VP-protected
+  # mp-tmf-api as did:web:dataspace-authority.org, using the holder key + issued
+  # OperatorCredential provisioned by the authority issuer above.
   consentFacade:
-    enabled: false
+    enabled: true
+    # the provider's OID4VP-protected TM Forum ingress. Reached in-cluster through
+    # the squid proxy (see oid4vp.proxy); its self-signed cert is trusted via dsc-ca.
+    tmfApiUrl: "https://mp-tmf-api.127.0.0.1.nip.io"
+    # the SD/catalog links the facade writes must be dereferenceable by the
+    # consent-manager (same namespace) - the fully-qualified in-namespace service.
+    selfUrl: "http://consent-facade.trust-anchor.svc.cluster.local:8080"
+    oid4vp:
+      # present the OperatorCredential (holder did:web:dataspace-authority.org) to
+      # obtain an access token for mp-tmf-api. holder key + credential + dsc-ca come
+      # from the dataspace-authority.org-tls secret and the vc-operator-credential
+      # secret (see values.yaml consentFacade.oid4vp for the full surface).
+      enabled: true
+      proxy:
+        enabled: true
   # seeded into consent-manager-secret; the consent-manager validates it and the
   # facade route injects the same value ($env://CONSENT_KEY) on the caller's behalf.
   consentKey: "changeme-consent-key"
@@ -188,9 +546,11 @@ consentManagement:
     # dereferences to; find-or-created by name so the SD is stable across runs.
     orgName: "Consent Demo Provider"
     orgCountry: "DE"
-    # cross-namespace endpoints at the provider (the consent-facade serves the SD)
+    # the deploy-time register Job find-or-creates the backing org via the provider's
+    # internal TM Forum api (cross-namespace, unauthenticated - a provisioning step),
+    # while the facade that serves the SD at runtime runs in this namespace.
     tmforumUrl: "http://tm-forum-api-svc.provider.svc.cluster.local:8080"
-    facadeUrl: "http://consent-facade.provider.svc.cluster.local:8080"
+    facadeUrl: "http://consent-facade.trust-anchor.svc.cluster.local:8080"
 
 # --- reconcile one jwt-auth consumer per participant --------------------------
 # The apisix chart has no native `consumers` support, so a bootstrap Job PUTs the
@@ -375,3 +735,15 @@ extraManifests:
               args:
                 - node -e "$REGISTER_JS"
     {{- end }}
+  # --- keystore password for the authority-keycloak prepare-keystore init ------
+  # Consumed by the keycloak prepare-keystore init container (STORE_PASS) to
+  # export /did-material/cert.pfx from the dataspace-authority.org-tls secret.
+  - |
+    apiVersion: v1
+    kind: Secret
+    metadata:
+      name: keystore-password
+      namespace: {{ .Release.Namespace }}
+    type: Opaque
+    stringData:
+      password: "dsc-authority-keystore-2026!"

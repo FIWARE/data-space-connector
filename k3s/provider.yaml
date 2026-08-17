@@ -163,6 +163,33 @@ decentralizedIam:
               path: /health
           activeDeadlineSeconds: 1500
         services:
+          # tmf-api: the OID4VP-protected TM Forum api behind the mp-tmf-api ingress.
+          # The consent-facade (at the authority) authenticates here with an
+          # OperatorCredential issued to did:web:dataspace-authority.org. Registering
+          # it makes the verifier's authorization endpoint recognise client_id=tmf-api
+          # (without this the endpoint 302s / "service not found").
+          - id: tmf-api
+            defaultOidcScope: "default"
+            authorizationType: "DEEPLINK"
+            oidcScopes:
+              "default":
+                credentials:
+                  - type: OperatorCredential
+                    trustedParticipantsLists:
+                      - https://tir.127.0.0.1.nip.io
+                    trustedIssuersLists:
+                      - http://trusted-issuers-list:8080
+                    jwtInclusion:
+                      enabled: true
+                      fullInclusion: true
+                dcql:
+                  credentials:
+                    - id: operator-query
+                      format: "jwt_vc_json"
+                      multiple: true
+                      meta:
+                        type_values:
+                          - [OperatorCredential]
           - id: tpp-service
             defaultOidcScope: "operator"
             authorizationType: "DEEPLINK"
@@ -1653,6 +1680,14 @@ registration:
         - LegalPersonCredential
         - UserCredential
         - MembershipCredential
+    # the dataspace authority (consent-facade holder). Its OID4VP-authenticated
+    # calls to mp-tmf-api present an OperatorCredential it self-issues; the tmf-api
+    # verifier scope requires `VerifiableCredential` (satisfied by the type array),
+    # trusting issuers from this list. See k3s/consent-trust-anchor.yaml.
+    - did: did:web:dataspace-authority.org
+      credentialTypes:
+        - OperatorCredential
+        - VerifiableCredential
   prepScript: export $(curl -f -X GET did-helper:3002/did-material/did.env)
 
 fdsc-edc:
