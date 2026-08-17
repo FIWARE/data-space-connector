@@ -9,8 +9,8 @@ here; this repo is packaging and integration glue.
 ## Tech Stack
 - Packaging: Helm 3 (umbrella chart with subchart dependencies).
 - Components deployed: EDC-based IdentityHub (Java 21), fdsc-edc (Java 21),
-  Rainbow DSP (Rust), Keycloak 26.6.x (CloudPirates chart; SEAMWARE-patched
-  image `quay.io/seamware/keycloak:26.6.3`), Scorpio Broker (Quarkus/Java),
+  Rainbow DSP (Rust), Keycloak 26.7.x (CloudPirates chart 0.21.19; upstream
+  image `docker.io/keycloak/keycloak:26.7.0`), Scorpio Broker (Quarkus/Java),
   TMForum API (Java), Contract Management, Business API Ecosystem, MongoDB,
   HashiCorp Vault, cert-manager, OpenTelemetry Collector.
 - Build / Release: GitHub Actions (`.github/workflows/`), helm package +
@@ -119,11 +119,19 @@ The chart already has a full OTEL tracing integration (chart version 9.1.0):
 - Tracing tests live in `charts/data-space-connector/tests/tracing_test.yaml`.
 
 ## Keycloak / OID4VCI wallet issuance (10.x)
-10.x migrated Keycloak to the CloudPirates chart + KC 26.6.x with the post-26.4
-OID4VCI model. Hard-won gotchas (full detail in `doc/release-notes/10-x.md`):
-- **Image:** use `quay.io/seamware/keycloak:26.6.3` — it carries the Liquibase
-  changeset `26.7.0-verifiable-credential` (fixes `column ... version does not
-  exist` when reusing a pre-26.4 DB) plus the OID4VCI QR-endpoint fix.
+10.x migrated Keycloak to the CloudPirates chart + KC 26.6.x/26.7.x with the
+post-26.4 OID4VCI model. Hard-won gotchas (full detail in `doc/release-notes/10-x.md`):
+- **Image:** since 10.4.0 the chart runs the upstream default
+  `docker.io/keycloak/keycloak:26.7.0` (CloudPirates chart 0.21.19) and sets **no**
+  `keycloak.image` override. The old `quay.io/seamware/keycloak:26.6.3` fork is
+  obsolete — 26.7.0 carries both the Liquibase changeset
+  `26.7.0-verifiable-credential` (fixes `column ... version does not exist` on a
+  reused pre-26.4 DB) and the OID4VCI QR-endpoint fix.
+- **Keystore path:** since KC 26.6.4 the `java-keystore` realm key provider only
+  reads keystores from `/opt/keycloak/data/<realm-name>/`. Both the Keycloak
+  container's `extraVolumeMounts` entry and `keycloak.signingKey.storePath` (and
+  `elsi.storePath`) must sit inside that folder; the init container may keep
+  writing to its own `/did-material` mount of the same emptyDir.
 - **Credential encryption:** the issuer advertises request + response encryption.
   Wallets that encrypt must set the JWE `kid` and must not send a top-level `alg`
   in `credential_response_encryption`; the EUDI wallet needs

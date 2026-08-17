@@ -390,7 +390,7 @@ and appends the signing key (elsi / signingKey / test-key fallback).
     "providerId" "java-keystore"
     "subComponents" (dict)
     "config" (dict
-        "keystore" (list "/did-material/cert.pfx")
+        "keystore" (list (printf "/opt/keycloak/data/%s/cert.pfx" .Values.keycloak.realm.name))
         "keystorePassword" (list "${STORE_PASS}")
         "keyAlias" (list "didPrivateKey")
         "keyPassword" (list "${STORE_PASS}")

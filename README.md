@@ -99,7 +99,8 @@ contain breaking changes. Important releases will be listed below, with addition
 * [8.x.x](doc/release-notes/8-x.md) - Update the FIWARE Data Space Connector from 7.x.x to 8.x.x
 * [9.x.x](doc/release-notes/9-x.md) - :warning: **Breaking changes** - Upgrade the FIWARE Data Space Connector from 8.5.2 to 9.x.x
   * **9.1.0** — Optional end-to-end [OpenTelemetry distributed tracing](doc/deployment-integration/observability/README.md) across all DSC components
-* [10.x.x](doc/release-notes/10-x.md) - :warning: **Breaking changes** - Keycloak chart migration (Bitnami → CloudPirates), Keycloak 26.6.2 and OID4VCI realm model rewrite
+* [10.x.x](doc/release-notes/10-x.md) - :warning: **Breaking changes** - Keycloak chart migration (Bitnami → CloudPirates), Keycloak 26.7.0 and OID4VCI realm model rewrite
+  * **10.4.0** — :warning: Keycloak `java-keystore` keystores must move to `/opt/keycloak/data/<realm-name>/`
 
 
 ## Components
@@ -225,7 +226,7 @@ The framework consists of the following components:
   roles/claims. Provides an [EBSI Trusted Issuers Registry](https://api-pilot.ebsi.eu/docs/apis/trusted-issuers-registry)
   compatible API
 
-The credential issuer on the consumer side is **[Keycloak 26.6.2](https://www.keycloak.org/)** (deployed via the
+The credential issuer on the consumer side is **[Keycloak 26.7.0](https://www.keycloak.org/)** (deployed via the
 [CloudPirates Keycloak chart](https://github.com/CloudPirates-io/helm-charts/tree/main/charts/keycloak)). Its OID4VCI
 implementation follows [OID4VCI Draft 15](https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html)
 (realm model redesign in [keycloak/keycloak#39768](https://github.com/keycloak/keycloak/pull/39768)). Roles to be embedded
@@ -246,7 +247,7 @@ clients required by the wallets validated against this release:
 > **Lissi** is the recommended wallet for production deployments.
 >
 > **EUDI Reference Wallet**: the upstream EUDI iOS app/lib is **not** compatible with the OID4VCI Draft 15 model that
-> Keycloak 26.6.2 ships. The forks linked above (a) implement the Draft 15 issuance flow against the current Keycloak
+> Keycloak 26.7.0 ships. The forks linked above (a) implement the Draft 15 issuance flow against the current Keycloak
 > endpoints and (b) accept self-signed TLS certificates, which is what makes them usable for local k3s development.
 > Do not use them in production.
 
