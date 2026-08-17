@@ -1,0 +1,22 @@
+{{- if and (eq .Values.identityhub.enabled true) .Values.identityhub.customCaCerts }}
+
+# Extra CA certificates the identityhub has to trust, e.g. the CA of a vault or a counterparty
+# that does not use a publicly trusted certificate. The deployment's `import-cacerts` init
+# container adds them to a copy of the JVM truststore; this ConfigMap is what it reads.
+#
+# The deployment referenced this ConfigMap by name while nothing ever created it, so declaring
+# customCaCerts used to leave the pod unable to start.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: "identityhub-custom-cacerts"
+  namespace: {{ .Release.Namespace | default "default" | quote }}
+  labels:
+    app.kubernetes.io/name: identityhub
+    app.kubernetes.io/instance: {{ .Release.Name }}
+data:
+  {{- range $name, $pem := .Values.identityhub.customCaCerts }}
+  {{ $name }}: |
+    {{- $pem | nindent 4 }}
+  {{- end }}
+{{- end }}

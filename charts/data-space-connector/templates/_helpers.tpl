@@ -437,3 +437,87 @@ Usage:
 {{- define "dsc.tempo.queryEndpoint" -}}
 {{- printf "http://%s-tempo:3200" .Release.Name -}}
 {{- end -}}
+
+{{/*
+Key id the participant's signing key is published under in the DID document, and the `kid` every
+counterparty resolves. Derived from one place on purpose: the same fragment is also referenced by
+`keycloak.signingKey.did`, the `signing_key_id` attribute of every credential ClientScope and
+`fdsc-edc`'s holder configuration, and those four have to agree.
+
+Usage:
+  {{ include "dsc.identityhub.keyId" . }}  → "did:web:example.org#key-1"
+*/}}
+{{- define "dsc.identityhub.keyId" -}}
+{{- $b := .Values.identityhub.bootstrap -}}
+{{- printf "%s#%s" (required "identityhub.bootstrap.did is required when identityhub.bootstrap.enabled" $b.did) $b.keyAlias -}}
+{{- end -}}
+
+{{/*
+In-cluster base URL of the identityhub Identity API, including the version segment.
+
+Usage:
+  {{ include "dsc.identityhub.identityApi" . }}  → "http://identityhub-service:8082/api/identity/v1alpha"
+*/}}
+{{- define "dsc.identityhub.identityApi" -}}
+{{- printf "http://identityhub-service:%v%s/v1alpha" .Values.identityhub.endpoints.identity.port .Values.identityhub.endpoints.identity.path -}}
+{{- end -}}
+
+{{/*
+Readiness URL of the identityhub, used by the bootstrap steps to wait for it.
+
+Usage:
+  {{ include "dsc.identityhub.readinessUrl" . }}  → "http://identityhub-service:8081/api/check/readiness"
+*/}}
+{{- define "dsc.identityhub.readinessUrl" -}}
+{{- printf "http://identityhub-service:%v%s/check/readiness" .Values.identityhub.endpoints.default.port .Values.identityhub.endpoints.default.path -}}
+{{- end -}}
+
+{{/*
+Environment shared by every identityhub bootstrap and rotation step. Rendered as a list of env
+entries, so callers append it inside an existing `env:` block.
+
+Usage:
+  env:
+    {{- include "dsc.identityhub.bootstrapEnv" . | nindent 12 }}
+*/}}
+{{- define "dsc.identityhub.bootstrapEnv" -}}
+{{- $b := .Values.identityhub.bootstrap -}}
+- name: DID
+  value: {{ $b.did | quote }}
+- name: KEY_ALIAS
+  value: {{ $b.keyAlias | quote }}
+- name: KEY_ID
+  value: {{ include "dsc.identityhub.keyId" . | quote }}
+- name: IDENTITY_API
+  value: {{ include "dsc.identityhub.identityApi" . | quote }}
+- name: READINESS_URL
+  value: {{ include "dsc.identityhub.readinessUrl" . | quote }}
+- name: CREDENTIAL_SERVICE_URL
+  value: {{ required "identityhub.bootstrap.credentialServiceUrl is required when identityhub.bootstrap.enabled" $b.credentialServiceUrl | quote }}
+- name: SUPERUSER_ID
+  value: {{ $b.superUserId | quote }}
+- name: IDENTITY_KEY_FILE
+  value: {{ printf "/identity-key/%s" $b.identityKey.key | quote }}
+- name: IDENTITY_KEY_ALGORITHM
+  value: {{ $b.identityKey.algorithm | quote }}
+- name: VAULT_ADDR
+  value: {{ tpl .Values.vault.hashicorp.url . | quote }}
+- name: VAULT_TOKEN
+  {{- if .Values.vault.hashicorp.existingSecret }}
+  valueFrom:
+    secretKeyRef:
+      name: {{ .Values.vault.hashicorp.existingSecret }}
+      key: {{ .Values.vault.hashicorp.existingSecretTokenKey }}
+  {{- else }}
+  value: {{ .Values.vault.hashicorp.token | required "vault.hashicorp.token or vault.hashicorp.existingSecret is required" | quote }}
+  {{- end }}
+- name: API_KEY
+  {{- if .Values.identityhub.superuser.existingSecret }}
+  valueFrom:
+    secretKeyRef:
+      name: {{ .Values.identityhub.superuser.existingSecret }}
+      key: {{ .Values.identityhub.superuser.existingSecretKeyKey }}
+  {{- else }}
+  value: {{ .Values.identityhub.superuser.key | required "identityhub.superuser.key or .existingSecret is required when the bootstrap is enabled" | quote }}
+  {{- end }}
+{{- end -}}

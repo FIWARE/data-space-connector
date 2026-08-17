@@ -1,0 +1,122 @@
+{{- if and .Values.vault.enabled .Values.vault.production.enabled .Values.vault.production.autoUnseal }}
+{{- if .Values.vault.server.dev.enabled }}
+{{- fail "vault.production.enabled requires vault.server.dev.enabled=false: a dev-mode vault stores everything in memory and auto-unseals, so persistence and unsealing are meaningless. See doc/deployment-integration/production/VAULT.md for the values a production vault needs." }}
+{{- end }}
+
+# Reconciler that keeps the bundled vault initialised and unsealed.
+#
+# A vault with persistent storage comes back SEALED after every restart and refuses every request
+# until it is unsealed, which is why the chart's default is a dev-mode vault that loses its contents
+# instead. This closes that gap without a cloud KMS: it initialises an empty vault once, stores the
+# unseal keys in a Kubernetes Secret, and unseals whenever it finds the vault sealed.
+#
+# Everything here speaks the plain vault HTTP API rather than the `vault` CLI, so the image only
+# needs curl - and the same image is then able to talk to the Kubernetes API to store the keys.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ printf "%s-vault-unsealer" .Release.Name | quote }}
+  namespace: {{ .Release.Namespace | default "default" | quote }}
+  labels:
+    app.kubernetes.io/name: vault-unsealer
+    app.kubernetes.io/instance: {{ .Release.Name }}
+data:
+  unseal.sh: |
+    #!/bin/sh
+    set -eu
+
+    VAULT_ADDR="${VAULT_ADDR:?VAULT_ADDR is required}"
+    SECRET_NAME="${SECRET_NAME:?SECRET_NAME is required}"
+    SHARES="${SECRET_SHARES:?SECRET_SHARES is required}"
+    THRESHOLD="${SECRET_THRESHOLD:?SECRET_THRESHOLD is required}"
+    KEY_DIR=/unseal-keys
+    KUBE_API="https://kubernetes.default.svc"
+    SA=/var/run/secrets/kubernetes.io/serviceaccount
+    NAMESPACE=$(cat "${SA}/namespace")
+
+    kube() {
+      _method="$1"; _path="$2"
+      shift 2
+      curl -sS --cacert "${SA}/ca.crt" \
+        -H "Authorization: Bearer $(cat "${SA}/token")" \
+        -H "Content-Type: application/json" \
+        -X "${_method}" "${KUBE_API}${_path}" "$@"
+    }
+
+    # Store the unseal keys and the root token. Created once, right after initialisation; if the
+    # Secret already exists we never overwrite it, because the keys it holds are the only way to
+    # open the storage volume that already exists.
+    store_keys() {
+      _payload="$1"
+      _root=$(printf '%s' "${_payload}" | sed -n 's/.*"root_token":"\([^"]*\)".*/\1/p')
+      # keys_base64 is an array; turn it into one key per line.
+      _keys=$(printf '%s' "${_payload}" | sed -n 's/.*"keys_base64":\[\([^]]*\)\].*/\1/p' | tr ',' '\n' | tr -d '"')
+
+      _data=""
+      _i=0
+      for _k in ${_keys}; do
+        _i=$((_i + 1))
+        _data="${_data}\"unseal-key-${_i}\":\"$(printf '%s' "${_k}" | base64 | tr -d '\n')\","
+      done
+      _data="${_data}\"root-token\":\"$(printf '%s' "${_root}" | base64 | tr -d '\n')\""
+
+      _body=$(printf '{"apiVersion":"v1","kind":"Secret","metadata":{"name":"%s","annotations":{"helm.sh/resource-policy":"keep"}},"type":"Opaque","data":{%s}}' \
+        "${SECRET_NAME}" "${_data}")
+
+      _code=$(printf '%s' "${_body}" | kube POST "/api/v1/namespaces/${NAMESPACE}/secrets" --data-binary @- -o /tmp/secret_resp.json -w '%{http_code}')
+      case "${_code}" in
+        20*) echo "unseal keys stored in secret ${SECRET_NAME}" ;;
+        409) echo "WARNING: secret ${SECRET_NAME} already exists and was NOT overwritten"
+             echo "         vault reported itself uninitialised, so those keys do not match it;"
+             echo "         delete the secret only if the storage volume is empty too" ;;
+        *)   echo "failed to store unseal keys: HTTP ${_code}"; cat /tmp/secret_resp.json; return 1 ;;
+      esac
+    }
+
+    initialize() {
+      echo "vault is uninitialised - initialising with ${SHARES} share(s), threshold ${THRESHOLD}"
+      _body=$(printf '{"secret_shares":%s,"secret_threshold":%s}' "${SHARES}" "${THRESHOLD}")
+      _code=$(printf '%s' "${_body}" | curl -sS -o /tmp/init.json -w '%{http_code}' -X PUT "${VAULT_ADDR}/v1/sys/init" --data-binary @-)
+      if [ "${_code}" != "200" ]; then
+        echo "init failed: HTTP ${_code}"; cat /tmp/init.json; return 1
+      fi
+      store_keys "$(cat /tmp/init.json)"
+    }
+
+    unseal() {
+      # The Secret is mounted, so kubelet refreshes it in place after initialisation; until then the
+      # directory is simply empty.
+      if [ ! -d "${KEY_DIR}" ] || [ -z "$(ls -A "${KEY_DIR}" 2>/dev/null | grep '^unseal-key-' || true)" ]; then
+        echo "vault is sealed but no unseal keys are available yet - waiting for ${SECRET_NAME}"
+        return 0
+      fi
+      for _f in "${KEY_DIR}"/unseal-key-*; do
+        [ -f "${_f}" ] || continue
+        _key=$(cat "${_f}")
+        _body=$(printf '{"key":"%s"}' "${_key}")
+        _code=$(printf '%s' "${_body}" | curl -sS -o /tmp/unseal.json -w '%{http_code}' -X PUT "${VAULT_ADDR}/v1/sys/unseal" --data-binary @-)
+        if [ "${_code}" != "200" ]; then
+          echo "unseal with $(basename "${_f}") failed: HTTP ${_code}"; cat /tmp/unseal.json; return 1
+        fi
+        if grep -q '"sealed":false' /tmp/unseal.json; then
+          echo "vault unsealed"
+          return 0
+        fi
+      done
+      echo "vault still sealed after applying every available key - threshold not met"
+    }
+
+    echo "watching ${VAULT_ADDR} (every ${POLL_SECONDS}s)"
+    while true; do
+      if curl -sS -o /tmp/status.json -f "${VAULT_ADDR}/v1/sys/seal-status" 2>/dev/null; then
+        if grep -q '"initialized":false' /tmp/status.json; then
+          initialize || true
+        elif grep -q '"sealed":true' /tmp/status.json; then
+          unseal || true
+        fi
+      else
+        echo "vault not reachable yet"
+      fi
+      sleep "${POLL_SECONDS}"
+    done
+{{- end }}

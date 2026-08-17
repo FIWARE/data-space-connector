@@ -34,7 +34,12 @@ data:
   ## VAULT ##
   ###########
   edc.vault.hashicorp.url: {{ tpl .Values.vault.hashicorp.url . | quote }}
-  edc.vault.hashicorp.token: {{ .Values.vault.hashicorp.token | required ".Values.vault.hashicorp.token is required" | quote }}
+  {{- if not .Values.vault.hashicorp.existingSecret }}
+  # Rendered in clear, and readable by anyone who can read ConfigMaps in this namespace. Set
+  # vault.hashicorp.existingSecret to omit it here and have the deployment inject
+  # EDC_VAULT_HASHICORP_TOKEN from a Secret instead.
+  edc.vault.hashicorp.token: {{ .Values.vault.hashicorp.token | required "either .Values.vault.hashicorp.token or .Values.vault.hashicorp.existingSecret is required" | quote }}
+  {{- end }}
   edc.vault.hashicorp.timeout.seconds: {{ .Values.vault.hashicorp.timeout | quote }}
   edc.vault.hashicorp.health.check.enabled: {{ .Values.vault.hashicorp.healthCheck.enabled | quote }}
   edc.vault.hashicorp.health.check.standby.ok: {{ .Values.vault.hashicorp.healthCheck.standbyOk | quote }}

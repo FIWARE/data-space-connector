@@ -65,8 +65,45 @@ spec:
       serviceAccountName: default
       securityContext:
         {{- toYaml .Values.identityhub.podSecurityContext | nindent 8 }}
-      {{- if or .Values.identityhub.initContainers $otelInjectAgent }}
+      {{- if or .Values.identityhub.initContainers $otelInjectAgent .Values.identityhub.customCaCerts }}
       initContainers:
+        {{- if .Values.identityhub.customCaCerts }}
+        # Import the extra CAs into a writable copy of the JVM truststore. Without this step the
+        # `custom-cacerts` volume the main container mounts over
+        # /opt/java/openjdk/lib/security/cacerts is an empty emptyDir, so declaring customCaCerts
+        # replaced the entire truststore with nothing instead of extending it - every outbound TLS
+        # connection then failed, including the ones to a vault with a private CA.
+        - name: import-cacerts
+          {{- if .Values.identityhub.image.repository }}
+          image: "{{ .Values.identityhub.image.repository }}:{{ .Values.identityhub.image.tag | default .Chart.AppVersion }}"
+          {{- else }}
+          image: "tractusx/identityhub:{{ .Values.identityhub.image.tag | default .Chart.AppVersion }}"
+          {{- end }}
+          imagePullPolicy: {{ .Values.identityhub.image.pullPolicy }}
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -e
+              cp "${JAVA_HOME}/lib/security/cacerts" /custom-cacerts/cacerts
+              for cert in /custom-cacertificates/*; do
+                [ -f "${cert}" ] || continue
+                echo "importing $(basename "${cert}")"
+                keytool -importcert -noprompt -trustcacerts \
+                  -alias "$(basename "${cert}")" \
+                  -file "${cert}" \
+                  -keystore /custom-cacerts/cacerts \
+                  -storepass changeit
+              done
+          securityContext:
+            {{- toYaml .Values.identityhub.securityContext | nindent 12 }}
+          volumeMounts:
+            - name: custom-cacertificates
+              mountPath: /custom-cacertificates
+              readOnly: true
+            - name: custom-cacerts
+              mountPath: /custom-cacerts
+        {{- end }}
         {{- if $otelInjectAgent }}
         # tracing: copy the OpenTelemetry Java agent JAR from the
         # pinned upstream image into the shared `otel-agent` volume so
@@ -203,6 +240,16 @@ spec:
               {{- else }}
               value: {{ .Values.identityhub.superuser.key | quote }}
               {{- end }}
+            {{- if .Values.vault.hashicorp.existingSecret }}
+            # The vault token as an env var instead of a ConfigMap entry. identityhub-cm.yaml omits
+            # the property entirely in this case: leaving an empty one behind would be resolved as
+            # an empty token rather than falling through to this value.
+            - name: EDC_VAULT_HASHICORP_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.vault.hashicorp.existingSecret }}
+                  key: {{ .Values.vault.hashicorp.existingSecretTokenKey }}
+            {{- end }}
             {{- if $otelInjectAgent }}
             # tracing: attach the OpenTelemetry Java agent to the JVM.
             # Any user-provided JAVA_TOOL_OPTIONS value is preserved by
