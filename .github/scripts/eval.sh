@@ -22,7 +22,10 @@ do
  do
    [ ! -f "${values}" ] && continue
    echo "Evaluating ${chart} with $(basename ${values})"
-   ./bin/helm template ${chart} -f ${values} | kubeconform -strict \
+   # -ignore-missing-schemas because these values render custom resources whose CRDs are not in any
+   # public catalog - the vc-operator's CredentialIssuer and VerifiableCredentialRequest. Everything
+   # with a published schema is still validated strictly.
+   ./bin/helm template ${chart} -f ${values} | kubeconform -strict -ignore-missing-schemas \
      -schema-location default \
      -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json'
 
