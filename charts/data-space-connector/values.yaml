@@ -1859,16 +1859,26 @@ did:
 
 # -- configuration for registering a participant at the til. Allows to preconfigure trust-relationships on deployment
 registration:
+  # -- should the issuers below be registered at the trusted-issuers list
   enabled: false
+  # -- name of the ConfigMap holding the generated registration script
   configMap: til-registration
+  # -- address of the trusted-issuers list to register at, e.g. `http://trusted-issuers-list:8080`
+  til: ""
+  # -- shell snippet prepended to the generated script. Must be a single line: it is interpolated
+  # without `nindent`, so a multi-line value breaks the `init.sh` block scalar.
   prepScript: ""
   image:
     repository: quay.io/curl/curl
     tag: 8.1.2
+    # -- [Kubernetes image pull policy](https://kubernetes.io/docs/concepts/containers/images/#image-pull-policy) to use
     pullPolicy: IfNotPresent
   command: [ /bin/sh, -c, /bin/init.sh ]
+  # -- hook annotations of the registration Job. post-upgrade matters: with post-install only, a
+  # release that already exists never runs it again, so nothing added to `issuer` after the first
+  # install ever reaches the list. Re-running is safe - the script treats a 409 as success.
   annotations:
-    "helm.sh/hook": post-install
+    "helm.sh/hook": post-install,post-upgrade
     "helm.sh/hook-weight": "0"
     "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
   extraEnvVars: []
@@ -2433,8 +2443,11 @@ fdsc-edc:
         clientId: "dsp"
         # -- scope to be used
         scope: "openid"
-        # -- trust all certificates presented at https. DO NOT USE IN PRODUCTION
-        trustAll: true
+        # -- trust all certificates presented at https, i.e. disable TLS verification for the
+        # OID4VP exchange. Only useful in local deployments with self-signed certificates; leave it
+        # off everywhere else. A private CA is handled by pointing `trustAnchorsFolder` at a folder
+        # holding it instead.
+        trustAll: false
         # -- identification of the credentials holder
         holder:
           # -- id of the holder
@@ -2479,10 +2492,13 @@ fdsc-edc:
         identity:
           enabled: false
 
-      # -- configuration of the TMForum extension
+      # -- configuration of the TMForum extension. Enabling it requires ALL seven addresses below:
+      # TMFConfig converts them with `URI.create(...).toURL()` while the runtime boots, so a single
+      # empty one aborts startup with `IllegalArgumentException: URI is not absolute`. That is why
+      # the default is off rather than on-with-empty-values.
       tmfExtension:
         # -- should the extension be enabled
-        enabled: true
+        enabled: false
         # -- address of the quote api to be used
         quoteApi:
         # -- address of the agreement api to be used
@@ -2602,8 +2618,9 @@ fdsc-edc:
           ## -- id of the participant to be used
           id:
         log:
-          ## -- loglevel to be used
-          level: DEBUG
+          ## -- loglevel to be used. DEBUG logs every DSP message including token contents, which is
+          ## useful while integrating and too noisy - and too revealing - to leave on in production.
+          level: INFO
         # -- handling of edc internal json-ld resolution
         jsonld:
           https:
@@ -2707,7 +2724,17 @@ identityhub:
     tag: sha-687d69f
     # -- [Kubernetes image pull policy](https://kubernetes.io/docs/concepts/containers/images/#image-pull-policy) to use
     pullPolicy: IfNotPresent
+  # -- additional init containers to run before the identityhub starts
   initContainers: []
+  # -- extra CA certificates the identityhub has to trust, as a map of file name to PEM content.
+  # They are imported into a copy of the JVM truststore by an init container, so they extend the
+  # bundled roots instead of replacing them. Needed to reach a vault, an issuer or a counterparty
+  # that uses a private CA.
+  customCaCerts: {}
+  # -- additional volumes to attach to the identityhub pod
+  additionalVolumes: []
+  # -- additional volume mounts for the identityhub container
+  additionalVolumeMounts: []
   # -- configuration of the super user to be created in the identity hub
   # -- the api key needs to be in form base64(<username>).<random-string>
   superuser:
@@ -2973,6 +3000,12 @@ identityhub:
     persistence:
       # -- Enable .log files to persist in local machine
       enabled: false
+      # -- access mode of the claim
+      accessMode: ReadWriteOnce
+      # -- size of the claim
+      size: 1Gi
+      # -- storage class of the claim; empty uses the cluster default
+      storageClass: ""
     # -- List of handlers to use in the logger
     handlers:
       - java.util.logging.ConsoleHandler

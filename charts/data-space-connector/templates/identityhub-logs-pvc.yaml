@@ -1,0 +1,24 @@
+{{- if and (eq .Values.identityhub.enabled true) .Values.identityhub.logging.enabled .Values.identityhub.logging.persistence.enabled }}
+
+# Volume for the identityhub log files.
+#
+# The deployment mounts a claim by this name whenever logging.persistence is enabled, and nothing
+# created it - so enabling persistence rendered a Deployment whose pod could never be scheduled.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: "identityhub-pvc-logs"
+  namespace: {{ .Release.Namespace | default "default" | quote }}
+  labels:
+    app.kubernetes.io/name: identityhub
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  accessModes:
+    - {{ .Values.identityhub.logging.persistence.accessMode }}
+  {{- with .Values.identityhub.logging.persistence.storageClass }}
+  storageClassName: {{ . | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.identityhub.logging.persistence.size }}
+{{- end }}

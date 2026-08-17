@@ -4,10 +4,33 @@
 # render with default values emits none of it and neither `helm template` nor `kubeconform` ever
 # sees those templates. This file turns the whole lane on so that it is schema-validated on every
 # pull request. It is not a deployable configuration - hostnames and secrets are placeholders.
+keycloak:
+  enabled: true
+  issuerDid: did:web:ci.example.org
+  realm:
+    verifiableCredentials:
+      # Only expiry_in_seconds is set, and no signing_key_id: exercises both derivations - the
+      # lifetime mirroring and the kid that matches what the identityhub publishes.
+      MembershipCredential:
+        attributes:
+          format: jwt_vc_json
+          verifiable_credential_type: MembershipCredential
+          credential_signing_alg: ES256
+          expiry_in_seconds: "2592000"
+
 identityhub:
   enabled: true
   superuser:
     key: "c3VwZXItdXNlcg==.ci-only-not-a-real-key"
+  # exercises the truststore init container and the ConfigMap it reads
+  customCaCerts:
+    ci-ca.pem: |
+      -----BEGIN CERTIFICATE-----
+      not-a-real-certificate
+      -----END CERTIFICATE-----
+  logging:
+    persistence:
+      enabled: true
   endpoints:
     identity:
       authKeyAlias: super-user-apikey
