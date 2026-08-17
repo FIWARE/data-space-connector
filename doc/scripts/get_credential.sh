@@ -25,7 +25,7 @@ token_response=$(curl -s -k -x localhost:8888 -X POST "$1/realms/test-realm/prot
 
 credential_access_token=$(echo "${token_response}" | jq '.access_token' -r)
 
-# KC main / patched 26.6.2 (keycloak/keycloak#47404) returns authorization_details
+# KC 26.7.0 (keycloak/keycloak#47404) returns authorization_details
 # with credential_identifiers — use credential_identifier when available, fall back
 # to credential_configuration_id for older Keycloaks.
 credential_identifier=$(echo "${token_response}" | jq -r '
