@@ -13,50 +13,59 @@ is run by such a central authority) and the **provider**.
 **Trust-anchor (central authority)** - a second release of the DSC umbrella chart
 named `consent-authority`, via [`k3s/consent-trust-anchor.yaml`](../k3s/consent-trust-anchor.yaml):
 
-* **consent-manager** (`consent-manager:3000`) - stores and serves the consent records/receipts (Node/MongoDB), on a managed MongoDB replica set (dedicated `consent` database). It points at the provider's consent-facade via `CONTRACT_SERVICE_BASE_URL` (cross-namespace, `consent-facade.provider.svc.cluster.local`).
-* an internal **APISIX facade** in front of the consent-manager (route `/consent-manager/*`) that injects the shared consent key server-side and strips the `x-user-key` shortcut. Not exposed via ingress (roadmap item 1).
+* **consent-manager** (`consent-manager:3000`) - stores and serves the consent records/receipts (Node/MongoDB), on a managed MongoDB replica set (dedicated `consent` database). It points at the consent-facade (now in the same namespace) via `CONTRACT_SERVICE_BASE_URL` (`consent-facade.trust-anchor.svc.cluster.local`).
+* an internal **APISIX facade** in front of the consent-manager (route `/consent-manager/*`) that authenticates callers **per participant** (`jwt-auth`, keyed on the token's `participant_name`) and injects the shared consent key server-side - so callers authenticate with their own participant JWT and never hold the consent key. Not exposed via ingress (roadmap item 1).
+* the **consent-facade** (`consent-facade:8080`) - a Micronaut service ([wistefan/consent-facade](https://github.com/wistefan/consent-facade)) that projects a provider's TMForum APIs (agreements, catalog, party) into the contract-service API the consent-manager consumes: bilateral contracts, catalog self-descriptions, and participant self-descriptions at `/participants/{tmforum-org-id}` (party API). It runs at the authority so it can front **multiple providers**, authenticating its outbound TMForum calls to each provider's OID4VP-protected api (as `did:web:dataspace-authority.org`). It replaces the POC node `contract-facade` (plan §10, backlog `UF-10`).
 * a **consent secret** carrying the session/JWT/oauth secrets and the shared consent key.
 
 **Provider**:
 
-* **consent-facade** (`consent-facade:8080`) - a Micronaut service ([wistefan/consent-facade](https://github.com/wistefan/consent-facade)) that projects the DSC's TMForum APIs (agreements, catalog, party) into the contract-service API the consent-manager consumes: bilateral contracts, catalog self-descriptions, and participant self-descriptions at `/participants/{tmforum-org-id}` (party API). It replaces the POC node `contract-facade` (plan §10, backlog `UF-10`).
 * the **consent-filter APISIX plugin** on the `mp-data-service-consent` route, which calls the authority's consent-manager (through its facade at `consent-authority-apisix-gateway.trust-anchor`) to gate access. This plugin is the **canonical (and only) consent-enforcement path** - OPA/odrl-pap still authorizes each request on the presented *credential*, but the *consent* decision is made by the plugin.
 
 ### Enabling
 
 Consent management is **opt-in** via the dedicated `consent` maven profile. The
 provider config lives in [`k3s/consent-provider.yaml`](../k3s/consent-provider.yaml)
-(layered on `provider.yaml`), and the central-authority config - the consent-manager
-+ its APISIX facade + a managed MongoDB, deployed as the `consent-authority` release
-into the trust-anchor namespace - lives in
-[`k3s/consent-trust-anchor.yaml`](../k3s/consent-trust-anchor.yaml). The provider
-overlay enables the facade only (`consentManager.enabled: false`):
+(layered on `provider.yaml`) and carries only the **consent-filter plugin**; the
+central-authority config - the consent-manager, its APISIX facade, the **consent-facade**
+and a managed MongoDB, deployed as the `consent-authority` release into the trust-anchor
+namespace - lives in [`k3s/consent-trust-anchor.yaml`](../k3s/consent-trust-anchor.yaml).
+The provider overlay disables both the consent-manager and the consent-facade (they run
+at the authority) and keeps the plugin:
 
 ```yaml
 consentManagement:
   enabled: true
   consentManager:
     enabled: false   # the consent-manager runs at the trust-anchor, not the provider
+  consentFacade:
+    enabled: false   # the consent-facade also runs at the trust-anchor (it fronts multiple providers)
 ```
 
-The shared `consentKey` (`X_VISIONSTRUST_CONSENT_KEY`) is set on the authority side in [`k3s/consent-trust-anchor.yaml`](../k3s/consent-trust-anchor.yaml) (`consentManagement.consentKey`); the consent-manager validates it and the facade route injects it, so the provider never holds it.
+The shared `consentKey` (`X_VISIONSTRUST_CONSENT_KEY`) is set on the authority side in [`k3s/consent-trust-anchor.yaml`](../k3s/consent-trust-anchor.yaml) (`consentManagement.consentKey`); the consent-manager validates it and the facade route injects it, so callers never hold it.
 
 Deploy the consent scenario with `mvn clean deploy -Pconsent`. That profile builds
-and imports the `consent-manager:local` image and deploys **both** the provider
-consent-facade and the trust-anchor `consent-authority` release. A plain
-`mvn clean deploy -Plocal` brings up the connector **without** consent management.
+and imports the `consent-manager:local` image and deploys the trust-anchor
+`consent-authority` release (consent-manager + consent-facade + MongoDB) plus the
+provider's consent-filter plugin. A plain `mvn clean deploy -Plocal` brings up the
+connector **without** consent management.
 
-> :bulb: The consent-facade runs in the `provider` namespace; the consent-manager, its APISIX facade and MongoDB run in the `trust-anchor` namespace. Check with `kubectl -n provider get pods` (consent-facade) and `kubectl -n trust-anchor get pods` (consent-manager, `consent-authority-apisix`, `mongodb`).
+> :bulb: The consent-manager, its APISIX facade, the **consent-facade** and MongoDB all run in the `trust-anchor` namespace; the provider runs only the consent-filter plugin (inside its own APISIX). Check with `kubectl -n trust-anchor get pods` (consent-manager, consent-facade, `consent-authority-apisix`, `mongodb`).
 
 ### Working with consent records
 
-The consent-manager is intentionally **not exposed via an ingress**. Reach it through a port-forward:
+The consent-manager is intentionally **not exposed via an ingress**; reach it through its authority
+**APISIX facade** - the front door that authenticates callers per-participant (`jwt-auth`) and injects
+the shared consent key server-side, so you present a participant token (`Authorization: Bearer`) and
+never hold the consent key. Port-forward the facade and set the same `$CM` base the
+[Demo](#demo-consent-gated-access-to-personal-data) uses:
 
 ```shell
-  kubectl -n trust-anchor port-forward svc/consent-manager 3000:3000
+  kubectl -n trust-anchor port-forward svc/consent-authority-apisix-gateway 3001:80
+  export CM=http://localhost:3001/consent-manager/v1
 ```
 
-> :key: **Reproducing the plugin's two calls by hand.** The plugin obtains these itself (it logs in with the participant client credentials and reads `/participants/me`), but to run the two calls manually you need the same two values tied to the provider participant: a *participant token* - a JWT signed with the consent-manager's `JWT_SECRET_KEY` (secret `consent-manager-secret`, key `jwtSecret`) whose `sub` is the provider participant's `_id` - and the *provider self-description* URL, which the consent-facade serves at `http://consent-facade.provider.svc.cluster.local:8080/participants/{tmforum-org-id}` (cross-namespace, since the consent-manager is at the trust-anchor). Mint the token inside the pod (the participant must already exist):
+> :key: **Reproducing the plugin's two calls by hand.** The plugin obtains these itself (it logs in with the participant client credentials and reads `/participants/me`), but to run the two calls manually you need the same two values tied to the provider participant: a *participant token* - a JWT signed with the consent-manager's `JWT_SECRET_KEY` (secret `consent-manager-secret`, key `jwtSecret`) whose `sub` is the provider participant's `_id` - and the *provider self-description* URL, which the consent-facade serves at `http://consent-facade.trust-anchor.svc.cluster.local:8080/participants/{tmforum-org-id}` (the facade runs in the trust-anchor namespace, alongside the consent-manager). Mint the token inside the pod (the participant must already exist):
 >
 > ```shell
 >   kubectl -n trust-anchor exec deploy/consent-manager -- node -e '
@@ -87,7 +96,7 @@ An identity in the consent-manager is a **`UserIdentifier`** - a record that bin
 The `identifier/search` call below only finds a `UserIdentifier` that has been **registered first**. In the consent-manager's own model a participant registers one of its users' identifiers itself, authenticated with a **participant JWT** (`sub` = the participant's id in the consent-manager):
 
 ```shell
-  curl -s -X POST http://localhost:3000/v1/users/register \
+  curl -s -X POST $CM/users/register \
     -H 'Content-Type: application/json' \
     -H "Authorization: Bearer <participantToken>" \
     -d '{ "email": "did:key:zDnaeeWrPc6G8GQEpBgLJGwPdFtHK1Mk7JbYhQyFu8waJNLBx" }'
@@ -100,20 +109,24 @@ The `email` is the holder DID; a throw-away one can be minted with the [did-help
 
 Once an identity is registered, the consent-filter plugin that gates access resolves and checks consent with a **two-call chain** against the consent-manager:
 
-1. Resolve the DID to a `UserIdentifier` (auth: the shared consent key). `selfDescription` must be the **provider self-description** (`providerSd`) the consent-facade serves at `/participants/{tmforum-org-id}` - the value `GET /v1/participants/me` returns for the provider participant:
+1. Resolve the DID to a `UserIdentifier`. The consent-manager requires the shared consent key on this
+   endpoint; through the facade you present your **participant JWT** and the facade injects that key.
+   `selfDescription` must be the **provider self-description** (`providerSd`) the consent-facade serves
+   at `/participants/{tmforum-org-id}` - the value `GET /participants/me` returns for the provider
+   participant:
 ```shell
-  curl -s -X POST http://localhost:3000/v1/users/identifier/search \
+  curl -s -X POST $CM/users/identifier/search \
     -H 'Content-Type: application/json' \
-    -H 'x-visionstrust-consent-key: changeme-consent-key' \
+    -H "Authorization: Bearer <participantToken>" \
     -d '{
-          "selfDescription": "http://consent-facade:8080/participants/urn:ngsi-ld:organization:<id>",
+          "selfDescription": "http://consent-facade.trust-anchor.svc.cluster.local:8080/participants/urn:ngsi-ld:organization:<id>",
           "email": "did:key:zDnaeeWrPc6G8GQEpBgLJGwPdFtHK1Mk7JbYhQyFu8waJNLBx"
         }' | jq .
   # -> { "participantExists": true, "userIdentifierExists": true, "userIdentifier": "<id>", ... }
 ```
 2. List that user's consents (auth: a provider participant JWT signed with the consent-manager's `JWT_SECRET_KEY`, `sub` = the provider participant id); the plugin allows only if some consent has `status == "granted"`:
 ```shell
-  curl -s "http://localhost:3000/v1/consents/participants/<userIdentifier>?receipt=true" \
+  curl -s "$CM/consents/participants/<userIdentifier>?receipt=true" \
     -H "Authorization: Bearer <participantToken>" | jq '.consents[] | .status'
 ```
 
@@ -247,19 +260,50 @@ Then, on the consumer side, generate a holder identity and issue the credential 
 The consent-manager is deployed empty. Rather than seeding Mongo, the demo records consent through
 the **real give-consent API** (no direct database writes): it registers the two participants, seeds a
 TM Forum **agreement** (which the consent-facade projects into a privacy notice), registers the
-subject, then `POST /v1/consents`. Port-forward the consent-manager and the provider's TM Forum API
-and set the working variables. `FACADE` is a **cluster** URL on purpose - it is stored in the
-consent-manager and dereferenced by it *in-cluster*, so it must be the service FQDN, not `localhost`:
+subject, then `POST /v1/consents`. Every consent-manager call goes through the authority's **APISIX
+facade** (`consent-authority-apisix-gateway`, route `/consent-manager/*`): it authenticates the caller
+**per participant** with their JWT (`jwt-auth`) and injects the shared consent key server-side - so you
+authenticate with a participant token (`Authorization: Bearer`) and never hold the consent key.
+Port-forward that facade and the provider's TM Forum API. `FACADE` is a **cluster** URL on purpose - it
+is stored in the consent-manager and dereferenced by it *in-cluster*, so it must be the service FQDN,
+not `localhost`:
 
 ```shell
-  kubectl -n trust-anchor port-forward svc/consent-manager 3001:3000
+  kubectl -n trust-anchor port-forward svc/consent-authority-apisix-gateway 3001:80
   kubectl -n provider     port-forward svc/tm-forum-api-svc 8090:8080
+  kubectl -n trust-anchor port-forward svc/consent-authority-apisix-admin 9180:9180   # for the 3a consumer onboarding
 
-  export CM=http://localhost:3001/v1
+  export CM=http://localhost:3001/consent-manager/v1   # -> the authority APISIX facade -> consent-manager
   export TMF=http://localhost:8090/tmf-api
-  export FACADE=http://consent-facade.provider.svc.cluster.local:8080
+  export FACADE=http://consent-facade.trust-anchor.svc.cluster.local:8080
   export DID=$SUBJECT_DID
 ```
+
+> :warning: **Every `$CM` call must go through the facade** (`localhost:3001` must be the
+> `consent-authority-apisix-gateway` port-forward, **not** the consent-manager). The calls below
+> authenticate per-participant with the participant JWT (`Authorization: Bearer`); the facade
+> validates it and injects the shared consent key server-side. A common trap: a **leftover
+> `svc/consent-manager 3001:3000` port-forward** from an earlier run keeps holding port `3001`, so
+> starting the gateway port-forward fails silently (`address already in use`) and `localhost:3001`
+> still reaches the consent-manager directly. Symptoms of hitting the consent-manager directly:
+>
+> - **`3a` login** returns HTML `Cannot POST /consent-manager/v1/participants/login` (Express 404 -
+>   the consent-manager has no `/consent-manager` prefix; the facade strips it).
+> - other calls return `{"message":"Authorization header missing or invalid"}` (the consent key is
+>   never injected).
+>
+> Fix it by killing the stale forward and re-establishing the gateway one:
+>
+> ```shell
+>   pkill -f 'port-forward.*3001'; sleep 1
+>   kubectl -n trust-anchor port-forward svc/consent-authority-apisix-gateway 3001:80 &
+>   # confirm you are on the facade (a no-auth request is rejected by APISIX jwt-auth, not Express):
+>   curl -s -X POST $CM/users/identifier/search -d '{}'
+>   # {"message":"Missing JWT token in request"}  -> facade (correct); the 3a calls add the Bearer token
+> ```
+>
+> The participant token expires after 1 h; if a call starts failing with an *invalid JWT* error,
+> re-run the login in 3a to refresh `$PROVIDER_JWT` (and `$CONSUMER_JWT`).
 
 **3a. Participants.** The provider participant already exists (registered at deploy time by the
 `register-provider-participant` Job); log in as it and read its own self-description, then create the
@@ -279,13 +323,26 @@ consumer (assumed not to exist yet in this test env).
          "partyCharacteristic":[{"name":"did","value":"did:web:fancy-marketplace.biz"}]}' | jq -r .id); echo $CONS_ORG
   export CONSUMER_SD=$FACADE/participants/$CONS_ORG
 
-  # register the consumer participant (201, or 409 if it already exists), then log in as it
+  # register the consumer participant (201, or 409 if it already exists), then log in as it.
+  # POST /participants sits behind the facade's per-participant jwt-auth, so authenticate the
+  # call with the existing provider token.
   curl -s -w '%{http_code}\n' -X POST $CM/participants -H 'Content-Type: application/json' \
+    -H "Authorization: Bearer $PROVIDER_JWT" \
     -d "{\"legalName\":\"Fancy Marketplace Co.\",\"email\":\"consumer@fancy-marketplace.biz\",
          \"did\":\"did:web:fancy-marketplace.biz\",\"clientID\":\"consent-demo-consumer\",
          \"clientSecret\":\"demo\",\"selfDescriptionURL\":\"$CONSUMER_SD\"}"
   export CONSUMER_JWT=$(curl -s -X POST $CM/participants/login -H 'Content-Type: application/json' \
     -d '{"clientID":"consent-demo-consumer","clientSecret":"demo"}' | jq -r .jwt); echo $CONS_ORG
+
+  # Onboard the consumer to the facade. The provider was onboarded at deploy (the register Job
+  # provisions its jwt-auth consumer); the consumer is created here, so provision its facade
+  # jwt-auth consumer too - keyed on its participant_name (the legalName), signed with the
+  # consent-manager JWT secret - otherwise its token is rejected at the facade with 401. In a
+  # real dataspace each participant does this itself at onboarding. Uses the APISIX admin API
+  # (port-forwarded in the prerequisites above):
+  export JWT_SECRET=$(kubectl -n trust-anchor get secret consent-manager-secret -o jsonpath='{.data.jwtSecret}' | base64 -d)
+  curl -s -X PUT http://localhost:9180/apisix/admin/consumers -H 'X-API-KEY: admin' \
+    -d '{"username":"Fancy_Marketplace_Co_","plugins":{"jwt-auth":{"key":"Fancy Marketplace Co.","secret":"'"$JWT_SECRET"'","algorithm":"HS256"}}}'
 ```
 
 **3b. Contract source (the EDC stand-in).** In production the provider↔consumer **agreement** is
@@ -326,31 +383,50 @@ JSON
 ```
 
 **3c. Register the subject.** A `UserIdentifier` binds the holder DID to a participant; register it on
-**both** sides (the provider side's `_id` is the `x-user-key` used to grant):
+**both** sides (idempotent - a repeat registration is a no-op):
 
 ```shell
-  export USER_KEY=$(curl -s -X POST $CM/users/register -H 'Content-Type: application/json' \
-    -H "Authorization: Bearer $PROVIDER_JWT" -d "{\"email\":\"$DID\",\"identifier\":\"$DID\"}" | jq -r ._id); echo $USER_KEY
-  curl -s -X POST $CM/users/register -H 'Content-Type: application/json' \
+  curl -s -o /dev/null -X POST $CM/users/register -H 'Content-Type: application/json' \
+    -H "Authorization: Bearer $PROVIDER_JWT" -d "{\"email\":\"$DID\",\"identifier\":\"$DID\"}"
+  curl -s -o /dev/null -X POST $CM/users/register -H 'Content-Type: application/json' \
     -H "Authorization: Bearer $CONSUMER_JWT" -d "{\"email\":\"$DID\",\"identifier\":\"$DID\"}"
 ```
 
-**3d. Grant.** Fetch the privacy notice the facade projected (it must have non-empty `data` **and**
-`purposes`), then give consent for its data. The `:userId` path segment is a placeholder - the
-**`x-user-key` header** (the provider `UserIdentifier._id`) selects the subject.
+**3d. Resolve the `x-user-key` (search).** The provider-side `UserIdentifier._id` is the `x-user-key`
+that selects the subject when granting. Resolve it from the holder DID via `identifier/search` - the
+same lookup the consent-filter plugin does, and it works whether the identifier was just registered or
+already existed. You authenticate per-participant with the **provider token**; the facade injects the
+consent key this endpoint requires. `selfDescription` must be the **provider** self-description
+(`$PROVIDER_SD`, the value `GET /participants/me` returns):
+
+```shell
+  export USER_KEY=$(curl -s -X POST $CM/users/identifier/search -H 'Content-Type: application/json' \
+    -H "Authorization: Bearer $PROVIDER_JWT" \
+    -d "{\"selfDescription\":\"$PROVIDER_SD\",\"email\":\"$DID\"}" | jq -r .userIdentifier); echo $USER_KEY
+```
+
+A non-empty `userIdentifier` (`userIdentifierExists: true`) is the key; an empty result means the
+registration in 3c has not propagated yet - retry.
+
+**3e. Grant.** Fetch the privacy notice the facade projected (it must have non-empty `data` **and**
+`purposes`), then give consent for its data. These calls carry the **provider token** (per-participant
+auth) *and* the **`x-user-key` header** - the `UserIdentifier._id` from 3d, which selects the subject
+(the `:userId` path segment is just a placeholder the header overrides).
 
 ```shell
   export PROV_B64=$(printf '%s' "$PROVIDER_SD" | base64 -w0)
   export CONS_B64=$(printf '%s' "$CONSUMER_SD" | base64 -w0)
 
-  export NOTICE=$(curl -s "$CM/consents/$DID/$PROV_B64/$CONS_B64" -H "x-user-key: $USER_KEY")
+  export NOTICE=$(curl -s "$CM/consents/$DID/$PROV_B64/$CONS_B64" \
+    -H "Authorization: Bearer $PROVIDER_JWT" -H "x-user-key: $USER_KEY")
   echo "$NOTICE" | jq '.[0] | {privacyNoticeId: ._id, data: [.data[].resource], purposes: [.purposes[].purpose]}'
 
   export PN_ID=$(echo "$NOTICE" | jq -r '.[0]._id')
   export DATA=$(echo "$NOTICE"  | jq -c '[.[0].data[].resource]')
 
   # the receipt's recordId is the consent's id (kept for the withdraw step)
-  export CONSENT_ID=$(curl -s -X POST $CM/consents -H 'Content-Type: application/json' -H "x-user-key: $USER_KEY" \
+  export CONSENT_ID=$(curl -s -X POST $CM/consents -H 'Content-Type: application/json' \
+    -H "Authorization: Bearer $PROVIDER_JWT" -H "x-user-key: $USER_KEY" \
     -d "{\"privacyNoticeId\":\"$PN_ID\",\"event\":\"given\",\"data\":$DATA}" | jq -r .record.recordId); echo "granted, consent id: $CONSENT_ID"
 ```
 
@@ -361,7 +437,7 @@ route conf in [`k3s/provider.yaml`](../k3s/provider.yaml)) and derives the provi
 authority APISIX is provisioned by the deploy reconcile Job, not by granting.)
 
 > :warning: **Consistency.** The consumer participant's stored `selfDescriptionURL` (3a), the
-> agreement's `consumer-id` (3b), and the `consumerId` passed to the grant (3d) must be **identical**
+> agreement's `consumer-id` (3b), and the `consumerId` passed to the grant (3e) must be **identical**
 > (likewise for the provider) - on a fresh deploy the steps satisfy this by construction. Re-running
 > against a *different* consumer org while `consent-demo-consumer` already exists leaves the
 > participant pinned to its original SD (`POST /v1/participants` is a no-op `409`), which mismatches
@@ -385,9 +461,9 @@ again. Access follows the subject's consent in real time:
 
 ```shell
   curl -s -X POST $CM/consents/$CONSENT_ID/terminate -H 'Content-Type: application/json' \
-    -H "x-user-key: $USER_KEY" -d '{}' | jq '{recordId: .record.recordId}'
+    -H "Authorization: Bearer $PROVIDER_JWT" -H "x-user-key: $USER_KEY" -d '{}' | jq '{recordId: .record.recordId}'
 ```
-(Re-running the grant in step 3d issues a fresh `granted` consent, so access is allowed again.)
+(Re-running the grant in step 3e issues a fresh `granted` consent, so access is allowed again.)
 
 > :bulb: To run this whole check in one shot, use [`./doc/scripts/verify_consent_flow.sh`](scripts/verify_consent_flow.sh) - it issues the token, then drives the same give-consent API to grant → assert `200`, revoke → assert `403`, re-grant → assert `200`, and exits non-zero on any failure. Needs the `cert/` holder identity from the prerequisites above.
 
@@ -412,7 +488,7 @@ The current integration is a **proof-of-concept**. The steps below take it to a 
 
 ### 1. Authentication & subject identity (P0)
 - **Real participant auth** instead of the single global `x-visionstrust-consent-key` shared secret and the `x-user-key`/query-param/base64-payload shortcuts in the consent-manager (`UF-1`). The consent-manager stays **unmodified**; the extra auth is added by the **APISIX facade in front of it** at the authority (route `/consent-manager/*`, upstream `consent-manager:3000`, in [`k3s/consent-trust-anchor.yaml`](../k3s/consent-trust-anchor.yaml)), which callers reach cross-namespace at `consent-authority-apisix-gateway.trust-anchor`.
-  - **Done (config-only hardening):** the facade `proxy-rewrite` **injects** the `x-visionstrust-consent-key` server-side (so callers no longer hold it) and **strips** the `x-user-key` shortcut header; the consent-filter plugin's `consent_api_url` points at `http://consent-authority-apisix-gateway.trust-anchor.svc.cluster.local/consent-manager`. The facade's APISIX is internal (ingress off), so it is not directly reachable from outside.
+  - **Done (config-only hardening):** every `/consent-manager/*` call requires a **per-participant JWT** (`jwt-auth`, keyed on the token's `participant_name`; one consumer per participant provisioned by the reconcile Job), and the facade **injects** the `x-visionstrust-consent-key` server-side - so callers authenticate as themselves and never hold the shared consent key. The `x-user-key` subject selector is **forwarded** behind that auth (a participant can name the subject of a grant); replacing it by deriving the subject from the token `sub` is the remaining part of `UF-1`. The consent-filter plugin's `consent_api_url` points at `http://consent-authority-apisix-gateway.trust-anchor.svc.cluster.local/consent-manager`. The facade's APISIX is internal (ingress off), so it is not directly reachable from outside.
   - **Done (participant-JWT validation) — verified live:** the facade requires a valid **participant JWT** on every call except `/participants/login` (APISIX `jwt-auth`, keyed on the token's `participant_name` via a consumer whose HS256 secret is the consent-manager's `JWT_SECRET_KEY`); the plugin now sends the token on call 1 too. Verified end-to-end: missing/tampered token → **401** at the facade (before the consent-manager), login stays open, and the full grant→**200** / revoke→**403** flow works. Baked into [`k3s/consent-trust-anchor.yaml`](../k3s/consent-trust-anchor.yaml) (login-exempt route + `jwt-auth` on the facade route + a consumer-reconcile Job, one consumer per participant).
   - **Done (secret ref):** the consent key injected by the facade is sourced from `consent-manager-secret` (mounted as env `CONSENT_KEY`, referenced in the route header as `$env://CONSENT_KEY`, resolved by APISIX at runtime) - no literal in git or etcd. Verified live.
   - **Done (credentials out of the route conf):** the plugin's `consent_key` is now **optional** (the facade injects it and overrides anything sent), so it is dropped from the provider route conf; the participant `client_secret` is no longer in the route conf either - the plugin reads it from env `CONSENT_CLIENT_SECRET`. APISIX spawns the ext-plugin runner with a *fixed* environment, so the container env never reaches it: the `consent-plugin-credentials` Secret is instead mounted as a file and the runner launch command `export`s it before `exec`ing the runner. `client_id` (not secret) stays in the conf. Verified live.
