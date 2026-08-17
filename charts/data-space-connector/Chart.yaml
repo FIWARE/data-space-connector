@@ -2,12 +2,12 @@ apiVersion: v2
 name: data-space-connector
 description: Umbrella Chart for the FIWARE Data Space Connector, combining all essential parts to be used by a participant.
 type: application
-version: 10.3.2
+version: 10.4.1
 dependencies:
   - name: decentralized-iam
     alias: decentralizedIam
     condition: decentralizedIam.enabled
-    version: 2.1.18
+    version: 2.1.19
     repository: https://fiware.github.io/decentralized-iam
   # data-service
   - name: scorpio-broker-aaio
@@ -18,7 +18,7 @@ dependencies:
   # issuance
   - name: keycloak
     condition: keycloak.enabled
-    version: 0.21.7
+    version: 0.21.24
     repository: oci://registry-1.docker.io/cloudpirates
   # contract management
   - name: tm-forum-api

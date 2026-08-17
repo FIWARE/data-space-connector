@@ -146,8 +146,10 @@ keycloak:
     credentialTypes:
       - OperatorCredential
   extraVolumeMounts:
+    # Since KC 26.6.4 the java-keystore realm key provider only reads keystores from
+    # ${kc.home.dir}/data/<realm-name>, so the directory name must match `realm.name`.
     - name: elsi-trust-store
-      mountPath: /trust-store
+      mountPath: /opt/keycloak/data/test-realm
     - name: realms
       mountPath: /opt/keycloak/data/import
     - name: providers
@@ -401,7 +403,7 @@ registration:
 
 elsi:
   enabled: true
-  storePath: /trust-store/keystore.p12
+  storePath: /opt/keycloak/data/test-realm/keystore.p12
   storePassword: password
   keyAlias: test-keystore
   keyPassword: password
