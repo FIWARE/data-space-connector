@@ -2,7 +2,7 @@ apiVersion: v2
 name: data-space-connector
 description: Umbrella Chart for the FIWARE Data Space Connector, combining all essential parts to be used by a participant.
 type: application
-version: 10.4.3
+version: 10.4.4
 dependencies:
   - name: decentralized-iam
     alias: decentralizedIam
@@ -65,7 +65,7 @@ dependencies:
   - name: cert-manager
     alias: cert-manager
     condition: cert-manager.enabled
-    version: v1.20.0
+    version: v1.21.1
     repository: https://charts.jetstack.io
   # vc-operator
   - name: vc-operator
