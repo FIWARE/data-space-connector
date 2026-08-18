@@ -15,6 +15,11 @@
 # --- everything the connector normally deploys, off -------------------------
 scorpio:
   enabled: false
+
+
+consentFacade:
+  enabled: true
+
 # --- OID4VP credential issuer for did:web:dataspace-authority.org --------------
 # Self-contained Keycloak issuer (mirrors the consumer issuer) that mints a
 # verifiable OperatorCredential for the consent-facade running in this release.
@@ -489,68 +494,21 @@ decentralizedIam:
     odrl-pap:
       enabled: false
 
-# --- managed MongoDB replica set for the consent-manager --------------------
-mongo-operator:
-  enabled: true
-managedMongo:
-  enabled: true
-
-# --- the consent-manager + the consent-facade (both at the authority) --------
-consentManagement:
-  enabled: true
-  consentManager:
-    enabled: true
-    # the consent-facade now runs in this (authority) namespace
-    contractServiceBaseUrl: "http://consent-facade.trust-anchor.svc.cluster.local:8080"
-  # The consent-facade runs at the authority (it fronts multiple providers) and
-  # authenticates its outbound TM Forum calls to each provider's OID4VP-protected
-  # mp-tmf-api as did:web:dataspace-authority.org, using the holder key + issued
-  # OperatorCredential provisioned by the authority issuer above.
-  consentFacade:
-    enabled: true
-    # the provider's OID4VP-protected TM Forum ingress. Reached in-cluster through
-    # the squid proxy (see oid4vp.proxy); its self-signed cert is trusted via dsc-ca.
-    tmfApiUrl: "https://mp-tmf-api.127.0.0.1.nip.io"
-    # the SD/catalog links the facade writes must be dereferenceable by the
-    # consent-manager (same namespace) - the fully-qualified in-namespace service.
-    selfUrl: "http://consent-facade.trust-anchor.svc.cluster.local:8080"
-    oid4vp:
-      # present the OperatorCredential (holder did:web:dataspace-authority.org) to
-      # obtain an access token for mp-tmf-api. holder key + credential + dsc-ca come
-      # from the dataspace-authority.org-tls secret and the vc-operator-credential
-      # secret (see values.yaml consentFacade.oid4vp for the full surface).
-      enabled: true
-      proxy:
-        enabled: true
-  # seeded into consent-manager-secret; the consent-manager validates it and the
-  # facade route injects the same value ($env://CONSENT_KEY) on the caller's behalf.
-  consentKey: "changeme-consent-key"
-  # provider participant registered at deploy time (item 3) via the consent-manager's
-  # real POST /participants API - so the participant is a deploy artifact with a
-  # stable selfDescriptionURL, not a per-run side effect of the seed script.
-  # clientID/clientSecret MUST match the provider consent-filter plugin credentials
-  # (route conf client_id + the consent-plugin-credentials secret in the provider ns).
-  providerParticipant:
-    enabled: true
-    legalName: "M&P Operations Inc."
-    email: "provider@mp-operation.org"
-    did: "did:web:mp-operations.org"
-    clientID: "consent-demo-provider"
-    # the participant client secret. For the demo a literal Secret
-    # (provider-participant-credentials) is created below; in production set
-    # credentialsSecretCreate=false and provide it externally (Vault-synced,
-    # same name/key). MUST match the provider plugin's consent-plugin-credentials.
-    credentialsSecretCreate: true
-    clientSecret: "demo"
-    # the backing TMForum organization (provider party API) the selfDescriptionURL
-    # dereferences to; find-or-created by name so the SD is stable across runs.
-    orgName: "Consent Demo Provider"
-    orgCountry: "DE"
-    # the deploy-time register Job find-or-creates the backing org via the provider's
-    # internal TM Forum api (cross-namespace, unauthenticated - a provisioning step),
-    # while the facade that serves the SD at runtime runs in this namespace.
-    tmforumUrl: "http://tm-forum-api-svc.provider.svc.cluster.local:8080"
-    facadeUrl: "http://consent-facade.trust-anchor.svc.cluster.local:8080"
+# --- consent-manager, consent-facade and their managed MongoDB --------------
+# These no longer live in this (umbrella-chart) release. They are deployed from
+# the trust-anchor chart as part of the `trust-anchor` release in this same
+# namespace, via k3s/consent-trust-anchor-components.yaml. This release provides
+# only the IAM that backs consent: the keycloak issuer, the did:web helper (the
+# `dataspace-authority.org-tls` secret the facade mounts), the vc-operator (the
+# `vc-operator-credential` secret the facade mounts) and the APISIX facade route
+# below. The route + the reconcile Job reference `consent-manager-secret` and the
+# `consent-manager` service by name (both created by the trust-anchor release in
+# this namespace). See doc/CONSENT_MANAGEMENT.md.
+#
+# No participant is statically configured. The authority learns participants
+# through registration (`POST /v1/participants`), and the reconcile Job below then
+# provisions a jwt-auth consumer for each. In the demo the provider participant is
+# registered as a manual bootstrap step - see doc/CONSENT_MANAGEMENT.md.
 
 # --- reconcile one jwt-auth consumer per participant --------------------------
 # The apisix chart has no native `consumers` support, so a bootstrap Job PUTs the
@@ -581,10 +539,17 @@ extraManifests:
       template:
         spec:
           restartPolicy: OnFailure
+          # The consent-manager image, consent-manager-secret and the managed mongo
+          # (mongodb-svc / mongodb-consent-password) are created by the trust-anchor
+          # release (charts/trust-anchor, via k3s/consent-trust-anchor-components.yaml)
+          # in this same namespace. This Job runs in the consent-authority release
+          # (where APISIX lives), so it references them by their well-known names -
+          # keep these in sync with the trust-anchor chart's consentManagement /
+          # managedMongo defaults.
           containers:
             - name: reconcile-consumers
-              image: "{{ .Values.consentManagement.consentManager.image.repository }}:{{ .Values.consentManagement.consentManager.image.tag }}"
-              imagePullPolicy: {{ .Values.consentManagement.consentManager.image.pullPolicy }}
+              image: "consent-manager:local"
+              imagePullPolicy: IfNotPresent
               env:
                 - name: APISIX_ADMIN
                   value: "http://{{ .Release.Name }}-apisix-admin:9180"
@@ -593,15 +558,15 @@ extraManifests:
                 - name: JWT_SECRET_KEY
                   valueFrom:
                     secretKeyRef:
-                      name: {{ .Values.consentManagement.consentManager.secret.name }}
+                      name: consent-manager-secret
                       key: jwtSecret
                 - name: CM_MONGO_PASSWORD
                   valueFrom:
                     secretKeyRef:
-                      name: {{ .Values.consentManagement.consentManager.mongo.auth.existingSecret }}
-                      key: {{ .Values.consentManagement.consentManager.mongo.auth.existingSecretPasswordKey }}
+                      name: mongodb-consent-password
+                      key: password
                 - name: MONGO_URI
-                  value: "mongodb://{{ .Values.consentManagement.consentManager.mongo.username }}:$(CM_MONGO_PASSWORD)@{{ .Values.consentManagement.consentManager.mongo.host }}:{{ .Values.consentManagement.consentManager.mongo.port }}/{{ .Values.consentManagement.consentManager.mongo.database }}?replicaSet={{ .Values.consentManagement.consentManager.mongo.replicaSet }}"
+                  value: "mongodb://consent:$(CM_MONGO_PASSWORD)@mongodb-svc:27017/consent?replicaSet=mongodb"
                 - name: RECONCILE_JS
                   value: |
                     const NM='/usr/src/app/node_modules/';
@@ -630,111 +595,6 @@ extraManifests:
               command: ["/bin/sh", "-ec"]
               args:
                 - node -e "$RECONCILE_JS"
-  # --- provider participant client secret (item 3) ----------------------------
-  # Used by the register Job below to set the participant's clientSecret. MUST
-  # equal the provider consent-filter plugin's client secret (consent-plugin-
-  # credentials in the provider namespace) so the plugin can log in as it.
-  - |
-    {{- if and .Values.consentManagement.providerParticipant.enabled .Values.consentManagement.providerParticipant.credentialsSecretCreate }}
-    apiVersion: v1
-    kind: Secret
-    metadata:
-      name: provider-participant-credentials
-      namespace: {{ .Release.Namespace }}
-    type: Opaque
-    stringData:
-      clientSecret: {{ .Values.consentManagement.providerParticipant.clientSecret | quote }}
-    {{- end }}
-  # --- register the provider participant at deploy time (item 3) ---------------
-  # Runs the consent-manager image to (1) find-or-create the backing TMForum org
-  # at the provider (so the selfDescriptionURL is stable), (2) register the
-  # participant via the consent-manager's real POST /v1/participants API
-  # (idempotent: 201 new / 409 exists), and (3) provision its jwt-auth consumer.
-  # This makes the provider participant a deploy artifact rather than a per-run
-  # side effect of the grant flow.
-  - |
-    {{- if .Values.consentManagement.providerParticipant.enabled }}
-    apiVersion: batch/v1
-    kind: Job
-    metadata:
-      name: {{ .Release.Name }}-register-provider-participant
-      namespace: {{ .Release.Namespace }}
-    spec:
-      ttlSecondsAfterFinished: 86400
-      backoffLimit: 10
-      template:
-        spec:
-          restartPolicy: OnFailure
-          containers:
-            - name: register-participant
-              image: "{{ .Values.consentManagement.consentManager.image.repository }}:{{ .Values.consentManagement.consentManager.image.tag }}"
-              imagePullPolicy: {{ .Values.consentManagement.consentManager.image.pullPolicy }}
-              env:
-                - name: CM_URL
-                  value: "http://consent-manager:{{ .Values.consentManagement.consentManager.service.port }}"
-                - name: TMF_PARTY
-                  value: "{{ .Values.consentManagement.providerParticipant.tmforumUrl }}/tmf-api/party/v4/organization"
-                - name: FACADE
-                  value: "{{ .Values.consentManagement.providerParticipant.facadeUrl }}"
-                - name: APISIX_ADMIN
-                  value: "http://{{ .Release.Name }}-apisix-admin:9180"
-                - name: APISIX_ADMIN_KEY
-                  value: "admin"
-                - name: JWT_SECRET_KEY
-                  valueFrom:
-                    secretKeyRef:
-                      name: {{ .Values.consentManagement.consentManager.secret.name }}
-                      key: jwtSecret
-                - name: PROV_LEGALNAME
-                  value: {{ .Values.consentManagement.providerParticipant.legalName | quote }}
-                - name: PROV_EMAIL
-                  value: {{ .Values.consentManagement.providerParticipant.email | quote }}
-                - name: PROV_DID
-                  value: {{ .Values.consentManagement.providerParticipant.did | quote }}
-                - name: PROV_CLIENTID
-                  value: {{ .Values.consentManagement.providerParticipant.clientID | quote }}
-                - name: PROV_CLIENTSECRET
-                  valueFrom:
-                    secretKeyRef:
-                      name: provider-participant-credentials
-                      key: clientSecret
-                - name: PROV_ORG_NAME
-                  value: {{ .Values.consentManagement.providerParticipant.orgName | quote }}
-                - name: PROV_ORG_COUNTRY
-                  value: {{ .Values.consentManagement.providerParticipant.orgCountry | quote }}
-                - name: REGISTER_JS
-                  value: |
-                    const http=require('http');
-                    const CM=process.env.CM_URL, TMF=process.env.TMF_PARTY, FACADE=process.env.FACADE;
-                    const ADMIN=process.env.APISIX_ADMIN, KEY=process.env.APISIX_ADMIN_KEY, SECRET=process.env.JWT_SECRET_KEY;
-                    const P={legalName:process.env.PROV_LEGALNAME,email:process.env.PROV_EMAIL,did:process.env.PROV_DID,clientID:process.env.PROV_CLIENTID,clientSecret:process.env.PROV_CLIENTSECRET};
-                    const ORG_NAME=process.env.PROV_ORG_NAME, ORG_COUNTRY=process.env.PROV_ORG_COUNTRY;
-                    const call=(method,url,headers,body)=>{const u=new URL(url);return new Promise((res,rej)=>{const d=body?JSON.stringify(body):null;const opt={host:u.hostname,port:u.port||80,method,path:u.pathname+u.search,headers:Object.assign({'content-type':'application/json'},headers||{},d?{'content-length':Buffer.byteLength(d)}:{})};const r=http.request(opt,x=>{let b='';x.on('data',c=>b+=c);x.on('end',()=>res({code:x.statusCode,body:b}));});r.on('error',rej);if(d)r.write(d);r.end();});};
-                    const sleep=ms=>new Promise(r=>setTimeout(r,ms));
-                    async function waitOk(url,headers,ok){for(let i=0;i<60;i++){try{const r=await call('GET',url,headers);if(ok.includes(r.code))return;}catch(e){}console.log('waiting for '+url+'...');await sleep(3000);}throw new Error('timeout waiting for '+url);}
-                    (async()=>{
-                      await waitOk(CM+'/v1/participants',{},[200]);
-                      await waitOk(TMF+'?limit=1',{},[200]);
-                      await waitOk(ADMIN+'/apisix/admin/consumers',{'x-api-key':KEY},[200,401]);
-                      let orgId;
-                      const list=await call('GET',TMF+'?limit=1000');
-                      let orgs=[];try{orgs=JSON.parse(list.body);}catch(e){}
-                      const found=(Array.isArray(orgs)?orgs:[]).find(o=>o&&o.name===ORG_NAME);
-                      if(found){orgId=found.id;}
-                      else{const c=await call('POST',TMF,{},{name:ORG_NAME,tradingName:ORG_NAME,isLegalEntity:true,organizationType:'company',contactMedium:[{characteristic:{country:ORG_COUNTRY}}],partyCharacteristic:[{name:'did',value:P.did}]});if(c.code>=300)throw new Error('party org POST -> '+c.code+' '+c.body.slice(0,150));orgId=JSON.parse(c.body).id;}
-                      const SD=FACADE+'/participants/'+orgId;
-                      const reg=await call('POST',CM+'/v1/participants',{},Object.assign({},P,{selfDescriptionURL:SD}));
-                      if(reg.code!==201&&reg.code!==409)throw new Error('POST /participants -> '+reg.code+' '+reg.body.slice(0,150));
-                      console.log('participant '+JSON.stringify(P.legalName)+' registered (HTTP '+reg.code+'), SD='+SD);
-                      const username=P.legalName.replace(/[^0-9a-zA-Z_]/g,'_');
-                      const cr=await call('PUT',ADMIN+'/apisix/admin/consumers',{'x-api-key':KEY},{username:username,plugins:{'jwt-auth':{key:P.legalName,secret:SECRET,algorithm:'HS256'}}});
-                      if(cr.code>=300)throw new Error('consumer PUT -> '+cr.code+' '+cr.body.slice(0,150));
-                      console.log('consumer '+username+' provisioned');
-                    })().catch(e=>{console.error('ERR',e.stack||e.message);process.exit(1);});
-              command: ["/bin/sh", "-ec"]
-              args:
-                - node -e "$REGISTER_JS"
-    {{- end }}
   # --- keystore password for the authority-keycloak prepare-keystore init ------
   # Consumed by the keycloak prepare-keystore init container (STORE_PASS) to
   # export /did-material/cert.pfx from the dataspace-authority.org-tls secret.

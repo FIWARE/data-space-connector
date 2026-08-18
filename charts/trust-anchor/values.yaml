@@ -56,3 +56,277 @@ trusted-issuers-list:
     port: 5432
     # -- name of the schema inside the db
     name: tildb
+
+# ---------------------------------------------------------------------------
+# Consent management (ISO/IEC TS 27560) - the consent-manager + consent-facade
+# and their managed MongoDB. These live in the trust-anchor chart because the
+# authority (this trust anchor) is where consent records are held; the IAM that
+# backs them (keycloak issuer, did:web helper, APISIX facade route, vc-operator)
+# stays in the data-space-connector umbrella chart and is deployed as a separate
+# `consent-authority` release in the same namespace (see doc/CONSENT_MANAGEMENT.md
+# and k3s/consent-trust-anchor.yaml). Everything here is off by default; the
+# consent scenario turns it on via k3s/consent-trust-anchor-components.yaml.
+# ---------------------------------------------------------------------------
+
+## Usage of the MongoDB community operator (installed cluster-wide, see
+## k3s/mongo-operator.yaml) - the managed replica set backing the consent-manager.
+managedMongo:
+  # -- should the managed MongoDB replica set be deployed? Requires the MongoDB
+  # community operator CRDs to be installed before applying the chart.
+  enabled: false
+  # -- generate the admin/consent password secrets in-cluster (once, kept across
+  # upgrades). Set to false to provide `mongodb-admin-password` /
+  # `mongodb-consent-password` externally.
+  generatePasswords: true
+  # -- name of the service account the mongod pods run as. The community operator
+  # defaults the generated StatefulSet to `mongodb-database`; the chart provisions
+  # this SA + its role/binding in the release namespace so the replica set can start
+  # (the operator's own chart only creates it in its `database.namespace`).
+  databaseServiceAccountName: mongodb-database
+  # -- spec as defined in https://github.com/mongodb/helm-charts/tree/main/charts/community-operator-crds
+  spec:
+    additionalMongodConfig:
+      storage.wiredTiger.engineConfig.journalCompressor: zlib
+
+consentManagement:
+  # -- should consent management be deployed
+  enabled: false
+
+  # -- the consent-manager service (VisionsOfficial/consent-manager, ISO 27560)
+  consentManager:
+    # -- deploy the consent-manager
+    enabled: true
+    # -- override for CONTRACT_SERVICE_BASE_URL (the consent-facade). Empty =>
+    # http://consent-facade:<port> (same namespace). Set to a cross-namespace FQDN
+    # (e.g. http://consent-facade.provider.svc.cluster.local:8080) when the
+    # consent-manager and consent-facade live in different namespaces.
+    contractServiceBaseUrl: ""
+    image:
+      # -- repository of the consent-manager image (built & imported locally)
+      repository: consent-manager
+      # -- tag of the consent-manager image
+      tag: local
+      # -- image pull policy
+      pullPolicy: IfNotPresent
+    # -- api prefix served by the consent-manager
+    apiPrefix: /v1
+    # -- port the consent-manager listens on
+    containerPort: 3000
+    service:
+      # -- kubernetes service type (keep internal)
+      type: ClusterIP
+      # -- service port
+      port: 3000
+    # -- application base url (APP_ENDPOINT/URL), defaults to the in-cluster service
+    appEndpoint: ""
+    mongo:
+      # -- full MongoDB connection string (must include the replica set). If set, overrides the parts below.
+      uri: ""
+      # -- mongodb host (managed-mongo service by default)
+      host: mongodb-svc
+      # -- mongodb port
+      port: 27017
+      # -- database name
+      database: consent
+      # -- username
+      username: consent
+      # -- replica set name (the managed MongoDBCommunity resource name)
+      replicaSet: mongodb
+      auth:
+        # -- secret holding the mongo password (shared with the managed-mongo consent user)
+        existingSecret: mongodb-consent-password
+        # -- key within the secret holding the mongo password
+        existingSecretPasswordKey: password
+    # -- session/JWT/OAuth/consent-key secret. Generated in-cluster when generate=true.
+    secret:
+      # -- name of the secret
+      name: consent-manager-secret
+      # -- generate the secret (session/jwt/oauth/consentKey/mongoPassword) in-cluster
+      generate: true
+      # -- key holding the consent key (X_VISIONSTRUST_CONSENT_KEY), injected by the facade
+      consentKeyKey: consentKey
+    # -- extra environment variables (map)
+    env: {}
+    # -- "valueFrom" environment variable references (map, name templated)
+    envValueFrom: {}
+    # -- additional secrets to load as env (list of secret names)
+    envSecretNames: []
+    # -- additional config maps to load as env (list of config map names)
+    envConfigMapNames: []
+    # -- pod security context
+    podSecurityContext:
+      seccompProfile:
+        type: RuntimeDefault
+      runAsUser: 10100
+      runAsGroup: 10100
+      fsGroup: 10100
+    # -- container security context
+    securityContext:
+      capabilities:
+        drop:
+          - ALL
+        add: []
+      readOnlyRootFilesystem: true
+      allowPrivilegeEscalation: false
+      runAsNonRoot: true
+      runAsUser: 10100
+    # -- cpu/memory resources
+    resources:
+      limits:
+        cpu: 500m
+        memory: 512Mi
+      requests:
+        cpu: 100m
+        memory: 128Mi
+
+  # -- the Micronaut consent-facade (Java) that projects the DSC TMForum
+  # agreements/catalog/party into the contract-service API the consent-manager
+  # consumes (github.com/wistefan/consent-facade); it reads the TMForum api
+  # configured via `tmfApiUrl`.
+  consentFacade:
+    # -- should the consent-facade be deployed (defaults on with consent management;
+    # the provider disables it, the authority runs it)
+    enabled: true
+    image:
+      # -- repository of the consent-facade image
+      repository: quay.io/wi_stefan/consent-facade
+      # -- image tag
+      tag: "0.0.1"
+      # -- image pull policy
+      pullPolicy: Always
+    # -- port the facade listens on
+    containerPort: 8080
+    # -- port the Micronaut management endpoints (incl. /health) listen on
+    # (matches endpoints.all.port in the image's application.yaml)
+    managementPort: 9090
+    service:
+      # -- kubernetes service type
+      type: ClusterIP
+      # -- service port
+      port: 8080
+    # -- base url of the TMForum api the facade reads (the DSC tm-forum-api). All
+    # of the facade's TMForum clients (product-ordering/-catalog/-inventory, party,
+    # agreement) are pointed here; the per-api paths come from the image defaults.
+    tmfApiUrl: http://tm-forum-api-svc:8080
+    # -- public base url the facade writes into the contracts' catalog/self-description
+    # links. Defaults to the in-cluster service (http://consent-facade:<port>).
+    selfUrl: ""
+    # persistent, database-backed provider registry (multi-provider). When enabled the
+    # facade manages providers at runtime through the /providers admin API, backed by
+    # PostgreSQL (the schema is created by the facade's Flyway migration on first start,
+    # seeded from the static providers). Off by default - the single-provider consent
+    # demo needs only the static config.
+    persistentRegistry:
+      # -- enable the PostgreSQL-backed provider registry + /providers admin API
+      enabled: false
+      database:
+        # -- database host (the shared managed-postgres service)
+        host: postgres
+        # -- database port
+        port: 5432
+        # -- database name (must exist; provision via managedPostgres.config.databases)
+        name: providerregistrydb
+        # -- database user
+        username: postgres
+        # -- existing secret holding the db password (postgres-operator credentials secret)
+        existingSecret:
+          # -- secret name
+          name: postgres.postgres.credentials.postgresql.acid.zalan.do
+          # -- key within the secret holding the password
+          key: password
+    # OID4VP authentication of the facade's outbound TM Forum calls. Because the
+    # facade runs at the authority and reads a *provider's* OID4VP-protected TM Forum
+    # api cross-organisation, it presents a verifiable credential (holder did:web:...)
+    # to obtain an access token. The holder signing key and the cluster CA (dsc-ca)
+    # are taken from the participant's cert-manager `<domain>-tls` secret
+    # (`didSecretName`, provisioned by the did helper in the consent-authority
+    # release); the issued credential(s) are projected from their secrets into
+    # `credentialsFolder`. Off by default.
+    oid4vp:
+      # -- enable OID4VP authentication of the facade's outbound TM Forum calls
+      enabled: false
+      # -- name of the participant's cert-manager tls secret. Its `tls.key` is the
+      # did:web signing key (converted to PKCS#8 by an init container) and its
+      # `ca.crt` is the cluster CA (dsc-ca) imported into the JVM truststore.
+      didSecretName:
+      holder:
+        # -- the holder DID presented in the verifiable presentation (this
+        # participant's did:web identity)
+        id:
+        # -- holder key type
+        keyType: EC
+        # -- path the PKCS#8 signing key is mounted at (converted from
+        # `didSecretName`'s tls.key by the convert-signing-key init container)
+        keyPath: /signing-key/tls.key
+        # -- algorithm used to sign the presentation
+        signatureAlgorithm: ECDH-ES
+      # -- folder the credentials to present are read from (the projected credential
+      # secrets, see `credentials`)
+      credentialsFolder: /credential-repo
+      # -- OID4VP client_id presented to the provider's authorization endpoint. This
+      # is the target provider's registered verifier SERVICE id (not the holder DID) -
+      # the verifier looks the service up by client_id. For the DSC TM Forum api the
+      # registered service is `tmf-api`.
+      clientId: "tmf-api"
+      # -- OID4VP scopes requested for TM Forum access
+      scopes:
+        - default
+      # -- trust anchors (PEM paths) added on top of the system truststore for
+      # client identification (the verifier's chain); the imported dsc-ca lives here
+      trustAnchors:
+        - /etc/ssl/cacert.pem
+      # -- credential secrets projected into `credentialsFolder`, issued by the
+      # authority's keycloak via the vc-operator. Each entry:
+      # secretName/secretKey -> fileName written into the folder.
+      credentials:
+        - secretName: vc-operator-credential
+          secretKey: credential
+          fileName: operator-credential.jwt
+      proxy:
+        # -- route the OID4VP flow and the TM Forum calls through a forward proxy.
+        # Needed in-cluster to reach a provider's *external* ingress host: the squid
+        # proxy resolves the ingress that otherwise points at 127.0.0.1.
+        enabled: false
+        # -- proxy host
+        host: squid-proxy.infra.svc.cluster.local
+        # -- proxy port
+        port: 8888
+      # -- openssl image used by the init container to convert the SEC1 signing key
+      # to the PKCS#8 the OID4VP holder expects
+      opensslImage: alpine/openssl:3.5.5
+    # -- extra environment variables (map)
+    env: {}
+    # -- "valueFrom" environment variable references (map, name templated)
+    envValueFrom: {}
+    # -- pod security context
+    podSecurityContext:
+      seccompProfile:
+        type: RuntimeDefault
+      runAsNonRoot: true
+      runAsUser: 185
+      runAsGroup: 0
+    # -- container security context
+    securityContext:
+      capabilities:
+        drop:
+          - ALL
+        add: []
+      readOnlyRootFilesystem: true
+      allowPrivilegeEscalation: false
+      runAsNonRoot: true
+      runAsUser: 185
+    # -- cpu/memory resources
+    resources:
+      limits:
+        cpu: 500m
+        memory: 512Mi
+      requests:
+        cpu: 100m
+        memory: 256Mi
+
+  # -- the shared consent key (X_VISIONSTRUST_CONSENT_KEY). The consent-manager
+  # validates it and the authority's APISIX facade injects it on the caller's
+  # behalf (the facade route in the consent-authority release reads it from
+  # consent-manager-secret). Seeded into consent-manager-secret under
+  # `consentManager.secret.consentKeyKey`.
+  consentKey: "changeme-consent-key"

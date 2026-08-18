@@ -43,12 +43,9 @@ spec:
   {{- $finalUsers = append $finalUsers $proxyUser }}
 {{- end }}
 
-{{- if and .Values.consentManagement.enabled (not .Values.consentManagement.consentManager.mongo.uri) }}
-  {{- $consentDb := .Values.consentManagement.consentManager.mongo.database }}
-  {{- $consentUser := dict "name" .Values.consentManagement.consentManager.mongo.username "db" $consentDb "passwordSecretRef" (dict "name" "mongodb-consent-password") "scramCredentialsSecretName" "mongodb-consent-password" "roles" (list (dict "name" "readWrite" "db" $consentDb)) }}
-  {{- $finalUsers = append $finalUsers $consentUser }}
-{{- end }}
-
+{{- /* the consent-manager's mongo user + its managed replica set live in the
+       trust-anchor chart now (charts/trust-anchor/templates/mongodb.yaml); this
+       chart's managed mongo carries only admin + marketplace users. */}}
 {{- range $user := $inputUsers }}
   {{- $finalUsers = append $finalUsers $user }}
 {{- end }}
@@ -95,19 +92,5 @@ metadata:
 type: Opaque
 data:
   {{ .Values.marketplace.bizEcosystemLogicProxy.db.secretKey }}: {{ randAlphaNum 30 | b64enc | quote }}
-{{- end }}
-{{- if and .Values.consentManagement.enabled (not .Values.consentManagement.consentManager.mongo.uri) .Release.IsInstall }}
----
-# password shared by the managed-mongo `consent` user and the consent-manager.
-apiVersion: v1
-kind: Secret
-metadata:
-  name: mongodb-consent-password
-  namespace: {{ $.Release.Namespace | quote }}
-  annotations:
-    helm.sh/resource-policy: keep
-type: Opaque
-data:
-  password: {{ randAlphaNum 30 | b64enc | quote }}
 {{- end }}
 {{- end }}

@@ -37,6 +37,11 @@ jobs:
       - name: Run unit tests
         run: helm unittest charts/data-space-connector
 
+      # the consent-management components (consent-manager/-facade + managed mongo)
+      # live in the trust-anchor chart; their suite ships there.
+      - name: Run trust-anchor unit tests
+        run: helm unittest charts/trust-anchor
+
   test:
     runs-on: ubuntu-latest
     strategy:

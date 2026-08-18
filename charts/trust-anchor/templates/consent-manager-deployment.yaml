@@ -7,7 +7,7 @@ metadata:
   name: consent-manager
   namespace: {{ $.Release.Namespace | quote }}
   labels:
-    {{ include "dsc.labels" . | nindent 4 }}
+    {{ include "trust-anchor.labels" . | nindent 4 }}
 spec:
   replicas: 1
   revisionHistoryLimit: 3

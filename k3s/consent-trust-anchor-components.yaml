@@ -1,0 +1,64 @@
+# ---------------------------------------------------------------------------
+# Consent components overlay for the *trust-anchor* release (charts/trust-anchor).
+#
+# Layered onto k3s/trust-anchor.yaml in the `consent` maven profile
+# (`-f k3s/trust-anchor.yaml -f k3s/consent-trust-anchor-components.yaml`), it
+# adds the consent-manager + consent-facade + their managed MongoDB to the
+# trust-anchor release. It is purely additive - the trust-anchor release keeps
+# deploying the TIR/TIL as usual.
+#
+# The IAM that backs consent (keycloak issuer, did:web helper providing the
+# `dataspace-authority.org-tls` secret, the APISIX facade route, and the
+# vc-operator minting `vc-operator-credential`) is deployed SEPARATELY as the
+# `consent-authority` release of the umbrella chart, via k3s/consent-trust-anchor.yaml
+# in the same namespace. The facade reads those secrets by name; the APISIX route
+# reads the consentKey from consent-manager-secret (created here) by name. See
+# doc/CONSENT_MANAGEMENT.md for the full topology.
+#
+# The MongoDB community operator is NOT a dependency of the trust-anchor chart;
+# it is installed cluster-wide (k3s/mongo-operator.yaml, watchNamespace "*") and
+# reconciles the MongoDBCommunity resource declared here.
+# ---------------------------------------------------------------------------
+
+# --- managed MongoDB replica set for the consent-manager --------------------
+managedMongo:
+  enabled: true
+
+# --- the consent-manager + the consent-facade (both at the authority) --------
+consentManagement:
+  enabled: true
+  consentManager:
+    enabled: true
+    # the consent-facade runs in this (authority) namespace
+    contractServiceBaseUrl: "http://consent-facade.trust-anchor.svc.cluster.local:8080"
+  # The consent-facade fronts multiple providers and authenticates its outbound
+  # TM Forum calls to each provider's OID4VP-protected mp-tmf-api as
+  # did:web:dataspace-authority.org, using the holder key + issued OperatorCredential
+  # provisioned by the authority issuer (in the consent-authority release).
+  consentFacade:
+    enabled: true
+    # the provider's OID4VP-protected TM Forum ingress. Reached in-cluster through
+    # the squid proxy (see oid4vp.proxy); its self-signed cert is trusted via dsc-ca.
+    tmfApiUrl: "https://mp-tmf-api.127.0.0.1.nip.io"
+    # the SD/catalog links the facade writes must be dereferenceable by the
+    # consent-manager (same namespace) - the fully-qualified in-namespace service.
+    selfUrl: "http://consent-facade.trust-anchor.svc.cluster.local:8080"
+    oid4vp:
+      # present the OperatorCredential (holder did:web:dataspace-authority.org) to
+      # obtain an access token for mp-tmf-api. holder key + credential + dsc-ca come
+      # from the dataspace-authority.org-tls secret and the vc-operator-credential
+      # secret, both created by the consent-authority release in this namespace.
+      enabled: true
+      # authority-specific identity - the chart defaults are blank so the chart is not
+      # hardcoded to this authority. The cert-manager tls secret backing did:web (its
+      # tls.key is the holder signing key, its ca.crt the dsc-ca) and the holder DID
+      # presented in the verifiable presentation.
+      didSecretName: dataspace-authority.org-tls
+      holder:
+        id: did:web:dataspace-authority.org
+      proxy:
+        enabled: true
+  # seeded into consent-manager-secret; the consent-manager validates it and the
+  # authority's APISIX facade route injects the same value ($env://CONSENT_KEY),
+  # reading it from consent-manager-secret by name.
+  consentKey: "changeme-consent-key"

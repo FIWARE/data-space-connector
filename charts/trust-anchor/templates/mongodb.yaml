@@ -1,0 +1,138 @@
+{{- if .Values.managedMongo.enabled }}
+{{- $cm := .Values.consentManagement.consentManager }}
+{{- /*
+  Managed MongoDB replica set for the consent-manager. The MongoDB community
+  operator is installed cluster-wide (see k3s/mongo-operator.yaml, watchNamespace
+  "*"); this only declares the MongoDBCommunity resource it reconciles plus the
+  admin/consent password secrets. Unlike the main-chart mongodb.yaml this variant
+  carries no marketplace users - the trust-anchor authority runs mongo solely for
+  the consent-manager.
+*/}}
+{{- $spec := .Values.managedMongo.spec | default dict }}
+{{- $consentMongoEnabled := and .Values.consentManagement.enabled $cm.enabled (not $cm.mongo.uri) }}
+{{- $dbSa := .Values.managedMongo.databaseServiceAccountName }}
+{{- /*
+  RBAC for the mongod pods. The community operator is installed cluster-wide
+  (k3s/mongo-operator.yaml), but its Helm chart only provisions this
+  ServiceAccount/Role/RoleBinding in its own `database.namespace`. The StatefulSet
+  the operator generates here runs its pods as `mongodb-database`, so that account
+  (and its role) must also exist in this namespace - otherwise the replica set
+  stays Pending with no pods and `mongodb-svc` never gets endpoints.
+*/}}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ $dbSa }}
+  namespace: {{ $.Release.Namespace | quote }}
+  labels:
+    {{ include "trust-anchor.labels" . | nindent 4 }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ $dbSa }}
+  namespace: {{ $.Release.Namespace | quote }}
+  labels:
+    {{ include "trust-anchor.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["patch", "delete", "get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ $dbSa }}
+  namespace: {{ $.Release.Namespace | quote }}
+  labels:
+    {{ include "trust-anchor.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ $dbSa }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ $dbSa }}
+    namespace: {{ $.Release.Namespace | quote }}
+---
+apiVersion: mongodbcommunity.mongodb.com/v1
+kind: MongoDBCommunity
+metadata:
+  # the CR name is also the replica-set name; the operator derives the service
+  # ({name}-svc) the consent-manager connects to, so keep it in sync with
+  # consentManagement.consentManager.mongo.replicaSet.
+  name: {{ $cm.mongo.replicaSet | quote }}
+  namespace: {{ $.Release.Namespace | quote }}
+  labels:
+    {{ include "trust-anchor.labels" . | nindent 4 }}
+spec:
+  members: {{ $spec.members | default 1 }}
+  type: {{ $spec.type | default "ReplicaSet" | quote }}
+  version: {{ $spec.version | default "6.0.5" | quote }}
+  security:
+    {{- $security := $spec.security | default (dict "authentication" (dict "modes" (list "SCRAM"))) }}
+{{ toYaml $security | nindent 4 }}
+{{- with $spec.additionalMongodConfig }}
+  additionalMongodConfig:
+{{ toYaml . | nindent 4 }}
+{{- end }}
+  users:
+    - name: admin
+      db: admin
+      passwordSecretRef:
+        name: mongodb-admin-password
+      scramCredentialsSecretName: mongodb-admin-password
+      roles:
+        - name: clusterAdmin
+          db: admin
+        - name: userAdminAnyDatabase
+          db: admin
+{{- if $consentMongoEnabled }}
+    - name: {{ $cm.mongo.username }}
+      db: {{ $cm.mongo.database }}
+      passwordSecretRef:
+        name: mongodb-consent-password
+      scramCredentialsSecretName: mongodb-consent-password
+      roles:
+        - name: readWrite
+          db: {{ $cm.mongo.database }}
+{{- end }}
+{{- with $spec.statefulSet }}
+  statefulSet:
+{{ toYaml . | nindent 4 }}
+{{- end }}
+{{- if and .Values.managedMongo.generatePasswords .Release.IsInstall }}
+---
+# admin credentials for the managed replica set. Generated once and kept across
+# upgrades (resource-policy keep) so the operator's stored SCRAM hash stays valid.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: mongodb-admin-password
+  namespace: {{ $.Release.Namespace | quote }}
+  annotations:
+    helm.sh/resource-policy: keep
+type: Opaque
+data:
+  password: {{ randAlphaNum 30 | b64enc | quote }}
+{{- end }}
+{{- if and $consentMongoEnabled .Values.managedMongo.generatePasswords .Release.IsInstall }}
+---
+# password shared by the managed-mongo `consent` user and the consent-manager
+# (the consent-manager reads it from this secret, see consent-manager-deployment).
+apiVersion: v1
+kind: Secret
+metadata:
+  name: mongodb-consent-password
+  namespace: {{ $.Release.Namespace | quote }}
+  annotations:
+    helm.sh/resource-policy: keep
+type: Opaque
+data:
+  password: {{ randAlphaNum 30 | b64enc | quote }}
+{{- end }}
+{{- end }}

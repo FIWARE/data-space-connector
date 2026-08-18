@@ -44,12 +44,17 @@ flowchart LR
 
 ### Components
 
-**Authority** (trust-anchor namespace, deployed as a second umbrella-chart release `consent-authority` via [`k3s/consent-trust-anchor.yaml`](../k3s/consent-trust-anchor.yaml)):
+**Authority** (trust-anchor namespace). The authority is deployed as **two releases** in the same namespace, split along the chart boundary:
 
-* **consent-manager** (`consent-manager:3000`) - stores and serves the consent records/receipts (Node/MongoDB) on a managed MongoDB replica set. It derives its privacy notices from the contract-service API the consent-facade serves (`CONTRACT_SERVICE_BASE_URL` → `consent-facade.trust-anchor.svc.cluster.local`). Run **unmodified**.
-* **APISIX facade** - an internal APISIX in front of the consent-manager (route `/consent-manager/*`). It authenticates callers **per participant** (`jwt-auth`, keyed on the token's `participant_name`) and **injects** the shared consent key server-side, so callers present only their own participant JWT and never hold the consent key. Not exposed via ingress.
-* **consent-facade** (`consent-facade:8080`) - a Micronaut service ([wistefan/consent-facade](https://github.com/wistefan/consent-facade)) that projects a provider's TMForum APIs (agreements, catalog, party) into the contract-service API the consent-manager consumes: bilateral contracts, catalog self-descriptions, and participant self-descriptions at `/participants/{tmforum-org-id}`. It runs at the authority so it can front **multiple providers**, authenticating its outbound TMForum reads to each provider's OID4VP-protected `mp-tmf-api` as `did:web:dataspace-authority.org`.
-* **consent secret** (`consent-manager-secret`) - the session/JWT/OAuth secrets and the shared consent key.
+* the **`trust-anchor` release** (the [`charts/trust-anchor`](../charts/trust-anchor) chart) carries the consent **data plane** - the consent-manager, the consent-facade and their managed MongoDB - turned on for the consent scenario by [`k3s/consent-trust-anchor-components.yaml`](../k3s/consent-trust-anchor-components.yaml);
+* the **`consent-authority` release** (the [`charts/data-space-connector`](../charts/data-space-connector) umbrella chart, via [`k3s/consent-trust-anchor.yaml`](../k3s/consent-trust-anchor.yaml)) carries the **IAM** that backs consent - the keycloak issuer, the `did:web:dataspace-authority.org` helper (which provisions the `dataspace-authority.org-tls` secret the facade mounts), the vc-operator (which mints the `vc-operator-credential` the facade presents) and the APISIX facade route.
+
+The two releases share the namespace and reference each other by well-known name (the facade route reads `consent-manager-secret` and targets the `consent-manager` service; the facade pod mounts the did/credential secrets), so no cross-release value plumbing is needed.
+
+* **consent-manager** (`consent-manager:3000`, *trust-anchor release*) - stores and serves the consent records/receipts (Node/MongoDB) on a managed MongoDB replica set. It derives its privacy notices from the contract-service API the consent-facade serves (`CONTRACT_SERVICE_BASE_URL` → `consent-facade.trust-anchor.svc.cluster.local`). Run **unmodified**.
+* **APISIX facade route** (*consent-authority release*) - an internal APISIX in front of the consent-manager (route `/consent-manager/*`). It authenticates callers **per participant** (`jwt-auth`, keyed on the token's `participant_name`) and **injects** the shared consent key server-side (read from `consent-manager-secret`), so callers present only their own participant JWT and never hold the consent key. Not exposed via ingress.
+* **consent-facade** (`consent-facade:8080`, *trust-anchor release*) - a Micronaut service ([wistefan/consent-facade](https://github.com/wistefan/consent-facade)) that projects a provider's TMForum APIs (agreements, catalog, party) into the contract-service API the consent-manager consumes: bilateral contracts, catalog self-descriptions, and participant self-descriptions at `/participants/{tmforum-org-id}`. It runs at the authority so it can front **multiple providers**, authenticating its outbound TMForum reads to each provider's OID4VP-protected `mp-tmf-api` as `did:web:dataspace-authority.org`.
+* **consent secret** (`consent-manager-secret`, *trust-anchor release*) - the session/JWT/OAuth secrets and the shared consent key; read by the consent-manager and, cross-release, by the APISIX facade route.
 
 **Provider** (the [`k3s/consent-provider.yaml`](../k3s/consent-provider.yaml) overlay):
 
@@ -150,12 +155,13 @@ sequenceDiagram
 
 ### Enabling
 
-Consent management is **opt-in** via the dedicated `consent` maven profile. The
-provider config lives in [`k3s/consent-provider.yaml`](../k3s/consent-provider.yaml)
-(layered on `provider.yaml`) and carries only the **consent-filter plugin**; the
-central-authority config - the consent-manager, its APISIX facade, the **consent-facade**
-and a managed MongoDB, deployed as the `consent-authority` release into the trust-anchor
-namespace - lives in [`k3s/consent-trust-anchor.yaml`](../k3s/consent-trust-anchor.yaml).
+Consent management is **opt-in** via the dedicated `consent` maven profile. It is
+spread across three overlays:
+
+* [`k3s/consent-provider.yaml`](../k3s/consent-provider.yaml) (layered on `provider.yaml`) - the provider's **consent-filter plugin** only.
+* [`k3s/consent-trust-anchor-components.yaml`](../k3s/consent-trust-anchor-components.yaml) (layered on `trust-anchor.yaml`) - the consent **data plane** (consent-manager + consent-facade + managed MongoDB), added to the **`trust-anchor` release** (`charts/trust-anchor`).
+* [`k3s/consent-trust-anchor.yaml`](../k3s/consent-trust-anchor.yaml) - the **`consent-authority` release** (`charts/data-space-connector`) with the **IAM** that backs consent (keycloak issuer, `did:web` helper, APISIX facade route, vc-operator).
+
 The provider overlay disables both the consent-manager and the consent-facade (they run
 at the authority) and keeps the plugin:
 
@@ -168,13 +174,13 @@ consentManagement:
     enabled: false   # the consent-facade also runs at the trust-anchor (it fronts multiple providers)
 ```
 
-The shared `consentKey` (`X_VISIONSTRUST_CONSENT_KEY`) is set on the authority side in [`k3s/consent-trust-anchor.yaml`](../k3s/consent-trust-anchor.yaml) (`consentManagement.consentKey`); the consent-manager validates it and the facade route injects it, so callers never hold it.
+The shared `consentKey` (`X_VISIONSTRUST_CONSENT_KEY`) is set on the data-plane side in [`k3s/consent-trust-anchor-components.yaml`](../k3s/consent-trust-anchor-components.yaml) (`consentManagement.consentKey`), seeded into `consent-manager-secret`; the consent-manager validates it and the `consent-authority` release's facade route injects it (reading it from that same secret by name), so callers never hold it.
 
 Deploy the consent scenario with `mvn clean deploy -Pconsent`. That profile builds
-and imports the `consent-manager:local` image and deploys the trust-anchor
-`consent-authority` release (consent-manager + consent-facade + MongoDB) plus the
-provider's consent-filter plugin. A plain `mvn clean deploy -Plocal` brings up the
-connector **without** consent management.
+and imports the `consent-manager:local` image, layers the consent data plane onto the
+`trust-anchor` release (consent-manager + consent-facade + MongoDB) and the IAM onto the
+`consent-authority` release, plus the provider's consent-filter plugin. A plain
+`mvn clean deploy -Plocal` brings up the connector **without** consent management.
 
 > :bulb: The consent-manager, its APISIX facade, the **consent-facade** and MongoDB all run in the `trust-anchor` namespace; the provider runs only the consent-filter plugin (inside its own APISIX). Check with `kubectl -n trust-anchor get pods` (consent-manager, consent-facade, `consent-authority-apisix`, `mongodb`).
 
@@ -256,13 +262,13 @@ Once an identity is registered, the consent-filter plugin that gates access reso
     -H "Authorization: Bearer <participantToken>" | jq '.consents[] | .status'
 ```
 
-> :warning: `GET /consents/participants/...` **always builds a receipt** for every consent, which HTTP-fetches each participant's `selfDescriptionURL` and reads `legalPerson.legalAddress` from it. So the participants' `selfDescriptionURL` **must** resolve to a valid self-description - the consent-facade serves these at `/participants/{tmforum-org-id}` (backed by the party API), which is why each participant is backed by a real TMForum organization (created by the deploy-time register Job and, for the consumer, by the Demo below). A participant whose SD URL 404s makes this call return `500`, which the plugin treats as "no consent".
+> :warning: `GET /consents/participants/...` **always builds a receipt** for every consent, which HTTP-fetches each participant's `selfDescriptionURL` and reads `legalPerson.legalAddress` from it. So the participants' `selfDescriptionURL` **must** resolve to a valid self-description - the consent-facade serves these at `/participants/{tmforum-org-id}` (backed by the party API), which is why each participant is backed by a real TMForum organization (created by the Demo below - step 3a provisions both the provider and consumer orgs). A participant whose SD URL 404s makes this call return `500`, which the plugin treats as "no consent".
 
 The full give-consent flow additionally needs a bootstrapped privacy notice - the consent-facade projects one from a TM Forum agreement. The [Demo](#demo-consent-gated-access-to-personal-data) below grants and revokes consent end to end through the consent-manager API (registering the participants and subject, seeding the agreement, then `POST /v1/consents`), with no direct database writes.
 
 ### Enforcing consent on a concrete service
 
-Consent is enforced on the data path by the **APISIX consent-filter plugin** - the canonical, only enforcement path (used by the [demo below](#demo-consent-gated-access-to-personal-data)). A custom external plugin attached to the `mp-data-service-consent` route runs the **two-call consent check** against the consent-manager on every request - resolve the subject's `userIdentifier` (`POST /v1/users/identifier/search`, authenticated with the `consent_key`), then list its consents (`GET /v1/consents/participants/{id}`, authenticated with the participant token) - and blocks unless a granted consent exists for the credential subject. OPA still authorizes the request on the *credential* first; the plugin adds the *consent* gate on top, keeping the access policy free of consent logic. The plugin authenticates with participant **client credentials** — it reads `client_id`/`client_secret` (the `consent_key` is injected by the facade), logs in via `/participants/login` for a (refreshing) participant token, and derives the provider self-description from `/participants/me`. Those credentials are **stable** (`consent-demo-provider`/`demo`, established by the deploy-time register Job), so no per-seed value is wired into the plugin.
+Consent is enforced on the data path by the **APISIX consent-filter plugin** - the canonical, only enforcement path (used by the [demo below](#demo-consent-gated-access-to-personal-data)). A custom external plugin attached to the `mp-data-service-consent` route runs the **two-call consent check** against the consent-manager on every request - resolve the subject's `userIdentifier` (`POST /v1/users/identifier/search`, authenticated with the `consent_key`), then list its consents (`GET /v1/consents/participants/{id}`, authenticated with the participant token) - and blocks unless a granted consent exists for the credential subject. OPA still authorizes the request on the *credential* first; the plugin adds the *consent* gate on top, keeping the access policy free of consent logic. The plugin authenticates with participant **client credentials** — it reads `client_id`/`client_secret` (the `consent_key` is injected by the facade), logs in via `/participants/login` for a (refreshing) participant token, and derives the provider self-description from `/participants/me`. Those credentials are **stable** (`consent-demo-provider`/`demo`, registered for the provider participant in step 3a and matching the provider plugin's `consent-plugin-credentials`), so no per-seed value is wired into the plugin.
 
 The check runs in the **response phase** (`ext-plugin-post-resp`) rather than pre-request: a personal-data read can return entities belonging to several data subjects, and gating on the response lets the decision be made per subject in the body rather than only on the caller's token. The alternative - the odrl-pap `consent:hasValidConsent` PIP evaluating consent inside OPA - is **not used**; consent is decided by the plugin, and odrl-pap/OPA handles only credential authorization.
 
@@ -397,9 +403,11 @@ not `localhost`:
 ```shell
   kubectl -n trust-anchor port-forward svc/consent-authority-apisix-gateway 3001:80
   kubectl -n provider     port-forward svc/tm-forum-api-svc 8090:8080
-  kubectl -n trust-anchor port-forward svc/consent-authority-apisix-admin 9180:9180   # for the 3a consumer onboarding
+  kubectl -n trust-anchor port-forward svc/consent-authority-apisix-admin 9180:9180   # apisix admin: jwt-auth consumers (3a)
+  kubectl -n trust-anchor port-forward svc/consent-manager 3000:3000                  # direct CM: one-time provider bootstrap (3a)
 
   export CM=http://localhost:3001/consent-manager/v1   # -> the authority APISIX facade -> consent-manager
+  export CM_DIRECT=http://localhost:3000/v1            # the consent-manager directly - authority bootstrap only (3a)
   export TMF=http://localhost:8090/tmf-api
   export FACADE=http://consent-facade.trust-anchor.svc.cluster.local:8080
   export DID=$SUBJECT_DID
@@ -431,15 +439,39 @@ not `localhost`:
 > The participant token expires after 1 h; if a call starts failing with an *invalid JWT* error,
 > re-run the login in 3a to refresh `$PROVIDER_JWT` (and `$CONSUMER_JWT`).
 
-**3a. Participants.** The provider participant already exists (registered at deploy time by the
-`register-provider-participant` Job); log in as it and read its own self-description, then create the
-consumer (assumed not to exist yet in this test env).
+**3a. Participants.** Nothing pre-registers participants, so first **bootstrap the provider
+participant** (a one-time authority-operator action), then log in as it and create the consumer.
+
+Registering the *first* participant goes **directly** to the consent-manager (`$CM_DIRECT`, the
+`svc/consent-manager` port-forward on `3000`): there is no participant token yet, so it cannot pass the
+facade's per-participant `jwt-auth` (the consumer below, by contrast, is created *through* the facade
+with the provider's token). `POST /participants` is the onboarding entry point and is unauthenticated;
+`clientID`/`clientSecret` **must** match the provider consent-filter plugin's credentials.
 
 ```shell
-  # provider login -> participant token, then its own self-description (no DB read)
+  # --- authority bootstrap: register the provider participant (direct to the consent-manager) ---
+  # 1) find-or-create the provider's backing TMForum org (gives a stable selfDescriptionURL)
+  export PROV_ORG=$(curl -s "$TMF/party/v4/organization?limit=1000" \
+    | jq -r 'map(select(.name=="Consent Demo Provider"))[0].id // empty')
+  [ -n "$PROV_ORG" ] || export PROV_ORG=$(curl -s -X POST $TMF/party/v4/organization -H 'Content-Type: application/json' \
+    -d '{"name":"Consent Demo Provider","tradingName":"Consent Demo Provider","isLegalEntity":true,
+         "organizationType":"company","contactMedium":[{"characteristic":{"country":"DE"}}],
+         "partyCharacteristic":[{"name":"did","value":"did:web:mp-operations.org"}]}' | jq -r .id); echo $PROV_ORG
+  export PROVIDER_SD=$FACADE/participants/$PROV_ORG
+  # 2) register the participant (201 new / 409 already exists)
+  curl -s -w '%{http_code}\n' -X POST $CM_DIRECT/participants -H 'Content-Type: application/json' \
+    -d "{\"legalName\":\"M&P Operations Inc.\",\"email\":\"provider@mp-operation.org\",
+         \"did\":\"did:web:mp-operations.org\",\"clientID\":\"consent-demo-provider\",
+         \"clientSecret\":\"demo\",\"selfDescriptionURL\":\"$PROVIDER_SD\"}"
+  # 3) provision its facade jwt-auth consumer (keyed on legalName / participant_name)
+  export JWT_SECRET=$(kubectl -n trust-anchor get secret consent-manager-secret -o jsonpath='{.data.jwtSecret}' | base64 -d)
+  curl -s -X PUT http://localhost:9180/apisix/admin/consumers -H 'X-API-KEY: admin' \
+    -d '{"username":"M_P_Operations_Inc_","plugins":{"jwt-auth":{"key":"M&P Operations Inc.","secret":"'"$JWT_SECRET"'","algorithm":"HS256"}}}'
+
+  # --- the provider now has an identity: log in through the facade ---
   export PROVIDER_JWT=$(curl -s -X POST $CM/participants/login -H 'Content-Type: application/json' \
-    -d '{"clientID":"consent-demo-provider","clientSecret":"demo"}' | jq -r .jwt)
-  export PROVIDER_SD=$(curl -s $CM/participants/me -H "Authorization: Bearer $PROVIDER_JWT" | jq -r .selfDescriptionURL); echo $PROVIDER_JWT
+    -d '{"clientID":"consent-demo-provider","clientSecret":"demo"}' | jq -r .jwt); echo $PROVIDER_JWT
+  export PROVIDER_SD=$(curl -s $CM/participants/me -H "Authorization: Bearer $PROVIDER_JWT" | jq -r .selfDescriptionURL)
   export PROV_ORG=${PROVIDER_SD##*/participants/}          # the backing TM Forum org id
 
   # create the consumer TM Forum org -> its self-description
@@ -460,12 +492,10 @@ consumer (assumed not to exist yet in this test env).
   export CONSUMER_JWT=$(curl -s -X POST $CM/participants/login -H 'Content-Type: application/json' \
     -d '{"clientID":"consent-demo-consumer","clientSecret":"demo"}' | jq -r .jwt); echo $CONS_ORG
 
-  # Onboard the consumer to the facade. The provider was onboarded at deploy (the register Job
-  # provisions its jwt-auth consumer); the consumer is created here, so provision its facade
-  # jwt-auth consumer too - keyed on its participant_name (the legalName), signed with the
-  # consent-manager JWT secret - otherwise its token is rejected at the facade with 401. In a
-  # real dataspace each participant does this itself at onboarding. Uses the APISIX admin API
-  # (port-forwarded in the prerequisites above):
+  # Onboard the consumer to the facade - exactly like the provider bootstrap above: provision its
+  # jwt-auth consumer (keyed on participant_name / legalName, signed with the consent-manager JWT
+  # secret), otherwise its token is rejected at the facade with 401. In a real dataspace each
+  # participant does this itself at onboarding. Uses the APISIX admin API (port-forwarded above):
   export JWT_SECRET=$(kubectl -n trust-anchor get secret consent-manager-secret -o jsonpath='{.data.jwtSecret}' | base64 -d)
   curl -s -X PUT http://localhost:9180/apisix/admin/consumers -H 'X-API-KEY: admin' \
     -d '{"username":"Fancy_Marketplace_Co_","plugins":{"jwt-auth":{"key":"Fancy Marketplace Co.","secret":"'"$JWT_SECRET"'","algorithm":"HS256"}}}'
