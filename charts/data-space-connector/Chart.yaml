@@ -1,6 +1,7 @@
 apiVersion: v2
 name: data-space-connector
-description: Umbrella Chart for the FIWARE Data Space Connector, combining all essential parts to be used by a participant.
+description: Umbrella Chart for the FIWARE Data Space Connector, combining all essential
+  parts to be used by a participant.
 type: application
 version: 10.4.8
 dependencies:
@@ -48,7 +49,7 @@ dependencies:
   - name: vault
     alias: vault
     condition: vault.enabled
-    version: 0.29.1
+    version: 0.34.1
     repository: https://helm.releases.hashicorp.com
   # dashboard
   - name: fdsc-dashboard
