@@ -20,6 +20,10 @@ keycloak:
 
 identityhub:
   enabled: true
+  # exercises the credential-sync sidecar
+  credentialSync:
+    enabled: true
+    secretName: vc-fdsc-edc-credential
   superuser:
     # from a Secret rather than a plain value: the vc-operator reads the api key from one, and a
     # plaintext api key in values has the same problem as a plaintext vault token
@@ -80,5 +84,3 @@ vcCredentials:
     - name: fdsc-edc-credential
       credentialType: membership-credential
       targetSecretName: vc-fdsc-edc-credential
-      identityHub:
-        enabled: true

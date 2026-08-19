@@ -9,10 +9,11 @@
 #   - identityhub-rotation-job.yaml:  the opt-in signing key rotation
 #
 # The assertions concentrate on the things that were wrong in real deployments:
-# the ordering of the steps, the derived key id, whether the credential insert is
-# a regular container (so a missing credential fails the Job rather than looping
-# in an init retry), and the hook that has to include post-upgrade for as long as
-# vault runs in dev mode.
+# the ordering of the steps, the derived key id, and the hook that has to include
+# post-upgrade for as long as vault runs in dev mode.
+#
+# Storing the credential is NOT covered here: it lives in the credential-sync
+# sidecar, see identityhub-credential-sync_test.yaml.
 # ---------------------------------------------------------------------------
 suite: IdentityHub participant bootstrap
 templates:
@@ -73,7 +74,7 @@ tests:
       - exists:
           path: data["check-kid.sh"]
       - exists:
-          path: data["insert-credential.sh"]
+          path: data["sync-credential.sh"]
       - exists:
           path: data["rotate-key.sh"]
 
@@ -153,7 +154,7 @@ tests:
   # The bootstrap Job
   # ==========================================================================
 
-  - it: should run the steps in order and insert the credential last
+  - it: should run the provisioning steps in order
     templates:
       - templates/identityhub-bootstrap-job.yaml
     set:
@@ -188,13 +189,22 @@ tests:
       - equal:
           path: spec.template.spec.initContainers[2].name
           value: register
-      # A regular container, so a missing credential fails the Job visibly.
+      # Storing the credential is not part of the bootstrap: it has to happen again
+      # on every renewal, so it belongs to the credential-sync sidecar and the Job
+      # is left with nothing to do once the participant exists.
       - equal:
           path: spec.template.spec.containers[0].name
-          value: insert-credential
+          value: done
       - lengthEqual:
           path: spec.template.spec.containers
           count: 1
+      - notContains:
+          path: spec.template.spec.volumes
+          content:
+            name: credential
+            secret:
+              secretName: vc-credential
+              optional: true
 
   - it: should skip the kid check when it is disabled
     templates:
@@ -267,32 +277,6 @@ tests:
           content:
             name: IDENTITY_API
             value: http://identityhub-service:8082/api/identity/v1alpha
-
-  - it: should mount the credential optionally so a first install can proceed
-    templates:
-      - templates/identityhub-bootstrap-job.yaml
-    set:
-      identityhub.enabled: true
-      identityhub.superuser.key: "c3VwZXItdXNlcg==.test"
-      identityhub.bootstrap:
-        enabled: true
-        did: did:web:example.org
-        credentialServiceUrl: https://example.org
-        identityKey:
-          secretName: example.org-tls
-        stsClientSecret:
-          existingSecret: identityhub-secret
-        credential:
-          enabled: true
-          secretName: vc-credential
-    asserts:
-      - contains:
-          path: spec.template.spec.volumes
-          content:
-            name: credential
-            secret:
-              secretName: vc-credential
-              optional: true
 
   # ==========================================================================
   # The rotation Job

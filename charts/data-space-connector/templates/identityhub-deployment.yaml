@@ -65,7 +65,7 @@ spec:
       serviceAccountName: default
       securityContext:
         {{- toYaml .Values.identityhub.podSecurityContext | nindent 8 }}
-      {{- if or .Values.identityhub.initContainers $otelInjectAgent .Values.identityhub.customCaCerts }}
+      {{- if or .Values.identityhub.initContainers $otelInjectAgent .Values.identityhub.customCaCerts (include "dsc.identityhub.credentialSync.enabled" .) }}
       initContainers:
         {{- if .Values.identityhub.customCaCerts }}
         # Import the extra CAs into a writable copy of the JVM truststore. Without this step the
@@ -123,6 +123,37 @@ spec:
         {{- end }}
         {{- with .Values.identityhub.initContainers }}
           {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- if include "dsc.identityhub.credentialSync.enabled" . }}
+        # Mirror the credential the vc-operator maintains in a Secret into the identityhub's own
+        # credential store, on issuance and on every renewal.
+        #
+        # A native Kubernetes sidecar - an init container with restartPolicy: Always - so it starts
+        # before the identityhub and keeps running alongside it. Same construct as the OPA sidecar
+        # of odrl-pap.
+        #
+        # It writes over localhost on purpose. The Identity API is component-internal ("must not be
+        # internet facing"), so the only thing that writes to it is the pod that owns the store;
+        # nothing outside needs credentials for it, and it never crosses the cluster network.
+        - name: credential-sync
+          restartPolicy: Always
+          image: "{{ .Values.identityhub.bootstrap.curlImage.repository }}:{{ .Values.identityhub.bootstrap.curlImage.tag }}"
+          imagePullPolicy: {{ .Values.identityhub.bootstrap.curlImage.pullPolicy }}
+          command: ["/bin/sh", "/scripts/sync-credential.sh"]
+          securityContext:
+            {{- toYaml .Values.identityhub.securityContext | nindent 12 }}
+          env:
+            {{- include "dsc.identityhub.credentialSyncEnv" . | nindent 12 }}
+          volumeMounts:
+            - name: credential-sync-scripts
+              mountPath: /scripts
+            - name: credential
+              mountPath: /credential
+              readOnly: true
+            # readOnlyRootFilesystem is on, and curl writes its response bodies to /tmp. Its own
+            # volume rather than the identityhub's, so the two never collide over a file name.
+            - name: credential-sync-tmp
+              mountPath: /tmp
         {{- end }}
       {{- end }}
       containers:
@@ -348,6 +379,20 @@ spec:
         {{- end }}
         - name: "tmp"
           emptyDir: { }
+        {{- if include "dsc.identityhub.credentialSync.enabled" . }}
+        - name: credential-sync-scripts
+          configMap:
+            name: "identityhub-bootstrap"
+            defaultMode: 0755
+        # optional: on a first install the vc-operator has not written the credential yet. The
+        # sidecar reports the empty mount and waits instead of crash-looping the pod.
+        - name: credential
+          secret:
+            secretName: {{ include "dsc.identityhub.credentialSync.secretName" . | quote }}
+            optional: true
+        - name: credential-sync-tmp
+          emptyDir: { }
+        {{- end }}
         - name: logs # aim for persistent volume in localhost
         {{- if and .Values.identityhub.logging.enabled .Values.identityhub.logging.persistence.enabled }}
           persistentVolumeClaim:

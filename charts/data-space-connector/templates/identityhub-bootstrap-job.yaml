@@ -96,38 +96,15 @@ spec:
             - name: tmp
               mountPath: /tmp
       containers:
-        # The credential insert is the last step and the only regular container, so a missing
-        # credential fails the Job loudly instead of being swallowed by an init retry loop.
-        {{- if $b.credential.enabled }}
-        - name: insert-credential
-          image: "{{ $b.curlImage.repository }}:{{ $b.curlImage.tag }}"
-          imagePullPolicy: {{ $b.curlImage.pullPolicy }}
-          command: ["/bin/sh", "/scripts/insert-credential.sh"]
-          securityContext:
-            {{- toYaml .Values.identityhub.securityContext | nindent 12 }}
-          env:
-            {{- include "dsc.identityhub.bootstrapEnv" . | nindent 12 }}
-            - name: CREDENTIAL_ID
-              value: {{ $b.credential.id | quote }}
-            - name: CREDENTIAL_FILE
-              value: {{ printf "/credential/%s" $b.credential.key | quote }}
-          volumeMounts:
-            - name: scripts
-              mountPath: /scripts
-            - name: credential
-              mountPath: /credential
-              readOnly: true
-            - name: tmp
-              mountPath: /tmp
-        {{- else }}
-        # Nothing to insert; the Job still has to declare a container.
+        # The bootstrap no longer stores the credential: that is the credential-sync sidecar's job
+        # (identityhub.credentialSync), because it has to happen again on every renewal and a Job
+        # that only runs on install and upgrade leaves the identityhub serving a stale copy.
         - name: done
           image: "{{ $b.curlImage.repository }}:{{ $b.curlImage.tag }}"
           imagePullPolicy: {{ $b.curlImage.pullPolicy }}
-          command: ["/bin/sh", "-c", "echo 'participant bootstrap complete (credential insert disabled)'"]
+          command: ["/bin/sh", "-c", "echo 'participant bootstrap complete'"]
           securityContext:
             {{- toYaml .Values.identityhub.securityContext | nindent 12 }}
-        {{- end }}
       volumes:
         - name: scripts
           configMap:
@@ -139,12 +116,6 @@ spec:
         - name: identity-key
           secret:
             secretName: {{ required "identityhub.bootstrap.identityKey.secretName is required when identityhub.bootstrap.enabled" $b.identityKey.secretName }}
-        # Written by the vc-operator. optional so a first install can proceed while the credential
-        # is still being issued; insert-credential.sh reports the empty mount and fails.
-        - name: credential
-          secret:
-            secretName: {{ $b.credential.secretName | default "" | quote }}
-            optional: true
         - name: shared
           emptyDir: {}
         # readOnlyRootFilesystem is on, and curl writes its response bodies to /tmp.

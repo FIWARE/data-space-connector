@@ -137,8 +137,8 @@ participant id decodes to exactly `super-user`; the IdentityHub derives the Vaul
 alias as `<participantContextId>-apikey` and compares the whole presented token
 against it.
 
-Keep the credential in step by letting the vc-operator publish renewals, instead
-of relying on the next deploy:
+Keep the identityhub's copy in step by enabling the credential-sync sidecar,
+instead of relying on the next deploy:
 
 ```yaml
 vcCredentials:
@@ -150,9 +150,17 @@ vcCredentials:
       # hours, not minutes: a five-minute window leaves no room to notice a
       # failure before the credential in use expires
       renewBefore: 24h
-      identityHub:
-        enabled: true
+
+identityhub:
+  credentialSync:
+    enabled: true
+    secretName: vc-fdsc-edc-credential
 ```
+
+The sidecar runs inside the identityhub pod and writes over `localhost`: the
+Identity API is component-internal, so the only thing that writes to it is the
+pod that owns the store. The vc-operator keeps obtaining and renewing the
+credential into the Secret; the sidecar only mirrors it.
 
 ## Pin the identity key's lifecycle
 

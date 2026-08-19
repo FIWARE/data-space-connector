@@ -2698,20 +2698,6 @@ vcCredentials:
     #     existingKeySecret: ""
     #     -- optional DID URL for the proof JWT kid header; when omitted the operator embeds the full JWK
     #     holderDID: ""
-    #   -- also publish the credential into the identityhub's own credential store, on issuance and
-    #   on every renewal. Needed for any credential a DCP connector presents: the identityhub keeps
-    #   its own copy, and one pushed only at deploy time expires on its own schedule and takes the
-    #   DCP lane down with nothing having changed in the cluster.
-    #   identityHub:
-    #     -- should the credential be published to the identityhub
-    #     enabled: false
-    #     -- the rest default to what identityhub.bootstrap already declares, so a participant
-    #     provisioned by this chart needs nothing here beyond `enabled: true`
-    #     url: ""
-    #     participantId: ""
-    #     credentialId: ""
-    #     apiKeySecret: ""
-    #     apiKeySecretKey: ""
 
 # -- vc-operator subchart configuration
 vc-operator:
@@ -2745,6 +2731,42 @@ identityhub:
     existingSecretKeyKey:
     # -- the plain key, will be ignored if existingSecret is set
     key:
+  # -- sidecar that keeps the identityhub's copy of a credential in step with the Secret the
+  # vc-operator maintains. The identityhub holds its own copy of everything a DCP connector
+  # presents, and a copy pushed once at deploy time expires on its own schedule and takes the DCP
+  # lane down with nothing having changed in the cluster.
+  #
+  # It runs inside the identityhub pod and writes over localhost on purpose: the Identity API is a
+  # component-internal API, so the only thing allowed to write to it is the pod that owns it. The
+  # sidecar does not speak OID4VCI - obtaining and renewing the credential stays with the
+  # vc-operator, which writes it to a Secret; this only mirrors that Secret into the identityhub.
+  credentialSync:
+    # -- should the sidecar be rendered
+    enabled: false
+    # -- Secret holding the credential, as written by the vc-operator. Defaults to
+    # identityhub.bootstrap.credential.secretName.
+    secretName: ""
+    # -- key within that Secret holding the raw JWT
+    key: credential
+    # -- id the credential is stored under in the identityhub
+    id: membership-credential
+    # -- how often the mounted Secret is re-read. The kubelet refreshes mounted Secrets on its own,
+    # so this is the only thing standing between a renewal and the identityhub seeing it; there is
+    # no watch on the Kubernetes API and therefore no RBAC to grant.
+    resyncSeconds: 60
+  # -- the identityhub's own credential watchdog, which re-requests expiring credentials from a
+  # DCP issuer service.
+  credentialWatchdog:
+    # -- `edc.iam.credential.status.check.period`, in seconds. 0 or less disables the watchdog.
+    # Off by default because the credentials in this chart come from an OID4VCI issuer (Keycloak)
+    # via the vc-operator: there is no DCP issuer service for the identityhub to ask, so leaving it
+    # on only produces a failing request every period.
+    checkPeriodSeconds: 0
+    # -- `edc.iam.credential.renewal.graceperiod`, in seconds: how long before expiry renewal is
+    # triggered. Upstream defaults to a week, which for a credential that only lives a week means
+    # it is considered renewable from the moment it is issued - keep this a fraction of the
+    # credential's lifetime.
+    renewalGracePeriodSeconds: 86400
   # -- provisioning of the participant context, its signing key and its credentials.
   # Without this, a deployed identityhub is inert: it holds no participant, no key in vault and no
   # credential, and every DCP flow fails. The steps are the ones documented in
@@ -2798,19 +2820,21 @@ identityhub:
       keycloakUrl: ""
       # -- realm that issues the credentials
       realm: ""
-    # -- the credential to publish into the identityhub's own credential store. Issued and renewed
-    # by the vc-operator into a Secret; this step pushes that copy. Renewals are pushed by the
-    # vc-operator itself (see `vcCredentials.requests[].identityHub`), because a job that only runs
-    # on deploy leaves the identityhub copy stale after an unattended renewal.
+    # -- DEPRECATED, use `identityhub.credentialSync`. Inserting the credential is not a bootstrap
+    # concern: it has to happen again on every renewal, and a Job that only runs on install and
+    # upgrade leaves the identityhub serving a stale copy. These keys are still read as defaults
+    # for `identityhub.credentialSync` and will be removed in a future release.
     credential:
-      # -- should a credential be inserted
-      enabled: true
-      # -- name of the Secret holding the credential, as written by the vc-operator
+      # -- DEPRECATED. `enabled: true` turns on identityhub.credentialSync.
+      enabled: false
+      # -- DEPRECATED, use identityhub.credentialSync.secretName. Empty by default so that the
+      # values under identityhub.credentialSync keep their documented defaults; these only take
+      # effect when explicitly set.
       secretName: ""
-      # -- key within that Secret holding the raw JWT
-      key: credential
-      # -- id the credential is stored under in the identityhub
-      id: membership-credential
+      # -- DEPRECATED, use identityhub.credentialSync.key
+      key: ""
+      # -- DEPRECATED, use identityhub.credentialSync.id
+      id: ""
     # -- replacement of the signing key, keeping the same alias and DID fragment. There is no
     # overlap window: the moment the key is replaced everything signed with the previous one stops
     # verifying, so this is opt-in, runs as its own Job and never as an upgrade hook. Enable it,

@@ -463,6 +463,79 @@ Usage:
 {{- end -}}
 
 {{/*
+Base URL of the Identity API as seen from inside the identityhub pod.
+
+The credential-sync sidecar uses this rather than the Service: the Identity API is
+component-internal ("must not be internet facing"), so the write stays inside the pod that owns
+the store instead of crossing the cluster network.
+
+Usage:
+  {{ include "dsc.identityhub.localIdentityApi" . }}  -> "http://localhost:8082/api/identity/v1alpha"
+*/}}
+{{- define "dsc.identityhub.localIdentityApi" -}}
+{{- printf "http://localhost:%v%s/v1alpha" .Values.identityhub.endpoints.identity.port .Values.identityhub.endpoints.identity.path -}}
+{{- end -}}
+
+{{/*
+Whether the credential-sync sidecar is enabled, honouring the deprecated
+identityhub.bootstrap.credential.enabled. Renders "true" or the empty string, so it can be used
+directly in an `if`.
+*/}}
+{{- define "dsc.identityhub.credentialSync.enabled" -}}
+{{- if or .Values.identityhub.credentialSync.enabled .Values.identityhub.bootstrap.credential.enabled -}}
+true
+{{- end -}}
+{{- end -}}
+
+{{/*
+The credential-sync settings. The deprecated identityhub.bootstrap.credential.* keys take
+precedence when set, which is why they default to empty: that leaves the documented defaults on
+identityhub.credentialSync while still honouring an existing deployment that sets the old ones.
+*/}}
+{{- define "dsc.identityhub.credentialSync.secretName" -}}
+{{- .Values.identityhub.bootstrap.credential.secretName | default .Values.identityhub.credentialSync.secretName | required "identityhub.credentialSync.secretName is required when the credential sync is enabled" -}}
+{{- end -}}
+
+{{- define "dsc.identityhub.credentialSync.key" -}}
+{{- .Values.identityhub.bootstrap.credential.key | default .Values.identityhub.credentialSync.key | default "credential" -}}
+{{- end -}}
+
+{{- define "dsc.identityhub.credentialSync.id" -}}
+{{- .Values.identityhub.bootstrap.credential.id | default .Values.identityhub.credentialSync.id | default "membership-credential" -}}
+{{- end -}}
+
+{{/*
+Environment for the credential-sync sidecar. Deliberately narrower than dsc.identityhub.bootstrapEnv:
+the sidecar never touches vault or the participant's private key, so it gets neither the vault token
+nor the identity key.
+*/}}
+{{- define "dsc.identityhub.credentialSyncEnv" -}}
+- name: DID
+  value: {{ required "identityhub.bootstrap.did is required when the credential sync is enabled" .Values.identityhub.bootstrap.did | quote }}
+- name: KEY_ID
+  value: {{ include "dsc.identityhub.keyId" . | quote }}
+- name: IDENTITY_API
+  value: {{ include "dsc.identityhub.localIdentityApi" . | quote }}
+- name: SUPERUSER_ID
+  value: {{ .Values.identityhub.bootstrap.superUserId | quote }}
+- name: CREDENTIAL_ID
+  value: {{ include "dsc.identityhub.credentialSync.id" . | quote }}
+- name: CREDENTIAL_FILE
+  value: {{ printf "/credential/%s" (include "dsc.identityhub.credentialSync.key" .) | quote }}
+- name: RESYNC_SECONDS
+  value: {{ .Values.identityhub.credentialSync.resyncSeconds | quote }}
+- name: API_KEY
+  {{- if .Values.identityhub.superuser.existingSecret }}
+  valueFrom:
+    secretKeyRef:
+      name: {{ .Values.identityhub.superuser.existingSecret }}
+      key: {{ .Values.identityhub.superuser.existingSecretKeyKey }}
+  {{- else }}
+  value: {{ .Values.identityhub.superuser.key | required "identityhub.superuser.key or .existingSecret is required when the credential sync is enabled" | quote }}
+  {{- end }}
+{{- end -}}
+
+{{/*
 Readiness URL of the identityhub, used by the bootstrap steps to wait for it.
 
 Usage:

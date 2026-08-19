@@ -187,12 +187,19 @@ curl -x localhost:8888 https://mp-operations.org/.well-known/did.json -k | jq .
 The demo deployment of the DSP is configured to require every participant to identify itself with a "MembershipCredential". In most use-cases, this credential will be issued by a central data-space authority. In order to keep the local deployment at managable size, we allow self-issuance of such credentials.
 The OID4VC based flows are automatically configured to get such credential in the local deployment, thus the Credential only needs to be issued for usage in DCP-based flows. The deployed [Tractus-X Identityhub](https://github.com/eclipse-tractusx/tractusx-identityhub) supports integration with compliant [Issuer Services](https://eclipse-dataspace-dcp.github.io/decentralized-claims-protocol/v1.0.1/#credential-issuance-protocol). However, we are reusing the [default issuer](./deployment-integration/local-deployment/LOCAL.MD#credentials-issuance-at-the-consumer) from the FIWARE Data Space Connector and insert the credential manually into the identity hub:
 
-> :warning: A credential inserted this way is a **copy**, and nothing keeps it in step with the one
-> the issuer renews. The identityhub does not fetch credentials - the DCP credential-issuance
-> protocol would let it, but that needs a DCP-compliant issuer service - so once the copy expires
-> every DCP exchange starts failing with nothing having changed in the cluster.
-> `vcCredentials.requests[].identityHub.enabled` hands the job to the vc-operator, which pushes the
-> credential on issuance and on every renewal.
+> :warning: A credential inserted this way is a **copy**, and nothing in the steps below keeps it in
+> step with the one the issuer renews, so once it expires every DCP exchange starts failing with
+> nothing having changed in the cluster. Set `identityhub.credentialSync.enabled` and the chart
+> renders a sidecar in the identityhub pod that mirrors the Secret the vc-operator maintains, on
+> issuance and on every renewal - which makes the manual steps below a one-off illustration rather
+> than something to run.
+>
+> Note what this is *not*: the identityhub can fetch credentials by itself. It ships
+> `credential-watchdog`, which re-requests an expiring credential, and the
+> `POST /participants/{id}/credentials/request` endpoint that starts one. What the local deployment
+> lacks is a DCP-compliant [Issuer Service](https://eclipse-dataspace-dcp.github.io/decentralized-claims-protocol/v1.0.1/#credential-issuance-protocol)
+> to ask - the default issuer here speaks OID4VCI - which is why the credential arrives out of band
+> and the watchdog is off by default (`identityhub.credentialWatchdog.checkPeriodSeconds: 0`).
 
 #### Consumer
 

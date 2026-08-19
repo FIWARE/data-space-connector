@@ -30,6 +30,18 @@ data:
   web.http.sts.port: {{ .Values.identityhub.endpoints.sts.port | quote}}
   web.http.sts.path: {{ .Values.identityhub.endpoints.sts.path | quote}}
 
+  ######################
+  ## CREDENTIAL RENEWAL #
+  ######################
+  # The identityhub re-requests expiring credentials from a DCP issuer service by itself. That
+  # needs an issuer service to ask: the credentials in this chart come from an OID4VCI issuer via
+  # the vc-operator and are mirrored in by the credential-sync sidecar, so the watchdog is off by
+  # default and every period would otherwise produce a failing request.
+  edc.iam.credential.status.check.period: {{ .Values.identityhub.credentialWatchdog.checkPeriodSeconds | quote }}
+  {{- if gt (int .Values.identityhub.credentialWatchdog.checkPeriodSeconds) 0 }}
+  edc.iam.credential.renewal.graceperiod: {{ .Values.identityhub.credentialWatchdog.renewalGracePeriodSeconds | quote }}
+  {{- end }}
+
   ###########
   ## VAULT ##
   ###########
