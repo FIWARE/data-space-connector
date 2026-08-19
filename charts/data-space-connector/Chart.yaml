@@ -2,7 +2,7 @@ apiVersion: v2
 name: data-space-connector
 description: Umbrella Chart for the FIWARE Data Space Connector, combining all essential parts to be used by a participant.
 type: application
-version: 10.4.0
+version: 10.4.6
 dependencies:
   - name: decentralized-iam
     alias: decentralizedIam
@@ -18,16 +18,16 @@ dependencies:
   # issuance
   - name: keycloak
     condition: keycloak.enabled
-    version: 0.21.19
+    version: 0.21.24
     repository: oci://registry-1.docker.io/cloudpirates
   # contract management
   - name: tm-forum-api
     condition: tm-forum-api.enabled
-    version: 0.17.10
+    version: 0.17.15
     repository: oci://quay.io/fiware/helm-charts
   - name: contract-management
     condition: contract-management.enabled
-    version: 3.5.31
+    version: 3.5.32
     repository: oci://quay.io/fiware/helm-charts
   # marketplace
   - name: business-api-ecosystem
@@ -65,7 +65,7 @@ dependencies:
   - name: cert-manager
     alias: cert-manager
     condition: cert-manager.enabled
-    version: v1.20.0
+    version: v1.21.1
     repository: https://charts.jetstack.io
   # vc-operator
   - name: vc-operator
@@ -75,11 +75,11 @@ dependencies:
     repository: oci://quay.io/seamware/helm-charts
   - name: prometheus
     condition: prometheus.enabled
-    version: 29.2.1
+    version: 29.24.0
     repository: https://prometheus-community.github.io/helm-charts
   - name: grafana
     condition: grafana.enabled
-    version: 12.1.1
+    version: 12.10.4
     repository: https://grafana-community.github.io/helm-charts
   # observability - OpenTelemetry Operator for auto-instrumentation (opt-in)
   - name: opentelemetry-operator
