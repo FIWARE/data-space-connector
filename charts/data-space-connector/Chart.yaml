@@ -1,6 +1,7 @@
 apiVersion: v2
 name: data-space-connector
-description: Umbrella Chart for the FIWARE Data Space Connector, combining all essential parts to be used by a participant.
+description: Umbrella Chart for the FIWARE Data Space Connector, combining all essential
+  parts to be used by a participant.
 type: application
 version: 10.4.6
 dependencies:
@@ -79,7 +80,7 @@ dependencies:
     repository: https://prometheus-community.github.io/helm-charts
   - name: grafana
     condition: grafana.enabled
-    version: 12.10.4
+    version: 12.11.0
     repository: https://grafana-community.github.io/helm-charts
   # observability - OpenTelemetry Operator for auto-instrumentation (opt-in)
   - name: opentelemetry-operator
