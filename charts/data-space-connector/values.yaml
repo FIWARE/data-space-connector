@@ -1274,7 +1274,9 @@ keycloak:
         clientId: 9c481dc3-2ad0-4fe0-881d-c32ad02fe0fc
         name: "Lissi ID Wallet"
         description: "Hardcoded clientId expected by the Lissi ID Wallet (iOS/Android)."
-        redirectUri: https://oob.lissi.io/vci-cb
+        redirectUri:
+          - https://oob.lissi.io/vci-cb
+          - https://wallet.lissi.io/lite/vci-cb
         attributes:
           oid4vci.enabled: "true"
           post.logout.redirect.uris: "+"
@@ -1285,7 +1287,8 @@ keycloak:
         clientId: wallet-dev
         name: "EUDI Reference Wallet (dev)"
         description: "Public client used by EUDI Reference Wallet (.DEV variant). PKCE + PAR + DPoP-bound access tokens."
-        redirectUri: eu.europa.ec.euidi://authorization
+        redirectUri:
+          - eu.europa.ec.euidi://authorization
         attributes:
           oid4vci.enabled: "true"
           post.logout.redirect.uris: "+"
