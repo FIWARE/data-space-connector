@@ -1,0 +1,528 @@
+{{- if and (eq .Values.identityhub.enabled true) (or .Values.identityhub.bootstrap.enabled (include "dsc.identityhub.credentialSync.enabled" .)) }}
+{{/* The credential-sync sidecar mounts these scripts too, so the ConfigMap also has to
+     exist for a deployment that syncs a credential without provisioning the participant. */}}
+
+# Scripts that provision the identityhub participant context, its signing key and its credentials.
+#
+# This is the procedure documented in doc/DSP_INTEGRATION.md ("Setup the consumer" / "Setup the
+# provider" / "Issue membership-credentials"), made idempotent and run in-cluster instead of from a
+# workstation. Every script is plain POSIX shell and takes its configuration from environment
+# variables, which the Job in identityhub-bootstrap-job.yaml renders from values.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: "identityhub-bootstrap"
+  namespace: {{ .Release.Namespace | default "default" | quote }}
+  labels:
+    app.kubernetes.io/name: identityhub
+    app.kubernetes.io/instance: {{ .Release.Name }}
+data:
+
+  # Derive a JWK pair from the participant's identity private key.
+  #
+  # Writes /shared/private.jwk and /shared/public.jwk so that every later step is
+  # algorithm-agnostic. This is the in-cluster equivalent of doc/scripts/get-private-jwk-p-256.sh
+  # (EC) and the modulus/privateExponent extraction (RSA).
+  #
+  # Getting the algorithm wrong is not a loud failure: extracting an RSA modulus out of an EC key
+  # produces a syntactically valid JWK full of garbage, and the mismatch only surfaces later as a
+  # counterparty rejecting every signature. Hence the explicit IDENTITY_KEY_ALGORITHM and the
+  # sanity checks on the extracted lengths.
+  derive-key.sh: |
+    #!/bin/sh
+    set -e
+
+    KEY_FILE="${IDENTITY_KEY_FILE:?IDENTITY_KEY_FILE is required}"
+    ALG="${IDENTITY_KEY_ALGORITHM:?IDENTITY_KEY_ALGORITHM is required}"
+    KEY_ID="${KEY_ID:?KEY_ID is required}"
+    # overridable so the script can be run outside the Job (the chart's unit tests do)
+    SHARED_DIR="${SHARED_DIR:-/shared}"
+
+    KEY_TEXT=$(openssl pkey -in "${KEY_FILE}" -text -noout)
+
+    # `openssl pkey -text` prints the key material as colon-separated hex between labelled
+    # sections; pull out everything between two labels and strip the formatting.
+    extract_hex() {
+      echo "$KEY_TEXT" | awk -v s="$1" -v e="$2" '$0 ~ s {flag=1; next} $0 ~ e {flag=0} flag {print}' | tr -d ' :\n'
+    }
+    # ASN.1 INTEGERs carry a leading 00 octet when the high bit is set; base64url JWK members must
+    # not, or the value decodes one byte too long.
+    strip_leading_zero() {
+      case "$1" in
+        00*) printf '%s' "${1#00}" ;;
+        *) printf '%s' "$1" ;;
+      esac
+    }
+    hex_to_b64url() {
+      printf '%s' "$1" | xxd -r -p | base64 | tr '+/' '-_' | tr -d '=\n'
+    }
+
+    case "${ALG}" in
+      EC)
+        CURVE=$(echo "$KEY_TEXT" | awk '/ASN1 OID:/ {print $3}')
+        case "${CURVE}" in
+          prime256v1) CRV="P-256"; COORD_HEX=64 ;;
+          secp384r1)  CRV="P-384"; COORD_HEX=96 ;;
+          *) echo "unsupported EC curve '${CURVE}' (expected prime256v1 or secp384r1)"; exit 1 ;;
+        esac
+
+        D_HEX=$(extract_hex '^priv:' '^pub:')
+        PUB_HEX=$(extract_hex '^pub:' 'ASN1 OID')
+        # strip the uncompressed-point prefix, then split into the two coordinates
+        PUB_HEX=${PUB_HEX#04}
+        X_HEX=$(printf '%s' "$PUB_HEX" | cut -c1-${COORD_HEX})
+        Y_HEX=$(printf '%s' "$PUB_HEX" | cut -c$((COORD_HEX + 1))-$((COORD_HEX * 2)))
+
+        if [ ${#X_HEX} -ne "${COORD_HEX}" ] || [ ${#Y_HEX} -ne "${COORD_HEX}" ] || [ -z "$D_HEX" ]; then
+          echo "unexpected EC key material (x=${#X_HEX} y=${#Y_HEX} d=${#D_HEX} hex chars, expected ${COORD_HEX})"
+          exit 1
+        fi
+
+        X=$(hex_to_b64url "$X_HEX")
+        Y=$(hex_to_b64url "$Y_HEX")
+        D=$(hex_to_b64url "$(strip_leading_zero "$D_HEX")")
+
+        printf '{"kty":"EC","crv":"%s","x":"%s","y":"%s","d":"%s"}' "$CRV" "$X" "$Y" "$D" > "${SHARED_DIR}/private.jwk"
+        printf '{"kty":"EC","crv":"%s","x":"%s","y":"%s","kid":"%s"}' "$CRV" "$X" "$Y" "$KEY_ID" > "${SHARED_DIR}/public.jwk"
+        ;;
+      RSA)
+        # `e` is not extracted: openssl prints publicExponent in decimal rather than as hex bytes,
+        # so it is asserted instead. Every cert-manager-issued RSA key uses 65537.
+        EXPONENT=$(echo "$KEY_TEXT" | awk '/^publicExponent:/ {print $2}')
+        if [ "${EXPONENT}" != "65537" ]; then
+          echo "unsupported RSA public exponent '${EXPONENT}' (only 65537 is handled)"
+          exit 1
+        fi
+
+        N_HEX=$(strip_leading_zero "$(extract_hex '^modulus:' '^publicExponent:')")
+        D_HEX=$(strip_leading_zero "$(extract_hex '^privateExponent:' '^prime1:')")
+
+        if [ ${#N_HEX} -lt 256 ] || [ -z "$D_HEX" ]; then
+          echo "unexpected RSA key material (n=${#N_HEX} d=${#D_HEX} hex chars)"
+          exit 1
+        fi
+
+        N=$(hex_to_b64url "$N_HEX")
+        D=$(hex_to_b64url "$D_HEX")
+
+        printf '{"kty":"RSA","e":"AQAB","n":"%s","d":"%s"}' "$N" "$D" > "${SHARED_DIR}/private.jwk"
+        printf '{"kty":"RSA","e":"AQAB","n":"%s","kid":"%s"}' "$N" "$KEY_ID" > "${SHARED_DIR}/public.jwk"
+        ;;
+      *)
+        echo "unsupported IDENTITY_KEY_ALGORITHM '${ALG}' (expected EC or RSA)"
+        exit 1
+        ;;
+    esac
+
+    echo "derived ${ALG} JWK for ${KEY_ID}"
+
+  # Shared helpers, sourced by the scripts below.
+  lib.sh: |
+    # Wait until a URL answers, then return. Fails the step rather than letting a later call
+    # produce a confusing error against a component that is not up yet.
+    wait_for() {
+      _name="$1"; _url="$2"; _tries="${3:-30}"
+      echo "Waiting for ${_name}..."
+      _i=0
+      until curl -fsS "${_url}" >/dev/null 2>&1; do
+        _i=$((_i + 1))
+        if [ "${_i}" -gt "${_tries}" ]; then echo "timeout waiting for ${_name} at ${_url}"; exit 1; fi
+        sleep 5
+      done
+    }
+
+    # base64url without padding, the encoding the Identity API expects for the {participantId}
+    # path parameter. A raw DID there fails as `Illegal base64 character 3a` behind a bare 400.
+    b64url() {
+      printf '%s' "$1" | base64 | tr '+/' '-_' | tr -d '=\n'
+    }
+
+    # Write a value into vault's KV v2 store under the given alias. The value is stored as a JSON
+    # string under `content`, which is what EDC's hashicorp vault client reads.
+    vault_put() {
+      _alias="$1"; _value="$2"
+      _body=$(printf '{"data":{"content":%s}}' "$(printf '%s' "${_value}" | sed 's/\\/\\\\/g; s/"/\\"/g; s/^/"/; s/$/"/')")
+      _code=$(curl -s -o /tmp/vault_resp.json -w "%{http_code}" -X POST "${VAULT_ADDR}/v1/secret/data/${_alias}" \
+        -H "X-Vault-Token: ${VAULT_TOKEN}" \
+        -d "${_body}")
+      echo "vault write ${_alias} -> HTTP ${_code}"
+      if [ "${_code}" -lt 200 ] || [ "${_code}" -ge 300 ]; then
+        cat /tmp/vault_resp.json
+        exit 1
+      fi
+    }
+
+    # The identityhub authenticates the Identity API by parsing the presented x-api-key as
+    # base64(participantContextId).secret, looking that participant up, reading the alias in its
+    # participant_context.api_token_alias column and comparing the WHOLE presented token against
+    # the value stored in vault under that alias.
+    superuser_token() {
+      printf '%s.%s' "$(printf '%s' "${SUPERUSER_ID}" | base64 | tr -d '\n')" "${API_KEY}"
+    }
+
+  # Provision vault and the participant context. Idempotent: safe to re-run on every upgrade.
+  register.sh: |
+    #!/bin/sh
+    set -e
+    # overridable so the scripts can be exercised outside the Job
+    SCRIPT_DIR="${SCRIPT_DIR:-/scripts}"
+    . "${SCRIPT_DIR}/lib.sh"
+    SHARED_DIR="${SHARED_DIR:-/shared}"
+
+    : "${DID:?DID is required}"
+    : "${KEY_ALIAS:?KEY_ALIAS is required}"
+    : "${VAULT_ADDR:?VAULT_ADDR is required}"
+    : "${VAULT_TOKEN:?VAULT_TOKEN is required}"
+    : "${IDENTITY_API:?IDENTITY_API is required}"
+    : "${API_KEY:?API_KEY is required}"
+
+    wait_for "identityhub" "${READINESS_URL}"
+    wait_for "vault" "${VAULT_ADDR}/v1/sys/health"
+
+    PRIVATE_JWK=$(cat "${SHARED_DIR}/private.jwk")
+    PUBLIC_JWK=$(cat "${SHARED_DIR}/public.jwk")
+
+    echo "Storing private key in vault under alias ${KEY_ALIAS}..."
+    vault_put "${KEY_ALIAS}" "${PRIVATE_JWK}"
+
+    # SuperUserSeedExtension seeds the super-user's alias with the bare API key, which has no
+    # base64(id). prefix, so no presentable token can ever match it and the account is locked out.
+    # Store the composed token instead. Repeated on every run because the seed extension only
+    # applies its value once, at first creation.
+    #
+    # The alias is derived by the identityhub as <participantContextId>-apikey - NOT the value of
+    # identityhub.endpoints.identity.authKeyAlias, which drives a different authenticator and is
+    # not consulted here.
+    echo "Repairing super-user credential in vault..."
+    vault_put "${SUPERUSER_ID}-apikey" "$(superuser_token)"
+
+    BASE64_DID=$(b64url "${DID}")
+    CS_ENDPOINT="${CREDENTIAL_SERVICE_URL}/api/credentials/v1/participants/${BASE64_DID}"
+
+    PAYLOAD=$(printf '{"role":["admin"],"active":true,"participantId":"%s","did":"%s","serviceEndpoints":[{"type":"CredentialService","serviceEndpoint":"%s","id":"credential-service"}],"key":{"keyId":"%s","privateKeyAlias":"%s","publicKeyJwk":%s}}' \
+      "${DID}" "${DID}" "${CS_ENDPOINT}" "${KEY_ID}" "${KEY_ALIAS}" "${PUBLIC_JWK}")
+
+    echo "Registering participant ${DID}..."
+    http_code=$(curl -s -o /tmp/resp.json -w "%{http_code}" -X POST "${IDENTITY_API}/participants" \
+      -H "x-api-key: $(superuser_token)" \
+      -H "Content-Type: application/json" \
+      -d "${PAYLOAD}")
+    echo "POST ${IDENTITY_API}/participants -> HTTP ${http_code}"
+    cat /tmp/resp.json
+    echo
+    if [ "${http_code}" = "409" ]; then
+      echo "Participant already exists."
+    elif [ "${http_code}" -lt 200 ] || [ "${http_code}" -ge 300 ]; then
+      exit 1
+    fi
+
+    # --- STS client secret ------------------------------------------------------------------
+    # Provisioned unconditionally, and the clientSecret the identityhub returns on creation is
+    # deliberately ignored:
+    #
+    #  * The identityhub reveals that generated secret only once, in the creation response. Any
+    #    vault restart in dev mode loses it, and on the next run the API answers 409 and the value
+    #    is gone for good - which is exactly how the DCP lane breaks with "Failed to fetch client
+    #    secret from the vault with alias: ...".
+    #  * Neither side ever stores the secret itself: edc_sts_client only keeps a secret_alias, and
+    #    both the EDC oauth client and the STS resolve that alias from vault and compare. So the
+    #    value is ours to choose, and a fixed one makes this restart-proof.
+    #
+    # It is written under TWO key names on purpose. EDC's hashicorp vault client URL-encodes the
+    # alias and the HTTP layer then encodes the '%', so a lookup for "did:web:x-sts-client-secret"
+    # actually resolves the key literally named "did%3Aweb%3Ax-sts-client-secret". The plain-colon
+    # name is what curl writes here. Storing both keeps whichever form the client uses working.
+    if [ -z "${STS_CLIENT_SECRET}" ]; then
+      echo "STS_CLIENT_SECRET is empty - refusing to provision an empty secret"
+      exit 1
+    fi
+    DID_PCT=$(printf '%s' "${DID}" | sed 's/:/%253A/g')
+    for alias_path in "${DID}-sts-client-secret" "${DID_PCT}-sts-client-secret"; do
+      echo "Writing STS client secret to vault alias ${alias_path}..."
+      vault_put "${alias_path}" "${STS_CLIENT_SECRET}"
+    done
+
+  # Verify that the issuer signs credentials with ${DID}#${KEY_ALIAS}, and stop the bootstrap if
+  # it does not.
+  #
+  # This only CHECKS - it cannot fix it, and neither can anything else automated:
+  #
+  #  * keycloak.signingKey.did is rendered into the realm as the `kid` config of a java-keystore
+  #    KeyProvider component, and the chart applies the realm only through `start --import-realm`,
+  #    which Keycloak SKIPS for a realm that already exists. On a pre-existing realm the kid stays
+  #    whatever the first import set.
+  #  * It cannot be repaired through the Admin API either: `java-keystore` declares exactly
+  #    priority, enabled, active, algorithm, keystore, keystorePassword, keystoreType, keyAlias,
+  #    keyPassword and keyUse (GET /admin/serverinfo). `kid` is NOT a declared property, so a PUT
+  #    on the component answers 204 and silently drops it. The realm import is the only path that
+  #    writes component config verbatim.
+  #
+  # A fresh install gets this right on its own and the check just passes. An existing realm needs
+  # the one-off repair printed below. Aborting here is deliberate: inserting a credential that a
+  # counterparty cannot verify is worse than not inserting it.
+  check-kid.sh: |
+    #!/bin/sh
+    set -e
+    # overridable so the scripts can be exercised outside the Job
+    SCRIPT_DIR="${SCRIPT_DIR:-/scripts}"
+    . "${SCRIPT_DIR}/lib.sh"
+
+    : "${KEYCLOAK_URL:?KEYCLOAK_URL is required}"
+    : "${KEYCLOAK_REALM:?KEYCLOAK_REALM is required}"
+    : "${KEY_ID:?KEY_ID is required}"
+
+    wait_for "keycloak realm ${KEYCLOAK_REALM}" "${KEYCLOAK_URL}/realms/${KEYCLOAK_REALM}/.well-known/openid-configuration"
+
+    CERTS=$(curl -fsS "${KEYCLOAK_URL}/realms/${KEYCLOAK_REALM}/protocol/openid-connect/certs")
+    if echo "${CERTS}" | grep -qF "\"${KEY_ID}\""; then
+      echo "OK: realm ${KEYCLOAK_REALM} publishes a key with kid ${KEY_ID}"
+      exit 0
+    fi
+
+    cat <<EOF
+    ERROR: realm '${KEYCLOAK_REALM}' does not publish a key with kid '${KEY_ID}'.
+
+    Credentials signed by this realm would carry a kid that counterparties cannot resolve in the
+    DID document, which publishes the signing key under that fragment only.
+
+    On a fresh install this means keycloak.signingKey.did is misconfigured - fix it in values.
+
+    On a realm that already exists, Keycloak skipped the import and the kid cannot be changed
+    through the Admin API. Repair it once, directly in the Keycloak database:
+
+      update component_config set value = '${KEY_ID}'
+       where name = 'kid'
+         and component_id = (
+           select c.id from component c
+             join realm r on r.id = c.realm_id
+            where r.name = '${KEYCLOAK_REALM}'
+              and c.provider_id = 'java-keystore');
+
+    then restart Keycloak so it reloads the realm's key providers.
+    EOF
+    exit 1
+
+  # Keep the identityhub's copy of the participant's credential in step with the Secret the
+  # vc-operator maintains.
+  #
+  # Without it every DCP flow fails: the connector presents a credential the identityhub does not
+  # hold. Obtaining and renewing the credential is the vc-operator's job - it speaks OID4VCI to the
+  # issuer and writes the result to a Secret - and this only mirrors that Secret into the
+  # identityhub. It therefore has to keep running: a push that happens once at deploy time leaves
+  # the copy stale after the first unattended renewal, which takes the DCP lane down with nothing
+  # having changed in the cluster.
+  #
+  # Two modes:
+  #   --once   a single push, failing if there is nothing to push. Used from a Job.
+  #   (loop)   re-reads the mounted Secret every RESYNC_SECONDS and pushes when it changed. Used
+  #            from the sidecar in the identityhub pod. The kubelet refreshes mounted Secrets by
+  #            itself, so no watch on the Kubernetes API and no RBAC are involved.
+  sync-credential.sh: |
+    #!/bin/sh
+    set -e
+    # overridable so the scripts can be exercised outside the Job
+    SCRIPT_DIR="${SCRIPT_DIR:-/scripts}"
+    . "${SCRIPT_DIR}/lib.sh"
+
+    : "${DID:?DID is required}"
+    : "${IDENTITY_API:?IDENTITY_API is required}"
+    : "${CREDENTIAL_FILE:?CREDENTIAL_FILE is required}"
+    : "${CREDENTIAL_ID:?CREDENTIAL_ID is required}"
+    RESYNC_SECONDS="${RESYNC_SECONDS:-60}"
+
+    ONCE=""
+    [ "$1" = "--once" ] && ONCE="yes"
+
+    BASE64_DID=$(b64url "${DID}")
+    CREDENTIALS_API="${IDENTITY_API}/participants/${BASE64_DID}/credentials"
+
+    # Push $1 (a compact JWT) into the identityhub. Returns non-zero instead of exiting, so a
+    # transient failure in loop mode is retried on the next cycle rather than killing the sidecar.
+    push_credential() {
+      _raw_vc="$1"
+
+      # Refuse a credential signed under a different kid than the one the DID document publishes:
+      # inserting it would present the counterparty with an unverifiable credential.
+      _header=$(printf '%s' "${_raw_vc}" | cut -d. -f1 | tr '_-' '/+')
+      case $((${#_header} % 4)) in 2) _header="${_header}==" ;; 3) _header="${_header}=" ;; esac
+      _header_json=$(printf '%s' "${_header}" | base64 -d 2>/dev/null || true)
+      if ! printf '%s' "${_header_json}" | grep -qF "${KEY_ID}"; then
+        echo "ERROR: the credential in ${CREDENTIAL_FILE} was not signed with ${KEY_ID}"
+        echo "header: ${_header_json}"
+        echo "force a re-issuance (bump the VerifiableCredentialRequest generation)"
+        return 1
+      fi
+
+      # Extract the `vc` object from the JWT payload. Done by brace counting rather than with a
+      # JSON parser to keep this image dependency-free.
+      _payload=$(printf '%s' "${_raw_vc}" | cut -d. -f2 | tr '_-' '/+')
+      case $((${#_payload} % 4)) in 2) _payload="${_payload}==" ;; 3) _payload="${_payload}=" ;; esac
+      _vc=$(printf '%s' "${_payload}" | base64 -d | awk '
+        { line = line $0 }
+        END {
+          start = index(line, "\"vc\":")
+          if (start == 0) { exit 1 }
+          rest = substr(line, start + 5)
+          depth = 0
+          for (i = 1; i <= length(rest); i++) {
+            c = substr(rest, i, 1)
+            if (c == "{") depth++
+            else if (c == "}") { depth--; if (depth == 0) { print substr(rest, 1, i); exit 0 } }
+          }
+          exit 1
+        }') || true
+      if [ -z "${_vc}" ]; then
+        echo "ERROR: could not extract the vc claim from the credential"
+        return 1
+      fi
+
+      _body=$(printf '{"id":"%s","participantContextId":"%s","verifiableCredentialContainer":{"rawVc":"%s","format":"VC1_0_JWT","credential":%s}}' \
+        "${CREDENTIAL_ID}" "${DID}" "${_raw_vc}" "${_vc}")
+
+      echo "Storing credential ${CREDENTIAL_ID}..."
+      _code=$(printf '%s' "${_body}" | curl -s -o /tmp/cred_resp.json -w "%{http_code}" -X POST "${CREDENTIALS_API}" \
+        -H "x-api-key: $(superuser_token)" \
+        -H "Content-Type: application/json" \
+        --data-binary @-) || return 1
+      echo "POST ${CREDENTIALS_API} -> HTTP ${_code}"
+
+      # 409 means a copy is already stored. Replace it: on a renewal the stored copy is the stale
+      # one, and leaving it in place is how the DCP lane dies without anyone deploying anything.
+      if [ "${_code}" = "409" ]; then
+        echo "credential ${CREDENTIAL_ID} already stored - replacing it"
+        _code=$(curl -s -o /tmp/cred_del.json -w "%{http_code}" -X DELETE "${CREDENTIALS_API}/${CREDENTIAL_ID}" \
+          -H "x-api-key: $(superuser_token)") || return 1
+        echo "DELETE ${CREDENTIALS_API}/${CREDENTIAL_ID} -> HTTP ${_code}"
+        if [ "${_code}" -lt 200 ] || [ "${_code}" -ge 300 ]; then
+          cat /tmp/cred_del.json
+          return 1
+        fi
+        _code=$(printf '%s' "${_body}" | curl -s -o /tmp/cred_resp.json -w "%{http_code}" -X POST "${CREDENTIALS_API}" \
+          -H "x-api-key: $(superuser_token)" \
+          -H "Content-Type: application/json" \
+          --data-binary @-) || return 1
+        echo "POST ${CREDENTIALS_API} (retry) -> HTTP ${_code}"
+      fi
+
+      if [ "${_code}" -lt 200 ] || [ "${_code}" -ge 300 ]; then
+        cat /tmp/cred_resp.json
+        return 1
+      fi
+      echo "credential ${CREDENTIAL_ID} stored"
+      return 0
+    }
+
+    if [ -n "${ONCE}" ]; then
+      if [ ! -s "${CREDENTIAL_FILE}" ]; then
+        echo "no credential at ${CREDENTIAL_FILE} yet - nothing to store"
+        echo "the vc-operator writes it asynchronously; re-run once it exists"
+        exit 1
+      fi
+      push_credential "$(tr -d '\n' < "${CREDENTIAL_FILE}")"
+      exit $?
+    fi
+
+    # Loop mode. The comparison is against the last credential actually stored, so a failed push is
+    # retried next cycle, and a restart of this container re-pushes once and then goes quiet.
+    echo "watching ${CREDENTIAL_FILE} every ${RESYNC_SECONDS}s"
+    LAST_PUSHED=""
+    while true; do
+      if [ -s "${CREDENTIAL_FILE}" ]; then
+        RAW_VC=$(tr -d '\n' < "${CREDENTIAL_FILE}")
+        if [ "${RAW_VC}" != "${LAST_PUSHED}" ]; then
+          if push_credential "${RAW_VC}"; then
+            LAST_PUSHED="${RAW_VC}"
+          else
+            echo "push failed - retrying in ${RESYNC_SECONDS}s"
+          fi
+        fi
+      else
+        # optional mount: on a first install the vc-operator has not written the Secret yet. Report
+        # it and keep waiting rather than crash-looping the sidecar and with it the pod's events.
+        echo "no credential at ${CREDENTIAL_FILE} yet - waiting"
+      fi
+      sleep "${RESYNC_SECONDS}"
+    done
+
+  # Replace the participant's signing key, keeping the same alias and the same DID fragment.
+  #
+  # Run explicitly, never on every upgrade: there is no overlap window. The moment the key is
+  # replaced, everything signed with the old one under this fragment stops verifying - including
+  # credentials already held in wallets - so re-issuance is part of the operation.
+  #
+  # The order below is the only safe one, verified against tractusx/identityhub:
+  #
+  #   * `rotate` does NOT replace in place. Called with the same keyId it APPENDS, leaving the DID
+  #     document with two verificationMethod entries sharing one id, and revoking either one then
+  #     removes BOTH (removal is by keyId, not by resource), leaving no key at all.
+  #   * revoke-then-add ends with exactly one entry carrying the new key. The gap between the two
+  #     calls is a window in which the participant publishes no key, so keep it short.
+  rotate-key.sh: |
+    #!/bin/sh
+    set -e
+    # overridable so the scripts can be exercised outside the Job
+    SCRIPT_DIR="${SCRIPT_DIR:-/scripts}"
+    . "${SCRIPT_DIR}/lib.sh"
+    SHARED_DIR="${SHARED_DIR:-/shared}"
+
+    : "${DID:?DID is required}"
+    : "${KEY_ALIAS:?KEY_ALIAS is required}"
+    : "${KEY_ID:?KEY_ID is required}"
+    : "${IDENTITY_API:?IDENTITY_API is required}"
+    : "${VAULT_ADDR:?VAULT_ADDR is required}"
+
+    wait_for "identityhub" "${READINESS_URL}"
+    wait_for "vault" "${VAULT_ADDR}/v1/sys/health"
+
+    BASE64_DID=$(b64url "${DID}")
+    KEYPAIRS_API="${IDENTITY_API}/participants/${BASE64_DID}/keypairs"
+    PUBLIC_JWK=$(cat "${SHARED_DIR}/public.jwk")
+    PRIVATE_JWK=$(cat "${SHARED_DIR}/private.jwk")
+
+    echo "Looking up the active keypair for ${KEY_ID}..."
+    curl -fsS -X GET "${KEYPAIRS_API}" -H "x-api-key: $(superuser_token)" > /tmp/keypairs.json
+
+    # Every resource carrying this keyId has to go: they all render the same verificationMethod id.
+    # Split the array into one record per line on `},{` - the embedded serializedPublicKey string
+    # contains braces, so splitting on a bare `{` would cut records in half. `"id":"` matches only
+    # the id field; participantContextId and keyId both end in a capital `Id`.
+    RESOURCE_IDS=$(sed 's/},{/}\n{/g' /tmp/keypairs.json | awk -v kid="${KEY_ID}" '
+      index($0, "\"keyId\":\"" kid "\"") > 0 && match($0, /"id":"[^"]*"/) {
+        print substr($0, RSTART + 6, RLENGTH - 7)
+      }')
+    if [ -z "${RESOURCE_IDS}" ]; then
+      echo "no keypair resource found for ${KEY_ID} - is the participant registered?"
+      exit 1
+    fi
+
+    for rid in ${RESOURCE_IDS}; do
+      echo "Revoking keypair resource ${rid}..."
+      http_code=$(curl -s -o /tmp/revoke.json -w "%{http_code}" -X POST "${KEYPAIRS_API}/${rid}/revoke" \
+        -H "x-api-key: $(superuser_token)" -H "Content-Type: application/json")
+      echo "POST ${KEYPAIRS_API}/${rid}/revoke -> HTTP ${http_code}"
+      if [ "${http_code}" -lt 200 ] || [ "${http_code}" -ge 300 ]; then
+        cat /tmp/revoke.json
+        exit 1
+      fi
+    done
+
+    echo "Overwriting vault alias ${KEY_ALIAS} with the new key..."
+    vault_put "${KEY_ALIAS}" "${PRIVATE_JWK}"
+
+    echo "Publishing the new key under ${KEY_ID}..."
+    DESCRIPTOR=$(printf '{"keyId":"%s","privateKeyAlias":"%s","publicKeyJwk":%s}' \
+      "${KEY_ID}" "${KEY_ALIAS}" "${PUBLIC_JWK}")
+    http_code=$(printf '%s' "${DESCRIPTOR}" | curl -s -o /tmp/add.json -w "%{http_code}" -X PUT "${KEYPAIRS_API}?makeDefault=true" \
+      -H "x-api-key: $(superuser_token)" \
+      -H "Content-Type: application/json" \
+      --data-binary @-)
+    echo "PUT ${KEYPAIRS_API} -> HTTP ${http_code}"
+    if [ "${http_code}" -lt 200 ] || [ "${http_code}" -ge 300 ]; then
+      cat /tmp/add.json
+      exit 1
+    fi
+
+    echo "key ${KEY_ID} rotated"
+    echo "REMINDER: re-issue every credential signed with the previous key, restart the workloads"
+    echo "that read the identity key at startup, and restart apisix so it refetches the JWKS."
+{{- end }}

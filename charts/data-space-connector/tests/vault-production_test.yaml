@@ -1,0 +1,234 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/helm-unittest/helm-unittest/main/schema/helm-testsuite.json
+#
+# ---------------------------------------------------------------------------
+# Helm-unittest suite for the production vault surface and the identityhub
+# templates that go with it.
+#
+# Covers:
+#   - vault-unsealer-*.yaml:        initialise and unseal a persistent vault
+#   - identityhub-cm.yaml:          the vault token, in a ConfigMap or not
+#   - identityhub-deployment.yaml:  the token env var and the truststore import
+#   - identityhub-service.yaml:     every port the deployment opens
+#   - identityhub-cacerts-cm.yaml / identityhub-logs-pvc.yaml: the objects the
+#     deployment referenced while nothing created them
+# ---------------------------------------------------------------------------
+suite: Production vault and identityhub wiring
+templates:
+  - templates/vault-unsealer-cm.yaml
+  - templates/vault-unsealer-rbac.yaml
+  - templates/vault-unsealer-deployment.yaml
+  - templates/identityhub-cm.yaml
+  - templates/identityhub-deployment.yaml
+  - templates/identityhub-service.yaml
+  - templates/identityhub-cacerts-cm.yaml
+  - templates/identityhub-logs-pvc.yaml
+tests:
+  # ==========================================================================
+  # The unsealer
+  # ==========================================================================
+
+  - it: should not render the unsealer by default
+    templates:
+      - templates/vault-unsealer-cm.yaml
+      - templates/vault-unsealer-rbac.yaml
+      - templates/vault-unsealer-deployment.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should render the unsealer for a persistent vault
+    templates:
+      - templates/vault-unsealer-deployment.yaml
+    set:
+      vault.enabled: true
+      vault.server.dev.enabled: false
+      vault.production.enabled: true
+    asserts:
+      - isKind:
+          of: Deployment
+      # A Deployment and not a Job: the restart that needs unsealing happens long
+      # after any deploy, and a completed Job would not notice.
+      - equal:
+          path: spec.template.spec.serviceAccountName
+          value: RELEASE-NAME-vault-unsealer
+      - equal:
+          path: spec.template.spec.containers[0].name
+          value: unsealer
+
+  - it: should scope the unsealer permissions to the secret it owns
+    templates:
+      - templates/vault-unsealer-rbac.yaml
+    set:
+      vault.enabled: true
+      vault.server.dev.enabled: false
+      vault.production.enabled: true
+      vault.production.secretName: my-unseal-keys
+    documentIndex: 1
+    asserts:
+      - isKind:
+          of: Role
+      # It must not be able to read the participant's identity key or credentials.
+      - equal:
+          path: rules[1].resourceNames[0]
+          value: my-unseal-keys
+      - equal:
+          path: rules[1].verbs
+          value:
+            - get
+            - update
+
+  - it: should refuse a production vault that is also in dev mode
+    templates:
+      - templates/vault-unsealer-cm.yaml
+    set:
+      vault.enabled: true
+      vault.server.dev.enabled: true
+      vault.production.enabled: true
+    asserts:
+      # Dev mode stores everything in memory and auto-unseals, so persistence and
+      # unsealing are meaningless next to it. Better to refuse than to no-op.
+      - failedTemplate:
+          errorPattern: 'requires vault.server.dev.enabled=false'
+
+  - it: should not render the unsealer when unsealing is manual
+    templates:
+      - templates/vault-unsealer-deployment.yaml
+    set:
+      vault.enabled: true
+      vault.server.dev.enabled: false
+      vault.production.enabled: true
+      vault.production.autoUnseal: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  # ==========================================================================
+  # The vault token
+  # ==========================================================================
+
+  - it: should render the vault token into the ConfigMap by default
+    templates:
+      - templates/identityhub-cm.yaml
+    set:
+      identityhub.enabled: true
+      identityhub.endpoints.identity.authKeyAlias: super-user-apikey
+    asserts:
+      - equal:
+          path: data["edc.vault.hashicorp.token"]
+          value: "root"
+
+  - it: should keep the token out of the ConfigMap when it comes from a Secret
+    templates:
+      - templates/identityhub-cm.yaml
+    set:
+      identityhub.enabled: true
+      identityhub.endpoints.identity.authKeyAlias: super-user-apikey
+      vault.hashicorp.existingSecret: vault-token
+    asserts:
+      # Omitted rather than emptied: an empty property would be resolved as an
+      # empty token instead of falling through to the environment variable.
+      - notExists:
+          path: data["edc.vault.hashicorp.token"]
+
+  - it: should inject the token as an environment variable instead
+    templates:
+      - templates/identityhub-deployment.yaml
+    set:
+      identityhub.enabled: true
+      identityhub.endpoints.identity.authKeyAlias: super-user-apikey
+      vault.hashicorp.existingSecret: vault-token
+      vault.hashicorp.existingSecretTokenKey: token
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: EDC_VAULT_HASHICORP_TOKEN
+            valueFrom:
+              secretKeyRef:
+                name: vault-token
+                key: token
+
+  # ==========================================================================
+  # The objects the deployment referenced but nothing created
+  # ==========================================================================
+
+  - it: should expose every port the deployment opens
+    templates:
+      - templates/identityhub-service.yaml
+    set:
+      identityhub.enabled: true
+      identityhub.endpoints.identity.authKeyAlias: super-user-apikey
+    asserts:
+      # accounts was missing, so the STS Accounts API was unreachable in-cluster.
+      - equal:
+          path: spec.ports[4].name
+          value: accounts
+
+  - it: should create the ConfigMap and the import step for extra CAs
+    templates:
+      - templates/identityhub-cacerts-cm.yaml
+      - templates/identityhub-deployment.yaml
+    set:
+      identityhub.enabled: true
+      identityhub.endpoints.identity.authKeyAlias: super-user-apikey
+      identityhub.customCaCerts:
+        my-ca.pem: |
+          -----BEGIN CERTIFICATE-----
+          test
+          -----END CERTIFICATE-----
+    asserts:
+      - exists:
+          path: metadata.name
+      - matchRegex:
+          path: metadata.name
+          pattern: 'identityhub'
+
+  - it: should import the extra CAs into a copy of the truststore
+    templates:
+      - templates/identityhub-deployment.yaml
+    set:
+      identityhub.enabled: true
+      identityhub.endpoints.identity.authKeyAlias: super-user-apikey
+      identityhub.customCaCerts:
+        my-ca.pem: |
+          -----BEGIN CERTIFICATE-----
+          test
+          -----END CERTIFICATE-----
+    asserts:
+      # Without this the mount replaced the whole truststore with an empty
+      # emptyDir, and every outbound TLS connection failed.
+      - equal:
+          path: spec.template.spec.initContainers[0].name
+          value: import-cacerts
+      - matchRegex:
+          path: spec.template.spec.initContainers[0].command[2]
+          pattern: 'keytool -importcert'
+
+  - it: should create the claim the deployment mounts for persistent logs
+    templates:
+      - templates/identityhub-logs-pvc.yaml
+    set:
+      identityhub.enabled: true
+      identityhub.endpoints.identity.authKeyAlias: super-user-apikey
+      identityhub.logging.persistence.enabled: true
+      identityhub.logging.persistence.size: 5Gi
+    asserts:
+      - isKind:
+          of: PersistentVolumeClaim
+      - equal:
+          path: metadata.name
+          value: identityhub-pvc-logs
+      - equal:
+          path: spec.resources.requests.storage
+          value: 5Gi
+
+  - it: should not create the claim when logs are not persisted
+    templates:
+      - templates/identityhub-logs-pvc.yaml
+    set:
+      identityhub.enabled: true
+      identityhub.endpoints.identity.authKeyAlias: super-user-apikey
+      identityhub.logging.persistence.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0

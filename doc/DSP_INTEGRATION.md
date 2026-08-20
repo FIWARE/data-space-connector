@@ -91,6 +91,33 @@ To run the local setup:
 The following steps will show how to create a ProductOffering throught the TMForum-APIs, buy access to it via TMForum, DSP+OID4VP and DSP+DCP and access the purchased data-service through all 3 methods. It requires a proper setup of Consumer and Provider identities as expected for the DCP, which also works for OID4VP.
 
 
+### Provisioning the participant identities
+
+Both participants need their identity and key-material registered in the identityhub before any
+DCP-based DSP interaction can happen. There are two ways to do that.
+
+**The chart can do it.** `identityhub.bootstrap` runs exactly the steps described below, in-cluster
+and idempotently, on install and on every upgrade: it derives the JWK from the identity key, writes
+it to Vault, repairs the identityhub super-user credential, registers the participant context with
+its CredentialService endpoint, provisions the STS client secret and inserts the credential into the
+identityhub's credential store. That is the recommended path for anything other than a throwaway
+deployment, and it is described in
+[the production guide](./deployment-integration/production/VAULT.md#participant-bootstrap).
+
+Two things it does that are easy to miss when doing this by hand:
+
+* The STS client secret is chosen rather than read from the participant-creation response. The
+  identityhub reveals its generated secret only once, so with a dev-mode Vault any restart loses it
+  and the next attempt gets a 409 with the value gone for good - which surfaces as
+  `Failed to fetch client secret from the vault with alias: ...`. Neither side stores the secret
+  itself, only an alias to compare against, so choosing it is what makes the setup repeatable.
+* It is written under two spellings of the alias. EDC's Vault client URL-encodes the alias and the
+  HTTP layer then encodes the `%` again, so a lookup for `did:web:x-sts-client-secret` actually
+  resolves the key literally named `did%3Aweb%3Ax-sts-client-secret`.
+
+**The manual procedure** is below, and it is what to reach for in a local deployment or when
+debugging. It is also what the integration tests do.
+
 ### Setup the consumer
 
 The consumer-identity and key-material needs to be registered in the identityhub, in order to participate in DCP-based DSP interactions. Since all OID4VC base flows do not rely on any propriatary extensions to the did-standard, they can also work with that.
@@ -159,6 +186,20 @@ curl -x localhost:8888 https://mp-operations.org/.well-known/did.json -k | jq .
 
 The demo deployment of the DSP is configured to require every participant to identify itself with a "MembershipCredential". In most use-cases, this credential will be issued by a central data-space authority. In order to keep the local deployment at managable size, we allow self-issuance of such credentials.
 The OID4VC based flows are automatically configured to get such credential in the local deployment, thus the Credential only needs to be issued for usage in DCP-based flows. The deployed [Tractus-X Identityhub](https://github.com/eclipse-tractusx/tractusx-identityhub) supports integration with compliant [Issuer Services](https://eclipse-dataspace-dcp.github.io/decentralized-claims-protocol/v1.0.1/#credential-issuance-protocol). However, we are reusing the [default issuer](./deployment-integration/local-deployment/LOCAL.MD#credentials-issuance-at-the-consumer) from the FIWARE Data Space Connector and insert the credential manually into the identity hub:
+
+> :warning: A credential inserted this way is a **copy**, and nothing in the steps below keeps it in
+> step with the one the issuer renews, so once it expires every DCP exchange starts failing with
+> nothing having changed in the cluster. Set `identityhub.credentialSync.enabled` and the chart
+> renders a sidecar in the identityhub pod that mirrors the Secret the vc-operator maintains, on
+> issuance and on every renewal - which makes the manual steps below a one-off illustration rather
+> than something to run.
+>
+> Note what this is *not*: the identityhub can fetch credentials by itself. It ships
+> `credential-watchdog`, which re-requests an expiring credential, and the
+> `POST /participants/{id}/credentials/request` endpoint that starts one. What the local deployment
+> lacks is a DCP-compliant [Issuer Service](https://eclipse-dataspace-dcp.github.io/decentralized-claims-protocol/v1.0.1/#credential-issuance-protocol)
+> to ask - the default issuer here speaks OID4VCI - which is why the credential arrives out of band
+> and the watchdog is off by default (`identityhub.credentialWatchdog.checkPeriodSeconds: 0`).
 
 #### Consumer
 
