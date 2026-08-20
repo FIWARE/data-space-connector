@@ -108,8 +108,10 @@ keycloak:
         - name: did-material
           mountPath: /did-material
   extraVolumeMounts:
+    # Since KC 26.6.4 the java-keystore realm key provider only reads keystores from
+    # ${kc.home.dir}/data/<realm-name>, so the directory name must match `realm.name`.
     - name: did-material
-      mountPath: /did-material
+      mountPath: /opt/keycloak/data/test-realm
     - name: did-material
       mountPath: "/etc/env"
       readOnly: true
@@ -144,7 +146,7 @@ keycloak:
           name: keystore-password
           key: password
   signingKey:
-    storePath: /did-material/cert.pfx
+    storePath: /opt/keycloak/data/test-realm/cert.pfx
     storePassword: "${STORE_PASS}"
     keyAlias: didPrivateKey
     keyPassword: "${STORE_PASS}"

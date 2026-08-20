@@ -202,7 +202,7 @@ this template.
           "directAccessGrantsEnabled" false
           "implicitFlowEnabled" false
           "serviceAccountsEnabled" false
-          "redirectUris" (list $lissi.redirectUri)
+          "redirectUris" (ternary (list $lissi.redirectUri) $lissi.redirectUri (kindIs "string" $lissi.redirectUri))
           "webOrigins" (list "+")
           "protocol" "openid-connect"
           "attributes" ($lissi.attributes | default dict)
@@ -218,7 +218,7 @@ this template.
           "directAccessGrantsEnabled" false
           "implicitFlowEnabled" false
           "serviceAccountsEnabled" false
-          "redirectUris" (list $eudi.redirectUri)
+          "redirectUris" (ternary (list $eudi.redirectUri) $eudi.redirectUri (kindIs "string" $eudi.redirectUri))
           "webOrigins" (list "+")
           "protocol" "openid-connect"
           "attributes" ($eudi.attributes | default dict)
@@ -390,7 +390,7 @@ and appends the signing key (elsi / signingKey / test-key fallback).
     "providerId" "java-keystore"
     "subComponents" (dict)
     "config" (dict
-        "keystore" (list "/did-material/cert.pfx")
+        "keystore" (list (printf "/opt/keycloak/data/%s/cert.pfx" .Values.keycloak.realm.name))
         "keystorePassword" (list "${STORE_PASS}")
         "keyAlias" (list "didPrivateKey")
         "keyPassword" (list "${STORE_PASS}")

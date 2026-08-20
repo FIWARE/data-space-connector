@@ -155,7 +155,7 @@ decentralizedIam:
         initContainers:
           - name: open-policy-agent
             restartPolicy: Always
-            image: openpolicyagent/opa:1.11.0
+            image: openpolicyagent/opa:1.19.0
             imagePullPolicy: IfNotPresent
             ports:
               - name: opa-http
@@ -362,18 +362,6 @@ keycloak:
       adminPasswordKey: keycloak-admin
     # -- proxy headers used when TLS is terminated at an upstream ingress/proxy
     proxyHeaders: xforwarded
-  # -- SEAMWARE-published Keycloak image, built on the official Keycloak 26.6.x
-  # source. On top of the OID4VCI QR-generation endpoint fix (missing from vanilla
-  # 26.6.2 — see https://github.com/keycloak/keycloak/issues/44623), the 26.6.3 tag
-  # also carries the Liquibase changeset `26.7.0-verifiable-credential`, which adds
-  # the `version` column to the custom `USER_VER_CREDENTIAL` table. Without it,
-  # reusing a pre-26.4 database fails at issuance with `column ... version does not
-  # exist` (see release-notes/10-x.md). Swap back to the upstream image once these
-  # fixes land in a vanilla release.
-  image:
-    registry: quay.io
-    repository: seamware/keycloak
-    tag: "26.6.3"
   # -- @param preserveProviders Disable mounting an emptyDir over /opt/keycloak/providers, preserving the providers bundled in the image.
   preserveProviders: true
   # -- TLS terminated at the ingress; the container does not serve HTTPS itself
@@ -388,9 +376,8 @@ keycloak:
   # sub-features that KC main split out from the original flag:
   #   * `oid4vc-vci-preauth-code` (KC 26.4+) — gates the pre-authorized_code
   #     grant on /create-credential-offer.
-  #   * `oid4vc-vci-rest-credential-offer` (KC main, present in the SEAMWARE
-  #     patched 26.6.2 image) — gates the /create-credential-offer REST
-  #     endpoint itself. Without it Keycloak answers
+  #   * `oid4vc-vci-rest-credential-offer` (upstream since 26.7.0) — gates the
+  #     /create-credential-offer REST endpoint itself. Without it Keycloak answers
   #     `403 invalid_client: "REST credential offer functionality is not enabled"`.
   features:
     enabled:
@@ -1195,7 +1182,7 @@ keycloak:
     # Attribute keys are auto-prefixed with `vc.` if the user didn't already.
     # Set `clientScope.create: false` to skip ClientScope generation for an entry.
     #
-    # ref: https://github.com/keycloak/keycloak/blob/26.6.2/server-spi-private/src/main/java/org/keycloak/models/oid4vci/CredentialScopeModel.java
+    # ref: https://github.com/keycloak/keycloak/blob/26.7.0/server-spi-private/src/main/java/org/keycloak/models/oid4vci/CredentialScopeModel.java
     # NOTE: this model is the post-26.4 redesign (PR keycloak#39768). The pre-26.4
     # `vc.{name}.*` realm-attribute scheme and `components.CredentialBuilder`
     # block were removed. Format strings also changed: `jwt_vc` -> `jwt_vc_json`,
@@ -1287,7 +1274,9 @@ keycloak:
         clientId: 9c481dc3-2ad0-4fe0-881d-c32ad02fe0fc
         name: "Lissi ID Wallet"
         description: "Hardcoded clientId expected by the Lissi ID Wallet (iOS/Android)."
-        redirectUri: https://oob.lissi.io/vci-cb
+        redirectUri:
+          - https://oob.lissi.io/vci-cb
+          - https://wallet.lissi.io/lite/vci-cb
         attributes:
           oid4vci.enabled: "true"
           post.logout.redirect.uris: "+"
@@ -1298,7 +1287,8 @@ keycloak:
         clientId: wallet-dev
         name: "EUDI Reference Wallet (dev)"
         description: "Public client used by EUDI Reference Wallet (.DEV variant). PKCE + PAR + DPoP-bound access tokens."
-        redirectUri: eu.europa.ec.euidi://authorization
+        redirectUri:
+          - eu.europa.ec.euidi://authorization
         attributes:
           oid4vci.enabled: "true"
           post.logout.redirect.uris: "+"
@@ -3040,7 +3030,7 @@ extraManifests: []
 # -- dashboard for operating the FIWARE Data Space Connector
 fdsc-dashboard:
   enabled: false
-      
+
 prometheus:
   enabled: false
 
