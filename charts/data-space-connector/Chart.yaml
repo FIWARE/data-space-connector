@@ -3,7 +3,7 @@ name: data-space-connector
 description: Umbrella Chart for the FIWARE Data Space Connector, combining all essential
   parts to be used by a participant.
 type: application
-version: 10.4.11
+version: 10.4.12
 dependencies:
   - name: decentralized-iam
     alias: decentralizedIam
@@ -76,7 +76,7 @@ dependencies:
     repository: oci://quay.io/seamware/helm-charts
   - name: prometheus
     condition: prometheus.enabled
-    version: 29.24.0
+    version: 29.27.0
     repository: https://prometheus-community.github.io/helm-charts
   - name: grafana
     condition: grafana.enabled
