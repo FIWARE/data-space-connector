@@ -58,6 +58,18 @@ spec:
               value: {{ $p.secretThreshold | quote }}
             - name: POLL_SECONDS
               value: "30"
+            {{- if $p.provisionToken }}
+            # Where the application token goes. The same Secret the identityhub and the connector read
+            # it from, so the two cannot drift.
+            - name: TOKEN_SECRET_NAME
+              value: {{ .Values.vault.hashicorp.existingSecret | quote }}
+            - name: TOKEN_SECRET_KEY
+              value: {{ .Values.vault.hashicorp.existingSecretTokenKey | quote }}
+            - name: TOKEN_PERIOD
+              value: {{ $p.tokenPeriod | quote }}
+            - name: POLICY_NAME
+              value: {{ $p.tokenPolicyName | quote }}
+            {{- end }}
           resources:
             requests:
               cpu: 10m

@@ -77,6 +77,73 @@ tests:
             - get
             - update
 
+  - it: should let the unsealer read the token secret it mints
+    templates:
+      - templates/vault-unsealer-rbac.yaml
+    set:
+      vault.enabled: true
+      vault.server.dev.enabled: false
+      vault.production.enabled: true
+      vault.production.secretName: my-unseal-keys
+      vault.hashicorp.existingSecret: my-vault-token
+    documentIndex: 1
+    asserts:
+      # Both Secrets and nothing else. The second one is only needed to tell whether the token has
+      # already been minted: it is created once and never rewritten.
+      - equal:
+          path: rules[1].resourceNames
+          value:
+            - my-unseal-keys
+            - my-vault-token
+
+  - it: should tell the unsealer where the token goes
+    templates:
+      - templates/vault-unsealer-deployment.yaml
+    set:
+      vault.enabled: true
+      vault.server.dev.enabled: false
+      vault.production.enabled: true
+      vault.hashicorp.existingSecret: my-vault-token
+      vault.hashicorp.existingSecretTokenKey: token
+      vault.production.tokenPeriod: 100h
+      vault.production.tokenPolicyName: my-policy
+    asserts:
+      # The destination is vault.hashicorp.existingSecret itself, not a key of its own: the consumers
+      # read it from there, so the two cannot drift.
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: TOKEN_SECRET_NAME
+            value: my-vault-token
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: TOKEN_PERIOD
+            value: "100h"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POLICY_NAME
+            value: my-policy
+
+  - it: should not provision a token when that is turned off
+    templates:
+      - templates/vault-unsealer-deployment.yaml
+    set:
+      vault.enabled: true
+      vault.server.dev.enabled: false
+      vault.production.enabled: true
+      vault.production.provisionToken: false
+      vault.hashicorp.existingSecret: my-vault-token
+    asserts:
+      # Without TOKEN_SECRET_NAME the script skips the whole branch, so the unsealer goes back to
+      # doing nothing but unsealing.
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: TOKEN_SECRET_NAME
+            value: my-vault-token
+
   - it: should refuse a production vault that is also in dev mode
     templates:
       - templates/vault-unsealer-cm.yaml

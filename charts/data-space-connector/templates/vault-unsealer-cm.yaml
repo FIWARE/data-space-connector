@@ -29,6 +29,14 @@ data:
     SECRET_NAME="${SECRET_NAME:?SECRET_NAME is required}"
     SHARES="${SECRET_SHARES:?SECRET_SHARES is required}"
     THRESHOLD="${SECRET_THRESHOLD:?SECRET_THRESHOLD is required}"
+    POLL_SECONDS="${POLL_SECONDS:?POLL_SECONDS is required}"
+    # Empty on purpose is a valid value: it means the deployment passes the vault token through a
+    # ConfigMap instead of a Secret, and there is nothing for this component to provision. Defaulted
+    # rather than required because `set -u` would otherwise abort on an unset variable.
+    TOKEN_SECRET_NAME="${TOKEN_SECRET_NAME:-}"
+    TOKEN_SECRET_KEY="${TOKEN_SECRET_KEY:-token}"
+    TOKEN_PERIOD="${TOKEN_PERIOD:-768h}"
+    POLICY_NAME="${POLICY_NAME:-dsc-connector}"
     KEY_DIR=/unseal-keys
     KUBE_API="https://kubernetes.default.svc"
     SA=/var/run/secrets/kubernetes.io/serviceaccount
@@ -106,6 +114,72 @@ data:
       echo "vault still sealed after applying every available key - threshold not met"
     }
 
+    # The root token the unsealer itself stored, read back from the same mounted Secret the unseal
+    # keys come from. Empty until kubelet has refreshed the mount, exactly like the keys.
+    vault_root() {
+      [ -f "${KEY_DIR}/root-token" ] && cat "${KEY_DIR}/root-token" || true
+    }
+
+    # The policy the components run under. Without it they would need the root token, which is what
+    # the chart used to hand them.
+    #
+    # Idempotent: vault overwrites the policy on every write, so this runs on every reconcile.
+    ensure_policy() {
+      _root="$1"
+      # create AND update: writing a path that does not exist yet is a create, and the bootstrap Job
+      # is idempotent, so it rewrites paths that do. secret/metadata/* is where KV v2 keeps versions,
+      # and it is the only way EDC's deleteSecret() removes anything - keypair revocation needs it.
+      # The quotes are escaped for the JSON body, not for the shell: printf passes %s arguments
+      # through verbatim, so what vault receives is valid HCL with real newlines.
+      _hcl='path \"secret/data/*\" { capabilities = [\"create\", \"read\", \"update\"] }\npath \"secret/metadata/*\" { capabilities = [\"read\", \"delete\"] }'
+      _body=$(printf '{"policy":"%s"}' "${_hcl}")
+      _code=$(printf '%s' "${_body}" | curl -sS -o /tmp/policy.json -w '%{http_code}' \
+        -H "X-Vault-Token: ${_root}" \
+        -X PUT "${VAULT_ADDR}/v1/sys/policies/acl/${POLICY_NAME}" --data-binary @-)
+      case "${_code}" in
+        20*) return 0 ;;
+        *)   echo "failed to write policy ${POLICY_NAME}: HTTP ${_code}"; cat /tmp/policy.json; return 1 ;;
+      esac
+    }
+
+    # Mint the token the components authenticate with, and store it where they read it from.
+    #
+    # Created once and never overwritten. The token reaches them as an environment variable, and env
+    # vars are not updated in a running pod; EDC also reads it once at startup and holds it immutable.
+    # Rewriting the Secret in place would therefore change nothing until the next restart - which
+    # could be weeks later, with the old token already dead. To rotate, delete the Secret and let the
+    # next reconcile mint a new one, then restart the consumers.
+    ensure_token() {
+      _root="$1"
+      _code=$(kube GET "/api/v1/namespaces/${NAMESPACE}/secrets/${TOKEN_SECRET_NAME}" -o /dev/null -w '%{http_code}')
+      if [ "${_code}" = "200" ]; then
+        return 0
+      fi
+
+      ensure_policy "${_root}" || return 1
+
+      _body=$(printf '{"policies":["%s"],"period":"%s"}' "${POLICY_NAME}" "${TOKEN_PERIOD}")
+      _code=$(printf '%s' "${_body}" | curl -sS -o /tmp/token.json -w '%{http_code}' \
+        -H "X-Vault-Token: ${_root}" \
+        -X POST "${VAULT_ADDR}/v1/auth/token/create" --data-binary @-)
+      if [ "${_code}" != "200" ]; then
+        echo "token creation failed: HTTP ${_code}"; cat /tmp/token.json; return 1
+      fi
+      _token=$(sed -n 's/.*"client_token":"\([^"]*\)".*/\1/p' /tmp/token.json)
+      if [ -z "${_token}" ]; then
+        echo "token creation returned no client_token"; return 1
+      fi
+
+      _secret=$(printf '{"apiVersion":"v1","kind":"Secret","metadata":{"name":"%s","annotations":{"helm.sh/resource-policy":"keep"}},"type":"Opaque","data":{"%s":"%s"}}' \
+        "${TOKEN_SECRET_NAME}" "${TOKEN_SECRET_KEY}" "$(printf '%s' "${_token}" | base64 | tr -d '\n')")
+      _code=$(printf '%s' "${_secret}" | kube POST "/api/v1/namespaces/${NAMESPACE}/secrets" --data-binary @- -o /tmp/token_secret.json -w '%{http_code}')
+      case "${_code}" in
+        20*) echo "application token stored in secret ${TOKEN_SECRET_NAME}" ;;
+        409) echo "secret ${TOKEN_SECRET_NAME} appeared meanwhile - leaving it alone" ;;
+        *)   echo "failed to store the application token: HTTP ${_code}"; cat /tmp/token_secret.json; return 1 ;;
+      esac
+    }
+
     echo "watching ${VAULT_ADDR} (every ${POLL_SECONDS}s)"
     while true; do
       if curl -sS -o /tmp/status.json -f "${VAULT_ADDR}/v1/sys/seal-status" 2>/dev/null; then
@@ -113,6 +187,15 @@ data:
           initialize || true
         elif grep -q '"sealed":true' /tmp/status.json; then
           unseal || true
+        elif [ -n "${TOKEN_SECRET_NAME}" ]; then
+          # Initialised and open: the only state in which a policy can be written. Skipped entirely
+          # when the deployment passes the token through a ConfigMap instead.
+          _root=$(vault_root)
+          if [ -z "${_root}" ]; then
+            echo "waiting for the root token in ${SECRET_NAME} before provisioning the application token"
+          else
+            ensure_token "${_root}" || true
+          fi
         fi
       else
         echo "vault not reachable yet"

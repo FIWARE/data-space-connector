@@ -82,11 +82,62 @@ IdentityHub receives it as `EDC_VAULT_HASHICORP_TOKEN` and the property is omitt
 from the ConfigMap entirely, rather than left empty for EDC to resolve as an empty
 token.
 
-Use a periodic, renewable token rather than the root one. The IdentityHub renews
-it on its own.
+With `vault.production.provisionToken` (the default) there is nothing to do here:
+the unsealer mints that token itself, right after it initialises Vault, and stores
+it in the Secret named by `existingSecret`. It is the only component that ever sees
+the root token, so it is the only one that can, and it removes the last manual step
+from the install — the Secret cannot be created before Vault exists, which used to
+leave the IdentityHub in `CreateContainerConfigError` in the middle of every deploy,
+fresh installs included.
+
+The token is periodic and scoped by an ACL policy named after
+`vault.production.tokenPolicyName`:
+
+```hcl
+path "secret/data/*"     { capabilities = ["create", "read", "update"] }
+path "secret/metadata/*" { capabilities = ["read", "delete"] }
+```
+
+`create` as well as `update` because writing an alias that does not exist yet is a
+create, and the bootstrap Job is idempotent, so it rewrites aliases that do.
+`secret/metadata/*` because that is where KV v2 keeps versions, and the only way
+EDC's `Vault#deleteSecret()` removes anything — keypair revocation needs it.
+
+> :warning: **Do not attach `default` and nothing else.** Vault's `default` policy
+> grants token self-management and no access to `secret/` at all, and Vault is
+> deny-by-default: every read and write returns `403`. A token like that renews
+> itself happily and fails the first `vault write` of the bootstrap Job.
+
+**Renewal.** Each runtime renews its own token in process — `auth/token/lookup-self`
+then `auth/token/renew-self`, rescheduled from the `lease_duration` Vault returns and
+tuned by `edc.vault.hashicorp.token.{ttl,renew-buffer}`. Renewing extends the lease of
+the same token: **the string never changes**, so nothing has to be propagated and no
+pod has to restart. That is also why the token is periodic — a non-periodic one hits
+its max TTL and stops being renewable.
+
+**Rotation**, when the token really has to change (it lapsed, or it was revoked):
 
 ```shell
-kubectl exec -n <ns> <release>-vault-0 -- vault token create -period=768h -policy=default -field=token
+kubectl delete secret vault-token -n <ns>          # the unsealer mints a new one within a cycle
+kubectl rollout restart deploy/identityhub -n <ns>
+```
+
+The restart is not optional. The token arrives as an environment variable, and env
+vars are never updated in a running pod; EDC also reads it once at startup and holds
+it immutable. That is why the unsealer creates the Secret and never overwrites it:
+rewriting it in place would change nothing visible until some later restart, with the
+old token possibly long dead by then.
+
+If you set `autoUnseal: false`, or `provisionToken: false`, you do it by hand — and
+then the policy has to exist first:
+
+```shell
+kubectl exec -n <ns> <release>-vault-0 -- sh -c \
+  'vault policy write dsc-connector - <<EOF
+path "secret/data/*"     { capabilities = ["create", "read", "update"] }
+path "secret/metadata/*" { capabilities = ["read", "delete"] }
+EOF'
+kubectl exec -n <ns> <release>-vault-0 -- vault token create -period=768h -policy=dsc-connector -field=token
 kubectl create secret generic vault-token -n <ns> --from-literal=token=<the token>
 ```
 

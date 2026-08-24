@@ -28,7 +28,13 @@ rules:
     verbs: ["create"]
   - apiGroups: [""]
     resources: ["secrets"]
-    resourceNames: [{{ .Values.vault.production.secretName | quote }}]
+    resourceNames:
+      - {{ .Values.vault.production.secretName | quote }}
+      {{- with .Values.vault.hashicorp.existingSecret }}
+      # The application token this component mints. get only, to tell whether it already exists:
+      # it is created once and never rewritten.
+      - {{ . | quote }}
+      {{- end }}
     verbs: ["get", "update"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1

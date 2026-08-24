@@ -3236,6 +3236,19 @@ vault:
     autoUnseal: true
     # -- name of the Secret the unseal keys and the root token are written to
     secretName: vault-unseal-keys
+    # -- should the unsealer also mint the token the components authenticate with and store it in
+    # `vault.hashicorp.existingSecret`. Without it that Secret has to be created by hand, and it
+    # cannot be created before vault has been initialised - so every install, fresh ones included,
+    # needs a manual step in the middle while the identityhub waits in CreateContainerConfigError.
+    #
+    # The token is periodic and scoped by an ACL policy to the KV paths the deployment uses. Note
+    # what it replaces: without a policy the only token that works is the root one.
+    provisionToken: true
+    # -- lifetime granted to that token. Periodic, so it can be renewed indefinitely - which EDC
+    # does on its own, in process, without the token itself ever changing.
+    tokenPeriod: "768h"
+    # -- name of the ACL policy created for it
+    tokenPolicyName: dsc-connector
 
 # -- configuration for the cert-manager component (https://github.com/cert-manager/cert-manager/blob/master/deploy/charts/cert-manager/values.yaml)
 cert-manager:
