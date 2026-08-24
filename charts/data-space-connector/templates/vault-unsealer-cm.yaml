@@ -1,7 +1,7 @@
-{{- if and .Values.vault.enabled .Values.vault.production.enabled .Values.vault.production.autoUnseal }}
-{{- if .Values.vault.server.dev.enabled }}
+{{- if and .Values.vault.enabled .Values.vault.production.enabled .Values.vault.server.dev.enabled }}
 {{- fail "vault.production.enabled requires vault.server.dev.enabled=false: a dev-mode vault stores everything in memory and auto-unseals, so persistence and unsealing are meaningless. See doc/deployment-integration/production/VAULT.md for the values a production vault needs." }}
 {{- end }}
+{{- if and .Values.vault.enabled .Values.vault.production.enabled .Values.vault.production.autoUnseal }}
 
 # Reconciler that keeps the bundled vault initialised and unsealed.
 #

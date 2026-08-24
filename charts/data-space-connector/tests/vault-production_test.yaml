@@ -90,6 +90,20 @@ tests:
       - failedTemplate:
           errorPattern: 'requires vault.server.dev.enabled=false'
 
+  - it: should refuse a production vault in dev mode even with manual unsealing
+    templates:
+      - templates/vault-unsealer-cm.yaml
+    set:
+      vault.enabled: true
+      vault.server.dev.enabled: true
+      vault.production.enabled: true
+      vault.production.autoUnseal: false
+    asserts:
+      # The guard used to sit inside the autoUnseal branch, so this combination rendered
+      # in silence and did nothing at all - the worst of the three outcomes.
+      - failedTemplate:
+          errorPattern: 'requires vault.server.dev.enabled=false'
+
   - it: should not render the unsealer when unsealing is manual
     templates:
       - templates/vault-unsealer-deployment.yaml
@@ -232,3 +246,8 @@ tests:
     asserts:
       - hasDocuments:
           count: 0
+
+  # The connector side of the same contract (fdsc-edc omitting the property and injecting
+  # EDC_VAULT_HASHICORP_TOKEN) is NOT covered here: the subchart is vendored as a .tgz, and
+  # helm-unittest cannot select templates inside a packaged dependency. It is verified in
+  # FIWARE/helm-charts with `helm template` instead, which is where that chart lives.

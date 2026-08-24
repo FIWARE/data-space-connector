@@ -2643,7 +2643,15 @@ fdsc-edc:
         hashicorp:
           enabled: true
           url: "http://{{ .Release.Name }}-vault:8200"
+          # This is a STATIC mirror of `vault.hashicorp` above: a subchart cannot read the parent's
+          # values, so changing the top-level block does NOT reach fdsc-edc. Both have to be set.
           token: "root"
+          # -- name of a Secret holding the vault token, same contract as `vault.hashicorp`: the
+          # property is omitted from the connector's properties file and injected as
+          # EDC_VAULT_HASHICORP_TOKEN instead. Needs fdsc-edc >= the version that supports it.
+          existingSecret: ""
+          # -- key within that Secret holding the token
+          existingSecretTokenKey: token
           timeout: 30
 
 # -- vc-operator managed credentials (replacement for the legacy credentials script)
@@ -3155,12 +3163,31 @@ vault:
     dev:
       enabled: true
       devRootToken: "root"
-    # -- lifecycle postStart hook of the vault pod. Used by `vault.production` to unseal on start;
-    # leave unset otherwise.
+    # -- lifecycle postStart hook of the vault pod, passed straight through to the HashiCorp
+    # subchart. Nothing in this chart uses it: unsealing is done by the vault-unsealer Deployment,
+    # which keeps watching instead of running once at start.
     postStart:
+    # -- single-node vault with file storage. Enable it together with `production` and with
+    # `dev.enabled: false`; the persistence itself comes from this subchart, not from `production`.
+    standalone:
+      enabled: "-"
+    # -- persistent volume for the vault data. This is what actually survives a restart, so a
+    # production vault needs it. Rendered as a StatefulSet volumeClaimTemplate, which is
+    # IMMUTABLE: pick the size and the class before the first install, or the StatefulSet has to
+    # be deleted to change them.
+    dataStorage:
+      enabled: true
+      # -- size of the volume. Left at the subchart default; 2Gi is ample for the handful of
+      # secrets this chart stores, so it is worth lowering deliberately rather than by accident.
+      size: 10Gi
+      # -- storage class to use. Empty means the cluster default.
+      storageClass: null
   # -- how the components of this chart reach vault. These keys are read by the umbrella's own
-  # templates (the identityhub) and mirrored into `fdsc-edc.common.config.vault.hashicorp`; they are
-  # not understood by the HashiCorp subchart itself.
+  # templates (the identityhub) and are NOT understood by the HashiCorp subchart itself.
+  #
+  # `fdsc-edc.common.config.vault.hashicorp` carries a hand-copied duplicate of them: a subchart
+  # cannot read its parent's values, so setting these does not reach the connector. Keep the two in
+  # step by hand.
   hashicorp:
     # -- address of the vault instance
     url: "http://{{ .Release.Name }}-vault:8200"
@@ -3209,12 +3236,6 @@ vault:
     autoUnseal: true
     # -- name of the Secret the unseal keys and the root token are written to
     secretName: vault-unseal-keys
-    # -- image used by the init/unseal job, defaults to the vault image itself
-    image:
-      repository: hashicorp/vault
-      tag: "1.18.1"
-      # -- [Kubernetes image pull policy](https://kubernetes.io/docs/concepts/containers/images/#image-pull-policy) to use
-      pullPolicy: IfNotPresent
 
 # -- configuration for the cert-manager component (https://github.com/cert-manager/cert-manager/blob/master/deploy/charts/cert-manager/values.yaml)
 cert-manager:

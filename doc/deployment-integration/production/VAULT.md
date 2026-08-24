@@ -90,12 +90,30 @@ kubectl exec -n <ns> <release>-vault-0 -- vault token create -period=768h -polic
 kubectl create secret generic vault-token -n <ns> --from-literal=token=<the token>
 ```
 
-`fdsc-edc` needs the same treatment, and its subchart still renders the token into
-its own ConfigMap - its `values.yaml` says as much
-(*"should not be used in production environments, provide the token as a secret env
-var"*). Until that chart can omit the property, pass the token through
-`fdsc-edc.common.deployment.additionalEnvVars` and leave
-`fdsc-edc.common.config.vault.hashicorp.token` empty.
+`fdsc-edc` takes the same two keys, and they have to be set separately: its subchart
+cannot read the parent's values, so `vault.hashicorp` above does not reach the
+connector.
+
+```yaml
+fdsc-edc:
+  common:
+    config:
+      vault:
+        hashicorp:
+          existingSecret: vault-token
+          existingSecretTokenKey: token
+```
+
+Set `existingSecret` rather than emptying `token`. Leaving the property behind with an
+empty value is not equivalent: EDC resolves it as an empty token instead of falling
+through to the environment variable, so the connector starts with no credentials for
+Vault at all. With `existingSecret` the property is omitted from the properties file
+entirely and the token arrives as `EDC_VAULT_HASHICORP_TOKEN`.
+
+One lane does not need any of this. `edc.vault.hashicorp.*` is only read where the
+`vault-hashicorp` extension is on the classpath, which is the DCP controlplane;
+`controlplane-oid4vc` excludes it deliberately. A connector running only OID4VC can set
+`vault.hashicorp.enabled: false` for that deployment and drop the block, token included.
 
 ## Participant bootstrap
 
