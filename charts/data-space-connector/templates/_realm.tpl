@@ -202,7 +202,7 @@ this template.
           "directAccessGrantsEnabled" false
           "implicitFlowEnabled" false
           "serviceAccountsEnabled" false
-          "redirectUris" (list $lissi.redirectUri)
+          "redirectUris" (ternary (list $lissi.redirectUri) $lissi.redirectUri (kindIs "string" $lissi.redirectUri))
           "webOrigins" (list "+")
           "protocol" "openid-connect"
           "attributes" ($lissi.attributes | default dict)
@@ -218,7 +218,7 @@ this template.
           "directAccessGrantsEnabled" false
           "implicitFlowEnabled" false
           "serviceAccountsEnabled" false
-          "redirectUris" (list $eudi.redirectUri)
+          "redirectUris" (ternary (list $eudi.redirectUri) $eudi.redirectUri (kindIs "string" $eudi.redirectUri))
           "webOrigins" (list "+")
           "protocol" "openid-connect"
           "attributes" ($eudi.attributes | default dict)
