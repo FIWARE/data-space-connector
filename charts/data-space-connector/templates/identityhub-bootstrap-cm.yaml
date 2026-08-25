@@ -4,10 +4,9 @@
 
 # Scripts that provision the identityhub participant context, its signing key and its credentials.
 #
-# This is the procedure documented in doc/DSP_INTEGRATION.md ("Setup the consumer" / "Setup the
-# provider" / "Issue membership-credentials"), made idempotent and run in-cluster instead of from a
-# workstation. Every script is plain POSIX shell and takes its configuration from environment
-# variables, which the Job in identityhub-bootstrap-job.yaml renders from values.
+# The provisioning procedure, made idempotent and run in-cluster instead of from a workstation.
+# Every script is plain POSIX shell and takes its configuration from environment variables, which
+# the Job in identityhub-bootstrap-job.yaml renders from values.
 apiVersion: v1
 kind: ConfigMap
 metadata:
