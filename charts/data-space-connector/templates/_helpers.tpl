@@ -447,6 +447,34 @@ counterparty resolves. Derived from one place on purpose: the same fragment is a
 Usage:
   {{ include "dsc.identityhub.keyId" . }}  → "did:web:example.org#key-1"
 */}}
+{{/*
+Fail if fdsc-edc's OID4VP holder kid disagrees with the key id the identityhub publishes.
+
+The connector is a separate chart and cannot `include` the helper above, so that value is set by
+hand and has to be kept in step. It is not a theoretical mismatch: a kid without the `#fragment`,
+or pointing at a different fragment, is accepted by every template here and only surfaces as a
+counterparty rejecting every presentation with "kid expected to correlate to iss".
+
+Checks the shared block and every per-deployment override, and only when a kid is actually set -
+an unset one is a valid configuration for a connector that does not present anything.
+*/}}
+{{- define "dsc.identityhub.assertHolderKid" -}}
+{{- if .Values.identityhub.bootstrap.did -}}
+{{- $expected := include "dsc.identityhub.keyId" . -}}
+{{- $edc := index .Values "fdsc-edc" | default dict -}}
+{{- $shared := dig "common" "config" "oid4vp" "holder" "kid" "" $edc -}}
+{{- if and $shared (ne ($shared | toString) $expected) -}}
+{{- fail (printf "fdsc-edc.common.config.oid4vp.holder.kid is %q but the identityhub publishes %q - a counterparty resolves the DID document and rejects anything signed under a different kid" ($shared | toString) $expected) -}}
+{{- end -}}
+{{- range $name, $dep := (dig "deployment" dict $edc) -}}
+{{- $own := dig "config" "oid4vp" "holder" "kid" "" ($dep | default dict) -}}
+{{- if and $own (ne ($own | toString) $expected) -}}
+{{- fail (printf "fdsc-edc.deployment.%s.config.oid4vp.holder.kid is %q but the identityhub publishes %q - the per-deployment block wins over common, so this is what the connector would actually sign with" $name ($own | toString) $expected) -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+
 {{- define "dsc.identityhub.keyId" -}}
 {{- $b := .Values.identityhub.bootstrap -}}
 {{- printf "%s#%s" (required "identityhub.bootstrap.did is required when identityhub.bootstrap.enabled" $b.did) $b.keyAlias -}}
@@ -563,6 +591,8 @@ Usage:
   value: {{ include "dsc.identityhub.keyId" . | quote }}
 - name: IDENTITY_API
   value: {{ include "dsc.identityhub.identityApi" . | quote }}
+- name: WAIT_RETRIES
+  value: {{ .Values.identityhub.bootstrap.waitRetries | quote }}
 - name: READINESS_URL
   value: {{ include "dsc.identityhub.readinessUrl" . | quote }}
 - name: CREDENTIAL_SERVICE_URL

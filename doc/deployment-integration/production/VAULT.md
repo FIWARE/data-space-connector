@@ -122,6 +122,19 @@ down. Plan the rota accordingly, and prefer draining Vault deliberately over let
 it be rescheduled at random — a `podDisruptionBudget` and a `nodeSelector` are worth
 more here than they look.
 
+**Order matters on install.** The bootstrap Job waits for the IdentityHub to report
+ready, and the IdentityHub is not ready while Vault is sealed. It gives up after
+`identityhub.bootstrap.waitRetries` polls five seconds apart — 150 seconds by default,
+and with `backoffLimit` retries on top of that, still minutes rather than hours. A
+manual unseal takes as long as it takes to get the key holders together, so either
+
+* unseal Vault first and deploy afterwards, which is the simple path; or
+* deploy, unseal, and re-run the deploy so the `post-upgrade` hook fires again; or
+* raise `identityhub.bootstrap.waitRetries` to cover the window you actually expect.
+
+Failing the Job is not destructive — every step in it is idempotent — but it does
+leave the participant unprovisioned until it runs to completion.
+
 **The application token** is not minted for you either when `autoUnseal: false`
 (`provisionToken` has no unsealer to run in). Create the policy and the token by hand
 with the root token, as described in [The Vault token](#the-vault-token) below, and
@@ -351,6 +364,20 @@ already exists.
    Exactly one entry must come back. Two entries sharing an id means something
    called the keypairs `rotate` endpoint instead: that appends rather than
    replaces, and revoking either entry then removes both.
+
+   **The Job is not atomic, and it does not roll back.** If the Vault write fails
+   after the revoke, it exits there. Nothing wrong is ever published - the DID
+   document is only updated once the new key is in Vault, and the revoke deletes
+   the old private key from Vault itself, so there is no stale key left to sign
+   with either. But the participant is then left with a revoked keypair and no
+   replacement, and can neither sign nor be verified until this is resolved.
+
+   The fix is to run the Job again, with `rotation.instance` bumped so it renders
+   as a new Job rather than patching the failed one. A second run picks up cleanly:
+   the listing it reads is not filtered by state, so the revoked resource is still
+   found, and revoking it again is accepted rather than rejected as an illegal
+   transition. Should the underlying cause not be transient, the participant stays
+   down until it is fixed - so rotate when someone is around to look at it.
 
 4. Re-issue every credential signed with the old key. For the MembershipCredential
    that means forcing the vc-operator to re-issue - changing the

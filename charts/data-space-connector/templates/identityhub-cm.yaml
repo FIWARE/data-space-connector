@@ -1,4 +1,5 @@
 {{- if (eq .Values.identityhub.enabled true) }}
+{{- include "dsc.identityhub.assertHolderKid" . }}
 
 # this configmap contains all application configuration that is required by the identityhub runtime.
 apiVersion: v1

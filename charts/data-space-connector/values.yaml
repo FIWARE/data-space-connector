@@ -2715,7 +2715,9 @@ identityhub:
   enabled: false
   image:
     repository: "tractusx/identityhub"
-    # -- Overrides the image tag whose default is the chart appVersion
+    # -- tag of the identityhub image. Required, and with no default on purpose: this is an
+    # upstream image whose versioning has nothing to do with this chart's appVersion, so falling
+    # back to it produced a tag that does not exist.
     tag: sha-687d69f
     # -- [Kubernetes image pull policy](https://kubernetes.io/docs/concepts/containers/images/#image-pull-policy) to use
     pullPolicy: IfNotPresent
@@ -2749,7 +2751,11 @@ identityhub:
   # sidecar does not speak OID4VCI - obtaining and renewing the credential stays with the
   # vc-operator, which writes it to a Secret; this only mirrors that Secret into the identityhub.
   credentialSync:
-    # -- should the sidecar be rendered
+    # -- should the sidecar be rendered. It only mirrors the credential into a participant context
+    # that already exists, so on its own it does nothing: `identityhub.bootstrap.enabled` has to be
+    # set as well, or the sidecar will keep reporting a 404 for the participant. The two switches
+    # are separate because a context is also provisioned by hand or by an earlier release, and such
+    # a deployment wants the sidecar without the Job.
     enabled: false
     # -- Secret holding the credential, as written by the vc-operator. Defaults to
     # identityhub.bootstrap.credential.secretName.
@@ -2780,7 +2786,10 @@ identityhub:
   # credential, and every DCP flow fails. The steps are the ones documented in
   # doc/DSP_INTEGRATION.md, run in-cluster and idempotently instead of by hand from a workstation.
   bootstrap:
-    # -- should the participant context be provisioned by the chart
+    # -- should the participant context be provisioned by the chart. This creates the context, the
+    # keypair and the super-user api key, but it does NOT put a credential in it: that is
+    # `identityhub.credentialSync.enabled`, and a participant without a credential presents nothing
+    # and is rejected by every counterparty. A complete provisioning needs both.
     enabled: false
     # -- DID of this participant, e.g. `did:web:my-connector.org`. Must match
     # `fdsc-edc.common.config.edc.participant.id` and the DID the issuer signs credentials for.
@@ -2848,11 +2857,20 @@ identityhub:
     # verifying, so this is opt-in, runs as its own Job and never as an upgrade hook. Enable it,
     # let it run, set it back to false.
     rotation:
-      # -- should the rotation Job be rendered
+      # -- should the rotation Job be rendered. The rotation is not atomic: the old keypair is
+      # revoked before the new one is published, and if the vault write in between fails the Job
+      # exits without publishing anything. Nothing wrong is ever served - the DID document is only
+      # updated after the key is safely stored - but the participant is left unable to sign until
+      # the Job is re-run, which is safe to do and picks up where it left off.
       enabled: false
       # -- suffix of the Job name. Bump it for each rotation so a new run is a new, immutable Job
       # instead of a failing patch of a completed one.
       instance: 1
+    # -- how many times the Job polls the identityhub before giving up, five seconds apart. The
+    # default covers a vault the chart unseals for you. A vault unsealed by hand is not ready until
+    # the key holders have shown up, which can be hours: either raise this, or unseal first and let
+    # the Job run on the next deploy.
+    waitRetries: 30
     # -- image used for the steps that only need openssl
     opensslImage:
       repository: alpine/openssl
@@ -3030,15 +3048,6 @@ identityhub:
   logging:
     # -- Enable logging to create .log files
     enabled: true
-    persistence:
-      # -- Enable .log files to persist in local machine
-      enabled: false
-      # -- access mode of the claim
-      accessMode: ReadWriteOnce
-      # -- size of the claim
-      size: 1Gi
-      # -- storage class of the claim; empty uses the cluster default
-      storageClass: ""
     # -- List of handlers to use in the logger
     handlers:
       - java.util.logging.ConsoleHandler

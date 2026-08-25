@@ -26,16 +26,18 @@ rules:
   - apiGroups: [""]
     resources: ["secrets"]
     verbs: ["create"]
+  # get only. Neither Secret is ever rewritten: the unseal keys because the ones in front of the
+  # storage volume are the only ones that open it, and the application token because it reaches the
+  # components as an environment variable, which a running pod never picks up again anyway. The
+  # script only ever POSTs (create) and GETs.
   - apiGroups: [""]
     resources: ["secrets"]
     resourceNames:
       - {{ .Values.vault.unattended.secretName | quote }}
       {{- with .Values.vault.hashicorp.existingSecret }}
-      # The application token this component mints. get only, to tell whether it already exists:
-      # it is created once and never rewritten.
       - {{ . | quote }}
       {{- end }}
-    verbs: ["get", "update"]
+    verbs: ["get"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding

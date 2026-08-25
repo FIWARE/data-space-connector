@@ -75,9 +75,9 @@ spec:
         # connection then failed, including the ones to a vault with a private CA.
         - name: import-cacerts
           {{- if .Values.identityhub.image.repository }}
-          image: "{{ .Values.identityhub.image.repository }}:{{ .Values.identityhub.image.tag | default .Chart.AppVersion }}"
+          image: "{{ .Values.identityhub.image.repository }}:{{ .Values.identityhub.image.tag | required "identityhub.image.tag is required: the identityhub is an upstream image and its version is unrelated to this chart's appVersion" }}"
           {{- else }}
-          image: "tractusx/identityhub:{{ .Values.identityhub.image.tag | default .Chart.AppVersion }}"
+          image: "tractusx/identityhub:{{ .Values.identityhub.image.tag | required "identityhub.image.tag is required: the identityhub is an upstream image and its version is unrelated to this chart's appVersion" }}"
           {{- end }}
           imagePullPolicy: {{ .Values.identityhub.image.pullPolicy }}
           command:
@@ -162,9 +162,9 @@ spec:
             {{- toYaml .Values.identityhub.securityContext | nindent 12 }}
           # either use the specified image, or use the default one
           {{- if .Values.identityhub.image.repository }}
-          image: "{{ .Values.identityhub.image.repository }}:{{ .Values.identityhub.image.tag | default .Chart.AppVersion }}"
+          image: "{{ .Values.identityhub.image.repository }}:{{ .Values.identityhub.image.tag | required "identityhub.image.tag is required: the identityhub is an upstream image and its version is unrelated to this chart's appVersion" }}"
           {{- else }}
-          image: "tractusx/identityhub:{{ .Values.identityhub.image.tag | default .Chart.AppVersion }}"
+          image: "tractusx/identityhub:{{ .Values.identityhub.image.tag | required "identityhub.image.tag is required: the identityhub is an upstream image and its version is unrelated to this chart's appVersion" }}"
           {{- end }}
 
           imagePullPolicy: {{ .Values.identityhub.image.pullPolicy }}
@@ -393,13 +393,10 @@ spec:
         - name: credential-sync-tmp
           emptyDir: { }
         {{- end }}
-        - name: logs # aim for persistent volume in localhost
-        {{- if and .Values.identityhub.logging.enabled .Values.identityhub.logging.persistence.enabled }}
-          persistentVolumeClaim:
-            claimName: identityhub-pvc-logs
-        {{- else }}
+        # The file handler writes here so the JUL config stays valid, but the logs are not meant to
+        # be read off the volume: the console handler is the one that feeds the cluster's log stack.
+        - name: logs
           emptyDir: { }
-        {{- end }}
       {{- with .Values.identityhub.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

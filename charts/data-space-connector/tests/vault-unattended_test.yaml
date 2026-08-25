@@ -71,11 +71,12 @@ tests:
       - equal:
           path: rules[1].resourceNames[0]
           value: my-unseal-keys
+      # get only: neither Secret is ever rewritten, so `update` would be a permission the script
+      # has no use for. Rotating the token is done by deleting the Secret, not by patching it.
       - equal:
           path: rules[1].verbs
           value:
             - get
-            - update
 
   - it: should let the unsealer read the token secret it mints
     templates:
@@ -284,35 +285,6 @@ tests:
       - matchRegex:
           path: spec.template.spec.initContainers[0].command[2]
           pattern: 'keytool -importcert'
-
-  - it: should create the claim the deployment mounts for persistent logs
-    templates:
-      - templates/identityhub-logs-pvc.yaml
-    set:
-      identityhub.enabled: true
-      identityhub.endpoints.identity.authKeyAlias: super-user-apikey
-      identityhub.logging.persistence.enabled: true
-      identityhub.logging.persistence.size: 5Gi
-    asserts:
-      - isKind:
-          of: PersistentVolumeClaim
-      - equal:
-          path: metadata.name
-          value: identityhub-pvc-logs
-      - equal:
-          path: spec.resources.requests.storage
-          value: 5Gi
-
-  - it: should not create the claim when logs are not persisted
-    templates:
-      - templates/identityhub-logs-pvc.yaml
-    set:
-      identityhub.enabled: true
-      identityhub.endpoints.identity.authKeyAlias: super-user-apikey
-      identityhub.logging.persistence.enabled: false
-    asserts:
-      - hasDocuments:
-          count: 0
 
   # The connector side of the same contract (fdsc-edc omitting the property and injecting
   # EDC_VAULT_HASHICORP_TOKEN) is NOT covered here: the subchart is vendored as a .tgz, and

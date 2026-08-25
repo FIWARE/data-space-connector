@@ -192,7 +192,9 @@ The OID4VC based flows are automatically configured to get such credential in th
 > nothing having changed in the cluster. Set `identityhub.credentialSync.enabled` and the chart
 > renders a sidecar in the identityhub pod that mirrors the Secret the vc-operator maintains, on
 > issuance and on every renewal - which makes the manual steps below a one-off illustration rather
-> than something to run.
+> than something to run. The sidecar only writes into a participant context that already exists, so
+> it goes together with `identityhub.bootstrap.enabled`; enabled on its own it just reports a 404
+> for the participant on every cycle.
 >
 > Note what this is *not*: the identityhub can fetch credentials by itself. It ships
 > `credential-watchdog`, which re-requests an expiring credential, and the

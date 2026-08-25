@@ -120,8 +120,11 @@ data:
   lib.sh: |
     # Wait until a URL answers, then return. Fails the step rather than letting a later call
     # produce a confusing error against a component that is not up yet.
+    # Retries default to 30 x 5s = 150s. That is ample for a vault the chart unseals itself, and
+    # nowhere near enough for one unsealed by hand: raise identityhub.bootstrap.waitRetries, or run
+    # the Job after the key holders have opened it.
     wait_for() {
-      _name="$1"; _url="$2"; _tries="${3:-30}"
+      _name="$1"; _url="$2"; _tries="${3:-${WAIT_RETRIES:-30}}"
       echo "Waiting for ${_name}..."
       _i=0
       until curl -fsS "${_url}" >/dev/null 2>&1; do
@@ -175,6 +178,7 @@ data:
     : "${VAULT_TOKEN:?VAULT_TOKEN is required}"
     : "${IDENTITY_API:?IDENTITY_API is required}"
     : "${API_KEY:?API_KEY is required}"
+    : "${READINESS_URL:?READINESS_URL is required}"
 
     wait_for "identityhub" "${READINESS_URL}"
     wait_for "vault" "${VAULT_ADDR}/v1/sys/health"
@@ -229,9 +233,10 @@ data:
     #    value is ours to choose, and a fixed one makes this restart-proof.
     #
     # It is written under TWO key names on purpose. EDC's hashicorp vault client URL-encodes the
-    # alias and the HTTP layer then encodes the '%', so a lookup for "did:web:x-sts-client-secret"
-    # actually resolves the key literally named "did%3Aweb%3Ax-sts-client-secret". The plain-colon
-    # name is what curl writes here. Storing both keeps whichever form the client uses working.
+    # alias and the HTTP layer then encodes the '%', so a lookup for "<did>-sts-client-secret"
+    # actually resolves the key literally named with every ':' of the DID replaced by "%3A". The
+    # plain-colon name is what curl writes here, so storing both keeps whichever form the client
+    # uses working.
     if [ -z "${STS_CLIENT_SECRET}" ]; then
       echo "STS_CLIENT_SECRET is empty - refusing to provision an empty secret"
       exit 1
@@ -312,11 +317,9 @@ data:
   # the copy stale after the first unattended renewal, which takes the DCP lane down with nothing
   # having changed in the cluster.
   #
-  # Two modes:
-  #   --once   a single push, failing if there is nothing to push. Used from a Job.
-  #   (loop)   re-reads the mounted Secret every RESYNC_SECONDS and pushes when it changed. Used
-  #            from the sidecar in the identityhub pod. The kubelet refreshes mounted Secrets by
-  #            itself, so no watch on the Kubernetes API and no RBAC are involved.
+  # Runs as a sidecar in the identityhub pod: re-reads the mounted Secret every RESYNC_SECONDS and
+  # pushes when it changed. The kubelet refreshes mounted Secrets by itself, so no watch on the
+  # Kubernetes API and no RBAC are involved.
   sync-credential.sh: |
     #!/bin/sh
     set -e
@@ -470,6 +473,7 @@ data:
     : "${KEY_ID:?KEY_ID is required}"
     : "${IDENTITY_API:?IDENTITY_API is required}"
     : "${VAULT_ADDR:?VAULT_ADDR is required}"
+    : "${READINESS_URL:?READINESS_URL is required}"
 
     wait_for "identityhub" "${READINESS_URL}"
     wait_for "vault" "${VAULT_ADDR}/v1/sys/health"
