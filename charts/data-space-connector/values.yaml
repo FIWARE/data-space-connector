@@ -2727,7 +2727,29 @@ identityhub:
   # They are imported into a copy of the JVM truststore by an init container, so they extend the
   # bundled roots instead of replacing them. Needed to reach a vault, an issuer or a counterparty
   # that uses a private CA.
+  # -- extra CA certificates the identityhub has to TRUST, given as PEM inline: the CA of a vault,
+  # of an issuer or of a counterparty that does not use a publicly trusted certificate. These are
+  # not the certificates that identify this participant - those come from cert-manager and are used
+  # straight from their Secret. Keys become filenames and, through them, truststore aliases. Use
+  # this for a CA that does not exist in the cluster as an object; otherwise prefer
+  # `customCaCertsFrom` and skip the copy.
   customCaCerts: {}
+  # -- the same, but read from Secrets and ConfigMaps that already exist in the cluster, so a
+  # cert-manager Secret can be pointed at directly instead of having its PEM copied into values.
+  # Both sources can be used together. Each entry names either a `secret` or a `configMap`:
+  #
+  #   customCaCertsFrom:
+  #     - secret: mp-operations.org-tls   # keys default to [ca.crt]
+  #     - secret: some-issuer-tls
+  #       keys: [ca.crt, tls.crt]
+  #     - configMap: corporate-root-ca    # no keys: every key in the ConfigMap
+  #
+  # `keys` defaults to `ca.crt` for Secrets on purpose. A kubernetes.io/tls Secret also carries
+  # tls.key, which does not belong in this pod and which `keytool -importcert` fails on, taking the
+  # init container down with it. Named keys are projected as `<source>-<key>` so that two sources
+  # cannot collide on a filename, which in a projected volume is a mount failure rather than a
+  # warning.
+  customCaCertsFrom: []
   # -- additional volumes to attach to the identityhub pod
   additionalVolumes: []
   # -- additional volume mounts for the identityhub container

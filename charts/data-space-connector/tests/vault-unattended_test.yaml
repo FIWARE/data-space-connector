@@ -9,8 +9,8 @@
 #   - identityhub-cm.yaml:          the vault token, in a ConfigMap or not
 #   - identityhub-deployment.yaml:  the token env var and the truststore import
 #   - identityhub-service.yaml:     every port the deployment opens
-#   - identityhub-cacerts-cm.yaml / identityhub-logs-pvc.yaml: the objects the
-#     deployment referenced while nothing created them
+#
+# The custom CA truststore has its own suite, identityhub-cacerts_test.yaml.
 # ---------------------------------------------------------------------------
 suite: Production vault and identityhub wiring
 templates:
@@ -20,8 +20,6 @@ templates:
   - templates/identityhub-cm.yaml
   - templates/identityhub-deployment.yaml
   - templates/identityhub-service.yaml
-  - templates/identityhub-cacerts-cm.yaml
-  - templates/identityhub-logs-pvc.yaml
 tests:
   # ==========================================================================
   # The unsealer
@@ -245,46 +243,6 @@ tests:
       - equal:
           path: spec.ports[4].name
           value: accounts
-
-  - it: should create the ConfigMap and the import step for extra CAs
-    templates:
-      - templates/identityhub-cacerts-cm.yaml
-      - templates/identityhub-deployment.yaml
-    set:
-      identityhub.enabled: true
-      identityhub.endpoints.identity.authKeyAlias: super-user-apikey
-      identityhub.customCaCerts:
-        my-ca.pem: |
-          -----BEGIN CERTIFICATE-----
-          test
-          -----END CERTIFICATE-----
-    asserts:
-      - exists:
-          path: metadata.name
-      - matchRegex:
-          path: metadata.name
-          pattern: 'identityhub'
-
-  - it: should import the extra CAs into a copy of the truststore
-    templates:
-      - templates/identityhub-deployment.yaml
-    set:
-      identityhub.enabled: true
-      identityhub.endpoints.identity.authKeyAlias: super-user-apikey
-      identityhub.customCaCerts:
-        my-ca.pem: |
-          -----BEGIN CERTIFICATE-----
-          test
-          -----END CERTIFICATE-----
-    asserts:
-      # Without this the mount replaced the whole truststore with an empty
-      # emptyDir, and every outbound TLS connection failed.
-      - equal:
-          path: spec.template.spec.initContainers[0].name
-          value: import-cacerts
-      - matchRegex:
-          path: spec.template.spec.initContainers[0].command[2]
-          pattern: 'keytool -importcert'
 
   # The connector side of the same contract (fdsc-edc omitting the property and injecting
   # EDC_VAULT_HASHICORP_TOKEN) is NOT covered here: the subchart is vendored as a .tgz, and

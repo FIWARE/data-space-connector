@@ -505,6 +505,17 @@ Usage:
 {{- end -}}
 
 {{/*
+Whether the identityhub needs the custom-CA machinery: the import init container, the truststore
+mount and the projected volume. Two sources feed it - PEM written inline in values, and Secrets or
+ConfigMaps that already exist in the cluster - and either one on its own is enough.
+*/}}
+{{- define "dsc.identityhub.customCaCerts.enabled" -}}
+{{- if or .Values.identityhub.customCaCerts .Values.identityhub.customCaCertsFrom -}}
+true
+{{- end -}}
+{{- end -}}
+
+{{/*
 Whether the credential-sync sidecar is enabled, honouring the deprecated
 identityhub.bootstrap.credential.enabled. Renders "true" or the empty string, so it can be used
 directly in an `if`.

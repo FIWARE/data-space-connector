@@ -65,9 +65,9 @@ spec:
       serviceAccountName: default
       securityContext:
         {{- toYaml .Values.identityhub.podSecurityContext | nindent 8 }}
-      {{- if or .Values.identityhub.initContainers $otelInjectAgent .Values.identityhub.customCaCerts (include "dsc.identityhub.credentialSync.enabled" .) }}
+      {{- if or .Values.identityhub.initContainers $otelInjectAgent (include "dsc.identityhub.customCaCerts.enabled" .) (include "dsc.identityhub.credentialSync.enabled" .) }}
       initContainers:
-        {{- if .Values.identityhub.customCaCerts }}
+        {{- if include "dsc.identityhub.customCaCerts.enabled" . }}
         # Import the extra CAs into a writable copy of the JVM truststore. Without this step the
         # `custom-cacerts` volume the main container mounts over
         # /opt/java/openjdk/lib/security/cacerts is an empty emptyDir, so declaring customCaCerts
@@ -325,7 +325,7 @@ spec:
           {{- end }}
           {{- end }}
           volumeMounts:
-            {{- if .Values.identityhub.customCaCerts }}
+            {{- if include "dsc.identityhub.customCaCerts.enabled" . }}
             - name: custom-cacerts
               mountPath: /opt/java/openjdk/lib/security/cacerts
               subPath: cacerts
@@ -368,11 +368,48 @@ spec:
             items:
               - key: "logging.properties"
                 path: "logging.properties"
-        {{- if .Values.identityhub.customCaCerts }}
+        {{- if include "dsc.identityhub.customCaCerts.enabled" . }}
+        # Every CA the init container has to import, gathered into one flat directory. `projected`
+        # is what makes that possible from several places at once: the ConfigMap rendered from
+        # customCaCerts, plus any Secret or ConfigMap that already exists in the cluster. The
+        # init container never learns where a file came from - it just walks the directory.
+        #
+        # Secrets default to ca.crt rather than being mounted whole: a kubernetes.io/tls Secret also
+        # holds tls.key, which has no business inside this pod and which keytool would choke on,
+        # failing the init container. Named keys are projected as `<source>-<key>`, so two sources
+        # cannot collide on a filename - a collision here is a mount failure, not a warning - and
+        # the alias keytool derives from the basename says where the certificate came from.
         - name: custom-cacertificates
-          configMap:
-            name: identityhub-custom-cacerts
+          projected:
             defaultMode: 0400
+            sources:
+              {{- if .Values.identityhub.customCaCerts }}
+              - configMap:
+                  name: identityhub-custom-cacerts
+              {{- end }}
+              {{- range $i, $src := .Values.identityhub.customCaCertsFrom }}
+              {{- if $src.secret }}
+              - secret:
+                  name: {{ $src.secret | quote }}
+                  items:
+                    {{- range $src.keys | default (list "ca.crt") }}
+                    - key: {{ . | quote }}
+                      path: {{ printf "%s-%s" $src.secret . | quote }}
+                    {{- end }}
+              {{- else if $src.configMap }}
+              - configMap:
+                  name: {{ $src.configMap | quote }}
+                  {{- with $src.keys }}
+                  items:
+                    {{- range . }}
+                    - key: {{ . | quote }}
+                      path: {{ printf "%s-%s" $src.configMap . | quote }}
+                    {{- end }}
+                  {{- end }}
+              {{- else }}
+              {{- fail (printf "identityhub.customCaCertsFrom[%d] needs either `secret` or `configMap`" $i) }}
+              {{- end }}
+              {{- end }}
         - name: custom-cacerts
           emptyDir:
             sizeLimit: 1Mi

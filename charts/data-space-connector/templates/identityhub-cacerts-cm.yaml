@@ -1,8 +1,14 @@
 {{- if and (eq .Values.identityhub.enabled true) .Values.identityhub.customCaCerts }}
 
-# Extra CA certificates the identityhub has to trust, e.g. the CA of a vault or a counterparty
-# that does not use a publicly trusted certificate. The deployment's `import-cacerts` init
-# container adds them to a copy of the JVM truststore; this ConfigMap is what it reads.
+# CA certificates the identityhub has to TRUST - the CA of a vault, of an issuer, or of a
+# counterparty that does not use a publicly trusted certificate. Not the certificates that identify
+# this participant: those are issued by cert-manager and used straight from their Secret.
+#
+# This holds only the ones written inline as PEM in `identityhub.customCaCerts`. CAs that already
+# exist in the cluster are named in `identityhub.customCaCertsFrom` and reach the pod through the
+# projected volume in identityhub-deployment.yaml, so a deployment that uses only that key renders
+# no ConfigMap at all. Either way the `import-cacerts` init container adds them to a copy of the
+# JVM truststore.
 #
 # The deployment referenced this ConfigMap by name while nothing ever created it, so declaring
 # customCaCerts used to leave the pod unable to start.
