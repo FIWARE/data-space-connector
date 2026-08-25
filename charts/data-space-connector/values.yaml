@@ -3159,7 +3159,7 @@ vault:
     # production: every restart of the vault pod loses the participant's signing key, the
     # identityhub super-user credential, the STS client secret and the transfer signing key that
     # fdsc-edc generates for itself, which takes the DCP lane down until the bootstrap Job re-runs.
-    # For production set `vault.production.enabled: true`, which turns this off.
+    # `vault.unattended.enabled: true` turns this off and gives vault persistent storage.
     dev:
       enabled: true
       devRootToken: "root"
@@ -3212,20 +3212,30 @@ vault:
       secret: /v1/secret
       # -- path of the health endpoint
       health: /v1/sys/health
-  # -- production mode for the bundled vault: persistent storage plus automatic unsealing, so the
-  # participant's identity survives a pod restart without an operator typing unseal keys.
+  # -- unattended operation of the bundled vault: persistent storage, and the chart initialising
+  # and unsealing it for you so a pod restart recovers on its own.
   #
-  # Two caveats, both deliberate and neither hidden:
+  # **This is not a production security posture, and it is not meant to be read as one.** A vault
+  # that unseals itself keeps its unseal keys next to it, in a Secret of this same namespace, so
+  # the cluster's Secret store is as trusted as the vault it opens. It is a good fit for demo and
+  # staging, where the alternative - dev mode - loses the participant's identity on every restart
+  # and does not put it back until the next deploy.
   #
-  #   * The unseal keys and the initial root token are stored in a Kubernetes Secret in this
-  #     namespace. That is what makes an unattended restart recover on its own, and it means the
-  #     cluster's Secret store is as trusted as the vault it unseals. Set `autoUnseal: false` to
-  #     keep the keys out of the cluster and unseal by hand instead.
+  # A real production vault is unsealed by people: several key holders in the operating
+  # organisation, each with a share, present them on every start. That cannot be automated away,
+  # and this chart does not pretend to. Set `autoUnseal: false` and `secretShares`/`secretThreshold`
+  # to something meaningful, and see doc/deployment-integration/production/VAULT.md for the manual
+  # procedure.
+  #
+  # Two things worth knowing either way:
+  #
   #   * Initialisation happens exactly once, on the first start of an empty vault. The resulting
   #     Secret is annotated `helm.sh/resource-policy: keep`, so it survives uninstall - deleting it
   #     while the storage volume still exists leaves a vault nobody can unseal.
-  production:
-    # -- should vault run with persistent storage and be unsealed automatically
+  #   * `secretShares: 1` and `autoUnseal: true` only make sense together. Splitting the master key
+  #     across several holders and then leaving all the shares in one Secret buys nothing.
+  unattended:
+    # -- should vault run with persistent storage, initialised and unsealed by the chart
     enabled: false
     # -- number of key shares to split the master key into
     secretShares: 1

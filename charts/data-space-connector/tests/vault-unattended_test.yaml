@@ -42,7 +42,7 @@ tests:
     set:
       vault.enabled: true
       vault.server.dev.enabled: false
-      vault.production.enabled: true
+      vault.unattended.enabled: true
     asserts:
       - isKind:
           of: Deployment
@@ -61,8 +61,8 @@ tests:
     set:
       vault.enabled: true
       vault.server.dev.enabled: false
-      vault.production.enabled: true
-      vault.production.secretName: my-unseal-keys
+      vault.unattended.enabled: true
+      vault.unattended.secretName: my-unseal-keys
     documentIndex: 1
     asserts:
       - isKind:
@@ -83,8 +83,8 @@ tests:
     set:
       vault.enabled: true
       vault.server.dev.enabled: false
-      vault.production.enabled: true
-      vault.production.secretName: my-unseal-keys
+      vault.unattended.enabled: true
+      vault.unattended.secretName: my-unseal-keys
       vault.hashicorp.existingSecret: my-vault-token
     documentIndex: 1
     asserts:
@@ -102,11 +102,11 @@ tests:
     set:
       vault.enabled: true
       vault.server.dev.enabled: false
-      vault.production.enabled: true
+      vault.unattended.enabled: true
       vault.hashicorp.existingSecret: my-vault-token
       vault.hashicorp.existingSecretTokenKey: token
-      vault.production.tokenPeriod: 100h
-      vault.production.tokenPolicyName: my-policy
+      vault.unattended.tokenPeriod: 100h
+      vault.unattended.tokenPolicyName: my-policy
     asserts:
       # The destination is vault.hashicorp.existingSecret itself, not a key of its own: the consumers
       # read it from there, so the two cannot drift.
@@ -132,8 +132,8 @@ tests:
     set:
       vault.enabled: true
       vault.server.dev.enabled: false
-      vault.production.enabled: true
-      vault.production.provisionToken: false
+      vault.unattended.enabled: true
+      vault.unattended.provisionToken: false
       vault.hashicorp.existingSecret: my-vault-token
     asserts:
       # Without TOKEN_SECRET_NAME the script skips the whole branch, so the unsealer goes back to
@@ -150,7 +150,7 @@ tests:
     set:
       vault.enabled: true
       vault.server.dev.enabled: true
-      vault.production.enabled: true
+      vault.unattended.enabled: true
     asserts:
       # Dev mode stores everything in memory and auto-unseals, so persistence and
       # unsealing are meaningless next to it. Better to refuse than to no-op.
@@ -163,8 +163,8 @@ tests:
     set:
       vault.enabled: true
       vault.server.dev.enabled: true
-      vault.production.enabled: true
-      vault.production.autoUnseal: false
+      vault.unattended.enabled: true
+      vault.unattended.autoUnseal: false
     asserts:
       # The guard used to sit inside the autoUnseal branch, so this combination rendered
       # in silence and did nothing at all - the worst of the three outcomes.
@@ -177,8 +177,8 @@ tests:
     set:
       vault.enabled: true
       vault.server.dev.enabled: false
-      vault.production.enabled: true
-      vault.production.autoUnseal: false
+      vault.unattended.enabled: true
+      vault.unattended.autoUnseal: false
     asserts:
       - hasDocuments:
           count: 0

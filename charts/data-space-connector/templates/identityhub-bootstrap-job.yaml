@@ -6,7 +6,7 @@
 # post-upgrade is not optional while vault runs in dev mode (vault.server.dev.enabled, the chart
 # default): its storage is in-memory, so every vault restart loses the signing key, the super-user
 # credential and the STS client secret this job writes, and only a re-run puts them back. With
-# vault.production.enabled the state survives and every step here is a no-op, which is why they are
+# vault.unattended.enabled the state survives and every step here is a no-op, which is why they are
 # all idempotent.
 apiVersion: batch/v1
 kind: Job

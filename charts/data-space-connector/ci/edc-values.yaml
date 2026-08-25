@@ -69,7 +69,7 @@ vault:
   hashicorp:
     # exercises the branch that keeps the token out of the ConfigMap
     existingSecret: vault-token
-  production:
+  unattended:
     enabled: true
 
 vcCredentials:

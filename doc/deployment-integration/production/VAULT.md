@@ -7,15 +7,36 @@ client, and the RSA key `fdsc-edc` generates for itself to sign transfer EDRs.
 
 By default the chart deploys Vault in **dev mode**, which stores all of that in
 memory. That is deliberate for local deployments and for the integration tests,
-and it is not usable in production: every restart of the Vault pod drops the lot,
-and the DCP lane stays broken until the bootstrap Job runs again. This page is the
-production configuration.
+and it is not usable in production: every restart of the Vault pod drops the lot.
+Note when it comes back — the bootstrap Job runs on install and upgrade, not on
+restart, so a Vault that restarts at 3am leaves the DCP lane broken until somebody
+deploys again.
 
-## Persistent, self-unsealing Vault
+There are three postures, and it is worth being blunt about which is which:
 
-A Vault with real storage comes back **sealed** after any restart and refuses
-every request until it is unsealed, so persistence on its own is not enough.
-`vault.production` covers the second half.
+| Posture | Survives a restart | Starts unattended | Keys outside the cluster |
+|---|---|---|---|
+| `dev` (default) | no | yes | n/a |
+| `unattended` with `autoUnseal: false` | yes | **no** | **yes** |
+| `unattended` with `autoUnseal: true` | yes | yes | no |
+
+**Only the middle row is a production posture.** A Vault that unseals itself has to
+keep its unseal keys within reach, which here means a Secret in the same namespace;
+that is a convenience for demo and staging, not a security property. Production
+means people: several key holders in the operating organisation, each with a share,
+presenting them on every start. It cannot be automated away, and this chart does not
+pretend otherwise — it just makes the unattended option available, and names it for
+what it is.
+
+## Persistent Vault
+
+A Vault with real storage comes back **sealed** after any restart and refuses every
+request until it is unsealed, so persistence on its own is not enough. Something has
+to present the unseal keys — either the chart, or a person.
+
+The values below are the unattended variant, which is what a demo or staging
+deployment wants. For production, keep everything except the last block and read
+[Unsealing in production](#unsealing-in-production).
 
 ```yaml
 vault:
@@ -35,33 +56,76 @@ vault:
     # keeps the token out of the ConfigMaps, see below
     existingSecret: vault-token
     existingSecretTokenKey: token
-  production:
+  unattended:
     enabled: true
-    # 1/1 is fine when the keys live in a Secret anyway; raise both to split the
-    # master key across several holders and unseal by hand
+    # 1/1 only makes sense together with autoUnseal: splitting the master key and
+    # then leaving every share in one Secret buys nothing
     secretShares: 1
     secretThreshold: 1
     autoUnseal: true
     secretName: vault-unseal-keys
 ```
 
-`vault.production.enabled` refuses to render next to `vault.server.dev.enabled`,
+`vault.unattended.enabled` refuses to render next to `vault.server.dev.enabled`,
 rather than quietly doing nothing.
 
 ### What auto-unsealing costs
 
 The unseal keys and the initial root token are written to a Kubernetes Secret in
 the release namespace. That is what lets an unattended restart recover on its own,
-and it means the cluster's Secret store is as trusted as the Vault it opens. There
-is no cloud KMS involved and none is required.
+and it means the cluster's Secret store is as trusted as the Vault it opens: anyone
+who can read Secrets in that namespace can open the Vault. No cloud KMS is involved
+and none is required — which is exactly why this is not a production posture.
 
-If that trade is not acceptable, set `autoUnseal: false` and unseal by hand after
-every start:
+## Unsealing in production
+
+Production means the unseal keys never live in the cluster. The operating
+organisation nominates key holders, the master key is split between them, and a
+quorum of them presents their shares every time Vault starts. There is no way around
+the manual step; that is the point of it.
+
+Values: everything from the block above, with the last part replaced by
+
+```yaml
+  unattended:
+    enabled: true
+    autoUnseal: false
+    # split across five holders, three of whom have to show up
+    secretShares: 5
+    secretThreshold: 3
+```
+
+With `autoUnseal: false` the chart deploys no unsealer at all: no Deployment, no
+ServiceAccount, no Secret holding keys. Vault is yours to initialise and open.
+
+**Once, at install.** Run this with the key holders present, and distribute the
+output there and then — it is the only time Vault ever shows it:
 
 ```shell
-kubectl exec -n <ns> <release>-vault-0 -- vault operator init -key-shares=3 -key-threshold=2
-kubectl exec -n <ns> <release>-vault-0 -- vault operator unseal <key>
+kubectl exec -n <ns> <release>-vault-0 -- vault operator init -key-shares=5 -key-threshold=3
 ```
+
+Each holder keeps one unseal key. Store the root token separately (a password
+manager, an HSM, an envelope in a safe): it is needed for the steps below and for
+recovery, and for nothing else. Do not keep any of it in the cluster.
+
+**On every start**, including every pod restart, upgrade and node drain. Three
+different holders run this, each with their own key:
+
+```shell
+kubectl exec -it -n <ns> <release>-vault-0 -- vault operator unseal
+kubectl exec -n <ns> <release>-vault-0 -- vault status | grep Sealed   # false when the quorum is met
+```
+
+Until the quorum is reached the IdentityHub cannot sign anything and the DCP lane is
+down. Plan the rota accordingly, and prefer draining Vault deliberately over letting
+it be rescheduled at random — a `podDisruptionBudget` and a `nodeSelector` are worth
+more here than they look.
+
+**The application token** is not minted for you either when `autoUnseal: false`
+(`provisionToken` has no unsealer to run in). Create the policy and the token by hand
+with the root token, as described in [The Vault token](#the-vault-token) below, and
+store it in the Secret named by `vault.hashicorp.existingSecret`.
 
 Two things about the Secret:
 
@@ -82,7 +146,7 @@ IdentityHub receives it as `EDC_VAULT_HASHICORP_TOKEN` and the property is omitt
 from the ConfigMap entirely, rather than left empty for EDC to resolve as an empty
 token.
 
-With `vault.production.provisionToken` (the default) there is nothing to do here:
+With `vault.unattended.provisionToken` (the default) there is nothing to do here:
 the unsealer mints that token itself, right after it initialises Vault, and stores
 it in the Secret named by `existingSecret`. It is the only component that ever sees
 the root token, so it is the only one that can, and it removes the last manual step
@@ -91,7 +155,7 @@ leave the IdentityHub in `CreateContainerConfigError` in the middle of every dep
 fresh installs included.
 
 The token is periodic and scoped by an ACL policy named after
-`vault.production.tokenPolicyName`:
+`vault.unattended.tokenPolicyName`:
 
 ```hcl
 path "secret/data/*"     { capabilities = ["create", "read", "update"] }

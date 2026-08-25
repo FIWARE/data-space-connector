@@ -1,4 +1,4 @@
-{{- if and .Values.vault.enabled .Values.vault.production.enabled .Values.vault.production.autoUnseal }}
+{{- if and .Values.vault.enabled .Values.vault.unattended.enabled .Values.vault.unattended.autoUnseal }}
 
 # The unsealer needs to write exactly one Secret: the unseal keys it gets back from initialising
 # vault. Scoped to that one name so the identity it runs under cannot read anything else in the
@@ -29,7 +29,7 @@ rules:
   - apiGroups: [""]
     resources: ["secrets"]
     resourceNames:
-      - {{ .Values.vault.production.secretName | quote }}
+      - {{ .Values.vault.unattended.secretName | quote }}
       {{- with .Values.vault.hashicorp.existingSecret }}
       # The application token this component mints. get only, to tell whether it already exists:
       # it is created once and never rewritten.
