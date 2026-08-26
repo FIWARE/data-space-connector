@@ -1,7 +1,6 @@
 apiVersion: v2
 name: data-space-connector
-description: Umbrella Chart for the FIWARE Data Space Connector, combining all essential
-  parts to be used by a participant.
+description: Umbrella Chart for the FIWARE Data Space Connector, combining all essential parts to be used by a participant.
 type: application
 version: 10.4.12
 dependencies:
@@ -90,7 +89,7 @@ dependencies:
   # observability - OpenTelemetry Collector for distributed tracing (opt-in)
   - name: opentelemetry-collector
     condition: opentelemetry-collector.enabled
-    version: 0.170.0
+    version: 0.171.0
     repository: https://open-telemetry.github.io/opentelemetry-helm-charts
   # observability - Grafana Tempo for trace storage backend (opt-in)
   - name: tempo
