@@ -58,6 +58,10 @@ spec:
               value: {{ $p.secretThreshold | quote }}
             - name: POLL_SECONDS
               value: "30"
+            # Mount path of the KV v2 engine, derived from the same value the components are
+            # configured with so the two cannot disagree about where secrets live.
+            - name: KV_PATH
+              value: {{ .Values.vault.hashicorp.paths.secret | trimPrefix "/v1/" | trimSuffix "/" | quote }}
             {{- if $p.provisionToken }}
             # Where the application token goes. The same Secret the identityhub and the connector read
             # it from, so the two cannot drift.

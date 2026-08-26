@@ -244,6 +244,55 @@ tests:
           path: spec.ports[4].name
           value: accounts
 
+  # A dev-mode vault mounts a KV v2 engine at secret/ for you; a real server mounts nothing there.
+  # Without this the unsealer leaves an open vault that answers every write with
+  # `no handler for route "secret/data/key-1"`, and the bootstrap Job dies on its first write.
+  - it: should mount the kv engine at the path the components are configured with
+    templates:
+      - templates/vault-unsealer-cm.yaml
+      - templates/vault-unsealer-deployment.yaml
+    set:
+      vault.enabled: true
+      vault.server.dev.enabled: false
+      vault.unattended.enabled: true
+      vault.hashicorp.existingSecret: vault-token
+    asserts:
+      - matchRegex:
+          path: data["unseal.sh"]
+          pattern: 'sys/mounts/\$\{KV_PATH\}'
+        template: templates/vault-unsealer-cm.yaml
+      - matchRegex:
+          path: data["unseal.sh"]
+          pattern: '"type":"kv","options":\{"version":"2"\}'
+        template: templates/vault-unsealer-cm.yaml
+      # Derived from vault.hashicorp.paths.secret rather than hardcoded, so the unsealer and the
+      # components cannot disagree about where secrets live.
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: KV_PATH
+            value: "secret"
+        template: templates/vault-unsealer-deployment.yaml
+
+  # The engine has to be mounted whatever the token arrangement is: a deployment that passes the
+  # token through a ConfigMap still needs somewhere to put its secrets. The provisioning branch
+  # used to be skipped wholesale when no token Secret was configured, taking the mount with it.
+  - it: should mount the kv engine even when it mints no token
+    templates:
+      - templates/vault-unsealer-cm.yaml
+    set:
+      vault.enabled: true
+      vault.server.dev.enabled: false
+      vault.unattended.enabled: true
+      vault.unattended.provisionToken: false
+    asserts:
+      - matchRegex:
+          path: data["unseal.sh"]
+          pattern: 'ensure_kv "\$\{_root\}"'
+      - matchRegex:
+          path: data["unseal.sh"]
+          pattern: 'if \[ -n "\$\{TOKEN_SECRET_NAME\}" \]; then'
+
   # The connector side of the same contract (fdsc-edc omitting the property and injecting
   # EDC_VAULT_HASHICORP_TOKEN) is NOT covered here: the subchart is vendored as a .tgz, and
   # helm-unittest cannot select templates inside a packaged dependency. It is verified in

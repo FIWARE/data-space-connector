@@ -122,6 +122,17 @@ down. Plan the rota accordingly, and prefer draining Vault deliberately over let
 it be rescheduled at random — a `podDisruptionBudget` and a `nodeSelector` are worth
 more here than they look.
 
+**The KV engine is mounted for you.** A dev-mode vault serves a KV v2 engine at
+`secret/` out of the box; a real server serves nothing there, so every write would
+fail with `no handler for route "secret/data/<alias>". route entry not found.` — a
+404 that reads like a missing secret rather than a missing engine. The unsealer
+mounts it at the path `vault.hashicorp.paths.secret` names, whether or not it also
+mints the token. With `autoUnseal: false` it is one more thing to do by hand:
+
+```shell
+vault secrets enable -path=secret -version=2 kv
+```
+
 **Order matters on install.** The bootstrap Job waits for the IdentityHub to report
 ready, and the IdentityHub is not ready while Vault is sealed. It gives up after
 `identityhub.bootstrap.waitRetries` polls five seconds apart — 150 seconds by default,

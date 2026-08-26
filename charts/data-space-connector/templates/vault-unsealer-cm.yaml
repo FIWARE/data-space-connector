@@ -37,6 +37,7 @@ data:
     TOKEN_SECRET_KEY="${TOKEN_SECRET_KEY:-token}"
     TOKEN_PERIOD="${TOKEN_PERIOD:-768h}"
     POLICY_NAME="${POLICY_NAME:-dsc-connector}"
+    KV_PATH="${KV_PATH:-secret}"
     KEY_DIR=/unseal-keys
     KUBE_API="https://kubernetes.default.svc"
     SA=/var/run/secrets/kubernetes.io/serviceaccount
@@ -120,6 +121,26 @@ data:
       [ -f "${KEY_DIR}/root-token" ] && cat "${KEY_DIR}/root-token" || true
     }
 
+    # Mount the KV v2 engine the components store everything under.
+    #
+    # A dev-mode vault mounts one at secret/ for you; a real server mounts NOTHING there, so without
+    # this every write fails with `no handler for route "secret/data/<alias>". route entry not
+    # found.` - a 404 that reads like a missing secret rather than a missing engine.
+    #
+    # Idempotent: vault answers 400 "path is already in use" for a path it already serves, which is
+    # the steady state on every reconcile after the first.
+    ensure_kv() {
+      _root="$1"
+      _code=$(printf '{"type":"kv","options":{"version":"2"}}' | curl -sS -o /tmp/kv.json -w '%{http_code}' \
+        -H "X-Vault-Token: ${_root}" \
+        -X POST "${VAULT_ADDR}/v1/sys/mounts/${KV_PATH}" --data-binary @-)
+      case "${_code}" in
+        20*) echo "kv v2 engine mounted at ${KV_PATH}/" ;;
+        400) grep -q "already in use" /tmp/kv.json || { echo "failed to mount the kv engine at ${KV_PATH}/: HTTP ${_code}"; cat /tmp/kv.json; return 1; } ;;
+        *)   echo "failed to mount the kv engine at ${KV_PATH}/: HTTP ${_code}"; cat /tmp/kv.json; return 1 ;;
+      esac
+    }
+
     # The policy the components run under. Without it they would need the root token, which is what
     # the chart used to hand them.
     #
@@ -187,14 +208,18 @@ data:
           initialize || true
         elif grep -q '"sealed":true' /tmp/status.json; then
           unseal || true
-        elif [ -n "${TOKEN_SECRET_NAME}" ]; then
-          # Initialised and open: the only state in which a policy can be written. Skipped entirely
-          # when the deployment passes the token through a ConfigMap instead.
+        else
+          # Initialised and open: the only state in which the engine can be mounted or a policy
+          # written. The mount happens whatever the token arrangement is - a deployment that passes
+          # the token through a ConfigMap still needs somewhere to put its secrets.
           _root=$(vault_root)
           if [ -z "${_root}" ]; then
-            echo "waiting for the root token in ${SECRET_NAME} before provisioning the application token"
+            echo "waiting for the root token in ${SECRET_NAME}"
           else
-            ensure_token "${_root}" || true
+            ensure_kv "${_root}" || true
+            if [ -n "${TOKEN_SECRET_NAME}" ]; then
+              ensure_token "${_root}" || true
+            fi
           fi
         fi
       else
