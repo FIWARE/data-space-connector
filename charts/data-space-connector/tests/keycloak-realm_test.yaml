@@ -1,0 +1,44 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/helm-unittest/helm-unittest/main/schema/helm-testsuite.json
+#
+# ---------------------------------------------------------------------------
+# Helm-unittest suite for the rendered realm.
+#
+# The realm is assembled by _realm.tpl from values that are spread across
+# keycloak.realm, keycloak.elsi and keycloak.tokenStatusList, so a key that
+# does not reach the template produces a realm that imports cleanly and behaves
+# differently. That is the failure this suite guards.
+# ---------------------------------------------------------------------------
+suite: Keycloak realm
+templates:
+  - templates/realm.yaml
+tests:
+  # values.yaml has shipped `frontendURL` since forever while _realm.tpl only read `frontendUrl`,
+  # so the documented key produced an empty attribute and Keycloak silently fell back to deriving
+  # the issuer URL from the request.
+  - it: should honour the documented frontendURL spelling
+    set:
+      keycloak.enabled: true
+      keycloak.realm.frontendURL: https://kc.example.org
+    asserts:
+      - matchRegex:
+          path: data["test-realm-realm.json"]
+          pattern: '"frontendUrl": "https://kc\.example\.org"'
+
+  - it: should honour the frontendUrl spelling the template always read
+    set:
+      keycloak.enabled: true
+      keycloak.realm.frontendUrl: https://kc.example.org
+    asserts:
+      - matchRegex:
+          path: data["test-realm-realm.json"]
+          pattern: '"frontendUrl": "https://kc\.example\.org"'
+
+  - it: should let frontendUrl win when both are given
+    set:
+      keycloak.enabled: true
+      keycloak.realm.frontendURL: https://documented.example.org
+      keycloak.realm.frontendUrl: https://explicit.example.org
+    asserts:
+      - matchRegex:
+          path: data["test-realm-realm.json"]
+          pattern: '"frontendUrl": "https://explicit\.example\.org"'
