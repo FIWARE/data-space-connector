@@ -2487,8 +2487,17 @@ fdsc-edc:
       # TMFConfig converts them with `URI.create(...).toURL()` while the runtime boots, so a single
       # empty one aborts startup with `IllegalArgumentException: URI is not absolute`. That is why
       # the default is off rather than on-with-empty-values.
+      #
+      # But turning it OFF is not free either, and the coupling is not obvious. The extension is
+      # what registers the connector's ObjectMapper - imperatively, at the end of
+      # TMFContractNegotiationExtension.initialize(), which returns early when disabled - and
+      # several extensions inject one. With TMF off, OID4VPExtension is simply the next to boot and
+      # dies with `No default provider for required injection point Field "objectMapper"`, a wiring
+      # error that says nothing about TMForum. So a deployment that uses the OID4VP lane needs this
+      # on, with all seven addresses filled in.
       tmfExtension:
-        # -- should the extension be enabled
+        # -- should the extension be enabled. Read the note above before turning this off: it also
+        # takes the connector's ObjectMapper with it.
         enabled: false
         # -- address of the quote api to be used
         quoteApi:
