@@ -21,6 +21,7 @@ specific flows and its deployment and integration with other frameworks.
   - [Deployment by Role](#deployment-by-role)
   - [Local Deployment (Maven)](#local-deployment-maven)
   - [Packet Delivery Company (ArgoCD)](#packet-delivery-company-argocd)
+  - [Running the EDC identity material in production](#running-the-edc-identity-material-in-production)
   - [Observability](#observability)
   - [Integration with AWS Garnet Framework (formerly AWS Smart Territory Framework)](#integration-with-aws-garnet-framework-formerly-aws-smart-territory-framework)
 
@@ -92,6 +93,14 @@ The configuration can be found at the
 [fiware-gitops repository](https://github.com/FIWARE-Ops/fiware-gitops/tree/master/aws/dsba/packet-delivery/data-space-connector).
 
 **Note,** that this is currently being reworked and above repository does not contain the latest configuration.
+
+### Running the EDC identity material in production
+
+What the Dataspace-Protocol part of the connector needs beyond a default install: a Vault that
+survives a restart, the participant bootstrap, keeping the identityhub's credential copy in step, and
+the runbook for rotating the signing key.
+
+* [Production setup for Vault and the participant identity](./deployment-integration/production/VAULT.md)
 
 ### Observability
 
