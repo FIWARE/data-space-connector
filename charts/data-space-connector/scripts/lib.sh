@@ -23,6 +23,14 @@ b64url() {
 
 # Write a value into vault's KV v2 store under the given alias. The value is stored as a JSON
 # string under `content`, which is what EDC's hashicorp vault client reads.
+# Does an alias resolve to anything? Used to tell a secret that was never provisioned from one
+# that is already in place, so a repair step only runs when it is actually needed.
+vault_has() {
+  _code=$(curl -s -o /dev/null -w '%{http_code}' -X GET "${VAULT_ADDR}/v1/secret/data/$1" \
+    -H "X-Vault-Token: ${VAULT_TOKEN}")
+  [ "${_code}" = "200" ]
+}
+
 vault_put() {
   _alias="$1"; _value="$2"
   _body=$(printf '{"data":{"content":%s}}' "$(printf '%s' "${_value}" | sed 's/\\/\\\\/g; s/"/\\"/g; s/^/"/; s/$/"/')")

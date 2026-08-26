@@ -123,6 +123,64 @@ tests:
           path: data["register.sh"]
           pattern: 's/:/%253A/g'
 
+  # The identityhub generates the participant's own api token, stores it only in vault and keeps
+  # just the alias in its database. A vault that lost its contents therefore leaves a row pointing
+  # at nothing, and the create above answers 409 so nothing re-provisions it. Worse, the resolver
+  # compares stored.equals(presented), so an absent secret is a NullPointerException rather than a
+  # 401.
+  - it: should repair the participant api token when its alias resolves to nothing
+    templates:
+      - templates/identityhub-bootstrap-cm.yaml
+    set:
+      identityhub.enabled: true
+      identityhub.superuser.key: "c3VwZXItdXNlcg==.test"
+      identityhub.bootstrap: &apiTokenBootstrap
+        enabled: true
+        did: did:web:example.org
+        credentialServiceUrl: https://example.org
+        identityKey:
+          secretName: example.org-tls
+        stsClientSecret:
+          existingSecret: identityhub-secret
+    asserts:
+      # Guarded, not unconditional: a healthy deployment must be left alone, and a token somebody is
+      # already using must not be rotated behind their back on every upgrade.
+      - matchRegex:
+          path: data["register.sh"]
+          pattern: 'if vault_has "\$\{DID\}-apikey" \|\| vault_has "\$\{DID_PCT\}-apikey"; then'
+      # Both spellings, because the alias can live under either depending on which side wrote it.
+      - matchRegex:
+          path: data["register.sh"]
+          pattern: 'vault_has "\$\{DID_PCT\}-apikey"'
+      # The identityhub's own repair endpoint, which rewrites the SAME alias and leaves the database
+      # untouched. Base64url in the path, like every other participant-scoped call.
+      - matchRegex:
+          path: data["register.sh"]
+          pattern: '\$\{IDENTITY_API\}/participants/\$\{BASE64_DID\}/token'
+      # Warns rather than aborting: none of the chart's own flows use this token, and an older
+      # identityhub without the endpoint would answer 404 and fail every bootstrap.
+      - matchRegex:
+          path: data["register.sh"]
+          pattern: 'WARNING: could not regenerate the participant api token'
+
+  # The super-user has an edc_sts_client row of its own, and it is deliberately left unresolvable:
+  # nothing authenticates as the super-user against the STS, and provisioning it would turn an
+  # unusable account into a usable one.
+  - it: should provision the STS client secret only for the participant
+    templates:
+      - templates/identityhub-bootstrap-cm.yaml
+    set:
+      identityhub.enabled: true
+      identityhub.superuser.key: "c3VwZXItdXNlcg==.test"
+      identityhub.bootstrap: *apiTokenBootstrap
+    asserts:
+      - matchRegex:
+          path: data["register.sh"]
+          pattern: '\$\{DID\}-sts-client-secret'
+      - notMatchRegex:
+          path: data["register.sh"]
+          pattern: 'vault_put "\$\{SUPERUSER_ID\}-sts-client-secret"'
+
   - it: should revoke before adding when rotating, never rotate in place
     templates:
       - templates/identityhub-bootstrap-cm.yaml

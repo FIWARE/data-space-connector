@@ -319,6 +319,43 @@ Identity API is component-internal, so the only thing that writes to it is the
 pod that owns the store. The vc-operator keeps obtaining and renewing the
 credential into the Secret; the sidecar only mirrors it.
 
+## What losing the vault costs
+
+Vault holds the participant's signing key, the identityhub's api keys, the STS
+client secrets and the RSA key the dcp controlplane signs transfer EDRs with. If
+its contents go and the database survives — moving off dev mode, a volume lost,
+a restore to an empty vault — the two are out of step, and it is worth knowing
+exactly which way.
+
+**The identityhub generates some of those secrets itself, stores them only in
+vault, and keeps just the *alias* in its database.** Nothing re-provisions them
+on its own: the participant contexts still exist, so the bootstrap Job's create
+answers 409 and moves on. Left alone, the database ends up pointing at aliases
+that resolve to nothing.
+
+What the bootstrap Job restores on the next deploy:
+
+| Entry | How |
+|---|---|
+| The signing key | Re-derived from the same cert-manager Secret, so the DID document does not change |
+| The super-user api key | Rewritten with the composed token on every run |
+| The participant's STS client secret | A value the chart chooses rather than one the identityhub generates, which is what makes it repeatable |
+| The participant's api token | Regenerated through the identityhub's own `POST /participants/{id}/token`, which rewrites the same alias — but only when it resolves to nothing, so a token already in use is never rotated |
+
+What it does **not** restore, on purpose:
+
+* **The super-user's STS client secret.** The super-user context has an
+  `edc_sts_client` row of its own, and nothing ever authenticates against the STS
+  as the super-user — the connector does so as the participant DID. Provisioning
+  it would turn an account that cannot be used into one that can, so the
+  reference is left unresolvable deliberately.
+* **`edr--*` entries.** One per transfer process. They are re-created by
+  negotiating again, and the ones from before are dead anyway.
+
+The dcp controlplane's signing key is not the Job's business: the connector
+generates it at startup when it finds none. Restart apisix afterwards, since it
+caches the JWKS that key backs.
+
 ## Pin the identity key's lifecycle
 
 The participant's identity is derived from a private key that is usually a

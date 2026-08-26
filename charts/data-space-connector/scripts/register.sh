@@ -35,6 +35,10 @@ echo "Repairing super-user credential in vault..."
 vault_put "${SUPERUSER_ID}-apikey" "$(superuser_token)"
 
 BASE64_DID=$(b64url "${DID}")
+# The same alias spelled the way EDC's vault client leaves it. Its client URL-encodes the alias and
+# the HTTP layer then encodes the '%' again, so a lookup for "<did>-<suffix>" resolves a key
+# literally named with every ':' of the DID replaced by "%3A". Used by both blocks below.
+DID_PCT=$(printf '%s' "${DID}" | sed 's/:/%253A/g')
 CS_ENDPOINT="${CREDENTIAL_SERVICE_URL}/api/credentials/v1/participants/${BASE64_DID}"
 
 PAYLOAD=$(printf '{"role":["admin"],"active":true,"participantId":"%s","did":"%s","serviceEndpoints":[{"type":"CredentialService","serviceEndpoint":"%s","id":"credential-service"}],"key":{"keyId":"%s","privateKeyAlias":"%s","publicKeyJwk":%s}}' \
@@ -54,6 +58,39 @@ elif [ "${http_code}" -lt 200 ] || [ "${http_code}" -ge 300 ]; then
   exit 1
 fi
 
+# --- participant api token ----------------------------------------------------------------------
+# The identityhub generates this one itself, stores it ONLY in vault, and keeps just the alias in its
+# database. Nothing re-provisions it: on a re-run the participant already exists, the call above
+# answers 409, and a vault that lost its contents is left with a row pointing at an alias that
+# resolves to nothing.
+#
+# That is not a clean failure. ParticipantServicePrincipalResolver resolves the alias and then
+# compares stored.equals(presented), so an absent secret is a NullPointerException - a 500 where a
+# 401 belongs.
+#
+# POST .../token is the identityhub's own repair: it writes a fresh token under the SAME alias and
+# touches nothing else. Done only when neither spelling resolves, so a healthy deployment is left
+# alone and a token somebody is already using is never rotated behind their back.
+#
+# A failure here warns rather than aborts, unlike every other step. This repairs something none of
+# the chart's own flows use - they all authenticate as the super-user - and an older identityhub
+# without the endpoint would answer 404 and take every bootstrap down with it.
+if vault_has "${DID}-apikey" || vault_has "${DID_PCT}-apikey"; then
+  echo "participant api token already resolves"
+else
+  echo "participant api token missing from vault - regenerating it..."
+  # The body is the token itself, so it is never echoed on success.
+  http_code=$(curl -s -o /tmp/apitoken.json -w "%{http_code}" -X POST \
+    "${IDENTITY_API}/participants/${BASE64_DID}/token" \
+    -H "x-api-key: $(superuser_token)")
+  if [ "${http_code}" -ge 200 ] && [ "${http_code}" -lt 300 ]; then
+    echo "participant api token regenerated under the existing alias"
+  else
+    echo "WARNING: could not regenerate the participant api token: HTTP ${http_code}"
+    echo "WARNING: authenticating as ${DID} against the identity API will fail until it is repaired"
+  fi
+fi
+
 # --- STS client secret ------------------------------------------------------------------
 # Provisioned unconditionally, and the clientSecret the identityhub returns on creation is
 # deliberately ignored:
@@ -66,16 +103,18 @@ fi
 #    both the EDC oauth client and the STS resolve that alias from vault and compare. So the
 #    value is ours to choose, and a fixed one makes this restart-proof.
 #
-# It is written under TWO key names on purpose. EDC's hashicorp vault client URL-encodes the
-# alias and the HTTP layer then encodes the '%', so a lookup for "<did>-sts-client-secret"
-# actually resolves the key literally named with every ':' of the DID replaced by "%3A". The
-# plain-colon name is what curl writes here, so storing both keeps whichever form the client
-# uses working.
+# It is written under both spellings of the alias (see DID_PCT above), so whichever form the client
+# uses resolves.
+#
+# Only the participant's. The super-user context has an edc_sts_client row of its own, pointing at
+# "<superUserId>-sts-client-secret", and that one is deliberately left unresolvable: nothing ever
+# authenticates against the STS as the super-user - the connector does so as the participant DID -
+# and provisioning it would turn an account that cannot be used into one that can. A reference that
+# resolves to nothing is the safer state here.
 if [ -z "${STS_CLIENT_SECRET}" ]; then
   echo "STS_CLIENT_SECRET is empty - refusing to provision an empty secret"
   exit 1
 fi
-DID_PCT=$(printf '%s' "${DID}" | sed 's/:/%253A/g')
 for alias_path in "${DID}-sts-client-secret" "${DID_PCT}-sts-client-secret"; do
   echo "Writing STS client secret to vault alias ${alias_path}..."
   vault_put "${alias_path}" "${STS_CLIENT_SECRET}"
