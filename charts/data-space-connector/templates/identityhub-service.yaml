@@ -27,6 +27,10 @@ spec:
       targetPort: credentials
       protocol: TCP
       name: credentials
+    - port: {{ .Values.identityhub.endpoints.accounts.port }}
+      targetPort: accounts
+      protocol: TCP
+      name: accounts
     - port: {{ .Values.identityhub.endpoints.version.port }}
       targetPort: version
       protocol: TCP

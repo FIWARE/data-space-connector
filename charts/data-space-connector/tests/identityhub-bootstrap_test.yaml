@@ -1,0 +1,331 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/helm-unittest/helm-unittest/main/schema/helm-testsuite.json
+#
+# ---------------------------------------------------------------------------
+# Helm-unittest suite for the identityhub participant bootstrap.
+#
+# Covers the templates that provision the participant context:
+#   - identityhub-bootstrap-cm.yaml:  the provisioning scripts
+#   - identityhub-bootstrap-job.yaml: the Job that runs them
+#   - identityhub-rotation-job.yaml:  the opt-in signing key rotation
+#
+# The assertions concentrate on the things that were wrong in real deployments:
+# the ordering of the steps, the derived key id, and the hook that has to include
+# post-upgrade for as long as vault runs in dev mode.
+#
+# Storing the credential is NOT covered here: it lives in the credential-sync
+# sidecar, see identityhub-credential-sync_test.yaml.
+# ---------------------------------------------------------------------------
+suite: IdentityHub participant bootstrap
+templates:
+  - templates/identityhub-bootstrap-cm.yaml
+  - templates/identityhub-bootstrap-job.yaml
+  - templates/identityhub-rotation-job.yaml
+tests:
+  # ==========================================================================
+  # Gating
+  # ==========================================================================
+
+  - it: should render nothing when the identityhub is disabled
+    set:
+      identityhub.enabled: false
+      identityhub.bootstrap.enabled: true
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should render nothing when the bootstrap is disabled
+    set:
+      identityhub.enabled: true
+      identityhub.bootstrap.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  # ==========================================================================
+  # The scripts
+  # ==========================================================================
+
+  - it: should provide every provisioning step as a script
+    templates:
+      - templates/identityhub-bootstrap-cm.yaml
+    set:
+      identityhub.enabled: true
+      identityhub.superuser.key: "c3VwZXItdXNlcg==.test"
+      identityhub.bootstrap:
+        enabled: true
+        did: did:web:example.org
+        credentialServiceUrl: https://example.org
+        identityKey:
+          secretName: example.org-tls
+        stsClientSecret:
+          existingSecret: identityhub-secret
+    asserts:
+      - isKind:
+          of: ConfigMap
+      - equal:
+          path: metadata.name
+          value: identityhub-bootstrap
+      - exists:
+          path: data["derive-key.sh"]
+      - exists:
+          path: data["lib.sh"]
+      - exists:
+          path: data["register.sh"]
+      - exists:
+          path: data["check-kid.sh"]
+      - exists:
+          path: data["sync-credential.sh"]
+      - exists:
+          path: data["rotate-key.sh"]
+
+  - it: should handle both EC and RSA identity keys
+    templates:
+      - templates/identityhub-bootstrap-cm.yaml
+    set:
+      identityhub.enabled: true
+      identityhub.superuser.key: "c3VwZXItdXNlcg==.test"
+      identityhub.bootstrap:
+        enabled: true
+        did: did:web:example.org
+        credentialServiceUrl: https://example.org
+        identityKey:
+          secretName: example.org-tls
+        stsClientSecret:
+          existingSecret: identityhub-secret
+    asserts:
+      # An RSA extraction applied to an EC key produces a valid-looking JWK full
+      # of garbage, so the script has to branch on the declared algorithm.
+      - matchRegex:
+          path: data["derive-key.sh"]
+          pattern: 'IDENTITY_KEY_ALGORITHM'
+      - matchRegex:
+          path: data["derive-key.sh"]
+          pattern: 'unsupported IDENTITY_KEY_ALGORITHM'
+
+  - it: should write the STS client secret under both spellings of the alias
+    templates:
+      - templates/identityhub-bootstrap-cm.yaml
+    set:
+      identityhub.enabled: true
+      identityhub.superuser.key: "c3VwZXItdXNlcg==.test"
+      identityhub.bootstrap:
+        enabled: true
+        did: did:web:example.org
+        credentialServiceUrl: https://example.org
+        identityKey:
+          secretName: example.org-tls
+        stsClientSecret:
+          existingSecret: identityhub-secret
+    asserts:
+      # EDC's vault client URL-encodes the alias and the HTTP layer encodes the
+      # '%' again, so the key it actually reads is the double-encoded one.
+      - matchRegex:
+          path: data["register.sh"]
+          pattern: 's/:/%253A/g'
+
+  - it: should revoke before adding when rotating, never rotate in place
+    templates:
+      - templates/identityhub-bootstrap-cm.yaml
+    set:
+      identityhub.enabled: true
+      identityhub.superuser.key: "c3VwZXItdXNlcg==.test"
+      identityhub.bootstrap:
+        enabled: true
+        did: did:web:example.org
+        credentialServiceUrl: https://example.org
+        identityKey:
+          secretName: example.org-tls
+        stsClientSecret:
+          existingSecret: identityhub-secret
+    asserts:
+      # `rotate` with the same keyId appends a second verificationMethod under one
+      # id, and revoking either one then removes both.
+      - matchRegex:
+          path: data["rotate-key.sh"]
+          pattern: '/revoke'
+      - matchRegex:
+          path: data["rotate-key.sh"]
+          pattern: 'makeDefault=true'
+      - notMatchRegex:
+          path: data["rotate-key.sh"]
+          pattern: '/rotate\?'
+
+  # ==========================================================================
+  # The bootstrap Job
+  # ==========================================================================
+
+  - it: should run the provisioning steps in order
+    templates:
+      - templates/identityhub-bootstrap-job.yaml
+    set:
+      identityhub.enabled: true
+      identityhub.superuser.key: "c3VwZXItdXNlcg==.test"
+      identityhub.bootstrap:
+        enabled: true
+        did: did:web:example.org
+        credentialServiceUrl: https://example.org
+        identityKey:
+          secretName: example.org-tls
+        stsClientSecret:
+          existingSecret: identityhub-secret
+        kidCheck:
+          enabled: true
+          keycloakUrl: http://keycloak:8080
+          realm: example
+        credential:
+          enabled: true
+          secretName: vc-credential
+    asserts:
+      - isKind:
+          of: Job
+      # initContainers are the only construct with guaranteed ordering, and the
+      # JWK has to exist before anything writes it to vault.
+      - equal:
+          path: spec.template.spec.initContainers[0].name
+          value: derive-key
+      - equal:
+          path: spec.template.spec.initContainers[1].name
+          value: check-kid
+      - equal:
+          path: spec.template.spec.initContainers[2].name
+          value: register
+      # Storing the credential is not part of the bootstrap: it has to happen again
+      # on every renewal, so it belongs to the credential-sync sidecar and the Job
+      # is left with nothing to do once the participant exists.
+      - equal:
+          path: spec.template.spec.containers[0].name
+          value: done
+      - lengthEqual:
+          path: spec.template.spec.containers
+          count: 1
+      - notContains:
+          path: spec.template.spec.volumes
+          content:
+            name: credential
+            secret:
+              secretName: vc-credential
+              optional: true
+
+  - it: should skip the kid check when it is disabled
+    templates:
+      - templates/identityhub-bootstrap-job.yaml
+    set:
+      identityhub.enabled: true
+      identityhub.superuser.key: "c3VwZXItdXNlcg==.test"
+      identityhub.bootstrap:
+        enabled: true
+        did: did:web:example.org
+        credentialServiceUrl: https://example.org
+        identityKey:
+          secretName: example.org-tls
+        stsClientSecret:
+          existingSecret: identityhub-secret
+        kidCheck:
+          enabled: false
+    asserts:
+      - lengthEqual:
+          path: spec.template.spec.initContainers
+          count: 2
+      - equal:
+          path: spec.template.spec.initContainers[1].name
+          value: register
+
+  - it: should run on upgrade as well as install
+    templates:
+      - templates/identityhub-bootstrap-job.yaml
+    set:
+      identityhub.enabled: true
+      identityhub.superuser.key: "c3VwZXItdXNlcg==.test"
+      identityhub.bootstrap:
+        enabled: true
+        did: did:web:example.org
+        credentialServiceUrl: https://example.org
+        identityKey:
+          secretName: example.org-tls
+        stsClientSecret:
+          existingSecret: identityhub-secret
+    asserts:
+      # A vault restart in dev mode drops everything this Job writes, and only a
+      # re-run puts it back.
+      - equal:
+          path: metadata.annotations["helm.sh/hook"]
+          value: post-install,post-upgrade
+
+  - it: should derive the key id from the did and the alias
+    templates:
+      - templates/identityhub-bootstrap-job.yaml
+    set:
+      identityhub.enabled: true
+      identityhub.superuser.key: "c3VwZXItdXNlcg==.test"
+      identityhub.bootstrap:
+        enabled: true
+        did: did:web:example.org
+        keyAlias: key-1
+        credentialServiceUrl: https://example.org
+        identityKey:
+          secretName: example.org-tls
+        stsClientSecret:
+          existingSecret: identityhub-secret
+    asserts:
+      - contains:
+          path: spec.template.spec.initContainers[0].env
+          content:
+            name: KEY_ID
+            value: did:web:example.org#key-1
+      - contains:
+          path: spec.template.spec.initContainers[0].env
+          content:
+            name: IDENTITY_API
+            value: http://identityhub-service:8082/api/identity/v1alpha
+
+  # ==========================================================================
+  # The rotation Job
+  # ==========================================================================
+
+  - it: should not render the rotation job unless it is asked for
+    templates:
+      - templates/identityhub-rotation-job.yaml
+    set:
+      identityhub.enabled: true
+      identityhub.superuser.key: "c3VwZXItdXNlcg==.test"
+      identityhub.bootstrap:
+        enabled: true
+        did: did:web:example.org
+        credentialServiceUrl: https://example.org
+        identityKey:
+          secretName: example.org-tls
+        stsClientSecret:
+          existingSecret: identityhub-secret
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should name the rotation job after the instance and carry no hook
+    templates:
+      - templates/identityhub-rotation-job.yaml
+    set:
+      identityhub.enabled: true
+      identityhub.superuser.key: "c3VwZXItdXNlcg==.test"
+      identityhub.bootstrap:
+        enabled: true
+        did: did:web:example.org
+        credentialServiceUrl: https://example.org
+        identityKey:
+          secretName: example.org-tls
+        stsClientSecret:
+          existingSecret: identityhub-secret
+        rotation:
+          enabled: true
+          instance: 3
+    asserts:
+      - equal:
+          path: metadata.name
+          value: identityhub-key-rotation-3
+      # Never a hook: every run invalidates the credentials signed with the
+      # previous key, so it must be an explicit act and not a side effect of an
+      # upgrade.
+      - notExists:
+          path: metadata.annotations["helm.sh/hook"]
+      - equal:
+          path: spec.template.spec.containers[0].name
+          value: rotate-key

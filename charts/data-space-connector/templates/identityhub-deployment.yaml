@@ -65,8 +65,45 @@ spec:
       serviceAccountName: default
       securityContext:
         {{- toYaml .Values.identityhub.podSecurityContext | nindent 8 }}
-      {{- if or .Values.identityhub.initContainers $otelInjectAgent }}
+      {{- if or .Values.identityhub.initContainers $otelInjectAgent (include "dsc.identityhub.customCaCerts.enabled" .) (include "dsc.identityhub.credentialSync.enabled" .) }}
       initContainers:
+        {{- if include "dsc.identityhub.customCaCerts.enabled" . }}
+        # Import the extra CAs into a writable copy of the JVM truststore. Without this step the
+        # `custom-cacerts` volume the main container mounts over
+        # /opt/java/openjdk/lib/security/cacerts is an empty emptyDir, so declaring customCaCerts
+        # replaced the entire truststore with nothing instead of extending it - every outbound TLS
+        # connection then failed, including the ones to a vault with a private CA.
+        - name: import-cacerts
+          {{- if .Values.identityhub.image.repository }}
+          image: "{{ .Values.identityhub.image.repository }}:{{ .Values.identityhub.image.tag | required "identityhub.image.tag is required: the identityhub is an upstream image and its version is unrelated to this chart's appVersion" }}"
+          {{- else }}
+          image: "tractusx/identityhub:{{ .Values.identityhub.image.tag | required "identityhub.image.tag is required: the identityhub is an upstream image and its version is unrelated to this chart's appVersion" }}"
+          {{- end }}
+          imagePullPolicy: {{ .Values.identityhub.image.pullPolicy }}
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -e
+              cp "${JAVA_HOME}/lib/security/cacerts" /custom-cacerts/cacerts
+              for cert in /custom-cacertificates/*; do
+                [ -f "${cert}" ] || continue
+                echo "importing $(basename "${cert}")"
+                keytool -importcert -noprompt -trustcacerts \
+                  -alias "$(basename "${cert}")" \
+                  -file "${cert}" \
+                  -keystore /custom-cacerts/cacerts \
+                  -storepass changeit
+              done
+          securityContext:
+            {{- toYaml .Values.identityhub.securityContext | nindent 12 }}
+          volumeMounts:
+            - name: custom-cacertificates
+              mountPath: /custom-cacertificates
+              readOnly: true
+            - name: custom-cacerts
+              mountPath: /custom-cacerts
+        {{- end }}
         {{- if $otelInjectAgent }}
         # tracing: copy the OpenTelemetry Java agent JAR from the
         # pinned upstream image into the shared `otel-agent` volume so
@@ -87,6 +124,37 @@ spec:
         {{- with .Values.identityhub.initContainers }}
           {{- toYaml . | nindent 8 }}
         {{- end }}
+        {{- if include "dsc.identityhub.credentialSync.enabled" . }}
+        # Mirror the credential the vc-operator maintains in a Secret into the identityhub's own
+        # credential store, on issuance and on every renewal.
+        #
+        # A native Kubernetes sidecar - an init container with restartPolicy: Always - so it starts
+        # before the identityhub and keeps running alongside it. Same construct as the OPA sidecar
+        # of odrl-pap.
+        #
+        # It writes over localhost on purpose. The Identity API is component-internal ("must not be
+        # internet facing"), so the only thing that writes to it is the pod that owns the store;
+        # nothing outside needs credentials for it, and it never crosses the cluster network.
+        - name: credential-sync
+          restartPolicy: Always
+          image: "{{ .Values.identityhub.bootstrap.curlImage.repository }}:{{ .Values.identityhub.bootstrap.curlImage.tag }}"
+          imagePullPolicy: {{ .Values.identityhub.bootstrap.curlImage.pullPolicy }}
+          command: ["/bin/sh", "/scripts/sync-credential.sh"]
+          securityContext:
+            {{- toYaml .Values.identityhub.securityContext | nindent 12 }}
+          env:
+            {{- include "dsc.identityhub.credentialSyncEnv" . | nindent 12 }}
+          volumeMounts:
+            - name: credential-sync-scripts
+              mountPath: /scripts
+            - name: credential
+              mountPath: /credential
+              readOnly: true
+            # readOnlyRootFilesystem is on, and curl writes its response bodies to /tmp. Its own
+            # volume rather than the identityhub's, so the two never collide over a file name.
+            - name: credential-sync-tmp
+              mountPath: /tmp
+        {{- end }}
       {{- end }}
       containers:
         - name: {{ .Chart.Name }}
@@ -94,9 +162,9 @@ spec:
             {{- toYaml .Values.identityhub.securityContext | nindent 12 }}
           # either use the specified image, or use the default one
           {{- if .Values.identityhub.image.repository }}
-          image: "{{ .Values.identityhub.image.repository }}:{{ .Values.identityhub.image.tag | default .Chart.AppVersion }}"
+          image: "{{ .Values.identityhub.image.repository }}:{{ .Values.identityhub.image.tag | required "identityhub.image.tag is required: the identityhub is an upstream image and its version is unrelated to this chart's appVersion" }}"
           {{- else }}
-          image: "tractusx/identityhub:{{ .Values.identityhub.image.tag | default .Chart.AppVersion }}"
+          image: "tractusx/identityhub:{{ .Values.identityhub.image.tag | required "identityhub.image.tag is required: the identityhub is an upstream image and its version is unrelated to this chart's appVersion" }}"
           {{- end }}
 
           imagePullPolicy: {{ .Values.identityhub.image.pullPolicy }}
@@ -203,6 +271,16 @@ spec:
               {{- else }}
               value: {{ .Values.identityhub.superuser.key | quote }}
               {{- end }}
+            {{- if .Values.vault.hashicorp.existingSecret }}
+            # The vault token as an env var instead of a ConfigMap entry. identityhub-cm.yaml omits
+            # the property entirely in this case: leaving an empty one behind would be resolved as
+            # an empty token rather than falling through to this value.
+            - name: EDC_VAULT_HASHICORP_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.vault.hashicorp.existingSecret }}
+                  key: {{ .Values.vault.hashicorp.existingSecretTokenKey }}
+            {{- end }}
             {{- if $otelInjectAgent }}
             # tracing: attach the OpenTelemetry Java agent to the JVM.
             # Any user-provided JAVA_TOOL_OPTIONS value is preserved by
@@ -247,7 +325,7 @@ spec:
           {{- end }}
           {{- end }}
           volumeMounts:
-            {{- if .Values.identityhub.customCaCerts }}
+            {{- if include "dsc.identityhub.customCaCerts.enabled" . }}
             - name: custom-cacerts
               mountPath: /opt/java/openjdk/lib/security/cacerts
               subPath: cacerts
@@ -290,24 +368,72 @@ spec:
             items:
               - key: "logging.properties"
                 path: "logging.properties"
-        {{- if .Values.identityhub.customCaCerts }}
+        {{- if include "dsc.identityhub.customCaCerts.enabled" . }}
+        # Every CA the init container has to import, gathered into one flat directory. `projected`
+        # is what makes that possible from several places at once: the ConfigMap rendered from
+        # customCaCerts, plus any Secret or ConfigMap that already exists in the cluster. The
+        # init container never learns where a file came from - it just walks the directory.
+        #
+        # Secrets default to ca.crt rather than being mounted whole: a kubernetes.io/tls Secret also
+        # holds tls.key, which has no business inside this pod and which keytool would choke on,
+        # failing the init container. Named keys are projected as `<source>-<key>`, so two sources
+        # cannot collide on a filename - a collision here is a mount failure, not a warning - and
+        # the alias keytool derives from the basename says where the certificate came from.
         - name: custom-cacertificates
-          configMap:
-            name: identityhub-custom-cacerts
+          projected:
             defaultMode: 0400
+            sources:
+              {{- if .Values.identityhub.customCaCerts }}
+              - configMap:
+                  name: identityhub-custom-cacerts
+              {{- end }}
+              {{- range $i, $src := .Values.identityhub.customCaCertsFrom }}
+              {{- if $src.secret }}
+              - secret:
+                  name: {{ $src.secret | quote }}
+                  items:
+                    {{- range $src.keys | default (list "ca.crt") }}
+                    - key: {{ . | quote }}
+                      path: {{ printf "%s-%s" $src.secret . | quote }}
+                    {{- end }}
+              {{- else if $src.configMap }}
+              - configMap:
+                  name: {{ $src.configMap | quote }}
+                  {{- with $src.keys }}
+                  items:
+                    {{- range . }}
+                    - key: {{ . | quote }}
+                      path: {{ printf "%s-%s" $src.configMap . | quote }}
+                    {{- end }}
+                  {{- end }}
+              {{- else }}
+              {{- fail (printf "identityhub.customCaCertsFrom[%d] needs either `secret` or `configMap`" $i) }}
+              {{- end }}
+              {{- end }}
         - name: custom-cacerts
           emptyDir:
             sizeLimit: 1Mi
         {{- end }}
         - name: "tmp"
           emptyDir: { }
-        - name: logs # aim for persistent volume in localhost
-        {{- if and .Values.identityhub.logging.enabled .Values.identityhub.logging.persistence.enabled }}
-          persistentVolumeClaim:
-            claimName: identityhub-pvc-logs
-        {{- else }}
+        {{- if include "dsc.identityhub.credentialSync.enabled" . }}
+        - name: credential-sync-scripts
+          configMap:
+            name: "identityhub-bootstrap"
+            defaultMode: 0755
+        # optional: on a first install the vc-operator has not written the credential yet. The
+        # sidecar reports the empty mount and waits instead of crash-looping the pod.
+        - name: credential
+          secret:
+            secretName: {{ include "dsc.identityhub.credentialSync.secretName" . | quote }}
+            optional: true
+        - name: credential-sync-tmp
           emptyDir: { }
         {{- end }}
+        # The file handler writes here so the JUL config stays valid, but the logs are not meant to
+        # be read off the volume: the console handler is the one that feeds the cluster's log stack.
+        - name: logs
+          emptyDir: { }
       {{- with .Values.identityhub.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
