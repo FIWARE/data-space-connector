@@ -22,7 +22,7 @@ metadata:
     app.kubernetes.io/instance: {{ .Release.Name }}
 rules:
   # create is namespace-wide because a resource that does not exist yet cannot be named in a
-  # resourceNames rule. get/update are pinned to the one Secret this component owns.
+  # resourceNames rule. Reading is pinned to the two Secrets this component owns.
   - apiGroups: [""]
     resources: ["secrets"]
     verbs: ["create"]
