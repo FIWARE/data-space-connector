@@ -19,7 +19,11 @@ merges extra attributes (string or map), and appends verifiable credential attri
 */}}
 {{- define "dsc.realmAttributes" -}}
 {{- $issuerDid := include "dsc.issuerDid" . -}}
-{{- $attrs := dict "frontendUrl" (.Values.keycloak.realm.frontendUrl | default "") "issuerDid" $issuerDid -}}
+{{/* Both spellings are read: values.yaml has shipped `frontendURL` since forever while this
+     template only ever looked at `frontendUrl`, so the documented key silently produced an empty
+     attribute and Keycloak fell back to deriving the issuer URL from the request. */}}
+{{- $frontendUrl := .Values.keycloak.realm.frontendUrl | default .Values.keycloak.realm.frontendURL | default "" -}}
+{{- $attrs := dict "frontendUrl" $frontendUrl "issuerDid" $issuerDid -}}
 {{- if .Values.keycloak.realm.attributes -}}
 {{- $extra := .Values.keycloak.realm.attributes -}}
 {{- if kindIs "string" .Values.keycloak.realm.attributes -}}

@@ -473,7 +473,8 @@ keycloak:
     import: true
     # -- name of the realm
     name: test-realm
-    # -- frontend url to be used for the realm
+    # -- frontend url to be used for the realm. `frontendUrl` is accepted as well; both end up in
+    # the realm's `frontendUrl` attribute.
     frontendURL: http://localhost:8080
     # -- custom displayNameHtml for the realm. If empty, defaults to "<div class="kc-logo-text"><span>{realm.name}</span></div>"
     displayNameHtml: ""
