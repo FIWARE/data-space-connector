@@ -1,7 +1,6 @@
 apiVersion: v2
 name: data-space-connector
-description: Umbrella Chart for the FIWARE Data Space Connector, combining all essential
-  parts to be used by a participant.
+description: Umbrella Chart for the FIWARE Data Space Connector, combining all essential parts to be used by a participant.
 type: application
 version: 10.4.12
 dependencies:
@@ -72,7 +71,7 @@ dependencies:
   - name: vc-operator
     alias: vc-operator
     condition: vc-operator.enabled
-    version: 0.1.3
+    version: 0.1.4
     repository: oci://quay.io/seamware/helm-charts
   - name: prometheus
     condition: prometheus.enabled
