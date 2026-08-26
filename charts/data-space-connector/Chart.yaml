@@ -59,7 +59,7 @@ dependencies:
   - name: did-helper
     alias: did
     condition: did.enabled
-    version: 0.1.21
+    version: 0.1.22
     repository: oci://quay.io/fiware/helm-charts
   # cert-manager
   - name: cert-manager
@@ -79,17 +79,17 @@ dependencies:
     repository: https://prometheus-community.github.io/helm-charts
   - name: grafana
     condition: grafana.enabled
-    version: 12.11.0
+    version: 12.11.2
     repository: https://grafana-community.github.io/helm-charts
   # observability - OpenTelemetry Operator for auto-instrumentation (opt-in)
   - name: opentelemetry-operator
     condition: opentelemetry-operator.enabled
-    version: 0.121.0
+    version: 0.122.0
     repository: https://open-telemetry.github.io/opentelemetry-helm-charts
   # observability - OpenTelemetry Collector for distributed tracing (opt-in)
   - name: opentelemetry-collector
     condition: opentelemetry-collector.enabled
-    version: 0.170.0
+    version: 0.171.0
     repository: https://open-telemetry.github.io/opentelemetry-helm-charts
   # observability - Grafana Tempo for trace storage backend (opt-in)
   - name: tempo
