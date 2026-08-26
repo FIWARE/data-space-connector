@@ -79,7 +79,7 @@ dependencies:
     repository: https://prometheus-community.github.io/helm-charts
   - name: grafana
     condition: grafana.enabled
-    version: 12.11.0
+    version: 12.11.2
     repository: https://grafana-community.github.io/helm-charts
   # observability - OpenTelemetry Operator for auto-instrumentation (opt-in)
   - name: opentelemetry-operator
