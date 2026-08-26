@@ -1,0 +1,86 @@
+# Values used by CI to render the EDC / Dataspace-Protocol part of the chart.
+#
+# Everything under identityhub, vault, fdsc-edc and vcCredentials is disabled by default, so a
+# render with default values emits none of it and neither `helm template` nor `kubeconform` ever
+# sees those templates. This file turns the whole lane on so that it is schema-validated on every
+# pull request. It is not a deployable configuration - hostnames and secrets are placeholders.
+keycloak:
+  enabled: true
+  issuerDid: did:web:ci.example.org
+  realm:
+    verifiableCredentials:
+      # Only expiry_in_seconds is set, and no signing_key_id: exercises both derivations - the
+      # lifetime mirroring and the kid that matches what the identityhub publishes.
+      MembershipCredential:
+        attributes:
+          format: jwt_vc_json
+          verifiable_credential_type: MembershipCredential
+          credential_signing_alg: ES256
+          expiry_in_seconds: "2592000"
+
+identityhub:
+  enabled: true
+  # exercises the credential-sync sidecar
+  credentialSync:
+    enabled: true
+    secretName: vc-fdsc-edc-credential
+  superuser:
+    # from a Secret rather than a plain value: the vc-operator reads the api key from one, and a
+    # plaintext api key in values has the same problem as a plaintext vault token
+    existingSecret: identityhub-secret
+    existingSecretKeyKey: superuser
+  # exercises the truststore init container and the ConfigMap it reads
+  customCaCerts:
+    ci-ca.pem: |
+      -----BEGIN CERTIFICATE-----
+      not-a-real-certificate
+      -----END CERTIFICATE-----
+  logging:
+    persistence:
+      enabled: true
+  endpoints:
+    identity:
+      authKeyAlias: super-user-apikey
+  bootstrap:
+    enabled: true
+    did: did:web:ci.example.org
+    credentialServiceUrl: https://ci.example.org
+    identityKey:
+      secretName: ci.example.org-tls
+    stsClientSecret:
+      existingSecret: identityhub-secret
+    kidCheck:
+      enabled: true
+      keycloakUrl: http://ci-keycloak:8080
+      realm: ci
+    credential:
+      secretName: vc-fdsc-edc-credential
+    # Rendered too: the rotation Job is opt-in at runtime but has to keep passing validation.
+    rotation:
+      enabled: true
+
+vault:
+  enabled: true
+  server:
+    dev:
+      enabled: false
+    standalone:
+      enabled: true
+  hashicorp:
+    # exercises the branch that keeps the token out of the ConfigMap
+    existingSecret: vault-token
+  unattended:
+    enabled: true
+
+vcCredentials:
+  enabled: true
+  issuer:
+    issuerURL: http://ci-keycloak:8080/realms/ci
+    tokenURL: http://ci-keycloak:8080/realms/ci/protocol/openid-connect/token
+  auth:
+    clientId: ci-client
+    clientSecret: ci-secret
+  requests:
+    - name: fdsc-edc-credential
+      credentialType: membership-credential
+      targetSecretName: vc-fdsc-edc-credential
