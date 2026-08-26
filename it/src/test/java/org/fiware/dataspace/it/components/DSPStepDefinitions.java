@@ -708,7 +708,7 @@ public class DSPStepDefinitions extends StepDefintions {
 
     /**
      * Converts the consumer's PEM private key to JWK format using IdentityHubHelper.
-     * This is the Java equivalent of running {@code get-private-jwk-from-k8s-secret.sh}.
+     * This is the Java equivalent of running {@code charts/data-space-connector/scripts/derive-key.sh}.
      */
     @When("The consumer private key is converted to JWK format.")
     public void theConsumerPrivateKeyIsConvertedToJwkFormat() throws Exception {
