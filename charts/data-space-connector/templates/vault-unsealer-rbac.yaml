@@ -1,0 +1,58 @@
+{{- if and .Values.vault.enabled .Values.vault.unattended.enabled .Values.vault.unattended.autoUnseal }}
+
+# The unsealer needs to write exactly one Secret: the unseal keys it gets back from initialising
+# vault. Scoped to that one name so the identity it runs under cannot read anything else in the
+# namespace - notably not the participant's identity key or the credentials.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ printf "%s-vault-unsealer" .Release.Name | quote }}
+  namespace: {{ .Release.Namespace | default "default" | quote }}
+  labels:
+    app.kubernetes.io/name: vault-unsealer
+    app.kubernetes.io/instance: {{ .Release.Name }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ printf "%s-vault-unsealer" .Release.Name | quote }}
+  namespace: {{ .Release.Namespace | default "default" | quote }}
+  labels:
+    app.kubernetes.io/name: vault-unsealer
+    app.kubernetes.io/instance: {{ .Release.Name }}
+rules:
+  # create is namespace-wide because a resource that does not exist yet cannot be named in a
+  # resourceNames rule. Reading is pinned to the two Secrets this component owns.
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["create"]
+  # get only. Neither Secret is ever rewritten: the unseal keys because the ones in front of the
+  # storage volume are the only ones that open it, and the application token because it reaches the
+  # components as an environment variable, which a running pod never picks up again anyway. The
+  # script only ever POSTs (create) and GETs.
+  - apiGroups: [""]
+    resources: ["secrets"]
+    resourceNames:
+      - {{ .Values.vault.unattended.secretName | quote }}
+      {{- with .Values.vault.hashicorp.existingSecret }}
+      - {{ . | quote }}
+      {{- end }}
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ printf "%s-vault-unsealer" .Release.Name | quote }}
+  namespace: {{ .Release.Namespace | default "default" | quote }}
+  labels:
+    app.kubernetes.io/name: vault-unsealer
+    app.kubernetes.io/instance: {{ .Release.Name }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ printf "%s-vault-unsealer" .Release.Name | quote }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ printf "%s-vault-unsealer" .Release.Name | quote }}
+    namespace: {{ .Release.Namespace | default "default" | quote }}
+{{- end }}

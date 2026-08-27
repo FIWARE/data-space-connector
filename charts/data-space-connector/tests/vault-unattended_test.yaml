@@ -1,0 +1,299 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/helm-unittest/helm-unittest/main/schema/helm-testsuite.json
+#
+# ---------------------------------------------------------------------------
+# Helm-unittest suite for the production vault surface and the identityhub
+# templates that go with it.
+#
+# Covers:
+#   - vault-unsealer-*.yaml:        initialise and unseal a persistent vault
+#   - identityhub-cm.yaml:          the vault token, in a ConfigMap or not
+#   - identityhub-deployment.yaml:  the token env var and the truststore import
+#   - identityhub-service.yaml:     every port the deployment opens
+#
+# The custom CA truststore has its own suite, identityhub-cacerts_test.yaml.
+# ---------------------------------------------------------------------------
+suite: Production vault and identityhub wiring
+templates:
+  - templates/vault-unsealer-cm.yaml
+  - templates/vault-unsealer-rbac.yaml
+  - templates/vault-unsealer-deployment.yaml
+  - templates/identityhub-cm.yaml
+  - templates/identityhub-deployment.yaml
+  - templates/identityhub-service.yaml
+tests:
+  # ==========================================================================
+  # The unsealer
+  # ==========================================================================
+
+  - it: should not render the unsealer by default
+    templates:
+      - templates/vault-unsealer-cm.yaml
+      - templates/vault-unsealer-rbac.yaml
+      - templates/vault-unsealer-deployment.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should render the unsealer for a persistent vault
+    templates:
+      - templates/vault-unsealer-deployment.yaml
+    set:
+      vault.enabled: true
+      vault.server.dev.enabled: false
+      vault.unattended.enabled: true
+    asserts:
+      - isKind:
+          of: Deployment
+      # A Deployment and not a Job: the restart that needs unsealing happens long
+      # after any deploy, and a completed Job would not notice.
+      - equal:
+          path: spec.template.spec.serviceAccountName
+          value: RELEASE-NAME-vault-unsealer
+      - equal:
+          path: spec.template.spec.containers[0].name
+          value: unsealer
+
+  - it: should scope the unsealer permissions to the secret it owns
+    templates:
+      - templates/vault-unsealer-rbac.yaml
+    set:
+      vault.enabled: true
+      vault.server.dev.enabled: false
+      vault.unattended.enabled: true
+      vault.unattended.secretName: my-unseal-keys
+    documentIndex: 1
+    asserts:
+      - isKind:
+          of: Role
+      # It must not be able to read the participant's identity key or credentials.
+      - equal:
+          path: rules[1].resourceNames[0]
+          value: my-unseal-keys
+      # get only: neither Secret is ever rewritten, so `update` would be a permission the script
+      # has no use for. Rotating the token is done by deleting the Secret, not by patching it.
+      - equal:
+          path: rules[1].verbs
+          value:
+            - get
+
+  - it: should let the unsealer read the token secret it mints
+    templates:
+      - templates/vault-unsealer-rbac.yaml
+    set:
+      vault.enabled: true
+      vault.server.dev.enabled: false
+      vault.unattended.enabled: true
+      vault.unattended.secretName: my-unseal-keys
+      vault.hashicorp.existingSecret: my-vault-token
+    documentIndex: 1
+    asserts:
+      # Both Secrets and nothing else. The second one is only needed to tell whether the token has
+      # already been minted: it is created once and never rewritten.
+      - equal:
+          path: rules[1].resourceNames
+          value:
+            - my-unseal-keys
+            - my-vault-token
+
+  - it: should tell the unsealer where the token goes
+    templates:
+      - templates/vault-unsealer-deployment.yaml
+    set:
+      vault.enabled: true
+      vault.server.dev.enabled: false
+      vault.unattended.enabled: true
+      vault.hashicorp.existingSecret: my-vault-token
+      vault.hashicorp.existingSecretTokenKey: token
+      vault.unattended.tokenPeriod: 100h
+      vault.unattended.tokenPolicyName: my-policy
+    asserts:
+      # The destination is vault.hashicorp.existingSecret itself, not a key of its own: the consumers
+      # read it from there, so the two cannot drift.
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: TOKEN_SECRET_NAME
+            value: my-vault-token
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: TOKEN_PERIOD
+            value: "100h"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POLICY_NAME
+            value: my-policy
+
+  - it: should not provision a token when that is turned off
+    templates:
+      - templates/vault-unsealer-deployment.yaml
+    set:
+      vault.enabled: true
+      vault.server.dev.enabled: false
+      vault.unattended.enabled: true
+      vault.unattended.provisionToken: false
+      vault.hashicorp.existingSecret: my-vault-token
+    asserts:
+      # Without TOKEN_SECRET_NAME the script skips the whole branch, so the unsealer goes back to
+      # doing nothing but unsealing.
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: TOKEN_SECRET_NAME
+            value: my-vault-token
+
+  - it: should refuse a production vault that is also in dev mode
+    templates:
+      - templates/vault-unsealer-cm.yaml
+    set:
+      vault.enabled: true
+      vault.server.dev.enabled: true
+      vault.unattended.enabled: true
+    asserts:
+      # Dev mode stores everything in memory and auto-unseals, so persistence and
+      # unsealing are meaningless next to it. Better to refuse than to no-op.
+      - failedTemplate:
+          errorPattern: 'requires vault.server.dev.enabled=false'
+
+  - it: should refuse a production vault in dev mode even with manual unsealing
+    templates:
+      - templates/vault-unsealer-cm.yaml
+    set:
+      vault.enabled: true
+      vault.server.dev.enabled: true
+      vault.unattended.enabled: true
+      vault.unattended.autoUnseal: false
+    asserts:
+      # The guard used to sit inside the autoUnseal branch, so this combination rendered
+      # in silence and did nothing at all - the worst of the three outcomes.
+      - failedTemplate:
+          errorPattern: 'requires vault.server.dev.enabled=false'
+
+  - it: should not render the unsealer when unsealing is manual
+    templates:
+      - templates/vault-unsealer-deployment.yaml
+    set:
+      vault.enabled: true
+      vault.server.dev.enabled: false
+      vault.unattended.enabled: true
+      vault.unattended.autoUnseal: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  # ==========================================================================
+  # The vault token
+  # ==========================================================================
+
+  - it: should render the vault token into the ConfigMap by default
+    templates:
+      - templates/identityhub-cm.yaml
+    set:
+      identityhub.enabled: true
+      identityhub.endpoints.identity.authKeyAlias: super-user-apikey
+    asserts:
+      - equal:
+          path: data["edc.vault.hashicorp.token"]
+          value: "root"
+
+  - it: should keep the token out of the ConfigMap when it comes from a Secret
+    templates:
+      - templates/identityhub-cm.yaml
+    set:
+      identityhub.enabled: true
+      identityhub.endpoints.identity.authKeyAlias: super-user-apikey
+      vault.hashicorp.existingSecret: vault-token
+    asserts:
+      # Omitted rather than emptied: an empty property would be resolved as an
+      # empty token instead of falling through to the environment variable.
+      - notExists:
+          path: data["edc.vault.hashicorp.token"]
+
+  - it: should inject the token as an environment variable instead
+    templates:
+      - templates/identityhub-deployment.yaml
+    set:
+      identityhub.enabled: true
+      identityhub.endpoints.identity.authKeyAlias: super-user-apikey
+      vault.hashicorp.existingSecret: vault-token
+      vault.hashicorp.existingSecretTokenKey: token
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: EDC_VAULT_HASHICORP_TOKEN
+            valueFrom:
+              secretKeyRef:
+                name: vault-token
+                key: token
+
+  # ==========================================================================
+  # The objects the deployment referenced but nothing created
+  # ==========================================================================
+
+  - it: should expose every port the deployment opens
+    templates:
+      - templates/identityhub-service.yaml
+    set:
+      identityhub.enabled: true
+      identityhub.endpoints.identity.authKeyAlias: super-user-apikey
+    asserts:
+      # accounts was missing, so the STS Accounts API was unreachable in-cluster.
+      - equal:
+          path: spec.ports[4].name
+          value: accounts
+
+  # A dev-mode vault mounts a KV v2 engine at secret/ for you; a real server mounts nothing there.
+  # Without this the unsealer leaves an open vault that answers every write with
+  # `no handler for route "secret/data/key-1"`, and the bootstrap Job dies on its first write.
+  - it: should mount the kv engine at the path the components are configured with
+    templates:
+      - templates/vault-unsealer-cm.yaml
+      - templates/vault-unsealer-deployment.yaml
+    set:
+      vault.enabled: true
+      vault.server.dev.enabled: false
+      vault.unattended.enabled: true
+      vault.hashicorp.existingSecret: vault-token
+    asserts:
+      - matchRegex:
+          path: data["unseal.sh"]
+          pattern: 'sys/mounts/\$\{KV_PATH\}'
+        template: templates/vault-unsealer-cm.yaml
+      - matchRegex:
+          path: data["unseal.sh"]
+          pattern: '"type":"kv","options":\{"version":"2"\}'
+        template: templates/vault-unsealer-cm.yaml
+      # Derived from vault.hashicorp.paths.secret rather than hardcoded, so the unsealer and the
+      # components cannot disagree about where secrets live.
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: KV_PATH
+            value: "secret"
+        template: templates/vault-unsealer-deployment.yaml
+
+  # The engine has to be mounted whatever the token arrangement is: a deployment that passes the
+  # token through a ConfigMap still needs somewhere to put its secrets. The provisioning branch
+  # used to be skipped wholesale when no token Secret was configured, taking the mount with it.
+  - it: should mount the kv engine even when it mints no token
+    templates:
+      - templates/vault-unsealer-cm.yaml
+    set:
+      vault.enabled: true
+      vault.server.dev.enabled: false
+      vault.unattended.enabled: true
+      vault.unattended.provisionToken: false
+    asserts:
+      - matchRegex:
+          path: data["unseal.sh"]
+          pattern: 'ensure_kv "\$\{_root\}"'
+      - matchRegex:
+          path: data["unseal.sh"]
+          pattern: 'if \[ -n "\$\{TOKEN_SECRET_NAME\}" \]; then'
+
+  # The connector side of the same contract (fdsc-edc omitting the property and injecting
+  # EDC_VAULT_HASHICORP_TOKEN) is NOT covered here: the subchart is vendored as a .tgz, and
+  # helm-unittest cannot select templates inside a packaged dependency. It is verified in
+  # FIWARE/helm-charts with `helm template` instead, which is where that chart lives.
