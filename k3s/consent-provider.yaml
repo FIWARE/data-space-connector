@@ -23,26 +23,26 @@ decentralizedIam:
     apisix:
       apisix:
         # external plugin runner (consent-plugin), started by APISIX as a subprocess.
-        # APISIX spawns the runner with a *fixed* environment (only PATH,
-        # APISIX_LISTEN_ADDRESS, ...), so the participant client secret cannot be
-        # delivered to it via the container env. Instead the launch command reads
-        # it from the mounted secret file and exports it (CONSENT_CLIENT_SECRET, the
-        # runner's env fallback for client_secret) before exec'ing the runner -
-        # keeping the secret out of the route config (etcd). `exec` preserves the
-        # pid so APISIX's runner supervision still works.
+        # It holds NO participant credential: it asks the provider-local consent-facade
+        # for a short-lived OID4VP access token (token_service_url on the route config),
+        # so there is no secret to smuggle into the runner's fixed environment and the
+        # launch command is a plain exec.
         extPlugin:
           enabled: true
           cmd:
-            - /bin/sh
-            - -c
-            - export CONSENT_CLIENT_SECRET="$(cat /consent-secret/clientSecret)"; exec /ext-plugin/go-runner
+            - /ext-plugin/go-runner
       # consent-plugin (external Go plugin) run by APISIX as a subprocess. The
       # statically-linked runner binary is staged into a shared volume by an init
       # container from the plugin image; APISIX spawns it and manages the socket.
       extraInitContainers:
         - name: install-consent-plugin
-          image: quay.io/wi_stefan/consent-plugin:0.0.1
-          imagePullPolicy: Always
+          # 0.0.5 replaces participant client credentials with the OID4VP token service
+          # (token_service_url): the plugin no longer logs in and holds no secret.
+          # 0.0.12 also matches the consumer against the consent's `recipients[0]`: on a
+          # `?receipt=true` record the consent-manager names the consumer only as an
+          # internal id, so matching consumer/dataConsumer alone denied valid consents.
+          image: quay.io/seamware/consent-plugin:0.0.12
+          imagePullPolicy: IfNotPresent
           command: ["/bin/sh", "-c", "cp /app/go-runner /ext-plugin/go-runner"]
           volumeMounts:
             - name: ext-plugin-bin
@@ -50,10 +50,6 @@ decentralizedIam:
       extraVolumeMounts:
         - name: ext-plugin-bin
           mountPath: /ext-plugin
-        # the participant client secret, read by the launch command above
-        - name: consent-plugin-secret
-          mountPath: /consent-secret
-          readOnly: true
       # NOTE: helm REPLACES list values, so the odrl-authorization defaults
       # (tpp-policy + opa-config, mounted by the OPA sidecar) are re-included here
       # alongside the ext-plugin binary volume.
@@ -66,9 +62,6 @@ decentralizedIam:
             name: opa-config
         - name: ext-plugin-bin
           emptyDir: {}
-        - name: consent-plugin-secret
-          secret:
-            secretName: consent-plugin-credentials
 
 # consent management (ISO/IEC TS 27560) - consent-manager + consent-facade.
 # The facade reads the provider's tm-forum-api; mongo uses the managed replica set.
@@ -88,30 +81,38 @@ consentManagement:
   # deploys it; it keeps only the APISIX consent-plugin wiring below.
   consentFacade:
     enabled: false
-  # the consent-plugin's participant client secret, mounted as a file into the
-  # provider APISIX container and exported as env CONSENT_CLIENT_SECRET by the
-  # ext-plugin launch command, so it is not stored as plaintext in the route
-  # config / etcd. For the demo a literal Secret is created below; in production
-  # set create=false and provide a Secret named consent-plugin-credentials
-  # externally (e.g. Vault-synced via external-secrets) with the same key.
-  pluginCredentials:
-    create: true
-    clientSecret: "demo"
+  # The external OwnerResolver the consent-filter plugin calls to determine, from
+  # the response DATA (never the requestor), whether a consent check is required
+  # and who the data owner is. Deployed provider-side (it knows the provider's
+  # data model). v1: owner from the entity's `dataOwner`, dataResource = the
+  # entity `id`.
+  ownerResolver:
+    enabled: true
+    image:
+      repository: quay.io/seamware/consent-owner-resolver
+      # 0.0.2+ carries the `contract` matcher (resource from the ODRL asset target).
+      # 0.0.8 pads the base64 participant ids sent to the facade's /verify: the facade
+      # validates a path parameter by re-encoding it WITH padding and comparing, so the
+      # previous unpadded value was rejected with 400 and every contract lookup failed
+      # (the plugin then denied with "access denied by consent policy").
+      tag: "0.0.8"
+    # Derive the governing resource from the CONTRACT instead of static rules: the
+    # resolver asks a provider-LOCAL consent-facade for the signed contract between
+    # this provider and the requesting consumer, matches the requested object URI
+    # against the contract's ODRL asset target, and uses that contract's PII catalog
+    # resource as the dataResource. Set to false to keep the static owner-only rules.
+    contractDriven: true
+  # A provider-LOCAL consent-facade, read only by the owner-resolver. It projects
+  # this provider's own TMForum agreements, so it needs no OID4VP (the reads are
+  # in-namespace) - unlike the authority facade, which reads cross-organisation.
+  # Keeping it local also means the authority facade's NetworkPolicy stays closed.
+  # The provider's own consent-facade instance is deployed as a SEPARATE release of
+  # charts/trust-anchor into this namespace - see k3s/consent-provider-facade.yaml.
+  # It needs the chart's full OID4VP holder wiring (PKCS#8 key conversion, dsc-ca in
+  # the JVM truststore, credential projection, a dozen OID4VP env vars), and a
+  # hand-written manifest here would duplicate and drift from it.
 
 extraManifests:
-  - |
-    {{- if .Values.consentManagement.pluginCredentials.create }}
-    apiVersion: v1
-    kind: Secret
-    metadata:
-      name: consent-plugin-credentials
-      # helm template does not inject the namespace; set it explicitly so the
-      # apply does not drop this into the default namespace.
-      namespace: {{ .Release.Namespace }}
-    type: Opaque
-    stringData:
-      clientSecret: {{ .Values.consentManagement.pluginCredentials.clientSecret | quote }}
-    {{- end }}
   # --- authorize the consent-facade's cross-org reads at the odrl-pap -----------
   # The facade (at the authority) authenticates to mp-tmf-api over OID4VP and passes
   # the openid-connect check, but the route's OPA/ODRL layer default-denies without a
@@ -145,3 +146,258 @@ extraManifests:
                   echo "odrl-pap POST /policy -> HTTP $code"; cat /tmp/out
                   # 2xx = created; a conflict on re-run is fine (policy already present)
                   case "$code" in 2*) exit 0;; 409) echo "already registered"; exit 0;; *) exit 1;; esac
+  # --- OwnerResolver: config, deployment, service ------------------------------
+  # The consent-filter plugin posts the response data here; the resolver returns
+  # (owner, dataResource) so the plugin can check consent per data owner,
+  # independently of the requestor. v1 rule: for the mp-data-service dataset,
+  # read the owner from the entity's `dataOwner` and use the entity `id` as the
+  # dataResource.
+  - |
+    {{- if .Values.consentManagement.ownerResolver.enabled }}
+    apiVersion: v1
+    kind: ConfigMap
+    metadata:
+      name: owner-resolver-config
+      namespace: {{ .Release.Namespace }}
+    data:
+      config.json: |
+        {
+          "defaultConsentRequired": false,
+          "defaultScheme": "identifier",
+          {{- if .Values.consentManagement.ownerResolver.contractDriven }}
+          "contractService": {
+            "url": "http://consent-facade.{{ .Release.Namespace }}.svc.cluster.local:8080",
+            "timeoutMs": 3000
+          },
+          "rules": [
+            {
+              "name": "mp-data-service-entity",
+              "match": { "service": "mp-data-service", "pathPattern": "/entities/[^/]+$" },
+              "consentRequired": true,
+              "matcher": { "type": "contract", "items": "", "itemsIsArray": false, "owner": "/dataOwner/value", "uriPointer": "/id" }
+            }
+          ]
+          {{- else }}
+          "rules": [
+            {
+              "name": "mp-data-service-entity",
+              "match": { "service": "mp-data-service", "pathPattern": "/entities/[^/]+$" },
+              "consentRequired": true,
+              "matcher": { "type": "json", "items": "", "itemsIsArray": false, "owner": "/dataOwner/value" }
+            }
+          ]
+          {{- end }}
+        }
+    {{- end }}
+  - |
+    {{- if .Values.consentManagement.ownerResolver.enabled }}
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: owner-resolver
+      namespace: {{ .Release.Namespace }}
+      labels:
+        app.kubernetes.io/name: owner-resolver
+    spec:
+      replicas: 1
+      selector:
+        matchLabels:
+          app.kubernetes.io/name: owner-resolver
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: owner-resolver
+        spec:
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 10100
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: owner-resolver
+              image: {{ .Values.consentManagement.ownerResolver.image.repository }}:{{ .Values.consentManagement.ownerResolver.image.tag }}
+              imagePullPolicy: IfNotPresent
+              args: []
+              env:
+                - name: CONFIG_PATH
+                  value: /etc/owner-resolver/config.json
+                - name: LISTEN_ADDR
+                  value: ":8080"
+                # LOG_LEVEL=debug makes the resolver log the requested path and the resolve
+                # error verbatim instead of an error class. Both carry owner identifiers, so it
+                # stays off; it is the switch to reach for when a request is denied and the
+                # class ("contract matcher") does not say which check failed.
+              ports:
+                - name: http
+                  containerPort: 8080
+              readinessProbe:
+                httpGet: { path: /health, port: http }
+                initialDelaySeconds: 2
+                periodSeconds: 10
+              livenessProbe:
+                httpGet: { path: /health, port: http }
+                initialDelaySeconds: 5
+                periodSeconds: 20
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop: ["ALL"]
+              resources:
+                requests: { cpu: "50m", memory: "32Mi" }
+                limits: { cpu: "250m", memory: "128Mi" }
+              volumeMounts:
+                - name: config
+                  mountPath: /etc/owner-resolver
+                  readOnly: true
+          volumes:
+            - name: config
+              configMap:
+                name: owner-resolver-config
+    {{- end }}
+  # --- the provider-local consent-facade lives in its own release ---------------
+  # It projects THIS provider's TMForum agreements/catalog (so the owner-resolver can
+  # find the governing contract and its ODRL asset target) and mints the provider's
+  # OID4VP tokens for the consent-plugin. Deployed from charts/trust-anchor via
+  # k3s/consent-provider-facade.yaml, because it needs that chart's full OID4VP holder
+  # wiring; its Service is `consent-facade` in this namespace, which is what the
+  # owner-resolver and the plugin address.
+  - |
+    {{- if .Values.consentManagement.ownerResolver.enabled }}
+    apiVersion: v1
+    kind: Service
+    metadata:
+      name: owner-resolver
+      namespace: {{ .Release.Namespace }}
+      labels:
+        app.kubernetes.io/name: owner-resolver
+    spec:
+      selector:
+        app.kubernetes.io/name: owner-resolver
+      ports:
+        - name: http
+          port: 8080
+          targetPort: http
+    {{- end }}
+  # --- NetworkPolicies for the provider-side consent components ----------------
+  # Both services are UNAUTHENTICATED and rely entirely on not being reachable, so
+  # reachability is the control:
+  #   * the consent-facade mints OID4VP access tokens that speak for THIS participant
+  #     (POST /internal/tokens) and serves its contract projection
+  #   * the owner-resolver decides whether data needs a consent check and who owns it
+  # Without a policy every pod in the namespace can reach both - i.e. any pod could
+  # obtain a participant token. The authority side has had equivalent policies from the
+  # start (charts/trust-anchor/templates/consent-network-policies.yaml); this closes the
+  # same gap on the provider side.
+  #
+  # The consent-plugin runs INSIDE the APISIX pod (as an ext-plugin runner), so plugin
+  # traffic originates from the APISIX pod and is selected by the apisix labels.
+  #
+  # A `from` entry with only a podSelector means "this namespace", which is what we want:
+  # every legitimate caller is provider-local. Selecting a pod at all makes ingress
+  # default-deny for it, so anything not listed here is refused.
+  - |
+    {{- if .Values.consentManagement.ownerResolver.enabled }}
+    apiVersion: networking.k8s.io/v1
+    kind: NetworkPolicy
+    metadata:
+      name: consent-facade-ingress
+      # helm template does not inject the namespace and the deploy applies the rendered
+      # files as-is; without this the policy lands in `default` and protects nothing.
+      namespace: {{ .Release.Namespace }}
+      labels:
+        app.kubernetes.io/name: consent-facade
+    spec:
+      podSelector:
+        matchLabels:
+          app.kubernetes.io/name: consent-facade
+      policyTypes:
+        - Ingress
+      ingress:
+        # the consent-plugin, for POST /internal/tokens
+        - from:
+            - podSelector:
+                matchLabels:
+                  app.kubernetes.io/name: apisix
+                  app.kubernetes.io/instance: {{ .Release.Name }}
+          ports:
+            - port: 8080
+        # the owner-resolver, which reads the governing contract from this instance
+        - from:
+            - podSelector:
+                matchLabels:
+                  app.kubernetes.io/name: owner-resolver
+          ports:
+            - port: 8080
+    {{- end }}
+  - |
+    {{- if .Values.consentManagement.ownerResolver.enabled }}
+    apiVersion: networking.k8s.io/v1
+    kind: NetworkPolicy
+    metadata:
+      name: owner-resolver-ingress
+      namespace: {{ .Release.Namespace }}
+      labels:
+        app.kubernetes.io/name: owner-resolver
+    spec:
+      podSelector:
+        matchLabels:
+          app.kubernetes.io/name: owner-resolver
+      policyTypes:
+        - Ingress
+      ingress:
+        # only the consent-plugin asks who owns the data
+        - from:
+            - podSelector:
+                matchLabels:
+                  app.kubernetes.io/name: apisix
+                  app.kubernetes.io/instance: {{ .Release.Name }}
+          ports:
+            - port: 8080
+    {{- end }}
+  # --- ensure the provider verifier's config-server database exists ------------
+  # Same idempotent guard as the authority (k3s/consent-trust-anchor.yaml): the
+  # vcverifier's config server needs the managed Postgres db `ccsdb`, which the
+  # Zalando operator only creates at initial provisioning. Create it on deploy if
+  # missing so a redeploy over a persisted volume never crash-loops the verifier.
+  - |
+    apiVersion: batch/v1
+    kind: Job
+    metadata:
+      name: {{ .Release.Name }}-ensure-ccsdb
+      namespace: {{ .Release.Namespace }}
+    spec:
+      ttlSecondsAfterFinished: 86400
+      backoffLimit: 30
+      activeDeadlineSeconds: 900
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: ensure-ccsdb
+              image: postgres:16-alpine
+              env:
+                - name: PGHOST
+                  value: postgres
+                - name: PGUSER
+                  valueFrom:
+                    secretKeyRef:
+                      name: postgres.postgres.credentials.postgresql.acid.zalan.do
+                      key: username
+                - name: PGPASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: postgres.postgres.credentials.postgresql.acid.zalan.do
+                      key: password
+              command: ["/bin/sh", "-ec"]
+              args:
+                - |
+                  until pg_isready -h "$PGHOST" -U "$PGUSER" -d postgres; do
+                    echo "waiting for postgres..."; sleep 3;
+                  done
+                  if psql -h "$PGHOST" -U "$PGUSER" -d postgres -tAc "SELECT 1 FROM pg_database WHERE datname='ccsdb'" | grep -q 1; then
+                    echo "ccsdb already exists"
+                  else
+                    psql -h "$PGHOST" -U "$PGUSER" -d postgres -c "CREATE DATABASE ccsdb"
+                    echo "created ccsdb"
+                  fi

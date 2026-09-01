@@ -17,9 +17,6 @@ scorpio:
   enabled: false
 
 
-consentFacade:
-  enabled: true
-
 # --- OID4VP credential issuer for did:web:dataspace-authority.org --------------
 # Self-contained Keycloak issuer (mirrors the consumer issuer) that mints a
 # verifiable OperatorCredential for the consent-facade running in this release.
@@ -353,6 +350,8 @@ vc-operator:
   enabled: true
   watchNamespaces:
     - trust-anchor
+  image:
+    tag: "0.3.0"
   extraEnvVars:
     - name: HTTPS_PROXY
       value: "http://squid-proxy.infra.svc.cluster.local:8888"
@@ -407,11 +406,151 @@ decentralizedIam:
     postgres-operator:
       enabled: false
     managedPostgres:
-      enabled: false
+      enabled: true
     trusted-issuers-list:
       enabled: false
     vcverifier:
-      enabled: false
+      enabled: true
+      ingress:
+        enabled: true
+        annotations:
+            traefik.ingress.kubernetes.io/router.tls: "true"
+            cert-manager.io/cluster-issuer: "selfsigned-issuer"
+            cert-manager.io/private-key-algorithm: "ECDSA"
+            cert-manager.io/alt-names: "verifier.dataspace-authority.org"
+        tls:
+          - hosts:
+              - verifier.dataspace-authority.org
+            secretName: verifier.dataspace-authority.org-tls
+        hosts:
+          - host: verifier.dataspace-authority.org
+            paths:
+              - "/"
+      configIngress:
+        enabled: false
+      deployment:
+        logging:
+          level: DEBUG
+        verifier:
+          tirAddress: https://tir.127.0.0.1.nip.io/
+          did: did:web:dataspace-authority.org
+          supportedModes: ["byValue", "byReference"]
+          # required for the tests, can be longer in real world environments
+          tilCacheExpiry: 1
+          tirCacheExpiry: 1
+          clientIdentification:
+            keyPath: /signing-key/tls.key
+            certificatePath: /signing-key/tls.crt
+            requestKeyAlgorithm: ES256
+            id: x509_san_dns:verifier.dataspace-authority.org
+        server:
+          host: https://verifier.dataspace-authority.org
+        additionalVolumes:
+          - name: signing-key
+            secret:
+              secretName: verifier.dataspace-authority.org-tls
+          # add the cert-manager CA to the system truststore
+          - name: root-ca
+            emptyDir: {}
+        additionalVolumeMounts:
+          - name: signing-key
+            mountPath: /signing-key
+          # add the cert-manager CA to the system truststore
+          - name: root-ca
+            mountPath: /etc/ssl/cert.pem
+            subPath: cert.pem
+        additionalEnvVars:
+          - name: HTTPS_PROXY
+            value: "http://squid-proxy.infra.svc.cluster.local:8888"
+          - name: HTTP_PROXY
+            value: "http://squid-proxy.infra.svc.cluster.local:8888"
+          - name: NO_PROXY
+            value: "w3.org,trusted-issuers-list"
+        initContainers:
+          # add the cert-manager CA to the system truststore
+          - name: add-root-ca
+            image: alpine:3.21.3
+            command:
+              [
+                "sh",
+                "-c",
+                "cat /etc/ssl/cert.pem /tmp/ca.crt > /root-ca/cert.pem",
+              ]
+            volumeMounts:
+              - name: root-ca
+                mountPath: /root-ca
+              - name: signing-key
+                mountPath: /tmp/ca.crt
+                subPath: ca.crt
+      registration:
+        enabled: true
+        job:
+          # Use a long TTL so the Job persists until the k3s-maven-plugin
+          # has verified its completion. The default 120s races with the
+          # plugin's parallel wait loop in CI.
+          ttlSecondsAfterFinished: 86400
+          initContainers:
+            waitForHost:
+              enabled: true
+              path: /health
+          activeDeadlineSeconds: 1500
+        services:
+          # One service, one audience: subjects and participants authenticate to the SAME
+          # relying party (this consent-manager), they just present different credentials.
+          # The credential policy is therefore selected by SCOPE, not by a second service -
+          # the pattern k3s/provider.yaml already uses for `data-service` (default/legal/
+          # operator). Every token this service issues carries `aud: consent-manager`, which
+          # is what consentManager.externalIdp.audience expects.
+          #   openid      - the data SUBJECT's UserCredential
+          #   participant - a PARTICIPANT's MembershipCredential (issued by its own keycloak,
+          #                 trusted because its issuer DID is registered in the trust-anchor
+          #                 TIR). The consent-manager resolves it to a Participant by `did`.
+          # See doc/CONSENT_MANAGEMENT.md.
+          #
+          # :warning: The provider mints that MembershipCredential with
+          # `holderBinding.enabled: false` (k3s/provider.yaml), so it carries no confirmation
+          # claim and is replayable by anyone holding the JWT. Enabling holder binding is the
+          # hardening step once this path works.
+          - id: consent-manager
+            defaultOidcScope: "openid"
+            authorizationType: "DEEPLINK"
+            oidcScopes:
+              "participant":
+                credentials:
+                  - type: MembershipCredential
+                    trustedParticipantsLists:
+                      - https://tir.127.0.0.1.nip.io
+                    trustedIssuersLists:
+                      - "*"
+                    jwtInclusion:
+                      enabled: true
+                      fullInclusion: true
+                dcql:
+                  credentials:
+                    - id: participant-query
+                      format: "jwt_vc_json"
+                      multiple: true
+                      meta:
+                        type_values:
+                          - ["MembershipCredential"]
+              "openid":
+                credentials:
+                  - type: UserCredential
+                    trustedParticipantsLists:
+                      - https://tir.127.0.0.1.nip.io
+                    trustedIssuersLists:
+                      - "*"
+                    jwtInclusion:
+                      enabled: true
+                      fullInclusion: true
+                dcql:
+                  credentials:
+                    - id: user-query
+                      format: "jwt_vc_json"
+                      multiple: true
+                      meta:
+                        type_values:
+                          - ["UserCredential"]
     credentials-config-service:
       enabled: false
   odrlAuthorization:
@@ -437,9 +576,20 @@ decentralizedIam:
             config_provider: "etcd"
         catchAllRoute:
           enabled: false
-      # internal only - the authority's apisix is not exposed via ingress
       ingress:
-        enabled: false
+        enabled: true
+        annotations:
+          cert-manager.io/cluster-issuer: "selfsigned-issuer"
+          cert-manager.io/private-key-algorithm: "ECDSA"
+          traefik.ingress.kubernetes.io/router.tls: "true"
+          cert-manager.io/alt-names: "consent-manager.dataspace-authority.org"
+        hosts:
+          - host: consent-manager.dataspace-authority.org
+            paths: ["/"]
+        tls:
+          - secretName: consent-manager-tls
+            hosts:
+              - consent-manager.dataspace-authority.org
       catchAllRoute:
         enabled: false
       # the consent key is sourced from consent-manager-secret (not a literal in
@@ -451,159 +601,201 @@ decentralizedIam:
             secretKeyRef:
               name: consent-manager-secret
               key: consentKey
-      # the consent-manager facade (roadmap item 1). Two routes:
-      #  * /participants/login is exempt (it issues the token) - higher priority.
-      #  * everything else requires a valid *participant JWT* (jwt-auth, keyed on
-      #    the token's participant_name via the consumer registered below), then
-      #    injects the consent key server-side. Callers therefore authenticate
-      #    per-participant with their JWT and never hold the shared consent key.
-      #    The x-user-key subject selector is forwarded: it now sits behind the
-      #    per-participant jwt-auth (no longer an unauthenticated shortcut), so a
-      #    participant can name the subject of a grant. Deriving the subject from
-      #    the token `sub` instead of a caller-supplied header is the rest of UF-1.
-      # Matched on uri only (no host); this apisix is internal (ingress off).
       routes:
-        - uri: /consent-manager/v1/participants/login
-          priority: 10
+        # NB there is deliberately NO /participants/login route. Participants
+        # authenticate over OID4VP (see the /consent-manager/* route below), so nothing
+        # issues consent-manager-signed participant tokens any more - and the login
+        # endpoint was an unauthenticated, published, unthrottled credential exchange.
+        # See doc/CONSENT_MANAGEMENT.md.
+        # ---------------------------------------------------------------------------------------
+        # Subject-authenticated path: the data subject presents its OWN OID4VP access token, which the
+        # consent-manager verifies itself via external JWKS (consentManager.externalIdp) and maps to its
+        # local User. Deliberately NO participant `jwt-auth` and NO consent-key injection - unlike the
+        # participant `/consent-manager/*` route, whose jwt-auth would reject a subject token at the
+        # gateway ("missing user key in JWT token"). This lets the subject reach its user-authenticated
+        # endpoints through the public ingress without a port-forward.
+        #
+        # :warning: Because these routes apply NO gateway authentication, each one is an ALLOW-LIST of
+        # (uris x methods) whose handlers are `verifyUserJWT`-gated in the consent-manager itself, i.e.
+        # they authenticate the SUBJECT's OID4VP token. Never widen this to `/consent-user/*`: this
+        # gateway is published (ingress `consent-authority-apisix`, host
+        # consent-manager.dataspace-authority.org), so a wildcard exposes the WHOLE consent-manager API
+        # unauthenticated - including endpoints gated only by the shared consent key (`POST /v1/consents`,
+        # `GET /v1/consents/{userId}/{providerId}/{consumerId}`, which this route does not inject and so
+        # cannot satisfy), and endpoints with NO gate at all
+        # (`GET /v1/consents/emailverification`, `GET /v1/users/{userId}` - the latter returns the
+        # subject's name, DID and its `identifiers`, i.e. the `x-user-key` that authenticates AS that
+        # subject). Anything added here must be checked against src/routes/*.ts for its middleware first.
+        #
+        # Methods are pinned per route so a path wildcard cannot pull in a differently-gated handler on
+        # the same path (e.g. `DELETE /v1/consents/{id}` is the subject's revoke, while `POST /v1/consents`
+        # is the consent-key-gated provider-on-behalf grant).
+        # ---------------------------------------------------------------------------------------
+        # subject reads: its own consent list/detail, available exchanges and its own account
+        - uris:
+            - /consent-user/v1/consents/me
+            - /consent-user/v1/consents/me/*
+            - /consent-user/v1/consents/exchanges/user
+            - /consent-user/v1/users/me
+          methods: ["GET"]
+          priority: 5
+          host: consent-manager.dataspace-authority.org
           upstream:
             nodes:
               consent-manager:3000: 1
             type: roundrobin
           plugins:
             proxy-rewrite:
-              regex_uri: ["^/consent-manager/(.*)", "/$1"]
-              headers:
-                remove:
-                  - x-user-key
-        - uri: /consent-manager/*
-          priority: 0
+              regex_uri: ["^/consent-user/(.*)", "/$1"]
+        # subject grants consent for itself (POST /v1/consents/user, `verifyUserJWT`)
+        - uris:
+            - /consent-user/v1/consents/user
+          methods: ["POST"]
+          priority: 5
+          host: consent-manager.dataspace-authority.org
           upstream:
             nodes:
               consent-manager:3000: 1
             type: roundrobin
           plugins:
-            jwt-auth:
-              key_claim_name: participant_name
-              header: authorization
+            proxy-rewrite:
+              regex_uri: ["^/consent-user/(.*)", "/$1"]
+        # subject withdraws a consent (DELETE /v1/consents/{id}, `verifyUserJWT`). The wildcard is safe
+        # because `/:id` is the ONLY delete on the consents router.
+        - uris:
+            - /consent-user/v1/consents/*
+          methods: ["DELETE"]
+          priority: 5
+          host: consent-manager.dataspace-authority.org
+          upstream:
+            nodes:
+              consent-manager:3000: 1
+            type: roundrobin
+          plugins:
+            proxy-rewrite:
+              regex_uri: ["^/consent-user/(.*)", "/$1"]
+        # subject self-service PDI signup. Unauthenticated BY DESIGN upstream (src/routes/users.ts has no
+        # middleware on /signup) - it is the only endpoint here that is not `verifyUserJWT`-gated, and it
+        # is exposed as a single exact uri+method rather than via a wildcard. It creates an account keyed
+        # on the holder DID; a deployment that onboards subjects out-of-band should drop this route.
+        - uris:
+            - /consent-user/v1/users/signup
+          methods: ["POST"]
+          priority: 5
+          host: consent-manager.dataspace-authority.org
+          upstream:
+            nodes:
+              consent-manager:3000: 1
+            type: roundrobin
+          plugins:
+            proxy-rewrite:
+              regex_uri: ["^/consent-user/(.*)", "/$1"]
+        # Participant path. Authentication is OID4VP: the caller presents an access token
+        # issued by this authority's verifier for the `consent-manager` service, which the
+        # gateway validates against the verifier's JWKS (bearer_only - the gateway never
+        # runs a browser flow). The consent-manager then resolves the token subject to a
+        # Participant by its `did`.
+        #
+        # This replaces the former `jwt-auth`, which validated a consent-manager-signed
+        # HS256 token against APISIX consumers that had to be provisioned by hand and all
+        # shared the consent-manager's jwtSecret - so any holder could mint a token as any
+        # participant. Nothing here holds a participant credential any more.
+        #
+        # The consent key is still injected server-side, unchanged: callers never hold it.
+        - uri: /consent-manager/*
+          priority: 0
+          host: consent-manager.dataspace-authority.org
+          upstream:
+            nodes:
+              consent-manager:3000: 1
+            type: roundrobin
+          plugins:
+            openid-connect:
+              bearer_only: true
+              use_jwks: true
+              # the token's `aud` is the verifier service id; check it explicitly rather
+              # than trusting the signature alone, or a token minted for another service
+              # of the same verifier would be accepted here
+              audience: consent-manager
+              client_id: consent-manager
+              client_secret: unused-bearer-only
+              discovery: https://verifier.dataspace-authority.org/services/consent-manager/.well-known/openid-configuration
+              # The verifier is addressed by its PUBLIC ingress host, because that host is the token's
+              # `iss` and the discovery document's `issuer`/`jwks_uri`. In the local cluster that name
+              # resolves to 127.0.0.1 and CoreDNS only rewrites *.nip.io, so both the discovery fetch
+              # and the JWKS fetch go through the squid forward proxy - the same mechanism the
+              # consent-manager (externalIdp.proxy) and the facades already use. Without this the
+              # gateway 401s every request with "failed to query the DNS server: name error".
+              proxy_opts:
+                http_proxy: http://squid-proxy.infra.svc.cluster.local:8888
+                https_proxy: http://squid-proxy.infra.svc.cluster.local:8888
+              # the verifier's ingress cert is signed by the cluster CA (selfsigned-ca), which this
+              # gateway has no trust bundle for; the hop is in-cluster via squid
+              ssl_verify: false
             proxy-rewrite:
               regex_uri: ["^/consent-manager/(.*)", "/$1"]
               headers:
                 set:
                   x-visionstrust-consent-key: "$env://CONSENT_KEY"
+        - uri: /.well-known/openid-configuration
+          host: consent-manager.dataspace-authority.org
+          upstream:
+            nodes:
+              verifier:3000: 1
+            type: roundrobin
+          plugins:
+            proxy-rewrite:
+              uri: /services/consent-manager/.well-known/openid-configuration
     # the PAP/PDP are not needed at the authority
     odrl-pap:
       enabled: false
 
-# --- consent-manager, consent-facade and their managed MongoDB --------------
-# These no longer live in this (umbrella-chart) release. They are deployed from
-# the trust-anchor chart as part of the `trust-anchor` release in this same
-# namespace, via k3s/consent-trust-anchor-components.yaml. This release provides
-# only the IAM that backs consent: the keycloak issuer, the did:web helper (the
-# `dataspace-authority.org-tls` secret the facade mounts), the vc-operator (the
-# `vc-operator-credential` secret the facade mounts) and the APISIX facade route
-# below. The route + the reconcile Job reference `consent-manager-secret` and the
-# `consent-manager` service by name (both created by the trust-anchor release in
-# this namespace). See doc/CONSENT_MANAGEMENT.md.
-#
-# No participant is statically configured. The authority learns participants
-# through registration (`POST /v1/participants`), and the reconcile Job below then
-# provisions a jwt-auth consumer for each. In the demo the provider participant is
-# registered as a manual bootstrap step - see doc/CONSENT_MANAGEMENT.md.
-
-# --- reconcile one jwt-auth consumer per participant --------------------------
-# The apisix chart has no native `consumers` support, so a bootstrap Job PUTs the
-# consumers via the admin API once apisix is up. Rather than a single hardcoded
-# consumer, this reconciles *every* participant the consent-manager knows: it runs
-# the consent-manager image (already carries mongoose + the compiled models),
-# lists the participants, and PUTs a jwt-auth consumer for each - keyed on the
-# participant's legalName (the token's `participant_name` claim), signed with the
-# shared JWT_SECRET_KEY the consent-manager issues all tokens with. It is
-# idempotent (PUT), so it also re-syncs consumers after an apisix/etcd reset. At
-# first deploy the participant set is usually empty (a no-op); the register Job
-# provisions the consumer for the participant it registers, so a real authority's
-# registration path is what drives this. jwt-auth on the facade route then rejects
-# any request whose token's participant_name has no matching consumer.
+# --- ensure the verifier's config-server database exists ----------------------
+# The vcverifier's embedded config server connects to the managed Postgres
+# database `ccsdb`. The Zalando postgres-operator creates databases only at the
+# initial cluster provisioning, so a redeploy that reuses a persisted volume can
+# come up without `ccsdb` and the verifier crash-loops
+# ("FATAL: database ccsdb does not exist"). This idempotent Job creates it on
+# every deploy when missing, so the verifier never starts before its DB exists.
 extraManifests:
   - |
     apiVersion: batch/v1
     kind: Job
     metadata:
-      name: {{ .Release.Name }}-jwt-consumer
-      # helm template does not inject the namespace; set it explicitly so the
-      # apply does not drop this into the default namespace (where it cannot reach
-      # the trust-anchor apisix admin, mongo or read consent-manager-secret).
+      name: {{ .Release.Name }}-ensure-ccsdb
       namespace: {{ .Release.Namespace }}
     spec:
       ttlSecondsAfterFinished: 86400
-      backoffLimit: 10
+      backoffLimit: 30
+      activeDeadlineSeconds: 900
       template:
         spec:
           restartPolicy: OnFailure
-          # The consent-manager image, consent-manager-secret and the managed mongo
-          # (mongodb-svc / mongodb-consent-password) are created by the trust-anchor
-          # release (charts/trust-anchor, via k3s/consent-trust-anchor-components.yaml)
-          # in this same namespace. This Job runs in the consent-authority release
-          # (where APISIX lives), so it references them by their well-known names -
-          # keep these in sync with the trust-anchor chart's consentManagement /
-          # managedMongo defaults.
           containers:
-            - name: reconcile-consumers
-              image: "consent-manager:local"
-              imagePullPolicy: IfNotPresent
+            - name: ensure-ccsdb
+              image: postgres:16-alpine
               env:
-                - name: APISIX_ADMIN
-                  value: "http://{{ .Release.Name }}-apisix-admin:9180"
-                - name: APISIX_ADMIN_KEY
-                  value: "admin"
-                - name: JWT_SECRET_KEY
+                - name: PGHOST
+                  value: postgres
+                - name: PGUSER
                   valueFrom:
                     secretKeyRef:
-                      name: consent-manager-secret
-                      key: jwtSecret
-                - name: CM_MONGO_PASSWORD
+                      name: postgres.postgres.credentials.postgresql.acid.zalan.do
+                      key: username
+                - name: PGPASSWORD
                   valueFrom:
                     secretKeyRef:
-                      name: mongodb-consent-password
+                      name: postgres.postgres.credentials.postgresql.acid.zalan.do
                       key: password
-                - name: MONGO_URI
-                  value: "mongodb://consent:$(CM_MONGO_PASSWORD)@mongodb-svc:27017/consent?replicaSet=mongodb"
-                - name: RECONCILE_JS
-                  value: |
-                    const NM='/usr/src/app/node_modules/';
-                    const mongoose=require(NM+'mongoose');
-                    const http=require('http');
-                    const Participant=require('/usr/src/app/dist/src/models/Participant/Participant.model').default;
-                    const ADMIN=process.env.APISIX_ADMIN, KEY=process.env.APISIX_ADMIN_KEY, SECRET=process.env.JWT_SECRET_KEY;
-                    const call=(method,url,headers,body)=>{const u=new URL(url);return new Promise((res,rej)=>{const d=body?JSON.stringify(body):null;const opt={host:u.hostname,port:u.port||80,method,path:u.pathname+u.search,headers:Object.assign({'content-type':'application/json'},headers||{},d?{'content-length':Buffer.byteLength(d)}:{})};const r=http.request(opt,x=>{let b='';x.on('data',c=>b+=c);x.on('end',()=>res({code:x.statusCode,body:b}));});r.on('error',rej);if(d)r.write(d);r.end();});};
-                    const sleep=ms=>new Promise(r=>setTimeout(r,ms));
-                    (async()=>{
-                      let up=false;
-                      for(let i=0;i<60&&!up;i++){try{const r=await call('GET',ADMIN+'/apisix/admin/consumers',{'x-api-key':KEY});if(r.code===200||r.code===401)up=true;}catch(e){}if(!up){console.log('waiting for apisix admin...');await sleep(3000);}}
-                      await mongoose.connect(process.env.MONGO_URI);
-                      const ps=await Participant.find({}).select('legalName');
-                      let n=0;
-                      for(const p of ps){
-                        const ln=p.legalName;if(!ln)continue;
-                        const username=ln.replace(/[^0-9a-zA-Z_]/g,'_');
-                        const r=await call('PUT',ADMIN+'/apisix/admin/consumers',{'x-api-key':KEY},{username:username,plugins:{'jwt-auth':{key:ln,secret:SECRET,algorithm:'HS256'}}});
-                        if(r.code>=300)throw new Error('consumer PUT for '+ln+' -> HTTP '+r.code+' '+r.body.slice(0,150));
-                        console.log('  consumer '+username+'  key='+JSON.stringify(ln));n++;
-                      }
-                      console.log('reconciled '+n+' participant consumer(s)');
-                      await mongoose.disconnect();
-                    })().catch(e=>{console.error('ERR',e.stack||e.message);process.exit(1);});
               command: ["/bin/sh", "-ec"]
               args:
-                - node -e "$RECONCILE_JS"
-  # --- keystore password for the authority-keycloak prepare-keystore init ------
-  # Consumed by the keycloak prepare-keystore init container (STORE_PASS) to
-  # export /did-material/cert.pfx from the dataspace-authority.org-tls secret.
-  - |
-    apiVersion: v1
-    kind: Secret
-    metadata:
-      name: keystore-password
-      namespace: {{ .Release.Namespace }}
-    type: Opaque
-    stringData:
-      password: "dsc-authority-keystore-2026!"
+                - |
+                  until pg_isready -h "$PGHOST" -U "$PGUSER" -d postgres; do
+                    echo "waiting for postgres..."; sleep 3;
+                  done
+                  if psql -h "$PGHOST" -U "$PGUSER" -d postgres -tAc "SELECT 1 FROM pg_database WHERE datname='ccsdb'" | grep -q 1; then
+                    echo "ccsdb already exists"
+                  else
+                    psql -h "$PGHOST" -U "$PGUSER" -d postgres -c "CREATE DATABASE ccsdb"
+                    echo "created ccsdb"
+                  fi

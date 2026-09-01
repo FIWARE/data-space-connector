@@ -1,0 +1,55 @@
+{{- if and .Values.consentManagement.enabled .Values.consentManagement.consentFacade.enabled .Values.consentManagement.consentFacade.ingress.enabled }}
+{{- $f := .Values.consentManagement.consentFacade }}
+{{- $i := $f.ingress }}
+# Public ingress for the consent-facade's SELF-DESCRIPTION endpoints only.
+#
+# The ids the facade mints (participant self-descriptions, catalog data
+# resources) end up inside privacy notices and ISO 27560 consent receipts, and
+# are meant to be dereferenceable by data subjects, auditors and other
+# participants. They must therefore be public URLs, not cluster-internal service
+# names - see `selfUrl`.
+#
+# Only the read-only self-description paths are published. The contract endpoints
+# (`/verify`, `/bilaterals`, `/contracts`) stay internal: they reveal WHICH
+# participants have contracts with each other, and the facade has no
+# authentication of its own (network isolation is its only protection), so they
+# must not be reachable from outside the cluster.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: consent-facade
+  # helm template does not inject the namespace, and the deploy applies the
+  # rendered files as-is - without this the Ingress lands in `default`, where it
+  # cannot route to the consent-facade Service in the release namespace (traefik
+  # then answers 404 and the consent-manager's self-description fetch fails).
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "trust-anchor.labels" . | nindent 4 }}
+  {{- with $i.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- with $i.ingressClassName }}
+  ingressClassName: {{ . }}
+  {{- end }}
+  rules:
+    {{- range $i.hosts }}
+    - host: {{ .host | quote }}
+      http:
+        paths:
+          {{- range $path := $.Values.consentManagement.consentFacade.ingress.publicPaths }}
+          - path: {{ $path }}
+            pathType: Prefix
+            backend:
+              service:
+                name: consent-facade
+                port:
+                  number: {{ $f.service.port }}
+          {{- end }}
+    {{- end }}
+  {{- with $i.tls }}
+  tls:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+{{- end }}

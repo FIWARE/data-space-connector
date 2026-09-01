@@ -92,6 +92,15 @@ consentManagement:
   # -- should consent management be deployed
   enabled: false
 
+  # NetworkPolicies isolating the consent-manager and consent-facade so they are reachable only by
+  # their intended in-cluster peers - the authority APISIX and each other - and NOT by arbitrary
+  # pods (e.g. a provider's APISIX consent-plugin). The consent-manager's participant auth + consent
+  # key injection are enforced at the APISIX facade, so a direct path to consent-manager:3000 would
+  # bypass them; these policies close that. Requires a NetworkPolicy-enforcing CNI (k3s enforces).
+  networkPolicy:
+    # -- create the isolation NetworkPolicies
+    enabled: true
+
   # -- the consent-manager service (VisionsOfficial/consent-manager, ISO 27560)
   consentManager:
     # -- deploy the consent-manager
@@ -102,11 +111,15 @@ consentManagement:
     # consent-manager and consent-facade live in different namespaces.
     contractServiceBaseUrl: ""
     image:
-      # -- repository of the consent-manager image (built & imported locally)
-      repository: consent-manager
-      # -- tag of the consent-manager image
-      tag: local
-      # -- image pull policy
+      # -- repository of the consent-manager image (compiled, non-root, read-only-fs
+      # safe; built from docker/app/Dockerfile in the consent-manager repo)
+      repository: quay.io/wi_stefan/consent-manager
+      # -- tag of the consent-manager image (carries the external-JWKS feature, the
+      # configurable discovery path, and the `did` uniqueness guard that makes a
+      # participant's DID a safe lookup key for externally issued tokens)
+      tag: "0.0.6"
+      # -- image pull policy (IfNotPresent so a locally-imported image is used; pulls
+      # from quay when absent)
       pullPolicy: IfNotPresent
     # -- api prefix served by the consent-manager
     apiPrefix: /v1
@@ -145,6 +158,47 @@ consentManagement:
       generate: true
       # -- key holding the consent key (X_VISIONSTRUST_CONSENT_KEY), injected by the facade
       consentKeyKey: consentKey
+    # External IDP / OID4VP token verification (consent-manager >= 1.2.0). When enabled, the
+    # consent-manager trusts JWTs whose `iss` is in `issuers`, verifying them via OIDC discovery +
+    # JWKS and mapping the token `sub` (a DID) to a local User/UserIdentifier/Participant. This is
+    # what lets a data subject (end-user) authenticate to the consent-manager DIRECTLY with its
+    # OID4VP access token - no facade translation and no x-user-key.
+    externalIdp:
+      # -- enable external-token verification (empty issuers => feature off in the consent-manager)
+      enabled: false
+      # -- trusted issuer URLs (must equal the token `iss`, i.e. the verifier's bare `server.host`).
+      # OIDC discovery runs at `<issuer><discoveryPath>` (see discoveryPath below).
+      issuers: []
+      # -- expected `aud` claim (required by the consent-manager whenever issuers are set).
+      # One value covers both data subjects and participants: they present different
+      # credentials, but to the same relying party, so on the verifier that is a single
+      # service with one credential policy per scope - and every token it issues carries
+      # that service id as `aud`.
+      audience: ""
+      # -- accepted signing algorithms (asymmetric only)
+      algorithms: "RS256,ES256,EdDSA"
+      # -- token claim carrying the subject DID
+      subjectClaim: sub
+      # -- discovery + JWKS cache TTL (seconds)
+      discoveryTtl: 3600
+      # -- path appended to each issuer to fetch its OIDC discovery document. Empty => the
+      # spec default `/.well-known/openid-configuration`. The FIWARE VCVerifier stamps its bare
+      # `server.host` as the token `iss` but serves discovery under a per-service path, so set this
+      # to e.g. `/services/consent-manager/.well-known/openid-configuration` to discover there while
+      # `issuers` stays the bare host that matches the token.
+      discoveryPath: ""
+      # -- forward proxy for reaching an external verifier ingress in-cluster (HTTP(S)_PROXY on the
+      # consent-manager). Empty => no proxy. For the local demo the verifier ingress resolves to
+      # 127.0.0.1, so route discovery/JWKS through the squid proxy.
+      proxy: ""
+      # -- CA the consent-manager must trust to reach the verifier over TLS (the verifier's ingress
+      # cert is usually cert-manager self-signed). Mounted and exported as NODE_EXTRA_CA_CERTS.
+      # Empty name => rely on the system trust store.
+      caSecret:
+        # -- secret holding the CA certificate (e.g. the verifier ingress tls secret)
+        name: ""
+        # -- key within the secret holding the PEM CA certificate
+        key: ca.crt
     # -- extra environment variables (map)
     env: {}
     # -- "valueFrom" environment variable references (map, name templated)
@@ -189,13 +243,27 @@ consentManagement:
     enabled: true
     image:
       # -- repository of the consent-facade image
-      repository: quay.io/wi_stefan/consent-facade
-      # -- image tag
-      tag: "0.0.1"
+      repository: quay.io/seamware/consent-facade
+      # -- image tag. 0.0.2+ preserves the source ODRL target as `assetTarget`, which
+      # the provider-side owner-resolver matches against the requested object. 0.0.3 is
+      # built on the repo's intended UBI base (JAVA_HOME=/usr/lib/jvm/java-21, uid 185);
+      # the published 0.0.2 was built on eclipse-temurin (/opt/java/openjdk), which is
+      # why the init container resolves the JDK instead of hardcoding it (see javaHome).
+      # 0.0.4 adds POST /internal/tokens (the OID4VP token service the consent-plugin
+      # uses instead of participant client credentials - doc/CONSENT_MANAGEMENT.md).
+      # 0.0.5 makes each token target's OIDC discovery path configurable: a VCVerifier
+      # serves discovery per service, and 0.0.4 always asked at the host root (404).
+      tag: "0.0.14"
       # -- image pull policy
       pullPolicy: Always
     # -- port the facade listens on
     containerPort: 8080
+    # -- explicit JDK home inside the facade image, used by the import-dsc-ca init
+    # container to locate `lib/security/cacerts` and `bin/keytool`. Empty (default)
+    # resolves it at runtime from $JAVA_HOME, falling back to the keytool/java binary
+    # on PATH - so the chart keeps working when the image's base changes (UBI openjdk
+    # uses /usr/lib/jvm/java-21, eclipse-temurin /opt/java/openjdk). Set only to pin it.
+    javaHome: ""
     # -- port the Micronaut management endpoints (incl. /health) listen on
     # (matches endpoints.all.port in the image's application.yaml)
     managementPort: 9090
@@ -209,8 +277,37 @@ consentManagement:
     # agreement) are pointed here; the per-api paths come from the image defaults.
     tmfApiUrl: http://tm-forum-api-svc:8080
     # -- public base url the facade writes into the contracts' catalog/self-description
-    # links. Defaults to the in-cluster service (http://consent-facade:<port>).
+    # links. These ids travel into privacy notices and ISO 27560 consent receipts and
+    # are meant to be dereferenceable by subjects, auditors and other participants, so
+    # in any real deployment this MUST be the public ingress url (see `ingress` below),
+    # not a cluster-internal name. Defaults to the in-cluster service
+    # (http://consent-facade:<port>), which is only adequate for a single-cluster test.
     selfUrl: ""
+    # Public ingress for the facade's self-description endpoints. Only the read-only
+    # SD/catalog paths are published; the contract endpoints (/verify, /bilaterals,
+    # /contracts) stay internal because they reveal which participants contract with
+    # each other and the facade has no authentication of its own.
+    ingress:
+      # -- expose the self-description endpoints via ingress
+      enabled: false
+      # -- ingress class (empty => the cluster default)
+      ingressClassName: ""
+      # -- annotations (cert-manager / controller specific)
+      annotations: {}
+      # -- path prefixes published publicly. Keep this to self-description reads.
+      publicPaths:
+        - /participants
+        - /catalog
+      # -- hosts served, e.g. [{host: consent-facade.dataspace-authority.org}]
+      hosts: []
+      # -- namespace of the ingress controller, admitted by the facade NetworkPolicy
+      # when the ingress is enabled (it must reach the pod to serve the public paths)
+      controllerNamespace: infra
+      # -- pod labels of the ingress controller, admitted by the NetworkPolicy
+      controllerPodLabels:
+        app.kubernetes.io/name: traefik
+      # -- tls blocks as in a standard Ingress spec
+      tls: []
     # persistent, database-backed provider registry (multi-provider). When enabled the
     # facade manages providers at runtime through the /providers admin API, backed by
     # PostgreSQL (the schema is created by the facade's Flyway migration on first start,
@@ -245,6 +342,22 @@ consentManagement:
     oid4vp:
       # -- enable OID4VP authentication of the facade's outbound TM Forum calls
       enabled: false
+      # -- audiences this facade may mint access tokens for via POST /internal/tokens,
+      # so components that do not implement OID4VP (the Go consent-plugin) can
+      # authenticate as this participant. A closed list of NAMED targets, never a
+      # caller-supplied URL: anything reaching that endpoint could otherwise make the
+      # facade present this participant's credential to an arbitrary host
+      # (see the consent-facade repo, doc/adr/0003).
+      #
+      # Each entry: `audience` (the name callers ask for), `url` (the verifier),
+      # `clientId` (the verifier SERVICE), `scope` (which of that service's credential
+      # policies to satisfy) and `discoveryPath` (the sub-path the target serves OIDC
+      # discovery under - a FIWARE VCVerifier serves it per service, e.g.
+      # `/services/consent-manager`; omit it only for an issuer that serves the
+      # spec location at its root). Passed as system properties rather than env vars:
+      # a list of objects needs bracketed property names, and Kubernetes does not
+      # allow brackets in env var NAMES (only in their values).
+      tokenTargets: []
       # -- name of the participant's cert-manager tls secret. Its `tls.key` is the
       # did:web signing key (converted to PKCS#8 by an init container) and its
       # `ca.crt` is the cluster CA (dsc-ca) imported into the JVM truststore.
@@ -283,10 +396,16 @@ consentManagement:
           secretKey: credential
           fileName: operator-credential.jwt
       proxy:
-        # -- route the OID4VP flow and the TM Forum calls through a forward proxy.
-        # Needed in-cluster to reach a provider's *external* ingress host: the squid
-        # proxy resolves the ingress that otherwise points at 127.0.0.1.
+        # -- route the OID4VP flow through a forward proxy. Needed in-cluster to reach a
+        # verifier's *external* ingress host: the squid proxy resolves the ingress that
+        # otherwise points at 127.0.0.1.
         enabled: false
+        # -- also route the TM Forum clients through that proxy. True for a facade that
+        # fronts OTHER participants (their TM Forum api is behind an external ingress).
+        # Set FALSE for a participant's own facade, whose TM Forum api is an in-namespace
+        # Service: squid cannot resolve a cluster-internal name and answers 500
+        # ("=> tm-forum-api-svc/<unresolved>:8080"), so every contract lookup fails.
+        tmForumClients: true
         # -- proxy host
         host: squid-proxy.infra.svc.cluster.local
         # -- proxy port

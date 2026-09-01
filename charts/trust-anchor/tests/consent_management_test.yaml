@@ -12,6 +12,7 @@ templates:
   - templates/consent-manager-secret.yaml
   - templates/consent-facade-deployment.yaml
   - templates/consent-facade-service.yaml
+  - templates/consent-facade-ingress.yaml
 tests:
   # ==========================================================================
   # Disabled by default -> nothing renders
@@ -36,7 +37,7 @@ tests:
           value: consent-manager
       - equal:
           path: spec.template.spec.containers[0].image
-          value: "consent-manager:local"
+          value: "quay.io/wi_stefan/consent-manager:0.0.6"
 
   - it: applies the strict security context
     template: templates/consent-manager-deployment.yaml
@@ -84,6 +85,143 @@ tests:
             name: MONGO_URI
             value: "mongodb://x:y@host:27017/consent?replicaSet=rs0"
 
+  - it: renders EXTERNAL_OIDC_DISCOVERY_PATH only when discoveryPath is set
+    template: templates/consent-manager-deployment.yaml
+    set:
+      consentManagement.enabled: true
+      consentManagement.consentManager.externalIdp.enabled: true
+      consentManagement.consentManager.externalIdp.issuers:
+        - "https://verifier.dataspace-authority.org"
+      consentManagement.consentManager.externalIdp.audience: "consent-manager"
+      consentManagement.consentManager.externalIdp.discoveryPath: "/services/consent-manager/.well-known/openid-configuration"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: EXTERNAL_OIDC_DISCOVERY_PATH
+            value: "/services/consent-manager/.well-known/openid-configuration"
+
+  - it: omits EXTERNAL_OIDC_DISCOVERY_PATH when discoveryPath is empty (well-known default)
+    template: templates/consent-manager-deployment.yaml
+    set:
+      consentManagement.enabled: true
+      consentManagement.consentManager.externalIdp.enabled: true
+      consentManagement.consentManager.externalIdp.issuers:
+        - "https://verifier.dataspace-authority.org"
+      consentManagement.consentManager.externalIdp.audience: "consent-manager"
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: EXTERNAL_OIDC_DISCOVERY_PATH
+            value: ""
+
+  - it: resolves the JDK path instead of hardcoding it (survives a base-image change)
+    template: templates/consent-facade-deployment.yaml
+    set:
+      consentManagement.enabled: true
+      consentManagement.consentFacade.oid4vp.enabled: true
+    asserts:
+      # a hardcoded JDK path turns a base-image swap into an init crashloop
+      - notMatchRegex:
+          path: spec.template.spec.initContainers[1].args[0]
+          pattern: "/usr/lib/jvm"
+      - matchRegex:
+          path: spec.template.spec.initContainers[1].args[0]
+          pattern: "JAVA_HOME"
+
+  - it: pins the JDK path when javaHome is set
+    template: templates/consent-facade-deployment.yaml
+    set:
+      consentManagement.enabled: true
+      consentManagement.consentFacade.oid4vp.enabled: true
+      consentManagement.consentFacade.javaHome: "/opt/java/openjdk"
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.initContainers[1].args[0]
+          pattern: 'JDK_DIR="/opt/java/openjdk"'
+
+  - it: publishes only the self-description paths on the facade ingress
+    template: templates/consent-facade-ingress.yaml
+    release:
+      namespace: trust-anchor
+    set:
+      consentManagement.enabled: true
+      consentManagement.consentFacade.ingress.enabled: true
+      consentManagement.consentFacade.ingress.hosts:
+        - host: consent-facade.dataspace-authority.org
+    asserts:
+      - isKind:
+          of: Ingress
+      # without an explicit namespace the deploy drops it into `default`
+      - equal:
+          path: metadata.namespace
+          value: trust-anchor
+      - equal:
+          path: spec.rules[0].host
+          value: consent-facade.dataspace-authority.org
+      # only the read-only SD/catalog reads are public; the contract endpoints
+      # (/verify, /bilaterals, /contracts) must stay internal - they reveal which
+      # participants contract with each other and the facade has no auth of its own.
+      - equal:
+          path: spec.rules[0].http.paths[0].path
+          value: /participants
+      - equal:
+          path: spec.rules[0].http.paths[1].path
+          value: /catalog
+      - lengthEqual:
+          path: spec.rules[0].http.paths
+          count: 2
+
+  - it: proxies the OID4VP flow but not the TM Forum clients when tmForumClients is off
+    template: templates/consent-facade-deployment.yaml
+    set:
+      consentManagement.enabled: true
+      consentManagement.consentFacade.oid4vp.enabled: true
+      consentManagement.consentFacade.oid4vp.proxy.enabled: true
+      consentManagement.consentFacade.oid4vp.proxy.tmForumClients: false
+    asserts:
+      # the OID4VP exchange still needs the proxy: the verifier is behind an external ingress
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OID4VP_PROXY_HOST
+            value: "squid-proxy.infra.svc.cluster.local"
+      # ...but the TM Forum clients must go direct. Proxying an in-namespace Service name
+      # makes squid answer 500 ("=> tm-forum-api-svc/<unresolved>:8080") and every contract
+      # lookup fails.
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: MICRONAUT_HTTP_SERVICES_AGREEMENT_PROXY_TYPE
+            value: "HTTP"
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: MICRONAUT_HTTP_SERVICES_PARTY_PROXY_TYPE
+            value: "HTTP"
+
+  - it: proxies the TM Forum clients by default (a facade fronting other participants)
+    template: templates/consent-facade-deployment.yaml
+    set:
+      consentManagement.enabled: true
+      consentManagement.consentFacade.oid4vp.enabled: true
+      consentManagement.consentFacade.oid4vp.proxy.enabled: true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: MICRONAUT_HTTP_SERVICES_AGREEMENT_PROXY_TYPE
+            value: "HTTP"
+
+  - it: renders no facade ingress by default
+    template: templates/consent-facade-ingress.yaml
+    set:
+      consentManagement.enabled: true
+    asserts:
+      - hasDocuments:
+          count: 0
+
   # ==========================================================================
   # secret
   # ==========================================================================
@@ -118,7 +256,7 @@ tests:
           value: consent-facade
       - equal:
           path: spec.template.spec.containers[0].image
-          value: "quay.io/wi_stefan/consent-facade:0.0.1"
+          value: "quay.io/seamware/consent-facade:0.0.14"
 
   - it: wires every TMForum client at the DSC tm-forum-api and sets its self url
     template: templates/consent-facade-deployment.yaml

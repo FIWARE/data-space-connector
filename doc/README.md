@@ -14,6 +14,7 @@ specific flows and its deployment and integration with other frameworks.
 <!-- param::isNotitle::true:: -->
 
 - [Details about flows and interfaces](#details-about-flows-and-interfaces)
+  - [TMForum Data Model](#tmforum-data-model)
   - [Contract Management](#contract-management)
   - [M2M Service Interaction](#m2m-service-interaction)
   - [Consent Management](#consent-management)
@@ -33,6 +34,20 @@ specific flows and its deployment and integration with other frameworks.
 
 
 ## Details about flows and interfaces
+
+### TMForum Data Model
+
+All DSC features around offering, negotiating, ordering and contracting data services share the
+TMForum APIs as their data model. The entities, their connections, the DSC-specific extensions and
+the (partly incompatible) differences between the components are documented here:
+* [TMForum Data Model](./tmforum/MODLE.md) - entry point: components, entity graph, extension planes
+  * [Platform constraints](./tmforum/platform.md) - what `tm-forum-api` allows (versions, ids, `@schemaLocation`, events)
+  * [Entity reference](./tmforum/entities.md) - per-entity purpose, fields and owners
+  * [Extension registry](./tmforum/extensions.md) - every DSC extension property and characteristic
+  * [Component view](./tmforum/components.md) - what each component reads, writes and requires
+  * [Lifecycles and flows](./tmforum/lifecycles.md) - state machines for catalog, negotiation, order, transfer
+  * [Divergences and incompatibilities](./tmforum/differences.md) - **read before combining features**
+  * [Plan towards an enforced model](./tmforum/plan.md) - phased plan, decisions to ratify, expected breakage
 
 ### Contract Management
 
@@ -56,7 +71,9 @@ can be found here:
 
 Optional consent management (ISO/IEC TS 27560) - its architecture, trust model and the demo flow charts 
 (granting consent, consent-gated data access, authenticated projection) are documented here:
-* [Consent Management](./CONSENT_MANAGEMENT.md)
+* [Consent Management](./CONSENT_MANAGEMENT.md) - architecture, trust model, participant
+  authentication over OID4VP, and the end-to-end demo
+* [Architecture Decision Records](./adr/README.md)
 
 
 

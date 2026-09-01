@@ -17,7 +17,7 @@
         <release.version>17</release.version>
 
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <version.io.kokuwa.maven.k3s-plugin>2.1.0</version.io.kokuwa.maven.k3s-plugin>
+        <version.io.kokuwa.maven.k3s-plugin>2.3.1</version.io.kokuwa.maven.k3s-plugin>
         <version.io.kokuwa.helm-maven-plugin>6.17.0</version.io.kokuwa.helm-maven-plugin>
         <version.org.apache.maven.plugins.maven-install>3.1.1</version.org.apache.maven.plugins.maven-install>
         <version.org.apache.maven.plugins.maven-source>2.4</version.org.apache.maven.plugins.maven-source>
@@ -226,6 +226,21 @@
                         </configuration>
                     </execution>
                     <execution>
+                        <id>copy-resources-additional-trust-anchor</id>
+                        <phase>prepare-package</phase>
+                        <goals>
+                            <goal>copy-resources</goal>
+                        </goals>
+                        <configuration>
+                            <outputDirectory>${project.build.directory}/k3s/additional-resources-trust-anchor</outputDirectory>
+                            <resources>
+                                <resource>
+                                    <directory>${main.basedir}/k3s/trust-anchor</directory>
+                                </resource>
+                            </resources>
+                        </configuration>
+                    </execution>
+                    <execution>
                         <id>copy-resources-additional-provider</id>
                         <phase>prepare-package</phase>
                         <goals>
@@ -402,6 +417,14 @@
                                              includes="**/apisix/templates/ingress.yaml"
                                              erroronmissingdir="false"/>
                                 </replaceregexp>
+                                <replaceregexp
+                                        match="(kind: Ingress&#xa;metadata:&#xa;  name: [^\n]+)"
+                                        replace="\1&#xa;  namespace: trust-anchor"
+                                        byline="false">
+                                    <fileset dir="${project.build.directory}/k3s/trust-anchor"
+                                             includes="**/apisix/templates/ingress.yaml"
+                                             erroronmissingdir="false"/>
+                                </replaceregexp>
                             </tasks>
                         </configuration>
                     </execution>
@@ -434,27 +457,6 @@
                         <configuration>
                             <failIfExists>false</failIfExists>
                             <manifests>${project.build.directory}/k3s/namespaces</manifests>
-                        </configuration>
-                    </execution>
-                    <!-- Import locally-built images into the k3s containerd *before* the
-                         manifests that reference them are applied. It must run after
-                         create-namespaces (k3s is up) and before apply-participants (which
-                         waits for the referencing pods to become Ready). Skipped by default
-                         (skipImage=true); the consent profile enables it (skipImage=false)
-                         for the consent-manager:local image it builds. Ordering relies on
-                         same-phase executions running in POM declaration order, so this must
-                         stay ahead of the apply-* executions. -->
-                    <execution>
-                        <id>import-consent-manager-image</id>
-                        <phase>deploy</phase>
-                        <goals>
-                            <goal>image</goal>
-                        </goals>
-                        <configuration>
-                            <skipImage>true</skipImage>
-                            <dockerImages>
-                                <dockerImage>consent-manager:local</dockerImage>
-                            </dockerImages>
                         </configuration>
                     </execution>
                     <execution>
@@ -617,6 +619,29 @@
                                     <additionalArguments>--name-template=provider --namespace=provider -f ${main.basedir}/k3s/provider.yaml -f ${main.basedir}/k3s/consent-provider.yaml --skip-tests</additionalArguments>
                                 </configuration>
                             </execution>
+                            <!-- the PROVIDER's own consent-facade instance: a second release of
+                                 charts/trust-anchor into the provider namespace. It serves the
+                                 owner-resolver's contract lookups and mints the provider's OID4VP
+                                 tokens for the consent-plugin (POST /internal/tokens), so the plugin
+                                 holds no participant credential. Deployed from that chart rather than
+                                 hand-written, because it needs the chart's full OID4VP holder wiring.
+                                 See doc/CONSENT_MANAGEMENT.md. -->
+                            <execution>
+                                <id>template-provider-facade</id>
+                                <goals>
+                                    <goal>init</goal>
+                                    <goal>dependency-update</goal>
+                                    <goal>template</goal>
+                                </goals>
+                                <phase>package</phase>
+                                <configuration>
+                                    <chartDirectory>${project.build.directory}/charts/trust-anchor</chartDirectory>
+                                    <skipTemplate>false</skipTemplate>
+                                    <templateGenerateName>true</templateGenerateName>
+                                    <templateOutputDir>${project.build.directory}/k3s/provider-facade</templateOutputDir>
+                                    <additionalArguments>--name-template=provider-facade --namespace=provider -f ${main.basedir}/k3s/consent-provider-facade.yaml --skip-tests</additionalArguments>
+                                </configuration>
+                            </execution>
                             <!-- layer the consent components (consent-manager + consent-facade +
                                  managed Mongo) onto the trust-anchor release via the additive
                                  components overlay. Merged by id onto the base template-trust-anchor
@@ -653,71 +678,21 @@
                                     <chartDirectory>${project.build.directory}/charts/data-space-connector</chartDirectory>
                                     <skipTemplate>false</skipTemplate>
                                     <templateGenerateName>true</templateGenerateName>
-                                    <templateOutputDir>${project.build.directory}/k3s/consent-authority</templateOutputDir>
+                                    <templateOutputDir>${project.build.directory}/k3s/trust-anchor</templateOutputDir>
                                     <additionalArguments>--name-template=consent-authority --namespace=trust-anchor -f ${main.basedir}/k3s/consent-trust-anchor.yaml --skip-tests</additionalArguments>
                                 </configuration>
                             </execution>
                         </executions>
                     </plugin>
+                    <!-- enable the k3s deploy for the consent scenario. The consent-manager is
+                         pulled from quay.io/wi_stefan/consent-manager (see the consentManager.image
+                         values), so there is no local image to build or import. -->
                     <plugin>
                         <groupId>io.kokuwa.maven</groupId>
                         <artifactId>k3s-maven-plugin</artifactId>
                         <configuration>
                             <skip>false</skip>
                         </configuration>
-                        <executions>
-                            <!-- enable the base import-consent-manager-image execution
-                                 (declared before the apply-* steps). Merged by id onto the
-                                 base execution, so it keeps the base's early position; here
-                                 we only flip skipImage=false so the image is loaded into k3s
-                                 before apply-participants waits on the consent-manager pod. -->
-                            <execution>
-                                <id>import-consent-manager-image</id>
-                                <phase>deploy</phase>
-                                <goals>
-                                    <goal>image</goal>
-                                </goals>
-                                <configuration>
-                                    <skipImage>false</skipImage>
-                                    <dockerImages>
-                                        <dockerImage>consent-manager:local</dockerImage>
-                                    </dockerImages>
-                                </configuration>
-                            </execution>
-                        </executions>
-                    </plugin>
-                    <!-- build the consent-manager image (see docker/consent-manager)
-                         before it is imported into k3s in the deploy phase.
-                         Local-only: the image is not published to a registry. -->
-                    <plugin>
-                        <groupId>org.apache.maven.plugins</groupId>
-                        <artifactId>maven-antrun-plugin</artifactId>
-                        <version>1.8</version>
-                        <!-- build only in the root module (docker/ lives there);
-                             not inherited by the `it` submodule where main.basedir
-                             resolves to an antrun-unresolvable ${project.parent.basedir} -->
-                        <inherited>false</inherited>
-                        <executions>
-                            <execution>
-                                <id>build-consent-manager-image</id>
-                                <phase>package</phase>
-                                <goals>
-                                    <goal>run</goal>
-                                </goals>
-                                <configuration>
-                                    <tasks>
-                                        <exec executable="docker" failonerror="true">
-                                            <arg value="build"/>
-                                            <arg value="-t"/>
-                                            <arg value="consent-manager:local"/>
-                                            <arg value="-f"/>
-                                            <arg value="${main.basedir}/docker/consent-manager/Dockerfile"/>
-                                            <arg value="${main.basedir}/docker/consent-manager"/>
-                                        </exec>
-                                    </tasks>
-                                </configuration>
-                            </execution>
-                        </executions>
                     </plugin>
                     <plugin>
                         <groupId>org.apache.maven.plugins</groupId>

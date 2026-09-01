@@ -87,7 +87,17 @@ public class StandardStepDefinitions extends StepDefintions {
     private List<String> createdPolicies = new ArrayList<>();
     private List<String> createdEntities = new ArrayList<>();
 
-    @Before
+    /**
+     * Prepares the standard deployment: a clean provider (policies, entities, TM Forum, TIL) plus the
+     * trusted issuers the flows presented credentials with.
+     *
+     * <p>Untagged, so it also prepares the {@code @central} and {@code @dsp} scenarios, which exercise
+     * the same provider state. The consent scenarios are excluded: their deployment relies on state
+     * this would remove - the odrl-pap policy that authorizes the consent-facade's cross-org TM Forum
+     * reads (without it no privacy notice can be projected) and the trusted issuers the facade and the
+     * consent-filter plugin authenticate with. Those scenarios clean up their own fixtures instead.
+     */
+    @Before("not @consent")
     public void setup() throws Exception {
         CryptoIntegration.init(this.getClass().getClassLoader());
         Security.addProvider(new BouncyCastleProvider());

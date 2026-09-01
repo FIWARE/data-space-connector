@@ -53,9 +53,25 @@ spec:
           imagePullPolicy: {{ $f.image.pullPolicy }}
           command: ["/bin/sh", "-c"]
           args:
-            # the image's cacerts is mode 0444; make the copy writable so keytool can
-            # add the CA (and so a retry can overwrite it after a restart)
-            - cp /usr/lib/jvm/java-21/lib/security/cacerts /cacerts/cacerts && chmod 0644 /cacerts/cacerts && /usr/lib/jvm/java-21/bin/keytool -importcert -noprompt -alias dsc-ca -file /root-ca/ca.crt -keystore /cacerts/cacerts -storepass changeit
+            # Resolve the JDK location instead of hardcoding it: the facade image's
+            # base has changed before (UBI openjdk keeps the JDK under
+            # /usr/lib/jvm/java-21, eclipse-temurin under /opt/java/openjdk), and a
+            # hardcoded path turns a base-image swap into an init crashloop
+            # ("cannot stat .../cacerts"). Prefer the explicit `javaHome` value, then
+            # $JAVA_HOME, then derive it from the keytool/java binary on PATH.
+            # The image's cacerts is mode 0444, so the copy is made writable for
+            # keytool (and so a retry can overwrite it after a restart).
+            - |
+              set -e
+              JDK_DIR="{{ $f.javaHome }}"
+              if [ -z "$JDK_DIR" ]; then
+                JDK_DIR="${JAVA_HOME:-$(dirname "$(dirname "$(readlink -f "$(command -v keytool || command -v java)")")")}"
+              fi
+              echo "using JDK at $JDK_DIR"
+              cp "$JDK_DIR/lib/security/cacerts" /cacerts/cacerts
+              chmod 0644 /cacerts/cacerts
+              "$JDK_DIR/bin/keytool" -importcert -noprompt -alias dsc-ca \
+                -file /root-ca/ca.crt -keystore /cacerts/cacerts -storepass changeit
           securityContext:
             {{- toYaml $f.securityContext | nindent 12 }}
           volumeMounts:
@@ -123,10 +139,27 @@ spec:
             # holder signing key + credentials come from the volumes below.
             - name: OID4VP_ENABLED
               value: "true"
+            # The token targets are passed as system properties, not env vars: they are a
+            # LIST OF OBJECTS, which needs bracketed property names, and Kubernetes rejects
+            # brackets in env var names (they are fine inside a value, which is why this
+            # rides along in JAVA_TOOL_OPTIONS).
+            {{- $props := "" }}
+            {{- range $i, $t := ($o.tokenTargets | default list) }}
+            {{- $props = printf "%s -Doid4vp.token-targets[%d].audience=%s -Doid4vp.token-targets[%d].url=%s" $props $i $t.audience $i $t.url }}
+            {{- if $t.clientId }}
+            {{- $props = printf "%s -Doid4vp.token-targets[%d].client-id=%s" $props $i $t.clientId }}
+            {{- end }}
+            {{- if $t.discoveryPath }}
+            {{- $props = printf "%s -Doid4vp.token-targets[%d].discovery-path=%s" $props $i $t.discoveryPath }}
+            {{- end }}
+            {{- range $j, $scope := ($t.scope | default list) }}
+            {{- $props = printf "%s -Doid4vp.token-targets[%d].scope[%d]=%s" $props $i $j $scope }}
+            {{- end }}
+            {{- end }}
             # point the JVM default SSLContext (used by both the OID4VP java.net.http
             # client and the Netty TM Forum clients) at the dsc-ca-augmented truststore
             - name: JAVA_TOOL_OPTIONS
-              value: "-Djavax.net.ssl.trustStore=/opt/truststore/cacerts -Djavax.net.ssl.trustStorePassword=changeit"
+              value: "-Djavax.net.ssl.trustStore=/opt/truststore/cacerts -Djavax.net.ssl.trustStorePassword=changeit{{ $props }}"
             - name: OID4VP_HOLDER_HOLDER_ID
               value: {{ $o.holder.id | quote }}
             - name: OID4VP_HOLDER_KEY_TYPE
@@ -151,12 +184,16 @@ spec:
             - name: OID4VP_PROXY_PORT
               value: {{ $o.proxy.port | quote }}
             # the generated TM Forum clients (Netty) reach the provider's external
-            # ingress host through the same forward proxy
+            # ingress host through the same forward proxy - but ONLY when the TM Forum api
+            # is actually external. For a participant's own facade it is an in-namespace
+            # Service, and squid cannot resolve a cluster-internal name.
+            {{- if $o.proxy.tmForumClients }}
             {{- range $svc := (list "PRODUCT_ORDER" "PRODUCT_CATALOG" "PRODUCT_INVENTORY" "PARTY" "AGREEMENT") }}
             - name: {{ printf "MICRONAUT_HTTP_SERVICES_%s_PROXY_TYPE" $svc | quote }}
               value: "HTTP"
             - name: {{ printf "MICRONAUT_HTTP_SERVICES_%s_PROXY_ADDRESS" $svc | quote }}
               value: {{ printf "%s:%v" $o.proxy.host (toString $o.proxy.port) | quote }}
+            {{- end }}
             {{- end }}
             {{- end }}
             {{- end }}
