@@ -128,15 +128,14 @@ consentManagement:
     # empty.
     contractServicePort: 8080
     image:
-      # -- repository of the consent-manager image (compiled, non-root, read-only-fs
-      # safe; built from docker/app/Dockerfile in the consent-manager repo)
+      # -- repository of the consent-manager image. The published image is used as-is;
+      # this project does not build it.
       repository: quay.io/wi_stefan/consent-manager
       # -- tag of the consent-manager image (carries the external-JWKS feature, the
       # configurable discovery path, and the `did` uniqueness guard that makes a
       # participant's DID a safe lookup key for externally issued tokens)
       tag: "0.0.6"
-      # -- image pull policy (IfNotPresent so a locally-imported image is used; pulls
-      # from quay when absent)
+      # -- image pull policy
       pullPolicy: IfNotPresent
     # -- api prefix served by the consent-manager
     apiPrefix: /v1

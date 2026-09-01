@@ -573,8 +573,8 @@
             <!-- Local deploy of the consent-management scenario: the standard local
                  provider/consumer stack plus the consent overlay layered onto the
                  provider template (`-f k3s/provider.yaml -f k3s/consent-provider.yaml`).
-                 Mirrors the `local` profile; additionally builds + imports the
-                 consent-manager image (both consent-specific). Run standalone:
+                 Mirrors the `local` profile. Every consent component is pulled as a
+                 published image or chart - nothing is built here. Run standalone:
                  `mvn verify -Pconsent`. -->
             <id>consent</id>
             <build>
@@ -661,9 +661,10 @@
                             </execution>
                         </executions>
                     </plugin>
-                    <!-- enable the k3s deploy for the consent scenario. The consent-manager is
-                         pulled from quay.io/wi_stefan/consent-manager (see the consentManager.image
-                         values), so there is no local image to build or import. -->
+                    <!-- enable the k3s deploy for the consent scenario. Every image is pulled
+                         from a registry (the consent-manager from
+                         quay.io/wi_stefan/consent-manager, see the consentManager.image values),
+                         so there is nothing to build or import. -->
                     <plugin>
                         <groupId>io.kokuwa.maven</groupId>
                         <artifactId>k3s-maven-plugin</artifactId>
