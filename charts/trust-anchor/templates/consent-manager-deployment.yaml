@@ -1,6 +1,9 @@
 {{- if and .Values.consentManagement.enabled .Values.consentManagement.consentManager.enabled }}
 {{- $cm := .Values.consentManagement.consentManager }}
-{{- $facadePort := .Values.consentManagement.consentFacade.service.port }}
+{{- /* The facade is a subchart, so its values are not readable here in every context
+       (helm-unittest renders this chart alone). The default names the facade's own default
+       port; a deployment that moves it sets consentManager.contractServiceBaseUrl. */}}
+{{- $facadePort := .Values.consentManagement.consentManager.contractServicePort }}
 kind: Deployment
 apiVersion: apps/v1
 metadata:

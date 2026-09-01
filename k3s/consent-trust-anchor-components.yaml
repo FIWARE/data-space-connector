@@ -63,57 +63,79 @@ consentManagement:
       caSecret:
         name: dataspace-authority.org-tls
         key: ca.crt
-  # The consent-facade fronts multiple providers and authenticates its outbound
-  # TM Forum calls to each provider's OID4VP-protected mp-tmf-api as
-  # did:web:dataspace-authority.org, using the holder key + issued OperatorCredential
-  # provisioned by the authority issuer (in the consent-authority release).
-  consentFacade:
-    enabled: true
-    # the provider's OID4VP-protected TM Forum ingress. Reached in-cluster through
-    # the squid proxy (see oid4vp.proxy); its self-signed cert is trusted via dsc-ca.
-    tmfApiUrl: "https://mp-tmf-api.127.0.0.1.nip.io"
-    # The ids the facade mints (participant self-descriptions, catalog data resources)
-    # travel into privacy notices and ISO 27560 consent receipts, so they must be
-    # PUBLIC, dereferenceable URLs - a data subject, an auditor or another
-    # participant has to be able to resolve them. Hence the public ingress host, not
-    # the cluster-internal service name. The consent-manager still reaches them
-    # in-cluster (through the squid proxy, trusting the cluster CA), and the
-    # provider-side owner-resolver rewrites the host to its local facade instance
-    # while keeping these ids - see k3s/consent-provider.yaml localFacade.
-    selfUrl: "https://consent-facade.dataspace-authority.org"
-    # Publish ONLY the self-description reads. /verify, /bilaterals and /contracts
-    # stay internal: they expose which participants hold contracts with each other,
-    # and the facade has no authentication of its own.
-    ingress:
-      enabled: true
-      annotations:
-        traefik.ingress.kubernetes.io/router.tls: "true"
-        cert-manager.io/cluster-issuer: "selfsigned-issuer"
-        cert-manager.io/private-key-algorithm: "ECDSA"
-        cert-manager.io/common-name: "consent-facade.dataspace-authority.org"
-        cert-manager.io/alt-names: "consent-facade.dataspace-authority.org"
-      hosts:
-        - host: consent-facade.dataspace-authority.org
-      tls:
-        - secretName: consent-facade.dataspace-authority.org-tls
-          hosts:
-            - consent-facade.dataspace-authority.org
-    oid4vp:
-      # present the OperatorCredential (holder did:web:dataspace-authority.org) to
-      # obtain an access token for mp-tmf-api. holder key + credential + dsc-ca come
-      # from the dataspace-authority.org-tls secret and the vc-operator-credential
-      # secret, both created by the consent-authority release in this namespace.
-      enabled: true
-      # authority-specific identity - the chart defaults are blank so the chart is not
-      # hardcoded to this authority. The cert-manager tls secret backing did:web (its
-      # tls.key is the holder signing key, its ca.crt the dsc-ca) and the holder DID
-      # presented in the verifiable presentation.
-      didSecretName: dataspace-authority.org-tls
-      holder:
-        id: did:web:dataspace-authority.org
-      proxy:
-        enabled: true
   # seeded into consent-manager-secret; the consent-manager validates it and the
   # authority's APISIX facade route injects the same value ($env://CONSENT_KEY),
   # reading it from consent-manager-secret by name.
   consentKey: "changeme-consent-key"
+
+# The consent-facade, from its own published chart (see the `consent-facade` dependency
+# in charts/trust-anchor/Chart.yaml). It fronts multiple providers and authenticates its
+# outbound TM Forum calls to each provider's OID4VP-protected mp-tmf-api as
+# did:web:dataspace-authority.org, using the holder key + issued OperatorCredential
+# provisioned by the authority issuer (in the consent-authority release).
+consent-facade:
+  enabled: true
+  ## the provider's OID4VP-protected TM Forum ingress. Reached in-cluster through the
+  ## squid proxy (see oid4vp.proxy); its self-signed cert is trusted via dsc-ca.
+  tmForum:
+    url: "https://mp-tmf-api.127.0.0.1.nip.io"
+  # The ids the facade mints (participant self-descriptions, catalog data resources)
+  # travel into privacy notices and ISO 27560 consent receipts, so they must be PUBLIC,
+  # dereferenceable URLs - a data subject, an auditor or another participant has to be
+  # able to resolve them. Hence the public ingress host, not the cluster-internal service
+  # name. The consent-manager still reaches them in-cluster (through the squid proxy,
+  # trusting the cluster CA), and the provider-side owner-resolver rewrites the host to
+  # its local facade instance while keeping these ids.
+  selfUrl: "https://consent-facade.dataspace-authority.org"
+  # Publish ONLY the self-description reads. /verify, /bilaterals and /contracts stay
+  # internal: they expose which participants hold contracts with each other, and the
+  # facade has no authentication of its own.
+  ingress:
+    enabled: true
+    annotations:
+      traefik.ingress.kubernetes.io/router.tls: "true"
+      cert-manager.io/cluster-issuer: "selfsigned-issuer"
+      cert-manager.io/private-key-algorithm: "ECDSA"
+      cert-manager.io/common-name: "consent-facade.dataspace-authority.org"
+      cert-manager.io/alt-names: "consent-facade.dataspace-authority.org"
+    hosts:
+      - host: consent-facade.dataspace-authority.org
+        paths:
+          - /participants
+          - /catalog
+    tls:
+      - secretName: consent-facade.dataspace-authority.org-tls
+        hosts:
+          - consent-facade.dataspace-authority.org
+  oid4vp:
+    # present the OperatorCredential (holder did:web:dataspace-authority.org) to obtain an
+    # access token for mp-tmf-api. Holder key + credential + dsc-ca come from the
+    # dataspace-authority.org-tls and vc-operator-credential secrets, both created by the
+    # consent-authority release in this namespace.
+    enabled: true
+    holder:
+      id: did:web:dataspace-authority.org
+    signingKey:
+      secretName: dataspace-authority.org-tls
+    proxy:
+      enabled: true
+  truststore:
+    enabled: true
+    caSecret:
+      name: dataspace-authority.org-tls
+  deployment:
+    # The dsc-ca as a PEM file at the path `oid4vp.trustAnchors` names. The chart's
+    # `truststore` imports the same CA into the JVM truststore (for every TLS client),
+    # while OID4VP client identification reads it as a PEM from this path.
+    additionalVolumes:
+      - name: root-ca
+        secret:
+          secretName: dataspace-authority.org-tls
+          items:
+            - key: ca.crt
+              path: ca.crt
+    additionalVolumeMounts:
+      - name: root-ca
+        mountPath: /etc/ssl/cacert.pem
+        subPath: ca.crt
+        readOnly: true

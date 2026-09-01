@@ -2,7 +2,7 @@ apiVersion: v2
 name: data-space-connector
 description: Umbrella Chart for the FIWARE Data Space Connector, combining all essential parts to be used by a participant.
 type: application
-version: 10.4.0
+version: 10.5.0
 dependencies:
   - name: decentralized-iam
     alias: decentralizedIam
@@ -96,3 +96,14 @@ dependencies:
     condition: tempo.enabled
     version: 1.24.4
     repository: https://grafana.github.io/helm-charts
+  # The consent components are published as their own FIWARE charts. A provider enables
+  # the owner-resolver (it knows the provider's data model) and, when it wants contract-
+  # driven resolution, a provider-local consent-facade.
+  - name: consent-facade
+    condition: consent-facade.enabled
+    version: 0.1.1
+    repository: oci://quay.io/fiware/helm-charts
+  - name: consent-owner-resolver
+    condition: consent-owner-resolver.enabled
+    version: 0.1.1
+    repository: oci://quay.io/fiware/helm-charts

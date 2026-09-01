@@ -81,37 +81,6 @@ consentManagement:
   # deploys it; it keeps only the APISIX consent-plugin wiring below.
   consentFacade:
     enabled: false
-  # The external OwnerResolver the consent-filter plugin calls to determine, from
-  # the response DATA (never the requestor), whether a consent check is required
-  # and who the data owner is. Deployed provider-side (it knows the provider's
-  # data model). v1: owner from the entity's `dataOwner`, dataResource = the
-  # entity `id`.
-  ownerResolver:
-    enabled: true
-    image:
-      repository: quay.io/seamware/consent-owner-resolver
-      # 0.0.2+ carries the `contract` matcher (resource from the ODRL asset target).
-      # 0.0.8 pads the base64 participant ids sent to the facade's /verify: the facade
-      # validates a path parameter by re-encoding it WITH padding and comparing, so the
-      # previous unpadded value was rejected with 400 and every contract lookup failed
-      # (the plugin then denied with "access denied by consent policy").
-      tag: "0.0.8"
-    # Derive the governing resource from the CONTRACT instead of static rules: the
-    # resolver asks a provider-LOCAL consent-facade for the signed contract between
-    # this provider and the requesting consumer, matches the requested object URI
-    # against the contract's ODRL asset target, and uses that contract's PII catalog
-    # resource as the dataResource. Set to false to keep the static owner-only rules.
-    contractDriven: true
-  # A provider-LOCAL consent-facade, read only by the owner-resolver. It projects
-  # this provider's own TMForum agreements, so it needs no OID4VP (the reads are
-  # in-namespace) - unlike the authority facade, which reads cross-organisation.
-  # Keeping it local also means the authority facade's NetworkPolicy stays closed.
-  # The provider's own consent-facade instance is deployed as a SEPARATE release of
-  # charts/trust-anchor into this namespace - see k3s/consent-provider-facade.yaml.
-  # It needs the chart's full OID4VP holder wiring (PKCS#8 key conversion, dsc-ca in
-  # the JVM truststore, credential projection, a dozen OID4VP env vars), and a
-  # hand-written manifest here would duplicate and drift from it.
-
 extraManifests:
   # --- authorize the consent-facade's cross-org reads at the odrl-pap -----------
   # The facade (at the authority) authenticates to mp-tmf-api over OID4VP and passes
@@ -146,158 +115,16 @@ extraManifests:
                   echo "odrl-pap POST /policy -> HTTP $code"; cat /tmp/out
                   # 2xx = created; a conflict on re-run is fine (policy already present)
                   case "$code" in 2*) exit 0;; 409) echo "already registered"; exit 0;; *) exit 1;; esac
-  # --- OwnerResolver: config, deployment, service ------------------------------
-  # The consent-filter plugin posts the response data here; the resolver returns
-  # (owner, dataResource) so the plugin can check consent per data owner,
-  # independently of the requestor. v1 rule: for the mp-data-service dataset,
-  # read the owner from the entity's `dataOwner` and use the entity `id` as the
-  # dataResource.
+  # --- isolate the provider-local consent-facade --------------------------------
+  # The facade chart ships no NetworkPolicy of its own (which callers are legitimate is a
+  # deployment decision), and the owner-resolver's policy comes from its chart. This one
+  # closes the facade: it serves the governing contract and mints the provider's OID4VP
+  # tokens, so only the consent-plugin (running inside the APISIX pod) and the
+  # owner-resolver may reach it. A `from` entry with only a podSelector means "this
+  # namespace", which is what we want - every legitimate caller is provider-local - and
+  # selecting a pod at all makes ingress default-deny for it.
   - |
-    {{- if .Values.consentManagement.ownerResolver.enabled }}
-    apiVersion: v1
-    kind: ConfigMap
-    metadata:
-      name: owner-resolver-config
-      namespace: {{ .Release.Namespace }}
-    data:
-      config.json: |
-        {
-          "defaultConsentRequired": false,
-          "defaultScheme": "identifier",
-          {{- if .Values.consentManagement.ownerResolver.contractDriven }}
-          "contractService": {
-            "url": "http://consent-facade.{{ .Release.Namespace }}.svc.cluster.local:8080",
-            "timeoutMs": 3000
-          },
-          "rules": [
-            {
-              "name": "mp-data-service-entity",
-              "match": { "service": "mp-data-service", "pathPattern": "/entities/[^/]+$" },
-              "consentRequired": true,
-              "matcher": { "type": "contract", "items": "", "itemsIsArray": false, "owner": "/dataOwner/value", "uriPointer": "/id" }
-            }
-          ]
-          {{- else }}
-          "rules": [
-            {
-              "name": "mp-data-service-entity",
-              "match": { "service": "mp-data-service", "pathPattern": "/entities/[^/]+$" },
-              "consentRequired": true,
-              "matcher": { "type": "json", "items": "", "itemsIsArray": false, "owner": "/dataOwner/value" }
-            }
-          ]
-          {{- end }}
-        }
-    {{- end }}
-  - |
-    {{- if .Values.consentManagement.ownerResolver.enabled }}
-    apiVersion: apps/v1
-    kind: Deployment
-    metadata:
-      name: owner-resolver
-      namespace: {{ .Release.Namespace }}
-      labels:
-        app.kubernetes.io/name: owner-resolver
-    spec:
-      replicas: 1
-      selector:
-        matchLabels:
-          app.kubernetes.io/name: owner-resolver
-      template:
-        metadata:
-          labels:
-            app.kubernetes.io/name: owner-resolver
-        spec:
-          securityContext:
-            runAsNonRoot: true
-            runAsUser: 10100
-            seccompProfile:
-              type: RuntimeDefault
-          containers:
-            - name: owner-resolver
-              image: {{ .Values.consentManagement.ownerResolver.image.repository }}:{{ .Values.consentManagement.ownerResolver.image.tag }}
-              imagePullPolicy: IfNotPresent
-              args: []
-              env:
-                - name: CONFIG_PATH
-                  value: /etc/owner-resolver/config.json
-                - name: LISTEN_ADDR
-                  value: ":8080"
-                # LOG_LEVEL=debug makes the resolver log the requested path and the resolve
-                # error verbatim instead of an error class. Both carry owner identifiers, so it
-                # stays off; it is the switch to reach for when a request is denied and the
-                # class ("contract matcher") does not say which check failed.
-              ports:
-                - name: http
-                  containerPort: 8080
-              readinessProbe:
-                httpGet: { path: /health, port: http }
-                initialDelaySeconds: 2
-                periodSeconds: 10
-              livenessProbe:
-                httpGet: { path: /health, port: http }
-                initialDelaySeconds: 5
-                periodSeconds: 20
-              securityContext:
-                allowPrivilegeEscalation: false
-                readOnlyRootFilesystem: true
-                capabilities:
-                  drop: ["ALL"]
-              resources:
-                requests: { cpu: "50m", memory: "32Mi" }
-                limits: { cpu: "250m", memory: "128Mi" }
-              volumeMounts:
-                - name: config
-                  mountPath: /etc/owner-resolver
-                  readOnly: true
-          volumes:
-            - name: config
-              configMap:
-                name: owner-resolver-config
-    {{- end }}
-  # --- the provider-local consent-facade lives in its own release ---------------
-  # It projects THIS provider's TMForum agreements/catalog (so the owner-resolver can
-  # find the governing contract and its ODRL asset target) and mints the provider's
-  # OID4VP tokens for the consent-plugin. Deployed from charts/trust-anchor via
-  # k3s/consent-provider-facade.yaml, because it needs that chart's full OID4VP holder
-  # wiring; its Service is `consent-facade` in this namespace, which is what the
-  # owner-resolver and the plugin address.
-  - |
-    {{- if .Values.consentManagement.ownerResolver.enabled }}
-    apiVersion: v1
-    kind: Service
-    metadata:
-      name: owner-resolver
-      namespace: {{ .Release.Namespace }}
-      labels:
-        app.kubernetes.io/name: owner-resolver
-    spec:
-      selector:
-        app.kubernetes.io/name: owner-resolver
-      ports:
-        - name: http
-          port: 8080
-          targetPort: http
-    {{- end }}
-  # --- NetworkPolicies for the provider-side consent components ----------------
-  # Both services are UNAUTHENTICATED and rely entirely on not being reachable, so
-  # reachability is the control:
-  #   * the consent-facade mints OID4VP access tokens that speak for THIS participant
-  #     (POST /internal/tokens) and serves its contract projection
-  #   * the owner-resolver decides whether data needs a consent check and who owns it
-  # Without a policy every pod in the namespace can reach both - i.e. any pod could
-  # obtain a participant token. The authority side has had equivalent policies from the
-  # start (charts/trust-anchor/templates/consent-network-policies.yaml); this closes the
-  # same gap on the provider side.
-  #
-  # The consent-plugin runs INSIDE the APISIX pod (as an ext-plugin runner), so plugin
-  # traffic originates from the APISIX pod and is selected by the apisix labels.
-  #
-  # A `from` entry with only a podSelector means "this namespace", which is what we want:
-  # every legitimate caller is provider-local. Selecting a pod at all makes ingress
-  # default-deny for it, so anything not listed here is refused.
-  - |
-    {{- if .Values.consentManagement.ownerResolver.enabled }}
+    {{- if (index .Values "consent-facade").enabled }}
     apiVersion: networking.k8s.io/v1
     kind: NetworkPolicy
     metadata:
@@ -330,36 +157,6 @@ extraManifests:
           ports:
             - port: 8080
     {{- end }}
-  - |
-    {{- if .Values.consentManagement.ownerResolver.enabled }}
-    apiVersion: networking.k8s.io/v1
-    kind: NetworkPolicy
-    metadata:
-      name: owner-resolver-ingress
-      namespace: {{ .Release.Namespace }}
-      labels:
-        app.kubernetes.io/name: owner-resolver
-    spec:
-      podSelector:
-        matchLabels:
-          app.kubernetes.io/name: owner-resolver
-      policyTypes:
-        - Ingress
-      ingress:
-        # only the consent-plugin asks who owns the data
-        - from:
-            - podSelector:
-                matchLabels:
-                  app.kubernetes.io/name: apisix
-                  app.kubernetes.io/instance: {{ .Release.Name }}
-          ports:
-            - port: 8080
-    {{- end }}
-  # --- ensure the provider verifier's config-server database exists ------------
-  # Same idempotent guard as the authority (k3s/consent-trust-anchor.yaml): the
-  # vcverifier's config server needs the managed Postgres db `ccsdb`, which the
-  # Zalando operator only creates at initial provisioning. Create it on deploy if
-  # missing so a redeploy over a persisted volume never crash-loops the verifier.
   - |
     apiVersion: batch/v1
     kind: Job
@@ -401,3 +198,108 @@ extraManifests:
                     psql -h "$PGHOST" -U "$PGUSER" -d postgres -c "CREATE DATABASE ccsdb"
                     echo "created ccsdb"
                   fi
+
+# The OwnerResolver, from its own published chart (see the `consent-owner-resolver`
+# dependency in charts/data-space-connector/Chart.yaml). The consent-filter plugin posts
+# the response DATA here and gets back whether a consent check is required and who the
+# data owner is - decided from the data, never from the requestor. It runs provider-side
+# because the answer depends on the provider's data model.
+consent-owner-resolver:
+  enabled: true
+  # Resolve the governing resource from the CONTRACT rather than from the rule alone: the
+  # resolver asks the provider-local consent-facade for the signed contract between this
+  # provider and the requesting consumer, matches the requested object's URI against the
+  # contract's ODRL asset target, and uses that contract's PII catalog resource as the
+  # dataResource. Drop `contractService` and the `uriPointer` to keep the owner-only rules.
+  contractService:
+    enabled: true
+    url: http://consent-facade.{{ .Release.Namespace }}.svc.cluster.local:8080
+  rules:
+    - name: mp-data-service-entity
+      match:
+        service: mp-data-service
+        pathPattern: "/entities/[^/]+$"
+      consentRequired: true
+      matcher:
+        type: contract
+        items: ""
+        itemsIsArray: false
+        owner: /dataOwner/value
+        uriPointer: /id
+  networkPolicy:
+    enabled: true
+    # The APISIX the consent-plugin runs inside. The instance label is spelled out because
+    # `allowedClients` is passed to the chart verbatim (not templated), so it cannot carry
+    # `{{ .Release.Name }}` - and the DSC provider release is named `provider` (see the
+    # helm-maven-plugin executions in pom.xml).
+    allowedClients:
+      - podSelector:
+          matchLabels:
+            app.kubernetes.io/name: apisix
+            app.kubernetes.io/instance: provider
+
+# A provider-LOCAL consent-facade, read only by the owner-resolver and the consent-plugin.
+# It projects THIS provider's own TM Forum agreements (so the owner-resolver can find the
+# governing contract and its ODRL asset target) and mints the provider's OID4VP tokens for
+# the plugin. Its reads are in-namespace, so it needs no OID4VP of its own - unlike the
+# authority facade, which reads cross-organisation. Keeping it local also means the
+# authority facade's NetworkPolicy stays closed.
+consent-facade:
+  enabled: true
+  # the provider's own TM Forum api, in-namespace
+  tmForum:
+    url: http://tm-forum-api-svc:8080
+  # the ids the authority facade minted are kept as they are; this instance only serves
+  # the same paths locally, so it mints ids in the authority's id space
+  selfUrl: "https://consent-facade.dataspace-authority.org"
+  # never published - /internal/tokens mints tokens that speak for this participant
+  ingress:
+    enabled: false
+  ## the plugin's token service: the facade presents THIS provider's credential to obtain
+  ## an access token for the authority's consent-manager
+  oid4vp:
+    enabled: true
+    holder:
+      id: did:web:mp-operations.org
+    signingKey:
+      secretName: mp-operations.org-tls
+    # The credential this participant presents: the MembershipCredential its own keycloak
+    # issues (issuerDid did:web:mp-operations.org), kept fresh in vc-fdsc-edc-credential by
+    # the provider's vc-operator. The authority verifier trusts it because that issuer DID
+    # is registered in the trust-anchor TIR.
+    credentials:
+      - secretName: vc-fdsc-edc-credential
+        secretKey: credential
+        fileName: membership-credential.jwt
+    tokenTargets:
+      - audience: consent-manager
+        url: https://verifier.dataspace-authority.org
+        clientId: consent-manager
+        scope:
+          - participant
+        discoveryPath: /services/consent-manager
+    proxy:
+      enabled: true
+      # the TM Forum api this instance reads is an in-namespace Service, which the proxy
+      # cannot resolve - only the OID4VP flow goes through it
+      tmForumClients: false
+  truststore:
+    enabled: true
+    caSecret:
+      name: mp-operations.org-tls
+  deployment:
+    # The dsc-ca as a PEM file at the path `oid4vp.trustAnchors` names. The chart's
+    # `truststore` imports the same CA into the JVM truststore (for every TLS client),
+    # while OID4VP client identification reads it as a PEM from this path.
+    additionalVolumes:
+      - name: root-ca
+        secret:
+          secretName: mp-operations.org-tls
+          items:
+            - key: ca.crt
+              path: ca.crt
+    additionalVolumeMounts:
+      - name: root-ca
+        mountPath: /etc/ssl/cacert.pem
+        subPath: ca.crt
+        readOnly: true

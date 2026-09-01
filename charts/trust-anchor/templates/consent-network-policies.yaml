@@ -32,7 +32,9 @@ spec:
       ports:
         - port: {{ .Values.consentManagement.consentManager.containerPort }}
 {{- end }}
-{{- if .Values.consentManagement.consentFacade.enabled }}
+{{- /* nil-safe: the subchart values are not always coalesced into this context */}}
+{{- $facade := (index .Values "consent-facade") | default dict }}
+{{- if $facade.enabled }}
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -55,8 +57,8 @@ spec:
             matchLabels:
               app.kubernetes.io/name: consent-manager
       ports:
-        - port: {{ .Values.consentManagement.consentFacade.containerPort }}
-    {{- if .Values.consentManagement.consentFacade.ingress.enabled }}
+        - port: {{ $facade.port | default .Values.consentManagement.networkPolicy.consentFacadePort }}
+    {{- if ($facade.ingress | default dict).enabled }}
     # The facade publishes its self-description endpoints (see the facade ingress),
     # so the ingress controller must reach it. Which PATHS are public is decided by
     # the ingress (only /participants and /catalog); a NetworkPolicy is L3/L4 and
@@ -65,12 +67,12 @@ spec:
     - from:
         - namespaceSelector:
             matchLabels:
-              kubernetes.io/metadata.name: {{ .Values.consentManagement.consentFacade.ingress.controllerNamespace }}
+              kubernetes.io/metadata.name: {{ .Values.consentManagement.networkPolicy.ingressController.namespace }}
           podSelector:
             matchLabels:
-              {{- toYaml .Values.consentManagement.consentFacade.ingress.controllerPodLabels | nindent 14 }}
+              {{- toYaml .Values.consentManagement.networkPolicy.ingressController.podLabels | nindent 14 }}
       ports:
-        - port: {{ .Values.consentManagement.consentFacade.containerPort }}
+        - port: {{ $facade.port | default .Values.consentManagement.networkPolicy.consentFacadePort }}
     {{- end }}
 {{- end }}
 {{- end }}

@@ -1,7 +1,7 @@
 apiVersion: v2
 name: trust-anchor
 description: Umbrella Chart to provide a minimal trust anchor for a FIWARE Dataspace
-version: 1.1.0
+version: 1.2.0
 dependencies:
   - name: trusted-issuers-list
     condition: trusted-issuers-list.enabled
@@ -11,3 +11,9 @@ dependencies:
     condition: postgres-operator.enabled
     version: 1.15.1
     repository: https://opensource.zalando.com/postgres-operator/charts/postgres-operator
+  # The consent-facade is no longer templated in this chart: it is published as its own
+  # FIWARE chart. Enabled by the authority (which runs it), disabled elsewhere.
+  - name: consent-facade
+    condition: consent-facade.enabled
+    version: 0.1.1
+    repository: oci://quay.io/fiware/helm-charts
