@@ -54,6 +54,8 @@ jobs:
             profiles: "test,central,central-test"
           - name: dsp
             profiles: "test,dsp,dsp-test"
+          - name: consent
+            profiles: "test,consent,consent-test"
     name: "Integration Test (${{ matrix.name }})"
 
     steps:
