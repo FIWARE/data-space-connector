@@ -18,7 +18,7 @@ dependencies:
   # issuance
   - name: keycloak
     condition: keycloak.enabled
-    version: 0.21.31
+    version: 0.21.34
     repository: oci://registry-1.docker.io/cloudpirates
   # contract management
   - name: tm-forum-api
