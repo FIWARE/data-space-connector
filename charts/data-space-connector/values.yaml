@@ -473,7 +473,8 @@ keycloak:
     import: true
     # -- name of the realm
     name: test-realm
-    # -- frontend url to be used for the realm
+    # -- frontend url to be used for the realm. `frontendUrl` is accepted as well; both end up in
+    # the realm's `frontendUrl` attribute.
     frontendURL: http://localhost:8080
     # -- custom displayNameHtml for the realm. If empty, defaults to "<div class="kc-logo-text"><span>{realm.name}</span></div>"
     displayNameHtml: ""
@@ -1849,16 +1850,26 @@ did:
 
 # -- configuration for registering a participant at the til. Allows to preconfigure trust-relationships on deployment
 registration:
+  # -- should the issuers below be registered at the trusted-issuers list
   enabled: false
+  # -- name of the ConfigMap holding the generated registration script
   configMap: til-registration
+  # -- address of the trusted-issuers list to register at, e.g. `http://trusted-issuers-list:8080`
+  til: ""
+  # -- shell snippet prepended to the generated script. Must be a single line: it is interpolated
+  # without `nindent`, so a multi-line value breaks the `init.sh` block scalar.
   prepScript: ""
   image:
     repository: quay.io/curl/curl
     tag: 8.1.2
+    # -- [Kubernetes image pull policy](https://kubernetes.io/docs/concepts/containers/images/#image-pull-policy) to use
     pullPolicy: IfNotPresent
   command: [ /bin/sh, -c, /bin/init.sh ]
+  # -- hook annotations of the registration Job. post-upgrade matters: with post-install only, a
+  # release that already exists never runs it again, so nothing added to `issuer` after the first
+  # install ever reaches the list. Re-running is safe - the script treats a 409 as success.
   annotations:
-    "helm.sh/hook": post-install
+    "helm.sh/hook": post-install,post-upgrade
     "helm.sh/hook-weight": "0"
     "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
   extraEnvVars: []
@@ -2423,8 +2434,11 @@ fdsc-edc:
         clientId: "dsp"
         # -- scope to be used
         scope: "openid"
-        # -- trust all certificates presented at https. DO NOT USE IN PRODUCTION
-        trustAll: true
+        # -- trust all certificates presented at https, i.e. disable TLS verification for the
+        # OID4VP exchange. Only useful in local deployments with self-signed certificates; leave it
+        # off everywhere else. A private CA is handled by pointing `trustAnchorsFolder` at a folder
+        # holding it instead.
+        trustAll: false
         # -- identification of the credentials holder
         holder:
           # -- id of the holder
@@ -2469,10 +2483,22 @@ fdsc-edc:
         identity:
           enabled: false
 
-      # -- configuration of the TMForum extension
+      # -- configuration of the TMForum extension. Enabling it requires ALL seven addresses below:
+      # TMFConfig converts them with `URI.create(...).toURL()` while the runtime boots, so a single
+      # empty one aborts startup with `IllegalArgumentException: URI is not absolute`. That is why
+      # the default is off rather than on-with-empty-values.
+      #
+      # But turning it OFF is not free either, and the coupling is not obvious. The extension is
+      # what registers the connector's ObjectMapper - imperatively, at the end of
+      # TMFContractNegotiationExtension.initialize(), which returns early when disabled - and
+      # several extensions inject one. With TMF off, OID4VPExtension is simply the next to boot and
+      # dies with `No default provider for required injection point Field "objectMapper"`, a wiring
+      # error that says nothing about TMForum. So a deployment that uses the OID4VP lane needs this
+      # on, with all seven addresses filled in.
       tmfExtension:
-        # -- should the extension be enabled
-        enabled: true
+        # -- should the extension be enabled. Read the note above before turning this off: it also
+        # takes the connector's ObjectMapper with it.
+        enabled: false
         # -- address of the quote api to be used
         quoteApi:
         # -- address of the agreement api to be used
@@ -2592,8 +2618,9 @@ fdsc-edc:
           ## -- id of the participant to be used
           id:
         log:
-          ## -- loglevel to be used
-          level: DEBUG
+          ## -- loglevel to be used. DEBUG logs every DSP message including token contents, which is
+          ## useful while integrating and too noisy - and too revealing - to leave on in production.
+          level: INFO
         # -- handling of edc internal json-ld resolution
         jsonld:
           https:
@@ -2629,7 +2656,15 @@ fdsc-edc:
         hashicorp:
           enabled: true
           url: "http://{{ .Release.Name }}-vault:8200"
+          # This is a STATIC mirror of `vault.hashicorp` above: a subchart cannot read the parent's
+          # values, so changing the top-level block does NOT reach fdsc-edc. Both have to be set.
           token: "root"
+          # -- name of a Secret holding the vault token, same contract as `vault.hashicorp`: the
+          # property is omitted from the connector's properties file and injected as
+          # EDC_VAULT_HASHICORP_TOKEN instead. Needs fdsc-edc >= the version that supports it.
+          existingSecret: ""
+          # -- key within that Secret holding the token
+          existingSecretTokenKey: token
           timeout: 30
 
 # -- vc-operator managed credentials (replacement for the legacy credentials script)
@@ -2693,11 +2728,45 @@ identityhub:
   enabled: false
   image:
     repository: "tractusx/identityhub"
-    # -- Overrides the image tag whose default is the chart appVersion
+    # -- tag of the identityhub image. Required, and with no default on purpose: this is an
+    # upstream image whose versioning has nothing to do with this chart's appVersion, so falling
+    # back to it produced a tag that does not exist.
     tag: sha-687d69f
     # -- [Kubernetes image pull policy](https://kubernetes.io/docs/concepts/containers/images/#image-pull-policy) to use
     pullPolicy: IfNotPresent
+  # -- additional init containers to run before the identityhub starts
   initContainers: []
+  # -- extra CA certificates the identityhub has to trust, as a map of file name to PEM content.
+  # They are imported into a copy of the JVM truststore by an init container, so they extend the
+  # bundled roots instead of replacing them. Needed to reach a vault, an issuer or a counterparty
+  # that uses a private CA.
+  # -- extra CA certificates the identityhub has to TRUST, given as PEM inline: the CA of a vault,
+  # of an issuer or of a counterparty that does not use a publicly trusted certificate. These are
+  # not the certificates that identify this participant - those come from cert-manager and are used
+  # straight from their Secret. Keys become filenames and, through them, truststore aliases. Use
+  # this for a CA that does not exist in the cluster as an object; otherwise prefer
+  # `customCaCertsFrom` and skip the copy.
+  customCaCerts: {}
+  # -- the same, but read from Secrets and ConfigMaps that already exist in the cluster, so a
+  # cert-manager Secret can be pointed at directly instead of having its PEM copied into values.
+  # Both sources can be used together. Each entry names either a `secret` or a `configMap`:
+  #
+  #   customCaCertsFrom:
+  #     - secret: mp-operations.org-tls   # keys default to [ca.crt]
+  #     - secret: some-issuer-tls
+  #       keys: [ca.crt, tls.crt]
+  #     - configMap: corporate-root-ca    # no keys: every key in the ConfigMap
+  #
+  # `keys` defaults to `ca.crt` for Secrets on purpose. A kubernetes.io/tls Secret also carries
+  # tls.key, which does not belong in this pod and which `keytool -importcert` fails on, taking the
+  # init container down with it. Named keys are projected as `<source>-<key>` so that two sources
+  # cannot collide on a filename, which in a projected volume is a mount failure rather than a
+  # warning.
+  customCaCertsFrom: []
+  # -- additional volumes to attach to the identityhub pod
+  additionalVolumes: []
+  # -- additional volume mounts for the identityhub container
+  additionalVolumeMounts: []
   # -- configuration of the super user to be created in the identity hub
   # -- the api key needs to be in form base64(<username>).<random-string>
   superuser:
@@ -2707,6 +2776,156 @@ identityhub:
     existingSecretKeyKey:
     # -- the plain key, will be ignored if existingSecret is set
     key:
+  # -- sidecar that keeps the identityhub's copy of a credential in step with the Secret the
+  # vc-operator maintains. The identityhub holds its own copy of everything a DCP connector
+  # presents, and a copy pushed once at deploy time expires on its own schedule and takes the DCP
+  # lane down with nothing having changed in the cluster.
+  #
+  # It runs inside the identityhub pod and writes over localhost on purpose: the Identity API is a
+  # component-internal API, so the only thing allowed to write to it is the pod that owns it. The
+  # sidecar does not speak OID4VCI - obtaining and renewing the credential stays with the
+  # vc-operator, which writes it to a Secret; this only mirrors that Secret into the identityhub.
+  credentialSync:
+    # -- should the sidecar be rendered. It only mirrors the credential into a participant context
+    # that already exists, so on its own it does nothing: `identityhub.bootstrap.enabled` has to be
+    # set as well, or the sidecar will keep reporting a 404 for the participant. The two switches
+    # are separate because a context is also provisioned by hand or by an earlier release, and such
+    # a deployment wants the sidecar without the Job.
+    enabled: false
+    # -- Secret holding the credential, as written by the vc-operator. Defaults to
+    # identityhub.bootstrap.credential.secretName.
+    secretName: ""
+    # -- key within that Secret holding the raw JWT
+    key: credential
+    # -- id the credential is stored under in the identityhub
+    id: membership-credential
+    # -- how often the mounted Secret is re-read. The kubelet refreshes mounted Secrets on its own,
+    # so this is the only thing standing between a renewal and the identityhub seeing it; there is
+    # no watch on the Kubernetes API and therefore no RBAC to grant.
+    resyncSeconds: 60
+  # -- the identityhub's own credential watchdog, which re-requests expiring credentials from a
+  # DCP issuer service.
+  credentialWatchdog:
+    # -- `edc.iam.credential.status.check.period`, in seconds. 0 or less disables the watchdog.
+    # Off by default because the credentials in this chart come from an OID4VCI issuer (Keycloak)
+    # via the vc-operator: there is no DCP issuer service for the identityhub to ask, so leaving it
+    # on only produces a failing request every period.
+    checkPeriodSeconds: 0
+    # -- `edc.iam.credential.renewal.graceperiod`, in seconds: how long before expiry renewal is
+    # triggered. Upstream defaults to a week, which for a credential that only lives a week means
+    # it is considered renewable from the moment it is issued - keep this a fraction of the
+    # credential's lifetime.
+    renewalGracePeriodSeconds: 86400
+  # -- provisioning of the participant context, its signing key and its credentials.
+  # Without this, a deployed identityhub is inert: it holds no participant, no key in vault and no
+  # credential, and every DCP flow fails. The steps are the ones documented in
+  # doc/DSP_INTEGRATION.md, run in-cluster and idempotently instead of by hand from a workstation.
+  bootstrap:
+    # -- should the participant context be provisioned by the chart. This creates the context, the
+    # keypair and the super-user api key, but it does NOT put a credential in it: that is
+    # `identityhub.credentialSync.enabled`, and a participant without a credential presents nothing
+    # and is rejected by every counterparty. A complete provisioning needs both.
+    enabled: false
+    # -- DID of this participant, e.g. `did:web:my-connector.org`. Must match
+    # `fdsc-edc.common.config.edc.participant.id` and the DID the issuer signs credentials for.
+    did: ""
+    # -- vault alias the signing key is stored under, and the fragment the public key is published
+    # as in the DID document (`<did>#<keyAlias>`). Changing it on an existing deployment breaks
+    # every credential already issued; rotate the key material instead (see `rotation` below).
+    keyAlias: key-1
+    # -- public base URL a counterparty reaches this participant's DCP credential service at. It
+    # must route `/api/credentials/*` to the identityhub credentials endpoint, and it is published
+    # in the DID document, so it has to resolve from outside the cluster.
+    credentialServiceUrl: ""
+    # -- participant context id of the identityhub super user. The identityhub derives the vault
+    # alias of its api key as `<superUserId>-apikey`, and the api key itself must decode to exactly
+    # this value, so it is not freely choosable.
+    superUserId: super-user
+    # -- the participant's identity private key. Every other copy of this identity - the JWK in
+    # vault, the public key in the DID document, the issuer's signing key, the holder key of
+    # fdsc-edc - is derived from this one Secret.
+    identityKey:
+      # -- name of the Secret holding the private key, typically a cert-manager TLS Secret
+      secretName: ""
+      # -- key within that Secret holding the PEM-encoded private key
+      key: tls.key
+      # -- algorithm of that key, `EC` or `RSA`. Getting this wrong is silent: extracting an RSA
+      # modulus from an EC key yields a valid-looking JWK full of garbage, and the mismatch only
+      # shows up later as counterparties rejecting every signature.
+      algorithm: EC
+    # -- shared secret between the fdsc-edc oauth client and the identityhub's embedded STS. Both
+    # sides only ever compare against the value stored in vault, so it may be chosen freely - which
+    # is what makes the bootstrap idempotent, unlike the secret the identityhub generates once and
+    # never reveals again.
+    stsClientSecret:
+      # -- name of the Secret holding the shared secret
+      existingSecret: ""
+      # -- key within that Secret
+      existingSecretKey: sts-client-secret
+    # -- verify that the issuer signs credentials with `<did>#<keyAlias>` before inserting any
+    # credential. The check cannot repair a mismatch (Keycloak never re-imports an existing realm
+    # and `kid` is not settable through its Admin API), so it aborts and prints the one-off repair.
+    kidCheck:
+      # -- should the issuer's kid be verified
+      enabled: false
+      # -- in-cluster base URL of the Keycloak that issues the credentials
+      keycloakUrl: ""
+      # -- realm that issues the credentials
+      realm: ""
+    # -- DEPRECATED, use `identityhub.credentialSync`. Inserting the credential is not a bootstrap
+    # concern: it has to happen again on every renewal, and a Job that only runs on install and
+    # upgrade leaves the identityhub serving a stale copy. These keys are still read as defaults
+    # for `identityhub.credentialSync` and will be removed in a future release.
+    credential:
+      # -- DEPRECATED. `enabled: true` turns on identityhub.credentialSync.
+      enabled: false
+      # -- DEPRECATED, use identityhub.credentialSync.secretName. Empty by default so that the
+      # values under identityhub.credentialSync keep their documented defaults; these only take
+      # effect when explicitly set.
+      secretName: ""
+      # -- DEPRECATED, use identityhub.credentialSync.key
+      key: ""
+      # -- DEPRECATED, use identityhub.credentialSync.id
+      id: ""
+    # -- replacement of the signing key, keeping the same alias and DID fragment. There is no
+    # overlap window: the moment the key is replaced everything signed with the previous one stops
+    # verifying, so this is opt-in, runs as its own Job and never as an upgrade hook. Enable it,
+    # let it run, set it back to false.
+    rotation:
+      # -- should the rotation Job be rendered. The rotation is not atomic: the old keypair is
+      # revoked before the new one is published, and if the vault write in between fails the Job
+      # exits without publishing anything. Nothing wrong is ever served - the DID document is only
+      # updated after the key is safely stored - but the participant is left unable to sign until
+      # the Job is re-run, which is safe to do and picks up where it left off.
+      enabled: false
+      # -- suffix of the Job name. Bump it for each rotation so a new run is a new, immutable Job
+      # instead of a failing patch of a completed one.
+      instance: 1
+    # -- how many times the Job polls the identityhub before giving up, five seconds apart. The
+    # default covers a vault the chart unseals for you. A vault unsealed by hand is not ready until
+    # the key holders have shown up, which can be hours: either raise this, or unseal first and let
+    # the Job run on the next deploy.
+    waitRetries: 30
+    # -- image used for the steps that only need openssl
+    opensslImage:
+      repository: alpine/openssl
+      tag: "3.5.5"
+      # -- [Kubernetes image pull policy](https://kubernetes.io/docs/concepts/containers/images/#image-pull-policy) to use
+      pullPolicy: IfNotPresent
+    # -- image used for the steps that talk to vault and the identityhub
+    curlImage:
+      repository: quay.io/curl/curl
+      tag: "8.1.2"
+      # -- [Kubernetes image pull policy](https://kubernetes.io/docs/concepts/containers/images/#image-pull-policy) to use
+      pullPolicy: IfNotPresent
+    # -- number of retries before the Job is considered failed
+    backoffLimit: 6
+    # -- hook annotations of the bootstrap Job. post-upgrade is required while vault runs in dev
+    # mode, since a vault restart drops everything the Job writes and only a re-run restores it.
+    annotations:
+      "helm.sh/hook": post-install,post-upgrade
+      "helm.sh/hook-weight": "10"
+      "helm.sh/hook-delete-policy": before-hook-creation
   livenessProbe:
     # -- Whether to enable kubernetes [liveness-probe](https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/)
     enabled: true
@@ -2864,9 +3083,6 @@ identityhub:
   logging:
     # -- Enable logging to create .log files
     enabled: true
-    persistence:
-      # -- Enable .log files to persist in local machine
-      enabled: false
     # -- List of handlers to use in the logger
     handlers:
       - java.util.logging.ConsoleHandler
@@ -2974,24 +3190,119 @@ identityhub:
       pullPolicy: IfNotPresent
 
 vault:
+  # -- should the bundled HashiCorp Vault be deployed. The identityhub and fdsc-edc need a vault to
+  # hold the participant's signing key and the STS client secret; set this to false only to point
+  # them at a vault managed outside this chart (via `vault.hashicorp.url`).
   enabled: false
+  # -- should the vault agent injector be deployed. Not used by any component of this chart.
   injector:
     enabled: false
   server:
+    # -- development mode: in-memory storage, auto-unsealed, single replica, HTTP only, and a fixed
+    # root token. Convenient for local deployments and the integration tests, and NOT usable in
+    # production: every restart of the vault pod loses the participant's signing key, the
+    # identityhub super-user credential, the STS client secret and the transfer signing key that
+    # fdsc-edc generates for itself, which takes the DCP lane down until the bootstrap Job re-runs.
+    # `vault.unattended.enabled: true` turns this off and gives vault persistent storage.
     dev:
       enabled: true
       devRootToken: "root"
-    postStart: # must be set externally!
+    # -- lifecycle postStart hook of the vault pod, passed straight through to the HashiCorp
+    # subchart. Nothing in this chart uses it: unsealing is done by the vault-unsealer Deployment,
+    # which keeps watching instead of running once at start.
+    postStart:
+    # -- single-node vault with file storage. Enable it together with `production` and with
+    # `dev.enabled: false`; the persistence itself comes from this subchart, not from `production`.
+    standalone:
+      enabled: "-"
+    # -- persistent volume for the vault data. This is what actually survives a restart, so a
+    # production vault needs it. Rendered as a StatefulSet volumeClaimTemplate, which is
+    # IMMUTABLE: pick the size and the class before the first install, or the StatefulSet has to
+    # be deleted to change them.
+    dataStorage:
+      enabled: true
+      # -- size of the volume. Left at the subchart default; 2Gi is ample for the handful of
+      # secrets this chart stores, so it is worth lowering deliberately rather than by accident.
+      size: 10Gi
+      # -- storage class to use. Empty means the cluster default.
+      storageClass: null
+  # -- how the components of this chart reach vault. These keys are read by the umbrella's own
+  # templates (the identityhub) and are NOT understood by the HashiCorp subchart itself.
+  #
+  # `fdsc-edc.common.config.vault.hashicorp` carries a hand-copied duplicate of them: a subchart
+  # cannot read its parent's values, so setting these does not reach the connector. Keep the two in
+  # step by hand.
   hashicorp:
+    # -- address of the vault instance
     url: "http://{{ .Release.Name }}-vault:8200"
+    # -- vault token, in clear. Rendered into a ConfigMap, so anyone who can read ConfigMaps in the
+    # namespace can read it: acceptable for a dev deployment with a dev-mode vault, not for
+    # production. Use `existingSecret` instead, which injects it as an environment variable and
+    # keeps it out of the ConfigMap entirely.
     token: "root"
+    # -- name of a Secret holding the vault token. Takes precedence over `token`.
+    existingSecret: ""
+    # -- key within that Secret holding the token
+    existingSecretTokenKey: token
+    # -- timeout to be used when talking to vault
     timeout: 30
     healthCheck:
+      # -- should the vault health check be enabled
       enabled: true
+      # -- should a standby vault be considered healthy
       standbyOk: true
     paths:
+      # -- base path of the KV v2 secret engine
       secret: /v1/secret
+      # -- path of the health endpoint
       health: /v1/sys/health
+  # -- unattended operation of the bundled vault: persistent storage, and the chart initialising
+  # and unsealing it for you so a pod restart recovers on its own.
+  #
+  # **This is not a production security posture, and it is not meant to be read as one.** A vault
+  # that unseals itself keeps its unseal keys next to it, in a Secret of this same namespace, so
+  # the cluster's Secret store is as trusted as the vault it opens. It is a good fit for demo and
+  # staging, where the alternative - dev mode - loses the participant's identity on every restart
+  # and does not put it back until the next deploy.
+  #
+  # A real production vault is unsealed by people: several key holders in the operating
+  # organisation, each with a share, present them on every start. That cannot be automated away,
+  # and this chart does not pretend to. Set `autoUnseal: false` and `secretShares`/`secretThreshold`
+  # to something meaningful, and see doc/deployment-integration/production/VAULT.md for the manual
+  # procedure.
+  #
+  # Two things worth knowing either way:
+  #
+  #   * Initialisation happens exactly once, on the first start of an empty vault. The resulting
+  #     Secret is annotated `helm.sh/resource-policy: keep`, so it survives uninstall - deleting it
+  #     while the storage volume still exists leaves a vault nobody can unseal.
+  #   * `secretShares: 1` and `autoUnseal: true` only make sense together. Splitting the master key
+  #     across several holders and then leaving all the shares in one Secret buys nothing.
+  unattended:
+    # -- should vault run with persistent storage, initialised and unsealed by the chart
+    enabled: false
+    # -- number of key shares to split the master key into
+    secretShares: 1
+    # -- number of key shares required to unseal
+    secretThreshold: 1
+    # -- should the chart initialise vault and unseal it automatically. When false, the operator
+    # must run `vault operator init` and `vault operator unseal` after every start.
+    autoUnseal: true
+    # -- name of the Secret the unseal keys and the root token are written to
+    secretName: vault-unseal-keys
+    # -- should the unsealer also mint the token the components authenticate with and store it in
+    # `vault.hashicorp.existingSecret`. Without it that Secret has to be created by hand, and it
+    # cannot be created before vault has been initialised - so every install, fresh ones included,
+    # needs a manual step in the middle while the identityhub waits in CreateContainerConfigError.
+    #
+    # The token is periodic and scoped by an ACL policy to the KV paths the deployment uses. Note
+    # what it replaces: without a policy the only token that works is the root one.
+    provisionToken: true
+    # -- lifetime granted to that token. Periodic, so it can be renewed indefinitely - which EDC
+    # does on its own, in process, without the token itself ever changing.
+    tokenPeriod: "768h"
+    # -- name of the ACL policy created for it
+    tokenPolicyName: dsc-connector
 
 # -- configuration for the cert-manager component (https://github.com/cert-manager/cert-manager/blob/master/deploy/charts/cert-manager/values.yaml)
 cert-manager:
