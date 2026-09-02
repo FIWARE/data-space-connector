@@ -71,7 +71,7 @@ dependencies:
   - name: vc-operator
     alias: vc-operator
     condition: vc-operator.enabled
-    version: 0.1.4
+    version: 0.1.5
     repository: oci://quay.io/seamware/helm-charts
   - name: prometheus
     condition: prometheus.enabled
@@ -79,7 +79,7 @@ dependencies:
     repository: https://prometheus-community.github.io/helm-charts
   - name: grafana
     condition: grafana.enabled
-    version: 12.11.2
+    version: 13.0.1
     repository: https://grafana-community.github.io/helm-charts
   # observability - OpenTelemetry Operator for auto-instrumentation (opt-in)
   - name: opentelemetry-operator
