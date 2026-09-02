@@ -663,7 +663,7 @@
                     </plugin>
                     <!-- enable the k3s deploy for the consent scenario. Every image is pulled
                          from a registry (the consent-manager from
-                         quay.io/wi_stefan/consent-manager, see the consentManager.image values),
+                         quay.io/wi_stefan/consent-manager, via the published consent-manager chart),
                          so there is nothing to build or import. -->
                     <plugin>
                         <groupId>io.kokuwa.maven</groupId>

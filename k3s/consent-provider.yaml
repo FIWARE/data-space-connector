@@ -67,13 +67,11 @@ decentralizedIam:
 # The facade reads the provider's tm-forum-api; mongo uses the managed replica set.
 consentManagement:
   enabled: true
-  # the consent-manager now runs in the trust-anchor (the central authority, see
-  # k3s/consent-trust-anchor.yaml); the provider keeps only the consent-facade.
-  # Consent is enforced solely by the APISIX consent-filter plugin (canonical
-  # path); there is no odrl-pap PIP wiring here, and the provider does not hold
-  # the consent key (the consent-manager + its facade do, at the trust-anchor).
-  consentManager:
-    enabled: false
+  # The consent-manager runs at the trust-anchor (the central authority, see
+  # k3s/consent-trust-anchor.yaml) and is deployed from its own chart there, so the
+  # provider does not configure it at all. Consent is enforced here solely by the APISIX
+  # consent-filter plugin (canonical path): there is no odrl-pap PIP wiring, and the
+  # provider does not hold the consent key (the consent-manager and its facade do).
   # The consent-facade now runs at the AUTHORITY (k3s/consent-trust-anchor.yaml),
   # not the provider: it is built to front multiple providers and authenticates to
   # each provider's OID4VP-protected TM Forum api (mp-tmf-api) as the dataspace

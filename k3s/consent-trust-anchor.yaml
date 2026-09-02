@@ -500,7 +500,7 @@ decentralizedIam:
           # The credential policy is therefore selected by SCOPE, not by a second service -
           # the pattern k3s/provider.yaml already uses for `data-service` (default/legal/
           # operator). Every token this service issues carries `aud: consent-manager`, which
-          # is what consentManager.externalIdp.audience expects.
+          # is what the consent-manager's externalIdp.audience expects.
           #   openid      - the data SUBJECT's UserCredential
           #   participant - a PARTICIPANT's MembershipCredential (issued by its own keycloak,
           #                 trusted because its issuer DID is registered in the trust-anchor
@@ -592,14 +592,15 @@ decentralizedIam:
               - consent-manager.dataspace-authority.org
       catchAllRoute:
         enabled: false
-      # the consent key is sourced from consent-manager-secret (not a literal in
-      # git/etcd): mounted here as env CONSENT_KEY and referenced in the facade
-      # route header as $env://CONSENT_KEY, which APISIX resolves at runtime.
+      # the consent key is sourced from the `consent-manager` secret the consent-manager
+      # chart creates (not a literal in git/etcd): mounted here as env CONSENT_KEY and
+      # referenced in the facade route header as $env://CONSENT_KEY, which APISIX resolves
+      # at runtime.
       extraEnvVars:
         - name: CONSENT_KEY
           valueFrom:
             secretKeyRef:
-              name: consent-manager-secret
+              name: consent-manager
               key: consentKey
       routes:
         # NB there is deliberately NO /participants/login route. Participants
@@ -609,7 +610,7 @@ decentralizedIam:
         # See doc/CONSENT_MANAGEMENT.md.
         # ---------------------------------------------------------------------------------------
         # Subject-authenticated path: the data subject presents its OWN OID4VP access token, which the
-        # consent-manager verifies itself via external JWKS (consentManager.externalIdp) and maps to its
+        # consent-manager verifies itself via external JWKS (its externalIdp values) and maps to its
         # local User. Deliberately NO participant `jwt-auth` and NO consent-key injection - unlike the
         # participant `/consent-manager/*` route, whose jwt-auth would reject a subject token at the
         # gateway ("missing user key in JWT token"). This lets the subject reach its user-authenticated

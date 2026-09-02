@@ -1,5 +1,11 @@
 {{- if .Values.managedMongo.enabled }}
-{{- $cm := .Values.consentManagement.consentManager }}
+{{- /* The consent-manager is a subchart, so its values are not readable here in every
+       context (helm-unittest renders this chart alone) - hence the nil-safe reads and the
+       `consentManagement.mongo` defaults. */}}
+{{- $cm := (index .Values "consent-manager") | default dict }}
+{{- $cmMongo := $cm.mongo | default dict }}
+{{- $mongoUser := $cmMongo.username | default .Values.consentManagement.mongo.username }}
+{{- $mongoDatabase := $cmMongo.database | default .Values.consentManagement.mongo.database }}
 {{- /*
   Managed MongoDB replica set for the consent-manager. The MongoDB community
   operator is installed cluster-wide (see k3s/mongo-operator.yaml, watchNamespace
@@ -9,7 +15,7 @@
   the consent-manager.
 */}}
 {{- $spec := .Values.managedMongo.spec | default dict }}
-{{- $consentMongoEnabled := and .Values.consentManagement.enabled $cm.enabled (not $cm.mongo.uri) }}
+{{- $consentMongoEnabled := and .Values.consentManagement.enabled $cm.enabled (not $cmMongo.uri) }}
 {{- $dbSa := .Values.managedMongo.databaseServiceAccountName }}
 {{- /*
   RBAC for the mongod pods. The community operator is installed cluster-wide
@@ -64,8 +70,8 @@ kind: MongoDBCommunity
 metadata:
   # the CR name is also the replica-set name; the operator derives the service
   # ({name}-svc) the consent-manager connects to, so keep it in sync with
-  # consentManagement.consentManager.mongo.replicaSet.
-  name: {{ $cm.mongo.replicaSet | quote }}
+  # the consent-manager's `mongo.replicaSet`.
+  name: {{ $cmMongo.replicaSet | default .Values.consentManagement.mongo.replicaSet | quote }}
   namespace: {{ $.Release.Namespace | quote }}
   labels:
     {{ include "trust-anchor.labels" . | nindent 4 }}
@@ -92,14 +98,14 @@ spec:
         - name: userAdminAnyDatabase
           db: admin
 {{- if $consentMongoEnabled }}
-    - name: {{ $cm.mongo.username }}
-      db: {{ $cm.mongo.database }}
+    - name: {{ $mongoUser }}
+      db: {{ $mongoDatabase }}
       passwordSecretRef:
         name: mongodb-consent-password
       scramCredentialsSecretName: mongodb-consent-password
       roles:
         - name: readWrite
-          db: {{ $cm.mongo.database }}
+          db: {{ $mongoDatabase }}
 {{- end }}
 {{- with $spec.statefulSet }}
   statefulSet:
@@ -123,7 +129,7 @@ data:
 {{- if and $consentMongoEnabled .Values.managedMongo.generatePasswords .Release.IsInstall }}
 ---
 # password shared by the managed-mongo `consent` user and the consent-manager
-# (the consent-manager reads it from this secret, see consent-manager-deployment).
+# (the consent-manager chart reads it from this secret - see its `mongo.auth`).
 apiVersion: v1
 kind: Secret
 metadata:

@@ -104,6 +104,9 @@ consentManagement:
     ## self-description endpoints. A NetworkPolicy is L3/L4 and cannot express WHICH paths
     ## are public - the facade's ingress decides that - so this admits the controller
     ## only, and the contract endpoints stay unpublished.
+    # -- port the consent-manager listens on, used by its policy. Mirrors the
+    # consent-manager chart's own default.
+    consentManagerPort: 3000
     # -- port the consent-facade listens on, used by its policy. Mirrors the
     # consent-facade chart's own default.
     consentFacadePort: 8080
@@ -114,145 +117,22 @@ consentManagement:
       podLabels:
         app.kubernetes.io/name: traefik
 
-  # -- the consent-manager service (VisionsOfficial/consent-manager, ISO 27560)
-  consentManager:
-    # -- deploy the consent-manager
-    enabled: true
-    # -- override for CONTRACT_SERVICE_BASE_URL (the consent-facade). Empty =>
-    # http://consent-facade:<port> (same namespace). Set to a cross-namespace FQDN
-    # (e.g. http://consent-facade.provider.svc.cluster.local:8080) when the
-    # consent-manager and consent-facade live in different namespaces.
-    contractServiceBaseUrl: ""
-    # -- port used to build the default CONTRACT_SERVICE_BASE_URL. Mirrors the
-    # consent-facade chart's own default; only relevant while contractServiceBaseUrl is
-    # empty.
-    contractServicePort: 8080
-    image:
-      # -- repository of the consent-manager image. The published image is used as-is;
-      # this project does not build it.
-      repository: quay.io/wi_stefan/consent-manager
-      # -- tag of the consent-manager image (carries the external-JWKS feature, the
-      # configurable discovery path, and the `did` uniqueness guard that makes a
-      # participant's DID a safe lookup key for externally issued tokens)
-      tag: "0.0.6"
-      # -- image pull policy
-      pullPolicy: IfNotPresent
-    # -- api prefix served by the consent-manager
-    apiPrefix: /v1
-    # -- port the consent-manager listens on
-    containerPort: 3000
-    service:
-      # -- kubernetes service type (keep internal)
-      type: ClusterIP
-      # -- service port
-      port: 3000
-    # -- application base url (APP_ENDPOINT/URL), defaults to the in-cluster service
-    appEndpoint: ""
-    mongo:
-      # -- full MongoDB connection string (must include the replica set). If set, overrides the parts below.
-      uri: ""
-      # -- mongodb host (managed-mongo service by default)
-      host: mongodb-svc
-      # -- mongodb port
-      port: 27017
-      # -- database name
-      database: consent
-      # -- username
-      username: consent
-      # -- replica set name (the managed MongoDBCommunity resource name)
-      replicaSet: mongodb
-      auth:
-        # -- secret holding the mongo password (shared with the managed-mongo consent user)
-        existingSecret: mongodb-consent-password
-        # -- key within the secret holding the mongo password
-        existingSecretPasswordKey: password
-    # -- session/JWT/OAuth/consent-key secret. Generated in-cluster when generate=true.
-    secret:
-      # -- name of the secret
-      name: consent-manager-secret
-      # -- generate the secret (session/jwt/oauth/consentKey/mongoPassword) in-cluster
-      generate: true
-      # -- key holding the consent key (X_VISIONSTRUST_CONSENT_KEY), injected by the facade
-      consentKeyKey: consentKey
-    # External IDP / OID4VP token verification (consent-manager >= 1.2.0). When enabled, the
-    # consent-manager trusts JWTs whose `iss` is in `issuers`, verifying them via OIDC discovery +
-    # JWKS and mapping the token `sub` (a DID) to a local User/UserIdentifier/Participant. This is
-    # what lets a data subject (end-user) authenticate to the consent-manager DIRECTLY with its
-    # OID4VP access token - no facade translation and no x-user-key.
-    externalIdp:
-      # -- enable external-token verification (empty issuers => feature off in the consent-manager)
-      enabled: false
-      # -- trusted issuer URLs (must equal the token `iss`, i.e. the verifier's bare `server.host`).
-      # OIDC discovery runs at `<issuer><discoveryPath>` (see discoveryPath below).
-      issuers: []
-      # -- expected `aud` claim (required by the consent-manager whenever issuers are set).
-      # One value covers both data subjects and participants: they present different
-      # credentials, but to the same relying party, so on the verifier that is a single
-      # service with one credential policy per scope - and every token it issues carries
-      # that service id as `aud`.
-      audience: ""
-      # -- accepted signing algorithms (asymmetric only)
-      algorithms: "RS256,ES256,EdDSA"
-      # -- token claim carrying the subject DID
-      subjectClaim: sub
-      # -- discovery + JWKS cache TTL (seconds)
-      discoveryTtl: 3600
-      # -- path appended to each issuer to fetch its OIDC discovery document. Empty => the
-      # spec default `/.well-known/openid-configuration`. The FIWARE VCVerifier stamps its bare
-      # `server.host` as the token `iss` but serves discovery under a per-service path, so set this
-      # to e.g. `/services/consent-manager/.well-known/openid-configuration` to discover there while
-      # `issuers` stays the bare host that matches the token.
-      discoveryPath: ""
-      # -- forward proxy for reaching an external verifier ingress in-cluster (HTTP(S)_PROXY on the
-      # consent-manager). Empty => no proxy. For the local demo the verifier ingress resolves to
-      # 127.0.0.1, so route discovery/JWKS through the squid proxy.
-      proxy: ""
-      # -- CA the consent-manager must trust to reach the verifier over TLS (the verifier's ingress
-      # cert is usually cert-manager self-signed). Mounted and exported as NODE_EXTRA_CA_CERTS.
-      # Empty name => rely on the system trust store.
-      caSecret:
-        # -- secret holding the CA certificate (e.g. the verifier ingress tls secret)
-        name: ""
-        # -- key within the secret holding the PEM CA certificate
-        key: ca.crt
-    # -- extra environment variables (map)
-    env: {}
-    # -- "valueFrom" environment variable references (map, name templated)
-    envValueFrom: {}
-    # -- additional secrets to load as env (list of secret names)
-    envSecretNames: []
-    # -- additional config maps to load as env (list of config map names)
-    envConfigMapNames: []
-    # -- pod security context
-    podSecurityContext:
-      seccompProfile:
-        type: RuntimeDefault
-      runAsUser: 10100
-      runAsGroup: 10100
-      fsGroup: 10100
-    # -- container security context
-    securityContext:
-      capabilities:
-        drop:
-          - ALL
-        add: []
-      readOnlyRootFilesystem: true
-      allowPrivilegeEscalation: false
-      runAsNonRoot: true
-      runAsUser: 10100
-    # -- cpu/memory resources
-    resources:
-      limits:
-        cpu: 500m
-        memory: 512Mi
-      requests:
-        cpu: 100m
-        memory: 128Mi
-
-  # The consent-facade - the service that projects the TM Forum agreements, catalog and
-  # parties into the contract-service API the consent-manager consumes - is deployed from
-  # its own published chart; configure it under the top-level `consent-facade` key below.
-  consentKey: "changeme-consent-key"
+  # The consent-manager (the ISO 27560 consent records and receipts) and the
+  # consent-facade (which projects the TM Forum agreements, catalog and parties into the
+  # contract-service API the consent-manager consumes) are both deployed from their own
+  # published charts; configure them under the top-level `consent-manager` and
+  # `consent-facade` keys below.
+  ## the user the managed MongoDB provisions for the consent-manager. It has to match the
+  ## `consent-manager.mongo` values, which is where the application reads them from.
+  mongo:
+    # -- user the managed MongoDB provisions
+    username: consent
+    # -- database that user is given readWrite on
+    database: consent
+    # -- name of the MongoDBCommunity resource, which is also the replica-set name (the
+    # operator derives the `<name>-svc` service from it). Has to match the
+    # consent-manager's `mongo.replicaSet`.
+    replicaSet: mongodb
 
 ## The consent-facade, deployed from its own published FIWARE chart
 ## (oci://quay.io/fiware/helm-charts/consent-facade). Only the keys the trust-anchor
@@ -356,3 +236,45 @@ consent-facade:
       tag: "0.0.14"
       # -- image pull policy
       pullPolicy: Always
+
+## The consent-manager, deployed from its own published FIWARE chart
+## (oci://quay.io/fiware/helm-charts/consent-manager). Only the keys the trust-anchor
+## deployment needs to differ on are set here; everything else is the chart's default.
+## See https://github.com/FIWARE/helm-charts/tree/main/charts/consent-manager
+consent-manager:
+  # -- deploy the consent-manager. The authority runs it; a deployment that only needs the
+  # facade leaves it off.
+  enabled: false
+  # -- keep the resource names stable (`consent-manager` rather than
+  # `<release>-consent-manager`): the authority's APISIX facade route, its NetworkPolicy
+  # and the participants that address the api all use that name.
+  fullnameOverride: consent-manager
+  ## the contract service the privacy notices are derived from - the consent-facade. Set a
+  ## cross-namespace FQDN when the two do not share a namespace.
+  contractService:
+    # -- base url of the consent-facade
+    url: http://consent-facade:8080
+  ## MongoDB: the managed replica set this chart declares (see `managedMongo`). The
+  ## username/database have to match `consentManagement.mongo`, which is what the operator
+  ## provisions, and the password secret is the one it creates for that user.
+  mongo:
+    # -- host of the managed replica set
+    host: mongodb-svc
+    # -- database to use
+    database: consent
+    # -- user to connect as
+    username: consent
+    # -- name of the replica set (the managed MongoDBCommunity resource name)
+    replicaSet: mongodb
+    auth:
+      existingSecret:
+        # -- the secret the managed MongoDB creates for this user
+        name: mongodb-consent-password
+        # -- key of the password inside it
+        key: password
+  deployment:
+    image:
+      # -- image tag. Carries the external-JWKS feature, the configurable discovery path,
+      # and the `did` uniqueness guard that makes a participant's DID a safe lookup key for
+      # externally issued tokens.
+      tag: "0.0.6"

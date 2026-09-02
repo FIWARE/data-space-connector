@@ -54,12 +54,12 @@ flowchart LR
 * the **`trust-anchor` release** (the [`charts/trust-anchor`](../charts/trust-anchor) chart) carries the consent **data plane** - the consent-manager, the consent-facade and their managed MongoDB - turned on for the consent scenario by [`k3s/consent-trust-anchor-components.yaml`](../k3s/consent-trust-anchor-components.yaml);
 * the **`consent-authority` release** (the [`charts/data-space-connector`](../charts/data-space-connector) umbrella chart, via [`k3s/consent-trust-anchor.yaml`](../k3s/consent-trust-anchor.yaml)) carries the **IAM** that backs consent - the keycloak issuer, the `did:web:dataspace-authority.org` helper (which provisions the `dataspace-authority.org-tls` secret the facade mounts), the vc-operator (which mints the `vc-operator-credential` the facade presents) and the APISIX facade route.
 
-The two releases share the namespace and reference each other by well-known name (the facade route reads `consent-manager-secret` and targets the `consent-manager` service; the facade pod mounts the did/credential secrets), so no cross-release value plumbing is needed.
+The two releases share the namespace and reference each other by well-known name (the facade route reads the `consent-manager` secret and targets the `consent-manager` service; the facade pod mounts the did/credential secrets), so no cross-release value plumbing is needed.
 
-* **consent-manager** (`consent-manager:3000`, *trust-anchor release*) - stores and serves the consent records/receipts (Node/MongoDB) on a managed MongoDB replica set. It derives its privacy notices from the contract-service API the consent-facade serves (`CONTRACT_SERVICE_BASE_URL` → `consent-facade.trust-anchor.svc.cluster.local`). Run **unmodified**.
-* **APISIX facade route** (*consent-authority release*) - an internal APISIX in front of the consent-manager (route `/consent-manager/*`). It authenticates callers over **OID4VP** (`openid-connect`, `bearer_only`, against the authority verifier's JWKS) and **injects** the shared consent key server-side (read from `consent-manager-secret`), so callers present only their own access token and never hold the consent key. The gateway itself **is** published (ingress `consent-authority-apisix`, host `consent-manager.dataspace-authority.org`), so every route on it is internet-reachable and must carry its own authentication - see the `/consent-user` allow-list below.
+* **consent-manager** (`consent-manager:3000`, *trust-anchor release*) - stores and serves the consent records/receipts (Node/MongoDB) on a managed MongoDB replica set. It derives its privacy notices from the contract-service API the consent-facade serves (`CONTRACT_SERVICE_BASE_URL` → `consent-facade.trust-anchor.svc.cluster.local`). Run **unmodified**, from the published [`consent-manager` chart](https://github.com/FIWARE/helm-charts/tree/main/charts/consent-manager).
+* **APISIX facade route** (*consent-authority release*) - an internal APISIX in front of the consent-manager (route `/consent-manager/*`). It authenticates callers over **OID4VP** (`openid-connect`, `bearer_only`, against the authority verifier's JWKS) and **injects** the shared consent key server-side (read from the `consent-manager` secret), so callers present only their own access token and never hold the consent key. The gateway itself **is** published (ingress `consent-authority-apisix`, host `consent-manager.dataspace-authority.org`), so every route on it is internet-reachable and must carry its own authentication - see the `/consent-user` allow-list below.
 * **consent-facade** (`consent-facade:8080`, *trust-anchor release*) - a Micronaut service ([wistefan/consent-facade](https://github.com/wistefan/consent-facade)) that projects a provider's TMForum APIs (agreements, catalog, party) into the contract-service API the consent-manager consumes: bilateral contracts, catalog self-descriptions, and participant self-descriptions at `/participants/{tmforum-org-id}`. It runs at the authority so it can front **multiple providers**, authenticating its outbound TMForum reads to each provider's OID4VP-protected `mp-tmf-api` as `did:web:dataspace-authority.org`. Deployed from the published [`consent-facade` chart](https://github.com/FIWARE/helm-charts/tree/main/charts/consent-facade); a **second, provider-local instance** runs in the provider release, serving the owner-resolver's contract lookups and minting the provider's OID4VP tokens for the plugin.
-* **consent secret** (`consent-manager-secret`, *trust-anchor release*) - the session/JWT/OAuth secrets and the shared consent key; read by the consent-manager and, cross-release, by the APISIX facade route.
+* **consent secret** (`consent-manager`, *trust-anchor release*) - the session/JWT/OAuth secrets and the shared consent key, created by the consent-manager chart; read by the consent-manager and, cross-release, by the APISIX facade route.
 * **direct subject access** (*optional*) - a **data subject** grants/reads consent for its *own* identity by authenticating to the consent-manager **directly** with its OID4VP access token - no facade, no `x-user-key`. The consent-manager (≥ 1.2.0) verifies external tokens whose `iss` is trusted (`consentManager.externalIdp`) via OIDC discovery + JWKS and maps the token `sub` (the holder DID) to a local `User`/`UserIdentifier`/`Participant`; the subject then uses the user-authenticated endpoints (`GET /v1/consents/me`, `POST /v1/consents/user`). The subject obtains its token from the authority verifier's **`consent-manager` service** (exposed at `https://verifier.dataspace-authority.org`). Because the verifier stamps its bare `server.host` (`https://verifier.dataspace-authority.org`) as the token `iss` but serves OIDC discovery only under a per-service path, `consentManager.externalIdp.discoveryPath` points the consent-manager at `/services/consent-manager/.well-known/openid-configuration` while the trusted `issuers` stays the bare host that matches the token. The participant `/consent-manager/*` facade route requires a token issued for the participant scope and would reject a subject token at the gateway, so subject tokens use dedicated authority-APISIX routes under **`/consent-user`** (no participant auth, no consent-key injection) that only proxy to the consent-manager - which verifies the OID4VP token itself. Because those routes apply **no gateway authentication**, they are an explicit **allow-list of (uri x method) pairs** whose handlers are `verifyUserJWT`-gated in the consent-manager, i.e. they authenticate the subject's own token: `GET /consents/me`, `GET /consents/me/{id}`, `GET /consents/exchanges/user`, `GET /users/me`, `POST /consents/user`, `DELETE /consents/{id}`, plus the deliberately-open `POST /users/signup` (self-service PDI signup, unauthenticated upstream). Everything else under `/consent-user` has no route and returns 404. The consent-manager stays unexposed (the NetworkPolicy still admits only APISIX); the subject reaches it at `https://consent-manager.dataspace-authority.org/consent-user/v1/*`.
 
 The consent-manager and consent-facade are isolated by a **NetworkPolicy** (trust-anchor chart) so they are reachable only through the authority APISIX (and the consent-manager↔facade contract-service link) - not by arbitrary in-cluster pods.
@@ -410,39 +410,41 @@ spread across three overlays:
 
 ### Where the components come from
 
-The **consent-facade** and the **owner-resolver** are published as their own FIWARE charts
-and consumed as subchart dependencies:
+The **consent-manager**, the **consent-facade** and the **owner-resolver** are published as
+their own FIWARE charts and consumed as subchart dependencies:
 
 | component | chart | pulled by |
 |---|---|---|
+| consent-manager | `oci://quay.io/fiware/helm-charts/consent-manager` | `charts/trust-anchor` |
 | consent-facade | `oci://quay.io/fiware/helm-charts/consent-facade` | `charts/trust-anchor` (the authority's instance) and `charts/data-space-connector` (a provider-local instance) |
 | consent-owner-resolver | `oci://quay.io/fiware/helm-charts/consent-owner-resolver` | `charts/data-space-connector` |
 
-They are configured under the top-level `consent-facade:` and `consent-owner-resolver:`
-keys. Both pin `fullnameOverride` (and the resolver also `nameOverride`) so the resource
-names and labels are `consent-facade` / `owner-resolver` - the consent-plugin's route
-config, the resolver's contract lookups and the NetworkPolicies all address them by those
-names.
+They are configured under the top-level `consent-manager:`, `consent-facade:` and
+`consent-owner-resolver:` keys. Each pins `fullnameOverride` (and the resolver also
+`nameOverride`) so the resource names and labels are `consent-manager` / `consent-facade` /
+`owner-resolver` - the APISIX facade route, the consent-plugin's route config, the
+resolver's contract lookups and the NetworkPolicies all address them by those names.
 
-`consentManagement.*` covers what this repository templates itself: the **consent-manager**
-(in `charts/trust-anchor`), the **consent-filter plugin** wiring on the provider APISIX, and
-the isolation policies.
+`consentManagement.*` covers what this repository templates itself: the **consent-filter
+plugin** wiring on the provider APISIX, the isolation policies, and the managed MongoDB user
+the consent-manager connects as.
 
 The provider overlay disables the consent-manager (it runs at the authority) and enables
 the plugin, the resolver and its local facade:
 
 ```yaml
 consentManagement:
-  enabled: true
-  consentManager:
-    enabled: false   # the consent-manager runs at the trust-anchor, not the provider
+  enabled: true      # the provider APISIX consent-plugin wiring
 consent-owner-resolver:
   enabled: true      # provider-side: the answer depends on the provider's data model
 consent-facade:
   enabled: true      # provider-local: serves the governing contract + the plugin's tokens
 ```
 
-The shared `consentKey` (`X_VISIONSTRUST_CONSENT_KEY`) is set on the data-plane side in [`k3s/consent-trust-anchor-components.yaml`](../k3s/consent-trust-anchor-components.yaml) (`consentManagement.consentKey`), seeded into `consent-manager-secret`; the consent-manager validates it and the `consent-authority` release's facade route injects it (reading it from that same secret by name), so callers never hold it.
+The consent-manager is not deployed at the provider at all - it is enabled in the
+trust-anchor release (`consent-manager.enabled: true`) at the authority.
+
+The shared `consentKey` (`X_VISIONSTRUST_CONSENT_KEY`) is set on the data-plane side in [`k3s/consent-trust-anchor-components.yaml`](../k3s/consent-trust-anchor-components.yaml) (`consent-manager.secret.consentKey`), seeded into the `consent-manager` secret; the consent-manager validates it and the `consent-authority` release's facade route injects it (reading it from that same secret by name), so callers never hold it.
 
 Deploy the consent scenario with `mvn clean deploy -Pconsent`. That profile layers the
 consent data plane onto the `trust-anchor` release (consent-manager + consent-facade +
