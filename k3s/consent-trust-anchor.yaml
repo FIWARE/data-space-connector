@@ -96,7 +96,11 @@ keycloak:
           #!/bin/sh
           curl -X 'POST' 'http://tir.trust-anchor.svc.cluster.local:8080/issuer' -H 'Content-Type: application/json' -d "{\"did\": \"did:web:dataspace-authority.org\", \"credentials\": []}"
   extraVolumeMounts:
-    - mountPath: /did-material
+    # Since KC 26.6.4 the java-keystore realm key provider only reads keystores from
+    # ${kc.home.dir}/data/<realm-name>, so the directory name must match `realm.name`.
+    # The init container above keeps writing to its own /did-material mount of the same
+    # emptyDir.
+    - mountPath: /opt/keycloak/data/authority-realm
       name: did-material
     - mountPath: /opt/keycloak/data/import
       name: realms
@@ -115,7 +119,7 @@ keycloak:
       emptyDir: {}
   issuerDid: did:web:dataspace-authority.org
   signingKey:
-    storePath: /did-material/cert.pfx
+    storePath: /opt/keycloak/data/authority-realm/cert.pfx
     storePassword: "${STORE_PASS}"
     keyAlias: didPrivateKey
     keyPassword: "${STORE_PASS}"
