@@ -1,0 +1,271 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/helm-unittest/helm-unittest/main/schema/helm-testsuite.json
+#
+# ---------------------------------------------------------------------------
+# Helm-unittest suite for the identityhub's custom CA truststore.
+#
+# These are CAs the identityhub has to TRUST - a vault, an issuer or a
+# counterparty using a private CA - not the certificates that identify this
+# participant, which come from cert-manager and are used straight from their
+# Secret.
+#
+# Two sources feed one projected volume: PEM written inline in
+# `identityhub.customCaCerts`, which renders a ConfigMap, and Secrets or
+# ConfigMaps that already exist in the cluster, named in
+# `identityhub.customCaCertsFrom`, which render nothing.
+#
+# What the assertions guard is the failure mode this whole area came from: the
+# deployment mounting an empty volume over the JVM truststore, which replaces
+# it with nothing instead of extending it and breaks every outbound TLS
+# connection.
+# ---------------------------------------------------------------------------
+suite: IdentityHub custom CA truststore
+templates:
+  - templates/identityhub-cacerts-cm.yaml
+  - templates/identityhub-deployment.yaml
+tests:
+  # ==========================================================================
+  # Inline PEM
+  # ==========================================================================
+
+  - it: should create the ConfigMap and the import step for extra CAs
+    set:
+      identityhub: &inline
+        enabled: true
+        endpoints:
+          identity:
+            authKeyAlias: super-user-apikey
+        customCaCerts:
+          my-ca.pem: |
+            -----BEGIN CERTIFICATE-----
+            test
+            -----END CERTIFICATE-----
+    asserts:
+      - exists:
+          path: metadata.name
+      - matchRegex:
+          path: metadata.name
+          pattern: 'identityhub'
+
+  - it: should import the extra CAs into a copy of the truststore
+    templates:
+      - templates/identityhub-deployment.yaml
+    set:
+      identityhub: *inline
+    asserts:
+      # Without this the mount replaced the whole truststore with an empty
+      # emptyDir, and every outbound TLS connection failed.
+      - equal:
+          path: spec.template.spec.initContainers[0].name
+          value: import-cacerts
+      - matchRegex:
+          path: spec.template.spec.initContainers[0].command[2]
+          pattern: 'keytool -importcert'
+
+  - it: should make the rendered ConfigMap the only source when PEM is inline
+    templates:
+      - templates/identityhub-deployment.yaml
+    set:
+      identityhub: *inline
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: custom-cacertificates
+            projected:
+              defaultMode: 0400
+              sources:
+                - configMap:
+                    name: identityhub-custom-cacerts
+
+  # ==========================================================================
+  # Secrets and ConfigMaps that already exist
+  # ==========================================================================
+
+  # The point of the whole feature: a cert-manager Secret is pointed at rather
+  # than having its PEM copied into values, and no ConfigMap is rendered.
+  - it: should render no ConfigMap when the CAs come from existing objects
+    templates:
+      - templates/identityhub-cacerts-cm.yaml
+    set:
+      identityhub: &fromSecret
+        enabled: true
+        endpoints:
+          identity:
+            authKeyAlias: super-user-apikey
+        customCaCertsFrom:
+          - secret: mp-operations.org-tls
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  # The gate on the initContainers key itself is separate from the gate on the
+  # import step inside it. Miss it and the deployment mounts an empty emptyDir
+  # over the truststore with nothing having written a truststore into it -
+  # exactly the bug this area started as.
+  - it: should still import and mount the truststore with no inline PEM
+    templates:
+      - templates/identityhub-deployment.yaml
+    set:
+      identityhub: *fromSecret
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].name
+          value: import-cacerts
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: custom-cacerts
+            mountPath: /opt/java/openjdk/lib/security/cacerts
+            subPath: cacerts
+
+  # A kubernetes.io/tls Secret also holds tls.key. Mounting it would put a
+  # private key in the pod and make `keytool -importcert` fail on it, taking
+  # the init container down. Exactly one item, and it is ca.crt.
+  - it: should project only ca.crt from a secret by default
+    templates:
+      - templates/identityhub-deployment.yaml
+    set:
+      identityhub: *fromSecret
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: custom-cacertificates
+            projected:
+              defaultMode: 0400
+              sources:
+                - secret:
+                    name: mp-operations.org-tls
+                    items:
+                      - key: ca.crt
+                        path: mp-operations.org-tls-ca.crt
+
+  # Named keys get a path derived from their source, so two sources cannot
+  # collide on a filename - which in a projected volume is a mount failure, not
+  # a warning - and the alias keytool derives from the basename stays traceable.
+  - it: should prefix projected paths with the source name
+    templates:
+      - templates/identityhub-deployment.yaml
+    set:
+      identityhub:
+        enabled: true
+        endpoints:
+          identity:
+            authKeyAlias: super-user-apikey
+        customCaCertsFrom:
+          - secret: issuer-tls
+            keys: [ca.crt, tls.crt]
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: custom-cacertificates
+            projected:
+              defaultMode: 0400
+              sources:
+                - secret:
+                    name: issuer-tls
+                    items:
+                      - key: ca.crt
+                        path: issuer-tls-ca.crt
+                      - key: tls.crt
+                        path: issuer-tls-tls.crt
+
+  # A ConfigMap holds no private key, so without `keys` it is taken whole. Its
+  # keys cannot be enumerated at template time anyway.
+  - it: should project a whole ConfigMap when no keys are named
+    templates:
+      - templates/identityhub-deployment.yaml
+    set:
+      identityhub:
+        enabled: true
+        endpoints:
+          identity:
+            authKeyAlias: super-user-apikey
+        customCaCertsFrom:
+          - configMap: corporate-root-ca
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: custom-cacertificates
+            projected:
+              defaultMode: 0400
+              sources:
+                - configMap:
+                    name: corporate-root-ca
+
+  - it: should combine inline PEM and existing objects in one volume
+    templates:
+      - templates/identityhub-deployment.yaml
+    set:
+      identityhub:
+        enabled: true
+        endpoints:
+          identity:
+            authKeyAlias: super-user-apikey
+        customCaCerts:
+          my-ca.pem: |
+            -----BEGIN CERTIFICATE-----
+            test
+            -----END CERTIFICATE-----
+        customCaCertsFrom:
+          - secret: mp-operations.org-tls
+          - configMap: corporate-root-ca
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: custom-cacertificates
+            projected:
+              defaultMode: 0400
+              sources:
+                - configMap:
+                    name: identityhub-custom-cacerts
+                - secret:
+                    name: mp-operations.org-tls
+                    items:
+                      - key: ca.crt
+                        path: mp-operations.org-tls-ca.crt
+                - configMap:
+                    name: corporate-root-ca
+
+  # An entry naming neither would silently contribute an empty source and the
+  # CA would just not be trusted, which surfaces far from here as a TLS error.
+  - it: should reject an entry that names neither a secret nor a configMap
+    templates:
+      - templates/identityhub-deployment.yaml
+    set:
+      identityhub:
+        enabled: true
+        endpoints:
+          identity:
+            authKeyAlias: super-user-apikey
+        customCaCertsFrom:
+          - name: corporate-root-ca
+    asserts:
+      - failedTemplate:
+          errorPattern: 'identityhub.customCaCertsFrom\[0\] needs either `secret` or `configMap`'
+
+  # ==========================================================================
+  # Off by default
+  # ==========================================================================
+
+  - it: should not touch the truststore when no CAs are declared
+    set:
+      identityhub:
+        enabled: true
+        endpoints:
+          identity:
+            authKeyAlias: super-user-apikey
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: custom-cacerts
+            mountPath: /opt/java/openjdk/lib/security/cacerts
+            subPath: cacerts
+        template: templates/identityhub-deployment.yaml
+      - hasDocuments:
+          count: 0
+        template: templates/identityhub-cacerts-cm.yaml
