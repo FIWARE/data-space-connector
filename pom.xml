@@ -17,7 +17,7 @@
         <release.version>17</release.version>
 
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <version.io.kokuwa.maven.k3s-plugin>2.1.0</version.io.kokuwa.maven.k3s-plugin>
+        <version.io.kokuwa.maven.k3s-plugin>2.3.1</version.io.kokuwa.maven.k3s-plugin>
         <version.io.kokuwa.helm-maven-plugin>6.17.0</version.io.kokuwa.helm-maven-plugin>
         <version.org.apache.maven.plugins.maven-install>3.1.1</version.org.apache.maven.plugins.maven-install>
         <version.org.apache.maven.plugins.maven-source>2.4</version.org.apache.maven.plugins.maven-source>
@@ -226,6 +226,21 @@
                         </configuration>
                     </execution>
                     <execution>
+                        <id>copy-resources-additional-trust-anchor</id>
+                        <phase>prepare-package</phase>
+                        <goals>
+                            <goal>copy-resources</goal>
+                        </goals>
+                        <configuration>
+                            <outputDirectory>${project.build.directory}/k3s/additional-resources-trust-anchor</outputDirectory>
+                            <resources>
+                                <resource>
+                                    <directory>${main.basedir}/k3s/trust-anchor</directory>
+                                </resource>
+                            </resources>
+                        </configuration>
+                    </execution>
+                    <execution>
                         <id>copy-resources-additional-provider</id>
                         <phase>prepare-package</phase>
                         <goals>
@@ -402,6 +417,14 @@
                                              includes="**/apisix/templates/ingress.yaml"
                                              erroronmissingdir="false"/>
                                 </replaceregexp>
+                                <replaceregexp
+                                        match="(kind: Ingress&#xa;metadata:&#xa;  name: [^\n]+)"
+                                        replace="\1&#xa;  namespace: trust-anchor"
+                                        byline="false">
+                                    <fileset dir="${project.build.directory}/k3s/trust-anchor"
+                                             includes="**/apisix/templates/ingress.yaml"
+                                             erroronmissingdir="false"/>
+                                </replaceregexp>
                             </tasks>
                         </configuration>
                     </execution>
@@ -521,6 +544,127 @@
                             <skip>false</skip>
                         </configuration>
                     </plugin>
+                    <plugin>
+                        <groupId>io.kokuwa.maven</groupId>
+                        <artifactId>k3s-maven-plugin</artifactId>
+                        <configuration>
+                            <skip>false</skip>
+                        </configuration>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-compiler-plugin</artifactId>
+                        <configuration>
+                            <skip>true</skip>
+                        </configuration>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-failsafe-plugin</artifactId>
+                        <version>${version.org.apache.maven.plugins.maven-failsafe}</version>
+                        <configuration>
+                            <skip>true</skip>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+        <profile>
+            <!-- Local deploy of the consent-management scenario: the standard local
+                 provider/consumer stack plus the consent overlay layered onto the
+                 provider template (`-f k3s/provider.yaml -f k3s/consent-provider.yaml`).
+                 Mirrors the `local` profile. Every consent component is pulled as a
+                 published image or chart - nothing is built here. Run standalone:
+                 `mvn verify -Pconsent`. -->
+            <id>consent</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>io.github.download-maven-plugin</groupId>
+                        <artifactId>download-maven-plugin</artifactId>
+                        <version>2.0.0</version>
+                        <configuration>
+                            <skip>false</skip>
+                        </configuration>
+                    </plugin>
+                    <plugin>
+                        <artifactId>maven-resources-plugin</artifactId>
+                        <configuration>
+                            <skip>false</skip>
+                        </configuration>
+                    </plugin>
+                    <plugin>
+                        <groupId>io.kokuwa.maven</groupId>
+                        <artifactId>helm-maven-plugin</artifactId>
+                        <configuration>
+                            <skip>false</skip>
+                        </configuration>
+                        <executions>
+                            <!-- override only the provider template to layer the consent
+                                 overlay; every other template execution is inherited
+                                 (merged by id) from the base build. -->
+                            <execution>
+                                <id>template-dsc-provider</id>
+                                <goals>
+                                    <goal>init</goal>
+                                    <goal>dependency-update</goal>
+                                    <goal>template</goal>
+                                </goals>
+                                <phase>package</phase>
+                                <configuration>
+                                    <chartDirectory>${project.build.directory}/charts/data-space-connector</chartDirectory>
+                                    <skipTemplate>false</skipTemplate>
+                                    <templateGenerateName>true</templateGenerateName>
+                                    <templateOutputDir>${project.build.directory}/k3s/dsc-provider</templateOutputDir>
+                                    <additionalArguments>--name-template=provider --namespace=provider -f ${main.basedir}/k3s/provider.yaml -f ${main.basedir}/k3s/consent-provider.yaml --skip-tests</additionalArguments>
+                                </configuration>
+                            </execution>
+                            <!-- layer the consent components (consent-manager + consent-facade +
+                                 managed Mongo) onto the trust-anchor release via the additive
+                                 components overlay. Merged by id onto the base template-trust-anchor
+                                 execution, so it inherits chart/output and only adds the overlay. -->
+                            <execution>
+                                <id>template-trust-anchor</id>
+                                <goals>
+                                    <goal>init</goal>
+                                    <goal>dependency-update</goal>
+                                    <goal>template</goal>
+                                </goals>
+                                <phase>package</phase>
+                                <configuration>
+                                    <chartDirectory>${project.build.directory}/charts/trust-anchor</chartDirectory>
+                                    <skipTemplate>false</skipTemplate>
+                                    <templateGenerateName>true</templateGenerateName>
+                                    <templateOutputDir>${project.build.directory}/k3s/trust-anchor</templateOutputDir>
+                                    <additionalArguments>--name-template=trust-anchor --namespace=trust-anchor -f ${main.basedir}/k3s/trust-anchor.yaml -f ${main.basedir}/k3s/consent-trust-anchor-components.yaml</additionalArguments>
+                                </configuration>
+                            </execution>
+                            <!-- the IAM that backs consent (keycloak issuer + did:web helper +
+                                 APISIX facade route + vc-operator) runs in the trust-anchor namespace
+                                 (central authority) as a 2nd release of the DSC umbrella chart, via
+                                 k3s/consent-trust-anchor.yaml. -->
+                            <execution>
+                                <id>template-consent-authority</id>
+                                <goals>
+                                    <goal>init</goal>
+                                    <goal>dependency-update</goal>
+                                    <goal>template</goal>
+                                </goals>
+                                <phase>package</phase>
+                                <configuration>
+                                    <chartDirectory>${project.build.directory}/charts/data-space-connector</chartDirectory>
+                                    <skipTemplate>false</skipTemplate>
+                                    <templateGenerateName>true</templateGenerateName>
+                                    <templateOutputDir>${project.build.directory}/k3s/trust-anchor</templateOutputDir>
+                                    <additionalArguments>--name-template=consent-authority --namespace=trust-anchor -f ${main.basedir}/k3s/consent-trust-anchor.yaml --skip-tests</additionalArguments>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <!-- enable the k3s deploy for the consent scenario. Every image is pulled
+                         from a registry (the consent-manager from
+                         quay.io/wi_stefan/consent-manager, via the published consent-manager chart),
+                         so there is nothing to build or import. -->
                     <plugin>
                         <groupId>io.kokuwa.maven</groupId>
                         <artifactId>k3s-maven-plugin</artifactId>

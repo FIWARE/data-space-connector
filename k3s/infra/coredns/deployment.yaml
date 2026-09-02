@@ -28,7 +28,7 @@ spec:
         - args:
             - -conf
             - /etc/coredns/Corefile
-          image: rancher/mirrored-coredns-coredns:1.10.1
+          image: rancher/mirrored-coredns-coredns:1.14.7
           imagePullPolicy: IfNotPresent
           livenessProbe:
             failureThreshold: 3
