@@ -91,31 +91,86 @@ To run the local setup:
 The following steps will show how to create a ProductOffering throught the TMForum-APIs, buy access to it via TMForum, DSP+OID4VP and DSP+DCP and access the purchased data-service through all 3 methods. It requires a proper setup of Consumer and Provider identities as expected for the DCP, which also works for OID4VP.
 
 
+### Provisioning the participant identities
+
+Both participants need their identity and key-material registered in the identityhub before any
+DCP-based DSP interaction can happen. There are two ways to do that.
+
+**The chart can do it.** `identityhub.bootstrap` runs exactly the steps described below, in-cluster
+and idempotently, on install and on every upgrade: it derives the JWK from the identity key, writes
+it to Vault, repairs the identityhub super-user credential, registers the participant context with
+its CredentialService endpoint, provisions the STS client secret and inserts the credential into the
+identityhub's credential store. That is the recommended path for anything other than a throwaway
+deployment, and it is described in
+[the production guide](./deployment-integration/production/VAULT.md#participant-bootstrap).
+
+Two things it does that are easy to miss when doing this by hand:
+
+* The STS client secret is chosen rather than read from the participant-creation response. The
+  identityhub reveals its generated secret only once, so with a dev-mode Vault any restart loses it
+  and the next attempt gets a 409 with the value gone for good - which surfaces as
+  `Failed to fetch client secret from the vault with alias: ...`. Neither side stores the secret
+  itself, only an alias to compare against, so choosing it is what makes the setup repeatable.
+* It is written under two spellings of the alias. EDC's Vault client URL-encodes the alias and the
+  HTTP layer then encodes the `%` again, so a lookup for `did:web:x-sts-client-secret` actually
+  resolves the key literally named `did%3Aweb%3Ax-sts-client-secret`.
+
+**The manual procedure** is below, and it is what to reach for in a local deployment or when
+debugging. It runs the very same scripts, from a workstation instead of from a Job, so the two paths
+cannot drift apart. (The integration tests are a third thing: they reimplement the steps in Java, in
+`it/src/test/java/.../IdentityHubHelper.java`, because they assert on the intermediate values.)
+
 ### Setup the consumer
 
 The consumer-identity and key-material needs to be registered in the identityhub, in order to participate in DCP-based DSP interactions. Since all OID4VC base flows do not rely on any propriatary extensions to the did-standard, they can also work with that.
 
-1. Get the private key(managed by cert-manager, used for signing the certificates) as JWK(to allow signing tokens in the Secure Token Service):
+The scripts are the ones the chart runs in-cluster - `charts/data-space-connector/scripts/` - so
+there is a single copy of this procedure rather than a shell version and a Kubernetes version that
+drift apart. They take their configuration from environment variables, which is all the Job does
+too.
+
+1. Point curl at the local proxy and the cluster CA, and open the identityhub's readiness port. Only
+   `/api/identity/*` and `/api/credentials/*` are exposed through the ingress, and the scripts wait
+   on `/api/check/readiness`:
+
 ```shell
-export CONSUMER_JWK=$(./doc/scripts/get-private-jwk-from-k8s-secret.sh consumer fancy-marketplace.biz-tls); echo $CONSUMER_JWK
+kubectl get secret ca-secret -n cert-manager -o jsonpath='{.data.tls\.crt}' | base64 -d > local-ca.crt
+export https_proxy=localhost:8888
+export CURL_CA_BUNDLE=./local-ca.crt
+kubectl port-forward -n consumer svc/identityhub-service 8081:8081 &
 ```
 
-2. Insert the key into Vault:
+2. Derive the JWK pair from the identity key that cert-manager manages:
+
 ```shell
-curl -k -X POST -x localhost:8888 'https://vault-fancy-marketplace.127.0.0.1.nip.io/v1/secret/data/key-1' \
-  --header 'X-Vault-Token: root' \
-  --data "$(jq -n --arg content "$CONSUMER_JWK" '{data:{content:$content}}')"
+export SCRIPT_DIR=./charts/data-space-connector/scripts
+export SHARED_DIR=$(mktemp -d)
+export DID=did:web:fancy-marketplace.biz
+export KEY_ALIAS=key-1
+export KEY_ID=${DID}#${KEY_ALIAS}
+
+kubectl get secret fancy-marketplace.biz-tls -n consumer -o jsonpath='{.data.tls\.key}' | base64 -d > ${SHARED_DIR}/identity.pem
+export IDENTITY_KEY_FILE=${SHARED_DIR}/identity.pem
+export IDENTITY_KEY_ALGORITHM=EC
+
+sh ${SCRIPT_DIR}/derive-key.sh
 ```
 
-3. Insert the participants identity and public key into identity hub.
+3. Store the key in Vault and register the participant context. This also repairs the identityhub
+   super-user credential and provisions the STS client secret, both of which the manual procedure
+   used to leave to chance; every step is idempotent, so re-running it is safe:
+
 ```shell
-export CONSUMER_PARTICIPANT=$(./doc/scripts/get-participant-create.sh "${CONSUMER_JWK}" did:web:fancy-marketplace.biz "https://identityhub-fancy-marketplace.127.0.0.1.nip.io" "key-1"); echo ${CONSUMER_PARTICIPANT} | jq .
-curl -k -x localhost:8888 -X POST \
-  'https://identityhub-management-fancy-marketplace.127.0.0.1.nip.io/api/identity/v1alpha/participants' \
-  --header 'Accept: */*' \
-  --header 'x-api-key: c3VwZXItdXNlcg==.random' \
-  --header 'Content-Type: application/json' \
-  --data "${CONSUMER_PARTICIPANT}"
+export VAULT_ADDR=https://vault-fancy-marketplace.127.0.0.1.nip.io
+export VAULT_TOKEN=root
+export IDENTITY_API=https://identityhub-management-fancy-marketplace.127.0.0.1.nip.io/api/identity/v1alpha
+export CREDENTIAL_SERVICE_URL=https://identityhub-fancy-marketplace.127.0.0.1.nip.io
+export READINESS_URL=http://localhost:8081/api/check/readiness
+export SUPERUSER_ID=super-user
+export API_KEY=random
+export STS_CLIENT_SECRET=$(openssl rand -hex 16)
+
+sh ${SCRIPT_DIR}/register.sh
 ```
 
 4. Check that the identity(e.g. did-document) is available:
@@ -125,29 +180,55 @@ curl -x localhost:8888 https://fancy-marketplace.biz/.well-known/did.json -k | j
 
 ### Setup the provider
 
-The provider indentity has to be prepared exactly the same way:
+The provider indentity has to be prepared exactly the same way, against its own namespace and hostnames.
 
-1. Get the private key(managed by cert-manager, used for signing the certificates) as JWK(to allow signing tokens in the Secure Token Service):
+The scripts are the ones the chart runs in-cluster - `charts/data-space-connector/scripts/` - so
+there is a single copy of this procedure rather than a shell version and a Kubernetes version that
+drift apart. They take their configuration from environment variables, which is all the Job does
+too.
+
+1. Point curl at the local proxy and the cluster CA, and open the identityhub's readiness port. Only
+   `/api/identity/*` and `/api/credentials/*` are exposed through the ingress, and the scripts wait
+   on `/api/check/readiness`:
+
 ```shell
-export PROVIDER_JWK=$(./doc/scripts/get-private-jwk-from-k8s-secret.sh provider mp-operations.org-tls); echo $PROVIDER_JWK
+kubectl get secret ca-secret -n cert-manager -o jsonpath='{.data.tls\.crt}' | base64 -d > local-ca.crt
+export https_proxy=localhost:8888
+export CURL_CA_BUNDLE=./local-ca.crt
+kubectl port-forward -n provider svc/identityhub-service 8081:8081 &
 ```
 
-2. Insert the key into Vault:
+2. Derive the JWK pair from the identity key that cert-manager manages:
+
 ```shell
-curl -x localhost:8888 -k -X POST 'https://vault-mp-operations.127.0.0.1.nip.io/v1/secret/data/key-1' \
-  --header 'X-Vault-Token: root' \
-  --data "$(jq -n --arg content "$PROVIDER_JWK" '{data:{content:$content}}')"
+export SCRIPT_DIR=./charts/data-space-connector/scripts
+export SHARED_DIR=$(mktemp -d)
+export DID=did:web:mp-operations.org
+export KEY_ALIAS=key-1
+export KEY_ID=${DID}#${KEY_ALIAS}
+
+kubectl get secret mp-operations.org-tls -n provider -o jsonpath='{.data.tls\.key}' | base64 -d > ${SHARED_DIR}/identity.pem
+export IDENTITY_KEY_FILE=${SHARED_DIR}/identity.pem
+export IDENTITY_KEY_ALGORITHM=EC
+
+sh ${SCRIPT_DIR}/derive-key.sh
 ```
 
-3. Insert the participants identity and public key into identity hub.
+3. Store the key in Vault and register the participant context. This also repairs the identityhub
+   super-user credential and provisions the STS client secret, both of which the manual procedure
+   used to leave to chance; every step is idempotent, so re-running it is safe:
+
 ```shell
-export PROVIDER_PARTICIPANT=$(./doc/scripts/get-participant-create.sh "${PROVIDER_JWK}" "did:web:mp-operations.org" "https://identityhub-mp-operations.127.0.0.1.nip.io" "key-1"); echo ${PROVIDER_PARTICIPANT} | jq .
-curl -x localhost:8888 -k -X POST \
-  'https://identityhub-management-mp-operations.127.0.0.1.nip.io/api/identity/v1alpha/participants' \
-  --header 'Accept: */*' \
-  --header 'x-api-key: c3VwZXItdXNlcg==.random' \
-  --header 'Content-Type: application/json' \
-  --data "${PROVIDER_PARTICIPANT}"
+export VAULT_ADDR=https://vault-mp-operations.127.0.0.1.nip.io
+export VAULT_TOKEN=root
+export IDENTITY_API=https://identityhub-management-mp-operations.127.0.0.1.nip.io/api/identity/v1alpha
+export CREDENTIAL_SERVICE_URL=https://identityhub-mp-operations.127.0.0.1.nip.io
+export READINESS_URL=http://localhost:8081/api/check/readiness
+export SUPERUSER_ID=super-user
+export API_KEY=random
+export STS_CLIENT_SECRET=$(openssl rand -hex 16)
+
+sh ${SCRIPT_DIR}/register.sh
 ```
 
 4. Check that the identity(e.g. did-document) is available:
@@ -159,6 +240,22 @@ curl -x localhost:8888 https://mp-operations.org/.well-known/did.json -k | jq .
 
 The demo deployment of the DSP is configured to require every participant to identify itself with a "MembershipCredential". In most use-cases, this credential will be issued by a central data-space authority. In order to keep the local deployment at managable size, we allow self-issuance of such credentials.
 The OID4VC based flows are automatically configured to get such credential in the local deployment, thus the Credential only needs to be issued for usage in DCP-based flows. The deployed [Tractus-X Identityhub](https://github.com/eclipse-tractusx/tractusx-identityhub) supports integration with compliant [Issuer Services](https://eclipse-dataspace-dcp.github.io/decentralized-claims-protocol/v1.0.1/#credential-issuance-protocol). However, we are reusing the [default issuer](./deployment-integration/local-deployment/LOCAL.MD#credentials-issuance-at-the-consumer) from the FIWARE Data Space Connector and insert the credential manually into the identity hub:
+
+> :warning: A credential inserted this way is a **copy**, and nothing in the steps below keeps it in
+> step with the one the issuer renews, so once it expires every DCP exchange starts failing with
+> nothing having changed in the cluster. Set `identityhub.credentialSync.enabled` and the chart
+> renders a sidecar in the identityhub pod that mirrors the Secret the vc-operator maintains, on
+> issuance and on every renewal - which makes the manual steps below a one-off illustration rather
+> than something to run. The sidecar only writes into a participant context that already exists, so
+> it goes together with `identityhub.bootstrap.enabled`; enabled on its own it just reports a 404
+> for the participant on every cycle.
+>
+> Note what this is *not*: the identityhub can fetch credentials by itself. It ships
+> `credential-watchdog`, which re-requests an expiring credential, and the
+> `POST /participants/{id}/credentials/request` endpoint that starts one. What the local deployment
+> lacks is a DCP-compliant [Issuer Service](https://eclipse-dataspace-dcp.github.io/decentralized-claims-protocol/v1.0.1/#credential-issuance-protocol)
+> to ask - the default issuer here speaks OID4VCI - which is why the credential arrives out of band
+> and the watchdog is off by default (`identityhub.credentialWatchdog.checkPeriodSeconds: 0`).
 
 #### Consumer
 
