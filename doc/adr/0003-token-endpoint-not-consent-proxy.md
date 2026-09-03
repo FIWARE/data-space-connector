@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-08-26
-**Applies to:** `FIWARE/data-space-connector`, `wistefan/consent-facade`
+**Applies to:** `FIWARE/data-space-connector`, `[consent-facade](https://github.com/SEAMWARE/consent-facade)`
 **Context doc:** [`../CONSENT_MANAGEMENT.md`](../CONSENT_MANAGEMENT.md)
 
 ## Context
