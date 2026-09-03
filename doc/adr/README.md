@@ -12,7 +12,7 @@ Short records of decisions that are expensive to reverse or easy to re-litigate.
 | [0005](0005-vc-based-participant-onboarding.md) | Onboard participants with a verifiable credential, not client credentials | Proposed | |
 
 ADRs 0002 and 0003 constrain the consent-facade's own API, so they are **mirrored** in
-`wistefan/consent-facade` under `doc/adr/` with the same numbers. This repository holds the
+[consent-facade](https://github.com/SEAMWARE/consent-facade) under `doc/adr/` with the same numbers. This repository holds the
 canonical copy; change it here first.
 
 Design document these belong to: [`../CONSENT_MANAGEMENT.md`](../CONSENT_MANAGEMENT.md).
