@@ -13,39 +13,7 @@ The decisions behind this integration are recorded as [ADRs](adr/README.md).
 
 Consent management spans **two namespaces**: a central **authority** (the trust-anchor - it knows all participants; in real deployments the consent-manager is operated by such a central authority, typically in its own environment) and the **provider** that serves the personal data.
 
-```mermaid
-flowchart LR
-  consumer([Data consumer])
-
-  subgraph authority["Authority — trust-anchor namespace (release: consent-authority)"]
-    direction TB
-    facade["APISIX facade<br/>/consent-manager/* — OID4VP (openid-connect), injects consent key"]
-    cm["consent-manager<br/>records &amp; receipts"]
-    cf["consent-facade<br/>TMForum → contract-service"]
-    mongo[("MongoDB<br/>replica set")]
-    facade --> cm
-    cm --- mongo
-    cm -->|CONTRACT_SERVICE_BASE_URL| cf
-  end
-
-  subgraph provider["Provider namespace"]
-    direction TB
-    apisix["Provider APISIX<br/>mp-data-service-consent route"]
-    opa["OPA / odrl-pap<br/>credential authz"]
-    plugin["consent-filter plugin<br/>consent gate, response phase"]
-    mptmf["mp-tmf-api<br/>OID4VP-protected"]
-    tmf["tm-forum-api"]
-    scorpio[("Scorpio broker<br/>personal data")]
-    apisix --> opa
-    apisix --> plugin
-    apisix --> scorpio
-    mptmf --> tmf
-  end
-
-  consumer -->|OID4VP access token| apisix
-  plugin -->|"two-call consent check<br/>(participant JWT)"| facade
-  cf -->|"OID4VP-authenticated reads<br/>(as did:web:dataspace-authority.org)"| mptmf
-```
+![Consent Architecture](./img/consent/arch.png)
 
 ### Components
 
@@ -56,23 +24,20 @@ flowchart LR
 
 The two releases share the namespace and reference each other by well-known name (the facade route reads the `consent-manager` secret and targets the `consent-manager` service; the facade pod mounts the did/credential secrets), so no cross-release value plumbing is needed.
 
-* **consent-manager** (`consent-manager:3000`, *trust-anchor release*) - stores and serves the consent records/receipts (Node/MongoDB) on a managed MongoDB replica set. It derives its privacy notices from the contract-service API the consent-facade serves (`CONTRACT_SERVICE_BASE_URL` → `consent-facade.trust-anchor.svc.cluster.local`). Run **unmodified**, from the published [`consent-manager` chart](https://github.com/FIWARE/helm-charts/tree/main/charts/consent-manager).
-* **APISIX facade route** (*consent-authority release*) - an internal APISIX in front of the consent-manager (route `/consent-manager/*`). It authenticates callers over **OID4VP** (`openid-connect`, `bearer_only`, against the authority verifier's JWKS) and **injects** the shared consent key server-side (read from the `consent-manager` secret), so callers present only their own access token and never hold the consent key. The gateway itself **is** published (ingress `consent-authority-apisix`, host `consent-manager.dataspace-authority.org`), so every route on it is internet-reachable and must carry its own authentication - see the `/consent-user` allow-list below.
-* **consent-facade** (`consent-facade:8080`, *trust-anchor release*) - a Micronaut service ([wistefan/consent-facade](https://github.com/wistefan/consent-facade)) that projects a provider's TMForum APIs (agreements, catalog, party) into the contract-service API the consent-manager consumes: bilateral contracts, catalog self-descriptions, and participant self-descriptions at `/participants/{tmforum-org-id}`. It runs at the authority so it can front **multiple providers**, authenticating its outbound TMForum reads to each provider's OID4VP-protected `mp-tmf-api` as `did:web:dataspace-authority.org`. Deployed from the published [`consent-facade` chart](https://github.com/FIWARE/helm-charts/tree/main/charts/consent-facade); a **second, provider-local instance** runs in the provider release, serving the owner-resolver's contract lookups and minting the provider's OID4VP tokens for the plugin.
-* **consent secret** (`consent-manager`, *trust-anchor release*) - the session/JWT/OAuth secrets and the shared consent key, created by the consent-manager chart; read by the consent-manager and, cross-release, by the APISIX facade route.
-* **direct subject access** (*optional*) - a **data subject** grants/reads consent for its *own* identity by authenticating to the consent-manager **directly** with its OID4VP access token - no facade, no `x-user-key`. The consent-manager (≥ 1.2.0) verifies external tokens whose `iss` is trusted (`consentManager.externalIdp`) via OIDC discovery + JWKS and maps the token `sub` (the holder DID) to a local `User`/`UserIdentifier`/`Participant`; the subject then uses the user-authenticated endpoints (`GET /v1/consents/me`, `POST /v1/consents/user`). The subject obtains its token from the authority verifier's **`consent-manager` service** (exposed at `https://verifier.dataspace-authority.org`). Because the verifier stamps its bare `server.host` (`https://verifier.dataspace-authority.org`) as the token `iss` but serves OIDC discovery only under a per-service path, `consentManager.externalIdp.discoveryPath` points the consent-manager at `/services/consent-manager/.well-known/openid-configuration` while the trusted `issuers` stays the bare host that matches the token. The participant `/consent-manager/*` facade route requires a token issued for the participant scope and would reject a subject token at the gateway, so subject tokens use dedicated authority-APISIX routes under **`/consent-user`** (no participant auth, no consent-key injection) that only proxy to the consent-manager - which verifies the OID4VP token itself. Because those routes apply **no gateway authentication**, they are an explicit **allow-list of (uri x method) pairs** whose handlers are `verifyUserJWT`-gated in the consent-manager, i.e. they authenticate the subject's own token: `GET /consents/me`, `GET /consents/me/{id}`, `GET /consents/exchanges/user`, `GET /users/me`, `POST /consents/user`, `DELETE /consents/{id}`, plus the deliberately-open `POST /users/signup` (self-service PDI signup, unauthenticated upstream). Everything else under `/consent-user` has no route and returns 404. The consent-manager stays unexposed (the NetworkPolicy still admits only APISIX); the subject reaches it at `https://consent-manager.dataspace-authority.org/consent-user/v1/*`.
-
-The consent-manager and consent-facade are isolated by a **NetworkPolicy** (trust-anchor chart) so they are reachable only through the authority APISIX (and the consent-manager↔facade contract-service link) - not by arbitrary in-cluster pods.
+* **consent-manager** - stores and serves the consent records/receipts (Node/MongoDB) on a managed MongoDB replica set. It derives its privacy notices from the contract-service API the consent-facade serves. Run from the published [`consent-manager` chart](https://github.com/FIWARE/helm-charts/tree/main/charts/consent-manager).
+* **APISIX facade route** - an internal APISIX in front of the consent-manager (route `/consent-manager/*`). It authenticates callers over **OID4VP** (`openid-connect`, `bearer_only`, against the authority verifier's JWKS) and **injects** the shared consent key server-side (read from the `consent-manager` secret), so callers present only their own access token and never hold the consent key. The gateway itself **is** public, so every route on it is internet-reachable and must carry its own authentication - see the `/consent-user` allow-list below.
+* **consent-facade** - a Micronaut service ([seamware/consent-facade](https://github.com/seamware/consent-facade)) that projects a provider's TMForum APIs (agreements, catalog, party) into the contract-service API the consent-manager consumes: bilateral contracts, catalog self-descriptions, and participant self-descriptions at `/participants/{tmforum-org-id}`. It runs at the authority so it can front **multiple providers**, authenticating its outbound TMForum reads to each provider's OID4VP-protected TMForum API under its own identity. Deployed from the published [`consent-facade` chart](https://github.com/FIWARE/helm-charts/tree/main/charts/consent-facade); a **second, provider-local instance** runs in the provider release, serving the owner-resolver's contract lookups and minting the provider's OID4VP tokens for the plugin.
 
 **Provider** (the [`k3s/consent-provider.yaml`](../k3s/consent-provider.yaml) overlay):
 
 * **consent-filter plugin** - an APISIX external plugin on the `mp-data-service-consent` route. It is the **canonical (and only) consent-enforcement path**: OPA/odrl-pap authorizes each request on the presented *credential*, and the plugin then gates on the data subject's *consent* by calling the authority's consent-manager (through the facade).
+* **consent-owner-resolver** - a service resolving the owner of the requested data, in order to correctly check its consent. Implementation should depend on the concrete use-case and data. Default implementation targets NGSI-LD Data, containing the data owner - [consent-owner-resolver](https://github.com/SEAMWARE/consent-owner-resolver)
 
 ### Trust & authentication
 
-* **Callers → consent-manager**: every `/consent-manager/*` call goes through the authority facade, which validates an **OID4VP access token** (`openid-connect`, `bearer_only`, against the authority verifier's JWKS, with `aud` checked explicitly) and injects the shared consent key downstream. The consent-manager then resolves the token subject to a `Participant` by its `did`. A participant obtains the token from **its own** consent-facade (`POST /internal/tokens`), which presents that participant's verifiable credential - so no component holds a participant secret, there is no `/participants/login`, and no APISIX consumer shares the consent-manager's `JWT_SECRET_KEY`. The details are in [Participant authentication over OID4VP](#participant-authentication-over-oid4vp) below.
+* **Callers → consent-manager**: every `/consent-manager/*` call goes through the APISIX Gateway, which validates an **OID4VP access token** (`openid-connect`, `bearer_only`, against the authority verifier's JWKS, with `aud` checked explicitly) and injects the shared consent key downstream. The consent-manager then resolves the token subject to a `Participant` by its `did`. A participant obtains the token from **its own** consent-facade (`POST /internal/tokens`), which presents that participant's verifiable credential - so no component holds a participant secret, there is no `/participants/login`, and no APISIX consumer shares the consent-manager's `JWT_SECRET_KEY`. The details are in [Participant authentication over OID4VP](#participant-authentication-over-oid4vp) below.
 * **consent-facade → provider TMForum**: the facade authenticates its reads to the provider's OID4VP-protected `mp-tmf-api` by presenting a verifiable credential (holder `did:web:dataspace-authority.org`, an `OperatorCredential`) over OID4VP; the provider's verifier issues an access token, and the request passes the route's `openid-connect` (authn) and OPA (authz) checks.
-* **Consumer → personal data**: two gates on the `mp-data-service-consent` route - OPA authorizes the credential, then the consent-filter plugin (in the response phase) gates on consent.
+* **Consumer → personal data**: two gates on the data route - OPA authorizes the credential, then the consent-filter plugin (in the response phase) gates on consent.
 * **Subject → consent-manager**: the `/consent-user` routes carry **no gateway authentication** by design - the
   consent-manager verifies the subject's OID4VP token itself. They are therefore an **allow-list**, not a prefix: each route
   pins both `uris` and `methods`, and every allow-listed handler is `verifyUserJWT`-gated (the one exception, `POST
@@ -99,34 +64,14 @@ presents the participant credential and hands the consent-plugin a short-lived a
 not proxy consent traffic - the plugin keeps talking to the consent-manager directly, so the facade is
 on the token-refresh path only, not on every request.
 
-```mermaid
-flowchart LR
-  subgraph provider["provider namespace"]
-    plugin["consent-plugin<br/>(APISIX ext-plugin)"]
-    facade["consent-facade (local)<br/>oid4vp-client-lib<br/>holder did:web:mp-operations.org"]
-  end
-  subgraph authority["trust-anchor namespace"]
-    gw["authority APISIX<br/>/consent-manager/*"]
-    ver["vcverifier<br/>service: consent-manager<br/>scope: participant"]
-    cm["consent-manager"]
-  end
+![Check Flow](./img/consent/flow.png)
 
-  plugin -->|"1. POST /internal/tokens {audience}"| facade
-  facade -->|"2. OID4VP: vp_token grant"| ver
-  ver -->|"3. access_token"| facade
-  facade -->|"4. access_token"| plugin
-  plugin -->|"5. consent check, Bearer access_token"| gw
-  gw -->|"6. verify (openid-connect, jwks) + inject consent key"| cm
-```
-
-Steps 1-4 happen only on a cache miss (token expiry); step 5 is every request.
 
 #### The facade's token endpoint
 
-Declared in its own spec, `api/consent-facade-internal.yaml`, which holds the facade's internal
-surface (this endpoint plus the `/providers` admin API) and is deliberately separate from
-`api/consent-facade.yaml` - the generated contract *towards the consent-manager*. Both specs generate
-Micronaut server interfaces; the internal one into `org.fiware.consent.internal.api`.
+Declared in its own spec, [api/consent-facade-internal.yaml](https://github.com/SEAMWARE/consent-facade/blob/main/api/consent-facade-internal.yaml),
+which holds the facade's internal surface (this endpoint plus the `/providers` admin API) and is deliberately separate from
+[api/consent-facade.yaml](https://github.com/SEAMWARE/consent-facade/blob/main/api/consent-facade.yaml) - the generated contract *towards the consent-manager*. Both specs generate Micronaut server interfaces; the internal one into `org.fiware.consent.internal.api`.
 
 ```
 POST /internal/tokens
@@ -163,7 +108,7 @@ returns a `404` the OID4VP client tries to parse as the configuration document.
 #### The verifier: one service, a scope per credential
 
 Subjects and participants authenticate to the **same relying party** - the consent-manager. They
-present different credentials (`UserCredential` vs `MembershipCredential`), but a different
+present different credentials, but a different
 credential is a different *policy*, not a different audience: the verifier stamps its **service id**
 as the token's `aud`. The credential policy is therefore selected by **scope** on the single
 `consent-manager` service - the pattern `k3s/provider.yaml` already uses for `data-service`:
@@ -186,15 +131,6 @@ as the token's `aud`. The credential policy is therefore selected by **scope** o
 
 Both scopes issue tokens with `aud: consent-manager`, so the consent-manager keeps a single expected
 audience and a single `discoveryPath`.
-
-The participant presents a **`MembershipCredential`** - the one its own keycloak already issues
-(`vcCredentials` → `credentialType: membership-credential`, secret `vc-fdsc-edc-credential`,
-`issuerDid: did:web:mp-operations.org`). "Member of this dataspace" is the claim that matches "I am a
-participant", and it needs no additional issuer scope or credential pipeline.
-
-> :warning: The provider mints that credential with `holderBinding.enabled: false`, so it carries no
-> confirmation claim: whoever holds the JWT can present it. The credential file must therefore be
-> treated as a secret; enabling holder binding is the hardening step for a real deployment.
 
 #### The gateway route
 
@@ -219,53 +155,17 @@ plugins:
         x-visionstrust-consent-key: "$env://CONSENT_KEY"
 ```
 
-The `proxy_opts` are load-bearing in the local cluster: the discovery document's `issuer` and
-`jwks_uri` are the verifier's **public** host (that host is the token's `iss`), CoreDNS only rewrites
-`*.nip.io`, so without the forward proxy every request fails with
-`failed to query the DNS server: name error` and the gateway answers `401`.
-
 There is deliberately **no `/participants/login` route**: nothing issues consent-manager-signed
 participant tokens, and that endpoint is an unauthenticated credential exchange.
 
 #### Resolving the token to a participant
 
 The consent-manager verifies externally-issued OID4VP tokens (`consentManager.externalIdp`) and maps
-the verified subject to a local identity - the same mechanism the data-subject path uses.
-`mapExternalSubjectToLocal` resolves the subject against `Participant.findOne({ did: subject })`
-alongside the `UserIdentifier`/`User` lookup, and `verifyParticipantJWT` requires that a participant
-was found.
-
-Because `did` is the key an external token authenticates through, a DID must not be claimable twice -
-two participants sharing one would make that lookup arbitrary, i.e. one participant authenticated as
-another. `registerParticipant` guards it at write time with a `findOne` + `409`, beside the existing
-`clientID` check, for any non-empty `did` (`""` is the field's default and is legitimately shared).
-`did` cannot be changed afterwards, so one check covers every path.
+the verified subject to a local identity. 
 
 A shared `aud` does **not** let a subject act as a participant: the role follows from the local record
 the token's subject resolves to, so a subject token only passes participant middleware if its DID is
 also registered as a `Participant.did`, and vice versa.
-
-#### NetworkPolicy
-
-The provider-side services are unauthenticated and rely on not being reachable, so reachability is
-the control. Two policies guard them:
-
-| Policy | Selects | Accepts on 8080 | Declared in |
-|---|---|---|---|
-| `consent-facade-ingress` | `app.kubernetes.io/name: consent-facade` | the APISIX pods (the plugin, for `POST /internal/tokens`) and the owner-resolver (contract lookup) | [`k3s/consent-provider.yaml`](../k3s/consent-provider.yaml) - which callers are legitimate is a deployment decision, so the facade chart ships no policy of its own |
-| `owner-resolver` | `app.kubernetes.io/name: owner-resolver` | the APISIX pods | the `consent-owner-resolver` chart (`networkPolicy.allowedClients`) |
-
-The consent-plugin runs **inside** the APISIX pod as an ext-plugin runner, so its traffic is selected
-by the apisix labels. A `from` entry with only a `podSelector` means "this namespace", which is right
-here - every legitimate caller is provider-local. Selecting a pod makes ingress default-deny for it.
-
-A NetworkPolicy is L3/L4 and **cannot** scope to `/internal/**`: it admits the plugin to the facade's
-port, not to a path. `kubectl port-forward` is unaffected either way - it is proxied by the kubelet,
-so the traffic originates from the node rather than a pod and the selectors never match it.
-
-The detailed component diagram (drawio source [`consent.drawio`](img/consent/consent.drawio)):
-
-![consent architecture](./img/consent/consent.png)
 
 ### Known limitations
 
@@ -275,10 +175,10 @@ Stated explicitly so the integration is not mistaken for a complete hardening:
   subject at any other participant: `/users/identifier/search` and `/users/search` are gated by
   `consentKeyCheck` alone, which only compares one global secret. OID4VP makes the caller's identity
   verified and available at the gateway, which is the precondition for scoping those endpoints, but
-  the scoping itself is a consent-manager change.
+  the scoping itself is a consent-manager change - follow the open issues [consent-manager #34](https://github.com/Prometheus-X-association/consent-manager/issues/34) and [consent-manager #36](https://github.com/Prometheus-X-association/consent-manager/issues/36)
 * **`x-user-key` is a bearer-equivalent** validated by existence only: `verifyUserKey` accepts any
   `UserIdentifier` id that resolves in the database - no signature, no expiry, no binding to the
-  caller. Anything that can read one can act as that subject on every `verifyUserKey` endpoint.
+  caller. Anything that can read one can act as that subject on every `verifyUserKey` endpoint - follow the open issues [consent-manager #34](https://github.com/Prometheus-X-association/consent-manager/issues/34) and [consent-manager #36](https://github.com/Prometheus-X-association/consent-manager/issues/36)
 * **Onboarding asserts identity rather than proving it.** `POST /participants` has no authentication,
   so anyone who can reach it may onboard a participant claiming any `did`, `legalName` and
   `selfDescriptionURL`. The `did` uniqueness guard stops two participants *sharing* a DID, but not the
@@ -297,27 +197,39 @@ Stated explicitly so the integration is not mistaken for a complete hardening:
 
 ## Flows
 
-The [Demo](#demo-consent-gated-access-to-personal-data) below walks these through as executable steps.
+The [Demo](#demo-consent-gated-access-to-personal-data) below walks the *subject-authenticated* grant
+and the data access through as executable steps.
 
-### Granting consent
+### Granting consent (a participant, on the subject's behalf)
 
-A participant (acting for the data subject) records a granted consent. Every consent-manager call goes through the authority facade with a participant JWT; the privacy notice is projected by the consent-facade from a TM Forum agreement.
+This is the **alternative** path: a participant records the consent *for* the subject with its own
+participant token plus the subject's `x-user-key`. Both demos use the
+[subject-authenticated grant](#subject-authenticated-consent-verifiable-credential) below instead,
+which is the primary path - it takes the acting user from the subject's own token and needs neither
+the consent key nor a consumer-side registration.
+
+The consent-manager calls here go through the authority facade with a participant JWT (the facade
+injects the consent key the `x-user-key` endpoints require); the privacy notice is projected by the
+consent-facade from a TM Forum agreement. Participant **onboarding** is the exception - `POST
+/participants` is unauthenticated and is called directly on the consent-manager (step 3a of the
+[demo](#demo-consent-gated-access-to-personal-data)), so it is not shown here.
 
 ```mermaid
 sequenceDiagram
-  actor op as Operator (subject + provider)
-  participant own as Provider's own consent-facade
+  actor op as Operator (acts as both participants)
+  participant own as Each participant's own consent-facade
   participant fac as Authority APISIX facade
   participant cm as consent-manager
-  participant cf as consent-facade
+  participant cf as consent-facade (authority)
   participant tmf as Provider TMForum (mp-tmf-api)
 
-  op->>own: POST /internal/tokens {audience}
-  own-->>op: OID4VP access token
+  op->>own: POST /internal/tokens {audience} — once per participant
+  own-->>op: OID4VP access token (provider / consumer)
   op->>tmf: seed agreement (offering, spec, purpose)
-  op->>fac: POST /users/register (Bearer) — subject on both sides
+  op->>fac: POST /users/register (provider Bearer)
+  op->>fac: POST /users/register (consumer Bearer) — giveConsent resolves the<br/>acting user only when BOTH identifiers exist
   op->>fac: POST /users/identifier/search (Bearer) → x-user-key
-  op->>fac: GET /consents/{did}/{providerSD}/{consumerSD} (Bearer + x-user-key)
+  op->>fac: GET /consents/{did}/{base64 providerSD}/{base64 consumerSD} (Bearer + x-user-key)
   fac->>cm: forward (consent key injected)
   cm->>cf: fetch bilateral contract / privacy notice
   cf->>tmf: OID4VP-authenticated reads (agreement → offering → spec)
@@ -343,7 +255,7 @@ sequenceDiagram
   ver-->>sub: access token (iss = https://verifier.dataspace-authority.org, aud = consent-manager, sub = holder DID)
   sub->>gw: POST /consent-user/v1/consents/user (Bearer token, notice + data)
   gw->>cm: proxy (no participant auth, no consent-key) -> POST /v1/consents/user
-  cm->>cm: iss trusted -> verify via JWKS; map sub (DID) -> local User
+  cm->>cm: iss trusted, verify via JWKS, map sub (DID) to local User
   cm->>ver: (cached) OIDC discovery (per-service path) + JWKS
   cm-->>sub: 201 - consent receipt
 ```
