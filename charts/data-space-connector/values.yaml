@@ -3450,12 +3450,3 @@ consent-owner-resolver:
         items: ""
         itemsIsArray: false
         owner: /dataOwner/value
-  ## only the consent enforcement point may ask who owns a piece of data
-  networkPolicy:
-    # -- restrict who may call /resolve
-    enabled: false
-    # -- the provider APISIX, which runs the consent-plugin
-    allowedClients:
-      - podSelector:
-          matchLabels:
-            app.kubernetes.io/name: apisix
