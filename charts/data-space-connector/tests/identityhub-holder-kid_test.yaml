@@ -1,0 +1,77 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/helm-unittest/helm-unittest/main/schema/helm-testsuite.json
+#
+# ---------------------------------------------------------------------------
+# Helm-unittest suite for the holder key id cross-check.
+#
+# fdsc-edc is a separate chart and cannot include this chart's helpers, so the
+# kid the connector signs its OID4VP presentations with is set by hand and has
+# to be kept in step with the key id the identityhub publishes in the DID
+# document. A wrong one renders perfectly valid manifests and only surfaces as
+# a counterparty rejecting every presentation, so it is caught at template time.
+#
+# The check lives in the `dsc.identityhub.assertHolderKid` helper and is invoked
+# from identityhub-cm.yaml, which is why that is the template under test here.
+# ---------------------------------------------------------------------------
+suite: IdentityHub holder key id
+templates:
+  - templates/identityhub-cm.yaml
+tests:
+  # ==========================================================================
+  # The key id the connector signs with has to match the one published here
+  # ==========================================================================
+
+  # fdsc-edc is a separate chart and cannot reach this chart's helpers, so its
+  # holder kid is set by hand. A wrong one renders perfectly well and only shows
+  # up as a counterparty rejecting every presentation, which is why it is caught
+  # at template time instead.
+  - it: should reject a holder kid that disagrees with the published key id
+    set:
+      identityhub: &kidBase
+        enabled: true
+        endpoints:
+          identity:
+            authKeyAlias: super-user-apikey
+        superuser:
+          key: abc
+        bootstrap:
+          enabled: true
+          did: did:web:example.org
+          credentialServiceUrl: https://example.org
+          identityKey:
+            secretName: example.org-tls
+          stsClientSecret:
+            existingSecret: identityhub-secret
+      fdsc-edc.common.config.oid4vp.holder.kid: did:web:example.org
+    asserts:
+      # The bare DID without the `#key-1` fragment is the mistake that actually
+      # happened, so that is the one asserted on.
+      - failedTemplate:
+          errorPattern: 'fdsc-edc.common.config.oid4vp.holder.kid is "did:web:example.org" but the identityhub publishes "did:web:example.org#key-1"'
+
+  # A per-deployment block overrides common, so checking only common would pass
+  # a connector that signs with something else entirely.
+  - it: should reject a per-deployment holder kid that disagrees
+    set:
+      identityhub: *kidBase
+      fdsc-edc.common.config.oid4vp.holder.kid: did:web:example.org#key-1
+      fdsc-edc.deployment.oid4vc.config.oid4vp.holder.kid: did:web:other.org#key-1
+    asserts:
+      - failedTemplate:
+          errorPattern: 'fdsc-edc.deployment.oid4vc.config.oid4vp.holder.kid is "did:web:other.org#key-1"'
+
+  - it: should accept a holder kid that matches
+    set:
+      identityhub: *kidBase
+      fdsc-edc.common.config.oid4vp.holder.kid: did:web:example.org#key-1
+    asserts:
+      - hasDocuments:
+          count: 1
+
+  # An unset kid is a valid configuration - a connector that presents nothing
+  # does not need one - so the guard must not turn the default into an error.
+  - it: should accept an unset holder kid
+    set:
+      identityhub: *kidBase
+    asserts:
+      - hasDocuments:
+          count: 1
