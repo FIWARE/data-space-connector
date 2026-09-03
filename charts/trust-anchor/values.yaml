@@ -146,96 +146,6 @@ consent-facade:
   # `<release>-consent-facade`): the consent-manager, the provider's consent-plugin and
   # the owner-resolver all address it by that name.
   fullnameOverride: consent-facade
-  ## the TM Forum api the facade projects
-  tmForum:
-    # -- base url of the TM Forum api
-    url: http://tm-forum-api-svc:8080
-  ## the OID4VP wiring the DSC needs: the facade authenticates its outbound TM Forum
-  ## reads by presenting a credential issued by the dataspace authority.
-  oid4vp:
-    # -- authenticate the outbound TM Forum reads over OID4VP
-    enabled: false
-    # -- the verifier SERVICE id registered for the DSC TM Forum api (the verifier looks
-    # the service up by client_id; this is not the holder DID)
-    clientId: "tmf-api"
-    # -- scopes requested for TM Forum access
-    scopes:
-      - default
-    # -- trust anchors added on top of the system truststore for client identification;
-    # the imported dsc-ca is mounted here
-    trustAnchors:
-      - /etc/ssl/cacert.pem
-    # -- folder the credentials are projected into
-    credentialsFolder: /credential-repo
-    holder:
-      # -- the holder DID presented in the verifiable presentation
-      id: ""
-      # -- algorithm the presentation is signed with
-      signatureAlgorithm: ECDH-ES
-    signingKey:
-      # -- the cert-manager tls secret backing the holder did:web. Its `tls.key` is the
-      # holder signing key and its `ca.crt` the dsc-ca (see `truststore`).
-      secretName: ""
-      # -- image used to convert the key from SEC1 to PKCS#8
-      convertImage: alpine/openssl:3.5.5
-    # -- the credential secrets projected into `credentialsFolder`, issued by the
-    # authority's keycloak via the vc-operator
-    credentials:
-      - secretName: vc-operator-credential
-        secretKey: credential
-        fileName: operator-credential.jwt
-    proxy:
-      # -- route the OID4VP flow through a forward proxy. Needed in-cluster to reach a
-      # verifier's *external* ingress host, which otherwise resolves to 127.0.0.1.
-      enabled: false
-      # -- host of the forward proxy
-      host: squid-proxy.infra.svc.cluster.local
-      # -- port of the forward proxy
-      port: 8888
-      # -- send the TM Forum clients through the proxy too. Correct only when the TM Forum
-      # api is external; a cluster-internal Service name cannot be resolved by the proxy.
-      tmForumClients: true
-  ## the dsc-ca, so the facade trusts the self-signed DSC ingress certificates
-  truststore:
-    # -- import the dsc-ca into the JVM truststore
-    enabled: false
-    caSecret:
-      # -- secret holding the CA. Usually the same cert-manager tls secret as
-      # `oid4vp.signingKey.secretName`.
-      name: ""
-  deployment:
-    # -- the image runs as uid 185 (UBI openjdk)
-    podSecurityContext:
-      seccompProfile:
-        type: RuntimeDefault
-      runAsNonRoot: true
-      runAsUser: 185
-      runAsGroup: 0
-    # -- container security context
-    securityContext:
-      capabilities:
-        drop:
-          - ALL
-      readOnlyRootFilesystem: true
-      allowPrivilegeEscalation: false
-      runAsNonRoot: true
-      runAsUser: 185
-    # -- cpu/memory resources
-    resources:
-      limits:
-        cpu: 500m
-        memory: 512Mi
-      requests:
-        cpu: 100m
-        memory: 256Mi
-    image:
-      # -- image tag. 0.0.4+ serves POST /internal/tokens, the OID4VP token service the
-      # consent-plugin uses instead of participant client credentials. 0.0.5+ makes each
-      # token target's OIDC discovery path configurable (a VCVerifier serves discovery per
-      # service, not at the host root).
-      tag: "0.0.14"
-      # -- image pull policy
-      pullPolicy: Always
 
 ## The consent-manager, deployed from its own published FIWARE chart
 ## (oci://quay.io/fiware/helm-charts/consent-manager). Only the keys the trust-anchor
@@ -272,9 +182,3 @@ consent-manager:
         name: mongodb-consent-password
         # -- key of the password inside it
         key: password
-  deployment:
-    image:
-      # -- image tag. Carries the external-JWKS feature, the configurable discovery path,
-      # and the `did` uniqueness guard that makes a participant's DID a safe lookup key for
-      # externally issued tokens.
-      tag: "0.0.6"
