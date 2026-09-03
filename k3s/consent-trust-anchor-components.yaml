@@ -122,17 +122,65 @@ consent-facade:
     # dataspace-authority.org-tls and vc-operator-credential secrets, both created by the
     # consent-authority release in this namespace.
     enabled: true
+    # the verifier SERVICE id registered for the DSC TM Forum api (the verifier looks the
+    # service up by client_id; this is not the holder DID)
+    clientId: "tmf-api"
+    # scopes requested for TM Forum access
+    scopes:
+      - default
+    # trust anchors for client identification (the verifier's chain). The dsc-ca is mounted
+    # as a PEM at this path by deployment.additionalVolumeMounts below.
+    trustAnchors:
+      - /etc/ssl/cacert.pem
+    # folder the credential is projected into
+    credentialsFolder: /credential-repo
     holder:
       id: did:web:dataspace-authority.org
+      # the algorithm the verifiable presentation is signed with
+      signatureAlgorithm: ECDH-ES
     signingKey:
       secretName: dataspace-authority.org-tls
+    # the OperatorCredential the authority's keycloak issues via the vc-operator; the
+    # provider's odrl-pap grants /tmf-api read to holders of exactly this credential type
+    # (see the authorize-facade-tmf-read Job in k3s/consent-provider.yaml)
+    credentials:
+      - secretName: vc-operator-credential
+        secretKey: credential
+        fileName: operator-credential.jwt
     proxy:
       enabled: true
+      host: squid-proxy.infra.svc.cluster.local
+      port: 8888
+      # this facade reads the provider's EXTERNAL mp-tmf-api ingress, which only resolves
+      # through the proxy - so the TM Forum clients go through it too
+      tmForumClients: true
   truststore:
     enabled: true
     caSecret:
       name: dataspace-authority.org-tls
   deployment:
+    # the image runs as uid 185 (UBI openjdk)
+    podSecurityContext:
+      seccompProfile:
+        type: RuntimeDefault
+      runAsNonRoot: true
+      runAsUser: 185
+      runAsGroup: 0
+    securityContext:
+      capabilities:
+        drop:
+          - ALL
+      readOnlyRootFilesystem: true
+      allowPrivilegeEscalation: false
+      runAsNonRoot: true
+      runAsUser: 185
+    resources:
+      limits:
+        cpu: 500m
+        memory: 512Mi
+      requests:
+        cpu: 100m
+        memory: 256Mi
     # The dsc-ca as a PEM file at the path `oid4vp.trustAnchors` names. The chart's
     # `truststore` imports the same CA into the JVM truststore (for every TLS client),
     # while OID4VP client identification reads it as a PEM from this path.

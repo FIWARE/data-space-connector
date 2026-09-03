@@ -257,8 +257,21 @@ consent-facade:
   ## an access token for the authority's consent-manager
   oid4vp:
     enabled: true
+    # the verifier SERVICE id registered for the DSC TM Forum api (not the holder DID)
+    clientId: "tmf-api"
+    # scopes requested for TM Forum access
+    scopes:
+      - default
+    # trust anchors for client identification (the verifier's chain). The dsc-ca is mounted
+    # as a PEM at this path by deployment.additionalVolumeMounts below.
+    trustAnchors:
+      - /etc/ssl/cacert.pem
+    # folder the credential is projected into
+    credentialsFolder: /credential-repo
     holder:
       id: did:web:mp-operations.org
+      # the algorithm the verifiable presentation is signed with
+      signatureAlgorithm: ECDH-ES
     signingKey:
       secretName: mp-operations.org-tls
     # The credential this participant presents: the MembershipCredential its own keycloak
@@ -278,6 +291,8 @@ consent-facade:
         discoveryPath: /services/consent-manager
     proxy:
       enabled: true
+      host: squid-proxy.infra.svc.cluster.local
+      port: 8888
       # the TM Forum api this instance reads is an in-namespace Service, which the proxy
       # cannot resolve - only the OID4VP flow goes through it
       tmForumClients: false
@@ -286,6 +301,28 @@ consent-facade:
     caSecret:
       name: mp-operations.org-tls
   deployment:
+    # the image runs as uid 185 (UBI openjdk)
+    podSecurityContext:
+      seccompProfile:
+        type: RuntimeDefault
+      runAsNonRoot: true
+      runAsUser: 185
+      runAsGroup: 0
+    securityContext:
+      capabilities:
+        drop:
+          - ALL
+      readOnlyRootFilesystem: true
+      allowPrivilegeEscalation: false
+      runAsNonRoot: true
+      runAsUser: 185
+    resources:
+      limits:
+        cpu: 500m
+        memory: 512Mi
+      requests:
+        cpu: 100m
+        memory: 256Mi
     # The dsc-ca as a PEM file at the path `oid4vp.trustAnchors` names. The chart's
     # `truststore` imports the same CA into the JVM truststore (for every TLS client),
     # while OID4VP client identification reads it as a PEM from this path.
