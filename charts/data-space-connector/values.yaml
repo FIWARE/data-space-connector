@@ -53,6 +53,18 @@ decentralizedIam:
       enabled: true
       # -- allows to set a fixed name for the services
       fullnameOverride: trusted-issuers-list
+      deployment:
+        image:
+          # -- contract-management grants credentials under the id of the order
+          # that granted them, which requires trusted-issuers-list >= 0.9.1.
+          # The chart chain does not deliver it yet: decentralized-iam 2.1.20
+          # depends on vc-authentication 1.3.6, which still pins the
+          # trusted-issuers-list chart 0.18.4 (app 0.8.1). Against that
+          # version the scope-addressed endpoints answer 404, so a grant
+          # fails and a revocation silently does nothing.
+          # -- REMOVE this override once decentralized-iam ships
+          # vc-authentication with the trusted-issuers-list chart >= 0.18.7.
+          tag: "0.9.1"
       # -- connection to the database
       database:
         # -- should persistence be used?
@@ -1774,9 +1786,7 @@ contract-management:
   # addition to the ProductSpecification itself. Off by default: it adds
   # one TMForum read per referenced ServiceSpecification to the
   # activation of an order, and it changes which configuration an order
-  # activates. Requires the contract-management chart >= 3.5.33 - an
-  # older subchart does not render the setting, so it has no effect
-  # there.
+  # activates.
   enableSpecificationComposition: false
   # -- how many specification levels below the ordered
   # ProductSpecification are resolved when composition is enabled. The
