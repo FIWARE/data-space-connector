@@ -1,0 +1,340 @@
+# ---------------------------------------------------------------------------
+# Consent management overlay.
+#
+# Layered on top of k3s/provider.yaml by the `consent` maven profile
+# (`-f k3s/provider.yaml -f k3s/consent-provider.yaml`), exactly the way
+# k3s/dsp-provider.yaml layers the DSP scenario. It carries the consent
+# *components* and their APISIX wiring so consent is opt-in:
+#   * consent-manager + consent-facade (consentManagement.*)
+#   * the external Go consent-plugin runner attached to APISIX
+#     (odrlAuthorization.apisix.apisix.extPlugin + the init container that
+#      stages the runner binary + its shared volume)
+#
+# NOTE: the `mp-data-service-consent` route and its ingress host stay in
+# provider.yaml (base), just like the DSP scenario's routes/hosts do. helm
+# REPLACES list values, so a single route/ingress entry cannot be overlaid
+# onto the shared `routes`/`ingress.hosts` lists without duplicating them.
+# That route is inert until this overlay enables the plugin runner and the
+# consent-manager it calls.
+# ---------------------------------------------------------------------------
+
+decentralizedIam:
+  odrlAuthorization:
+    apisix:
+      apisix:
+        # external plugin runner (consent-plugin), started by APISIX as a subprocess.
+        # It holds NO participant credential: it asks the provider-local consent-facade
+        # for a short-lived OID4VP access token (token_service_url on the route config),
+        # so there is no secret to smuggle into the runner's fixed environment and the
+        # launch command is a plain exec.
+        extPlugin:
+          enabled: true
+          cmd:
+            - /ext-plugin/go-runner
+      # consent-plugin (external Go plugin) run by APISIX as a subprocess. The
+      # statically-linked runner binary is staged into a shared volume by an init
+      # container from the plugin image; APISIX spawns it and manages the socket.
+      extraInitContainers:
+        - name: install-consent-plugin
+          # 0.0.5 replaces participant client credentials with the OID4VP token service
+          # (token_service_url): the plugin no longer logs in and holds no secret.
+          # 0.0.12 also matches the consumer against the consent's `recipients[0]`: on a
+          # `?receipt=true` record the consent-manager names the consumer only as an
+          # internal id, so matching consumer/dataConsumer alone denied valid consents.
+          image: quay.io/seamware/consent-plugin:0.0.12
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "-c", "cp /app/go-runner /ext-plugin/go-runner"]
+          volumeMounts:
+            - name: ext-plugin-bin
+              mountPath: /ext-plugin
+      extraVolumeMounts:
+        - name: ext-plugin-bin
+          mountPath: /ext-plugin
+      # NOTE: helm REPLACES list values, so the odrl-authorization defaults
+      # (tpp-policy + opa-config, mounted by the OPA sidecar) are re-included here
+      # alongside the ext-plugin binary volume.
+      extraVolumes:
+        - name: tpp-policy
+          configMap:
+            name: tpp-policy
+        - name: opa-config
+          configMap:
+            name: opa-config
+        - name: ext-plugin-bin
+          emptyDir: {}
+
+# consent management (ISO/IEC TS 27560) - consent-manager + consent-facade.
+# The facade reads the provider's tm-forum-api; mongo uses the managed replica set.
+consentManagement:
+  enabled: true
+  # The consent-manager runs at the trust-anchor (the central authority, see
+  # k3s/consent-trust-anchor.yaml) and is deployed from its own chart there, so the
+  # provider does not configure it at all. Consent is enforced here solely by the APISIX
+  # consent-filter plugin (canonical path): there is no odrl-pap PIP wiring, and the
+  # provider does not hold the consent key (the consent-manager and its facade do).
+  # The consent-facade now runs at the AUTHORITY (k3s/consent-trust-anchor.yaml),
+  # not the provider: it is built to front multiple providers and authenticates to
+  # each provider's OID4VP-protected TM Forum api (mp-tmf-api) as the dataspace
+  # authority (did:web:dataspace-authority.org). The provider therefore no longer
+  # deploys it; it keeps only the APISIX consent-plugin wiring below.
+  consentFacade:
+    enabled: false
+extraManifests:
+  # --- authorize the consent-facade's cross-org reads at the odrl-pap -----------
+  # The facade (at the authority) authenticates to mp-tmf-api over OID4VP and passes
+  # the openid-connect check, but the route's OPA/ODRL layer default-denies without a
+  # matching policy. This registers an ODRL policy permitting *read* of /tmf-api to any
+  # holder of an OperatorCredential (the credential the authority presents), so the
+  # facade can project the provider's TM Forum data. Idempotent (re-POST is tolerated).
+  - |
+    apiVersion: batch/v1
+    kind: Job
+    metadata:
+      name: {{ .Release.Name }}-authorize-facade-tmf-read
+      namespace: {{ .Release.Namespace }}
+    spec:
+      ttlSecondsAfterFinished: 86400
+      backoffLimit: 10
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: register-policy
+              image: curlimages/curl:8.18.0
+              command: ["/bin/sh", "-ec"]
+              args:
+                - |
+                  echo "waiting for odrl-pap..."
+                  until curl -sf http://odrl-pap:8080/policy > /dev/null; do sleep 5; done
+                  cat > /tmp/policy.json <<'JSON'
+                  {"@context":{"odrl":"http://www.w3.org/ns/odrl/2/","xsd":"http://www.w3.org/2001/XMLSchema#"},"@id":"https://mp-operation.org/policy/authority/tmfApiRead","odrl:uid":"https://mp-operation.org/policy/authority/tmfApiRead","@type":"odrl:Policy","odrl:permission":{"odrl:assigner":{"@id":"https://www.mp-operation.org/"},"odrl:target":{"@type":"odrl:AssetCollection","odrl:source":"urn:asset","odrl:refinement":[{"@type":"odrl:Constraint","odrl:leftOperand":"http:path","odrl:operator":{"@id":"http:isInPath"},"odrl:rightOperand":"/tmf-api"}]},"odrl:assignee":{"@type":"odrl:PartyCollection","odrl:source":"urn:user","odrl:refinement":{"@type":"odrl:Constraint","odrl:leftOperand":{"@id":"vc:type"},"odrl:operator":{"@id":"odrl:hasPart"},"odrl:rightOperand":{"@value":"OperatorCredential","@type":"xsd:string"}}},"odrl:action":{"@id":"odrl:read"}}}
+                  JSON
+                  code=$(curl -s -o /tmp/out -w '%{http_code}' -X POST http://odrl-pap:8080/policy -H 'Content-Type: application/json' --data @/tmp/policy.json)
+                  echo "odrl-pap POST /policy -> HTTP $code"; cat /tmp/out
+                  # 2xx = created; a conflict on re-run is fine (policy already present)
+                  case "$code" in 2*) exit 0;; 409) echo "already registered"; exit 0;; *) exit 1;; esac
+  # --- isolate the provider-local consent-facade --------------------------------
+  # The facade chart ships no NetworkPolicy of its own (which callers are legitimate is a
+  # deployment decision), and the owner-resolver's policy comes from its chart. This one
+  # closes the facade: it serves the governing contract and mints the provider's OID4VP
+  # tokens, so only the consent-plugin (running inside the APISIX pod) and the
+  # owner-resolver may reach it. A `from` entry with only a podSelector means "this
+  # namespace", which is what we want - every legitimate caller is provider-local - and
+  # selecting a pod at all makes ingress default-deny for it.
+  - |
+    {{- if (index .Values "consent-facade").enabled }}
+    apiVersion: networking.k8s.io/v1
+    kind: NetworkPolicy
+    metadata:
+      name: consent-facade-ingress
+      # helm template does not inject the namespace and the deploy applies the rendered
+      # files as-is; without this the policy lands in `default` and protects nothing.
+      namespace: {{ .Release.Namespace }}
+      labels:
+        app.kubernetes.io/name: consent-facade
+    spec:
+      podSelector:
+        matchLabels:
+          app.kubernetes.io/name: consent-facade
+      policyTypes:
+        - Ingress
+      ingress:
+        # the consent-plugin, for POST /internal/tokens
+        - from:
+            - podSelector:
+                matchLabels:
+                  app.kubernetes.io/name: apisix
+                  app.kubernetes.io/instance: {{ .Release.Name }}
+          ports:
+            - port: 8080
+        # the owner-resolver, which reads the governing contract from this instance
+        - from:
+            - podSelector:
+                matchLabels:
+                  app.kubernetes.io/name: owner-resolver
+          ports:
+            - port: 8080
+    {{- end }}
+  - |
+    apiVersion: batch/v1
+    kind: Job
+    metadata:
+      name: {{ .Release.Name }}-ensure-ccsdb
+      namespace: {{ .Release.Namespace }}
+    spec:
+      ttlSecondsAfterFinished: 86400
+      backoffLimit: 30
+      activeDeadlineSeconds: 900
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: ensure-ccsdb
+              image: postgres:16-alpine
+              env:
+                - name: PGHOST
+                  value: postgres
+                - name: PGUSER
+                  valueFrom:
+                    secretKeyRef:
+                      name: postgres.postgres.credentials.postgresql.acid.zalan.do
+                      key: username
+                - name: PGPASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: postgres.postgres.credentials.postgresql.acid.zalan.do
+                      key: password
+              command: ["/bin/sh", "-ec"]
+              args:
+                - |
+                  until pg_isready -h "$PGHOST" -U "$PGUSER" -d postgres; do
+                    echo "waiting for postgres..."; sleep 3;
+                  done
+                  if psql -h "$PGHOST" -U "$PGUSER" -d postgres -tAc "SELECT 1 FROM pg_database WHERE datname='ccsdb'" | grep -q 1; then
+                    echo "ccsdb already exists"
+                  else
+                    psql -h "$PGHOST" -U "$PGUSER" -d postgres -c "CREATE DATABASE ccsdb"
+                    echo "created ccsdb"
+                  fi
+
+# The OwnerResolver, from its own published chart (see the `consent-owner-resolver`
+# dependency in charts/data-space-connector/Chart.yaml). The consent-filter plugin posts
+# the response DATA here and gets back whether a consent check is required and who the
+# data owner is - decided from the data, never from the requestor. It runs provider-side
+# because the answer depends on the provider's data model.
+consent-owner-resolver:
+  enabled: true
+  # Resolve the governing resource from the CONTRACT rather than from the rule alone: the
+  # resolver asks the provider-local consent-facade for the signed contract between this
+  # provider and the requesting consumer, matches the requested object's URI against the
+  # contract's ODRL asset target, and uses that contract's PII catalog resource as the
+  # dataResource. Drop `contractService` and the `uriPointer` to keep the owner-only rules.
+  contractService:
+    enabled: true
+    url: http://consent-facade.{{ .Release.Namespace }}.svc.cluster.local:8080
+  rules:
+    - name: mp-data-service-entity
+      match:
+        service: mp-data-service
+        pathPattern: "/entities/[^/]+$"
+      consentRequired: true
+      matcher:
+        type: contract
+        items: ""
+        itemsIsArray: false
+        owner: /dataOwner/value
+        uriPointer: /id
+  networkPolicy:
+    enabled: true
+    # The APISIX the consent-plugin runs inside. The instance label is spelled out because
+    # `allowedClients` is passed to the chart verbatim (not templated), so it cannot carry
+    # `{{ .Release.Name }}` - and the DSC provider release is named `provider` (see the
+    # helm-maven-plugin executions in pom.xml).
+    allowedClients:
+      - podSelector:
+          matchLabels:
+            app.kubernetes.io/name: apisix
+            app.kubernetes.io/instance: provider
+
+# A provider-LOCAL consent-facade, read only by the owner-resolver and the consent-plugin.
+# It projects THIS provider's own TM Forum agreements (so the owner-resolver can find the
+# governing contract and its ODRL asset target) and mints the provider's OID4VP tokens for
+# the plugin. Its reads are in-namespace, so it needs no OID4VP of its own - unlike the
+# authority facade, which reads cross-organisation. Keeping it local also means the
+# authority facade's NetworkPolicy stays closed.
+consent-facade:
+  enabled: true
+  # the provider's own TM Forum api, in-namespace
+  tmForum:
+    url: http://tm-forum-api-svc:8080
+  # the ids the authority facade minted are kept as they are; this instance only serves
+  # the same paths locally, so it mints ids in the authority's id space
+  selfUrl: "https://consent-facade.dataspace-authority.org"
+  # never published - /internal/tokens mints tokens that speak for this participant
+  ingress:
+    enabled: false
+  ## the plugin's token service: the facade presents THIS provider's credential to obtain
+  ## an access token for the authority's consent-manager
+  oid4vp:
+    enabled: true
+    # the verifier SERVICE id registered for the DSC TM Forum api (not the holder DID)
+    clientId: "tmf-api"
+    # scopes requested for TM Forum access
+    scopes:
+      - default
+    # trust anchors for client identification (the verifier's chain). The dsc-ca is mounted
+    # as a PEM at this path by deployment.additionalVolumeMounts below.
+    trustAnchors:
+      - /etc/ssl/cacert.pem
+    # folder the credential is projected into
+    credentialsFolder: /credential-repo
+    holder:
+      id: did:web:mp-operations.org
+      # the algorithm the verifiable presentation is signed with
+      signatureAlgorithm: ECDH-ES
+    signingKey:
+      secretName: mp-operations.org-tls
+    # The credential this participant presents: the MembershipCredential its own keycloak
+    # issues (issuerDid did:web:mp-operations.org), kept fresh in vc-fdsc-edc-credential by
+    # the provider's vc-operator. The authority verifier trusts it because that issuer DID
+    # is registered in the trust-anchor TIR.
+    credentials:
+      - secretName: vc-fdsc-edc-credential
+        secretKey: credential
+        fileName: membership-credential.jwt
+    tokenTargets:
+      - audience: consent-manager
+        url: https://verifier.dataspace-authority.org
+        clientId: consent-manager
+        scope:
+          - participant
+        discoveryPath: /services/consent-manager
+    proxy:
+      enabled: true
+      host: squid-proxy.infra.svc.cluster.local
+      port: 8888
+      # the TM Forum api this instance reads is an in-namespace Service, which the proxy
+      # cannot resolve - only the OID4VP flow goes through it
+      tmForumClients: false
+  truststore:
+    enabled: true
+    caSecret:
+      name: mp-operations.org-tls
+  deployment:
+    # the image runs as uid 185 (UBI openjdk)
+    podSecurityContext:
+      seccompProfile:
+        type: RuntimeDefault
+      runAsNonRoot: true
+      runAsUser: 185
+      runAsGroup: 0
+    securityContext:
+      capabilities:
+        drop:
+          - ALL
+      readOnlyRootFilesystem: true
+      allowPrivilegeEscalation: false
+      runAsNonRoot: true
+      runAsUser: 185
+    resources:
+      limits:
+        cpu: 500m
+        memory: 512Mi
+      requests:
+        cpu: 100m
+        memory: 256Mi
+    # The dsc-ca as a PEM file at the path `oid4vp.trustAnchors` names. The chart's
+    # `truststore` imports the same CA into the JVM truststore (for every TLS client),
+    # while OID4VP client identification reads it as a PEM from this path.
+    additionalVolumes:
+      - name: root-ca
+        secret:
+          secretName: mp-operations.org-tls
+          items:
+            - key: ca.crt
+              path: ca.crt
+    additionalVolumeMounts:
+      - name: root-ca
+        mountPath: /etc/ssl/cacert.pem
+        subPath: ca.crt
+        readOnly: true

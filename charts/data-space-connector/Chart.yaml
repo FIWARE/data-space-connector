@@ -27,7 +27,7 @@ dependencies:
     repository: oci://quay.io/fiware/helm-charts
   - name: contract-management
     condition: contract-management.enabled
-    version: 3.5.32
+    version: 3.5.36
     repository: oci://quay.io/fiware/helm-charts
   # marketplace
   - name: business-api-ecosystem
@@ -96,3 +96,14 @@ dependencies:
     condition: tempo.enabled
     version: 1.24.4
     repository: https://grafana.github.io/helm-charts
+  # The consent components are published as their own FIWARE charts. A provider enables
+  # the owner-resolver (it knows the provider's data model) and, when it wants contract-
+  # driven resolution, a provider-local consent-facade.
+  - name: consent-facade
+    condition: consent-facade.enabled
+    version: 0.1.1
+    repository: oci://quay.io/fiware/helm-charts
+  - name: consent-owner-resolver
+    condition: consent-owner-resolver.enabled
+    version: 0.1.1
+    repository: oci://quay.io/fiware/helm-charts

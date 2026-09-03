@@ -6,3 +6,7 @@ helm
 target
 maven-status
 .idea
+
+# local consent-demo artifacts (holder identity incl. private key, local CA)
+/cert/
+/local-ca.crt

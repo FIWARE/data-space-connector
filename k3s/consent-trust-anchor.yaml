@@ -1,0 +1,806 @@
+# ---------------------------------------------------------------------------
+# Consent authority overlay (trust-anchor namespace).
+#
+# Deploys the consent-manager + an internal APISIX facade + a managed MongoDB
+# using the DSC umbrella chart as a SECOND release (name `consent-authority`) in
+# the trust-anchor namespace - the "central authority" that knows all
+# participants. Everything else the umbrella chart offers is disabled. The
+# consent-facade stays at the provider and is reached cross-namespace.
+#
+# Layered by the `consent` maven profile:
+#   helm template consent-authority charts/data-space-connector \
+#     -f k3s/consent-trust-anchor.yaml --namespace trust-anchor
+# ---------------------------------------------------------------------------
+
+# --- everything the connector normally deploys, off -------------------------
+scorpio:
+  enabled: false
+
+
+# --- OID4VP credential issuer for did:web:dataspace-authority.org --------------
+# Self-contained Keycloak issuer (mirrors the consumer issuer) that mints a
+# verifiable OperatorCredential for the consent-facade running in this release.
+# Adapted from k3s/consumer.yaml; trimmed to just the operator-credential scope
+# and the contract-management service-account client that requests it.
+keycloak:
+  enabled: true
+  # -- distinct name so the Service/StatefulSet are `authority-keycloak`
+  # (referenced by vcCredentials/vc-operator issuerURL below).
+  fullnameOverride: authority-keycloak
+  # -- EMBEDDED postgres. The external Zalando DB the umbrella defaults to is not
+  # available in the trust-anchor namespace, so enable the keycloak subchart's
+  # bundled postgres. With postgres.enabled=true the subchart auto-wires the JDBC
+  # URL (`jdbc:postgresql://<release>-postgres:5432/keycloak`), the `postgres`
+  # username and the password from the generated `<release>-postgres` secret -
+  # the external `database.*` block is ignored entirely in that branch. We only
+  # blank `database.existingSecret` so nothing dangling references the missing
+  # Zalando secret.
+  postgres:
+    enabled: true
+  database:
+    existingSecret: ""
+  resources:
+    requests:
+      cpu: "100m"
+    limits:
+      cpu: "500m"
+  ingress:
+    enabled: true
+    annotations:
+      traefik.ingress.kubernetes.io/router.tls: "true"
+      cert-manager.io/cluster-issuer: "selfsigned-issuer"
+      cert-manager.io/private-key-algorithm: "ECDSA"
+      cert-manager.io/alt-names: "keycloak-authority.127.0.0.1.nip.io"
+      cert-manager.io/common-name: "keycloak-authority.127.0.0.1.nip.io"
+    hosts:
+      - host: keycloak-authority.127.0.0.1.nip.io
+        paths:
+          - path: /
+            pathType: Prefix
+    tls:
+      - secretName: keycloak-authority.127.0.0.1.nip.io-tls
+        hosts:
+          - keycloak-authority.127.0.0.1.nip.io
+  extraInitContainers:
+    - name: prepare-keystore
+      image: alpine/openssl:3.5.5
+      command: ["/bin/sh", "-c"]
+      args:
+        - |
+          openssl pkcs12 -export \
+            -in /certs-did/tls.crt \
+            -inkey /certs-did/tls.key \
+            -certfile /certs-did/ca.crt \
+            -out /did-material/cert.pfx \
+            -name "didPrivateKey" \
+            -passout env:STORE_PASS
+          chmod 644 /did-material/cert.pfx
+      env:
+      - name: "STORE_PASS"
+        valueFrom:
+          secretKeyRef:
+            name: keystore-password
+            key: password
+      volumeMounts:
+        - name: did-material
+          mountPath: /did-material
+        - name: did-priv-key
+          mountPath: /certs-did
+    - name: register-at-tir
+      image: curlimages/curl:8.18.0
+      command:
+        - /bin/sh
+      args:
+        - -ec
+        - |
+          #!/bin/sh
+          curl -X 'POST' 'http://tir.trust-anchor.svc.cluster.local:8080/issuer' -H 'Content-Type: application/json' -d "{\"did\": \"did:web:dataspace-authority.org\", \"credentials\": []}"
+  extraVolumeMounts:
+    # Since KC 26.6.4 the java-keystore realm key provider only reads keystores from
+    # ${kc.home.dir}/data/<realm-name>, so the directory name must match `realm.name`.
+    # The init container above keeps writing to its own /did-material mount of the same
+    # emptyDir.
+    - mountPath: /opt/keycloak/data/authority-realm
+      name: did-material
+    - mountPath: /opt/keycloak/data/import
+      name: realms
+    - name: providers
+      mountPath: /opt/keycloak/providers
+  extraVolumes:
+    - emptyDir: {}
+      name: did-material
+    - configMap:
+        name: authority-realm-realm
+      name: realms
+    - name: did-priv-key
+      secret:
+        secretName: dataspace-authority.org-tls
+    - name: providers
+      emptyDir: {}
+  issuerDid: did:web:dataspace-authority.org
+  signingKey:
+    storePath: /opt/keycloak/data/authority-realm/cert.pfx
+    storePassword: "${STORE_PASS}"
+    keyAlias: didPrivateKey
+    keyPassword: "${STORE_PASS}"
+    did: did:web:dataspace-authority.org
+    keyAlgorithm: ES256
+  proxy:
+    enabled: true
+    httpsProxy: "http://squid-proxy.infra.svc.cluster.local:8888"
+    noProxy: "localhost,*.cluster.local,*.svc"
+    spiProxyMappings: ".*\\.127\\.0\\.0\\.1\\.nip\\.io;http://squid-proxy.infra.svc.cluster.local:8888"
+  # extraEnvVars replaces the umbrella list, so KC_HEAP_SIZE has to be repeated here.
+  # STORE_PASS is consumed by the realm.json key-provider config (see signingKey above).
+  extraEnvVars:
+    - name: KC_HEAP_SIZE
+      value: "1024m"
+    - name: "STORE_PASS"
+      valueFrom:
+        secretKeyRef:
+          name: keystore-password
+          key: password
+  realm:
+    frontendUrl: https://keycloak-authority.127.0.0.1.nip.io
+    import: true
+    name: authority-realm
+    attributes:
+      issuerDid: "did:web:dataspace-authority.org"
+    # -- only the operator-credential scope is needed to mint the
+    # OperatorCredential for the consent-facade. Status-list mapper dropped
+    # (no token-status-list plugin / tokenStatusList at the authority).
+    verifiableCredentials:
+      operator-credential:
+        attributes:
+          format: "jwt_vc_json"
+          verifiable_credential_type: "OperatorCredential"
+          credential_signing_alg: "ES256"
+          credential_build_config.token_jws_type: "JWT"
+        protocolMappers:
+          - name: context-mapper-oc
+            protocol: oid4vc
+            protocolMapper: oid4vc-context-mapper
+            config:
+              context: https://www.w3.org/2018/credentials/v1
+          - name: email-mapper-oc
+            protocol: oid4vc
+            protocolMapper: oid4vc-user-attribute-mapper
+            config:
+              claim.name: email
+              userAttribute: email
+          - name: firstName-mapper-oc
+            protocol: oid4vc
+            protocolMapper: oid4vc-user-attribute-mapper
+            config:
+              claim.name: firstName
+              userAttribute: firstName
+          - name: lastName-mapper-oc
+            protocol: oid4vc
+            protocolMapper: oid4vc-user-attribute-mapper
+            config:
+              claim.name: lastName
+              userAttribute: lastName
+          # operator-credential is presented to the provider's data service
+          # (organization_did=mp-operations.org), so the role array carries that target.
+          - name: role-mapper-oc
+            protocol: oid4vc
+            protocolMapper: oid4vc-target-role-mapper
+            config:
+              claim.name: roles
+              clientId: did:web:mp-operations.org
+    # -- roles for the role-mapper-oc target client. did:web:mp-operations.org
+    # must exist as a client (defined below) for these role definitions and the
+    # service-account role assignment to import cleanly.
+    clientRoles: |
+      "did:web:mp-operations.org": [
+        {
+          "name": "OPERATOR",
+          "description": "Is allowed to operate clusters.",
+          "clientRole": true
+        },
+        {
+          "name": "REPRESENTATIVE",
+          "description": "Is allowed to register.",
+          "clientRole": true
+        }]
+    users: |
+      {
+        "username": "service-account-contract-management",
+        "enabled": true,
+        "serviceAccountClientId": "contract-management",
+        "clientRoles": {
+          "did:web:mp-operations.org": [
+            "REPRESENTATIVE"
+          ]
+        },
+        "verifiableCredentials": [
+          {"credentialScopeName": "operator-credential"}
+        ]
+      }
+    clients:
+      # -- target client for the operator-credential role mapper. Minimal
+      # service-account client; its roles (above) are what the OperatorCredential
+      # `roles` claim is populated from.
+      - clientId: did:web:mp-operations.org
+        enabled: true
+        description: Client to connect mp-operations.org
+        surrogateAuthRequired: false
+        alwaysDisplayInConsole: false
+        clientAuthenticatorType: client-secret
+        defaultRoles: []
+        redirectUris: []
+        webOrigins: []
+        notBefore: 0
+        bearerOnly: false
+        consentRequired: false
+        standardFlowEnabled: true
+        implicitFlowEnabled: false
+        directAccessGrantsEnabled: false
+        serviceAccountsEnabled: true
+        publicClient: false
+        frontchannelLogout: false
+        secret: kpWxZn7LgcWT84AzS3aS5X5URmL0FC0Q
+        protocol: openid-connect
+        attributes:
+          client.secret.creation.time: "1675260539"
+        protocolMappers: []
+        authenticationFlowBindingOverrides: {}
+        fullScopeAllowed: true
+        nodeReRegistrationTimeout: -1
+        defaultClientScopes: []
+        optionalClientScopes: []
+      # -- the client the vc-operator authenticates as to request the credential.
+      - clientId: contract-management
+        enabled: true
+        description: Client representing the contract-management
+        surrogateAuthRequired: false
+        alwaysDisplayInConsole: false
+        clientAuthenticatorType: client-secret
+        secret: contract-management-client-secret
+        defaultRoles: []
+        redirectUris: []
+        webOrigins: []
+        notBefore: 0
+        bearerOnly: false
+        consentRequired: false
+        standardFlowEnabled: false
+        implicitFlowEnabled: false
+        directAccessGrantsEnabled: false
+        serviceAccountsEnabled: true
+        publicClient: false
+        frontchannelLogout: false
+        protocol: openid-connect
+        attributes:
+          client.secret.creation.time: "1675260539"
+          oid4vci.enabled: "true"
+        authenticationFlowBindingOverrides: {}
+        fullScopeAllowed: true
+        nodeReRegistrationTimeout: -1
+        defaultClientScopes: []
+        optionalClientScopes: ["operator-credential"]
+tm-forum-api:
+  enabled: false
+contract-management:
+  enabled: false
+marketplace:
+  enabled: false
+fdsc-edc:
+  enabled: false
+fdsc-dashboard:
+  enabled: false
+vault:
+  enabled: false
+# --- did:web:dataspace-authority.org did-helper (serves the DID document) ------
+did:
+  enabled: true
+  config:
+    server:
+      hostUrl: "http://dataspace-authority.org"
+      certPath: "/certs/tls.crt"
+  volumes:
+    - name: certs
+      secret:
+        secretName: dataspace-authority.org-tls
+        items:
+          - key: tls.crt
+            path: tls.crt
+  volumeMounts:
+    - name: certs
+      mountPath: /certs
+  ingress:
+    enabled: true
+    className: ""
+    annotations:
+      traefik.ingress.kubernetes.io/service.passhostheader: "true"
+      traefik.ingress.kubernetes.io/router.tls: "true"
+      cert-manager.io/cluster-issuer: "selfsigned-issuer"
+      cert-manager.io/private-key-algorithm: "ECDSA"
+      cert-manager.io/common-name: "dataspace-authority.org"
+      cert-manager.io/alt-names: "dataspace-authority.org"
+    hosts:
+      - host: dataspace-authority.org
+        paths:
+          - path: /
+            pathType: ImplementationSpecific
+    tls:
+      - secretName: dataspace-authority.org-tls
+        hosts:
+          - dataspace-authority.org
+cert-manager:
+  enabled: false
+prometheus:
+  enabled: false
+grafana:
+  enabled: false
+opentelemetry-operator:
+  enabled: false
+opentelemetry-collector:
+  enabled: false
+tempo:
+  enabled: false
+rainbow:
+  enabled: false
+identityhub:
+  enabled: false
+dataSpaceConfig:
+  enabled: false
+# the authority-keycloak issuer needs the generated admin secret (issuance-secret)
+issuance:
+  generatePasswords:
+    enabled: true
+
+# --- vc-operator: reconciles the OperatorCredential into a secret --------------
+vc-operator:
+  enabled: true
+  watchNamespaces:
+    - trust-anchor
+  image:
+    tag: "0.3.0"
+  extraEnvVars:
+    - name: HTTPS_PROXY
+      value: "http://squid-proxy.infra.svc.cluster.local:8888"
+    - name: HTTP_PROXY
+      value: "http://squid-proxy.infra.svc.cluster.local:8888"
+    - name: NO_PROXY
+      value: "authority-keycloak,*.cluster.local,*.svc,10.0.0.0/8"
+    - name: SSL_CERT_FILE
+      value: "/etc/ssl/certs/ca.crt"
+  extraVolumeMounts:
+    - name: root-ca
+      mountPath: /etc/ssl/certs/ca.crt
+      subPath: ca.crt
+      readOnly: true
+  extraVolumes:
+    - name: root-ca
+      secret:
+        secretName: dataspace-authority.org-tls
+        items:
+          - key: ca.crt
+            path: ca.crt
+
+# --- vcCredentials: the OperatorCredential request for the consent-facade -------
+vcCredentials:
+  enabled: true
+  issuers:
+    - name: authority-operator-issuer
+      issuerURL: http://authority-keycloak:8080/realms/authority-realm
+      issuerType: keycloak
+      tokenURL: http://authority-keycloak:8080/realms/authority-realm/protocol/openid-connect/token
+      auth:
+        secretName: authority-contract-management-client-auth
+        clientId: contract-management
+        clientSecret: contract-management-client-secret
+      requests:
+        - name: authority-operator-credential
+          credentialType: operator-credential
+          format: jwt_vc_json
+          targetSecretName: vc-operator-credential
+          targetSecretKey: credential
+          targetFile: operator-credential.jwt
+          renewBefore: 5m
+          holderBinding:
+            enabled: false
+
+# --- APISIX only, out of decentralized-iam (internal facade in front of the CM)
+decentralizedIam:
+  enabled: true
+  vcAuthentication:
+    # no Postgres at the authority (verifier/til/ccs/identityhub are off); avoids
+    # colliding with the trust-anchor chart's own postgres-operator.
+    postgres-operator:
+      enabled: false
+    managedPostgres:
+      enabled: true
+    trusted-issuers-list:
+      enabled: false
+    vcverifier:
+      enabled: true
+      ingress:
+        enabled: true
+        annotations:
+            traefik.ingress.kubernetes.io/router.tls: "true"
+            cert-manager.io/cluster-issuer: "selfsigned-issuer"
+            cert-manager.io/private-key-algorithm: "ECDSA"
+            cert-manager.io/alt-names: "verifier.dataspace-authority.org"
+        tls:
+          - hosts:
+              - verifier.dataspace-authority.org
+            secretName: verifier.dataspace-authority.org-tls
+        hosts:
+          - host: verifier.dataspace-authority.org
+            paths:
+              - "/"
+      configIngress:
+        enabled: false
+      deployment:
+        logging:
+          level: DEBUG
+        verifier:
+          tirAddress: https://tir.127.0.0.1.nip.io/
+          did: did:web:dataspace-authority.org
+          supportedModes: ["byValue", "byReference"]
+          # required for the tests, can be longer in real world environments
+          tilCacheExpiry: 1
+          tirCacheExpiry: 1
+          clientIdentification:
+            keyPath: /signing-key/tls.key
+            certificatePath: /signing-key/tls.crt
+            requestKeyAlgorithm: ES256
+            id: x509_san_dns:verifier.dataspace-authority.org
+        server:
+          host: https://verifier.dataspace-authority.org
+        additionalVolumes:
+          - name: signing-key
+            secret:
+              secretName: verifier.dataspace-authority.org-tls
+          # add the cert-manager CA to the system truststore
+          - name: root-ca
+            emptyDir: {}
+        additionalVolumeMounts:
+          - name: signing-key
+            mountPath: /signing-key
+          # add the cert-manager CA to the system truststore
+          - name: root-ca
+            mountPath: /etc/ssl/cert.pem
+            subPath: cert.pem
+        additionalEnvVars:
+          - name: HTTPS_PROXY
+            value: "http://squid-proxy.infra.svc.cluster.local:8888"
+          - name: HTTP_PROXY
+            value: "http://squid-proxy.infra.svc.cluster.local:8888"
+          - name: NO_PROXY
+            value: "w3.org,trusted-issuers-list"
+        initContainers:
+          # add the cert-manager CA to the system truststore
+          - name: add-root-ca
+            image: alpine:3.21.3
+            command:
+              [
+                "sh",
+                "-c",
+                "cat /etc/ssl/cert.pem /tmp/ca.crt > /root-ca/cert.pem",
+              ]
+            volumeMounts:
+              - name: root-ca
+                mountPath: /root-ca
+              - name: signing-key
+                mountPath: /tmp/ca.crt
+                subPath: ca.crt
+      registration:
+        enabled: true
+        job:
+          # Use a long TTL so the Job persists until the k3s-maven-plugin
+          # has verified its completion. The default 120s races with the
+          # plugin's parallel wait loop in CI.
+          ttlSecondsAfterFinished: 86400
+          initContainers:
+            waitForHost:
+              enabled: true
+              path: /health
+          activeDeadlineSeconds: 1500
+        services:
+          # One service, one audience: subjects and participants authenticate to the SAME
+          # relying party (this consent-manager), they just present different credentials.
+          # The credential policy is therefore selected by SCOPE, not by a second service -
+          # the pattern k3s/provider.yaml already uses for `data-service` (default/legal/
+          # operator). Every token this service issues carries `aud: consent-manager`, which
+          # is what the consent-manager's externalIdp.audience expects.
+          #   openid      - the data SUBJECT's UserCredential
+          #   participant - a PARTICIPANT's MembershipCredential (issued by its own keycloak,
+          #                 trusted because its issuer DID is registered in the trust-anchor
+          #                 TIR). The consent-manager resolves it to a Participant by `did`.
+          # See doc/CONSENT_MANAGEMENT.md.
+          #
+          # :warning: The provider mints that MembershipCredential with
+          # `holderBinding.enabled: false` (k3s/provider.yaml), so it carries no confirmation
+          # claim and is replayable by anyone holding the JWT. Enabling holder binding is the
+          # hardening step once this path works.
+          - id: consent-manager
+            defaultOidcScope: "openid"
+            authorizationType: "DEEPLINK"
+            oidcScopes:
+              "participant":
+                credentials:
+                  - type: MembershipCredential
+                    trustedParticipantsLists:
+                      - https://tir.127.0.0.1.nip.io
+                    trustedIssuersLists:
+                      - "*"
+                    jwtInclusion:
+                      enabled: true
+                      fullInclusion: true
+                dcql:
+                  credentials:
+                    - id: participant-query
+                      format: "jwt_vc_json"
+                      multiple: true
+                      meta:
+                        type_values:
+                          - ["MembershipCredential"]
+              "openid":
+                credentials:
+                  - type: UserCredential
+                    trustedParticipantsLists:
+                      - https://tir.127.0.0.1.nip.io
+                    trustedIssuersLists:
+                      - "*"
+                    jwtInclusion:
+                      enabled: true
+                      fullInclusion: true
+                dcql:
+                  credentials:
+                    - id: user-query
+                      format: "jwt_vc_json"
+                      multiple: true
+                      meta:
+                        type_values:
+                          - ["UserCredential"]
+    credentials-config-service:
+      enabled: false
+  odrlAuthorization:
+    apisix:
+      etcd:
+        replicaCount: 1
+        persistence:
+          enabled: false
+      apisix:
+        enabled: true
+        admin:
+          credentials:
+            admin: admin
+          allow:
+            ipList:
+              - 0.0.0.0/0
+        deployment:
+          mode: traditional
+          role: "traditional"
+          role_traditional:
+            config_provider: "etcd"
+          role_data_plane:
+            config_provider: "etcd"
+        catchAllRoute:
+          enabled: false
+      ingress:
+        enabled: true
+        annotations:
+          cert-manager.io/cluster-issuer: "selfsigned-issuer"
+          cert-manager.io/private-key-algorithm: "ECDSA"
+          traefik.ingress.kubernetes.io/router.tls: "true"
+          cert-manager.io/alt-names: "consent-manager.dataspace-authority.org"
+        hosts:
+          - host: consent-manager.dataspace-authority.org
+            paths: ["/"]
+        tls:
+          - secretName: consent-manager-tls
+            hosts:
+              - consent-manager.dataspace-authority.org
+      catchAllRoute:
+        enabled: false
+      # the consent key is sourced from the `consent-manager` secret the consent-manager
+      # chart creates (not a literal in git/etcd): mounted here as env CONSENT_KEY and
+      # referenced in the facade route header as $env://CONSENT_KEY, which APISIX resolves
+      # at runtime.
+      extraEnvVars:
+        - name: CONSENT_KEY
+          valueFrom:
+            secretKeyRef:
+              name: consent-manager
+              key: consentKey
+      routes:
+        # NB there is deliberately NO /participants/login route. Participants
+        # authenticate over OID4VP (see the /consent-manager/* route below), so nothing
+        # issues consent-manager-signed participant tokens any more - and the login
+        # endpoint was an unauthenticated, published, unthrottled credential exchange.
+        # See doc/CONSENT_MANAGEMENT.md.
+        # ---------------------------------------------------------------------------------------
+        # Subject-authenticated path: the data subject presents its OWN OID4VP access token, which the
+        # consent-manager verifies itself via external JWKS (its externalIdp values) and maps to its
+        # local User. Deliberately NO participant `jwt-auth` and NO consent-key injection - unlike the
+        # participant `/consent-manager/*` route, whose jwt-auth would reject a subject token at the
+        # gateway ("missing user key in JWT token"). This lets the subject reach its user-authenticated
+        # endpoints through the public ingress without a port-forward.
+        #
+        # :warning: Because these routes apply NO gateway authentication, each one is an ALLOW-LIST of
+        # (uris x methods) whose handlers are `verifyUserJWT`-gated in the consent-manager itself, i.e.
+        # they authenticate the SUBJECT's OID4VP token. Never widen this to `/consent-user/*`: this
+        # gateway is published (ingress `consent-authority-apisix`, host
+        # consent-manager.dataspace-authority.org), so a wildcard exposes the WHOLE consent-manager API
+        # unauthenticated - including endpoints gated only by the shared consent key (`POST /v1/consents`,
+        # `GET /v1/consents/{userId}/{providerId}/{consumerId}`, which this route does not inject and so
+        # cannot satisfy), and endpoints with NO gate at all
+        # (`GET /v1/consents/emailverification`, `GET /v1/users/{userId}` - the latter returns the
+        # subject's name, DID and its `identifiers`, i.e. the `x-user-key` that authenticates AS that
+        # subject). Anything added here must be checked against src/routes/*.ts for its middleware first.
+        #
+        # Methods are pinned per route so a path wildcard cannot pull in a differently-gated handler on
+        # the same path (e.g. `DELETE /v1/consents/{id}` is the subject's revoke, while `POST /v1/consents`
+        # is the consent-key-gated provider-on-behalf grant).
+        # ---------------------------------------------------------------------------------------
+        # subject reads: its own consent list/detail, available exchanges and its own account
+        - uris:
+            - /consent-user/v1/consents/me
+            - /consent-user/v1/consents/me/*
+            - /consent-user/v1/consents/exchanges/user
+            - /consent-user/v1/users/me
+          methods: ["GET"]
+          priority: 5
+          host: consent-manager.dataspace-authority.org
+          upstream:
+            nodes:
+              consent-manager:3000: 1
+            type: roundrobin
+          plugins:
+            proxy-rewrite:
+              regex_uri: ["^/consent-user/(.*)", "/$1"]
+        # subject grants consent for itself (POST /v1/consents/user, `verifyUserJWT`)
+        - uris:
+            - /consent-user/v1/consents/user
+          methods: ["POST"]
+          priority: 5
+          host: consent-manager.dataspace-authority.org
+          upstream:
+            nodes:
+              consent-manager:3000: 1
+            type: roundrobin
+          plugins:
+            proxy-rewrite:
+              regex_uri: ["^/consent-user/(.*)", "/$1"]
+        # subject withdraws a consent (DELETE /v1/consents/{id}, `verifyUserJWT`). The wildcard is safe
+        # because `/:id` is the ONLY delete on the consents router.
+        - uris:
+            - /consent-user/v1/consents/*
+          methods: ["DELETE"]
+          priority: 5
+          host: consent-manager.dataspace-authority.org
+          upstream:
+            nodes:
+              consent-manager:3000: 1
+            type: roundrobin
+          plugins:
+            proxy-rewrite:
+              regex_uri: ["^/consent-user/(.*)", "/$1"]
+        # subject self-service PDI signup. Unauthenticated BY DESIGN upstream (src/routes/users.ts has no
+        # middleware on /signup) - it is the only endpoint here that is not `verifyUserJWT`-gated, and it
+        # is exposed as a single exact uri+method rather than via a wildcard. It creates an account keyed
+        # on the holder DID; a deployment that onboards subjects out-of-band should drop this route.
+        - uris:
+            - /consent-user/v1/users/signup
+          methods: ["POST"]
+          priority: 5
+          host: consent-manager.dataspace-authority.org
+          upstream:
+            nodes:
+              consent-manager:3000: 1
+            type: roundrobin
+          plugins:
+            proxy-rewrite:
+              regex_uri: ["^/consent-user/(.*)", "/$1"]
+        # Participant path. Authentication is OID4VP: the caller presents an access token
+        # issued by this authority's verifier for the `consent-manager` service, which the
+        # gateway validates against the verifier's JWKS (bearer_only - the gateway never
+        # runs a browser flow). The consent-manager then resolves the token subject to a
+        # Participant by its `did`.
+        #
+        # This replaces the former `jwt-auth`, which validated a consent-manager-signed
+        # HS256 token against APISIX consumers that had to be provisioned by hand and all
+        # shared the consent-manager's jwtSecret - so any holder could mint a token as any
+        # participant. Nothing here holds a participant credential any more.
+        #
+        # The consent key is still injected server-side, unchanged: callers never hold it.
+        - uri: /consent-manager/*
+          priority: 0
+          host: consent-manager.dataspace-authority.org
+          upstream:
+            nodes:
+              consent-manager:3000: 1
+            type: roundrobin
+          plugins:
+            openid-connect:
+              bearer_only: true
+              use_jwks: true
+              # the token's `aud` is the verifier service id; check it explicitly rather
+              # than trusting the signature alone, or a token minted for another service
+              # of the same verifier would be accepted here
+              audience: consent-manager
+              client_id: consent-manager
+              client_secret: unused-bearer-only
+              discovery: https://verifier.dataspace-authority.org/services/consent-manager/.well-known/openid-configuration
+              # The verifier is addressed by its PUBLIC ingress host, because that host is the token's
+              # `iss` and the discovery document's `issuer`/`jwks_uri`. In the local cluster that name
+              # resolves to 127.0.0.1 and CoreDNS only rewrites *.nip.io, so both the discovery fetch
+              # and the JWKS fetch go through the squid forward proxy - the same mechanism the
+              # consent-manager (externalIdp.proxy) and the facades already use. Without this the
+              # gateway 401s every request with "failed to query the DNS server: name error".
+              proxy_opts:
+                http_proxy: http://squid-proxy.infra.svc.cluster.local:8888
+                https_proxy: http://squid-proxy.infra.svc.cluster.local:8888
+              # the verifier's ingress cert is signed by the cluster CA (selfsigned-ca), which this
+              # gateway has no trust bundle for; the hop is in-cluster via squid
+              ssl_verify: false
+            proxy-rewrite:
+              regex_uri: ["^/consent-manager/(.*)", "/$1"]
+              headers:
+                set:
+                  x-visionstrust-consent-key: "$env://CONSENT_KEY"
+        - uri: /.well-known/openid-configuration
+          host: consent-manager.dataspace-authority.org
+          upstream:
+            nodes:
+              verifier:3000: 1
+            type: roundrobin
+          plugins:
+            proxy-rewrite:
+              uri: /services/consent-manager/.well-known/openid-configuration
+    # the PAP/PDP are not needed at the authority
+    odrl-pap:
+      enabled: false
+
+# --- ensure the verifier's config-server database exists ----------------------
+# The vcverifier's embedded config server connects to the managed Postgres
+# database `ccsdb`. The Zalando postgres-operator creates databases only at the
+# initial cluster provisioning, so a redeploy that reuses a persisted volume can
+# come up without `ccsdb` and the verifier crash-loops
+# ("FATAL: database ccsdb does not exist"). This idempotent Job creates it on
+# every deploy when missing, so the verifier never starts before its DB exists.
+extraManifests:
+  - |
+    apiVersion: batch/v1
+    kind: Job
+    metadata:
+      name: {{ .Release.Name }}-ensure-ccsdb
+      namespace: {{ .Release.Namespace }}
+    spec:
+      ttlSecondsAfterFinished: 86400
+      backoffLimit: 30
+      activeDeadlineSeconds: 900
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: ensure-ccsdb
+              image: postgres:16-alpine
+              env:
+                - name: PGHOST
+                  value: postgres
+                - name: PGUSER
+                  valueFrom:
+                    secretKeyRef:
+                      name: postgres.postgres.credentials.postgresql.acid.zalan.do
+                      key: username
+                - name: PGPASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: postgres.postgres.credentials.postgresql.acid.zalan.do
+                      key: password
+              command: ["/bin/sh", "-ec"]
+              args:
+                - |
+                  until pg_isready -h "$PGHOST" -U "$PGUSER" -d postgres; do
+                    echo "waiting for postgres..."; sleep 3;
+                  done
+                  if psql -h "$PGHOST" -U "$PGUSER" -d postgres -tAc "SELECT 1 FROM pg_database WHERE datname='ccsdb'" | grep -q 1; then
+                    echo "ccsdb already exists"
+                  else
+                    psql -h "$PGHOST" -U "$PGUSER" -d postgres -c "CREATE DATABASE ccsdb"
+                    echo "created ccsdb"
+                  fi

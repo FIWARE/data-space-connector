@@ -3695,3 +3695,69 @@ tempo:
     requests:
       cpu: 100m
       memory: 256Mi
+
+# -- Consent Management -- provider-side wiring only. The consent-manager and its
+# managed MongoDB live in the trust-anchor chart (charts/trust-anchor). This umbrella 
+# chart provides the IAM that backs consent (keycloak issuer, did:web helper, APISIX facade route,
+# vc-operator), the provider APISIX consent-plugin wiring below, and - through the
+# `consent-facade` / `consent-owner-resolver` dependencies - the provider-side
+# consent services. See doc/CONSENT_MANAGEMENT.md.
+consentManagement:
+  # -- enable the provider-side consent-plugin wiring (the Go consent-plugin that
+  # runs on the provider APISIX and calls the authority's consent-manager). The
+  # consent-manager itself is deployed from the trust-anchor chart; the facade and
+  # the owner-resolver come from their own charts (see the keys at the end of this
+  # file).
+  enabled: false
+
+## The consent-facade, deployed from its own published FIWARE chart
+## (oci://quay.io/fiware/helm-charts/consent-facade). A provider runs one locally when the
+## owner-resolver resolves the governing contract
+## See https://github.com/FIWARE/helm-charts/tree/main/charts/consent-facade
+consent-facade:
+  # -- deploy a provider-local consent-facade
+  enabled: false
+  # -- keep the resource names stable (`consent-facade` rather than
+  # `<release>-consent-facade`): the consent-plugin route config and the owner-resolver
+  # address it by that name.
+  fullnameOverride: consent-facade
+  ## the TM Forum api the facade projects. If provider-local instance reads its OWN
+  ## TM Forum api in-namespace, it needs no OID4VP and no proxy.
+  tmForum:
+    # -- base url of the TM Forum api
+    url: http://tm-forum-api-svc:8080
+  ## OID4VP, for a facade that reads a TM Forum api it does not own
+  oid4vp:
+    # -- authenticate the outbound TM Forum reads over OID4VP
+    enabled: false
+
+## The consent-owner-resolver, deployed from its own published FIWARE chart
+## (oci://quay.io/fiware/helm-charts/consent-owner-resolver). It answers, from the
+## response data, whether a consent check is required and who owns the data - which is a
+## provider-side question, because it depends on the provider's data model.
+## See https://github.com/FIWARE/helm-charts/tree/main/charts/consent-owner-resolver
+consent-owner-resolver:
+  # -- deploy the owner-resolver
+  enabled: false
+  # -- keep the resource name stable (`owner-resolver`): the consent-plugin route config
+  # addresses it by that name.
+  fullnameOverride: owner-resolver
+  # -- keep the `app.kubernetes.io/name` label stable too (`owner-resolver` rather than
+  # the chart name): the provider's consent-facade NetworkPolicy selects the resolver as a
+  # client by that label, and so would any other selector written against it.
+  nameOverride: owner-resolver
+  # -- the DSC data model: a `PersonalProfile`-style NGSI-LD entity carries its data owner
+  # in `dataOwner`, and the requested object is the entity `id`. With `contractService`
+  # enabled the matcher additionally takes the data resource from the contract whose ODRL
+  # asset target names that id; without it the check stays owner-level.
+  rules:
+    - name: mp-data-service-entity
+      match:
+        service: mp-data-service
+        pathPattern: "/entities/[^/]+$"
+      consentRequired: true
+      matcher:
+        type: json
+        items: ""
+        itemsIsArray: false
+        owner: /dataOwner/value
