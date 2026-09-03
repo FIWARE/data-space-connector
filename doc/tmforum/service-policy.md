@@ -20,7 +20,8 @@
 > | CM-5, CM-8 - union, `odrl:uid` de-duplication, single provider | released |
 > | CM-9, TIL-1…TIL-7 - order-scoped grants | released, `trusted-issuers-list 0.9.1` |
 > | DSC-2, DSC-7, DSC-8 - chart settings, model docs, 10.5.0 | this repository |
-> | **open** | BAE-1/BAE-2 authoring UI, ENF-1/ENF-2 the `serviceSpecification` access policy, DSC-4 the integration test, CM-12 re-activation on change, consent granularity (§5.5) |
+> | ENF-1, ENF-2, DSC-4, DSC-5, DSC-6 - PDP check, access policy, integration test, authoring guide | this repository |
+> | **open** | BAE-1/BAE-2 authoring UI, CM-12 re-activation when a shared specification changes, consent granularity (§5.5), and the chart chain hop that brings `trusted-issuers-list` 0.9.1 through `vc-authentication` |
 >
 > Provider-facing authoring guide:
 > [`doc/deployment-integration/roles/provider/COMPOSED_SPECIFICATIONS.md`](../deployment-integration/roles/provider/COMPOSED_SPECIFICATIONS.md).
@@ -343,8 +344,8 @@ hubs, relationship queries, and the `@schemaLocation` mechanism.
 
 | # | Change | Where | Effort |
 |---|---|---|---|
-| ENF-1 | **Verify `tmf:resource` derivation** for `/tmf-api/serviceCatalogManagement/v4/serviceSpecification`. If the PDP derives the operand generically from the request path, nothing changes; if it uses an allowlist, extend it | ODRL-PAP / OPA (`wistefan/odrl-pap`) | S–M |
-| ENF-2 | **Access policy for the new path** so a seller may create and read service specs through the OID4VP-protected API — the analogue of `allowProductSpec.json` | `it/src/test/resources/policies/allowServiceSpec.json`, plus whatever the deployment guides hand to operators | S |
+| ENF-1 | **Nothing to change — verified.** `tmf:resource` maps to the rego method `resource_type(http_part)` (`odrl-pap: src/main/resources/rego/tmf/leftOperand.rego`), which splits the request path, drops the segment containing `ngsi-ld` (the entity id) and takes the last remaining one. `serviceSpecification` therefore resolves for both the collection and the single-entity path with no PDP change | — | — |
+| ENF-2 | **Access policy for the new path** so a seller may create and read service specs through the OID4VP-protected API — the analogue of `allowProductSpec.json`. Added as `it/src/test/resources/policies/allowServiceSpec.json`; the integration tests author specifications directly against the TMForum API, so they do not need it, but a marketplace deployment does | `it/src/test/resources/policies/allowServiceSpec.json` | done |
 | ENF-3 | Nothing to change at the **credentials-config-service**: the whole TMForum API is registered as one service (`tm-forum-api.registration.ccs.id: tmf-api`), so the new paths are already covered | — | — |
 | ENF-4 | **trusted-issuers-list**: order-scoped credential entries — planned in detail in [§5.7](#57-trusted-issuers-list--order-scoped-credential-entries) | `trusted-issuers-list` | M |
 

@@ -726,6 +726,9 @@ contract-management:
   did: did:web:mp-operations.org
   enableCentralMarketplace: true
   enableOdrlPap: true
+  # read the policies of the ServiceSpecifications a product is composed of as well.
+  # With a flat specification the result is identical, so this stays on for every scenario.
+  enableSpecificationComposition: true
   enableRainbow: false
   services:
     ## Config for Trusted Issuers List
