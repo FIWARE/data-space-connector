@@ -802,15 +802,6 @@ tm-forum-api:
           - tm-forum-api.127.0.0.1.nip.io
 
 contract-management:
-  # Pre-release build: it writes the consent-relevant characteristics (provider-id,
-  # consumer-id, signing-date, policy) onto the agreement it creates from a completed
-  # product order, which is what lets the consent-facade project a privacy notice from a
-  # purchased offering. The released 3.3.9 does not, so the second consent demo denies
-  # access with "no signed contract between ...". See doc/CONSENT_MANAGEMENT.md.
-  # The tag must be set explicitly: the subchart defaults it to its own appVersion.
-  deployment:
-    image:
-      tag: "3.3.11"
   did: did:web:mp-operations.org
   enableCentralMarketplace: true
   enableOdrlPap: true
