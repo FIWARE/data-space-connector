@@ -21,7 +21,8 @@
 > | CM-9, TIL-1…TIL-7 - order-scoped grants | released, `trusted-issuers-list 0.9.1` |
 > | DSC-2, DSC-7, DSC-8 - chart settings, model docs, 10.5.0 | this repository |
 > | ENF-1, ENF-2, DSC-4, DSC-5, DSC-6 - PDP check, access policy, integration test, authoring guide | this repository |
-> | **open** | BAE-1/BAE-2 authoring UI, CM-12 re-activation when a shared specification changes, consent granularity (§5.5), and the chart chain hop that brings `trusted-issuers-list` 0.9.1 through `vc-authentication` |
+> | CM-12 - re-activation when a part changes | **dropped**, it contradicts D-C7 |
+> | **open** | BAE-1/BAE-2 authoring UI, consent granularity (§5.5), and the chart chain hop that brings `trusted-issuers-list` 0.9.1 through `vc-authentication` |
 >
 > Provider-facing authoring guide:
 > [`doc/deployment-integration/roles/provider/COMPOSED_SPECIFICATIONS.md`](../deployment-integration/roles/provider/COMPOSED_SPECIFICATIONS.md).
@@ -236,7 +237,7 @@ owners' repositories, not the model.
 | **D-C4** | Merge key and duplicate handling | ODRL policies: `odrl:uid`. Credential configs: `(credentialsType, claims)` — the value already used for `HashSet` dedup in `TrustedIssuersListAdapter`. A duplicate is de-duplicated silently; **two different policies sharing one `odrl:uid` are a hard error** | `PAPAdapter` derives the PAP id from `odrl:uid` + order id, so a uid collision silently overwrites a policy. Failing the activation is better than installing one of two rules at random |
 | **D-C5** ⚠ | Traversal | Depth-limited (default 2 under D-C1: product → service), cycle-guarded by a visited-set of entity ids, `bundledProductSpecification` recursion inside the same budget. Hitting the limit or a cycle **truncates**, and every truncation emits a `WARN` naming the specification, the omitted references and the limit; the limit and its effect are documented for providers | Softer than the proposed hard error, on the grounds that a truncated activation is recoverable while a failed order is not — but truncation is only acceptable *because* it is loud: an unlogged truncation is silently missing access control. The log line is part of the decision, not an implementation detail |
 | **D-C6** ⚠ | Ownership of a part's configuration | **Single-provider only.** The `ProductSpecification`'s provider governs the whole aggregate: one order, one responsible contract-management. A part naming a *different* provider party makes the activation **fail loudly** — cross-provider composition is not supported and is not a deferred sub-case of this feature | Sharper than the proposal, which left the door open. Splitting one order's activation across two contract-managements has no rollback story: one side grants, the other does not, and nothing reconciles them. If resale/aggregation is wanted later it is its own design, not a relaxed check |
-| **D-C7** | Activation is a snapshot | Effective configuration is resolved **at order completion** and not re-resolved when a part changes. Documented, not implied | Today the same is true of `ProductSpecification`, but reuse makes editing a shared part look like a bulk update. Optional follow-up: subscribe to the `ServiceSpecification` hub and re-activate affected orders (§6, P4) |
+| **D-C7** | Activation is a snapshot | Effective configuration is resolved **at order completion** and not re-resolved when a part changes. Documented, not implied | Today the same is true of `ProductSpecification`, but reuse makes editing a shared part look like a bulk update. This is a decision *against* re-activation, not a deferral of it: a provider who wants a changed policy to apply publishes a new version and the customer orders it |
 | **D-C8** | Revocation must be order-scoped | An order's revocation may only remove TIL credential entries that no other *active* order requires. **How to achieve that is answered in [§4.2](#42-d-c8-how-to-make-til-entries-order-scoped)**: the target is a scope field in the trusted-issuers-list, with client-side recomputation as the interim | Otherwise order A's cancellation silently de-authorises order B. See [3.7](#37-revocation-has-no-reference-counting) |
 | **D-C9** | DSP projections stay flat | `fdsc-edc` keeps reading the **product level only**; under D-C2 everything it needs is authored there, so it needs no change at all. Rainbow is **out of scope entirely** — no work item, no flattening obligation | DSP/DCAT has one dataset per asset. Combined with D-C2 this makes the DSP path a non-participant in this feature rather than a consumer of a flattened view |
 | **D-C10** | Empty is legal | A specification at either level with no characteristics, and a bundle offering with no `productSpecification`, contribute nothing and are **not** errors | This is the normal shape of a composed product. It is the case that NPEs and empty-zips today ([3.2](#32-a-bundle-offering-kills-the-whole-order), [3.3](#33-a-composed-specification-usually-has-no-characteristics-at-all--and-that-npes)) |
@@ -314,7 +315,7 @@ Effort is a rough size for one developer familiar with the code base: **S** ≤ 
 | CM-9 | **Use the scope-addressed TIL endpoints** (TIL-3): grant becomes `PUT /issuer/{did}/credential?scope=<orderId>` with the resolved set, revocation becomes `DELETE …?scope=<orderId>`. This *removes* the read-modify-write, the `HashSet` merge, `removeCredentialsItem` and the create-or-update branch — the adapter gets smaller, not bigger. Regenerate the TIL client first (TIL-7) | `til/TrustedIssuersListAdapter.java`, `til/TilProductOrderHandler.java`, `pom.xml` (`til.api.url`) | M |
 | CM-10 | **Feature flag.** `general.enableSpecificationComposition` (default **off**), so the graph walk and its latency cost can be enabled per deployment | `configuration/GeneralProperties.java` | S |
 | CM-11 | **Tests.** Parameterized unit tests over the cases (product-only, service-only, mixed, bundled, cyclic, truncating, empty-at-every-level, duplicate `odrl:uid`, cross-provider rejection); extend `ContractManagementIT` with a composed specification, including a shared service spec revoked by one of two orders | `src/test/java/org/fiware/iam/tmforum/…`, `ContractManagementIT.java` | M |
-| CM-12 | Optional: subscribe to the `ServiceSpecification` hub and re-activate affected orders (D-C7 follow-up) | `configuration/NotificationProperties.java`, new handler | M–L |
+| ~~CM-12~~ | ~~Subscribe to the `ServiceSpecification` hub and re-activate affected orders~~ — **dropped.** D-C7 decided that an order's effective configuration is fixed when it completes, so re-activating it when a part changes would undo that decision rather than follow it. A provider who wants a changed policy to apply publishes a new version and the customer orders it | — | — |
 
 Two things are explicitly *not* in this list. **Rainbow** is out of scope by D-C9 — its handlers keep
 reading the product level and gain nothing. **`fdsc-edc`** needs no change either, because D-C2
@@ -365,7 +366,7 @@ product's own `purpose` (or its name) — degraded, not broken.
 |---|---|---|
 | DSC-1 | **No new service URL needed.** `contract-management.services.service-catalog` is already set in the umbrella values and in `k3s/provider.yaml`, and the DSP profiles inherit it; D-C1 removes the resource-catalog URL from the picture | — |
 | DSC-2 | The composition feature flag from CM-10, documented helm-docs style | `charts/data-space-connector/values.yaml` |
-| DSC-3 | `ServiceSpecification` hub subscription, **if** CM-12 is implemented — the entity list is hard-coded in the subchart template, so this is a `helm-charts` change, not a values change | `helm-charts/charts/contract-management/templates/configmap.yaml`, `values.yaml` |
+| ~~DSC-3~~ | ~~`ServiceSpecification` hub subscription~~ — not needed, since CM-12 is dropped | — |
 | DSC-4 | Integration test: a composed specification bought through the marketplace, plus the shared-service-spec revocation case | `it/src/test/resources/it/local_marketplace.feature` (or a new `composed_specification.feature`), `it/src/test/java/.../StandardStepDefinitions.java` — mirror `createProductSpecWithPolicy` for service specs |
 | DSC-5 | New PAP policies for the IT (ENF-2) | `it/src/test/resources/policies/` |
 | DSC-6 | Authoring documentation: a composed example next to the flat one | `doc/deployment-integration/local-deployment/LOCAL.MD`, `doc/CENTRAL_MARKETPLACE.md`, `doc/deployment-integration/roles/provider/` |
@@ -419,7 +420,7 @@ flowchart TB
     P3["<b>3 · Order-scoped revocation</b><br/>TIL-1…TIL-7 → CM-9<br/><i>required before reuse is advertised</i>"]
     P4["<b>4 · Authoring</b><br/>BAE-1, BAE-3, ENF-1, ENF-2, DSC-2…10"]
     P5["<b>5 · Consent granularity</b><br/>consent-facade per service"]
-    P6["<b>6 · Freshness + performance</b><br/>CM-12, TMF-1, TMF-2"]
+    P6["<b>6 · Performance</b><br/>TMF-1, TMF-2"]
     P0 --> P1 --> P2 --> P3 --> P4 --> P5
     P3 --> P6
 ```
