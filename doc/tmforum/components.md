@@ -76,6 +76,28 @@ Only the **first** matching characteristic is used per specification, and all of
 flattened, so one specification carries at most one credential configuration and one policy
 configuration.
 
+### Composed specifications
+
+With `general.enableSpecificationComposition` (default **off**) contract-management additionally
+reads the configuration of the `ServiceSpecification`s the ordered `ProductSpecification`
+references, and recursively of the `ProductSpecification`s it bundles
+(`SpecificationGraphResolver`). The first matching characteristic is taken **per specification**, and
+the results are unioned: policies de-duplicated by `odrl:uid`, credential configurations by value.
+
+* a composition declaring more than one provider fails the activation; a part declaring none
+  inherits the product's provider;
+* two different policies claiming one `odrl:uid` fail the activation, since the ODRL-PAP keys an
+  installed policy by that uid plus the order id;
+* the walk is depth-limited (`general.specificationCompositionMaxDepth`, default 2) and
+  cycle-guarded; hitting either guard truncates the walk and logs a warning naming what it skipped;
+* `ResourceSpecification`s are not read.
+
+Credentials are granted at the trusted-issuers-list under the **id of the order** that granted them
+(`PUT /issuer/{did}/credential?scope=<orderId>`, requires trusted-issuers-list ≥ 0.9.1), so
+cancelling one order leaves what another order granted in place — which is what makes a
+`ServiceSpecification` shared between products safe. Revocation deletes by that scope and therefore
+does not resolve the specification graph at all.
+
 ### Subscriptions
 
 `notification.entities` in `application.yaml` subscribes to `ProductOrder`, `ProductOffering`,

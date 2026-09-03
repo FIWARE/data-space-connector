@@ -97,9 +97,32 @@ always check the column before authoring:
 | `targetSpecification` | **`id`** | object (ODRL `AssetCollection` + `refinement`) | fdsc-transfer-extension | Replaces `odrl:target` in the policy pushed to the ODRL-PAP, enabling path/attribute-level enforcement |
 | `serviceConfiguration` | **`id`** | object (credentials-config-service `Service`) | fdsc-transfer-extension | Registered at the credentials-config-service when provisioning an OID4VC-secured transfer (`defaultOidcScope`, `oidcScopes`, `dcql`, trusted lists) |
 | `credentialsConfiguration` | `valueType` (schema `const`) | array of `{credentialsType, claims[]}` | contract-management → trusted-issuers-list | Which credential types + claim restrictions the customer's issuer may issue once the order completes |
-| `authorizationPolicy` | `valueType` (schema `const`) | array of ODRL policies | contract-management → ODRL-PAP | Access-control policies installed when the order completes |
+| `authorizationPolicy` | `valueType` (schema `const`) | array of ODRL policies | contract-management → ODRL-PAP | Access-control policies installed when the order completes. Also read from the `ServiceSpecification`s the product is composed of — see [below](#the-same-plane-on-a-servicespecification) |
 | `purpose` | **`name`** (configurable: `facade.spec.purpose-characteristic`) | object or JSON string | consent-facade | Processing purpose: `{id, name, description, purpose (DPV), legalBasis (DPV)}`. Only `name` is consumed by today's consent-manager |
 | `asset type`, `media type`, `location` | **`name`**, case-insensitive | string | BAE | A spec carrying **all three** is a *digital product*: BAE then forbids characteristic changes without a version bump |
+
+### The same plane on a `ServiceSpecification`
+
+With `contract-management.enableSpecificationComposition` enabled, the configuration plane is read
+from the `ServiceSpecification`s a `ProductSpecification` references as well — an access policy
+protects an API, and an API is a `ServiceSpecification`. The concept is identical; only the container
+names differ per API:
+
+| Entity | Characteristic list | Value list |
+|---|---|---|
+| `ProductSpecification` | `productSpecCharacteristic` | `productSpecCharacteristicValue` |
+| `ServiceSpecification` | **`specCharacteristic`** | **`characteristicValueSpecification`** |
+| `ResourceSpecification` | `resourceSpecCharacteristic` | `resourceSpecCharacteristicValue` — **not read**, decision D-C1 |
+
+`id`, `name` and `valueType` are the same on all of them, and `valueType` stays the discriminator.
+Which characteristic belongs on which level, and why the `fdsc-edc` ones stay at the product level,
+is in [`service-policy.md`](./service-policy.md#41-which-characteristic-belongs-on-which-level); the
+provider-facing version is
+[`COMPOSED_SPECIFICATIONS.md`](../deployment-integration/roles/provider/COMPOSED_SPECIFICATIONS.md).
+
+The two JSON schemas above pin `productSpecCharacteristicValue` and therefore do not apply to a
+`ServiceSpecification`'s characteristics; no schema is required for them, since `valueType` and the
+value list are standard TMForum fields.
 
 ### Value selection
 

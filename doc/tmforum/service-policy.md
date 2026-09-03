@@ -8,19 +8,32 @@
 > composed dataset, so the composition stops before them — see
 > [The DSP boundary](#the-dsp-boundary).
 >
-> **Status: the decision register in [§4](#4-decisions-decided-2026-09-02) is decided** for this
-> repository as of 2026-09-02. `ResourceSpecification` carries **no** DSC configuration (D-C1), the
-> `fdsc-edc` integration characteristics stay on `ProductSpecification` (D-C2), and composition is a
-> **single-provider** feature (D-C6), and order-scoped revocation is planned as a
-> **`trusted-issuers-list` change** ([§5.7](#57-trusted-issuers-list--order-scoped-credential-entries)).
-> Changes inside `business-ecosystem-logic-proxy` and `tm-forum-api` still need their owners'
-> sign-off per [`plan.md` phase 0](./plan.md#phase-0--agree-the-model).
+> **Status (2026-09-03): phases 0-3 are implemented and released.** The decision register in
+> [§4](#4-decisions-decided-2026-09-02) is decided; `ResourceSpecification` carries **no** DSC
+> configuration (D-C1), the `fdsc-edc` integration characteristics stay on `ProductSpecification`
+> (D-C2), and composition is a **single-provider** feature (D-C6).
+>
+> | Item | State |
+> |---|---|
+> | CM-1, CM-6, CM-7 - tolerant resolution | released, `contract-management 3.3.12` |
+> | CM-2, CM-4, CM-10 - the service-level walk and its settings | released |
+> | CM-5, CM-8 - union, `odrl:uid` de-duplication, single provider | released |
+> | CM-9, TIL-1…TIL-7 - order-scoped grants | released, `trusted-issuers-list 0.9.1` |
+> | DSC-2, DSC-7, DSC-8 - chart settings, model docs, 10.5.0 | this repository |
+> | **open** | BAE-1/BAE-2 authoring UI, ENF-1/ENF-2 the `serviceSpecification` access policy, DSC-4 the integration test, CM-12 re-activation on change, consent granularity (§5.5) |
+>
+> Provider-facing authoring guide:
+> [`doc/deployment-integration/roles/provider/COMPOSED_SPECIFICATIONS.md`](../deployment-integration/roles/provider/COMPOSED_SPECIFICATIONS.md).
 
-Today the model is flat: one `ProductSpecification` carries `productSpecCharacteristic[valueType=
-"authorizationPolicy"]` and `productSpecCharacteristic[valueType="credentialsConfiguration"]`, and
-`contract-management` reads exactly those two on exactly that entity
-([`entities.md#productspecification`](./entities.md#productspecification)). TMForum, BAE and
-`tm-forum-api` all support composition already; the DSC's *consumers* do not.
+The model used to be flat: one `ProductSpecification` carried
+`productSpecCharacteristic[valueType="authorizationPolicy"]` and
+`productSpecCharacteristic[valueType="credentialsConfiguration"]`, and `contract-management` read
+exactly those two on exactly that entity
+([`entities.md#productspecification`](./entities.md#productspecification)) - while TMForum, BAE and
+`tm-forum-api` supported composition all along. The rest of this document is written from that
+starting point, because it is the analysis the decisions were taken from; what is implemented today
+is summarized in the status block above, and the flat behaviour is still what a deployment gets with
+`enableSpecificationComposition` off.
 
 ## 1. What "composed" means
 
