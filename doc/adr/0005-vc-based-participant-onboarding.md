@@ -2,7 +2,7 @@
 
 **Status:** Proposed (design only - not implemented)
 **Date:** 2026-08-26
-**Applies to:** `FIWARE/data-space-connector`, Prometheus-X/Visions consent-manager
+**Applies to:** `FIWARE/data-space-connector`,  [Prometheus-X/consent-manager](https://github.com/Prometheus-X-association/consent-manager)
 **Context doc:** [`../CONSENT_MANAGEMENT.md`](../CONSENT_MANAGEMENT.md)
 
 ## Context
