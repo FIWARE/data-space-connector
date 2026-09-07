@@ -43,6 +43,9 @@ spec:
   {{- $finalUsers = append $finalUsers $proxyUser }}
 {{- end }}
 
+{{- /* the consent-manager's mongo user + its managed replica set live in the
+       trust-anchor chart now (charts/trust-anchor/templates/mongodb.yaml); this
+       chart's managed mongo carries only admin + marketplace users. */}}
 {{- range $user := $inputUsers }}
   {{- $finalUsers = append $finalUsers $user }}
 {{- end }}
