@@ -36,7 +36,6 @@ import static org.fiware.dataspace.it.components.MPOperationsEnvironment.SCORPIO
 import static org.fiware.dataspace.it.components.MPOperationsEnvironment.TMF_DIRECT_ADDRESS;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -98,6 +97,13 @@ public class ConsentStepDefinitions extends StepDefintions {
      * How long the plugin's decision may take to follow a changed consent.
      */
     private static final Duration DECISION_TIMEOUT = Duration.ofSeconds(30);
+
+    /**
+     * How long a denial has to hold before it counts as one. A single 403 can be a decision
+     * that has not caught up with a fresh grant, so the withdrawal scenarios assert that the
+     * deny persists rather than accepting the first one observed.
+     */
+    private static final Duration DENY_HOLDS_FOR = Duration.ofSeconds(10);
 
     /**
      * The event a withdrawal adds to the consent's lifecycle log in the receipt.
@@ -355,10 +361,20 @@ public class ConsentStepDefinitions extends StepDefintions {
 
     // --- Then --------------------------------------------------------------------------------
 
-    @Then("The consumer is denied access to the personal profile.")
-    public void accessIsDenied() {
-        awaitDataAccess(HttpStatus.SC_FORBIDDEN,
-                "Without a granted consent the consent-filter plugin should deny the read.");
+    @Then("The consumer stays denied access to the personal profile.")
+    public void accessStaysDenied() {
+        // `during` rather than `until`: a single 403 could just be a decision that has not
+        // caught up yet, which would let a broken withdrawal pass. The deny has to hold.
+        Awaitility.await("The consent-filter plugin should keep denying the read.")
+                .atMost(DENY_HOLDS_FOR.plus(DECISION_TIMEOUT))
+                .during(DENY_HOLDS_FOR)
+                .pollInterval(Duration.ofSeconds(2))
+                .untilAsserted(() -> {
+                    try (Response response = readPersonalProfile(dataAccessToken())) {
+                        assertEquals(HttpStatus.SC_FORBIDDEN, response.code(),
+                                "Without a granted consent the consent-filter plugin should deny the read.");
+                    }
+                });
     }
 
     @Then("The consumer can read the personal profile.")
@@ -461,7 +477,10 @@ public class ConsentStepDefinitions extends StepDefintions {
                         noticeData = resources;
                     }
                 });
-        assertNotNull(privacyNoticeId, "The notice id is needed to grant the consent.");
+        // `asText()` yields "" rather than null for a missing field, so a null-check would
+        // never fire and the grant would go out with an empty privacyNoticeId
+        assertFalse(privacyNoticeId == null || privacyNoticeId.isEmpty(),
+                "The notice id is needed to grant the consent.");
     }
 
     /**

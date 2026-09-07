@@ -615,10 +615,12 @@ decentralizedIam:
         # ---------------------------------------------------------------------------------------
         # Subject-authenticated path: the data subject presents its OWN OID4VP access token, which the
         # consent-manager verifies itself via external JWKS (its externalIdp values) and maps to its
-        # local User. Deliberately NO participant `jwt-auth` and NO consent-key injection - unlike the
-        # participant `/consent-manager/*` route, whose jwt-auth would reject a subject token at the
-        # gateway ("missing user key in JWT token"). This lets the subject reach its user-authenticated
-        # endpoints through the public ingress without a port-forward.
+        # local User. Deliberately NO participant authentication and NO consent-key injection. The
+        # participant `/consent-manager/*` route would not do: its `openid-connect` would accept this
+        # token (same verifier), but the consent-manager's participant middleware behind it resolves
+        # the caller to a Participant and would never find the subject - and that route injects the
+        # consent key, which a subject must not act with. This lets the subject reach its
+        # user-authenticated endpoints through the public ingress without a port-forward.
         #
         # :warning: Because these routes apply NO gateway authentication, each one is an ALLOW-LIST of
         # (uris x methods) whose handlers are `verifyUserJWT`-gated in the consent-manager itself, i.e.
@@ -718,11 +720,18 @@ decentralizedIam:
             openid-connect:
               bearer_only: true
               use_jwks: true
-              # the token's `aud` is the verifier service id; check it explicitly rather
-              # than trusting the signature alone, or a token minted for another service
-              # of the same verifier would be accepted here
-              audience: consent-manager
               client_id: consent-manager
+              # The token's `aud` is the verifier service id; check it explicitly rather
+              # than trusting the signature alone, or a token minted for another service
+              # of the same verifier would be accepted here. It has to be expressed as
+              # `claim_validator.audience` - openid-connect reads the audience only from
+              # there (a top-level `audience` key is silently ignored), and
+              # `match_with_client_id` compares it against `client_id` above.
+              claim_validator:
+                audience:
+                  claim: aud
+                  required: true
+                  match_with_client_id: true
               client_secret: unused-bearer-only
               discovery: https://verifier.dataspace-authority.org/services/consent-manager/.well-known/openid-configuration
               # The verifier is addressed by its PUBLIC ingress host, because that host is the token's

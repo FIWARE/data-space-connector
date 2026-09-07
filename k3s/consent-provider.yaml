@@ -3,12 +3,13 @@
 #
 # Layered on top of k3s/provider.yaml by the `consent` maven profile
 # (`-f k3s/provider.yaml -f k3s/consent-provider.yaml`), exactly the way
-# k3s/dsp-provider.yaml layers the DSP scenario. It carries the consent
-# *components* and their APISIX wiring so consent is opt-in:
-#   * consent-manager + consent-facade (consentManagement.*)
+# k3s/dsp-provider.yaml layers the DSP scenario. It carries the provider-side
+# consent *components* and their APISIX wiring so consent is opt-in:
 #   * the external Go consent-plugin runner attached to APISIX
 #     (odrlAuthorization.apisix.apisix.extPlugin + the init container that
 #      stages the runner binary + its shared volume)
+#   * the owner-resolver and a provider-local consent-facade, each from its own
+#     published chart (`consent-owner-resolver` / `consent-facade` below)
 #
 # NOTE: the `mp-data-service-consent` route and its ingress host stay in
 # provider.yaml (base), just like the DSP scenario's routes/hosts do. helm
@@ -63,22 +64,12 @@ decentralizedIam:
         - name: ext-plugin-bin
           emptyDir: {}
 
-# consent management (ISO/IEC TS 27560) - consent-manager + consent-facade.
-# The facade reads the provider's tm-forum-api; mongo uses the managed replica set.
-consentManagement:
-  enabled: true
-  # The consent-manager runs at the trust-anchor (the central authority, see
-  # k3s/consent-trust-anchor.yaml) and is deployed from its own chart there, so the
-  # provider does not configure it at all. Consent is enforced here solely by the APISIX
-  # consent-filter plugin (canonical path): there is no odrl-pap PIP wiring, and the
-  # provider does not hold the consent key (the consent-manager and its facade do).
-  # The consent-facade now runs at the AUTHORITY (k3s/consent-trust-anchor.yaml),
-  # not the provider: it is built to front multiple providers and authenticates to
-  # each provider's OID4VP-protected TM Forum api (mp-tmf-api) as the dataspace
-  # authority (did:web:dataspace-authority.org). The provider therefore no longer
-  # deploys it; it keeps only the APISIX consent-plugin wiring below.
-  consentFacade:
-    enabled: false
+# What the provider deploys for consent management (ISO/IEC TS 27560): the APISIX
+# consent-filter plugin wired above, the owner-resolver and a provider-local consent-facade
+# (both configured at the end of this file, each from its own published chart). The
+# consent-manager itself runs at the authority - see k3s/consent-trust-anchor-components.yaml -
+# so the provider never holds the consent key, and consent is enforced here solely by the
+# plugin (there is no odrl-pap PIP wiring).
 extraManifests:
   # --- authorize the consent-facade's cross-org reads at the odrl-pap -----------
   # The facade (at the authority) authenticates to mp-tmf-api over OID4VP and passes

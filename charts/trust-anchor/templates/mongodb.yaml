@@ -86,32 +86,42 @@ spec:
   additionalMongodConfig:
 {{ toYaml . | nindent 4 }}
 {{- end }}
-  users:
-    - name: admin
-      db: admin
-      passwordSecretRef:
-        name: mongodb-admin-password
-      scramCredentialsSecretName: mongodb-admin-password
-      roles:
-        - name: clusterAdmin
-          db: admin
-        - name: userAdminAnyDatabase
-          db: admin
-{{- if $consentMongoEnabled }}
-    - name: {{ $mongoUser }}
-      db: {{ $mongoDatabase }}
-      passwordSecretRef:
-        name: mongodb-consent-password
-      scramCredentialsSecretName: mongodb-consent-password
-      roles:
-        - name: readWrite
-          db: {{ $mongoDatabase }}
+{{- /* `managedMongo.spec` is documented as the CRD spec, so users supplied there are
+       merged rather than dropped - the same way the umbrella chart's mongodb.yaml does
+       it. The chart's own admin user is added only when the input does not define one,
+       so a deployment can take it over. */}}
+{{- $inputUsers := $spec.users | default list }}
+{{- $adminUserExists := false }}
+{{- range $user := $inputUsers }}
+  {{- if eq $user.name "admin" }}
+    {{- $adminUserExists = true }}
+  {{- end }}
 {{- end }}
+{{- $finalUsers := list }}
+{{- if not $adminUserExists }}
+  {{- $adminUser := dict "name" "admin" "db" "admin" "passwordSecretRef" (dict "name" "mongodb-admin-password") "scramCredentialsSecretName" "mongodb-admin-password" "roles" (list (dict "name" "clusterAdmin" "db" "admin") (dict "name" "userAdminAnyDatabase" "db" "admin")) }}
+  {{- $finalUsers = append $finalUsers $adminUser }}
+{{- end }}
+{{- if $consentMongoEnabled }}
+  {{- $consentUser := dict "name" $mongoUser "db" $mongoDatabase "passwordSecretRef" (dict "name" "mongodb-consent-password") "scramCredentialsSecretName" "mongodb-consent-password" "roles" (list (dict "name" "readWrite" "db" $mongoDatabase)) }}
+  {{- $finalUsers = append $finalUsers $consentUser }}
+{{- end }}
+{{- range $user := $inputUsers }}
+  {{- $finalUsers = append $finalUsers $user }}
+{{- end }}
+  users:
+{{ toYaml $finalUsers | nindent 4 }}
 {{- with $spec.statefulSet }}
   statefulSet:
 {{ toYaml . | nindent 4 }}
 {{- end }}
-{{- if and .Values.managedMongo.generatePasswords .Release.IsInstall }}
+{{- /* Generate once, then keep: gating on `.Release.IsInstall` would skip generation
+       when managedMongo is enabled during an UPGRADE, leaving the MongoDBCommunity
+       pointing `passwordSecretRef` at a secret nothing ever created. Looking the secret
+       up instead is true to the intent - generate when it is not there yet - and it also
+       keeps the value stable across re-renders. */}}
+{{- $adminSecretExists := (lookup "v1" "Secret" $.Release.Namespace "mongodb-admin-password") }}
+{{- if and .Values.managedMongo.generatePasswords (not $adminSecretExists) }}
 ---
 # admin credentials for the managed replica set. Generated once and kept across
 # upgrades (resource-policy keep) so the operator's stored SCRAM hash stays valid.
@@ -126,7 +136,8 @@ type: Opaque
 data:
   password: {{ randAlphaNum 30 | b64enc | quote }}
 {{- end }}
-{{- if and $consentMongoEnabled .Values.managedMongo.generatePasswords .Release.IsInstall }}
+{{- $consentSecretExists := (lookup "v1" "Secret" $.Release.Namespace "mongodb-consent-password") }}
+{{- if and $consentMongoEnabled .Values.managedMongo.generatePasswords (not $consentSecretExists) }}
 ---
 # password shared by the managed-mongo `consent` user and the consent-manager
 # (the consent-manager chart reads it from this secret - see its `mongo.auth`).

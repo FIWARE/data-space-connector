@@ -32,6 +32,11 @@ consentManagement:
 # in charts/trust-anchor/Chart.yaml).
 consent-manager:
   enabled: true
+  # The application's own base url. It is written into the ISO 27560 receipts and the
+  # e-mail-verification links, so it has to be the address a data subject can actually
+  # reach - the same reasoning as the facade's public `selfUrl` below. Left empty the chart
+  # falls back to the in-cluster service, which no subject can resolve.
+  appEndpoint: "https://consent-manager.dataspace-authority.org"
   ## the consent-facade runs in this (authority) namespace
   contractService:
     url: "http://consent-facade.trust-anchor.svc.cluster.local:8080"

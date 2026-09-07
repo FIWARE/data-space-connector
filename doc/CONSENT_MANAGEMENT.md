@@ -2,11 +2,6 @@
 
 Some data spaces require that access to personal data is backed by the **explicit consent** of the data subject, recorded in an auditable way. The Data Space Connector can deploy an optional consent-management layer based on the [Prometheus-X/consent-manager](https://github.com/Prometheus-X-association/consent-manager), producing [ISO/IEC TS 27560](https://www.iso.org/standard/80392.html) consent records, and enforce them at the gateway through the existing ODRL/OPA authorization stack.
 
-> :warning: This is a **reference integration**: the consent-manager is kept cluster-internal (no
-> ingress) and the demo uses example credentials. Before production use, harden the credentials,
-> expose the data-subject consent UI over ingress + TLS + auth, and run the authority in its own
-> environment. See [Known limitations](#known-limitations).
-
 The decisions behind this integration are recorded as [ADRs](adr/README.md).
 
 ## Architecture
@@ -160,7 +155,7 @@ participant tokens, and that endpoint is an unauthenticated credential exchange.
 
 #### Resolving the token to a participant
 
-The consent-manager verifies externally-issued OID4VP tokens (`consentManager.externalIdp`) and maps
+The consent-manager verifies externally-issued OID4VP tokens (`consent-manager.externalIdp`) and maps
 the verified subject to a local identity. 
 
 A shared `aud` does **not** let a subject act as a participant: the role follows from the local record
@@ -575,7 +570,7 @@ The end-to-end behaviour is:
 2. Grant consent for the holder DID in the consent-manager (see above) &rarr; the same request now returns **200**.
 3. Revoke the consent &rarr; the request returns **403** again.
 
-> :bulb: The consent-filter plugin implements the two-call check directly and gates the `mp-data-service-consent` route end to end (grant → 200 / revoke → 403, see [`verify_consent_flow.sh`](scripts/verify_consent_flow.sh)).
+> :bulb: The consent-filter plugin implements the two-call check directly and gates the `mp-data-service-consent` route end to end (grant → 200 / revoke → 403). The [`@consent` integration tests](#integration-tests) assert exactly that.
 
 > :warning: A full local bring-up of the provider **with** consent management is resource-hungry; the &ge;24 GB recommendation in the [local deployment requirements](deployment-integration/local-deployment/LOCAL.MD#requirements) applies.
 
@@ -922,11 +917,11 @@ verifier's JWKS and maps the holder DID (`sub`) to the subject's local `User`.
 
 > :warning: This needs a `quay.io/wi_stefan/consent-manager` image with the external-JWKS feature
 > (*verify external IDP / OID4VP JWTs via OIDC discovery + JWKS*, plus the configurable
-> `EXTERNAL_OIDC_DISCOVERY_PATH`); pin `consentManager.image.tag` accordingly.
+> `EXTERNAL_OIDC_DISCOVERY_PATH`); pin `consent-manager.deployment.image.tag` accordingly.
 > The verifier issues tokens with `aud: consent-manager` and `iss:
-> https://verifier.dataspace-authority.org` - these must match `consentManager.externalIdp.audience`
-> and `consentManager.externalIdp.issuers`. The verifier serves OIDC discovery only under a
-> per-service path, so `consentManager.externalIdp.discoveryPath` is set to
+> https://verifier.dataspace-authority.org` - these must match `consent-manager.externalIdp.audience`
+> and `consent-manager.externalIdp.issuers`. The verifier serves OIDC discovery only under a
+> per-service path, so `consent-manager.externalIdp.discoveryPath` is set to
 > `/services/consent-manager/.well-known/openid-configuration` (discovery is fetched at
 > `<issuer><discoveryPath>` while the `iss` stays the bare host). Because the consent-manager reaches
 > the verifier's discovery/JWKS at that ingress host, its runtime must also (a) **trust the cluster
@@ -961,9 +956,11 @@ build the signed `vp_token` from `cert/` → exchange it for the access token) -
 provider demos use, only the base URL differs: the verifier's per-service discovery URL
 `https://verifier.dataspace-authority.org/services/consent-manager`, with the `openid` scope. The
 subject reaches the consent-manager through the authority APISIX's allow-listed **`/consent-user`** routes - a
-subject path with **no** participant `jwt-auth` and **no** consent-key injection, so the subject's
-OID4VP token is *not* rejected at the gateway (the participant `/consent-manager/*` route's `jwt-auth`
-would reject it); the consent-manager verifies the token itself. It is the same public ingress + squid
+subject path with **no** participant authentication and **no** consent-key injection. The participant
+`/consent-manager/*` route would not do: its `openid-connect` would accept the subject's token (it is
+issued by the same verifier), but the consent-manager's participant middleware behind it resolves the
+caller to a *Participant* and would never find the subject - and that route also injects the consent
+key, which a subject must not act with; the consent-manager verifies the token itself. It is the same public ingress + squid
 the participant `$CM` calls use, so no port-forward is needed:
 
 ```shell
@@ -1031,7 +1028,7 @@ time:
 with the provider token + `x-user-key: $USER_KEY`, via squid.) Re-running the grant in 3e issues a fresh
 `granted` consent, so access is allowed again.
 
-> :bulb: To run this whole check in one shot, use [`./doc/scripts/verify_consent_flow.sh`](scripts/verify_consent_flow.sh) - it issues the token, then drives the same give-consent API to grant → assert `200`, revoke → assert `403`, re-grant → assert `200`, and exits non-zero on any failure. Needs the `cert/` holder identity from the prerequisites above.
+> :bulb: To run this whole check unattended, use the [`@consent` integration tests](#integration-tests): they drive the same give-consent API - grant → assert `200`, withdraw → assert the `403` holds - against a deployed data space, and fail the build on any deviation.
 
 ## Demo 2: consent on a purchased offering (the full TM Forum lifecycle)
 

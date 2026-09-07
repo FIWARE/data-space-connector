@@ -17,7 +17,7 @@ Feature: Consent-gated access to personal data as described in CONSENT_MANAGEMEN
     Given The provider allows reading personal profiles at OPA.
     And The data subject published a personal profile it owns.
     When The consumer requests the personal profile.
-    Then The consumer is denied access to the personal profile.
+    Then The consumer stays denied access to the personal profile.
 
   Scenario: The data subject grants consent and the same request succeeds.
     Given The provider allows reading personal profiles at OPA.
@@ -35,5 +35,8 @@ Feature: Consent-gated access to personal data as described in CONSENT_MANAGEMEN
     And A signed agreement between the participants covers the personal profile.
     And The data subject is registered at the provider and has a PDI account.
     And The data subject granted consent for its own data.
+    # the positive control: without it a grant that has not propagated yet would leave the
+    # stale 403 in place and the scenario would pass even if withdrawal did nothing
+    And The consumer can read the personal profile.
     When The data subject withdraws its consent.
-    Then The consumer is denied access to the personal profile.
+    Then The consumer stays denied access to the personal profile.
