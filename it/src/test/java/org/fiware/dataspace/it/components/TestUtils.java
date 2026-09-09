@@ -52,10 +52,25 @@ public class TestUtils {
 
 	public static final OkHttpClient OK_HTTP_CLIENT;
 
+	/**
+	 * Client that talks to {@code localhost} directly instead of through the squid proxy.
+	 *
+	 * <p>{@link #OK_HTTP_CLIENT} proxies everything through squid, which is how the cluster-internal
+	 * ingress hosts are resolved. A {@code kubectl port-forward} listens on the test machine, so it
+	 * has to be reached without that proxy.
+	 */
+	public static final OkHttpClient DIRECT_HTTP_CLIENT;
+
 	static {
 		try {
 			OK_HTTP_CLIENT = new OkHttpClient.Builder()
 					.proxy(getHttpProxy())
+					.followRedirects(false)
+					.sslSocketFactory(getTrustAllContext().getSocketFactory(), getTrustAllManager())
+					.addInterceptor(socketTimeoutRetryInterceptor())
+					.build();
+			DIRECT_HTTP_CLIENT = new OkHttpClient.Builder()
+					.proxy(Proxy.NO_PROXY)
 					.followRedirects(false)
 					.sslSocketFactory(getTrustAllContext().getSocketFactory(), getTrustAllManager())
 					.addInterceptor(socketTimeoutRetryInterceptor())

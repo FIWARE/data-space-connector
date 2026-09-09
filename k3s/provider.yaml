@@ -163,6 +163,33 @@ decentralizedIam:
               path: /health
           activeDeadlineSeconds: 1500
         services:
+          # tmf-api: the OID4VP-protected TM Forum api behind the mp-tmf-api ingress.
+          # The consent-facade (at the authority) authenticates here with an
+          # OperatorCredential issued to did:web:dataspace-authority.org. Registering
+          # it makes the verifier's authorization endpoint recognise client_id=tmf-api
+          # (without this the endpoint 302s / "service not found").
+          - id: tmf-api
+            defaultOidcScope: "default"
+            authorizationType: "DEEPLINK"
+            oidcScopes:
+              "default":
+                credentials:
+                  - type: OperatorCredential
+                    trustedParticipantsLists:
+                      - https://tir.127.0.0.1.nip.io
+                    trustedIssuersLists:
+                      - http://trusted-issuers-list:8080
+                    jwtInclusion:
+                      enabled: true
+                      fullInclusion: true
+                dcql:
+                  credentials:
+                    - id: operator-query
+                      format: "jwt_vc_json"
+                      multiple: true
+                      meta:
+                        type_values:
+                          - [OperatorCredential]
           - id: tpp-service
             defaultOidcScope: "operator"
             authorizationType: "DEEPLINK"
@@ -344,7 +371,7 @@ decentralizedIam:
           cert-manager.io/cluster-issuer: "selfsigned-issuer"
           cert-manager.io/private-key-algorithm: "ECDSA"
           traefik.ingress.kubernetes.io/router.tls: "true"
-          cert-manager.io/alt-names: "mp-data-service.127.0.0.1.nip.io,tpp-data-service.127.0.0.1.nip.io,tpp-service.127.0.0.1.nip.io,mp-tmf-api.127.0.0.1.nip.io,contract-management.127.0.0.1.nip.io,dsp-mp-operations.127.0.0.1.nip.io,dcp-mp-operations.127.0.0.1.nip.io,identityhub-mp-operations.127.0.0.1.nip.io,identityhub-management-mp-operations.127.0.0.1.nip.io,vault-mp-operations.127.0.0.1.nip.io,provider-oid4vc-management.127.0.0.1.nip.io,provider-dcp-management.127.0.0.1.nip.io"
+          cert-manager.io/alt-names: "mp-data-service.127.0.0.1.nip.io,tpp-data-service.127.0.0.1.nip.io,tpp-service.127.0.0.1.nip.io,mp-tmf-api.127.0.0.1.nip.io,contract-management.127.0.0.1.nip.io,dsp-mp-operations.127.0.0.1.nip.io,dcp-mp-operations.127.0.0.1.nip.io,identityhub-mp-operations.127.0.0.1.nip.io,identityhub-management-mp-operations.127.0.0.1.nip.io,vault-mp-operations.127.0.0.1.nip.io,provider-oid4vc-management.127.0.0.1.nip.io,provider-dcp-management.127.0.0.1.nip.io,mp-data-service-consent.127.0.0.1.nip.io"
         hosts:
           - host: mp-data-service.127.0.0.1.nip.io
             paths: ["/"]
@@ -370,6 +397,8 @@ decentralizedIam:
             paths: ["/"]
           - host: provider-dcp-management.127.0.0.1.nip.io
             paths: ["/"]
+          - host: mp-data-service-consent.127.0.0.1.nip.io
+            paths: ["/"]
         tls:
           - secretName: apisix-provider-tls
             hosts:
@@ -385,6 +414,7 @@ decentralizedIam:
               - vault-mp-operations.127.0.0.1.nip.io
               - provider-oid4vc-management.127.0.0.1.nip.io
               - provider-dcp-management.127.0.0.1.nip.io
+              - mp-data-service-consent.127.0.0.1.nip.io
       catchAllRoute:
         enabled: false
       routes:
@@ -478,6 +508,55 @@ decentralizedIam:
               host: http://localhost:8181
               policy: policy/main
               with_body: true
+        # same backend + auth/authz as mp-data-service, plus the consent-plugin.
+        # pre-req captures the request context (the JWT `sub`); post-resp runs the
+        # two-call consent check against the consent-manager (identifier/search +
+        # consents/participants) and denies unless a granted consent exists.
+        # The plugin holds NO participant credential. It asks the provider-local
+        # consent-facade (token_service_url) for a short-lived OID4VP access token,
+        # which that facade obtains by presenting this participant's credential as
+        # did:web:mp-operations.org; the token is then accepted by the authority
+        # gateway's openid-connect check and resolved to a Participant by `did`. The
+        # provider self-description is still derived from /participants/me, so no
+        # per-seed token/SD wiring is needed. No `consent_key` either: the authority's
+        # facade injects it server-side. See doc/CONSENT_MANAGEMENT.md.
+        # `audit_enabled` emits one access-decision event per request to the OTLP
+        # collector (`audit_otlp_endpoint`) as a log record marked
+        # service.name=consent-access-audit; off by default (turn on once the
+        # opentelemetry-collector subchart + a logs/audit pipeline are deployed).
+        - uri: /*
+          host: mp-data-service-consent.127.0.0.1.nip.io
+          upstream:
+            nodes:
+              data-service-scorpio:9090: 1
+            type: roundrobin
+          plugins:
+            openid-connect:
+              proxy_opts:
+                https_proxy: http://squid-proxy.infra.svc.cluster.local:8888
+              bearer_only: true
+              use_jwks: true
+              client_id: data-service
+              client_secret: unused
+              ssl_verify: false
+              discovery: https://verifier.mp-operations.org/services/data-service/.well-known/openid-configuration
+            opa:
+              host: http://localhost:8181
+              policy: policy/main
+              with_body: true
+            # The plugin must be wired on BOTH phases with the identical conf:
+            # ext-plugin-pre-req runs RequestFilter (captures method/path, keyed by
+            # $request_id); ext-plugin-post-resp runs ResponseFilter (resolves the
+            # data owner and checks consent). Without the pre-req phase there is no
+            # stored context and the plugin fails closed on every request.
+            ext-plugin-pre-req:
+              conf:
+                - name: consent-filter
+                  value: '{"consent_api_url":"http://consent-authority-apisix-gateway.trust-anchor.svc.cluster.local/consent-manager","consent_api_host":"consent-manager.dataspace-authority.org","consent_api_prefix":"/v1","owner_resolver_url":"http://owner-resolver.provider.svc.cluster.local:8080/resolve","service":"mp-data-service","token_service_url":"http://consent-facade.provider.svc.cluster.local:8080/internal/tokens","token_audience":"consent-manager","fail_open":false,"audit_enabled":false,"audit_otlp_endpoint":"http://provider-opentelemetry-collector:4318"}'
+            ext-plugin-post-resp:
+              conf:
+                - name: consent-filter
+                  value: '{"consent_api_url":"http://consent-authority-apisix-gateway.trust-anchor.svc.cluster.local/consent-manager","consent_api_host":"consent-manager.dataspace-authority.org","consent_api_prefix":"/v1","owner_resolver_url":"http://owner-resolver.provider.svc.cluster.local:8080/resolve","service":"mp-data-service","token_service_url":"http://consent-facade.provider.svc.cluster.local:8080/internal/tokens","token_audience":"consent-manager","fail_open":false,"audit_enabled":false,"audit_otlp_endpoint":"http://provider-opentelemetry-collector:4318"}'
         - uri: /.well-known/openid-configuration
           host: mp-tmf-api.127.0.0.1.nip.io
           upstream:
@@ -760,6 +839,15 @@ contract-management:
   additionalEnvVars:
     - name: LOGGER_LEVELS_ROOT
       value: DEBUG
+    # Enrich the agreements written from completed product orders for the consent integration:
+    # provider-id/consumer-id (the participants' self-description URLs), signing-date and policy.
+    # Without it the consent-facade projects no privacy notice from a purchased offering.
+    - name: CONSENT_ENABLED
+      value: "true"
+    # MUST equal the consent-facade's own selfUrl - the consent-manager matches participants on
+    # this exact string, so a value that merely resolves is not enough.
+    - name: CONSENT_SELF_DESCRIPTION_BASE_URL
+      value: https://consent-facade.dataspace-authority.org
 mongo-operator:
   enabled: false
 
@@ -833,6 +921,10 @@ managedMongo:
               resources:
                 requests:
                   storage: "1Gi"
+
+# consent management (ISO/IEC TS 27560) is opt-in via the `consent` maven
+# profile; its config lives in k3s/consent-provider.yaml (consent-manager +
+# consent-facade + the APISIX consent-plugin wiring).
 
 # marketplace frontend
 marketplace:
@@ -1598,6 +1690,14 @@ registration:
         - LegalPersonCredential
         - UserCredential
         - MembershipCredential
+    # the dataspace authority (consent-facade holder). Its OID4VP-authenticated
+    # calls to mp-tmf-api present an OperatorCredential it self-issues; the tmf-api
+    # verifier scope requires `VerifiableCredential` (satisfied by the type array),
+    # trusting issuers from this list. See k3s/consent-trust-anchor.yaml.
+    - did: did:web:dataspace-authority.org
+      credentialTypes:
+        - OperatorCredential
+        - VerifiableCredential
   prepScript: export $(curl -f -X GET did-helper:3002/did-material/did.env)
 
 fdsc-edc:
@@ -1629,6 +1729,8 @@ vc-operator:
   enabled: true
   watchNamespaces:
     - provider
+  image:
+    tag: "0.3.0"
   extraEnvVars:
     - name: HTTPS_PROXY
       value: "http://squid-proxy.infra.svc.cluster.local:8888"

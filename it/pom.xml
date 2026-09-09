@@ -351,6 +351,37 @@
                 </plugins>
             </build>
         </profile>
+        <!-- consent local deploy (root `consent` profile): like `local`, the it
+             module must not re-template/re-apply on top of the root deploy — a
+             second helm render regenerates the etcd hook Job's token and its
+             immutable pod template then conflicts on re-apply. -->
+        <profile>
+            <id>consent</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <artifactId>maven-resources-plugin</artifactId>
+                        <configuration>
+                            <skip>true</skip>
+                        </configuration>
+                    </plugin>
+                    <plugin>
+                        <groupId>io.kokuwa.maven</groupId>
+                        <artifactId>helm-maven-plugin</artifactId>
+                        <configuration>
+                            <skip>true</skip>
+                        </configuration>
+                    </plugin>
+                    <plugin>
+                        <groupId>io.kokuwa.maven</groupId>
+                        <artifactId>k3s-maven-plugin</artifactId>
+                        <configuration>
+                            <skip>true</skip>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
         <!-- Test filter profiles: use these to run only tests for a specific deployment profile -->
         <profile>
             <id>local-test</id>
@@ -394,6 +425,33 @@
                         <configuration>
                             <systemPropertyVariables>
                                 <cucumber.filter.tags>@dsp</cucumber.filter.tags>
+                            </systemPropertyVariables>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+        <profile>
+            <id>consent-test</id>
+            <build>
+                <plugins>
+                    <!-- The deploy profile the consent scenario is brought up with (`consent`, in the
+                         parent pom) skips compiler and failsafe, so that `mvn clean deploy -Pconsent`
+                         only deploys. Running the tests against that deployment re-enables both. -->
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-compiler-plugin</artifactId>
+                        <configuration>
+                            <skip>false</skip>
+                        </configuration>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-failsafe-plugin</artifactId>
+                        <configuration>
+                            <skip>false</skip>
+                            <systemPropertyVariables>
+                                <cucumber.filter.tags>@consent</cucumber.filter.tags>
                             </systemPropertyVariables>
                         </configuration>
                     </plugin>

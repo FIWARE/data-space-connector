@@ -1,0 +1,87 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/helm-unittest/helm-unittest/main/schema/helm-testsuite.json
+#
+# ---------------------------------------------------------------------------
+# Helm-unittest suite for the Consent Management pieces this chart templates: the
+# NetworkPolicies that isolate the consent-manager and the consent-facade, both gated by
+# consentManagement.enabled.
+#
+# The two services themselves come from their own published charts
+# (oci://quay.io/fiware/helm-charts/consent-manager and .../consent-facade), so their
+# behaviour is covered there. What this chart owns is the reachability around them.
+# ---------------------------------------------------------------------------
+suite: Consent Management - deployable components
+templates:
+  - templates/consent-network-policies.yaml
+tests:
+  # ==========================================================================
+  # Disabled by default -> nothing renders
+  # ==========================================================================
+  - it: renders nothing when consentManagement is disabled (default)
+    asserts:
+      - hasDocuments:
+          count: 0
+
+
+  # ==========================================================================
+  - it: isolates the consent-manager and the facade, keyed off the facade subchart
+    template: templates/consent-network-policies.yaml
+    set:
+      consentManagement.enabled: true
+      consent-manager.enabled: true
+      consent-facade.enabled: true
+    asserts:
+      - hasDocuments:
+          count: 2
+      - equal:
+          path: metadata.name
+          value: consent-manager-ingress
+        documentIndex: 0
+      - equal:
+          path: metadata.name
+          value: consent-facade-ingress
+        documentIndex: 1
+
+  - it: renders no facade policy when the facade is not deployed here
+    template: templates/consent-network-policies.yaml
+    set:
+      consentManagement.enabled: true
+      consent-manager.enabled: true
+      consent-facade.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 1
+      - equal:
+          path: metadata.name
+          value: consent-manager-ingress
+        documentIndex: 0
+
+  - it: admits the ingress controller only while the facade publishes an ingress
+    template: templates/consent-network-policies.yaml
+    documentIndex: 1
+    set:
+      consentManagement.enabled: true
+      consent-manager.enabled: true
+      consent-facade.enabled: true
+      consent-facade.ingress.enabled: true
+      consentManagement.networkPolicy.ingressController.namespace: infra
+    asserts:
+      - lengthEqual:
+          path: spec.ingress
+          count: 2
+      - equal:
+          path: spec.ingress[1].from[0].namespaceSelector.matchLabels["kubernetes.io/metadata.name"]
+          value: infra
+
+  - it: renders no manager policy when the consent-manager is not deployed here
+    template: templates/consent-network-policies.yaml
+    set:
+      consentManagement.enabled: true
+      consent-manager.enabled: false
+      consent-facade.enabled: true
+    asserts:
+      - hasDocuments:
+          count: 1
+      - equal:
+          path: metadata.name
+          value: consent-facade-ingress
+        documentIndex: 0
