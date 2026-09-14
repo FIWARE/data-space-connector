@@ -7,7 +7,7 @@ dependencies:
   - name: decentralized-iam
     alias: decentralizedIam
     condition: decentralizedIam.enabled
-    version: 2.1.19
+    version: 2.1.22
     repository: https://fiware.github.io/decentralized-iam
   # data-service
   - name: scorpio-broker-aaio
@@ -18,7 +18,7 @@ dependencies:
   # issuance
   - name: keycloak
     condition: keycloak.enabled
-    version: 0.21.34
+    version: 0.21.36
     repository: oci://registry-1.docker.io/cloudpirates
   # contract management
   - name: tm-forum-api
@@ -27,7 +27,7 @@ dependencies:
     repository: oci://quay.io/fiware/helm-charts
   - name: contract-management
     condition: contract-management.enabled
-    version: 3.5.32
+    version: 3.5.36
     repository: oci://quay.io/fiware/helm-charts
   # marketplace
   - name: business-api-ecosystem
@@ -75,11 +75,11 @@ dependencies:
     repository: oci://quay.io/seamware/helm-charts
   - name: prometheus
     condition: prometheus.enabled
-    version: 29.27.0
+    version: 29.27.2
     repository: https://prometheus-community.github.io/helm-charts
   - name: grafana
     condition: grafana.enabled
-    version: 13.0.1
+    version: 13.2.2
     repository: https://grafana-community.github.io/helm-charts
   # observability - OpenTelemetry Operator for auto-instrumentation (opt-in)
   - name: opentelemetry-operator
@@ -89,7 +89,7 @@ dependencies:
   # observability - OpenTelemetry Collector for distributed tracing (opt-in)
   - name: opentelemetry-collector
     condition: opentelemetry-collector.enabled
-    version: 0.172.0
+    version: 0.172.1
     repository: https://open-telemetry.github.io/opentelemetry-helm-charts
   # observability - Grafana Tempo for trace storage backend (opt-in)
   - name: tempo
