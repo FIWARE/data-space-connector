@@ -148,6 +148,7 @@ public class ConsentStepDefinitions extends StepDefintions {
     private String providerToken;
     private String subjectToken;
     private String userIdentifier;
+    private String agreementId;
     private String privacyNoticeId;
     private ArrayNode noticeData;
     private String consentId;
@@ -271,8 +272,13 @@ public class ConsentStepDefinitions extends StepDefintions {
                 OPERATOR_PROFILE_ENTITY_ID, providerSelfDescription, consumerSelfDescription,
                 System.currentTimeMillis() / 1000);
         try (Response response = post(HTTP_CLIENT, agreementApi(), agreement)) {
-            assertEquals(HttpStatus.SC_CREATED, response.code(), "The agreement should have been created.");
+            String body = response.body().string();
+            assertEquals(HttpStatus.SC_CREATED, response.code(), "The agreement should have been created: " + body);
+            // the id is what identifies this scenario's notice among the ones the pair accumulated:
+            // deleting an agreement does not delete the notice the facade projected from it
+            agreementId = OBJECT_MAPPER.readTree(body).path("id").asText();
         }
+        assertFalse(agreementId.isEmpty(), "The created agreement should have returned its id.");
     }
 
     @Given("The data subject is registered at the provider and has a PDI account.")
@@ -440,17 +446,28 @@ public class ConsentStepDefinitions extends StepDefintions {
     }
 
     /**
-     * Fetches the notice the facade projected from the agreement - the offer the subject consents to.
+     * Fetches the notice the facade projected from <em>this scenario's</em> agreement - the offer the
+     * subject consents to.
      *
      * <p>Projection has to read the agreement, resolve both participants and the offering's
      * specification, so it is awaited: an empty {@code data} or {@code purposes} means the projection
      * has not caught up (or the agreement is not consent-ready).
+     *
+     * <p>The notice is asked for by <em>contract</em>, not by provider/consumer pair. The pair-wide
+     * listing only returns notices the consent-manager has already stored, and a notice outlives the
+     * agreement it was projected from: every scenario seeds a fresh agreement, so that listing grows
+     * by one stale entry per scenario and the notice of the current agreement is not among them (it
+     * was observed to appear ~16 minutes later). Consenting to a stale one records the consent
+     * against a contract the plugin no longer evaluates, and the access stays denied with a granted
+     * consent in the database. Naming the contract makes the consent-manager project that contract's
+     * notice on demand, and can only ever return the one this scenario's agreement stands for.
      */
     private void fetchPrivacyNotice() {
         String providerKey = base64(providerSelfDescription);
         String consumerKey = base64(consumerSelfDescription);
-        String noticeUrl = String.format("%s/consents/%s/%s/%s",
-                CONSENT_MANAGER_FACADE_ADDRESS, subjectDid, providerKey, consumerKey);
+        String contractKey = base64(String.format(CONTRACT_URI_TEMPLATE, agreementId));
+        String noticeUrl = String.format("%s/consents/%s/%s/%s/%s",
+                CONSENT_MANAGER_FACADE_ADDRESS, subjectDid, providerKey, consumerKey, contractKey);
 
         Awaitility.await("The privacy notice should have been projected from the agreement.")
                 .atMost(PROPAGATION_TIMEOUT)
@@ -467,7 +484,7 @@ public class ConsentStepDefinitions extends StepDefintions {
                         assertEquals(HttpStatus.SC_OK, response.code(), "The notice should be readable: " + body);
                         JsonNode notices = OBJECT_MAPPER.readTree(body);
                         assertTrue(notices.isArray() && !notices.isEmpty(),
-                                "A notice should have been projected: " + body);
+                                "A notice should have been projected from " + agreementId + ": " + body);
                         JsonNode notice = notices.get(0);
                         assertFalse(notice.path("data").isEmpty(), "The notice needs a data resource: " + body);
                         assertFalse(notice.path("purposes").isEmpty(), "The notice needs a purpose: " + body);

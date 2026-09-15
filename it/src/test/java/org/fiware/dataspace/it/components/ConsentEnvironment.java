@@ -48,6 +48,18 @@ public abstract class ConsentEnvironment {
      */
     public static final String CONSENT_FACADE_ADDRESS = "https://consent-facade.dataspace-authority.org";
 
+    /**
+     * Template of a bilateral contract URI: the contract service the consent-manager projects its
+     * privacy notices from, plus the TM Forum agreement the contract stands for.
+     *
+     * <p>The base has to be the one the deployment configures
+     * ({@code consent-manager.contractService.url} in
+     * {@code k3s/consent-trust-anchor-components.yaml}), because the consent-manager stores exactly
+     * that string on the notice and resolves a contract by it.
+     */
+    public static final String CONTRACT_URI_TEMPLATE =
+            "http://consent-facade.trust-anchor.svc.cluster.local:8080/bilaterals/default~%s";
+
     // --- endpoints that are not published and are reached via kubectl port-forward -------------
 
     /**
