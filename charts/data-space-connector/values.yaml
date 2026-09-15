@@ -3746,7 +3746,7 @@ consent-owner-resolver:
   # the chart name): the provider's consent-facade NetworkPolicy selects the resolver as a
   # client by that label, and so would any other selector written against it.
   nameOverride: owner-resolver
-  # -- the DSC data model: a `PersonalProfile`-style NGSI-LD entity carries its data owner
+  # -- the DSC data model: an `OperatorProfile`-style NGSI-LD entity carries its data owner
   # in `dataOwner`, and the requested object is the entity `id`. With `contractService`
   # enabled the matcher additionally takes the data resource from the contract whose ODRL
   # asset target names that id; without it the check stays owner-level.

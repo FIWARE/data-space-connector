@@ -14,29 +14,29 @@ Feature: Consent-gated access to personal data as described in CONSENT_MANAGEMEN
   # Nothing is written into the consent-manager's database.
 
   Scenario: A consumer is denied personal data while no consent exists.
-    Given The provider allows reading personal profiles at OPA.
-    And The data subject published a personal profile it owns.
-    When The consumer requests the personal profile.
-    Then The consumer stays denied access to the personal profile.
+    Given The provider allows reading operator profiles at OPA.
+    And The data subject published an operator profile it owns.
+    When The consumer requests the operator profile.
+    Then The consumer stays denied access to the operator profile.
 
   Scenario: The data subject grants consent and the same request succeeds.
-    Given The provider allows reading personal profiles at OPA.
-    And The data subject published a personal profile it owns.
+    Given The provider allows reading operator profiles at OPA.
+    And The data subject published an operator profile it owns.
     And Both participants are onboarded at the consent-manager.
-    And A signed agreement between the participants covers the personal profile.
+    And A signed agreement between the participants covers the operator profile.
     And The data subject is registered at the provider and has a PDI account.
     When The data subject grants consent for its own data.
-    Then The consumer can read the personal profile.
+    Then The consumer can read the operator profile.
 
   Scenario: Withdrawing the consent denies the access again.
-    Given The provider allows reading personal profiles at OPA.
-    And The data subject published a personal profile it owns.
+    Given The provider allows reading operator profiles at OPA.
+    And The data subject published an operator profile it owns.
     And Both participants are onboarded at the consent-manager.
-    And A signed agreement between the participants covers the personal profile.
+    And A signed agreement between the participants covers the operator profile.
     And The data subject is registered at the provider and has a PDI account.
     And The data subject granted consent for its own data.
     # the positive control: without it a grant that has not propagated yet would leave the
     # stale 403 in place and the scenario would pass even if withdrawal did nothing
-    And The consumer can read the personal profile.
+    And The consumer can read the operator profile.
     When The data subject withdraws its consent.
-    Then The consumer stays denied access to the personal profile.
+    Then The consumer stays denied access to the operator profile.

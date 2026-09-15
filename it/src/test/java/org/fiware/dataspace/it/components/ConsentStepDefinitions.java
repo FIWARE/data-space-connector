@@ -74,12 +74,12 @@ public class ConsentStepDefinitions extends StepDefintions {
     private static final String OPENID_SCOPE = "openid";
 
     /**
-     * Id of the OPA policy that permits reading personal profiles. It carries no consent refinement
+     * Id of the OPA policy that permits reading operator profiles. It carries no consent refinement
      * on purpose: OPA authorizes on the credential alone so that the consent-filter plugin is the
      * component deciding on consent.
      */
-    private static final String PERSONAL_PROFILE_READ_POLICY_ID =
-            "https://mp-operation.org/policy/common/personalProfileRead";
+    private static final String OPERATOR_PROFILE_READ_POLICY_ID =
+            "https://mp-operation.org/policy/common/operatorProfileRead";
 
     /**
      * The processing purpose declared on the product specification. Nothing can derive it - it is a
@@ -121,10 +121,10 @@ public class ConsentStepDefinitions extends StepDefintions {
      * full URI and the resolver rightly reports no owner. Every request the gate sees must be one
      * whose shape the deployment's owner pointer describes.
      */
-    private Response readPersonalProfile(String accessToken) throws IOException {
+    private Response readOperatorProfile(String accessToken) throws IOException {
         Request request = new Request.Builder()
                 .get()
-                .url(CONSENT_ENFORCED_DATA_ADDRESS + "/ngsi-ld/v1/entities/" + PERSONAL_PROFILE_ENTITY_ID)
+                .url(CONSENT_ENFORCED_DATA_ADDRESS + "/ngsi-ld/v1/entities/" + OPERATOR_PROFILE_ENTITY_ID)
                 .header("Authorization", "Bearer " + accessToken)
                 .header("Accept", MediaType.APPLICATION_JSON)
                 .build();
@@ -173,9 +173,9 @@ public class ConsentStepDefinitions extends StepDefintions {
 
     // --- Given -------------------------------------------------------------------------------
 
-    @Given("The provider allows reading personal profiles at OPA.")
-    public void allowPersonalProfileRead() throws Exception {
-        deletePolicyIfPresent(PERSONAL_PROFILE_READ_POLICY_ID);
+    @Given("The provider allows reading operator profiles at OPA.")
+    public void allowOperatorProfileRead() throws Exception {
+        deletePolicyIfPresent(OPERATOR_PROFILE_READ_POLICY_ID);
         String policy = """
                 {
                   "@context": { "odrl": "http://www.w3.org/ns/odrl/2/" },
@@ -196,16 +196,16 @@ public class ConsentStepDefinitions extends StepDefintions {
                     "odrl:action": { "@id": "odrl:read" }
                   }
                 }
-                """.formatted(PERSONAL_PROFILE_READ_POLICY_ID, PERSONAL_PROFILE_ENTITY_TYPE);
+                """.formatted(OPERATOR_PROFILE_READ_POLICY_ID, OPERATOR_PROFILE_ENTITY_TYPE);
         try (Response response = post(HTTP_CLIENT, PROVIDER_PAP_ADDRESS + "/policy", policy)) {
             assertTrue(response.isSuccessful(),
                     "The read policy should have been registered at the PAP, but was " + response.code());
         }
     }
 
-    @Given("The data subject published a personal profile it owns.")
-    public void publishPersonalProfile() throws Exception {
-        deleteEntityIfPresent(PERSONAL_PROFILE_ENTITY_ID);
+    @Given("The data subject published an operator profile it owns.")
+    public void publishOperatorProfile() throws Exception {
+        deleteEntityIfPresent(OPERATOR_PROFILE_ENTITY_ID);
         // the dataOwner is what the OwnerResolver reads to decide whose data this is, so the consent
         // gate is bound to the subject and not to whoever requests it
         String entity = """
@@ -213,12 +213,12 @@ public class ConsentStepDefinitions extends StepDefintions {
                   "id": "%s",
                   "type": "%s",
                   "dataOwner": { "type": "Property", "value": "%s" },
-                  "email": { "type": "Property", "value": "alice@example.org" },
-                  "loyaltyPoints": { "type": "Property", "value": 4200 }
+                  "email": { "type": "Property", "value": "mipa@example.org" },
+                  "educationalHistory": { "type": "Property", "value": "B.Sc. Industrial Engineering (2018), Certified Kubernetes Administrator (2022)" }
                 }
-                """.formatted(PERSONAL_PROFILE_ENTITY_ID, PERSONAL_PROFILE_ENTITY_TYPE, subjectDid);
+                """.formatted(OPERATOR_PROFILE_ENTITY_ID, OPERATOR_PROFILE_ENTITY_TYPE, subjectDid);
         try (Response response = post(HTTP_CLIENT, SCORPIO_ADDRESS + "/ngsi-ld/v1/entities", entity)) {
-            assertEquals(HttpStatus.SC_CREATED, response.code(), "The personal profile should have been created.");
+            assertEquals(HttpStatus.SC_CREATED, response.code(), "The operator profile should have been created.");
         }
     }
 
@@ -247,7 +247,7 @@ public class ConsentStepDefinitions extends StepDefintions {
         }
     }
 
-    @Given("A signed agreement between the participants covers the personal profile.")
+    @Given("A signed agreement between the participants covers the operator profile.")
     public void seedAgreement() throws Exception {
         // a real deployment gets this from the marketplace or an EDC negotiation; the facade only
         // projects it into the privacy notice the subject consents to
@@ -268,7 +268,7 @@ public class ConsentStepDefinitions extends StepDefintions {
                     { "name": "signing-date", "value": %d } ]
                 }
                 """.formatted(offeringId, providerOrganizationId, consumerOrganizationId,
-                PERSONAL_PROFILE_ENTITY_ID, providerSelfDescription, consumerSelfDescription,
+                OPERATOR_PROFILE_ENTITY_ID, providerSelfDescription, consumerSelfDescription,
                 System.currentTimeMillis() / 1000);
         try (Response response = post(HTTP_CLIENT, agreementApi(), agreement)) {
             assertEquals(HttpStatus.SC_CREATED, response.code(), "The agreement should have been created.");
@@ -292,7 +292,7 @@ public class ConsentStepDefinitions extends StepDefintions {
         // the subject creates its own PDI account; the account e-mail is the holder DID, the same
         // value the UserIdentifier carries
         String signup = """
-                { "firstName": "Alice", "lastName": "Subject", "email": "%s", "password": "consent-it-password" }
+                { "firstName": "Mipa", "lastName": "Operator", "email": "%s", "password": "consent-it-password" }
                 """.formatted(subjectDid);
         String subjectUserId;
         try (Response response = post(HTTP_CLIENT, CONSENT_USER_ADDRESS + "/users/signup", signup)) {
@@ -321,11 +321,11 @@ public class ConsentStepDefinitions extends StepDefintions {
 
     // --- When --------------------------------------------------------------------------------
 
-    @When("The consumer requests the personal profile.")
-    public void requestPersonalProfile() throws Exception {
-        try (Response response = readPersonalProfile(dataAccessToken())) {
+    @When("The consumer requests the operator profile.")
+    public void requestOperatorProfile() throws Exception {
+        try (Response response = readOperatorProfile(dataAccessToken())) {
             log.info("Reading {} through the consent-enforced host answered {}.",
-                    PERSONAL_PROFILE_ENTITY_ID, response.code());
+                    OPERATOR_PROFILE_ENTITY_ID, response.code());
         }
     }
 
@@ -361,7 +361,7 @@ public class ConsentStepDefinitions extends StepDefintions {
 
     // --- Then --------------------------------------------------------------------------------
 
-    @Then("The consumer stays denied access to the personal profile.")
+    @Then("The consumer stays denied access to the operator profile.")
     public void accessStaysDenied() {
         // `during` rather than `until`: a single 403 could just be a decision that has not
         // caught up yet, which would let a broken withdrawal pass. The deny has to hold.
@@ -370,14 +370,14 @@ public class ConsentStepDefinitions extends StepDefintions {
                 .during(DENY_HOLDS_FOR)
                 .pollInterval(Duration.ofSeconds(2))
                 .untilAsserted(() -> {
-                    try (Response response = readPersonalProfile(dataAccessToken())) {
+                    try (Response response = readOperatorProfile(dataAccessToken())) {
                         assertEquals(HttpStatus.SC_FORBIDDEN, response.code(),
                                 "Without a granted consent the consent-filter plugin should deny the read.");
                     }
                 });
     }
 
-    @Then("The consumer can read the personal profile.")
+    @Then("The consumer can read the operator profile.")
     public void accessIsAllowed() {
         awaitDataAccess(HttpStatus.SC_OK,
                 "With a granted consent the plugin should let the identical request through.");
@@ -397,7 +397,7 @@ public class ConsentStepDefinitions extends StepDefintions {
                 .atMost(DECISION_TIMEOUT)
                 .pollInterval(Duration.ofSeconds(2))
                 .untilAsserted(() -> {
-                    try (Response response = readPersonalProfile(dataAccessToken())) {
+                    try (Response response = readOperatorProfile(dataAccessToken())) {
                         assertEquals(expectedStatus, response.code(), message);
                     }
                 });

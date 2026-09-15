@@ -113,10 +113,10 @@ public abstract class ConsentEnvironment {
     /**
      * The personal data entity the consent is exercised on.
      */
-    public static final String PERSONAL_PROFILE_ENTITY_ID = "urn:ngsi-ld:PersonalProfile:consent-it";
+    public static final String OPERATOR_PROFILE_ENTITY_ID = "urn:ngsi-ld:OperatorProfile:consent-it";
 
     /**
      * Type of that entity - the type the OPA policy permits reading.
      */
-    public static final String PERSONAL_PROFILE_ENTITY_TYPE = "PersonalProfile";
+    public static final String OPERATOR_PROFILE_ENTITY_TYPE = "OperatorProfile";
 }

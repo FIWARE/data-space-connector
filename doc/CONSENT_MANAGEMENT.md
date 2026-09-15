@@ -1,8 +1,38 @@
-## Consent Management
+# Consent Management
 
 Some data spaces require that access to personal data is backed by the **explicit consent** of the data subject, recorded in an auditable way. The Data Space Connector can deploy an optional consent-management layer based on the [Prometheus-X/consent-manager](https://github.com/Prometheus-X-association/consent-manager), producing [ISO/IEC TS 27560](https://www.iso.org/standard/80392.html) consent records, and enforce them at the gateway through the existing ODRL/OPA authorization stack.
 
 The decisions behind this integration are recorded as [ADRs](adr/README.md).
+
+## The use case
+
+While sharing of personal data between organizations can extend the value and capabilities of a Data Space, it requires compliance with regulations like [General Data Protection Regulation - GDPR](https://gdpr-info.eu/) and standards like [ISO/IEC TS 27560](https://www.iso.org/standard/80392.html) for storing the consent of the data subject.
+In our example use case, `mp-operations.org` might store data about educational history of its registered operators, so that consumers can get information about the level of service they can expect. However, parts of that data are personal and belong to the operator itself. It can only be shared with others (for example the consumer organization `fancy-marketplace.biz`), when the data subject (e.g. the person that the data belongs to) explicitly consents to that. This might become even more important, if the data subject is not an employee of the organization, but a customer interacting with multiple participants of the Data Space. In order to respect its GDPR-Rights, the sharing organizations have to check its consent for every data exchange it is involved in.
+The Consent Management solves that:
+* Data Subjects (e.g. the persons whose data is shared) are first class citizens in the data space
+  * they are uniquely identified across all participants
+  * they can independently grant/revoke fine-grained consent on data and sharing contracts between organizations
+* An authority (`Data Space Authority`) keeps track of the consents, independently from the data holders and consumers
+* Data Providers check Consent on every interaction involving personal data
+* Consent Manager and Data Provider trace and log consent decisions and data access
+
+![Overview](./img/consent/top-level.png)
+
+A concrete interaction would therefore look as follows:
+* Data Subject "Mipa Operator" provides its "OperatorProfile" personal data to `mp-operations.org`
+* `mp-operations.org` and `fancy-marketplace.biz` create a contract to give `fancy-marketplace.biz` access to all "OperatorProfile" entries of `mp-operations.org`
+* `mp-operations.org` requests "Mipa Operator" to consent to the data sharing of its "OperatorProfile" under the newly created contract
+* "Mipa Operator" interacts with the `Data Space Authority`'s consent-manager to grant consent for the sharing
+* `fancy-marketplace.biz` requests the profile of "Mipa Operator" at `mp-operations.org`
+* `mp-operations.org` checks the consent for that profile and contract at the consent-manager and responds the profile accordingly
+
+The detailed architecture and technical solution are described in the next chapters: the
+[Architecture](#architecture) and the [Flows](#flows) it is built from. Both demos execute the
+interaction above end to end - the [first demo](#demo-consent-gated-access-to-personal-data) seeds
+the provider↔consumer contract by hand and concentrates on the consent itself, while
+[Demo 2](#demo-2-consent-on-a-purchased-offering-the-full-tm-forum-lifecycle) also produces the
+contract the way a marketplace does: the provider publishes an offering, the consumer orders it,
+and contract-management turns the completed order into the agreement consent is scoped by.
 
 ## Architecture
 
@@ -269,7 +299,7 @@ sequenceDiagram
   participant fac as Authority facade
   participant cm as consent-manager
 
-  cons->>apisix: GET /entities/{PersonalProfile} (OID4VP access token)
+  cons->>apisix: GET /entities/{OperatorProfile} (OID4VP access token)
   apisix->>opa: authorize on credential
   opa-->>apisix: allow
   apisix->>scorpio: read entities
@@ -423,7 +453,7 @@ Declare it as a product-specification characteristic **named `purpose`**:
 
 ```json
 {
-  "name": "Personal Profile",
+  "name": "Operator Profile",
   "productSpecCharacteristic": [
     {
       "name": "purpose",
@@ -432,7 +462,7 @@ Declare it as a product-specification characteristic **named `purpose`**:
         {
           "value": {
             "id": "profile-service-provision",
-            "name": "Personal profile for service provision",
+            "name": "Operator profile for service provision",
             "description": "Deliver the requested service.",
             "purpose": "https://w3id.org/dpv#ServiceProvision"
           }
@@ -458,7 +488,7 @@ How it is read:
 > :warning: **A missing purpose does not fail - it degrades silently.** When no `purpose`
 > characteristic is present, the facade falls back to the product specification's own **`name`** as
 > the purpose name (`CatalogMapper.toSoftwareResource`). The privacy notice is then well-formed and
-> the demo flow still passes, but the subject has consented to something like *"Personal Profile"* -
+> the demo flow still passes, but the subject has consented to something like *"Operator Profile"* -
 > a product name, not a processing purpose. Nothing downstream can detect this, which is why it is
 > worth asserting on: check that a projected notice's `purposes[].purpose` is the value you declared
 > and not the product's name.
@@ -605,7 +635,7 @@ This walkthrough shows the core consent story end to end: a data subject publish
 > offering, the consumer buys it and contract-management writes the agreement - see
 > [Demo 2](#demo-2-consent-on-a-purchased-offering-the-full-tm-forum-lifecycle).
 
-> :bulb: **Two enforcement layers.** The `mp-data-service-consent` route runs each request through **two** gates: first OPA (fed by odrl-pap) authorizes the call on the presented *credential*, then the custom **consent-filter** APISIX plugin gates it on the data subject's *consent*. The plugin no longer uses the requestor's token to identify the subject: in the response phase it sends the returned data to the **OwnerResolver** (deployed provider-side), which returns the data owner (from the entity's `dataOwner`) and the resource (the entity `id`); the plugin then checks that owner's consent for that entity against the consent-manager. This walkthrough exercises exactly that split - OPA must **allow** the `PersonalProfile` read (step 0) so that the **plugin** is the component that denies the access when no consent exists and permits it once consent is granted. The data requests therefore target the plugin-enforced host `mp-data-service-consent.127.0.0.1.nip.io`; the access token is still obtained from `mp-data-service.127.0.0.1.nip.io`, which serves the OIDC discovery.
+> :bulb: **Two enforcement layers.** The `mp-data-service-consent` route runs each request through **two** gates: first OPA (fed by odrl-pap) authorizes the call on the presented *credential*, then the custom **consent-filter** APISIX plugin gates it on the data subject's *consent*. The plugin no longer uses the requestor's token to identify the subject: in the response phase it sends the returned data to the **OwnerResolver** (deployed provider-side), which returns the data owner (from the entity's `dataOwner`) and the resource (the entity `id`); the plugin then checks that owner's consent for that entity against the consent-manager. This walkthrough exercises exactly that split - OPA must **allow** the `OperatorProfile` read (step 0) so that the **plugin** is the component that denies the access when no consent exists and permits it once consent is granted. The data requests therefore target the plugin-enforced host `mp-data-service-consent.127.0.0.1.nip.io`; the access token is still obtained from `mp-data-service.127.0.0.1.nip.io`, which serves the OIDC discovery.
 
 **Prerequisites.** Deploy the data space with consent management enabled (`mvn clean deploy -Pconsent`, see [Enabling](#enabling)). All commands below are run from the repository root. The grant step reaches the consent-manager and TM Forum API through `kubectl port-forward`, so point `KUBECONFIG` at the local cluster:
 
@@ -630,15 +660,15 @@ Then, on the consumer side, generate a holder identity and issue the credential 
   export USER_CREDENTIAL=$(./doc/scripts/get_credential.sh https://keycloak-consumer.127.0.0.1.nip.io user-credential employee); echo ${USER_CREDENTIAL}
 ```
 
-**0. Allow the read at OPA - consent is left to the plugin.** Register a policy that permits *read* of `PersonalProfile` entities to any credential holder (`vc:any`). It carries **no** consent refinement: OPA authorizes purely on the credential, so the request reaches the consent-filter plugin, which is the component that decides on consent. (Without this policy OPA denies the call outright and the plugin never runs.)
+**0. Allow the read at OPA - consent is left to the plugin.** Register a policy that permits *read* of `OperatorProfile` entities to any credential holder (`vc:any`). It carries **no** consent refinement: OPA authorizes purely on the credential, so the request reaches the consent-filter plugin, which is the component that decides on consent. (Without this policy OPA denies the call outright and the plugin never runs.)
 
 ```shell
   curl -k -x localhost:8888 -s -X POST https://pap-provider.127.0.0.1.nip.io/policy \
     -H 'Content-Type: application/json' \
     -d '{
           "@context": { "odrl": "http://www.w3.org/ns/odrl/2/" },
-          "@id": "https://mp-operation.org/policy/common/personalProfileRead",
-          "odrl:uid": "https://mp-operation.org/policy/common/personalProfileRead",
+          "@id": "https://mp-operation.org/policy/common/operatorProfileRead",
+          "odrl:uid": "https://mp-operation.org/policy/common/operatorProfileRead",
           "@type": "odrl:Policy",
           "odrl:permission": {
             "odrl:assigner": { "@id": "https://www.mp-operation.org/" },
@@ -646,7 +676,7 @@ Then, on the consumer side, generate a holder identity and issue the credential 
               "@type": "odrl:AssetCollection",
               "odrl:source": "urn:asset",
               "odrl:refinement": [
-                { "@type": "odrl:Constraint", "odrl:leftOperand": "ngsi-ld:entityType", "odrl:operator": { "@id": "odrl:eq" }, "odrl:rightOperand": "PersonalProfile" }
+                { "@type": "odrl:Constraint", "odrl:leftOperand": "ngsi-ld:entityType", "odrl:operator": { "@id": "odrl:eq" }, "odrl:rightOperand": "OperatorProfile" }
               ]
             },
             "odrl:assignee": { "@id": "vc:any" },
@@ -655,19 +685,19 @@ Then, on the consumer side, generate a holder identity and issue the credential 
         }'
 ```
 
-**1. The subject publishes personal data.** The data owner creates a `PersonalProfile` entity in the provider's context broker (via the demo scorpio ingress). Crucially, the entity carries a **`dataOwner`** attribute = the subject's DID: this is what the OwnerResolver reads to decide *whose* data it is, so the consent gate is bound to the data owner and **not** to whoever requests it. (`SUBJECT_DID` is the holder DID from the `cert/` identity created in the prerequisites.)
+**1. The subject publishes personal data.** The data owner creates an `OperatorProfile` entity in the provider's context broker (via the demo scorpio ingress). Crucially, the entity carries a **`dataOwner`** attribute = the subject's DID: this is what the OwnerResolver reads to decide *whose* data it is, so the consent gate is bound to the data owner and **not** to whoever requests it. (`SUBJECT_DID` is the holder DID from the `cert/` identity created in the prerequisites.)
 
 ```shell
   export SUBJECT_DID=$(jq -r '.id' cert/did.json); echo ${SUBJECT_DID}
-  export ENTITY_ID=urn:ngsi-ld:PersonalProfile:alice
+  export ENTITY_ID=urn:ngsi-ld:OperatorProfile:mipa
   curl -k -x localhost:8888 -s -X POST https://scorpio-provider.127.0.0.1.nip.io/ngsi-ld/v1/entities \
     -H 'Content-Type: application/json' \
     -d "{
-      \"id\": \"urn:ngsi-ld:PersonalProfile:alice\",
-      \"type\": \"PersonalProfile\",
+      \"id\": \"urn:ngsi-ld:OperatorProfile:mipa\",
+      \"type\": \"OperatorProfile\",
       \"dataOwner\": { \"type\": \"Property\", \"value\": \"${SUBJECT_DID}\" },
-      \"email\": { \"type\": \"Property\", \"value\": \"alice@example.org\" },
-      \"loyaltyPoints\": { \"type\": \"Property\", \"value\": 4200 }
+      \"email\": { \"type\": \"Property\", \"value\": \"mipa@example.org\" },
+      \"educationalHistory\": { \"type\": \"Property\", \"value\": \"B.Sc. Industrial Engineering (2018), Certified Kubernetes Administrator (2022)\" }
     }"
 ```
 
@@ -676,7 +706,7 @@ Then, on the consumer side, generate a holder identity and issue the credential 
 ```shell
   export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh https://mp-data-service.127.0.0.1.nip.io $USER_CREDENTIAL default); echo ${ACCESS_TOKEN}
   curl -k -x localhost:8888 -s -o /dev/null -w 'HTTP %{http_code}\n' \
-    -X GET 'https://mp-data-service-consent.127.0.0.1.nip.io/ngsi-ld/v1/entities/urn:ngsi-ld:PersonalProfile:alice' \
+    -X GET 'https://mp-data-service-consent.127.0.0.1.nip.io/ngsi-ld/v1/entities/urn:ngsi-ld:OperatorProfile:mipa' \
     -H "Authorization: Bearer ${ACCESS_TOKEN}"
   # -> HTTP 403 (denied by the consent-filter plugin, not by OPA)
 ```
@@ -813,11 +843,11 @@ consent-facade preserves whatever the agreement carried as `assetTarget`.)
 ```shell
   export SPEC_ID=$(curl -s -X POST $TMF/productCatalogManagement/v4/productSpecification \
     -H 'Content-Type: application/json' -d @- <<JSON | jq -r .id
-{ "name": "Personal Profile", "description": "The subject's profile",
+{ "name": "Operator Profile", "description": "The operator's profile",
   "productSpecCharacteristic": [ { "name": "purpose", "valueType": "object",
     "productSpecCharacteristicValue": [ { "value": {
       "id": "profile-service-provision",
-      "name": "Personal profile for service provision",
+      "name": "Operator profile for service provision",
       "description": "Deliver the requested service.",
       "purpose": "https://w3id.org/dpv#ServiceProvision" } } ] } ] }
 JSON
@@ -825,7 +855,7 @@ JSON
 
   export OFFERING_ID=$(curl -s -X POST $TMF/productCatalogManagement/v4/productOffering \
     -H 'Content-Type: application/json' \
-    -d "{\"name\":\"Personal Profile Offering\",\"productSpecification\":{\"id\":\"$SPEC_ID\"}}" | jq -r .id); echo $OFFERING_ID
+    -d "{\"name\":\"Operator Profile Offering\",\"productSpecification\":{\"id\":\"$SPEC_ID\"}}" | jq -r .id); echo $OFFERING_ID
 
   export AGREEMENT_ID=$(curl -s -X POST $TMF/agreementManagement/v4/agreement \
     -H 'Content-Type: application/json' -d @- <<JSON | jq -r .id
@@ -864,7 +894,7 @@ its OID4VP token to a `User`. So the subject signs itself up and the provider-si
   #    The account e-mail is the holder DID - the same value the UserIdentifier carries (see the note
   #    below); the consent-manager keys its identity lookups on that field.
   export SUBJECT_USER_ID=$(curl -s -k -x localhost:8888 -X POST $CU/users/signup -H 'Content-Type: application/json' \
-    -d "{\"firstName\":\"Alice\",\"lastName\":\"Subject\",\"email\":\"$DID\",\"password\":\"demo-password\"}" \
+    -d "{\"firstName\":\"Mipa\",\"lastName\":\"Operator\",\"email\":\"$DID\",\"password\":\"demo-password\"}" \
     | jq -r '.user._id'); echo $SUBJECT_USER_ID
 
   # 3) attach the provider-side identifier to that account (authority action - needs the consent key,
@@ -1011,7 +1041,7 @@ no per-grant wiring is needed. Step 4 then observes access exactly as before.
 ```shell
   export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh https://mp-data-service.127.0.0.1.nip.io $USER_CREDENTIAL default)
   curl -k -x localhost:8888 -s -w '\nHTTP %{http_code}\n' \
-    -X GET 'https://mp-data-service-consent.127.0.0.1.nip.io/ngsi-ld/v1/entities/urn:ngsi-ld:PersonalProfile:alice' \
+    -X GET 'https://mp-data-service-consent.127.0.0.1.nip.io/ngsi-ld/v1/entities/urn:ngsi-ld:OperatorProfile:mipa' \
     -H "Authorization: Bearer ${ACCESS_TOKEN}"
   # -> the entity + HTTP 200
 ```
@@ -1108,7 +1138,7 @@ both the data owner and the consenting identity:
 
 ```shell
   export SUBJECT_DID=$(jq -r '.id' cert/did.json); echo ${SUBJECT_DID}
-  export ENTITY_ID=urn:ngsi-ld:PersonalProfile:alice
+  export ENTITY_ID=urn:ngsi-ld:OperatorProfile:mipa
 
 kubectl -n provider     port-forward svc/tm-forum-api-svc 8090:8080
 kubectl -n trust-anchor port-forward svc/consent-authority-apisix-admin 9180:9180   # apisix admin (optional: inspecting routes)
@@ -1130,7 +1160,7 @@ export DID=$SUBJECT_DID
 
 ### 1. Allow the read at OPA
 
-Register a policy that permits *read* of `PersonalProfile` entities to any credential holder
+Register a policy that permits *read* of `OperatorProfile` entities to any credential holder
 (`vc:any`), carrying **no** consent refinement: OPA authorizes on the credential alone, so the request
 reaches the consent-filter plugin, which is the component that decides on consent. Without this OPA
 denies outright and the plugin never runs.
@@ -1140,8 +1170,8 @@ curl -k -x localhost:8888 -s -X POST https://pap-provider.127.0.0.1.nip.io/polic
   -H 'Content-Type: application/json' \
   -d '{
         "@context": { "odrl": "http://www.w3.org/ns/odrl/2/" },
-        "@id": "https://mp-operation.org/policy/common/personalProfileRead",
-        "odrl:uid": "https://mp-operation.org/policy/common/personalProfileRead",
+        "@id": "https://mp-operation.org/policy/common/operatorProfileRead",
+        "odrl:uid": "https://mp-operation.org/policy/common/operatorProfileRead",
         "@type": "odrl:Policy",
         "odrl:permission": {
           "odrl:assigner": { "@id": "https://www.mp-operation.org/" },
@@ -1149,7 +1179,7 @@ curl -k -x localhost:8888 -s -X POST https://pap-provider.127.0.0.1.nip.io/polic
             "@type": "odrl:AssetCollection",
             "odrl:source": "urn:asset",
             "odrl:refinement": [
-              { "@type": "odrl:Constraint", "odrl:leftOperand": "ngsi-ld:entityType", "odrl:operator": { "@id": "odrl:eq" }, "odrl:rightOperand": "PersonalProfile" }
+              { "@type": "odrl:Constraint", "odrl:leftOperand": "ngsi-ld:entityType", "odrl:operator": { "@id": "odrl:eq" }, "odrl:rightOperand": "OperatorProfile" }
             ]
           },
           "odrl:assignee": { "@id": "vc:any" },
@@ -1169,10 +1199,10 @@ requests it.
     -H 'Content-Type: application/json' \
     -d "{
       \"id\": \"${ENTITY_ID}\",
-      \"type\": \"PersonalProfile\",
+      \"type\": \"OperatorProfile\",
       \"dataOwner\": { \"type\": \"Property\", \"value\": \"${SUBJECT_DID}\" },
-      \"email\": { \"type\": \"Property\", \"value\": \"alice@example.org\" },
-      \"loyaltyPoints\": { \"type\": \"Property\", \"value\": 4200 }
+      \"email\": { \"type\": \"Property\", \"value\": \"mipa@example.org\" },
+      \"educationalHistory\": { \"type\": \"Property\", \"value\": \"B.Sc. Industrial Engineering (2018), Certified Kubernetes Administrator (2022)\" }
     }"
 ```
 
@@ -1269,8 +1299,8 @@ characteristics on the **specification** carry everything consent needs downstre
   export SPEC_ID=$(curl -s -X POST $TMF/productCatalogManagement/v4/productSpecification \
     -H 'Content-Type: application/json' -d @- <<JSON | jq -r .id
 {
-  "name": "Personal Profile",
-  "description": "The subject's profile",
+  "name": "Operator Profile",
+  "description": "The operator's profile",
   "relatedParty": [ { "id": "$PROV_ORG", "role": "provider" } ],
   "productSpecCharacteristic": [
     {
@@ -1278,7 +1308,7 @@ characteristics on the **specification** carry everything consent needs downstre
       "valueType": "object",
       "productSpecCharacteristicValue": [ { "value": {
         "id": "profile-service-provision",
-        "name": "Personal profile for service provision",
+        "name": "Operator profile for service provision",
         "description": "Deliver the requested service.",
         "purpose": "https://w3id.org/dpv#ServiceProvision" } } ]
     },
@@ -1304,7 +1334,7 @@ JSON
 
   export OFFERING_ID=$(curl -s -X POST $TMF/productCatalogManagement/v4/productOffering \
     -H 'Content-Type: application/json' \
-    -d "{\"name\":\"Personal Profile Offering\",\"isBundle\":false,\"isSellable\":true,
+    -d "{\"name\":\"Operator Profile Offering\",\"isBundle\":false,\"isSellable\":true,
          \"lifecycleStatus\":\"Active\",
          \"productSpecification\":{\"id\":\"$SPEC_ID\"},
          \"productOfferingPrice\":[{\"id\":\"$PRICE_ID\"}],
@@ -1381,7 +1411,7 @@ export USER_KEY=$(curl -s -k -x localhost:8888 -X POST $CM/users/identifier/sear
 #    The account e-mail is the holder DID - the same value the UserIdentifier carries (see the note
 #    below); the consent-manager keys its identity lookups on that field.
 export SUBJECT_USER_ID=$(curl -s -k -x localhost:8888 -X POST $CU/users/signup -H 'Content-Type: application/json' \
-  -d "{\"firstName\":\"Alice\",\"lastName\":\"Subject\",\"email\":\"$DID\",\"password\":\"demo-password\"}" \
+  -d "{\"firstName\":\"Mipa\",\"lastName\":\"Operator\",\"email\":\"$DID\",\"password\":\"demo-password\"}" \
   | jq -r '.user._id'); echo $SUBJECT_USER_ID
 
 # 3) attach the provider-side identifier to that account (authority action - needs the consent key,
@@ -1418,7 +1448,7 @@ echo "$NOTICE" | jq '.[0] | {privacyNoticeId: ._id, data: [.data[].resource], pu
 
 export PN_ID=$(echo "$NOTICE" | jq -r '.[0]._id')
 export DATA=$(echo "$NOTICE"  | jq -c '[.[0].data[].resource]')
-  # -> purposes: ["Personal profile for service provision"]   (not "Personal Profile")
+  # -> purposes: ["Operator profile for service provision"]   (not "Operator Profile")
 ```
 
 Now the **subject** authenticates with its own credential over OID4VP and grants for its own identity.
