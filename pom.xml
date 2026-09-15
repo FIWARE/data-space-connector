@@ -431,12 +431,15 @@
                     <!-- Patch the rendered manifests for deadlines and drop the helm hooks a fresh
                          install never runs (see k3s/ci-post-render.sh). Bound to `package` like the
                          templating above and declared after it, so it always sees the finished
-                         render; the apply that consumes it happens at `deploy`. The
-                         integration-test module patches its own render in its `test` profile - the
-                         script is idempotent, so a tree may pass through it twice. -->
+                         render; the apply that consumes it happens at `deploy`.
+                         Not inherited: the integration-test module patches its own render in its
+                         `test` profile, with a path that resolves there. `${main.basedir}` is
+                         `${project.parent.basedir}` in that module, which Maven does not expand for
+                         an antrun argument - the script path would arrive at /bin/bash verbatim. -->
                     <execution>
                         <id>post-render-manifests</id>
                         <phase>package</phase>
+                        <inherited>false</inherited>
                         <goals>
                             <goal>run</goal>
                         </goals>
