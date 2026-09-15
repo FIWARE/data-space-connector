@@ -428,6 +428,27 @@
                             </tasks>
                         </configuration>
                     </execution>
+                    <!-- Patch the rendered manifests for deadlines and drop the helm hooks a fresh
+                         install never runs (see k3s/ci-post-render.sh). Bound to `package` like the
+                         templating above and declared after it, so it always sees the finished
+                         render; the apply that consumes it happens at `deploy`. The
+                         integration-test module patches its own render in its `test` profile - the
+                         script is idempotent, so a tree may pass through it twice. -->
+                    <execution>
+                        <id>post-render-manifests</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>run</goal>
+                        </goals>
+                        <configuration>
+                            <tasks>
+                                <exec executable="/bin/bash" failonerror="true">
+                                    <arg value="${main.basedir}/k3s/ci-post-render.sh" />
+                                    <arg value="${project.build.directory}/k3s" />
+                                </exec>
+                            </tasks>
+                        </configuration>
+                    </execution>
                 </executions>
             </plugin>
             <plugin>

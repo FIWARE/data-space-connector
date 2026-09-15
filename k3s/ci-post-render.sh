@@ -24,11 +24,21 @@
 # Usage: ci-post-render.sh <directory>
 # Patches all .yaml files in <directory> in-place; a file left with no
 # documents is removed, so `kubectl apply --recursive` is not handed an
-# empty manifest.
+# empty manifest. A missing directory is not an error - profiles that render
+# nothing simply have nothing to patch.
+#
+# Running it twice over the same directory is a no-op: an existing
+# progressDeadlineSeconds/activeDeadlineSeconds is replaced rather than
+# duplicated. The root build patches its own render and the integration-test
+# module patches its own, and either tree may be handed to the script again.
 
 set -euo pipefail
 
 TARGET_DIR="${1:?Usage: $0 <directory>}"
+
+if [ ! -d "$TARGET_DIR" ]; then
+    exit 0
+fi
 
 find "$TARGET_DIR" -name '*.yaml' -print0 | while IFS= read -r -d '' file; do
     awk '
@@ -46,7 +56,9 @@ find "$TARGET_DIR" -name '*.yaml' -print0 | while IFS= read -r -d '' file; do
     # matches `helm.sh/hook:`, not `helm.sh/hook-delete-policy:`
     /helm\.sh\/hook:/ { hook = $0 }
     /^  ttlSecondsAfterFinished:/ && is_job { $0 = "  ttlSecondsAfterFinished: 86400" }
+    # drop what is about to be re-added, so a second run cannot duplicate the key
     /^  activeDeadlineSeconds:/ && is_job { next }
+    /^  progressDeadlineSeconds:/ && is_deploy { next }
     /^spec:/ && is_deploy && !pd {
         buf[++n] = $0
         buf[++n] = "  progressDeadlineSeconds: 1500"
