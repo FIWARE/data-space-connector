@@ -16,6 +16,7 @@ specific flows and its deployment and integration with other frameworks.
 - [Details about flows and interfaces](#details-about-flows-and-interfaces)
   - [Contract Management](#contract-management)
   - [M2M Service Interaction](#m2m-service-interaction)
+  - [Consent Management](#consent-management)
 - [Deployment / Integration](#deployment--integration)
   - [Quick Start Guide](#quick-start-guide)
   - [Deployment by Role](#deployment-by-role)
@@ -51,6 +52,14 @@ More information can be found here:
 A detailed description about the steps to be performed in a Machine-To-Machine (M2M) service interaction 
 can be found here:
 * [Service Interaction (M2M)](./flows/service-interaction-m2m)
+
+### Consent Management
+
+Optional consent management (ISO/IEC TS 27560) - its architecture, trust model and the demo flow charts 
+(granting consent, consent-gated data access, authenticated projection) are documented here:
+* [Consent Management](./CONSENT_MANAGEMENT.md) - architecture, trust model, participant
+  authentication over OID4VP, and the end-to-end demo
+* [Architecture Decision Records](./adr/README.md)
 
 
 
