@@ -19,7 +19,11 @@ merges extra attributes (string or map), and appends verifiable credential attri
 */}}
 {{- define "dsc.realmAttributes" -}}
 {{- $issuerDid := include "dsc.issuerDid" . -}}
-{{- $attrs := dict "frontendUrl" (.Values.keycloak.realm.frontendUrl | default "") "issuerDid" $issuerDid -}}
+{{/* Both spellings are read: values.yaml has shipped `frontendURL` since forever while this
+     template only ever looked at `frontendUrl`, so the documented key silently produced an empty
+     attribute and Keycloak fell back to deriving the issuer URL from the request. */}}
+{{- $frontendUrl := .Values.keycloak.realm.frontendUrl | default .Values.keycloak.realm.frontendURL | default "" -}}
+{{- $attrs := dict "frontendUrl" $frontendUrl "issuerDid" $issuerDid -}}
 {{- if .Values.keycloak.realm.attributes -}}
 {{- $extra := .Values.keycloak.realm.attributes -}}
 {{- if kindIs "string" .Values.keycloak.realm.attributes -}}
@@ -296,6 +300,31 @@ Skipped when clientScope.create is explicitly set to false.
 {{/* Derive vc.supported_credential_types from vc.verifiable_credential_type when not set. See header comment above. */}}
 {{- if and (not (hasKey $attrs "vc.supported_credential_types")) (hasKey $attrs "vc.verifiable_credential_type") -}}
 {{- $_ := set $attrs "vc.supported_credential_types" (index $attrs "vc.verifiable_credential_type") -}}
+{{- end -}}
+{{/*
+Keep the two lifetime attributes in sync. `vc.expiry_in_seconds` is what the admin console
+displays, but the `exp` of the issued credential comes from `vc.refresh_interval_in_seconds`, so
+setting only one of them produces a credential that expires at a completely different time than
+the console claims - with Keycloak's default of 604800 that is a week instead of whatever was
+configured. Mirroring whichever one was set keeps the two from disagreeing; setting neither leaves
+Keycloak's own defaults alone, since a credential lifetime is a policy decision and not the
+chart's to invent.
+*/}}
+{{- if and (hasKey $attrs "vc.expiry_in_seconds") (not (hasKey $attrs "vc.refresh_interval_in_seconds")) -}}
+{{- $_ := set $attrs "vc.refresh_interval_in_seconds" (index $attrs "vc.expiry_in_seconds") -}}
+{{- else if and (hasKey $attrs "vc.refresh_interval_in_seconds") (not (hasKey $attrs "vc.expiry_in_seconds")) -}}
+{{- $_ := set $attrs "vc.expiry_in_seconds" (index $attrs "vc.refresh_interval_in_seconds") -}}
+{{- end -}}
+{{/*
+Sign with the key id the DID document actually publishes. When the identityhub serves the DID
+document it publishes the signing key under `<did>#<keyAlias>`, while Keycloak defaults
+`vc.signing_key_id` to the bare DID - and a bare-DID kid is not resolvable in that document, so
+issuance fails outright with "No key for id '<did>' and algorithm ... available". Only applied
+when the participant bootstrap is on, i.e. when the identityhub is the one publishing the
+document; a did-helper-served document keeps Keycloak's default.
+*/}}
+{{- if and (not (hasKey $attrs "vc.signing_key_id")) $.Values.identityhub.enabled (dig "bootstrap" "enabled" false $.Values.identityhub) -}}
+{{- $_ := set $attrs "vc.signing_key_id" (include "dsc.identityhub.keyId" $) -}}
 {{- end -}}
 {{- $scopes = append $scopes (dict
     "name" $vcKey

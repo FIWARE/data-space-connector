@@ -1,0 +1,24 @@
+{{- if and (eq .Values.identityhub.enabled true) (or .Values.identityhub.bootstrap.enabled (include "dsc.identityhub.credentialSync.enabled" .)) }}
+{{/* The credential-sync sidecar mounts these scripts too, so the ConfigMap also has to
+     exist for a deployment that syncs a credential without provisioning the participant. */}}
+
+# Scripts that provision the identityhub participant context, its signing key and its credentials.
+#
+# The scripts themselves live in ../scripts and are pulled in verbatim: they are plain POSIX shell
+# with no templating, so there is exactly one copy of each and it is a file you can read, lint and
+# run. The Job in identityhub-bootstrap-job.yaml supplies their configuration through environment
+# variables; running them from a workstation is a matter of exporting the same variables.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: "identityhub-bootstrap"
+  namespace: {{ .Release.Namespace | default "default" | quote }}
+  labels:
+    app.kubernetes.io/name: identityhub
+    app.kubernetes.io/instance: {{ .Release.Name }}
+data:
+{{- range $path, $_ := .Files.Glob "scripts/*.sh" }}
+  {{ base $path }}: |
+{{ regexReplaceAll "(?m)[ \t]+$" ($.Files.Get $path | indent 4) "" }}
+{{- end }}
+{{- end }}

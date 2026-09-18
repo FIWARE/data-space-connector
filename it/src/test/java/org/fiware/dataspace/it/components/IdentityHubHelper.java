@@ -278,7 +278,7 @@ public class IdentityHubHelper {
     /**
      * Builds the participant creation JSON payload for the IdentityHub management API.
      * <p>
-     * This is the Java equivalent of {@code doc/scripts/get-participant-create.sh}.
+     * This is the Java equivalent of the payload built by {@code charts/data-space-connector/scripts/register.sh}.
      * Creates a JSON structure with the participant's identity, public key, and service endpoints.
      *
      * @param jwk                the full JWK (including private key {@code d}) as a JSON string

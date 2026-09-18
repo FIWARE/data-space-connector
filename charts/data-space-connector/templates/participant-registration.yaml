@@ -16,7 +16,11 @@ data:
 
     {{- $values := .Values -}}
     {{- range $index, $issuer := .Values.registration.issuer }}
-    curl -v -f -X 'POST' \
+    # A 409 means this issuer is already on the list, which is the normal outcome of every run
+    # after the first. `curl -f` turned that into a non-zero exit, and since the Job's exit status
+    # is the last curl's, the Job failed on every re-run - which made the registration effectively
+    # install-only and left later changes unable to reach the trusted-issuers list.
+    http_code=$(curl -s -o /tmp/til_resp.json -w '%{http_code}' -X 'POST' \
       '{{ $registration.til }}/issuer' \
       -H 'accept: */*' \
       -H 'Content-Type: application/json' \
@@ -30,7 +34,15 @@ data:
           }{{- if lt $index $last }},{{ end }}
         {{- end }}
       ]
-    }"
+    }")
+    echo "POST {{ $registration.til }}/issuer ({{ $issuer.did }}) -> HTTP ${http_code}"
+    cat /tmp/til_resp.json 2>/dev/null || true
+    echo
+    case "${http_code}" in
+      2*) ;;
+      409) echo "issuer {{ $issuer.did }} is already registered" ;;
+      *) exit 1 ;;
+    esac
     {{- end }}
 
 

@@ -1,4 +1,5 @@
 {{- if (eq .Values.identityhub.enabled true) }}
+{{- include "dsc.identityhub.assertHolderKid" . }}
 
 # this configmap contains all application configuration that is required by the identityhub runtime.
 apiVersion: v1
@@ -30,11 +31,28 @@ data:
   web.http.sts.port: {{ .Values.identityhub.endpoints.sts.port | quote}}
   web.http.sts.path: {{ .Values.identityhub.endpoints.sts.path | quote}}
 
+  ######################
+  ## CREDENTIAL RENEWAL #
+  ######################
+  # The identityhub re-requests expiring credentials from a DCP issuer service by itself. That
+  # needs an issuer service to ask: the credentials in this chart come from an OID4VCI issuer via
+  # the vc-operator and are mirrored in by the credential-sync sidecar, so the watchdog is off by
+  # default and every period would otherwise produce a failing request.
+  edc.iam.credential.status.check.period: {{ .Values.identityhub.credentialWatchdog.checkPeriodSeconds | quote }}
+  {{- if gt (int .Values.identityhub.credentialWatchdog.checkPeriodSeconds) 0 }}
+  edc.iam.credential.renewal.graceperiod: {{ .Values.identityhub.credentialWatchdog.renewalGracePeriodSeconds | quote }}
+  {{- end }}
+
   ###########
   ## VAULT ##
   ###########
   edc.vault.hashicorp.url: {{ tpl .Values.vault.hashicorp.url . | quote }}
-  edc.vault.hashicorp.token: {{ .Values.vault.hashicorp.token | required ".Values.vault.hashicorp.token is required" | quote }}
+  {{- if not .Values.vault.hashicorp.existingSecret }}
+  # Rendered in clear, and readable by anyone who can read ConfigMaps in this namespace. Set
+  # vault.hashicorp.existingSecret to omit it here and have the deployment inject
+  # EDC_VAULT_HASHICORP_TOKEN from a Secret instead.
+  edc.vault.hashicorp.token: {{ .Values.vault.hashicorp.token | required "either .Values.vault.hashicorp.token or .Values.vault.hashicorp.existingSecret is required" | quote }}
+  {{- end }}
   edc.vault.hashicorp.timeout.seconds: {{ .Values.vault.hashicorp.timeout | quote }}
   edc.vault.hashicorp.health.check.enabled: {{ .Values.vault.hashicorp.healthCheck.enabled | quote }}
   edc.vault.hashicorp.health.check.standby.ok: {{ .Values.vault.hashicorp.healthCheck.standbyOk | quote }}

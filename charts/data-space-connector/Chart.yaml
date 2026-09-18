@@ -2,12 +2,12 @@ apiVersion: v2
 name: data-space-connector
 description: Umbrella Chart for the FIWARE Data Space Connector, combining all essential parts to be used by a participant.
 type: application
-version: 10.5.0
+version: 10.6.0
 dependencies:
   - name: decentralized-iam
     alias: decentralizedIam
     condition: decentralizedIam.enabled
-    version: 2.1.19
+    version: 2.1.22
     repository: https://fiware.github.io/decentralized-iam
   # data-service
   - name: scorpio-broker-aaio
@@ -18,7 +18,7 @@ dependencies:
   # issuance
   - name: keycloak
     condition: keycloak.enabled
-    version: 0.21.31
+    version: 0.21.37
     repository: oci://registry-1.docker.io/cloudpirates
   # contract management
   - name: tm-forum-api
@@ -65,34 +65,45 @@ dependencies:
   - name: cert-manager
     alias: cert-manager
     condition: cert-manager.enabled
-    version: v1.21.1
+    version: v1.21.2
     repository: https://charts.jetstack.io
   # vc-operator
   - name: vc-operator
     alias: vc-operator
     condition: vc-operator.enabled
-    version: 0.1.4
+    version: 0.1.5
     repository: oci://quay.io/seamware/helm-charts
   - name: prometheus
     condition: prometheus.enabled
-    version: 29.27.0
+    version: 29.30.0
     repository: https://prometheus-community.github.io/helm-charts
   - name: grafana
     condition: grafana.enabled
-    version: 12.11.2
+    version: 13.2.5
     repository: https://grafana-community.github.io/helm-charts
   # observability - OpenTelemetry Operator for auto-instrumentation (opt-in)
   - name: opentelemetry-operator
     condition: opentelemetry-operator.enabled
-    version: 0.122.0
+    version: 0.123.0
     repository: https://open-telemetry.github.io/opentelemetry-helm-charts
   # observability - OpenTelemetry Collector for distributed tracing (opt-in)
   - name: opentelemetry-collector
     condition: opentelemetry-collector.enabled
-    version: 0.171.0
+    version: 0.173.1
     repository: https://open-telemetry.github.io/opentelemetry-helm-charts
   # observability - Grafana Tempo for trace storage backend (opt-in)
   - name: tempo
     condition: tempo.enabled
     version: 1.24.4
     repository: https://grafana.github.io/helm-charts
+  # The consent components are published as their own FIWARE charts. A provider enables
+  # the owner-resolver (it knows the provider's data model) and, when it wants contract-
+  # driven resolution, a provider-local consent-facade.
+  - name: consent-facade
+    condition: consent-facade.enabled
+    version: 0.1.1
+    repository: oci://quay.io/fiware/helm-charts
+  - name: consent-owner-resolver
+    condition: consent-owner-resolver.enabled
+    version: 0.1.1
+    repository: oci://quay.io/fiware/helm-charts

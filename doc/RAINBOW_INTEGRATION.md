@@ -600,7 +600,11 @@ Consumer:
 
 Get client key as jwk
 ```shell
-export JWK=$(./doc/scripts/get-private-jwk-from-k8s-secret.sh consumer fancy-marketplace.biz-tls); echo $JWK
+export SHARED_DIR=$(mktemp -d)
+kubectl get secret fancy-marketplace.biz-tls -n consumer -o jsonpath='{.data.tls\.key}' | base64 -d > ${SHARED_DIR}/identity.pem
+IDENTITY_KEY_FILE=${SHARED_DIR}/identity.pem IDENTITY_KEY_ALGORITHM=EC KEY_ID=did:web:fancy-marketplace.biz#key-1 \
+  sh ./charts/data-space-connector/scripts/derive-key.sh
+export JWK=$(cat ${SHARED_DIR}/private.jwk); echo $JWK
 ```
 
 Create key in vault:
@@ -644,7 +648,11 @@ Provider:
 
 Get client key as jwk
 ```shell
-export JWK=$(./doc/scripts/get-private-jwk-from-k8s-secret.sh provider mp-operations.org-tls); echo $JWK
+export SHARED_DIR=$(mktemp -d)
+kubectl get secret mp-operations.org-tls -n provider -o jsonpath='{.data.tls\.key}' | base64 -d > ${SHARED_DIR}/identity.pem
+IDENTITY_KEY_FILE=${SHARED_DIR}/identity.pem IDENTITY_KEY_ALGORITHM=EC KEY_ID=did:web:mp-operations.org#key-1 \
+  sh ./charts/data-space-connector/scripts/derive-key.sh
+export JWK=$(cat ${SHARED_DIR}/private.jwk); echo $JWK
 ```
 
 Create key in vault:

@@ -1,0 +1,124 @@
+{{- if and (eq .Values.identityhub.enabled true) .Values.identityhub.bootstrap.enabled }}
+{{- $b := .Values.identityhub.bootstrap }}
+
+# Provisions the identityhub participant context on install and on every upgrade.
+#
+# post-upgrade is not optional while vault runs in dev mode (vault.server.dev.enabled, the chart
+# default): its storage is in-memory, so every vault restart loses the signing key, the super-user
+# credential and the STS client secret this job writes, and only a re-run puts them back. With
+# vault.unattended.enabled the state survives and every step here is a no-op, which is why they are
+# all idempotent.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: "identityhub-bootstrap"
+  namespace: {{ .Release.Namespace | default "default" | quote }}
+  labels:
+    app.kubernetes.io/name: identityhub
+    app.kubernetes.io/instance: {{ .Release.Name }}
+  annotations:
+    {{- toYaml $b.annotations | nindent 4 }}
+spec:
+  backoffLimit: {{ $b.backoffLimit }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: identityhub
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+      restartPolicy: Never
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: default
+      securityContext:
+        {{- toYaml .Values.identityhub.podSecurityContext | nindent 8 }}
+      # Strictly ordered: the JWK has to exist before anything writes it to vault, and the kid
+      # check has to pass before a credential is inserted. initContainers are the only construct
+      # that guarantees that ordering.
+      initContainers:
+        - name: derive-key
+          image: "{{ $b.opensslImage.repository }}:{{ $b.opensslImage.tag }}"
+          imagePullPolicy: {{ $b.opensslImage.pullPolicy }}
+          command: ["/bin/sh", "/scripts/derive-key.sh"]
+          securityContext:
+            {{- toYaml .Values.identityhub.securityContext | nindent 12 }}
+          env:
+            {{- include "dsc.identityhub.bootstrapEnv" . | nindent 12 }}
+          volumeMounts:
+            - name: scripts
+              mountPath: /scripts
+            - name: identity-key
+              mountPath: /identity-key
+              readOnly: true
+            - name: shared
+              mountPath: /shared
+            - name: tmp
+              mountPath: /tmp
+        {{- if $b.kidCheck.enabled }}
+        - name: check-kid
+          image: "{{ $b.curlImage.repository }}:{{ $b.curlImage.tag }}"
+          imagePullPolicy: {{ $b.curlImage.pullPolicy }}
+          command: ["/bin/sh", "/scripts/check-kid.sh"]
+          securityContext:
+            {{- toYaml .Values.identityhub.securityContext | nindent 12 }}
+          env:
+            {{- include "dsc.identityhub.bootstrapEnv" . | nindent 12 }}
+            - name: KEYCLOAK_URL
+              value: {{ required "identityhub.bootstrap.kidCheck.keycloakUrl is required when kidCheck is enabled" $b.kidCheck.keycloakUrl | quote }}
+            - name: KEYCLOAK_REALM
+              value: {{ required "identityhub.bootstrap.kidCheck.realm is required when kidCheck is enabled" $b.kidCheck.realm | quote }}
+          volumeMounts:
+            - name: scripts
+              mountPath: /scripts
+            - name: tmp
+              mountPath: /tmp
+        {{- end }}
+        - name: register
+          image: "{{ $b.curlImage.repository }}:{{ $b.curlImage.tag }}"
+          imagePullPolicy: {{ $b.curlImage.pullPolicy }}
+          command: ["/bin/sh", "/scripts/register.sh"]
+          securityContext:
+            {{- toYaml .Values.identityhub.securityContext | nindent 12 }}
+          env:
+            {{- include "dsc.identityhub.bootstrapEnv" . | nindent 12 }}
+            - name: STS_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ required "identityhub.bootstrap.stsClientSecret.existingSecret is required" $b.stsClientSecret.existingSecret }}
+                  key: {{ $b.stsClientSecret.existingSecretKey }}
+          volumeMounts:
+            - name: scripts
+              mountPath: /scripts
+            - name: shared
+              mountPath: /shared
+            - name: tmp
+              mountPath: /tmp
+      containers:
+        # The bootstrap no longer stores the credential: that is the credential-sync sidecar's job
+        # (identityhub.credentialSync), because it has to happen again on every renewal and a Job
+        # that only runs on install and upgrade leaves the identityhub serving a stale copy.
+        - name: done
+          image: "{{ $b.curlImage.repository }}:{{ $b.curlImage.tag }}"
+          imagePullPolicy: {{ $b.curlImage.pullPolicy }}
+          command: ["/bin/sh", "-c", "echo 'participant bootstrap complete'"]
+          securityContext:
+            {{- toYaml .Values.identityhub.securityContext | nindent 12 }}
+      volumes:
+        - name: scripts
+          configMap:
+            name: "identityhub-bootstrap"
+            defaultMode: 0755
+        # The participant's identity private key. Everything else - the JWK in vault, the public
+        # key in the DID document, the issuer's signing key - is derived from this one file, so all
+        # of its consumers have to be pointed at the same Secret.
+        - name: identity-key
+          secret:
+            secretName: {{ required "identityhub.bootstrap.identityKey.secretName is required when identityhub.bootstrap.enabled" $b.identityKey.secretName }}
+        - name: shared
+          emptyDir: {}
+        # readOnlyRootFilesystem is on, and curl writes its response bodies to /tmp.
+        - name: tmp
+          emptyDir: {}
+{{- end }}

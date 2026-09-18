@@ -147,6 +147,9 @@ fdsc-edc:
           host: squid-proxy.infra.svc.cluster.local
           port: 8888
       tmfExtension:
+        # explicit now that the chart default is off: the extension needs all seven addresses, and
+        # an enabled-but-empty configuration aborts the runtime at boot
+        enabled: true
         quoteApi: http://tm-forum-api-svc.consumer.svc.cluster.local:8080/tmf-api/quote/v4
         agreementApi: http://tm-forum-api-svc.consumer.svc.cluster.local:8080/tmf-api/agreementManagement/v4
         productOrderApi: http://tm-forum-api-svc.consumer.svc.cluster.local:8080/tmf-api/productOrderingManagement/v4

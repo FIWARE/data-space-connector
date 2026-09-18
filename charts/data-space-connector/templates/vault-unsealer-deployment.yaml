@@ -1,0 +1,105 @@
+{{- if and .Values.vault.enabled .Values.vault.unattended.enabled .Values.vault.unattended.autoUnseal }}
+{{- $p := .Values.vault.unattended }}
+
+# Runs as a Deployment rather than a Job on purpose: a vault pod that restarts at 3am comes back
+# sealed, and a completed Job will not notice. This keeps watching.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ printf "%s-vault-unsealer" .Release.Name | quote }}
+  namespace: {{ .Release.Namespace | default "default" | quote }}
+  labels:
+    app.kubernetes.io/name: vault-unsealer
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: vault-unsealer
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: vault-unsealer
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ printf "%s-vault-unsealer" .Release.Name | quote }}
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+        runAsUser: 10100
+        runAsGroup: 10100
+        fsGroup: 10100
+      containers:
+        - name: unsealer
+          image: "{{ .Values.identityhub.bootstrap.curlImage.repository }}:{{ .Values.identityhub.bootstrap.curlImage.tag }}"
+          imagePullPolicy: {{ .Values.identityhub.bootstrap.curlImage.pullPolicy }}
+          command: ["/bin/sh", "/scripts/unseal.sh"]
+          securityContext:
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 10100
+          env:
+            - name: VAULT_ADDR
+              value: {{ tpl .Values.vault.hashicorp.url . | quote }}
+            - name: SECRET_NAME
+              value: {{ $p.secretName | quote }}
+            - name: SECRET_SHARES
+              value: {{ $p.secretShares | quote }}
+            - name: SECRET_THRESHOLD
+              value: {{ $p.secretThreshold | quote }}
+            - name: POLL_SECONDS
+              value: "30"
+            # Mount path of the KV v2 engine, derived from the same value the components are
+            # configured with so the two cannot disagree about where secrets live.
+            - name: KV_PATH
+              value: {{ .Values.vault.hashicorp.paths.secret | trimPrefix "/v1/" | trimSuffix "/" | quote }}
+            {{- if $p.provisionToken }}
+            # Where the application token goes. The same Secret the identityhub and the connector read
+            # it from, so the two cannot drift.
+            - name: TOKEN_SECRET_NAME
+              value: {{ .Values.vault.hashicorp.existingSecret | quote }}
+            - name: TOKEN_SECRET_KEY
+              value: {{ .Values.vault.hashicorp.existingSecretTokenKey | quote }}
+            - name: TOKEN_PERIOD
+              value: {{ $p.tokenPeriod | quote }}
+            - name: POLICY_NAME
+              value: {{ $p.tokenPolicyName | quote }}
+            {{- end }}
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              memory: 64Mi
+          volumeMounts:
+            - name: scripts
+              mountPath: /scripts
+            # optional: the Secret does not exist until this very component creates it. kubelet
+            # populates the mount afterwards, which is how the unseal path picks the keys up
+            # without a restart.
+            - name: unseal-keys
+              mountPath: /unseal-keys
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: scripts
+          configMap:
+            name: {{ printf "%s-vault-unsealer" .Release.Name | quote }}
+            defaultMode: 0755
+        - name: unseal-keys
+          secret:
+            secretName: {{ $p.secretName | quote }}
+            optional: true
+        - name: tmp
+          emptyDir: {}
+{{- end }}
