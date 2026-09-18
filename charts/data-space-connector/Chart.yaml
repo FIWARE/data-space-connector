@@ -18,7 +18,7 @@ dependencies:
   # issuance
   - name: keycloak
     condition: keycloak.enabled
-    version: 0.21.36
+    version: 0.21.37
     repository: oci://registry-1.docker.io/cloudpirates
   # contract management
   - name: tm-forum-api
@@ -65,7 +65,7 @@ dependencies:
   - name: cert-manager
     alias: cert-manager
     condition: cert-manager.enabled
-    version: v1.21.1
+    version: v1.21.2
     repository: https://charts.jetstack.io
   # vc-operator
   - name: vc-operator
@@ -75,21 +75,21 @@ dependencies:
     repository: oci://quay.io/seamware/helm-charts
   - name: prometheus
     condition: prometheus.enabled
-    version: 29.27.2
+    version: 29.30.0
     repository: https://prometheus-community.github.io/helm-charts
   - name: grafana
     condition: grafana.enabled
-    version: 13.2.2
+    version: 13.2.5
     repository: https://grafana-community.github.io/helm-charts
   # observability - OpenTelemetry Operator for auto-instrumentation (opt-in)
   - name: opentelemetry-operator
     condition: opentelemetry-operator.enabled
-    version: 0.122.0
+    version: 0.123.0
     repository: https://open-telemetry.github.io/opentelemetry-helm-charts
   # observability - OpenTelemetry Collector for distributed tracing (opt-in)
   - name: opentelemetry-collector
     condition: opentelemetry-collector.enabled
-    version: 0.172.1
+    version: 0.173.1
     repository: https://open-telemetry.github.io/opentelemetry-helm-charts
   # observability - Grafana Tempo for trace storage backend (opt-in)
   - name: tempo
