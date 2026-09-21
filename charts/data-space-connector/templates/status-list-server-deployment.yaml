@@ -118,4 +118,23 @@ spec:
           secret:
             secretName: {{ .Values.statusListServer.signing.secretName }}
       {{- end }}
+      {{- with .Values.statusListServer.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.statusListServer.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.statusListServer.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.statusListServer.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.statusListServer.priorityClassName }}
+      priorityClassName: {{ . | quote }}
+      {{- end }}
 {{- end }}
