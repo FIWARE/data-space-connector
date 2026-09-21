@@ -38,5 +38,8 @@ spec:
         {{- toYaml .Values.registration.extraVolumes | nindent 8 }}
         {{- end }}
       restartPolicy: Never
+      {{- with .Values.registration.priorityClassName }}
+      priorityClassName: {{ . | quote }}
+      {{- end }}
   backoffLimit: 10
 {{- end }}

@@ -87,6 +87,9 @@ spec:
     spec:
       serviceAccountName: {{ .Release.Name }}-otel-restart
       restartPolicy: Never
+      {{- with .Values.tracing.priorityClassName }}
+      priorityClassName: {{ . | quote }}
+      {{- end }}
       containers:
         - name: restart
           image: bitnami/kubectl:latest

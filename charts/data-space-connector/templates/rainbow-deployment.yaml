@@ -84,4 +84,23 @@ spec:
             name: {{ .Values.rainbow.ccs.configMap }}
             defaultMode: 0755
       {{- end }}
+      {{- with .Values.rainbow.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.rainbow.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.rainbow.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.rainbow.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.rainbow.priorityClassName }}
+      priorityClassName: {{ . | quote }}
+      {{- end }}
 {{- end }}
