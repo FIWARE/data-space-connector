@@ -1770,6 +1770,20 @@ contract-management:
     # -- logical service name exposed as `OTEL_SERVICE_NAME` and recorded
     # as the service identity on every span emitted by contract-management.
     serviceName: contract-management
+  # -- read the policy and credential configuration from the
+  # ServiceSpecifications a ProductSpecification is composed of, in
+  # addition to the ProductSpecification itself. Off by default: it adds
+  # one TMForum read per referenced ServiceSpecification to the
+  # activation of an order, and it changes which configuration an order
+  # activates.
+  enableSpecificationComposition: false
+  # -- how many specification levels below the ordered
+  # ProductSpecification are resolved when composition is enabled. The
+  # default of 2 covers a ProductSpecification and the
+  # ServiceSpecifications it references; bundled ProductSpecifications
+  # consume the same budget. References below the limit are skipped with
+  # a warning naming them.
+  specificationCompositionMaxDepth: 2
   til:
     credentialType: OperatorCredential
   services:
