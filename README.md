@@ -1,5 +1,21 @@
 # FIWARE Data Space Connector
 
+
+> [!IMPORTANT]
+> **Get involved and help us improve the FIWARE Data Space Connector**
+>
+> The FIWARE DSC evolves through the feedback of the organizations deploying it. There are three easy ways to
+> contribute:
+>
+> * **Tell us how you use it**: fill in the short [FIWARE DSC usage survey](https://forms.gle/ach1equB9VjyyKfF9). It
+>   takes a few minutes and directly shapes our roadmap.
+> * **Join the FIWARE Data Spaces Work Group call**: an open, bi-weekly meeting on Mondays (11:30 CEST) where
+>   roadmap, releases and open issues are discussed. Anyone is welcome —
+>   [add it to your calendar](https://calendar.google.com/calendar/event?action=TEMPLATE&tmeid=NzN0bW1hdDBsdWhxYjRuNXZrcnNwZ2o2cW1fMjAyNjA5MjhUMDkzMDAwWiB2aWN0b3IucmFtcGVyZXpAc2VhbXdhcmUuY29t&tmsrc=victor.ramperez%40seamware.com&scp=ALL).
+> * **Open issues and contribute**: found a bug, a gap in the documentation or a missing feature? Please
+>   [open an issue](https://github.com/FIWARE/data-space-connector/issues) or send a pull request. Questions and
+>   deployment experiences are just as welcome as code.
+
 The FIWARE Data Space Connector (FIWARE DSC) is a data space connector resulting from the integration of open-source
 software components that are part of the [FIWARE Dataspace Components (FDC)](https://github.com/FIWARE) and the
 [Eclipse Dataspace Components (EDC)](https://eclipse-edc.github.io/docs/). Every organization participating
