@@ -97,6 +97,44 @@ pom.xml                       # drives local-deploy + integration tests
 - Chart version (`charts/data-space-connector/Chart.yaml` `version:`)
   follows semver; bump minor for additive features.
 
+## Pod Scheduling Fields
+- The chart templates 12 workloads of its own (6 Deployments, 6 Jobs). Pods
+  that come from subcharts are configured by overriding the subchart's own
+  values, never by templating them here -- see the subchart rule above.
+- Deployments carry the full block: `nodeSelector`, `affinity`,
+  `tolerations`, `topologySpreadConstraints`, `priorityClassName`. Jobs carry
+  `priorityClassName` only; spreading a single-pod Job is meaningless.
+- Always gate with `{{- with }}`, never a bare `if` plus interpolation. An
+  unset value (`""`, `[]`, `{}`) renders nothing, so upgrading an existing
+  release is a no-op. `tests/scheduling_test.yaml` pins that behaviour.
+- Field indentation is 6 spaces with `nindent 8` in every one of the 12
+  files, Jobs included: their podSpec is `spec.template.spec`, same depth as
+  a Deployment's. Watch out for `backoffLimit`, which sits at 2 spaces on the
+  Job spec -- appending after it puts the field on the wrong object.
+- Each workload hangs off the key it already uses for the rest of its config:
+  `identityhub`, `identityhub.bootstrap` (shared by the bootstrap and
+  rotation Jobs), `rainbow`, `dataSpaceConfig`, `statusListServer`,
+  `statusListServer.redis`, `registration`, `tracing` (both otel helper
+  Jobs), `vault.unattended`, `tm-forum-api.registration`.
+- The last two sit inside a subchart's values namespace. That is deliberate
+  and follows what the chart already does -- `vault-unsealer-deployment.yaml`
+  reads `$p := .Values.vault.unattended` and `tmf-registration-job.yaml`
+  reads `index .Values "tm-forum-api"`. Neither subchart declares the key, and
+  neither ships an `additionalProperties: false` schema, so the extra key is
+  inert for them.
+- `status-list-server-redis.yaml` holds a Deployment and a Service in one
+  file. The fields belong to the Deployment, before the `---`.
+- CRs are not templated workloads: scheduling for `mongodb.yaml` goes through
+  `managedMongo.spec.statefulSet`, and for `trust-anchor/postgres.yaml`
+  through `managedPostgres.config` (the Zalando CR has its own
+  `podPriorityClassName`).
+- `identityhub-rotation-job.yaml` is deliberately not a Helm hook and its name
+  is pinned by `bootstrap.rotation.instance`. Changing
+  `identityhub.bootstrap.priorityClassName` while a completed rotation Job of
+  the same name exists fails the upgrade with "field is immutable" until the
+  instance is bumped. The other five Jobs are hooks with
+  `before-hook-creation`, so they are recreated.
+
 ## OpenTelemetry Tracing (from ticket-28)
 The chart already has a full OTEL tracing integration (chart version 9.1.0):
 - Global `tracing:` block in `values.yaml` (line ~2731) controls
