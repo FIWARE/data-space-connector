@@ -118,6 +118,12 @@ Documentation for enabling distributed tracing across the FIWARE DSC using OpenT
 * [Distributed Tracing with OpenTelemetry](./deployment-integration/observability/README.md)
 * [Grafana Tempo Backend (In-Cluster)](./deployment-integration/observability/README.md#grafana-tempo-backend-in-cluster) -- Deploy Tempo and Grafana as optional subcharts for a turnkey trace-storage and visualisation stack with zero-config auto-wiring.
 
+### eIDAS 2.0 Compliance
+
+Documentation for enabling eIDAS 2.0 compliance through the `did:elsi` DID method, including VCVerifier-native PKIX certificate chain validation against EU Trusted Lists, certificate generation for testing, and migration from the deprecated DSS-based approach.
+
+* [eIDAS 2.0 Compliance with did:elsi](./deployment-integration/eidas/README.md)
+
 ### Integration with AWS Garnet Framework (formerly AWS Smart Territory Framework)
 
 This is an example of a data service provider that is integrated with the 
