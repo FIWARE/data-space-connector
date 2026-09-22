@@ -21,7 +21,7 @@ If the upstream charts are not yet updated, open tracking issues and document th
 - `charts/data-space-connector/Chart.yaml` — bump `decentralized-iam` version from `2.1.22` to the version that bundles VCVerifier ≥ 6.22.0
 - `charts/data-space-connector/values.yaml`:
   - Under the `decentralizedIam.vcAuthentication` section (lines ~123–132), add a deprecation comment to the `dss:` block explaining that the DSS validation service is superseded by VCVerifier's built-in eIDAS validation in chart version ≥ (new version). Keep the block for backward compatibility but mark it deprecated.
-  - Add a new `eidas:` configuration block under `decentralizedIam.vcAuthentication.vcverifier.deployment` (or wherever the upstream vcverifier chart exposes it) with helm-docs comments (`# --` format) for the following keys:
+  - Add a new `eidas:` configuration block. **Important:** The exact values path depends on how the upstream vcverifier Helm chart exposes the `eidas:` block in its configmap template. As of vcverifier chart v4.12.26, the configmap template only renders `server/m2m/logging/verifier/configRepo/elsi/database/configServer` — it does not yet render `eidas:`. The implementing agent **must** re-verify the exact path against the updated upstream chart (≥ 4.12.27 or whichever version adds eIDAS rendering). The expected path is `decentralizedIam.vcAuthentication.vcverifier.deployment.eidas` (mirroring the app's YAML config structure), but this must be confirmed before implementation. Add the block with helm-docs comments (`# --` format) for the following keys:
     - `enabled` (default: `false`) — master toggle for eIDAS trust list validation
     - `lotlUrl` (default: official EU LOTL URL) — URL of the EU List of Trusted Lists
     - `refreshInterval` (default: `86400`) — trust list refresh interval in seconds
@@ -45,7 +45,7 @@ If the upstream charts are not yet updated, open tracking issues and document th
 **Goal:** Rewrite the k3s overlay values files that demonstrate eIDAS/ELSI deployment to use the new VCVerifier-native trust list validation instead of the external DSS service.
 
 **Files affected:**
-- `k3s/provider-elsi.yaml` (371 lines) — major rewrite:
+- `k3s/provider-elsi.yaml` (370 lines) — major rewrite:
   - Remove the entire `dss:` block (lines ~90–117) — DSS validation service no longer needed
   - Remove `crl:` secret and DSS keystores configuration
   - Remove `additionalContainers` for CRL provider
@@ -53,8 +53,8 @@ If the upstream charts are not yet updated, open tracking issues and document th
   - Add `vcverifier.deployment.eidas` block with `enabled: true` and appropriate settings for local testing (e.g., `revocationCheck: off` for local envs without real OCSP/CRL)
   - Keep the verifier's `elsi.enabled: true` (the DID method is still supported, just verified differently)
 
-- `k3s/consumer-elsi.yaml` (414 lines) — investigate and update:
-  - The `keycloak-jades-vc-issuer` init container (line ~94) may or may not still be needed. Investigation required:
+- `k3s/consumer-elsi.yaml` (413 lines) — investigate and update:
+  - The `install-jades-issuer` init container (line ~94; image `quay.io/fiware/keycloak-jades-vc-issuer`) may or may not still be needed. Investigation required:
     - If VCVerifier 6.22.0 just needs regular JWTs with `x5c` headers (not full JAdES), and standard Keycloak OID4VCI issuance includes `x5c` when using a java-keystore key provider, the JAdES plugin can be removed
     - If `x5c` inclusion still requires the plugin, keep it but add a comment explaining it's needed for x5c header injection, not JAdES format
   - The `elsi:` block (lines ~404–413) for keystore configuration likely stays unchanged (still needed for issuing credentials with eIDAS certificates)
@@ -84,7 +84,7 @@ If the upstream charts are not yet updated, open tracking issues and document th
   7. **Certificate revocation**: Explain `revocationCheck` modes (off/soft/hard), OCSP and CRL endpoint handling
   8. **Trust list freshness**: Explain `refreshInterval`, `allowStaleTrustLists`, rollback protection
   9. **Local deployment**: Updated `mvn clean deploy -Plocal,elsi` instructions with new values
-  10. **Migration from DSS-based approach**: Step-by-step migration guide from old (chart ≤ 10.7.0) to new approach
+  10. **Migration from DSS-based approach**: Step-by-step migration guide from the pre-eIDAS-2.0 approach (decentralized-iam < TBD version, using external DSS validation service) to VCVerifier-native trust list validation
   11. **Troubleshooting**: Common error scenarios from VCVerifier (`eidas_trust_store_required_for_did_elsi`, `eidas_issuer_not_trusted_by_trust_list`, `certificate_revoked`, etc.)
 
 - `doc/deployment-integration/local-deployment/LOCAL.MD`:
