@@ -49,6 +49,7 @@ eIDAS support is **disabled by default** and is strictly opt-in.
 - [Certificate Revocation](#certificate-revocation)
 - [Trust List Freshness](#trust-list-freshness)
 - [Local Deployment](#local-deployment)
+- [Migration from DSS-based Approach](#migration-from-dss-based-approach)
 - [Troubleshooting](#troubleshooting)
 
 </details>
@@ -443,6 +444,86 @@ echo "${ELSI_CREDENTIAL}"
 Inspect it on [jwt.io](https://jwt.io/) to verify that:
 - The `iss` claim is `did:elsi:VATDE-1234567`.
 - The `x5c` header contains the certificate chain.
+
+---
+
+## Migration from DSS-based Approach
+
+If your deployment previously used the external `dss-validation-service` for
+eIDAS certificate validation (chart versions < 10.7.0), follow these steps to
+migrate to VCVerifier-native trust list validation.
+
+### Prerequisites
+
+- **decentralized-iam >= 2.1.23** (VCVerifier >= 6.22.0) — included in chart
+  version 10.7.0 and later.
+- Familiarity with your existing `dss:` configuration block and any custom
+  overlays that deploy the DSS sidecar.
+
+### Migration Steps
+
+1. **Enable VCVerifier-native eIDAS validation.** Add the `eidas` block to
+   your values overlay:
+
+   ```yaml
+   decentralizedIam:
+     vcAuthentication:
+       vcverifier:
+         deployment:
+           eidas:
+             enabled: true
+   ```
+
+   See [Enabling eIDAS Validation](#enabling-eidas-validation) for the full
+   minimal overlay and [Configuration Reference](#configuration-reference)
+   for all available settings.
+
+2. **Remove or leave the `dss:` block.** The
+   `decentralizedIam.vcAuthentication.dss` block is deprecated. When
+   `eidas.enabled` is `true`, VCVerifier ignores the DSS configuration
+   entirely. You may remove the block now or leave it for a transitional
+   period — it has no effect.
+
+3. **Remove DSS infrastructure from overlays.** Delete the following from
+   your custom values files and deployment overlays:
+   - `dss-validation-service` Deployment / container definitions
+   - DSS-related Secrets and ConfigMaps (keystores, CRL stores)
+   - CRL-update sidecar or CronJob (if present)
+   - Any `Service` or `Ingress` exposing the DSS endpoint
+
+4. **Remove `verifier.elsi.validationEndpoint`.** This setting previously
+   pointed VCVerifier at the external DSS service. It is no longer needed —
+   validation is built-in when `eidas.enabled` is `true`.
+
+5. **Keep the `keycloak-jades-vc-issuer` init container (consumer side).**
+   The JAdES plugin is still required on the consumer's Keycloak to inject
+   the `x5c` certificate chain header into issued credentials. See
+   [JAdES Plugin for x5c Header Injection](#jades-plugin-for-x5c-header-injection).
+
+6. **Tune environment-specific settings.** Adjust these values for your
+   deployment:
+   - `revocationCheck` — `"soft"` for production, `"off"` for local testing
+     (see [Certificate Revocation](#certificate-revocation))
+   - `refreshInterval` — how often to re-fetch the LOTL (default: 24 hours)
+   - `countries` — filter to only the EU member states you need
+
+### Before / After Comparison
+
+| Before (< 10.7.0) | After (>= 10.7.0) |
+|---|---|
+| `decentralizedIam.vcAuthentication.dss` block with DSS endpoint URL | `decentralizedIam.vcAuthentication.vcverifier.deployment.eidas` block |
+| External `dss-validation-service` Deployment + Service | No external service — VCVerifier validates natively |
+| CRL-update sidecar or CronJob for revocation data | Built-in OCSP/CRL checks via `revocationCheck` setting |
+| `verifier.elsi.validationEndpoint` pointing to DSS | Removed — automatic when `eidas.enabled: true` |
+| `keycloak-jades-vc-issuer` init container | Retained — still needed for `x5c` header injection |
+
+### Rollback
+
+If you need to revert to the DSS-based approach:
+
+1. Set `eidas.enabled: false` (or remove the `eidas:` block).
+2. Restore the `dss:` block and `verifier.elsi.validationEndpoint`.
+3. Re-deploy the `dss-validation-service` and CRL infrastructure.
 
 ---
 
