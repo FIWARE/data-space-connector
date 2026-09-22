@@ -60,6 +60,9 @@ public class StandardStepDefinitions extends StepDefintions {
      * Schema location for the TMForum ODRL policy configuration characteristic.
      */
     private static final String POLICY_CONFIG_SCHEMA = "https://raw.githubusercontent.com/FIWARE/contract-management/refs/heads/policy-support/schemas/odrl/policyCharacteristic.json";
+    private static final String SMALL_POLICY_ID = "https://mp-operation.org/policy/common/k8s-small";
+    private static final String FULL_POLICY_ID = "https://mp-operation.org/policy/common/k8s-full";
+    private static final String AUTHORIZATION_POLICY_VALUE_TYPE = "authorizationPolicy";
     /**
      * Timeout in seconds for policy propagation to OPA via the PAP.
      */
@@ -84,6 +87,14 @@ public class StandardStepDefinitions extends StepDefintions {
      * Stores the product specification ID for the Full K8S spec.
      */
     private String productSpecFullId;
+    /**
+     * Stores the service specification ID carrying the cluster policy.
+     */
+    private String serviceSpecId;
+    /**
+     * Stores the product specification ID composed of {@link #serviceSpecId}.
+     */
+    private String composedProductSpecId;
     private List<String> createdPolicies = new ArrayList<>();
     private List<String> createdEntities = new ArrayList<>();
 
@@ -215,6 +226,8 @@ public class StandardStepDefinitions extends StepDefintions {
                 "/tmf-api/productCatalogManagement/v4/productOffering", "Standard offerings");
         cleanUpTMForumResourceList(TMF_DIRECT_ADDRESS,
                 "/tmf-api/productCatalogManagement/v4/productSpecification", "Standard specifications");
+        cleanUpTMForumResourceList(TMF_DIRECT_ADDRESS,
+                "/tmf-api/serviceCatalogManagement/v4/serviceSpecification", "Standard service specifications");
         cleanUpTMForumResourceList(TMF_DIRECT_ADDRESS,
                 "/tmf-api/productOrderingManagement/v4/productOrder", "Standard orders");
         cleanUpTMForumResourceList(TMF_DIRECT_ADDRESS,
@@ -1211,7 +1224,7 @@ public class StandardStepDefinitions extends StepDefintions {
     @When("The provider creates a K8S Small product specification with credentials and policy config.")
     public void createSmallProductSpec() throws Exception {
         productSpecSmallId = createProductSpecWithPolicy("M&P K8S Small",
-                "https://mp-operation.org/policy/common/k8s-small", buildSmallPolicyRefinements());
+                SMALL_POLICY_ID, buildSmallPolicyRefinements());
     }
 
     /**
@@ -1222,7 +1235,104 @@ public class StandardStepDefinitions extends StepDefintions {
     @When("The provider creates a K8S Full product specification with credentials and policy config.")
     public void createFullProductSpec() throws Exception {
         productSpecFullId = createProductSpecWithPolicy("M&P K8S",
-                "https://mp-operation.org/policy/common/k8s-full", buildFullPolicyRefinements());
+                FULL_POLICY_ID, buildFullPolicyRefinements());
+    }
+
+    /**
+     * Creates the "M&P K8S Cluster API" service specification, carrying the policy that restricts
+     * cluster creation. The policy lives on the service rather than on the product: an access policy
+     * protects an API, and in TMForum an API is a ServiceSpecification.
+     * <p>
+     * Note the container names of the characteristic plane differ from the product specification -
+     * specCharacteristic instead of productSpecCharacteristic, and characteristicValueSpecification
+     * instead of productSpecCharacteristicValue.
+     */
+    @When("The provider creates a K8S Small service specification with the cluster policy.")
+    public void createSmallServiceSpec() throws Exception {
+        Map<String, Object> policy = buildClusterPolicy(SMALL_POLICY_ID, buildSmallPolicyRefinements());
+        Map<String, Object> serviceSpec = Map.of(
+                "name", "M&P K8S Cluster API",
+                "version", "1.0.0",
+                "lifecycleStatus", "ACTIVE",
+                "specCharacteristic", List.of(Map.of(
+                        "id", "policyConfig",
+                        "name", "Policy for creation of K8S clusters.",
+                        "valueType", AUTHORIZATION_POLICY_VALUE_TYPE,
+                        "characteristicValueSpecification", List.of(Map.of(
+                                "isDefault", true,
+                                "value", policy)))));
+
+        RequestBody body = RequestBody.create(OBJECT_MAPPER.writeValueAsString(serviceSpec),
+                okhttp3.MediaType.parse(MediaType.APPLICATION_JSON));
+        Request request = new Request.Builder()
+                .post(body)
+                .url(MPOperationsEnvironment.TMF_DIRECT_ADDRESS
+                        + "/tmf-api/serviceCatalogManagement/v4/serviceSpecification")
+                .build();
+        Response response = HTTP_CLIENT.newCall(request).execute();
+        try {
+            assertEquals(HttpStatus.SC_CREATED, response.code(),
+                    "The service specification should have been created.");
+            serviceSpecId = OBJECT_MAPPER.readValue(response.body().string(), Map.class).get("id").toString();
+        } finally {
+            response.body().close();
+        }
+    }
+
+    /**
+     * Creates a product specification that carries only the credential configuration and delegates
+     * its policy to the referenced service specification.
+     */
+    @When("The provider creates a product specification composed of the service specification.")
+    public void createComposedProductSpec() throws Exception {
+        assertNotNull(serviceSpecId, "The service specification must be created first.");
+
+        Map<String, Object> credentialsValue = Map.of(
+                "credentialsType", "OperatorCredential",
+                "claims", List.of(
+                        Map.of("name", "roles",
+                                "path", "$.roles[?(@.target==\"" + MPOperationsEnvironment.PROVIDER_DID + "\")].names[*]",
+                                "allowedValues", List.of("OPERATOR"))));
+
+        Map<String, Object> productSpec = Map.of(
+                "brand", "M&P Operations",
+                "version", "1.0.0",
+                "lifecycleStatus", "ACTIVE",
+                "name", "M&P K8S Composed",
+                "serviceSpecification", List.of(Map.of("id", serviceSpecId)),
+                "productSpecCharacteristic", List.of(Map.of(
+                        "id", "credentialsConfig",
+                        "name", "Credentials Config",
+                        "valueType", "credentialsConfiguration",
+                        "productSpecCharacteristicValue", List.of(Map.of(
+                                "isDefault", true,
+                                "value", credentialsValue)))));
+
+        RequestBody body = RequestBody.create(OBJECT_MAPPER.writeValueAsString(productSpec),
+                okhttp3.MediaType.parse(MediaType.APPLICATION_JSON));
+        Request request = new Request.Builder()
+                .post(body)
+                .url(MPOperationsEnvironment.TMF_DIRECT_ADDRESS
+                        + "/tmf-api/productCatalogManagement/v4/productSpecification")
+                .build();
+        Response response = HTTP_CLIENT.newCall(request).execute();
+        try {
+            assertEquals(HttpStatus.SC_CREATED, response.code(),
+                    "The composed product specification should have been created.");
+            composedProductSpecId = OBJECT_MAPPER.readValue(response.body().string(), Map.class)
+                    .get("id").toString();
+        } finally {
+            response.body().close();
+        }
+    }
+
+    /**
+     * Creates a product offering for the composed product specification.
+     */
+    @When("The provider creates a product offering for the composed specification.")
+    public void createComposedProductOffering() throws Exception {
+        assertNotNull(composedProductSpecId, "The composed product spec must be created first.");
+        createProductOffering("M&P K8S Offering Composed", composedProductSpecId);
     }
 
     /**
@@ -1464,35 +1574,7 @@ public class StandardStepDefinitions extends StepDefintions {
                                 "path", "$.roles[?(@.target==\"" + MPOperationsEnvironment.PROVIDER_DID + "\")].names[*]",
                                 "allowedValues", List.of("OPERATOR"))));
 
-        // Build ODRL policy for policyConfig
-        Map<String, Object> odrlPolicy = new LinkedHashMap<>();
-        odrlPolicy.put("@context", Map.of("odrl", "http://www.w3.org/ns/odrl/2/"));
-        odrlPolicy.put("@id", policyId);
-        odrlPolicy.put("odrl:uid", policyId);
-        odrlPolicy.put("@type", "odrl:Policy");
-
-        Map<String, Object> permission = new LinkedHashMap<>();
-        permission.put("odrl:assigner", "https://www.mp-operation.org/");
-        permission.put("odrl:target", Map.of(
-                "@type", "odrl:AssetCollection",
-                "odrl:source", "urn:asset",
-                "odrl:refinement", targetRefinements));
-        permission.put("odrl:assignee", Map.of(
-                "@type", "odrl:PartyCollection",
-                "odrl:source", "urn:user",
-                "odrl:refinement", Map.of(
-                        "@type", "odrl:LogicalConstraint",
-                        "odrl:and", List.of(
-                                Map.of("@type", "odrl:Constraint",
-                                        "odrl:leftOperand", "vc:role",
-                                        "odrl:operator", "odrl:hasPart",
-                                        "odrl:rightOperand", Map.of("@value", "OPERATOR", "@type", "xsd:string")),
-                                Map.of("@type", "odrl:Constraint",
-                                        "odrl:leftOperand", "vc:type",
-                                        "odrl:operator", "odrl:hasPart",
-                                        "odrl:rightOperand", Map.of("@value", "OperatorCredential", "@type", "xsd:string"))))));
-        permission.put("odrl:action", "odrl:use");
-        odrlPolicy.put("odrl:permission", permission);
+        Map<String, Object> odrlPolicy = buildClusterPolicy(policyId, targetRefinements);
 
         ProductSpecificationCreateVO pscVo = new ProductSpecificationCreateVO()
                 .brand("M&P Operations")
@@ -1565,6 +1647,47 @@ public class StandardStepDefinitions extends StepDefintions {
                         "odrl:leftOperand", "ngsi-ld:entityType",
                         "odrl:operator", "odrl:eq",
                         "odrl:rightOperand", "K8SCluster"));
+    }
+
+    /**
+     * Builds the ODRL policy that allows an OperatorCredential holder to act on K8S clusters,
+     * refined by the given target constraints.
+     *
+     * @param policyId          the {@code odrl:uid} of the policy - unique per policy, since the
+     *                          ODRL-PAP keys an installed policy by it plus the order id
+     * @param targetRefinements the constraints restricting what may be created
+     * @return the policy, ready to be put into a characteristic value
+     */
+    private Map<String, Object> buildClusterPolicy(String policyId, List<Map<String, Object>> targetRefinements) {
+        Map<String, Object> odrlPolicy = new LinkedHashMap<>();
+        odrlPolicy.put("@context", Map.of("odrl", "http://www.w3.org/ns/odrl/2/"));
+        odrlPolicy.put("@id", policyId);
+        odrlPolicy.put("odrl:uid", policyId);
+        odrlPolicy.put("@type", "odrl:Policy");
+
+        Map<String, Object> permission = new LinkedHashMap<>();
+        permission.put("odrl:assigner", "https://www.mp-operation.org/");
+        permission.put("odrl:target", Map.of(
+                "@type", "odrl:AssetCollection",
+                "odrl:source", "urn:asset",
+                "odrl:refinement", targetRefinements));
+        permission.put("odrl:assignee", Map.of(
+                "@type", "odrl:PartyCollection",
+                "odrl:source", "urn:user",
+                "odrl:refinement", Map.of(
+                        "@type", "odrl:LogicalConstraint",
+                        "odrl:and", List.of(
+                                Map.of("@type", "odrl:Constraint",
+                                        "odrl:leftOperand", "vc:role",
+                                        "odrl:operator", "odrl:hasPart",
+                                        "odrl:rightOperand", Map.of("@value", "OPERATOR", "@type", "xsd:string")),
+                                Map.of("@type", "odrl:Constraint",
+                                        "odrl:leftOperand", "vc:type",
+                                        "odrl:operator", "odrl:hasPart",
+                                        "odrl:rightOperand", Map.of("@value", "OperatorCredential", "@type", "xsd:string"))))));
+        permission.put("odrl:action", "odrl:use");
+        odrlPolicy.put("odrl:permission", permission);
+        return odrlPolicy;
     }
 
     /**
