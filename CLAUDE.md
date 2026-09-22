@@ -56,6 +56,7 @@ doc/
   flows/                      # mermaid sequence diagrams
   release-notes/              # per-version changelogs
     9-x.md                    # 9.0.0 breaking changes + 9.1.0 OTEL tracing
+  adr/                        # architecture decision records
 
 it/                           # k3s-based integration tests (Maven-driven)
 k3s/                          # k3s bootstrap manifests for local dev
@@ -134,6 +135,11 @@ pom.xml                       # drives local-deploy + integration tests
   the same name exists fails the upgrade with "field is immutable" until the
   instance is bumped. The other five Jobs are hooks with
   `before-hook-creation`, so they are recreated.
+
+## Documentation
+
+- Every architectural decision should be documented in the ADR format in the folder doc/adr
+- Every new/modified feature should be documented in the README.md or its corresponding markdown document in doc/
 
 ## OpenTelemetry Tracing (from ticket-28)
 The chart already has a full OTEL tracing integration (chart version 9.1.0):
