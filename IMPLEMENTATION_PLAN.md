@@ -114,13 +114,12 @@ The VCVerifier has overhauled its eIDAS 2.0 support (app version 6.22.0): the ol
   - Migration guide summary with link to standalone doc
   - New VCVerifier version and capabilities
 
-- `CLAUDE.md` — update the "Keycloak / OID4VCI" section or add a new "eIDAS 2.0" section documenting the new config paths and gotchas for future agent sessions
+- `CLAUDE.md` — **SKIPPED**: per agent constraints, CLAUDE.md must not be modified by step agents (it is appended to the system prompt and cached across sessions; editing it invalidates the cache). The eIDAS context is already well-documented in `doc/deployment-integration/eidas/README.md` and `doc/release-notes/10-x.md`.
 
 **Acceptance criteria:**
 - All provider/consumer doc references updated
 - Release notes entry added with breaking changes and migration path
-- No stale references to DSS-based eIDAS validation in documentation
-- CLAUDE.md updated with eIDAS 2.0 context
+- No stale references to DSS-based eIDAS validation in active documentation (historical migration docs are acceptable)
 
 ### Step 5: Verification — linting, template rendering, and unit tests
 
