@@ -19,10 +19,10 @@
 > | CM-2, CM-4, CM-10 - the service-level walk and its settings | released |
 > | CM-5, CM-8 - union, `odrl:uid` de-duplication, single provider | released |
 > | CM-9, TIL-1…TIL-7 - order-scoped grants | released, `trusted-issuers-list 0.9.1` |
-> | DSC-2, DSC-7, DSC-8 - chart settings, model docs, 10.5.0 | this repository |
+> | DSC-2, DSC-7, DSC-8 - chart settings, model docs, 10.8.0 | this repository |
 > | ENF-1, ENF-2, DSC-4, DSC-5, DSC-6 - PDP check, access policy, integration test, authoring guide | this repository |
 > | CM-12 - re-activation when a part changes | **dropped**, it contradicts D-C7 |
-> | **open** | BAE-1/BAE-2 authoring UI, consent granularity (§5.5), and the chart chain hop that brings `trusted-issuers-list` 0.9.1 through `vc-authentication` |
+> | **open** | BAE-1/BAE-2 authoring UI and consent granularity (§5.5) |
 >
 > Provider-facing authoring guide:
 > [`doc/deployment-integration/roles/provider/COMPOSED_SPECIFICATIONS.md`](../deployment-integration/roles/provider/COMPOSED_SPECIFICATIONS.md).
