@@ -227,6 +227,8 @@ public class StandardStepDefinitions extends StepDefintions {
         cleanUpTMForumResourceList(TMF_DIRECT_ADDRESS,
                 "/tmf-api/productCatalogManagement/v4/productSpecification", "Standard specifications");
         cleanUpTMForumResourceList(TMF_DIRECT_ADDRESS,
+                "/tmf-api/serviceCatalogManagement/v4/serviceSpecification", "Standard service specifications");
+        cleanUpTMForumResourceList(TMF_DIRECT_ADDRESS,
                 "/tmf-api/productOrderingManagement/v4/productOrder", "Standard orders");
         cleanUpTMForumResourceList(TMF_DIRECT_ADDRESS,
                 "/tmf-api/agreementManagement/v4/agreement", "Standard agreements");
