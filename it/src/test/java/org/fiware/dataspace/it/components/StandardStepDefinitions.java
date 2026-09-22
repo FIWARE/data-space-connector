@@ -1648,12 +1648,6 @@ public class StandardStepDefinitions extends StepDefintions {
     }
 
     /**
-     * Creates a product offering at the provider's TMForum API referencing the given specification.
-     *
-     * @param offeringName the name of the product offering
-     * @param specId       the product specification ID to reference
-     */
-    /**
      * Builds the ODRL policy that allows an OperatorCredential holder to act on K8S clusters,
      * refined by the given target constraints.
      *
@@ -1694,6 +1688,12 @@ public class StandardStepDefinitions extends StepDefintions {
         return odrlPolicy;
     }
 
+    /**
+     * Creates a product offering at the provider's TMForum API referencing the given specification.
+     *
+     * @param offeringName the name of the product offering
+     * @param specId       the product specification ID to reference
+     */
     private void createProductOffering(String offeringName, String specId) throws Exception {
         ProductOfferingCreateVO productOfferingCreate = new ProductOfferingCreateVO()
                 .lifecycleStatus("ACTIVE")
