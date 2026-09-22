@@ -1829,8 +1829,8 @@ contract-management:
   # ProductSpecification are resolved when composition is enabled. The
   # default of 2 covers a ProductSpecification and the
   # ServiceSpecifications it references; bundled ProductSpecifications
-  # consume the same budget. References below the limit are skipped with
-  # a warning naming them.
+  # consume the same budget. References deeper than the limit are skipped
+  # with a warning naming them.
   specificationCompositionMaxDepth: 2
   til:
     credentialType: OperatorCredential

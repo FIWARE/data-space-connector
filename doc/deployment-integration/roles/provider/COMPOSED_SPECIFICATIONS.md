@@ -194,7 +194,7 @@ is what makes sharing a service specification safe.
 
 | Log line | Meaning |
 |---|---|
-| `The composition of specification … is deeper than the configured limit of N levels` | references below the limit were **not** applied. Raise `specificationCompositionMaxDepth` or flatten the composition |
+| `The composition of specification … is deeper than the configured limit of N levels` | references deeper than the limit were **not** applied. Raise `specificationCompositionMaxDepth` or flatten the composition |
 | `The composition of specification … contains two different policies claiming the uid …` | two parts use one `odrl:uid` for different policies; nothing was installed |
 | `The composition of specification … declares more than one provider` | a part names a different provider party |
 | `The … specification … referenced by specification … could not be resolved` | a dangling reference — the catalog is broken, and the activation failed rather than granting a partial configuration |
