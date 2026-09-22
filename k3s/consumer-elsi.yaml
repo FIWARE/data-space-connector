@@ -26,6 +26,8 @@ decentralizedIam:
       enabled: false
     trusted-issuers-list:
       enabled: false
+    # dss-validation-service is no longer needed — eIDAS certificate chain validation
+    # is now built into VCVerifier (>= 6.22.0) via vcverifier.deployment.eidas.
     dss:
       enabled: false
       crl:
@@ -91,6 +93,10 @@ keycloak:
         hosts:
           - keycloak-consumer.127.0.0.1.nip.io
   extraInitContainers:
+    # The keycloak-jades-vc-issuer plugin is still needed for did:elsi issuance.
+    # It injects the x5c certificate chain header into issued JWTs, which is
+    # required by VCVerifier's eIDAS 2.0 PKIX chain validation. Standard
+    # Keycloak OID4VCI does not include x5c headers automatically.
     - name: install-jades-issuer
       image: quay.io/fiware/keycloak-jades-vc-issuer:1.2.0
       imagePullPolicy: IfNotPresent
