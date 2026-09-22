@@ -10,20 +10,20 @@ The VCVerifier has overhauled its eIDAS 2.0 support (app version 6.22.0): the ol
 
 **Goal:** Bump the `decentralized-iam` chart dependency to pick up the VCVerifier version that includes built-in eIDAS 2.0 trust list validation (app version ≥ 6.22.0), and update the `values.yaml` config surface accordingly.
 
-**Pre-requisite check:** Before implementing, verify that the upstream dependency chain has been updated:
-- `vcverifier` Helm chart ≥ 4.12.27 (or whichever version includes appVersion 6.22.0) — must add `eidas:` to the configmap template rendering
-- `vc-authentication` chart bumps its `vcverifier` dependency to include the above
-- `decentralized-iam` chart bumps its `vc-authentication` dependency
+**Pre-requisite check:** ✅ Verified — the upstream dependency chain is available:
+- `vcverifier` Helm chart **4.13.0** (appVersion **6.22.0**) — includes `eidas:` block in configmap template
+- `vc-authentication` chart **1.3.9** bundles vcverifier 4.13.0
+- `decentralized-iam` chart **2.1.23** bundles vc-authentication 1.3.9
 
-If the upstream charts are not yet updated, open tracking issues and document the required upstream versions in this file. Proceed with steps 2-5 against the expected config shape, gating the Chart.yaml version bump on upstream availability.
+**Note:** The upstream vcverifier chart uses `lotUrl` (not `lotlUrl` as originally planned). The values path is confirmed as `deployment.eidas`.
 
 **Files affected:**
-- `charts/data-space-connector/Chart.yaml` — bump `decentralized-iam` version from `2.1.22` to the version that bundles VCVerifier ≥ 6.22.0
+- `charts/data-space-connector/Chart.yaml` — bump `decentralized-iam` version from `2.1.22` to `2.1.23`
 - `charts/data-space-connector/values.yaml`:
   - Under the `decentralizedIam.vcAuthentication` section (lines ~123–132), add a deprecation comment to the `dss:` block explaining that the DSS validation service is superseded by VCVerifier's built-in eIDAS validation in chart version ≥ (new version). Keep the block for backward compatibility but mark it deprecated.
-  - Add a new `eidas:` configuration block. **Important:** The exact values path depends on how the upstream vcverifier Helm chart exposes the `eidas:` block in its configmap template. As of vcverifier chart v4.12.26, the configmap template only renders `server/m2m/logging/verifier/configRepo/elsi/database/configServer` — it does not yet render `eidas:`. The implementing agent **must** re-verify the exact path against the updated upstream chart (≥ 4.12.27 or whichever version adds eIDAS rendering). The expected path is `decentralizedIam.vcAuthentication.vcverifier.deployment.eidas` (mirroring the app's YAML config structure), but this must be confirmed before implementation. Add the block with helm-docs comments (`# --` format) for the following keys:
+  - Add a new `eidas:` configuration block under `vcverifier.deployment`. The values path is confirmed as `decentralizedIam.vcAuthentication.vcverifier.deployment.eidas`. Add the block with helm-docs comments (`# --` format) for the following keys:
     - `enabled` (default: `false`) — master toggle for eIDAS trust list validation
-    - `lotlUrl` (default: official EU LOTL URL) — URL of the EU List of Trusted Lists
+    - `lotUrl` (default: official EU LOTL URL) — URL of the EU List of Trusted Lists
     - `refreshInterval` (default: `86400`) — trust list refresh interval in seconds
     - `countries` (default: `[]` = all) — ISO 3166-1 alpha-2 country filter
     - `maxWorkers` (default: `5`) — concurrent trust list fetch workers
