@@ -1548,6 +1548,9 @@ tm-forum-api:
         # -- needs to be updated for the concrete dataspace
         trustedParticipantsLists: http://tir.trust-anchor.org
         trustedIssuersLists: http://trusted-issuers-list:8080
+    # -- priority class to be assigned to the pods
+    # ref: https://kubernetes.io/docs/concepts/scheduling-eviction/pod-priority-preemption/
+    priorityClassName: ""
 
 
 ## Configuration of the status-list-server for Token Status List (RFC draft-ietf-oauth-status-list) support.
@@ -1644,6 +1647,21 @@ statusListServer:
       limits:
         memory: "256Mi"
         cpu: "250m"
+    # -- selector template
+    # ref: https://kubernetes.io/docs/user-guide/node-selection/
+    nodeSelector: {}
+    # -- affinity template
+    # ref: https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#affinity-and-anti-affinity
+    affinity: {}
+    # -- tolerations template
+    # ref: https://kubernetes.io/docs/concepts/configuration/taint-and-toleration/
+    tolerations: []
+    # -- topology spread constraints template
+    # ref: https://kubernetes.io/docs/concepts/scheduling-eviction/topology-spread-constraints/
+    topologySpreadConstraints: []
+    # -- priority class to be assigned to the pods
+    # ref: https://kubernetes.io/docs/concepts/scheduling-eviction/pod-priority-preemption/
+    priorityClassName: ""
   # -- signing key and certificate chain configuration for token signing.
   # -- Mount an externally managed Secret (e.g. from cert-manager) containing tls.key and tls.crt.
   # -- When enabled, the built-in ACME certificate manager is bypassed entirely.
@@ -1688,6 +1706,21 @@ statusListServer:
       #     - /
     # -- configure the ingress' TLS
     tls: []
+  # -- selector template
+  # ref: https://kubernetes.io/docs/user-guide/node-selection/
+  nodeSelector: {}
+  # -- affinity template
+  # ref: https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#affinity-and-anti-affinity
+  affinity: {}
+  # -- tolerations template
+  # ref: https://kubernetes.io/docs/concepts/configuration/taint-and-toleration/
+  tolerations: []
+  # -- topology spread constraints template
+  # ref: https://kubernetes.io/docs/concepts/scheduling-eviction/topology-spread-constraints/
+  topologySpreadConstraints: []
+  # -- priority class to be assigned to the pods
+  # ref: https://kubernetes.io/docs/concepts/scheduling-eviction/pod-priority-preemption/
+  priorityClassName: ""
       # - secretName: status-list-tls
       #   hosts:
       #     - status-list.example.com
@@ -1745,6 +1778,21 @@ rainbow:
     configMap: rainbow-registration
     # -- service id of the data-service to be used
     id: tpp-service
+  # -- selector template
+  # ref: https://kubernetes.io/docs/user-guide/node-selection/
+  nodeSelector: {}
+  # -- affinity template
+  # ref: https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#affinity-and-anti-affinity
+  affinity: {}
+  # -- tolerations template
+  # ref: https://kubernetes.io/docs/concepts/configuration/taint-and-toleration/
+  tolerations: []
+  # -- topology spread constraints template
+  # ref: https://kubernetes.io/docs/concepts/scheduling-eviction/topology-spread-constraints/
+  topologySpreadConstraints: []
+  # -- priority class to be assigned to the pods
+  # ref: https://kubernetes.io/docs/concepts/scheduling-eviction/pod-priority-preemption/
+  priorityClassName: ""
 
 ## configuration of the tm-forum-api - see https://github.com/FIWARE/helm-charts/tree/main/charts/contract-management for details
 contract-management:
@@ -1895,6 +1943,9 @@ registration:
   #     - LegalPersonCredential
   #     - OperatorCredential
   issuer: []
+  # -- priority class to be assigned to the pods
+  # ref: https://kubernetes.io/docs/concepts/scheduling-eviction/pod-priority-preemption/
+  priorityClassName: ""
 
 # -- configuration for the .well-known/data-space-configuration endpoint document
 dataSpaceConfig:
@@ -1914,6 +1965,21 @@ dataSpaceConfig:
 
   # -- Supported authentication protocols (e.g.: oid4vp)
   authenticationProtocols: []
+  # -- selector template
+  # ref: https://kubernetes.io/docs/user-guide/node-selection/
+  nodeSelector: {}
+  # -- affinity template
+  # ref: https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#affinity-and-anti-affinity
+  affinity: {}
+  # -- tolerations template
+  # ref: https://kubernetes.io/docs/concepts/configuration/taint-and-toleration/
+  tolerations: []
+  # -- topology spread constraints template
+  # ref: https://kubernetes.io/docs/concepts/scheduling-eviction/topology-spread-constraints/
+  topologySpreadConstraints: []
+  # -- priority class to be assigned to the pods
+  # ref: https://kubernetes.io/docs/concepts/scheduling-eviction/pod-priority-preemption/
+  priorityClassName: ""
 
 ## Installation of the mongo-operator - see https://github.com/mongodb/helm-charts/tree/main/charts/community-operator
 mongo-operator:
@@ -2940,6 +3006,9 @@ identityhub:
       "helm.sh/hook": post-install,post-upgrade
       "helm.sh/hook-weight": "10"
       "helm.sh/hook-delete-policy": before-hook-creation
+    # -- priority class to be assigned to the pods
+    # ref: https://kubernetes.io/docs/concepts/scheduling-eviction/pod-priority-preemption/
+    priorityClassName: ""
   livenessProbe:
     # -- Whether to enable kubernetes [liveness-probe](https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/)
     enabled: true
@@ -3202,6 +3271,12 @@ identityhub:
       # -- [Kubernetes image pull policy](https://kubernetes.io/docs/concepts/containers/images/#image-pull-policy)
       # for the agent init container.
       pullPolicy: IfNotPresent
+  # -- topology spread constraints template
+  # ref: https://kubernetes.io/docs/concepts/scheduling-eviction/topology-spread-constraints/
+  topologySpreadConstraints: []
+  # -- priority class to be assigned to the pods
+  # ref: https://kubernetes.io/docs/concepts/scheduling-eviction/pod-priority-preemption/
+  priorityClassName: ""
 
 vault:
   # -- should the bundled HashiCorp Vault be deployed. The identityhub and fdsc-edc need a vault to
@@ -3317,6 +3392,9 @@ vault:
     tokenPeriod: "768h"
     # -- name of the ACL policy created for it
     tokenPolicyName: dsc-connector
+    # -- priority class to be assigned to the pods
+    # ref: https://kubernetes.io/docs/concepts/scheduling-eviction/pod-priority-preemption/
+    priorityClassName: ""
 
 # -- configuration for the cert-manager component (https://github.com/cert-manager/cert-manager/blob/master/deploy/charts/cert-manager/values.yaml)
 cert-manager:
@@ -3431,6 +3509,9 @@ tracing:
       # -- container image for the Node.js auto-instrumentation agent init
       # container injected by the Operator.
       image: "ghcr.io/open-telemetry/opentelemetry-operator/autoinstrumentation-nodejs:0.75.0"
+  # -- priority class to be assigned to the pods
+  # ref: https://kubernetes.io/docs/concepts/scheduling-eviction/pod-priority-preemption/
+  priorityClassName: ""
 
 # -- values passed to the bundled `opentelemetry-operator` subchart
 # (chart: open-telemetry/opentelemetry-operator). The operator provides
