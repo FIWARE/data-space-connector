@@ -26,8 +26,8 @@ contract-management:
 | `contract-management` | chart `3.5.36` (app `3.3.12`) |
 | `trusted-issuers-list` | app `0.9.1` |
 
-The connector chart pins the `trusted-issuers-list` image until the chart chain catches up; see the
-[10.5.0 release note](../../../release-notes/10-x.md).
+Both ship with the connector chart; no image override is needed. See the
+[10.8.0 release note](../../../release-notes/10-x.md).
 
 Leaving the flag off keeps the previous behaviour exactly: only the ordered `ProductSpecification`
 is read.
