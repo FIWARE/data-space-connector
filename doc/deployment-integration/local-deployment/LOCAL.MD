@@ -1325,11 +1325,9 @@ When using the `OPERATOR_CREDENTIAL`, it will work:
 
 ## eIDAS Compliancy
 
-The Data Space Connector supports [eIDAS 2.0](https://digital-strategy.ec.europa.eu/en/policies/eidas-regulation) compliance through the [`did:elsi` DID method](https://alastria.github.io/did-method-elsi/), which ties organization identity to qualified certificates issued under the EU Trust Framework.
+The Data Space Connector supports [eIDAS 2.0](https://digital-strategy.ec.europa.eu/en/policies/eidas-regulation) compliance through PKIX certificate chain validation against the [EU Trusted Lists](https://ec.europa.eu/digital-building-blocks/sites/display/DIGITAL/EU+Trusted+Lists). This works with `did:elsi`, `did:web`, and HTTPS-issued credentials that carry an `x5c` JWT header.
 
-Starting with **decentralized-iam >= 2.1.23 / VCVerifier >= 6.22.0**, certificate chain validation is performed natively by VCVerifier using PKIX validation against the [EU Trusted Lists (ETSI TS 119 612)](https://ec.europa.eu/digital-building-blocks/sites/display/DIGITAL/EU+Trusted+Lists). The previously required external `dss-validation-service` is no longer needed.
-
-For full documentation on eIDAS configuration, certificate generation, migration from the DSS-based approach, and troubleshooting, see the **[standalone eIDAS documentation](../eidas/README.md)**.
+For full documentation on eIDAS configuration, certificate generation, and troubleshooting, see the **[standalone eIDAS documentation](../eidas/README.md)**.
 
 ### Quick Start (Local Deployment)
 

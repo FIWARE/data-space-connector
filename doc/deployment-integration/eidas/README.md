@@ -1,17 +1,30 @@
-# eIDAS 2.0 Compliance: did:elsi and EU Trusted List Validation
+# eIDAS 2.0 Compliance: EU Trusted List Validation
 
 The FIWARE Data Space Connector supports
 [eIDAS 2.0](https://digital-strategy.ec.europa.eu/en/policies/eidas-regulation)
-compliance through the
-[`did:elsi` DID method](https://alastria.github.io/did-method-elsi/),
-which ties organization identity to qualified certificates issued under the
-EU Trust Framework. Starting with **decentralized-iam >= 2.1.23 /
-VCVerifier >= 6.22.0**, certificate chain validation is performed natively
-by VCVerifier using PKIX validation against the
+compliance through PKIX certificate chain validation against the
 [EU Trusted Lists (ETSI TS 119 612)](https://ec.europa.eu/digital-building-blocks/sites/display/DIGITAL/EU+Trusted+Lists).
-The previously required external
-[dss-validation-service](https://github.com/wistefan/dss-validation-service)
-is no longer needed.
+Starting with **decentralized-iam >= 2.1.23 / VCVerifier >= 6.22.0**,
+this validation is performed natively by VCVerifier.
+
+eIDAS 2.0 verification works with any DID method or credential issuance
+approach that includes an `x5c` certificate chain header in issued JWTs:
+
+- **`did:elsi`** -- the
+  [`did:elsi` DID method](https://alastria.github.io/did-method-elsi/)
+  ties organization identity directly to an eIDAS-qualified certificate
+  via the `organizationIdentifier` (OID 2.5.4.97) in the Subject DN.
+- **`did:web`** -- credentials issued under a `did:web` DID can carry
+  an `x5c` header with an eIDAS certificate chain, enabling the same
+  PKIX trust list validation.
+- **HTTPS-issued credentials** -- any credential that includes the `x5c`
+  JWT header can be validated against the EU Trusted Lists, regardless
+  of the issuer identifier scheme.
+
+In all cases, VCVerifier extracts the `x5c` header, validates the
+certificate chain against the trust store built from the EU List of
+Trusted Lists (LOTL), and (for `did:elsi`) additionally verifies that
+the certificate's `organizationIdentifier` matches the DID.
 
 eIDAS support is **disabled by default** and is strictly opt-in.
 
@@ -21,6 +34,7 @@ eIDAS support is **disabled by default** and is strictly opt-in.
 <summary><strong>Table of Contents</strong></summary>
 
 - [Architecture](#architecture)
+  - [Supported DID Methods and Issuance Approaches](#supported-did-methods-and-issuance-approaches)
   - [Validation Flow](#validation-flow)
 - [Configuration -- Provider (Verifier)](#configuration----provider-verifier)
   - [Enabling eIDAS Validation](#enabling-eidas-validation)
@@ -35,7 +49,6 @@ eIDAS support is **disabled by default** and is strictly opt-in.
 - [Certificate Revocation](#certificate-revocation)
 - [Trust List Freshness](#trust-list-freshness)
 - [Local Deployment](#local-deployment)
-- [Migration from DSS-Based Approach](#migration-from-dss-based-approach)
 - [Troubleshooting](#troubleshooting)
 
 </details>
@@ -48,12 +61,28 @@ eIDAS 2.0 support in the Data Space Connector involves two roles:
 
 | Role | Component | Responsibility |
 |------|-----------|----------------|
-| **Consumer (Issuer)** | Keycloak + JAdES plugin | Issues Verifiable Credentials signed with an eIDAS certificate. The `x5c` JWT header carries the full certificate chain. The credential's `iss` claim is a `did:elsi:<organisationIdentifier>` DID. |
-| **Provider (Verifier)** | VCVerifier | Validates incoming `did:elsi` credentials by verifying the JWT signature against the certificate chain in `x5c`, then validating that chain against a trust store built from the EU List of Trusted Lists (LOTL). |
+| **Consumer (Issuer)** | Keycloak + JAdES plugin | Issues Verifiable Credentials signed with an eIDAS certificate. The `x5c` JWT header carries the full certificate chain. The credential's `iss` claim can use `did:elsi`, `did:web`, or an HTTPS identifier. |
+| **Provider (Verifier)** | VCVerifier | Validates incoming credentials that carry an `x5c` header by verifying the JWT signature against the certificate chain, then validating that chain against a trust store built from the EU List of Trusted Lists (LOTL). For `did:elsi`, the certificate's `organizationIdentifier` is additionally matched against the DID. |
+
+### Supported DID Methods and Issuance Approaches
+
+VCVerifier's eIDAS trust list validation is not limited to a single DID
+method. Any credential that carries an `x5c` JWT header with a valid eIDAS
+certificate chain can be validated:
+
+| Approach | Identifier Example | Additional Check |
+|----------|-------------------|------------------|
+| `did:elsi` | `did:elsi:VATDE-1234567` | `organizationIdentifier` (OID 2.5.4.97) in the leaf certificate must match the DID |
+| `did:web` | `did:web:example.com` | Standard `did:web` resolution + `x5c` PKIX chain validation |
+| HTTPS | `https://issuer.example.com` | `x5c` PKIX chain validation only |
+
+The examples in this document use `did:elsi` because it is the most
+tightly coupled with eIDAS certificates, but the PKIX validation itself
+applies to all approaches.
 
 ### Validation Flow
 
-When VCVerifier receives a credential with a `did:elsi` issuer, it performs
+When VCVerifier receives a credential with an `x5c` header, it performs
 the following steps:
 
 ```
@@ -66,19 +95,16 @@ Credential (JWT with x5c header)
   2. Verify JWT signature against the leaf certificate
         |
         v
-  3. Extract organizationIdentifier (OID 2.5.4.97) from the
-     leaf certificate's Subject DN
+  3. (did:elsi only) Extract organizationIdentifier (OID 2.5.4.97)
+     from the leaf certificate's Subject DN and match against the
+     did:elsi identifier (e.g., did:elsi:VATDE-1234567 -> VATDE-1234567)
         |
         v
-  4. Match organizationIdentifier against the did:elsi identifier
-     (e.g., did:elsi:VATDE-1234567 -> VATDE-1234567)
-        |
-        v
-  5. Validate the certificate chain (PKIX) against the trust store
+  4. Validate the certificate chain (PKIX) against the trust store
      built from the EU LOTL
         |
         v
-  6. (Optional) Check certificate revocation status via OCSP/CRL
+  5. (Optional) Check certificate revocation status via OCSP/CRL
         |
         v
   Credential accepted or rejected
@@ -93,17 +119,19 @@ background (see [Trust List Freshness](#trust-list-freshness)).
 
 ## Configuration -- Provider (Verifier)
 
-The provider runs VCVerifier, which validates incoming `did:elsi`
-credentials. Two configuration blocks are relevant:
+The provider runs VCVerifier, which validates incoming credentials
+carrying eIDAS certificate chains. Two configuration blocks are relevant:
 
 1. `decentralizedIam.vcAuthentication.vcverifier.deployment.elsi` --
-   enables the `did:elsi` DID method in the verifier.
+   enables the `did:elsi` DID method in the verifier (only needed when
+   using `did:elsi`; not required for `did:web` or HTTPS issuers).
 2. `decentralizedIam.vcAuthentication.vcverifier.deployment.eidas` --
-   configures the built-in PKIX trust list validation.
+   configures the built-in PKIX trust list validation (required for all
+   eIDAS approaches).
 
 ### Enabling eIDAS Validation
 
-Minimal `values.yaml` overlay to enable eIDAS validation:
+Minimal `values.yaml` overlay to enable eIDAS validation with `did:elsi`:
 
 ```yaml
 decentralizedIam:
@@ -111,7 +139,7 @@ decentralizedIam:
     vcverifier:
       deployment:
         elsi:
-          # Enable did:elsi DID method support
+          # Enable did:elsi DID method support (omit if using did:web or HTTPS)
           enabled: true
         eidas:
           # Enable built-in eIDAS 2.0 trust list validation
@@ -119,12 +147,12 @@ decentralizedIam:
 ```
 
 When `eidas.enabled` is `true`, VCVerifier builds a trust store from the
-EU LOTL at startup and validates every `did:elsi` credential's certificate
+EU LOTL at startup and validates every credential's `x5c` certificate
 chain against it. No external validation service is needed.
 
-> **Note:** The `dss-validation-service` (`decentralizedIam.vcAuthentication.dss`)
-> is deprecated and should not be enabled alongside the new `eidas` block.
-> See [Migration from DSS-Based Approach](#migration-from-dss-based-approach).
+> **Note:** The `elsi.enabled` toggle is only needed when the issuer uses
+> the `did:elsi` DID method. For `did:web` or HTTPS-issued credentials,
+> only the `eidas` block is required.
 
 ### Configuration Reference
 
@@ -132,7 +160,7 @@ All values live under `decentralizedIam.vcAuthentication.vcverifier.deployment.e
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `enabled` | bool | `false` | Master toggle for eIDAS trust list validation. Must be `true` when using `did:elsi`. |
+| `enabled` | bool | `false` | Master toggle for eIDAS trust list validation. Must be `true` for any eIDAS-based credential verification (`did:elsi`, `did:web` with `x5c`, or HTTPS-issued). |
 | `lotUrl` | string | `""` (official EU LOTL) | URL of the EU List of Trusted Lists. When empty, defaults to `https://ec.europa.eu/tools/lotl/eu-lotl.xml`. |
 | `refreshInterval` | int | `86400` | Interval in seconds between background LOTL refreshes. |
 | `countries` | list | `[]` (all EU) | ISO 3166-1 alpha-2 country filter. Empty list means all EU member states. Example: `["DE", "ES", "FR"]`. |
@@ -161,8 +189,9 @@ for a complete local-deployment example.
 ## Configuration -- Consumer (Issuer)
 
 The consumer runs Keycloak, which issues Verifiable Credentials signed with
-an eIDAS certificate. The credential's `iss` claim uses the `did:elsi` DID
-method, and the `x5c` JWT header carries the full certificate chain.
+an eIDAS certificate. The `x5c` JWT header carries the full certificate
+chain. The credential's `iss` claim can use `did:elsi`, `did:web`, or an
+HTTPS identifier -- the examples below use `did:elsi`.
 
 ### Keycloak elsi Block
 
@@ -251,6 +280,12 @@ keycloak:
           defaultMode: 0755
 ```
 
+> **Important:** The `mountPath` must match your realm name --
+> `/opt/keycloak/data/<your-realm-name>/`. The example above uses
+> `test-realm`. If your realm is named differently (e.g., `my-realm`),
+> change the path to `/opt/keycloak/data/my-realm`. This is a KC 26.6.4
+> restriction -- the `java-keystore` provider only reads from that path.
+
 ---
 
 ## Preparation -- Generating Test Certificates
@@ -297,22 +332,20 @@ generated using the [FIWARE/eIDAS tool](https://github.com/FIWARE/eIDAS).
      --from-file output/keystore.p12 | jq -r '.data."keystore.p12"'
    ```
 
-> **Note:** With the new VCVerifier-native trust list validation, you no
-> longer need to extract the CA trust store (`ca-store.jks`) or the CRL
-> (`crl.pem`) for the provider side. VCVerifier builds its trust store
-> directly from the EU Trusted Lists. These artifacts are only needed if
-> you are still using the deprecated `dss-validation-service`.
+> **Note:** VCVerifier builds its trust store directly from the EU
+> Trusted Lists. You do not need to extract the CA trust store
+> (`ca-store.jks`) or the CRL (`crl.pem`) for the provider side.
 
 ### Certificate Requirements
 
 For VCVerifier's PKIX validation to succeed, the leaf certificate must:
 
-- Contain the `organizationIdentifier` attribute (OID 2.5.4.97) in the
-  Subject DN, matching the `did:elsi` identifier.
 - Be signed by a CA that appears in one of the EU Trusted Lists (or, for
   testing, be self-signed with `revocationCheck: "off"`).
 - Include the full certificate chain in the `x5c` JWT header when the
   credential is issued.
+- When using `did:elsi`: contain the `organizationIdentifier` attribute
+  (OID 2.5.4.97) in the Subject DN, matching the DID identifier.
 
 ---
 
@@ -370,7 +403,7 @@ refreshes it periodically. The following settings control this behavior:
 
 - The initial trust store build happens during VCVerifier startup. If the
   LOTL or national lists are unreachable, startup will succeed but the
-  trust store will be empty, causing all `did:elsi` credentials to be
+  trust store will be empty, causing all eIDAS-validated credentials to be
   rejected.
 - The `countries` filter (e.g., `["DE", "ES"]`) reduces startup time and
   memory usage by only fetching trust lists for the specified countries.
@@ -413,101 +446,6 @@ Inspect it on [jwt.io](https://jwt.io/) to verify that:
 
 ---
 
-## Migration from DSS-Based Approach
-
-If you are upgrading from a deployment that used the external
-`dss-validation-service` (decentralized-iam < 2.1.23 / VCVerifier < 6.22.0),
-follow these steps:
-
-### 1. Update the Chart Dependency
-
-Ensure `decentralized-iam` is at version `>= 2.1.23` in your
-`Chart.yaml`:
-
-```yaml
-- name: decentralized-iam
-  alias: decentralizedIam
-  version: ">=2.1.23"
-  repository: ...
-```
-
-Run `helm dependency update charts/data-space-connector`.
-
-### 2. Enable the New eIDAS Block
-
-Add the `eidas` block to your provider values:
-
-```yaml
-decentralizedIam:
-  vcAuthentication:
-    vcverifier:
-      deployment:
-        eidas:
-          enabled: true
-          # Set revocationCheck appropriately for your environment
-          revocationCheck: "soft"
-```
-
-### 3. Disable the DSS Validation Service
-
-Set `dss.enabled: false` and `dss.crl.enabled: false`:
-
-```yaml
-decentralizedIam:
-  vcAuthentication:
-    dss:
-      enabled: false
-      crl:
-        enabled: false
-```
-
-### 4. Remove DSS-Specific Configuration
-
-Remove from your values files:
-- `dss.trust` (trust list URLs, keystores)
-- `dss.keystores` (base64-encoded JKS keystores)
-- `dss.deployment.additionalContainers` (CRL provider sidecar)
-- `dss.deployment.additionalVolumes` (CRL secret volume)
-- `dss.crl.secret` (base64-encoded CRL)
-- `dss.health` (health check port)
-
-### 5. Remove the validationEndpoint from elsi
-
-The `validationEndpoint` block under `vcverifier.deployment.verifier.elsi`
-is no longer needed:
-
-```yaml
-# REMOVE this block:
-elsi:
-  validationEndpoint:
-    host: http://provider-dss:8080
-    validationPath: /validateSignature
-    healthPath: /health/liveness
-```
-
-Keep `elsi.enabled: true` -- the DID method is still used, only the
-validation backend has changed.
-
-### 6. Consumer Side -- Keep the JAdES Plugin
-
-The `keycloak-jades-vc-issuer` init container is still required on the
-consumer side. It injects the `x5c` certificate chain header into issued
-JWTs, which VCVerifier's PKIX validation reads from the credential. The
-`elsi` block in `values.yaml` is also unchanged.
-
-### Summary of Changes
-
-| Component | Before (DSS) | After (VCVerifier-native) |
-|-----------|-------------|--------------------------|
-| Provider: validation service | `dss.enabled: true` + external dss-validation-service | `eidas.enabled: true` (built into VCVerifier) |
-| Provider: CRL sidecar | Required for local testing | Not needed (revocation via OCSP/CRL endpoints or `revocationCheck: "off"`) |
-| Provider: CA trust store | Manual JKS keystore (`dss.keystores`) | Automatic from EU Trusted Lists |
-| Provider: elsi config | `validationEndpoint` pointing to DSS | No `validationEndpoint` needed |
-| Consumer: JAdES plugin | Required for x5c header injection | Still required for x5c header injection |
-| Consumer: elsi block | Unchanged | Unchanged |
-
----
-
 ## Troubleshooting
 
 ### Common Error Scenarios
@@ -515,7 +453,7 @@ JWTs, which VCVerifier's PKIX validation reads from the credential. The
 | Error | Cause | Resolution |
 |-------|-------|------------|
 | Credential rejected with no trust store | `eidas.enabled` is `false` or the LOTL was unreachable at startup | Set `eidas.enabled: true` and verify network connectivity to the EU LOTL URL |
-| `organizationIdentifier` mismatch | The `did:elsi` identifier does not match OID 2.5.4.97 in the leaf certificate | Regenerate the certificate with the correct `ORGANISATION_IDENTIFIER` matching the DID |
+| `organizationIdentifier` mismatch (`did:elsi` only) | The `did:elsi` identifier does not match OID 2.5.4.97 in the leaf certificate | Regenerate the certificate with the correct `ORGANISATION_IDENTIFIER` matching the DID |
 | Certificate chain validation failed | The issuing CA is not in the EU Trusted Lists, or the `countries` filter excludes it | Check the `countries` setting; for test certificates, this is expected (test CAs are not in the EU LOTL) |
 | Revocation check failed | OCSP/CRL endpoint unreachable with `revocationCheck: "hard"` | Switch to `"soft"` or ensure OCSP/CRL endpoints are reachable; for local testing use `"off"` |
 | Stale trust list rejected | A national trust list's `NextUpdate` is in the past and `allowStaleTrustLists: false` | Set `allowStaleTrustLists: true` or investigate why the trust list is not being refreshed |
@@ -528,5 +466,6 @@ JWTs, which VCVerifier's PKIX validation reads from the credential. The
 - Use `helm template` with your values to verify the `eidas` block appears
   in the VCVerifier configmap.
 - Decode the credential JWT at [jwt.io](https://jwt.io/) to verify the
-  `x5c` header is present and the `iss` claim uses `did:elsi`.
+  `x5c` header is present and the `iss` claim matches the expected DID or
+  issuer URL.
 - For test certificates (self-signed), always use `revocationCheck: "off"`.

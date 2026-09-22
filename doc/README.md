@@ -24,6 +24,7 @@ specific flows and its deployment and integration with other frameworks.
   - [Packet Delivery Company (ArgoCD)](#packet-delivery-company-argocd)
   - [Running the EDC identity material in production](#running-the-edc-identity-material-in-production)
   - [Observability](#observability)
+  - [eIDAS 2.0 Compliance](#eidas-20-compliance)
   - [Integration with AWS Garnet Framework (formerly AWS Smart Territory Framework)](#integration-with-aws-garnet-framework-formerly-aws-smart-territory-framework)
 
 <!-- END doctoc generated TOC please keep comment here to allow auto update -->
@@ -120,9 +121,9 @@ Documentation for enabling distributed tracing across the FIWARE DSC using OpenT
 
 ### eIDAS 2.0 Compliance
 
-Documentation for enabling eIDAS 2.0 compliance through the `did:elsi` DID method, including VCVerifier-native PKIX certificate chain validation against EU Trusted Lists, certificate generation for testing, and migration from the deprecated DSS-based approach.
+Documentation for enabling eIDAS 2.0 compliance through VCVerifier-native PKIX certificate chain validation against EU Trusted Lists. Covers `did:elsi`, `did:web`, and HTTPS-issued credentials, certificate generation for testing, and per-component configuration.
 
-* [eIDAS 2.0 Compliance with did:elsi](./deployment-integration/eidas/README.md)
+* [eIDAS 2.0 Compliance](./deployment-integration/eidas/README.md)
 
 ### Integration with AWS Garnet Framework (formerly AWS Smart Territory Framework)
 
