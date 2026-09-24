@@ -1323,193 +1323,22 @@ When using the `OPERATOR_CREDENTIAL`, it will work:
   ./doc/scripts/get_access_token_oid4vp.sh https://mp-data-service.127.0.0.1.nip.io $OPERATOR_CREDENTIAL operator
 ```
 
-## eIDAS compliancy
+## eIDAS Compliancy
 
-In order to provide eIDAS complinacy, the Dataspace Connector supports the usage of the [did:elsi method](https://alastria.github.io/did-method-elsi/).
-For that the configuration of provider and consumer needs to be extended:
-* the consumer needs the ability to issue credentials according to the did:elsi spec
-* the verifier needs the ability to verify credentials using did:elsi
+The Data Space Connector supports [eIDAS 2.0](https://digital-strategy.ec.europa.eu/en/policies/eidas-regulation) compliance through PKIX certificate chain validation against the [EU Trusted Lists](https://ec.europa.eu/digital-building-blocks/sites/display/DIGITAL/EU+Trusted+Lists). This works with `did:elsi`, `did:web`, and HTTPS-issued credentials that carry an `x5c` JWT header.
 
-### Preparation
+For full documentation on eIDAS configuration, certificate generation, and troubleshooting, see the **[standalone eIDAS documentation](../eidas/README.md)**.
 
-To test the usage of did:elsi in your local (or test) environment, a valid eIDAS Certificate Chain can be generated using [the FIWARE/eIDAS tool](https://github.com/FIWARE/eIDAS).
+### Quick Start (Local Deployment)
 
-To generate the required secrets:
-
-0. Create a working dir:
+Once the provider and consumer are configured per the [eIDAS documentation](../eidas/README.md), deploy locally with:
 ```shell
-  mkdir output
+mvn clean deploy -Plocal,eidas
 ```
 
-1. Create your config:
-```shell
-echo "COUNTRY=\"DE\"
-LOCALITY=\"Berlin\"
-STATE=\"Berlin\"
-# the organisation identifier needs to match the identifier of your did:elsi
-ORGANISATION_IDENTIFIER=\"VATDE-1234567\"
-ORGANISATION=\"Test org\"
-COMMON_NAME=\"Test\"
-EMAIL=\"test@test.org\"
-# needs to be an actual available crl. localhost:3000 is valid for the local test env
-CRL_URI=http://localhost:3000/crl.pem" > output/config
-```
+The interaction is the same as the standard local deployment (see [Demo Interactions](#demo-interactions)). The visible difference is the credential format: the JWT's `iss` claim is a `did:elsi` DID and the `x5c` header contains the certificate chain.
 
-2. Create the key material:
-```shell
-  docker run -v $(pwd)/output:/out -v $(pwd)/output/config:/config/config quay.io/fiware/eidas:1.3.2
-```
-
-3. Get the properly encoded contents and put them into you values files([provider](../../../k3s/provider-elsi.yaml) and [consumer](../../../k3s/consumer-elsi.yaml))
-```shell
-  # CRL file for [the provider](../../../k3s/provider-elsi.yaml#L111)
-  kubectl create secret generic t --dry-run -o json --from-file output/crl.pem | jq .data.\"crl.pem\"
-  # Keystore of the certificates for [the provider](../../../k3s/provider-elsi.yaml#L87)
-  kubectl create secret generic t --dry-run -o json --from-file output/ca-store.jks | jq .data.\"ca-store.jks\"
-  # Keystore with the [signing key](../../../k3s/consumer-elsi.yaml#L275)
-  kubectl create secret generic t --dry-run -o json --from-file output/keystore.p12 | jq .data.\"keystore.p12\"
-```
-
-### The Consumer
-
-Keycloak does currently not support the issuance of did:elsi compatible credentials. Therefor, it needs to be extended with the [keycloak-jades-vc-issuer](https://github.com/FIWARE/keycloak-jades-vc-issuer). It provides an implementation of the [SigningService-Interface](https://github.com/keycloak/keycloak/blob/main/services/src/main/java/org/keycloak/protocol/oid4vc/issuance/signing/SigningService.java), using the [Digitial Signature Service library](https://github.com/esig/dss).
-The standard local deployment needs to be changed in the following places:
-
-1. [Enable elsi-support](../../../k3s/consumer-elsi.yaml#L266)
-```yaml
-  elsi:
-    # enable the usage of did:elsi
-    enabled: true
-    # configure the path inside the keyloak container, where the signing key-store is located.
-    # since KC 26.6.4 the java-keystore provider only reads from /opt/keycloak/data/<realm-name>
-    storePath: /opt/keycloak/data/test-realm/keystore.p12
-    # password of the keystore
-    storePassword: password
-    # alias of the key inside the store
-    keyAlias: test-keystore
-    # password of the signing key
-    keyPassword: password
-    # algorithm of the key
-    keyAlgorithm: RS256
-    # did that the key belongs to
-    did: did:elsi:VATDE-1234567
-    # the store and its contents
-    keystore:
-      keystore.p12: <THE_KEYSTORE_BASE_&$>
-```
-This will load the keystore into a secret and configures the [realm](../../../charts/data-space-connector/templates/realm.yaml) to use did:elsi and load the key accordingly.
-
-2. [Mount the store to keycloak](../../../k3s/consumer-elsi.yaml#L88-L105)
-```yaml
-  # mount the secret-volume
-  extraVolumeMounts:
-    - name: elsi-trust-store
-      # needs to match the storePath above
-      mountPath: /trust-store
-  ....
-  # load the secret into a volume
-  extraVolumes:
-    - name: elsi-trust-store
-      secret:
-        secretName: elsi-secret
-        defaultMode: 0755
-```
-3. [Add the jades-issuer via init-container](../../../k3s/consumer-elsi.yaml#L45)
-```yaml
-    # add the init container that copies the plugin to the shared folder
-    - name: install-jades-issuer
-      image: quay.io/fiware/keycloak-jades-vc-issuer:1.2.0
-      imagePullPolicy: IfNotPresent
-      volumeMounts:
-        - name: providers
-          mountPath: /target
-  # mount provider folder into keycloak
-  extraVolumeMounts:
-    - name: providers
-      mountPath: /opt/bitnami/keycloak/providers/
-  # create an empty dir
-  extraVolumes:
-    - name: providers
-      emptyDir: {}
-```
-
-### The Provider
-
-Since the validation of [JAdES Signatures](https://www.etsi.org/deliver/etsi_ts/119100_119199/11918201/01.01.01_60/ts_11918201v010101p.pdf) is quite complex,
-the verifier does not fully validate itself. Instead, it requests validation at the [dss-validation-service](https://github.com/wistefan/dss-validation-service).
-The service uses the [Digital Signature Service Library](https://github.com/esig/dss/tree/master), that is provided as a [Digital Building Block by the European Comission](https://ec.europa.eu/digital-building-blocks/sites/display/DIGITAL/Digital+Signature+Service+-++DSS).
-To do so, the deployment needs to be changed as following:
-1. [Enable dss](../../../k3s/provider-elsi.yaml#L84)
-```yaml
-dss:
-  # enable the dss-validation-service
-  enabled: true
-  # port of the health check endpoint.
-  health:
-    port: 8080
-  # in order to validate credentials, trust sources need to be configured
-  trust:
-    # trust sources can be [eIDAS Trusted Lists](https://eidas.ec.europa.eu/efda/trust-services/browse/eidas/tls)
-    lists:
-      # refresh interval of the list
-      - refreshSeconds: 2
-        # url of the concrete list to be used
-        url: "https://ec.europa.eu/tools/lotl/eu-lotl.xml"
-    # or keystores containing certificates
-    stores:
-      - path: /keystores/store.jks
-        type: jks
-        password: password
-  # convinience to load a keystore into a secret for local environments
-  keystores:
-    store.jks: <KEYSTORE_CONTENT_BASE_64>
-  # valid certificates require a valid CRL(certificate revocation list). For the local (test) use-case, this can be provided via static-website
-  deployment:
-    additionalContainers:
-      - name: crl-provider-static
-        imagePullPolicy: IfNotPresent
-        image: "lipanski/docker-static-website:2.1.0"
-        volumeMounts:
-          - name: crl-provider-json
-            mountPath: /home/static/crl.pem
-            subPath: crl.pem
-    additionalVolumes:
-      - name: crl-provider-json
-        secret:
-          secretName: crl-provider
-  # allows to load a pem-encoded CRL to a secret for the local test case
-  crl:
-    enabled: true
-    secret:
-      crl.pem: <CRL_CONTENT_BASE_64>
-```
-2. [Configure the verifier to use the dss-validation-service](../../../k3s/provider-elsi.yaml#L133)
-```yaml
-  elsi:
-    # enable support for validation of did:elsi
-    enabled: true
-    # endpoints of the dss-validation service
-    validationEndpoint:
-      host: http://provider-dss:8080
-      # path of the signature validation endpoint
-      validationPath: /validateSignature
-      # path of the health indicator
-      healthPath: /health/liveness
-```
-
-### Usage
-
-Once everything is properly configured, the Dataspace can be deployed locally via:
-```shell
-  mvn clean deploy -Plocal,elsi
-```
-
-The interaction is the same as in all previously described steps - see [Demo Interactions](#demo-interactions). The most visible difference is in the credential.
-Get one via:
-```shell
- export ELSI_CREDENTIAL=$(./doc/scripts/get_credential.sh https://keycloak-consumer.127.0.0.1.nip.io user-credential); echo ${ELSI_CREDENTIAL}
-```
-Now it can be inspected f.e. on [jwt.io](https://jwt.io/). The certificate chain should be included in the jwt-headers and the issuer is the configured `did:elsi`
+See [k3s/provider-eidas.yaml](../../../k3s/provider-eidas.yaml) and [k3s/consumer-eidas.yaml](../../../k3s/consumer-eidas.yaml) for the complete local overlay files.
 
 ## Deployment details
 
@@ -1537,7 +1366,7 @@ Available ingresses:
 | http://did-consumer.127.0.0.1.nip.io:8080/       | https://did-consumer.127.0.0.1.nip.io/      | [did-helper](https://github.com/wistefan/did-helper)                       | Consumer     | Helper to provide access to the consumers did and key material                      | yes, should never be public                          |
 | https://mp-data-service.127.0.0.1.nip.io:8443/    | http://mp-data-service.127.0.0.1.nip.io/   | [Apisix](https://apisix.apache.org/)                                       | Provider     | ApiGateway to be used as entry point to all secured services, f.e. the data-service | no                                                   |
 | https://provider-verifier.127.0.0.1.nip.io:8443/ | https://provider-verifier.io               | [VCVerifier](https://github.com/FIWARE/VCVerifier)                         | Provider     | Authentication endpoint, used for authenticating through VerifiableCredentials      | no                                                   |
-| http://did-provider.127.0.0.1.nip.io:8080/       | http://did-provider.127.0.0.1.nip.io/      | [did-helper](https://github.com/wistefan/did-helper)                       | Provider     | Helper to provide access to the providers did and key material                      | yes, should never be public                          |
+| https://mp-operations.org:8443/                  | https://mp-operations.org/                 | [did-helper](https://github.com/wistefan/did-helper)                       | Provider     | Helper to provide access to the providers did and key material                      | yes, should never be public                          |
 | http://scorpio-provider.127.0.0.1.nip.io:8080/   | http://scorpio-provider.127.0.0.1.nip.io/  | [Scorpio ContextBroker](https://github.com/ScorpioBroker/ScorpioBroker)    | Provider     | Provides direct access to the context broker, to be used for test setup.            | yes, should only be available through the PEP        |
 | http://pap-provider.127.0.0.1.nip.io:8080/       | http://pap-provider.127.0.0.1.nip.io       | [ODRL-PAP](https://github.com/wistefan/odrl-pap)                           | Provider     | Allows configuration of the access policie, used for authorization                  | yes, should only be available to authorized users    |
 
