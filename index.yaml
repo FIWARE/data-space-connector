@@ -2,6 +2,105 @@ apiVersion: v1
 entries:
   data-space-connector:
   - apiVersion: v2
+    created: "2026-09-24T10:37:53.141372331Z"
+    dependencies:
+    - alias: decentralizedIam
+      condition: decentralizedIam.enabled
+      name: decentralized-iam
+      repository: https://fiware.github.io/decentralized-iam
+      version: 2.1.23
+    - alias: scorpio
+      condition: scorpio.enabled
+      name: scorpio-broker-aaio
+      repository: oci://quay.io/fiware/helm-charts
+      version: 0.4.15
+    - condition: keycloak.enabled
+      name: keycloak
+      repository: oci://registry-1.docker.io/cloudpirates
+      version: 0.21.41
+    - condition: tm-forum-api.enabled
+      name: tm-forum-api
+      repository: oci://quay.io/fiware/helm-charts
+      version: 0.17.16
+    - condition: contract-management.enabled
+      name: contract-management
+      repository: oci://quay.io/fiware/helm-charts
+      version: 3.5.36
+    - alias: marketplace
+      condition: marketplace.enabled
+      name: business-api-ecosystem
+      repository: oci://quay.io/fiware/helm-charts
+      version: 1.1.0
+    - alias: mongo-operator
+      condition: mongo-operator.enabled
+      name: community-operator
+      repository: https://mongodb.github.io/helm-charts
+      version: 0.13.0
+    - condition: fdsc-edc.enabled
+      name: fdsc-edc
+      repository: oci://quay.io/fiware/helm-charts
+      version: 0.4.2
+    - alias: vault
+      condition: vault.enabled
+      name: vault
+      repository: https://helm.releases.hashicorp.com
+      version: 0.34.1
+    - condition: fdsc-dashboard.enabled
+      name: fdsc-dashboard
+      repository: oci://quay.io/fiware/helm-charts
+      version: 0.6.10
+    - alias: did
+      condition: did.enabled
+      name: did-helper
+      repository: oci://quay.io/fiware/helm-charts
+      version: 0.1.22
+    - alias: cert-manager
+      condition: cert-manager.enabled
+      name: cert-manager
+      repository: https://charts.jetstack.io
+      version: v1.21.2
+    - alias: vc-operator
+      condition: vc-operator.enabled
+      name: vc-operator
+      repository: oci://quay.io/seamware/helm-charts
+      version: 0.1.5
+    - condition: prometheus.enabled
+      name: prometheus
+      repository: https://prometheus-community.github.io/helm-charts
+      version: 29.30.0
+    - condition: grafana.enabled
+      name: grafana
+      repository: https://grafana-community.github.io/helm-charts
+      version: 13.2.5
+    - condition: opentelemetry-operator.enabled
+      name: opentelemetry-operator
+      repository: https://open-telemetry.github.io/opentelemetry-helm-charts
+      version: 0.123.0
+    - condition: opentelemetry-collector.enabled
+      name: opentelemetry-collector
+      repository: https://open-telemetry.github.io/opentelemetry-helm-charts
+      version: 0.173.1
+    - condition: tempo.enabled
+      name: tempo
+      repository: https://grafana.github.io/helm-charts
+      version: 1.24.4
+    - condition: consent-facade.enabled
+      name: consent-facade
+      repository: oci://quay.io/fiware/helm-charts
+      version: 0.1.1
+    - condition: consent-owner-resolver.enabled
+      name: consent-owner-resolver
+      repository: oci://quay.io/fiware/helm-charts
+      version: 0.1.1
+    description: Umbrella Chart for the FIWARE Data Space Connector, combining all
+      essential parts to be used by a participant.
+    digest: 57606c92ee05e3f4a7e83239bedb3525d6bbc967582ed2dee22b890b9b3255c0
+    name: data-space-connector
+    type: application
+    urls:
+    - https://github.com/FIWARE/data-space-connector/releases/download/data-space-connector-10.9.0/data-space-connector-10.9.0.tgz
+    version: 10.9.0
+  - apiVersion: v2
     created: "2026-09-22T08:47:58.70484876Z"
     dependencies:
     - alias: decentralizedIam
@@ -4167,4 +4266,4 @@ entries:
     urls:
     - https://github.com/FIWARE/data-space-connector/releases/download/trust-anchor-0.2.0/trust-anchor-0.2.0.tgz
     version: 0.2.0
-generated: "2026-09-22T08:47:58.705122799Z"
+generated: "2026-09-24T10:37:53.14159917Z"
