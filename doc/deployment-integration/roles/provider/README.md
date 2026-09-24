@@ -74,6 +74,8 @@ The [Contract Management](https://github.com/FIWARE/contract-management) compone
 
 > **Note:** If the data space uses a [central marketplace](../../../CENTRAL_MARKETPLACE.md), the Contract Management component requires specific configuration to work with it. See the [Central Marketplace documentation](../../../CENTRAL_MARKETPLACE.md) for details on how to configure Contract Management in that scenario.
 
+> **Note:** The policies and the credential configuration are read from the ordered `ProductSpecification` by default. A product can instead be composed of `ServiceSpecification`s that carry their own policies - an access policy protects an API, and in TMForum an API is a `ServiceSpecification`. See [Authoring a composed ProductSpecification](./COMPOSED_SPECIFICATIONS.md).
+
 ### Marketplace (BAE)
 
 A provider can offer its products and services through a marketplace in two ways:
