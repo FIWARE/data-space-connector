@@ -79,6 +79,8 @@ keycloak:
   ingress:
     enabled: true
     annotations:
+      # without this traefik creates no HTTPS router and every https:// call 404s
+      traefik.ingress.kubernetes.io/router.tls: "true"
       cert-manager.io/cluster-issuer: "selfsigned-issuer"
       cert-manager.io/private-key-algorithm: "ECDSA"
       cert-manager.io/alt-names: "keycloak-consumer.127.0.0.1.nip.io"
@@ -93,25 +95,10 @@ keycloak:
         hosts:
           - keycloak-consumer.127.0.0.1.nip.io
   extraInitContainers:
-    # The keycloak-jades-vc-issuer plugin is still needed for did:elsi issuance.
-    # It injects the x5c certificate chain header into issued JWTs, which is
-    # required by VCVerifier's eIDAS 2.0 PKIX chain validation. Standard
-    # Keycloak OID4VCI does not include x5c headers automatically.
-    - name: install-jades-issuer
-      image: quay.io/fiware/keycloak-jades-vc-issuer:1.2.0
-      imagePullPolicy: IfNotPresent
-      volumeMounts:
-        - name: providers
-          mountPath: /target
-    - name: register-at-tir
-      image: curlimages/curl:8.18.0
-      command:
-        - /bin/sh
-      args:
-        - -ec
-        - |
-          curl -X 'POST' 'http://tir.trust-anchor.svc.cluster.local:8080/issuer' -H 'Content-Type: application/json' -d "{\"did\": \"did:elsi:VATDE-1234567\", \"credentials\": []}"
-    # download the token-status-list plugin JAR from Maven Central into the providers volume
+    # Download the token-status-list plugin JAR into the shared providers volume.
+    # MUST run before install-jades-issuer: that image copies its own JARs into the
+    # same emptyDir and resets the directory to root:root 0755, which strips the
+    # fsGroup (1001) group-write bit and locks out this non-root curl image.
     - name: download-token-status-plugin
       image: curlimages/curl:8.18.0
       imagePullPolicy: IfNotPresent
@@ -126,7 +113,25 @@ keycloak:
           echo "Plugin downloaded successfully"
       volumeMounts:
         - name: providers
+          mountPath: /providers
+    # The keycloak-jades-vc-issuer plugin is still needed for did:elsi issuance.
+    # It injects the x5c certificate chain header into issued JWTs, which is
+    # required by VCVerifier's eIDAS 2.0 PKIX chain validation. Standard
+    # Keycloak OID4VCI does not include x5c headers automatically.
+    - name: install-jades-issuer
+      image: quay.io/fiware/keycloak-jades-vc-issuer:1.3.0
+      imagePullPolicy: IfNotPresent
+      volumeMounts:
+        - name: providers
           mountPath: /target
+    - name: register-at-tir
+      image: curlimages/curl:8.18.0
+      command:
+        - /bin/sh
+      args:
+        - -ec
+        - |
+          curl -X 'POST' 'http://tir.trust-anchor.svc.cluster.local:8080/issuer' -H 'Content-Type: application/json' -d "{\"did\": \"did:elsi:VATDE-1234567\", \"credentials\": []}"
     - name: register-at-til
       image: quay.io/curl/curl:8.1.2
       command:
@@ -175,11 +180,18 @@ keycloak:
     - name: providers
       emptyDir: {}
   realm:
-    frontendUrl: https://keycloak-consumer.127.0.0.1.nip.io:8080
+    # no port: 8080 is the http port, so an https frontendUrl carrying it makes every URL
+    # keycloak advertises - issuer, credential offer, oid4vc endpoints - unreachable
+    frontendUrl: https://keycloak-consumer.127.0.0.1.nip.io
     import: true
     name: test-realm
+    # KC 26.7.0 ties /create-credential-offer to a per-user `verifiableCredentials` list -
+    # without it the endpoint answers 400 invalid_credential_offer_request
+    # "User 'test-user' does not have verifiable credential 'user-credential'".
+    wallets:
+      issueCredentialsToUsers: true
     clientRoles: |
-      "did:web:did-provider.127.0.0.1.nip.io": [
+      "did:web:mp-operations.org": [
         {
           "name": "READER",
           "description": "Is allowed to see offers etc.",
@@ -206,7 +218,7 @@ keycloak:
           }
         ],
         "clientRoles": {
-          "did:web:did-provider.127.0.0.1.nip.io": [
+          "did:web:mp-operations.org": [
             "OPERATOR"
           ],
           "account": [
@@ -223,7 +235,7 @@ keycloak:
     # which `dsc.defaultClients` auto-extends into the client's optionalClientScopes.
     clients: |
       {
-        "clientId": "did:web:did-provider.127.0.0.1.nip.io",
+        "clientId": "did:web:mp-operations.org",
         "enabled": true,
         "description": "Client to connect test.org",
         "surrogateAuthRequired": false,
@@ -258,7 +270,9 @@ keycloak:
         attributes:
           format: "jwt_vc_json"
           verifiable_credential_type: "UserCredential"
-          credential_signing_alg: "ES256"
+          # must match elsi.keyAlgorithm below - the eIDAS tool issues an RSA key, and asking
+          # for ES256 makes Keycloak pick an unrelated realm key that carries no certificate chain
+          credential_signing_alg: "RS256"
           credential_build_config.token_jws_type: "JWT"
         protocolMappers:
           - name: context-mapper-uc
@@ -289,12 +303,14 @@ keycloak:
             protocolMapper: oid4vc-target-role-mapper
             config:
               claim.name: roles
-              clientId: did:web:did-provider.127.0.0.1.nip.io
+              clientId: did:web:mp-operations.org
       operator-credential:
         attributes:
           format: "jwt_vc_json"
           verifiable_credential_type: "OperatorCredential"
-          credential_signing_alg: "ES256"
+          # must match elsi.keyAlgorithm below - the eIDAS tool issues an RSA key, and asking
+          # for ES256 makes Keycloak pick an unrelated realm key that carries no certificate chain
+          credential_signing_alg: "RS256"
           credential_build_config.token_jws_type: "JWT"
         protocolMappers:
           - name: context-mapper-oc
@@ -325,7 +341,7 @@ keycloak:
             protocolMapper: oid4vc-target-role-mapper
             config:
               claim.name: roles
-              clientId: did:web:did-provider.127.0.0.1.nip.io
+              clientId: did:web:mp-operations.org
           - name: status-list-claim-mapper-oc
             protocol: oid4vc
             protocolMapper: oid4vc-status-list-claim-mapper
@@ -334,7 +350,9 @@ keycloak:
         attributes:
           format: "jwt_vc_json"
           verifiable_credential_type: "VerifiableCredential"
-          credential_signing_alg: "ES256"
+          # must match elsi.keyAlgorithm below - the eIDAS tool issues an RSA key, and asking
+          # for ES256 makes Keycloak pick an unrelated realm key that carries no certificate chain
+          credential_signing_alg: "RS256"
           credential_build_config.token_jws_type: "JWT"
         protocolMappers:
           - name: context-mapper-vc
@@ -403,9 +421,10 @@ registration:
   enabled: true
   configMap: consumer-til-registration
   til: http://trusted-issuers-list.provider.svc.cluster.local:8080
-  did: ${DID}
-  credentialTypes: 
-    - UserCredential
+  issuer:
+    - did: did:elsi:VATDE-1234567
+      credentialTypes:
+        - UserCredential
 
 elsi:
   enabled: true

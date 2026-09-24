@@ -1333,12 +1333,12 @@ For full documentation on eIDAS configuration, certificate generation, and troub
 
 Once the provider and consumer are configured per the [eIDAS documentation](../eidas/README.md), deploy locally with:
 ```shell
-mvn clean deploy -Plocal,elsi
+mvn clean deploy -Plocal,eidas
 ```
 
 The interaction is the same as the standard local deployment (see [Demo Interactions](#demo-interactions)). The visible difference is the credential format: the JWT's `iss` claim is a `did:elsi` DID and the `x5c` header contains the certificate chain.
 
-See [k3s/provider-elsi.yaml](../../../k3s/provider-elsi.yaml) and [k3s/consumer-elsi.yaml](../../../k3s/consumer-elsi.yaml) for the complete local overlay files.
+See [k3s/provider-eidas.yaml](../../../k3s/provider-eidas.yaml) and [k3s/consumer-eidas.yaml](../../../k3s/consumer-eidas.yaml) for the complete local overlay files.
 
 ## Deployment details
 
@@ -1366,7 +1366,7 @@ Available ingresses:
 | http://did-consumer.127.0.0.1.nip.io:8080/       | https://did-consumer.127.0.0.1.nip.io/      | [did-helper](https://github.com/wistefan/did-helper)                       | Consumer     | Helper to provide access to the consumers did and key material                      | yes, should never be public                          |
 | https://mp-data-service.127.0.0.1.nip.io:8443/    | http://mp-data-service.127.0.0.1.nip.io/   | [Apisix](https://apisix.apache.org/)                                       | Provider     | ApiGateway to be used as entry point to all secured services, f.e. the data-service | no                                                   |
 | https://provider-verifier.127.0.0.1.nip.io:8443/ | https://provider-verifier.io               | [VCVerifier](https://github.com/FIWARE/VCVerifier)                         | Provider     | Authentication endpoint, used for authenticating through VerifiableCredentials      | no                                                   |
-| http://did-provider.127.0.0.1.nip.io:8080/       | http://did-provider.127.0.0.1.nip.io/      | [did-helper](https://github.com/wistefan/did-helper)                       | Provider     | Helper to provide access to the providers did and key material                      | yes, should never be public                          |
+| https://mp-operations.org:8443/                  | https://mp-operations.org/                 | [did-helper](https://github.com/wistefan/did-helper)                       | Provider     | Helper to provide access to the providers did and key material                      | yes, should never be public                          |
 | http://scorpio-provider.127.0.0.1.nip.io:8080/   | http://scorpio-provider.127.0.0.1.nip.io/  | [Scorpio ContextBroker](https://github.com/ScorpioBroker/ScorpioBroker)    | Provider     | Provides direct access to the context broker, to be used for test setup.            | yes, should only be available through the PEP        |
 | http://pap-provider.127.0.0.1.nip.io:8080/       | http://pap-provider.127.0.0.1.nip.io       | [ODRL-PAP](https://github.com/wistefan/odrl-pap)                           | Provider     | Allows configuration of the access policie, used for authorization                  | yes, should only be available to authorized users    |
 

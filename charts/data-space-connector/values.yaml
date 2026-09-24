@@ -96,8 +96,8 @@ decentralizedIam:
         eidas:
           # -- enable eIDAS 2.0 trust list validation for did:elsi credentials
           enabled: false
-          # -- URL of the EU List of Trusted Lists (LOTL). When unset, the official EU LOTL (https://ec.europa.eu/tools/lotl/eu-lotl.xml) is used.
-          lotUrl: ""
+          # -- URL of the EU List of Trusted Lists (LOTL). When unset, the official EU LOTL (https://ec.europa.eu/tools/lotl/eu-lotl.xml) is used. Note the spelling: VCVerifier reads `lotlUrl`, while the vcverifier subchart declares it as `lotUrl`, which the server ignores.
+          lotlUrl: ""
           # -- interval in seconds between background LOTL refreshes
           refreshInterval: 86400
           # -- ISO 3166-1 alpha-2 country filter; empty means all EU member states
@@ -3452,6 +3452,9 @@ certManagerResources:
 
 # -- list of extra Kubernetes manifests to deploy alongside the chart.
 # Each entry can be a string (raw YAML, supports Helm templating) or an object.
+# Set `metadata.namespace: {{ .Release.Namespace }}` on every entry: unlike the chart's own
+# templates these manifests are passed through verbatim, so an object without a namespace is
+# applied to `default` whenever the rendered tree is applied without an explicit `-n`.
 extraManifests: []
 
 # -- dashboard for operating the FIWARE Data Space Connector

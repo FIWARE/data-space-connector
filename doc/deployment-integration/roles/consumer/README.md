@@ -186,7 +186,7 @@ For other deployment scenarios, the base `consumer.yaml` can be extended with ad
 
 | Overlay | File | Description |
 |---------|------|-------------|
-| **ELSI** | [k3s/consumer-elsi.yaml](../../../../k3s/consumer-elsi.yaml) | Configuration for deployments compliant with the [ELSI](https://github.com/FIWARE/elsi) trust framework, including eIDAS certificate issuance via Keycloak. See [eIDAS 2.0 Compliance](../../eidas/README.md) for details |
+| **ELSI** | [k3s/consumer-eidas.yaml](../../../../k3s/consumer-eidas.yaml) | Configuration for deployments compliant with the [ELSI](https://github.com/FIWARE/elsi) trust framework, including eIDAS certificate issuance via Keycloak. See [eIDAS 2.0 Compliance](../../eidas/README.md) for details |
 | **Gaia-X** | [k3s/consumer-gaia-x.yaml](../../../../k3s/consumer-gaia-x.yaml) | Configuration for [Gaia-X](https://gaia-x.eu/) compliant deployments |
 | **TM Forum APIs** | [k3s/consumer-tmf.yaml](../../../../k3s/consumer-tmf.yaml) | Enables [TM Forum APIs](https://www.tmforum.org/oda/open-apis/) on the consumer (required for central marketplace and EDC-related features) |
 | **Auth components** | [k3s/consumer-auth.yaml](../../../../k3s/consumer-auth.yaml) | Configures authentication components for the consumer (required for central marketplace and EDC-related features) |

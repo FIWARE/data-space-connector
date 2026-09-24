@@ -480,7 +480,7 @@ For other deployment scenarios, the base `provider.yaml` can be extended with ad
 
 | Overlay | File | Description |
 |---------|------|-------------|
-| **ELSI** | [k3s/provider-elsi.yaml](../../../../k3s/provider-elsi.yaml) | Configuration for deployments compliant with the [ELSI](https://github.com/FIWARE/elsi) trust framework, including [eIDAS 2.0 trust list validation](../../eidas/README.md) via VCVerifier's built-in PKIX chain verification against the EU Trusted Lists |
+| **ELSI** | [k3s/provider-eidas.yaml](../../../../k3s/provider-eidas.yaml) | Configuration for deployments compliant with the [ELSI](https://github.com/FIWARE/elsi) trust framework, including [eIDAS 2.0 trust list validation](../../eidas/README.md) via VCVerifier's built-in PKIX chain verification against the EU Trusted Lists |
 | **Gaia-X** | [k3s/provider-gaia-x.yaml](../../../../k3s/provider-gaia-x.yaml) | Configuration for [Gaia-X](https://gaia-x.eu/) compliant deployments |
 | **DSP** | [k3s/dsp-provider.yaml](../../../../k3s/dsp-provider.yaml) | Enables the [Dataspace Protocol (DSP)](https://docs.internationaldataspaces.org/ids-knowledgebase/dataspace-protocol) connector on the provider side |
 
@@ -490,7 +490,7 @@ For example, to deploy a provider with ELSI compliance:
 helm install provider fiware/data-space-connector \
   -n provider \
   -f k3s/provider.yaml \
-  -f k3s/provider-elsi.yaml
+  -f k3s/provider-eidas.yaml
 ```
 
 ## Production considerations

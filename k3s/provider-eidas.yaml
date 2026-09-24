@@ -1,0 +1,740 @@
+cert-manager:
+  enabled: false
+
+keycloak:
+  enabled: false
+
+decentralizedIam:
+  enabled: true
+
+  vcAuthentication:
+
+    postgres-operator:
+      enabled: false
+
+    managedPostgres:
+      enabled: true
+      config:
+        volume:
+          storageClass: "local-path"
+        users:
+          ngb:
+            - createdb
+        databases:
+          ngb: ngb
+        preparedDatabases:
+          ngb:
+            extensions:
+              postgis: public
+
+    vcverifier:
+      ingress:
+        enabled: true
+        annotations:
+          # without this traefik creates no HTTPS router and every https:// call 404s
+          traefik.ingress.kubernetes.io/router.tls: "true"
+          cert-manager.io/cluster-issuer: "selfsigned-issuer"
+          cert-manager.io/private-key-algorithm: "ECDSA"
+          cert-manager.io/common-name: "provider-verifier.127.0.0.1.nip.io"
+          cert-manager.io/alt-names: "provider-verifier.127.0.0.1.nip.io"
+        hosts:
+          - host: provider-verifier.127.0.0.1.nip.io
+            paths:
+              - "/"
+        tls:
+          - secretName: provider-verifier.127.0.0.1.nip.io-tls
+            hosts:
+              - provider-verifier.127.0.0.1.nip.io
+      deployment:
+        verifier:
+          tirAddress: https://tir.127.0.0.1.nip.io:8080/
+          did: did:web:mp-operations.org
+          # VCVerifier 6.22.0 ships inconsistent defaults: supportedModes defaults to
+          # ["urlEncoded"] while requestMode defaults to "byReference", so verifyConfig
+          # rejects any config that sets neither (request_mode_not_in_supported_modes).
+          # This overlay has no clientIdentification signing key, which byValue and
+          # byReference both require, so pin the pair to urlEncoded.
+          supportedModes: ["urlEncoded"]
+          requestMode: urlEncoded
+        server:
+          # no port: 8080 is the http port, so an https host carrying it makes every url the
+          # verifier advertises - issuer, authorization and token endpoint - unreachable
+          host: https://provider-verifier.127.0.0.1.nip.io
+        configRepo:
+          configEndpoint: http://verifier:8090
+        # mp-operations.org has no dns entry, so - as in the other profiles - the verifier
+        # reaches it through the squid proxy, which forwards every host to traefik.
+        # The trust list host must be excluded: squid terminates TLS with traefik's
+        # certificate, so a proxied trust list fetch fails to verify. With the real EU LOTL
+        # this exclusion has to name ec.europa.eu and every national trust list host instead.
+        additionalEnvVars:
+          - name: HTTPS_PROXY
+            value: "http://squid-proxy.infra.svc.cluster.local:8888"
+          - name: HTTP_PROXY
+            value: "http://squid-proxy.infra.svc.cluster.local:8888"
+          - name: NO_PROXY
+            value: "credentials-config-service,w3.org,trusted-issuers-list,eidas-trust-list-mock"
+          # point Go at the merged bundle rather than overwriting /etc/ssl/cert.pem, which is a
+          # symlink in this image - a subPath mount onto it fails the container with
+          # "cannot create subdirectories in .../ca-certificates.crt: not a directory"
+          - name: SSL_CERT_FILE
+            value: /root-ca/cert.pem
+        additionalVolumes:
+          # the cert-manager CA, so did:web resolution over https is trusted
+          - name: root-ca
+            emptyDir: {}
+          - name: ca-to-add
+            secret:
+              secretName: provider-verifier.127.0.0.1.nip.io-tls
+              items:
+                - key: ca.crt
+                  path: ca.crt
+        additionalVolumeMounts:
+          - name: root-ca
+            mountPath: /root-ca
+        elsi:
+          enabled: true
+        # the trust list fetcher reports what it loaded at INFO; at the default WARN the
+        # startup is silent and a trust store that came up empty looks exactly like a healthy one
+        logging:
+          level: INFO
+        # eIDAS 2.0 trust list validation — replaces the external dss-validation-service.
+        # did:elsi credentials are now verified by VCVerifier's built-in PKIX chain
+        # validation against EU Trusted Lists (ETSI TS 119 612).
+        eidas:
+          enabled: true
+          # The demo certificates chain to a self-signed test CA, which no real national trust
+          # list carries - against the official LOTL every credential would be rejected. Point
+          # the verifier at the in-cluster mock instead (see extraManifests at the end of this
+          # file). Production keeps this unset, which uses the official EU LOTL.
+          # spelled lotlUrl, not lotUrl - that is the key VCVerifier actually reads
+          lotlUrl: "http://eidas-trust-list-mock:3000/lotl.xml"
+          # The shortest refresh VCVerifier accepts. A failed initial fetch is not retried with
+          # any backoff - the fetcher just waits for the next tick - so this is also how long a
+          # verifier that started before the mock was ready stays with an empty trust store.
+          # Anything smaller is silently clamped: eidas.WithRefreshInterval enforces a 1 hour
+          # floor, so e.g. `3` would still behave as 3600.
+          refreshInterval: 3600
+          # Disable revocation checks for local testing (no real OCSP/CRL endpoints).
+          # In production, use "soft" (best-effort) or "hard" (fail-closed).
+          revocationCheck: "off"
+      # without a registered service the verifier answers "service not found" and its token
+      # endpoint cannot issue an access token - the credentials config lives in its own
+      # database, so it has to be seeded by the registration job
+        initContainers:
+          # add the cert-manager CA to the system truststore
+          - name: add-root-ca
+            image: alpine:3.21.3
+            command:
+              - /bin/sh
+            args:
+              - -ec
+              - |
+                cat /etc/ssl/cert.pem /tmp/ca.crt > /root-ca/cert.pem
+            volumeMounts:
+              - name: root-ca
+                mountPath: /root-ca
+              - name: ca-to-add
+                mountPath: /tmp/ca.crt
+                subPath: ca.crt
+          - name: register-at-tir
+            image: curlimages/curl:8.18.0
+            command:
+              - /bin/sh
+            args:
+              - -ec
+              - |
+                curl -X 'POST' 'http://tir.trust-anchor.svc.cluster.local:8080/issuer' -H 'Content-Type: application/json' -d "{\"did\": \"did:web:mp-operations.org\", \"credentials\": []}"
+
+      registration:
+        enabled: true
+        job:
+          # Long TTL so the Job outlives the k3s-maven-plugin's completion check.
+          ttlSecondsAfterFinished: 86400
+          initContainers:
+            waitForHost:
+              enabled: true
+              path: /health
+          activeDeadlineSeconds: 1500
+        services:
+          - id: data-service
+            defaultOidcScope: "default"
+            authorizationType: "DEEPLINK"
+            oidcScopes:
+              "default":
+                credentials:
+                  - type: UserCredential
+                    trustedParticipantsLists:
+                      - https://tir.127.0.0.1.nip.io
+                    trustedIssuersLists:
+                      - http://trusted-issuers-list:8080
+                    jwtInclusion:
+                      enabled: true
+                      fullInclusion: true
+                dcql:
+                  credentials:
+                    - id: user-query
+                      format: "jwt_vc_json"
+                      multiple: true
+                      meta:
+                        type_values:
+                          - [UserCredential]
+          - id: tmf-api
+            defaultOidcScope: "default"
+            authorizationType: "DEEPLINK"
+            oidcScopes:
+              "default":
+                credentials:
+                  - type: OperatorCredential
+                    trustedParticipantsLists:
+                      - https://tir.127.0.0.1.nip.io
+                    trustedIssuersLists:
+                      - http://trusted-issuers-list:8080
+                    jwtInclusion:
+                      enabled: true
+                      fullInclusion: true
+                dcql:
+                  credentials:
+                    - id: operator-query
+                      format: "jwt_vc_json"
+                      multiple: true
+                      meta:
+                        type_values:
+                          - [OperatorCredential]
+    trusted-issuers-list:
+      # only open for clean up in the tests
+      ingress:
+        til:
+          enabled: true
+          annotations:
+            cert-manager.io/cluster-issuer: "selfsigned-issuer"
+            cert-manager.io/private-key-algorithm: "ECDSA"
+            cert-manager.io/common-name: "til-provider.127.0.0.1.nip.io"
+            cert-manager.io/alt-names: "til-provider.127.0.0.1.nip.io"
+            traefik.ingress.kubernetes.io/router.tls: "true"
+          hosts:
+            - host: til-provider.127.0.0.1.nip.io
+              paths:
+                - /
+          tls:
+            - secretName: til-provider.127.0.0.1.nip.io-tls
+              hosts:
+                - til-provider.127.0.0.1.nip.io
+
+    # dss-validation-service is no longer needed — eIDAS certificate chain validation
+    # is now built into VCVerifier (>= 6.22.0) via the eidas block above.
+    dss:
+      enabled: false
+      crl:
+        enabled: false
+
+  odrlAuthorization:
+
+    apisix:
+      etcd:
+        replicaCount: 1
+        persistence:
+          enabled: false
+      image:
+        debug: true
+      # the apisix subchart exposes the gateway through `ingress`, not `dataPlane.ingress`;
+      # the latter renders no Ingress at all, leaving every https:// endpoint unrouted
+      ingress:
+        enabled: true
+        annotations:
+          cert-manager.io/cluster-issuer: "selfsigned-issuer"
+          cert-manager.io/private-key-algorithm: "ECDSA"
+          # without this traefik creates no HTTPS router and every https:// call 404s
+          traefik.ingress.kubernetes.io/router.tls: "true"
+          cert-manager.io/alt-names: "mp-data-service.127.0.0.1.nip.io,mp-tmf-api.127.0.0.1.nip.io"
+        hosts:
+          - host: mp-data-service.127.0.0.1.nip.io
+            paths: ["/"]
+          - host: mp-tmf-api.127.0.0.1.nip.io
+            paths: ["/"]
+        tls:
+          - secretName: apisix-provider-tls
+            hosts:
+              - mp-data-service.127.0.0.1.nip.io
+              - mp-tmf-api.127.0.0.1.nip.io
+      catchAllRoute:
+        enabled: false
+      # a real list - passing this as a block string makes the chart's toYaml nest it
+      # as a scalar, and APISIX then starts with no routes at all (404 Route Not Found)
+      routes:
+        - uri: /.well-known/openid-configuration
+          host: mp-data-service.127.0.0.1.nip.io
+          upstream:
+            nodes:
+              verifier:3000: 1
+            type: roundrobin
+          plugins:
+            proxy-rewrite:
+              uri: /services/data-service/.well-known/openid-configuration
+        - uri: /.well-known/data-space-configuration
+          upstream:
+            nodes:
+              dsconfig:3002: 1
+            type: roundrobin
+          plugins:
+            proxy-rewrite:
+              uri: /.well-known/data-space-configuration/data-space-configuration.json
+            response-rewrite:
+              headers:
+                set:
+                  content-type: application/json
+        - uri: /*
+          host: mp-data-service.127.0.0.1.nip.io
+          upstream:
+            nodes:
+              data-service-scorpio:9090: 1
+            type: roundrobin
+          plugins:
+            openid-connect:
+              # the discovery document advertises the verifier's public host, and the jwks behind it
+              # is only reachable through the squid proxy - without this apisix answers 401 with
+              # "accessing jwks url ... failed: timeout"
+              proxy_opts:
+                https_proxy: http://squid-proxy.infra.svc.cluster.local:8888
+              bearer_only: true
+              use_jwks: true
+              client_id: data-service
+              client_secret: unused
+              ssl_verify: false
+              discovery: http://verifier:3000/services/data-service/.well-known/openid-configuration
+            opa:
+              host: "http://localhost:8181"
+              policy: policy/main
+              with_body: true
+        - uri: /.well-known/openid-configuration
+          host: mp-tmf-api.127.0.0.1.nip.io
+          upstream:
+            nodes:
+              verifier:3000: 1
+            type: roundrobin
+          plugins:
+            proxy-rewrite:
+              uri: /services/tmf-api/.well-known/openid-configuration
+        - uri: /*
+          host: mp-tmf-api.127.0.0.1.nip.io
+          upstream:
+            nodes:
+              tm-forum-api-svc:8080: 1
+            type: roundrobin
+          plugins:
+            openid-connect:
+              # the discovery document advertises the verifier's public host, and the jwks behind it
+              # is only reachable through the squid proxy - without this apisix answers 401 with
+              # "accessing jwks url ... failed: timeout"
+              proxy_opts:
+                https_proxy: http://squid-proxy.infra.svc.cluster.local:8888
+              bearer_only: true
+              use_jwks: true
+              client_id: contract-management
+              client_secret: unused
+              ssl_verify: false
+              discovery: http://verifier:3000/services/tmf-api/.well-known/openid-configuration
+            opa:
+              host: "http://localhost:8181"
+              policy: policy/main
+              with_body: true
+
+    odrl-pap:
+      additionalEnvVars:
+        - name: GENERAL_ORGANIZATION_DID
+          value: did:web:mp-operations.org
+      ingress:
+        enabled: true
+        annotations:
+          # without this traefik creates no HTTPS router and every https:// call 404s
+          traefik.ingress.kubernetes.io/router.tls: "true"
+          cert-manager.io/cluster-issuer: "selfsigned-issuer"
+          cert-manager.io/private-key-algorithm: "ECDSA"
+          cert-manager.io/common-name: "pap-provider.127.0.0.1.nip.io"
+          cert-manager.io/alt-names: "pap-provider.127.0.0.1.nip.io"
+        hosts:
+          - host: pap-provider.127.0.0.1.nip.io
+            paths:
+              - "/"
+        tls:
+          - secretName: pap-provider.127.0.0.1.nip.io-tls
+            hosts:
+              - pap-provider.127.0.0.1.nip.io
+
+did:
+  enabled: true
+  config:
+    server:
+      hostUrl: "http://mp-operations.org"
+      certPath: "/certs/tls.crt"
+  volumes:
+    - name: certs
+      secret:
+        secretName: mp-operations.org-tls
+        items:
+          - key: tls.crt
+            path: tls.crt
+  volumeMounts:
+    - name: certs
+      mountPath: /certs
+  ingress:
+    enabled: true
+    className: ""
+    annotations:
+      traefik.ingress.kubernetes.io/service.passhostheader: "true"
+      traefik.ingress.kubernetes.io/router.tls: "true"
+      cert-manager.io/cluster-issuer: "selfsigned-issuer"
+      cert-manager.io/private-key-algorithm: "ECDSA"
+      cert-manager.io/common-name: "mp-operations.org"
+      cert-manager.io/alt-names: "mp-operations.org"
+    hosts:
+      - host: mp-operations.org
+        paths:
+          - path: /
+            pathType: ImplementationSpecific
+    tls:
+      - secretName: mp-operations.org-tls
+        hosts:
+          - mp-operations.org
+
+dataSpaceConfig:
+  enabled: true
+  serviceType: ClusterIP
+  port: 3002
+  supportedModels:
+    - "https://raw.githubusercontent.com/smart-data-models/dataModel.Consumption/master/ConsumptionPoint/schema.json"
+    - "https://raw.githubusercontent.com/smart-data-models/dataModel.Consumption/master/ConsumptionCost/schema.json"
+  supportedProtocols:
+    - http
+    - https
+  authenticationProtocols:
+    - oid4vp
+
+scorpio:
+  ingress:
+    enabled: true
+    # only to make it available for the test initialization
+    annotations:
+      # without this traefik creates no HTTPS router and every https:// call 404s
+      traefik.ingress.kubernetes.io/router.tls: "true"
+      cert-manager.io/cluster-issuer: "selfsigned-issuer"
+      cert-manager.io/private-key-algorithm: "ECDSA"
+      cert-manager.io/common-name: "scorpio-provider.127.0.0.1.nip.io"
+      cert-manager.io/alt-names: "scorpio-provider.127.0.0.1.nip.io"
+    hosts:
+    - host: scorpio-provider.127.0.0.1.nip.io
+      paths:
+        - "/"
+    tls:
+      - secretName: scorpio-provider.127.0.0.1.nip.io-tls
+        hosts:
+          - scorpio-provider.127.0.0.1.nip.io
+  ccs:
+    enabled: true
+    defaultOidcScope:
+      name: default
+    oidcScopes:
+      default:
+        - type: UserCredential
+          trustedParticipantsLists:
+            - http://tir.trust-anchor.svc.cluster.local:8080
+          trustedIssuersLists:
+            - http://trusted-issuers-list:8080
+      operator:
+        - type: OperatorCredential
+          trustedParticipantsLists:
+            - http://tir.trust-anchor.svc.cluster.local:8080
+          trustedIssuersLists:
+            - http://trusted-issuers-list:8080
+
+tm-forum-api:
+  defaultConfig:
+    contextUrl: https://uri.etsi.org/ngsi-ld/v1/ngsi-ld-core-context.jsonld
+  allInOne:
+    enabled: true
+  apiProxy:
+    enabled: false
+  registration:
+    ccs:
+      defaultOidcScope:
+        credentialTypes:
+          - UserCredential
+        trustedParticipantsLists: http://tir.trust-anchor.svc.cluster.local:8080
+
+  ingress:
+    enabled: true
+    annotations:
+      # without this traefik creates no HTTPS router and every https:// call 404s
+      traefik.ingress.kubernetes.io/router.tls: "true"
+      cert-manager.io/cluster-issuer: "selfsigned-issuer"
+      cert-manager.io/private-key-algorithm: "ECDSA"
+      cert-manager.io/common-name: "tm-forum-api.127.0.0.1.nip.io"
+      cert-manager.io/alt-names: "tm-forum-api.127.0.0.1.nip.io"
+    hosts:
+      - host: tm-forum-api.127.0.0.1.nip.io
+        paths:
+          - /
+    tls:
+      - secretName: tm-forum-api.127.0.0.1.nip.io-tls
+        hosts:
+          - tm-forum-api.127.0.0.1.nip.io
+
+contract-management:
+  services:
+    ## Config for the TM Forum Service hosting the APIs
+    product-order:
+      ## URL of the TM Forum Service hosting the Product Ordering API
+      url: http://tm-forum-api-svc:8080
+    party:
+      ## URL of the TM Forum Service hosting the Party API
+      url: http://tm-forum-api-svc:8080
+    product-catalog:
+      ## URL of the TM Forum Service hosting the Product Catalog API
+      url: http://tm-forum-api-svc:8080
+    service-catalog:
+      ## URL of the TM Forum Service hosting the Service Catalog API
+      url: http://tm-forum-api-svc:8080
+    tmforum-agreement-api:
+      ## URL of the TM Forum Service hosting the Agreement API
+      url: http://tm-forum-api-svc:8080
+    quote:
+      ## URL for TM Forum Service hosting the Quote API
+      url: http://tm-forum-api-svc:8080
+  til:
+    credentialType: OperatorCredential
+
+# A mock EU List of Trusted Lists, served in-cluster.
+#
+# The demo certificates are rooted in a self-signed test CA, which is not part of any list
+# published under the real EU LOTL - so a trust store built from the real LOTL can never
+# validate them, and every credential would be rejected. Pointing `eidas.lotlUrl` at this mock
+# makes the local test CA a granted qualified CA, which is what lets the demo flow complete.
+#
+# The XML lives in k3s/eidas-mock/ and is inlined here so the overlay stays self-contained.
+# The certificate in tl-de.xml must be the root that signed `elsi.keystore` in
+# k3s/consumer-eidas.yaml - regenerate both together, never one on its own.
+extraManifests:
+  - |
+    apiVersion: v1
+    kind: ConfigMap
+    metadata:
+      name: eidas-trust-list-mock
+      # without this the object is applied to "default": the rendered tree is applied as a
+      # whole, and unlike the chart's own templates these manifests carry no namespace
+      namespace: {{ .Release.Namespace }}
+    data:
+      lotl.xml: |
+        <?xml version="1.0" encoding="UTF-8"?>
+        <!--
+          Mock EU List of Trusted Lists for the local demo.
+
+          The certificates issued by the FIWARE eIDAS tool are rooted in a self-signed test CA,
+          which by definition is not part of any national trust list published under the real EU
+          LOTL. Pointing VCVerifier at the real LOTL therefore builds a trust store that can never
+          validate them. This mock replaces the LOTL with one that points at a single national list
+          carrying the local test CA.
+
+          VCVerifier does not verify the XMLDSig signature on trust lists (documented limitation in
+          its eidas package), so this list is served unsigned.
+
+          NEVER use this outside a local or test deployment - it declares an arbitrary CA qualified.
+        -->
+        <TrustServiceStatusList xmlns="http://uri.etsi.org/02231/v2#"
+                                TSLTag="http://uri.etsi.org/19612/TSLTag">
+          <SchemeInformation>
+            <TSLVersionIdentifier>5</TSLVersionIdentifier>
+            <TSLSequenceNumber>1</TSLSequenceNumber>
+            <TSLType>http://uri.etsi.org/TrstSvc/TrustedList/TSLType/EUlistofthelists</TSLType>
+            <SchemeOperatorName>
+              <Name xml:lang="en">FIWARE Data Space Connector - local demo</Name>
+            </SchemeOperatorName>
+            <SchemeName>
+              <Name xml:lang="en">Mock List of Trusted Lists</Name>
+            </SchemeName>
+            <SchemeInformationURI>
+              <URI xml:lang="en">http://eidas-trust-list-mock:3000/lotl.xml</URI>
+            </SchemeInformationURI>
+            <StatusDeterminationApproach>http://uri.etsi.org/TrstSvc/TrustedList/StatusDetn/EUlistofthelists</StatusDeterminationApproach>
+            <SchemeTerritory>EU</SchemeTerritory>
+            <HistoricalInformationPeriod>65535</HistoricalInformationPeriod>
+            <ListIssueDateTime>2025-01-01T00:00:00Z</ListIssueDateTime>
+            <NextUpdate>
+              <dateTime>2035-01-01T00:00:00Z</dateTime>
+            </NextUpdate>
+            <PointersToOtherTSL>
+              <OtherTSLPointer>
+                <TSLLocation>http://eidas-trust-list-mock:3000/tl-de.xml</TSLLocation>
+                <AdditionalInformation>
+                  <OtherInformation>
+                    <SchemeTerritory>DE</SchemeTerritory>
+                  </OtherInformation>
+                  <OtherInformation>
+                    <TSLType>http://uri.etsi.org/TrstSvc/TrustedList/TSLType/EUgeneric</TSLType>
+                  </OtherInformation>
+                  <OtherInformation>
+                    <MimeType>application/vnd.etsi.tsl+xml</MimeType>
+                  </OtherInformation>
+                </AdditionalInformation>
+              </OtherTSLPointer>
+            </PointersToOtherTSL>
+          </SchemeInformation>
+        </TrustServiceStatusList>
+      tl-de.xml: |
+        <?xml version="1.0" encoding="UTF-8"?>
+        <!--
+          Mock national trust list (territory DE) for the local demo.
+
+          It declares the local test CA generated by https://github.com/FIWARE/eIDAS as a granted,
+          qualified certificate authority (CA/QC), which is what makes VCVerifier's PKIX validation
+          accept credentials whose x5c chain terminates in it.
+
+          The certificate below must be the root that signed `elsi.keystore` in k3s/consumer-eidas.yaml -
+          not just any CA from a run of the tool. Both are regenerated together; to re-derive it from the
+          keystore that is actually deployed:
+
+            python3 -c "import re,base64;print(base64.b64decode(re.search(r'keystore\.p12:\s*([A-Za-z0-9+/=]+)',open('k3s/consumer-eidas.yaml').read()).group(1)).hex())" >/dev/null
+            # or, straight from an issued credential:
+            echo "$ELSI_CREDENTIAL" | cut -d. -f1 | tr '_-' '/+' | awk '{print $0"=="}' | base64 -d \
+              | jq -r '.x5c[-1]'
+        -->
+        <TrustServiceStatusList xmlns="http://uri.etsi.org/02231/v2#"
+                                TSLTag="http://uri.etsi.org/19612/TSLTag">
+          <SchemeInformation>
+            <TSLVersionIdentifier>5</TSLVersionIdentifier>
+            <TSLSequenceNumber>1</TSLSequenceNumber>
+            <TSLType>http://uri.etsi.org/TrstSvc/TrustedList/TSLType/EUgeneric</TSLType>
+            <SchemeOperatorName>
+              <Name xml:lang="en">FIWARE Data Space Connector - local demo</Name>
+            </SchemeOperatorName>
+            <SchemeName>
+              <Name xml:lang="en">Mock Trusted List DE</Name>
+            </SchemeName>
+            <SchemeInformationURI>
+              <URI xml:lang="en">http://eidas-trust-list-mock:3000/tl-de.xml</URI>
+            </SchemeInformationURI>
+            <StatusDeterminationApproach>http://uri.etsi.org/TrstSvc/TrustedList/StatusDetn/EUappropriate</StatusDeterminationApproach>
+            <SchemeTerritory>DE</SchemeTerritory>
+            <HistoricalInformationPeriod>65535</HistoricalInformationPeriod>
+            <ListIssueDateTime>2025-01-01T00:00:00Z</ListIssueDateTime>
+            <NextUpdate>
+              <dateTime>2035-01-01T00:00:00Z</dateTime>
+            </NextUpdate>
+          </SchemeInformation>
+          <TrustServiceProviderList>
+            <TrustServiceProvider>
+              <TSPInformation>
+                <TSPName>
+                  <Name xml:lang="en">FIWARE Test CA</Name>
+                </TSPName>
+                <TSPTradeName>
+                  <Name xml:lang="en">FIWARE Test CA</Name>
+                </TSPTradeName>
+                <TSPInformationURI>
+                  <URI xml:lang="en">https://github.com/FIWARE/eIDAS</URI>
+                </TSPInformationURI>
+              </TSPInformation>
+              <TSPServices>
+                <TSPService>
+                  <ServiceInformation>
+                    <ServiceTypeIdentifier>http://uri.etsi.org/TrstSvc/Svctype/CA/QC</ServiceTypeIdentifier>
+                    <ServiceName>
+                      <Name xml:lang="en">FIWARE Test CA - qualified certificates</Name>
+                    </ServiceName>
+                    <ServiceDigitalIdentity>
+                      <DigitalId>
+                        <X509Certificate>
+                  MIIF1DCCA7ygAwIBAgIBATANBgkqhkiG9w0BAQsFADCBgjELMAkGA1UEBhMCREUxDzANBgNVBAgM
+                  BkJlcmxpbjEPMA0GA1UEBwwGQmVybGluMRIwEAYDVQQKDAlGSVdBUkUgQ0ExEjAQBgNVBAMMCUZJ
+                  V0FSRS1DQTEcMBoGCSqGSIb3DQEJARYNY2FAZml3YXJlLm9yZzELMAkGA1UEBRMCMDEwHhcNMjUw
+                  MTEzMTIzNTM1WhcNMzUwMTExMTIzNTM1WjCBgjELMAkGA1UEBhMCREUxDzANBgNVBAgMBkJlcmxp
+                  bjEPMA0GA1UEBwwGQmVybGluMRIwEAYDVQQKDAlGSVdBUkUgQ0ExEjAQBgNVBAMMCUZJV0FSRS1D
+                  QTEcMBoGCSqGSIb3DQEJARYNY2FAZml3YXJlLm9yZzELMAkGA1UEBRMCMDEwggIiMA0GCSqGSIb3
+                  DQEBAQUAA4ICDwAwggIKAoICAQC+zj/43k6tQZOludewo04jdMPtg5jTOflDepZePMGWZBzBlG+q
+                  udVKjwMYTfKoxAtSljoDanNqpxX3haQnbhJ4y4mvwDW3YBykJrvVzlMp4CdFuHipMeDcEtZpuNyv
+                  ZtXCi1RoX0Y7yrpTLNmepxyE3ArK3p/QgwqTDrHAHTzZONlH6sWuznavRQ5QBQqSBrc13/F9qc5/
+                  Tc0gc1u+uwJ/g/cLVJJ3lOxoSvjPIk5JiAqMhOAqL6sjSPjj7Ji4UsVxnGHd6QuuR7H5fmr0U0AX
+                  SlmsEL7G8/57vyyZdcvbrgiDd1+QV8Xh5PcuoN2Dk2D1/wWzxTAGe6FljA/3TyRv4NfLoXoaHnSI
+                  f1vb6zPKeHnf8KEqI+ky37BrAcfbjmhwIKwaRuaq2kImlYaanVbV0p+wMRKw91bbpQapzEuF9CDn
+                  xSBf6+76kcL1/G4ipLYfysxyFcrn5wcWOBlN985mHblatLXXNc2HDy5K7xeyh+AQkC8zN4o457FO
+                  8Y1lI6mMfbYpNs2JbeZZ+TUcaYQdCq/m0FZB9e7uIRd86AIlfVQ3nh77HtM0IDP8HPy1uE1MpUGz
+                  hYkuQX9J0F+tnj1W/oQChs8rjdnOlPybg89JCVWxZHree5T49Q1OBpaAAuWPq4cZrTl0hyF/GKm+
+                  wNQsJzrJAn13iDBDNOfEpf92aQIDAQABo1MwUTAdBgNVHQ4EFgQU0QW60Un6ZlLUAtRCMPrAOaie
+                  OY8wHwYDVR0jBBgwFoAU0QW60Un6ZlLUAtRCMPrAOaieOY8wDwYDVR0TAQH/BAUwAwEB/zANBgkq
+                  hkiG9w0BAQsFAAOCAgEAnfeWaA0VuVdz9qpqPeNl9IST2REoC/x2TOHb9HZUqs/IWYhAKGNhM5fe
+                  29F6yGaxyFO8MgjnzNr1byjMgUFCvYJjqjE0gpfrCmo/Deold0vPov+AdBZJQ4lm4hCKFQhuuHEf
+                  /iKNY9aHTvd3qAHmlFkU9UFNxmwVFIydX/7c3LNoP++nzciLHvn2J+javaP7mByzEmvwwIKcJfF5
+                  PIC3ak06sd/EzCAOjeEOP6UVDFV6E+zbcFCrSUhjaFiQY74Y7pBZ+fzXQZFyf/oBiCckq+Ow4ZPu
+                  QdDi4qFDKMGCUW6LRwnXLu9nlwe1yRuygtEUTv2/oSqB7JiQj2P3e0CRcOXG+i1Rzv2wQftRsTV+
+                  /R/BPA2Cyx/QsUmHGUHHsjl0OJ+sHymmvxBw7P/CbER/VSuGGPmo5zH23y8K+Nl/qw9cWFmQXBWn
+                  ltO+chFXxv/d4UTLjH09pDb8jSXKpYxpmlXXlLa51sjNoUjs4F/8o3QyC6cggbIdu2x5nDwXWh9O
+                  f2UJD/N5ulzCMkIpO1ubcPRNoccVH51hWJQpZN2zuov4KXx3DGLdVTeIJqqblMp7ospCKNFpV7Vv
+                  9yF5E/hU5b3n11Di1f/Wpt+nkNwwjiFM2mlZu7+BdT8bUX0EdJ/JkrW8In3nt1UvcMBFKGcSQrts
+                  VE27pA6+uPyeS9DheN8=
+                        </X509Certificate>
+                      </DigitalId>
+                    </ServiceDigitalIdentity>
+                    <ServiceStatus>http://uri.etsi.org/TrstSvc/TrustedList/Svcstatus/granted</ServiceStatus>
+                    <StatusStartingTime>2025-01-01T00:00:00Z</StatusStartingTime>
+                  </ServiceInformation>
+                </TSPService>
+              </TSPServices>
+            </TrustServiceProvider>
+          </TrustServiceProviderList>
+        </TrustServiceStatusList>
+  - |
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: eidas-trust-list-mock
+      namespace: {{ .Release.Namespace }}
+      labels:
+        app.kubernetes.io/name: eidas-trust-list-mock
+    spec:
+      replicas: 1
+      selector:
+        matchLabels:
+          app.kubernetes.io/name: eidas-trust-list-mock
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: eidas-trust-list-mock
+        spec:
+          containers:
+            - name: static
+              image: lipanski/docker-static-website:2.1.0
+              imagePullPolicy: IfNotPresent
+              ports:
+                - containerPort: 3000
+                  name: http
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop:
+                    - ALL
+              volumeMounts:
+                - name: trust-lists
+                  mountPath: /home/static/lotl.xml
+                  subPath: lotl.xml
+                - name: trust-lists
+                  mountPath: /home/static/tl-de.xml
+                  subPath: tl-de.xml
+          volumes:
+            - name: trust-lists
+              configMap:
+                name: eidas-trust-list-mock
+  - |
+    apiVersion: v1
+    kind: Service
+    metadata:
+      name: eidas-trust-list-mock
+      namespace: {{ .Release.Namespace }}
+      labels:
+        app.kubernetes.io/name: eidas-trust-list-mock
+    spec:
+      selector:
+        app.kubernetes.io/name: eidas-trust-list-mock
+      ports:
+        - name: http
+          port: 3000
+          targetPort: 3000
