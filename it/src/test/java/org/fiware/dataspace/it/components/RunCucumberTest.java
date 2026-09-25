@@ -21,6 +21,8 @@ import static io.cucumber.junit.platform.engine.Constants.PLUGIN_PROPERTY_NAME;
  *   <li>{@code @dsp} — Tests for the Dataspace Protocol deployment ({@code mvn clean deploy -Plocal,dsp})</li>
  *   <li>{@code @consent} — Tests for the consent-management deployment
  *       ({@code mvn clean integration-test -Ptest,consent,consent-test})</li>
+ *   <li>{@code @eidas} — Tests for the eIDAS deployment
+ *       ({@code mvn clean integration-test -Ptest,elsi,eidas-test})</li>
  * </ul>
  *
  * @author <a href="https://github.com/wistefan">Stefan Wiedemann</a>

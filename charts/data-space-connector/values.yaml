@@ -92,6 +92,30 @@ decentralizedIam:
             name: postgres.postgres.credentials.postgresql.acid.zalan.do
             usernameKey: username
             passwordKey: password
+        # -- configuration for eIDAS 2.0 trust list validation (VCVerifier ≥ 6.22.0). Enables built-in PKIX certificate chain validation against EU Trusted Lists (ETSI TS 119 612), replacing the external dss-validation-service.
+        eidas:
+          # -- enable eIDAS 2.0 trust list validation for did:elsi credentials
+          enabled: false
+          # -- URL of the EU List of Trusted Lists (LOTL). When unset, the official EU LOTL (https://ec.europa.eu/tools/lotl/eu-lotl.xml) is used. Note the spelling: VCVerifier reads `lotlUrl`, while the vcverifier subchart declares it as `lotUrl`, which the server ignores.
+          lotlUrl: ""
+          # -- interval in seconds between background LOTL refreshes
+          refreshInterval: 86400
+          # -- ISO 3166-1 alpha-2 country filter; empty means all EU member states
+          countries: []
+          # -- number of concurrent trust list fetch workers
+          maxWorkers: 5
+          # -- HTTP timeout in seconds per individual trust list fetch
+          fetchTimeout: 30
+          # -- accept trust lists past their NextUpdate timestamp
+          allowStaleTrustLists: false
+          # -- when to evaluate trust-service status: "current" (at time of verification) or "issuance" (at credential issuance time)
+          statusEvaluation: "current"
+          # -- OCSP/CRL revocation checking mode: "off", "soft" (best-effort), or "hard" (fail-closed)
+          revocationCheck: "soft"
+          # -- HTTP timeout in seconds for OCSP/CRL requests
+          revocationTimeout: 10
+          # -- cache lifetime in seconds for revocation check results
+          revocationCacheExpiry: 3600
     # -- configuration for the credentials-config-service to be deployed as part of the connector, see https://github.com/FIWARE/helm-charts/tree/main/charts/credentials-config-service for all options
     credentials-config-service:
       # -- should it be enabled? set to false if one outside the chart is used.
@@ -120,9 +144,9 @@ decentralizedIam:
       registration:
         enabled: false
 
-    # -- configuration for the digital-signature.service to be deployed as part of the connector in case of did:elsi support
+    # -- @deprecated The dss-validation-service is superseded by VCVerifier's built-in eIDAS 2.0 trust list validation (vcverifier.deployment.eidas) since decentralized-iam ≥ 2.1.23 / VCVerifier ≥ 6.22.0. Use the eidas block above instead. This block is retained for backward compatibility with older VCVerifier versions.
     dss:
-      # -- should it be enabled?
+      # -- should it be enabled? Deprecated: use vcverifier.deployment.eidas.enabled instead.
       enabled: false
       # -- allows to set a fixed name for the services
       fullnameOverride: dss
@@ -3428,6 +3452,9 @@ certManagerResources:
 
 # -- list of extra Kubernetes manifests to deploy alongside the chart.
 # Each entry can be a string (raw YAML, supports Helm templating) or an object.
+# Set `metadata.namespace: {{ .Release.Namespace }}` on every entry: unlike the chart's own
+# templates these manifests are passed through verbatim, so an object without a namespace is
+# applied to `default` whenever the rendered tree is applied without an explicit `-n`.
 extraManifests: []
 
 # -- dashboard for operating the FIWARE Data Space Connector

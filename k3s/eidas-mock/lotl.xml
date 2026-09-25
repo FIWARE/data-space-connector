@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Mock EU List of Trusted Lists for the local demo.
+
+  The certificates issued by the FIWARE eIDAS tool are rooted in a self-signed test CA,
+  which by definition is not part of any national trust list published under the real EU
+  LOTL. Pointing VCVerifier at the real LOTL therefore builds a trust store that can never
+  validate them. This mock replaces the LOTL with one that points at a single national list
+  carrying the local test CA.
+
+  VCVerifier does not verify the XMLDSig signature on trust lists (documented limitation in
+  its eidas package), so this list is served unsigned.
+
+  NEVER use this outside a local or test deployment - it declares an arbitrary CA qualified.
+-->
+<TrustServiceStatusList xmlns="http://uri.etsi.org/02231/v2#"
+                        TSLTag="http://uri.etsi.org/19612/TSLTag">
+  <SchemeInformation>
+    <TSLVersionIdentifier>5</TSLVersionIdentifier>
+    <TSLSequenceNumber>1</TSLSequenceNumber>
+    <TSLType>http://uri.etsi.org/TrstSvc/TrustedList/TSLType/EUlistofthelists</TSLType>
+    <SchemeOperatorName>
+      <Name xml:lang="en">FIWARE Data Space Connector - local demo</Name>
+    </SchemeOperatorName>
+    <SchemeName>
+      <Name xml:lang="en">Mock List of Trusted Lists</Name>
+    </SchemeName>
+    <SchemeInformationURI>
+      <URI xml:lang="en">http://eidas-trust-list-mock:3000/lotl.xml</URI>
+    </SchemeInformationURI>
+    <StatusDeterminationApproach>http://uri.etsi.org/TrstSvc/TrustedList/StatusDetn/EUlistofthelists</StatusDeterminationApproach>
+    <SchemeTerritory>EU</SchemeTerritory>
+    <HistoricalInformationPeriod>65535</HistoricalInformationPeriod>
+    <ListIssueDateTime>2025-01-01T00:00:00Z</ListIssueDateTime>
+    <NextUpdate>
+      <dateTime>2035-01-01T00:00:00Z</dateTime>
+    </NextUpdate>
+    <PointersToOtherTSL>
+      <OtherTSLPointer>
+        <TSLLocation>http://eidas-trust-list-mock:3000/tl-de.xml</TSLLocation>
+        <AdditionalInformation>
+          <OtherInformation>
+            <SchemeTerritory>DE</SchemeTerritory>
+          </OtherInformation>
+          <OtherInformation>
+            <TSLType>http://uri.etsi.org/TrstSvc/TrustedList/TSLType/EUgeneric</TSLType>
+          </OtherInformation>
+          <OtherInformation>
+            <MimeType>application/vnd.etsi.tsl+xml</MimeType>
+          </OtherInformation>
+        </AdditionalInformation>
+      </OtherTSLPointer>
+    </PointersToOtherTSL>
+  </SchemeInformation>
+</TrustServiceStatusList>
