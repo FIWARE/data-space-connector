@@ -96,7 +96,9 @@ decentralizedIam:
         eidas:
           # -- enable eIDAS 2.0 trust list validation for did:elsi credentials
           enabled: false
-          # -- URL of the EU List of Trusted Lists (LOTL). When unset, the official EU LOTL (https://ec.europa.eu/tools/lotl/eu-lotl.xml) is used. Note the spelling: VCVerifier reads `lotlUrl`, while the vcverifier subchart declares it as `lotUrl`, which the server ignores.
+          # -- URL of the EU List of Trusted Lists (LOTL). When unset, the official EU LOTL (https://ec.europa.eu/tools/lotl/eu-lotl.xml) is used.
+          # TODO(upstream): the vcverifier subchart declares this key as `lotUrl`, but the server reads `lotlUrl` (config/config.go, `mapstructure:"lotlUrl"`).
+          # We set the spelling the server reads; the subchart's own key is inert. Remove this note once the chart is renamed in FIWARE/helm-charts.
           lotlUrl: ""
           # -- interval in seconds between background LOTL refreshes
           refreshInterval: 86400

@@ -45,7 +45,7 @@ eIDAS support is **disabled by default** and is strictly opt-in.
   - [JAdES Plugin for x5c Header Injection](#jades-plugin-for-x5c-header-injection)
   - [Keystore Volume Mount](#keystore-volume-mount)
 - [Preparation -- Generating Test Certificates](#preparation----generating-test-certificates)
-- [Per-Credential eIDAS Validation (SD-JWT)](#per-credential-eidas-validation-sd-jwt)
+- [Turning Validation On: `eidasConfig` per Credential Type](#turning-validation-on-eidasconfig-per-credential-type)
 - [Certificate Revocation](#certificate-revocation)
 - [Trust List Freshness](#trust-list-freshness)
 - [Local Deployment](#local-deployment)
@@ -149,9 +149,14 @@ decentralizedIam:
           enabled: true
 ```
 
-When `eidas.enabled` is `true`, VCVerifier builds a trust store from the
-EU LOTL at startup and validates every credential's `x5c` certificate
-chain against it. No external validation service is needed.
+When `eidas.enabled` is `true`, VCVerifier fetches the EU LOTL at startup and
+builds a trust store from it. No external validation service is needed.
+
+> **This block on its own validates nothing.** It builds the trust store; what
+> makes a credential actually get checked against it is `eidasConfig` on the
+> credential type, and the credential has to be an SD-JWT. See
+> [Turning Validation On](#turning-validation-on-eidasconfig-per-credential-type)
+> -- that step is not optional.
 
 > **Note:** The `elsi.enabled` toggle is only needed when the issuer uses
 > the `did:elsi` DID method. For `did:web` or HTTPS-issued credentials,
@@ -163,7 +168,7 @@ All values live under `decentralizedIam.vcAuthentication.vcverifier.deployment.e
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `enabled` | bool | `false` | Master toggle for eIDAS trust list validation. Must be `true` for any eIDAS-based credential verification (`did:elsi`, `did:web` with `x5c`, or HTTPS-issued). |
+| `enabled` | bool | `false` | Starts the trust-list fetcher and builds the trust store. Required for any eIDAS verification, but **not sufficient** -- see [Turning Validation On](#turning-validation-on-eidasconfig-per-credential-type). With it `false`, a per-credential `eidasConfig` is rejected with HTTP 400. |
 | `lotlUrl` | string | `""` (official EU LOTL) | URL of the EU List of Trusted Lists. When empty, defaults to `https://ec.europa.eu/tools/lotl/eu-lotl.xml`. Note the spelling -- VCVerifier reads `lotlUrl`; the `lotUrl` the vcverifier subchart declares is silently ignored. |
 | `refreshInterval` | int | `86400` | Interval in seconds between background LOTL refreshes. Clamped to `[3600, 604800]` -- a smaller value is silently raised to one hour. A failed fetch is not retried before the next interval, so this also bounds how long a verifier that started without a reachable trust list stays unusable. |
 | `countries` | list | `[]` (all EU) | ISO 3166-1 alpha-2 country filter. Empty list means all EU member states. Example: `["DE", "ES", "FR"]`. |
@@ -260,10 +265,17 @@ keycloak:
     verifiableCredentials:
       user-credential:
         attributes:
-          format: "jwt_vc_json"
-          # "false" hands this credential back to Keycloak's own signer
+          # eIDAS validation is SD-JWT only
+          format: "dc+sd-jwt"
+          # "false" hands this credential back to Keycloak's own signer, which writes a
+          # leaf+intermediate x5c and no signing time
           jades.enabled: "true"
 ```
+
+`jades.enabled` is read raw by the plugin, not as a `vc.`-prefixed Keycloak
+credential attribute. The chart's `_realm.tpl` keeps it unprefixed for exactly
+that reason (`dsc.vcScopeUnprefixedAttributes`); writing `vc.jades.enabled`
+yourself would hide it from the plugin.
 
 > **Note:** 1.3.0 requires Keycloak 26.7.x. The OID4VCI signing SPI was
 > rewritten after 26.4, and the plugin's `provided` dependency set is pinned to
@@ -386,22 +398,90 @@ For VCVerifier's PKIX validation to succeed, the leaf certificate must:
 
 ---
 
-## Per-Credential eIDAS Validation (SD-JWT)
+## Turning Validation On: `eidasConfig` per Credential Type
 
-VCVerifier supports per-credential-type eIDAS validation for SD-JWT
-credentials through the `eidasConfig` option in the credentials
-configuration. This allows requiring eIDAS validation only for specific
-credential types rather than applying it globally.
+**There is no global "validate everything" mode.** The `eidas` block from the
+previous section starts the trust-list fetcher and builds the trust store; it
+does not by itself cause a single credential to be checked. What decides that is
+`eidasConfig` on the individual credential type in the credentials
+configuration.
 
-When `eidasConfig` is set on a credential type in the
-[Credentials Config Service](https://github.com/FIWARE/credentials-config-service),
-VCVerifier applies the eIDAS trust list validation specifically to that
-credential type's issuer certificate chain, even if the global `eidas`
-block is disabled.
+`EidasValidationService` looks the configuration up per credential type, and for
+a type that carries none it returns pass-through without touching the trust
+store. A deployment that sets `eidas.enabled: true` and nothing else therefore
+fetches the EU Trusted Lists on every refresh and never consults them -- and,
+because nothing fails, looks exactly like a working one.
 
-This is useful when:
-- Only certain credential types require eIDAS-level assurance.
-- Different credential types need different trust list configurations.
+Both settings are required, and they are not interchangeable:
+
+| Setting | Scope | What it does |
+|---|---|---|
+| `...vcverifier.deployment.eidas.enabled` | verifier-wide | Starts the trust-list fetcher and builds the trust store. **Precondition.** With it `false`, a per-credential `eidasConfig` is rejected at config-validation time with HTTP 400. |
+| `eidasConfig.enabled` | one credential type | Makes the verifier actually validate that type's `x5c` chain against the trust store. |
+
+`eidasConfig` is set on the credential inside the verifier's service
+registration (or directly in the
+[Credentials Config Service](https://github.com/FIWARE/credentials-config-service)):
+
+```yaml
+decentralizedIam:
+  vcAuthentication:
+    vcverifier:
+      registration:
+        services:
+          - id: data-service
+            defaultOidcScope: "default"
+            oidcScopes:
+              "default":
+                credentials:
+                  - type: UserCredential
+                    trustedIssuersLists:
+                      - http://trusted-issuers-list:8080
+                    eidasConfig:
+                      # validate this credential type against the trust store
+                      enabled: true
+                      # ISO 3166-1 alpha-2; empty falls back to the global `countries`
+                      allowedCountries:
+                        - DE
+                      # defaults to true when absent: the issuing CA must be listed under a
+                      # qualified service type AND the leaf must carry a QcCompliance statement
+                      requireQualified: true
+```
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `enabled` | bool | `false` | Validate this credential type against the EU Trusted Lists. |
+| `allowedCountries` | list | `[]` | Restricts which national lists are consulted for this type. Empty falls back to the verifier-wide `countries`. |
+| `requireQualified` | bool | `true` | Accept only qualified trust services (`CA/QC`, `NationalRootCA/QC`) **and** require the leaf certificate to declare a `QcCompliance` qcStatement. Set to `false` for a non-qualified CA. |
+
+### The format constraint: SD-JWT only
+
+eIDAS validation is implemented for SD-JWT (`dc+sd-jwt`) and for nothing else.
+A credential of any other format -- `jwt_vc_json` in particular -- that has
+`eidasConfig.enabled: true` is **rejected outright** with
+`ErrorEidasSDJWTRequired`. It is not silently skipped and it is not accepted.
+
+So an eIDAS deployment issues its credentials as `dc+sd-jwt`, and the DCQL query
+that asks for them matches on `meta.vct_values` (a flat array) rather than the
+`meta.type_values` (array of arrays) that `jwt_vc_json` uses.
+
+### x5c and the trust anchor
+
+Two signers produce a different `x5c` for SD-JWT, and both validate:
+
+| Signer | `x5c` contents | Why |
+|---|---|---|
+| Keycloak's own `SdJwtCredentialSigner` | leaf + intermediate | HAIP-6.1.1 requires the trust anchor **not** to be in `x5c`; Keycloak strips the trailing self-signed certificate. |
+| `keycloak-jades-vc-issuer` with `jades.enabled: "true"` | leaf + intermediate + root | Writes the realm key's full chain, and adds the JAdES signing time. |
+
+PKIX chain building takes the root from the trust store either way, so the
+shorter chain is not a problem. The local overlay forces JAdES because the
+signing time is part of what makes the signature an eIDAS advanced electronic
+signature.
+
+> **Note:** `jades.enabled` is **not** a `vc.`-prefixed Keycloak credential
+> attribute -- the plugin reads it raw. The chart keeps it unprefixed for that
+> reason; see `dsc.vcScopeUnprefixedAttributes` in `_realm.tpl`.
 
 ---
 
@@ -482,14 +562,15 @@ how the deployment is configured.
 A local demo consequently needs a mock LOTL that declares the test CA a granted
 qualified CA. The eIDAS overlay ships one:
 
-| File | Role |
+| Document | Role |
 |---|---|
-| [k3s/eidas-mock/lotl.xml](../../../k3s/eidas-mock/lotl.xml) | List of Trusted Lists, pointing at a single national list |
-| [k3s/eidas-mock/tl-de.xml](../../../k3s/eidas-mock/tl-de.xml) | National list (territory `DE`) carrying the test CA as `CA/QC`, status `granted` |
+| `lotl.xml` | List of Trusted Lists, pointing at a single national list |
+| `tl-de.xml` | National list (territory `DE`) carrying the test CA as `CA/QC`, status `granted` |
 
-Both are served in-cluster by a small static web server that
-[k3s/provider-eidas.yaml](../../../k3s/provider-eidas.yaml) adds through
-`extraManifests`, and the verifier is pointed at it:
+Both live as ConfigMap entries in the `extraManifests` block at the end of
+[k3s/provider-eidas.yaml](../../../k3s/provider-eidas.yaml) -- that is the only
+copy, so edit them there. A small static web server defined in the same block
+serves them in-cluster, and the verifier is pointed at it:
 
 ```yaml
 decentralizedIam:
@@ -647,7 +728,7 @@ for i in 0 1 2; do
     | openssl x509 -inform DER -out chain$i.pem
 done
 
-sed -n '/<X509Certificate>/,/<\/X509Certificate>/p' k3s/eidas-mock/tl-de.xml \
+sed -n '/<X509Certificate>/,/<\/X509Certificate>/p' k3s/provider-eidas.yaml \
   | sed '1d;$d' | tr -d ' \n' | base64 -d | openssl x509 -inform DER -out tl-ca.pem
 
 openssl verify -CAfile tl-ca.pem -untrusted chain1.pem chain0.pem
@@ -659,7 +740,7 @@ chain0.pem: OK
 
 A simpler equivalent: the root in the credential's `x5c[-1]` must be
 byte-identical to the certificate in
-[k3s/eidas-mock/tl-de.xml](../../../k3s/eidas-mock/tl-de.xml). If they differ,
+the `tl-de.xml` entry of [k3s/provider-eidas.yaml](../../../k3s/provider-eidas.yaml). If they differ,
 the trust list was built from a different run of the certificate tool than the
 keystore in `k3s/consumer-eidas.yaml`, and the verifier rejects the credential
 with `certificate does not chain to any trusted service`.
@@ -667,15 +748,18 @@ with `certificate does not chain to any trusted service`.
 Then check that the issuer is the `did:elsi` DID:
 
 ```shell
-./doc/scripts/get-payload-from-jwt.sh "${ELSI_CREDENTIAL}" | jq '{iss, vc_type: .vc.type}'
+./doc/scripts/get-payload-from-jwt.sh "${ELSI_CREDENTIAL}" | jq '{iss, vct}'
 ```
 
 ```json
 {
   "iss": "did:elsi:VATDE-1234567",
-  "vc_type": ["VerifiableCredential", "UserCredential"]
+  "vct": "UserCredential"
 }
 ```
+
+SD-JWT carries the credential type in the flat `vct` claim; the `vc.type` array
+is the `jwt_vc_json` shape, which eIDAS validation does not accept.
 
 The identifier after `did:elsi:` must equal the `organizationIdentifier`
 (OID 2.5.4.97) in the leaf certificate's Subject DN -- that is the match
@@ -751,34 +835,44 @@ matched the `did:elsi` issuer, and the provider's policy granted access.
 
 ### 8. Confirm that validation actually bites
 
-A demo that only shows the happy path proves little. Present the same
-credential with the trust list validation turned off and then on, and
-compare -- or, more simply, present a credential from an issuer that is not
-registered at the provider's trusted-issuers list:
+A demo that only shows the happy path proves little -- and a credential refused
+by the trusted-issuers list proves nothing about the trust list, because that is
+a different check entirely.
+
+The eIDAS overlay therefore registers a second scope,
+`eidas-unlisted-country`, that differs from `default` in exactly one field:
+its `eidasConfig.allowedCountries` is `["FR"]`, and the mock national list is
+territory `DE`. Present the very same credential against it:
 
 ```shell
-export OTHER_CREDENTIAL=$(./doc/scripts/get_credential.sh \
-  https://keycloak-consumer.127.0.0.1.nip.io verifiable-credential test-user)
 ./doc/scripts/get_access_token_oid4vp.sh \
-  https://mp-data-service.127.0.0.1.nip.io "${OTHER_CREDENTIAL}" default
+  https://mp-data-service.127.0.0.1.nip.io "${ELSI_CREDENTIAL}" eidas-unlisted-country
 ```
 
-`VerifiableCredential` is not among the `credentialTypes` registered for
-`did:elsi:VATDE-1234567` in the eIDAS overlay's `registration` block, so the
-verifier refuses it and no access token is issued.
+It must come back empty while step 6 succeeded. Same credential, same issuer,
+same policy, same trusted-issuers list -- the only thing that changed is which
+national trust list the verifier was allowed to look in. That is the one
+observation that distinguishes "the chain was validated" from "the check was
+skipped", and it is what `it/src/test/resources/it/eidas.feature` asserts.
+
+The verifier's log names the reason:
+
+```
+EidasValidationService: issuer certificate does not chain to any trusted service
+```
 
 ---
 
 ## Migration from DSS-based Approach
 
 If your deployment previously used the external `dss-validation-service` for
-eIDAS certificate validation (chart versions < 10.7.0), follow these steps to
+eIDAS certificate validation (chart versions < 10.9.0), follow these steps to
 migrate to VCVerifier-native trust list validation.
 
 ### Prerequisites
 
 - **decentralized-iam >= 2.1.23** (VCVerifier >= 6.22.0) — included in chart
-  version 10.7.0 and later.
+  version 10.9.0 and later.
 - Familiarity with your existing `dss:` configuration block and any custom
   overlays that deploy the DSS sidecar.
 
@@ -831,7 +925,7 @@ migrate to VCVerifier-native trust list validation.
 
 ### Before / After Comparison
 
-| Before (< 10.7.0) | After (>= 10.7.0) |
+| Before (< 10.9.0) | After (>= 10.9.0) |
 |---|---|
 | `decentralizedIam.vcAuthentication.dss` block with DSS endpoint URL | `decentralizedIam.vcAuthentication.vcverifier.deployment.eidas` block |
 | External `dss-validation-service` Deployment + Service | No external service — VCVerifier validates natively |
@@ -841,11 +935,27 @@ migrate to VCVerifier-native trust list validation.
 
 ### Rollback
 
-If you need to revert to the DSS-based approach:
+Reverting to the DSS-based approach is **not** a values-only change.
+`verifier.elsi.validationEndpoint` no longer exists anywhere in the bundled
+charts -- vcverifier 4.13.0 dropped the key:
 
-1. Set `eidas.enabled: false` (or remove the `eidas:` block).
-2. Restore the `dss:` block and `verifier.elsi.validationEndpoint`.
-3. Re-deploy the `dss-validation-service` and CRL infrastructure.
+```console
+$ grep -rn "validationEndpoint" charts/
+(nothing)
+```
+
+So a rollback means pinning the whole `decentralized-iam` dependency back to a
+version that still ships it (< 2.1.23), not just restoring the `dss:` block.
+Concretely:
+
+1. Pin `decentralized-iam` to `2.1.22` in
+   `charts/data-space-connector/Chart.yaml` and re-run
+   `helm dependency update`.
+2. Set `eidas.enabled: false` (or remove the `eidas:` block).
+3. Restore the `dss:` block and `verifier.elsi.validationEndpoint`.
+4. Re-deploy the `dss-validation-service` and CRL infrastructure.
+5. Switch the credentials back to `jwt_vc_json` and remove `eidasConfig` --
+   the DSS-based path did not use either.
 
 ---
 
@@ -855,6 +965,8 @@ If you need to revert to the DSS-based approach:
 
 | Error | Cause | Resolution |
 |-------|-------|------------|
+| **Everything passes, but validation never ran** | The credential type carries no `eidasConfig`, so `EidasValidationService` is a pass-through | Set `eidasConfig.enabled: true` on the credential type. Prove it bites by presenting the same credential under a scope whose `allowedCountries` no trust service matches -- it must be refused |
+| `credential format is "jwt_vc_json" but eIDAS requires "dc+sd-jwt"` | eIDAS validation is SD-JWT only | Issue the credential as `dc+sd-jwt` and match it in DCQL with `meta.vct_values` |
 | Credential rejected with no trust store | `eidas.enabled` is `false` or the LOTL was unreachable at startup | Set `eidas.enabled: true` and verify network connectivity to the EU LOTL URL |
 | `organizationIdentifier` mismatch (`did:elsi` only) | The `did:elsi` identifier does not match OID 2.5.4.97 in the leaf certificate | Regenerate the certificate with the correct `ORGANISATION_IDENTIFIER` matching the DID |
 | Certificate chain validation failed | The issuing CA is not in the trust store, or the `countries` filter excludes it | Check the `countries` setting. With locally generated certificates the CA is never in the real EU LOTL -- point `lotlUrl` at the mock trust list and make sure it carries the current root CA (see [Mocking the EU Trusted List](#mocking-the-eu-trusted-list-local-only)) |
