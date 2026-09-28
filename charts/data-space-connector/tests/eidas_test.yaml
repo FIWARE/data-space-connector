@@ -9,8 +9,7 @@
 #    stays off by default so an existing release upgrades to a no-op. The
 #    subchart renders it with a bare `toYaml`, so the umbrella's job is only to
 #    carry the right keys - in particular `lotlUrl`, which is what the server
-#    reads. The subchart declares `lotUrl`, which it ignores; if an upstream
-#    bump ever renames it, the assertion below is what catches it.
+#    reads and what the subchart has declared since decentralized-iam 2.1.25.
 #
 # 2. `jades.enabled` reaches a credential's client scope WITHOUT the `vc.`
 #    prefix that `dsc.vcClientScopes` puts on every other attribute. The

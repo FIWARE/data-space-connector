@@ -107,7 +107,6 @@ decentralizedIam:
           # list carries - against the official LOTL every credential would be rejected. Point
           # the verifier at the in-cluster mock instead (see extraManifests at the end of this
           # file). Production keeps this unset, which uses the official EU LOTL.
-          # spelled lotlUrl, not lotUrl - that is the key VCVerifier actually reads
           lotlUrl: "http://eidas-trust-list-mock:3000/lotl.xml"
           # The shortest refresh VCVerifier accepts. A failed initial fetch is not retried with
           # any backoff - the fetcher just waits for the next tick - so this is also how long a

@@ -4,8 +4,11 @@ The FIWARE Data Space Connector supports
 [eIDAS 2.0](https://digital-strategy.ec.europa.eu/en/policies/eidas-regulation)
 compliance through PKIX certificate chain validation against the
 [EU Trusted Lists (ETSI TS 119 612)](https://ec.europa.eu/digital-building-blocks/sites/display/DIGITAL/EU+Trusted+Lists).
-Starting with **decentralized-iam >= 2.1.23 / VCVerifier >= 6.22.0**,
-this validation is performed natively by VCVerifier.
+Starting with **VCVerifier >= 6.22.0** this validation is performed natively by
+VCVerifier. The configuration surface documented here needs
+**decentralized-iam >= 2.1.25**, which is what chart 10.9.0 pins: 2.1.25 is the
+first release whose vcverifier subchart spells the LOTL override `lotlUrl`, the
+key the server actually reads.
 
 eIDAS 2.0 verification works with any DID method or credential issuance
 approach that includes an `x5c` certificate chain header in issued JWTs:
@@ -169,7 +172,7 @@ All values live under `decentralizedIam.vcAuthentication.vcverifier.deployment.e
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | `enabled` | bool | `false` | Starts the trust-list fetcher and builds the trust store. Required for any eIDAS verification, but **not sufficient** -- see [Turning Validation On](#turning-validation-on-eidasconfig-per-credential-type). With it `false`, a per-credential `eidasConfig` is rejected with HTTP 400. |
-| `lotlUrl` | string | `""` (official EU LOTL) | URL of the EU List of Trusted Lists. When empty, defaults to `https://ec.europa.eu/tools/lotl/eu-lotl.xml`. Note the spelling -- VCVerifier reads `lotlUrl`; the `lotUrl` the vcverifier subchart declares is silently ignored. |
+| `lotlUrl` | string | `""` (official EU LOTL) | URL of the EU List of Trusted Lists. When empty, defaults to `https://ec.europa.eu/tools/lotl/eu-lotl.xml`. |
 | `refreshInterval` | int | `86400` | Interval in seconds between background LOTL refreshes. Clamped to `[3600, 604800]` -- a smaller value is silently raised to one hour. A failed fetch is not retried before the next interval, so this also bounds how long a verifier that started without a reachable trust list stays unusable. |
 | `countries` | list | `[]` (all EU) | ISO 3166-1 alpha-2 country filter. Empty list means all EU member states. Example: `["DE", "ES", "FR"]`. |
 | `maxWorkers` | int | `5` | Number of concurrent workers for fetching national trust lists. |
@@ -579,7 +582,6 @@ decentralizedIam:
       deployment:
         eidas:
           enabled: true
-          # spelled lotlUrl, not lotUrl - see the configuration reference
           lotlUrl: "http://eidas-trust-list-mock:3000/lotl.xml"
 ```
 
@@ -871,8 +873,9 @@ migrate to VCVerifier-native trust list validation.
 
 ### Prerequisites
 
-- **decentralized-iam >= 2.1.23** (VCVerifier >= 6.22.0) — included in chart
-  version 10.9.0 and later.
+- **decentralized-iam >= 2.1.25** (VCVerifier >= 6.23.1) — included in chart
+  version 10.9.0 and later. The feature itself exists from 2.1.23 /
+  VCVerifier 6.22.0, but `lotlUrl` is only settable from 2.1.25.
 - Familiarity with your existing `dss:` configuration block and any custom
   overlays that deploy the DSS sidecar.
 
