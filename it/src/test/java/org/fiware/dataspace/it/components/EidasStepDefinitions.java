@@ -20,6 +20,7 @@ import org.bouncycastle.asn1.x500.style.IETFUtils;
 import org.bouncycastle.cert.jcajce.JcaX509CertificateHolder;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
 import org.fiware.dataspace.it.components.model.IssuerCredential;
+import org.opentest4j.AssertionFailedError;
 import org.fiware.dataspace.it.components.model.IssuerConfiguration;
 import org.fiware.dataspace.it.components.model.OpenIdConfiguration;
 import org.fiware.dataspace.it.components.model.TrustedIssuer;
@@ -36,6 +37,7 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -54,6 +56,16 @@ public class EidasStepDefinitions extends StepDefintions {
 
     private static final String USER_CREDENTIAL = "user-credential";
     private static final String DEFAULT_SCOPE = "default";
+
+    /**
+     * Scope declaring the same credential with an eIDAS country filter the mock trust list does
+     * not satisfy. Presenting a credential here must fail while {@link #DEFAULT_SCOPE} succeeds.
+     */
+    private static final String UNLISTED_COUNTRY_SCOPE = "eidas-unlisted-country";
+
+    /** eIDAS trust list validation only applies to SD-JWT, so the credential is requested as one. */
+    private static final String SD_JWT_FORMAT = "dc+sd-jwt";
+
     private static final String ENERGY_REPORT_ENTITY_ID = "urn:ngsi-ld:EnergyReport:fms-1";
 
     /**
@@ -70,6 +82,13 @@ public class EidasStepDefinitions extends StepDefintions {
     private static final int EXPECTED_CHAIN_LENGTH = 3;
 
     private static final Duration DATA_ACCESS_TIMEOUT = Duration.ofSeconds(60);
+
+    /**
+     * The verifier caches the credentials configuration it reads from the trusted-issuers list, so a
+     * freshly registered issuer is not visible to it immediately. Bounds how long the first token
+     * exchange is retried rather than failing on a cache that is merely one cycle behind.
+     */
+    private static final Duration TIL_PROPAGATION_TIMEOUT = Duration.ofSeconds(30);
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
@@ -90,8 +109,8 @@ public class EidasStepDefinitions extends StepDefintions {
         deleteEnergyReport();
         cleanUpTIL();
         registerElsiIssuerAtTil();
-        // give the verifier time to pick the new trusted-issuers entry up
-        Thread.sleep(3001);
+        // The verifier picks the new entry up on its next config refresh; the steps that depend on
+        // it retry for TIL_PROPAGATION_TIMEOUT rather than this hook guessing a fixed delay.
     }
 
     /**
@@ -121,6 +140,12 @@ public class EidasStepDefinitions extends StepDefintions {
                 .build();
         try (Response response = HTTP_CLIENT.newCall(create).execute()) {
             log.debug("Registered the did:elsi issuer - code {}", response.code());
+            // A 409 is the normal outcome when the chart's own registration job got there first.
+            assertTrue(response.isSuccessful() || response.code() == HttpStatus.SC_CONFLICT,
+                    "The did:elsi issuer should be registered at the provider's trusted-issuers "
+                            + "list, but the registration answered " + response.code()
+                            + ". Every later step depends on it, so failing here keeps the cause "
+                            + "visible.");
         }
     }
 
@@ -163,7 +188,7 @@ public class EidasStepDefinitions extends StepDefintions {
     public void eidasEmployeeReceivesCredential() throws Exception {
         String accessToken = EidasEnvironment.loginToConsumerKeycloak(EidasEnvironment.TEST_USER_NAME);
         employeeWallet.getCredentialFromIssuer(
-                accessToken, EidasEnvironment.CONSUMER_KEYCLOAK_ADDRESS, USER_CREDENTIAL);
+                accessToken, EidasEnvironment.CONSUMER_KEYCLOAK_ADDRESS, USER_CREDENTIAL, SD_JWT_FORMAT);
         assertNotNull(employeeWallet.getStoredCredential(USER_CREDENTIAL),
                 "The user credential should be stored in the wallet.");
     }
@@ -213,22 +238,35 @@ public class EidasStepDefinitions extends StepDefintions {
     public void certificateChainIsComplete() throws Exception {
         JsonNode x5c = decodeSegment(storedCredential(), 0).path(X5C_HEADER);
         assertEquals(EXPECTED_CHAIN_LENGTH, x5c.size(),
-                "The chain should contain the leaf, the intermediate and the root of the test CA.");
+                "The chain should contain the leaf, the intermediate and the root of the test CA. "
+                        + "A chain of two means Keycloak's own SD-JWT signer produced it - it strips "
+                        + "the trailing trust anchor per HAIP-6.1.1 - so jades.enabled did not reach "
+                        + "the client scope.");
 
         X509Certificate leaf = certificateAt(0);
         X509Certificate intermediate = certificateAt(1);
         assertEquals(intermediate.getSubjectX500Principal(), leaf.getIssuerX500Principal(),
                 "The leaf should be issued by the intermediate it is shipped with.");
         leaf.verify(intermediate.getPublicKey());
+
+        X509Certificate root = certificateAt(EXPECTED_CHAIN_LENGTH - 1);
+        assertEquals(root.getSubjectX500Principal(), intermediate.getIssuerX500Principal(),
+                "The intermediate should be issued by the root the chain terminates in.");
+        intermediate.verify(root.getPublicKey());
     }
 
     // --- data access ---
 
     @Then("The eIDAS credential can be exchanged for an access token.")
-    public void eidasCredentialCanBeExchangedForToken() throws Exception {
-        String accessToken = getAccessToken();
-        assertNotNull(accessToken, "The verifier should issue an access token for the eIDAS credential.");
-        assertFalse(accessToken.isEmpty(), "The access token should not be empty.");
+    public void eidasCredentialCanBeExchangedForToken() {
+        Awaitility.await()
+                .atMost(TIL_PROPAGATION_TIMEOUT)
+                .untilAsserted(() -> {
+                    String accessToken = getAccessToken();
+                    assertNotNull(accessToken,
+                            "The verifier should issue an access token for the eIDAS credential.");
+                    assertFalse(accessToken.isEmpty(), "The access token should not be empty.");
+                });
     }
 
     @Then("The eIDAS consumer employee can access the EnergyReport with the access token.")
@@ -249,6 +287,19 @@ public class EidasStepDefinitions extends StepDefintions {
                                         + "eIDAS credential.");
                     }
                 });
+    }
+
+    @Then("The eIDAS credential is rejected for a scope whose trust list does not carry its CA.")
+    public void eidasCredentialRejectedForUnlistedCountry() throws Exception {
+        OpenIdConfiguration openIdConfiguration =
+                MPOperationsEnvironment.getOpenIDConfiguration(MPOperationsEnvironment.PROVIDER_API_ADDRESS);
+        assertThrows(AssertionFailedError.class,
+                () -> employeeWallet.exchangeCredentialForToken(
+                        openIdConfiguration, USER_CREDENTIAL, UNLISTED_COUNTRY_SCOPE),
+                "The very same credential that is accepted under the default scope has to be "
+                        + "refused under a scope whose eIDAS country filter no trust service "
+                        + "matches. If it is accepted, the trust list is not being consulted at "
+                        + "all and the whole eIDAS check is a pass-through.");
     }
 
     private String getAccessToken() throws Exception {

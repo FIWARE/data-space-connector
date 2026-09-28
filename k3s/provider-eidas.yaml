@@ -145,6 +145,27 @@ decentralizedIam:
               - -ec
               - |
                 curl -X 'POST' 'http://tir.trust-anchor.svc.cluster.local:8080/issuer' -H 'Content-Type: application/json' -d "{\"did\": \"did:web:mp-operations.org\", \"credentials\": []}"
+          # The fetcher does one LOTL fetch at startup and, on failure, simply waits for the
+          # next tick - there is no backoff and no early retry. With refreshInterval at its
+          # 3600s floor, losing this race means an hour of an empty trust store behind a
+          # perfectly healthy /health, so the verifier must not start before the mock serves.
+          - name: wait-for-trust-list
+            image: curlimages/curl:8.18.0
+            env:
+              # the mock is excluded from the proxy for the verifier itself; the same has to
+              # hold here or squid answers with traefik's certificate
+              - name: NO_PROXY
+                value: "eidas-trust-list-mock"
+            command:
+              - /bin/sh
+            args:
+              - -ec
+              - |
+                until curl -sf -o /dev/null http://eidas-trust-list-mock:3000/lotl.xml; do
+                  echo "waiting for the eIDAS trust list mock"
+                  sleep 2
+                done
+                echo "trust list mock is serving"
 
       registration:
         enabled: true
@@ -171,14 +192,57 @@ decentralizedIam:
                     jwtInclusion:
                       enabled: true
                       fullInclusion: true
+                    # This - not the global `eidas` block - is what makes the trust list
+                    # actually get consulted. EidasValidationService looks the config up per
+                    # credential type and is a pass-through for any type that does not carry
+                    # one, so without this the x5c chain is never checked against the LOTL.
+                    # The global block only starts the fetcher; both are required.
+                    eidasConfig:
+                      enabled: true
+                      # the mock LOTL carries the test CA under the DE national list
+                      allowedCountries:
+                        - DE
+                      # defaults to true when absent. The test leaf carries a QcCompliance
+                      # qcStatements extension, so the qualified check passes.
+                      requireQualified: true
                 dcql:
                   credentials:
                     - id: user-query
-                      format: "jwt_vc_json"
+                      format: "dc+sd-jwt"
                       multiple: true
                       meta:
-                        type_values:
-                          - [UserCredential]
+                        # sd-jwt matches on vct (flat array); type_values is the jwt_vc_json form
+                        vct_values:
+                          - UserCredential
+              # Same credential, same trusted-issuers list, same policy - the only difference is
+              # that the eIDAS country filter names a country the mock LOTL does not carry. A
+              # token issued under "default" but refused under this scope is the only evidence
+              # that the trust list is actually being consulted rather than skipped.
+              "eidas-unlisted-country":
+                credentials:
+                  - type: UserCredential
+                    trustedParticipantsLists:
+                      - https://tir.127.0.0.1.nip.io
+                    trustedIssuersLists:
+                      - http://trusted-issuers-list:8080
+                    jwtInclusion:
+                      enabled: true
+                      fullInclusion: true
+                    eidasConfig:
+                      enabled: true
+                      # the mock national list is territory DE, so FR resolves to no trust
+                      # service at all and the chain can never be built
+                      allowedCountries:
+                        - FR
+                      requireQualified: true
+                dcql:
+                  credentials:
+                    - id: user-query-unlisted
+                      format: "dc+sd-jwt"
+                      multiple: true
+                      meta:
+                        vct_values:
+                          - UserCredential
           - id: tmf-api
             defaultOidcScope: "default"
             authorizationType: "DEEPLINK"
@@ -193,14 +257,28 @@ decentralizedIam:
                     jwtInclusion:
                       enabled: true
                       fullInclusion: true
+                    # This - not the global `eidas` block - is what makes the trust list
+                    # actually get consulted. EidasValidationService looks the config up per
+                    # credential type and is a pass-through for any type that does not carry
+                    # one, so without this the x5c chain is never checked against the LOTL.
+                    # The global block only starts the fetcher; both are required.
+                    eidasConfig:
+                      enabled: true
+                      # the mock LOTL carries the test CA under the DE national list
+                      allowedCountries:
+                        - DE
+                      # defaults to true when absent. The test leaf carries a QcCompliance
+                      # qcStatements extension, so the qualified check passes.
+                      requireQualified: true
                 dcql:
                   credentials:
                     - id: operator-query
-                      format: "jwt_vc_json"
+                      format: "dc+sd-jwt"
                       multiple: true
                       meta:
-                        type_values:
-                          - [OperatorCredential]
+                        # sd-jwt matches on vct (flat array); type_values is the jwt_vc_json form
+                        vct_values:
+                          - OperatorCredential
     trusted-issuers-list:
       # only open for clean up in the tests
       ingress:
@@ -221,12 +299,9 @@ decentralizedIam:
               hosts:
                 - til-provider.127.0.0.1.nip.io
 
-    # dss-validation-service is no longer needed — eIDAS certificate chain validation
-    # is now built into VCVerifier (>= 6.22.0) via the eidas block above.
-    dss:
-      enabled: false
-      crl:
-        enabled: false
+    # No dss block: the dss-validation-service is deprecated and already disabled by default.
+    # eIDAS certificate chain validation is built into VCVerifier (>= 6.22.0), configured in
+    # the eidas block above.
 
   odrlAuthorization:
 
@@ -510,7 +585,9 @@ contract-management:
 # validate them, and every credential would be rejected. Pointing `eidas.lotlUrl` at this mock
 # makes the local test CA a granted qualified CA, which is what lets the demo flow complete.
 #
-# The XML lives in k3s/eidas-mock/ and is inlined here so the overlay stays self-contained.
+# The XML is inlined here rather than kept in separate files so that the overlay stays
+# self-contained: `helm install -f k3s/provider-eidas.yaml` has to work on its own, and a
+# values file cannot read a sibling file. This is the only copy - edit it here.
 # The certificate in tl-de.xml must be the root that signed `elsi.keystore` in
 # k3s/consumer-eidas.yaml - regenerate both together, never one on its own.
 extraManifests:
@@ -707,11 +784,26 @@ extraManifests:
                 - containerPort: 3000
                   name: http
               securityContext:
+                runAsNonRoot: true
+                runAsUser: 65532
                 allowPrivilegeEscalation: false
                 readOnlyRootFilesystem: true
+                seccompProfile:
+                  type: RuntimeDefault
                 capabilities:
                   drop:
                     - ALL
+              resources:
+                requests:
+                  cpu: 10m
+                  memory: 16Mi
+                limits:
+                  memory: 32Mi
+              readinessProbe:
+                httpGet:
+                  path: /lotl.xml
+                  port: 3000
+                periodSeconds: 2
               volumeMounts:
                 - name: trust-lists
                   mountPath: /home/static/lotl.xml

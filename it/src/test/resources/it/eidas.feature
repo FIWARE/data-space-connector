@@ -4,6 +4,7 @@ Feature: The eIDAS deployment issues credentials bound to an eIDAS certificate a
   # This feature covers the eIDAS 2.0 flow from doc/deployment-integration/eidas/README.md:
   # - the issuer is identified by a did:elsi DID rather than a did:web one
   # - issued credentials carry the certificate chain in the x5c JOSE header
+  # - credentials are issued as dc+sd-jwt, because VCVerifier's eIDAS validation is SD-JWT only
   # - the verifier validates that chain against the EU-trust-list format (a mock list locally)
   #   and matches the certificate's organizationIdentifier against the DID
   # Everything else - policies, entities, data access - is the standard OID4VP flow.
@@ -20,10 +21,21 @@ Feature: The eIDAS deployment issues credentials bound to an eIDAS certificate a
     And The signing certificate's organizationIdentifier matches the did:elsi issuer.
     And The credential is signed as JAdES.
 
-  Scenario: The certificate chain terminates in a CA the verifier trusts.
+  Scenario: The credential ships a complete certificate chain.
     Given The eIDAS consumer Keycloak credential issuer is configured.
     When The eIDAS consumer employee receives a user credential.
     Then The certificate chain of the credential is complete.
+
+  # The trust list is only demonstrably in play if the same credential is accepted under one
+  # scope and refused under another that differs in nothing but the eIDAS country filter.
+  # Without this, every assertion in this feature also holds when validation is skipped.
+  Scenario: The trust list decides whether the credential is accepted.
+    Given The did:elsi issuer is trusted by the provider.
+    When M&P Operations registers a policy to allow every participant access to its energy reports.
+    And M&P Operations creates an energy report.
+    And The eIDAS consumer employee receives a user credential.
+    Then The eIDAS credential can be exchanged for an access token.
+    And The eIDAS credential is rejected for a scope whose trust list does not carry its CA.
 
   Scenario: A credential bound to an eIDAS certificate grants access to provider data.
     Given The did:elsi issuer is trusted by the provider.
