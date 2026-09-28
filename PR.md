@@ -199,6 +199,12 @@ a retry-with-backoff on the initial fetch belongs in VCVerifier upstream — wor
 
 ### 4. `lotUrl` is worked around in the umbrella instead of fixed upstream
 
+> **Resolved.** Fixed upstream in `decentralized-iam` 2.1.25 (vcverifier subchart 4.15.3), which
+> renames the key to `lotlUrl`. Chart 10.9.0 pins 2.1.25 and the workaround notes are gone.
+> Note there is no backward-compatible alias, so a values file still setting `lotUrl` is now
+> silently ignored — recorded under Breaking changes in the release notes.
+
+
 The vcverifier subchart declares the key as `lotUrl`:
 
 ```yaml
