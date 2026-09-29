@@ -51,6 +51,8 @@ decentralizedIam:
       ingress:
         enabled: true
         annotations:
+          # without this traefik creates no HTTPS router and every https:// call 404s
+          traefik.ingress.kubernetes.io/router.tls: "true"
           cert-manager.io/cluster-issuer: "selfsigned-issuer"
           cert-manager.io/private-key-algorithm: "ECDSA"
           cert-manager.io/common-name: "provider-ccs.127.0.0.1.nip.io"
@@ -66,6 +68,8 @@ decentralizedIam:
       configIngress:
         enabled: true
         annotations:
+          # without this traefik creates no HTTPS router and every https:// call 404s
+          traefik.ingress.kubernetes.io/router.tls: "true"
           cert-manager.io/cluster-issuer: "selfsigned-issuer"
           cert-manager.io/private-key-algorithm: "ECDSA"
           cert-manager.io/common-name: "provider-verifier.127.0.0.1.nip.io"
@@ -83,9 +87,18 @@ decentralizedIam:
           level: DEBUG
         verifier:
           tirAddress: https://tir.127.0.0.1.nip.io:8080/
-          did: ${DID}
+          did: did:web:mp-operations.org
+          # VCVerifier 6.22.0 ships inconsistent defaults: supportedModes defaults to
+          # ["urlEncoded"] while requestMode defaults to "byReference", so verifyConfig
+          # rejects any config that sets neither (request_mode_not_in_supported_modes).
+          # This overlay has no clientIdentification signing key, which byValue and
+          # byReference both require, so pin the pair to urlEncoded.
+          supportedModes: ["urlEncoded"]
+          requestMode: urlEncoded
         server:
-          host: https://provider-verifier.127.0.0.1.nip.io:8080
+          # no port: 8080 is the http port, so an https host carrying it makes every url the
+          # verifier advertises - issuer, authorization and token endpoint - unreachable
+          host: https://provider-verifier.127.0.0.1.nip.io
         configRepo:
           configEndpoint: http://verifier:8090
         additionalVolumes:
@@ -93,7 +106,7 @@ decentralizedIam:
             emptyDir: {}
           - name: ca-to-add
             secret:
-              secretName: did-provider.127.0.0.1.nip.io-tls
+              secretName: mp-operations.org-tls
               items:
                 - key: ca.crt
                   path: ca.crt
@@ -135,7 +148,7 @@ decentralizedIam:
             args:
               - -ec
               - |
-                curl -X 'POST' 'http://tir.trust-anchor.svc.cluster.local:8080/issuer' -H 'Content-Type: application/json' -d "{\"did\": \"did:web:did-provider.127.0.0.1.nip.io\", \"credentials\": []}"
+                curl -X 'POST' 'http://tir.trust-anchor.svc.cluster.local:8080/issuer' -H 'Content-Type: application/json' -d "{\"did\": \"did:web:mp-operations.org\", \"credentials\": []}"
 
   odrlAuthorization:
 
@@ -151,6 +164,8 @@ decentralizedIam:
           enabled: true
           hostname: mp-data-service.127.0.0.1.nip.io
           annotations:
+            # without this traefik creates no HTTPS router and every https:// call 404s
+            traefik.ingress.kubernetes.io/router.tls: "true"
             cert-manager.io/cluster-issuer: "selfsigned-issuer"
             cert-manager.io/private-key-algorithm: "ECDSA"
             cert-manager.io/common-name: "mp-data-service.127.0.0.1.nip.io"
@@ -165,7 +180,9 @@ decentralizedIam:
               path: /
       catchAllRoute:
         enabled: false
-      routes: |-
+      # a real list - passing this as a block string makes the chart's toYaml nest it
+      # as a scalar, and APISIX then starts with no routes at all (404 Route Not Found)
+      routes:
         - uri: /.well-known/openid-configuration
           host: mp-data-service.127.0.0.1.nip.io
           upstream:
@@ -236,10 +253,12 @@ decentralizedIam:
     odrl-pap:
       additionalEnvVars:
         - name: GENERAL_ORGANIZATION_DID
-          value: did:web:did-provider.127.0.0.1.nip.io
+          value: did:web:mp-operations.org
       ingress:
         enabled: true
         annotations:
+          # without this traefik creates no HTTPS router and every https:// call 404s
+          traefik.ingress.kubernetes.io/router.tls: "true"
           cert-manager.io/cluster-issuer: "selfsigned-issuer"
           cert-manager.io/private-key-algorithm: "ECDSA"
           cert-manager.io/common-name: "pap-provider.127.0.0.1.nip.io"
@@ -257,7 +276,7 @@ did:
   enabled: true
   config:
     server:
-      hostUrl: "http://did-provider.127.0.0.1.nip.io"
+      hostUrl: "http://mp-operations.org"
       certPath: "/certs/tls.crt"
     generateKey:
       enabled: true
@@ -270,7 +289,7 @@ did:
   volumes:
     - name: certs
       secret:
-        secretName: did-provider.127.0.0.1.nip.io-tls
+        secretName: mp-operations.org-tls
         items:
           - key: tls.crt
             path: tls.crt
@@ -285,17 +304,17 @@ did:
       traefik.ingress.kubernetes.io/router.tls: "true"
       cert-manager.io/cluster-issuer: "selfsigned-issuer"
       cert-manager.io/private-key-algorithm: "ECDSA"
-      cert-manager.io/common-name: "did-provider.127.0.0.1.nip.io"
-      cert-manager.io/alt-names: "did-provider.127.0.0.1.nip.io"
+      cert-manager.io/common-name: "mp-operations.org"
+      cert-manager.io/alt-names: "mp-operations.org"
     hosts:
-      - host: did-provider.127.0.0.1.nip.io
+      - host: mp-operations.org
         paths:
           - path: /
             pathType: ImplementationSpecific
     tls:
-      - secretName: did-provider.127.0.0.1.nip.io-tls
+      - secretName: mp-operations.org-tls
         hosts:
-          - did-provider.127.0.0.1.nip.io
+          - mp-operations.org
 dataSpaceConfig:
   enabled: true
   serviceType: ClusterIP
@@ -313,6 +332,8 @@ scorpio:
     enabled: true
     # only to make it available for the test initialization
     annotations:
+      # without this traefik creates no HTTPS router and every https:// call 404s
+      traefik.ingress.kubernetes.io/router.tls: "true"
       cert-manager.io/cluster-issuer: "selfsigned-issuer"
       cert-manager.io/private-key-algorithm: "ECDSA"
       cert-manager.io/common-name: "scorpio-provider.127.0.0.1.nip.io"
@@ -361,6 +382,8 @@ tm-forum-api:
   ingress:
     enabled: true
     annotations:
+      # without this traefik creates no HTTPS router and every https:// call 404s
+      traefik.ingress.kubernetes.io/router.tls: "true"
       cert-manager.io/cluster-issuer: "selfsigned-issuer"
       cert-manager.io/private-key-algorithm: "ECDSA"
       cert-manager.io/common-name: "tm-forum-api.127.0.0.1.nip.io"

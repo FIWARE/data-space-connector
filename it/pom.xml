@@ -432,6 +432,22 @@
             </build>
         </profile>
         <profile>
+            <id>eidas-test</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-failsafe-plugin</artifactId>
+                        <configuration>
+                            <systemPropertyVariables>
+                                <cucumber.filter.tags>@eidas</cucumber.filter.tags>
+                            </systemPropertyVariables>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+        <profile>
             <id>consent-test</id>
             <build>
                 <plugins>

@@ -108,7 +108,7 @@ public class StandardStepDefinitions extends StepDefintions {
      * reads (without it no privacy notice can be projected) and the trusted issuers the facade and the
      * consent-filter plugin authenticate with. Those scenarios clean up their own fixtures instead.
      */
-    @Before("not @consent")
+    @Before("not @consent and not @eidas")
     public void setup() throws Exception {
         CryptoIntegration.init(this.getClass().getClassLoader());
         Security.addProvider(new BouncyCastleProvider());
