@@ -668,7 +668,13 @@ extraManifests:
           not just any CA from a run of the tool. Both are regenerated together; to re-derive it from the
           keystore that is actually deployed:
 
-            python3 -c "import re,base64;print(base64.b64decode(re.search(r'keystore\.p12:\s*([A-Za-z0-9+/=]+)',open('k3s/consumer-eidas.yaml').read()).group(1)).hex())" >/dev/null
+            sed -n 's/^ *keystore\.p12: //p' k3s/consumer-eidas.yaml | tr -d ' \n' | base64 -d > keystore.p12
+            # -cacerts emits [intermediate, root] in that order, so take the LAST certificate;
+            # piping straight into `openssl x509` would silently give you the intermediate.
+            openssl pkcs12 -in keystore.p12 -nokeys -cacerts -passin pass:password -legacy \
+              | awk '/BEGIN CERTIFICATE/{c=""} {c=c $0 ORS} /END CERTIFICATE/{last=c} END{printf "%s", last}' \
+              | openssl x509 -outform DER | base64 -w0
+
             # or, straight from an issued credential:
             echo "$ELSI_CREDENTIAL" | cut -d. -f1 | tr '_-' '/+' | awk '{print $0"=="}' | base64 -d \
               | jq -r '.x5c[-1]'

@@ -37,6 +37,21 @@ Verified locally against:
 
 ### 1. eIDAS validation never actually runs in the demo or the integration test
 
+> **Correction (this finding was overstated).** `@vramperez` is right in
+> [r4103483710](https://github.com/FIWARE/data-space-connector/pull/212#discussion_r4103483710):
+> there are **two** mechanisms, and I only looked at one.
+> `JWTProofChecker.verifyElsiJWT` validates the `x5c` chain against the trust store for any issuer
+> whose `iss` is a `did:elsi:` DID, in any format, with no `eidasConfig` — `verifier.go:457` injects
+> the store into the global proof checker whenever `eidas.enabled` is true. The overlay's issuer
+> *is* `did:elsi:VATDE-1234567`, so the mock LOTL was **not** inert and an empty trust store would
+> have failed the flow with `eidas_trust_store_required_for_did_elsi`.
+>
+> What remains true: `EidasValidationService` (the SD-JWT + `eidasConfig` path) never ran, so the
+> per-type `allowedCountries` / `requireQualified` filters were unreachable, `did:web` and HTTPS
+> issuers would have had no validation at all, and nothing in the suite could distinguish a working
+> trust list from a skipped check. The fix stands on those grounds, not on the original claim.
+
+
 This is the central problem: the feature the PR is built around is not exercised by anything it adds.
 
 `EidasValidationService.ValidateVC` (`verifier/eidas_validation.go:110`) gates on **per-credential-type**

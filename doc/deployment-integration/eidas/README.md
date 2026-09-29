@@ -10,24 +10,37 @@ VCVerifier. The configuration surface documented here needs
 first release whose vcverifier subchart spells the LOTL override `lotlUrl`, the
 key the server actually reads.
 
-eIDAS 2.0 verification works with any DID method or credential issuance
-approach that includes an `x5c` certificate chain header in issued JWTs:
+## Two mechanisms, different triggers
 
-- **`did:elsi`** -- the
-  [`did:elsi` DID method](https://alastria.github.io/did-method-elsi/)
-  ties organization identity directly to an eIDAS-qualified certificate
-  via the `organizationIdentifier` (OID 2.5.4.97) in the Subject DN.
-- **`did:web`** -- credentials issued under a `did:web` DID can carry
-  an `x5c` header with an eIDAS certificate chain, enabling the same
-  PKIX trust list validation.
-- **HTTPS-issued credentials** -- any credential that includes the `x5c`
-  JWT header can be validated against the EU Trusted Lists, regardless
-  of the issuer identifier scheme.
+Carrying an `x5c` header is **not** by itself enough to get a credential
+validated against the trust list. VCVerifier has two separate paths, and which
+one applies depends on the issuer and the credential format:
 
-In all cases, VCVerifier extracts the `x5c` header, validates the
-certificate chain against the trust store built from the EU List of
-Trusted Lists (LOTL), and (for `did:elsi`) additionally verifies that
-the certificate's `organizationIdentifier` matches the DID.
+| | Trigger | Covers | Needs `eidasConfig`? | Formats |
+|---|---|---|---|---|
+| **1. `did:elsi` proof check** | `iss` is a `did:elsi:` DID | The issuer-signed JWT's `x5c` chain, plus an `organizationIdentifier` (OID 2.5.4.97) ↔ DID match | No | Any |
+| **2. `EidasValidationService`** | The credential type carries `eidasConfig.enabled: true` | The credential's `x5c` chain, with per-type country and qualified-service filters | Yes | **SD-JWT only** |
+
+Both require the verifier-wide `eidas` block to be enabled -- that is what
+builds the trust store.
+
+What this means in practice:
+
+- **`did:elsi` issuers** get trust-list validation automatically, for any
+  format, as soon as `eidas.enabled` is `true`. If the trust store is missing,
+  the credential is rejected with `eidas_trust_store_required_for_did_elsi`
+  rather than silently accepted.
+- **`did:web` and HTTPS issuers** resolve their signing key from the DID
+  document or the issuer's JWKS. The `x5c` header, if present, is **ignored**
+  by the proof check. The only way such a credential is validated against the
+  trust list is mechanism 2 -- which means it has to be an SD-JWT *and* carry
+  `eidasConfig`.
+- **Mechanism 2 adds per-type control** (`allowedCountries`,
+  `requireQualified`) that mechanism 1 has no equivalent for: the `did:elsi`
+  path searches all countries and applies no qualified-service filter.
+
+The two compose. A `did:elsi` SD-JWT with `eidasConfig` goes through both, and
+both have to pass.
 
 eIDAS support is **disabled by default** and is strictly opt-in.
 
@@ -36,6 +49,7 @@ eIDAS support is **disabled by default** and is strictly opt-in.
 <details>
 <summary><strong>Table of Contents</strong></summary>
 
+- [Two mechanisms, different triggers](#two-mechanisms-different-triggers)
 - [Architecture](#architecture)
   - [Supported DID Methods and Issuance Approaches](#supported-did-methods-and-issuance-approaches)
   - [Validation Flow](#validation-flow)
@@ -72,19 +86,19 @@ eIDAS 2.0 support in the Data Space Connector involves two roles:
 
 ### Supported DID Methods and Issuance Approaches
 
-VCVerifier's eIDAS trust list validation is not limited to a single DID
-method. Any credential that carries an `x5c` JWT header with a valid eIDAS
-certificate chain can be validated:
+Trust-list validation is reachable from more than one DID method, but not on
+the same terms -- see [Two mechanisms](#two-mechanisms-different-triggers):
 
-| Approach | Identifier Example | Additional Check |
+| Approach | Identifier Example | How the chain gets validated |
 |----------|-------------------|------------------|
-| `did:elsi` | `did:elsi:VATDE-1234567` | `organizationIdentifier` (OID 2.5.4.97) in the leaf certificate must match the DID |
-| `did:web` | `did:web:example.com` | Standard `did:web` resolution + `x5c` PKIX chain validation |
-| HTTPS | `https://issuer.example.com` | `x5c` PKIX chain validation only |
+| `did:elsi` | `did:elsi:VATDE-1234567` | Automatically, via the `did:elsi` proof check. Also requires the leaf's `organizationIdentifier` (OID 2.5.4.97) to match the DID. `eidasConfig` optionally layers per-type filters on top. |
+| `did:web` | `did:web:example.com` | **Only** via `eidasConfig` on an SD-JWT credential type. The signing key comes from the DID document and the `x5c` header is otherwise ignored. |
+| HTTPS | `https://issuer.example.com` | **Only** via `eidasConfig` on an SD-JWT credential type. The signing key comes from the issuer's JWKS. |
 
 The examples in this document use `did:elsi` because it is the most
-tightly coupled with eIDAS certificates, but the PKIX validation itself
-applies to all approaches.
+tightly coupled with eIDAS certificates. For `did:web` and HTTPS issuers, a
+credential in any other format -- or without `eidasConfig` -- gets no
+trust-list validation at all, however complete its `x5c` chain is.
 
 ### Validation Flow
 
@@ -187,7 +201,7 @@ All values live under `decentralizedIam.vcAuthentication.vcverifier.deployment.e
 
 | Setting | Production | Local / Test |
 |---------|-----------|--------------|
-| `revocationCheck` | `"soft"` or `"hard"` | `"off"` (test certs lack real OCSP/CRL endpoints) |
+| `revocationCheck` | `"soft"` or `"hard"` | `"off"` -- test certs lack reachable OCSP/CRL endpoints. This does *not* make a self-signed chain trusted; that needs the mock LOTL. |
 | `allowStaleTrustLists` | `false` | `true` (acceptable when testing offline) |
 | `countries` | filter to relevant countries | `[]` (all) |
 | `lotlUrl` | default (official EU LOTL) | the in-cluster mock, see [Demo Flow](#demo-flow) |
@@ -392,8 +406,12 @@ generated using the [FIWARE/eIDAS tool](https://github.com/FIWARE/eIDAS).
 
 For VCVerifier's PKIX validation to succeed, the leaf certificate must:
 
-- Be signed by a CA that appears in one of the EU Trusted Lists (or, for
-  testing, be self-signed with `revocationCheck: "off"`).
+- Chain up to a CA that appears in one of the EU Trusted Lists. `revocationCheck`
+  has no bearing on this: turning it `"off"` only skips the OCSP/CRL lookup, it
+  does **not** make an untrusted or self-signed chain acceptable. A locally
+  generated test CA is in no national list, so a local deployment has to put its
+  root into a mock trust list --
+  see [Mocking the EU Trusted List](#mocking-the-eu-trusted-list-local-only).
 - Include the full certificate chain in the `x5c` JWT header when the
   credential is issued.
 - When using `did:elsi`: contain the `organizationIdentifier` attribute
@@ -403,24 +421,25 @@ For VCVerifier's PKIX validation to succeed, the leaf certificate must:
 
 ## Turning Validation On: `eidasConfig` per Credential Type
 
-**There is no global "validate everything" mode.** The `eidas` block from the
-previous section starts the trust-list fetcher and builds the trust store; it
-does not by itself cause a single credential to be checked. What decides that is
-`eidasConfig` on the individual credential type in the credentials
-configuration.
+The `eidas` block from the previous section starts the trust-list fetcher and
+builds the trust store. For a **`did:elsi`** issuer that is already enough: the
+proof check validates the chain automatically. For **every other issuer scheme**
+it is not -- `EidasValidationService` looks its configuration up per credential
+type, and for a type that carries none it returns pass-through without touching
+the trust store.
 
-`EidasValidationService` looks the configuration up per credential type, and for
-a type that carries none it returns pass-through without touching the trust
-store. A deployment that sets `eidas.enabled: true` and nothing else therefore
-fetches the EU Trusted Lists on every refresh and never consults them -- and,
-because nothing fails, looks exactly like a working one.
+So a deployment whose issuers are `did:web` or HTTPS, with `eidas.enabled: true`
+and no `eidasConfig`, fetches the EU Trusted Lists on every refresh and never
+consults them -- and, because nothing fails, looks exactly like a working one.
+`eidasConfig` is also the only way to get per-type country and qualified-service
+filters, which the `did:elsi` path does not offer.
 
-Both settings are required, and they are not interchangeable:
+The two settings are not interchangeable:
 
 | Setting | Scope | What it does |
 |---|---|---|
-| `...vcverifier.deployment.eidas.enabled` | verifier-wide | Starts the trust-list fetcher and builds the trust store. **Precondition.** With it `false`, a per-credential `eidasConfig` is rejected at config-validation time with HTTP 400. |
-| `eidasConfig.enabled` | one credential type | Makes the verifier actually validate that type's `x5c` chain against the trust store. |
+| `...vcverifier.deployment.eidas.enabled` | verifier-wide | Starts the trust-list fetcher and builds the trust store. **Precondition for both mechanisms.** With it `false`, a `did:elsi` credential is rejected with `eidas_trust_store_required_for_did_elsi`, and a per-credential `eidasConfig` is rejected at config-validation time with HTTP 400. |
+| `eidasConfig.enabled` | one credential type | Runs `EidasValidationService` on that type: required for non-`did:elsi` issuers, and the only source of per-type `allowedCountries` / `requireQualified` filters. SD-JWT only. |
 
 `eidasConfig` is set on the credential inside the verifier's service
 registration (or directly in the

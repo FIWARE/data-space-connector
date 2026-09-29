@@ -27,14 +27,16 @@ against it with standard PKIX chain building, consulting OCSP/CRL separately.
 Use VCVerifier's built-in trust-list validation. Deprecate `decentralizedIam.vcAuthentication.dss`
 and stop deploying the DSS sidecar in the shipped overlays.
 
-Validation is switched on by **two** settings, both required:
+`...vcverifier.deployment.eidas.enabled` builds the trust store. Two mechanisms then consult it:
 
-- `...vcverifier.deployment.eidas.enabled` builds the trust store. It is verifier-wide and is only a
-  precondition.
-- `eidasConfig.enabled` on an individual credential type makes that type's chain actually get
-  checked.
+- the **`did:elsi` proof check**, triggered by the issuer DID alone, for any credential format; and
+- **`EidasValidationService`**, triggered by `eidasConfig.enabled` on a credential type, SD-JWT only,
+  and the only source of per-type country and qualified-service filters.
 
-Credentials subject to eIDAS validation are issued as `dc+sd-jwt`.
+`did:web` and HTTPS issuers resolve their signing key from the DID document or JWKS and their `x5c`
+header is ignored by the proof check, so for them the second mechanism is the only one available.
+
+The shipped overlays issue `dc+sd-jwt` with `eidasConfig`, so both mechanisms apply.
 
 ## Consequences
 
@@ -44,18 +46,20 @@ means the verifier now depends on reaching `ec.europa.eu` and every national lis
 so an air-gapped or proxied deployment has to allow that egress — the local overlay exempts the
 trust-list host from the squid proxy for the same reason.
 
-**A deployment can be silently non-validating.** Because the per-type `eidasConfig` is what triggers
-validation and its absence is a pass-through, a deployment that enables only the global block
-fetches the lists forever and consults them never, with nothing failing to indicate it. This is the
-single biggest operational hazard of the design, and it is why the shipped overlay carries a
-scope whose country filter matches no trust service and the integration test asserts that the same
-credential is refused there. A deployment that cannot demonstrate a refusal has not demonstrated
-validation.
+**A non-`did:elsi` deployment can be silently non-validating.** For `did:web` and HTTPS issuers the
+per-type `eidasConfig` is the only trigger and its absence is a pass-through, so enabling just the
+global block fetches the lists forever and consults them never, with nothing failing to indicate it.
+`did:elsi` deployments are not exposed to this — the proof check runs on the issuer DID alone — but
+they also get no per-type filters. This asymmetry is the main operational hazard of the design, and
+it is why the shipped overlay carries a scope whose country filter matches no trust service and the
+integration test asserts that the same credential is refused there. A deployment that cannot
+demonstrate a refusal has not demonstrated that mechanism.
 
-**SD-JWT becomes mandatory for eIDAS credentials.** `EidasValidationService` rejects any other
+**SD-JWT becomes mandatory for the per-type mechanism.** `EidasValidationService` rejects any other
 format outright rather than skipping the check, so `jwt_vc_json` is not an option for a credential
-type with `eidasConfig` enabled. Existing eIDAS deployments on `jwt_vc_json` must migrate the format
-and switch their DCQL from `meta.type_values` to `meta.vct_values`.
+type with `eidasConfig` enabled. A `did:elsi` deployment may stay on `jwt_vc_json` and rely on the
+proof check alone; anything wanting per-type filters, or any non-`did:elsi` issuer, must migrate the
+format and switch its DCQL from `meta.type_values` to `meta.vct_values`.
 
 **Rollback is a dependency pin, not a values change.** vcverifier 4.13.0 removed
 `verifier.elsi.validationEndpoint` entirely, so reverting to DSS requires pinning
