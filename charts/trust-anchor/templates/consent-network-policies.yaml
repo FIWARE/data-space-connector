@@ -1,0 +1,80 @@
+{{- if and .Values.consentManagement.enabled .Values.consentManagement.networkPolicy.enabled }}
+{{- /*
+  Isolate the consent-manager and consent-facade so they are reachable only by their intended
+  in-cluster peers. Both are ClusterIP services with no ingress, but ClusterIP has no namespace
+  isolation - without these policies any pod in any namespace (e.g. a provider's APISIX consent
+  plugin) could reach them directly, bypassing the APISIX facade that enforces the participant
+  auth + consent-key injection. The `from` selectors are pod-selectors, so they match only pods in
+  this namespace; cross-namespace sources are denied. Requires a NetworkPolicy-enforcing CNI.
+*/}}
+{{- /* nil-safe: the subchart values are not always coalesced into this context */}}
+{{- $manager := (index .Values "consent-manager") | default dict }}
+{{- if $manager.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: consent-manager-ingress
+  namespace: {{ $.Release.Namespace | quote }}
+  labels:
+    {{ include "trust-anchor.labels" . | nindent 4 }}
+spec:
+  # the consent-manager accepts traffic only from the authority APISIX - both the participant facade
+  # route (/consent-manager/*) and the allow-listed end-user routes (/consent-user/...) enter through it.
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: consent-manager
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: apisix
+      ports:
+        - port: {{ $manager.port | default .Values.consentManagement.networkPolicy.consentManagerPort }}
+{{- end }}
+{{- /* nil-safe: the subchart values are not always coalesced into this context */}}
+{{- $facade := (index .Values "consent-facade") | default dict }}
+{{- if $facade.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: consent-facade-ingress
+  namespace: {{ $.Release.Namespace | quote }}
+  labels:
+    {{ include "trust-anchor.labels" . | nindent 4 }}
+spec:
+  # the consent-facade accepts traffic only from the consent-manager (the contract-service API +
+  # self-description dereference).
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: consent-facade
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: consent-manager
+      ports:
+        - port: {{ $facade.port | default .Values.consentManagement.networkPolicy.consentFacadePort }}
+    {{- if ($facade.ingress | default dict).enabled }}
+    # The facade publishes its self-description endpoints (see the facade ingress),
+    # so the ingress controller must reach it. Which PATHS are public is decided by
+    # the ingress (only /participants and /catalog); a NetworkPolicy is L3/L4 and
+    # cannot express that, so this rule intentionally admits the controller only -
+    # not arbitrary pods - and the contract endpoints stay unpublished.
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.consentManagement.networkPolicy.ingressController.namespace }}
+          podSelector:
+            matchLabels:
+              {{- toYaml .Values.consentManagement.networkPolicy.ingressController.podLabels | nindent 14 }}
+      ports:
+        - port: {{ $facade.port | default .Values.consentManagement.networkPolicy.consentFacadePort }}
+    {{- end }}
+{{- end }}
+{{- end }}

@@ -68,8 +68,15 @@ jobs:
           title: ${{ needs.generate-version.outputs.version }}
 
   oci-release:
-    name: Publish OCI snapshot
+    name: Publish OCI snapshot (${{ matrix.chart }})
     runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        chart:
+          - data-space-connector
+          - trust-anchor
 
     steps:
       - uses: actions/checkout@v5
@@ -86,13 +93,14 @@ jobs:
       - name: Compute snapshot version
         id: version
         run: |
-          CHART_VERSION=$(grep '^version:' charts/data-space-connector/Chart.yaml | awk '{print $2}')
+          CHART_VERSION=$(grep '^version:' charts/${{ matrix.chart }}/Chart.yaml | awk '{print $2}')
           SNAPSHOT_VERSION="${CHART_VERSION}-${{ steps.pr_number.outputs.nr }}"
           echo "snapshot-version=$SNAPSHOT_VERSION" >> $GITHUB_OUTPUT
-          sed -i "s/^version: .*/version: ${SNAPSHOT_VERSION}/" charts/data-space-connector/Chart.yaml
+          sed -i "s/^version: .*/version: ${SNAPSHOT_VERSION}/" charts/${{ matrix.chart }}/Chart.yaml
 
       - name: Add Helm repositories
         run: |
+          helm repo add fiware https://fiware.github.io/helm-charts
           helm repo add fiware-iam https://fiware.github.io/decentralized-iam
           helm repo add mongodb https://mongodb.github.io/helm-charts
           helm repo add hashicorp https://helm.releases.hashicorp.com
@@ -101,15 +109,16 @@ jobs:
           helm repo add grafana-community https://grafana-community.github.io/helm-charts
           helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm-charts
           helm repo add grafana https://grafana.github.io/helm-charts
+          helm repo add postgres-operator https://opensource.zalando.com/postgres-operator/charts/postgres-operator
 
       - name: Build dependencies
-        run: helm dependency update charts/data-space-connector
+        run: helm dependency update charts/${{ matrix.chart }}
 
       - name: Package chart
-        run: helm package charts/data-space-connector
+        run: helm package charts/${{ matrix.chart }}
 
       - name: Login to quay.io
         run: helm registry login quay.io -u ${{ secrets.QUAY_USERNAME }} -p ${{ secrets.QUAY_PASSWORD }}
 
       - name: Push OCI artifact
-        run: helm push data-space-connector-${{ steps.version.outputs.snapshot-version }}.tgz oci://quay.io/fiware/helm-charts
+        run: helm push ${{ matrix.chart }}-${{ steps.version.outputs.snapshot-version }}.tgz oci://quay.io/fiware/helm-charts

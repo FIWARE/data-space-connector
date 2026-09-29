@@ -33,6 +33,9 @@ spec:
         app.kubernetes.io/instance: {{ .Release.Name }}
     spec:
       restartPolicy: Never
+      {{- with .Values.tracing.priorityClassName }}
+      priorityClassName: {{ . | quote }}
+      {{- end }}
       containers:
         - name: register-rule
           image: bitnami/kubectl:latest

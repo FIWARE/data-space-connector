@@ -37,6 +37,23 @@ Feature: The local deployment should support marketplace buying and service acce
     Then Fancy Marketplace operator can create a K8S cluster with 3 nodes.
     And Fancy Marketplace operator cannot create a K8S cluster with 4 nodes.
 
+  Scenario: Consumer buys access to a product composed of a service specification.
+    # The policy lives on the ServiceSpecification, not on the ordered ProductSpecification:
+    # an access policy protects an API, and in TMForum an API is a ServiceSpecification.
+    Given M&P Operations is registered as a participant in the data space.
+    And Fancy Marketplace is registered as a participant in the data space.
+    And M&P Operations allows self-registration of organizations.
+    And M&P Operations allows to buy its offerings.
+    When The provider creates a K8S Small service specification with the cluster policy.
+    And The provider creates a product specification composed of the service specification.
+    And The provider creates a product offering for the composed specification.
+    And Fancy Marketplace issues a user credential to its employee.
+    And Fancy Marketplace issues an operator credential to its employee.
+    And Fancy Marketplace representative registers at M&P Operations.
+    And Fancy Marketplace representative buys the first available offering.
+    Then Fancy Marketplace operator can create a K8S cluster with 3 nodes.
+    And Fancy Marketplace operator cannot create a K8S cluster with 4 nodes.
+
   Scenario: Consumer buys access to full offering and can create unrestricted clusters.
     Given M&P Operations is registered as a participant in the data space.
     And Fancy Marketplace is registered as a participant in the data space.

@@ -39,5 +39,8 @@ spec:
         {{- toYaml $tmf.registration.extraVolumes | nindent 8 }}
         {{- end }}
       restartPolicy: {{ $tmf.registration.restartPolicy }}
+      {{- with $tmf.registration.priorityClassName }}
+      priorityClassName: {{ . | quote }}
+      {{- end }}
   backoffLimit: {{ $tmf.registration.backoffLimit }}
 {{- end }}

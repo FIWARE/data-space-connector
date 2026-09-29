@@ -74,6 +74,8 @@ The [Contract Management](https://github.com/FIWARE/contract-management) compone
 
 > **Note:** If the data space uses a [central marketplace](../../../CENTRAL_MARKETPLACE.md), the Contract Management component requires specific configuration to work with it. See the [Central Marketplace documentation](../../../CENTRAL_MARKETPLACE.md) for details on how to configure Contract Management in that scenario.
 
+> **Note:** The policies and the credential configuration are read from the ordered `ProductSpecification` by default. A product can instead be composed of `ServiceSpecification`s that carry their own policies - an access policy protects an API, and in TMForum an API is a `ServiceSpecification`. See [Authoring a composed ProductSpecification](./COMPOSED_SPECIFICATIONS.md).
+
 ### Marketplace (BAE)
 
 A provider can offer its products and services through a marketplace in two ways:
@@ -478,7 +480,7 @@ For other deployment scenarios, the base `provider.yaml` can be extended with ad
 
 | Overlay | File | Description |
 |---------|------|-------------|
-| **ELSI** | [k3s/provider-elsi.yaml](../../../../k3s/provider-elsi.yaml) | Configuration for deployments compliant with the [ELSI](https://github.com/FIWARE/elsi) trust framework |
+| **eIDAS / ELSI** | [k3s/provider-eidas.yaml](../../../../k3s/provider-eidas.yaml) | Configuration for deployments compliant with the [ELSI](https://github.com/FIWARE/elsi) trust framework, including [eIDAS 2.0 trust list validation](../../eidas/README.md) via VCVerifier's built-in PKIX chain verification against the EU Trusted Lists |
 | **Gaia-X** | [k3s/provider-gaia-x.yaml](../../../../k3s/provider-gaia-x.yaml) | Configuration for [Gaia-X](https://gaia-x.eu/) compliant deployments |
 | **DSP** | [k3s/dsp-provider.yaml](../../../../k3s/dsp-provider.yaml) | Enables the [Dataspace Protocol (DSP)](https://docs.internationaldataspaces.org/ids-knowledgebase/dataspace-protocol) connector on the provider side |
 
@@ -488,7 +490,7 @@ For example, to deploy a provider with ELSI compliance:
 helm install provider fiware/data-space-connector \
   -n provider \
   -f k3s/provider.yaml \
-  -f k3s/provider-elsi.yaml
+  -f k3s/provider-eidas.yaml
 ```
 
 ## Production considerations

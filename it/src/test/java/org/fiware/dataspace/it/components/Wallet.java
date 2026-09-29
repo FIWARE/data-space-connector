@@ -69,6 +69,19 @@ public class Wallet {
     }
 
     /**
+     * The holder DID of this wallet - the {@code did:key} derived from its signing key.
+     *
+     * <p>It is the identity every presentation is made with, so it is also the identity a data
+     * subject is known by: the value a {@code dataOwner} attribute carries and the {@code sub} of the
+     * access tokens the wallet obtains.
+     *
+     * @return the holder DID
+     */
+    public String getDid() {
+        return did;
+    }
+
+    /**
      * Retrieves a previously stored credential by its ID.
      *
      * @param credentialId the credential configuration ID used when the credential was issued

@@ -32,6 +32,8 @@ keycloak:
   ingress:
     enabled: true
     annotations:
+      # without this traefik creates no HTTPS router and every https:// call 404s
+      traefik.ingress.kubernetes.io/router.tls: "true"
       cert-manager.io/cluster-issuer: "selfsigned-issuer"
       cert-manager.io/private-key-algorithm: "ECDSA"
       cert-manager.io/alt-names: "keycloak-consumer.127.0.0.1.nip.io"
@@ -153,7 +155,9 @@ keycloak:
     did: did:web:fancy-marketplace.biz
     keyAlgorithm: ES256
   realm:
-    frontendUrl: https://keycloak-consumer.127.0.0.1.nip.io:8080
+    # no port: 8080 is the http port, so an https frontendUrl carrying it makes every URL
+    # keycloak advertises - issuer, credential offer, oid4vc endpoints - unreachable
+    frontendUrl: https://keycloak-consumer.127.0.0.1.nip.io
     import: true
     name: test-realm
     clientRoles: |
@@ -337,9 +341,10 @@ registration:
   enabled: true
   configMap: consumer-til-registration
   til: http://trusted-issuers-list.provider.svc.cluster.local:8080
-  did: did:web:fancy-marketplace.biz
-  credentialTypes:
-    - UserCredential
+  issuer:
+    - did: did:web:fancy-marketplace.biz
+      credentialTypes:
+        - UserCredential
 did:
   enabled: true
   config:

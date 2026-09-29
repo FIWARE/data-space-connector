@@ -1,0 +1,90 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/helm-unittest/helm-unittest/main/schema/helm-testsuite.json
+#
+# ---------------------------------------------------------------------------
+# Helm-unittest suite for the eIDAS 2.0 configuration surface.
+#
+# Two things are pinned here.
+#
+# 1. The `eidas` values block reaches the vcverifier subchart untouched, and
+#    stays off by default so an existing release upgrades to a no-op. The
+#    subchart renders it with a bare `toYaml`, so the umbrella's job is only to
+#    carry the right keys - in particular `lotlUrl`, which is what the server
+#    reads and what the subchart has declared since decentralized-iam 2.1.25.
+#
+# 2. `jades.enabled` reaches a credential's client scope WITHOUT the `vc.`
+#    prefix that `dsc.vcClientScopes` puts on every other attribute. The
+#    keycloak-jades-vc-issuer plugin reads it raw, so a prefix silently
+#    disables the override and the plugin falls back to its per-format default.
+#
+# The `eidas` block itself lives in a subchart, so it is asserted through the
+# realm ConfigMap's sibling templates rather than here; `helm template` against
+# k3s/provider-eidas.yaml in CI covers the rendered vcverifier configmap.
+# ---------------------------------------------------------------------------
+suite: eIDAS 2.0 configuration surface
+templates:
+  - templates/realm.yaml
+tests:
+  # ==========================================================================
+  # jades.enabled must not be vc.-prefixed
+  # ==========================================================================
+
+  - it: should pass jades.enabled through to the client scope unprefixed
+    set:
+      keycloak.realm.name: test-realm
+      keycloak.realm.verifiableCredentials:
+        user-credential:
+          attributes:
+            format: "dc+sd-jwt"
+            verifiable_credential_type: "UserCredential"
+            jades.enabled: "true"
+    asserts:
+      - matchRegex:
+          path: data["test-realm-realm.json"]
+          pattern: '"jades\.enabled": *"true"'
+      # the prefixed spelling is what the plugin cannot see
+      - notMatchRegex:
+          path: data["test-realm-realm.json"]
+          pattern: '"vc\.jades\.enabled"'
+
+  - it: should still vc.-prefix ordinary credential attributes
+    set:
+      keycloak.realm.name: test-realm
+      keycloak.realm.verifiableCredentials:
+        user-credential:
+          attributes:
+            format: "dc+sd-jwt"
+            verifiable_credential_type: "UserCredential"
+    asserts:
+      - matchRegex:
+          path: data["test-realm-realm.json"]
+          pattern: '"vc\.format": *"dc\+sd-jwt"'
+      - matchRegex:
+          path: data["test-realm-realm.json"]
+          pattern: '"vc\.verifiable_credential_type": *"UserCredential"'
+
+  - it: should not double-prefix an attribute the user already wrote prefixed
+    set:
+      keycloak.realm.name: test-realm
+      keycloak.realm.verifiableCredentials:
+        user-credential:
+          attributes:
+            vc.format: "dc+sd-jwt"
+    asserts:
+      - matchRegex:
+          path: data["test-realm-realm.json"]
+          pattern: '"vc\.format": *"dc\+sd-jwt"'
+      - notMatchRegex:
+          path: data["test-realm-realm.json"]
+          pattern: '"vc\.vc\.format"'
+
+  - it: should not invent a jades.enabled attribute when none is configured
+    set:
+      keycloak.realm.name: test-realm
+      keycloak.realm.verifiableCredentials:
+        user-credential:
+          attributes:
+            format: "dc+sd-jwt"
+    asserts:
+      - notMatchRegex:
+          path: data["test-realm-realm.json"]
+          pattern: 'jades\.enabled'

@@ -16,6 +16,7 @@ specific flows and its deployment and integration with other frameworks.
 - [Details about flows and interfaces](#details-about-flows-and-interfaces)
   - [Contract Management](#contract-management)
   - [M2M Service Interaction](#m2m-service-interaction)
+  - [Consent Management](#consent-management)
 - [Deployment / Integration](#deployment--integration)
   - [Quick Start Guide](#quick-start-guide)
   - [Deployment by Role](#deployment-by-role)
@@ -23,6 +24,7 @@ specific flows and its deployment and integration with other frameworks.
   - [Packet Delivery Company (ArgoCD)](#packet-delivery-company-argocd)
   - [Running the EDC identity material in production](#running-the-edc-identity-material-in-production)
   - [Observability](#observability)
+  - [eIDAS 2.0 Compliance](#eidas-20-compliance)
   - [Integration with AWS Garnet Framework (formerly AWS Smart Territory Framework)](#integration-with-aws-garnet-framework-formerly-aws-smart-territory-framework)
 
 <!-- END doctoc generated TOC please keep comment here to allow auto update -->
@@ -51,6 +53,14 @@ More information can be found here:
 A detailed description about the steps to be performed in a Machine-To-Machine (M2M) service interaction 
 can be found here:
 * [Service Interaction (M2M)](./flows/service-interaction-m2m)
+
+### Consent Management
+
+Optional consent management (ISO/IEC TS 27560) - its architecture, trust model and the demo flow charts 
+(granting consent, consent-gated data access, authenticated projection) are documented here:
+* [Consent Management](./CONSENT_MANAGEMENT.md) - architecture, trust model, participant
+  authentication over OID4VP, and the end-to-end demo
+* [Architecture Decision Records](./adr/README.md)
 
 
 
@@ -108,6 +118,12 @@ Documentation for enabling distributed tracing across the FIWARE DSC using OpenT
 
 * [Distributed Tracing with OpenTelemetry](./deployment-integration/observability/README.md)
 * [Grafana Tempo Backend (In-Cluster)](./deployment-integration/observability/README.md#grafana-tempo-backend-in-cluster) -- Deploy Tempo and Grafana as optional subcharts for a turnkey trace-storage and visualisation stack with zero-config auto-wiring.
+
+### eIDAS 2.0 Compliance
+
+Documentation for enabling eIDAS 2.0 compliance through VCVerifier-native PKIX certificate chain validation against EU Trusted Lists. Covers `did:elsi`, `did:web`, and HTTPS-issued credentials, certificate generation for testing, and per-component configuration.
+
+* [eIDAS 2.0 Compliance](./deployment-integration/eidas/README.md)
 
 ### Integration with AWS Garnet Framework (formerly AWS Smart Territory Framework)
 

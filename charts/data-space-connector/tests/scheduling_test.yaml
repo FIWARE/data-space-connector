@@ -1,0 +1,179 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/helm-unittest/helm-unittest/main/schema/helm-testsuite.json
+#
+# ---------------------------------------------------------------------------
+# Helm-unittest suite for the pod scheduling fields on the chart's own
+# workloads.
+#
+# Every first-party Deployment takes the full block (nodeSelector, affinity,
+# tolerations, topologySpreadConstraints, priorityClassName); the Jobs take
+# priorityClassName only, since spreading a single-pod Job is meaningless.
+#
+# The fields are gated with `{{- with }}`, so leaving them unset must render
+# nothing at all — that is what keeps an upgrade of an existing release a
+# no-op. The first block below pins exactly that.
+# ---------------------------------------------------------------------------
+suite: Pod scheduling fields
+templates:
+  - templates/rainbow-deployment.yaml
+  - templates/dsconfig-deployment.yaml
+  - templates/status-list-server-deployment.yaml
+  - templates/status-list-server-redis.yaml
+  - templates/participant-registration-job.yaml
+  - templates/apisix-otel-global-rule-job.yaml
+tests:
+  # ==========================================================================
+  # Unset means absent
+  # ==========================================================================
+
+  - it: should not emit any scheduling field when none is configured
+    set:
+      rainbow.enabled: true
+    template: templates/rainbow-deployment.yaml
+    asserts:
+      - notExists:
+          path: spec.template.spec.priorityClassName
+      - notExists:
+          path: spec.template.spec.topologySpreadConstraints
+      - notExists:
+          path: spec.template.spec.nodeSelector
+      - notExists:
+          path: spec.template.spec.affinity
+      - notExists:
+          path: spec.template.spec.tolerations
+
+  - it: should not emit a priorityClassName on a Job when none is configured
+    set:
+      registration.enabled: true
+    template: templates/participant-registration-job.yaml
+    asserts:
+      - notExists:
+          path: spec.template.spec.priorityClassName
+
+  # ==========================================================================
+  # Deployments take the whole block
+  # ==========================================================================
+
+  - it: should set every scheduling field on a deployment
+    set:
+      rainbow.enabled: true
+      rainbow.priorityClassName: marketplace-critical
+      rainbow.nodeSelector:
+        disktype: ssd
+      rainbow.tolerations:
+        - key: dedicated
+          operator: Exists
+      rainbow.affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: kubernetes.io/os
+                    operator: In
+                    values: [linux]
+      rainbow.topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              app: rainbow
+    template: templates/rainbow-deployment.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.priorityClassName
+          value: marketplace-critical
+      - equal:
+          path: spec.template.spec.nodeSelector.disktype
+          value: ssd
+      - lengthEqual:
+          path: spec.template.spec.tolerations
+          count: 1
+      - exists:
+          path: spec.template.spec.affinity.nodeAffinity
+      - equal:
+          path: spec.template.spec.topologySpreadConstraints[0].topologyKey
+          value: topology.kubernetes.io/zone
+
+  - it: should set the priority class on the data-space-configuration server
+    set:
+      dataSpaceConfig.enabled: true
+      dataSpaceConfig.priorityClassName: marketplace-critical
+    template: templates/dsconfig-deployment.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.priorityClassName
+          value: marketplace-critical
+
+  - it: should set the priority class on the status-list server
+    set:
+      statusListServer.enabled: true
+      statusListServer.priorityClassName: stateful-critical
+    template: templates/status-list-server-deployment.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.priorityClassName
+          value: stateful-critical
+
+  # ==========================================================================
+  # The status-list redis ships a Deployment and a Service in one file, so the
+  # fields must land on the Deployment and leave the Service untouched.
+  # ==========================================================================
+
+  - it: should put the redis scheduling fields on the deployment, not the service
+    set:
+      statusListServer.enabled: true
+      statusListServer.redis.enabled: true
+      statusListServer.redis.priorityClassName: stateful-critical
+      statusListServer.redis.topologySpreadConstraints:
+        - maxSkew: 2
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: redis
+    template: templates/status-list-server-redis.yaml
+    asserts:
+      - hasDocuments:
+          count: 2
+      - equal:
+          path: spec.template.spec.priorityClassName
+          value: stateful-critical
+        documentSelector:
+          path: kind
+          value: Deployment
+      - equal:
+          path: spec.template.spec.topologySpreadConstraints[0].maxSkew
+          value: 2
+        documentSelector:
+          path: kind
+          value: Deployment
+      - isKind:
+          of: Service
+        documentIndex: 1
+
+  # ==========================================================================
+  # Jobs take priorityClassName only
+  # ==========================================================================
+
+  - it: should set the priority class on the participant registration job
+    set:
+      registration.enabled: true
+      registration.priorityClassName: marketplace-critical
+    template: templates/participant-registration-job.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.priorityClassName
+          value: marketplace-critical
+      - notExists:
+          path: spec.template.spec.topologySpreadConstraints
+
+  - it: should set the priority class on the otel global rule job
+    set:
+      tracing.enabled: true
+      decentralizedIam.enabled: true
+      tracing.priorityClassName: marketplace-critical
+    template: templates/apisix-otel-global-rule-job.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.priorityClassName
+          value: marketplace-critical

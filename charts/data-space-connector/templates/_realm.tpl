@@ -263,7 +263,8 @@ Build a list of client scopes derived from verifiableCredentials.
 Each VC entry generates one client scope with protocol "oid4vc" and the VC's
 attributes attached to the scope itself (the VC name is the scope name).
 Attribute keys are auto-prefixed with `vc.` if the user did not write them
-prefixed already. Map / slice attribute values are JSON-encoded.
+prefixed already, except for the keys listed in `dsc.vcScopeUnprefixedAttributes`.
+Map / slice attribute values are JSON-encoded.
 
 Defaults applied when the user does not set them explicitly:
   - `vc.issuer_did` is filled from `dsc.issuerDid` (elsi.did / keycloak.issuerDid / "${DID}").
@@ -279,7 +280,23 @@ Defaults applied when the user does not set them explicitly:
 ref: https://github.com/keycloak/keycloak/blob/26.6.1/server-spi-private/src/main/java/org/keycloak/models/oid4vci/CredentialScopeModel.java
 Skipped when clientScope.create is explicitly set to false.
 */}}
+{{/*
+Client-scope attribute keys that must reach the scope verbatim, without the `vc.` prefix
+`dsc.vcClientScopes` otherwise applies.
+
+They are not Keycloak `CredentialScopeModel` attributes, so nothing strips a prefix back off
+before they are read:
+
+  - `jades.enabled` is read by the keycloak-jades-vc-issuer plugin's `JAdESSigningPolicy`
+    through a raw `clientScope.getAttribute("jades.enabled")`. Prefixed, the plugin sees
+    nothing and silently falls back to its per-format default.
+*/}}
+{{- define "dsc.vcScopeUnprefixedAttributes" -}}
+jades.enabled
+{{- end -}}
+
 {{- define "dsc.vcClientScopes" -}}
+{{- $unprefixed := splitList "\n" (include "dsc.vcScopeUnprefixedAttributes" .) -}}
 {{- $scopes := list -}}
 {{- $defaultIssuerDid := include "dsc.issuerDid" . -}}
 {{- range $vcKey, $vcVal := .Values.keycloak.realm.verifiableCredentials | default dict -}}
@@ -292,7 +309,7 @@ Skipped when clientScope.create is explicitly set to false.
 {{- $val = $attrVal | toJson -}}
 {{- end -}}
 {{- $key := $attrKey -}}
-{{- if not (hasPrefix "vc." $attrKey) -}}
+{{- if not (or (hasPrefix "vc." $attrKey) (has $attrKey $unprefixed)) -}}
 {{- $key = printf "vc.%s" $attrKey -}}
 {{- end -}}
 {{- $_ := set $attrs $key (printf "%v" $val) -}}
