@@ -31,6 +31,7 @@ Feature: The eIDAS deployment issues credentials bound to an eIDAS certificate a
   # Without this, every assertion in this feature also holds when validation is skipped.
   Scenario: The trust list decides whether the credential is accepted.
     Given The did:elsi issuer is trusted by the provider.
+    And The provider advertises both the default and the unlisted-country eIDAS scope.
     When M&P Operations registers a policy to allow every participant access to its energy reports.
     And M&P Operations creates an energy report.
     And The eIDAS consumer employee receives a user credential.

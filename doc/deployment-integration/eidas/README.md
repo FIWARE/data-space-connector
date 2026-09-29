@@ -6,7 +6,7 @@ compliance through PKIX certificate chain validation against the
 [EU Trusted Lists (ETSI TS 119 612)](https://ec.europa.eu/digital-building-blocks/sites/display/DIGITAL/EU+Trusted+Lists).
 Starting with **VCVerifier >= 6.22.0** this validation is performed natively by
 VCVerifier. The configuration surface documented here needs
-**decentralized-iam >= 2.1.25**, which is what chart 10.9.0 pins: 2.1.25 is the
+**decentralized-iam >= 2.1.25**, which is what chart 10.10.0 pins: 2.1.25 is the
 first release whose vcverifier subchart spells the LOTL override `lotlUrl`, the
 key the server actually reads.
 
@@ -169,11 +169,13 @@ decentralizedIam:
 When `eidas.enabled` is `true`, VCVerifier fetches the EU LOTL at startup and
 builds a trust store from it. No external validation service is needed.
 
-> **This block on its own validates nothing.** It builds the trust store; what
-> makes a credential actually get checked against it is `eidasConfig` on the
-> credential type, and the credential has to be an SD-JWT. See
-> [Turning Validation On](#turning-validation-on-eidasconfig-per-credential-type)
-> -- that step is not optional.
+> **For a `did:elsi` issuer this is already enough** -- the proof check validates
+> the chain on the issuer DID alone. **For a `did:web` or HTTPS issuer it is
+> not:** their `x5c` header is ignored by the proof check, so the credential has
+> to be an SD-JWT carrying `eidasConfig` before anything is checked. See
+> [Turning Validation On](#turning-validation-on-eidasconfig-per-credential-type).
+> `eidasConfig` is also what adds per-type country and qualified-service filters,
+> which `did:elsi` deployments otherwise do not get.
 
 > **Note:** The `elsi.enabled` toggle is only needed when the issuer uses
 > the `did:elsi` DID method. For `did:web` or HTTPS-issued credentials,
@@ -887,13 +889,13 @@ EidasValidationService: issuer certificate does not chain to any trusted service
 ## Migration from DSS-based Approach
 
 If your deployment previously used the external `dss-validation-service` for
-eIDAS certificate validation (chart versions < 10.9.0), follow these steps to
+eIDAS certificate validation (chart versions < 10.10.0), follow these steps to
 migrate to VCVerifier-native trust list validation.
 
 ### Prerequisites
 
 - **decentralized-iam >= 2.1.25** (VCVerifier >= 6.23.1) — included in chart
-  version 10.9.0 and later. The feature itself exists from 2.1.23 /
+  version 10.10.0 and later. The feature itself exists from 2.1.23 /
   VCVerifier 6.22.0, but `lotlUrl` is only settable from 2.1.25.
 - Familiarity with your existing `dss:` configuration block and any custom
   overlays that deploy the DSS sidecar.
@@ -947,7 +949,7 @@ migrate to VCVerifier-native trust list validation.
 
 ### Before / After Comparison
 
-| Before (< 10.9.0) | After (>= 10.9.0) |
+| Before (< 10.10.0) | After (>= 10.10.0) |
 |---|---|
 | `decentralizedIam.vcAuthentication.dss` block with DSS endpoint URL | `decentralizedIam.vcAuthentication.vcverifier.deployment.eidas` block |
 | External `dss-validation-service` Deployment + Service | No external service — VCVerifier validates natively |

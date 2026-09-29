@@ -289,10 +289,35 @@ public class EidasStepDefinitions extends StepDefintions {
                 });
     }
 
+    /**
+     * Guards the negative case below. The verifier passes an explicitly supplied {@code scope}
+     * straight through without checking that it exists, and a scope it has no credential
+     * configuration for fails the exchange with the same HTTP 400 as a rejected certificate chain.
+     * Asserting first that the scope really is registered is what stops a typo in the overlay from
+     * keeping {@link #eidasCredentialRejectedForUnlistedCountry()} green for the wrong reason.
+     */
+    @Given("The provider advertises both the default and the unlisted-country eIDAS scope.")
+    public void providerAdvertisesBothScopes() throws Exception {
+        OpenIdConfiguration openIdConfiguration =
+                MPOperationsEnvironment.getOpenIDConfiguration(MPOperationsEnvironment.PROVIDER_API_ADDRESS);
+        List<String> scopes = openIdConfiguration.getScopesSupported();
+        assertNotNull(scopes, "The provider should advertise its supported scopes.");
+        assertTrue(scopes.contains(DEFAULT_SCOPE),
+                "The default scope should be registered, but scopes_supported was: " + scopes);
+        assertTrue(scopes.contains(UNLISTED_COUNTRY_SCOPE),
+                "The " + UNLISTED_COUNTRY_SCOPE + " scope has to be registered for the negative "
+                        + "case to mean anything - otherwise its rejection would just be an "
+                        + "unknown scope. scopes_supported was: " + scopes);
+    }
+
     @Then("The eIDAS credential is rejected for a scope whose trust list does not carry its CA.")
     public void eidasCredentialRejectedForUnlistedCountry() throws Exception {
         OpenIdConfiguration openIdConfiguration =
                 MPOperationsEnvironment.getOpenIDConfiguration(MPOperationsEnvironment.PROVIDER_API_ADDRESS);
+        // The verifier answers a failed validation with 400 and a body that carries no
+        // machine-readable reason (the Go error serialises to {}), so the status alone cannot
+        // distinguish "chain untrusted" from "scope unknown". The preceding step pins the scope
+        // down; what is asserted here is that the exchange fails at all.
         assertThrows(AssertionFailedError.class,
                 () -> employeeWallet.exchangeCredentialForToken(
                         openIdConfiguration, USER_CREDENTIAL, UNLISTED_COUNTRY_SCOPE),

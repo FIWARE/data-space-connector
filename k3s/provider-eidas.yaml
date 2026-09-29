@@ -191,11 +191,12 @@ decentralizedIam:
                     jwtInclusion:
                       enabled: true
                       fullInclusion: true
-                    # This - not the global `eidas` block - is what makes the trust list
-                    # actually get consulted. EidasValidationService looks the config up per
-                    # credential type and is a pass-through for any type that does not carry
-                    # one, so without this the x5c chain is never checked against the LOTL.
-                    # The global block only starts the fetcher; both are required.
+                    # This issuer is did:elsi, so the proof check already validates the x5c
+                    # chain against the trust store off the global `eidas` block alone. What
+                    # eidasConfig adds is EidasValidationService: a second, per-type check with
+                    # country and qualified-service filters, which the did:elsi path has no
+                    # equivalent for. It is also what a did:web or HTTPS issuer would need, since
+                    # for those the x5c header is ignored by the proof check entirely.
                     eidasConfig:
                       enabled: true
                       # the mock LOTL carries the test CA under the DE national list
@@ -256,11 +257,12 @@ decentralizedIam:
                     jwtInclusion:
                       enabled: true
                       fullInclusion: true
-                    # This - not the global `eidas` block - is what makes the trust list
-                    # actually get consulted. EidasValidationService looks the config up per
-                    # credential type and is a pass-through for any type that does not carry
-                    # one, so without this the x5c chain is never checked against the LOTL.
-                    # The global block only starts the fetcher; both are required.
+                    # This issuer is did:elsi, so the proof check already validates the x5c
+                    # chain against the trust store off the global `eidas` block alone. What
+                    # eidasConfig adds is EidasValidationService: a second, per-type check with
+                    # country and qualified-service filters, which the did:elsi path has no
+                    # equivalent for. It is also what a did:web or HTTPS issuer would need, since
+                    # for those the x5c header is ignored by the proof check entirely.
                     eidasConfig:
                       enabled: true
                       # the mock LOTL carries the test CA under the DE national list
