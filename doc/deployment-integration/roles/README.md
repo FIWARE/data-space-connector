@@ -170,3 +170,18 @@ Enable these if your data space uses a **marketplace model** where data products
 ### FDSC-EDC (Dataspace Protocol)
 
 Enable this if your data space requires compliance with the **Dataspace Protocol (DSP)** as defined by the International Data Spaces Association (IDSA) / Eclipse Dataspace Components. This is relevant for interoperability with other DSP-compliant connectors.
+
+## Verifying the deployment
+
+Whatever the role, once the connector is installed you can check it with
+[fdsc-verify](https://github.com/SEAMWARE/fdsc-verify). It infers the role from the components deployed in the namespace,
+validates the configuration and the live identity material (DIDs, keys, credentials, trusted issuers), and reports the
+cause and the fix for every finding:
+
+```shell
+fdsc-verify -n <namespace> --preflight-only   # safe run: creates nothing
+fdsc-verify -n <namespace>                    # full run, end-to-end flows included
+```
+
+If FDSC-EDC is enabled, pass a counterparty with `--peer` to exercise the Dataspace Protocol negotiation and transfer.
+See the [fdsc-verify README](https://github.com/SEAMWARE/fdsc-verify#readme) for installation and all options.
