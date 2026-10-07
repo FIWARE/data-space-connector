@@ -58,6 +58,7 @@ recipes.
   - [Deployment by Role](#deployment-by-role)
   - [Helm chart](#helm-chart)
   - [Local Deployment (Maven)](#local-deployment-maven)
+  - [Verifying a deployment](#verifying-a-deployment)
 - [Testing](#testing)
 - [Additional documentation and resources](#additional-documentation-and-resources)
 - [Funding](#funding)
