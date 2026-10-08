@@ -27,7 +27,7 @@ dependencies:
     repository: oci://quay.io/fiware/helm-charts
   - name: contract-management
     condition: contract-management.enabled
-    version: 3.5.36
+    version: 3.5.37
     repository: oci://quay.io/fiware/helm-charts
   # marketplace
   - name: business-api-ecosystem
@@ -79,7 +79,7 @@ dependencies:
     repository: https://prometheus-community.github.io/helm-charts
   - name: grafana
     condition: grafana.enabled
-    version: 13.2.7
+    version: 13.3.0
     repository: https://grafana-community.github.io/helm-charts
   # observability - OpenTelemetry Operator for auto-instrumentation (opt-in)
   - name: opentelemetry-operator
