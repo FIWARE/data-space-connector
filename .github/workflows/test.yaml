@@ -75,7 +75,7 @@ jobs:
       - name: Execute tests (${{ matrix.name }})
         id: test
         run: |
-          mvn clean integration-test -P${{ matrix.profiles }} -Dhelm.version=3.17.3
+          mvn clean integration-test -P${{ matrix.profiles }}
 
       - name: Post-mortem on failure
         if: failure()
@@ -85,6 +85,10 @@ jobs:
           echo "=============================="
           echo "  CLUSTER POST-MORTEM REPORT  "
           echo "=============================="
+
+          echo ""
+          echo "### HELM RELEASES ###"
+          ./it/target/helm/helm list --all-namespaces --all || true
 
           echo ""
           echo "### NODE STATUS ###"

@@ -15,7 +15,8 @@
     </parent>
 
     <properties>
-        <main.basedir>${project.parent.basedir}</main.basedir>
+        <!-- the repository root; ${project.parent.basedir} is not expanded in plugin arguments -->
+        <main.basedir>${project.basedir}/..</main.basedir>
         <version.org.projectlombok>1.18.32</version.org.projectlombok>
         <version.org.slf4j.slf4j-api>2.0.6</version.org.slf4j.slf4j-api>
         <version.javax.validation>2.0.1.Final</version.javax.validation>
@@ -33,7 +34,6 @@
 
         <version.com.nimbusds.nimbus-jose-jwt>10.5</version.com.nimbusds.nimbus-jose-jwt>
 
-        <parent.dir>${project.basedir}/..</parent.dir>
     </properties>
 
     <dependencyManagement>
@@ -324,63 +324,19 @@
     </build>
 
     <profiles>
+        <!-- The local deploy profiles of the parent (`local`, `consent`) deploy from the root
+             module. This module must not deploy a second time on top of it. -->
         <profile>
             <id>local</id>
-            <build>
-                <plugins>
-                    <plugin>
-                        <artifactId>maven-resources-plugin</artifactId>
-                        <configuration>
-                            <skip>true</skip>
-                        </configuration>
-                    </plugin>
-                    <plugin>
-                        <groupId>io.kokuwa.maven</groupId>
-                        <artifactId>helm-maven-plugin</artifactId>
-                        <configuration>
-                            <skip>true</skip>
-                        </configuration>
-                    </plugin>
-                    <plugin>
-                        <groupId>io.kokuwa.maven</groupId>
-                        <artifactId>k3s-maven-plugin</artifactId>
-                        <configuration>
-                            <skip>true</skip>
-                        </configuration>
-                    </plugin>
-                </plugins>
-            </build>
+            <properties>
+                <deploy.skip>true</deploy.skip>
+            </properties>
         </profile>
-        <!-- consent local deploy (root `consent` profile): like `local`, the it
-             module must not re-template/re-apply on top of the root deploy — a
-             second helm render regenerates the etcd hook Job's token and its
-             immutable pod template then conflicts on re-apply. -->
         <profile>
             <id>consent</id>
-            <build>
-                <plugins>
-                    <plugin>
-                        <artifactId>maven-resources-plugin</artifactId>
-                        <configuration>
-                            <skip>true</skip>
-                        </configuration>
-                    </plugin>
-                    <plugin>
-                        <groupId>io.kokuwa.maven</groupId>
-                        <artifactId>helm-maven-plugin</artifactId>
-                        <configuration>
-                            <skip>true</skip>
-                        </configuration>
-                    </plugin>
-                    <plugin>
-                        <groupId>io.kokuwa.maven</groupId>
-                        <artifactId>k3s-maven-plugin</artifactId>
-                        <configuration>
-                            <skip>true</skip>
-                        </configuration>
-                    </plugin>
-                </plugins>
-            </build>
+            <properties>
+                <deploy.skip>true</deploy.skip>
+            </properties>
         </profile>
         <!-- Test filter profiles: use these to run only tests for a specific deployment profile -->
         <profile>
@@ -474,151 +430,34 @@
                 </plugins>
             </build>
         </profile>
+        <!-- Deploys the data space before the tests run: the deploy of the parent build,
+             moved from `deploy` to `pre-integration-test`. Combine with a profile that selects
+             the scenario and one that filters the tests, e.g. `-Ptest,dsp,dsp-test`.
+             k3s-maven-plugin is declared before antrun, as in the parent, so the cluster is
+             up before k3s/deploy.sh runs in the same phase. -->
         <profile>
             <id>test</id>
+            <properties>
+                <deploy.skip>false</deploy.skip>
+            </properties>
             <build>
                 <plugins>
                     <plugin>
-                        <groupId>org.apache.maven.plugins</groupId>
-                        <artifactId>maven-antrun-plugin</artifactId>
-                        <version>1.8</version>
-                        <executions>
-                            <execution>
-                                <id>prepare-test</id>
-                                <phase>generate-test-sources</phase>
-                                <goals>
-                                    <goal>run</goal>
-                                </goals>
-                                <configuration>
-                                    <tasks>
-                                        <exec executable="/bin/bash">
-                                            <arg value="${parent.dir}/helpers/certs/generate-certs.sh" />
-                                            <arg value="${parent.dir}/k3s" />
-                                        </exec>
-                                    </tasks>
-                                </configuration>
-                            </execution>
-                            <execution>
-                                <id>patch-progress-deadline</id>
-                                <phase>process-test-classes</phase>
-                                <goals>
-                                    <goal>run</goal>
-                                </goals>
-                                <configuration>
-                                    <tasks>
-                                        <exec executable="/bin/bash" failonerror="true">
-                                            <arg value="${parent.dir}/k3s/ci-post-render.sh" />
-                                            <arg value="${project.build.directory}/k3s" />
-                                        </exec>
-                                    </tasks>
-                                </configuration>
-                            </execution>
-                        </executions>
-                    </plugin>
-
-                    <plugin>
-                        <groupId>io.github.download-maven-plugin</groupId>
-                        <artifactId>download-maven-plugin</artifactId>
-                        <version>2.0.0</version>
-                        <configuration>
-                            <skip>false</skip>
-                        </configuration>
-                    </plugin>
-                    <plugin>
-                        <artifactId>maven-resources-plugin</artifactId>
-                        <configuration>
-                            <skip>false</skip>
-                        </configuration>
-                        <executions>
-                            <execution>
-                                <id>copy-resources-trust-anchor</id>
-                                <phase>validate</phase>
-                            </execution>
-                            <execution>
-                                <id>copy-resources-namespaces</id>
-                                <phase>validate</phase>
-                                <goals>
-                                    <goal>copy-resources</goal>
-                                </goals>
-                            </execution>
-                            <execution>
-                                <id>copy-resources-dsc</id>
-                                <phase>validate</phase>
-                                <goals>
-                                    <goal>copy-resources</goal>
-                                </goals>
-                            </execution>
-                        </executions>
-                    </plugin>
-                    <plugin>
-                        <groupId>io.kokuwa.maven</groupId>
-                        <artifactId>helm-maven-plugin</artifactId>
-                        <configuration>
-                            <skip>false</skip>
-                        </configuration>
-                        <executions>
-                            <execution>
-                                <id>template-dsc-consumer</id>
-                                <phase>test-compile</phase>
-                            </execution>
-                            <execution>
-                                <id>template-dsc-provider</id>
-                                <phase>test-compile</phase>
-                            </execution>
-                            <execution>
-                                <id>template-trust-anchor</id>
-                                <phase>test-compile</phase>
-                            </execution>
-                            <execution>
-                                <id>template-dsc-mongo-operator</id>
-                                <phase>test-compile</phase>
-                            </execution>
-                            <execution>
-                                <id>template-dsc-postgres-operator</id>
-                                <phase>test-compile</phase>
-                            </execution>
-                            <!-- Only defined by the root `consent` profile, where it is bound to
-                                 `package` - after the post-render step at process-test-classes. It has
-                                 to be rendered with the others, or its manifests reach the cluster
-                                 unpatched: that is how the etcd pre-upgrade hook job of the
-                                 consent-authority release survived the hook filter and kept the apply
-                                 waiting for a job a fresh install never needs. Without the `consent`
-                                 profile this execution has no goals and does nothing. -->
-                            <execution>
-                                <id>template-consent-authority</id>
-                                <phase>test-compile</phase>
-                            </execution>
-                        </executions>
-                    </plugin>
-                    <plugin>
                         <groupId>io.kokuwa.maven</groupId>
                         <artifactId>k3s-maven-plugin</artifactId>
-                        <configuration>
-                            <skip>false</skip>
-                        </configuration>
                         <executions>
                             <execution>
-                                <id>create-namespaces</id>
+                                <id>start-cluster</id>
                                 <phase>pre-integration-test</phase>
                             </execution>
+                        </executions>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-antrun-plugin</artifactId>
+                        <executions>
                             <execution>
-                                <id>apply-mongo-operator</id>
-                                <phase>pre-integration-test</phase>
-                            </execution>
-                            <execution>
-                                <id>apply-postgres-operator-crd</id>
-                                <phase>pre-integration-test</phase>
-                            </execution>
-                            <execution>
-                                <id>apply-postgres-operator</id>
-                                <phase>pre-integration-test</phase>
-                            </execution>
-                            <execution>
-                                <id>apply-cert-manager</id>
-                                <phase>pre-integration-test</phase>
-                            </execution>
-                            <execution>
-                                <id>apply-participants</id>
+                                <id>deploy-dataspace</id>
                                 <phase>pre-integration-test</phase>
                             </execution>
                         </executions>
