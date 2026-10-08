@@ -73,7 +73,7 @@ Optional consent management (ISO/IEC TS 27560) - its architecture, trust model a
 
 An automated minimal deployment of a complete data space (trust anchor + provider + consumer) for **learning and development purposes**. Its goal is not to show how to deploy each component individually, but to provide a running environment where you can explore the flows and understand how a FIWARE DSC-based Data Space works.
 
-* [Quick Start Guide](./deployment-integration/quick-start/README.md)
+* [Quick Start Guide](./deployment-integration/local-deployment/LOCAL.MD)
 
 > **Note:** The Quick Start Guide is not intended for production deployments. For deploying in a real environment, see the role-based guides below.
 
