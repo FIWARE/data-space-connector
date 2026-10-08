@@ -60,7 +60,7 @@ The locally deployed Data Space consists of 2 Participants, connected through a 
 Every Data Spaces requires a framework that ensures trust between the participants. Depending on the requirements of the
 concrete Data Space,
 this can become a rather complex topic. Various trust-providers exist(
-f.e. [Gaia-X Digital Clearing Houses](https://gaia-x.eu/gxdch)) and could be reused(see [Gaia-X for more information](../GAIA_X.MD)). The default setup of the connector requires an [EBSI-Trusted Issuers Registry](https://hub.ebsi.eu/apis/pilot/trusted-issuers-registry/v4) to provide the list of participants.
+f.e. [Gaia-X Digital Clearing Houses](https://gaia-x.eu/gxdch)) and could be reused(see [Gaia-X for more information](../../GAIA_X.MD)). The default setup of the connector requires an [EBSI-Trusted Issuers Registry](https://hub.ebsi.eu/apis/pilot/trusted-issuers-registry/v4) to provide the list of participants.
 
 The local Data Spaces comes with the [FIWARE Trusted Issuers List](https://github.com/FIWARE/trusted-issuers-list) as a
 rather simple implementation of that API, providing CRUD functionality
@@ -236,7 +236,7 @@ essentially 3 building blocks:
   identity to be used for the local Data Space
 
 After the deployment, the provider can create a policy to allow access to its data. An example policy can be found in
-the [test-resources](../it/src/test/resources/policies/energyReport.json)
+the [test-resources](../../../it/src/test/resources/policies/energyReport.json)
 It allows every participant to access entities of type ```EnergyReport```.
 
 > :warning: The PAP and Scorpio APIs are only published to make demo interactions easier.
@@ -1262,7 +1262,7 @@ with the TMForum-APIs directly.
 All previous steps allowed essentially everyone to use the credentials issued, since the verification does not check if they belong to the holder presenting them.
 However, in a lot of usecases only the one that got the credential issued should be able to use it. Therfor, the [Verifier](../../../README.md#components) can be configured to check that the presenter is actually the lawful holder of the credential.
 
-To try it out, insert your holder did (```echo $HOLDER_DID```) into the mapper configuration of your consumer(e.g. [consumer.yaml](../../../k3s/consumer.yamlL234-L241)). Redeploy the connector and then try the following:
+To try it out, insert your holder did (```echo $HOLDER_DID```) into the `subject` claim mapper of your consumer(e.g. `subject-mapper-lpc` in [consumer.yaml](../../../k3s/consumer.yaml)). Redeploy the connector and then try the following:
 
 1. Configure holder verfifcation for a certain scope:
 ```shell
@@ -1387,12 +1387,12 @@ more organization-focused once like [did:web](https://w3c-ccg.github.io/did-meth
 ### Deployment
 
 The deployment leverages the [k3s-maven-plugin](https://github.com/kokuwaio/k3s-maven-plugin) to stay as close to the real deployments as possible,
-while providing integration with the [integration tests](../it/src/test).
+while providing integration with the [integration tests](../../../it/src/test).
 In order to build a concrete deployment, [maven](https://maven.apache.org/) executes the following steps, that would also be done by a `normal` deployment process:
 
-1. Copy the required charts([charts/](../charts)) to the target folder, e.g. `target/charts`
-2. Copy additionally required resources([k3s/infra & k3s/namespaces](../k3s/)) to the target folder, e.g. `target/k3s`
-3. Execute `helm template` on the charts, with the local values provided for each participant(e.g. [trust-anchor](../k3s/trust-anchor.yaml), [provider](../k3s/provider.yaml) and [consumer](../k3s/consumer.yaml)) and copy the manifests to the target folder(e.g. `target/k3s`)
+1. Copy the required charts([charts/](../../../charts)) to the target folder, e.g. `target/charts`
+2. Copy additionally required resources([k3s/infra & k3s/namespaces](../../../k3s/)) to the target folder, e.g. `target/k3s`
+3. Execute `helm template` on the charts, with the local values provided for each participant(e.g. [trust-anchor](../../../k3s/trust-anchor.yaml), [provider](../../../k3s/provider.yaml) and [consumer](../../../k3s/consumer.yaml)) and copy the manifests to the target folder(e.g. `target/k3s`)
 4. Spin up the cluster
 5. Apply the infrastructure resources to the cluster, via `kubectl apply`
 6. Apply the charts to the cluster, via `kubectl apply`

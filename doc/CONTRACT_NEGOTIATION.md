@@ -43,7 +43,7 @@ In order to access a Service by using the Transfer Process Protocol, the followi
 
 0. Prepare the IAM
 
-* Setup all required policies(see [DSP-Integration for details](DSP_INTEGRATION.md#authentication-and-authorization))
+* Setup all required policies(see [DSP-Integration for details](DSP_INTEGRATION.md#architecture))
 ```shell
     ./doc/scripts/prepare-dsp-policies.sh
 ``` 

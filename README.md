@@ -530,7 +530,7 @@ For deploying the FIWARE DSC in a real environment, refer to the documentation t
   * [Consumer](./doc/deployment-integration/roles/consumer/README.md) — Retrieves data from other participants
   * [Provider](./doc/deployment-integration/roles/provider/README.md) — Offers data or services to other participants
   * [Consumer + Provider](./doc/deployment-integration/roles/consumer-provider/README.md) — Acts as both (most common scenario)
-  * [Admin](./doc/deployment-integration/roles/admin/README.md) — Operates the data space trust infrastructure
+  * [Admin](./doc/deployment-integration/roles/operator/README.md) — Operates the data space trust infrastructure
 
 ### Helm chart
 

@@ -10,7 +10,7 @@ Via the TMForum APIs, providers can create product specifications and offerings.
 can register as a party and place product orders. In the case of a product order, the TMForum APIs will 
 send a notification to the contract-management notification listener, which will create an entry at the 
 Trusted Issuers List for the consumer organisation. Also compare to the flow descriptions 
-of [Consumer registration](#consumer-registration) and [Contract management](#contract-management). 
+of [Consumer registration](#example-flow) and [Contract management](#contract-management). 
 
 
 ## Authorization and authentication
@@ -54,7 +54,7 @@ It includes the following steps of the aquisition process:
 
 > :bulb: Since frontend-solutions are still under construction, plain REST-calls are used for the flow. Since all calls require a valid JWT, the [demo-portal](https://packetdelivery-portal.dsba.fiware.dev/) for the provider has a link to get a plain token in exchange for the Verifiable Credential. Log-in either as CONSUMER or PROVIDER (see [Credentials and Role-Assignment](#credentials-and-role-assignment)) to get tokens. 
 
-0. In order to have the consumer registered, it has to be created as an ```Organization``` through the [TMForum Party-API](https://github.com/FIWARE/tmforum-api/tree/main/party-catalog). The registration needs to happen with a direct api-call to the Parties-API, with a token in Role ```LEGAL_REPRESENTATIVE```: [POST /organization](../../../examples/tmf/tmf.postman_collection.json#l80)
+0. In order to have the consumer registered, it has to be created as an ```Organization``` through the [TMForum Party-API](https://github.com/FIWARE/tmforum-api/tree/main/party-catalog). The registration needs to happen with a direct api-call to the Parties-API, with a token in Role ```LEGAL_REPRESENTATIVE```: [POST /organization](./tmf/tmf.postman_collection.json)
 
 1. Creating an offer as the PROVIDER (use a JWT retrieved for user ```standard-employee``` of [PacketDelivery](https://packetdelivery-kc.dsba.fiware.dev/realms/fiware-server/account/#/)):
     1. Create the product specification

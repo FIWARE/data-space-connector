@@ -11,7 +11,7 @@ In this case, considering that your environment for the AWS Garnet Framework was
 <br> 
 
 ### IPS Service Provider Deployment in Amazon EKS 
-This section covers the setup of the prerequisites of the IPS Service Provider examples of this repository, available in [this reference](../service-provider-ips/README.md).
+This section covers the setup of the prerequisites of the IPS Service Provider example, available in [this reference](https://github.com/FIWARE-Ops/data-space-connector/blob/53975a9320fc9507957612acc0b3b4b31b4f4897/examples/service-provider-ips/README.md) of the archived FIWARE-Ops/data-space-connector repository.
 
 #### Changes to the original Helm chart 
 [The edited version of the IPS Service Provider example Helm Chart](./yaml/values-dsc-aws-load-balancer-controller-scenario2.yaml) contains 3 main differences for this scenario where an existing Context Broker is already deployed and must only by extended by the additional building blocks of the Data Spaces Connector:
