@@ -16,7 +16,7 @@
 # by name. See doc/CONSENT_MANAGEMENT.md for the full topology.
 #
 # The MongoDB community operator is NOT a dependency of the trust-anchor chart;
-# it is installed cluster-wide (k3s/mongo-operator.yaml, watchNamespace "*") and
+# it is installed cluster-wide (k3s/operators.yaml, watchNamespace "*") and
 # reconciles the MongoDBCommunity resource declared here.
 # ---------------------------------------------------------------------------
 

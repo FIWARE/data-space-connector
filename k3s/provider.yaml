@@ -2,8 +2,8 @@ cert-manager:
   enabled: false
 
 # The self-signed CA and the selfsigned-issuer are cluster-wide and shared by every participant,
-# so the local deployment creates them once, with the cluster infrastructure
-# (k3s/infra/cert-manager-config), instead of from this release.
+# so the local deployment creates them once, with cert-manager in the operators release
+# (k3s/operators.yaml), instead of from this release.
 certManagerResources:
   enabled: false
 

@@ -13,12 +13,11 @@
 #
 # Order matters:
 #   1. namespaces
-#   2. the operators (mongo, postgres, cert-manager) - their CRDs and webhooks have to
-#      be up before anything uses them
+#   2. the operators (mongo, postgres, cert-manager) and the self-signed issuers, one
+#      release - their CRDs and webhooks have to be up before anything uses them
 #   3. the manifests that are not part of a chart: the cluster infrastructure (traefik,
-#      coredns, squid, the cert-manager issuers) and the participants' additional
-#      resources. They contain cert-manager Certificates and ClusterIssuers, so they come
-#      after cert-manager.
+#      coredns, squid) and the participants' additional resources. They request
+#      certificates from the selfsigned-issuer, so they come after the operators.
 #   4. the participants: the trust anchor first, because the registration hooks of the
 #      other participants call it, then provider and consumer.
 #
@@ -86,14 +85,11 @@ log "Chart dependencies"
 "$HELM" dependency update "$TRUST_ANCHOR_CHART"
 
 log "Operators"
-install mongo-operator mongo-operator "$DSC_CHART" k3s/mongo-operator.yaml
-install postgres-operator postgres-operator "$DSC_CHART" k3s/postgres-operator.yaml
-install cert-manager cert-manager "$DSC_CHART" k3s/cert-manager.yaml
+install operators operators "$DSC_CHART" k3s/operators.yaml --wait-for-jobs
+kubectl wait --for=condition=Ready clusterissuer/selfsigned-issuer --timeout=5m
 
 log "Cluster infrastructure"
 kubectl apply --recursive -f k3s/infra
-kubectl -n cert-manager wait --for=condition=Ready certificate/selfsigned-ca --timeout=5m
-kubectl wait --for=condition=Ready clusterissuer/selfsigned-issuer --timeout=5m
 kubectl -n kube-system rollout status deployment/coredns --timeout=5m
 kubectl -n infra rollout status deployment/traefik --timeout=5m
 kubectl -n infra rollout status deployment/squid-proxy --timeout=5m

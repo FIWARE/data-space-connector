@@ -1,4 +1,9 @@
 {{- if .Values.certManagerResources.enabled }}
+{{- /*
+The issuers are hooks, so that they are created after the cert-manager CRDs when cert-manager
+is installed in the same release. Their weights are above the one of cert-manager's
+startupapicheck job, which waits until the cert-manager webhook accepts requests.
+*/}}
 
 {{- if eq .Values.certManagerResources.type "prod" }}
 # --- PRODUCTION (Let's Encrypt) ---
@@ -8,6 +13,7 @@ metadata:
   name: prod-issuer
   annotations:
     "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "10"
 spec:
   acme:
     email: {{ .Values.certManagerResources.acmeEmail }}
@@ -27,7 +33,7 @@ metadata:
   name: ca-issuer
   annotations:
     "helm.sh/hook": post-install,post-upgrade
-    "helm.sh/hook-weight": "1"
+    "helm.sh/hook-weight": "10"
 spec:
   selfSigned: {}
 ---
@@ -38,7 +44,7 @@ metadata:
   namespace: {{ .Values.certManagerResources.namespace | default "cert-manager" }}
   annotations:
     "helm.sh/hook": post-install,post-upgrade
-    "helm.sh/hook-weight": "2"
+    "helm.sh/hook-weight": "11"
 spec:
   isCA: true
   commonName: selfsigned-ca
@@ -57,7 +63,7 @@ metadata:
   name: selfsigned-issuer
   annotations:
     "helm.sh/hook": post-install,post-upgrade
-    "helm.sh/hook-weight": "3"
+    "helm.sh/hook-weight": "12"
 spec:
   ca:
     secretName: ca-secret

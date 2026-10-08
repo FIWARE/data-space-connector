@@ -1396,7 +1396,7 @@ The same deployment backs the [integration tests](../../../it/src/test). [Maven]
 2. Spin up the cluster and write its kubeconfig, e.g. `target/k3s.yaml`
 3. Run [k3s/deploy.sh](../../../k3s/deploy.sh), which
     1. creates the [namespaces](../../../k3s/namespaces), via `kubectl apply`
-    2. installs the operators (Postgres, MongoDB, cert-manager) as Helm releases of the [connector chart](../../../charts)
+    2. installs the operators (Postgres, MongoDB, cert-manager) and the self-signed CA issuer as a single Helm release of the [connector chart](../../../charts), with [k3s/operators.yaml](../../../k3s/operators.yaml)
     3. applies the cluster infrastructure ([k3s/infra](../../../k3s/infra)), via `kubectl apply`
     4. installs the participants with `helm upgrade --install`, using the local values for each of them (e.g. [trust-anchor](../../../k3s/trust-anchor.yaml), [provider](../../../k3s/provider.yaml) and [consumer](../../../k3s/consumer.yaml))
 
@@ -1404,5 +1404,5 @@ Running the deployment again against an existing cluster upgrades the releases i
 The script can also be run on its own against any cluster, e.g. `KUBECONFIG=target/k3s.yaml k3s/deploy.sh`.
 
 # Trust local certificate
-kubectl get secret ca-secret -n cert-manager -o jsonpath='{.data.tls\.crt}' | base64 -d > local-ca.crt 
+kubectl get secret ca-secret -n operators -o jsonpath='{.data.tls\.crt}' | base64 -d > local-ca.crt 
   open chrome://settings/certificates → "Authorities" → Import local-ca.crt and tick "Trust this certificate for identifying websites". Same effect, just the UI path.
