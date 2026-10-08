@@ -206,6 +206,10 @@
                                     <arg value="${main.basedir}/k3s/deploy.sh" />
                                     <env key="KUBECONFIG" value="${project.build.directory}/k3s.yaml" />
                                     <env key="HELM" value="${project.build.directory}/helm/helm" />
+                                    <!-- keep the pinned helm away from the user's own repositories, plugins and cache -->
+                                    <env key="HELM_CONFIG_HOME" value="${project.build.directory}/helm/config" />
+                                    <env key="HELM_CACHE_HOME" value="${project.build.directory}/helm/cache" />
+                                    <env key="HELM_DATA_HOME" value="${project.build.directory}/helm/data" />
                                     <env key="TRUST_ANCHOR_VALUES" value="${deploy.trustAnchor.values}" />
                                     <env key="CONSENT_AUTHORITY_VALUES" value="${deploy.consentAuthority.values}" />
                                     <env key="PROVIDER_VALUES" value="${deploy.provider.values}" />
