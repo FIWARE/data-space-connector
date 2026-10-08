@@ -882,6 +882,9 @@ tm-forum-api:
 decentralizedIam:
   enabled: true
   vcAuthentication:
+    # the cluster-wide operator is installed once, as its own release (k3s/postgres-operator.yaml)
+    postgres-operator:
+      enabled: false
     vcverifier:
       enabled: false
     credentials-config-service:

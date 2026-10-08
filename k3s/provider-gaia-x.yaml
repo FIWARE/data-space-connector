@@ -153,10 +153,10 @@ decentralizedIam:
   odrlAuthorization:
 
     apisix:
+      # APISIX runs standalone here (routes from values, no admin API), so the etcd the
+      # chart ships by default is never used
       etcd:
-        replicaCount: 1
-        persistence:
-          enabled: false
+        enabled: false
       image:
         debug: true
       dataPlane:

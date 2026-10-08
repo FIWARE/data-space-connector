@@ -118,8 +118,7 @@ extraManifests:
     kind: NetworkPolicy
     metadata:
       name: consent-facade-ingress
-      # helm template does not inject the namespace and the deploy applies the rendered
-      # files as-is; without this the policy lands in `default` and protects nothing.
+      # explicit, so the policy cannot land in another namespace however it is applied
       namespace: {{ .Release.Namespace }}
       labels:
         app.kubernetes.io/name: consent-facade
@@ -219,8 +218,8 @@ consent-owner-resolver:
     enabled: true
     # The APISIX the consent-plugin runs inside. The instance label is spelled out because
     # `allowedClients` is passed to the chart verbatim (not templated), so it cannot carry
-    # `{{ .Release.Name }}` - and the DSC provider release is named `provider` (see the
-    # helm-maven-plugin executions in pom.xml).
+    # `{{ .Release.Name }}` - and the DSC provider release is named `provider` (see
+    # k3s/deploy.sh).
     allowedClients:
       - podSelector:
           matchLabels:
@@ -329,3 +328,9 @@ consent-facade:
         mountPath: /etc/ssl/cacert.pem
         subPath: ca.crt
         readOnly: true
+
+# The vc-operator CRDs are cluster-wide and can only belong to one release. In the consent
+# scenario the consent-authority release, installed before the provider, already brings them.
+vc-operator:
+  crds:
+    install: false

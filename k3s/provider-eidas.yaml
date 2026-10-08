@@ -169,8 +169,6 @@ decentralizedIam:
       registration:
         enabled: true
         job:
-          # Long TTL so the Job outlives the k3s-maven-plugin's completion check.
-          ttlSecondsAfterFinished: 86400
           initContainers:
             waitForHost:
               enabled: true
@@ -307,10 +305,10 @@ decentralizedIam:
   odrlAuthorization:
 
     apisix:
+      # APISIX runs standalone here (routes from values, no admin API), so the etcd the
+      # chart ships by default is never used
       etcd:
-        replicaCount: 1
-        persistence:
-          enabled: false
+        enabled: false
       image:
         debug: true
       # the apisix subchart exposes the gateway through `ingress`, not `dataPlane.ingress`;
