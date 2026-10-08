@@ -146,6 +146,8 @@
                 <configuration>
                     <skip>${deploy.skip}</skip>
                     <addDefaultRepo>false</addDefaultRepo>
+                    <!-- required by the plugin; only the helm binary is used, k3s/deploy.sh installs the charts -->
+                    <chartDirectory>${main.basedir}/charts/data-space-connector</chartDirectory>
                 </configuration>
                 <executions>
                     <execution>
