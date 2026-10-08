@@ -22,6 +22,17 @@ jobs:
       - name: Lint
         run: ./.github/scripts/lint.sh
 
+  # Relative links and anchors of the Markdown documentation, see lychee.toml.
+  # Runs alongside the chart checks instead of gating them.
+  links:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Check documentation links
+        run: ./.github/scripts/check-links.sh
+
   eval:
     runs-on: ubuntu-latest
     needs:

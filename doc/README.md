@@ -20,6 +20,7 @@ specific flows and its deployment and integration with other frameworks.
 - [Deployment / Integration](#deployment--integration)
   - [Quick Start Guide](#quick-start-guide)
   - [Deployment by Role](#deployment-by-role)
+  - [Verifying a deployment](#verifying-a-deployment)
   - [Local Deployment (Maven)](#local-deployment-maven)
   - [Packet Delivery Company (ArgoCD)](#packet-delivery-company-argocd)
   - [Running the EDC identity material in production](#running-the-edc-identity-material-in-production)
@@ -72,7 +73,7 @@ Optional consent management (ISO/IEC TS 27560) - its architecture, trust model a
 
 An automated minimal deployment of a complete data space (trust anchor + provider + consumer) for **learning and development purposes**. Its goal is not to show how to deploy each component individually, but to provide a running environment where you can explore the flows and understand how a FIWARE DSC-based Data Space works.
 
-* [Quick Start Guide](./deployment-integration/quick-start/README.md)
+* [Quick Start Guide](./deployment-integration/local-deployment/LOCAL.MD)
 
 > **Note:** The Quick Start Guide is not intended for production deployments. For deploying in a real environment, see the role-based guides below.
 
@@ -85,6 +86,12 @@ Documentation for deploying the FIWARE DSC according to your organization's role
   * [Provider](./deployment-integration/roles/provider/README.md)
   * [Consumer + Provider](./deployment-integration/roles/consumer-provider/README.md)
   * [Operator (Data Space Governance)](./deployment-integration/roles/operator/README.md)
+
+### Verifying a deployment
+
+After installing the connector, [fdsc-verify](https://github.com/SEAMWARE/fdsc-verify) checks a running deployment against its own namespace: whether it is built right (Helm values), wired right (DIDs, JWKS, credentials, certificates, trusted issuers) and whether its flows work (TMForum, EDC negotiation and transfer). It infers the role, reports the cause and the fix for every finding, and `--preflight-only` creates nothing in the cluster.
+
+* [fdsc-verify](https://github.com/SEAMWARE/fdsc-verify#readme)
 
 ### Local Deployment (Maven)
 

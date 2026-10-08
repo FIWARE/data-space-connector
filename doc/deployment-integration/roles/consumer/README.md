@@ -34,7 +34,7 @@ Every participant in the data space needs a [Decentralized Identifier (DID)](htt
 
 The [DID Helper](https://github.com/SEAMWARE/did-helper) is a lightweight service that creates `did:key` or serves the consumer's [DID document](https://www.w3.org/TR/did-core/).
 
-> **Note:** If the data space uses the [Decentralized Claims Protocol (DCP)](https://eclipse-dataspace-dcp.github.io/decentralized-claims-protocol/v1.0.1/) (typically together with the [Dataspace Protocol](https://docs.internationaldataspaces.org/ids-knowledgebase/dataspace-protocol) via [FDSC-EDC](#fdsc-edc-dataspace-protocol)), the **DID Helper is replaced by the Identity Hub**, which serves the DID document (and the consumer's credentials) as required by DCP. See the [Dataspace Protocol Integration Guide](../../../DSP_INTEGRATION.md) for details.
+> **Note:** If the data space uses the [Decentralized Claims Protocol (DCP)](https://eclipse-dataspace-dcp.github.io/decentralized-claims-protocol/v1.0.1/) (typically together with the [Dataspace Protocol](https://docs.internationaldataspaces.org/ids-knowledgebase/dataspace-protocol) via [FDSC-EDC](#dataspace-protocolfdsc-edc-and-identityhub)), the **DID Helper is replaced by the Identity Hub**, which serves the DID document (and the consumer's credentials) as required by DCP. See the [Dataspace Protocol Integration Guide](../../../DSP_INTEGRATION.md) for details.
 
 The DID document contains the consumer's public key, which providers use to verify that credentials were issued by this organization. The DID must be registered at the data space's Trust Anchor following the Data Space onboarding process.
 

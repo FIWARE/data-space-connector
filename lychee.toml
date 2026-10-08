@@ -1,0 +1,26 @@
+# Configuration for the documentation link check (.github/scripts/check-links.sh).
+#
+# Only links inside the repository are checked: relative links between files and
+# anchors (#section) within them. External URLs are skipped, so an unrelated site
+# being down never fails a pull request.
+
+offline = true
+include_fragments = "anchor-only"
+
+# Match *.md and *.MD alike: some guides (LOCAL.MD, GAIA_X.MD) use the upper-case
+# extension and would otherwise never be checked.
+glob_ignore_case = true
+
+# Build output, local tooling and fetched subcharts are not documentation.
+exclude_path = [
+  "(^|/)target/",
+  "(^|/)helm/",
+  "(^|/)maven-status/",
+  "^charts/[^/]+/charts/",
+]
+
+# The minimal values these links point to do not exist yet; remove this entry
+# once they are added.
+exclude = [
+  "doc/deployment-integration/quick-start/values/",
+]

@@ -11,7 +11,7 @@ In this case, the FIWARE Context Broker will be hosted by a pod in the Kubernete
 <br>
 
 ### IPS Service Provider Deployment in Amazon EKS 
-This section covers the setup of the prerequisites of the IPS Service Provider examples of this repository, available in [this reference](../service-provider-ips/README.md).
+This section covers the setup of the prerequisites of the IPS Service Provider example, available in [this reference](https://github.com/FIWARE-Ops/data-space-connector/blob/53975a9320fc9507957612acc0b3b4b31b4f4897/examples/service-provider-ips/README.md) of the archived FIWARE-Ops/data-space-connector repository.
 
 * IPS Kubernetes namespace creation 
 

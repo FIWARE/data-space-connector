@@ -24,14 +24,14 @@ Once the system started, all flows described for the [local setup](./deployment-
 
 #### Differences to local deployment
 
-In order to have a valid ```did:web``` available inside the local environment, a proper certificate chain has to be generated. This can be done with the scripts available in the [helpers/certs/-folder](../helpers/certs/). When executed, the will create a Root-CA, an Intermediate-CA and a Client-Certificate, containing the identity of our demo-consumer ```did:web:fancy-marketplace.biz```. The script will also take care to distribute the secrets and certificates through the k3s configuration:
+In order to have a valid ```did:web``` available inside the local environment, a proper certificate chain has to be generated. This can be done with the scripts available in the [helpers/certs/-folder](https://github.com/FIWARE/data-space-connector/tree/2a01e88369941f893ad4474c5e55a69ab3b6471a/helpers/certs). When executed, the will create a Root-CA, an Intermediate-CA and a Client-Certificate, containing the identity of our demo-consumer ```did:web:fancy-marketplace.biz```. The script will also take care to distribute the secrets and certificates through the k3s configuration:
 
 * the client-certificate private-key and the certificate-chain as a java-keystore to the [Consumers Keycloak Deployment](../k3s/consumer/), in order to properly sign credentials
 * the certificate chain as a tls-secrets to the [Treafik Deployment](../k3s/infra/traefik/) to be used as TLS Certificate on the Ingress
-* the Root-CA's keypair as a secret for the [gx-registry Deployment](../k3s/infra/gx-registry/), to be used as trust-anchor of the GDCH
+* the Root-CA's keypair as a secret for the [gx-registry Deployment](../k3s/gaia-x-infra/gx-registry/), to be used as trust-anchor of the GDCH
 * the Root-CA as a secret for the [Provider](../k3s/provider/) to allow import into the Verifiers Trust-Store for trusting the certificates
 * the certificate chain as a secret to the [Consumer] to allow its publication as part of the did.json-document
-* the Root-CA as a an env-var for the [registries init-container](../k3s/infra/gx-registry/deployment-registry.yaml) to be inserted in the [Trust-Anchors List](../helpers/gaiax-local-trust/README.md)
+* the Root-CA as a an env-var for the [registries init-container](../k3s/gaia-x-infra/gx-registry/deployment-registry.yaml) to be inserted in the [Trust-Anchors List](../helpers/gaiax-local-trust/README.md)
 * the client-certs modulus and exponent for the [values.yaml](../k3s/consumer-gaia-x.yaml) to allow its publication as part of the did.json-document
 
 In addition to create the ```did:web``` some more infrastructure changes are required to support proper resolution of the did. According to the [spec](https://w3c-ccg.github.io/did-method-web/), a did.json document needs to be made available at a well-known endpoint(in case of the demo-consumer that would be `fancy-marketplace.biz/.well-known/did.json`) through https. To support the required dns-resolution and local certificates for the Verifier and Gaia-X Registry Service, a proxy solution is integrated with the local deployment:

@@ -8,9 +8,6 @@ instead of merging them into one policy on the `ProductSpecification`.
 activates an order. This page is the provider's view of that: how to switch it on, how to author it,
 and which rules decide what a customer ends up being allowed to do.
 
-> The model behind it, including the decisions and their rationale, is in
-> [`doc/tmforum/service-policy.md`](../../../tmforum/service-policy.md).
-
 ## Switching it on
 
 ```yaml

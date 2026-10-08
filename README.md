@@ -58,6 +58,7 @@ recipes.
   - [Deployment by Role](#deployment-by-role)
   - [Helm chart](#helm-chart)
   - [Local Deployment (Maven)](#local-deployment-maven)
+  - [Verifying a deployment](#verifying-a-deployment)
 - [Testing](#testing)
 - [Additional documentation and resources](#additional-documentation-and-resources)
 - [Funding](#funding)
@@ -529,7 +530,7 @@ For deploying the FIWARE DSC in a real environment, refer to the documentation t
   * [Consumer](./doc/deployment-integration/roles/consumer/README.md) — Retrieves data from other participants
   * [Provider](./doc/deployment-integration/roles/provider/README.md) — Offers data or services to other participants
   * [Consumer + Provider](./doc/deployment-integration/roles/consumer-provider/README.md) — Acts as both (most common scenario)
-  * [Admin](./doc/deployment-integration/roles/admin/README.md) — Operates the data space trust infrastructure
+  * [Admin](./doc/deployment-integration/roles/operator/README.md) — Operates the data space trust infrastructure
 
 ### Helm chart
 
@@ -572,6 +573,26 @@ For development and testing with all components, a Maven-based local deployment 
     mvn clean deploy -Plocal,dsp
 ```
 
+### Verifying a deployment
+
+Once a connector is installed, [fdsc-verify](https://github.com/SEAMWARE/fdsc-verify) checks that it is built and wired
+the way you expect, and that its flows actually work. Point it at the namespace: it infers the role from the deployed
+components and runs three phases in order — `static` (the release's Helm values), `preflight` (live identity material:
+DIDs, JWKS, credentials, certificates, trusted issuers) and `flow` (a real TMForum quote and EDC negotiation/transfer).
+Every finding comes with its cause and the fix. It only needs `kubectl`, `openssl` and Python 3.9+, and installs
+nothing in the cluster.
+
+```shell
+    # Safe run: everything except the flows, creates nothing
+    fdsc-verify -n <Namespace> --preflight-only
+    # Full run, flows included (anything created is removed at the end)
+    fdsc-verify -n <Namespace>
+```
+
+See the [fdsc-verify README](https://github.com/SEAMWARE/fdsc-verify#readme) for installation, the EDC flows against a
+counterparty (`--peer`) and CI usage (`--json`). Unlike the [integration tests](#testing), which exercise the chart on a
+local data space, fdsc-verify validates *your* deployment.
+
 
 ## Testing
 
@@ -599,6 +620,7 @@ specific flows and its deployment and integration with other frameworks:
 * [Service Interaction (M2M)](./doc/flows/service-interaction-m2m)
 * [Contract Management flows](./doc/flows/contract-management)
 * [Local Deployment](./doc/deployment-integration/local-deployment/LOCAL.MD)
+* [fdsc-verify](https://github.com/SEAMWARE/fdsc-verify) — Validate a deployed connector: configuration, identity wiring and end-to-end flows
 * [Distributed Tracing (OpenTelemetry)](./doc/deployment-integration/observability/README.md) — Enable end-to-end distributed tracing across all DSC components using OpenTelemetry, with support for Jaeger, Grafana Tempo, Honeycomb, and other OTLP-compatible backends
 * [Additional documentation](./doc)
 * [Ongoing Work](./doc/ONGOING_WORK.md)
