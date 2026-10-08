@@ -407,18 +407,17 @@ test in a single command:
   mvn clean integration-test -Ptest,consent,consent-test
 ```
 
-`test` brings the cluster up and applies the manifests, `consent` supplies the consent-specific
-templating, and `consent-test` filters to `@consent`. The `consent` profile is otherwise deploy-only
+`test` brings the cluster up and installs the releases, `consent` selects the consent-specific
+values files, and `consent-test` filters to `@consent`. The `consent` profile is otherwise deploy-only
 (it skips compiler and failsafe so that `mvn clean deploy -Pconsent` does not run tests), which
 `consent-test` re-enables. To test against an already-deployed data space instead, run
 `mvn verify -pl it -Pconsent,consent-test`.
 
 > :warning: `integration-test` stops before the teardown phase, so the k3s container stays up after the
-> run - convenient for inspecting the result (`export KUBECONFIG=$(pwd)/it/target/k3s.yaml`), but
-> **remove it before the next run** (`docker rm -f k3s-maven-plugin`). Re-applying onto an existing
-> cluster fails: a second helm render regenerates the etcd pre-upgrade hook Job's token, and its pod
-> template is immutable. The same applies to `-Dk3s.skipRm=true`. To keep logs from a run, stream them
-> (`kubectl logs -f`) while it is still in the test phase.
+> run - convenient for inspecting the result (`export KUBECONFIG=$(pwd)/it/target/k3s.yaml`). Running
+> again against that cluster upgrades the existing releases in place (`helm upgrade --install`); to
+> start from a clean cluster, remove it first (`docker rm -f k3s-maven-plugin`). To keep logs from a
+> run, stream them (`kubectl logs -f`) while it is still in the test phase.
 
 Each run works on a **fresh data subject**: the test wallet generates a new `did:key`, which becomes
 the published entity's `dataOwner` and the identity consent is granted for. Scenarios are therefore

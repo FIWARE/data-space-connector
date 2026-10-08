@@ -15,10 +15,12 @@ The local deployment tries to be as decoupled from the host system as possible t
 - [Maven](https://maven.apache.org/)
 - Java Development Kit (at least v17)
 - [Docker](https://www.docker.com/)
+- [kubectl](https://kubernetes.io/docs/tasks/tools/install-kubectl/)
+
+Helm does not need to be installed: the build downloads the version it deploys with.
 
 In order to interact with the system, the following tools are also helpful:
 
-- [kubectl](https://kubernetes.io/docs/tasks/tools/install-kubectl/)
 - [curl](https://curl.se/download.html)
 - [jq](https://stedolan.github.io/jq/download/)
 - [yq](https://mikefarah.gitbook.io/yq/)
@@ -1386,16 +1388,20 @@ more organization-focused once like [did:web](https://w3c-ccg.github.io/did-meth
 
 ### Deployment
 
-The deployment leverages the [k3s-maven-plugin](https://github.com/kokuwaio/k3s-maven-plugin) to stay as close to the real deployments as possible,
-while providing integration with the [integration tests](../../../it/src/test).
-In order to build a concrete deployment, [maven](https://maven.apache.org/) executes the following steps, that would also be done by a `normal` deployment process:
+The deployment runs [k3s](https://k3s.io/) in a docker container, started by the [k3s-maven-plugin](https://github.com/kokuwaio/k3s-maven-plugin),
+and installs the data space into it the same way it is installed in a real environment: every chart becomes a Helm release.
+The same deployment backs the [integration tests](../../../it/src/test). [Maven](https://maven.apache.org/) executes the following steps:
 
-1. Copy the required charts([charts/](../../../charts)) to the target folder, e.g. `target/charts`
-2. Copy additionally required resources([k3s/infra & k3s/namespaces](../../../k3s/)) to the target folder, e.g. `target/k3s`
-3. Execute `helm template` on the charts, with the local values provided for each participant(e.g. [trust-anchor](../../../k3s/trust-anchor.yaml), [provider](../../../k3s/provider.yaml) and [consumer](../../../k3s/consumer.yaml)) and copy the manifests to the target folder(e.g. `target/k3s`)
-4. Spin up the cluster
-5. Apply the infrastructure resources to the cluster, via `kubectl apply`
-6. Apply the charts to the cluster, via `kubectl apply`
+1. Download the pinned Helm version to the build folder, e.g. `target/helm/helm`
+2. Spin up the cluster and write its kubeconfig, e.g. `target/k3s.yaml`
+3. Run [k3s/deploy.sh](../../../k3s/deploy.sh), which
+    1. creates the [namespaces](../../../k3s/namespaces), via `kubectl apply`
+    2. installs the operators (Postgres, MongoDB, cert-manager) as Helm releases of the [connector chart](../../../charts)
+    3. applies the cluster infrastructure ([k3s/infra](../../../k3s/infra)), via `kubectl apply`
+    4. installs the participants with `helm upgrade --install`, using the local values for each of them (e.g. [trust-anchor](../../../k3s/trust-anchor.yaml), [provider](../../../k3s/provider.yaml) and [consumer](../../../k3s/consumer.yaml))
+
+Running the deployment again against an existing cluster upgrades the releases in place. To list them: `helm list -A`.
+The script can also be run on its own against any cluster, e.g. `KUBECONFIG=target/k3s.yaml k3s/deploy.sh`.
 
 # Trust local certificate
 kubectl get secret ca-secret -n cert-manager -o jsonpath='{.data.tls\.crt}' | base64 -d > local-ca.crt 
