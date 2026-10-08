@@ -39,7 +39,6 @@ backend exporter.
   - [Keycloak (Native OTEL)](#keycloak-native-otel)
   - [Scorpio (Quarkus Native OTEL)](#scorpio-quarkus-native-otel)
   - [tm-forum-api, contract-management, marketplace (Subchart extraEnv)](#tm-forum-api-contract-management-marketplace-subchart-extraenv)
-  - [decentralizedIam (Forward-Compatible Passthrough)](#decentralizediam-forward-compatible-passthrough)
 - [Auto-Instrumentation via OpenTelemetry Operator](#auto-instrumentation-via-opentelemetry-operator)
   - [Why Auto-Instrumentation?](#why-auto-instrumentation)
   - [Prerequisites](#prerequisites)

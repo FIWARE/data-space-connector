@@ -18,7 +18,7 @@ In order to be compatible with other connectors, the FIWARE Data Space Connector
     * provides two flavors:
       * OID4VC - uses the [OpenID for Verifiable Credentials Protocols](https://openid.net/sg/openid4vc/) for authentication between connectors
       * DCP - uses the [Decentralized Claims Protocol](https://eclipse-dataspace-dcp.github.io/decentralized-claims-protocol/v1.0.1/) for authentication between connectors
-* Identity Hub - implementation of the EDC-Identity Services, currently using the [Tractus-X IdentityHub](github.com/eclipse-tractusx/tractusx-identityhub)
+* Identity Hub - implementation of the EDC-Identity Services, currently using the [Tractus-X IdentityHub](https://github.com/eclipse-tractusx/tractusx-identityhub)
 
 ### Authentication via OID4VP
 
