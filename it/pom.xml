@@ -16,7 +16,7 @@
 
     <properties>
         <main.basedir>${project.parent.basedir}</main.basedir>
-        <version.org.projectlombok>1.18.32</version.org.projectlombok>
+        <version.org.projectlombok>1.18.42</version.org.projectlombok>
         <version.org.slf4j.slf4j-api>2.0.6</version.org.slf4j.slf4j-api>
         <version.javax.validation>2.0.1.Final</version.javax.validation>
         <version.com.fasterxml.jackson.core>2.14.2</version.com.fasterxml.jackson.core>
