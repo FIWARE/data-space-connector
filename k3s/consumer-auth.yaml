@@ -415,10 +415,6 @@ vcCredentials:
 
 vc-operator:
   enabled: true
-  # The CRDs are cluster-wide and can only belong to one release. The provider release,
-  # installed before this one, already brings them.
-  crds:
-    install: false
   watchNamespaces:
     - consumer
   extraEnvVars:

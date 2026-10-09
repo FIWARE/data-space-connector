@@ -328,9 +328,3 @@ consent-facade:
         mountPath: /etc/ssl/cacert.pem
         subPath: ca.crt
         readOnly: true
-
-# The vc-operator CRDs are cluster-wide and can only belong to one release. In the consent
-# scenario the consent-authority release, installed before the provider, already brings them.
-vc-operator:
-  crds:
-    install: false
