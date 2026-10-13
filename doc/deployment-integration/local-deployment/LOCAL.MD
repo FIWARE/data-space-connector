@@ -1399,6 +1399,7 @@ The same deployment backs the [integration tests](../../../it/src/test). [Maven]
     2. installs the operators (Postgres, MongoDB, cert-manager) and the self-signed CA issuer as a single Helm release of the [connector chart](../../../charts), with [k3s/operators.yaml](../../../k3s/operators.yaml)
     3. applies the cluster infrastructure ([k3s/infra](../../../k3s/infra)), via `kubectl apply`
     4. installs the participants with `helm upgrade --install`, using the local values for each of them (e.g. [trust-anchor](../../../k3s/trust-anchor.yaml), [provider](../../../k3s/provider.yaml) and [consumer](../../../k3s/consumer.yaml))
+    5. waits until every Deployment, StatefulSet and DaemonSet of the namespaces that got a release is ready
 
 Running the deployment again against an existing cluster upgrades the releases in place. To list them: `helm list -A`.
 The script can also be run on its own against any cluster, e.g. `KUBECONFIG=target/k3s.yaml k3s/deploy.sh`.
