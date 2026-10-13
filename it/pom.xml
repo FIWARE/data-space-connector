@@ -15,7 +15,8 @@
     </parent>
 
     <properties>
-        <main.basedir>${project.parent.basedir}</main.basedir>
+        <!-- the repository root; ${project.parent.basedir} is not expanded in plugin arguments -->
+        <main.basedir>${project.basedir}/..</main.basedir>
         <version.org.projectlombok>1.18.42</version.org.projectlombok>
         <version.org.slf4j.slf4j-api>2.0.6</version.org.slf4j.slf4j-api>
         <version.javax.validation>2.0.1.Final</version.javax.validation>
