@@ -39,6 +39,9 @@
              values files is not installed. -->
         <deploy.skip>true</deploy.skip>
         <deploy.trustAnchor.values>k3s/trust-anchor.yaml</deploy.trustAnchor.values>
+        <!-- extra helm arguments for the trust-anchor release, e.g. turning off its wait
+             when it mounts something a later release creates -->
+        <deploy.trustAnchor.args></deploy.trustAnchor.args>
         <deploy.consentAuthority.values></deploy.consentAuthority.values>
         <deploy.provider.values>k3s/provider.yaml</deploy.provider.values>
         <deploy.consumer.values>k3s/consumer.yaml</deploy.consumer.values>
@@ -211,6 +214,7 @@
                                     <env key="HELM_CACHE_HOME" value="${project.build.directory}/helm/cache" />
                                     <env key="HELM_DATA_HOME" value="${project.build.directory}/helm/data" />
                                     <env key="TRUST_ANCHOR_VALUES" value="${deploy.trustAnchor.values}" />
+                                    <env key="TRUST_ANCHOR_ARGS" value="${deploy.trustAnchor.args}" />
                                     <env key="CONSENT_AUTHORITY_VALUES" value="${deploy.consentAuthority.values}" />
                                     <env key="PROVIDER_VALUES" value="${deploy.provider.values}" />
                                     <env key="CONSUMER_VALUES" value="${deploy.consumer.values}" />
@@ -265,6 +269,11 @@
             <properties>
                 <deploy.skip>false</deploy.skip>
                 <deploy.trustAnchor.values>k3s/trust-anchor.yaml,k3s/consent-trust-anchor-components.yaml</deploy.trustAnchor.values>
+                <!-- the consent components of the trust anchor mount secrets that the
+                     consent-authority release creates, and consent-authority needs the TIR
+                     and the consent-manager secret of the trust anchor. Do not wait for the
+                     trust anchor here; deploy.sh waits for every release at the end. -->
+                <deploy.trustAnchor.args>--wait=false</deploy.trustAnchor.args>
                 <deploy.consentAuthority.values>k3s/consent-trust-anchor.yaml</deploy.consentAuthority.values>
                 <deploy.provider.values>k3s/provider.yaml,k3s/consent-provider.yaml</deploy.provider.values>
             </properties>
