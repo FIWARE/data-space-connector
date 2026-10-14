@@ -346,25 +346,6 @@ scorpio:
       - secretName: scorpio-provider.127.0.0.1.nip.io-tls
         hosts:
           - scorpio-provider.127.0.0.1.nip.io
-  ccs:
-    enabled: true
-    defaultOidcScope:
-      name: default
-    oidcScopes:
-      default:
-        - type: UserCredential
-          trustedParticipantsLists:
-            - url: https://registry.127.0.0.1.nip.io
-              type: gaia-x
-          trustedIssuersLists:
-            - http://trusted-issuers-list:8080
-      operator:
-        - type: OperatorCredential
-          trustedParticipantsLists:
-            - url: https://registry.127.0.0.1.nip.io
-              type: gaia-x
-          trustedIssuersLists:
-            - http://trusted-issuers-list:8080
 
 tm-forum-api:
   defaultConfig:

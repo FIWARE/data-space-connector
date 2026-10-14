@@ -292,32 +292,6 @@ scorpio:
   service:
     # -- ClusterIP is the recommended type for most clusters
     type: ClusterIP
-  # -- configuration to register the dataplane at the credentials-config-service
-  ccs:
-    # -- should the automatic registration of scorpio be enabled
-    enabled: false
-    # -- endpoint of the ccs to regsiter at
-    endpoint: http://verifier:8090
-    # -- configmap to get the registration information from
-    configMap: scorpio-registration
-
-  # -- additional init containers to be used for the dataplane
-  #initContainers:
-  # -- curl container to register at the credentials config service
-  #- name: register-credential-config
-  #  image: quay.io/curl/curl:8.1.2
-  #  command: [ "/bin/sh", "-c", "/bin/init.sh" ]
-  #  volumeMounts:
-  #    - name: scorpio-registration
-  #      mountPath: /bin/init.sh
-  #      subPath: init.sh
-  # -- additonal volumes to be mounted for the dataplane
-  additionalVolumes:
-    - name: scorpio-registration
-      configMap:
-        name: scorpio-registration
-        defaultMode: 0755
-
   # -- distributed-tracing configuration for the scorpio subchart.
   # Scorpio is a Quarkus application with native OpenTelemetry support.
   # Because scorpio is a third-party subchart whose templates are not
