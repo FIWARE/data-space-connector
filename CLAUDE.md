@@ -45,7 +45,7 @@ charts/data-space-connector/templates/
   participant-registration.yaml
   mongodb.yaml                # internal MongoDB (when not using operator)
   cert-manager-issuer.yaml, elsi-secret.yaml, issuance-secrets.yaml
-  bae-did.yaml, bae-prep-cm.yaml, ca-script.yaml, credentials-script.yaml
+  bae-prep-cm.yaml, ca-script.yaml, credentials-script.yaml
   extra-manifests.yaml, realm.yaml, tmf-registration-cm.yaml
   _helpers.tpl, _realm.tpl
 
