@@ -450,6 +450,43 @@
                                 <id>start-cluster</id>
                                 <phase>pre-integration-test</phase>
                             </execution>
+                            <!-- template path; the render happens at `package`, before this phase -->
+                            <execution>
+                                <id>apply-namespaces</id>
+                                <phase>pre-integration-test</phase>
+                            </execution>
+                            <execution>
+                                <id>apply-operators</id>
+                                <phase>pre-integration-test</phase>
+                            </execution>
+                            <execution>
+                                <id>apply-issuers</id>
+                                <phase>pre-integration-test</phase>
+                            </execution>
+                            <execution>
+                                <id>apply-infra</id>
+                                <phase>pre-integration-test</phase>
+                            </execution>
+                            <execution>
+                                <id>apply-gaia-x-infra</id>
+                                <phase>pre-integration-test</phase>
+                            </execution>
+                            <execution>
+                                <id>apply-additional-trust-anchor</id>
+                                <phase>pre-integration-test</phase>
+                            </execution>
+                            <execution>
+                                <id>apply-additional-provider</id>
+                                <phase>pre-integration-test</phase>
+                            </execution>
+                            <execution>
+                                <id>apply-additional-consumer</id>
+                                <phase>pre-integration-test</phase>
+                            </execution>
+                            <execution>
+                                <id>apply-participants</id>
+                                <phase>pre-integration-test</phase>
+                            </execution>
                         </executions>
                     </plugin>
                     <plugin>

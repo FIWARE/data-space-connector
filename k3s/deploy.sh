@@ -1,8 +1,10 @@
 #!/bin/bash
 # Deploy the local data space into a running cluster with `helm upgrade --install`.
 #
-# Called by the Maven build (`mvn clean deploy -Plocal`, and the integration tests in
-# the `it` module), but usable on its own against any cluster:
+# The helm-install path of the Maven build (`mvn clean deploy -Plocal,helm-install`, and
+# the integration tests in the `it` module with `-Phelm-install`); by default the build
+# renders the charts with `helm template` and applies them with kubectl instead. Usable
+# on its own against any cluster:
 #
 #   KUBECONFIG=it/target/k3s.yaml k3s/deploy.sh
 #
@@ -29,8 +31,9 @@
 #   KUBECONFIG                 cluster to deploy to (required)
 #   HELM                       helm binary, default `helm`
 #   TIMEOUT                    timeout of every helm operation, default 25m
-#   TRUST_ANCHOR_VALUES        comma-separated values files, relative to the repository
-#   CONSENT_AUTHORITY_VALUES   root. A release whose values are empty is not installed.
+#   TRUST_ANCHOR_VALUES        comma-separated values files, absolute or relative to the
+#   CONSENT_AUTHORITY_VALUES   repository root. A release whose values are empty is not
+#                              installed.
 #   TRUST_ANCHOR_ARGS          extra helm arguments for the trust-anchor release
 #   PROVIDER_VALUES
 #   CONSUMER_VALUES

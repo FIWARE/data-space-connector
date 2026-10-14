@@ -34,19 +34,30 @@
         <!-- helm version the data space is deployed with -->
         <helm.version>3.17.3</helm.version>
 
-        <!-- What k3s/deploy.sh deploys, overridden by the profiles. Values files are
-             comma-separated and relative to the repository root; a release without
-             values files is not installed. -->
+        <!-- Whether to deploy the data space at all: `local`/`consent` here and `test` in the
+             integration-test module turn it on. -->
         <deploy.skip>true</deploy.skip>
-        <deploy.trustAnchor.values>k3s/trust-anchor.yaml</deploy.trustAnchor.values>
+        <!-- How it is deployed. By default the charts are rendered with `helm template` and
+             applied with the k3s-maven-plugin, the way a GitOps tool applies them. The
+             `helm-install` profile switches to k3s/deploy.sh, which installs every chart as
+             a Helm release instead. -->
+        <deploy.template.skip>${deploy.skip}</deploy.template.skip>
+        <deploy.install.skip>true</deploy.install.skip>
+
+        <!-- What is deployed, overridden by the profiles. Values files are comma-separated
+             absolute paths, handed as-is to helm's `-f` on both paths; a release without
+             values files is not deployed. -->
+        <deploy.trustAnchor.values>${main.basedir}/k3s/trust-anchor.yaml</deploy.trustAnchor.values>
         <!-- extra helm arguments for the trust-anchor release, e.g. turning off its wait
              when it mounts something a later release creates -->
         <deploy.trustAnchor.args></deploy.trustAnchor.args>
         <deploy.consentAuthority.values></deploy.consentAuthority.values>
-        <deploy.provider.values>k3s/provider.yaml</deploy.provider.values>
-        <deploy.consumer.values>k3s/consumer.yaml</deploy.consumer.values>
+        <deploy.provider.values>${main.basedir}/k3s/provider.yaml</deploy.provider.values>
+        <deploy.consumer.values>${main.basedir}/k3s/consumer.yaml</deploy.consumer.values>
         <deploy.prometheus.values></deploy.prometheus.values>
         <deploy.gaiaxInfra>false</deploy.gaiaxInfra>
+        <!-- the same switch for the k3s-maven-plugin, which only takes a skip flag -->
+        <deploy.gaiaxInfra.skip>true</deploy.gaiaxInfra.skip>
     </properties>
 
     <build>
@@ -137,11 +148,17 @@
 
             <!-- Deploys the data space into a k3s cluster. Off unless a profile turns it on
                  (`deploy.skip`): `local`/`consent` here, `test` in the integration-test module.
-                 The three plugins run in this order within the bound phase:
-                 1. helm-maven-plugin downloads the pinned helm binary (`helm.version`),
-                 2. k3s-maven-plugin starts the cluster and writes its kubeconfig,
-                 3. k3s/deploy.sh installs every chart as a helm release
-                    (helm upgrade with install), with the values files the profiles select. -->
+                 Both paths download the pinned helm binary (`helm.version`) and start the
+                 cluster; then, depending on `deploy.template.skip`/`deploy.install.skip`:
+                 - template (default), the way a GitOps tool deploys the charts:
+                   1. helm-maven-plugin renders every release with `helm template` into
+                      target/rendered (package),
+                   2. k3s/ci-post-render.sh and the APISIX ingress patch adjust the render (package),
+                   3. k3s-maven-plugin applies it with kubectl, in order, waiting for every
+                      apply to become ready (deploy);
+                 - helm-install (`-Phelm-install`): k3s/deploy.sh installs every chart as a helm
+                   release (helm upgrade with install) (deploy).
+                 Both use the values files the profiles select through the `deploy.*` properties. -->
             <plugin>
                 <groupId>io.kokuwa.maven</groupId>
                 <artifactId>helm-maven-plugin</artifactId>
@@ -149,8 +166,14 @@
                 <configuration>
                     <skip>${deploy.skip}</skip>
                     <addDefaultRepo>false</addDefaultRepo>
-                    <!-- required by the plugin; only the helm binary is used, k3s/deploy.sh installs the charts -->
                     <chartDirectory>${main.basedir}/charts/data-space-connector</chartDirectory>
+                    <!-- the template goal is skipped by default; `skip` decides per execution -->
+                    <skipTemplate>false</skipTemplate>
+                    <!-- keep the pinned helm away from the user's own repositories, like the
+                         HELM_*_HOME that the deploy-dataspace execution hands to k3s/deploy.sh -->
+                    <repositoryConfig>${project.build.directory}/helm/config/repositories.yaml</repositoryConfig>
+                    <repositoryCache>${project.build.directory}/helm/cache/repository</repositoryCache>
+                    <registryConfig>${project.build.directory}/helm/config/registry/config.json</registryConfig>
                 </configuration>
                 <executions>
                     <execution>
@@ -159,6 +182,67 @@
                         <goals>
                             <goal>init</goal>
                         </goals>
+                    </execution>
+                    <!-- The cluster-wide operators, with their CRDs (`crds/` is not rendered by
+                         default). Applied in two steps, see apply-operators/apply-issuers. -->
+                    <execution>
+                        <id>template-operators</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>dependency-update</goal>
+                            <goal>template</goal>
+                        </goals>
+                        <configuration>
+                            <skip>${deploy.template.skip}</skip>
+                            <templateGenerateName>true</templateGenerateName>
+                            <templateOutputDir>${project.build.directory}/rendered/operators</templateOutputDir>
+                            <additionalArguments>--name-template=operators --namespace=operators --include-crds -f ${main.basedir}/k3s/operators.yaml</additionalArguments>
+                        </configuration>
+                    </execution>
+                    <!-- The participants, with their CRDs (e.g. vc-operator's). Every release
+                         renders into rendered/participants, so that they are applied together -
+                         the profiles add their own releases there (consent-authority,
+                         prometheus). -->
+                    <execution>
+                        <id>template-trust-anchor</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>dependency-update</goal>
+                            <goal>template</goal>
+                        </goals>
+                        <configuration>
+                            <skip>${deploy.template.skip}</skip>
+                            <chartDirectory>${main.basedir}/charts/trust-anchor</chartDirectory>
+                            <templateGenerateName>true</templateGenerateName>
+                            <templateOutputDir>${project.build.directory}/rendered/participants/trust-anchor</templateOutputDir>
+                            <additionalArguments>--name-template=trust-anchor --namespace=trust-anchor --include-crds -f ${deploy.trustAnchor.values} --skip-tests</additionalArguments>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>template-provider</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>template</goal>
+                        </goals>
+                        <configuration>
+                            <skip>${deploy.template.skip}</skip>
+                            <templateGenerateName>true</templateGenerateName>
+                            <templateOutputDir>${project.build.directory}/rendered/participants/provider</templateOutputDir>
+                            <additionalArguments>--name-template=provider --namespace=provider --include-crds -f ${deploy.provider.values} --skip-tests</additionalArguments>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>template-consumer</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>template</goal>
+                        </goals>
+                        <configuration>
+                            <skip>${deploy.template.skip}</skip>
+                            <templateGenerateName>true</templateGenerateName>
+                            <templateOutputDir>${project.build.directory}/rendered/participants/consumer</templateOutputDir>
+                            <additionalArguments>--name-template=consumer --namespace=consumer --include-crds -f ${deploy.consumer.values} --skip-tests</additionalArguments>
+                        </configuration>
                     </execution>
                 </executions>
             </plugin>
@@ -189,6 +273,117 @@
                             <failIfExists>false</failIfExists>
                         </configuration>
                     </execution>
+                    <!-- Template path: apply the render in order. Every apply waits until what
+                         it created is ready, before the next one starts. -->
+                    <execution>
+                        <id>apply-namespaces</id>
+                        <phase>deploy</phase>
+                        <goals>
+                            <goal>apply</goal>
+                        </goals>
+                        <configuration>
+                            <skipApply>${deploy.template.skip}</skipApply>
+                            <manifests>${main.basedir}/k3s/namespaces</manifests>
+                        </configuration>
+                    </execution>
+                    <!-- The operators release in two steps: first its subcharts (the operators,
+                         their CRDs, and cert-manager's startupapicheck Job, which completes once
+                         the cert-manager webhook accepts requests), then the chart's own templates
+                         (the self-signed CA and the issuers), which need that webhook. -->
+                    <execution>
+                        <id>apply-operators</id>
+                        <phase>deploy</phase>
+                        <goals>
+                            <goal>apply</goal>
+                        </goals>
+                        <configuration>
+                            <skipApply>${deploy.template.skip}</skipApply>
+                            <manifests>${project.build.directory}/rendered/operators/data-space-connector/charts</manifests>
+                            <timeout>500</timeout>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>apply-issuers</id>
+                        <phase>deploy</phase>
+                        <goals>
+                            <goal>apply</goal>
+                        </goals>
+                        <configuration>
+                            <skipApply>${deploy.template.skip}</skipApply>
+                            <manifests>${project.build.directory}/rendered/operators/data-space-connector/templates</manifests>
+                            <timeout>500</timeout>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>apply-infra</id>
+                        <phase>deploy</phase>
+                        <goals>
+                            <goal>apply</goal>
+                        </goals>
+                        <configuration>
+                            <skipApply>${deploy.template.skip}</skipApply>
+                            <manifests>${main.basedir}/k3s/infra</manifests>
+                            <timeout>500</timeout>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>apply-gaia-x-infra</id>
+                        <phase>deploy</phase>
+                        <goals>
+                            <goal>apply</goal>
+                        </goals>
+                        <configuration>
+                            <!-- the gx-registry and its Kubo peer, only for the gaia-x profile -->
+                            <skipApply>${deploy.gaiaxInfra.skip}</skipApply>
+                            <manifests>${main.basedir}/k3s/gaia-x-infra</manifests>
+                            <timeout>500</timeout>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>apply-additional-trust-anchor</id>
+                        <phase>deploy</phase>
+                        <goals>
+                            <goal>apply</goal>
+                        </goals>
+                        <configuration>
+                            <skipApply>${deploy.template.skip}</skipApply>
+                            <manifests>${main.basedir}/k3s/trust-anchor</manifests>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>apply-additional-provider</id>
+                        <phase>deploy</phase>
+                        <goals>
+                            <goal>apply</goal>
+                        </goals>
+                        <configuration>
+                            <skipApply>${deploy.template.skip}</skipApply>
+                            <manifests>${main.basedir}/k3s/provider</manifests>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>apply-additional-consumer</id>
+                        <phase>deploy</phase>
+                        <goals>
+                            <goal>apply</goal>
+                        </goals>
+                        <configuration>
+                            <skipApply>${deploy.template.skip}</skipApply>
+                            <manifests>${main.basedir}/k3s/consumer</manifests>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>apply-participants</id>
+                        <phase>deploy</phase>
+                        <goals>
+                            <goal>apply</goal>
+                        </goals>
+                        <configuration>
+                            <skipApply>${deploy.template.skip}</skipApply>
+                            <manifests>${project.build.directory}/rendered/participants</manifests>
+                            <timeout>1500</timeout>
+                        </configuration>
+                    </execution>
                 </executions>
             </plugin>
             <plugin>
@@ -196,6 +391,48 @@
                 <artifactId>maven-antrun-plugin</artifactId>
                 <version>1.8</version>
                 <executions>
+                    <!-- Template path: adjust the render before it is applied. Declared after the
+                         helm-maven-plugin, so it runs after the render in the same phase.
+                         Workaround for https://github.com/apache/apisix-helm-chart/issues/949:
+                         the APISIX ingress template carries no namespace, and kubectl would
+                         apply it to `default`; inject the namespace of each release. Then
+                         k3s/ci-post-render.sh sets deadlines and drops the hooks a fresh install
+                         never runs. -->
+                    <execution>
+                        <id>post-render</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>run</goal>
+                        </goals>
+                        <configuration>
+                            <skip>${deploy.template.skip}</skip>
+                            <target>
+                                <replaceregexp match="(kind: Ingress&#xa;metadata:&#xa;  name: [^\n]+)"
+                                               replace="\1&#xa;  namespace: trust-anchor" byline="false">
+                                    <fileset dir="${project.build.directory}/rendered/participants"
+                                             includes="trust-anchor/**/apisix/templates/ingress.yaml,consent-authority/**/apisix/templates/ingress.yaml"
+                                             erroronmissingdir="false"/>
+                                </replaceregexp>
+                                <replaceregexp match="(kind: Ingress&#xa;metadata:&#xa;  name: [^\n]+)"
+                                               replace="\1&#xa;  namespace: provider" byline="false">
+                                    <fileset dir="${project.build.directory}/rendered/participants"
+                                             includes="provider/**/apisix/templates/ingress.yaml"
+                                             erroronmissingdir="false"/>
+                                </replaceregexp>
+                                <replaceregexp match="(kind: Ingress&#xa;metadata:&#xa;  name: [^\n]+)"
+                                               replace="\1&#xa;  namespace: consumer" byline="false">
+                                    <fileset dir="${project.build.directory}/rendered/participants"
+                                             includes="consumer/**/apisix/templates/ingress.yaml"
+                                             erroronmissingdir="false"/>
+                                </replaceregexp>
+                                <exec executable="/bin/bash" failonerror="true">
+                                    <arg value="${main.basedir}/k3s/ci-post-render.sh" />
+                                    <arg value="${project.build.directory}/rendered" />
+                                </exec>
+                            </target>
+                        </configuration>
+                    </execution>
+                    <!-- helm-install path -->
                     <execution>
                         <id>deploy-dataspace</id>
                         <phase>deploy</phase>
@@ -203,7 +440,7 @@
                             <goal>run</goal>
                         </goals>
                         <configuration>
-                            <skip>${deploy.skip}</skip>
+                            <skip>${deploy.install.skip}</skip>
                             <target>
                                 <exec executable="/bin/bash" failonerror="true">
                                     <arg value="${main.basedir}/k3s/deploy.sh" />
@@ -232,6 +469,17 @@
         <!-- The profiles select what is deployed by setting the `deploy.*` properties. A
              profile that only changes the values files can be combined with `local` (or
              with `test` in the integration-test module), e.g. `mvn clean deploy -Plocal,dsp`. -->
+        <!-- Deploys with k3s/deploy.sh (helm upgrade with install) instead of rendering the
+             charts and applying them. Combine it with any deploy profile, e.g.
+             `mvn clean deploy -Plocal,helm-install` or
+             `mvn clean integration-test -Ptest,consent,consent-test,helm-install`. -->
+        <profile>
+            <id>helm-install</id>
+            <properties>
+                <deploy.template.skip>true</deploy.template.skip>
+                <deploy.install.skip>${deploy.skip}</deploy.install.skip>
+            </properties>
+        </profile>
         <profile>
             <id>local</id>
             <properties>
@@ -268,17 +516,37 @@
             <id>consent</id>
             <properties>
                 <deploy.skip>false</deploy.skip>
-                <deploy.trustAnchor.values>k3s/trust-anchor.yaml,k3s/consent-trust-anchor-components.yaml</deploy.trustAnchor.values>
+                <deploy.trustAnchor.values>${main.basedir}/k3s/trust-anchor.yaml,${main.basedir}/k3s/consent-trust-anchor-components.yaml</deploy.trustAnchor.values>
                 <!-- the consent components of the trust anchor mount secrets that the
                      consent-authority release creates, and consent-authority needs the TIR
                      and the consent-manager secret of the trust anchor. Do not wait for the
                      trust anchor here; deploy.sh waits for every release at the end. -->
                 <deploy.trustAnchor.args>--wait=false</deploy.trustAnchor.args>
-                <deploy.consentAuthority.values>k3s/consent-trust-anchor.yaml</deploy.consentAuthority.values>
-                <deploy.provider.values>k3s/provider.yaml,k3s/consent-provider.yaml</deploy.provider.values>
+                <deploy.consentAuthority.values>${main.basedir}/k3s/consent-trust-anchor.yaml</deploy.consentAuthority.values>
+                <deploy.provider.values>${main.basedir}/k3s/provider.yaml,${main.basedir}/k3s/consent-provider.yaml</deploy.provider.values>
             </properties>
             <build>
                 <plugins>
+                    <plugin>
+                        <groupId>io.kokuwa.maven</groupId>
+                        <artifactId>helm-maven-plugin</artifactId>
+                        <executions>
+                            <!-- template path: the consent authority, applied with the participants -->
+                            <execution>
+                                <id>template-consent-authority</id>
+                                <phase>package</phase>
+                                <goals>
+                                    <goal>template</goal>
+                                </goals>
+                                <configuration>
+                                    <skip>${deploy.template.skip}</skip>
+                                    <templateGenerateName>true</templateGenerateName>
+                                    <templateOutputDir>${project.build.directory}/rendered/participants/consent-authority</templateOutputDir>
+                                    <additionalArguments>--name-template=consent-authority --namespace=trust-anchor --include-crds -f ${deploy.consentAuthority.values} --skip-tests</additionalArguments>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
                     <plugin>
                         <groupId>org.apache.maven.plugins</groupId>
                         <artifactId>maven-compiler-plugin</artifactId>
@@ -300,37 +568,64 @@
         <profile>
             <id>eidas</id>
             <properties>
-                <deploy.provider.values>k3s/provider-eidas.yaml</deploy.provider.values>
-                <deploy.consumer.values>k3s/consumer-eidas.yaml</deploy.consumer.values>
+                <deploy.provider.values>${main.basedir}/k3s/provider-eidas.yaml</deploy.provider.values>
+                <deploy.consumer.values>${main.basedir}/k3s/consumer-eidas.yaml</deploy.consumer.values>
             </properties>
         </profile>
         <profile>
             <id>dsp</id>
             <properties>
-                <deploy.provider.values>k3s/provider.yaml,k3s/dsp-provider.yaml</deploy.provider.values>
-                <deploy.consumer.values>k3s/consumer.yaml,k3s/consumer-auth.yaml,k3s/consumer-tmf.yaml,k3s/dsp-consumer.yaml</deploy.consumer.values>
+                <deploy.provider.values>${main.basedir}/k3s/provider.yaml,${main.basedir}/k3s/dsp-provider.yaml</deploy.provider.values>
+                <deploy.consumer.values>${main.basedir}/k3s/consumer.yaml,${main.basedir}/k3s/consumer-auth.yaml,${main.basedir}/k3s/consumer-tmf.yaml,${main.basedir}/k3s/dsp-consumer.yaml</deploy.consumer.values>
             </properties>
         </profile>
         <profile>
             <id>central</id>
             <properties>
-                <deploy.consumer.values>k3s/consumer.yaml,k3s/consumer-auth.yaml,k3s/consumer-tmf.yaml</deploy.consumer.values>
+                <deploy.consumer.values>${main.basedir}/k3s/consumer.yaml,${main.basedir}/k3s/consumer-auth.yaml,${main.basedir}/k3s/consumer-tmf.yaml</deploy.consumer.values>
             </properties>
         </profile>
         <profile>
             <id>monitoring</id>
             <properties>
-                <deploy.prometheus.values>k3s/prometheus.yaml</deploy.prometheus.values>
-                <deploy.provider.values>k3s/provider.yaml,k3s/monitoring.yaml</deploy.provider.values>
+                <deploy.prometheus.values>${main.basedir}/k3s/prometheus.yaml</deploy.prometheus.values>
+                <deploy.provider.values>${main.basedir}/k3s/provider.yaml,${main.basedir}/k3s/monitoring.yaml</deploy.provider.values>
             </properties>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>io.kokuwa.maven</groupId>
+                        <artifactId>helm-maven-plugin</artifactId>
+                        <executions>
+                            <!-- template path: the monitoring stack, applied with the participants -->
+                            <execution>
+                                <id>template-prometheus</id>
+                                <phase>package</phase>
+                                <goals>
+                                    <goal>template</goal>
+                                </goals>
+                                <configuration>
+                                    <skip>${deploy.template.skip}</skip>
+                                    <templateGenerateName>true</templateGenerateName>
+                                    <templateOutputDir>${project.build.directory}/rendered/participants/prometheus</templateOutputDir>
+                                    <additionalArguments>--name-template=prometheus --namespace=monitoring --include-crds -f ${deploy.prometheus.values} --skip-tests</additionalArguments>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
         </profile>
         <profile>
             <id>gaia-x</id>
             <properties>
-                <deploy.provider.values>k3s/provider-gaia-x.yaml</deploy.provider.values>
-                <deploy.consumer.values>k3s/consumer-gaia-x.yaml</deploy.consumer.values>
+                <deploy.provider.values>${main.basedir}/k3s/provider-gaia-x.yaml</deploy.provider.values>
+                <deploy.consumer.values>${main.basedir}/k3s/consumer-gaia-x.yaml</deploy.consumer.values>
                 <!-- the gx-registry and its Kubo peer, only needed by this scenario -->
                 <deploy.gaiaxInfra>true</deploy.gaiaxInfra>
+                <!-- applied by the k3s-maven-plugin on the template path only; deploy.sh applies
+                     it itself on the helm-install path -->
+                <deploy.gaiaxInfra.skip>${deploy.template.skip}</deploy.gaiaxInfra.skip>
             </properties>
             <build>
                 <plugins>
