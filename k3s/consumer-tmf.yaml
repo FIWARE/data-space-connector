@@ -7,8 +7,6 @@ tm-forum-api:
     enabled: true
   apiProxy:
     enabled: false
-  registration:
-    enabled: false
   ingress:
     annotations:
       cert-manager.io/cluster-issuer: "selfsigned-issuer"

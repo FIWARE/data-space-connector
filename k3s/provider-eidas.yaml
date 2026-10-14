@@ -505,23 +505,6 @@ scorpio:
       - secretName: scorpio-provider.127.0.0.1.nip.io-tls
         hosts:
           - scorpio-provider.127.0.0.1.nip.io
-  ccs:
-    enabled: true
-    defaultOidcScope:
-      name: default
-    oidcScopes:
-      default:
-        - type: UserCredential
-          trustedParticipantsLists:
-            - http://tir.trust-anchor.svc.cluster.local:8080
-          trustedIssuersLists:
-            - http://trusted-issuers-list:8080
-      operator:
-        - type: OperatorCredential
-          trustedParticipantsLists:
-            - http://tir.trust-anchor.svc.cluster.local:8080
-          trustedIssuersLists:
-            - http://trusted-issuers-list:8080
 
 tm-forum-api:
   defaultConfig:
@@ -530,13 +513,6 @@ tm-forum-api:
     enabled: true
   apiProxy:
     enabled: false
-  registration:
-    ccs:
-      defaultOidcScope:
-        credentialTypes:
-          - UserCredential
-        trustedParticipantsLists: http://tir.trust-anchor.svc.cluster.local:8080
-
   ingress:
     enabled: true
     annotations:

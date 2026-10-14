@@ -782,8 +782,6 @@ tm-forum-api:
     enabled: true
   apiProxy:
     enabled: false
-  registration:
-    enabled: false
   ingress:
     enabled: true
     annotations:
