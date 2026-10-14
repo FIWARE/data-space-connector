@@ -305,7 +305,7 @@ The Trust Anchor should be deployed on **infrastructure managed independently** 
 ### Integration with trust frameworks
 
 For production data spaces, consider integrating with established trust frameworks:
-- [Gaia-X Digital Clearing Houses (GXDCH)](https://gaia-x.eu/gxdch) — for Gaia-X compliance. See [Gaia-X Integration](../../../GAIA_X.MD)
+- [Gaia-X Digital Clearing Houses (GXDCH)](https://gaia-x.eu/services-deliverables/digital-clearing-house/) — for Gaia-X compliance. See [Gaia-X Integration](../../../GAIA_X.MD)
 - [EBSI](https://ec.europa.eu/digital-building-blocks/sites/display/EBSI) — for European Blockchain Services Infrastructure compatibility
 - Custom trust frameworks defined by the data space governance body
 

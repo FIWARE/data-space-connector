@@ -18,7 +18,7 @@
 
 The FIWARE Data Space Connector (FIWARE DSC) is a data space connector resulting from the integration of open-source
 software components that are part of the [FIWARE Dataspace Components (FDC)](https://github.com/FIWARE) and the
-[Eclipse Dataspace Components (EDC)](https://eclipse-edc.github.io/docs/). Every organization participating
+[Eclipse Dataspace Components (EDC)](https://eclipse-edc.github.io/documentation/). Every organization participating
 in a data space can deploy it to "connect" to a data space, acting as data (processing) service provider,
 consumer of data (processing) services, or both.
 
@@ -77,7 +77,7 @@ The FIWARE DSC currently integrates the following frameworks:
   facilitates the authentication of participating organizations and their users (end users, devices, software agents
   including AI agents) using [W3C DIDs](https://www.w3.org/TR/did-core/) and
   [Verifiable Credentials](https://www.w3.org/TR/vc-data-model/), relying on trust mechanisms compatible with
-  [EBSI specifications](https://api-pilot.ebsi.eu/docs/apis) and
+  [EBSI specifications](https://hub.ebsi.eu/api ) and
   [Gaia-X recommendations](https://gaia-x.gitlab.io/policy-rules-committee/trust-framework/).
   Because it is based on the OIDC family of protocols, the authentication module supports H2M (Human-to-Machine) and M2M (Machine-to-Machine) interaction schemes and has been adopted as a mandatory protocol within the EU Digital Identity initiative (see section 4.2.1 "Interfaces and protocols" in the [EUDI Wallet Architecture and Reference Framework](https://eudi.dev/1.1.0/arf/) specifications).
 * **Authorization Framework** (Policy enforcement): determines, based on policies defined following the
@@ -95,9 +95,9 @@ The FIWARE DSC currently integrates the following frameworks:
   contracting, and inventory, based on the [FIWARE BAE Marketplace](https://github.com/FIWARE-TMForum/Business-API-Ecosystem)
 
 At the data exchange and service invocation layer, the FIWARE DSC is prepared to manage access to any HTTP-based
-interface. While it provides built-in compatibility with [ETSI NGSI-LD](https://www.etsi.org/committee/cim) as data
+interface. While it provides built-in compatibility with [ETSI NGSI-LD](https://cim.etsi.org/NGSI-LD/official/front-page.html) as data
 exchange API, it can also mediate access to services using S3, NGSIv2, web portal interfaces,
-[A2A or MCP](https://google.github.io/A2A/) for AI agent functionalities, and any other REST API.
+[A2A or MCP](https://a2a-protocol.org/latest/) for AI agent functionalities, and any other REST API.
 
 Technically, the FIWARE Data Space Connector is a
 [Helm Umbrella-Chart](https://helm.sh/docs/howto/charts_tips_and_tricks/#complex-charts-with-many-dependencies),
@@ -154,7 +154,7 @@ Precisely, the connector bundles the following components:
         <tr>
             <td><a href="https://github.com/FIWARE/trusted-issuers-list">trusted-issuers-list</a></td>
             <td>Acts as Trusted Issuers List by providing an <a
-                    href="https://api-pilot.ebsi.eu/docs/apis/trusted-issuers-registry">EBSI Trusted Issuers
+                    href="https://hub.ebsi.eu/api/core/issuers-registry">EBSI Trusted Issuers
                     Registry</a> API</td>
             <td>Local Trusted Issuers List</td>
         </tr>

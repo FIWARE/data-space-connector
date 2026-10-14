@@ -4,7 +4,7 @@
 
 [Keycloak](https://github.com/keycloak/keycloak) is the **Verifiable Credential (VC) Issuer** used by the FIWARE Data Space Connector. It is responsible for issuing [Verifiable Credentials](https://www.w3.org/TR/vc-data-model/) to the organization's users so they can authenticate and access services offered by other participants in the data space.
 
-Since version 24, Keycloak provides native support for [OpenID for Verifiable Credentials (OID4VC)](https://www.keycloak.org/docs/latest/server_admin/#_oid4vc), including the [OID4VCI](https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html) protocol for credential issuance. For more details, see the [Keycloak OID4VC documentation](https://www.keycloak.org/docs/latest/server_admin/#_oid4vc).
+Since version 24, Keycloak provides native support for [OpenID for Verifiable Credentials (OID4VC)](https://www.keycloak.org/docs/latest/server_admin/#_oid4vci), including the [OID4VCI](https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html) protocol for credential issuance. For more details, see the [Keycloak OID4VC documentation](https://www.keycloak.org/docs/latest/server_admin/#_oid4vci).
 
 ## What Keycloak does in the data space
 
