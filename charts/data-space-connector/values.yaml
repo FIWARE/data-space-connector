@@ -1786,16 +1786,6 @@ rainbow:
     serviceType: ClusterIP
     # -- port of the service
     port: 8080
-  # -- configuration to register rainbow at the credentials-config-service
-  ccs:
-    # -- should the registration at the credentials-config-service be enabled
-    enabled: false
-    # -- endpoint of the ccs to regsiter at
-    endpoint: http://verifier:8090
-    # -- configmap to get the registration information from
-    configMap: rainbow-registration
-    # -- service id of the data-service to be used
-    id: tpp-service
   # -- selector template
   # ref: https://kubernetes.io/docs/user-guide/node-selection/
   nodeSelector: {}

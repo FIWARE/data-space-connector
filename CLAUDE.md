@@ -41,7 +41,6 @@ charts/data-space-connector/templates/
   identityhub-cm.yaml / -datasource-cm.yaml / -logging.yaml / -ingress.yaml
   identityhub-service.yaml
   participant-registration-job.yaml, tmf-registration-job.yaml
-  rainbow-registration.yaml,
   participant-registration.yaml
   mongodb.yaml                # internal MongoDB (when not using operator)
   cert-manager-issuer.yaml, elsi-secret.yaml, issuance-secrets.yaml
