@@ -105,5 +105,5 @@ dependencies:
     repository: oci://quay.io/fiware/helm-charts
   - name: consent-owner-resolver
     condition: consent-owner-resolver.enabled
-    version: 0.1.1
+    version: 0.2.0
     repository: oci://quay.io/fiware/helm-charts
