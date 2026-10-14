@@ -1899,7 +1899,9 @@ registration:
   command: [ /bin/sh, -c, /bin/init.sh ]
   # -- hook annotations of the registration Job. post-upgrade matters: with post-install only, a
   # release that already exists never runs it again, so nothing added to `issuer` after the first
-  # install ever reaches the list. Re-running is safe - the script treats a 409 as success.
+  # install ever reaches the list. Re-running is safe: an issuer that is already registered (409)
+  # is left as it is, so a change to the credentials of an existing issuer does not reach the list
+  # either - that takes the trusted-issuers-list API. Any other error fails the Job.
   annotations:
     "helm.sh/hook": post-install,post-upgrade
     "helm.sh/hook-weight": "0"
