@@ -513,13 +513,6 @@ tm-forum-api:
     enabled: true
   apiProxy:
     enabled: false
-  registration:
-    ccs:
-      defaultOidcScope:
-        credentialTypes:
-          - UserCredential
-        trustedParticipantsLists: http://tir.trust-anchor.svc.cluster.local:8080
-
   ingress:
     enabled: true
     annotations:

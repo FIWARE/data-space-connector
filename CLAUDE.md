@@ -40,12 +40,12 @@ charts/data-space-connector/templates/
   dsconfig-cm.yaml / -service.yaml
   identityhub-cm.yaml / -datasource-cm.yaml / -logging.yaml / -ingress.yaml
   identityhub-service.yaml
-  participant-registration-job.yaml, tmf-registration-job.yaml
+  participant-registration-job.yaml
   participant-registration.yaml
   mongodb.yaml                # internal MongoDB (when not using operator)
   cert-manager-issuer.yaml, elsi-secret.yaml, issuance-secrets.yaml
   bae-prep-cm.yaml, ca-script.yaml, credentials-script.yaml
-  extra-manifests.yaml, realm.yaml, tmf-registration-cm.yaml
+  extra-manifests.yaml, realm.yaml
   _helpers.tpl, _realm.tpl
 
 doc/
@@ -98,7 +98,7 @@ pom.xml                       # drives local-deploy + integration tests
   follows semver; bump minor for additive features.
 
 ## Pod Scheduling Fields
-- The chart templates 12 workloads of its own (6 Deployments, 6 Jobs). Pods
+- The chart templates 11 workloads of its own (6 Deployments, 5 Jobs). Pods
   that come from subcharts are configured by overriding the subchart's own
   values, never by templating them here -- see the subchart rule above.
 - Deployments carry the full block: `nodeSelector`, `affinity`,
@@ -107,7 +107,7 @@ pom.xml                       # drives local-deploy + integration tests
 - Always gate with `{{- with }}`, never a bare `if` plus interpolation. An
   unset value (`""`, `[]`, `{}`) renders nothing, so upgrading an existing
   release is a no-op. `tests/scheduling_test.yaml` pins that behaviour.
-- Field indentation is 6 spaces with `nindent 8` in every one of the 12
+- Field indentation is 6 spaces with `nindent 8` in every one of the 11
   files, Jobs included: their podSpec is `spec.template.spec`, same depth as
   a Deployment's. Watch out for `backoffLimit`, which sits at 2 spaces on the
   Job spec -- appending after it puts the field on the wrong object.
@@ -115,13 +115,11 @@ pom.xml                       # drives local-deploy + integration tests
   `identityhub`, `identityhub.bootstrap` (shared by the bootstrap and
   rotation Jobs), `rainbow`, `dataSpaceConfig`, `statusListServer`,
   `statusListServer.redis`, `registration`, `tracing` (both otel helper
-  Jobs), `vault.unattended`, `tm-forum-api.registration`.
-- The last two sit inside a subchart's values namespace. That is deliberate
-  and follows what the chart already does -- `vault-unsealer-deployment.yaml`
-  reads `$p := .Values.vault.unattended` and `tmf-registration-job.yaml`
-  reads `index .Values "tm-forum-api"`. Neither subchart declares the key, and
-  neither ships an `additionalProperties: false` schema, so the extra key is
-  inert for them.
+  Jobs), `vault.unattended`.
+- The last one sits inside a subchart's values namespace. That is deliberate:
+  `vault-unsealer-deployment.yaml` reads `$p := .Values.vault.unattended`. The
+  subchart does not declare the key and ships no `additionalProperties: false`
+  schema, so the extra key is inert for it.
 - `status-list-server-redis.yaml` holds a Deployment and a Service in one
   file. The fields belong to the Deployment, before the `---`.
 - CRs are not templated workloads: scheduling for `mongodb.yaml` goes through

@@ -925,7 +925,7 @@ integration:
 | Component | Reason |
 |---|---|
 | **Rainbow** | Slated for removal in a future release. |
-| **Registration jobs** (participant-registration, tmf-registration) | Short-lived batch jobs that do not benefit from continuous tracing. |
+| **Registration jobs** (participant-registration) | Short-lived batch jobs that do not benefit from continuous tracing. |
 | **MongoDB** | Database-level tracing is handled by the application drivers, not the server. |
 | **HashiCorp Vault** | Infrastructure component; tracing is configured independently if needed. |
 | **cert-manager** | Cluster-level operator; out of scope for application tracing. |

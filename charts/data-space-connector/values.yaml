@@ -1532,44 +1532,6 @@ tm-forum-api:
   redis:
     enabled: false
 
-  registration:
-    enabled: true
-    # -- name to be used for the registration jobs
-    name: tmf-api-registration
-    annotations:
-      "helm.sh/hook": post-install
-      "helm.sh/hook-weight": "0"
-      "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
-    image:
-      repository: quay.io/curl/curl
-      tag: 8.1.2
-      pullPolicy: IfNotPresent
-    command: [ /bin/sh, -c, /bin/init.sh ]
-    extraEnvVars: []
-    extraVolumes: []
-    extraVolumeMounts: []
-    backoffLimit: 10
-    restartPolicy: Never
-    # -- configuration to register the dataplane at the credentials-config-service
-    ccs:
-      # -- endpoint of the ccs to regsiter at
-      endpoint: http://verifier:8090
-      # -- service id of the data-service to be used
-      id: tmf-api
-      # -- default scope to be created for the data plane
-      defaultOidcScope:
-        # -- name of the scope
-        name: default
-        # -- name of the default credential to be configured
-        credentialTypes:
-          - VerifiableCredential
-        # -- needs to be updated for the concrete dataspace
-        trustedParticipantsLists: http://tir.trust-anchor.org
-        trustedIssuersLists: http://trusted-issuers-list:8080
-    # -- priority class to be assigned to the pods
-    # ref: https://kubernetes.io/docs/concepts/scheduling-eviction/pod-priority-preemption/
-    priorityClassName: ""
-
 
 ## Configuration of the status-list-server for Token Status List (RFC draft-ietf-oauth-status-list) support.
 ## Provides credential revocation infrastructure for Verifiable Credentials issued by Keycloak.
