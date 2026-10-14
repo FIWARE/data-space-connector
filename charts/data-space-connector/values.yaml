@@ -166,6 +166,12 @@ decentralizedIam:
         prometheus.io/scrape: "true"
         prometheus.io/path: /apisix/prometheus/metrics
         prometheus.io/port: "9091"
+      service:
+        # -- traffic policy of the gateway service. Left empty so that Kubernetes applies its own
+        # default (`Cluster` for NodePort and LoadBalancer) and the service can also be set to
+        # `ClusterIP`: the apisix chart writes the field for every type, and the API server rejects
+        # it on a ClusterIP service. Set it to `Local` to keep the client source IP.
+        externalTrafficPolicy: ""
       apisix:
         prometheus:
           enabled: true
