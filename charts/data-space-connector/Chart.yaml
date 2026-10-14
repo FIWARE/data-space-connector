@@ -27,7 +27,7 @@ dependencies:
     repository: oci://quay.io/fiware/helm-charts
   - name: contract-management
     condition: contract-management.enabled
-    version: 3.5.37
+    version: 3.6.0
     repository: oci://quay.io/fiware/helm-charts
   # marketplace
   - name: business-api-ecosystem
