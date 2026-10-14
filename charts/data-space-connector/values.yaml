@@ -79,6 +79,13 @@ decentralizedIam:
       enabled: true
       # -- allows to set a fixed name for the services
       fullnameOverride: verifier
+      registration:
+        job:
+          # -- how long the registration job may run, including its wait for the verifier. On a
+          # fresh install the verifier only becomes ready once Postgres, the trusted-issuers-list
+          # and the PAP are up, which regularly takes longer than the subchart's 300 seconds and
+          # fails the release.
+          activeDeadlineSeconds: 1200
       deployment:
         # -- configuration for the m2m flow, in case the tir is requiring authentication
         m2m:
