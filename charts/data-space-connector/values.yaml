@@ -1769,6 +1769,9 @@ contract-management:
   # -- should it be enabled? set to false if one outside the chart is used.
   enabled: true
   fullnameOverride: contract-management
+  # -- integrate with rainbow for DSP negotiations. Turn it on together with `rainbow.enabled`:
+  # without rainbow, contract management fails to register at it on start and on every order.
+  enableRainbow: false
   # -- distributed-tracing configuration for the contract-management subchart.
   # contract-management is a Micronaut (Java) application that supports the
   # standard OpenTelemetry SDK environment variables. Because

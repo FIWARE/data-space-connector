@@ -1,4 +1,8 @@
 {{- if .Values.rainbow.enabled }}
+{{- $contractManagement := index .Values "contract-management" }}
+{{- if and $contractManagement.enabled (not $contractManagement.enableRainbow) }}
+{{- fail "rainbow.enabled is true but contract-management.enableRainbow is false: set contract-management.enableRainbow to true so that contract management negotiates through rainbow" }}
+{{- end }}
 kind: Deployment
 apiVersion: apps/v1
 metadata:
