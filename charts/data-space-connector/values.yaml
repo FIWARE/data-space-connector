@@ -399,6 +399,10 @@ keycloak:
       adminPasswordKey: keycloak-admin
     # -- proxy headers used when TLS is terminated at an upstream ingress/proxy
     proxyHeaders: xforwarded
+  image:
+    # -- pull policy of the Keycloak image. The subchart pins the image by digest, so pulling it on
+    # every start only makes restarts depend on the registry being reachable.
+    imagePullPolicy: IfNotPresent
   # -- @param preserveProviders Disable mounting an emptyDir over /opt/keycloak/providers, preserving the providers bundled in the image.
   preserveProviders: true
   # -- TLS terminated at the ingress; the container does not serve HTTPS itself
@@ -1482,7 +1486,10 @@ tm-forum-api:
   apiProxy:
     enabled: true
     image:
-      tag: distroless-v1.27-latest
+      # -- envoy image of the proxy. Pinned to the last release of the 1.27 line, which is what
+      # `distroless-v1.27-latest` resolves to; a newer envoy line needs the tm-forum-api chart to
+      # support it first.
+      tag: distroless-v1.27.7
     service:
       # -- name to be used for the proxy service.
       nameOverride: tm-forum-api
@@ -1605,7 +1612,7 @@ statusListServer:
     # -- container image tag
     tag: 1.0.1
     # -- image pull policy
-    pullPolicy: Always
+    pullPolicy: IfNotPresent
   service:
     # -- Kubernetes Service type
     serviceType: ClusterIP
