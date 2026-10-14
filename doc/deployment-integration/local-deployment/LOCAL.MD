@@ -1388,21 +1388,42 @@ more organization-focused once like [did:web](https://w3c-ccg.github.io/did-meth
 
 ### Deployment
 
-The deployment runs [k3s](https://k3s.io/) in a docker container, started by the [k3s-maven-plugin](https://github.com/kokuwaio/k3s-maven-plugin),
-and installs the data space into it the same way it is installed in a real environment: every chart becomes a Helm release.
-The same deployment backs the [integration tests](../../../it/src/test). [Maven](https://maven.apache.org/) executes the following steps:
+The deployment runs [k3s](https://k3s.io/) in a docker container, started by the [k3s-maven-plugin](https://github.com/kokuwaio/k3s-maven-plugin).
+The same deployment backs the [integration tests](../../../it/src/test). The data space can be deployed into it in two ways,
+which use the same values files; the CI runs every test scenario with both of them.
+
+**Template and apply (default).** Every chart is rendered with `helm template` and the result is applied with `kubectl`,
+the way a GitOps tool deploys a chart. [Maven](https://maven.apache.org/) executes the following steps:
 
 1. Download the pinned Helm version to the build folder, e.g. `target/helm/helm`
-2. Spin up the cluster and write its kubeconfig, e.g. `target/k3s.yaml`
-3. Run [k3s/deploy.sh](../../../k3s/deploy.sh), which
-    1. creates the [namespaces](../../../k3s/namespaces), via `kubectl apply`
-    2. installs the operators (Postgres, MongoDB, cert-manager) and the self-signed CA issuer as a single Helm release of the [connector chart](../../../charts), with [k3s/operators.yaml](../../../k3s/operators.yaml)
-    3. applies the cluster infrastructure ([k3s/infra](../../../k3s/infra)), via `kubectl apply`
-    4. installs the participants with `helm upgrade --install`, using the local values for each of them (e.g. [trust-anchor](../../../k3s/trust-anchor.yaml), [provider](../../../k3s/provider.yaml) and [consumer](../../../k3s/consumer.yaml))
-    5. waits until every Deployment, StatefulSet and DaemonSet of the namespaces that got a release is ready
+2. Render every release into `target/rendered`, with the [helm-maven-plugin](https://github.com/kokuwaio/helm-maven-plugin):
+   the operators (Postgres, MongoDB, cert-manager, with their CRDs) and the self-signed CA issuer from
+   [k3s/operators.yaml](../../../k3s/operators.yaml), and the participants (with their CRDs too) with the local values for each of them
+   (e.g. [trust-anchor](../../../k3s/trust-anchor.yaml), [provider](../../../k3s/provider.yaml) and [consumer](../../../k3s/consumer.yaml))
+3. Adjust the render: set the namespace of the APISIX ingress, which its chart leaves out, and run
+   [k3s/ci-post-render.sh](../../../k3s/ci-post-render.sh) (deadlines, and dropping the hooks a fresh install never runs)
+4. Spin up the cluster and write its kubeconfig, e.g. `target/k3s.yaml`
+5. Apply, in this order and waiting for each step to be ready: the [namespaces](../../../k3s/namespaces), the operators,
+   the CA and issuers, the cluster infrastructure ([k3s/infra](../../../k3s/infra)), the participants' additional
+   resources, and the participants
 
-Running the deployment again against an existing cluster upgrades the releases in place. To list them: `helm list -A`.
+**Helm install (`helm-install` profile).** Every chart is installed as a Helm release, the way `helm install` does, so
+hooks run in their phase and order and `lookup` sees existing objects. Add the profile to any deployment, e.g.
+`mvn clean deploy -Plocal,helm-install`. Maven downloads the pinned Helm version, spins up the cluster, and runs
+[k3s/deploy.sh](../../../k3s/deploy.sh), which
+
+1. creates the [namespaces](../../../k3s/namespaces), via `kubectl apply`
+2. installs the operators (Postgres, MongoDB, cert-manager) and the self-signed CA issuer as a single Helm release of the [connector chart](../../../charts), with [k3s/operators.yaml](../../../k3s/operators.yaml)
+3. applies the cluster infrastructure ([k3s/infra](../../../k3s/infra)), via `kubectl apply`
+4. installs the participants with `helm upgrade --install`, using the local values for each of them (e.g. [trust-anchor](../../../k3s/trust-anchor.yaml), [provider](../../../k3s/provider.yaml) and [consumer](../../../k3s/consumer.yaml))
+5. waits until every Deployment, StatefulSet and DaemonSet of the namespaces that got a release is ready
+
+Running it again against an existing cluster upgrades the releases in place. To list them: `helm list -A`.
 The script can also be run on its own against any cluster, e.g. `KUBECONFIG=target/k3s.yaml k3s/deploy.sh`.
+
+The cluster survives `mvn clean`, and a new build reuses it. To switch between the two ways, start from a fresh one
+(`docker rm -f k3s-maven-plugin`): Helm refuses to adopt objects that `kubectl apply` created
+(`invalid ownership metadata`).
 
 # Trust local certificate
 kubectl get secret ca-secret -n operators -o jsonpath='{.data.tls\.crt}' | base64 -d > local-ca.crt 
