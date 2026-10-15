@@ -259,9 +259,16 @@ did:
         items:
           - key: tls.crt
             path: tls.crt
+    # did-helper generates a key pair and a keystore in /cert at startup even when certPath is
+    # set; they are not used, but the directory has to be writable, also with a read-only root
+    # filesystem
+    - name: did-helper-workdir
+      emptyDir: {}
   volumeMounts:
     - name: certs
       mountPath: /certs
+    - name: did-helper-workdir
+      mountPath: /cert
   ingress:
     enabled: true
     className: <your-ingress-class>   # add the annotations your ingress controller needs
