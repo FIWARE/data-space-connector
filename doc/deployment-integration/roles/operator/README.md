@@ -74,7 +74,7 @@ The Central Marketplace is deployed using the same `fiware/data-space-connector`
 | **TMForum API** | Hosts the shared catalog (products, offerings, orders, parties, agreements). All interactions with the marketplace (organization registration, product specification, offering, ordering and order completion) can be performed directly through this API — see the end-to-end flow in [CENTRAL_MARKETPLACE.md](../../../CENTRAL_MARKETPLACE.md). |
 | **Scorpio Context Broker** | NGSI-LD backend for the TMForum API. Should not be exposed to participants as a data service. |
 | **Contract Management** | Configured in central-marketplace mode: `enableCentralMarketplace: true`, `enableOdrlPap: false`, `oid4vp.enabled: true`. On order completion, it authenticates with the marketplace's credential and notifies the provider's Contract Management. |
-| **VCVerifier + Credentials Config Service + Trusted Issuers List (local)** | Authenticate the providers (and users) that access the marketplace's catalog and ordering APIs. |
+| **VCVerifier + Trusted Issuers List (local)** | Authenticate the providers (and users) that access the marketplace's catalog and ordering APIs. |
 
 The **ODRL-PAP, OPA and data-service protection** components that a Provider deploys are **not** needed in the Central Marketplace — the marketplace does not expose protected data services.
 
@@ -228,14 +228,14 @@ credentials:
 The `MarketplaceCredential` type is **not mandatory** — it is simply the type used throughout this documentation, the [local demo](../../../CENTRAL_MARKETPLACE.md) and the shipped examples (see [`k3s/consumer.yaml`](../../../../k3s/consumer.yaml) Keycloak realm and [`k3s/provider.yaml`](../../../../k3s/provider.yaml) policies). Any credential type can be used as long as the three sides agree on it:
 
 1. **Keycloak (this realm)** must issue the chosen type — adjust `scope` and `vct` in the `verifiableCredentials.<id>` entry, the `id` under `credentials.configurations`, and the `targetFile` that Contract Management will read.
-2. **Central Marketplace CCS + PAP** uses that same type to let its Contract Management present it to providers. No extra configuration is typically needed here.
-3. **Each provider's CCS + PAP** must accept that type on the Contract Management endpoint (see step 3 and step 4 of [Participating in a Central Marketplace](../provider/README.md#participating-in-a-central-marketplace) — the `type` field in the `credentials-config-service` scope and the `allowContractManagement` policy at the PAP).
+2. **Central Marketplace VCVerifier + PAP** use that same type to let its Contract Management present it to providers. No extra configuration is typically needed here.
+3. **Each provider's VCVerifier + PAP** must accept that type on the Contract Management endpoint (see step 3 and step 4 of [Participating in a Central Marketplace](../provider/README.md#participating-in-a-central-marketplace) — the `type` field in the service registered with `vcverifier.registration.services` and the `allowContractManagement` policy at the PAP).
 
 If the type is changed, it must be changed consistently on all three sides or provider-side authentication will fail.
 
 **5. Authentication stack for the marketplace's own APIs**
 
-Providers and users accessing the catalog and ordering APIs authenticate via OID4VP against the marketplace's own VCVerifier + Credentials Config Service + local Trusted Issuers List. The values mirror those of a Provider ([see Provider role](../provider/README.md#deployment)), but the `credentials-config-service.registration` must expose a `LegalPersonCredential`-based scope for the catalog/ordering endpoints (so any registered participant can log in to publish or buy offerings).
+Providers and users accessing the catalog and ordering APIs authenticate via OID4VP against the marketplace's own VCVerifier + local Trusted Issuers List. The values mirror those of a Provider ([see Provider role](../provider/README.md#deployment)), but the services registered with `vcverifier.registration.services` must expose a `LegalPersonCredential`-based scope for the catalog/ordering endpoints (so any registered participant can log in to publish or buy offerings).
 
 > **Note:** The Central Marketplace does **not** deploy the ODRL-PAP + OPA data-service-protection stack. Its only protected surface is the TMForum API behind APISIX with OID4VP auth.
 
@@ -246,7 +246,7 @@ The local demo (`mvn clean deploy -Plocal,central`) deploys the Central Marketpl
 | File | Description |
 |------|-------------|
 | [k3s/consumer.yaml](../../../../k3s/consumer.yaml) | Base values for the organization hosting the Central Marketplace (Keycloak, DID, database, etc.) |
-| [k3s/consumer-auth.yaml](../../../../k3s/consumer-auth.yaml) | Authentication stack (VCVerifier, Credentials Config Service, Trusted Issuers List, APISIX routes) required to protect the marketplace APIs |
+| [k3s/consumer-auth.yaml](../../../../k3s/consumer-auth.yaml) | Authentication stack (VCVerifier, Trusted Issuers List, APISIX routes) required to protect the marketplace APIs |
 | [k3s/consumer-tmf.yaml](../../../../k3s/consumer-tmf.yaml) | TMForum API, Scorpio backend and Contract Management configured in central-marketplace mode (`enableCentralMarketplace: true`, `oid4vp.enabled: true`) |
 
 Deploying the Central Marketplace with the same layout:

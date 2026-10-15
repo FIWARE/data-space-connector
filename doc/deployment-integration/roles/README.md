@@ -43,10 +43,10 @@ The following table shows which components are required, optional, or not applic
         </tr>
         <tr>
             <td><a href="https://github.com/FIWARE/credentials-config-service">credentials-config-service</a></td>
-            <td>Holds the information which VCs are required for accessing a service</td>
+            <td>Holds the information which VCs are required for accessing a service. VCVerifier serves this API itself and the services are registered with <code>vcverifier.registration.services</code>, so the standalone service is disabled by default</td>
             <td>-</td>
-            <td>Required</td>
-            <td>Required</td>
+            <td>Built into VCVerifier</td>
+            <td>Built into VCVerifier</td>
             <td>-</td>
         </tr>
         <tr>

@@ -47,7 +47,7 @@ See the [Consumer deployment guide](consumer/README.md) for details.
 
 ### Provider
 
-When acting as a **provider**, Keycloak also issues VCs, but additionally the provider deployment includes components that verify credentials presented by external consumers (e.g., VCVerifier, Credentials Config Service).
+When acting as a **provider**, Keycloak also issues VCs, but additionally the provider deployment includes components that verify credentials presented by external consumers (e.g., VCVerifier, Trusted Issuers List).
 
 See the [Provider deployment guide](provider/README.md) for details.
 

@@ -145,9 +145,6 @@ contract-management:
 fdsc-edc:
   enabled: false
 
-credentials:
-  enabled: false
-
 identityhub:
   enabled: false
 

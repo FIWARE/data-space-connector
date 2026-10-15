@@ -39,7 +39,7 @@ The provider needs the same base components as a consumer:
 | Component | Description |
 |-----------|-------------|
 | **VCVerifier** | Verifies incoming Verifiable Credentials via [OID4VP](https://openid.net/specs/openid-4-verifiable-presentations-1_0.html). Checks credential signatures, issuer trust (via the Trust Anchor), and credential type acceptance. Returns a JWT access token on success. |
-| **Credentials Config Service** | Configures which credential types are accepted for each protected service. Defines which Trusted Issuers Lists and Trusted Participants Lists to check. |
+| **Credentials configuration** | Which credential types are accepted for each protected service, and which Trusted Issuers Lists and Trusted Participants Lists to check. Served by the VCVerifier itself, on its configuration API (port 8090); the services are registered there from the values with `vcverifier.registration.services`. The standalone [Credentials Config Service](https://github.com/FIWARE/credentials-config-service) is no longer needed and is disabled by default. |
 | **Trusted Issuers List** (local) | The provider's own list of trusted issuers, used in combination with the Trust Anchor's registry to determine which organizations can issue specific credential types. |
 
 ### Authorization: Policy enforcement
@@ -67,7 +67,7 @@ The [TMForum API](https://github.com/FIWARE/tmforum-api) implements standardized
 
 ### Contract Management
 
-The [Contract Management](https://github.com/FIWARE/contract-management) component automates access control based on product orders. When a consumer purchases a product offering via the TMForum API, Contract Management reacts to the order and, most importantly, **registers the consumer's DID in the provider's local Trusted Issuers List**, so the consumer's credentials are accepted at the provider when accessing the purchased service. Additionally, if the [Credentials Config Service](https://github.com/FIWARE/credentials-config-service) and the [ODRL-PAP](https://github.com/SEAMWARE/odrl-pap) are deployed, Contract Management also creates the matching credentials configuration and the ODRL access policies that encode the contract terms. Enable this when:
+The [Contract Management](https://github.com/FIWARE/contract-management) component automates access control based on product orders. When a consumer purchases a product offering via the TMForum API, Contract Management reacts to the order and, most importantly, **registers the consumer's DID in the provider's local Trusted Issuers List**, so the consumer's credentials are accepted at the provider when accessing the purchased service. The credential types granted to the consumer are taken from the ordered product. Additionally, if the [ODRL-PAP](https://github.com/SEAMWARE/odrl-pap) is deployed, Contract Management also creates the ODRL access policies that encode the contract terms. Enable this when:
 - You use TMForum APIs for product ordering
 - Access should be granted/revoked automatically based on contracts
 - You need audit trails for data access agreements
@@ -172,14 +172,14 @@ decentralizedIam:
               with_body: true
 ```
 
-**3. Register the Contract Management as a service in the Credentials Config Service**
+**3. Register the Contract Management as a service at the VCVerifier**
 
 The VCVerifier needs to know which credential types to accept on the Contract Management host. Register the service with a dedicated OIDC scope (`external-marketplace`) that accepts the `MarketplaceCredential`:
 
 ```yaml
 decentralizedIam:
   vcAuthentication:
-    credentials-config-service:
+    vcverifier:
       registration:
         enabled: true
         services:
@@ -198,6 +198,8 @@ decentralizedIam:
                       enabled: true
                       fullInclusion: true
 ```
+
+Add the entry to the same `registration.services` list as the provider's other services (such as the `data-service` of the [values example](#using-the-fiware-dsc-helm-chart-and-values)): Helm replaces lists instead of merging them, so a list in a second values file drops the first one.
 
 `trustedIssuersLists: "*"` is intentional here: the marketplace's credential is issued by the marketplace itself, and the trust decision is delegated entirely to the Trust Anchor's TIR.
 
@@ -302,25 +304,9 @@ decentralizedIam:
           did: <your-organization's-DID>
         server:
           host: https://<your_verifier_domain>
-        configRepo:
-          configEndpoint: http://verifier:8090
-
-    # Credentials Config Service — defines which credential types are accepted
-    credentials-config-service:
-      ingress:
-        enabled: true
-        annotations:
-          cert-manager.io/cluster-issuer: "prod"
-          cert-manager.io/private-key-algorithm: "ECDSA"
-          cert-manager.io/common-name: "<your_ccs_domain>"
-        hosts:
-          - host: <your_ccs_domain>
-            paths:
-              - "/"
-        tls:
-          - secretName: <your_ccs_domain>-tls
-            hosts:
-              - <your_ccs_domain>
+      # Services and the credentials they accept, registered at the VCVerifier's configuration
+      # API on install and upgrade. A service that is already registered is left as it is: change
+      # it through that API (`PUT http://verifier:8090/service/<id>`).
       registration:
         enabled: true
         services:
@@ -511,7 +497,7 @@ The following ingresses are useful for development but must **not** be publicly 
 - **Scorpio Broker** direct ingress — all access must go through APISIX
 - **ODRL-PAP** ingress — policy management should be restricted to authorized operators
 - **Trusted Issuers List** management API — restrict to internal access
-- **Credentials Config Service** — restrict to internal access
+- **VCVerifier configuration API** (`vcverifier.configIngress`, port 8090) — it defines which credentials each service accepts; keep it internal, and only publish it, restricted, if services have to be managed from outside the cluster
 
 ### APISIX configuration
 

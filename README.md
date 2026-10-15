@@ -148,7 +148,7 @@ Precisely, the connector bundles the following components:
         </tr>
         <tr>
             <td><a href="https://github.com/FIWARE/credentials-config-service">credentials-config-service</a></td>
-            <td>Holds the information which VCs are required for accessing a service</td>
+            <td>Holds the information which VCs are required for accessing a service. VCVerifier serves this API itself, so the standalone service is disabled by default</td>
             <td>PRP/PAP (authentication)</td>
         </tr>
         <tr>
@@ -237,7 +237,8 @@ The framework consists of the following components:
   OID4VP protocol with the user-side system that stores credentials (a digital wallet in the case of end users,
   another storage system in the case of software agents such as AI agents, devices, robots, etc.)
 * **[credentials-config-service](https://github.com/FIWARE/credentials-config-service)**: maintains the configuration
-  of which VCs, containing which roles/claims, the VCVerifier must request for each product/service
+  of which VCs, containing which roles/claims, the VCVerifier must request for each product/service. The
+  VCVerifier serves this API itself, and the chart registers the services through it
 * **[trusted-issuers-list](https://github.com/FIWARE/trusted-issuers-list)**: maintains a registry of organizations
   (identified by their DID) that are considered trusted issuers of certain classes of VCs containing certain
   roles/claims. Provides an [EBSI Trusted Issuers Registry](https://hub.ebsi.eu/api/core/issuers-registry)
