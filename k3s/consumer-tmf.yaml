@@ -31,17 +31,6 @@ scorpio:
       cpu: "100m"
       memory: 128Mi
 
-postgis:
-  enabled: true
-  primary:
-    resourcesPreset: none
-    persistence:
-      enabled: false
-  readReplicas:
-    persistence:
-      enabled: false
-
-
 # contract management for distributing the buy events
 contract-management:
   enabled: true

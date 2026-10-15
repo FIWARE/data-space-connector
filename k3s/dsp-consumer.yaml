@@ -202,7 +202,7 @@ identityhub:
     auth:
       username: ih
       existingSecret: ih.postgres.credentials.postgresql.acid.zalan.do
-      existingSecretKeyKey: "password"
+      existingSecretPasswordKey: "password"
   additionalVolumeMounts:
     - name: root-ca
       mountPath: /root-ca
