@@ -14,7 +14,7 @@ dependencies:
     alias: scorpio
     condition: scorpio.enabled
     repository: oci://quay.io/fiware/helm-charts
-    version: 0.4.15
+    version: 0.5.0
   # issuance
   - name: keycloak
     condition: keycloak.enabled
