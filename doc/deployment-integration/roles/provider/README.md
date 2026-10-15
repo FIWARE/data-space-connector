@@ -53,7 +53,7 @@ The provider needs the same base components as a consumer:
 
 ## Optional components
 
-All optional components listed below can be deployed using the `fiware/data-space-connector` Helm chart by enabling them in your values file.
+All optional components listed below can be deployed using the `fiware/data-space-connector` Helm chart. Some of them - Scorpio, the TMForum API and Contract Management - are **enabled by default**; set them to `false` explicitly if you do not need them. The [values example](#using-the-fiware-dsc-helm-chart-and-values) below lists the default of each one.
 
 > **Note on Scorpio Context Broker:** The FIWARE implementation of the [TMForum APIs](https://github.com/FIWARE/tmforum-api) is based on [NGSI-LD](https://www.etsi.org/deliver/etsi_gs/CIM/001_099/009/01.08.01_60/gs_CIM009v010801p.pdf), which is why the `fiware/data-space-connector` Helm chart deploys a [Scorpio Context Broker](https://github.com/ScorpioBroker/ScorpioBroker) as its backend. In the provided examples, this same Scorpio instance is also used as the NGSI-LD endpoint that the provider exposes through the connector. However, **in production**, if you want to expose an NGSI-LD endpoint as a data service, you should deploy a **separate Context Broker** for that purpose and not reuse the Scorpio instance that backs the TMForum APIs.
 
@@ -430,28 +430,27 @@ decentralizedIam:
             hosts:
               - <your_pap_domain>
 
+# --- Enabled by default: set to false if you do not need them ---
 # Scorpio Context Broker (TMForum backend — see note on Scorpio above)
 scorpio:
-  # enabled by default
+  enabled: true
+tm-forum-api:
+  enabled: true         # TMForum APIs: product catalog, ordering, ...
+contract-management:
+  enabled: true         # contract-based access, needs the TMForum API
 
 # --- Disabled by default (enable as needed) ---
-tm-forum-api:
-  enabled: false        # Set to true for marketplace features
-contract-management:
-  enabled: false        # Set to true for contract-based access
 marketplace:
-  enabled: false        # Set to true for web marketplace portal
+  enabled: false        # local marketplace portal (BAE), needs MongoDB
 fdsc-edc:
-  enabled: false        # Set to true for DSP compliance
-
-# Components not needed for provider
-credentials:
-  enabled: false
+  enabled: false        # Dataspace Protocol connector
 identityhub:
-  enabled: false
+  enabled: false        # only needed with the Decentralized Claims Protocol
 vault:
   enabled: false
 ```
+
+A provider without any of the optional components sets `scorpio`, `tm-forum-api` and `contract-management` to `false`: leaving them out of the values file deploys them.
 
 2. Add the FIWARE DSC helm chart repository:
 
