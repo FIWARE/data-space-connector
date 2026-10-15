@@ -221,8 +221,6 @@ decentralizedIam:
             config_provider: "etcd"
           role_data_plane:
             config_provider: "etcd"
-        catchAllRoute:
-          enabled: false
       ingress:
         enabled: true
         annotations:

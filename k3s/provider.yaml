@@ -360,8 +360,6 @@ decentralizedIam:
             config_provider: "etcd"
           role_data_plane:
             config_provider: "etcd"
-        catchAllRoute:
-          enabled: false
       ingress:
         enabled: true
         annotations:
@@ -684,15 +682,6 @@ decentralizedIam:
       transfers:
         host: http://rainbow-provider.127.0.0.1.nip.io:8080
         path: transfers
-
-postgresql:
-  primary:
-    resourcesPreset: none
-    persistence:
-      enabled: false
-  readReplicas:
-    persistence:
-      enabled: false
 
 # helper component to serve the did.json document
 did:
