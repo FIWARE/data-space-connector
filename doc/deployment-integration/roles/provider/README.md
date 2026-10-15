@@ -223,6 +223,8 @@ The provider uses the `fiware/data-space-connector` chart with authentication an
 
 1. Create a helm `values.yaml` file with the key settings for a provider deployment:
 
+   The Ingresses in the example only carry the cert-manager annotations and use the cluster's default ingress class unless `className` is set. Add the class and the annotations your ingress controller needs; the [local deployment](../../local-deployment/LOCAL.MD) uses Traefik, for example.
+
 ```yaml
 # Key settings for provider deployment
 
@@ -245,7 +247,8 @@ did:
   enabled: true
   config:
     server:
-      hostUrl: "http://<your_did_domain>"
+      # https: did-helper also publishes <hostUrl>/.well-known/tls.crt as the x5u of the key
+      hostUrl: "https://<your_did_domain>"
       certPath: "/certs/tls.crt"
   volumes:
     - name: certs
@@ -259,10 +262,8 @@ did:
       mountPath: /certs
   ingress:
     enabled: true
-    className: ""
+    className: <your-ingress-class>   # add the annotations your ingress controller needs
     annotations:
-      traefik.ingress.kubernetes.io/service.passhostheader: "true"
-      traefik.ingress.kubernetes.io/router.tls: "true"
       cert-manager.io/cluster-issuer: "prod" # Use self-signed for testing
       cert-manager.io/private-key-algorithm: "ECDSA"
       cert-manager.io/common-name: "<your_did_domain>"
@@ -286,7 +287,6 @@ decentralizedIam:
       ingress:
         enabled: true
         annotations:
-          traefik.ingress.kubernetes.io/router.tls: "true"
           cert-manager.io/cluster-issuer: "prod"
           cert-manager.io/private-key-algorithm: "ECDSA"
           cert-manager.io/common-name: "<your_verifier_domain>"
