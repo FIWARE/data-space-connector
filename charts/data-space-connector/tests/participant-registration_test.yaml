@@ -1,0 +1,32 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/helm-unittest/helm-unittest/main/schema/helm-testsuite.json
+#
+# ---------------------------------------------------------------------------
+# Helm-unittest suite for the trusted-issuers-list registration.
+#
+# A 2xx registers the issuer, a 409 leaves the existing entry exactly as it is -
+# it may have been changed through the API since - and anything else fails the
+# job. No re-run may overwrite an existing issuer.
+# ---------------------------------------------------------------------------
+suite: trusted-issuers-list registration
+templates:
+  - templates/participant-registration.yaml
+tests:
+  - it: leaves an existing issuer unchanged and fails on any other error
+    set:
+      registration:
+        enabled: true
+        til: http://trusted-issuers-list:8080
+        issuer:
+          - did: did:web:example.org
+            credentialTypes:
+              - LegalPersonCredential
+    asserts:
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: '409\) echo "issuer did:web:example.org is already registered and was left unchanged'
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: '\*\) exit 1 ;;'
+      - notMatchRegex:
+          path: data["init.sh"]
+          pattern: 'PUT'

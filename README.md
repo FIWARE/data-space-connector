@@ -606,6 +606,11 @@ The tests can be executed via:
 They will spin up the [Local Data Space](./doc/deployment-integration/local-deployment/LOCAL.MD) and run
 the [test-scenarios](./it/src/test/resources/it/mvds_basic.feature) against it.
 
+By default the charts are rendered with `helm template` and applied with `kubectl`, as a GitOps tool does; add the
+`helm-install` profile (`mvn clean integration-test -Ptest,helm-install`) to install them as Helm releases instead.
+The CI runs every scenario both ways, see
+[ADR 0007](./doc/adr/0007-test-both-deployment-paths.md).
+
 
 ## Additional documentation and resources
 

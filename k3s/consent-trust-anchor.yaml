@@ -7,8 +7,8 @@
 # participants. Everything else the umbrella chart offers is disabled. The
 # consent-facade stays at the provider and is reached cross-namespace.
 #
-# Layered by the `consent` maven profile:
-#   helm template consent-authority charts/data-space-connector \
+# Installed by k3s/deploy.sh in the `consent` maven profile:
+#   helm upgrade --install consent-authority charts/data-space-connector \
 #     -f k3s/consent-trust-anchor.yaml --namespace trust-anchor
 # ---------------------------------------------------------------------------
 
@@ -405,12 +405,15 @@ vcCredentials:
 decentralizedIam:
   enabled: true
   vcAuthentication:
-    # no Postgres at the authority (verifier/til/ccs/identityhub are off); avoids
+    # no Postgres of its own at the authority (til/ccs/identityhub are off); avoids
     # colliding with the trust-anchor chart's own postgres-operator.
     postgres-operator:
       enabled: false
+    # The verifier keeps its ccsdb in the trust-anchor release's `postgres` cluster, in the
+    # same namespace, created there by the ensure-ccsdb job (extraManifests below). A second
+    # `postgres` cluster from this release would be the same object as that one.
     managedPostgres:
-      enabled: true
+      enabled: false
     trusted-issuers-list:
       enabled: false
     vcverifier:
@@ -489,10 +492,6 @@ decentralizedIam:
       registration:
         enabled: true
         job:
-          # Use a long TTL so the Job persists until the k3s-maven-plugin
-          # has verified its completion. The default 120s races with the
-          # plugin's parallel wait loop in CI.
-          ttlSecondsAfterFinished: 86400
           initContainers:
             waitForHost:
               enabled: true
