@@ -511,6 +511,39 @@ The following ingresses are useful for development but must **not** be publicly 
 - If using a proxy, configure `HTTPS_PROXY`/`NO_PROXY` appropriately
 - The VCVerifier's signing key (used for JWT issuance) must be protected
 
+#### Request object modes
+
+`deployment.verifier.supportedModes` defaults to `urlEncoded`. With `byValue` or `byReference` the verifier signs the request objects it sends to wallets, so it also needs `clientIdentification`; without its `keyPath` the verifier does not start (`Failed to initialize verifier`):
+
+```yaml
+decentralizedIam:
+  vcAuthentication:
+    vcverifier:
+      deployment:
+        verifier:
+          supportedModes: ["byValue", "byReference"]
+          clientIdentification:
+            id: x509_san_dns:<your_verifier_domain>   # how the verifier identifies itself to wallets
+            keyPath: /signing-key/tls.key            # key that signs the request objects
+            certificatePath: /signing-key/tls.crt    # certificate embedded in their header
+            requestKeyAlgorithm: ES256               # algorithm of that key
+        additionalVolumes:
+          - name: signing-key
+            secret:
+              secretName: <your_verifier_domain>-tls # e.g. a cert-manager certificate for the verifier's domain
+        additionalVolumeMounts:
+          - name: signing-key
+            mountPath: /signing-key
+```
+
+The verifier reads the algorithm from `requestKeyAlgorithm`; the `keyAlgorithm` listed under `clientIdentification` in the vcverifier chart's values has no effect.
+
+#### Token signing algorithm
+
+The access tokens the verifier issues are validated by APISIX's `openid-connect` plugin, which only builds the public key from an RSA JWK (or from an `x5c` chain, which the verifier does not publish). Keep `deployment.verifier.keyAlgorithm` at its default `RS256`: with `ES256`, APISIX rejects every token with `No trusted certs loaded`. This only concerns the verifier's tokens; Keycloak can keep signing credentials with `ES256`.
+
+By default (`generateKey: true`) the verifier generates that key at startup and only keeps it in memory, so the tokens issued before a restart stop validating and several replicas do not share a key. In production, provide an RSA key instead, with `generateKey: false` and `keyPath`.
+
 ### Policy management
 
 - Define ODRL policies following the principle of least privilege

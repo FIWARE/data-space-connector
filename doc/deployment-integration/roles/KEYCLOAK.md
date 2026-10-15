@@ -223,7 +223,7 @@ The signing key configuration tells Keycloak where to find the keystore and whic
     keyAlgorithm: ES256                     # ECDSA with P-256 curve
 ```
 
-The `did` and `issuerDid` must match your organization's registered DID. `ES256` is the recommended algorithm.
+The `did` and `issuerDid` must match your organization's registered DID. `ES256` is the recommended algorithm. This key signs the credentials; the access tokens of the provider's VCVerifier use a key of their own, which has to be RSA (see [Token signing algorithm](provider/README.md#token-signing-algorithm)).
 
 ### Environment variables
 
