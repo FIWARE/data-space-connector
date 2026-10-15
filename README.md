@@ -148,7 +148,7 @@ Precisely, the connector bundles the following components:
         </tr>
         <tr>
             <td><a href="https://github.com/FIWARE/credentials-config-service">credentials-config-service</a></td>
-            <td>Holds the information which VCs are required for accessing a service</td>
+            <td>Holds the information which VCs are required for accessing a service. VCVerifier serves this API itself, so the standalone service is disabled by default</td>
             <td>PRP/PAP (authentication)</td>
         </tr>
         <tr>
@@ -237,7 +237,8 @@ The framework consists of the following components:
   OID4VP protocol with the user-side system that stores credentials (a digital wallet in the case of end users,
   another storage system in the case of software agents such as AI agents, devices, robots, etc.)
 * **[credentials-config-service](https://github.com/FIWARE/credentials-config-service)**: maintains the configuration
-  of which VCs, containing which roles/claims, the VCVerifier must request for each product/service
+  of which VCs, containing which roles/claims, the VCVerifier must request for each product/service. The
+  VCVerifier serves this API itself, and the chart registers the services through it
 * **[trusted-issuers-list](https://github.com/FIWARE/trusted-issuers-list)**: maintains a registry of organizations
   (identified by their DID) that are considered trusted issuers of certain classes of VCs containing certain
   roles/claims. Provides an [EBSI Trusted Issuers Registry](https://hub.ebsi.eu/api/core/issuers-registry)
@@ -537,13 +538,17 @@ For deploying the FIWARE DSC in a real environment, refer to the documentation t
 The Data-Space-Connector is a [Helm Umbrella-Chart](https://helm.sh/docs/howto/charts_tips_and_tricks/#complex-charts-with-many-dependencies), containing all the sub-charts of the different components and their dependencies. Its sources can be found
 [here](./charts/data-space-connector).
 
-The chart is available at the repository `https://fiware.github.io/data-space-connector/`. You can install it via:
+The chart is published to the OCI registry `oci://quay.io/fiware/helm-charts`. Install it with a pinned version - the [release notes](./doc/release-notes) describe what changes between versions:
 
 ```shell
-    # add the repo
-    helm repo add dsc https://fiware.github.io/data-space-connector/
-    # install the chart
-    helm install <DeploymentName> dsc/data-space-connector -n <Namespace> -f values.yaml
+    helm install <DeploymentName> oci://quay.io/fiware/helm-charts/data-space-connector --version <version> -n <Namespace> -f values.yaml
+```
+
+It is also available from the Helm repository `https://fiware.github.io/data-space-connector`:
+
+```shell
+    helm repo add fiware-dsc https://fiware.github.io/data-space-connector
+    helm install <DeploymentName> fiware-dsc/data-space-connector --version <version> -n <Namespace> -f values.yaml
 ```
 **Note,** that due to the app-of-apps structure of the connector and the different dependencies between the components, a deployment without providing any configuration values will not work. Make sure to provide a
 `values.yaml` file for the deployment, specifying all necessary parameters. This includes setting parameters of the connected data space (e.g., trust anchor endpoints), DNS information (providing Ingress or OpenShift Route parameters),
