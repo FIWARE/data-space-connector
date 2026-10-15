@@ -79,6 +79,13 @@ decentralizedIam:
       enabled: true
       # -- allows to set a fixed name for the services
       fullnameOverride: verifier
+      registration:
+        job:
+          # -- how long the registration job may run, including its wait for the verifier. On a
+          # fresh install the verifier only becomes ready once Postgres, the trusted-issuers-list
+          # and the PAP are up, which regularly takes longer than the subchart's 300 seconds and
+          # fails the release.
+          activeDeadlineSeconds: 1200
       deployment:
         # -- configuration for the m2m flow, in case the tir is requiring authentication
         m2m:
@@ -166,6 +173,12 @@ decentralizedIam:
         prometheus.io/scrape: "true"
         prometheus.io/path: /apisix/prometheus/metrics
         prometheus.io/port: "9091"
+      service:
+        # -- traffic policy of the gateway service. Left empty so that Kubernetes applies its own
+        # default (`Cluster` for NodePort and LoadBalancer) and the service can also be set to
+        # `ClusterIP`: the apisix chart writes the field for every type, and the API server rejects
+        # it on a ClusterIP service. Set it to `Local` to keep the client source IP.
+        externalTrafficPolicy: ""
       apisix:
         prometheus:
           enabled: true
@@ -279,32 +292,6 @@ scorpio:
   service:
     # -- ClusterIP is the recommended type for most clusters
     type: ClusterIP
-  # -- configuration to register the dataplane at the credentials-config-service
-  ccs:
-    # -- should the automatic registration of scorpio be enabled
-    enabled: false
-    # -- endpoint of the ccs to regsiter at
-    endpoint: http://verifier:8090
-    # -- configmap to get the registration information from
-    configMap: scorpio-registration
-
-  # -- additional init containers to be used for the dataplane
-  #initContainers:
-  # -- curl container to register at the credentials config service
-  #- name: register-credential-config
-  #  image: quay.io/curl/curl:8.1.2
-  #  command: [ "/bin/sh", "-c", "/bin/init.sh" ]
-  #  volumeMounts:
-  #    - name: scorpio-registration
-  #      mountPath: /bin/init.sh
-  #      subPath: init.sh
-  # -- additonal volumes to be mounted for the dataplane
-  additionalVolumes:
-    - name: scorpio-registration
-      configMap:
-        name: scorpio-registration
-        defaultMode: 0755
-
   # -- distributed-tracing configuration for the scorpio subchart.
   # Scorpio is a Quarkus application with native OpenTelemetry support.
   # Because scorpio is a third-party subchart whose templates are not
@@ -386,6 +373,10 @@ keycloak:
       adminPasswordKey: keycloak-admin
     # -- proxy headers used when TLS is terminated at an upstream ingress/proxy
     proxyHeaders: xforwarded
+  image:
+    # -- pull policy of the Keycloak image. The subchart pins the image by digest, so pulling it on
+    # every start only makes restarts depend on the registry being reachable.
+    imagePullPolicy: IfNotPresent
   # -- @param preserveProviders Disable mounting an emptyDir over /opt/keycloak/providers, preserving the providers bundled in the image.
   preserveProviders: true
   # -- TLS terminated at the ingress; the container does not serve HTTPS itself
@@ -1469,7 +1460,10 @@ tm-forum-api:
   apiProxy:
     enabled: true
     image:
-      tag: distroless-v1.27-latest
+      # -- envoy image of the proxy. Pinned to the last release of the 1.27 line, which is what
+      # `distroless-v1.27-latest` resolves to; a newer envoy line needs the tm-forum-api chart to
+      # support it first.
+      tag: distroless-v1.27.7
     service:
       # -- name to be used for the proxy service.
       nameOverride: tm-forum-api
@@ -1538,44 +1532,6 @@ tm-forum-api:
   redis:
     enabled: false
 
-  registration:
-    enabled: true
-    # -- name to be used for the registration jobs
-    name: tmf-api-registration
-    annotations:
-      "helm.sh/hook": post-install
-      "helm.sh/hook-weight": "0"
-      "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
-    image:
-      repository: quay.io/curl/curl
-      tag: 8.1.2
-      pullPolicy: IfNotPresent
-    command: [ /bin/sh, -c, /bin/init.sh ]
-    extraEnvVars: []
-    extraVolumes: []
-    extraVolumeMounts: []
-    backoffLimit: 10
-    restartPolicy: Never
-    # -- configuration to register the dataplane at the credentials-config-service
-    ccs:
-      # -- endpoint of the ccs to regsiter at
-      endpoint: http://verifier:8090
-      # -- service id of the data-service to be used
-      id: tmf-api
-      # -- default scope to be created for the data plane
-      defaultOidcScope:
-        # -- name of the scope
-        name: default
-        # -- name of the default credential to be configured
-        credentialTypes:
-          - VerifiableCredential
-        # -- needs to be updated for the concrete dataspace
-        trustedParticipantsLists: http://tir.trust-anchor.org
-        trustedIssuersLists: http://trusted-issuers-list:8080
-    # -- priority class to be assigned to the pods
-    # ref: https://kubernetes.io/docs/concepts/scheduling-eviction/pod-priority-preemption/
-    priorityClassName: ""
-
 
 ## Configuration of the status-list-server for Token Status List (RFC draft-ietf-oauth-status-list) support.
 ## Provides credential revocation infrastructure for Verifiable Credentials issued by Keycloak.
@@ -1592,7 +1548,7 @@ statusListServer:
     # -- container image tag
     tag: 1.0.1
     # -- image pull policy
-    pullPolicy: Always
+    pullPolicy: IfNotPresent
   service:
     # -- Kubernetes Service type
     serviceType: ClusterIP
@@ -1792,16 +1748,6 @@ rainbow:
     serviceType: ClusterIP
     # -- port of the service
     port: 8080
-  # -- configuration to register rainbow at the credentials-config-service
-  ccs:
-    # -- should the registration at the credentials-config-service be enabled
-    enabled: false
-    # -- endpoint of the ccs to regsiter at
-    endpoint: http://verifier:8090
-    # -- configmap to get the registration information from
-    configMap: rainbow-registration
-    # -- service id of the data-service to be used
-    id: tpp-service
   # -- selector template
   # ref: https://kubernetes.io/docs/user-guide/node-selection/
   nodeSelector: {}
@@ -1823,6 +1769,9 @@ contract-management:
   # -- should it be enabled? set to false if one outside the chart is used.
   enabled: true
   fullnameOverride: contract-management
+  # -- integrate with rainbow for DSP negotiations. Turn it on together with `rainbow.enabled`:
+  # without rainbow, contract management fails to register at it on start and on every order.
+  enableRainbow: false
   # -- distributed-tracing configuration for the contract-management subchart.
   # contract-management is a Micronaut (Java) application that supports the
   # standard OpenTelemetry SDK environment variables. Because
@@ -1953,7 +1902,9 @@ registration:
   command: [ /bin/sh, -c, /bin/init.sh ]
   # -- hook annotations of the registration Job. post-upgrade matters: with post-install only, a
   # release that already exists never runs it again, so nothing added to `issuer` after the first
-  # install ever reaches the list. Re-running is safe - the script treats a 409 as success.
+  # install ever reaches the list. Re-running is safe: an issuer that is already registered (409)
+  # is left as it is, so a change to the credentials of an existing issuer does not reach the list
+  # either - that takes the trusted-issuers-list API. Any other error fails the Job.
   annotations:
     "helm.sh/hook": post-install,post-upgrade
     "helm.sh/hook-weight": "0"

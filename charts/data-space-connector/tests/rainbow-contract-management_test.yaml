@@ -1,0 +1,41 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/helm-unittest/helm-unittest/main/schema/helm-testsuite.json
+#
+# ---------------------------------------------------------------------------
+# Helm-unittest suite for the rainbow integration of contract management.
+#
+# Contract management's rainbow integration is off by default, matching rainbow
+# itself. Helm cannot derive one from the other, so enabling rainbow without
+# the integration is refused instead of leaving contract management silently
+# outside DSP negotiations.
+# ---------------------------------------------------------------------------
+suite: rainbow integration of contract management
+templates:
+  - templates/rainbow-deployment.yaml
+tests:
+  - it: refuses rainbow without the contract management integration
+    set:
+      rainbow:
+        enabled: true
+    asserts:
+      - failedTemplate:
+          errorPattern: "set contract-management.enableRainbow to true"
+
+  - it: deploys rainbow together with the integration
+    set:
+      rainbow:
+        enabled: true
+      contract-management:
+        enableRainbow: true
+    asserts:
+      - isKind:
+          of: Deployment
+
+  - it: deploys rainbow without contract management
+    set:
+      rainbow:
+        enabled: true
+      contract-management:
+        enabled: false
+    asserts:
+      - isKind:
+          of: Deployment

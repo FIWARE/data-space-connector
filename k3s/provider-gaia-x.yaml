@@ -153,10 +153,10 @@ decentralizedIam:
   odrlAuthorization:
 
     apisix:
+      # APISIX runs standalone here (routes from values, no admin API), so the etcd the
+      # chart ships by default is never used
       etcd:
-        replicaCount: 1
-        persistence:
-          enabled: false
+        enabled: false
       image:
         debug: true
       dataPlane:
@@ -346,25 +346,6 @@ scorpio:
       - secretName: scorpio-provider.127.0.0.1.nip.io-tls
         hosts:
           - scorpio-provider.127.0.0.1.nip.io
-  ccs:
-    enabled: true
-    defaultOidcScope:
-      name: default
-    oidcScopes:
-      default:
-        - type: UserCredential
-          trustedParticipantsLists:
-            - url: https://registry.127.0.0.1.nip.io
-              type: gaia-x
-          trustedIssuersLists:
-            - http://trusted-issuers-list:8080
-      operator:
-        - type: OperatorCredential
-          trustedParticipantsLists:
-            - url: https://registry.127.0.0.1.nip.io
-              type: gaia-x
-          trustedIssuersLists:
-            - http://trusted-issuers-list:8080
 
 tm-forum-api:
   defaultConfig:
@@ -373,12 +354,6 @@ tm-forum-api:
     enabled: true
   apiProxy:
     enabled: false
-  registration:
-    ccs:
-      defaultOidcScope:
-        credentialTypes:
-          - UserCredential
-        trustedParticipantsLists: http://tir.trust-anchor.svc.cluster.local:8080
   ingress:
     enabled: true
     annotations:

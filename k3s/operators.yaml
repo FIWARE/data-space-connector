@@ -1,3 +1,9 @@
+# The cluster-wide operators of the local data space, installed once as the `operators`
+# release (namespace `operators`) before any participant: the MongoDB and Postgres
+# operators and cert-manager, together with the self-signed CA and the selfsigned-issuer
+# ClusterIssuer that every participant requests its certificates from.
+# Every other component of the chart is disabled.
+
 mongo-operator:
   enabled: true
   database:
@@ -12,14 +18,12 @@ mongo-operator:
         cpu: 100m
         memory: 200Mi
 
-
 decentralizedIam:
-  enabled: false
-
   vcAuthentication:
-    enabled: false
     postgres-operator:
-      enabled: false
+      enabled: true
+      configKubernetes:
+        enable_cross_namespace_secret: true
 
     managedPostgres:
       enabled: false
@@ -43,6 +47,21 @@ decentralizedIam:
 
     tpp:
       enabled: false
+
+cert-manager:
+  enabled: true
+  crds:
+    enabled: true
+  # Waits until the cert-manager webhook accepts requests, so that the issuers below are
+  # not created before it is ready.
+  startupapicheck:
+    enabled: true
+
+certManagerResources:
+  enabled: true
+  type: selfsigned
+  # the namespace cert-manager runs in, where the ClusterIssuer finds the CA secret
+  namespace: operators
 
 managedMongo:
   enabled: false
@@ -84,9 +103,6 @@ vault:
   enabled: false
 
 issuerservice:
-  enabled: false
-
-cert-manager:
   enabled: false
 
 prometheus:
