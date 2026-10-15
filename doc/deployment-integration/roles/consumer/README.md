@@ -94,6 +94,8 @@ did:
   volumes:
     - name: certs
       secret:
+        # the DID's key, issued by cert-manager for the Ingress below and never rotated: see
+        # "Identity key lifecycle"
         secretName: <your_did_domain>-tls
         items:
           - key: tls.crt
@@ -107,6 +109,9 @@ did:
     annotations:
       cert-manager.io/cluster-issuer: "prod" # Use self-signed for testing
       cert-manager.io/private-key-algorithm: "ECDSA"
+      # the Secret also holds the DID's key: renewals must keep it (cert-manager >= 1.18
+      # generates a new one by default)
+      cert-manager.io/private-key-rotation-policy: "Never"
       cert-manager.io/common-name: "<your_did_domain>"
     hosts:
       - host: <your_did_domain>
@@ -213,6 +218,7 @@ helm install consumer fiware/data-space-connector \
 - Use a registered domain name that your organization controls for the [`did:web`](https://w3c-ccg.github.io/did-method-web/) identifier
 - Ensure the DID document is served over HTTPS with a valid certificate
 - Protect the private key associated with your DID — it is the foundation of your organization's identity in the data space. If compromised, an attacker could issue credentials on your behalf
+- Give the DID a dedicated key that renewals do not regenerate, not the TLS Secret of an Ingress: see [Identity key lifecycle](../provider/README.md#identity-key-lifecycle) in the provider guide, which applies to consumers as well
 
 ### Trust Anchor registration
 

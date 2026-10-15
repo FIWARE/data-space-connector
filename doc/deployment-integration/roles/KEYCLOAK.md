@@ -203,10 +203,10 @@ Three volumes connect the init container, the Helm-generated realm ConfigMap, an
       name: realms
     - name: did-priv-key
       secret:
-        secretName: <your-keycloak-domain>-tls   # TLS secret with the DID private key
+        secretName: <your_did_domain>-tls   # Secret with the DID private key
 ```
 
-Replace `<your-keycloak-domain>-tls` with the name of the TLS secret that contains your organization's DID private key.
+Replace `<your_did_domain>-tls` with the Secret that holds your organization's DID private key - the same one did-helper publishes, not the certificate of Keycloak's own Ingress. Its key must survive certificate renewals: cert-manager regenerates it on every renewal by default, which would change the DID and invalidate the issued credentials. See [Identity key lifecycle](provider/README.md#identity-key-lifecycle).
 
 ### Signing key
 

@@ -253,6 +253,8 @@ did:
   volumes:
     - name: certs
       secret:
+        # the DID's key, issued by cert-manager for the Ingress below and never rotated: see
+        # "Identity key lifecycle"
         secretName: <your_did_domain>-tls
         items:
           - key: tls.crt
@@ -266,6 +268,9 @@ did:
     annotations:
       cert-manager.io/cluster-issuer: "prod" # Use self-signed for testing
       cert-manager.io/private-key-algorithm: "ECDSA"
+      # the Secret also holds the DID's key: renewals must keep it (cert-manager >= 1.18
+      # generates a new one by default)
+      cert-manager.io/private-key-rotation-policy: "Never"
       cert-manager.io/common-name: "<your_did_domain>"
     hosts:
       - host: <your_did_domain>
@@ -490,6 +495,41 @@ helm install provider fiware/data-space-connector \
 - Use a registered domain name that your organization controls for the `did:web` identifier
 - Ensure the DID document is served over HTTPS with a valid certificate
 - Protect the private key associated with your DID — it is the foundation of your organization's identity in the data space. If compromised, an attacker could issue credentials on your behalf
+
+#### Identity key lifecycle
+
+The DID's private key is what did-helper publishes and what Keycloak signs credentials with. If it changes, the DID document changes with it, every credential signed with the previous key stops verifying, and the participants that resolved the DID see a different key without notice.
+
+Since cert-manager 1.18, a certificate's `privateKey.rotationPolicy` defaults to `Always`: every renewal - every 60 days with Let's Encrypt - generates a new key. Whatever certificate holds the DID's key must therefore set `Never`. There are two ways to do it:
+
+- **On the DID's Ingress**, as the example above does: the `cert-manager.io/private-key-rotation-policy: "Never"` annotation makes cert-manager keep the key of the certificate it issues for that Ingress, and the same Secret serves TLS and holds the identity key. It is the smallest change, but ties the identity to that Ingress: changing its controller, host or issuer touches the identity key too.
+- **A dedicated `Certificate`** for the identity, separate from any Ingress, which only cert-manager renews and which keeps its key. Mount its Secret in did-helper and in the Keycloak keystore init container ([Keycloak guide](../KEYCLOAK.md)) instead of the Ingress' one; the Ingresses keep their own certificates, so a TLS rotation or compromise does not reach the identity:
+
+```yaml
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: identity-key
+  namespace: <your_namespace>
+spec:
+  secretName: <your_identity_key_secret>
+  commonName: <your_did_domain>
+  dnsNames:
+    - <your_did_domain>
+  issuerRef:
+    name: <your_cluster_issuer>
+    kind: ClusterIssuer
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+    rotationPolicy: Never      # renewals keep the key, and with it the DID
+```
+
+Either way, every component that holds a copy of the key has to follow it: restarting did-helper and Keycloak on a changed Secret keeps them consistent, but credentials signed with a previous key still stop verifying, and a component that stored the key elsewhere - such as the identity hub, in Vault - keeps the old one. Hence `Never`.
+
+Use separate keys for everything else that signs: the verifier's request objects (`clientIdentification`) and tokens (see [VCVerifier](#vcverifier)), and the marketplace's SIOP key. Sharing the identity key spreads it across components that do not need it.
+
+Keep a backup of the identity key outside the cluster: losing it means a new DID. Rotating it on purpose works the same way as losing it - did-helper publishes a single key - so plan it as a re-issuance of the credentials signed with the old one, as described for the identity hub in [Vault](../../production/VAULT.md#rotating-the-signing-key).
 
 ### Do not expose internal APIs
 
