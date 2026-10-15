@@ -62,7 +62,7 @@ The locally deployed Data Space consists of 2 Participants, connected through a 
 Every Data Spaces requires a framework that ensures trust between the participants. Depending on the requirements of the
 concrete Data Space,
 this can become a rather complex topic. Various trust-providers exist(
-f.e. [Gaia-X Digital Clearing Houses](https://gaia-x.eu/gxdch)) and could be reused(see [Gaia-X for more information](../../GAIA_X.MD)). The default setup of the connector requires an [EBSI-Trusted Issuers Registry](https://hub.ebsi.eu/apis/pilot/trusted-issuers-registry/v4) to provide the list of participants.
+f.e. [Gaia-X Digital Clearing Houses](https://gaia-x.eu/services-deliverables/digital-clearing-house/)) and could be reused(see [Gaia-X for more information](../../GAIA_X.MD)). The default setup of the connector requires an [EBSI-Trusted Issuers Registry](https://hub.ebsi.eu/api/core/issuers-registry) to provide the list of participants.
 
 The local Data Spaces comes with the [FIWARE Trusted Issuers List](https://github.com/FIWARE/trusted-issuers-list) as a
 rather simple implementation of that API, providing CRUD functionality
@@ -1327,7 +1327,7 @@ When using the `OPERATOR_CREDENTIAL`, it will work:
 
 ## eIDAS Compliancy
 
-The Data Space Connector supports [eIDAS 2.0](https://digital-strategy.ec.europa.eu/en/policies/eidas-regulation) compliance through PKIX certificate chain validation against the [EU Trusted Lists](https://ec.europa.eu/digital-building-blocks/sites/display/DIGITAL/EU+Trusted+Lists). This works with `did:elsi`, `did:web`, and HTTPS-issued credentials that carry an `x5c` JWT header.
+The Data Space Connector supports [eIDAS 2.0](https://digital-strategy.ec.europa.eu/en/policies/eidas-regulation) compliance through PKIX certificate chain validation against the [EU Trusted Lists](https://digital-strategy.ec.europa.eu/en/policies/eu-trusted-lists). This works with `did:elsi`, `did:web`, and HTTPS-issued credentials that carry an `x5c` JWT header.
 
 For full documentation on eIDAS configuration, certificate generation, and troubleshooting, see the **[standalone eIDAS documentation](../eidas/README.md)**.
 
@@ -1377,13 +1377,13 @@ Available ingresses:
 
 In a Data Space, every participant requires an identity. The FIWARE Data Space relies on [Decentralized Identifiers](https://www.w3.org/TR/did-core/)
 to identify its participants. While the concrete scheme to be used for a Data Space needs to be decided by its requirements,
-the local installation uses [did:key](https://w3c-ccg.github.io/did-method-key/). While the did's are not well readable for humans,
+the local installation uses [did:key](https://w3c-ccg.github.io/did-key-spec/). While the did's are not well readable for humans,
 they are well-supported, can be resolved without any external interaction and can easily be generated within the deployment. That makes
 them a perfect fit for the local use-case.
 All participants(e.g. the consumer and the participant) get a did generated on installation, by using the [did-helper](https://github.com/wistefan/did-helper).
 The identities and connected key-material is automatically distributed in the cluster and set in the componets that require it.
 
-In real world data spaces, the participants should rather use stabled identities, which can be [did:key](https://w3c-ccg.github.io/did-method-key/), but also
+In real world data spaces, the participants should rather use stabled identities, which can be [did:key](https://w3c-ccg.github.io/did-key-spec/), but also
 more organization-focused once like [did:web](https://w3c-ccg.github.io/did-method-web/) or [did:elsi](https://alastria.github.io/did-method-elsi/).
 
 ### Deployment
