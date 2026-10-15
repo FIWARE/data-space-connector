@@ -450,19 +450,21 @@ vault:
 
 A provider without any of the optional components sets `scorpio`, `tm-forum-api` and `contract-management` to `false`: leaving them out of the values file deploys them.
 
-2. Add the FIWARE DSC helm chart repository:
+2. Install the chart with your values, pinning its version (see the [release notes](../../../release-notes) for what changes between versions):
 
 ```shell
-helm repo add fiware-dsc https://fiware.github.io/data-space-connector
-```
-
-3. Install the chart with your values:
-
-```shell
-helm install provider fiware-dsc/data-space-connector \
+helm install provider oci://quay.io/fiware/helm-charts/data-space-connector \
+  --version <version> \
   -n provider \
   --create-namespace \
   -f provider-values.yaml
+```
+
+   The chart is also available from the Helm repository `https://fiware.github.io/data-space-connector`:
+
+```shell
+helm repo add fiware-dsc https://fiware.github.io/data-space-connector
+helm install provider fiware-dsc/data-space-connector --version <version> -n provider --create-namespace -f provider-values.yaml
 ```
 
 See [quick-start/values/provider.yaml](../../quick-start/values/provider.yaml) for a complete minimal example.
@@ -484,7 +486,7 @@ For other deployment scenarios, the base `provider.yaml` can be extended with ad
 For example, to deploy a provider with ELSI compliance:
 
 ```shell
-helm install provider fiware/data-space-connector \
+helm install provider oci://quay.io/fiware/helm-charts/data-space-connector --version <version> \
   -n provider \
   -f k3s/provider.yaml \
   -f k3s/provider-eidas.yaml

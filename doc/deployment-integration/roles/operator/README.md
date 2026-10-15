@@ -251,7 +251,7 @@ The local demo (`mvn clean deploy -Plocal,central`) deploys the Central Marketpl
 Deploying the Central Marketplace with the same layout:
 
 ```shell
-helm install central-marketplace fiware/data-space-connector \
+helm install central-marketplace oci://quay.io/fiware/helm-charts/data-space-connector --version <version> \
   -n central-marketplace \
   --create-namespace \
   -f k3s/consumer.yaml \
@@ -266,10 +266,13 @@ helm install central-marketplace fiware/data-space-connector \
 
 ## Helm chart
 
-The Trust Anchor uses a dedicated Helm chart, separate from the participant chart:
+The Trust Anchor uses a dedicated Helm chart, separate from the participant chart, published next to it:
 
-```
-fiware/trust-anchor
+```shell
+helm install trust-anchor oci://quay.io/fiware/helm-charts/trust-anchor --version <version> -n trust-anchor --create-namespace -f values.yaml
+# or, from the Helm repository
+helm repo add fiware-dsc https://fiware.github.io/data-space-connector
+helm install trust-anchor fiware-dsc/trust-anchor --version <version> -n trust-anchor --create-namespace -f values.yaml
 ```
 
 See the [quickstart values](../../quick-start/values/trust-anchor.yaml) for a minimal example.

@@ -538,13 +538,17 @@ For deploying the FIWARE DSC in a real environment, refer to the documentation t
 The Data-Space-Connector is a [Helm Umbrella-Chart](https://helm.sh/docs/howto/charts_tips_and_tricks/#complex-charts-with-many-dependencies), containing all the sub-charts of the different components and their dependencies. Its sources can be found
 [here](./charts/data-space-connector).
 
-The chart is available at the repository `https://fiware.github.io/data-space-connector/`. You can install it via:
+The chart is published to the OCI registry `oci://quay.io/fiware/helm-charts`. Install it with a pinned version - the [release notes](./doc/release-notes) describe what changes between versions:
 
 ```shell
-    # add the repo
-    helm repo add dsc https://fiware.github.io/data-space-connector/
-    # install the chart
-    helm install <DeploymentName> dsc/data-space-connector -n <Namespace> -f values.yaml
+    helm install <DeploymentName> oci://quay.io/fiware/helm-charts/data-space-connector --version <version> -n <Namespace> -f values.yaml
+```
+
+It is also available from the Helm repository `https://fiware.github.io/data-space-connector`:
+
+```shell
+    helm repo add fiware-dsc https://fiware.github.io/data-space-connector
+    helm install <DeploymentName> fiware-dsc/data-space-connector --version <version> -n <Namespace> -f values.yaml
 ```
 **Note,** that due to the app-of-apps structure of the connector and the different dependencies between the components, a deployment without providing any configuration values will not work. Make sure to provide a
 `values.yaml` file for the deployment, specifying all necessary parameters. This includes setting parameters of the connected data space (e.g., trust anchor endpoints), DNS information (providing Ingress or OpenShift Route parameters),
