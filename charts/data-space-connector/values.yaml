@@ -1,3 +1,8 @@
+# values.schema.json is generated from this file, see CLAUDE.md. The `# @schema` blocks adjust what
+# the generator infers from the defaults. Every subchart's key is left open there: Helm validates
+# this chart's schema against values that already contain the subchart's own defaults, and the
+# subchart's keys are the subchart's to validate.
+
 # -- configuration to be shared between the issuance components
 issuance:
   generatePasswords:
@@ -6,6 +11,11 @@ issuance:
     #-- name of the secret to put the generated password into
     secretName: issuance-secret
 
+# @schema
+# type: object
+# additionalProperties: true
+# properties: {}
+# @schema
 decentralizedIam:
   enabled: true
 
@@ -260,6 +270,11 @@ decentralizedIam:
         path: /transfers
 
 ## configuration of the context-broker - see https://github.com/FIWARE/helm-charts/tree/main/charts/scorpio-broker-aaio for details
+# @schema
+# type: object
+# additionalProperties: true
+# properties: {}
+# @schema
 scorpio:
   fullnameOverride: data-service-scorpio
   # -- should scorpio be enabled
@@ -361,6 +376,11 @@ elsi:
   keyPassword:
 
 ## configuration of the keycloak - see https://github.com/CloudPirates-io/helm-charts/tree/main/charts/keycloak for details
+# @schema
+# type: object
+# additionalProperties: true
+# properties: {}
+# @schema
 keycloak:
   # -- should it be enabled? set to false if one outside the chart is used.
   enabled: true
@@ -1382,6 +1402,11 @@ keycloak:
     credentialTypes: []
 
 ## configuration of the tm-forum-api - see https://github.com/FIWARE/helm-charts/tree/main/charts/tm-forum-api for details
+# @schema
+# type: object
+# additionalProperties: true
+# properties: {}
+# @schema
 tm-forum-api:
   # -- should it be enabled? set to false if one outside the chart is used.
   enabled: true
@@ -1765,6 +1790,11 @@ rainbow:
   priorityClassName: ""
 
 ## configuration of the tm-forum-api - see https://github.com/FIWARE/helm-charts/tree/main/charts/contract-management for details
+# @schema
+# type: object
+# additionalProperties: true
+# properties: {}
+# @schema
 contract-management:
   # -- should it be enabled? set to false if one outside the chart is used.
   enabled: true
@@ -1880,6 +1910,11 @@ contract-management:
       value: "none"
 
 # -- configuration for the did-helper, see https://github.com/wistefan/did-helper
+# @schema
+# type: object
+# additionalProperties: true
+# properties: {}
+# @schema
 did:
   enabled: false
 
@@ -1957,6 +1992,11 @@ dataSpaceConfig:
   priorityClassName: ""
 
 ## Installation of the mongo-operator - see https://github.com/mongodb/helm-charts/tree/main/charts/community-operator
+# @schema
+# type: object
+# additionalProperties: true
+# properties: {}
+# @schema
 mongo-operator:
   # -- should the mongo-operator be installed
   enabled: false
@@ -1971,6 +2011,11 @@ managedMongo:
       storage.wiredTiger.engineConfig.journalCompressor: zlib
 
 # -- configuration for the marketplace components
+# @schema
+# type: object
+# additionalProperties: true
+# properties: {}
+# @schema
 marketplace:
   enabled: false
 
@@ -2176,6 +2221,11 @@ marketplace:
       - name: OTEL_LOGS_EXPORTER
         value: "none"
 
+# @schema
+# type: object
+# additionalProperties: true
+# properties: {}
+# @schema
 fdsc-edc:
   # -- distributed-tracing configuration for the fdsc-edc workload.
   # Because fdsc-edc is a third-party subchart whose templates are not
@@ -2776,6 +2826,11 @@ vcCredentials:
     #     holderDID: ""
 
 # -- vc-operator subchart configuration
+# @schema
+# type: object
+# additionalProperties: true
+# properties: {}
+# @schema
 vc-operator:
   enabled: false
 
@@ -3253,6 +3308,11 @@ identityhub:
   # ref: https://kubernetes.io/docs/concepts/scheduling-eviction/pod-priority-preemption/
   priorityClassName: ""
 
+# @schema
+# type: object
+# additionalProperties: true
+# properties: {}
+# @schema
 vault:
   # -- should the bundled HashiCorp Vault be deployed. The identityhub and fdsc-edc need a vault to
   # hold the participant's signing key and the STS client secret; set this to false only to point
@@ -3372,6 +3432,11 @@ vault:
     priorityClassName: ""
 
 # -- configuration for the cert-manager component (https://github.com/cert-manager/cert-manager/blob/master/deploy/charts/cert-manager/values.yaml)
+# @schema
+# type: object
+# additionalProperties: true
+# properties: {}
+# @schema
 cert-manager:
   enabled: false
   startupapicheck:
@@ -3409,12 +3474,27 @@ certManagerResources:
 extraManifests: []
 
 # -- dashboard for operating the FIWARE Data Space Connector
+# @schema
+# type: object
+# additionalProperties: true
+# properties: {}
+# @schema
 fdsc-dashboard:
   enabled: false
 
+# @schema
+# type: object
+# additionalProperties: true
+# properties: {}
+# @schema
 prometheus:
   enabled: false
 
+# @schema
+# type: object
+# additionalProperties: true
+# properties: {}
+# @schema
 grafana:
   enabled: false
 
@@ -3496,6 +3576,11 @@ tracing:
 # Kubernetes-native auto-instrumentation by injecting language-specific
 # agents into annotated pods via a mutating webhook. Requires cert-manager
 # for webhook certificate management.
+# @schema
+# type: object
+# additionalProperties: true
+# properties: {}
+# @schema
 opentelemetry-operator:
   # -- toggle the bundled OpenTelemetry Operator subchart. When enabled,
   # deploys the operator which watches for `Instrumentation` CRs and
@@ -3535,6 +3620,11 @@ opentelemetry-operator:
 # stays off so existing deployments are unaffected. When `tracing.enabled`
 # is flipped on, operators typically also flip `opentelemetry-collector.enabled`
 # on to get an in-cluster collector reachable on port 4317/4318.
+# @schema
+# type: object
+# additionalProperties: true
+# properties: {}
+# @schema
 opentelemetry-collector:
   # -- toggle the bundled OpenTelemetry Collector subchart. Keep false
   # when pointing `tracing.exporter.otlp.endpoint` at an external
@@ -3717,6 +3807,11 @@ opentelemetry-collector:
 # that the OpenTelemetry Collector can export spans to. When `tempo.enabled`
 # is true a Tempo single-binary instance is deployed; operators can query
 # stored traces via Grafana or the Tempo HTTP API on port 3200.
+# @schema
+# type: object
+# additionalProperties: true
+# properties: {}
+# @schema
 tempo:
   # -- toggle the bundled Grafana Tempo subchart. When enabled, deploys a
   # single-binary Tempo instance for trace storage. Keep false when using
@@ -3787,6 +3882,11 @@ consentManagement:
 ## (oci://quay.io/fiware/helm-charts/consent-facade). A provider runs one locally when the
 ## owner-resolver resolves the governing contract
 ## See https://github.com/FIWARE/helm-charts/tree/main/charts/consent-facade
+# @schema
+# type: object
+# additionalProperties: true
+# properties: {}
+# @schema
 consent-facade:
   # -- deploy a provider-local consent-facade
   enabled: false
@@ -3809,6 +3909,11 @@ consent-facade:
 ## response data, whether a consent check is required and who owns the data - which is a
 ## provider-side question, because it depends on the provider's data model.
 ## See https://github.com/FIWARE/helm-charts/tree/main/charts/consent-owner-resolver
+# @schema
+# type: object
+# additionalProperties: true
+# properties: {}
+# @schema
 consent-owner-resolver:
   # -- deploy the owner-resolver
   enabled: false
