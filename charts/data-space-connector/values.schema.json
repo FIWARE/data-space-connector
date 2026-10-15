@@ -1,0 +1,2682 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+    "cert-manager": {
+      "additionalProperties": true,
+      "description": "configuration for the cert-manager component (https://github.com/cert-manager/cert-manager/blob/master/deploy/charts/cert-manager/values.yaml)",
+      "required": [],
+      "title": "cert-manager",
+      "type": "object"
+    },
+    "certManagerResources": {
+      "additionalProperties": false,
+      "description": "configuration for additional resources to be deployed for cert-manager, like ClusterIssuers",
+      "properties": {
+        "acmeEmail": {
+          "default": "admins@example.com",
+          "description": "Email address for ACME registration (required for \"prod\" mode).\nLet's Encrypt will send expiration notifications to this address.",
+          "title": "acmeEmail",
+          "type": "string"
+        },
+        "enabled": {
+          "default": false,
+          "description": "Toggle for deploying additional ClusterIssuers and bootstrap resources.\nSet to true to automate certificate infrastructure after the subchart install.",
+          "title": "enabled",
+          "type": "boolean"
+        },
+        "ingressClass": {
+          "default": "nginx",
+          "description": "The Ingress Class that cert-manager will use for HTTP-01 challenges (required for \"prod\" mode).\nMust match the 'ingressClassName' of your controller (e.g., nginx, traefik).",
+          "title": "ingressClass",
+          "type": "string"
+        },
+        "namespace": {
+          "default": "cert-manager",
+          "description": "The namespace where cert-manager is deployed.\nRequired to place the CA Secret for the 'selfsigned' mode.",
+          "title": "namespace",
+          "type": "string"
+        },
+        "type": {
+          "default": "prod",
+          "description": "Type of certificate issuer to configure.\n\"selfsigned\": Generates a local self-signed CA (ideal for Dev/Internal labs).\n\"prod\": Configures Let's Encrypt Production issuer (real trusted SSL).",
+          "title": "type",
+          "type": "string"
+        }
+      },
+      "required": [],
+      "title": "certManagerResources",
+      "type": "object"
+    },
+    "consent-facade": {
+      "additionalProperties": true,
+      "description": "# The consent-facade, deployed from its own published FIWARE chart\n# (oci://quay.io/fiware/helm-charts/consent-facade). A provider runs one locally when the\n# owner-resolver resolves the governing contract\n# See https://github.com/FIWARE/helm-charts/tree/main/charts/consent-facade",
+      "required": [],
+      "title": "consent-facade",
+      "type": "object"
+    },
+    "consent-owner-resolver": {
+      "additionalProperties": true,
+      "description": "# The consent-owner-resolver, deployed from its own published FIWARE chart\n# (oci://quay.io/fiware/helm-charts/consent-owner-resolver). It answers, from the\n# response data, whether a consent check is required and who owns the data - which is a\n# provider-side question, because it depends on the provider's data model.\n# See https://github.com/FIWARE/helm-charts/tree/main/charts/consent-owner-resolver",
+      "required": [],
+      "title": "consent-owner-resolver",
+      "type": "object"
+    },
+    "consentManagement": {
+      "additionalProperties": false,
+      "description": "Consent Management -- provider-side wiring only. The consent-manager and its\nmanaged MongoDB live in the trust-anchor chart (charts/trust-anchor). This umbrella \nchart provides the IAM that backs consent (keycloak issuer, did:web helper, APISIX facade route,\nvc-operator), the provider APISIX consent-plugin wiring below, and - through the\n`consent-facade` / `consent-owner-resolver` dependencies - the provider-side\nconsent services. See doc/CONSENT_MANAGEMENT.md.",
+      "properties": {
+        "enabled": {
+          "default": false,
+          "description": "enable the provider-side consent-plugin wiring (the Go consent-plugin that\nruns on the provider APISIX and calls the authority's consent-manager). The\nconsent-manager itself is deployed from the trust-anchor chart; the facade and\nthe owner-resolver come from their own charts (see the keys at the end of this\nfile).",
+          "title": "enabled",
+          "type": "boolean"
+        }
+      },
+      "required": [],
+      "title": "consentManagement",
+      "type": "object"
+    },
+    "contract-management": {
+      "additionalProperties": true,
+      "description": "# configuration of the tm-forum-api - see https://github.com/FIWARE/helm-charts/tree/main/charts/contract-management for details",
+      "required": [],
+      "title": "contract-management",
+      "type": "object"
+    },
+    "dataSpaceConfig": {
+      "additionalProperties": false,
+      "description": "configuration for the .well-known/data-space-configuration endpoint document",
+      "properties": {
+        "affinity": {
+          "additionalProperties": true,
+          "description": "affinity template\nref: https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#affinity-and-anti-affinity",
+          "required": [],
+          "title": "affinity",
+          "type": "object"
+        },
+        "authenticationProtocols": {
+          "description": "Supported authentication protocols (e.g.: oid4vp)",
+          "items": {
+            "required": []
+          },
+          "title": "authenticationProtocols",
+          "type": "array"
+        },
+        "enabled": {
+          "default": false,
+          "title": "enabled",
+          "type": "boolean"
+        },
+        "nodeSelector": {
+          "additionalProperties": true,
+          "description": "selector template\nref: https://kubernetes.io/docs/user-guide/node-selection/",
+          "required": [],
+          "title": "nodeSelector",
+          "type": "object"
+        },
+        "port": {
+          "default": 3002,
+          "description": "Kubernetes Service port",
+          "title": "port",
+          "type": "integer"
+        },
+        "priorityClassName": {
+          "default": "",
+          "description": "priority class to be assigned to the pods\nref: https://kubernetes.io/docs/concepts/scheduling-eviction/pod-priority-preemption/",
+          "title": "priorityClassName",
+          "type": "string"
+        },
+        "serviceType": {
+          "default": "ClusterIP",
+          "description": "Kubernetes Service type",
+          "title": "serviceType",
+          "type": "string"
+        },
+        "supportedModels": {
+          "description": "Supported data models by the service (array of links to JSON schemas)",
+          "items": {
+            "required": []
+          },
+          "title": "supportedModels",
+          "type": "array"
+        },
+        "supportedProtocols": {
+          "description": "Supported protocols (e.g.: http,https)",
+          "items": {
+            "required": []
+          },
+          "title": "supportedProtocols",
+          "type": "array"
+        },
+        "tolerations": {
+          "description": "tolerations template\nref: https://kubernetes.io/docs/concepts/configuration/taint-and-toleration/",
+          "items": {
+            "required": []
+          },
+          "title": "tolerations",
+          "type": "array"
+        },
+        "topologySpreadConstraints": {
+          "description": "topology spread constraints template\nref: https://kubernetes.io/docs/concepts/scheduling-eviction/topology-spread-constraints/",
+          "items": {
+            "required": []
+          },
+          "title": "topologySpreadConstraints",
+          "type": "array"
+        }
+      },
+      "required": [],
+      "title": "dataSpaceConfig",
+      "type": "object"
+    },
+    "decentralizedIam": {
+      "additionalProperties": true,
+      "required": [],
+      "title": "decentralizedIam",
+      "type": "object"
+    },
+    "did": {
+      "additionalProperties": true,
+      "description": "configuration for the did-helper, see https://github.com/wistefan/did-helper",
+      "required": [],
+      "title": "did",
+      "type": "object"
+    },
+    "elsi": {
+      "additionalProperties": false,
+      "description": "configuration to issue credentials, using a did:elsi",
+      "properties": {
+        "did": {
+          "default": "",
+          "description": "the did to be used",
+          "required": [],
+          "title": "did",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "enabled": {
+          "default": false,
+          "description": "should a did:elsi be used",
+          "title": "enabled",
+          "type": "boolean"
+        },
+        "keyAlgorithm": {
+          "default": "",
+          "description": "algorithm of the signing key",
+          "required": [],
+          "title": "keyAlgorithm",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "keyAlias": {
+          "default": "",
+          "description": "alias of the key",
+          "required": [],
+          "title": "keyAlias",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "keyPassword": {
+          "default": "",
+          "description": "password of the key",
+          "required": [],
+          "title": "keyPassword",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "keystore": {
+          "additionalProperties": true,
+          "description": "keystore to be used for signing the credentials, as the data of the elsi-secret Secret: file\nnames mapped to their base64-encoded content, e.g. `store.p12: \u003cTHE_ENCODED_CONTENT\u003e`",
+          "required": [],
+          "title": "keystore",
+          "type": "object"
+        },
+        "storePassword": {
+          "default": "",
+          "description": "password for the keystore",
+          "required": [],
+          "title": "storePassword",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "storePath": {
+          "default": "",
+          "description": "path to the keystore",
+          "required": [],
+          "title": "storePath",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [],
+      "title": "elsi",
+      "type": "object"
+    },
+    "extraManifests": {
+      "description": "list of extra Kubernetes manifests to deploy alongside the chart.\nEach entry can be a string (raw YAML, supports Helm templating) or an object.\nSet `metadata.namespace: {{ .Release.Namespace }}` on every entry: unlike the chart's own\ntemplates these manifests are passed through verbatim, so an object without a namespace is\napplied to `default` whenever the rendered tree is applied without an explicit `-n`.",
+      "items": {
+        "required": []
+      },
+      "title": "extraManifests",
+      "type": "array"
+    },
+    "fdsc-dashboard": {
+      "additionalProperties": true,
+      "description": "dashboard for operating the FIWARE Data Space Connector",
+      "required": [],
+      "title": "fdsc-dashboard",
+      "type": "object"
+    },
+    "fdsc-edc": {
+      "additionalProperties": true,
+      "required": [],
+      "title": "fdsc-edc",
+      "type": "object"
+    },
+    "fullnameOverride": {
+      "default": "",
+      "description": "overrides the full name used in the names of the resources this chart creates itself",
+      "title": "fullnameOverride",
+      "type": "string"
+    },
+    "global": {
+      "description": "Global values are values that can be accessed from any chart or subchart by exactly the same name.",
+      "required": [],
+      "title": "global",
+      "type": "object"
+    },
+    "grafana": {
+      "additionalProperties": true,
+      "required": [],
+      "title": "grafana",
+      "type": "object"
+    },
+    "identityhub": {
+      "additionalProperties": false,
+      "properties": {
+        "additionalVolumeMounts": {
+          "description": "additional volume mounts for the identityhub container",
+          "items": {
+            "required": []
+          },
+          "title": "additionalVolumeMounts",
+          "type": "array"
+        },
+        "additionalVolumes": {
+          "description": "additional volumes to attach to the identityhub pod",
+          "items": {
+            "required": []
+          },
+          "title": "additionalVolumes",
+          "type": "array"
+        },
+        "affinity": {
+          "additionalProperties": true,
+          "description": "[affinity](https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#affinity-and-anti-affinity) to configure which nodes the pods can be scheduled on",
+          "required": [],
+          "title": "affinity",
+          "type": "object"
+        },
+        "autoscaling": {
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "default": false,
+              "description": "Enables [horizontal pod autoscaling](https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/)",
+              "title": "enabled",
+              "type": "boolean"
+            },
+            "maxReplicas": {
+              "default": 100,
+              "description": "Maximum replicas if resource consumption exceeds resource threshholds",
+              "title": "maxReplicas",
+              "type": "integer"
+            },
+            "minReplicas": {
+              "default": 1,
+              "description": "Minimal replicas if resource consumption falls below resource threshholds",
+              "title": "minReplicas",
+              "type": "integer"
+            },
+            "targetCPUUtilizationPercentage": {
+              "default": 80,
+              "description": "targetAverageUtilization of cpu provided to a pod",
+              "title": "targetCPUUtilizationPercentage",
+              "type": "integer"
+            },
+            "targetMemoryUtilizationPercentage": {
+              "default": 80,
+              "description": "targetAverageUtilization of memory provided to a pod",
+              "title": "targetMemoryUtilizationPercentage",
+              "type": "integer"
+            }
+          },
+          "required": [],
+          "title": "autoscaling",
+          "type": "object"
+        },
+        "bootstrap": {
+          "additionalProperties": false,
+          "description": "provisioning of the participant context, its signing key and its credentials.\nWithout this, a deployed identityhub is inert: it holds no participant, no key in vault and no\ncredential, and every DCP flow fails. The steps are the ones documented in\ndoc/DSP_INTEGRATION.md, run in-cluster and idempotently instead of by hand from a workstation.",
+          "properties": {
+            "annotations": {
+              "additionalProperties": true,
+              "description": "hook annotations of the bootstrap Job. post-upgrade is required while vault runs in dev\nmode, since a vault restart drops everything the Job writes and only a re-run restores it.",
+              "required": [],
+              "title": "annotations",
+              "type": "object"
+            },
+            "backoffLimit": {
+              "default": 6,
+              "description": "number of retries before the Job is considered failed",
+              "title": "backoffLimit",
+              "type": "integer"
+            },
+            "credential": {
+              "additionalProperties": false,
+              "description": "DEPRECATED, use `identityhub.credentialSync`. Inserting the credential is not a bootstrap\nconcern: it has to happen again on every renewal, and a Job that only runs on install and\nupgrade leaves the identityhub serving a stale copy. These keys are still read as defaults\nfor `identityhub.credentialSync` and will be removed in a future release.",
+              "properties": {
+                "enabled": {
+                  "default": false,
+                  "description": "DEPRECATED. `enabled: true` turns on identityhub.credentialSync.",
+                  "title": "enabled",
+                  "type": "boolean"
+                },
+                "id": {
+                  "default": "",
+                  "description": "DEPRECATED, use identityhub.credentialSync.id",
+                  "title": "id",
+                  "type": "string"
+                },
+                "key": {
+                  "default": "",
+                  "description": "DEPRECATED, use identityhub.credentialSync.key",
+                  "title": "key",
+                  "type": "string"
+                },
+                "secretName": {
+                  "default": "",
+                  "description": "DEPRECATED, use identityhub.credentialSync.secretName. Empty by default so that the\nvalues under identityhub.credentialSync keep their documented defaults; these only take\neffect when explicitly set.",
+                  "title": "secretName",
+                  "type": "string"
+                }
+              },
+              "required": [],
+              "title": "credential",
+              "type": "object"
+            },
+            "credentialServiceUrl": {
+              "default": "",
+              "description": "public base URL a counterparty reaches this participant's DCP credential service at. It\nmust route `/api/credentials/*` to the identityhub credentials endpoint, and it is published\nin the DID document, so it has to resolve from outside the cluster.",
+              "title": "credentialServiceUrl",
+              "type": "string"
+            },
+            "curlImage": {
+              "additionalProperties": false,
+              "description": "image used for the steps that talk to vault and the identityhub",
+              "properties": {
+                "pullPolicy": {
+                  "default": "IfNotPresent",
+                  "description": "[Kubernetes image pull policy](https://kubernetes.io/docs/concepts/containers/images/#image-pull-policy) to use",
+                  "title": "pullPolicy",
+                  "type": "string"
+                },
+                "repository": {
+                  "default": "quay.io/curl/curl",
+                  "title": "repository",
+                  "type": "string"
+                },
+                "tag": {
+                  "default": "8.1.2",
+                  "title": "tag",
+                  "type": "string"
+                }
+              },
+              "required": [],
+              "title": "curlImage",
+              "type": "object"
+            },
+            "did": {
+              "default": "",
+              "description": "DID of this participant, e.g. `did:web:my-connector.org`. Must match\n`fdsc-edc.common.config.edc.participant.id` and the DID the issuer signs credentials for.",
+              "title": "did",
+              "type": "string"
+            },
+            "enabled": {
+              "default": false,
+              "description": "should the participant context be provisioned by the chart. This creates the context, the\nkeypair and the super-user api key, but it does NOT put a credential in it: that is\n`identityhub.credentialSync.enabled`, and a participant without a credential presents nothing\nand is rejected by every counterparty. A complete provisioning needs both.",
+              "title": "enabled",
+              "type": "boolean"
+            },
+            "identityKey": {
+              "additionalProperties": false,
+              "description": "the participant's identity private key. Every other copy of this identity - the JWK in\nvault, the public key in the DID document, the issuer's signing key, the holder key of\nfdsc-edc - is derived from this one Secret.",
+              "properties": {
+                "algorithm": {
+                  "default": "EC",
+                  "description": "algorithm of that key, `EC` or `RSA`. Getting this wrong is silent: extracting an RSA\nmodulus from an EC key yields a valid-looking JWK full of garbage, and the mismatch only\nshows up later as counterparties rejecting every signature.",
+                  "title": "algorithm",
+                  "type": "string"
+                },
+                "key": {
+                  "default": "tls.key",
+                  "description": "key within that Secret holding the PEM-encoded private key",
+                  "title": "key",
+                  "type": "string"
+                },
+                "secretName": {
+                  "default": "",
+                  "description": "name of the Secret holding the private key, typically a cert-manager TLS Secret",
+                  "title": "secretName",
+                  "type": "string"
+                }
+              },
+              "required": [],
+              "title": "identityKey",
+              "type": "object"
+            },
+            "keyAlias": {
+              "default": "key-1",
+              "description": "vault alias the signing key is stored under, and the fragment the public key is published\nas in the DID document (`\u003cdid\u003e#\u003ckeyAlias\u003e`). Changing it on an existing deployment breaks\nevery credential already issued; rotate the key material instead (see `rotation` below).",
+              "title": "keyAlias",
+              "type": "string"
+            },
+            "kidCheck": {
+              "additionalProperties": false,
+              "description": "verify that the issuer signs credentials with `\u003cdid\u003e#\u003ckeyAlias\u003e` before inserting any\ncredential. The check cannot repair a mismatch (Keycloak never re-imports an existing realm\nand `kid` is not settable through its Admin API), so it aborts and prints the one-off repair.",
+              "properties": {
+                "enabled": {
+                  "default": false,
+                  "description": "should the issuer's kid be verified",
+                  "title": "enabled",
+                  "type": "boolean"
+                },
+                "keycloakUrl": {
+                  "default": "",
+                  "description": "in-cluster base URL of the Keycloak that issues the credentials",
+                  "title": "keycloakUrl",
+                  "type": "string"
+                },
+                "realm": {
+                  "default": "",
+                  "description": "realm that issues the credentials",
+                  "title": "realm",
+                  "type": "string"
+                }
+              },
+              "required": [],
+              "title": "kidCheck",
+              "type": "object"
+            },
+            "opensslImage": {
+              "additionalProperties": false,
+              "description": "image used for the steps that only need openssl",
+              "properties": {
+                "pullPolicy": {
+                  "default": "IfNotPresent",
+                  "description": "[Kubernetes image pull policy](https://kubernetes.io/docs/concepts/containers/images/#image-pull-policy) to use",
+                  "title": "pullPolicy",
+                  "type": "string"
+                },
+                "repository": {
+                  "default": "alpine/openssl",
+                  "title": "repository",
+                  "type": "string"
+                },
+                "tag": {
+                  "default": "3.5.5",
+                  "title": "tag",
+                  "type": "string"
+                }
+              },
+              "required": [],
+              "title": "opensslImage",
+              "type": "object"
+            },
+            "priorityClassName": {
+              "default": "",
+              "description": "priority class to be assigned to the pods\nref: https://kubernetes.io/docs/concepts/scheduling-eviction/pod-priority-preemption/",
+              "title": "priorityClassName",
+              "type": "string"
+            },
+            "rotation": {
+              "additionalProperties": false,
+              "description": "replacement of the signing key, keeping the same alias and DID fragment. There is no\noverlap window: the moment the key is replaced everything signed with the previous one stops\nverifying, so this is opt-in, runs as its own Job and never as an upgrade hook. Enable it,\nlet it run, set it back to false.",
+              "properties": {
+                "enabled": {
+                  "default": false,
+                  "description": "should the rotation Job be rendered. The rotation is not atomic: the old keypair is\nrevoked before the new one is published, and if the vault write in between fails the Job\nexits without publishing anything. Nothing wrong is ever served - the DID document is only\nupdated after the key is safely stored - but the participant is left unable to sign until\nthe Job is re-run, which is safe to do and picks up where it left off.",
+                  "title": "enabled",
+                  "type": "boolean"
+                },
+                "instance": {
+                  "default": 1,
+                  "description": "suffix of the Job name. Bump it for each rotation so a new run is a new, immutable Job\ninstead of a failing patch of a completed one.",
+                  "title": "instance",
+                  "type": "integer"
+                }
+              },
+              "required": [],
+              "title": "rotation",
+              "type": "object"
+            },
+            "stsClientSecret": {
+              "additionalProperties": false,
+              "description": "shared secret between the fdsc-edc oauth client and the identityhub's embedded STS. Both\nsides only ever compare against the value stored in vault, so it may be chosen freely - which\nis what makes the bootstrap idempotent, unlike the secret the identityhub generates once and\nnever reveals again.",
+              "properties": {
+                "existingSecret": {
+                  "default": "",
+                  "description": "name of the Secret holding the shared secret",
+                  "title": "existingSecret",
+                  "type": "string"
+                },
+                "existingSecretKey": {
+                  "default": "sts-client-secret",
+                  "description": "key within that Secret",
+                  "title": "existingSecretKey",
+                  "type": "string"
+                }
+              },
+              "required": [],
+              "title": "stsClientSecret",
+              "type": "object"
+            },
+            "superUserId": {
+              "default": "super-user",
+              "description": "participant context id of the identityhub super user. The identityhub derives the vault\nalias of its api key as `\u003csuperUserId\u003e-apikey`, and the api key itself must decode to exactly\nthis value, so it is not freely choosable.",
+              "title": "superUserId",
+              "type": "string"
+            },
+            "waitRetries": {
+              "default": 30,
+              "description": "how many times the Job polls the identityhub before giving up, five seconds apart. The\ndefault covers a vault the chart unseals for you. A vault unsealed by hand is not ready until\nthe key holders have shown up, which can be hours: either raise this, or unseal first and let\nthe Job run on the next deploy.",
+              "title": "waitRetries",
+              "type": "integer"
+            }
+          },
+          "required": [],
+          "title": "bootstrap",
+          "type": "object"
+        },
+        "credentialSync": {
+          "additionalProperties": false,
+          "description": "sidecar that keeps the identityhub's copy of a credential in step with the Secret the\nvc-operator maintains. The identityhub holds its own copy of everything a DCP connector\npresents, and a copy pushed once at deploy time expires on its own schedule and takes the DCP\nlane down with nothing having changed in the cluster.\n\nIt runs inside the identityhub pod and writes over localhost on purpose: the Identity API is a\ncomponent-internal API, so the only thing allowed to write to it is the pod that owns it. The\nsidecar does not speak OID4VCI - obtaining and renewing the credential stays with the\nvc-operator, which writes it to a Secret; this only mirrors that Secret into the identityhub.",
+          "properties": {
+            "enabled": {
+              "default": false,
+              "description": "should the sidecar be rendered. It only mirrors the credential into a participant context\nthat already exists, so on its own it does nothing: `identityhub.bootstrap.enabled` has to be\nset as well, or the sidecar will keep reporting a 404 for the participant. The two switches\nare separate because a context is also provisioned by hand or by an earlier release, and such\na deployment wants the sidecar without the Job.",
+              "title": "enabled",
+              "type": "boolean"
+            },
+            "id": {
+              "default": "membership-credential",
+              "description": "id the credential is stored under in the identityhub",
+              "title": "id",
+              "type": "string"
+            },
+            "key": {
+              "default": "credential",
+              "description": "key within that Secret holding the raw JWT",
+              "title": "key",
+              "type": "string"
+            },
+            "resyncSeconds": {
+              "default": 60,
+              "description": "how often the mounted Secret is re-read. The kubelet refreshes mounted Secrets on its own,\nso this is the only thing standing between a renewal and the identityhub seeing it; there is\nno watch on the Kubernetes API and therefore no RBAC to grant.",
+              "title": "resyncSeconds",
+              "type": "integer"
+            },
+            "secretName": {
+              "default": "",
+              "description": "Secret holding the credential, as written by the vc-operator. Defaults to\nidentityhub.bootstrap.credential.secretName.",
+              "title": "secretName",
+              "type": "string"
+            }
+          },
+          "required": [],
+          "title": "credentialSync",
+          "type": "object"
+        },
+        "credentialWatchdog": {
+          "additionalProperties": false,
+          "description": "the identityhub's own credential watchdog, which re-requests expiring credentials from a\nDCP issuer service.",
+          "properties": {
+            "checkPeriodSeconds": {
+              "default": 0,
+              "description": "`edc.iam.credential.status.check.period`, in seconds. 0 or less disables the watchdog.\nOff by default because the credentials in this chart come from an OID4VCI issuer (Keycloak)\nvia the vc-operator: there is no DCP issuer service for the identityhub to ask, so leaving it\non only produces a failing request every period.",
+              "title": "checkPeriodSeconds",
+              "type": "integer"
+            },
+            "renewalGracePeriodSeconds": {
+              "default": 86400,
+              "description": "`edc.iam.credential.renewal.graceperiod`, in seconds: how long before expiry renewal is\ntriggered. Upstream defaults to a week, which for a credential that only lives a week means\nit is considered renewable from the moment it is issued - keep this a fraction of the\ncredential's lifetime.",
+              "title": "renewalGracePeriodSeconds",
+              "type": "integer"
+            }
+          },
+          "required": [],
+          "title": "credentialWatchdog",
+          "type": "object"
+        },
+        "customCaCerts": {
+          "additionalProperties": true,
+          "description": "extra CA certificates the identityhub has to trust, as a map of file name to PEM content.\nThey are imported into a copy of the JVM truststore by an init container, so they extend the\nbundled roots instead of replacing them. Needed to reach a vault, an issuer or a counterparty\nthat uses a private CA.\nextra CA certificates the identityhub has to TRUST, given as PEM inline: the CA of a vault,\nof an issuer or of a counterparty that does not use a publicly trusted certificate. These are\nnot the certificates that identify this participant - those come from cert-manager and are used\nstraight from their Secret. Keys become filenames and, through them, truststore aliases. Use\nthis for a CA that does not exist in the cluster as an object; otherwise prefer\n`customCaCertsFrom` and skip the copy.",
+          "required": [],
+          "title": "customCaCerts",
+          "type": "object"
+        },
+        "customCaCertsFrom": {
+          "description": "the same, but read from Secrets and ConfigMaps that already exist in the cluster, so a\ncert-manager Secret can be pointed at directly instead of having its PEM copied into values.\nBoth sources can be used together. Each entry names either a `secret` or a `configMap`:\n\n  customCaCertsFrom:\n    - secret: mp-operations.org-tls   # keys default to [ca.crt]\n    - secret: some-issuer-tls\n      keys: [ca.crt, tls.crt]\n    - configMap: corporate-root-ca    # no keys: every key in the ConfigMap\n\n`keys` defaults to `ca.crt` for Secrets on purpose. A kubernetes.io/tls Secret also carries\ntls.key, which does not belong in this pod and which `keytool -importcert` fails on, taking the\ninit container down with it. Named keys are projected as `\u003csource\u003e-\u003ckey\u003e` so that two sources\ncannot collide on a filename, which in a projected volume is a mount failure rather than a\nwarning.",
+          "items": {
+            "required": []
+          },
+          "title": "customCaCertsFrom",
+          "type": "array"
+        },
+        "didIngress": {
+          "additionalProperties": false,
+          "description": "ingress publishing the DID document of the identityhub",
+          "properties": {
+            "annotations": {
+              "additionalProperties": true,
+              "description": "annotations to be added to the ingress",
+              "required": [],
+              "title": "annotations",
+              "type": "object"
+            },
+            "className": {
+              "default": "",
+              "description": "ingress class to use",
+              "title": "className",
+              "type": "string"
+            },
+            "enabled": {
+              "default": true,
+              "description": "should the ingress be created",
+              "title": "enabled",
+              "type": "boolean"
+            },
+            "hosts": {
+              "description": "hosts to publish, each with its `host` and the `paths` to route",
+              "items": {
+                "required": []
+              },
+              "title": "hosts",
+              "type": "array"
+            },
+            "port": {
+              "default": "did",
+              "description": "name of the identityhub service port to route to",
+              "title": "port",
+              "type": "string"
+            },
+            "tls": {
+              "description": "tls configuration, each entry with its `hosts` and `secretName`",
+              "items": {
+                "required": []
+              },
+              "title": "tls",
+              "type": "array"
+            }
+          },
+          "required": [],
+          "title": "didIngress",
+          "type": "object"
+        },
+        "enabled": {
+          "default": false,
+          "title": "enabled",
+          "type": "boolean"
+        },
+        "endpoints": {
+          "additionalProperties": false,
+          "description": "endpoints of the control plane",
+          "properties": {
+            "accounts": {
+              "additionalProperties": false,
+              "description": "STS Accounts API, used to manipulate STS accounts",
+              "properties": {
+                "path": {
+                  "default": "/api/accounts",
+                  "title": "path",
+                  "type": "string"
+                },
+                "port": {
+                  "default": 8085,
+                  "title": "port",
+                  "type": "integer"
+                }
+              },
+              "required": [],
+              "title": "accounts",
+              "type": "object"
+            },
+            "credentials": {
+              "additionalProperties": false,
+              "description": "DCP Presentation API endpoint",
+              "properties": {
+                "path": {
+                  "default": "/api/credentials",
+                  "description": "path for incoming api calls",
+                  "title": "path",
+                  "type": "string"
+                },
+                "port": {
+                  "default": 8083,
+                  "description": "port for incoming api calls",
+                  "title": "port",
+                  "type": "integer"
+                }
+              },
+              "required": [],
+              "title": "credentials",
+              "type": "object"
+            },
+            "default": {
+              "additionalProperties": false,
+              "description": "default api for health checks, should not be added to any ingress",
+              "properties": {
+                "path": {
+                  "default": "/api",
+                  "description": "path for incoming api calls",
+                  "title": "path",
+                  "type": "string"
+                },
+                "port": {
+                  "default": 8081,
+                  "description": "port for incoming api calls",
+                  "title": "port",
+                  "type": "integer"
+                }
+              },
+              "required": [],
+              "title": "default",
+              "type": "object"
+            },
+            "did": {
+              "additionalProperties": false,
+              "description": "DID service endpoint. DID documents can be resolved from here.",
+              "properties": {
+                "path": {
+                  "default": "/",
+                  "description": "path for incoming api calls",
+                  "title": "path",
+                  "type": "string"
+                },
+                "port": {
+                  "default": 8084,
+                  "description": "port for incoming api calls",
+                  "title": "port",
+                  "type": "integer"
+                }
+              },
+              "required": [],
+              "title": "did",
+              "type": "object"
+            },
+            "identity": {
+              "additionalProperties": false,
+              "description": "management api, used by internal users, can be added to an ingress and must not be internet facing",
+              "properties": {
+                "authKeyAlias": {
+                  "default": "",
+                  "description": "authentication key, must be attached to each 'X-Api-Key' request header",
+                  "required": [],
+                  "title": "authKeyAlias",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "path": {
+                  "default": "/api/identity",
+                  "description": "path for incoming api calls",
+                  "title": "path",
+                  "type": "string"
+                },
+                "port": {
+                  "default": 8082,
+                  "description": "port for incoming api calls",
+                  "title": "port",
+                  "type": "integer"
+                }
+              },
+              "required": [],
+              "title": "identity",
+              "type": "object"
+            },
+            "sts": {
+              "additionalProperties": false,
+              "description": "STS Endpoint, used to obtain tokens",
+              "properties": {
+                "path": {
+                  "default": "/api/sts",
+                  "title": "path",
+                  "type": "string"
+                },
+                "port": {
+                  "default": 8087,
+                  "title": "port",
+                  "type": "integer"
+                }
+              },
+              "required": [],
+              "title": "sts",
+              "type": "object"
+            },
+            "version": {
+              "additionalProperties": false,
+              "description": "Version API, used to obtain exact version information about all APIs at runtime",
+              "properties": {
+                "path": {
+                  "default": "/.well-known/api",
+                  "title": "path",
+                  "type": "string"
+                },
+                "port": {
+                  "default": 8086,
+                  "title": "port",
+                  "type": "integer"
+                }
+              },
+              "required": [],
+              "title": "version",
+              "type": "object"
+            }
+          },
+          "required": [],
+          "title": "endpoints",
+          "type": "object"
+        },
+        "env": {
+          "additionalProperties": true,
+          "description": "Extra environment variables that will be pass onto deployment pods",
+          "required": [],
+          "title": "env",
+          "type": "object"
+        },
+        "envConfigMapNames": {
+          "description": "[Kubernetes ConfigMap Resource](https://kubernetes.io/docs/concepts/configuration/configmap/) names to load environment variables from",
+          "items": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "required": []
+          },
+          "title": "envConfigMapNames",
+          "type": "array"
+        },
+        "envSecretNames": {
+          "description": "[Kubernetes Secret Resource](https://kubernetes.io/docs/concepts/configuration/secret/) names to load environment variables from",
+          "items": {
+            "required": []
+          },
+          "title": "envSecretNames",
+          "type": "array"
+        },
+        "envValueFrom": {
+          "additionalProperties": true,
+          "description": "\"valueFrom\" environment variable references that will be added to deployment pods. Name is templated.\nref: https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.19/#envvarsource-v1-core",
+          "required": [],
+          "title": "envValueFrom",
+          "type": "object"
+        },
+        "image": {
+          "additionalProperties": false,
+          "properties": {
+            "pullPolicy": {
+              "default": "IfNotPresent",
+              "description": "[Kubernetes image pull policy](https://kubernetes.io/docs/concepts/containers/images/#image-pull-policy) to use",
+              "title": "pullPolicy",
+              "type": "string"
+            },
+            "repository": {
+              "default": "tractusx/identityhub",
+              "title": "repository",
+              "type": "string"
+            },
+            "tag": {
+              "default": "sha-687d69f",
+              "description": "tag of the identityhub image. Required, and with no default on purpose: this is an\nupstream image whose versioning has nothing to do with this chart's appVersion, so falling\nback to it produced a tag that does not exist.",
+              "title": "tag",
+              "type": "string"
+            }
+          },
+          "required": [],
+          "title": "image",
+          "type": "object"
+        },
+        "initContainers": {
+          "description": "additional init containers to run before the identityhub starts",
+          "items": {
+            "required": []
+          },
+          "title": "initContainers",
+          "type": "array"
+        },
+        "livenessProbe": {
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "default": true,
+              "description": "Whether to enable kubernetes [liveness-probe](https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/)",
+              "title": "enabled",
+              "type": "boolean"
+            },
+            "failureThreshold": {
+              "default": 6,
+              "description": "when a probe fails kubernetes will try 6 times before giving up",
+              "title": "failureThreshold",
+              "type": "integer"
+            },
+            "initialDelaySeconds": {
+              "default": 5,
+              "description": "seconds to wait before performing the first liveness check",
+              "title": "initialDelaySeconds",
+              "type": "integer"
+            },
+            "periodSeconds": {
+              "default": 5,
+              "description": "this fields specifies that kubernetes should perform a liveness check every 5 seconds",
+              "title": "periodSeconds",
+              "type": "integer"
+            },
+            "successThreshold": {
+              "default": 1,
+              "description": "number of consecutive successes for the probe to be considered successful after having failed",
+              "title": "successThreshold",
+              "type": "integer"
+            },
+            "timeoutSeconds": {
+              "default": 5,
+              "description": "number of seconds after which the probe times out",
+              "title": "timeoutSeconds",
+              "type": "integer"
+            }
+          },
+          "required": [],
+          "title": "livenessProbe",
+          "type": "object"
+        },
+        "logging": {
+          "additionalProperties": false,
+          "description": "Configuration of the [Java Util Logging Facade](https://docs.oracle.com/javase/7/docs/technotes/guides/logging/overview.html)",
+          "properties": {
+            "default": {
+              "default": ".level=INFO\norg.eclipse.edc.level=INFO\nhandlers=java.util.logging.ConsoleHandler\njava.util.logging.ConsoleHandler.formatter=org.eclipse.tractusx.identityhub.monitor.ColorfulFormatter\njava.util.logging.ConsoleHandler.level=ALL\norg.eclipse.tractusx.identityhub.monitor.ColorfulFormatter.format=%7$s[%1$tY-%1$tm-%1$td %1$tH:%1$tM:%1$tS] [%4$s] %5$s%6$s%n%8$s",
+              "description": "default logging properties if logging is not enabled",
+              "title": "default",
+              "type": "string"
+            },
+            "enabled": {
+              "default": true,
+              "description": "Enable logging to create .log files",
+              "title": "enabled",
+              "type": "boolean"
+            },
+            "formatters": {
+              "additionalProperties": false,
+              "properties": {
+                "org.eclipse.tractusx.identityhub.monitor.ColorfulFormatter": {
+                  "additionalProperties": false,
+                  "description": "configuration of custom colorful formatter",
+                  "properties": {
+                    "format": {
+                      "default": "%7$s[%1$tY-%1$tm-%1$td %1$tH:%1$tM:%1$tS] [%4$s] %5$s%6$s%n%8$s",
+                      "title": "format",
+                      "type": "string"
+                    }
+                  },
+                  "required": [],
+                  "title": "org.eclipse.tractusx.identityhub.monitor.ColorfulFormatter",
+                  "type": "object"
+                }
+              },
+              "required": [],
+              "title": "formatters",
+              "type": "object"
+            },
+            "handlers": {
+              "description": "List of handlers to use in the logger",
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "string"
+                  }
+                ],
+                "required": []
+              },
+              "title": "handlers",
+              "type": "array"
+            },
+            "handlersConfig": {
+              "additionalProperties": false,
+              "properties": {
+                "java.util.logging.ConsoleHandler": {
+                  "additionalProperties": false,
+                  "description": "Console handler configuration",
+                  "properties": {
+                    "formatter": {
+                      "default": "org.eclipse.tractusx.identityhub.monitor.ColorfulFormatter",
+                      "title": "formatter",
+                      "type": "string"
+                    },
+                    "level": {
+                      "default": "FINE",
+                      "title": "level",
+                      "type": "string"
+                    }
+                  },
+                  "required": [],
+                  "title": "java.util.logging.ConsoleHandler",
+                  "type": "object"
+                },
+                "java.util.logging.FileHandler": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "append": {
+                      "default": true,
+                      "description": "Append logs to the file or create new file every deployment",
+                      "title": "append",
+                      "type": "boolean"
+                    },
+                    "count": {
+                      "default": 1,
+                      "description": "Number of files to use in log file rotation",
+                      "title": "count",
+                      "type": "integer"
+                    },
+                    "formatter": {
+                      "default": "org.eclipse.tractusx.identityhub.monitor.ColorfulFormatter",
+                      "description": "Formatter to use in handler, formatter must be set in identityhub.logging.formatters",
+                      "title": "formatter",
+                      "type": "string"
+                    },
+                    "level": {
+                      "default": "FINE",
+                      "description": "Log level of handler",
+                      "title": "level",
+                      "type": "string"
+                    },
+                    "limit": {
+                      "default": 0,
+                      "description": "Limit of bytes to write before log file rotation",
+                      "title": "limit",
+                      "type": "integer"
+                    },
+                    "pattern": {
+                      "default": "/app/logs/identityhub.log",
+                      "description": "Path where the log is created, must be the same path as the logging.path values",
+                      "title": "pattern",
+                      "type": "string"
+                    }
+                  },
+                  "required": [],
+                  "title": "java.util.logging.FileHandler",
+                  "type": "object"
+                }
+              },
+              "required": [],
+              "title": "handlersConfig",
+              "type": "object"
+            },
+            "level": {
+              "default": "INFO",
+              "description": "root log level",
+              "title": "level",
+              "type": "string"
+            },
+            "logLevels": {
+              "additionalProperties": false,
+              "description": "package level control",
+              "properties": {
+                "jakarta.json": {
+                  "default": "OFF",
+                  "title": "jakarta.json",
+                  "type": "string"
+                },
+                "jdk.event": {
+                  "default": "OFF",
+                  "title": "jdk.event",
+                  "type": "string"
+                },
+                "okhttp3.internal": {
+                  "default": "OFF",
+                  "title": "okhttp3.internal",
+                  "type": "string"
+                },
+                "org.eclipse.edc": {
+                  "default": "FINE",
+                  "title": "org.eclipse.edc",
+                  "type": "string"
+                },
+                "org.eclipse.tractusx": {
+                  "default": "FINE",
+                  "title": "org.eclipse.tractusx",
+                  "type": "string"
+                },
+                "org.flywaydb": {
+                  "default": "OFF",
+                  "title": "org.flywaydb",
+                  "type": "string"
+                },
+                "org.glassfish": {
+                  "default": "OFF",
+                  "title": "org.glassfish",
+                  "type": "string"
+                },
+                "org.jvnet": {
+                  "default": "OFF",
+                  "title": "org.jvnet",
+                  "type": "string"
+                },
+                "org.postgresql": {
+                  "default": "OFF",
+                  "title": "org.postgresql",
+                  "type": "string"
+                }
+              },
+              "required": [],
+              "title": "logLevels",
+              "type": "object"
+            },
+            "path": {
+              "default": "/app/logs",
+              "description": "path where the log resides, must be the same path as the fileHandler pattern",
+              "title": "path",
+              "type": "string"
+            }
+          },
+          "required": [],
+          "title": "logging",
+          "type": "object"
+        },
+        "nodeSelector": {
+          "additionalProperties": true,
+          "description": "[node selector](https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#nodeselector) to constrain pods to nodes",
+          "required": [],
+          "title": "nodeSelector",
+          "type": "object"
+        },
+        "podAnnotations": {
+          "additionalProperties": true,
+          "description": "additional annotations for the pod",
+          "required": [],
+          "title": "podAnnotations",
+          "type": "object"
+        },
+        "podLabels": {
+          "additionalProperties": true,
+          "description": "additional labels for the pod",
+          "required": [],
+          "title": "podLabels",
+          "type": "object"
+        },
+        "podSecurityContext": {
+          "additionalProperties": true,
+          "description": "The [pod security context](https://kubernetes.io/docs/tasks/configure-pod-container/security-context/#set-the-security-context-for-a-pod) defines privilege and access control settings for a Pod within the deployment",
+          "required": [],
+          "title": "podSecurityContext",
+          "type": "object"
+        },
+        "postgresql": {
+          "additionalProperties": false,
+          "properties": {
+            "auth": {
+              "additionalProperties": false,
+              "properties": {
+                "existingSecret": {
+                  "default": "ih.postgres.credentials.postgresql.acid.zalan.do",
+                  "title": "existingSecret",
+                  "type": "string"
+                },
+                "existingSecretPasswordKey": {
+                  "default": "password",
+                  "title": "existingSecretPasswordKey",
+                  "type": "string"
+                },
+                "password": {
+                  "default": "",
+                  "required": [],
+                  "title": "password",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "username": {
+                  "default": "ih",
+                  "title": "username",
+                  "type": "string"
+                }
+              },
+              "required": [],
+              "title": "auth",
+              "type": "object"
+            },
+            "database": {
+              "default": "ih",
+              "title": "database",
+              "type": "string"
+            },
+            "host": {
+              "default": "postgres",
+              "title": "host",
+              "type": "string"
+            },
+            "port": {
+              "default": 5432,
+              "required": [],
+              "title": "port",
+              "type": [
+                "string",
+                "integer"
+              ]
+            }
+          },
+          "required": [],
+          "title": "postgresql",
+          "type": "object"
+        },
+        "priorityClassName": {
+          "default": "",
+          "description": "priority class to be assigned to the pods\nref: https://kubernetes.io/docs/concepts/scheduling-eviction/pod-priority-preemption/",
+          "title": "priorityClassName",
+          "type": "string"
+        },
+        "readinessProbe": {
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "default": true,
+              "description": "Whether to enable kubernetes [readiness-probes](https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/)",
+              "title": "enabled",
+              "type": "boolean"
+            },
+            "failureThreshold": {
+              "default": 6,
+              "description": "when a probe fails kubernetes will try 6 times before giving up",
+              "title": "failureThreshold",
+              "type": "integer"
+            },
+            "initialDelaySeconds": {
+              "default": 5,
+              "description": "seconds to wait before performing the first readiness check",
+              "title": "initialDelaySeconds",
+              "type": "integer"
+            },
+            "periodSeconds": {
+              "default": 5,
+              "description": "this fields specifies that kubernetes should perform a readiness check every 5 seconds",
+              "title": "periodSeconds",
+              "type": "integer"
+            },
+            "successThreshold": {
+              "default": 1,
+              "description": "number of consecutive successes for the probe to be considered successful after having failed",
+              "title": "successThreshold",
+              "type": "integer"
+            },
+            "timeoutSeconds": {
+              "default": 5,
+              "description": "number of seconds after which the probe times out",
+              "title": "timeoutSeconds",
+              "type": "integer"
+            }
+          },
+          "required": [],
+          "title": "readinessProbe",
+          "type": "object"
+        },
+        "replicaCount": {
+          "default": 1,
+          "title": "replicaCount",
+          "type": "integer"
+        },
+        "resources": {
+          "additionalProperties": true,
+          "description": "[resource management](https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/) for the container",
+          "required": [],
+          "title": "resources",
+          "type": "object"
+        },
+        "securityContext": {
+          "additionalProperties": true,
+          "description": "The [container security context](https://kubernetes.io/docs/tasks/configure-pod-container/security-context/#set-the-security-context-for-a-container) defines privilege and access control settings for a Container within a pod",
+          "required": [],
+          "title": "securityContext",
+          "type": "object"
+        },
+        "service": {
+          "additionalProperties": false,
+          "properties": {
+            "annotations": {
+              "additionalProperties": true,
+              "required": [],
+              "title": "annotations",
+              "type": "object"
+            },
+            "type": {
+              "default": "ClusterIP",
+              "description": "[Service type](https://kubernetes.io/docs/concepts/services-networking/service/#publishing-services-service-types) to expose the running application on a set of Pods as a network service.",
+              "title": "type",
+              "type": "string"
+            }
+          },
+          "required": [],
+          "title": "service",
+          "type": "object"
+        },
+        "superuser": {
+          "additionalProperties": false,
+          "description": "configuration of the super user to be created in the identity hub\nthe api key needs to be in form base64(\u003cusername\u003e).\u003crandom-string\u003e",
+          "properties": {
+            "existingSecret": {
+              "default": "",
+              "description": "reference to the existing secret containing the key",
+              "required": [],
+              "title": "existingSecret",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "existingSecretKeyKey": {
+              "default": "",
+              "description": "key in the secret containing the key",
+              "required": [],
+              "title": "existingSecretKeyKey",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "key": {
+              "default": "",
+              "description": "the plain key, will be ignored if existingSecret is set",
+              "required": [],
+              "title": "key",
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [],
+          "title": "superuser",
+          "type": "object"
+        },
+        "tolerations": {
+          "description": "[tolerations](https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/) to configure preferred nodes",
+          "items": {
+            "required": []
+          },
+          "title": "tolerations",
+          "type": "array"
+        },
+        "topologySpreadConstraints": {
+          "description": "topology spread constraints template\nref: https://kubernetes.io/docs/concepts/scheduling-eviction/topology-spread-constraints/",
+          "items": {
+            "required": []
+          },
+          "title": "topologySpreadConstraints",
+          "type": "array"
+        },
+        "tracing": {
+          "additionalProperties": false,
+          "description": "distributed-tracing configuration for the IdentityHub component.\nValues here override or complement the global `tracing:` block. When\ntracing is active the deployment gains an init container that copies\nthe OpenTelemetry Java auto-instrumentation agent into a shared\nvolume, mounts the volume read-only into the IdentityHub container,\nprepends `-javaagent:/otel-agent/opentelemetry-javaagent.jar` to\n`JAVA_TOOL_OPTIONS`, and receives the standard `OTEL_*` SDK\nenvironment variables rendered by the `dsc.otel.env` helper.",
+          "properties": {
+            "enabled": {
+              "default": "",
+              "description": "toggle OpenTelemetry tracing on the IdentityHub workload. Leave\nunset (default) to inherit `tracing.enabled` from the global\nblock; set to `true` / `false` to override.",
+              "required": [],
+              "title": "enabled",
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "javaagent": {
+              "additionalProperties": false,
+              "description": "OpenTelemetry Java auto-instrumentation agent configuration.\nThe agent JAR is shipped as a container image and copied into a\nshared `emptyDir` volume (`otel-agent`) by an init container; the\nmain container then mounts the volume read-only and the JVM picks\nthe agent up via `JAVA_TOOL_OPTIONS`.",
+              "properties": {
+                "enabled": {
+                  "default": true,
+                  "description": "toggle the Java agent init container. Disable to run the\nIdentityHub without auto-instrumentation (e.g. when the runtime\nalready carries the agent or manual SDK instrumentation is\nused). Only meaningful when `identityhub.tracing.enabled` (or\nthe global `tracing.enabled`) is true.",
+                  "title": "enabled",
+                  "type": "boolean"
+                },
+                "image": {
+                  "default": "ghcr.io/open-telemetry/opentelemetry-operator/autoinstrumentation-java:2.11.0",
+                  "description": "container image providing the OpenTelemetry Java agent JAR\nat `/javaagent.jar`. Pinned to a stable upstream release so\nbehaviour is reproducible across chart versions.",
+                  "title": "image",
+                  "type": "string"
+                },
+                "pullPolicy": {
+                  "default": "IfNotPresent",
+                  "description": "[Kubernetes image pull policy](https://kubernetes.io/docs/concepts/containers/images/#image-pull-policy)\nfor the agent init container.",
+                  "title": "pullPolicy",
+                  "type": "string"
+                }
+              },
+              "required": [],
+              "title": "javaagent",
+              "type": "object"
+            },
+            "serviceName": {
+              "default": "identityhub",
+              "description": "logical service name exposed as `OTEL_SERVICE_NAME` and recorded\nas `service.name` on every span emitted by this workload.",
+              "title": "serviceName",
+              "type": "string"
+            }
+          },
+          "required": [],
+          "title": "tracing",
+          "type": "object"
+        },
+        "url": {
+          "additionalProperties": false,
+          "properties": {
+            "protocol": {
+              "default": "",
+              "description": "Explicitly declared url for reaching the dsp api (e.g. if ingresses not used)",
+              "title": "protocol",
+              "type": "string"
+            },
+            "public": {
+              "default": "",
+              "title": "public",
+              "type": "string"
+            },
+            "readiness": {
+              "default": "",
+              "title": "readiness",
+              "type": "string"
+            }
+          },
+          "required": [],
+          "title": "url",
+          "type": "object"
+        },
+        "volumeMounts": {
+          "description": "declare where to mount [volumes](https://kubernetes.io/docs/concepts/storage/volumes/) into the container",
+          "items": {
+            "required": []
+          },
+          "title": "volumeMounts",
+          "type": "array"
+        },
+        "volumes": {
+          "description": "[volume](https://kubernetes.io/docs/concepts/storage/volumes/) directories",
+          "items": {
+            "required": []
+          },
+          "title": "volumes",
+          "type": "array"
+        }
+      },
+      "required": [],
+      "title": "identityhub",
+      "type": "object"
+    },
+    "imagePullSecrets": {
+      "description": "pull secrets for the images of the workloads this chart templates itself (the identityhub)",
+      "items": {
+        "required": []
+      },
+      "title": "imagePullSecrets",
+      "type": "array"
+    },
+    "issuance": {
+      "additionalProperties": false,
+      "description": "configuration to be shared between the issuance components",
+      "properties": {
+        "generatePasswords": {
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "default": true,
+              "description": "should a password for the database connection of issuance components be generated in the cluster",
+              "title": "enabled",
+              "type": "boolean"
+            },
+            "secretName": {
+              "default": "issuance-secret",
+              "description": "name of the secret to put the generated password into",
+              "title": "secretName",
+              "type": "string"
+            }
+          },
+          "required": [],
+          "title": "generatePasswords",
+          "type": "object"
+        }
+      },
+      "required": [],
+      "title": "issuance",
+      "type": "object"
+    },
+    "keycloak": {
+      "additionalProperties": true,
+      "description": "# configuration of the keycloak - see https://github.com/CloudPirates-io/helm-charts/tree/main/charts/keycloak for details",
+      "required": [],
+      "title": "keycloak",
+      "type": "object"
+    },
+    "managedMongo": {
+      "additionalProperties": false,
+      "description": "# Usage of the mongo-operator - see https://github.com/mongodb/mongodb-kubernetes-operator",
+      "properties": {
+        "enabled": {
+          "default": false,
+          "description": "should it be enabled?",
+          "title": "enabled",
+          "type": "boolean"
+        },
+        "spec": {
+          "additionalProperties": true,
+          "description": "spec as defined in https://github.com/mongodb/helm-charts/tree/main/charts/community-operator-crds",
+          "required": [],
+          "title": "spec",
+          "type": "object"
+        }
+      },
+      "required": [],
+      "title": "managedMongo",
+      "type": "object"
+    },
+    "marketplace": {
+      "additionalProperties": true,
+      "description": "configuration for the marketplace components",
+      "required": [],
+      "title": "marketplace",
+      "type": "object"
+    },
+    "mongo-operator": {
+      "additionalProperties": true,
+      "description": "# Installation of the mongo-operator - see https://github.com/mongodb/helm-charts/tree/main/charts/community-operator",
+      "required": [],
+      "title": "mongo-operator",
+      "type": "object"
+    },
+    "nameOverride": {
+      "default": "",
+      "description": "overrides the chart name used in the names of the resources this chart creates itself",
+      "title": "nameOverride",
+      "type": "string"
+    },
+    "opentelemetry-collector": {
+      "additionalProperties": true,
+      "description": "values passed to the bundled `opentelemetry-collector` subchart\n(chart: open-telemetry/opentelemetry-collector). The collector is only\nrendered when `opentelemetry-collector.enabled` is true; by default it\nstays off so existing deployments are unaffected. When `tracing.enabled`\nis flipped on, operators typically also flip `opentelemetry-collector.enabled`\non to get an in-cluster collector reachable on port 4317/4318.",
+      "required": [],
+      "title": "opentelemetry-collector",
+      "type": "object"
+    },
+    "opentelemetry-operator": {
+      "additionalProperties": true,
+      "description": "values passed to the bundled `opentelemetry-operator` subchart\n(chart: open-telemetry/opentelemetry-operator). The operator provides\nKubernetes-native auto-instrumentation by injecting language-specific\nagents into annotated pods via a mutating webhook. Requires cert-manager\nfor webhook certificate management.",
+      "required": [],
+      "title": "opentelemetry-operator",
+      "type": "object"
+    },
+    "prometheus": {
+      "additionalProperties": true,
+      "required": [],
+      "title": "prometheus",
+      "type": "object"
+    },
+    "rainbow": {
+      "additionalProperties": false,
+      "description": "# configuration of rainbow to provide integration with the Dataspace Protocol",
+      "properties": {
+        "affinity": {
+          "additionalProperties": true,
+          "description": "affinity template\nref: https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#affinity-and-anti-affinity",
+          "required": [],
+          "title": "affinity",
+          "type": "object"
+        },
+        "db": {
+          "additionalProperties": false,
+          "description": "database configuration of rainbow",
+          "properties": {
+            "existingSecret": {
+              "default": "",
+              "description": "secret containing the password for the database",
+              "required": [],
+              "title": "existingSecret",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "passwordKey": {
+              "default": "",
+              "description": "key of the password inside that secret",
+              "required": [],
+              "title": "passwordKey",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "url": {
+              "default": "",
+              "description": "host of the database to be used",
+              "required": [],
+              "title": "url",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "user": {
+              "default": "",
+              "description": "user to be used when accesing the database",
+              "required": [],
+              "title": "user",
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [],
+          "title": "db",
+          "type": "object"
+        },
+        "enabled": {
+          "default": false,
+          "description": "should rainbow be enabled",
+          "title": "enabled",
+          "type": "boolean"
+        },
+        "ingress": {
+          "additionalProperties": false,
+          "description": "configuration for external access to rainbow",
+          "properties": {
+            "annotations": {
+              "additionalProperties": true,
+              "description": "annotations to be added to the ingress",
+              "required": [],
+              "title": "annotations",
+              "type": "object"
+            },
+            "className": {
+              "default": "",
+              "description": "kubernetes.io/ingress.class: \"ambassador\"\n# example annotations, allowing cert-manager to automatically create tls-certs and forcing everything to use ssl.\nkubernetes.io/tls-acme: \"true\"\ningress.kubernetes.io/ssl-redirect: \"true\"\ningress class to use",
+              "title": "className",
+              "type": "string"
+            },
+            "enabled": {
+              "default": false,
+              "description": "should the ingress be enabled",
+              "title": "enabled",
+              "type": "boolean"
+            },
+            "hosts": {
+              "description": "all hosts to be provided",
+              "items": {
+                "required": []
+              },
+              "title": "hosts",
+              "type": "array"
+            },
+            "tls": {
+              "description": "# provide a hosts and the paths that should be available\n- host: localhost\npaths:\n- /\nconfigure the ingress' tls",
+              "items": {
+                "required": []
+              },
+              "title": "tls",
+              "type": "array"
+            }
+          },
+          "required": [],
+          "title": "ingress",
+          "type": "object"
+        },
+        "nodeSelector": {
+          "additionalProperties": true,
+          "description": "selector template\nref: https://kubernetes.io/docs/user-guide/node-selection/",
+          "required": [],
+          "title": "nodeSelector",
+          "type": "object"
+        },
+        "priorityClassName": {
+          "default": "",
+          "description": "priority class to be assigned to the pods\nref: https://kubernetes.io/docs/concepts/scheduling-eviction/pod-priority-preemption/",
+          "title": "priorityClassName",
+          "type": "string"
+        },
+        "service": {
+          "additionalProperties": false,
+          "description": "configuration of service access to rainbow",
+          "properties": {
+            "port": {
+              "default": 8080,
+              "description": "port of the service",
+              "title": "port",
+              "type": "integer"
+            },
+            "serviceType": {
+              "default": "ClusterIP",
+              "description": "service type to be used",
+              "title": "serviceType",
+              "type": "string"
+            }
+          },
+          "required": [],
+          "title": "service",
+          "type": "object"
+        },
+        "tolerations": {
+          "description": "tolerations template\nref: https://kubernetes.io/docs/concepts/configuration/taint-and-toleration/",
+          "items": {
+            "required": []
+          },
+          "title": "tolerations",
+          "type": "array"
+        },
+        "topologySpreadConstraints": {
+          "description": "topology spread constraints template\nref: https://kubernetes.io/docs/concepts/scheduling-eviction/topology-spread-constraints/",
+          "items": {
+            "required": []
+          },
+          "title": "topologySpreadConstraints",
+          "type": "array"
+        }
+      },
+      "required": [],
+      "title": "rainbow",
+      "type": "object"
+    },
+    "registration": {
+      "additionalProperties": false,
+      "description": "configuration for registering a participant at the til. Allows to preconfigure trust-relationships on deployment",
+      "properties": {
+        "annotations": {
+          "additionalProperties": true,
+          "description": "hook annotations of the registration Job. post-upgrade matters: with post-install only, a\nrelease that already exists never runs it again, so nothing added to `issuer` after the first\ninstall ever reaches the list. Re-running is safe: an issuer that is already registered (409)\nis left as it is, so a change to the credentials of an existing issuer does not reach the list\neither - that takes the trusted-issuers-list API. Any other error fails the Job.",
+          "required": [],
+          "title": "annotations",
+          "type": "object"
+        },
+        "command": {
+          "items": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "required": []
+          },
+          "title": "command",
+          "type": "array"
+        },
+        "configMap": {
+          "default": "til-registration",
+          "description": "name of the ConfigMap holding the generated registration script",
+          "title": "configMap",
+          "type": "string"
+        },
+        "enabled": {
+          "default": false,
+          "description": "should the issuers below be registered at the trusted-issuers list",
+          "title": "enabled",
+          "type": "boolean"
+        },
+        "extraEnvVars": {
+          "items": {
+            "required": []
+          },
+          "title": "extraEnvVars",
+          "type": "array"
+        },
+        "extraVolumeMounts": {
+          "items": {
+            "required": []
+          },
+          "title": "extraVolumeMounts",
+          "type": "array"
+        },
+        "extraVolumes": {
+          "items": {
+            "required": []
+          },
+          "title": "extraVolumes",
+          "type": "array"
+        },
+        "image": {
+          "additionalProperties": false,
+          "properties": {
+            "pullPolicy": {
+              "default": "IfNotPresent",
+              "description": "[Kubernetes image pull policy](https://kubernetes.io/docs/concepts/containers/images/#image-pull-policy) to use",
+              "title": "pullPolicy",
+              "type": "string"
+            },
+            "repository": {
+              "default": "quay.io/curl/curl",
+              "title": "repository",
+              "type": "string"
+            },
+            "tag": {
+              "default": "8.1.2",
+              "title": "tag",
+              "type": "string"
+            }
+          },
+          "required": [],
+          "title": "image",
+          "type": "object"
+        },
+        "issuer": {
+          "description": "issuer:\n- did: ${DID}\n  credentialTypes:\n    - LegalPersonCredential\n    - OperatorCredential",
+          "items": {
+            "required": []
+          },
+          "title": "issuer",
+          "type": "array"
+        },
+        "prepScript": {
+          "default": "",
+          "description": "shell snippet prepended to the generated script. Must be a single line: it is interpolated\nwithout `nindent`, so a multi-line value breaks the `init.sh` block scalar.",
+          "title": "prepScript",
+          "type": "string"
+        },
+        "priorityClassName": {
+          "default": "",
+          "description": "priority class to be assigned to the pods\nref: https://kubernetes.io/docs/concepts/scheduling-eviction/pod-priority-preemption/",
+          "title": "priorityClassName",
+          "type": "string"
+        },
+        "til": {
+          "default": "",
+          "description": "address of the trusted-issuers list to register at, e.g. `http://trusted-issuers-list:8080`",
+          "title": "til",
+          "type": "string"
+        }
+      },
+      "required": [],
+      "title": "registration",
+      "type": "object"
+    },
+    "scorpio": {
+      "additionalProperties": true,
+      "description": "# configuration of the context-broker - see https://github.com/FIWARE/helm-charts/tree/main/charts/scorpio-broker-aaio for details",
+      "required": [],
+      "title": "scorpio",
+      "type": "object"
+    },
+    "statusListServer": {
+      "additionalProperties": false,
+      "description": "# Configuration of the status-list-server for Token Status List (RFC draft-ietf-oauth-status-list) support.\n# Provides credential revocation infrastructure for Verifiable Credentials issued by Keycloak.\n# See https://github.com/adorsys/status-list-server for upstream documentation.\n# NOTE: For a complete revocation setup, also enable keycloak.tokenStatusList.enabled\n# and set keycloak.tokenStatusList.serverUrl to point to this server\n# (e.g., http://status-list-server:8081 for in-cluster access).",
+      "properties": {
+        "affinity": {
+          "additionalProperties": true,
+          "description": "affinity template\nref: https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#affinity-and-anti-affinity",
+          "required": [],
+          "title": "affinity",
+          "type": "object"
+        },
+        "containerPort": {
+          "default": 8000,
+          "description": "container port the status-list-server listens on",
+          "title": "containerPort",
+          "type": "integer"
+        },
+        "enabled": {
+          "default": false,
+          "description": "should the status-list-server be deployed? Enable alongside keycloak.tokenStatusList to provide credential revocation support.",
+          "title": "enabled",
+          "type": "boolean"
+        },
+        "env": {
+          "additionalProperties": false,
+          "description": "environment variables controlling the status-list-server application",
+          "properties": {
+            "appEnv": {
+              "default": "production",
+              "description": "application environment (e.g., development, production)",
+              "title": "appEnv",
+              "type": "string"
+            },
+            "cacheMaxCapacity": {
+              "default": 1000,
+              "description": "in-memory cache maximum capacity (number of entries)",
+              "required": [],
+              "title": "cacheMaxCapacity",
+              "type": [
+                "string",
+                "integer"
+              ]
+            },
+            "cacheTtl": {
+              "default": 300,
+              "description": "in-memory cache TTL in seconds",
+              "required": [],
+              "title": "cacheTtl",
+              "type": [
+                "string",
+                "integer"
+              ]
+            },
+            "enableMetrics": {
+              "default": "false",
+              "description": "whether to enable the Prometheus metrics endpoint",
+              "title": "enableMetrics",
+              "type": "string"
+            },
+            "rustLog": {
+              "default": "info",
+              "description": "Rust log level (e.g., info, debug, warn)",
+              "title": "rustLog",
+              "type": "string"
+            },
+            "serverDomain": {
+              "default": "",
+              "description": "domain name used by the server for status list URLs",
+              "title": "serverDomain",
+              "type": "string"
+            },
+            "serverHost": {
+              "default": "0.0.0.0",
+              "description": "host address the server binds to",
+              "title": "serverHost",
+              "type": "string"
+            }
+          },
+          "required": [],
+          "title": "env",
+          "type": "object"
+        },
+        "image": {
+          "additionalProperties": false,
+          "properties": {
+            "pullPolicy": {
+              "default": "IfNotPresent",
+              "description": "image pull policy",
+              "title": "pullPolicy",
+              "type": "string"
+            },
+            "repository": {
+              "default": "quay.io/wi_stefan/status-list-server",
+              "description": "container image repository for the status-list-server",
+              "title": "repository",
+              "type": "string"
+            },
+            "tag": {
+              "default": "1.0.1",
+              "description": "container image tag",
+              "title": "tag",
+              "type": "string"
+            }
+          },
+          "required": [],
+          "title": "image",
+          "type": "object"
+        },
+        "ingress": {
+          "additionalProperties": false,
+          "description": "ingress configuration for external access to the status-list-server",
+          "properties": {
+            "annotations": {
+              "additionalProperties": true,
+              "description": "annotations to be added to the ingress",
+              "required": [],
+              "title": "annotations",
+              "type": "object"
+            },
+            "className": {
+              "default": "",
+              "description": "kubernetes.io/ingress.class: \"ambassador\"\nkubernetes.io/tls-acme: \"true\"\ningress.kubernetes.io/ssl-redirect: \"true\"\ningress class name",
+              "title": "className",
+              "type": "string"
+            },
+            "enabled": {
+              "default": false,
+              "description": "should the ingress be enabled",
+              "title": "enabled",
+              "type": "boolean"
+            },
+            "hosts": {
+              "description": "all hosts to be provided",
+              "items": {
+                "required": []
+              },
+              "title": "hosts",
+              "type": "array"
+            },
+            "tls": {
+              "description": "# provide hosts and the paths that should be available\n- host: status-list.example.com\n  paths:\n    - /\nconfigure the ingress' TLS",
+              "items": {
+                "required": []
+              },
+              "title": "tls",
+              "type": "array"
+            }
+          },
+          "required": [],
+          "title": "ingress",
+          "type": "object"
+        },
+        "nodeSelector": {
+          "additionalProperties": true,
+          "description": "selector template\nref: https://kubernetes.io/docs/user-guide/node-selection/",
+          "required": [],
+          "title": "nodeSelector",
+          "type": "object"
+        },
+        "postgresql": {
+          "additionalProperties": false,
+          "description": "PostgreSQL database configuration for the status-list-server",
+          "properties": {
+            "auth": {
+              "additionalProperties": false,
+              "properties": {
+                "existingSecret": {
+                  "default": "",
+                  "description": "name of an existing Secret containing the database password",
+                  "title": "existingSecret",
+                  "type": "string"
+                },
+                "existingSecretPasswordKey": {
+                  "default": "password",
+                  "description": "key within the existing Secret that holds the password",
+                  "title": "existingSecretPasswordKey",
+                  "type": "string"
+                },
+                "password": {
+                  "default": "",
+                  "description": "database password (used when existingSecret is empty)",
+                  "title": "password",
+                  "type": "string"
+                },
+                "username": {
+                  "default": "statuslist",
+                  "description": "database username",
+                  "title": "username",
+                  "type": "string"
+                }
+              },
+              "required": [],
+              "title": "auth",
+              "type": "object"
+            },
+            "database": {
+              "default": "statuslistdb",
+              "description": "database name",
+              "title": "database",
+              "type": "string"
+            },
+            "host": {
+              "default": "postgres",
+              "description": "database host (used when url is empty)",
+              "title": "host",
+              "type": "string"
+            },
+            "port": {
+              "default": 5432,
+              "description": "database port",
+              "required": [],
+              "title": "port",
+              "type": [
+                "string",
+                "integer"
+              ]
+            },
+            "url": {
+              "default": "",
+              "description": "database connection URL in the format postgres://user:password\nif set, this takes precedence over individual host/port/database/username fields",
+              "title": "url",
+              "type": "string"
+            }
+          },
+          "required": [],
+          "title": "postgresql",
+          "type": "object"
+        },
+        "priorityClassName": {
+          "default": "",
+          "description": "priority class to be assigned to the pods\nref: https://kubernetes.io/docs/concepts/scheduling-eviction/pod-priority-preemption/",
+          "title": "priorityClassName",
+          "type": "string"
+        },
+        "redis": {
+          "additionalProperties": false,
+          "description": "Redis configuration for the status-list-server",
+          "properties": {
+            "affinity": {
+              "additionalProperties": true,
+              "description": "affinity template\nref: https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#affinity-and-anti-affinity",
+              "required": [],
+              "title": "affinity",
+              "type": "object"
+            },
+            "certCacheTtl": {
+              "default": 3600,
+              "description": "TTL in seconds for certificate cache entries in Redis",
+              "required": [],
+              "title": "certCacheTtl",
+              "type": [
+                "string",
+                "integer"
+              ]
+            },
+            "enabled": {
+              "default": true,
+              "description": "should an in-chart Redis instance be deployed? Disable when pointing to an external Redis.",
+              "title": "enabled",
+              "type": "boolean"
+            },
+            "image": {
+              "additionalProperties": false,
+              "properties": {
+                "pullPolicy": {
+                  "default": "IfNotPresent",
+                  "description": "Redis image pull policy",
+                  "title": "pullPolicy",
+                  "type": "string"
+                },
+                "repository": {
+                  "default": "redis",
+                  "description": "Redis container image repository",
+                  "title": "repository",
+                  "type": "string"
+                },
+                "tag": {
+                  "default": "7",
+                  "description": "Redis container image tag",
+                  "title": "tag",
+                  "type": "string"
+                }
+              },
+              "required": [],
+              "title": "image",
+              "type": "object"
+            },
+            "nodeSelector": {
+              "additionalProperties": true,
+              "description": "selector template\nref: https://kubernetes.io/docs/user-guide/node-selection/",
+              "required": [],
+              "title": "nodeSelector",
+              "type": "object"
+            },
+            "priorityClassName": {
+              "default": "",
+              "description": "priority class to be assigned to the pods\nref: https://kubernetes.io/docs/concepts/scheduling-eviction/pod-priority-preemption/",
+              "title": "priorityClassName",
+              "type": "string"
+            },
+            "requireClientAuth": {
+              "default": "false",
+              "description": "whether Redis requires client certificate authentication",
+              "title": "requireClientAuth",
+              "type": "string"
+            },
+            "resources": {
+              "additionalProperties": true,
+              "description": "resource requests and limits for the in-chart Redis container",
+              "required": [],
+              "title": "resources",
+              "type": "object"
+            },
+            "secretsCacheTtl": {
+              "default": 300,
+              "description": "TTL in seconds for secrets cache entries in Redis",
+              "required": [],
+              "title": "secretsCacheTtl",
+              "type": [
+                "string",
+                "integer"
+              ]
+            },
+            "tolerations": {
+              "description": "tolerations template\nref: https://kubernetes.io/docs/concepts/configuration/taint-and-toleration/",
+              "items": {
+                "required": []
+              },
+              "title": "tolerations",
+              "type": "array"
+            },
+            "topologySpreadConstraints": {
+              "description": "topology spread constraints template\nref: https://kubernetes.io/docs/concepts/scheduling-eviction/topology-spread-constraints/",
+              "items": {
+                "required": []
+              },
+              "title": "topologySpreadConstraints",
+              "type": "array"
+            },
+            "uri": {
+              "default": "",
+              "description": "Redis connection URI (e.g., redis://redis:6379). When redis.enabled is true, defaults to the in-chart Redis service.",
+              "title": "uri",
+              "type": "string"
+            }
+          },
+          "required": [],
+          "title": "redis",
+          "type": "object"
+        },
+        "resources": {
+          "additionalProperties": true,
+          "description": "resource requests and limits for the status-list-server container",
+          "required": [],
+          "title": "resources",
+          "type": "object"
+        },
+        "service": {
+          "additionalProperties": false,
+          "properties": {
+            "port": {
+              "default": 8081,
+              "description": "service port (external)",
+              "title": "port",
+              "type": "integer"
+            },
+            "serviceType": {
+              "default": "ClusterIP",
+              "description": "Kubernetes Service type",
+              "title": "serviceType",
+              "type": "string"
+            }
+          },
+          "required": [],
+          "title": "service",
+          "type": "object"
+        },
+        "signing": {
+          "additionalProperties": false,
+          "description": "signing key and certificate chain configuration for token signing.\nMount an externally managed Secret (e.g. from cert-manager) containing tls.key and tls.crt.\nWhen enabled, the built-in ACME certificate manager is bypassed entirely.\nFiles are re-read on each request so cert-manager rotation is picked up without a pod restart.",
+          "properties": {
+            "enabled": {
+              "default": false,
+              "description": "should the signing key secret be mounted?",
+              "title": "enabled",
+              "type": "boolean"
+            },
+            "issuer": {
+              "additionalProperties": false,
+              "description": "issuer to be used for getting the signing key",
+              "properties": {
+                "algorithm": {
+                  "default": "ECDSA",
+                  "description": "alogorithm to be used for the cert",
+                  "title": "algorithm",
+                  "type": "string"
+                },
+                "dnsNames": {
+                  "description": "dns names to be included in the certificate",
+                  "items": {
+                    "required": []
+                  },
+                  "title": "dnsNames",
+                  "type": "array"
+                },
+                "encoding": {
+                  "default": "PKCS8",
+                  "description": "encoding of the certificate",
+                  "title": "encoding",
+                  "type": "string"
+                },
+                "kind": {
+                  "default": "ClusterIssuer",
+                  "description": "kind of the issuer to be used",
+                  "title": "kind",
+                  "type": "string"
+                },
+                "name": {
+                  "default": "",
+                  "description": "name of the issuer to be used",
+                  "required": [],
+                  "title": "name",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "size": {
+                  "default": 256,
+                  "description": "size of the key to be used",
+                  "title": "size",
+                  "type": "integer"
+                }
+              },
+              "required": [],
+              "title": "issuer",
+              "type": "object"
+            },
+            "mountPath": {
+              "default": "/signing",
+              "description": "mount path inside the container for the signing secret",
+              "title": "mountPath",
+              "type": "string"
+            },
+            "secretName": {
+              "default": "signing-key",
+              "description": "name of the Kubernetes Secret containing tls.key and tls.crt (e.g. created by cert-manager)",
+              "title": "secretName",
+              "type": "string"
+            }
+          },
+          "required": [],
+          "title": "signing",
+          "type": "object"
+        },
+        "tolerations": {
+          "description": "tolerations template\nref: https://kubernetes.io/docs/concepts/configuration/taint-and-toleration/",
+          "items": {
+            "required": []
+          },
+          "title": "tolerations",
+          "type": "array"
+        },
+        "topologySpreadConstraints": {
+          "description": "topology spread constraints template\nref: https://kubernetes.io/docs/concepts/scheduling-eviction/topology-spread-constraints/",
+          "items": {
+            "required": []
+          },
+          "title": "topologySpreadConstraints",
+          "type": "array"
+        }
+      },
+      "required": [],
+      "title": "statusListServer",
+      "type": "object"
+    },
+    "tempo": {
+      "additionalProperties": true,
+      "description": "values passed to the bundled `tempo` subchart\n(chart: grafana/tempo). Tempo provides an in-cluster trace storage backend\nthat the OpenTelemetry Collector can export spans to. When `tempo.enabled`\nis true a Tempo single-binary instance is deployed; operators can query\nstored traces via Grafana or the Tempo HTTP API on port 3200.",
+      "required": [],
+      "title": "tempo",
+      "type": "object"
+    },
+    "tm-forum-api": {
+      "additionalProperties": true,
+      "description": "# configuration of the tm-forum-api - see https://github.com/FIWARE/helm-charts/tree/main/charts/tm-forum-api for details",
+      "required": [],
+      "title": "tm-forum-api",
+      "type": "object"
+    },
+    "tracing": {
+      "additionalProperties": false,
+      "description": "global distributed-tracing configuration used by every component that\nsupports OpenTelemetry. The values under this block are fed into the\n`dsc.otel.env` template helper and rendered as the standard `OTEL_*`\nenvironment variables on each workload. Flipping `tracing.enabled` off\ndisables tracing everywhere; per-component toggles live under each\nsubchart's `tracing:` key and default to the global value.",
+      "properties": {
+        "autoInstrumentation": {
+          "additionalProperties": false,
+          "description": "auto-instrumentation via the OpenTelemetry Operator. When enabled,\nrenders an `Instrumentation` CR that the Operator's mutating webhook\nuses to inject language-specific agents into annotated pods. Requires\n`opentelemetry-operator.enabled: true` and cert-manager.",
+          "properties": {
+            "enabled": {
+              "default": false,
+              "description": "master gate for auto-instrumentation. When true, the chart renders\nthe `Instrumentation` CR. Pods still need the matching\n`instrumentation.opentelemetry.io/inject-\u003clang\u003e: \"true\"` annotation\nto be instrumented.",
+              "title": "enabled",
+              "type": "boolean"
+            },
+            "java": {
+              "additionalProperties": false,
+              "description": "Java auto-instrumentation agent settings.",
+              "properties": {
+                "image": {
+                  "default": "ghcr.io/open-telemetry/opentelemetry-operator/autoinstrumentation-java:2.11.0",
+                  "description": "container image for the Java auto-instrumentation agent init\ncontainer injected by the Operator.",
+                  "title": "image",
+                  "type": "string"
+                }
+              },
+              "required": [],
+              "title": "java",
+              "type": "object"
+            },
+            "nodejs": {
+              "additionalProperties": false,
+              "description": "Node.js auto-instrumentation agent settings.",
+              "properties": {
+                "image": {
+                  "default": "ghcr.io/open-telemetry/opentelemetry-operator/autoinstrumentation-nodejs:0.75.0",
+                  "description": "container image for the Node.js auto-instrumentation agent init\ncontainer injected by the Operator.",
+                  "title": "image",
+                  "type": "string"
+                }
+              },
+              "required": [],
+              "title": "nodejs",
+              "type": "object"
+            },
+            "python": {
+              "additionalProperties": false,
+              "description": "Python auto-instrumentation agent settings.",
+              "properties": {
+                "image": {
+                  "default": "ghcr.io/open-telemetry/opentelemetry-operator/autoinstrumentation-python:0.54b0",
+                  "description": "container image for the Python auto-instrumentation agent init\ncontainer injected by the Operator.",
+                  "title": "image",
+                  "type": "string"
+                }
+              },
+              "required": [],
+              "title": "python",
+              "type": "object"
+            }
+          },
+          "required": [],
+          "title": "autoInstrumentation",
+          "type": "object"
+        },
+        "enabled": {
+          "default": false,
+          "description": "global on/off switch for OpenTelemetry tracing across the data-space\nconnector. When false, no `OTEL_*` env vars are injected and the\n`opentelemetry-collector` subchart stays disabled by default.",
+          "title": "enabled",
+          "type": "boolean"
+        },
+        "exporter": {
+          "additionalProperties": false,
+          "description": "OTLP exporter configuration used by every traced workload. The\ndefault endpoint targets the in-cluster OpenTelemetry Collector\ndeployed by this umbrella chart; override to point at an external\ncollector or directly at a backend (Tempo, Jaeger, Honeycomb, ...).",
+          "properties": {
+            "otlp": {
+              "additionalProperties": false,
+              "properties": {
+                "endpoint": {
+                  "default": "",
+                  "description": "OTLP endpoint the workloads export spans to. The default targets\nthe bundled collector service\n(`\u003crelease\u003e-opentelemetry-collector:4317`).",
+                  "title": "endpoint",
+                  "type": "string"
+                },
+                "insecure": {
+                  "default": true,
+                  "description": "disable TLS on the OTLP exporter. Set to false and configure\nthe collector / backend with certificates for production.",
+                  "title": "insecure",
+                  "type": "boolean"
+                },
+                "protocol": {
+                  "default": "grpc",
+                  "description": "OTLP protocol: `grpc` (default, port 4317) or `http/protobuf`\n(port 4318). Must match the collector's listening protocol.",
+                  "title": "protocol",
+                  "type": "string"
+                }
+              },
+              "required": [],
+              "title": "otlp",
+              "type": "object"
+            }
+          },
+          "required": [],
+          "title": "exporter",
+          "type": "object"
+        },
+        "priorityClassName": {
+          "default": "",
+          "description": "priority class to be assigned to the pods\nref: https://kubernetes.io/docs/concepts/scheduling-eviction/pod-priority-preemption/",
+          "title": "priorityClassName",
+          "type": "string"
+        },
+        "propagators": {
+          "default": "tracecontext,baggage",
+          "description": "  deployment.environment: \"production\"\n  service.namespace: \"dsc\"\npropagators to use, passed as `OTEL_PROPAGATORS`. Comma-separated\nlist; see\nhttps://opentelemetry.io/docs/languages/sdk-configuration/general/#otel_propagators",
+          "title": "propagators",
+          "type": "string"
+        },
+        "resourceAttributes": {
+          "additionalProperties": true,
+          "description": "extra resource attributes merged into `OTEL_RESOURCE_ATTRIBUTES`\nfor every traced workload. Service-specific attributes (such as\n`service.name`) are added automatically by the helper.",
+          "required": [],
+          "title": "resourceAttributes",
+          "type": "object"
+        },
+        "sampler": {
+          "default": "parentbased_traceidratio",
+          "description": "trace sampler name, passed as `OTEL_TRACES_SAMPLER`. Accepts any\nvalue supported by the OpenTelemetry SDK: `always_on`, `always_off`,\n`traceidratio`, `parentbased_always_on`, `parentbased_traceidratio`.",
+          "title": "sampler",
+          "type": "string"
+        },
+        "samplerArg": {
+          "default": "1.0",
+          "description": "argument for the sampler, passed as `OTEL_TRACES_SAMPLER_ARG`. For\nratio-based samplers this is the sampling probability in [0.0, 1.0].",
+          "title": "samplerArg",
+          "type": "string"
+        }
+      },
+      "required": [],
+      "title": "tracing",
+      "type": "object"
+    },
+    "vault": {
+      "additionalProperties": true,
+      "required": [],
+      "title": "vault",
+      "type": "object"
+    },
+    "vc-operator": {
+      "additionalProperties": true,
+      "description": "vc-operator subchart configuration",
+      "required": [],
+      "title": "vc-operator",
+      "type": "object"
+    },
+    "vcCredentials": {
+      "additionalProperties": false,
+      "description": "vc-operator managed credentials (replacement for the legacy credentials script)",
+      "properties": {
+        "auth": {
+          "additionalProperties": false,
+          "description": "authentication secret for the CredentialIssuer (OAuth 2.0 client credentials)",
+          "properties": {
+            "clientId": {
+              "default": "",
+              "description": "OAuth 2.0 client_id registered in Keycloak",
+              "title": "clientId",
+              "type": "string"
+            },
+            "clientSecret": {
+              "default": "",
+              "description": "OAuth 2.0 client_secret for the above client",
+              "title": "clientSecret",
+              "type": "string"
+            },
+            "existingSecret": {
+              "default": "",
+              "description": "reference to an existing secret (if set, clientId/clientSecret are ignored)",
+              "title": "existingSecret",
+              "type": "string"
+            },
+            "secretName": {
+              "default": "vc-operator-auth",
+              "description": "name of the Secret to create",
+              "title": "secretName",
+              "type": "string"
+            }
+          },
+          "required": [],
+          "title": "auth",
+          "type": "object"
+        },
+        "enabled": {
+          "default": false,
+          "description": "should vc-operator credential management be enabled",
+          "title": "enabled",
+          "type": "boolean"
+        },
+        "issuer": {
+          "additionalProperties": false,
+          "description": "configuration of the CredentialIssuer (Keycloak OID4VCI endpoint)",
+          "properties": {
+            "issuerType": {
+              "default": "keycloak",
+              "description": "issuer implementation type (\"generic\" or \"keycloak\")",
+              "title": "issuerType",
+              "type": "string"
+            },
+            "issuerURL": {
+              "default": "",
+              "description": "base URL of the OID4VCI issuer (e.g. http://\u003ckeycloak\u003e:8080/realms/\u003crealm\u003e)",
+              "title": "issuerURL",
+              "type": "string"
+            },
+            "name": {
+              "default": "keycloak-issuer",
+              "description": "name of the CredentialIssuer resource",
+              "title": "name",
+              "type": "string"
+            },
+            "tokenURL": {
+              "default": "",
+              "description": "override the token endpoint URL (required when the issuer metadata does not include token_endpoint directly)",
+              "title": "tokenURL",
+              "type": "string"
+            }
+          },
+          "required": [],
+          "title": "issuer",
+          "type": "object"
+        },
+        "issuers": {
+          "description": "name of the VCR resource\n- name:\n  -- credential type to request (must match one of the issuer's supported types)\n  credentialType:\n  -- credential format (jwt_vc_json, ldp_vc, jwt_vc, vc+sd-jwt)\n  format: jwt_vc_json\n  -- name of the target Secret for storing the credential\n  targetSecretName:\n  -- key in the target Secret (defaults to \"credential\")\n  targetSecretKey: credential\n  -- filename when the secret is projected as a volume (for backward compatibility)\n  targetFile:\n  -- duration before expiry to trigger renewal (e.g. 5m, 1h)\n  renewBefore: 5m\n  -- additional issuer-specific claims\n  additionalClaims: {}\n  -- holder binding configuration (enables proof-of-possession during OID4VCI issuance)\n  holderBinding:\n    -- enable holder binding for this credential request\n    enabled: false\n    -- name of the Secret to create for the holder's ECDSA P-256 private key (auto-generated with tls.key entry)\n    keySecretName:\n    -- reference to an existing Secret (if set, key generation is skipped)\n    existingKeySecret: \"\"\n    -- optional DID URL for the proof JWT kid header; when omitted the operator embeds the full JWK\n    holderDID: \"\"\nseveral CredentialIssuers, each with its own `name`, `issuerURL`, `issuerType`, `tokenURL`,\n`auth` and `requests` as above. When set, it replaces `issuer`, `auth` and `requests`.",
+          "items": {
+            "required": []
+          },
+          "title": "issuers",
+          "type": "array"
+        },
+        "requests": {
+          "description": "list of VerifiableCredentialRequest resources to create",
+          "items": {
+            "required": []
+          },
+          "title": "requests",
+          "type": "array"
+        }
+      },
+      "required": [],
+      "title": "vcCredentials",
+      "type": "object"
+    }
+  },
+  "required": [],
+  "type": "object"
+}

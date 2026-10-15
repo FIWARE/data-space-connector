@@ -309,8 +309,6 @@ decentralizedIam:
       # chart ships by default is never used
       etcd:
         enabled: false
-      image:
-        debug: true
       # the apisix subchart exposes the gateway through `ingress`, not `dataPlane.ingress`;
       # the latter renders no Ingress at all, leaving every https:// endpoint unrouted
       ingress:
