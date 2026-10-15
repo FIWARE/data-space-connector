@@ -120,24 +120,35 @@ keycloak:
   enabled: true
   ingress:
     enabled: true
-    hostname: <your-keycloak-domain>
+    className: <your-ingress-class>                             # add the annotations your ingress controller needs
     annotations:
-      traefik.ingress.kubernetes.io/router.tls: "true"         # Enable TLS on the ingress router
       cert-manager.io/cluster-issuer: "selfsigned-issuer"       # Cert-manager issuer (use "prod" for production)
       cert-manager.io/private-key-algorithm: "ECDSA"            # Key algorithm for the TLS certificate
       cert-manager.io/common-name: "<your-keycloak-domain>"
-    pathType: Prefix
-    tls: true
+    hosts:
+      - host: <your-keycloak-domain>
+        paths:
+          # only what wallets and verifiers need: the realm's endpoints and the static resources
+          - path: /realms/<your-realm>
+            pathType: Prefix
+          - path: /resources
+            pathType: Prefix
+    tls:
+      - secretName: <your-keycloak-domain>-tls
+        hosts:
+          - <your-keycloak-domain>
 ```
 
-Replace the hostname with your actual domain. In production, use a real cluster issuer (i.e. `prod`) instead of `selfsigned-issuer`.
+Replace the hostname and the realm with your own. In production, use a real cluster issuer (i.e. `prod`) instead of `selfsigned-issuer`.
+
+The example publishes only the realm that issues credentials. The admin console (`/admin`) and the `master` realm are left out: reach them with `kubectl port-forward`, or publish them on a separate host restricted to administrators. Publishing `/` exposes both on the same host as the issuer.
 
 ### Init container: keystore preparation
 
 Keycloak needs a PKCS12 keystore to sign Verifiable Credentials. An init container converts the DID TLS certificate (PEM format) into the required keystore format before Keycloak starts:
 
 ```yaml
-  initContainers:
+  extraInitContainers:
     - name: prepare-keystore
       image: alpine/openssl:3.5.5
       command: ["/bin/sh", "-c"]
@@ -165,6 +176,8 @@ Keycloak needs a PKCS12 keystore to sign Verifiable Credentials. An init contain
 ```
 
 This reads the DID private key and certificate from a TLS secret and produces a `cert.pfx` keystore in the shared `did-material` volume.
+
+> **Note:** the key is `extraInitContainers`. `initContainers` configures the chart's own init containers and takes a map, so a list there fails validation.
 
 ### Volumes
 
@@ -459,7 +472,7 @@ decentralizedIam:
 
 ### Credential encryption & wallet interop
 
-The chart ships the upstream `keycloak/keycloak:26.7.0` image. Two things to know:
+The chart ships the upstream `keycloak/keycloak` image, 26.7.0 or later (the exact version is the one of the `keycloak` dependency in the chart's `Chart.yaml`). Two things to know:
 
 - **Database migration:** 26.7.0 carries the Liquibase changeset `26.7.0-verifiable-credential`
   (adds the `version` column to the custom `USER_VER_CREDENTIAL` table), so reusing a pre-26.4
