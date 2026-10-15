@@ -240,7 +240,7 @@ The framework consists of the following components:
   of which VCs, containing which roles/claims, the VCVerifier must request for each product/service
 * **[trusted-issuers-list](https://github.com/FIWARE/trusted-issuers-list)**: maintains a registry of organizations
   (identified by their DID) that are considered trusted issuers of certain classes of VCs containing certain
-  roles/claims. Provides an [EBSI Trusted Issuers Registry](https://api-pilot.ebsi.eu/docs/apis/trusted-issuers-registry)
+  roles/claims. Provides an [EBSI Trusted Issuers Registry](https://hub.ebsi.eu/api/core/issuers-registry)
   compatible API
 
 The credential issuer on the consumer side is **[Keycloak 26.7.0](https://www.keycloak.org/)** (deployed via the
