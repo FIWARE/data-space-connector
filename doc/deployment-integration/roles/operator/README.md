@@ -23,12 +23,12 @@ To support this task, an [Onboarding Portal](#onboarding-portal) is available as
 
 ### Trusted Issuers Registry (TIR)
 
-The [Trusted Issuers Registry](https://github.com/FIWARE/trusted-issuers-list) implements the [EBSI Trusted Issuers Registry API](https://hub.ebsi.eu/apis/pilot/trusted-issuers-registry/v4), providing a standardized way to query which organizations are trusted in the data space.
+The [Trusted Issuers Registry](https://github.com/FIWARE/trusted-issuers-list) implements the [EBSI Trusted Issuers Registry API](https://hub.ebsi.eu/api/core/issuers-registry), providing a standardized way to query which organizations are trusted in the data space.
 
 - Exposes a read-only API (`/v4/issuers`) for participants to verify trust
 - Backed by a management API (`/issuer`) for registering and managing trusted issuers
 
-> **Note:** The FIWARE [Trusted Issuers Registry](https://github.com/FIWARE/trusted-issuers-list) is the default implementation shipped with the FIWARE Data Space Connector, but it is not the only option. Any component that exposes the [EBSI Trusted Issuers Registry API](https://hub.ebsi.eu/apis/pilot/trusted-issuers-registry/v4) can be used as the Trust Anchor's registry — including **blockchain-backed implementations** such as the [EBSI Trusted Issuers Registry](https://hub.ebsi.eu/apis/pilot/trusted-issuers-registry/v4) itself. This allows data spaces to align the trust registry with the governance and decentralization model that best fits their requirements.
+> **Note:** The FIWARE [Trusted Issuers Registry](https://github.com/FIWARE/trusted-issuers-list) is the default implementation shipped with the FIWARE Data Space Connector, but it is not the only option. Any component that exposes the [EBSI Trusted Issuers Registry API](https://hub.ebsi.eu/api/core/issuers-registry) can be used as the Trust Anchor's registry — including **blockchain-backed implementations** such as the [EBSI Trusted Issuers Registry](https://hub.ebsi.eu/api/core/issuers-registry) itself. This allows data spaces to align the trust registry with the governance and decentralization model that best fits their requirements.
 
 ### Trusted Issuers List (TIL) management API
 
