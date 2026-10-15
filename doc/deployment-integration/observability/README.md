@@ -743,7 +743,7 @@ marketplace:
 marketplace:
   bizEcosystemLogicProxy:
     statefulset:
-      podAnnotations:
+      additionalAnnotations:
         instrumentation.opentelemetry.io/inject-nodejs: "true"
 ```
 
@@ -875,7 +875,7 @@ marketplace:
 marketplace:
   bizEcosystemLogicProxy:
     statefulset:
-      podAnnotations:
+      additionalAnnotations:
         instrumentation.opentelemetry.io/inject-nodejs: "true"
 ```
 

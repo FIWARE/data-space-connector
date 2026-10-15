@@ -174,13 +174,12 @@ marketplace:
       tokenPath: /token
       jwksPath: /.well-known/jwks
     allowedRoles: [seller, customer, admin]
-  bizEcosystemApis:
-    tmForum:
-      catalog:     { host: tm-forum-api-svc, port: 8080, path: /tmf-api/productCatalogManagement/v4 }
-      inventory:   { host: tm-forum-api-svc, port: 8080, path: /tmf-api/productInventory/v4 }
-      ordering:    { host: tm-forum-api-svc, port: 8080, path: /tmf-api/productOrderingManagement/v4 }
-      party:       { host: tm-forum-api-svc, port: 8080, path: /tmf-api/party/v4 }
-      # ... other TMForum sub-APIs (billing, usage, customer, resources, services, ...)
+  tmForum:
+    catalog:     { host: tm-forum-api-svc, port: 8080, path: /tmf-api/productCatalogManagement/v4 }
+    inventory:   { host: tm-forum-api-svc, port: 8080, path: /tmf-api/productInventory/v4 }
+    ordering:    { host: tm-forum-api-svc, port: 8080, path: /tmf-api/productOrderingManagement/v4 }
+    party:       { host: tm-forum-api-svc, port: 8080, path: /tmf-api/party/v4 }
+    # ... other TMForum sub-APIs (billing, usage, customer, resources, services, ...)
   bizEcosystemLogicProxy:
     ingress:
       enabled: true
