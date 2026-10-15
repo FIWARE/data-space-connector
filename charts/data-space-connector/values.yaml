@@ -3,6 +3,13 @@
 # this chart's schema against values that already contain the subchart's own defaults, and the
 # subchart's keys are the subchart's to validate.
 
+# -- overrides the chart name used in the names of the resources this chart creates itself
+nameOverride: ""
+# -- overrides the full name used in the names of the resources this chart creates itself
+fullnameOverride: ""
+# -- pull secrets for the images of the workloads this chart templates itself (the identityhub)
+imagePullSecrets: []
+
 # -- configuration to be shared between the issuance components
 issuance:
   generatePasswords:
@@ -359,9 +366,14 @@ scorpio:
 elsi:
   # -- should a did:elsi be used
   enabled: false
-  # -- keystore to be used for signing the credentials
-  # keystore:
-  # store.p12: <THE_ENCODED_CONTENT>
+  # -- keystore to be used for signing the credentials, as the data of the elsi-secret Secret: file
+  # names mapped to their base64-encoded content, e.g. `store.p12: <THE_ENCODED_CONTENT>`
+  # @schema
+  # type: object
+  # additionalProperties: true
+  # properties: {}
+  # @schema
+  keystore: {}
   # -- the did to be used
   # @schema
   # type: [string, "null"]
@@ -1844,6 +1856,8 @@ rainbow:
       ## example annotations, allowing cert-manager to automatically create tls-certs and forcing everything to use ssl.
       # kubernetes.io/tls-acme: "true"
       # ingress.kubernetes.io/ssl-redirect: "true"
+    # -- ingress class to use
+    className: ""
     # -- all hosts to be provided
     hosts: []
       ## provide a hosts and the paths that should be available
@@ -2942,6 +2956,9 @@ vcCredentials:
     #     existingKeySecret: ""
     #     -- optional DID URL for the proof JWT kid header; when omitted the operator embeds the full JWK
     #     holderDID: ""
+  # -- several CredentialIssuers, each with its own `name`, `issuerURL`, `issuerType`, `tokenURL`,
+  # `auth` and `requests` as above. When set, it replaces `issuer`, `auth` and `requests`.
+  issuers: []
 
 # -- vc-operator subchart configuration
 # @schema
@@ -3202,9 +3219,25 @@ identityhub:
     failureThreshold: 6
     # -- number of consecutive successes for the probe to be considered successful after having failed
     successThreshold: 1
+  # -- ingress publishing the DID document of the identityhub
   didIngress:
+    # -- should the ingress be created
     enabled: true
+    # -- name of the identityhub service port to route to
     port: did
+    # -- ingress class to use
+    className: ""
+    # -- annotations to be added to the ingress
+    # @schema
+    # type: object
+    # additionalProperties: true
+    # properties: {}
+    # @schema
+    annotations: {}
+    # -- hosts to publish, each with its `host` and the `paths` to route
+    hosts: []
+    # -- tls configuration, each entry with its `hosts` and `secretName`
+    tls: []
   # -- endpoints of the control plane
   endpoints:
     # -- default api for health checks, should not be added to any ingress
