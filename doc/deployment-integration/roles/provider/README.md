@@ -164,7 +164,7 @@ decentralizedIam:
               use_jwks: true
               client_id: contract-management
               client_secret: unused
-              ssl_verify: false
+              ssl_verify: true            # see "Trusting a private CA" below if your certificates are not publicly trusted
               discovery: http://verifier:3000/services/contract-management/.well-known/openid-configuration
             opa:
               host: http://localhost:8181
@@ -390,7 +390,7 @@ decentralizedIam:
               use_jwks: true
               client_id: data-service
               client_secret: unused
-              ssl_verify: false
+              ssl_verify: true            # see "Trusting a private CA" below if your certificates are not publicly trusted
               discovery: https://<your_verifier_domain>/services/data-service/.well-known/openid-configuration
             opa:
               host: http://localhost:8181
@@ -503,6 +503,24 @@ The following ingresses are useful for development but must **not** be publicly 
 
 - Change the APISIX `admin` credentials from defaults
 - Configure proper error responses (do not leak internal service details)
+- Keep `ssl_verify: true` in the `openid-connect` plugin. Even when `discovery` points to the verifier inside the cluster, the discovery document announces the verifier's public `jwks_uri`, so APISIX fetches the keys that validate every token over HTTPS. Without verification, whoever can intercept that call can make APISIX accept forged tokens.
+
+#### Trusting a private CA
+
+If the verifier's certificate is issued by a private CA, give APISIX that CA instead of disabling the verification. Put the CA certificate (PEM) in a Secret, for example `private-ca` with the key `ca.crt`, and point the apisix chart to it:
+
+```yaml
+decentralizedIam:
+  odrlAuthorization:
+    apisix:
+      apisix:
+        ssl:
+          enabled: true              # the chart only mounts the CA together with its HTTPS listener
+          existingCASecret: private-ca
+          certCAFilename: ca.crt
+```
+
+The apisix chart only mounts the CA, and sets it as APISIX's `ssl_trusted_certificate`, when `apisix.ssl.enabled` is set, which also opens its HTTPS listener (port 9443); that listener needs no further configuration when TLS is terminated at the Ingress.
 
 ### VCVerifier
 
