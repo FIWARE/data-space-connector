@@ -51,7 +51,7 @@ The following table shows which components are required, optional, or not applic
         </tr>
         <tr>
             <td><a href="https://github.com/FIWARE/trusted-issuers-list">trusted-issuers-list</a></td>
-            <td>Acts as Trusted Issuers List by providing an <a href="https://api-pilot.ebsi.eu/docs/apis/trusted-issuers-registry">EBSI Trusted Issuers Registry</a> API</td>
+            <td>Acts as Trusted Issuers List by providing an <a href="https://hub.ebsi.eu/api/core/issuers-registry">EBSI Trusted Issuers Registry</a> API</td>
             <td>-</td>
             <td>Required</td>
             <td>Required</td>

@@ -3,7 +3,7 @@
 The FIWARE Data Space Connector supports
 [eIDAS 2.0](https://digital-strategy.ec.europa.eu/en/policies/eidas-regulation)
 compliance through PKIX certificate chain validation against the
-[EU Trusted Lists (ETSI TS 119 612)](https://ec.europa.eu/digital-building-blocks/sites/display/DIGITAL/EU+Trusted+Lists).
+[EU Trusted Lists (ETSI TS 119 612)](https://digital-strategy.ec.europa.eu/en/policies/eu-trusted-lists).
 Starting with **VCVerifier >= 6.22.0** this validation is performed natively by
 VCVerifier. The configuration surface documented here needs
 **decentralized-iam >= 2.1.25**, which is what chart 10.10.0 pins: 2.1.25 is the
