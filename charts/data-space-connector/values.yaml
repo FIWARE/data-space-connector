@@ -1362,20 +1362,15 @@ keycloak:
           require.pushed.authorization.requests: "true"
           dpop.bound.access.tokens: "true"
 
-  # -- configuration for the signing key to be used for issuing credentials
-  # signingKey:
-  # -- path to the keystore containing the signing key
-  # storePath:
-  # -- password for the keystore containing the signing key
-  # storePassword:
-  # -- alias of the signing key
-  # keyAlias:
-  # -- password of the signing key
-  # keyPassword:
-  # -- algorithm of the signing key
-  # keyAlgorithm:
-  # -- did that the key belongs to
-  # did:
+  # -- DID of the credential issuer, used for the realm's `issuerDid` attribute and each credential's
+  # `vc.issuer_did`. Ignored when `elsi` is enabled, which uses `elsi.did`; when empty, `${DID}` is
+  # left for the realm import to resolve.
+  issuerDid: ""
+  # -- keystore holding the key the credentials are signed with, ignored when `elsi` is enabled.
+  # Its keys: `storePath` (path of the keystore), `storePassword`, `keyAlias`, `keyPassword`,
+  # `keyAlgorithm` and `did` (the key's DID, `${DID}` when unset). When empty, the realm uses the
+  # keystore at `/opt/keycloak/data/<realm name>/cert.pfx` with the password in `${STORE_PASS}`.
+  signingKey: {}
 
   # -- Configuration for the token-status-list Keycloak plugin (keycloak-token-status-plugin).
   # -- Enables credential revocation via the Token Status List specification (RFC draft-ietf-oauth-status-list).
