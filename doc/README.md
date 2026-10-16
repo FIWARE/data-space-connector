@@ -85,6 +85,7 @@ Documentation for deploying the FIWARE DSC according to your organization's role
 * [Deployment by Role — Overview](./deployment-integration/roles/README.md)
   * [Consumer](./deployment-integration/roles/consumer/README.md)
   * [Provider](./deployment-integration/roles/provider/README.md)
+    * [Running a local marketplace](./deployment-integration/roles/provider/LOCAL_MARKETPLACE.md)
   * [Consumer + Provider](./deployment-integration/roles/consumer-provider/README.md)
   * [Operator (Data Space Governance)](./deployment-integration/roles/operator/README.md)
 

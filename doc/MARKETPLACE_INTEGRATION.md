@@ -2,6 +2,8 @@
 
 In order to offer data and data services or buy them, the FIWARE Data Space Connector supports the integration with the [FIWARE BAE Marketplace](https://github.com/FIWARE-TMForum). It can be enabled through the ```marketplace.enabled: true``` configuration. 
 
+> To set up a marketplace in your own provider deployment - MongoDB, the values, the login with Verifiable Credentials - see [Running a local marketplace](./deployment-integration/roles/provider/LOCAL_MARKETPLACE.md). This document describes the demo in the local deployment.
+
 ## Demo Usage
 
 The Marketplace is integrated into the [Local Deployment](./deployment-integration/local-deployment/LOCAL.MD). To prepare the DEMO interaction, deploy it via ```mvn clean deploy -Plocal```. Since it contains a frontend and needs to integrate with a wallet, the deployment contains [Squid](https://www.squid-cache.org/) as an https-forward-proxy in order to delegate DNS-resolution directly to the [Traefik-Ingress Controller](https://traefik.io). Follow the documented steps to prepare the demo.
