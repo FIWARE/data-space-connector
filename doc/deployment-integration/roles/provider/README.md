@@ -30,7 +30,7 @@ This information is essential for configuring Keycloak, the DID, the VCVerifier,
 The provider needs the same base components as a consumer:
 - **Keycloak** — VC issuer for the provider's own users. For detailed configuration instructions, see the [Keycloak Configuration](../KEYCLOAK.md) guide.
 - **DID Helper** — publishes the provider's DID document
-- **Managed PostgreSQL** — database for IAM components
+- **PostgreSQL** — database for Keycloak and the IAM components: an existing one, or one the chart deploys (see [Databases](#databases))
 
 > **Note:** If the data space uses the [Decentralized Claims Protocol (DCP)](https://eclipse-dataspace-dcp.github.io/decentralized-claims-protocol/v1.0.1/) (typically together with the [Dataspace Protocol](https://docs.internationaldataspaces.org/ids-knowledgebase/dataspace-protocol) via [FDSC-EDC](#fdsc-edc-dataspace-protocol)), the **DID Helper is replaced by the Identity Hub**, which serves the DID document (and the provider's credentials) as required by DCP. See the [Dataspace Protocol Integration Guide](../../../DSP_INTEGRATION.md) for details.
 
@@ -50,6 +50,68 @@ The provider needs the same base components as a consumer:
 | **OPA** (Open Policy Agent) | Policy Decision Point (PDP). Evaluates authorization policies (in Rego format, generated from ODRL) for each incoming request and returns allow/deny decisions. |
 | **ODRL-PAP** | Policy Administration Point. Allows the provider to define access policies using [ODRL](https://www.w3.org/TR/odrl-model/) (Open Digital Rights Language). Translates ODRL policies into Rego for OPA. |
 
+
+### Databases
+
+Keycloak, the Trusted Issuers List, the VCVerifier, the ODRL-PAP and Scorpio store their data in PostgreSQL; the local marketplace also needs MongoDB (see [Running a local marketplace](./LOCAL_MARKETPLACE.md#mongodb)). Use databases you already run, or let the chart deploy them:
+
+- **A PostgreSQL deployed by the chart** (`decentralizedIam.vcAuthentication.managedPostgres`, the default): a single cluster named `postgres` in the connector's namespace, with a database for each component, created by the [Zalando Postgres Operator](https://github.com/zalando/postgres-operator). The chart installs that operator by default too (`decentralizedIam.vcAuthentication.postgres-operator.enabled`); if one already runs in the cluster - for example installed by another connector or by the Trust Anchor - disable it in this release, since the operator's cluster-wide resources can only belong to one release.
+- **An existing PostgreSQL**: disable both, create a database and a user for each component, store the passwords in Secrets of the connector's namespace, and point each component to them:
+
+```yaml
+decentralizedIam:
+  vcAuthentication:
+    managedPostgres:
+      enabled: false
+    postgres-operator:
+      enabled: false
+    trusted-issuers-list:
+      database:
+        host: <your_postgres_host>
+        port: 5432
+        name: <til_database>
+        username: <til_user>
+        existingSecret:
+          enabled: true
+          name: <til_secret>
+          key: password
+    vcverifier:
+      deployment:
+        database:
+          host: <your_postgres_host>
+          name: <verifier_database>
+          existingSecret:
+            name: <verifier_secret>               # holds both the user and the password
+            usernameKey: username
+            passwordKey: password
+  odrlAuthorization:
+    odrl-pap:
+      database:
+        url: jdbc:postgresql://<your_postgres_host>:5432/<pap_database>
+        username: <pap_user>
+        existingSecret:
+          enabled: true
+          name: <pap_secret>
+          key: password
+keycloak:
+  database:
+    host: <your_postgres_host>
+    name: <keycloak_database>
+    existingSecret: <keycloak_secret>             # holds both the user and the password
+    secretKeys:
+      usernameKey: username
+      passwordKey: password
+scorpio:
+  db:
+    dbhost: <your_postgres_host>
+    user: <scorpio_user>
+    existingSecret:
+      enabled: true
+      name: <scorpio_secret>
+      key: password
+```
+
+Scorpio needs the PostGIS extension in its database; the examples in [`k3s/`](../../../../k3s) create it, as a database named `ngb`, through the operator's `preparedDatabases`. The Identity Hub and the status list server, when enabled, take their database settings under `identityhub.postgresql` and `statusListServer.postgresql`.
 
 ## Optional components
 
