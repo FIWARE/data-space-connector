@@ -1,3 +1,15 @@
+# values.schema.json is generated from this file, see CLAUDE.md. The `# @schema` blocks adjust what
+# the generator infers from the defaults. Every subchart's key is left open there: Helm validates
+# this chart's schema against values that already contain the subchart's own defaults, and the
+# subchart's keys are the subchart's to validate.
+
+# -- overrides the chart name used in the names of the resources this chart creates itself
+nameOverride: ""
+# -- overrides the full name used in the names of the resources this chart creates itself
+fullnameOverride: ""
+# -- pull secrets for the images of the workloads this chart templates itself (the identityhub)
+imagePullSecrets: []
+
 # -- configuration to be shared between the issuance components
 issuance:
   generatePasswords:
@@ -6,6 +18,11 @@ issuance:
     #-- name of the secret to put the generated password into
     secretName: issuance-secret
 
+# @schema
+# type: object
+# additionalProperties: true
+# properties: {}
+# @schema
 decentralizedIam:
   enabled: true
 
@@ -79,6 +96,13 @@ decentralizedIam:
       enabled: true
       # -- allows to set a fixed name for the services
       fullnameOverride: verifier
+      registration:
+        job:
+          # -- how long the registration job may run, including its wait for the verifier. On a
+          # fresh install the verifier only becomes ready once Postgres, the trusted-issuers-list
+          # and the PAP are up, which regularly takes longer than the subchart's 300 seconds and
+          # fails the release.
+          activeDeadlineSeconds: 1200
       deployment:
         # -- configuration for the m2m flow, in case the tir is requiring authentication
         m2m:
@@ -166,6 +190,12 @@ decentralizedIam:
         prometheus.io/scrape: "true"
         prometheus.io/path: /apisix/prometheus/metrics
         prometheus.io/port: "9091"
+      service:
+        # -- traffic policy of the gateway service. Left empty so that Kubernetes applies its own
+        # default (`Cluster` for NodePort and LoadBalancer) and the service can also be set to
+        # `ClusterIP`: the apisix chart writes the field for every type, and the API server rejects
+        # it on a ClusterIP service. Set it to `Local` to keep the client source IP.
+        externalTrafficPolicy: ""
       apisix:
         prometheus:
           enabled: true
@@ -247,6 +277,11 @@ decentralizedIam:
         path: /transfers
 
 ## configuration of the context-broker - see https://github.com/FIWARE/helm-charts/tree/main/charts/scorpio-broker-aaio for details
+# @schema
+# type: object
+# additionalProperties: true
+# properties: {}
+# @schema
 scorpio:
   fullnameOverride: data-service-scorpio
   # -- should scorpio be enabled
@@ -279,32 +314,6 @@ scorpio:
   service:
     # -- ClusterIP is the recommended type for most clusters
     type: ClusterIP
-  # -- configuration to register the dataplane at the credentials-config-service
-  ccs:
-    # -- should the automatic registration of scorpio be enabled
-    enabled: false
-    # -- endpoint of the ccs to regsiter at
-    endpoint: http://verifier:8090
-    # -- configmap to get the registration information from
-    configMap: scorpio-registration
-
-  # -- additional init containers to be used for the dataplane
-  #initContainers:
-  # -- curl container to register at the credentials config service
-  #- name: register-credential-config
-  #  image: quay.io/curl/curl:8.1.2
-  #  command: [ "/bin/sh", "-c", "/bin/init.sh" ]
-  #  volumeMounts:
-  #    - name: scorpio-registration
-  #      mountPath: /bin/init.sh
-  #      subPath: init.sh
-  # -- additonal volumes to be mounted for the dataplane
-  additionalVolumes:
-    - name: scorpio-registration
-      configMap:
-        name: scorpio-registration
-        defaultMode: 0755
-
   # -- distributed-tracing configuration for the scorpio subchart.
   # Scorpio is a Quarkus application with native OpenTelemetry support.
   # Because scorpio is a third-party subchart whose templates are not
@@ -357,23 +366,51 @@ scorpio:
 elsi:
   # -- should a did:elsi be used
   enabled: false
-  # -- keystore to be used for signing the credentials
-  # keystore:
-  # store.p12: <THE_ENCODED_CONTENT>
+  # -- keystore to be used for signing the credentials, as the data of the elsi-secret Secret: file
+  # names mapped to their base64-encoded content, e.g. `store.p12: <THE_ENCODED_CONTENT>`
+  # @schema
+  # type: object
+  # additionalProperties: true
+  # properties: {}
+  # @schema
+  keystore: {}
   # -- the did to be used
+  # @schema
+  # type: [string, "null"]
+  # @schema
   did:
   # -- algorithm of the signing key
+  # @schema
+  # type: [string, "null"]
+  # @schema
   keyAlgorithm:
   # -- path to the keystore
+  # @schema
+  # type: [string, "null"]
+  # @schema
   storePath:
   # -- password for the keystore
+  # @schema
+  # type: [string, "null"]
+  # @schema
   storePassword:
   # -- alias of the key
+  # @schema
+  # type: [string, "null"]
+  # @schema
   keyAlias:
   # -- password of the key
+  # @schema
+  # type: [string, "null"]
+  # @schema
   keyPassword:
 
 ## configuration of the keycloak - see https://github.com/CloudPirates-io/helm-charts/tree/main/charts/keycloak for details
+# @schema
+# type: object
+# additionalProperties: true
+# properties: {}
+# @schema
 keycloak:
   # -- should it be enabled? set to false if one outside the chart is used.
   enabled: true
@@ -386,6 +423,10 @@ keycloak:
       adminPasswordKey: keycloak-admin
     # -- proxy headers used when TLS is terminated at an upstream ingress/proxy
     proxyHeaders: xforwarded
+  image:
+    # -- pull policy of the Keycloak image. The subchart pins the image by digest, so pulling it on
+    # every start only makes restarts depend on the registry being reachable.
+    imagePullPolicy: IfNotPresent
   # -- @param preserveProviders Disable mounting an emptyDir over /opt/keycloak/providers, preserving the providers bundled in the image.
   preserveProviders: true
   # -- TLS terminated at the ingress; the container does not serve HTTPS itself
@@ -1321,20 +1362,15 @@ keycloak:
           require.pushed.authorization.requests: "true"
           dpop.bound.access.tokens: "true"
 
-  # -- configuration for the signing key to be used for issuing credentials
-  # signingKey:
-  # -- path to the keystore containing the signing key
-  # storePath:
-  # -- password for the keystore containing the signing key
-  # storePassword:
-  # -- alias of the signing key
-  # keyAlias:
-  # -- password of the signing key
-  # keyPassword:
-  # -- algorithm of the signing key
-  # keyAlgorithm:
-  # -- did that the key belongs to
-  # did:
+  # -- DID of the credential issuer, used for the realm's `issuerDid` attribute and each credential's
+  # `vc.issuer_did`. Ignored when `elsi` is enabled, which uses `elsi.did`; when empty, `${DID}` is
+  # left for the realm import to resolve.
+  issuerDid: ""
+  # -- keystore holding the key the credentials are signed with, ignored when `elsi` is enabled.
+  # Its keys: `storePath` (path of the keystore), `storePassword`, `keyAlias`, `keyPassword`,
+  # `keyAlgorithm` and `did` (the key's DID, `${DID}` when unset). When empty, the realm uses the
+  # keystore at `/opt/keycloak/data/<realm name>/cert.pfx` with the password in `${STORE_PASS}`.
+  signingKey: {}
 
   # -- Configuration for the token-status-list Keycloak plugin (keycloak-token-status-plugin).
   # -- Enables credential revocation via the Token Status List specification (RFC draft-ietf-oauth-status-list).
@@ -1391,6 +1427,11 @@ keycloak:
     credentialTypes: []
 
 ## configuration of the tm-forum-api - see https://github.com/FIWARE/helm-charts/tree/main/charts/tm-forum-api for details
+# @schema
+# type: object
+# additionalProperties: true
+# properties: {}
+# @schema
 tm-forum-api:
   # -- should it be enabled? set to false if one outside the chart is used.
   enabled: true
@@ -1469,7 +1510,10 @@ tm-forum-api:
   apiProxy:
     enabled: true
     image:
-      tag: distroless-v1.27-latest
+      # -- envoy image of the proxy. Pinned to the last release of the 1.27 line, which is what
+      # `distroless-v1.27-latest` resolves to; a newer envoy line needs the tm-forum-api chart to
+      # support it first.
+      tag: distroless-v1.27.7
     service:
       # -- name to be used for the proxy service.
       nameOverride: tm-forum-api
@@ -1538,44 +1582,6 @@ tm-forum-api:
   redis:
     enabled: false
 
-  registration:
-    enabled: true
-    # -- name to be used for the registration jobs
-    name: tmf-api-registration
-    annotations:
-      "helm.sh/hook": post-install
-      "helm.sh/hook-weight": "0"
-      "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
-    image:
-      repository: quay.io/curl/curl
-      tag: 8.1.2
-      pullPolicy: IfNotPresent
-    command: [ /bin/sh, -c, /bin/init.sh ]
-    extraEnvVars: []
-    extraVolumes: []
-    extraVolumeMounts: []
-    backoffLimit: 10
-    restartPolicy: Never
-    # -- configuration to register the dataplane at the credentials-config-service
-    ccs:
-      # -- endpoint of the ccs to regsiter at
-      endpoint: http://verifier:8090
-      # -- service id of the data-service to be used
-      id: tmf-api
-      # -- default scope to be created for the data plane
-      defaultOidcScope:
-        # -- name of the scope
-        name: default
-        # -- name of the default credential to be configured
-        credentialTypes:
-          - VerifiableCredential
-        # -- needs to be updated for the concrete dataspace
-        trustedParticipantsLists: http://tir.trust-anchor.org
-        trustedIssuersLists: http://trusted-issuers-list:8080
-    # -- priority class to be assigned to the pods
-    # ref: https://kubernetes.io/docs/concepts/scheduling-eviction/pod-priority-preemption/
-    priorityClassName: ""
-
 
 ## Configuration of the status-list-server for Token Status List (RFC draft-ietf-oauth-status-list) support.
 ## Provides credential revocation infrastructure for Verifiable Credentials issued by Keycloak.
@@ -1592,7 +1598,7 @@ statusListServer:
     # -- container image tag
     tag: 1.0.1
     # -- image pull policy
-    pullPolicy: Always
+    pullPolicy: IfNotPresent
   service:
     # -- Kubernetes Service type
     serviceType: ClusterIP
@@ -1601,6 +1607,11 @@ statusListServer:
   # -- container port the status-list-server listens on
   containerPort: 8000
   # -- resource requests and limits for the status-list-server container
+  # @schema
+  # type: object
+  # additionalProperties: true
+  # properties: {}
+  # @schema
   resources:
     requests:
       memory: "256Mi"
@@ -1621,8 +1632,14 @@ statusListServer:
     # -- whether to enable the Prometheus metrics endpoint
     enableMetrics: "false"
     # -- in-memory cache TTL in seconds
+    # @schema
+    # type: [string, integer]
+    # @schema
     cacheTtl: "300"
     # -- in-memory cache maximum capacity (number of entries)
+    # @schema
+    # type: [string, integer]
+    # @schema
     cacheMaxCapacity: "1000"
   # -- PostgreSQL database configuration for the status-list-server
   postgresql:
@@ -1632,6 +1649,9 @@ statusListServer:
     # -- database host (used when url is empty)
     host: "postgres"
     # -- database port
+    # @schema
+    # type: [string, integer]
+    # @schema
     port: "5432"
     # -- database name
     database: "statuslistdb"
@@ -1653,8 +1673,14 @@ statusListServer:
     # -- whether Redis requires client certificate authentication
     requireClientAuth: "false"
     # -- TTL in seconds for certificate cache entries in Redis
+    # @schema
+    # type: [string, integer]
+    # @schema
     certCacheTtl: "3600"
     # -- TTL in seconds for secrets cache entries in Redis
+    # @schema
+    # type: [string, integer]
+    # @schema
     secretsCacheTtl: "300"
     image:
       # -- Redis container image repository
@@ -1664,6 +1690,11 @@ statusListServer:
       # -- Redis image pull policy
       pullPolicy: IfNotPresent
     # -- resource requests and limits for the in-chart Redis container
+    # @schema
+    # type: object
+    # additionalProperties: true
+    # properties: {}
+    # @schema
     resources:
       requests:
         memory: "128Mi"
@@ -1673,9 +1704,19 @@ statusListServer:
         cpu: "250m"
     # -- selector template
     # ref: https://kubernetes.io/docs/user-guide/node-selection/
+    # @schema
+    # type: object
+    # additionalProperties: true
+    # properties: {}
+    # @schema
     nodeSelector: {}
     # -- affinity template
     # ref: https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#affinity-and-anti-affinity
+    # @schema
+    # type: object
+    # additionalProperties: true
+    # properties: {}
+    # @schema
     affinity: {}
     # -- tolerations template
     # ref: https://kubernetes.io/docs/concepts/configuration/taint-and-toleration/
@@ -1700,6 +1741,9 @@ statusListServer:
     # -- issuer to be used for getting the signing key
     issuer:
       # -- name of the issuer to be used
+      # @schema
+      # type: [string, "null"]
+      # @schema
       name:
       # -- kind of the issuer to be used
       kind: ClusterIssuer
@@ -1716,6 +1760,11 @@ statusListServer:
     # -- should the ingress be enabled
     enabled: false
     # -- annotations to be added to the ingress
+    # @schema
+    # type: object
+    # additionalProperties: true
+    # properties: {}
+    # @schema
     annotations: {}
       # kubernetes.io/ingress.class: "ambassador"
       # kubernetes.io/tls-acme: "true"
@@ -1732,9 +1781,19 @@ statusListServer:
     tls: []
   # -- selector template
   # ref: https://kubernetes.io/docs/user-guide/node-selection/
+  # @schema
+  # type: object
+  # additionalProperties: true
+  # properties: {}
+  # @schema
   nodeSelector: {}
   # -- affinity template
   # ref: https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#affinity-and-anti-affinity
+  # @schema
+  # type: object
+  # additionalProperties: true
+  # properties: {}
+  # @schema
   affinity: {}
   # -- tolerations template
   # ref: https://kubernetes.io/docs/concepts/configuration/taint-and-toleration/
@@ -1758,23 +1817,42 @@ rainbow:
   # -- database configuration of rainbow
   db:
     # -- host of the database to be used
+    # @schema
+    # type: [string, "null"]
+    # @schema
     url:
     # -- user to be used when accesing the database
+    # @schema
+    # type: [string, "null"]
+    # @schema
     user:
     # -- secret containing the password for the database
+    # @schema
+    # type: [string, "null"]
+    # @schema
     existingSecret:
     # -- key of the password inside that secret
+    # @schema
+    # type: [string, "null"]
+    # @schema
     passwordKey:
   # -- configuration for external access to rainbow
   ingress:
     # -- should the ingress be enabled
     enabled: false
     # -- annotations to be added to the ingress
+    # @schema
+    # type: object
+    # additionalProperties: true
+    # properties: {}
+    # @schema
     annotations: {}
       # kubernetes.io/ingress.class: "ambassador"
       ## example annotations, allowing cert-manager to automatically create tls-certs and forcing everything to use ssl.
       # kubernetes.io/tls-acme: "true"
       # ingress.kubernetes.io/ssl-redirect: "true"
+    # -- ingress class to use
+    className: ""
     # -- all hosts to be provided
     hosts: []
       ## provide a hosts and the paths that should be available
@@ -1792,21 +1870,21 @@ rainbow:
     serviceType: ClusterIP
     # -- port of the service
     port: 8080
-  # -- configuration to register rainbow at the credentials-config-service
-  ccs:
-    # -- should the registration at the credentials-config-service be enabled
-    enabled: false
-    # -- endpoint of the ccs to regsiter at
-    endpoint: http://verifier:8090
-    # -- configmap to get the registration information from
-    configMap: rainbow-registration
-    # -- service id of the data-service to be used
-    id: tpp-service
   # -- selector template
   # ref: https://kubernetes.io/docs/user-guide/node-selection/
+  # @schema
+  # type: object
+  # additionalProperties: true
+  # properties: {}
+  # @schema
   nodeSelector: {}
   # -- affinity template
   # ref: https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#affinity-and-anti-affinity
+  # @schema
+  # type: object
+  # additionalProperties: true
+  # properties: {}
+  # @schema
   affinity: {}
   # -- tolerations template
   # ref: https://kubernetes.io/docs/concepts/configuration/taint-and-toleration/
@@ -1819,10 +1897,18 @@ rainbow:
   priorityClassName: ""
 
 ## configuration of the tm-forum-api - see https://github.com/FIWARE/helm-charts/tree/main/charts/contract-management for details
+# @schema
+# type: object
+# additionalProperties: true
+# properties: {}
+# @schema
 contract-management:
   # -- should it be enabled? set to false if one outside the chart is used.
   enabled: true
   fullnameOverride: contract-management
+  # -- integrate with rainbow for DSP negotiations. Turn it on together with `rainbow.enabled`:
+  # without rainbow, contract management fails to register at it on start and on every order.
+  enableRainbow: false
   # -- distributed-tracing configuration for the contract-management subchart.
   # contract-management is a Micronaut (Java) application that supports the
   # standard OpenTelemetry SDK environment variables. Because
@@ -1931,6 +2017,11 @@ contract-management:
       value: "none"
 
 # -- configuration for the did-helper, see https://github.com/wistefan/did-helper
+# @schema
+# type: object
+# additionalProperties: true
+# properties: {}
+# @schema
 did:
   enabled: false
 
@@ -1953,7 +2044,14 @@ registration:
   command: [ /bin/sh, -c, /bin/init.sh ]
   # -- hook annotations of the registration Job. post-upgrade matters: with post-install only, a
   # release that already exists never runs it again, so nothing added to `issuer` after the first
-  # install ever reaches the list. Re-running is safe - the script treats a 409 as success.
+  # install ever reaches the list. Re-running is safe: an issuer that is already registered (409)
+  # is left as it is, so a change to the credentials of an existing issuer does not reach the list
+  # either - that takes the trusted-issuers-list API. Any other error fails the Job.
+  # @schema
+  # type: object
+  # additionalProperties: true
+  # properties: {}
+  # @schema
   annotations:
     "helm.sh/hook": post-install,post-upgrade
     "helm.sh/hook-weight": "0"
@@ -1991,9 +2089,19 @@ dataSpaceConfig:
   authenticationProtocols: []
   # -- selector template
   # ref: https://kubernetes.io/docs/user-guide/node-selection/
+  # @schema
+  # type: object
+  # additionalProperties: true
+  # properties: {}
+  # @schema
   nodeSelector: {}
   # -- affinity template
   # ref: https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#affinity-and-anti-affinity
+  # @schema
+  # type: object
+  # additionalProperties: true
+  # properties: {}
+  # @schema
   affinity: {}
   # -- tolerations template
   # ref: https://kubernetes.io/docs/concepts/configuration/taint-and-toleration/
@@ -2006,6 +2114,11 @@ dataSpaceConfig:
   priorityClassName: ""
 
 ## Installation of the mongo-operator - see https://github.com/mongodb/helm-charts/tree/main/charts/community-operator
+# @schema
+# type: object
+# additionalProperties: true
+# properties: {}
+# @schema
 mongo-operator:
   # -- should the mongo-operator be installed
   enabled: false
@@ -2015,11 +2128,21 @@ managedMongo:
   # -- should it be enabled?
   enabled: false
   # -- spec as defined in https://github.com/mongodb/helm-charts/tree/main/charts/community-operator-crds
+  # @schema
+  # type: object
+  # additionalProperties: true
+  # properties: {}
+  # @schema
   spec:
     additionalMongodConfig:
       storage.wiredTiger.engineConfig.journalCompressor: zlib
 
 # -- configuration for the marketplace components
+# @schema
+# type: object
+# additionalProperties: true
+# properties: {}
+# @schema
 marketplace:
   enabled: false
 
@@ -2225,6 +2348,11 @@ marketplace:
       - name: OTEL_LOGS_EXPORTER
         value: "none"
 
+# @schema
+# type: object
+# additionalProperties: true
+# properties: {}
+# @schema
 fdsc-edc:
   # -- distributed-tracing configuration for the fdsc-edc workload.
   # Because fdsc-edc is a third-party subchart whose templates are not
@@ -2823,8 +2951,16 @@ vcCredentials:
     #     existingKeySecret: ""
     #     -- optional DID URL for the proof JWT kid header; when omitted the operator embeds the full JWK
     #     holderDID: ""
+  # -- several CredentialIssuers, each with its own `name`, `issuerURL`, `issuerType`, `tokenURL`,
+  # `auth` and `requests` as above. When set, it replaces `issuer`, `auth` and `requests`.
+  issuers: []
 
 # -- vc-operator subchart configuration
+# @schema
+# type: object
+# additionalProperties: true
+# properties: {}
+# @schema
 vc-operator:
   enabled: false
 
@@ -2850,6 +2986,11 @@ identityhub:
   # straight from their Secret. Keys become filenames and, through them, truststore aliases. Use
   # this for a CA that does not exist in the cluster as an object; otherwise prefer
   # `customCaCertsFrom` and skip the copy.
+  # @schema
+  # type: object
+  # additionalProperties: true
+  # properties: {}
+  # @schema
   customCaCerts: {}
   # -- the same, but read from Secrets and ConfigMaps that already exist in the cluster, so a
   # cert-manager Secret can be pointed at directly instead of having its PEM copied into values.
@@ -2875,10 +3016,19 @@ identityhub:
   # -- the api key needs to be in form base64(<username>).<random-string>
   superuser:
     # -- reference to the existing secret containing the key
+    # @schema
+    # type: [string, "null"]
+    # @schema
     existingSecret:
     # -- key in the secret containing the key
+    # @schema
+    # type: [string, "null"]
+    # @schema
     existingSecretKeyKey:
     # -- the plain key, will be ignored if existingSecret is set
+    # @schema
+    # type: [string, "null"]
+    # @schema
     key:
   # -- sidecar that keeps the identityhub's copy of a credential in step with the Secret the
   # vc-operator maintains. The identityhub holds its own copy of everything a DCP connector
@@ -3026,6 +3176,11 @@ identityhub:
     backoffLimit: 6
     # -- hook annotations of the bootstrap Job. post-upgrade is required while vault runs in dev
     # mode, since a vault restart drops everything the Job writes and only a re-run restores it.
+    # @schema
+    # type: object
+    # additionalProperties: true
+    # properties: {}
+    # @schema
     annotations:
       "helm.sh/hook": post-install,post-upgrade
       "helm.sh/hook-weight": "10"
@@ -3059,9 +3214,25 @@ identityhub:
     failureThreshold: 6
     # -- number of consecutive successes for the probe to be considered successful after having failed
     successThreshold: 1
+  # -- ingress publishing the DID document of the identityhub
   didIngress:
+    # -- should the ingress be created
     enabled: true
+    # -- name of the identityhub service port to route to
     port: did
+    # -- ingress class to use
+    className: ""
+    # -- annotations to be added to the ingress
+    # @schema
+    # type: object
+    # additionalProperties: true
+    # properties: {}
+    # @schema
+    annotations: {}
+    # -- hosts to publish, each with its `host` and the `paths` to route
+    hosts: []
+    # -- tls configuration, each entry with its `hosts` and `secretName`
+    tls: []
   # -- endpoints of the control plane
   endpoints:
     # -- default api for health checks, should not be added to any ingress
@@ -3077,6 +3248,9 @@ identityhub:
       # -- path for incoming api calls
       path: /api/identity
       # -- authentication key, must be attached to each 'X-Api-Key' request header
+      # @schema
+      # type: [string, "null"]
+      # @schema
       authKeyAlias:
     # -- DCP Presentation API endpoint
     credentials:
@@ -3105,12 +3279,32 @@ identityhub:
   service:
     # -- [Service type](https://kubernetes.io/docs/concepts/services-networking/service/#publishing-services-service-types) to expose the running application on a set of Pods as a network service.
     type: ClusterIP
+    # @schema
+    # type: object
+    # additionalProperties: true
+    # properties: {}
+    # @schema
     annotations: {}
   # -- additional labels for the pod
+  # @schema
+  # type: object
+  # additionalProperties: true
+  # properties: {}
+  # @schema
   podLabels: {}
   # -- additional annotations for the pod
+  # @schema
+  # type: object
+  # additionalProperties: true
+  # properties: {}
+  # @schema
   podAnnotations: {}
   # -- The [pod security context](https://kubernetes.io/docs/tasks/configure-pod-container/security-context/#set-the-security-context-for-a-pod) defines privilege and access control settings for a Pod within the deployment
+  # @schema
+  # type: object
+  # additionalProperties: true
+  # properties: {}
+  # @schema
   podSecurityContext:
     seccompProfile:
       # -- Restrict a Container's Syscalls with seccomp
@@ -3122,6 +3316,11 @@ identityhub:
     # -- The owner for volumes and any files created within volumes will belong to this guid
     fsGroup: 10100
   # The [container security context](https://kubernetes.io/docs/tasks/configure-pod-container/security-context/#set-the-security-context-for-a-container) defines privilege and access control settings for a Container within a pod
+  # @schema
+  # type: object
+  # additionalProperties: true
+  # properties: {}
+  # @schema
   securityContext:
     capabilities:
       # -- Specifies which capabilities to drop to reduce syscall attack surface
@@ -3138,11 +3337,21 @@ identityhub:
     # -- The container's process will run with the specified uid
     runAsUser: 10100
   # Extra environment variables that will be pass onto deployment pods
+  # @schema
+  # type: object
+  # additionalProperties: true
+  # properties: {}
+  # @schema
   env: {}
   #  ENV_NAME: value
 
   # "valueFrom" environment variable references that will be added to deployment pods. Name is templated.
   # ref: https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.19/#envvarsource-v1-core
+  # @schema
+  # type: object
+  # additionalProperties: true
+  # properties: {}
+  # @schema
   envValueFrom: {}
   #  ENV_NAME:c
   #    configMapKeyRef:
@@ -3167,6 +3376,11 @@ identityhub:
   # -- [volume](https://kubernetes.io/docs/concepts/storage/volumes/) directories
   volumes: []
   # -- [resource management](https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/) for the container
+  # @schema
+  # type: object
+  # additionalProperties: true
+  # properties: {}
+  # @schema
   resources:
     limits:
       cpu: 1.5
@@ -3241,10 +3455,20 @@ identityhub:
       java.util.logging.ConsoleHandler.level=ALL
       org.eclipse.tractusx.identityhub.monitor.ColorfulFormatter.format=%7$s[%1$tY-%1$tm-%1$td %1$tH:%1$tM:%1$tS] [%4$s] %5$s%6$s%n%8$s
   # [node selector](https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#nodeselector) to constrain pods to nodes
+  # @schema
+  # type: object
+  # additionalProperties: true
+  # properties: {}
+  # @schema
   nodeSelector: {}
   # [tolerations](https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/) to configure preferred nodes
   tolerations: []
   # [affinity](https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#affinity-and-anti-affinity) to configure which nodes the pods can be scheduled on
+  # @schema
+  # type: object
+  # additionalProperties: true
+  # properties: {}
+  # @schema
   affinity: {}
   url:
     # -- Explicitly declared url for reaching the dsp api (e.g. if ingresses not used)
@@ -3253,10 +3477,16 @@ identityhub:
     readiness: ""
   postgresql:
     host: postgres
+    # @schema
+    # type: [string, integer]
+    # @schema
     port: "5432"
     database: "ih"
     auth:
       username: ih
+      # @schema
+      # type: [string, "null"]
+      # @schema
       password:
       existingSecret: ih.postgres.credentials.postgresql.acid.zalan.do
       existingSecretPasswordKey: password
@@ -3272,6 +3502,9 @@ identityhub:
     # -- toggle OpenTelemetry tracing on the IdentityHub workload. Leave
     # unset (default) to inherit `tracing.enabled` from the global
     # block; set to `true` / `false` to override.
+    # @schema
+    # type: [boolean, "null"]
+    # @schema
     enabled:
     # -- logical service name exposed as `OTEL_SERVICE_NAME` and recorded
     # as `service.name` on every span emitted by this workload.
@@ -3302,6 +3535,11 @@ identityhub:
   # ref: https://kubernetes.io/docs/concepts/scheduling-eviction/pod-priority-preemption/
   priorityClassName: ""
 
+# @schema
+# type: object
+# additionalProperties: true
+# properties: {}
+# @schema
 vault:
   # -- should the bundled HashiCorp Vault be deployed. The identityhub and fdsc-edc need a vault to
   # hold the participant's signing key and the STS client secret; set this to false only to point
@@ -3421,6 +3659,11 @@ vault:
     priorityClassName: ""
 
 # -- configuration for the cert-manager component (https://github.com/cert-manager/cert-manager/blob/master/deploy/charts/cert-manager/values.yaml)
+# @schema
+# type: object
+# additionalProperties: true
+# properties: {}
+# @schema
 cert-manager:
   enabled: false
   startupapicheck:
@@ -3458,12 +3701,27 @@ certManagerResources:
 extraManifests: []
 
 # -- dashboard for operating the FIWARE Data Space Connector
+# @schema
+# type: object
+# additionalProperties: true
+# properties: {}
+# @schema
 fdsc-dashboard:
   enabled: false
 
+# @schema
+# type: object
+# additionalProperties: true
+# properties: {}
+# @schema
 prometheus:
   enabled: false
 
+# @schema
+# type: object
+# additionalProperties: true
+# properties: {}
+# @schema
 grafana:
   enabled: false
 
@@ -3504,6 +3762,11 @@ tracing:
   # -- extra resource attributes merged into `OTEL_RESOURCE_ATTRIBUTES`
   # for every traced workload. Service-specific attributes (such as
   # `service.name`) are added automatically by the helper.
+  # @schema
+  # type: object
+  # additionalProperties: true
+  # properties: {}
+  # @schema
   resourceAttributes: {}
   #   deployment.environment: "production"
   #   service.namespace: "dsc"
@@ -3545,6 +3808,11 @@ tracing:
 # Kubernetes-native auto-instrumentation by injecting language-specific
 # agents into annotated pods via a mutating webhook. Requires cert-manager
 # for webhook certificate management.
+# @schema
+# type: object
+# additionalProperties: true
+# properties: {}
+# @schema
 opentelemetry-operator:
   # -- toggle the bundled OpenTelemetry Operator subchart. When enabled,
   # deploys the operator which watches for `Instrumentation` CRs and
@@ -3584,6 +3852,11 @@ opentelemetry-operator:
 # stays off so existing deployments are unaffected. When `tracing.enabled`
 # is flipped on, operators typically also flip `opentelemetry-collector.enabled`
 # on to get an in-cluster collector reachable on port 4317/4318.
+# @schema
+# type: object
+# additionalProperties: true
+# properties: {}
+# @schema
 opentelemetry-collector:
   # -- toggle the bundled OpenTelemetry Collector subchart. Keep false
   # when pointing `tracing.exporter.otlp.endpoint` at an external
@@ -3766,6 +4039,11 @@ opentelemetry-collector:
 # that the OpenTelemetry Collector can export spans to. When `tempo.enabled`
 # is true a Tempo single-binary instance is deployed; operators can query
 # stored traces via Grafana or the Tempo HTTP API on port 3200.
+# @schema
+# type: object
+# additionalProperties: true
+# properties: {}
+# @schema
 tempo:
   # -- toggle the bundled Grafana Tempo subchart. When enabled, deploys a
   # single-binary Tempo instance for trace storage. Keep false when using
@@ -3836,6 +4114,11 @@ consentManagement:
 ## (oci://quay.io/fiware/helm-charts/consent-facade). A provider runs one locally when the
 ## owner-resolver resolves the governing contract
 ## See https://github.com/FIWARE/helm-charts/tree/main/charts/consent-facade
+# @schema
+# type: object
+# additionalProperties: true
+# properties: {}
+# @schema
 consent-facade:
   # -- deploy a provider-local consent-facade
   enabled: false
@@ -3858,6 +4141,11 @@ consent-facade:
 ## response data, whether a consent check is required and who owns the data - which is a
 ## provider-side question, because it depends on the provider's data model.
 ## See https://github.com/FIWARE/helm-charts/tree/main/charts/consent-owner-resolver
+# @schema
+# type: object
+# additionalProperties: true
+# properties: {}
+# @schema
 consent-owner-resolver:
   # -- deploy the owner-resolver
   enabled: false

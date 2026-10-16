@@ -28,6 +28,7 @@ tests:
   - it: should not emit any scheduling field when none is configured
     set:
       rainbow.enabled: true
+      contract-management.enableRainbow: true
     template: templates/rainbow-deployment.yaml
     asserts:
       - notExists:
@@ -56,6 +57,7 @@ tests:
   - it: should set every scheduling field on a deployment
     set:
       rainbow.enabled: true
+      contract-management.enableRainbow: true
       rainbow.priorityClassName: marketplace-critical
       rainbow.nodeSelector:
         disktype: ssd

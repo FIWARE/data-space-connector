@@ -134,7 +134,7 @@ too.
    on `/api/check/readiness`:
 
 ```shell
-kubectl get secret ca-secret -n cert-manager -o jsonpath='{.data.tls\.crt}' | base64 -d > local-ca.crt
+kubectl get secret ca-secret -n operators -o jsonpath='{.data.tls\.crt}' | base64 -d > local-ca.crt
 export https_proxy=localhost:8888
 export CURL_CA_BUNDLE=./local-ca.crt
 kubectl port-forward -n consumer svc/identityhub-service 8081:8081 &
@@ -192,7 +192,7 @@ too.
    on `/api/check/readiness`:
 
 ```shell
-kubectl get secret ca-secret -n cert-manager -o jsonpath='{.data.tls\.crt}' | base64 -d > local-ca.crt
+kubectl get secret ca-secret -n operators -o jsonpath='{.data.tls\.crt}' | base64 -d > local-ca.crt
 export https_proxy=localhost:8888
 export CURL_CA_BUNDLE=./local-ca.crt
 kubectl port-forward -n provider svc/identityhub-service 8081:8081 &

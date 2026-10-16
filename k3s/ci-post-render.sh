@@ -29,8 +29,10 @@
 #
 # Running it twice over the same directory is a no-op: an existing
 # progressDeadlineSeconds/activeDeadlineSeconds is replaced rather than
-# duplicated. The root build patches its own render and the integration-test
-# module patches its own, and either tree may be handed to the script again.
+# duplicated, so a render can be handed to the script again.
+#
+# Used by the template path of the Maven build (the default), on
+# target/rendered; the helm-install path does not render anything.
 
 set -euo pipefail
 

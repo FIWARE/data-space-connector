@@ -4,6 +4,8 @@ In a FIWARE Data Space, each organization plays one or more roles. Each role req
 
 If you are new to the FIWARE DSC, start with the [Quick Start Guide](../local-deployment/LOCAL.MD) to understand how all the components work together before deploying for production.
 
+The [Glossary](../../README.md#glossary) explains the abbreviations and the example organizations used throughout these guides.
+
 ## Roles in a Data Space
 
 | Role | Description |
@@ -43,15 +45,15 @@ The following table shows which components are required, optional, or not applic
         </tr>
         <tr>
             <td><a href="https://github.com/FIWARE/credentials-config-service">credentials-config-service</a></td>
-            <td>Holds the information which VCs are required for accessing a service</td>
+            <td>Holds the information which VCs are required for accessing a service. VCVerifier serves this API itself and the services are registered with <code>vcverifier.registration.services</code>, so the standalone service is disabled by default</td>
             <td>-</td>
-            <td>Required</td>
-            <td>Required</td>
+            <td>Built into VCVerifier</td>
+            <td>Built into VCVerifier</td>
             <td>-</td>
         </tr>
         <tr>
             <td><a href="https://github.com/FIWARE/trusted-issuers-list">trusted-issuers-list</a></td>
-            <td>Acts as Trusted Issuers List by providing an <a href="https://api-pilot.ebsi.eu/docs/apis/trusted-issuers-registry">EBSI Trusted Issuers Registry</a> API</td>
+            <td>Acts as Trusted Issuers List by providing an <a href="https://hub.ebsi.eu/api/core/issuers-registry">EBSI Trusted Issuers Registry</a> API</td>
             <td>-</td>
             <td>Required</td>
             <td>Required</td>
