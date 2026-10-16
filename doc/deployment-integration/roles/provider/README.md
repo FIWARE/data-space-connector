@@ -80,14 +80,14 @@ The [Contract Management](https://github.com/FIWARE/contract-management) compone
 
 A provider can offer its products and services through a marketplace in two ways:
 
-- **Local marketplace** — Deploy a marketplace as part of the provider's own connector. The [Business API Ecosystem](https://github.com/FIWARE/business-api-ecosystem) provides a web portal for browsing and ordering product offerings directly from this provider.
+- **Local marketplace** — Deploy a marketplace as part of the provider's own connector. The [Business API Ecosystem](https://github.com/FIWARE/business-api-ecosystem) provides a web portal for browsing and ordering product offerings directly from this provider. See [Running a local marketplace](./LOCAL_MARKETPLACE.md).
 - **Central marketplace** — If the data space operates a shared central marketplace, the provider can publish its offerings there instead of (or in addition to) running its own. See the [Central Marketplace documentation](../../../CENTRAL_MARKETPLACE.md) for details.
 
 Enable the local marketplace when:
 - You want a user-facing web interface for your own data marketplace
 - Consumers should be able to browse and order offerings through a portal hosted by the provider
 
-> **Note:** The local Marketplace requires MongoDB in addition to the existing PostgreSQL. MongoDB can be deployed via the `fiware/data-space-connector` Helm chart using the MongoDB Community Operator.
+> **Note:** The local Marketplace requires MongoDB in addition to the existing PostgreSQL, deployed by the chart through the MongoDB Community Operator. [Running a local marketplace](./LOCAL_MARKETPLACE.md) covers the whole setup: the operator, the values, the login with Verifiable Credentials and the security considerations.
 
 > **Note:** To create **DSP-compatible** products and offerings (i.e. offerings whose data is exchanged over the Dataspace Protocol — see [FDSC-EDC (Dataspace Protocol)](#fdsc-edc-dataspace-protocol)) through the local marketplace UI, the BAE Logic Proxy must be deployed with `BAE_LP_DSP_ENABLED=true`, set under `marketplace.bizEcosystemLogicProxy.additionalEnvVars`. This flag exposes the DSP-specific fields in the offering-creation forms; omit it for a marketplace that only brokers classic FIWARE offerings. See [Using the BAE Marketplace](../../../DSP_INTEGRATION.md#using-the-bae-marketplace) in the DSP Integration documentation.
 
