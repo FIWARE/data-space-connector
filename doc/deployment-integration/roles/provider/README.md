@@ -39,7 +39,7 @@ The provider needs the same base components as a consumer:
 | Component | Description |
 |-----------|-------------|
 | **VCVerifier** | Verifies incoming Verifiable Credentials via [OID4VP](https://openid.net/specs/openid-4-verifiable-presentations-1_0.html). Checks credential signatures, issuer trust (via the Trust Anchor), and credential type acceptance. Returns a JWT access token on success. |
-| **Credentials Config Service** | Configures which credential types are accepted for each protected service. Defines which Trusted Issuers Lists and Trusted Participants Lists to check. |
+| **Credentials configuration** | Which credential types are accepted for each protected service, and which Trusted Issuers Lists and Trusted Participants Lists to check. Served by the VCVerifier itself, on its configuration API (port 8090); the services are registered there from the values with `vcverifier.registration.services`. The standalone [Credentials Config Service](https://github.com/FIWARE/credentials-config-service) is no longer needed and is disabled by default. |
 | **Trusted Issuers List** (local) | The provider's own list of trusted issuers, used in combination with the Trust Anchor's registry to determine which organizations can issue specific credential types. |
 
 ### Authorization: Policy enforcement
@@ -53,7 +53,7 @@ The provider needs the same base components as a consumer:
 
 ## Optional components
 
-All optional components listed below can be deployed using the `fiware/data-space-connector` Helm chart by enabling them in your values file.
+All optional components listed below can be deployed using the `fiware/data-space-connector` Helm chart. Some of them - Scorpio, the TMForum API and Contract Management - are **enabled by default**; set them to `false` explicitly if you do not need them. The [values example](#using-the-fiware-dsc-helm-chart-and-values) below lists the default of each one.
 
 > **Note on Scorpio Context Broker:** The FIWARE implementation of the [TMForum APIs](https://github.com/FIWARE/tmforum-api) is based on [NGSI-LD](https://www.etsi.org/deliver/etsi_gs/CIM/001_099/009/01.08.01_60/gs_CIM009v010801p.pdf), which is why the `fiware/data-space-connector` Helm chart deploys a [Scorpio Context Broker](https://github.com/ScorpioBroker/ScorpioBroker) as its backend. In the provided examples, this same Scorpio instance is also used as the NGSI-LD endpoint that the provider exposes through the connector. However, **in production**, if you want to expose an NGSI-LD endpoint as a data service, you should deploy a **separate Context Broker** for that purpose and not reuse the Scorpio instance that backs the TMForum APIs.
 
@@ -67,7 +67,7 @@ The [TMForum API](https://github.com/FIWARE/tmforum-api) implements standardized
 
 ### Contract Management
 
-The [Contract Management](https://github.com/FIWARE/contract-management) component automates access control based on product orders. When a consumer purchases a product offering via the TMForum API, Contract Management reacts to the order and, most importantly, **registers the consumer's DID in the provider's local Trusted Issuers List**, so the consumer's credentials are accepted at the provider when accessing the purchased service. Additionally, if the [Credentials Config Service](https://github.com/FIWARE/credentials-config-service) and the [ODRL-PAP](https://github.com/SEAMWARE/odrl-pap) are deployed, Contract Management also creates the matching credentials configuration and the ODRL access policies that encode the contract terms. Enable this when:
+The [Contract Management](https://github.com/FIWARE/contract-management) component automates access control based on product orders. When a consumer purchases a product offering via the TMForum API, Contract Management reacts to the order and, most importantly, **registers the consumer's DID in the provider's local Trusted Issuers List**, so the consumer's credentials are accepted at the provider when accessing the purchased service. The credential types granted to the consumer are taken from the ordered product. Additionally, if the [ODRL-PAP](https://github.com/SEAMWARE/odrl-pap) is deployed, Contract Management also creates the ODRL access policies that encode the contract terms. Enable this when:
 - You use TMForum APIs for product ordering
 - Access should be granted/revoked automatically based on contracts
 - You need audit trails for data access agreements
@@ -164,7 +164,7 @@ decentralizedIam:
               use_jwks: true
               client_id: contract-management
               client_secret: unused
-              ssl_verify: false
+              ssl_verify: true            # see "Trusting a private CA" below if your certificates are not publicly trusted
               discovery: http://verifier:3000/services/contract-management/.well-known/openid-configuration
             opa:
               host: http://localhost:8181
@@ -172,14 +172,14 @@ decentralizedIam:
               with_body: true
 ```
 
-**3. Register the Contract Management as a service in the Credentials Config Service**
+**3. Register the Contract Management as a service at the VCVerifier**
 
 The VCVerifier needs to know which credential types to accept on the Contract Management host. Register the service with a dedicated OIDC scope (`external-marketplace`) that accepts the `MarketplaceCredential`:
 
 ```yaml
 decentralizedIam:
   vcAuthentication:
-    credentials-config-service:
+    vcverifier:
       registration:
         enabled: true
         services:
@@ -198,6 +198,8 @@ decentralizedIam:
                       enabled: true
                       fullInclusion: true
 ```
+
+Add the entry to the same `registration.services` list as the provider's other services (such as the `data-service` of the [values example](#using-the-fiware-dsc-helm-chart-and-values)): Helm replaces lists instead of merging them, so a list in a second values file drops the first one.
 
 `trustedIssuersLists: "*"` is intentional here: the marketplace's credential is issued by the marketplace itself, and the trust decision is delegated entirely to the Trust Anchor's TIR.
 
@@ -221,6 +223,8 @@ The provider uses the `fiware/data-space-connector` chart with authentication an
 
 1. Create a helm `values.yaml` file with the key settings for a provider deployment:
 
+   The Ingresses in the example only carry the cert-manager annotations and use the cluster's default ingress class unless `className` is set. Add the class and the annotations your ingress controller needs; the [local deployment](../../local-deployment/LOCAL.MD) uses Traefik, for example.
+
 ```yaml
 # Key settings for provider deployment
 
@@ -243,26 +247,37 @@ did:
   enabled: true
   config:
     server:
-      hostUrl: "http://<your_did_domain>"
+      # https: did-helper also publishes <hostUrl>/.well-known/tls.crt as the x5u of the key
+      hostUrl: "https://<your_did_domain>"
       certPath: "/certs/tls.crt"
   volumes:
     - name: certs
       secret:
+        # the DID's key, issued by cert-manager for the Ingress below and never rotated: see
+        # "Identity key lifecycle"
         secretName: <your_did_domain>-tls
         items:
           - key: tls.crt
             path: tls.crt
+    # did-helper generates a key pair and a keystore in /cert at startup even when certPath is
+    # set; they are not used, but the directory has to be writable, also with a read-only root
+    # filesystem
+    - name: did-helper-workdir
+      emptyDir: {}
   volumeMounts:
     - name: certs
       mountPath: /certs
+    - name: did-helper-workdir
+      mountPath: /cert
   ingress:
     enabled: true
-    className: ""
+    className: <your-ingress-class>   # add the annotations your ingress controller needs
     annotations:
-      traefik.ingress.kubernetes.io/service.passhostheader: "true"
-      traefik.ingress.kubernetes.io/router.tls: "true"
       cert-manager.io/cluster-issuer: "prod" # Use self-signed for testing
       cert-manager.io/private-key-algorithm: "ECDSA"
+      # the Secret also holds the DID's key: renewals must keep it (cert-manager >= 1.18
+      # generates a new one by default)
+      cert-manager.io/private-key-rotation-policy: "Never"
       cert-manager.io/common-name: "<your_did_domain>"
     hosts:
       - host: <your_did_domain>
@@ -284,7 +299,6 @@ decentralizedIam:
       ingress:
         enabled: true
         annotations:
-          traefik.ingress.kubernetes.io/router.tls: "true"
           cert-manager.io/cluster-issuer: "prod"
           cert-manager.io/private-key-algorithm: "ECDSA"
           cert-manager.io/common-name: "<your_verifier_domain>"
@@ -302,25 +316,9 @@ decentralizedIam:
           did: <your-organization's-DID>
         server:
           host: https://<your_verifier_domain>
-        configRepo:
-          configEndpoint: http://verifier:8090
-
-    # Credentials Config Service — defines which credential types are accepted
-    credentials-config-service:
-      ingress:
-        enabled: true
-        annotations:
-          cert-manager.io/cluster-issuer: "prod"
-          cert-manager.io/private-key-algorithm: "ECDSA"
-          cert-manager.io/common-name: "<your_ccs_domain>"
-        hosts:
-          - host: <your_ccs_domain>
-            paths:
-              - "/"
-        tls:
-          - secretName: <your_ccs_domain>-tls
-            hosts:
-              - <your_ccs_domain>
+      # Services and the credentials they accept, registered at the VCVerifier's configuration
+      # API on install and upgrade. A service that is already registered is left as it is: change
+      # it through that API (`PUT http://verifier:8090/service/<id>`).
       registration:
         enabled: true
         services:
@@ -404,7 +402,7 @@ decentralizedIam:
               use_jwks: true
               client_id: data-service
               client_secret: unused
-              ssl_verify: false
+              ssl_verify: true            # see "Trusting a private CA" below if your certificates are not publicly trusted
               discovery: https://<your_verifier_domain>/services/data-service/.well-known/openid-configuration
             opa:
               host: http://localhost:8181
@@ -430,42 +428,43 @@ decentralizedIam:
             hosts:
               - <your_pap_domain>
 
+# --- Enabled by default: set to false if you do not need them ---
 # Scorpio Context Broker (TMForum backend — see note on Scorpio above)
 scorpio:
-  # enabled by default
+  enabled: true
+tm-forum-api:
+  enabled: true         # TMForum APIs: product catalog, ordering, ...
+contract-management:
+  enabled: true         # contract-based access, needs the TMForum API
 
 # --- Disabled by default (enable as needed) ---
-tm-forum-api:
-  enabled: false        # Set to true for marketplace features
-contract-management:
-  enabled: false        # Set to true for contract-based access
 marketplace:
-  enabled: false        # Set to true for web marketplace portal
+  enabled: false        # local marketplace portal (BAE), needs MongoDB
 fdsc-edc:
-  enabled: false        # Set to true for DSP compliance
-
-# Components not needed for provider
-credentials:
-  enabled: false
+  enabled: false        # Dataspace Protocol connector
 identityhub:
-  enabled: false
+  enabled: false        # only needed with the Decentralized Claims Protocol
 vault:
   enabled: false
 ```
 
-2. Add the FIWARE DSC helm chart repository:
+A provider without any of the optional components sets `scorpio`, `tm-forum-api` and `contract-management` to `false`: leaving them out of the values file deploys them.
+
+2. Install the chart with your values, pinning its version (see the [release notes](../../../release-notes) for what changes between versions):
 
 ```shell
-helm repo add fiware-dsc https://fiware.github.io/data-space-connector
-```
-
-3. Install the chart with your values:
-
-```shell
-helm install provider fiware-dsc/data-space-connector \
+helm install provider oci://quay.io/fiware/helm-charts/data-space-connector \
+  --version <version> \
   -n provider \
   --create-namespace \
   -f provider-values.yaml
+```
+
+   The chart is also available from the Helm repository `https://fiware.github.io/data-space-connector`:
+
+```shell
+helm repo add fiware-dsc https://fiware.github.io/data-space-connector
+helm install provider fiware-dsc/data-space-connector --version <version> -n provider --create-namespace -f provider-values.yaml
 ```
 
 See [quick-start/values/provider.yaml](../../quick-start/values/provider.yaml) for a complete minimal example.
@@ -487,7 +486,7 @@ For other deployment scenarios, the base `provider.yaml` can be extended with ad
 For example, to deploy a provider with ELSI compliance:
 
 ```shell
-helm install provider fiware/data-space-connector \
+helm install provider oci://quay.io/fiware/helm-charts/data-space-connector --version <version> \
   -n provider \
   -f k3s/provider.yaml \
   -f k3s/provider-eidas.yaml
@@ -506,18 +505,71 @@ helm install provider fiware/data-space-connector \
 - Ensure the DID document is served over HTTPS with a valid certificate
 - Protect the private key associated with your DID — it is the foundation of your organization's identity in the data space. If compromised, an attacker could issue credentials on your behalf
 
+#### Identity key lifecycle
+
+The DID's private key is what did-helper publishes and what Keycloak signs credentials with. If it changes, the DID document changes with it, every credential signed with the previous key stops verifying, and the participants that resolved the DID see a different key without notice.
+
+Since cert-manager 1.18, a certificate's `privateKey.rotationPolicy` defaults to `Always`: every renewal - every 60 days with Let's Encrypt - generates a new key. Whatever certificate holds the DID's key must therefore set `Never`. There are two ways to do it:
+
+- **On the DID's Ingress**, as the example above does: the `cert-manager.io/private-key-rotation-policy: "Never"` annotation makes cert-manager keep the key of the certificate it issues for that Ingress, and the same Secret serves TLS and holds the identity key. It is the smallest change, but ties the identity to that Ingress: changing its controller, host or issuer touches the identity key too.
+- **A dedicated `Certificate`** for the identity, separate from any Ingress, which only cert-manager renews and which keeps its key. Mount its Secret in did-helper and in the Keycloak keystore init container ([Keycloak guide](../KEYCLOAK.md)) instead of the Ingress' one; the Ingresses keep their own certificates, so a TLS rotation or compromise does not reach the identity:
+
+```yaml
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: identity-key
+  namespace: <your_namespace>
+spec:
+  secretName: <your_identity_key_secret>
+  commonName: <your_did_domain>
+  dnsNames:
+    - <your_did_domain>
+  issuerRef:
+    name: <your_cluster_issuer>
+    kind: ClusterIssuer
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+    rotationPolicy: Never      # renewals keep the key, and with it the DID
+```
+
+Either way, every component that holds a copy of the key has to follow it: restarting did-helper and Keycloak on a changed Secret keeps them consistent, but credentials signed with a previous key still stop verifying, and a component that stored the key elsewhere - such as the identity hub, in Vault - keeps the old one. Hence `Never`.
+
+Use separate keys for everything else that signs: the verifier's request objects (`clientIdentification`) and tokens (see [VCVerifier](#vcverifier)), and the marketplace's SIOP key. Sharing the identity key spreads it across components that do not need it.
+
+Keep a backup of the identity key outside the cluster: losing it means a new DID. Rotating it on purpose works the same way as losing it - did-helper publishes a single key - so plan it as a re-issuance of the credentials signed with the old one, as described for the identity hub in [Vault](../../production/VAULT.md#rotating-the-signing-key).
+
 ### Do not expose internal APIs
 
 The following ingresses are useful for development but must **not** be publicly accessible in production:
 - **Scorpio Broker** direct ingress — all access must go through APISIX
 - **ODRL-PAP** ingress — policy management should be restricted to authorized operators
 - **Trusted Issuers List** management API — restrict to internal access
-- **Credentials Config Service** — restrict to internal access
+- **VCVerifier configuration API** (`vcverifier.configIngress`, port 8090) — it defines which credentials each service accepts; keep it internal, and only publish it, restricted, if services have to be managed from outside the cluster
 
 ### APISIX configuration
 
 - Change the APISIX `admin` credentials from defaults
 - Configure proper error responses (do not leak internal service details)
+- Keep `ssl_verify: true` in the `openid-connect` plugin. Even when `discovery` points to the verifier inside the cluster, the discovery document announces the verifier's public `jwks_uri`, so APISIX fetches the keys that validate every token over HTTPS. Without verification, whoever can intercept that call can make APISIX accept forged tokens.
+
+#### Trusting a private CA
+
+If the verifier's certificate is issued by a private CA, give APISIX that CA instead of disabling the verification. Put the CA certificate (PEM) in a Secret, for example `private-ca` with the key `ca.crt`, and point the apisix chart to it:
+
+```yaml
+decentralizedIam:
+  odrlAuthorization:
+    apisix:
+      apisix:
+        ssl:
+          enabled: true              # the chart only mounts the CA together with its HTTPS listener
+          existingCASecret: private-ca
+          certCAFilename: ca.crt
+```
+
+The apisix chart only mounts the CA, and sets it as APISIX's `ssl_trusted_certificate`, when `apisix.ssl.enabled` is set, which also opens its HTTPS listener (port 9443); that listener needs no further configuration when TLS is terminated at the Ingress.
 
 ### VCVerifier
 
@@ -525,6 +577,39 @@ The following ingresses are useful for development but must **not** be publicly 
 - Ensure the VCVerifier can reach the Trust Anchor over HTTPS with valid certificates
 - If using a proxy, configure `HTTPS_PROXY`/`NO_PROXY` appropriately
 - The VCVerifier's signing key (used for JWT issuance) must be protected
+
+#### Request object modes
+
+`deployment.verifier.supportedModes` defaults to `urlEncoded`. With `byValue` or `byReference` the verifier signs the request objects it sends to wallets, so it also needs `clientIdentification`; without its `keyPath` the verifier does not start (`Failed to initialize verifier`):
+
+```yaml
+decentralizedIam:
+  vcAuthentication:
+    vcverifier:
+      deployment:
+        verifier:
+          supportedModes: ["byValue", "byReference"]
+          clientIdentification:
+            id: x509_san_dns:<your_verifier_domain>   # how the verifier identifies itself to wallets
+            keyPath: /signing-key/tls.key            # key that signs the request objects
+            certificatePath: /signing-key/tls.crt    # certificate embedded in their header
+            requestKeyAlgorithm: ES256               # algorithm of that key
+        additionalVolumes:
+          - name: signing-key
+            secret:
+              secretName: <your_verifier_domain>-tls # e.g. a cert-manager certificate for the verifier's domain
+        additionalVolumeMounts:
+          - name: signing-key
+            mountPath: /signing-key
+```
+
+The verifier reads the algorithm from `requestKeyAlgorithm`; the `keyAlgorithm` listed under `clientIdentification` in the vcverifier chart's values has no effect.
+
+#### Token signing algorithm
+
+The access tokens the verifier issues are validated by APISIX's `openid-connect` plugin, which only builds the public key from an RSA JWK (or from an `x5c` chain, which the verifier does not publish). Keep `deployment.verifier.keyAlgorithm` at its default `RS256`: with `ES256`, APISIX rejects every token with `No trusted certs loaded`. This only concerns the verifier's tokens; Keycloak can keep signing credentials with `ES256`.
+
+By default (`generateKey: true`) the verifier generates that key at startup and only keeps it in memory, so the tokens issued before a restart stop validating and several replicas do not share a key. In production, provide an RSA key instead, with `generateKey: false` and `keyPath`.
 
 ### Policy management
 

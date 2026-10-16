@@ -72,6 +72,8 @@ pom.xml                       # drives local-deploy + integration tests
 - Lint: `helm lint charts/data-space-connector`
 - Render: `helm template test charts/data-space-connector -f <values>.yaml`
 - Unit tests: `helm unittest charts/data-space-connector`
+- Values schema: `.github/scripts/values-schema.sh` regenerates
+  `values.schema.json` from `values.yaml`; `--check` fails when it is stale
   (requires helm-unittest plugin, pinned to v0.6.3 in CI)
 - Integration (local k3s, slow): `mvn -f pom.xml verify`
 - CI entry points: `.github/workflows/check.yaml` (lint) and
@@ -81,6 +83,19 @@ pom.xml                       # drives local-deploy + integration tests
 - Every `values.yaml` key carries a `# --` comment (helm-docs format) so
   the values table in `README.md` regenerates cleanly. Keep new values
   documented the same way.
+- `values.schema.json` is generated from `values.yaml` and validates this
+  chart's own keys: a key that is not in `values.yaml` is refused. Every key
+  a template reads must therefore be declared, with a default the template
+  treats as unset. Regenerate the schema after any change to `values.yaml`.
+  Add a `# @schema` block right above a key when its default does not tell
+  the generator enough:
+  - an empty default (`key:`) or one that also takes another type:
+    `type: [string, "null"]`, `type: [string, integer]`, ...;
+  - a map that takes arbitrary keys (annotations, labels, resources,
+    security contexts, env maps, ...), and every subchart's key:
+    `type: object`, `additionalProperties: true` and `properties: {}`.
+  A value removed from under a subchart's key, which the schema cannot
+  refuse, gets a `fail` in `templates/removed-values.yaml`.
 - Feature toggles follow `<component>.enabled` and `{{- if ... }}` gates
   wrap the entire template file.
 - Container env blocks always end with three extension points in this
