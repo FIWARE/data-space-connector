@@ -172,7 +172,7 @@ plugins:
     proxy_opts:                   # the verifier's ingress host resolves to 127.0.0.1 in-cluster
       http_proxy: http://squid-proxy.infra.svc.cluster.local:8888
       https_proxy: http://squid-proxy.infra.svc.cluster.local:8888
-    ssl_verify: false             # its ingress cert is signed by the cluster CA
+    ssl_verify: false             # local demo only: its ingress cert is signed by the cluster CA; outside of it trust the CA instead, see the provider guide's "Trusting a private CA"
   proxy-rewrite:
     regex_uri: ["^/consent-manager/(.*)", "/$1"]
     headers:

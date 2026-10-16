@@ -305,14 +305,13 @@ Add the plugin via an init container in the Keycloak configuration:
 
 ```yaml
 keycloak:
-  keycloak:
-    extraInitContainers:
-      - name: install-jades-issuer
-        image: quay.io/fiware/keycloak-jades-vc-issuer:1.3.0
-        imagePullPolicy: IfNotPresent
-        volumeMounts:
-          - name: providers
-            mountPath: /target
+  extraInitContainers:
+    - name: install-jades-issuer
+      image: quay.io/fiware/keycloak-jades-vc-issuer:1.3.0
+      imagePullPolicy: IfNotPresent
+      volumeMounts:
+        - name: providers
+          mountPath: /target
 ```
 
 See the [k3s/consumer-eidas.yaml](../../../k3s/consumer-eidas.yaml) overlay
@@ -328,15 +327,14 @@ mounted via Keycloak's `extraVolumeMounts` and `extraVolumes`:
 
 ```yaml
 keycloak:
-  keycloak:
-    extraVolumeMounts:
-      - name: elsi-trust-store
-        mountPath: /opt/keycloak/data/test-realm
-    extraVolumes:
-      - name: elsi-trust-store
-        secret:
-          secretName: elsi-secret
-          defaultMode: 0755
+  extraVolumeMounts:
+    - name: elsi-trust-store
+      mountPath: /opt/keycloak/data/test-realm
+  extraVolumes:
+    - name: elsi-trust-store
+      secret:
+        secretName: elsi-secret
+        defaultMode: 0755
 ```
 
 > **Important:** The `mountPath` must match your realm name --

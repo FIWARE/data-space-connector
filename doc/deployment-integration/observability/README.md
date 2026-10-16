@@ -103,7 +103,7 @@ flowchart LR
 Enable tracing globally with a single value:
 
 ```bash
-helm upgrade --install my-dsc dsc/data-space-connector \
+helm upgrade --install my-dsc oci://quay.io/fiware/helm-charts/data-space-connector --version <version> \
   --set tracing.enabled=true
 ```
 
@@ -275,7 +275,7 @@ grafana:
 Or via `--set` flags:
 
 ```bash
-helm upgrade --install my-dsc dsc/data-space-connector \
+helm upgrade --install my-dsc oci://quay.io/fiware/helm-charts/data-space-connector --version <version> \
   --set tracing.enabled=true \
   --set tempo.enabled=true \
   --set grafana.enabled=true
@@ -743,7 +743,7 @@ marketplace:
 marketplace:
   bizEcosystemLogicProxy:
     statefulset:
-      podAnnotations:
+      additionalAnnotations:
         instrumentation.opentelemetry.io/inject-nodejs: "true"
 ```
 
@@ -875,7 +875,7 @@ marketplace:
 marketplace:
   bizEcosystemLogicProxy:
     statefulset:
-      podAnnotations:
+      additionalAnnotations:
         instrumentation.opentelemetry.io/inject-nodejs: "true"
 ```
 
