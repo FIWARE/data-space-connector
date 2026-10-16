@@ -7,8 +7,6 @@ tm-forum-api:
     enabled: true
   apiProxy:
     enabled: false
-  registration:
-    enabled: false
   ingress:
     annotations:
       cert-manager.io/cluster-issuer: "selfsigned-issuer"
@@ -32,17 +30,6 @@ scorpio:
     requests:
       cpu: "100m"
       memory: 128Mi
-
-postgis:
-  enabled: true
-  primary:
-    resourcesPreset: none
-    persistence:
-      enabled: false
-  readReplicas:
-    persistence:
-      enabled: false
-
 
 # contract management for distributing the buy events
 contract-management:

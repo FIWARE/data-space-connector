@@ -103,7 +103,7 @@ flowchart LR
 Enable tracing globally with a single value:
 
 ```bash
-helm upgrade --install my-dsc dsc/data-space-connector \
+helm upgrade --install my-dsc oci://quay.io/fiware/helm-charts/data-space-connector --version <version> \
   --set tracing.enabled=true
 ```
 
@@ -275,7 +275,7 @@ grafana:
 Or via `--set` flags:
 
 ```bash
-helm upgrade --install my-dsc dsc/data-space-connector \
+helm upgrade --install my-dsc oci://quay.io/fiware/helm-charts/data-space-connector --version <version> \
   --set tracing.enabled=true \
   --set tempo.enabled=true \
   --set grafana.enabled=true
@@ -743,7 +743,7 @@ marketplace:
 marketplace:
   bizEcosystemLogicProxy:
     statefulset:
-      podAnnotations:
+      additionalAnnotations:
         instrumentation.opentelemetry.io/inject-nodejs: "true"
 ```
 
@@ -875,7 +875,7 @@ marketplace:
 marketplace:
   bizEcosystemLogicProxy:
     statefulset:
-      podAnnotations:
+      additionalAnnotations:
         instrumentation.opentelemetry.io/inject-nodejs: "true"
 ```
 
@@ -925,7 +925,7 @@ integration:
 | Component | Reason |
 |---|---|
 | **Rainbow** | Slated for removal in a future release. |
-| **Registration jobs** (participant-registration, tmf-registration, dataplane-registration, rainbow-registration) | Short-lived batch jobs that do not benefit from continuous tracing. |
+| **Registration jobs** (participant-registration) | Short-lived batch jobs that do not benefit from continuous tracing. |
 | **MongoDB** | Database-level tracing is handled by the application drivers, not the server. |
 | **HashiCorp Vault** | Infrastructure component; tracing is configured independently if needed. |
 | **cert-manager** | Cluster-level operator; out of scope for application tracing. |

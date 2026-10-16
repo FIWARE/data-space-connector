@@ -64,6 +64,8 @@ The consumer could use the same `fiware/data-space-connector` chart as the provi
 
 1. Create a helm `values.yaml` file with the key settings to enable only the consumer-related components like this:
 
+   The Ingresses in the example only carry the cert-manager annotations and use the cluster's default ingress class unless `className` is set. Add the class and the annotations your ingress controller needs; the [local deployment](../../local-deployment/LOCAL.MD) uses Traefik, for example.
+
 ```yaml
 # Key settings for consumer-only deployment
 
@@ -86,26 +88,37 @@ did:
   enabled: true
   config:
     server:
-      hostUrl: "http://<your_did_domain>"
+      # https: did-helper also publishes <hostUrl>/.well-known/tls.crt as the x5u of the key
+      hostUrl: "https://<your_did_domain>"
       certPath: "/certs/tls.crt"
   volumes:
     - name: certs
       secret:
+        # the DID's key, issued by cert-manager for the Ingress below and never rotated: see
+        # "Identity key lifecycle"
         secretName: <your_did_domain>-tls
         items:
           - key: tls.crt
             path: tls.crt
+    # did-helper generates a key pair and a keystore in /cert at startup even when certPath is
+    # set; they are not used, but the directory has to be writable, also with a read-only root
+    # filesystem
+    - name: did-helper-workdir
+      emptyDir: {}
   volumeMounts:
     - name: certs
       mountPath: /certs
+    - name: did-helper-workdir
+      mountPath: /cert
   ingress:
     enabled: true
-    className: ""
+    className: <your-ingress-class>   # add the annotations your ingress controller needs
     annotations:
-      traefik.ingress.kubernetes.io/service.passhostheader: "true"
-      traefik.ingress.kubernetes.io/router.tls: "true"
       cert-manager.io/cluster-issuer: "prod" # Use self-signed for testing
       cert-manager.io/private-key-algorithm: "ECDSA"
+      # the Secret also holds the DID's key: renewals must keep it (cert-manager >= 1.18
+      # generates a new one by default)
+      cert-manager.io/private-key-rotation-policy: "Never"
       cert-manager.io/common-name: "<your_did_domain>"
     hosts:
       - host: <your_did_domain>
@@ -145,9 +158,6 @@ contract-management:
 fdsc-edc:
   enabled: false
 
-credentials:
-  enabled: false
-
 identityhub:
   enabled: false
 
@@ -161,19 +171,21 @@ tm-forum-api:
   enabled: false
 ```
 
-2. Add the FIWARE DSC helm chart repository:
+2. Install the chart with your values, pinning its version (see the [release notes](../../../release-notes) for what changes between versions):
 
 ```shell
-helm repo add fiware-dsc https://fiware.github.io/data-space-connector
-````
-
-3. Install the chart with your values:
-
-```shell
-helm install consumer fiware-dsc/data-space-connector \
+helm install consumer oci://quay.io/fiware/helm-charts/data-space-connector \
+  --version <version> \
   -n consumer \
   --create-namespace \
   -f consumer-values.yaml
+```
+
+   The chart is also available from the Helm repository `https://fiware.github.io/data-space-connector`:
+
+```shell
+helm repo add fiware-dsc https://fiware.github.io/data-space-connector
+helm install consumer fiware-dsc/data-space-connector --version <version> -n consumer --create-namespace -f consumer-values.yaml
 ```
 
 #### Other deployment options
@@ -186,7 +198,7 @@ For other deployment scenarios, the base `consumer.yaml` can be extended with ad
 
 | Overlay | File | Description |
 |---------|------|-------------|
-| **eIDAS / ELSI** | [k3s/consumer-eidas.yaml](../../../../k3s/consumer-eidas.yaml) | Configuration for deployments compliant with the [ELSI](https://github.com/FIWARE/elsi) trust framework, including eIDAS certificate issuance via Keycloak. See [eIDAS 2.0 Compliance](../../eidas/README.md) for details |
+| **eIDAS / ELSI** | [k3s/consumer-eidas.yaml](../../../../k3s/consumer-eidas.yaml) | Configuration for deployments compliant with the [ELSI](https://alastria.github.io/did-method-elsi/) trust framework, including eIDAS certificate issuance via Keycloak. See [eIDAS 2.0 Compliance](../../eidas/README.md) for details |
 | **Gaia-X** | [k3s/consumer-gaia-x.yaml](../../../../k3s/consumer-gaia-x.yaml) | Configuration for [Gaia-X](https://gaia-x.eu/) compliant deployments |
 | **TM Forum APIs** | [k3s/consumer-tmf.yaml](../../../../k3s/consumer-tmf.yaml) | Enables [TM Forum APIs](https://www.tmforum.org/oda/open-apis/) on the consumer (required for central marketplace and EDC-related features) |
 | **Auth components** | [k3s/consumer-auth.yaml](../../../../k3s/consumer-auth.yaml) | Configures authentication components for the consumer (required for central marketplace and EDC-related features) |
@@ -195,7 +207,7 @@ For other deployment scenarios, the base `consumer.yaml` can be extended with ad
 For example, to deploy a consumer with DSP support and TM Forum APIs:
 
 ```shell
-helm install consumer fiware/data-space-connector \
+helm install consumer oci://quay.io/fiware/helm-charts/data-space-connector --version <version> \
   -n consumer \
   -f k3s/consumer.yaml \
   -f k3s/consumer-auth.yaml \
@@ -215,6 +227,7 @@ helm install consumer fiware/data-space-connector \
 - Use a registered domain name that your organization controls for the [`did:web`](https://w3c-ccg.github.io/did-method-web/) identifier
 - Ensure the DID document is served over HTTPS with a valid certificate
 - Protect the private key associated with your DID — it is the foundation of your organization's identity in the data space. If compromised, an attacker could issue credentials on your behalf
+- Give the DID a dedicated key that renewals do not regenerate, not the TLS Secret of an Ingress: see [Identity key lifecycle](../provider/README.md#identity-key-lifecycle) in the provider guide, which applies to consumers as well
 
 ### Trust Anchor registration
 
