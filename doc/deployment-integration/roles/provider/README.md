@@ -536,7 +536,7 @@ spec:
 
 Either way, every component that holds a copy of the key has to follow it: restarting did-helper and Keycloak on a changed Secret keeps them consistent, but credentials signed with a previous key still stop verifying, and a component that stored the key elsewhere - such as the identity hub, in Vault - keeps the old one. Hence `Never`.
 
-Use separate keys for everything else that signs: the verifier's request objects (`clientIdentification`) and tokens (see [VCVerifier](#vcverifier)), and the marketplace's SIOP key. Sharing the identity key spreads it across components that do not need it.
+Use separate keys for everything else that signs, such as the verifier's request objects (`clientIdentification`) and tokens (see [VCVerifier](#vcverifier)): sharing the identity key spreads it across components that do not need it. The local marketplace needs no key of its own when it logs users in through the verifier's OpenID Connect discovery, as [Running a local marketplace](./LOCAL_MARKETPLACE.md#login-with-verifiable-credentials) describes; its SIOP mode, instead, has to sign with the identity key itself, since the verifier checks those signatures against the DID.
 
 Keep a backup of the identity key outside the cluster: losing it means a new DID. Rotating it on purpose works the same way as losing it - did-helper publishes a single key - so plan it as a re-issuance of the credentials signed with the old one, as described for the identity hub in [Vault](../../production/VAULT.md#rotating-the-signing-key).
 
