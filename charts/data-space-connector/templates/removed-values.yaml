@@ -1,0 +1,11 @@
+{{- /*
+Values this chart no longer reads, under a subchart's key. values.schema.json leaves the subcharts'
+keys open, so these would otherwise be ignored without a word; rainbow.ccs, being this chart's own,
+is rejected by the schema. Renders nothing.
+*/ -}}
+{{- if hasKey .Values.scorpio "ccs" }}
+{{- fail "scorpio.ccs was removed in 10.11.0: register the data service through decentralizedIam.vcAuthentication.vcverifier.registration.services instead, see doc/release-notes/10-x.md" }}
+{{- end }}
+{{- if hasKey (index .Values "tm-forum-api") "registration" }}
+{{- fail "tm-forum-api.registration was removed in 10.11.0: register the TM Forum API through decentralizedIam.vcAuthentication.vcverifier.registration.services instead, see doc/release-notes/10-x.md" }}
+{{- end }}

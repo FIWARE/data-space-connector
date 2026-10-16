@@ -23,12 +23,12 @@ To support this task, an [Onboarding Portal](#onboarding-portal) is available as
 
 ### Trusted Issuers Registry (TIR)
 
-The [Trusted Issuers Registry](https://github.com/FIWARE/trusted-issuers-list) implements the [EBSI Trusted Issuers Registry API](https://hub.ebsi.eu/apis/pilot/trusted-issuers-registry/v4), providing a standardized way to query which organizations are trusted in the data space.
+The [Trusted Issuers Registry](https://github.com/FIWARE/trusted-issuers-list) implements the [EBSI Trusted Issuers Registry API](https://hub.ebsi.eu/api/core/issuers-registry), providing a standardized way to query which organizations are trusted in the data space.
 
 - Exposes a read-only API (`/v4/issuers`) for participants to verify trust
 - Backed by a management API (`/issuer`) for registering and managing trusted issuers
 
-> **Note:** The FIWARE [Trusted Issuers Registry](https://github.com/FIWARE/trusted-issuers-list) is the default implementation shipped with the FIWARE Data Space Connector, but it is not the only option. Any component that exposes the [EBSI Trusted Issuers Registry API](https://hub.ebsi.eu/apis/pilot/trusted-issuers-registry/v4) can be used as the Trust Anchor's registry — including **blockchain-backed implementations** such as the [EBSI Trusted Issuers Registry](https://hub.ebsi.eu/apis/pilot/trusted-issuers-registry/v4) itself. This allows data spaces to align the trust registry with the governance and decentralization model that best fits their requirements.
+> **Note:** The FIWARE [Trusted Issuers Registry](https://github.com/FIWARE/trusted-issuers-list) is the default implementation shipped with the FIWARE Data Space Connector, but it is not the only option. Any component that exposes the [EBSI Trusted Issuers Registry API](https://hub.ebsi.eu/api/core/issuers-registry) can be used as the Trust Anchor's registry — including **blockchain-backed implementations** such as the [EBSI Trusted Issuers Registry](https://hub.ebsi.eu/api/core/issuers-registry) itself. This allows data spaces to align the trust registry with the governance and decentralization model that best fits their requirements.
 
 ### Trusted Issuers List (TIL) management API
 
@@ -74,7 +74,7 @@ The Central Marketplace is deployed using the same `fiware/data-space-connector`
 | **TMForum API** | Hosts the shared catalog (products, offerings, orders, parties, agreements). All interactions with the marketplace (organization registration, product specification, offering, ordering and order completion) can be performed directly through this API — see the end-to-end flow in [CENTRAL_MARKETPLACE.md](../../../CENTRAL_MARKETPLACE.md). |
 | **Scorpio Context Broker** | NGSI-LD backend for the TMForum API. Should not be exposed to participants as a data service. |
 | **Contract Management** | Configured in central-marketplace mode: `enableCentralMarketplace: true`, `enableOdrlPap: false`, `oid4vp.enabled: true`. On order completion, it authenticates with the marketplace's credential and notifies the provider's Contract Management. |
-| **VCVerifier + Credentials Config Service + Trusted Issuers List (local)** | Authenticate the providers (and users) that access the marketplace's catalog and ordering APIs. |
+| **VCVerifier + Trusted Issuers List (local)** | Authenticate the providers (and users) that access the marketplace's catalog and ordering APIs. |
 
 The **ODRL-PAP, OPA and data-service protection** components that a Provider deploys are **not** needed in the Central Marketplace — the marketplace does not expose protected data services.
 
@@ -174,13 +174,12 @@ marketplace:
       tokenPath: /token
       jwksPath: /.well-known/jwks
     allowedRoles: [seller, customer, admin]
-  bizEcosystemApis:
-    tmForum:
-      catalog:     { host: tm-forum-api-svc, port: 8080, path: /tmf-api/productCatalogManagement/v4 }
-      inventory:   { host: tm-forum-api-svc, port: 8080, path: /tmf-api/productInventory/v4 }
-      ordering:    { host: tm-forum-api-svc, port: 8080, path: /tmf-api/productOrderingManagement/v4 }
-      party:       { host: tm-forum-api-svc, port: 8080, path: /tmf-api/party/v4 }
-      # ... other TMForum sub-APIs (billing, usage, customer, resources, services, ...)
+  tmForum:
+    catalog:     { host: tm-forum-api-svc, port: 8080, path: /tmf-api/productCatalogManagement/v4 }
+    inventory:   { host: tm-forum-api-svc, port: 8080, path: /tmf-api/productInventory/v4 }
+    ordering:    { host: tm-forum-api-svc, port: 8080, path: /tmf-api/productOrderingManagement/v4 }
+    party:       { host: tm-forum-api-svc, port: 8080, path: /tmf-api/party/v4 }
+    # ... other TMForum sub-APIs (billing, usage, customer, resources, services, ...)
   bizEcosystemLogicProxy:
     ingress:
       enabled: true
@@ -228,14 +227,14 @@ credentials:
 The `MarketplaceCredential` type is **not mandatory** — it is simply the type used throughout this documentation, the [local demo](../../../CENTRAL_MARKETPLACE.md) and the shipped examples (see [`k3s/consumer.yaml`](../../../../k3s/consumer.yaml) Keycloak realm and [`k3s/provider.yaml`](../../../../k3s/provider.yaml) policies). Any credential type can be used as long as the three sides agree on it:
 
 1. **Keycloak (this realm)** must issue the chosen type — adjust `scope` and `vct` in the `verifiableCredentials.<id>` entry, the `id` under `credentials.configurations`, and the `targetFile` that Contract Management will read.
-2. **Central Marketplace CCS + PAP** uses that same type to let its Contract Management present it to providers. No extra configuration is typically needed here.
-3. **Each provider's CCS + PAP** must accept that type on the Contract Management endpoint (see step 3 and step 4 of [Participating in a Central Marketplace](../provider/README.md#participating-in-a-central-marketplace) — the `type` field in the `credentials-config-service` scope and the `allowContractManagement` policy at the PAP).
+2. **Central Marketplace VCVerifier + PAP** use that same type to let its Contract Management present it to providers. No extra configuration is typically needed here.
+3. **Each provider's VCVerifier + PAP** must accept that type on the Contract Management endpoint (see step 3 and step 4 of [Participating in a Central Marketplace](../provider/README.md#participating-in-a-central-marketplace) — the `type` field in the service registered with `vcverifier.registration.services` and the `allowContractManagement` policy at the PAP).
 
 If the type is changed, it must be changed consistently on all three sides or provider-side authentication will fail.
 
 **5. Authentication stack for the marketplace's own APIs**
 
-Providers and users accessing the catalog and ordering APIs authenticate via OID4VP against the marketplace's own VCVerifier + Credentials Config Service + local Trusted Issuers List. The values mirror those of a Provider ([see Provider role](../provider/README.md#deployment)), but the `credentials-config-service.registration` must expose a `LegalPersonCredential`-based scope for the catalog/ordering endpoints (so any registered participant can log in to publish or buy offerings).
+Providers and users accessing the catalog and ordering APIs authenticate via OID4VP against the marketplace's own VCVerifier + local Trusted Issuers List. The values mirror those of a Provider ([see Provider role](../provider/README.md#deployment)), but the services registered with `vcverifier.registration.services` must expose a `LegalPersonCredential`-based scope for the catalog/ordering endpoints (so any registered participant can log in to publish or buy offerings).
 
 > **Note:** The Central Marketplace does **not** deploy the ODRL-PAP + OPA data-service-protection stack. Its only protected surface is the TMForum API behind APISIX with OID4VP auth.
 
@@ -246,13 +245,13 @@ The local demo (`mvn clean deploy -Plocal,central`) deploys the Central Marketpl
 | File | Description |
 |------|-------------|
 | [k3s/consumer.yaml](../../../../k3s/consumer.yaml) | Base values for the organization hosting the Central Marketplace (Keycloak, DID, database, etc.) |
-| [k3s/consumer-auth.yaml](../../../../k3s/consumer-auth.yaml) | Authentication stack (VCVerifier, Credentials Config Service, Trusted Issuers List, APISIX routes) required to protect the marketplace APIs |
+| [k3s/consumer-auth.yaml](../../../../k3s/consumer-auth.yaml) | Authentication stack (VCVerifier, Trusted Issuers List, APISIX routes) required to protect the marketplace APIs |
 | [k3s/consumer-tmf.yaml](../../../../k3s/consumer-tmf.yaml) | TMForum API, Scorpio backend and Contract Management configured in central-marketplace mode (`enableCentralMarketplace: true`, `oid4vp.enabled: true`) |
 
 Deploying the Central Marketplace with the same layout:
 
 ```shell
-helm install central-marketplace fiware/data-space-connector \
+helm install central-marketplace oci://quay.io/fiware/helm-charts/data-space-connector --version <version> \
   -n central-marketplace \
   --create-namespace \
   -f k3s/consumer.yaml \
@@ -267,10 +266,13 @@ helm install central-marketplace fiware/data-space-connector \
 
 ## Helm chart
 
-The Trust Anchor uses a dedicated Helm chart, separate from the participant chart:
+The Trust Anchor uses a dedicated Helm chart, separate from the participant chart, published next to it:
 
-```
-fiware/trust-anchor
+```shell
+helm install trust-anchor oci://quay.io/fiware/helm-charts/trust-anchor --version <version> -n trust-anchor --create-namespace -f values.yaml
+# or, from the Helm repository
+helm repo add fiware-dsc https://fiware.github.io/data-space-connector
+helm install trust-anchor fiware-dsc/trust-anchor --version <version> -n trust-anchor --create-namespace -f values.yaml
 ```
 
 See the [quickstart values](../../quick-start/values/trust-anchor.yaml) for a minimal example.
@@ -305,7 +307,7 @@ The Trust Anchor should be deployed on **infrastructure managed independently** 
 ### Integration with trust frameworks
 
 For production data spaces, consider integrating with established trust frameworks:
-- [Gaia-X Digital Clearing Houses (GXDCH)](https://gaia-x.eu/gxdch) — for Gaia-X compliance. See [Gaia-X Integration](../../../GAIA_X.MD)
+- [Gaia-X Digital Clearing Houses (GXDCH)](https://gaia-x.eu/services-deliverables/digital-clearing-house/) — for Gaia-X compliance. See [Gaia-X Integration](../../../GAIA_X.MD)
 - [EBSI](https://ec.europa.eu/digital-building-blocks/sites/display/EBSI) — for European Blockchain Services Infrastructure compatibility
 - Custom trust frameworks defined by the data space governance body
 
