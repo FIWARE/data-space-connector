@@ -20,5 +20,5 @@ dependencies:
   # The consent-manager is published as its own FIWARE chart.
   - name: consent-manager
     condition: consent-manager.enabled
-    version: 0.1.2
+    version: 0.2.0
     repository: oci://quay.io/fiware/helm-charts
