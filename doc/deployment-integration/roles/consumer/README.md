@@ -25,6 +25,10 @@ A consumer organization requires a **Verifiable Credential (VC) Issuer** — a c
 
 The FIWARE Data Space Connector uses [Keycloak](https://github.com/keycloak/keycloak) as the VC issuer. For detailed configuration instructions, see the [Keycloak Configuration](../KEYCLOAK.md) guide.
 
+### Database
+
+Keycloak stores its data in PostgreSQL: an existing one, or one the chart deploys with `decentralizedIam.vcAuthentication.managedPostgres`. See [Databases](../provider/README.md#databases) in the provider guide for both options.
+
 ### DID
 
 Every participant in the data space needs a [Decentralized Identifier (DID)](https://www.w3.org/TR/did-core/) — a globally unique identifier that the organization controls and that is not dependent on a centralized registry. DIDs can be of different types (methods), such as `did:key`, `did:web`, `did:ebsi`, among others.
