@@ -163,3 +163,33 @@ jobs:
 
           echo ""
           echo "=== END OF POST-MORTEM ==="
+
+      # DSP failures are usually races between the EDC controlplanes and their TMF storage,
+      # which only show up in the logs of pods that are still running. Keep the full logs of
+      # every component in that path, including the previous container of restarted pods.
+      - name: Collect DSP component logs on failure
+        if: failure() && matrix.scenario.name == 'dsp'
+        env:
+          KUBECONFIG: ${{ github.workspace }}/it/target/k3s.yaml
+        run: |
+          mkdir -p dsp-logs
+          kubectl get pods --all-namespaces --no-headers \
+              -o custom-columns=NAMESPACE:.metadata.namespace,NAME:.metadata.name \
+            | grep -E 'fdsc-edc|tm-forum-api|scorpio|odrl-pap|identityhub' \
+            | while read ns name; do
+                kubectl logs "$name" -n "$ns" --all-containers --timestamps \
+                  > "dsp-logs/$ns-$name.log" 2>&1 || true
+                if ! kubectl logs "$name" -n "$ns" --all-containers --timestamps --previous \
+                    > "dsp-logs/$ns-$name.previous.log" 2>/dev/null; then
+                  rm -f "dsp-logs/$ns-$name.previous.log"
+                fi
+              done
+          ls -l dsp-logs
+
+      - name: Upload DSP component logs
+        if: failure() && matrix.scenario.name == 'dsp'
+        uses: actions/upload-artifact@v4
+        with:
+          name: dsp-logs-${{ matrix.deployment.name }}
+          path: dsp-logs/
+          retention-days: 14
