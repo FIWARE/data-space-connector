@@ -15,10 +15,12 @@ wait_for() {
   done
 }
 
-# base64url without padding, the encoding the Identity API expects for the {participantId}
-# path parameter. A raw DID there fails as `Illegal base64 character 3a` behind a bare 400.
-b64url() {
-  printf '%s' "$1" | base64 | tr '+/' '-_' | tr -d '=\n'
+# URL-encode a participant id for the {participantContextId} path parameter. Since EDC 0.17 the
+# Identity API takes the plain id there, encoded once, no longer base64url. Only ':' needs it in
+# the DIDs used here. A DID that already carries a '%' (a did:web with a port) cannot be used: the
+# server rejects an encoded '%' in a path.
+urlencode_id() {
+  printf '%s' "$1" | sed 's/:/%3A/g'
 }
 
 # Write a value into vault's KV v2 store under the given alias. The value is stored as a JSON

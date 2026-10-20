@@ -48,4 +48,9 @@ data:
   edc.sql.store.jti.datasource: "jti"
   edc.datasource.jti.url: jdbc:postgresql://{{ .Values.identityhub.postgresql.host }}:{{ .Values.identityhub.postgresql.port }}/{{ .Values.identityhub.postgresql.database }}
   edc.datasource.jti.user: {{ .Values.identityhub.postgresql.auth.username | quote }}
+
+  # participant context configuration
+  edc.sql.store.participantcontextconfig.datasource: "participantcontextconfig"
+  edc.datasource.participantcontextconfig.url: jdbc:postgresql://{{ .Values.identityhub.postgresql.host }}:{{ .Values.identityhub.postgresql.port }}/{{ .Values.identityhub.postgresql.database }}
+  edc.datasource.participantcontextconfig.user: {{ .Values.identityhub.postgresql.auth.username | quote }}
 {{- end }}

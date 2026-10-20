@@ -262,6 +262,15 @@ spec:
               {{- else }}
               value: {{ .Values.identityhub.postgresql.auth.password | quote }}
               {{- end }}
+            - name: EDC_DATASOURCE_PARTICIPANTCONTEXTCONFIG_PASSWORD
+              {{- if .Values.identityhub.postgresql.auth.existingSecret }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.identityhub.postgresql.auth.existingSecret }}
+                  key: {{ .Values.identityhub.postgresql.auth.existingSecretPasswordKey }}
+              {{- else }}
+              value: {{ .Values.identityhub.postgresql.auth.password | quote }}
+              {{- end }}
             - name: EDC_IH_API_SUPERUSER_KEY
               {{- if .Values.identityhub.superuser.existingSecret }}
               valueFrom:
