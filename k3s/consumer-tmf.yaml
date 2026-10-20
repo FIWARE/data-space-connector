@@ -25,11 +25,21 @@ scorpio:
   enabled: true
   resources:
     limits:
-      cpu: "500m"
+      # room for the bursts of a start or a busy node; a throttled broker misses its probes
+      cpu: "1500m"
       memory: 1Gi
     requests:
       cpu: "100m"
       memory: 128Mi
+  # The liveness probe only checks that the broker runs. A slow database or a busy node marks it
+  # not ready instead of getting it restarted, which would take it away from its clients.
+  livenessProbe:
+    path: /q/health/live
+    failureThreshold: 12
+    timeoutSeconds: 5
+  readinessProbe:
+    path: /q/health/ready
+    timeoutSeconds: 5
 
 # contract management for distributing the buy events
 contract-management:

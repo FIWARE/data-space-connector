@@ -484,10 +484,10 @@ an unset one is a valid configuration for a connector that does not present anyt
 In-cluster base URL of the identityhub Identity API, including the version segment.
 
 Usage:
-  {{ include "dsc.identityhub.identityApi" . }}  → "http://identityhub-service:8082/api/identity/v1alpha"
+  {{ include "dsc.identityhub.identityApi" . }}  → "http://identityhub-service:8082/api/identity/v1beta"
 */}}
 {{- define "dsc.identityhub.identityApi" -}}
-{{- printf "http://identityhub-service:%v%s/v1alpha" .Values.identityhub.endpoints.identity.port .Values.identityhub.endpoints.identity.path -}}
+{{- printf "http://identityhub-service:%v%s/v1beta" .Values.identityhub.endpoints.identity.port .Values.identityhub.endpoints.identity.path -}}
 {{- end -}}
 
 {{/*
@@ -498,10 +498,10 @@ component-internal ("must not be internet facing"), so the write stays inside th
 the store instead of crossing the cluster network.
 
 Usage:
-  {{ include "dsc.identityhub.localIdentityApi" . }}  -> "http://localhost:8082/api/identity/v1alpha"
+  {{ include "dsc.identityhub.localIdentityApi" . }}  -> "http://localhost:8082/api/identity/v1beta"
 */}}
 {{- define "dsc.identityhub.localIdentityApi" -}}
-{{- printf "http://localhost:%v%s/v1alpha" .Values.identityhub.endpoints.identity.port .Values.identityhub.endpoints.identity.path -}}
+{{- printf "http://localhost:%v%s/v1beta" .Values.identityhub.endpoints.identity.port .Values.identityhub.endpoints.identity.path -}}
 {{- end -}}
 
 {{/*

@@ -28,8 +28,8 @@ SHARED_DIR="${SHARED_DIR:-/shared}"
 wait_for "identityhub" "${READINESS_URL}"
 wait_for "vault" "${VAULT_ADDR}/v1/sys/health"
 
-BASE64_DID=$(b64url "${DID}")
-KEYPAIRS_API="${IDENTITY_API}/participants/${BASE64_DID}/keypairs"
+ENCODED_DID=$(urlencode_id "${DID}")
+KEYPAIRS_API="${IDENTITY_API}/participants/${ENCODED_DID}/keypairs"
 PUBLIC_JWK=$(cat "${SHARED_DIR}/public.jwk")
 PRIVATE_JWK=$(cat "${SHARED_DIR}/private.jwk")
 
