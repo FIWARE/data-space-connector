@@ -1388,6 +1388,45 @@
           "title": "service",
           "type": "object"
         },
+        "startupProbe": {
+          "additionalProperties": false,
+          "description": "the liveness probe only runs once the startup probe has passed, so a slow start is not killed half way. A restart in the middle of the first start can leave the super-user with an API key other than the configured one",
+          "properties": {
+            "enabled": {
+              "default": true,
+              "description": "Whether to enable kubernetes [startup-probe](https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/)",
+              "title": "enabled",
+              "type": "boolean"
+            },
+            "failureThreshold": {
+              "default": 30,
+              "description": "number of failed checks before the container is restarted, 30 x 10 seconds gives the identityhub 5 minutes to start",
+              "title": "failureThreshold",
+              "type": "integer"
+            },
+            "initialDelaySeconds": {
+              "default": 5,
+              "description": "seconds to wait before performing the first startup check",
+              "title": "initialDelaySeconds",
+              "type": "integer"
+            },
+            "periodSeconds": {
+              "default": 10,
+              "description": "this fields specifies that kubernetes should perform a startup check every 10 seconds",
+              "title": "periodSeconds",
+              "type": "integer"
+            },
+            "timeoutSeconds": {
+              "default": 5,
+              "description": "number of seconds after which the probe times out",
+              "title": "timeoutSeconds",
+              "type": "integer"
+            }
+          },
+          "required": [],
+          "title": "startupProbe",
+          "type": "object"
+        },
         "superuser": {
           "additionalProperties": false,
           "description": "configuration of the super user to be created in the identity hub\nthe api key needs to be in form base64(\u003cusername\u003e).\u003crandom-string\u003e",
