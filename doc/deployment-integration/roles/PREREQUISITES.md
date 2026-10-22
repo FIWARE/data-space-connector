@@ -5,18 +5,20 @@ What a Kubernetes cluster needs before any role of the FIWARE Data Space Connect
 The [local deployment](../local-deployment/LOCAL.MD) sets all of this up on its own, for a test environment on a single machine; this page is for clusters that are set up by hand.
 
 <!-- ToC -->
-- [At a glance](#at-a-glance)
-- [Kubernetes](#kubernetes)
-- [Databases](#databases)
-  - [PostgreSQL deployed by the charts: the Zalando Postgres Operator](#postgresql-deployed-by-the-charts-the-zalando-postgres-operator)
-  - [MongoDB deployed by the charts](#mongodb-deployed-by-the-charts)
-  - [Installing the operators once](#installing-the-operators-once)
-- [cert-manager](#cert-manager)
-- [Network](#network)
-  - [Public names have to resolve inside the cluster](#public-names-have-to-resolve-inside-the-cluster)
-  - [Outbound access](#outbound-access)
-  - [Private CA](#private-ca)
-- [Sizing](#sizing)
+- [Cluster Prerequisites](#cluster-prerequisites)
+  - [At a glance](#at-a-glance)
+  - [Kubernetes](#kubernetes)
+  - [Databases](#databases)
+    - [PostgreSQL deployed by the charts: the Zalando Postgres Operator](#postgresql-deployed-by-the-charts-the-zalando-postgres-operator)
+    - [MongoDB deployed by the charts](#mongodb-deployed-by-the-charts)
+    - [Installing the operators once](#installing-the-operators-once)
+  - [cert-manager](#cert-manager)
+  - [Network](#network)
+    - [Public names have to resolve inside the cluster](#public-names-have-to-resolve-inside-the-cluster)
+    - [Outbound access](#outbound-access)
+    - [Private CA](#private-ca)
+  - [Sizing](#sizing)
+    - [Set memory limits on the Java components](#set-memory-limits-on-the-java-components)
 
 ## At a glance
 
@@ -29,7 +31,6 @@ The [local deployment](../local-deployment/LOCAL.MD) sets all of this up on its 
 | [MongoDB](#databases) | With the local marketplace or the Trust Anchor's consent management: an existing one, or one the charts deploy through a MongoDB operator | Provider, Operator |
 | [cert-manager](#cert-manager) | Optional, recommended | Certificates of the public hosts and of the identity key |
 | [Public names resolvable inside the cluster](#public-names-have-to-resolve-inside-the-cluster) | Always | Verifier, APISIX, marketplace, vc-operator, Keycloak |
-| [CPU, memory and disk](#sizing) | Always | - |
 
 ## Kubernetes
 
