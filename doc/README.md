@@ -83,6 +83,7 @@ An automated minimal deployment of a complete data space (trust anchor + provide
 Documentation for deploying the FIWARE DSC according to your organization's role in the data space. Each guide describes the required and optional components, architecture, and production considerations.
 
 * [Deployment by Role — Overview](./deployment-integration/roles/README.md)
+  * [Cluster prerequisites](./deployment-integration/roles/PREREQUISITES.md)
   * [Consumer](./deployment-integration/roles/consumer/README.md)
   * [Provider](./deployment-integration/roles/provider/README.md)
     * [Running a local marketplace](./deployment-integration/roles/provider/LOCAL_MARKETPLACE.md)
