@@ -22,6 +22,12 @@ decentralizedIam:
   vcAuthentication:
     postgres-operator:
       enabled: true
+      # A cluster whose creation failed half way has its roles and databases created only on
+      # the operator's next sync - by default up to 30 minutes later, long after every
+      # deployment that uses it has exceeded its progress deadline. Sync every minute instead.
+      configGeneral:
+        repair_period: 1m
+        resync_period: 1m
       configKubernetes:
         enable_cross_namespace_secret: true
 
