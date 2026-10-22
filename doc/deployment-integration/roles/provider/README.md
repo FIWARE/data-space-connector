@@ -21,6 +21,8 @@ Before deploying, contact the **Data Space Operator** to initiate the onboarding
 
 This information is essential for configuring Keycloak, the DID, the VCVerifier, and the Verifiable Credentials correctly.
 
+Check also that the cluster meets the [Cluster Prerequisites](../PREREQUISITES.md): its databases, the network requirements and the resources the provider needs.
+
 ## Required components
 
 > **Note:** The data services that the provider wants to expose through the FIWARE Data Space Connector (APIs, web applications, etc.) are not included in this list. These are external to the connector and must be deployed and managed independently.

@@ -17,6 +17,8 @@ Before deploying, contact the **Data Space Operator** to initiate the onboarding
 
 This information is essential for configuring Keycloak, the DID, and the Verifiable Credentials correctly.
 
+Check also that the cluster meets the [Cluster Prerequisites](../PREREQUISITES.md): its databases, the network requirements and the resources the consumer needs.
+
 ## Required components
 
 ### Verifiable Credential Issuer
