@@ -8,7 +8,7 @@ An alternative deployment guide, based on [MicroK8s](https://microk8s.io/) can b
 
 ## Requirements
 
-Since the local deployment installs 2 connector instances and a trust-anchor, its recommended to use a strong enough machine. While 16Gb Ram might be enough, its recommended to have >24Gb available. The deployment is build and tested on Ubuntu, most other Linux distributions should work as well.
+Since the local deployment installs 2 connector instances and a trust-anchor, its recommended to use a strong enough machine. While 16Gb Ram might be enough, its recommended to have >24Gb available. The [Cluster Prerequisites](../roles/PREREQUISITES.md#sizing) give the resources each role uses. The deployment is build and tested on Ubuntu, most other Linux distributions should work as well.
 
 The local deployment tries to be as decoupled from the host system as possible to reduce the amount of requirements but stills needs the following programs:
 
