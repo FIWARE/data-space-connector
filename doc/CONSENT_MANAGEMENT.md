@@ -180,6 +180,8 @@ plugins:
         x-visionstrust-consent-key: "$env://CONSENT_KEY"
 ```
 
+The authority verifier has to sign its access tokens with `RS256`, its default: the `openid-connect` plugin rejects `ES256` tokens with `401`. See [Token signing algorithm](deployment-integration/roles/provider/README.md#token-signing-algorithm) in the provider guide.
+
 There is deliberately **no `/participants/login` route**: nothing issues consent-manager-signed
 participant tokens, and that endpoint is an unauthenticated credential exchange.
 
