@@ -134,7 +134,7 @@ too.
    on `/api/check/readiness`:
 
 ```shell
-kubectl get secret ca-secret -n cert-manager -o jsonpath='{.data.tls\.crt}' | base64 -d > local-ca.crt
+kubectl get secret ca-secret -n operators -o jsonpath='{.data.tls\.crt}' | base64 -d > local-ca.crt
 export https_proxy=localhost:8888
 export CURL_CA_BUNDLE=./local-ca.crt
 kubectl port-forward -n consumer svc/identityhub-service 8081:8081 &
@@ -163,7 +163,7 @@ sh ${SCRIPT_DIR}/derive-key.sh
 ```shell
 export VAULT_ADDR=https://vault-fancy-marketplace.127.0.0.1.nip.io
 export VAULT_TOKEN=root
-export IDENTITY_API=https://identityhub-management-fancy-marketplace.127.0.0.1.nip.io/api/identity/v1alpha
+export IDENTITY_API=https://identityhub-management-fancy-marketplace.127.0.0.1.nip.io/api/identity/v1beta
 export CREDENTIAL_SERVICE_URL=https://identityhub-fancy-marketplace.127.0.0.1.nip.io
 export READINESS_URL=http://localhost:8081/api/check/readiness
 export SUPERUSER_ID=super-user
@@ -192,7 +192,7 @@ too.
    on `/api/check/readiness`:
 
 ```shell
-kubectl get secret ca-secret -n cert-manager -o jsonpath='{.data.tls\.crt}' | base64 -d > local-ca.crt
+kubectl get secret ca-secret -n operators -o jsonpath='{.data.tls\.crt}' | base64 -d > local-ca.crt
 export https_proxy=localhost:8888
 export CURL_CA_BUNDLE=./local-ca.crt
 kubectl port-forward -n provider svc/identityhub-service 8081:8081 &
@@ -221,7 +221,7 @@ sh ${SCRIPT_DIR}/derive-key.sh
 ```shell
 export VAULT_ADDR=https://vault-mp-operations.127.0.0.1.nip.io
 export VAULT_TOKEN=root
-export IDENTITY_API=https://identityhub-management-mp-operations.127.0.0.1.nip.io/api/identity/v1alpha
+export IDENTITY_API=https://identityhub-management-mp-operations.127.0.0.1.nip.io/api/identity/v1beta
 export CREDENTIAL_SERVICE_URL=https://identityhub-mp-operations.127.0.0.1.nip.io
 export READINESS_URL=http://localhost:8081/api/check/readiness
 export SUPERUSER_ID=super-user
@@ -268,7 +268,7 @@ export CONSUMER_CREDENTIAL_CONTENT=$(./doc/scripts/get-payload-from-jwt.sh "${CO
 2. Insert the credential into the identity hub:
 ```shell
 curl -k -x localhost:8888 -X POST \
-  'https://identityhub-management-fancy-marketplace.127.0.0.1.nip.io/api/identity/v1alpha/participants/ZGlkOndlYjpmYW5jeS1tYXJrZXRwbGFjZS5iaXo/credentials' \
+  'https://identityhub-management-fancy-marketplace.127.0.0.1.nip.io/api/identity/v1beta/participants/did%3Aweb%3Afancy-marketplace.biz/credentials' \
   --header 'Accept: */*' \
   --header 'x-api-key: c3VwZXItdXNlcg==.random' \
   --header 'Content-Type: application/json' \
@@ -295,7 +295,7 @@ export PROVIDER_CREDENTIAL_CONTENT=$(./doc/scripts/get-payload-from-jwt.sh "${PR
 2. Insert the credential into the identity hub:
 ```shell
 curl -k -x localhost:8888 -X POST \
-  'https://identityhub-management-mp-operations.127.0.0.1.nip.io/api/identity/v1alpha/participants/ZGlkOndlYjptcC1vcGVyYXRpb25zLm9yZw/credentials' \
+  'https://identityhub-management-mp-operations.127.0.0.1.nip.io/api/identity/v1beta/participants/did%3Aweb%3Amp-operations.org/credentials' \
   --header 'Accept: */*' \
   --header 'x-api-key: c3VwZXItdXNlcg==.random' \
   --header 'Content-Type: application/json' \

@@ -26,8 +26,8 @@ RESYNC_SECONDS="${RESYNC_SECONDS:-60}"
 ONCE=""
 [ "$1" = "--once" ] && ONCE="yes"
 
-BASE64_DID=$(b64url "${DID}")
-CREDENTIALS_API="${IDENTITY_API}/participants/${BASE64_DID}/credentials"
+ENCODED_DID=$(urlencode_id "${DID}")
+CREDENTIALS_API="${IDENTITY_API}/participants/${ENCODED_DID}/credentials"
 
 # Push $1 (a compact JWT) into the identityhub. Returns non-zero instead of exiting, so a
 # transient failure in loop mode is retried on the next cycle rather than killing the sidecar.

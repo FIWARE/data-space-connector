@@ -153,10 +153,10 @@ tests:
           path: data["register.sh"]
           pattern: 'vault_has "\$\{DID_PCT\}-apikey"'
       # The identityhub's own repair endpoint, which rewrites the SAME alias and leaves the database
-      # untouched. Base64url in the path, like every other participant-scoped call.
+      # untouched. The URL-encoded DID in the path, like every other participant-scoped call.
       - matchRegex:
           path: data["register.sh"]
-          pattern: '\$\{IDENTITY_API\}/participants/\$\{BASE64_DID\}/token'
+          pattern: '\$\{IDENTITY_API\}/participants/\$\{ENCODED_DID\}/token'
       # Warns rather than aborting: none of the chart's own flows use this token, and an older
       # identityhub without the endpoint would answer 404 and fail every bootstrap.
       - matchRegex:
@@ -334,7 +334,7 @@ tests:
           path: spec.template.spec.initContainers[0].env
           content:
             name: IDENTITY_API
-            value: http://identityhub-service:8082/api/identity/v1alpha
+            value: http://identityhub-service:8082/api/identity/v1beta
 
   # ==========================================================================
   # The rotation Job

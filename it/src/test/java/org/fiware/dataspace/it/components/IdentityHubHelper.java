@@ -21,6 +21,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.StringReader;
 import java.math.BigInteger;
+import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -48,7 +49,7 @@ public class IdentityHubHelper {
     /**
      * The IdentityHub management API path for participant operations.
      */
-    private static final String PARTICIPANTS_API_PATH = "/api/identity/v1alpha/participants";
+    private static final String PARTICIPANTS_API_PATH = "/api/identity/v1beta/participants";
 
     /**
      * The Vault KV secret engine path prefix for key storage.
@@ -122,7 +123,7 @@ public class IdentityHubHelper {
      * <p>
      * Equivalent to the curl command:
      * <pre>
-     * curl -X POST 'http://identityhub-management-{instance}.127.0.0.1.nip.io:8080/api/identity/v1alpha/participants' \
+     * curl -X POST 'http://identityhub-management-{instance}.127.0.0.1.nip.io:8080/api/identity/v1beta/participants' \
      *   --header 'x-api-key: c3VwZXItdXNlcg==.random' \
      *   --header 'Content-Type: application/json' \
      *   --data '...'
@@ -153,10 +154,10 @@ public class IdentityHubHelper {
     /**
      * Inserts a verifiable credential into the IdentityHub for a given participant.
      * <p>
-     * The participant ID is Base64url-encoded and used as a path segment.
+     * The participant ID is URL-encoded and used as a path segment.
      * Equivalent to the curl command:
      * <pre>
-     * curl -X POST 'http://identityhub-management-{instance}.127.0.0.1.nip.io:8080/api/identity/v1alpha/participants/{base64url-pid}/credentials' \
+     * curl -X POST 'http://identityhub-management-{instance}.127.0.0.1.nip.io:8080/api/identity/v1beta/participants/{url-encoded-pid}/credentials' \
      *   --header 'x-api-key: c3VwZXItdXNlcg==.random' \
      *   --data '{"id":"...","participantContextId":"...","verifiableCredentialContainer":{...}}'
      * </pre>
@@ -170,7 +171,7 @@ public class IdentityHubHelper {
      */
     public static void insertCredential(String identityHubManagementAddress, String participantId,
                                         String credentialId, String rawVc, String credentialContent) throws Exception {
-        String base64ParticipantId = base64UrlEncode(participantId);
+        String encodedParticipantId = encodeParticipantId(participantId);
 
         ObjectNode container = OBJECT_MAPPER.createObjectNode();
         container.put("rawVc", rawVc);
@@ -183,7 +184,7 @@ public class IdentityHubHelper {
         payload.set("verifiableCredentialContainer", container);
 
         RequestBody body = RequestBody.create(OBJECT_MAPPER.writeValueAsString(payload), JSON);
-        String url = identityHubManagementAddress + PARTICIPANTS_API_PATH + "/" + base64ParticipantId + "/credentials";
+        String url = identityHubManagementAddress + PARTICIPANTS_API_PATH + "/" + encodedParticipantId + "/credentials";
         Request request = new Request.Builder()
                 .url(url)
                 .post(body)
@@ -295,17 +296,13 @@ public class IdentityHubHelper {
         publicJwk.remove("d");
         publicJwk.put("kid", did + "#" + keyAlias);
 
-        String base64ParticipantId = base64UrlEncode(did);
+        String encodedParticipantId = encodeParticipantId(did);
 
         // Build the credential service endpoint URL
-        String credentialServiceUrl = identityHubAddress + "/api/credentials/v1/participants/" + base64ParticipantId;
+        String credentialServiceUrl = identityHubAddress + "/api/credentials/v1/participants/" + encodedParticipantId;
 
         // Build the participant payload
         ObjectNode payload = OBJECT_MAPPER.createObjectNode();
-
-        ArrayNode roles = OBJECT_MAPPER.createArrayNode();
-        roles.add("admin");
-        payload.set("role", roles);
 
         ArrayNode serviceEndpoints = OBJECT_MAPPER.createArrayNode();
         ObjectNode credentialService = OBJECT_MAPPER.createObjectNode();
@@ -316,7 +313,7 @@ public class IdentityHubHelper {
         payload.set("serviceEndpoints", serviceEndpoints);
 
         payload.put("active", true);
-        payload.put("participantId", did);
+        payload.put("participantContextId", did);
         payload.put("did", did);
 
         ObjectNode key = OBJECT_MAPPER.createObjectNode();
@@ -329,13 +326,14 @@ public class IdentityHubHelper {
     }
 
     /**
-     * Base64url-encodes a string without padding, as used in IdentityHub API paths.
+     * URL-encodes a participant ID for the {@code participantContextId} segment of IdentityHub API paths.
+     * Since EDC 0.17 the IdentityHub takes the plain ID there, encoded once, no longer Base64url.
      *
-     * @param input the string to encode
-     * @return the Base64url-encoded string without padding
+     * @param participantId the participant ID (e.g., {@code did:web:fancy-marketplace.biz})
+     * @return the URL-encoded participant ID
      */
-    public static String base64UrlEncode(String input) {
-        return Base64.getUrlEncoder().withoutPadding().encodeToString(input.getBytes());
+    public static String encodeParticipantId(String participantId) {
+        return URLEncoder.encode(participantId, StandardCharsets.UTF_8);
     }
 
     /**

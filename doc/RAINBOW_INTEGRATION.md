@@ -617,16 +617,15 @@ curl -X POST 'http://vault-mp-operations.127.0.0.1.nip.io:8080/v1/secret/data/ke
 ```shell
 export PUBLIC_JWK=$(echo $JWK | jq 'del(.d)' | jq '. += {"kid":"did:web:fancy-marketplace.biz#key-1"}')
 export DATA=$(echo '{
-      "role": ["admin"],
       "serviceEndpoints": [
           {
             "type": "CredentialService",
-            "serviceEndpoint": "http://identityhub-fancy-marketplace.127.0.0.1.nip.io/api/credentials/v1/participants/ZGlkOndlYjpmYW5jeS1tYXJrZXRwbGFjZS5iaXo",
+            "serviceEndpoint": "http://identityhub-fancy-marketplace.127.0.0.1.nip.io/api/credentials/v1/participants/did%3Aweb%3Afancy-marketplace.biz",
             "id": "credential-service"
           }
         ],
       "active": true,
-      "participantId": "did:web:fancy-marketplace.biz",
+      "participantContextId": "did:web:fancy-marketplace.biz",
       "did": "did:web:fancy-marketplace.biz",
       "key": {
         "keyId": "did:web:fancy-marketplace.biz#key-1",
@@ -637,7 +636,7 @@ export DATA=$(echo '{
 
 export DATA_RAW=$(echo "${DATA}" | jq --argjson pem "$PUBLIC_JWK" '.key.publicKeyJwk = $pem'); echo $DATA_RAW | jq .
 curl -X POST \
-  'http://identityhub-management-fancy-marketplace.127.0.0.1.nip.io:8080/api/identity/v1alpha/participants' \
+  'http://identityhub-management-fancy-marketplace.127.0.0.1.nip.io:8080/api/identity/v1beta/participants' \
   --header 'Accept: */*' \
   --header 'x-api-key: c3VwZXItdXNlcg==.random' \
   --header 'Content-Type: application/json' \
@@ -666,16 +665,15 @@ curl -X POST 'http://localhost:8200/v1/secret/data/key-1' \
 ```shell
 export PUBLIC_JWK=$(echo $JWK | jq 'del(.d)' | jq '. += {"kid":"did:web:mp-operations.org#key-1"}')
 export DATA=$(echo '{
-      "role": ["admin"],
       "serviceEndpoints": [
           {
             "type": "CredentialService",
-            "serviceEndpoint": "http://identityhub-mp-operations.127.0.0.1.nip.io/api/credentials/v1/participants/ZGlkOndlYjptcC1vcGVyYXRpb25zLm9yZw",
+            "serviceEndpoint": "http://identityhub-mp-operations.127.0.0.1.nip.io/api/credentials/v1/participants/did%3Aweb%3Amp-operations.org",
             "id": "credential-service"
           }
         ],
       "active": true,
-      "participantId": "did:web:mp-operations.org",
+      "participantContextId": "did:web:mp-operations.org",
       "did": "did:web:mp-operations.org",
       "key": {
         "keyId": "did:web:mp-operations.org#key-1",
@@ -686,7 +684,7 @@ export DATA=$(echo '{
 
 export DATA_RAW=$(echo "${DATA}" | jq --argjson pem "$PUBLIC_JWK" '.key.publicKeyJwk = $pem'); echo $DATA_RAW | jq .
 curl -X POST \
-  'http://identityhub-management-mp-operations.127.0.0.1.nip.io:8080/api/identity/v1alpha/participants' \
+  'http://identityhub-management-mp-operations.127.0.0.1.nip.io:8080/api/identity/v1beta/participants' \
   --header 'Accept: */*' \
   --header 'x-api-key: c3VwZXItdXNlcg==.random' \
   --header 'Content-Type: application/json' \
@@ -707,7 +705,7 @@ Put credential:
 
 ```shell
 curl  -X POST \
-  'http://identityhub-management-fancy-marketplace.127.0.0.1.nip.io:8080/api/identity/v1alpha/participants/ZGlkOndlYjpmYW5jeS1tYXJrZXRwbGFjZS5iaXo/credentials' \
+  'http://identityhub-management-fancy-marketplace.127.0.0.1.nip.io:8080/api/identity/v1beta/participants/did%3Aweb%3Afancy-marketplace.biz/credentials' \
   --header 'Accept: */*' \
   --header 'x-api-key: c3VwZXItdXNlcg==.random' \
   --header 'Content-Type: application/json' \
@@ -760,7 +758,7 @@ Put credential:
 
 ```shell
 curl  -X POST \
-  'http://identityhub-management-mp-operations.127.0.0.1.nip.io:8080/api/identity/v1alpha/participants/ZGlkOndlYjptcC1vcGVyYXRpb25zLm9yZw/credentials' \
+  'http://identityhub-management-mp-operations.127.0.0.1.nip.io:8080/api/identity/v1beta/participants/did%3Aweb%3Amp-operations.org/credentials' \
   --header 'Accept: */*' \
   --header 'x-api-key: c3VwZXItdXNlcg==.random' \
   --header 'Content-Type: application/json' \
