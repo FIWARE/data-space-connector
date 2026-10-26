@@ -642,13 +642,13 @@ public class DSPStepDefinitions extends StepDefintions {
     private void deleteIdentityHubParticipant(String managementAddress, String participantDid) {
         try {
             // URL-encode the DID for the path parameter
-            String encodedDid = Base64.getEncoder().encodeToString(participantDid.getBytes(StandardCharsets.UTF_8));
+            String encodedDid = IdentityHubHelper.encodeParticipantId(participantDid);
 
             // get all credentials, participant removal does not delete them
             Request getCreds = new Request.Builder()
                     .get()
                     .url(managementAddress
-                            + "/api/identity/v1alpha/participants/" + encodedDid + "/credentials")
+                            + "/api/identity/v1beta/participants/" + encodedDid + "/credentials")
                     .addHeader("x-api-key", IdentityHubHelper.IDENTITY_HUB_API_KEY)
                     .build();
             List<String> credentialIds = new ArrayList<>();
@@ -664,7 +664,7 @@ public class DSPStepDefinitions extends StepDefintions {
                         Request credDelete = new Request.Builder()
                                 .delete()
                                 .url(managementAddress
-                                        + "/api/identity/v1alpha/participants/" + encodedDid + "/credentials/" + credentialId)
+                                        + "/api/identity/v1beta/participants/" + encodedDid + "/credentials/" + credentialId)
                                 .addHeader("x-api-key", IdentityHubHelper.IDENTITY_HUB_API_KEY)
                                 .build();
                         try (Response resp = HTTP_CLIENT.newCall(credDelete).execute()) {
@@ -677,7 +677,7 @@ public class DSPStepDefinitions extends StepDefintions {
             Request deleteRequest = new Request.Builder()
                     .delete()
                     .url(managementAddress
-                            + "/api/identity/v1alpha/participants/" + encodedDid)
+                            + "/api/identity/v1beta/participants/" + encodedDid)
                     .addHeader("x-api-key", IdentityHubHelper.IDENTITY_HUB_API_KEY)
                     .build();
             try (Response resp = HTTP_CLIENT.newCall(deleteRequest).execute()) {
@@ -3152,9 +3152,9 @@ public class DSPStepDefinitions extends StepDefintions {
      * @param participantDid               the DID of the participant whose credentials to check
      */
     private void verifyCredentialInIdentityHub(String identityHubManagementAddress, String participantDid) throws Exception {
-        String base64ParticipantId = IdentityHubHelper.base64UrlEncode(participantDid);
+        String encodedParticipantId = IdentityHubHelper.encodeParticipantId(participantDid);
         String credentialsUrl = identityHubManagementAddress
-                + "/api/identity/v1alpha/participants/" + base64ParticipantId + "/credentials";
+                + "/api/identity/v1beta/participants/" + encodedParticipantId + "/credentials";
 
         Request request = new Request.Builder()
                 .get()

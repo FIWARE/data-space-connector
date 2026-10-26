@@ -4,7 +4,7 @@
 
 [Keycloak](https://github.com/keycloak/keycloak) is the **Verifiable Credential (VC) Issuer** used by the FIWARE Data Space Connector. It is responsible for issuing [Verifiable Credentials](https://www.w3.org/TR/vc-data-model/) to the organization's users so they can authenticate and access services offered by other participants in the data space.
 
-Since version 24, Keycloak provides native support for [OpenID for Verifiable Credentials (OID4VC)](https://www.keycloak.org/docs/latest/server_admin/#_oid4vc), including the [OID4VCI](https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html) protocol for credential issuance. For more details, see the [Keycloak OID4VC documentation](https://www.keycloak.org/docs/latest/server_admin/#_oid4vc).
+Since version 24, Keycloak provides native support for [OpenID for Verifiable Credentials (OID4VC)](https://www.keycloak.org/docs/latest/server_admin/#_oid4vci), including the [OID4VCI](https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html) protocol for credential issuance. For more details, see the [Keycloak OID4VC documentation](https://www.keycloak.org/docs/latest/server_admin/#_oid4vci).
 
 ## What Keycloak does in the data space
 
@@ -47,7 +47,7 @@ See the [Consumer deployment guide](consumer/README.md) for details.
 
 ### Provider
 
-When acting as a **provider**, Keycloak also issues VCs, but additionally the provider deployment includes components that verify credentials presented by external consumers (e.g., VCVerifier, Credentials Config Service).
+When acting as a **provider**, Keycloak also issues VCs, but additionally the provider deployment includes components that verify credentials presented by external consumers (e.g., VCVerifier, Trusted Issuers List).
 
 See the [Provider deployment guide](provider/README.md) for details.
 
@@ -120,24 +120,35 @@ keycloak:
   enabled: true
   ingress:
     enabled: true
-    hostname: <your-keycloak-domain>
+    className: <your-ingress-class>                             # add the annotations your ingress controller needs
     annotations:
-      traefik.ingress.kubernetes.io/router.tls: "true"         # Enable TLS on the ingress router
       cert-manager.io/cluster-issuer: "selfsigned-issuer"       # Cert-manager issuer (use "prod" for production)
       cert-manager.io/private-key-algorithm: "ECDSA"            # Key algorithm for the TLS certificate
       cert-manager.io/common-name: "<your-keycloak-domain>"
-    pathType: Prefix
-    tls: true
+    hosts:
+      - host: <your-keycloak-domain>
+        paths:
+          # only what wallets and verifiers need: the realm's endpoints and the static resources
+          - path: /realms/<your-realm>
+            pathType: Prefix
+          - path: /resources
+            pathType: Prefix
+    tls:
+      - secretName: <your-keycloak-domain>-tls
+        hosts:
+          - <your-keycloak-domain>
 ```
 
-Replace the hostname with your actual domain. In production, use a real cluster issuer (i.e. `prod`) instead of `selfsigned-issuer`.
+Replace the hostname and the realm with your own. In production, use a real cluster issuer (i.e. `prod`) instead of `selfsigned-issuer`.
+
+The example publishes only the realm that issues credentials. The admin console (`/admin`) and the `master` realm are left out: reach them with `kubectl port-forward`, or publish them on a separate host restricted to administrators. Publishing `/` exposes both on the same host as the issuer.
 
 ### Init container: keystore preparation
 
 Keycloak needs a PKCS12 keystore to sign Verifiable Credentials. An init container converts the DID TLS certificate (PEM format) into the required keystore format before Keycloak starts:
 
 ```yaml
-  initContainers:
+  extraInitContainers:
     - name: prepare-keystore
       image: alpine/openssl:3.5.5
       command: ["/bin/sh", "-c"]
@@ -166,6 +177,8 @@ Keycloak needs a PKCS12 keystore to sign Verifiable Credentials. An init contain
 
 This reads the DID private key and certificate from a TLS secret and produces a `cert.pfx` keystore in the shared `did-material` volume.
 
+> **Note:** the key is `extraInitContainers`. `initContainers` configures the chart's own init containers and takes a map, so a list there fails validation.
+
 ### Volumes
 
 Three volumes connect the init container, the Helm-generated realm ConfigMap, and the DID private key to Keycloak:
@@ -190,10 +203,10 @@ Three volumes connect the init container, the Helm-generated realm ConfigMap, an
       name: realms
     - name: did-priv-key
       secret:
-        secretName: <your-keycloak-domain>-tls   # TLS secret with the DID private key
+        secretName: <your_did_domain>-tls   # Secret with the DID private key
 ```
 
-Replace `<your-keycloak-domain>-tls` with the name of the TLS secret that contains your organization's DID private key.
+Replace `<your_did_domain>-tls` with the Secret that holds your organization's DID private key - the same one did-helper publishes, not the certificate of Keycloak's own Ingress. Its key must survive certificate renewals: cert-manager regenerates it on every renewal by default, which would change the DID and invalidate the issued credentials. See [Identity key lifecycle](provider/README.md#identity-key-lifecycle).
 
 ### Signing key
 
@@ -210,7 +223,7 @@ The signing key configuration tells Keycloak where to find the keystore and whic
     keyAlgorithm: ES256                     # ECDSA with P-256 curve
 ```
 
-The `did` and `issuerDid` must match your organization's registered DID. `ES256` is the recommended algorithm.
+The `did` and `issuerDid` must match your organization's registered DID. `ES256` is the recommended algorithm. This key signs the credentials; the access tokens of the provider's VCVerifier use a key of their own, which has to be RSA (see [Token signing algorithm](provider/README.md#token-signing-algorithm)).
 
 ### Environment variables
 
@@ -459,7 +472,7 @@ decentralizedIam:
 
 ### Credential encryption & wallet interop
 
-The chart ships the upstream `keycloak/keycloak:26.7.0` image. Two things to know:
+The chart ships the upstream `keycloak/keycloak` image, 26.7.0 or later (the exact version is the one of the `keycloak` dependency in the chart's `Chart.yaml`). Two things to know:
 
 - **Database migration:** 26.7.0 carries the Liquibase changeset `26.7.0-verifiable-credential`
   (adds the `version` column to the custom `USER_VER_CREDENTIAL` table), so reusing a pre-26.4

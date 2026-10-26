@@ -34,14 +34,14 @@ vault_put "${KEY_ALIAS}" "${PRIVATE_JWK}"
 echo "Repairing super-user credential in vault..."
 vault_put "${SUPERUSER_ID}-apikey" "$(superuser_token)"
 
-BASE64_DID=$(b64url "${DID}")
+ENCODED_DID=$(urlencode_id "${DID}")
 # The same alias spelled the way EDC's vault client leaves it. Its client URL-encodes the alias and
 # the HTTP layer then encodes the '%' again, so a lookup for "<did>-<suffix>" resolves a key
 # literally named with every ':' of the DID replaced by "%3A". Used by both blocks below.
 DID_PCT=$(printf '%s' "${DID}" | sed 's/:/%253A/g')
-CS_ENDPOINT="${CREDENTIAL_SERVICE_URL}/api/credentials/v1/participants/${BASE64_DID}"
+CS_ENDPOINT="${CREDENTIAL_SERVICE_URL}/api/credentials/v1/participants/${ENCODED_DID}"
 
-PAYLOAD=$(printf '{"role":["admin"],"active":true,"participantId":"%s","did":"%s","serviceEndpoints":[{"type":"CredentialService","serviceEndpoint":"%s","id":"credential-service"}],"key":{"keyId":"%s","privateKeyAlias":"%s","publicKeyJwk":%s}}' \
+PAYLOAD=$(printf '{"active":true,"participantContextId":"%s","did":"%s","serviceEndpoints":[{"type":"CredentialService","serviceEndpoint":"%s","id":"credential-service"}],"key":{"keyId":"%s","privateKeyAlias":"%s","publicKeyJwk":%s}}' \
   "${DID}" "${DID}" "${CS_ENDPOINT}" "${KEY_ID}" "${KEY_ALIAS}" "${PUBLIC_JWK}")
 
 echo "Registering participant ${DID}..."
@@ -81,7 +81,7 @@ else
   echo "participant api token missing from vault - regenerating it..."
   # The body is the token itself, so it is never echoed on success.
   http_code=$(curl -s -o /tmp/apitoken.json -w "%{http_code}" -X POST \
-    "${IDENTITY_API}/participants/${BASE64_DID}/token" \
+    "${IDENTITY_API}/participants/${ENCODED_DID}/token" \
     -H "x-api-key: $(superuser_token)")
   if [ "${http_code}" -ge 200 ] && [ "${http_code}" -lt 300 ]; then
     echo "participant api token regenerated under the existing alias"

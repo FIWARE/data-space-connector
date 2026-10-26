@@ -1,0 +1,91 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/helm-unittest/helm-unittest/main/schema/helm-testsuite.json
+#
+# ---------------------------------------------------------------------------
+# Helm-unittest suite for the values schema and the removed values.
+#
+# values.schema.json is generated from values.yaml (.github/scripts/values-schema.sh).
+# This chart's own keys only accept what values.yaml declares, so a typo or a
+# value that no longer exists fails instead of being ignored. The subcharts'
+# keys stay open - each subchart's schema validates them - and the values
+# removed from under them are refused by templates/removed-values.yaml.
+# ---------------------------------------------------------------------------
+suite: values schema
+templates:
+  - templates/removed-values.yaml
+tests:
+  - it: renders with the default values
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: refuses an unknown key of this chart
+    set:
+      registration:
+        tyop: true
+    asserts:
+      - failedTemplate:
+          errorPattern: "tyop"
+
+  - it: refuses a value of the wrong type
+    set:
+      elsi:
+        did:
+          not: a string
+    asserts:
+      - failedTemplate:
+          errorPattern: "elsi.did"
+
+  - it: accepts the types a key is annotated with
+    set:
+      identityhub:
+        postgresql:
+          port: 5432
+      elsi:
+        did: did:elsi:VATDE-1234567
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: accepts any key in a free-form map
+    set:
+      identityhub:
+        podAnnotations:
+          example.org/anything: "true"
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: leaves the subcharts' keys to the subcharts
+    set:
+      keycloak:
+        anyKeyOfTheSubchart: true
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: refuses rainbow.ccs, removed in 10.11.0
+    set:
+      rainbow:
+        ccs:
+          enabled: true
+    asserts:
+      - failedTemplate:
+          errorPattern: "ccs"
+
+  - it: refuses scorpio.ccs, removed in 10.11.0, naming its replacement
+    set:
+      scorpio:
+        ccs:
+          enabled: false
+    asserts:
+      - failedTemplate:
+          errorPattern: "scorpio.ccs was removed in 10.11.0: register the data service through decentralizedIam.vcAuthentication.vcverifier.registration.services"
+
+  - it: refuses tm-forum-api.registration, removed in 10.11.0, naming its replacement
+    set:
+      tm-forum-api:
+        registration:
+          enabled: true
+    asserts:
+      - failedTemplate:
+          errorPattern: "tm-forum-api.registration was removed in 10.11.0: register the TM Forum API through decentralizedIam.vcAuthentication.vcverifier.registration.services"
