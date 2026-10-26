@@ -1,0 +1,109 @@
+# The cluster-wide operators of the local data space, installed once as the `operators`
+# release (namespace `operators`) before any participant: the MongoDB and Postgres
+# operators and cert-manager, together with the self-signed CA and the selfsigned-issuer
+# ClusterIssuer that every participant requests its certificates from.
+# Every other component of the chart is disabled.
+
+mongo-operator:
+  enabled: true
+  database:
+    namespace: provider
+  operator:
+    watchNamespace: "*"
+    resources:
+      limits:
+        cpu: 300m
+        memory: 1Gi
+      requests:
+        cpu: 100m
+        memory: 200Mi
+
+decentralizedIam:
+  vcAuthentication:
+    postgres-operator:
+      enabled: true
+      # A cluster whose creation failed half way has its roles and databases created only on
+      # the operator's next sync - by default up to 30 minutes later, long after every
+      # deployment that uses it has exceeded its progress deadline. Sync every minute instead.
+      configGeneral:
+        repair_period: 1m
+        resync_period: 1m
+      configKubernetes:
+        enable_cross_namespace_secret: true
+
+    managedPostgres:
+      enabled: false
+
+    trusted-issuers-list:
+      enabled: false
+
+    credentials-config-service:
+      enabled: false
+
+    vcverifier:
+      enabled: false
+
+  odrlAuthorization:
+    enabled: false
+    apisix:
+      enabled: false
+
+    odrl-pap:
+      enabled: false
+
+    tpp:
+      enabled: false
+
+cert-manager:
+  enabled: true
+  crds:
+    enabled: true
+  # Waits until the cert-manager webhook accepts requests, so that the issuers below are
+  # not created before it is ready.
+  startupapicheck:
+    enabled: true
+
+certManagerResources:
+  enabled: true
+  type: selfsigned
+  # the namespace cert-manager runs in, where the ClusterIssuer finds the CA secret
+  namespace: operators
+
+managedMongo:
+  enabled: false
+
+did:
+  enabled: false
+
+dataSpaceConfig:
+  enabled: false
+
+scorpio:
+  enabled: false
+
+tm-forum-api:
+  enabled: false
+
+rainbow:
+  enabled: false
+
+contract-management:
+  enabled: false
+
+marketplace:
+  enabled: false
+
+keycloak:
+  enabled: false
+
+registration:
+  enabled: false
+
+identityhub:
+  enabled: false
+
+vault:
+  enabled: false
+
+prometheus:
+  enabled: false

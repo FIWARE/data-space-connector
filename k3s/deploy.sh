@@ -1,0 +1,158 @@
+#!/bin/bash
+# Deploy the local data space into a running cluster with `helm upgrade --install`.
+#
+# The helm-install path of the Maven build (`mvn clean deploy -Plocal,helm-install`, and
+# the integration tests in the `it` module with `-Phelm-install`); by default the build
+# renders the charts with `helm template` and applies them with kubectl instead. Usable
+# on its own against any cluster:
+#
+#   KUBECONFIG=it/target/k3s.yaml k3s/deploy.sh
+#
+# Every chart is installed as a Helm release, the same way an operator installs it, so
+# hooks run in their phase and order, `lookup` sees the existing secrets, the CRDs of
+# each chart's crds/ folder are installed, and running the script again upgrades the
+# releases in place.
+#
+# Order matters:
+#   1. namespaces
+#   2. the operators (mongo, postgres, cert-manager) and the self-signed issuers, one
+#      release - their CRDs and webhooks have to be up before anything uses them
+#   3. the manifests that are not part of a chart: the cluster infrastructure (traefik,
+#      coredns, squid) and the participants' additional resources. They request
+#      certificates from the selfsigned-issuer, so they come after the operators.
+#   4. the participants: the trust anchor first, because the registration hooks of the
+#      other participants call it, then provider and consumer. A profile can turn off
+#      the wait for the trust anchor (TRUST_ANCHOR_ARGS) when it depends on a later
+#      release - the consent scenario does.
+#   5. a final wait for every Deployment, StatefulSet and DaemonSet of the namespaces
+#      that got a release.
+#
+# Configuration, from the environment (the Maven profiles set these):
+#   KUBECONFIG                 cluster to deploy to (required)
+#   HELM                       helm binary, default `helm`
+#   TIMEOUT                    timeout of every helm operation, default 25m
+#   TRUST_ANCHOR_VALUES        comma-separated values files, absolute or relative to the
+#   CONSENT_AUTHORITY_VALUES   repository root. A release whose values are empty is not
+#                              installed.
+#   TRUST_ANCHOR_ARGS          extra helm arguments for the trust-anchor release
+#   PROVIDER_VALUES
+#   CONSUMER_VALUES
+#   PROMETHEUS_VALUES
+#   GAIA_X_INFRA               `true` to also apply k3s/gaia-x-infra
+#
+# Requires kubectl on the PATH.
+
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$ROOT"
+
+: "${KUBECONFIG:?KUBECONFIG must point to the cluster to deploy to}"
+export KUBECONFIG
+HELM="${HELM:-helm}"
+TIMEOUT="${TIMEOUT:-25m}"
+
+DSC_CHART=charts/data-space-connector
+TRUST_ANCHOR_CHART=charts/trust-anchor
+
+log() {
+    echo "==> $*"
+}
+
+on_error() {
+    echo "Deployment failed. Releases:" >&2
+    "$HELM" list --all-namespaces --all >&2 || true
+}
+trap on_error ERR
+
+# namespaces that got a release, waited for at the end
+INSTALLED_NAMESPACES=()
+
+# install <release> <namespace> <chart> <comma-separated values files> [extra helm args]
+install() {
+    local release=$1 namespace=$2 chart=$3 values=$4
+    shift 4
+    if [ -z "$values" ]; then
+        return 0
+    fi
+    local args=() files=() file
+    IFS=',' read -ra files <<< "$values"
+    for file in "${files[@]}"; do
+        args+=(-f "$file")
+    done
+    log "helm upgrade --install $release ($namespace) with $values"
+    "$HELM" upgrade --install "$release" "$chart" \
+        --namespace "$namespace" \
+        "${args[@]}" \
+        --wait --timeout "$TIMEOUT" \
+        "$@"
+    INSTALLED_NAMESPACES+=("$namespace")
+}
+
+# wait_ready <namespace>: every Deployment, StatefulSet and DaemonSet in it is ready.
+# Not `kubectl rollout status`: it rejects StatefulSets with the OnDelete strategy,
+# which the postgres-operator uses.
+wait_ready() {
+    local namespace=$1 object desired
+    for object in $(kubectl -n "$namespace" get deployment -o name); do
+        kubectl -n "$namespace" wait --for=condition=Available "$object" --timeout="$TIMEOUT"
+    done
+    for object in $(kubectl -n "$namespace" get statefulset -o name); do
+        desired=$(kubectl -n "$namespace" get "$object" -o jsonpath='{.spec.replicas}')
+        if [ "${desired:-0}" -gt 0 ]; then
+            kubectl -n "$namespace" wait --for=jsonpath='{.status.readyReplicas}'="$desired" \
+                "$object" --timeout="$TIMEOUT"
+        fi
+    done
+    for object in $(kubectl -n "$namespace" get daemonset -o name); do
+        desired=$(kubectl -n "$namespace" get "$object" -o jsonpath='{.status.desiredNumberScheduled}')
+        if [ "${desired:-0}" -gt 0 ]; then
+            kubectl -n "$namespace" wait --for=jsonpath='{.status.numberReady}'="$desired" \
+                "$object" --timeout="$TIMEOUT"
+        fi
+    done
+}
+
+log "Namespaces"
+kubectl apply -f k3s/namespaces
+
+log "Chart dependencies"
+"$HELM" dependency update "$DSC_CHART"
+"$HELM" dependency update "$TRUST_ANCHOR_CHART"
+
+log "Operators"
+install operators operators "$DSC_CHART" k3s/operators.yaml --wait-for-jobs
+kubectl wait --for=condition=Ready clusterissuer/selfsigned-issuer --timeout=5m
+
+log "Cluster infrastructure"
+kubectl apply --recursive -f k3s/infra
+kubectl -n kube-system rollout status deployment/coredns --timeout=5m
+kubectl -n infra rollout status deployment/traefik --timeout=5m
+kubectl -n infra rollout status deployment/squid-proxy --timeout=5m
+if [ "${GAIA_X_INFRA:-false}" = "true" ]; then
+    kubectl apply --recursive -f k3s/gaia-x-infra
+fi
+
+log "Additional resources of the participants"
+kubectl apply -f k3s/trust-anchor -f k3s/provider -f k3s/consumer
+
+if [ -n "${PROMETHEUS_VALUES:-}" ]; then
+    log "Monitoring"
+    install prometheus monitoring "$DSC_CHART" "$PROMETHEUS_VALUES"
+fi
+
+log "Participants"
+# TRUST_ANCHOR_ARGS is a list of arguments, so it is left unquoted
+# shellcheck disable=SC2086
+install trust-anchor trust-anchor "$TRUST_ANCHOR_CHART" "${TRUST_ANCHOR_VALUES:-}" --wait-for-jobs ${TRUST_ANCHOR_ARGS:-}
+install consent-authority trust-anchor "$DSC_CHART" "${CONSENT_AUTHORITY_VALUES:-}" --wait-for-jobs
+install provider provider "$DSC_CHART" "${PROVIDER_VALUES:-}" --wait-for-jobs
+install consumer consumer "$DSC_CHART" "${CONSUMER_VALUES:-}" --wait-for-jobs
+
+log "Waiting for every release"
+for namespace in $(printf '%s\n' "${INSTALLED_NAMESPACES[@]}" | sort -u); do
+    wait_ready "$namespace"
+done
+
+log "Deployed releases"
+"$HELM" list --all-namespaces

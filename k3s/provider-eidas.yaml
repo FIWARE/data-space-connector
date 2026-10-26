@@ -169,8 +169,6 @@ decentralizedIam:
       registration:
         enabled: true
         job:
-          # Long TTL so the Job outlives the k3s-maven-plugin's completion check.
-          ttlSecondsAfterFinished: 86400
           initContainers:
             waitForHost:
               enabled: true
@@ -307,12 +305,10 @@ decentralizedIam:
   odrlAuthorization:
 
     apisix:
+      # APISIX runs standalone here (routes from values, no admin API), so the etcd the
+      # chart ships by default is never used
       etcd:
-        replicaCount: 1
-        persistence:
-          enabled: false
-      image:
-        debug: true
+        enabled: false
       # the apisix subchart exposes the gateway through `ingress`, not `dataPlane.ingress`;
       # the latter renders no Ingress at all, leaving every https:// endpoint unrouted
       ingress:
@@ -505,23 +501,6 @@ scorpio:
       - secretName: scorpio-provider.127.0.0.1.nip.io-tls
         hosts:
           - scorpio-provider.127.0.0.1.nip.io
-  ccs:
-    enabled: true
-    defaultOidcScope:
-      name: default
-    oidcScopes:
-      default:
-        - type: UserCredential
-          trustedParticipantsLists:
-            - http://tir.trust-anchor.svc.cluster.local:8080
-          trustedIssuersLists:
-            - http://trusted-issuers-list:8080
-      operator:
-        - type: OperatorCredential
-          trustedParticipantsLists:
-            - http://tir.trust-anchor.svc.cluster.local:8080
-          trustedIssuersLists:
-            - http://trusted-issuers-list:8080
 
 tm-forum-api:
   defaultConfig:
@@ -530,13 +509,6 @@ tm-forum-api:
     enabled: true
   apiProxy:
     enabled: false
-  registration:
-    ccs:
-      defaultOidcScope:
-        credentialTypes:
-          - UserCredential
-        trustedParticipantsLists: http://tir.trust-anchor.svc.cluster.local:8080
-
   ingress:
     enabled: true
     annotations:

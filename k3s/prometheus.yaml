@@ -46,9 +46,6 @@ decentralizedIam:
 managedMongo:
   enabled: false
 
-postgis:
-  enabled: false
-
 did:
   enabled: false
 
@@ -80,9 +77,6 @@ identityhub:
   enabled: false
 
 vault:
-  enabled: false
-
-issuerservice:
   enabled: false
 
 cert-manager:

@@ -33,6 +33,17 @@ jobs:
       - name: Check documentation links
         run: ./.github/scripts/check-links.sh
 
+  # values.schema.json is generated from values.yaml, see CLAUDE.md. A change to values.yaml that
+  # is not followed by regenerating the schema fails here.
+  values-schema:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Check the values schema is up to date
+        run: ./.github/scripts/values-schema.sh --check
+
   eval:
     runs-on: ubuntu-latest
     needs:
@@ -90,10 +101,17 @@ jobs:
           message: "Please apply one of the following labels to the PR: 'patch', 'minor', 'major'."
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
+  # Bumps the version of every chart the PR changes, from its version on main and the PR's
+  # semver label, and pushes the result to the PR branch. It only depends on check-labels: a
+  # dependency on the comment job, which is skipped when the label is present, would skip it too.
   prepare-release:
-    needs: ["check-labels", "comment"]
+    needs: ["check-labels"]
 
     runs-on: ubuntu-latest
+
+    env:
+      BASE_SHA: ${{ github.event.pull_request.base.sha }}
+      HEAD_SHA: ${{ github.event.pull_request.head.sha }}
 
     steps:
       - uses: actions/checkout@v5
@@ -107,8 +125,12 @@ jobs:
 
       - name: Get changed files
         id: changed-files
-        uses: tj-actions/changed-files@v14.6
-        
+        run: |
+          {
+            echo 'files<<EOF'
+            git diff --name-only "$BASE_SHA...$HEAD_SHA"
+            echo 'EOF'
+          } >> "$GITHUB_OUTPUT"
 
       # prepare yaml parser
       - uses: actions/setup-go@v4
@@ -119,6 +141,7 @@ jobs:
 
       - uses: actions/checkout@v5
         with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
           ref: ${{ github.head_ref }}
           path: current-branch
 
@@ -129,10 +152,12 @@ jobs:
           
       - name: Update versions
         shell: bash
+        env:
+          CHANGED_FILES: ${{ steps.changed-files.outputs.files }}
         run: |
           declare -A changedCharts
 
-          for file in ${{ steps.changed-files.outputs.all_changed_and_modified_files }}; do         
+          for file in $CHANGED_FILES; do
 
               echo "$file was changed"
               baseFolder=$(cut -d'/' -f1 <<< "$file")
@@ -143,6 +168,10 @@ jobs:
           done    
 
           for c in "${changedCharts[@]}"; do
+              if [ ! -f "main/charts/$c/Chart.yaml" ]; then
+                  echo "$c is not on main yet, keeping its version"
+                  continue
+              fi
               # get version from chart yaml
               version=$(yq e '.version' "main/charts/$c/Chart.yaml")
               major=$(cut -d'.' -f1 <<< "$version")
@@ -169,19 +198,30 @@ jobs:
           done
 
       - name: Commit files
-        continue-on-error: true
+        id: commit
         run: |
           cd current-branch
+          if git diff --quiet; then
+              echo "Chart versions are already up to date"
+              exit 0
+          fi
           git config --local user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
-          git status
-          echo commit
           git commit -m "Update helm chart versions" -a
-          echo status update
-          git status
+          git show --stat HEAD
+          echo "committed=true" >> "$GITHUB_OUTPUT"
+
+      # The token cannot push to a fork: its author has to set the versions.
+      - name: Versions to set on a fork
+        if: steps.commit.outputs.committed == 'true' && github.event.pull_request.head.repo.full_name != github.repository
+        run: |
+          cd current-branch
+          echo "::error::This pull request comes from a fork, so the chart versions cannot be updated automatically. Set them in the pull request:"
+          git show HEAD -- 'charts/*/Chart.yaml'
+          exit 1
 
       - name: Push changes
-        continue-on-error: true
+        if: steps.commit.outputs.committed == 'true' && github.event.pull_request.head.repo.full_name == github.repository
         uses: ad-m/github-push-action@master
         with:
           directory: current-branch

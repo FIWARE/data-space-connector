@@ -17,7 +17,7 @@ An organization has a **single identity** in the data space, regardless of how m
 
 ### Evolving from one role to the other
 
-- **Consumer to provider** — If your organization initially deploys as a consumer only and later needs to become a provider, you can add the provider components (VCVerifier, Credentials Config Service, APISIX, OPA, ODRL-PAP, etc.) to the existing deployment. The DID and Keycloak are already in place.
+- **Consumer to provider** — If your organization initially deploys as a consumer only and later needs to become a provider, you can add the provider components (VCVerifier, Trusted Issuers List, APISIX, OPA, ODRL-PAP, etc.) to the existing deployment. The DID and Keycloak are already in place.
 - **Provider to consumer** — If your organization already has a FIWARE Data Space Connector deployed as a provider, it already includes all the components needed to act as a consumer (Keycloak and DID). You only need to configure the Keycloak realm with the appropriate clients, roles, and credential types for the target providers.
 
 ## Production considerations
