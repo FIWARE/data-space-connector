@@ -2,7 +2,7 @@ apiVersion: v2
 name: data-space-connector
 description: Umbrella Chart for the FIWARE Data Space Connector, combining all essential parts to be used by a participant.
 type: application
-version: 10.13.0
+version: 10.14.3
 dependencies:
   - name: decentralized-iam
     alias: decentralizedIam
@@ -23,7 +23,7 @@ dependencies:
   # contract management
   - name: tm-forum-api
     condition: tm-forum-api.enabled
-    version: 0.17.17
+    version: 0.19.3
     repository: oci://quay.io/fiware/helm-charts
   - name: contract-management
     condition: contract-management.enabled
@@ -33,7 +33,7 @@ dependencies:
   - name: business-api-ecosystem
     alias: marketplace
     condition: marketplace.enabled
-    version: 1.1.0
+    version: 1.2.0
     repository: oci://quay.io/fiware/helm-charts
   - name: community-operator
     alias: mongo-operator
@@ -53,13 +53,13 @@ dependencies:
   # dashboard
   - name: fdsc-dashboard
     condition: fdsc-dashboard.enabled
-    version: 0.6.11
+    version: 0.7.0
     repository: oci://quay.io/fiware/helm-charts
   # did-helper
   - name: did-helper
     alias: did
     condition: did.enabled
-    version: 0.1.22
+    version: 0.2.0
     repository: oci://quay.io/fiware/helm-charts
   # cert-manager
   - name: cert-manager
@@ -75,7 +75,7 @@ dependencies:
     repository: oci://quay.io/seamware/helm-charts
   - name: prometheus
     condition: prometheus.enabled
-    version: 29.35.0
+    version: 29.37.0
     repository: https://prometheus-community.github.io/helm-charts
   - name: grafana
     condition: grafana.enabled
@@ -101,9 +101,9 @@ dependencies:
   # driven resolution, a provider-local consent-facade.
   - name: consent-facade
     condition: consent-facade.enabled
-    version: 0.1.1
+    version: 0.2.0
     repository: oci://quay.io/fiware/helm-charts
   - name: consent-owner-resolver
     condition: consent-owner-resolver.enabled
-    version: 0.1.1
+    version: 0.2.0
     repository: oci://quay.io/fiware/helm-charts

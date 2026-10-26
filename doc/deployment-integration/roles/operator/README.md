@@ -6,6 +6,8 @@ The Data Space Operator operates the **shared trust infrastructure** of the data
 
 In a FIWARE Data Space, the Operator's primary responsibility is operating the **Trust Anchor**: the central registry where all trusted participants and their credentials are registered.
 
+The cluster that runs the Trust Anchor needs the [Cluster Prerequisites](../PREREQUISITES.md), in particular, when the chart deploys its PostgreSQL, a single installation of the Postgres operator per cluster.
+
 ## Onboarding new participants
 
 ### Participant onboarding

@@ -3188,6 +3188,18 @@ identityhub:
     # -- priority class to be assigned to the pods
     # ref: https://kubernetes.io/docs/concepts/scheduling-eviction/pod-priority-preemption/
     priorityClassName: ""
+  # -- the liveness probe only runs once the startup probe has passed, so a slow start is not killed half way. A restart in the middle of the first start can leave the super-user with an API key other than the configured one
+  startupProbe:
+    # -- Whether to enable kubernetes [startup-probe](https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/)
+    enabled: true
+    # -- seconds to wait before performing the first startup check
+    initialDelaySeconds: 5
+    # -- this fields specifies that kubernetes should perform a startup check every 10 seconds
+    periodSeconds: 10
+    # -- number of seconds after which the probe times out
+    timeoutSeconds: 5
+    # -- number of failed checks before the container is restarted, 30 x 10 seconds gives the identityhub 5 minutes to start
+    failureThreshold: 30
   livenessProbe:
     # -- Whether to enable kubernetes [liveness-probe](https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/)
     enabled: true
