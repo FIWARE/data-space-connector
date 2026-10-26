@@ -35,9 +35,6 @@ identityhub:
       -----BEGIN CERTIFICATE-----
       not-a-real-certificate
       -----END CERTIFICATE-----
-  logging:
-    persistence:
-      enabled: true
   endpoints:
     identity:
       authKeyAlias: super-user-apikey

@@ -8,17 +8,19 @@ An alternative deployment guide, based on [MicroK8s](https://microk8s.io/) can b
 
 ## Requirements
 
-Since the local deployment installs 2 connector instances and a trust-anchor, its recommended to use a strong enough machine. While 16Gb Ram might be enough, its recommended to have >24Gb available. The deployment is build and tested on Ubuntu, most other Linux distributions should work as well.
+Since the local deployment installs 2 connector instances and a trust-anchor, its recommended to use a strong enough machine. While 16Gb Ram might be enough, its recommended to have >24Gb available. The [Cluster Prerequisites](../roles/PREREQUISITES.md#sizing) give the resources each role uses. The deployment is build and tested on Ubuntu, most other Linux distributions should work as well.
 
 The local deployment tries to be as decoupled from the host system as possible to reduce the amount of requirements but stills needs the following programs:
 
 - [Maven](https://maven.apache.org/)
 - Java Development Kit (at least v17)
 - [Docker](https://www.docker.com/)
+- [kubectl](https://kubernetes.io/docs/tasks/tools/install-kubectl/)
+
+Helm does not need to be installed: the build downloads the version it deploys with.
 
 In order to interact with the system, the following tools are also helpful:
 
-- [kubectl](https://kubernetes.io/docs/tasks/tools/install-kubectl/)
 - [curl](https://curl.se/download.html)
 - [jq](https://stedolan.github.io/jq/download/)
 - [yq](https://mikefarah.gitbook.io/yq/)
@@ -60,7 +62,7 @@ The locally deployed Data Space consists of 2 Participants, connected through a 
 Every Data Spaces requires a framework that ensures trust between the participants. Depending on the requirements of the
 concrete Data Space,
 this can become a rather complex topic. Various trust-providers exist(
-f.e. [Gaia-X Digital Clearing Houses](https://gaia-x.eu/gxdch)) and could be reused(see [Gaia-X for more information](../../GAIA_X.MD)). The default setup of the connector requires an [EBSI-Trusted Issuers Registry](https://hub.ebsi.eu/apis/pilot/trusted-issuers-registry/v4) to provide the list of participants.
+f.e. [Gaia-X Digital Clearing Houses](https://gaia-x.eu/services-deliverables/digital-clearing-house/)) and could be reused(see [Gaia-X for more information](../../GAIA_X.MD)). The default setup of the connector requires an [EBSI-Trusted Issuers Registry](https://hub.ebsi.eu/api/core/issuers-registry) to provide the list of participants.
 
 The local Data Spaces comes with the [FIWARE Trusted Issuers List](https://github.com/FIWARE/trusted-issuers-list) as a
 rather simple implementation of that API, providing CRUD functionality
@@ -1325,7 +1327,7 @@ When using the `OPERATOR_CREDENTIAL`, it will work:
 
 ## eIDAS Compliancy
 
-The Data Space Connector supports [eIDAS 2.0](https://digital-strategy.ec.europa.eu/en/policies/eidas-regulation) compliance through PKIX certificate chain validation against the [EU Trusted Lists](https://ec.europa.eu/digital-building-blocks/sites/display/DIGITAL/EU+Trusted+Lists). This works with `did:elsi`, `did:web`, and HTTPS-issued credentials that carry an `x5c` JWT header.
+The Data Space Connector supports [eIDAS 2.0](https://digital-strategy.ec.europa.eu/en/policies/eidas-regulation) compliance through PKIX certificate chain validation against the [EU Trusted Lists](https://digital-strategy.ec.europa.eu/en/policies/eu-trusted-lists). This works with `did:elsi`, `did:web`, and HTTPS-issued credentials that carry an `x5c` JWT header.
 
 For full documentation on eIDAS configuration, certificate generation, and troubleshooting, see the **[standalone eIDAS documentation](../eidas/README.md)**.
 
@@ -1375,28 +1377,54 @@ Available ingresses:
 
 In a Data Space, every participant requires an identity. The FIWARE Data Space relies on [Decentralized Identifiers](https://www.w3.org/TR/did-core/)
 to identify its participants. While the concrete scheme to be used for a Data Space needs to be decided by its requirements,
-the local installation uses [did:key](https://w3c-ccg.github.io/did-method-key/). While the did's are not well readable for humans,
+the local installation uses [did:key](https://w3c-ccg.github.io/did-key-spec/). While the did's are not well readable for humans,
 they are well-supported, can be resolved without any external interaction and can easily be generated within the deployment. That makes
 them a perfect fit for the local use-case.
 All participants(e.g. the consumer and the participant) get a did generated on installation, by using the [did-helper](https://github.com/wistefan/did-helper).
 The identities and connected key-material is automatically distributed in the cluster and set in the componets that require it.
 
-In real world data spaces, the participants should rather use stabled identities, which can be [did:key](https://w3c-ccg.github.io/did-method-key/), but also
+In real world data spaces, the participants should rather use stabled identities, which can be [did:key](https://w3c-ccg.github.io/did-key-spec/), but also
 more organization-focused once like [did:web](https://w3c-ccg.github.io/did-method-web/) or [did:elsi](https://alastria.github.io/did-method-elsi/).
 
 ### Deployment
 
-The deployment leverages the [k3s-maven-plugin](https://github.com/kokuwaio/k3s-maven-plugin) to stay as close to the real deployments as possible,
-while providing integration with the [integration tests](../../../it/src/test).
-In order to build a concrete deployment, [maven](https://maven.apache.org/) executes the following steps, that would also be done by a `normal` deployment process:
+The deployment runs [k3s](https://k3s.io/) in a docker container, started by the [k3s-maven-plugin](https://github.com/kokuwaio/k3s-maven-plugin).
+The same deployment backs the [integration tests](../../../it/src/test). The data space can be deployed into it in two ways,
+which use the same values files; the CI runs every test scenario with both of them.
 
-1. Copy the required charts([charts/](../../../charts)) to the target folder, e.g. `target/charts`
-2. Copy additionally required resources([k3s/infra & k3s/namespaces](../../../k3s/)) to the target folder, e.g. `target/k3s`
-3. Execute `helm template` on the charts, with the local values provided for each participant(e.g. [trust-anchor](../../../k3s/trust-anchor.yaml), [provider](../../../k3s/provider.yaml) and [consumer](../../../k3s/consumer.yaml)) and copy the manifests to the target folder(e.g. `target/k3s`)
-4. Spin up the cluster
-5. Apply the infrastructure resources to the cluster, via `kubectl apply`
-6. Apply the charts to the cluster, via `kubectl apply`
+**Template and apply (default).** Every chart is rendered with `helm template` and the result is applied with `kubectl`,
+the way a GitOps tool deploys a chart. [Maven](https://maven.apache.org/) executes the following steps:
+
+1. Download the pinned Helm version to the build folder, e.g. `target/helm/helm`
+2. Render every release into `target/rendered`, with the [helm-maven-plugin](https://github.com/kokuwaio/helm-maven-plugin):
+   the operators (Postgres, MongoDB, cert-manager, with their CRDs) and the self-signed CA issuer from
+   [k3s/operators.yaml](../../../k3s/operators.yaml), and the participants (with their CRDs too) with the local values for each of them
+   (e.g. [trust-anchor](../../../k3s/trust-anchor.yaml), [provider](../../../k3s/provider.yaml) and [consumer](../../../k3s/consumer.yaml))
+3. Adjust the render: set the namespace of the APISIX ingress, which its chart leaves out, and run
+   [k3s/ci-post-render.sh](../../../k3s/ci-post-render.sh) (deadlines, and dropping the hooks a fresh install never runs)
+4. Spin up the cluster and write its kubeconfig, e.g. `target/k3s.yaml`
+5. Apply, in this order and waiting for each step to be ready: the [namespaces](../../../k3s/namespaces), the operators,
+   the CA and issuers, the cluster infrastructure ([k3s/infra](../../../k3s/infra)), the participants' additional
+   resources, and the participants
+
+**Helm install (`helm-install` profile).** Every chart is installed as a Helm release, the way `helm install` does, so
+hooks run in their phase and order and `lookup` sees existing objects. Add the profile to any deployment, e.g.
+`mvn clean deploy -Plocal,helm-install`. Maven downloads the pinned Helm version, spins up the cluster, and runs
+[k3s/deploy.sh](../../../k3s/deploy.sh), which
+
+1. creates the [namespaces](../../../k3s/namespaces), via `kubectl apply`
+2. installs the operators (Postgres, MongoDB, cert-manager) and the self-signed CA issuer as a single Helm release of the [connector chart](../../../charts), with [k3s/operators.yaml](../../../k3s/operators.yaml)
+3. applies the cluster infrastructure ([k3s/infra](../../../k3s/infra)), via `kubectl apply`
+4. installs the participants with `helm upgrade --install`, using the local values for each of them (e.g. [trust-anchor](../../../k3s/trust-anchor.yaml), [provider](../../../k3s/provider.yaml) and [consumer](../../../k3s/consumer.yaml))
+5. waits until every Deployment, StatefulSet and DaemonSet of the namespaces that got a release is ready
+
+Running it again against an existing cluster upgrades the releases in place. To list them: `helm list -A`.
+The script can also be run on its own against any cluster, e.g. `KUBECONFIG=target/k3s.yaml k3s/deploy.sh`.
+
+The cluster survives `mvn clean`, and a new build reuses it. To switch between the two ways, start from a fresh one
+(`docker rm -f k3s-maven-plugin`): Helm refuses to adopt objects that `kubectl apply` created
+(`invalid ownership metadata`).
 
 # Trust local certificate
-kubectl get secret ca-secret -n cert-manager -o jsonpath='{.data.tls\.crt}' | base64 -d > local-ca.crt 
+kubectl get secret ca-secret -n operators -o jsonpath='{.data.tls\.crt}' | base64 -d > local-ca.crt 
   open chrome://settings/certificates → "Authorities" → Import local-ca.crt and tick "Trust this certificate for identifying websites". Same effect, just the UI path.

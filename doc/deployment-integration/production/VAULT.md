@@ -359,10 +359,10 @@ caches the JWKS that key backs.
 ## Pin the identity key's lifecycle
 
 The participant's identity is derived from a private key that is usually a
-cert-manager TLS Secret. cert-manager's `privateKey.rotationPolicy` defaults to
-`Never`, i.e. the key is reused when the certificate is renewed - which is what
-keeps the published DID document valid across renewals. That default is not
-declared anywhere by default, and upstream intends to change it, so declare it:
+cert-manager TLS Secret. Since cert-manager 1.18, `privateKey.rotationPolicy`
+defaults to `Always`: every renewal generates a new key, which changes the
+published DID document and invalidates everything signed with the previous key.
+Only `Never` reuses the key across renewals, so declare it:
 
 ```yaml
 privateKey:
