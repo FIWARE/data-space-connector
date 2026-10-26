@@ -29,7 +29,7 @@ This deployment example focuses on 2 possible initial configurations of infrastr
 In any of the previous cases, an Amazon EKS Cluster is needed to deploy the Data Space Connector. However, if there is an existing Amazon EKS Cluster in your AWS, it can be leveraged for this deployment and no additional cluster must be created. The next steps will help deploying a new cluster from scratch for the connector deployment.
 
 ### Amazon EKS Cluster Creation
-If the creation of a dedicated Kubernetes cluster is considered for the deployment of the FIWARE Data Spaces Connector, it is recommended that users follow the instructions to create a new Amazon EKS Cluster available in the [official Amazon EKS Immersion Workshop](https://catalog.workshops.aws/eks-immersionday/en-US/introduction#confirm-eks-setup)
+If the creation of a dedicated Kubernetes cluster is considered for the deployment of the FIWARE Data Spaces Connector, it is recommended that users follow the instructions to create a new Amazon EKS Cluster available in the [official Amazon EKS Immersion Workshop](https://www.eksworkshop.com/docs/introduction/getting-started/)
 
 #### AWS EKS Cluster Setup with Fargate Profile
 

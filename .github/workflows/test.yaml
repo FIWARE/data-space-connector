@@ -47,7 +47,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
+        scenario:
           - name: local
             profiles: "test,local-test"
           - name: central
@@ -58,7 +58,15 @@ jobs:
             profiles: "test,consent,consent-test"
           - name: eidas
             profiles: "test,eidas,eidas-test"
-    name: "Integration Test (${{ matrix.name }})"
+        # every scenario is deployed both ways: rendered with `helm template` and applied
+        # with kubectl, as a GitOps tool does (the default), and installed as Helm releases
+        # (`helm-install`), as `helm install` does
+        deployment:
+          - name: template
+            profiles: ""
+          - name: helm-install
+            profiles: ",helm-install"
+    name: "Integration Test (${{ matrix.scenario.name }}, ${{ matrix.deployment.name }})"
 
     steps:
       - uses: actions/checkout@v5
@@ -72,10 +80,10 @@ jobs:
         run: |
           sudo modprobe br_netfilter
 
-      - name: Execute tests (${{ matrix.name }})
+      - name: Execute tests (${{ matrix.scenario.name }}, ${{ matrix.deployment.name }})
         id: test
         run: |
-          mvn clean integration-test -P${{ matrix.profiles }} -Dhelm.version=3.17.3
+          mvn clean integration-test -P${{ matrix.scenario.profiles }}${{ matrix.deployment.profiles }}
 
       - name: Post-mortem on failure
         if: failure()
@@ -85,6 +93,10 @@ jobs:
           echo "=============================="
           echo "  CLUSTER POST-MORTEM REPORT  "
           echo "=============================="
+
+          echo ""
+          echo "### HELM RELEASES ###"
+          ./it/target/helm/helm list --all-namespaces --all || true
 
           echo ""
           echo "### NODE STATUS ###"
@@ -141,6 +153,22 @@ jobs:
               done
 
           echo ""
+          echo "### LOGS OF THE PREVIOUS CONTAINER OF RESTARTED PODS (last 100 lines each) ###"
+          kubectl get pods --all-namespaces -o json \
+            | jq -r '.items[] | select(any((.status.containerStatuses // [])[]; .restartCount > 0)) | .metadata.namespace + "/" + .metadata.name' \
+            | while read pod; do
+                ns=$(echo $pod | cut -d/ -f1)
+                name=$(echo $pod | cut -d/ -f2)
+                echo "--- Previous logs: $pod ---"
+                kubectl logs "$name" -n "$ns" --all-containers --previous --tail=100 2>&1 || true
+                echo ""
+              done
+
+          echo ""
+          echo "### POSTGRES OPERATOR LOGS (last 300 lines) ###"
+          kubectl logs -n operators -l app.kubernetes.io/name=postgres-operator --tail=300 2>&1 || true
+
+          echo ""
           echo "### DISK & MEMORY ON RUNNER ###"
           df -h || true
           free -h || true
@@ -151,3 +179,33 @@ jobs:
 
           echo ""
           echo "=== END OF POST-MORTEM ==="
+
+      # DSP failures are usually races between the EDC controlplanes and their TMF storage,
+      # which only show up in the logs of pods that are still running. Keep the full logs of
+      # every component in that path, including the previous container of restarted pods.
+      - name: Collect DSP component logs on failure
+        if: failure() && matrix.scenario.name == 'dsp'
+        env:
+          KUBECONFIG: ${{ github.workspace }}/it/target/k3s.yaml
+        run: |
+          mkdir -p dsp-logs
+          kubectl get pods --all-namespaces --no-headers \
+              -o custom-columns=NAMESPACE:.metadata.namespace,NAME:.metadata.name \
+            | grep -E 'fdsc-edc|tm-forum-api|scorpio|odrl-pap|identityhub' \
+            | while read ns name; do
+                kubectl logs "$name" -n "$ns" --all-containers --timestamps \
+                  > "dsp-logs/$ns-$name.log" 2>&1 || true
+                if ! kubectl logs "$name" -n "$ns" --all-containers --timestamps --previous \
+                    > "dsp-logs/$ns-$name.previous.log" 2>/dev/null; then
+                  rm -f "dsp-logs/$ns-$name.previous.log"
+                fi
+              done
+          ls -l dsp-logs
+
+      - name: Upload DSP component logs
+        if: failure() && matrix.scenario.name == 'dsp'
+        uses: actions/upload-artifact@v4
+        with:
+          name: dsp-logs-${{ matrix.deployment.name }}
+          path: dsp-logs/
+          retention-days: 14

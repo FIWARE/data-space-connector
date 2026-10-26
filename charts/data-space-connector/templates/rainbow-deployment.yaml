@@ -1,4 +1,8 @@
 {{- if .Values.rainbow.enabled }}
+{{- $contractManagement := index .Values "contract-management" }}
+{{- if and $contractManagement.enabled (not $contractManagement.enableRainbow) }}
+{{- fail "rainbow.enabled is true but contract-management.enableRainbow is false: set contract-management.enableRainbow to true so that contract management negotiates through rainbow" }}
+{{- end }}
 kind: Deployment
 apiVersion: apps/v1
 metadata:
@@ -21,16 +25,6 @@ spec:
     spec:
       serviceAccountName: default
       initContainers:
-        {{- if (eq .Values.rainbow.ccs.enabled true) }}
-        # -- curl container to register at the credentials config service
-        - name: register-credential-config
-          image: quay.io/curl/curl:8.1.2
-          command: [ "/bin/sh", "-c", "/bin/init.sh" ]
-          volumeMounts:
-            - name: ccs-registration
-              mountPath: /bin/init.sh
-              subPath: init.sh
-        {{- end }}
         - name: rainbow-init
           imagePullPolicy: IfNotPresent
           image: quay.io/wi_stefan/rainbow:0.0.3
@@ -77,13 +71,6 @@ spec:
           ports:
             - containerPort: 1234
               name: http
-      {{- if .Values.rainbow.ccs.configMap }}
-      volumes:
-        - name: ccs-registration
-          configMap:
-            name: {{ .Values.rainbow.ccs.configMap }}
-            defaultMode: 0755
-      {{- end }}
       {{- with .Values.rainbow.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

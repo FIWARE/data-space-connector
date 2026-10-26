@@ -1,10 +1,11 @@
 cert-manager:
   enabled: false
 
+# The self-signed CA and the selfsigned-issuer are cluster-wide and shared by every participant,
+# so the local deployment creates them once, with cert-manager in the operators release
+# (k3s/operators.yaml), instead of from this release.
 certManagerResources:
-  enabled: true
-  namespace: cert-manager
-  type: "selfsigned"
+  enabled: false
 
 decentralizedIam:
   enabled: true
@@ -153,10 +154,6 @@ decentralizedIam:
       registration:
         enabled: true
         job:
-          # Use a long TTL so the Job persists until the k3s-maven-plugin
-          # has verified its completion. The default 120s races with the
-          # plugin's parallel wait loop in CI.
-          ttlSecondsAfterFinished: 86400
           initContainers:
             waitForHost:
               enabled: true
@@ -363,8 +360,6 @@ decentralizedIam:
             config_provider: "etcd"
           role_data_plane:
             config_provider: "etcd"
-        catchAllRoute:
-          enabled: false
       ingress:
         enabled: true
         annotations:
@@ -688,15 +683,6 @@ decentralizedIam:
         host: http://rainbow-provider.127.0.0.1.nip.io:8080
         path: transfers
 
-postgresql:
-  primary:
-    resourcesPreset: none
-    persistence:
-      enabled: false
-  readReplicas:
-    persistence:
-      enabled: false
-
 # helper component to serve the did.json document
 did:
   enabled: true
@@ -751,11 +737,21 @@ dataSpaceConfig:
 scorpio:
   resources:
     limits:
-      cpu: "500m"
+      # room for the bursts of a start or a busy node; a throttled broker misses its probes
+      cpu: "1500m"
       memory: 1Gi
     requests:
       cpu: "100m"
       memory: 128Mi
+  # The liveness probe only checks that the broker runs. A slow database or a busy node marks it
+  # not ready instead of getting it restarted, which would take it away from its clients.
+  livenessProbe:
+    path: /q/health/live
+    failureThreshold: 12
+    timeoutSeconds: 5
+  readinessProbe:
+    path: /q/health/ready
+    timeoutSeconds: 5
   ingress:
     enabled: true
     # only to make it available for the test initialization
@@ -781,8 +777,6 @@ tm-forum-api:
   allInOne:
     enabled: true
   apiProxy:
-    enabled: false
-  registration:
     enabled: false
   ingress:
     enabled: true
