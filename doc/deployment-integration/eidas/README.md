@@ -3,7 +3,7 @@
 The FIWARE Data Space Connector supports
 [eIDAS 2.0](https://digital-strategy.ec.europa.eu/en/policies/eidas-regulation)
 compliance through PKIX certificate chain validation against the
-[EU Trusted Lists (ETSI TS 119 612)](https://ec.europa.eu/digital-building-blocks/sites/display/DIGITAL/EU+Trusted+Lists).
+[EU Trusted Lists (ETSI TS 119 612)](https://digital-strategy.ec.europa.eu/en/policies/eu-trusted-lists).
 Starting with **VCVerifier >= 6.22.0** this validation is performed natively by
 VCVerifier. The configuration surface documented here needs
 **decentralized-iam >= 2.1.25**, which is what chart 10.10.0 pins: 2.1.25 is the
@@ -305,14 +305,13 @@ Add the plugin via an init container in the Keycloak configuration:
 
 ```yaml
 keycloak:
-  keycloak:
-    extraInitContainers:
-      - name: install-jades-issuer
-        image: quay.io/fiware/keycloak-jades-vc-issuer:1.3.0
-        imagePullPolicy: IfNotPresent
-        volumeMounts:
-          - name: providers
-            mountPath: /target
+  extraInitContainers:
+    - name: install-jades-issuer
+      image: quay.io/fiware/keycloak-jades-vc-issuer:1.3.0
+      imagePullPolicy: IfNotPresent
+      volumeMounts:
+        - name: providers
+          mountPath: /target
 ```
 
 See the [k3s/consumer-eidas.yaml](../../../k3s/consumer-eidas.yaml) overlay
@@ -328,15 +327,14 @@ mounted via Keycloak's `extraVolumeMounts` and `extraVolumes`:
 
 ```yaml
 keycloak:
-  keycloak:
-    extraVolumeMounts:
-      - name: elsi-trust-store
-        mountPath: /opt/keycloak/data/test-realm
-    extraVolumes:
-      - name: elsi-trust-store
-        secret:
-          secretName: elsi-secret
-          defaultMode: 0755
+  extraVolumeMounts:
+    - name: elsi-trust-store
+      mountPath: /opt/keycloak/data/test-realm
+  extraVolumes:
+    - name: elsi-trust-store
+      secret:
+        secretName: elsi-secret
+        defaultMode: 0755
 ```
 
 > **Important:** The `mountPath` must match your realm name --

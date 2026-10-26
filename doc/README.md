@@ -27,6 +27,7 @@ specific flows and its deployment and integration with other frameworks.
   - [Observability](#observability)
   - [eIDAS 2.0 Compliance](#eidas-20-compliance)
   - [Integration with AWS Garnet Framework (formerly AWS Smart Territory Framework)](#integration-with-aws-garnet-framework-formerly-aws-smart-territory-framework)
+- [Glossary](#glossary)
 
 <!-- END doctoc generated TOC please keep comment here to allow auto update -->
 
@@ -82,8 +83,10 @@ An automated minimal deployment of a complete data space (trust anchor + provide
 Documentation for deploying the FIWARE DSC according to your organization's role in the data space. Each guide describes the required and optional components, architecture, and production considerations.
 
 * [Deployment by Role — Overview](./deployment-integration/roles/README.md)
+  * [Cluster prerequisites](./deployment-integration/roles/PREREQUISITES.md)
   * [Consumer](./deployment-integration/roles/consumer/README.md)
   * [Provider](./deployment-integration/roles/provider/README.md)
+    * [Running a local marketplace](./deployment-integration/roles/provider/LOCAL_MARKETPLACE.md)
   * [Consumer + Provider](./deployment-integration/roles/consumer-provider/README.md)
   * [Operator (Data Space Governance)](./deployment-integration/roles/operator/README.md)
 
@@ -143,3 +146,29 @@ but integrating the FIWARE Context Broker from the STF.
 More information can be found here:
 * [Integration with AWS Garnet Framework](./deployment-integration/aws-garnet/)
 
+## Glossary
+
+Terms and example names used across this documentation and the examples in [`k3s/`](../k3s).
+
+**Example participants**
+
+| Name | DID | Role in the examples |
+|---|---|---|
+| M&P Operations ("MP") | `did:web:mp-operations.org` | The **provider**: offers the data service and, in the local deployment, its own marketplace. "MP" is this organization, not "marketplace" |
+| Fancy Marketplace | `did:web:fancy-marketplace.biz` | The **consumer**, whose users buy and access M&P Operations' offerings. It also hosts the central marketplace in that scenario |
+| Data space authority | `did:web:dataspace-authority.org` | The authority of the consent management scenario |
+
+**Components and terms**
+
+| Term | Meaning |
+|---|---|
+| BAE | [Business API Ecosystem](https://github.com/FIWARE/business-api-ecosystem), the marketplace portal (`marketplace` in the chart) |
+| Central marketplace | A marketplace shared by the data space, where providers publish their offerings, see [CENTRAL_MARKETPLACE.md](./CENTRAL_MARKETPLACE.md) |
+| Trust Anchor | The data space's root of trust; its Trusted Issuers Registry lists the participants |
+| TIR | Trusted Issuers Registry, the Trust Anchor's list of participants and the credentials they may issue |
+| TIL | Trusted Issuers List, each provider's own list of the issuers it trusts for each credential type |
+| VCVerifier | Verifies the credentials presented over OID4VP and issues access tokens. It also serves the credentials configuration API (what each service accepts), formerly the separate Credentials Config Service |
+| PEP / PDP / PAP | Policy enforcement, decision and administration points: APISIX, OPA and the ODRL-PAP |
+| OID4VCI / OID4VP | OpenID for Verifiable Credential Issuance and for Verifiable Presentations: how credentials are issued (by Keycloak) and presented (to the VCVerifier) |
+| DSP / DCP | Dataspace Protocol and Decentralized Claims Protocol, used by FDSC-EDC and the Identity Hub, see [DSP_INTEGRATION.md](./DSP_INTEGRATION.md) |
+| did-helper | Publishes the organization's `did:web` document |

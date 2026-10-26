@@ -153,31 +153,31 @@ decentralizedIam:
   odrlAuthorization:
 
     apisix:
+      # APISIX runs standalone here (routes from values, no admin API), so the etcd the
+      # chart ships by default is never used
       etcd:
-        replicaCount: 1
-        persistence:
-          enabled: false
-      image:
-        debug: true
-      dataPlane:
-        ingress:
-          enabled: true
-          hostname: mp-data-service.127.0.0.1.nip.io
-          annotations:
-            # without this traefik creates no HTTPS router and every https:// call 404s
-            traefik.ingress.kubernetes.io/router.tls: "true"
-            cert-manager.io/cluster-issuer: "selfsigned-issuer"
-            cert-manager.io/private-key-algorithm: "ECDSA"
-            cert-manager.io/common-name: "mp-data-service.127.0.0.1.nip.io"
-            cert-manager.io/alt-names: "mp-data-service.127.0.0.1.nip.io"
-          tls: true
-          extraTls:
-            - secretName: mp-data-service.127.0.0.1.nip.io-tls
-              hosts:
-                - mp-data-service.127.0.0.1.nip.io
-          extraHosts:
-            - name: mp-tmf-api.127.0.0.1.nip.io
-              path: /
+        enabled: false
+      # the apisix subchart exposes the gateway through `ingress`, not `dataPlane.ingress`;
+      # the latter renders no Ingress at all, leaving every https:// endpoint unrouted
+      ingress:
+        enabled: true
+        annotations:
+          cert-manager.io/cluster-issuer: "selfsigned-issuer"
+          cert-manager.io/private-key-algorithm: "ECDSA"
+          # without this traefik creates no HTTPS router and every https:// call 404s
+          traefik.ingress.kubernetes.io/router.tls: "true"
+          cert-manager.io/common-name: "mp-data-service.127.0.0.1.nip.io"
+          cert-manager.io/alt-names: "mp-data-service.127.0.0.1.nip.io,mp-tmf-api.127.0.0.1.nip.io"
+        hosts:
+          - host: mp-data-service.127.0.0.1.nip.io
+            paths: ["/"]
+          - host: mp-tmf-api.127.0.0.1.nip.io
+            paths: ["/"]
+        tls:
+          - secretName: mp-data-service.127.0.0.1.nip.io-tls
+            hosts:
+              - mp-data-service.127.0.0.1.nip.io
+              - mp-tmf-api.127.0.0.1.nip.io
       catchAllRoute:
         enabled: false
       # a real list - passing this as a block string makes the chart's toYaml nest it
@@ -346,25 +346,6 @@ scorpio:
       - secretName: scorpio-provider.127.0.0.1.nip.io-tls
         hosts:
           - scorpio-provider.127.0.0.1.nip.io
-  ccs:
-    enabled: true
-    defaultOidcScope:
-      name: default
-    oidcScopes:
-      default:
-        - type: UserCredential
-          trustedParticipantsLists:
-            - url: https://registry.127.0.0.1.nip.io
-              type: gaia-x
-          trustedIssuersLists:
-            - http://trusted-issuers-list:8080
-      operator:
-        - type: OperatorCredential
-          trustedParticipantsLists:
-            - url: https://registry.127.0.0.1.nip.io
-              type: gaia-x
-          trustedIssuersLists:
-            - http://trusted-issuers-list:8080
 
 tm-forum-api:
   defaultConfig:
@@ -373,12 +354,6 @@ tm-forum-api:
     enabled: true
   apiProxy:
     enabled: false
-  registration:
-    ccs:
-      defaultOidcScope:
-        credentialTypes:
-          - UserCredential
-        trustedParticipantsLists: http://tir.trust-anchor.svc.cluster.local:8080
   ingress:
     enabled: true
     annotations:
