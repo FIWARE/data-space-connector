@@ -4,7 +4,7 @@
 # Settings live in lychee.toml at the repository root: only relative links and
 # anchors are checked, external URLs are skipped.
 #
-# lychee runs from its container, pinned like the Helm image in lint.sh, so the
+# lychee runs from its container, pinned to a version, so the
 # check behaves the same locally and in CI without installing anything.
 
 set -uo pipefail
