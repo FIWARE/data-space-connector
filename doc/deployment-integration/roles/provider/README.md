@@ -641,6 +641,10 @@ The apisix chart only mounts the CA, and sets it as APISIX's `ssl_trusted_certif
 - If using a proxy, configure `HTTPS_PROXY`/`NO_PROXY` appropriately
 - The VCVerifier's signing key (used for JWT issuance) must be protected
 
+#### Metrics
+
+The verifier serves its Prometheus metrics, `/metrics`, on port 9090 of the `verifier` Service (`metrics`), apart from port 3000, which its Ingress publishes, so the metrics are not reachable from outside the cluster. Scrape them from inside the cluster, at `http://verifier.<your_namespace>.svc.cluster.local:9090/metrics`. The port is set with `deployment.server.metricsPort`; setting it to the main port (3000) serves the metrics there again, and publishes them with the Ingress.
+
 #### Request object modes
 
 `deployment.verifier.supportedModes` defaults to `urlEncoded`. With `byValue` or `byReference` the verifier signs the request objects it sends to wallets, so it also needs `clientIdentification`; without its `keyPath` the verifier does not start (`Failed to initialize verifier`):
