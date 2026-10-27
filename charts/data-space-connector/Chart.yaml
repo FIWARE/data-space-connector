@@ -2,7 +2,7 @@ apiVersion: v2
 name: data-space-connector
 description: Umbrella Chart for the FIWARE Data Space Connector, combining all essential parts to be used by a participant.
 type: application
-version: 10.14.5
+version: 10.14.6
 dependencies:
   - name: decentralized-iam
     alias: decentralizedIam
@@ -84,7 +84,7 @@ dependencies:
   # observability - OpenTelemetry Operator for auto-instrumentation (opt-in)
   - name: opentelemetry-operator
     condition: opentelemetry-operator.enabled
-    version: 0.124.0
+    version: 0.126.1
     repository: https://open-telemetry.github.io/opentelemetry-helm-charts
   # observability - OpenTelemetry Collector for distributed tracing (opt-in)
   - name: opentelemetry-collector
