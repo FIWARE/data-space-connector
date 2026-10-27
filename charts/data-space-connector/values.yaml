@@ -104,6 +104,12 @@ decentralizedIam:
           # fails the release.
           activeDeadlineSeconds: 1200
       deployment:
+        server:
+          # -- port of /metrics (and a copy of /health), apart from the main port, so that the
+          # verifier's Ingress, which publishes the main port, does not publish the metrics. It is
+          # added to the verifier Service as `metrics`. Set it to the main port (3000) to serve the
+          # metrics there, as before 10.15.0.
+          metricsPort: 9090
         # -- configuration for the m2m flow, in case the tir is requiring authentication
         m2m:
           # -- we do not need authentication here
