@@ -727,8 +727,10 @@ public class StandardStepDefinitions extends StepDefintions {
                 .post(requestBody)
                 .build();
         Response creationResponse = HTTP_CLIENT.newCall(creationRequest).execute();
-        //assertEquals(HttpStatus.SC_CREATED, creationResponse.code(), "The entity should have been created.");
-        creationResponse.body().close();
+        // Fail here with the broker's answer rather than as a 404 on the first read of the entity.
+        String creationBody = creationResponse.body().string();
+        assertEquals(HttpStatus.SC_CREATED, creationResponse.code(),
+                "The entity should have been created. Response: " + creationBody);
         createdEntities.add("urn:ngsi-ld:EnergyReport:fms-1");
     }
 
