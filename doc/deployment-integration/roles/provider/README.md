@@ -323,16 +323,15 @@ did:
         items:
           - key: tls.crt
             path: tls.crt
-    # did-helper generates a key pair and a keystore in /cert at startup even when certPath is
-    # set; they are not used, but the directory has to be writable, also with a read-only root
-    # filesystem
-    - name: did-helper-workdir
-      emptyDir: {}
   volumeMounts:
     - name: certs
       mountPath: /certs
-    - name: did-helper-workdir
-      mountPath: /cert
+  # with certPath did-helper writes nothing, so it runs on a read-only root filesystem
+  securityContext:
+    readOnlyRootFilesystem: true
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop: ["ALL"]
   ingress:
     enabled: true
     className: <your-ingress-class>   # add the annotations your ingress controller needs
@@ -671,7 +670,7 @@ The verifier reads the algorithm from `requestKeyAlgorithm`; the `keyAlgorithm` 
 
 #### Token signing algorithm
 
-The access tokens the verifier issues are validated by APISIX's `openid-connect` plugin, which only builds the public key from an RSA JWK (or from an `x5c` chain, which the verifier does not publish). Keep `deployment.verifier.keyAlgorithm` at its default `RS256`: with `ES256`, APISIX rejects every token with `No trusted certs loaded`. This only concerns the verifier's tokens; Keycloak can keep signing credentials with `ES256`.
+The access tokens the verifier issues are validated by APISIX's `openid-connect` plugin, whose library ([lua-resty-openidc](https://github.com/zmartzone/lua-resty-openidc)) only accepts tokens signed with `RS*` or `HS*` algorithms, in every APISIX version up to 3.19 at least. With an `ES256` token it does not look up any key - neither in the JWKS nor in an `x5c` chain - and rejects every request with `401` and `jwt signature verification failed: No trusted certs loaded`. Keep `deployment.verifier.keyAlgorithm` at its default `RS256` for every verifier whose tokens APISIX validates. This only concerns the verifier's tokens; Keycloak can keep signing credentials with `ES256`.
 
 By default (`generateKey: true`) the verifier generates that key at startup and only keeps it in memory, so the tokens issued before a restart stop validating and several replicas do not share a key. In production, provide an RSA key instead, with `generateKey: false` and `keyPath`.
 
