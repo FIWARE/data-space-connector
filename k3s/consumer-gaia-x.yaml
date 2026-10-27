@@ -347,6 +347,12 @@ registration:
         - UserCredential
 did:
   enabled: true
+  # with certPath did-helper writes nothing, so it runs on a read-only root filesystem
+  securityContext:
+    readOnlyRootFilesystem: true
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop: ["ALL"]
   config:
     server:
       hostUrl: "http://fancy-marketplace.biz"
