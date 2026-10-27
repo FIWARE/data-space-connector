@@ -18,14 +18,9 @@ concurrency:
 
 jobs:
 
-  lint:
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v5
-
-      - name: Lint
-        run: ./.github/scripts/lint.sh
+  # Lints the charts and validates what they render, see https://github.com/SEAMWARE/github-workflows
+  chart-lint:
+    uses: SEAMWARE/github-workflows/.github/workflows/chart-lint.yml@v1
 
   # Relative links and anchors of the Markdown documentation, see lychee.toml.
   # Runs alongside the chart checks instead of gating them.
@@ -49,28 +44,11 @@ jobs:
       - name: Check the values schema is up to date
         run: ./.github/scripts/values-schema.sh --check
 
-  eval:
-    runs-on: ubuntu-latest
-    needs:
-      - lint
-
-    steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-go@v5
-        with:
-          go-version: '>=1.17.0'
-        
-      - name: Eval
-        run: |
-          .github/build/install.sh
-          .github/scripts/eval.sh
-
   # Requires a semver label and bumps the version of the charts the pull request changes, see
   # https://github.com/SEAMWARE/github-workflows
   chart-version:
     needs:
-      - lint
-      - eval
+      - chart-lint
     uses: SEAMWARE/github-workflows/.github/workflows/chart-pr.yml@v1
     permissions:
       contents: write
