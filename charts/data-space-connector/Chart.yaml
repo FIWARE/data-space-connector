@@ -27,7 +27,7 @@ dependencies:
     repository: oci://quay.io/fiware/helm-charts
   - name: contract-management
     condition: contract-management.enabled
-    version: 3.6.0
+    version: 3.6.2
     repository: oci://quay.io/fiware/helm-charts
   # marketplace
   - name: business-api-ecosystem
@@ -43,7 +43,7 @@ dependencies:
   # dsp
   - name: fdsc-edc
     condition: fdsc-edc.enabled
-    version: 0.7.6
+    version: 0.7.8
     repository: oci://quay.io/fiware/helm-charts
   - name: vault
     alias: vault
@@ -101,7 +101,7 @@ dependencies:
   # driven resolution, a provider-local consent-facade.
   - name: consent-facade
     condition: consent-facade.enabled
-    version: 0.2.0
+    version: 0.2.1
     repository: oci://quay.io/fiware/helm-charts
   - name: consent-owner-resolver
     condition: consent-owner-resolver.enabled
