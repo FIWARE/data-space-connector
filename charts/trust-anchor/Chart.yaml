@@ -15,7 +15,7 @@ dependencies:
   # FIWARE chart. Enabled by the authority (which runs it), disabled elsewhere.
   - name: consent-facade
     condition: consent-facade.enabled
-    version: 0.2.0
+    version: 0.2.1
     repository: oci://quay.io/fiware/helm-charts
   # The consent-manager is published as its own FIWARE chart.
   - name: consent-manager
