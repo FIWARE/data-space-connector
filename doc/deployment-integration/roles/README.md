@@ -4,6 +4,8 @@ In a FIWARE Data Space, each organization plays one or more roles. Each role req
 
 If you are new to the FIWARE DSC, start with the [Quick Start Guide](../local-deployment/LOCAL.MD) to understand how all the components work together before deploying for production.
 
+Before installing any role, check that the cluster has what the charts need - databases, network and resources: see [Cluster Prerequisites](PREREQUISITES.md).
+
 The [Glossary](../../README.md#glossary) explains the abbreviations and the example organizations used throughout these guides.
 
 ## Roles in a Data Space

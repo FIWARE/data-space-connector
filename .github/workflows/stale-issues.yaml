@@ -5,11 +5,9 @@ on:
   workflow_dispatch:
 
 jobs:
+  # see https://github.com/SEAMWARE/github-workflows
   stale:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/stale@v9
-        with:
-          stale-issue-message: 'This issue is stale because it has been open 30 days with no activity. Remove stale label or comment or this will be closed in 5 days.'
-          days-before-stale: 30
-          days-before-close: 5
+    uses: SEAMWARE/github-workflows/.github/workflows/stale.yml@v1
+    permissions:
+      issues: write
+      pull-requests: write

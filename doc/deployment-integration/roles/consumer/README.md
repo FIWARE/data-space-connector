@@ -17,6 +17,8 @@ Before deploying, contact the **Data Space Operator** to initiate the onboarding
 
 This information is essential for configuring Keycloak, the DID, and the Verifiable Credentials correctly.
 
+Check also that the cluster meets the [Cluster Prerequisites](../PREREQUISITES.md): its databases, the network requirements and the resources the consumer needs.
+
 ## Required components
 
 ### Verifiable Credential Issuer
@@ -104,16 +106,15 @@ did:
         items:
           - key: tls.crt
             path: tls.crt
-    # did-helper generates a key pair and a keystore in /cert at startup even when certPath is
-    # set; they are not used, but the directory has to be writable, also with a read-only root
-    # filesystem
-    - name: did-helper-workdir
-      emptyDir: {}
   volumeMounts:
     - name: certs
       mountPath: /certs
-    - name: did-helper-workdir
-      mountPath: /cert
+  # with certPath did-helper writes nothing, so it runs on a read-only root filesystem
+  securityContext:
+    readOnlyRootFilesystem: true
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop: ["ALL"]
   ingress:
     enabled: true
     className: <your-ingress-class>   # add the annotations your ingress controller needs
