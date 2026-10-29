@@ -56,9 +56,9 @@ jobs:
           run: echo "version=${VERSION}" >> $GITHUB_OUTPUT
 
     # Publishes the charts, failing when a changed chart has no new version, see
-    # https://github.com/SEAMWARE/github-workflows
+    # https://github.com/FIWARE/github-workflows
     chart-release:
-      uses: SEAMWARE/github-workflows/.github/workflows/chart-release.yml@v1
+      uses: FIWARE/github-workflows/.github/workflows/chart-release.yml@v1
       permissions:
         contents: write
       with:

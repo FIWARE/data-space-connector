@@ -14,9 +14,9 @@ on:
 jobs:
 
   # Opens a pull request for every chart dependency with a newer stable version, see
-  # https://github.com/SEAMWARE/github-workflows
+  # https://github.com/FIWARE/github-workflows
   check-dependencies:
-    uses: SEAMWARE/github-workflows/.github/workflows/chart-dependencies.yml@v1
+    uses: FIWARE/github-workflows/.github/workflows/chart-dependencies.yml@v1
     permissions:
       contents: write
       pull-requests: write
