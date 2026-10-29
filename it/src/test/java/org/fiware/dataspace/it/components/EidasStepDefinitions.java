@@ -282,9 +282,10 @@ public class EidasStepDefinitions extends StepDefintions {
                             .addHeader("Accept", MediaType.APPLICATION_JSON)
                             .build();
                     try (Response response = HTTP_CLIENT.newCall(request).execute()) {
+                        // The body tells a broker 404 (entity missing) from a gateway 404 (no route).
                         assertEquals(HttpStatus.SC_OK, response.code(),
                                 "The EnergyReport should be accessible with a token obtained from the "
-                                        + "eIDAS credential.");
+                                        + "eIDAS credential. Response: " + response.body().string());
                     }
                 });
     }

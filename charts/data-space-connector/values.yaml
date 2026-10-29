@@ -104,6 +104,12 @@ decentralizedIam:
           # fails the release.
           activeDeadlineSeconds: 1200
       deployment:
+        server:
+          # -- port of /metrics (and a copy of /health), apart from the main port, so that the
+          # verifier's Ingress, which publishes the main port, does not publish the metrics. It is
+          # added to the verifier Service as `metrics`. Set it to the main port (3000) to serve the
+          # metrics there, as before 10.15.0.
+          metricsPort: 9090
         # -- configuration for the m2m flow, in case the tir is requiring authentication
         m2m:
           # -- we do not need authentication here
@@ -3188,6 +3194,18 @@ identityhub:
     # -- priority class to be assigned to the pods
     # ref: https://kubernetes.io/docs/concepts/scheduling-eviction/pod-priority-preemption/
     priorityClassName: ""
+  # -- the liveness probe only runs once the startup probe has passed, so a slow start is not killed half way. A restart in the middle of the first start can leave the super-user with an API key other than the configured one
+  startupProbe:
+    # -- Whether to enable kubernetes [startup-probe](https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/)
+    enabled: true
+    # -- seconds to wait before performing the first startup check
+    initialDelaySeconds: 5
+    # -- this fields specifies that kubernetes should perform a startup check every 10 seconds
+    periodSeconds: 10
+    # -- number of seconds after which the probe times out
+    timeoutSeconds: 5
+    # -- number of failed checks before the container is restarted, 30 x 10 seconds gives the identityhub 5 minutes to start
+    failureThreshold: 30
   livenessProbe:
     # -- Whether to enable kubernetes [liveness-probe](https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/)
     enabled: true

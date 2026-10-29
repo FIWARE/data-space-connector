@@ -21,6 +21,8 @@ Before deploying, contact the **Data Space Operator** to initiate the onboarding
 
 This information is essential for configuring Keycloak, the DID, the VCVerifier, and the Verifiable Credentials correctly.
 
+Check also that the cluster meets the [Cluster Prerequisites](../PREREQUISITES.md): its databases, the network requirements and the resources the provider needs.
+
 ## Required components
 
 > **Note:** The data services that the provider wants to expose through the FIWARE Data Space Connector (APIs, web applications, etc.) are not included in this list. These are external to the connector and must be deployed and managed independently.
@@ -321,16 +323,15 @@ did:
         items:
           - key: tls.crt
             path: tls.crt
-    # did-helper generates a key pair and a keystore in /cert at startup even when certPath is
-    # set; they are not used, but the directory has to be writable, also with a read-only root
-    # filesystem
-    - name: did-helper-workdir
-      emptyDir: {}
   volumeMounts:
     - name: certs
       mountPath: /certs
-    - name: did-helper-workdir
-      mountPath: /cert
+  # with certPath did-helper writes nothing, so it runs on a read-only root filesystem
+  securityContext:
+    readOnlyRootFilesystem: true
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop: ["ALL"]
   ingress:
     enabled: true
     className: <your-ingress-class>   # add the annotations your ingress controller needs
@@ -640,6 +641,10 @@ The apisix chart only mounts the CA, and sets it as APISIX's `ssl_trusted_certif
 - If using a proxy, configure `HTTPS_PROXY`/`NO_PROXY` appropriately
 - The VCVerifier's signing key (used for JWT issuance) must be protected
 
+#### Metrics
+
+The verifier serves its Prometheus metrics, `/metrics`, on port 9090 of the `verifier` Service (`metrics`), apart from port 3000, which its Ingress publishes, so the metrics are not reachable from outside the cluster. Scrape them from inside the cluster, at `http://verifier.<your_namespace>.svc.cluster.local:9090/metrics`. The port is set with `deployment.server.metricsPort`; setting it to the main port (3000) serves the metrics there again, and publishes them with the Ingress.
+
 #### Request object modes
 
 `deployment.verifier.supportedModes` defaults to `urlEncoded`. With `byValue` or `byReference` the verifier signs the request objects it sends to wallets, so it also needs `clientIdentification`; without its `keyPath` the verifier does not start (`Failed to initialize verifier`):
@@ -669,7 +674,7 @@ The verifier reads the algorithm from `requestKeyAlgorithm`; the `keyAlgorithm` 
 
 #### Token signing algorithm
 
-The access tokens the verifier issues are validated by APISIX's `openid-connect` plugin, which only builds the public key from an RSA JWK (or from an `x5c` chain, which the verifier does not publish). Keep `deployment.verifier.keyAlgorithm` at its default `RS256`: with `ES256`, APISIX rejects every token with `No trusted certs loaded`. This only concerns the verifier's tokens; Keycloak can keep signing credentials with `ES256`.
+The access tokens the verifier issues are validated by APISIX's `openid-connect` plugin, whose library ([lua-resty-openidc](https://github.com/zmartzone/lua-resty-openidc)) only accepts tokens signed with `RS*` or `HS*` algorithms, in every APISIX version up to 3.19 at least. With an `ES256` token it does not look up any key - neither in the JWKS nor in an `x5c` chain - and rejects every request with `401` and `jwt signature verification failed: No trusted certs loaded`. Keep `deployment.verifier.keyAlgorithm` at its default `RS256` for every verifier whose tokens APISIX validates. This only concerns the verifier's tokens; Keycloak can keep signing credentials with `ES256`.
 
 By default (`generateKey: true`) the verifier generates that key at startup and only keeps it in memory, so the tokens issued before a restart stop validating and several replicas do not share a key. In production, provide an RSA key instead, with `generateKey: false` and `keyPath`.
 

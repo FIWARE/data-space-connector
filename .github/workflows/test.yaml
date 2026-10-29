@@ -153,6 +153,35 @@ jobs:
               done
 
           echo ""
+          echo "### LOGS OF THE PREVIOUS CONTAINER OF RESTARTED PODS (last 100 lines each) ###"
+          kubectl get pods --all-namespaces -o json \
+            | jq -r '.items[] | select(any((.status.containerStatuses // [])[]; .restartCount > 0)) | .metadata.namespace + "/" + .metadata.name' \
+            | while read pod; do
+                ns=$(echo $pod | cut -d/ -f1)
+                name=$(echo $pod | cut -d/ -f2)
+                echo "--- Previous logs: $pod ---"
+                kubectl logs "$name" -n "$ns" --all-containers --previous --tail=100 2>&1 || true
+                echo ""
+              done
+
+          # Every scenario reads its data through Scorpio, and a restarted broker only shows why it
+          # died in the previous container; what it did with the test's requests is in the current one.
+          echo ""
+          echo "### LOGS OF THE CURRENT SCORPIO CONTAINERS (last 200 lines each) ###"
+          kubectl get pods --all-namespaces --no-headers \
+              -o custom-columns=NAMESPACE:.metadata.namespace,NAME:.metadata.name \
+            | grep scorpio \
+            | while read ns name; do
+                echo "--- Logs: $ns/$name ---"
+                kubectl logs "$name" -n "$ns" --all-containers --timestamps --tail=200 2>&1 || true
+                echo ""
+              done
+
+          echo ""
+          echo "### POSTGRES OPERATOR LOGS (last 300 lines) ###"
+          kubectl logs -n operators -l app.kubernetes.io/name=postgres-operator --tail=300 2>&1 || true
+
+          echo ""
           echo "### DISK & MEMORY ON RUNNER ###"
           df -h || true
           free -h || true
