@@ -1,8 +1,10 @@
 # Ticket: Data space eventing and participant-removal cleanup
 
-**Type:** Epic (8 sub-tickets across 4 repositories)
-**Design:** [architecture.md](architecture.md) — **answered questions and the follow-ups left open: [questions.md](questions.md)**
-**Status:** refined, unblocked — the design decisions were taken in the review of 2026-10-28
+**Type:** Epic (12 sub-tickets across 4 repositories; the contract-management helm chart is a
+fifth, touched from DSC-1)
+**Design:** [architecture.md](architecture.md) — **the decisions behind it, Q1–Q13 and F1–F8: [questions.md](questions.md)**
+**Status:** refined, unblocked — design decisions taken in the reviews of 2026-10-28 and
+2026-10-29; no open question is blocking
 
 ## Summary
 
@@ -26,7 +28,7 @@ happened, so every future need of that kind would grow its own callback. This ep
 channel once, on CloudEvents and on the authentication the connector already uses, and consumes it
 for one use case.
 
-## Decisions taken in review (2026-10-28)
+## Decisions taken in review (2026-10-28, 2026-10-29)
 
 | | Decision |
 |---|---|
@@ -44,7 +46,14 @@ for one use case.
 | PAP / agreements | reporting is enough for now |
 | Scope in the TIL | stays internal; may be exposed on the **management** API only |
 | Latency | ~2 min (poll interval × confirmations) is acceptable |
-| Specification | write the result up for the DSBA/Gaia-X/IDSA context (DSC-3) |
+| Scope attribution | a **typed** grant in the TIL — `scope=<publisher id>` + `scopeType=dataspace` — added backwards compatibly; no reserved prefix (D-11) |
+| Configuration namespace | **`dataspace.events`**, not `contract-management.events`; the component keeps its name for now (D-12) |
+| Onboarding portal | **in scope for this epic**: it both writes and removes membership trust, so it has to do both with the scope (OBP-1) |
+| `full` mode | kept |
+| `adoptUnattributed` | kept as designed: adopts for a single-publisher deployment, refuses for several |
+| Publisher origin | the receiver configures the publisher's DNS name beside its identifier; two pieces of identity are acceptable |
+| Publisher management API | out of scope — a later epic |
+| Specification | an **interoperability write-up in this repository** (DSC-3). Not a submission: DSBA, Gaia-X and IDSA are unaffected by this change |
 
 ## Scope
 
@@ -65,7 +74,9 @@ for one use case.
 - Participant-to-participant configuration delivery after a purchase (architecture §14).
 - Durable/auditable delivery (outbox, event log, catch-up feed) — D-4.
 - Cleaning up ODRL policies, Rainbow/EDC agreements or issued credentials on removal.
-- Renaming `contract-management`.
+- Renaming `contract-management` — the event configuration is namespaced `dataspace.events` so that
+  the rename, whenever it comes, costs nothing here.
+- Self-service registration of publishers by a participant (needs persistence, D-4) — a later epic.
 - Any change to how an operator removes a participant.
 
 ---
@@ -79,7 +90,7 @@ for one use case.
   (`application/cloudevents+json`), `dataspaceid` optional.
 - `OPTIONS /events` answering the webhook validation request: return `WebHook-Allowed-Origin` for a
   configured publisher's origin, nothing for anybody else, plus `Allow: POST`.
-- `EventListener` controller behind `events.listener.enabled`, dispatching to a
+- `EventListener` controller behind `dataspace.events.listener.enabled`, dispatching to a
   `DataSpaceEventHandler` interface — one implementation per event type, mirroring the
   `TMForumEventHandler` registry in `NotificationListener`.
 - Authorization (architecture §6): verify the bearer against the configured verifier JWKS, read the
@@ -87,7 +98,8 @@ for one use case.
   pair to be configured, ignore events whose `subject` is this participant's own identifier.
 - Deduplicate on `(source, id)` with a bounded, time-limited in-memory cache.
 - Unknown `type` → `202` + metric, never an error.
-- Configuration: `events.*` as a **`@Refreshable`** `@ConfigurationProperties` bean, picked up from
+- Configuration: **`dataspace.events.*`** (D-12 — the namespace is the data space's, not the
+  component's) as a **`@Refreshable`** `@ConfigurationProperties` bean, picked up from
   the mounted ConfigMap through a file watch and through `/refresh`, so a publisher can be added
   without restarting the pod. Conditions in the style of
   `GeneralProperties.CentralMarketplaceCondition`.
@@ -106,7 +118,7 @@ for one use case.
 
 **Repo:** `FIWARE/contract-management`
 
-- `POST /subscriptions`, `DELETE /subscriptions/{id}` behind `events.publisher.enabled`:
+- `POST /subscriptions`, `DELETE /subscriptions/{id}` behind `dataspace.events.publisher.enabled`:
   OID4VP-authenticated, `subscriberId` must equal the authenticated identifier, request shaped after
   the CloudEvents Subscriptions API (`sink`, `types`, `protocol`, `protocolsettings`), leased with a
   TTL, capped per subscriber and in total.
@@ -169,13 +181,14 @@ for one use case.
 
 - `ParticipantRemovedHandler` applying the publisher's `onParticipantRemoved.mode`
   (`report` | `dataspace` | `granted` | `full`) with `keep` and per-identifier `overrides`, through
-  a `TrustedIssuersListAdapter` extended with the calls it needs (requires TIL-1; `adoptUnattributed`
-  requires TIL-2).
-- Membership grants are written under the scope `dataspace:<publisher id>` wherever
-  `contract-management` creates them, so that what it creates is attributable like what it cleans up.
+  a `TrustedIssuersListAdapter` extended with the calls it needs (requires TIL-1 and TIL-2;
+  `adoptUnattributed` requires TIL-3).
+- Membership grants are written as `scope=<publisher id>`, `scopeType=dataspace` wherever
+  `contract-management` creates them, so that what it creates is attributable like what it cleans
+  up. Order grants keep writing `scope` alone, unchanged.
 - The per-publisher reconciliation sweep (architecture §10): at start-up and on a timer, for each
-  publisher, the identifiers holding `dataspace:<publisher>`-scoped credentials that the publisher's
-  registry no longer lists; same policy, capped by `maxRemovalsPerRun`.
+  publisher, the identifiers holding credentials granted under that publisher's membership scope
+  which the publisher's registry no longer lists; same policy, capped by `maxRemovalsPerRun`.
 - Reporting in every mode: log, `dsc_dataspace_events_participant_removed_total{publisher,action,mode}`,
   and `GET /events/participants/removed` listing what each data space removed, what is still held
   for it, and whether it is attributable.
@@ -191,28 +204,54 @@ for one use case.
 - `adoptUnattributed: true` with one publisher adopts; with two publishers it refuses and says so.
 - A failing TIL call yields `502` to the publisher (so it retries) and leaves nothing half-applied.
 
-## TIL-1 — Scope queries on the management API
+## TIL-1 — Typed scopes
+
+**Repo:** `FIWARE/trusted-issuers-list`
+
+A grant gains a type, so that "this credential exists because the issuer is a member of data space
+X" is expressible without reserving a prefix in a free-form field (D-11).
+
+- `Credential.scopeType`, nullable, beside the existing `scope`; a new Liquibase changeset
+  (`changelog-v0_0_7.xml`) adding the nullable column — no data migration.
+- An optional `scopeType` query parameter on the three scope endpoints
+  (`PUT`/`DELETE /issuer/{did}/credential`, and `POST /issuer`), carried into
+  `CredentialRepository` as `findByTrustedIssuerDidAndScopeAndScopeType` /
+  `deleteByTrustedIssuerDidAndScopeAndScopeType`.
+- **Absent `scopeType` means the untyped grants**, never "any type". Every existing caller writes
+  and deletes ProductOrder scopes without it and must keep addressing exactly the rows it addresses
+  today.
+- `scopeType` is as internal as `scope`: it appears in no `/v4` or `/v5` projection
+  (`TIRMapper` untouched).
+
+**Acceptance:** an existing unscoped or untyped-scope row is unaffected by the migration; a typed
+grant and an untyped grant with the same `scope` string coexist and are deleted independently; a
+scoped call without `scopeType` never touches a typed grant and vice versa; nothing new appears in
+a `/v4` or `/v5` response. Parameterized over (scope, scopeType) combinations in
+`TrustedIssuersListControllerTest`.
+
+## TIL-2 — Scope queries on the management API
 
 **Repo:** `FIWARE/trusted-issuers-list`
 
 Two read endpoints on the **management** API; the scope stays out of every TIR projection:
 
-- `GET /issuer/{did}/scopes` → the scopes currently holding credentials for this issuer, with a
-  count. Needed by the `granted` mode and by the report.
-- `GET /issuer?scope=<scope>` → the issuers holding credentials granted under that scope. Needed by
-  the reconciliation sweep.
+- `GET /issuer/{did}/scopes` → the scopes currently holding credentials for this issuer, each with
+  its `scopeType` and a count. Needed by the `granted` mode and by the report.
+- `GET /issuer?scope=<scope>&scopeType=<type>` → the issuers holding credentials granted under that
+  scope. Needed by the reconciliation sweep.
 
-**Acceptance:** exactly the distinct scopes; empty for an issuer with only unattributed credentials;
-`404` for an unknown issuer; the scope appears in no `/v4` or `/v5` response. Covered in
-`TrustedIssuersListControllerTest`.
+**Acceptance:** exactly the distinct (scope, scopeType) pairs; empty for an issuer with only
+unattributed credentials; `404` for an unknown issuer; the scope appears in no `/v4` or `/v5`
+response. Covered in `TrustedIssuersListControllerTest`.
 
-## TIL-2 — Delete the unattributed credentials of an issuer *(migration path only)*
+## TIL-3 — Delete the unattributed credentials of an issuer *(migration path only)*
 
 **Repo:** `FIWARE/trusted-issuers-list`
 
-`DELETE /issuer/{did}/credential` requires `scope` today and answers `400` without it, so the
-credentials that no grant owns cannot be removed selectively. Needed **only** for
-`adoptUnattributed`, so it may follow the rest of the epic. Spell it explicitly rather than by
+`DELETE /issuer/{did}/credential` requires `scope` today and answers `400` without it
+(`TrustedIssuersListController.requireScope`), so the credentials that no grant owns cannot be
+removed selectively. Needed **only** for `adoptUnattributed`, so it may follow the rest of the
+epic. Spell it explicitly rather than by
 omitting the parameter, so that a forgotten parameter stays an error instead of becoming a
 destructive success.
 
@@ -220,17 +259,47 @@ destructive success.
 `404` for an unknown issuer, idempotent; a request with neither the explicit marker nor a scope is
 still `400`.
 
+## OBP-1 — Onboarding portal: write and remove membership trust with the scope
+
+**Repo:** [`SEAMWARE/On-Boarding-Portal`](https://github.com/SEAMWARE/On-Boarding-Portal)
+
+The portal is the other writer of membership-derived trust, and today it is also the bluntest
+remover. `registerIssuer` (`backend/src/service/registry-client.ts`) posts to `<til>/issuer` with no
+scope, so everything it creates is unattributed and invisible to the mechanism; `unregisterIssuer`
+calls `DELETE <til>/issuer/{did}`, which drops the issuer whole — including order-granted entries
+and other data spaces'.
+
+- `TilConfig` gains the data space identifier (the publisher id) for each configured TIL.
+- `registerIssuer` posts with `?scope=<publisher id>&scopeType=dataspace` (TIL-1), so what the
+  portal creates is attributable from the moment it is created.
+- `unregisterIssuer` calls `DELETE <til>/issuer/{did}/credential?scope=<publisher id>&scopeType=dataspace`
+  instead of deleting the issuer, and deletes the issuer only when no credential is left.
+- Optional, and the reason the portal is worth touching here beyond attribution: when it removes a
+  participant it already *knows* — it can `POST` the removal to the publisher's internal `/events`
+  (CM-2), which turns the TIR watcher into a backstop rather than the only detection, without
+  changing anything about how the event is authorized downstream.
+- Both the trust anchor's registry and any participant TIL in `app.til` are reached by the same
+  code, so the change lands once.
+
+**Acceptance:** an issuer registered through the portal carries the membership scope in the TIL;
+removing a participant through the portal leaves order-granted and differently-scoped credentials
+in place; a TIL that does not yet implement TIL-1 still works (the portal falls back to the
+unscoped calls and logs it); the direct event publication is configurable and off by default.
+
 ## DSC-1 — Chart: participant side
 
 **Repo:** this one
 
-- `contract-management.events.*` in `charts/data-space-connector/values.yaml` with `# --` comments
-  for helm-docs, every key defaulting to off and the reaction to `report`; regenerate
-  `values.schema.json` (`.github/scripts/values-schema.sh`) and the README values table.
+- `contract-management.dataspace.events.*` in `charts/data-space-connector/values.yaml` with
+  `# --` comments for helm-docs, every key defaulting to off and the reaction to `report`;
+  regenerate `values.schema.json` (`.github/scripts/values-schema.sh`) and the README values table.
+  The namespace under the subchart alias is `dataspace.events`, not `events`, so that a later
+  rename of the component leaves the feature's configuration surface untouched (D-12).
 - The publishers block must be mounted as a ConfigMap the application can refresh (CM-1), not baked
   into the container's environment.
-- A `scope` on `registration.issuer` entries so membership-derived trust is attributable from the
-  first install, defaulting to the data space's publisher id where one is configured.
+- A `scope`/`scopeType` on `registration.issuer` entries so membership-derived trust is
+  attributable from the first install, defaulting to the data space's publisher id and
+  `dataspace` where a publisher is configured.
 - Events path on the contract-management ingress (and, if the subchart does not support it,
   `FIWARE/helm-charts` first).
 - Example ODRL policy `it/src/test/resources/policies/allowDataSpaceEvents.json`.
@@ -247,7 +316,7 @@ still `400`.
 - `k3s/` overlays: publisher at the trust anchor, listener + policy at provider and consumer.
 - Cucumber feature `it/src/test/resources/it/dataspace_eventing.feature` + step definitions:
   1. an order grants the consumer an order-scoped TIL entry at the provider, and the provider's
-     `registration.issuer` holds a `dataspace:`-scoped one for the same identifier;
+     `registration.issuer` holds a `dataspace`-typed one for the same identifier;
   2. the operator deletes the consumer from the trust anchor's TIR;
   3. with the default `report` mode, **nothing is removed** and the report lists the consumer;
   4. with `dataspace` mode, the membership entry is gone and the order-scoped one remains;
@@ -264,16 +333,27 @@ still `400`.
   *Confirm event callbacks with the CloudEvents webhook handshake*.
   Update `doc/adr/README.md`.
 
-## DSC-3 — Specification write-up
+## DSC-3 — Interoperability specification
 
-**Repo:** this one (document), then contributed outward
+**Repo:** this one — `doc/eventing/specification.md`
 
-Write the mechanism up for the DSBA/Gaia-X/IDSA context, as the review asked. D-9 keeps the wire
-format on existing CloudEvents documents, so what has to be specified is small: the event types and
-their payloads, the authentication binding (OID4VP access token obtained at the receiver's
-verifier), the authorization rule of architecture §6, and the subscription profile. No ODRL left
-operand for the credential issuer exists today; note it as a possible contribution to the PAP rather
-than a dependency.
+Not a submission to a governance body: DSBA, Gaia-X and IDSA are unaffected by this change, as the
+review pointed out. What is written up is the **interoperability contract** — what a second,
+non-FIWARE implementation needs in order to publish to, or subscribe at, a FIWARE participant,
+separated from the architecture document's rationale and from this repository's chart values:
+
+- the event types and their payloads, with `org.fiware.dataspace.participant.removed` as the first;
+- the authentication binding: an OID4VP access token obtained at the **receiver's** verifier, and
+  what a publisher has to present;
+- the authorization rule of architecture §6 (publisher × type, `source` equals the authenticated
+  identifier, self-events ignored);
+- the subscription profile: which parts of the CloudEvents Subscriptions API shape are used, and the
+  webhook handshake with the exact headers (pinned, because that document is `1.0.3-wip`);
+- what is explicitly *not* specified: the reaction to an event, which is local policy.
+
+D-9 keeps the wire format on existing CloudEvents documents, so this stays short. No ODRL left
+operand for the credential issuer exists today; note it as a possible PAP contribution rather than a
+dependency. If a governance body ever asks for it, this is the document that goes.
 
 ---
 
@@ -287,7 +367,8 @@ than a dependency.
   with defaults still changes no trust configuration (verified by the helm-unittest suite and by
   step 3 of the feature).
 - Every public method and class documented (JavaDoc), no magic constants.
-- Documentation and release notes merged; ADRs written and indexed; DSC-3 drafted.
+- Documentation and release notes merged; ADRs written and indexed; `doc/eventing/specification.md`
+  written and linked from `doc/README.md`.
 - The feature is demonstrable from the local deployment (`mvn clean deploy -Plocal`) with a scripted
   removal at the trust anchor.
 
@@ -295,9 +376,11 @@ than a dependency.
 
 - Entirely additive and off by default; no existing values change meaning; the default reaction is
   `report`, so switching the feature on never deletes anything by itself.
-- The TIL additions are additive; CM-5 must fail loudly at start-up when a configured mode needs a
-  trusted-issuers-list that is too old, not silently at event time (`TrustedIssuersListAdapter`
-  already documents a comparable minimum-version requirement).
+- The TIL additions are additive: a nullable column and optional query parameters, with absent
+  `scopeType` keeping its present meaning for every caller that exists today. CM-5 and OBP-1 must
+  fail loudly — at start-up for CM-5 — when a configured mode needs a trusted-issuers-list that is
+  too old, not silently at event time (`TrustedIssuersListAdapter` already documents a comparable
+  minimum-version requirement).
 - Entries that predate the feature are unattributed and therefore outside the mechanism; they are
   reported, and `adoptUnattributed` is the opt-in migration for a single-data-space deployment.
 - Old participants (no listener) and old trust anchors (no publisher) interoperate with new ones;
@@ -312,4 +395,5 @@ than a dependency.
 | A removal in one data space destroys trust from another | attribution per publisher (D-10); `full` is documented as the blunt instrument it is |
 | The installed base stays unattributed, so the sweep sees nothing | the report lists unattributed entries explicitly; `registration.issuer` carries a scope going forward; `adoptUnattributed` for the simple case |
 | contract-management grows a second, unrelated responsibility | kept behind modes and conditions as the central-marketplace mode is; a rename is acknowledged as a likely follow-up |
+| The portal keeps deleting whole issuers, undoing the attribution from the other side | OBP-1 is part of the epic, and the integration test covers the portal path once it lands |
 | The epic stalls between repositories | CM-1 + CM-4 + CM-5 in `report` mode + DSC-2 already deliver visibility; the cleanup modes can follow the TIL release |

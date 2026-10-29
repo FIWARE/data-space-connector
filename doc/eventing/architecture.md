@@ -287,9 +287,15 @@ at the **receiver's** verifier and uses the returned access token as a bearer.
    ```yaml
    publishers:
      - id: did:web:trust-anchor.org
+       origin: trust-anchor.org                   # answered on OPTIONS /events, §5.2
        types: [ "org.fiware.dataspace.participant.removed" ]
        registry: https://tir.trust-anchor.org     # used by §10
    ```
+
+   A publisher is therefore known by two things: its **identifier**, which authorizes the event,
+   and its **origin** — a DNS name — which is what the webhook handshake of §5.2 works on. They are
+   configured together and deliberately not derived from one another, for the same reason D-8
+   gives: nothing may be inferred from a participant identifier.
 
    An event whose `source` differs from the authenticated identifier, or whose `type` that publisher
    is not configured for, is `403`. **This is the check that matters**: without it every
@@ -352,7 +358,7 @@ the trust anchor's namespace** (§11) — not the trusted-issuers-list, and not 
 **watches the registry and diffs it**; the registry is not instrumented.
 
 ```
-every events.publisher.tirWatch.interval (default 60s):
+every dataspace.events.publisher.tirWatch.interval (default 60s):
   snapshot := enumerate GET /issuer   (all pages, trusted-issuers-list management API)
   if the enumeration did not complete       -> discard, keep the previous snapshot, warn
   missing := previous \ snapshot
@@ -401,13 +407,23 @@ touch it.
 The trusted-issuers-list already records that: every credential it holds is attributed to the
 **scope** that granted it (`/issuer/{did}/credential?scope=`, see `TrustedIssuersListAdapter`). This
 design extends the existing mechanism rather than adding a second one — entries that exist *because*
-an organization is a member of a data space are granted under that data space's scope:
+an organization is a member of a data space are granted under that data space's scope.
 
-| Origin of the entry | Scope | Meaning |
-|---|---|---|
-| `contract-management` on order activation | the ProductOrder id | "this order grants them this" |
-| membership registration — chart `registration.issuer`, onboarding | `dataspace:<publisher id>` | "I trust them because they are a member of that data space" |
-| operator by hand, or anything created before this feature | none | unattributed; outside the mechanism |
+The scope is a free-form string today, holding ProductOrder ids. Rather than reserve a prefix inside
+it, the grant gains a **type**: the trusted-issuers-list takes an optional `scopeType` beside
+`scope` (D-11), so a membership grant is `scope=<publisher id>`, `scopeType=dataspace` and cannot
+collide with an order id whatever an order id happens to look like.
+
+| Origin of the entry | `scope` | `scopeType` | Meaning |
+|---|---|---|---|
+| `contract-management` on order activation | the ProductOrder id | *(none)* | "this order grants them this" |
+| membership registration — chart `registration.issuer`, onboarding portal | the publisher id | `dataspace` | "I trust them because they are a member of that data space" |
+| operator by hand, or anything created before this feature | *(none)* | *(none)* | unattributed; outside the mechanism |
+
+The addition is backwards compatible in both directions: the column is nullable, so every existing
+row stays valid, and a scoped call that passes no `scopeType` addresses the **untyped** grants only
+— which is exactly what every caller writing ProductOrder scopes does today, so none of them can
+reach a membership grant by accident, and none of them has to change.
 
 The scope stays **internal to the trusted-issuers-list and its management API** — it is never
 exposed through any TIR projection, as the specification requires today.
@@ -417,7 +433,7 @@ exposed through any TIR projection, as the specification requires today.
 | `onParticipantRemoved` | Action | TIL call |
 |---|---|---|
 | `report` *(default)* | record and report only; no local state changes | — |
-| `dataspace` | drop what this data space's membership granted | `DELETE /issuer/{did}/credential?scope=dataspace:<publisher id>` |
+| `dataspace` | drop what this data space's membership granted | `DELETE /issuer/{did}/credential?scope=<publisher id>&scopeType=dataspace` |
 | `granted` | `dataspace`, plus every order-scoped grant to that identifier | additionally one delete per scope from `GET /issuer/{did}/scopes` |
 | `full` | drop the issuer entirely, including other data spaces' entries and unattributed ones | `DELETE /issuer/{did}` |
 
@@ -466,7 +482,7 @@ that data space's registry:
 
 ```
 for each publisher P with registry R:
-    attributed := GET /issuer?scope=dataspace:<P>          (TIL management API)
+    attributed := GET /issuer?scope=<P>&scopeType=dataspace   (TIL management API)
     members    := enumerate GET R/v4/issuers
     stale      := attributed \ members \ keep
     apply onParticipantRemoved(P) to stale, capped by maxRemovalsPerRun
@@ -489,40 +505,48 @@ registries for every credential validation.
 
 ## 11. Deployment
 
-**At the participant** — values on the existing `contract-management` subchart:
+The configuration namespace is **`dataspace.events`**, not `contract-management.events` (D-12).
+The mechanism belongs to the data space, not to the component that happens to host it today.
+`contract-management` keeps its name — renaming it is explicitly not part of this work — but if it
+is ever renamed, nothing in a deployed configuration has to follow. In the umbrella chart the block
+still sits under the subchart alias, as every subchart knob does.
+
+**At the participant:**
 
 ```yaml
 contract-management:
-  events:
-    listener:
-      enabled: true
-      verifier:
-        jwksUrl: http://verifier:3000/.well-known/jwks
-      # runtime-refreshable (mounted ConfigMap + /refresh), see §6
-      publishers:
-        - id: did:web:trust-anchor.org
-          types: [ "org.fiware.dataspace.participant.removed" ]
-          registry: https://tir.trust-anchor.org
-          subscription:
-            sink: https://contract-management.mp-operations.org/events
-            clientId: dataspace-events
-            scopes: [ default ]
-            renewInterval: 10m
-          onParticipantRemoved:
-            mode: report
-            adoptUnattributed: false
-            keep: [ did:web:trust-anchor.org ]
-            overrides: []
-          reconciliation:
-            enabled: true
-            interval: 6h
-            maxRemovalsPerRun: 5
+  dataspace:
+    events:
+      listener:
+        enabled: true
+        verifier:
+          jwksUrl: http://verifier:3000/.well-known/jwks
+        # runtime-refreshable (mounted ConfigMap + /refresh), see §6
+        publishers:
+          - id: did:web:trust-anchor.org
+            origin: trust-anchor.org          # for the webhook handshake, §5.2
+            types: [ "org.fiware.dataspace.participant.removed" ]
+            registry: https://tir.trust-anchor.org
+            subscription:
+              sink: https://contract-management.mp-operations.org/events
+              clientId: dataspace-events
+              scopes: [ default ]
+              renewInterval: 10m
+            onParticipantRemoved:
+              mode: report
+              adoptUnattributed: false
+              keep: [ did:web:trust-anchor.org ]
+              overrides: []
+            reconciliation:
+              enabled: true
+              interval: 6h
+              maxRemovalsPerRun: 5
 ```
 
 plus an ODRL policy admitting the trust anchor's credential type to the events path — shipped as an
 example next to `it/src/test/resources/policies/allowContractManagement.json` — the events path on
-the contract-management ingress, and a `scope` on the chart's `registration.issuer` entries so that
-membership-derived trust is attributable from the first install (§9).
+the contract-management ingress, and a `scope`/`scopeType` on the chart's `registration.issuer`
+entries so that membership-derived trust is attributable from the first install (§9).
 
 **At the trust anchor** — the publisher stays a **separate release**, as the review asked: the
 `trust-anchor` chart does not gain a dependency on something called `contract-management`. It is
@@ -542,18 +566,21 @@ contract-management:
   oid4vp:
     enabled: true                 # to authenticate towards the participants
     holder: { holderId: did:web:trust-anchor.org, ... }
-  events:
-    publisher:
-      enabled: true
-      tirWatch:
+  dataspace:
+    events:
+      publisher:
         enabled: true
-        tir: http://tir:8080
-        interval: 60s
-        confirmations: 2
-        maxRemovalsPerCycle: 5
+        origin: trust-anchor.org  # sent as WebHook-Request-Origin, §5.2
+        tirWatch:
+          enabled: true
+          tir: http://tir:8080
+          interval: 60s
+          confirmations: 2
+          maxRemovalsPerCycle: 5
 ```
 
-**Everything is off by default.** `events.listener.enabled`, `events.publisher.enabled` and
+**Everything is off by default.** `dataspace.events.listener.enabled`,
+`dataspace.events.publisher.enabled` and
 `reconciliation.enabled` default to `false`, and the default reaction is `report`, so enabling the
 feature on an existing deployment changes no trust configuration until someone asks for it.
 
@@ -572,6 +599,8 @@ Accepted in the review of 2026-10-28 unless noted; each is a candidate ADR (`doc
 | **D-7** | **No payload signature** | No governance framework in sight requires non-repudiation of a removal notice; it stays additive if one appears | A JWS over the envelope in v1 |
 | **D-8** | A callback is confirmed with the **CloudEvents webhook handshake**, never derived from the subscriber's identifier | Participant identifiers are not necessarily `did:web`, so no host can be derived from them; the handshake proves consent for any sink, whatever the DID method | Matching the callback host against a `did:web` domain (first draft); accepting an arbitrary callback URL |
 | **D-9** | Use the **specified protocol where one exists**: CloudEvents HTTP Protocol Binding (structured mode) and the CloudEvents HTTP webhook handshake; the subscription request follows the shape of the CloudEvents Subscriptions API without claiming conformance | The review's rule — if a specification for `application/cloudevents+json` exchange exists, use it. The binding is a released 1.0.2 document; the webhook document is `1.0.3-wip`, so its headers are pinned here | Specifying a FIWARE-local wire protocol |
+| **D-11** | Membership grants are **typed** in the trusted-issuers-list (`scope=<publisher id>`, `scopeType=dataspace`) rather than carrying a reserved prefix in `scope` | `scope` is free-form and holds ProductOrder ids; a `dataspace:` prefix is a convention nothing enforces and an order id could collide with. A nullable column plus an optional query parameter is backwards compatible, and a call without `scopeType` keeps addressing the untyped grants | A reserved `dataspace:` prefix (first draft); a bare publisher id as the scope, with the configuration deciding what it means |
+| **D-12** | The configuration namespace is **`dataspace.events`**, independent of the component's name | `contract-management` keeps its name for now, and the mechanism is not about contracts. Naming the configuration after the data space means a later rename costs nothing in deployed configuration | `contract-management.events.*` (first draft); renaming the component as part of this epic |
 | **D-10** | **Multi-data-space membership is supported**: every reaction and every sweep is per publisher and touches only entries attributable to that data space | A participant can be a member of several data spaces and trust issuers from none of them; without attribution no removal can be answered safely | Treating the TIL as belonging to one data space; a `keep` list as the only guard (the first draft) |
 
 ## 13. Failure modes and security considerations
@@ -586,6 +615,7 @@ Accepted in the review of 2026-10-28 unless noted; each is a candidate ADR (`doc
 | Replayed event | repeated cleanup | `(source, id)` dedup; handlers converge; an entry re-created by a later order carries the order's scope and survives `dataspace` mode |
 | Operator removes a participant by mistake | trust entries deleted at every participant | `confirmations`, the circuit breaker, the `report` default, and the report that lets an operator see and undo |
 | Participant is a member of two data spaces, one removes it | the other data space's trust is destroyed | D-10 attribution: only the removing data space's scope is touched (except in `full`, which is documented as blunt) |
+| The onboarding portal removes a participant from a TIL | it calls `DELETE /issuer/{did}` today, which also drops order-granted and other data spaces' entries | OBP-1: register with the membership scope and remove only that scope's credentials |
 | Unattributed legacy entries | invisible to the sweep, never cleaned | listed in the report; `adoptUnattributed` for single-membership deployments; `registration.issuer` carries a scope going forward |
 
 ## 14. What this opens up
@@ -599,10 +629,13 @@ Accepted in the review of 2026-10-28 unless noted; each is a candidate ADR (`doc
   rather than poll.
 - A **second publisher** is just another entry in `publishers`: a sectoral authority, a second trust
   anchor, or a marketplace announcing catalogue changes — and, with D-10, a second data space.
-- **A specification contribution.** The review asked for the envelope and the two APIs to be written
-  up for the DSBA/Gaia-X/IDSA context. Since D-9 keeps everything on CloudEvents documents, what
-  remains to specify is small: the event types, the authentication binding (OID4VP access token at
-  the receiver's verifier) and the authorization rule of §6.
+- **An interoperability specification.** Not a submission to a governance body — DSBA, Gaia-X and
+  IDSA are unaffected by this — but the write-up a second implementation needs in order to talk to
+  a FIWARE participant: the event types and their payloads, the authentication binding (OID4VP
+  access token obtained at the receiver's verifier), the authorization rule of §6 and the
+  subscription profile. D-9 keeps the wire format on existing CloudEvents documents, so it is
+  short. It lives in this repository (DSC-3) and can be carried outward later if anyone asks for
+  it.
 
 ## 15. Impact per repository
 
@@ -610,5 +643,6 @@ Accepted in the review of 2026-10-28 unless noted; each is a candidate ADR (`doc
 |---|---|
 | [contract-management](https://github.com/FIWARE/contract-management) | the whole mechanism: `/events`, `/subscriptions`, the webhook handshake, the watcher, the per-publisher reaction, the reconciliation sweep, the report, refreshable configuration |
 | [trusted-issuers-list](https://github.com/FIWARE/trusted-issuers-list) | management-API additions only: list the scopes holding credentials for an issuer; list the issuers holding credentials of a scope; delete the unattributed credentials of an issuer (for `adoptUnattributed`). The scope stays out of every TIR projection |
-| [helm-charts (contract-management chart)](https://github.com/FIWARE/helm-charts) | the `events` values block, the events path on the ingress |
+| [helm-charts (contract-management chart)](https://github.com/FIWARE/helm-charts) | the `dataspace.events` values block as a mountable ConfigMap, the events path on the ingress |
+| [On-Boarding-Portal](https://github.com/SEAMWARE/On-Boarding-Portal) | register issuers with the membership scope instead of unscoped, and remove a participant by dropping that scope's credentials rather than the whole issuer; optionally publish the removal event directly |
 | **data-space-connector** (this repo) | umbrella values + schema, a scope on `registration.issuer`, the trust-anchor publisher release, example ODRL policy, k3s overlays, an integration test, documentation, release notes, ADRs |
