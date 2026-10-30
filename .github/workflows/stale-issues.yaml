@@ -5,9 +5,9 @@ on:
   workflow_dispatch:
 
 jobs:
-  # see https://github.com/SEAMWARE/github-workflows
+  # see https://github.com/FIWARE/github-workflows
   stale:
-    uses: SEAMWARE/github-workflows/.github/workflows/stale.yml@v1
+    uses: FIWARE/github-workflows/.github/workflows/stale.yml@v1
     permissions:
       issues: write
       pull-requests: write
