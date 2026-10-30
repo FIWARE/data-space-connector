@@ -323,16 +323,15 @@ did:
         items:
           - key: tls.crt
             path: tls.crt
-    # did-helper generates a key pair and a keystore in /cert at startup even when certPath is
-    # set; they are not used, but the directory has to be writable, also with a read-only root
-    # filesystem
-    - name: did-helper-workdir
-      emptyDir: {}
   volumeMounts:
     - name: certs
       mountPath: /certs
-    - name: did-helper-workdir
-      mountPath: /cert
+  # with certPath did-helper writes nothing, so it runs on a read-only root filesystem
+  securityContext:
+    readOnlyRootFilesystem: true
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop: ["ALL"]
   ingress:
     enabled: true
     className: <your-ingress-class>   # add the annotations your ingress controller needs
@@ -641,6 +640,10 @@ The apisix chart only mounts the CA, and sets it as APISIX's `ssl_trusted_certif
 - Ensure the VCVerifier can reach the Trust Anchor over HTTPS with valid certificates
 - If using a proxy, configure `HTTPS_PROXY`/`NO_PROXY` appropriately
 - The VCVerifier's signing key (used for JWT issuance) must be protected
+
+#### Metrics
+
+The verifier serves its Prometheus metrics, `/metrics`, on port 9090 of the `verifier` Service (`metrics`), apart from port 3000, which its Ingress publishes, so the metrics are not reachable from outside the cluster. Scrape them from inside the cluster, at `http://verifier.<your_namespace>.svc.cluster.local:9090/metrics`. The port is set with `deployment.server.metricsPort`; setting it to the main port (3000) serves the metrics there again, and publishes them with the Ingress.
 
 #### Request object modes
 

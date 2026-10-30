@@ -2,12 +2,12 @@ apiVersion: v2
 name: data-space-connector
 description: Umbrella Chart for the FIWARE Data Space Connector, combining all essential parts to be used by a participant.
 type: application
-version: 10.14.3
+version: 10.15.6
 dependencies:
   - name: decentralized-iam
     alias: decentralizedIam
     condition: decentralizedIam.enabled
-    version: 2.1.27
+    version: 2.1.28
     repository: https://fiware.github.io/decentralized-iam
   # data-service
   - name: scorpio-broker-aaio
@@ -18,7 +18,7 @@ dependencies:
   # issuance
   - name: keycloak
     condition: keycloak.enabled
-    version: 0.21.46
+    version: 0.21.49
     repository: oci://registry-1.docker.io/cloudpirates
   # contract management
   - name: tm-forum-api
@@ -27,7 +27,7 @@ dependencies:
     repository: oci://quay.io/fiware/helm-charts
   - name: contract-management
     condition: contract-management.enabled
-    version: 3.6.0
+    version: 3.6.2
     repository: oci://quay.io/fiware/helm-charts
   # marketplace
   - name: business-api-ecosystem
@@ -43,7 +43,7 @@ dependencies:
   # dsp
   - name: fdsc-edc
     condition: fdsc-edc.enabled
-    version: 0.7.6
+    version: 0.7.8
     repository: oci://quay.io/fiware/helm-charts
   - name: vault
     alias: vault
@@ -59,13 +59,13 @@ dependencies:
   - name: did-helper
     alias: did
     condition: did.enabled
-    version: 0.2.0
+    version: 0.2.1
     repository: oci://quay.io/fiware/helm-charts
   # cert-manager
   - name: cert-manager
     alias: cert-manager
     condition: cert-manager.enabled
-    version: v1.21.2
+    version: v1.21.3
     repository: https://charts.jetstack.io
   # vc-operator
   - name: vc-operator
@@ -75,11 +75,11 @@ dependencies:
     repository: oci://quay.io/seamware/helm-charts
   - name: prometheus
     condition: prometheus.enabled
-    version: 29.37.0
+    version: 29.39.0
     repository: https://prometheus-community.github.io/helm-charts
   - name: grafana
     condition: grafana.enabled
-    version: 13.3.0
+    version: 14.2.0
     repository: https://grafana-community.github.io/helm-charts
   # observability - OpenTelemetry Operator for auto-instrumentation (opt-in)
   - name: opentelemetry-operator
@@ -89,7 +89,7 @@ dependencies:
   # observability - OpenTelemetry Collector for distributed tracing (opt-in)
   - name: opentelemetry-collector
     condition: opentelemetry-collector.enabled
-    version: 0.174.0
+    version: 0.176.1
     repository: https://open-telemetry.github.io/opentelemetry-helm-charts
   # observability - Grafana Tempo for trace storage backend (opt-in)
   - name: tempo
@@ -101,7 +101,7 @@ dependencies:
   # driven resolution, a provider-local consent-facade.
   - name: consent-facade
     condition: consent-facade.enabled
-    version: 0.2.0
+    version: 0.2.1
     repository: oci://quay.io/fiware/helm-charts
   - name: consent-owner-resolver
     condition: consent-owner-resolver.enabled

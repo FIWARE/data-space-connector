@@ -55,38 +55,22 @@ jobs:
           id: out
           run: echo "version=${VERSION}" >> $GITHUB_OUTPUT
 
-    deploy:
-      name: "Release charts"
-      needs:
-        - "generate-version"
-      runs-on: ubuntu-latest
-
-      steps:
-        - uses: actions/checkout@v5
-
-        - name: Fetch history
-          run: git fetch --prune --unshallow
-
-        - name: Configure Git
-          run: |
-            git config user.name "$GITHUB_ACTOR"
-            git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
-
-        - name: Install Helm
-          run: |
-            curl -fsSLo get_helm.sh https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3
-            chmod 700 get_helm.sh
-            ./get_helm.sh
-
-        - name: Run chart-releaser
-          uses: helm/chart-releaser-action@v1.5.0
-          env:
-            CR_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
-            CR_SKIP_EXISTING: true
+    # Publishes the charts, failing when a changed chart has no new version, see
+    # https://github.com/FIWARE/github-workflows
+    chart-release:
+      uses: FIWARE/github-workflows/.github/workflows/chart-release.yml@v1
+      permissions:
+        contents: write
+      with:
+        oci-registry: quay.io/fiware/helm-charts
+        oci-charts: data-space-connector trust-anchor
+      secrets:
+        oci-username: ${{ secrets.QUAY_USERNAME }}
+        oci-password: ${{ secrets.QUAY_PASSWORD }}
 
     git-release:
       name: "Create Git Release"
-      needs: ["generate-version", "deploy"]
+      needs: ["generate-version", "chart-release"]
       runs-on: ubuntu-latest
 
       steps:
@@ -107,67 +91,3 @@ jobs:
             title: ${{ needs.generate-version.outputs.version }}
             files: |
               LICENSE
-
-    oci-release:
-      name: "Publish OCI artifact (${{ matrix.chart }})"
-      needs: ["deploy"]
-      runs-on: ubuntu-latest
-
-      strategy:
-        fail-fast: false
-        matrix:
-          chart:
-            - data-space-connector
-            - trust-anchor
-
-      steps:
-        - uses: actions/checkout@v5
-
-        - name: Install Helm
-          uses: azure/setup-helm@v4
-
-        - name: Get chart version
-          id: version
-          run: |
-            CHART_VERSION=$(grep '^version:' charts/${{ matrix.chart }}/Chart.yaml | awk '{print $2}')
-            echo "version=$CHART_VERSION" >> $GITHUB_OUTPUT
-
-        - name: Login to quay.io
-          run: helm registry login quay.io -u ${{ secrets.QUAY_USERNAME }} -p ${{ secrets.QUAY_PASSWORD }}
-
-        - name: Check if version already exists
-          id: check
-          run: |
-            if helm show chart oci://quay.io/fiware/helm-charts/${{ matrix.chart }} --version ${{ steps.version.outputs.version }} > /dev/null 2>&1; then
-              echo "exists=true" >> $GITHUB_OUTPUT
-              echo "Version ${{ steps.version.outputs.version }} of ${{ matrix.chart }} already exists in quay.io, skipping push"
-            else
-              echo "exists=false" >> $GITHUB_OUTPUT
-              echo "Version ${{ steps.version.outputs.version }} of ${{ matrix.chart }} not found in quay.io, will publish"
-            fi
-
-        - name: Add Helm repositories
-          if: steps.check.outputs.exists == 'false'
-          run: |
-            helm repo add fiware https://fiware.github.io/helm-charts
-            helm repo add fiware-iam https://fiware.github.io/decentralized-iam
-            helm repo add mongodb https://mongodb.github.io/helm-charts
-            helm repo add hashicorp https://helm.releases.hashicorp.com
-            helm repo add jetstack https://charts.jetstack.io
-            helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
-            helm repo add grafana-community https://grafana-community.github.io/helm-charts
-            helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm-charts
-            helm repo add grafana https://grafana.github.io/helm-charts
-            helm repo add postgres-operator https://opensource.zalando.com/postgres-operator/charts/postgres-operator
-
-        - name: Build dependencies
-          if: steps.check.outputs.exists == 'false'
-          run: helm dependency update charts/${{ matrix.chart }}
-
-        - name: Package chart
-          if: steps.check.outputs.exists == 'false'
-          run: helm package charts/${{ matrix.chart }}
-
-        - name: Push OCI artifact
-          if: steps.check.outputs.exists == 'false'
-          run: helm push ${{ matrix.chart }}-${{ steps.version.outputs.version }}.tgz oci://quay.io/fiware/helm-charts
