@@ -27,11 +27,14 @@ charts/
                               # scorpio, tm-forum-api, contract-management,
                               # marketplace, fdsc-edc, vault, did, cert-manager,
                               # opentelemetry-collector
-    values.yaml               # ~2930 lines -- every knob lives here
+    values.yaml               # ~4190 lines -- every knob lives here
     templates/                # in-chart manifests (see below)
     tests/                    # helm-unittest suites
       tracing_test.yaml       # OTEL tracing tests (33 tests, 361 asserts)
-  trust-anchor/               # secondary chart for trust-anchor scenarios
+  trust-anchor/               # secondary chart: TIR/TIL, Zalando postgres, and
+                              # the consent authority (consent-manager +
+                              # consent-facade subcharts, NetworkPolicies).
+                              # No values.schema.json; tests in tests/
 
 charts/data-space-connector/templates/
   identityhub-deployment.yaml # EDC IdentityHub (Java, tractusx/identityhub)
@@ -71,7 +74,8 @@ pom.xml                       # drives local-deploy + integration tests
 - Dependency fetch: `helm dependency update charts/data-space-connector`
 - Lint: `helm lint charts/data-space-connector`
 - Render: `helm template test charts/data-space-connector -f <values>.yaml`
-- Unit tests: `helm unittest charts/data-space-connector`
+- Unit tests: `helm unittest charts/data-space-connector` and
+  `helm unittest charts/trust-anchor` (both run in CI)
 - Values schema: `.github/scripts/values-schema.sh` regenerates
   `values.schema.json` from `values.yaml`; `--check` fails when it is stale
   (requires helm-unittest plugin, pinned to v0.6.3 in CI)
@@ -111,6 +115,11 @@ pom.xml                       # drives local-deploy + integration tests
   drop ALL capabilities). Any new container must match that.
 - Chart version (`charts/data-space-connector/Chart.yaml` `version:`)
   follows semver; bump minor for additive features.
+- Comment density: values keys get one `# --` line (two-three when a
+  contract needs it); templates explain *why* in `{{- /* ... */}}` blocks
+  above non-obvious logic; helm-unittest suites open with a short header
+  comment and one `it:` per behaviour. Java IT classes carry one-line
+  Javadoc on public constants and step methods. Match that, no more.
 
 ## Pod Scheduling Fields
 - The chart templates 11 workloads of its own (6 Deployments, 5 Jobs). Pods
@@ -201,16 +210,41 @@ post-26.4 OID4VCI model. Hard-won gotchas (full detail in `doc/release-notes/10-
 - **Wallet preset + per-user VCs:** `keycloak.realm.wallets` (Lissi/EUDI clients);
   `wallets.issueCredentialsToUsers: true` auto-assigns realm VCs to declared users.
 
+## Consent Management (ticket-109)
+Being migrated from the Prometheus-X consent-manager (Node, MongoDB, shared
+consent key, authority APISIX facade routes) to `dsc-consent-manager` (Java,
+PostgreSQL, validates VCVerifier JWTs itself; chart
+`oci://quay.io/fiware/helm-charts/dsc-consent-manager`, API base `/v1`,
+ports 8080 API / 9090 management). Follow `IMPLEMENTATION_PLAN.md`.
+- Pieces: trust-anchor chart (manager, authority consent-facade,
+  NetworkPolicies, DB); DSC chart only wires the provider side
+  (`consent-facade`, `consent-owner-resolver`, `consentManagement`).
+- k3s scenario: `k3s/consent-trust-anchor.yaml` (2nd DSC release
+  `consent-authority` in ns `trust-anchor`: keycloak issuer, VCVerifier
+  service `consent-manager`), `k3s/consent-trust-anchor-components.yaml`
+  (trust-anchor chart values), `k3s/consent-provider.yaml` (APISIX
+  consent-filter plugin, image `quay.io/seamware/consent-plugin`).
+  Run: `mvn clean deploy -Pconsent`; IT:
+  `mvn clean integration-test -Ptest,consent,consent-test`.
+- IT: `it/src/test/java/.../components/Consent{Environment,StepDefinitions}.java`,
+  `it/src/test/resources/it/consent_management.feature` (tag `@consent`).
+- Docs: `doc/CONSENT_MANAGEMENT.md`, ADRs `doc/adr/0001`-`0005` + index
+  `doc/adr/README.md`.
+- The consent-filter plugin source is NOT in this repo; only its tag and
+  route config live here.
+
 ## Important Files
 - `charts/data-space-connector/Chart.yaml` -- dependency graph (current
-  version 9.1.0).
-- `charts/data-space-connector/values.yaml` -- ~2930-line config surface;
+  version 10.15.6).
+- `charts/data-space-connector/values.yaml` -- ~4190-line config surface;
   top-level sections start at these approximate line numbers:
-  `decentralizedIam` (9), `scorpio` (183), `keycloak` (262),
-  `tm-forum-api` (1168), `rainbow` (1299), `contract-management` (1351),
-  `dataSpaceConfig` (1417), `marketplace` (1450), `fdsc-edc` (1556),
-  `identityhub` (1913), `tracing` (2731),
-  `opentelemetry-collector` (2776).
+  `decentralizedIam` (26), `scorpio` (291), `keycloak` (420),
+  `tm-forum-api` (1441), `rainbow` (1820), `contract-management` (1911),
+  `dataSpaceConfig` (2079), `managedMongo` (2133), `marketplace` (2152),
+  `fdsc-edc` (2362), `identityhub` (2973), `tracing` (3752),
+  `opentelemetry-collector` (3878), `consentManagement` (4123),
+  `consent-facade` (4140), `consent-owner-resolver` (4167).
+- `charts/trust-anchor/Chart.yaml` -- trust-anchor chart (version 1.3.4).
 - `charts/data-space-connector/templates/_helpers.tpl` -- shared Helm
   partials (`dsc.labels`, `dsc.otel.*`, etc.).
 - `charts/data-space-connector/templates/identityhub-deployment.yaml` --

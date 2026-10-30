@@ -1,4 +1,4 @@
-# values.schema.json is generated from this file, see CLAUDE.md. The `# @schema` blocks adjust what
+# values.schema.json is generated from this file, see AGENTS.md. The `# @schema` blocks adjust what
 # the generator infers from the defaults. Every subchart's key is left open there: Helm validates
 # this chart's schema against values that already contain the subchart's own defaults, and the
 # subchart's keys are the subchart's to validate.
