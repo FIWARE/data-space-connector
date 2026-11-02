@@ -524,9 +524,14 @@ decentralizedIam:
           #                    scope, so no issuer can grant itself a consent role:
           #                    MembershipCredential -> PARTICIPANT, UserCredential -> USER.
           #                    No credential maps to consent-catalog (CATALOG).
-          #   participant_id - credentialSubject.id of the MembershipCredential, the
-          #                    participant DID (participant scope only)
+          #   participant_id - the MembershipCredential's `issuer`, the participant DID that
+          #                    the TIR check covers (participant scope only); the plugin's
+          #                    `consumer_claim` reads the same field. Not credentialSubject.id,
+          #                    which any issuer sets freely. VCVerifier 6.27.0 does not yet
+          #                    compare `vc.issuer` with the signed `iss` for jwt_vc_json.
           #   email, given_name, family_name - the UserCredential's profile (openid only)
+          # With several matching credentials the last one's claims win, so the DCQL asks for
+          # one (`multiple: false`, a wallet hint the verifier does not enforce).
           # See doc/CONSENT_MANAGEMENT.md.
           #
           # :warning: The provider mints that MembershipCredential with
@@ -551,13 +556,13 @@ decentralizedIam:
                       claimsToInclude:
                         - originalKey: type
                           newKey: roles
-                        - originalKey: credentialSubject.id
+                        - originalKey: issuer
                           newKey: participant_id
                 dcql:
                   credentials:
                     - id: participant-query
                       format: "jwt_vc_json"
-                      multiple: true
+                      multiple: false
                       meta:
                         type_values:
                           - ["MembershipCredential"]
@@ -585,7 +590,7 @@ decentralizedIam:
                   credentials:
                     - id: user-query
                       format: "jwt_vc_json"
-                      multiple: true
+                      multiple: false
                       meta:
                         type_values:
                           - ["UserCredential"]

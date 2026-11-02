@@ -343,9 +343,15 @@ credentials are issued, if their claims have to change.
   `roleMapping` names the credential types instead of `consent-*` strings. The verifier
   already enforces the type per scope, so no participant's issuer can grant itself a
   consent role, and the credentials issued in `k3s/provider.yaml` / `k3s/consumer.yaml`
-  stay unchanged. `participant_id` is the MembershipCredential's `credentialSubject.id`;
-  the openid scope also maps `email`, `given_name` and `family_name` from the
-  UserCredential.
+  stay unchanged. `participant_id` is the MembershipCredential's `issuer` (the DID the TIR
+  check covers and the plugin's default `consumer_claim` reads), not `credentialSubject.id`,
+  which an issuer sets freely; in k3s both participants self-issue, so the two are equal.
+  The openid scope also maps `email`, `given_name` and `family_name` from the
+  UserCredential. Both DCQL queries ask for one credential (`multiple: false`) because the
+  verifier lets the last credential's claims win; it does not enforce `multiple`.
+  Residual gap for Step 6 docs: VCVerifier 6.27.0 does not compare `vc.issuer` with the
+  signed `iss` for jwt_vc_json, so a hand-crafted VC can still name another DID until
+  upstream rejects that mismatch (it already does on the `vc+jwt` path).
 
 ### Step 4: k3s scenario and build wiring
 Files: `k3s/consent-trust-anchor-components.yaml`, `k3s/consent-provider.yaml`,
