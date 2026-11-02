@@ -118,6 +118,7 @@ contain breaking changes. Important releases will be listed below, with addition
   * **9.1.0** — Optional end-to-end [OpenTelemetry distributed tracing](doc/deployment-integration/observability/README.md) across all DSC components
 * [10.x.x](doc/release-notes/10-x.md) - :warning: **Breaking changes** - Keycloak chart migration (Bitnami → CloudPirates), Keycloak 26.7.0 and OID4VCI realm model rewrite
   * **10.4.0** — :warning: Keycloak `java-keystore` keystores must move to `/opt/keycloak/data/<realm-name>/`
+  * **10.16.0** — [Consent management](doc/CONSENT_MANAGEMENT.md) moves to dsc-consent-manager on PostgreSQL; :warning: breaking for consent users through trust-anchor chart 2.0.0 and consent-filter plugin 1.0.0
 
 
 ## Components
