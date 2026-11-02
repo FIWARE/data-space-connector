@@ -462,8 +462,12 @@ comment ~850), `k3s/deploy.sh` (comments only, unless ordering changes), `pom.xm
     URLs there (`CONSENT_SELF_DESCRIPTION_BASE_URL`). An agreement the IT seeds must
     therefore name the participant DIDs in `provider-id`/`consumer-id`, or notice
     generation by contract fails with "No active participant is registered under '<url>'".
-    The purchase-flow path (contract-management) has the same mismatch, which Step 6 must
-    document;
+    The purchase-flow path (contract-management) has the same mismatch: a marketplace
+    purchase no longer yields a privacy notice. **Open decision for the ticket owner:** the
+    fix is upstream, not in this repo (contract-management or the consent-facade emitting or
+    mapping to the participant DID, or the consent-manager resolving parties by
+    `selfDescriptionUri`), followed by an image/chart bump here. Until it is decided, Step 6
+    documents the gap in `doc/CONSENT_MANAGEMENT.md`;
   - k3s enforces NetworkPolicies (kube-router), and a freshly started pod is rejected
     for its first seconds until its IP is synced. Retry the first in-cluster call;
   - running k3s nested in a k3s pod needs `-Dk3s.clusterCidr=10.152.0.0/16

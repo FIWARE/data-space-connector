@@ -853,7 +853,7 @@ contract-management:
     # The facade passes provider-id/consumer-id through verbatim as the contract's parties.
     # Known gap: those are self-description URLs here, but the consent-manager resolves
     # contract parties by DID, so notices generated from purchased offerings currently fail
-    # ("No active participant is registered under '<url>'"); see IMPLEMENTATION_PLAN Step 6.
+    # ("No active participant is registered under '<url>'"). See doc/CONSENT_MANAGEMENT.md.
     - name: CONSENT_SELF_DESCRIPTION_BASE_URL
       value: https://consent-facade.dataspace-authority.org
 mongo-operator:
