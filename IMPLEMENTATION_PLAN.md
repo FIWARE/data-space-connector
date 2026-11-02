@@ -54,7 +54,8 @@ Files: `charts/trust-anchor/Chart.yaml`, `charts/trust-anchor/values.yaml`,
 `charts/trust-anchor/templates/{mongodb.yaml,consent-network-policies.yaml,postgres.yaml,_helpers.tpl}`,
 new `charts/trust-anchor/templates/{consent-manager-setup-job.yaml,removed-values.yaml}`,
 `charts/trust-anchor/tests/consent_management_test.yaml`, `charts/trust-anchor/Chart.lock`
-(if present), and `charts/trust-anchor/README.md` (if present; regenerate the values table).
+(if present), `charts/trust-anchor/README.md` (if present; regenerate the values table),
+and the chart-key part of `k3s/consent-trust-anchor-components.yaml` (see the last bullet).
 
 - `Chart.yaml`: replace the `consent-manager` 0.2.0 dependency with
   `name: dsc-consent-manager`, `version: 0.1.0`,
@@ -93,8 +94,11 @@ new `charts/trust-anchor/templates/{consent-manager-setup-job.yaml,removed-value
   - A **plain Job, not a Helm hook** (same as `ensure-ccsdb`, which is a plain Job in
     `extraManifests`): a pre-install hook would deadlock, because the Zalando secret only
     appears after the operator reconciles the `postgresql` CR, a normal release resource.
-    `restartPolicy: OnFailure`, `backoffLimit: 30`, `activeDeadlineSeconds: 900`,
-    `ttlSecondsAfterFinished: 300`. The consent-manager Deployment sits in
+    `restartPolicy: OnFailure`, `backoffLimit: 30`, `activeDeadlineSeconds: 900`, and
+    `ttlSecondsAfterFinished` from the new value `consentManagement.setup.ttlSecondsAfterFinished`
+    (default `300`, rendered with `{{- with }}`, so `null` omits the field). GitOps users with self-heal (Argo CD) unset it:
+    with a TTL, Argo recreates the Job after every cleanup and the app flaps OutOfSync. The
+    script is idempotent, so that loop is noisy, not harmful. The consent-manager Deployment sits in
     `CreateContainerConfigError` until `consent-manager-env` exists and recovers on its own;
     `deploy.sh --wait` covers that window (check its timeout, Step 4).
   - Name it `consent-manager-setup-{{ .Release.Revision }}-<hash>`, where `<hash>` is
@@ -124,19 +128,30 @@ new `charts/trust-anchor/templates/{consent-manager-setup-job.yaml,removed-value
     `consent-manager.postgres.credentials.postgresql.acid.zalan.do` (keys `username` /
     `password`) via `secretKeyRef`, and `SMTP_USER`/`SMTP_PASSWORD` from
     `consentManagement.smtp.existingSecret` when it is set (see below), so the script never
-    reads those Secrets through the API. The script:
-    1. reads `LOG_PSEUDONYM_KEY` and `ERASURE_VERIFICATION_SECRET` from the existing
-       `consent-manager-env` (`kubectl get -o jsonpath`) and generates only the missing ones
-       with `head -c 32 /dev/urandom | base64` -- they must never rotate;
-    2. applies `consent-manager-env` (`kubectl create secret generic --dry-run=client -o
-       yaml | kubectl apply -f -`) with `DB_USER`, `DB_PASSWORD`, the two keys and, when
-       configured, `SMTP_USER`/`SMTP_PASSWORD`. Without an SMTP secret it does not write
-       the SMTP keys;
-    3. when the JWK init container ran and `consent-manager-signing-keys` does not exist,
-       creates it from `/work/signing-key.jwk` under the data key
-       `consent-manager.signingKeys.signingKeyFile` (default `signing-key.jwk`; the subchart
-       mounts exactly that key, any other name fails at pod start). An existing Secret is
-       **never** overwritten. `generate: false` means the operator provides that Secret.
+    reads those Secrets through the API. The script runs under `set -eu` and:
+    1. reads `consent-manager-env` with `kubectl get secret ... -o json`, capturing stderr.
+       Only two outcomes lead to generating a key: the call fails **and** stderr reports
+       `NotFound` (no Secret yet: generate both), or it succeeds and
+       `LOG_PSEUDONYM_KEY` / `ERASURE_VERIFICATION_SECRET` is absent or empty (generate
+       only that one). Any other failure (Forbidden, timeout, API error) exits non-zero, so
+       the Job retries instead of replacing live keys. Never `2>/dev/null || true`. New
+       keys come from `head -c 32 /dev/urandom | base64`; existing keys must never rotate;
+    2. applies `consent-manager-env` with server-side apply:
+       `kubectl create secret generic --dry-run=client -o yaml | kubectl apply
+       --server-side --field-manager=consent-manager-setup --force-conflicts -f -`. Unlike
+       client-side apply it does not copy the data (DB password, keys) into the
+       `last-applied-configuration` annotation. It needs the same verbs (create/patch), and
+       because the field manager owns the keys it wrote, it still drops SMTP keys that are
+       no longer configured. The Secret holds `DB_USER`, `DB_PASSWORD`, the two keys and,
+       when configured, `SMTP_USER`/`SMTP_PASSWORD`. Without an SMTP secret it does not
+       write the SMTP keys;
+    3. when the JWK init container ran, checks `consent-manager-signing-keys` the same
+       way as in 1: on `NotFound` it creates it from `/work/signing-key.jwk` under the data
+       key `consent-manager.signingKeys.signingKeyFile` (default `signing-key.jwk`; the
+       subchart mounts exactly that key, any other name fails at pod start), treating an
+       `AlreadyExists` from a concurrent run as success; on any other error it exits
+       non-zero. An existing Secret is **never** overwritten. `generate: false` means the
+       operator provides that Secret.
   - SMTP credentials: new optional values `consentManagement.smtp.existingSecret` (default
     `""`), `consentManagement.smtp.userKey` (default `username`) and
     `consentManagement.smtp.passwordKey` (default `password`). When the secret is set the
@@ -198,6 +213,11 @@ new `charts/trust-anchor/templates/{consent-manager-setup-job.yaml,removed-value
     image changes;
   - the Role grants `get`/`patch` only with `resourceNames` `consent-manager-env` and
     `consent-manager-signing-keys`, and `create` without `resourceNames`;
+  - the script runs under `set -eu`, generates keys only on a `NotFound` read or an
+    empty key and exits non-zero on any other read error, and applies
+    `consent-manager-env` with `--server-side --field-manager=consent-manager-setup`;
+  - `ttlSecondsAfterFinished` follows `consentManagement.setup.ttlSecondsAfterFinished`
+    and is omitted when that is `null`;
   - the `generate-jwk` init container and the signing-key step are rendered only when
     `consentManagement.signingKey.generate` is true, and the script writes the data key
     named by `consent-manager.signingKeys.signingKeyFile`;
@@ -205,9 +225,22 @@ new `charts/trust-anchor/templates/{consent-manager-setup-job.yaml,removed-value
     when it is set;
   - `consent-manager.secrets.existingSecret` / `signingKeys.secretName` match the names
     the Job writes.
+- `k3s/consent-trust-anchor-components.yaml`: the `fail`s above would break the `consent`
+  profile (and its CI matrix leg) at render time from this step on, because the file still
+  sets every removed key. So this step already drops `managedMongo`,
+  `consent-manager.mongo`, `secret.consentKey`, `externalIdp`, `appEndpoint` and
+  `contractService`, and sets the new chart's keys that need no later step:
+  `config.consentManagerUrl: https://consent-manager.dataspace-authority.org`,
+  `config.contractServiceUrl: http://consent-facade.trust-anchor.svc.cluster.local:8080`,
+  `identityProviders.primary.{issuer,discoveryUrl,audience}` (Step 4 lists the values) and
+  `consentManagement.networkPolicy.consentManagerClients`. Step 4 adds the claim mapping
+  and the verifier reachability settings. Until Step 4/5 land the consent leg renders and
+  deploys but its IT is expected to fail (plugin 0.0.12 against the new API); that is
+  accepted.
 - Acceptance: `helm dependency update charts/trust-anchor && helm lint charts/trust-anchor
-  && helm unittest charts/trust-anchor` pass. `helm template` with
-  `k3s/trust-anchor.yaml` renders.
+  && helm unittest charts/trust-anchor` pass. `helm template` renders both with
+  `-f k3s/trust-anchor.yaml` and with
+  `-f k3s/trust-anchor.yaml -f k3s/consent-trust-anchor-components.yaml`.
 
 ### Step 2: data-space-connector chart -- drop consent Mongo/consent-key leftovers
 Files: `charts/data-space-connector/values.yaml` (`consentManagement`, `consent-facade`,
@@ -221,10 +254,15 @@ Files: `charts/data-space-connector/values.yaml` (`consentManagement`, `consent-
   and "managed MongoDB". The provider-side plugin calls the authority's consent-manager
   `/v1` API directly with a VCVerifier JWT from the provider-local consent-facade.
 - Grep the chart (`templates/`, `_realm.tpl`, `values.yaml`) for `consentKey`,
-  `CONSENT_KEY`, `visionstrust`, `consent-user/`, `:3000`. Remove what is left. Any removed
-  key under a subchart alias gets a `fail` in `templates/removed-values.yaml`.
+  `CONSENT_KEY`, `visionstrust`, `consent-user/`, `:3000`. On the plan branch this finds
+  nothing: the chart's consent values are only `enabled` flags, the facade/resolver
+  overrides and their docs, and none of them is removed. So this step changes comments
+  and docs only and adds no `removed-values.yaml` entry.
 - Regenerate the schema (`.github/scripts/values-schema.sh`) and the README values table.
-  Bump `Chart.yaml` `version` to `10.16.0`.
+  Bump `Chart.yaml` `version` to `10.16.0`: minor, because no DSC value is removed or
+  changes meaning. The breaking changes live in the trust-anchor chart (2.0.0) and the
+  provider's consent route / plugin config. If the implementer does have to remove a
+  value that then `fail`s, bump to `11.0.0` instead and say so in the release note.
 - Acceptance: `helm lint`, `helm unittest charts/data-space-connector` and
   `.github/scripts/values-schema.sh --check` pass. `helm template` with
   `k3s/provider.yaml,k3s/consent-provider.yaml` renders.
@@ -273,21 +311,56 @@ Files: `k3s/consent-trust-anchor-components.yaml`, `k3s/consent-provider.yaml`,
 comment ~850), `k3s/deploy.sh` (comments only, unless ordering changes), `pom.xml`
 (`consent` profile ~line 510), `.github/workflows/test.yaml` (comment ~line 40).
 
-- `consent-trust-anchor-components.yaml`: drop `managedMongo`, `consent-manager.mongo`,
-  `secret.consentKey`, `externalIdp`, `appEndpoint`. Set the new chart's keys:
-  - `config.consentManagerUrl: https://consent-manager.dataspace-authority.org`;
-  - `config.contractServiceUrl: http://consent-facade.trust-anchor.svc.cluster.local:8080`;
-  - `identityProviders.primary.issuer: https://verifier.dataspace-authority.org`;
-  - `discoveryUrl: .../services/consent-manager/.well-known/openid-configuration`;
-  - `audience: consent-manager`;
+- `consent-trust-anchor-components.yaml` (Step 1 already removed the old keys and set the
+  URLs and `consentManagerClients`). The `consent-manager` values end up as:
+  - `config.consentManagerUrl: https://consent-manager.dataspace-authority.org` (Step 1);
+  - `config.contractServiceUrl: http://consent-facade.trust-anchor.svc.cluster.local:8080`
+    (Step 1);
+  - `identityProviders.primary.issuer: https://verifier.dataspace-authority.org`,
+    `discoveryUrl: https://verifier.dataspace-authority.org/services/consent-manager/.well-known/openid-configuration`,
+    `audience: consent-manager` (Step 1). They stay https: the app compares the issuer
+    byte-for-byte with the discovery document's `issuer`, and the verifier publishes its
+    `jwks_uri` under the public host, so an in-cluster http `discoveryUrl` with
+    `allowInsecureTransport` would still fail at the JWKS fetch;
   - claim paths and `roleMapping` from Step 3;
-  - `allowInsecureTransport` only if discovery is http in-cluster;
   - `deployment.replicaCount: 1`, smaller resources for k3s.
   Postgres comes from Step 1. Leave SMTP empty, which disables notifications.
-  Set `consentManagement.networkPolicy.consentManagerClients` to the provider APISIX
-  (`{namespace: provider, podLabels: {app.kubernetes.io/name: apisix}}`), else the
-  plugin's in-cluster calls to `consent-manager.trust-anchor.svc.cluster.local:8080` are
-  dropped on a NetworkPolicy-enforcing CNI.
+- Verifier reachability in k3s. `verifier.dataspace-authority.org` resolves to 127.0.0.1
+  inside pods (CoreDNS only maps `*.127.0.0.1.nip.io`), and its ingress cert is signed by
+  the cluster CA (`selfsigned-ca`). The old chart solved both with `externalIdp.proxy` and
+  `externalIdp.caSecret`. dsc-consent-manager 0.1.0 has no proxy, CA or extra-volume
+  option, but the app (Micronaut) builds its discovery client from the global HTTP-client
+  settings (`IdentityProviderRegistry.createDiscoveryClient` copies the global proxy and
+  SSL config), and the JWKS fetch uses the default client too. `config.extraEnv` refuses
+  neither of the variables below, so set them there, k3s only, with a comment:
+  - `MICRONAUT_HTTP_CLIENT_PROXY_TYPE: HTTP` and
+    `MICRONAUT_HTTP_CLIENT_PROXY_ADDRESS: squid-proxy.infra.svc.cluster.local:8888`: the
+    squid forward proxy routes the public hosts to traefik, as for every other component;
+  - `MICRONAUT_HTTP_SERVICES_CONTRACT_SERVICE_PROXY_TYPE: DIRECT`: the global proxy would
+    also catch the contract-service client (`@Client(id = "contract-service")`), and the
+    consent-facade NetworkPolicy admits only consent-manager pods, not squid;
+  - `MICRONAUT_HTTP_CLIENT_SSL_INSECURE_TRUST_ALL_CERTIFICATES: "true"`: there is no way to
+    mount the cluster CA. This matches the `ssl_verify: false` the authority APISIX already
+    uses on the same hop through squid. Tokens are still verified against the fetched JWKS;
+    only the in-cluster TLS peer check is skipped. Production verifiers have a publicly
+    trusted cert and need none of these variables. Step 6 documents that.
+  Verification gate, part of this step's acceptance: the consent-manager pod gets Ready
+  (its readiness probe includes the identity providers, so it stays unready while
+  discovery fails), and a participant-scope token from the authority verifier gets a
+  non-401 answer from `GET /v1/participants/me`, which proves the JWKS fetch. If either
+  fails because the settings do not reach those clients, do not work around it in this
+  repo: report the step as blocked and name the missing upstream option (a CA/truststore
+  volume and an IdP proxy setting in the dsc-consent-manager chart). The fallback is a
+  chart release with those options and a dependency bump.
+- Self-descriptions: the app fetches `selfDescriptionUri` only for
+  `GET /v1/privacy-notices/{id}?resolve=true`, through a separate client with no proxy. So
+  `SELF_DESCRIPTION_ALLOWED_HOSTS` stays unset, the IT does not use `resolve=true`, and
+  Step 6 notes that `resolve=true` does not work in the local k3s scenario.
+- `consentManagement.networkPolicy.consentManagerClients` is the provider APISIX
+  (`{namespace: provider, podLabels: {app.kubernetes.io/name: apisix}}`, set in Step 1),
+  else the plugin's in-cluster calls to
+  `consent-manager.trust-anchor.svc.cluster.local:8080` are dropped on a
+  NetworkPolicy-enforcing CNI.
 - The trust-anchor Postgres now also has to be up for the consent-manager. Re-check the
   `--wait=false` / ordering notes in the `pom.xml` `consent` profile and `deploy.sh`, and
   update their comments. Mongo is gone from the trust-anchor; the provider's mongo stays.
@@ -315,7 +388,7 @@ comment ~850), `k3s/deploy.sh` (comments only, unless ordering changes), `pom.xm
 - Update the `.github/workflows/test.yaml` comment (no "managed mongo").
 - Acceptance: every `helm template` call the `consent` profile makes renders, which you
   can check by running the commands from `deploy.sh` with `--dry-run=client` or
-  `helm template`. Since plugin 1.0.0 is published, the CI `consent` matrix leg
+  `helm template`, and the verifier-reachability gate above passes. Since plugin 1.0.0 is published, the CI `consent` matrix leg
   (`test,consent,consent-test`) is expected to deploy; it may still fail on the IT until
   Step 5 lands, which is accepted for this step.
 
@@ -343,7 +416,8 @@ Files: `it/src/test/java/org/fiware/dataspace/it/components/ConsentEnvironment.j
     is no GET by contract);
   - grant with `POST /v1/consents`, withdraw via the consent's revoke operation;
   - assert with `GET /v1/consents?userIdentifier=` and `GET /v1/consents/check`.
-  Remove the `identifier/search` and `consents/participants` calls.
+  Remove the `identifier/search` and `consents/participants` calls. Do not use
+  `?resolve=true` (see Step 4, self-descriptions).
 - Keep the three scenarios in `consent_management.feature` (deny without consent, allow
   after grant, deny after revoke). Rename steps only where the wording names the old API.
 - Acceptance: `mvn -f it/pom.xml test-compile` passes. The `@consent` scenario passes
@@ -368,17 +442,28 @@ PNGs as outdated), `doc/adr/0001`-`0005`, new `doc/adr/0008-dsc-consent-manager.
     `require_purpose`/`require_contract`, the removed `consent_api_host`/`consent_key`),
     the matching rules and the provider/consumer registration it relies on;
   - deployment values for both charts and the k3s `consent` profile, including the setup
-    Job (what it owns, the never-rotate rule, the signing-key options), SMTP credentials via
-    `consentManagement.smtp.existingSecret`, and `networkPolicy.consentManagerClients` for
-    providers in other namespaces;
+    Job (what it owns, the never-rotate rule and its error handling, the signing-key
+    options), SMTP credentials via `consentManagement.smtp.existingSecret`, and
+    `networkPolicy.consentManagerClients` for providers in other namespaces;
+  - GitOps: unset `consentManagement.setup.ttlSecondsAfterFinished` under Argo CD self-heal,
+    else the Job is recreated after every TTL cleanup. `helm uninstall` leaves
+    `consent-manager-env` and `consent-manager-signing-keys` in place: they are not release
+    objects, which is what keeps the keys from rotating on a reinstall. Delete them by hand
+    to start from scratch;
+  - the k3s-only verifier reachability settings (`config.extraEnv` proxy, contract-service
+    `DIRECT`, trust-all TLS) from Step 4, why production does not need them, and that
+    `GET /v1/privacy-notices/{id}?resolve=true` does not work in the local scenario;
   - migration from the old consent-manager. There is no data migration from Mongo:
     consents must be re-granted. Upgrading to trust-anchor 2.0.0 on an existing Postgres
     volume relies on the setup Job creating the `consent_manager` database; the plugin
     must be upgraded to 1.0.0 together with the route config.
 - New ADR 0008 in the existing ADR format: context, decision, consequences. ADRs
   0001-0005 get `Status: Superseded by 0008`. Update the index in `doc/adr/README.md`.
-- Release notes: in `doc/release-notes/10-x.md`, a 10.16.0 entry with the breaking change
-  for consent users and the trust-anchor chart 2.0.0.
+- Release notes: in `doc/release-notes/10-x.md`, a 10.16.0 entry. State plainly that the
+  DSC chart itself only changes docs and comments (no value removed, hence the minor
+  bump), and that the breaking changes for consent users are in the trust-anchor chart
+  2.0.0 (Mongo and the consent key removed, Postgres, new subchart values) and in the
+  provider's consent route / plugin 1.0.0 config.
 - Update the links and summaries in `doc/README.md`, `README.md` and `charts/README.md`.
   `.github/scripts/check-links.sh` must pass.
 - Update the AGENTS.md Consent Management section to the final state: drop "being
@@ -397,4 +482,5 @@ PNGs as outdated), `doc/adr/0001`-`0005`, new `doc/adr/0008-dsc-consent-manager.
 - Run `mvn clean deploy -Pconsent` followed by
   `mvn clean integration-test -Ptest,consent,consent-test` (plugin 1.0.0), and fix the
   failures. Redeploy once on the same cluster to confirm the setup Job is idempotent and
-  the generated keys and signing key do not change.
+  the generated keys and signing key do not change, and that `consent-manager-env` carries
+  no `kubectl.kubernetes.io/last-applied-configuration` annotation.
