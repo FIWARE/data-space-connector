@@ -60,8 +60,9 @@ can be found here:
 
 Optional consent management (ISO/IEC TS 27560) - its architecture, trust model and the demo flow charts 
 (granting consent, consent-gated data access, authenticated projection) are documented here:
-* [Consent Management](./CONSENT_MANAGEMENT.md) - architecture, trust model, participant
-  authentication over OID4VP, and the end-to-end demo
+* [Consent Management](./CONSENT_MANAGEMENT.md) - the dsc-consent-manager at the authority,
+  authentication with the VCVerifier JWT, the consent-filter plugin, deployment, migration from the
+  MongoDB-based consent-manager, and the end-to-end demo
 * [Architecture Decision Records](./adr/README.md)
 
 
