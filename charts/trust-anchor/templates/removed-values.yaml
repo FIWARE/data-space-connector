@@ -20,6 +20,12 @@ Mongo-era configuration silently half-applied. Renders nothing.
 {{- if hasKey $manager "externalIdp" }}
 {{- fail (printf "consent-manager.externalIdp was removed in 2.0.0: configure consent-manager.identityProviders.primary instead, %s" $migration) }}
 {{- end }}
+{{- if hasKey $manager "appEndpoint" }}
+{{- fail (printf "consent-manager.appEndpoint was removed in 2.0.0: set consent-manager.config.consentManagerUrl instead, %s" $migration) }}
+{{- end }}
+{{- if hasKey $manager "contractService" }}
+{{- fail (printf "consent-manager.contractService was removed in 2.0.0: set consent-manager.config.contractServiceUrl instead, %s" $migration) }}
+{{- end }}
 {{- if or $managerSecrets.smtpUser $managerSecrets.smtpPassword }}
 {{- fail "consent-manager.secrets.smtpUser/smtpPassword are ignored because the setup Job owns consent-manager.secrets.existingSecret: set consentManagement.smtp.existingSecret instead" }}
 {{- end }}

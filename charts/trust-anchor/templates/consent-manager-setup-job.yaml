@@ -221,7 +221,9 @@ spec:
               }
 
               mkdir -p /work/env
+              envExists=true
               if ! fetch_secret {{ .envSecret }} /work/env.json; then
+                envExists=false
                 echo '{}' >/work/env.json
               fi
               # existing keys never rotate; only an absent or empty one is generated
@@ -234,6 +236,20 @@ spec:
               done
               printf '%s' "$DB_USER" >/work/env/DB_USER
               printf '%s' "$DB_PASSWORD" >/work/env/DB_PASSWORD
+              # the first write is create-only, so of two concurrent Jobs only one sets the keys; the
+              # loser exits and its retry reads the winner's keys. SMTP is left to the apply below:
+              # a key kubectl-create also owns would survive its removal from the apply.
+              if [ "$envExists" = false ]; then
+                if kubectl create secret generic {{ .envSecret }} --from-file=/work/env 2>/work/err; then
+                  echo "created {{ .envSecret }}"
+                elif grep -q AlreadyExists /work/err; then
+                  echo "{{ .envSecret }} was created concurrently, retrying with its keys" >&2
+                  exit 1
+                else
+                  cat /work/err >&2
+                  exit 1
+                fi
+              fi
               {{- if .smtp.existingSecret }}
               printf '%s' "$SMTP_USER" >/work/env/SMTP_USER
               printf '%s' "$SMTP_PASSWORD" >/work/env/SMTP_PASSWORD

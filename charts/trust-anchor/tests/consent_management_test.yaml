@@ -199,6 +199,22 @@ tests:
       - failedTemplate:
           errorPattern: "consent-manager.externalIdp was removed in 2.0.0"
 
+  - it: fails on consent-manager.appEndpoint
+    template: templates/removed-values.yaml
+    set:
+      consent-manager.appEndpoint: https://consent-manager.example.org
+    asserts:
+      - failedTemplate:
+          errorPattern: "consent-manager.appEndpoint was removed in 2.0.0"
+
+  - it: fails on consent-manager.contractService
+    template: templates/removed-values.yaml
+    set:
+      consent-manager.contractService.url: http://consent-facade:8080
+    asserts:
+      - failedTemplate:
+          errorPattern: "consent-manager.contractService was removed in 2.0.0"
+
   - it: fails on consent-manager.secrets.smtpUser / smtpPassword
     template: templates/removed-values.yaml
     set:
@@ -281,7 +297,7 @@ tests:
     asserts:
       - equal:
           path: metadata.name
-          value: consent-manager-setup-0-f58d7af1
+          value: consent-manager-setup-0-c24b5fa9
 
   - it: renames the Job when the setup image changes
     template: templates/consent-manager-setup-job.yaml
@@ -291,7 +307,7 @@ tests:
     asserts:
       - notEqual:
           path: metadata.name
-          value: consent-manager-setup-0-f58d7af1
+          value: consent-manager-setup-0-c24b5fa9
 
   - it: renames the Job when the postgres image changes
     template: templates/consent-manager-setup-job.yaml
@@ -301,7 +317,7 @@ tests:
     asserts:
       - notEqual:
           path: metadata.name
-          value: consent-manager-setup-0-f58d7af1
+          value: consent-manager-setup-0-c24b5fa9
 
   - it: renames the Job when the JWK image changes
     template: templates/consent-manager-setup-job.yaml
@@ -311,7 +327,7 @@ tests:
     asserts:
       - notEqual:
           path: metadata.name
-          value: consent-manager-setup-0-f58d7af1
+          value: consent-manager-setup-0-c24b5fa9
 
   - it: keeps finished Jobs for ttlSecondsAfterFinished
     template: templates/consent-manager-setup-job.yaml
@@ -371,6 +387,17 @@ tests:
       - notMatchRegex:
           path: spec.template.spec.containers[0].args[0]
           pattern: '\|\| true'
+
+  - it: creates consent-manager-env create-only and exits on a concurrent AlreadyExists
+    template: templates/consent-manager-setup-job.yaml
+    documentIndex: 3
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].args[0]
+          pattern: 'if \[ "\$envExists" = false \]; then\s+if kubectl create secret generic consent-manager-env --from-file=/work/env 2>/work/err; then'
+      - matchRegex:
+          path: spec.template.spec.containers[0].args[0]
+          pattern: 'elif grep -q AlreadyExists /work/err; then\s+echo "consent-manager-env was created concurrently[^\n]*\s+exit 1'
 
   - it: applies consent-manager-env server-side under its own field manager
     template: templates/consent-manager-setup-job.yaml
