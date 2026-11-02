@@ -70,9 +70,8 @@ consent-manager:
         userIdentifier: [sub]
         participantIdentifier: [participant_id]
         roles: [roles]
-      # The credential type is the role; the verifier already pins the type per scope. A
-      # given roleMapping replaces the default whole, so `catalog` keeps its default value:
-      # no credential carries it.
+      # The credential type is the role; the verifier already pins the type per scope.
+      # `catalog` keeps the chart default, spelled out here: no credential carries it.
       roleMapping:
         user: UserCredential
         participant: MembershipCredential
