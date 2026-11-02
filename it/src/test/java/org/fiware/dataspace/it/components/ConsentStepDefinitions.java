@@ -1,7 +1,6 @@
 package org.fiware.dataspace.it.components;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.node.ArrayNode;
 import io.cucumber.java.After;
 import io.cucumber.java.Before;
 import io.cucumber.java.en.Given;
@@ -9,6 +8,7 @@ import io.cucumber.java.en.Then;
 import io.cucumber.java.en.When;
 import jakarta.ws.rs.core.MediaType;
 import lombok.extern.slf4j.Slf4j;
+import okhttp3.HttpUrl;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.RequestBody;
@@ -19,12 +19,12 @@ import org.bouncycastle.jce.provider.BouncyCastleProvider;
 import org.keycloak.common.crypto.CryptoIntegration;
 
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.security.Security;
 import java.time.Duration;
 import java.util.ArrayList;
-import java.util.Base64;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 import static org.fiware.dataspace.it.components.ConsentEnvironment.*;
 import static org.fiware.dataspace.it.components.FancyMarketplaceEnvironment.CONSUMER_DID;
@@ -43,8 +43,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <p>The flow under test is the one a data subject actually drives: the subject publishes personal
  * data at the provider, a consumer is denied access until the subject grants consent, and access
- * follows the consent from then on. Nothing is written into the consent-manager's database - the
- * consent is recorded through the real give-consent API, as a subject would.
+ * follows the consent from then on. Nothing is written into the consent-manager's database - every
+ * call goes through its {@code /v1} API with a token of the authority verifier, as the real parties
+ * would make it.
  *
  * <p>The subject and the requesting consumer share one {@link Wallet}, mirroring the walkthrough:
  * its {@code did:key} is both the {@code dataOwner} of the published entity and the identity the
@@ -74,6 +75,22 @@ public class ConsentStepDefinitions extends StepDefintions {
     private static final String OPENID_SCOPE = "openid";
 
     /**
+     * Scope for a participant's token at the same service; it asks for the MembershipCredential.
+     */
+    private static final String PARTICIPANT_SCOPE = "participant";
+
+    /**
+     * The consumer's MembershipCredential, issued by its own keycloak. Its issuer is the consumer DID,
+     * which the verifier puts into the participant-identifier claim.
+     */
+    private static final String MEMBERSHIP_CREDENTIAL = "membership-credential";
+
+    /**
+     * The consumer keycloak user the MembershipCredential is issued to.
+     */
+    private static final String MEMBERSHIP_CREDENTIAL_USERNAME = "employee";
+
+    /**
      * Id of the OPA policy that permits reading operator profiles. It carries no consent refinement
      * on purpose: OPA authorizes on the credential alone so that the consent-filter plugin is the
      * component deciding on consent.
@@ -89,7 +106,8 @@ public class ConsentStepDefinitions extends StepDefintions {
     private static final String PURPOSE_URI = "https://w3id.org/dpv#ServiceProvision";
 
     /**
-     * How long the policy needs to reach OPA, and a projected notice the consent-manager.
+     * How long the policy needs to reach OPA, and the agreement needs to reach the
+     * consent-manager's notice generation.
      */
     private static final Duration PROPAGATION_TIMEOUT = Duration.ofSeconds(30);
 
@@ -106,9 +124,14 @@ public class ConsentStepDefinitions extends StepDefintions {
     private static final Duration DENY_HOLDS_FOR = Duration.ofSeconds(10);
 
     /**
-     * The event a withdrawal adds to the consent's lifecycle log in the receipt.
+     * The decision the subject takes on the notice, and the status it leaves the consent in.
      */
-    private static final String EVENT_STATE_REVOKED = "consent revoked";
+    private static final String STATUS_GRANTED = "GRANTED";
+
+    /**
+     * The status a withdrawal leaves the consent in.
+     */
+    private static final String STATUS_REVOKED = "REVOKED";
 
     private static final okhttp3.MediaType JSON = okhttp3.MediaType.parse(MediaType.APPLICATION_JSON);
 
@@ -138,6 +161,11 @@ public class ConsentStepDefinitions extends StepDefintions {
      */
     private Wallet subjectWallet;
 
+    /**
+     * The consumer organization's wallet, holding its MembershipCredential.
+     */
+    private Wallet consumerWallet;
+
     private final List<KubernetesHelper.PortForward> portForwards = new ArrayList<>();
 
     private String subjectDid;
@@ -145,12 +173,9 @@ public class ConsentStepDefinitions extends StepDefintions {
     private String consumerOrganizationId;
     private String providerSelfDescription;
     private String consumerSelfDescription;
-    private String providerToken;
     private String subjectToken;
-    private String userIdentifier;
     private String agreementId;
     private String privacyNoticeId;
-    private ArrayNode noticeData;
     private String consentId;
 
     @Before("@consent")
@@ -159,9 +184,8 @@ public class ConsentStepDefinitions extends StepDefintions {
         Security.addProvider(new BouncyCastleProvider());
         subjectWallet = new Wallet();
         subjectDid = subjectWallet.getDid();
+        consumerWallet = new Wallet();
         log.info("The data subject of this scenario is {}.", subjectDid);
-        portForwards.add(KubernetesHelper.portForward(
-                TRUST_ANCHOR_NAMESPACE, CONSENT_MANAGER_SERVICE, CONSENT_MANAGER_LOCAL_PORT, CONSENT_MANAGER_PORT));
         portForwards.add(KubernetesHelper.portForward(
                 PROVIDER_NAMESPACE, CONSENT_FACADE_SERVICE, CONSENT_FACADE_LOCAL_PORT, CONSENT_FACADE_PORT));
     }
@@ -230,28 +254,42 @@ public class ConsentStepDefinitions extends StepDefintions {
         providerSelfDescription = CONSENT_FACADE_ADDRESS + "/participants/" + providerOrganizationId;
         consumerSelfDescription = CONSENT_FACADE_ADDRESS + "/participants/" + consumerOrganizationId;
 
-        // onboarding is an authority action on an unauthenticated endpoint, so it goes directly to the
-        // consent-manager instead of through the participant-authenticated facade
-        registerParticipant("M&P Operations Inc.", "provider@mp-operation.org", PROVIDER_DID,
-                "consent-it-provider", providerSelfDescription);
-        registerParticipant("Fancy Marketplace Co.", "consumer@fancy-marketplace.biz", CONSUMER_DID,
-                "consent-it-consumer", consumerSelfDescription);
+        // each participant registers itself: the identifier is the DID in its token, never the body
+        registerParticipant(fetchProviderToken(), "M&P Operations Inc.", "provider@mp-operation.org",
+                providerSelfDescription);
+        registerParticipant(consumerParticipantToken(), "Fancy Marketplace Co.", "consumer@fancy-marketplace.biz",
+                consumerSelfDescription);
 
-        providerToken = fetchProviderToken();
-        try (Response response = get(HTTP_CLIENT, CONSENT_MANAGER_FACADE_ADDRESS + "/participants/me", providerToken)) {
-            assertEquals(HttpStatus.SC_OK, response.code(), "The provider token should be accepted by the facade.");
-            String storedSelfDescription = OBJECT_MAPPER.readTree(response.body().string())
-                    .path("selfDescriptionURL").asText();
-            assertEquals(providerSelfDescription, storedSelfDescription,
-                    "The stored self description must match the one the agreement is written with - "
-                            + "the consent-manager matches participants on that exact string.");
+        // the two lookups the consent-filter plugin makes: the provider by its own token, the
+        // consumer in the directory - it denies when either misses or has no self-description
+        String providerToken = fetchProviderToken();
+        try (Response response = get(HTTP_CLIENT, CONSENT_MANAGER_API + "/participants/me", providerToken)) {
+            String body = response.body().string();
+            assertEquals(HttpStatus.SC_OK, response.code(), "The provider should be registered: " + body);
+            JsonNode provider = OBJECT_MAPPER.readTree(body);
+            assertEquals(PROVIDER_DID, provider.path("identifier").asText(), "The provider is known by its DID.");
+            assertEquals(providerSelfDescription, provider.path("selfDescriptionUri").asText(),
+                    "The provider should carry its self-description.");
+        }
+        HttpUrl consumerLookup = HttpUrl.get(CONSENT_MANAGER_API + "/participants").newBuilder()
+                .addQueryParameter("identifier", CONSUMER_DID)
+                .build();
+        try (Response response = get(HTTP_CLIENT, consumerLookup.toString(), providerToken)) {
+            String body = response.body().string();
+            assertEquals(HttpStatus.SC_OK, response.code(), "The directory should be readable: " + body);
+            JsonNode consumers = OBJECT_MAPPER.readTree(body).path("content");
+            assertEquals(1, consumers.size(), "The consumer should be in the directory: " + body);
+            assertEquals(consumerSelfDescription, consumers.get(0).path("selfDescriptionUri").asText(),
+                    "The consumer should carry its self-description.");
         }
     }
 
     @Given("A signed agreement between the participants covers the operator profile.")
     public void seedAgreement() throws Exception {
         // a real deployment gets this from the marketplace or an EDC negotiation; the facade only
-        // projects it into the privacy notice the subject consents to
+        // projects it into the contract the notice is generated from. provider-id/consumer-id are
+        // passed through verbatim, and the consent-manager resolves the parties by participant
+        // identifier, so they carry the participant DIDs and not self-description URLs
         cleanUpAgreementsOfPair();
         String specificationId = createProductSpecification();
         String offeringId = createProductOffering(specificationId);
@@ -269,54 +307,35 @@ public class ConsentStepDefinitions extends StepDefintions {
                     { "name": "signing-date", "value": %d } ]
                 }
                 """.formatted(offeringId, providerOrganizationId, consumerOrganizationId,
-                OPERATOR_PROFILE_ENTITY_ID, providerSelfDescription, consumerSelfDescription,
+                OPERATOR_PROFILE_ENTITY_ID, PROVIDER_DID, CONSUMER_DID,
                 System.currentTimeMillis() / 1000);
         try (Response response = post(HTTP_CLIENT, agreementApi(), agreement)) {
             String body = response.body().string();
             assertEquals(HttpStatus.SC_CREATED, response.code(), "The agreement should have been created: " + body);
-            // the id is what identifies this scenario's notice among the ones the pair accumulated:
-            // deleting an agreement does not delete the notice the facade projected from it
+            // the id names the contract this scenario's notice is generated from
             agreementId = OBJECT_MAPPER.readTree(body).path("id").asText();
         }
         assertFalse(agreementId.isEmpty(), "The created agreement should have returned its id.");
     }
 
-    @Given("The data subject is registered at the provider and has a PDI account.")
+    @Given("The data subject is registered at the consent-manager and linked to the provider.")
     public void registerSubject() throws Exception {
-        // the provider registers its data subject - a repeated registration is a no-op
-        String registration = """
-                { "email": "%s", "identifier": "%s" }
-                """.formatted(subjectDid, subjectDid);
-        try (Response response = post(HTTP_CLIENT, CONSENT_MANAGER_FACADE_ADDRESS + "/users/register",
-                registration, providerToken)) {
+        // the subject registers itself; the user identifier is the holder DID its token carries.
+        // The operation takes no body, and answers 201 the first time and 200 after.
+        subjectToken = subjectToken();
+        try (Response response = post(HTTP_CLIENT, CONSENT_MANAGER_API + "/users/register", "", subjectToken)) {
             assertTrue(response.isSuccessful(),
-                    "The subject should have been registered at the provider, but was " + response.code());
+                    "The subject should have been able to register, but got " + response.body().string());
         }
 
-        userIdentifier = searchUserIdentifier();
-
-        // the subject creates its own PDI account; the account e-mail is the holder DID, the same
-        // value the UserIdentifier carries
-        String signup = """
-                { "firstName": "Mipa", "lastName": "Operator", "email": "%s", "password": "consent-it-password" }
+        // the provider links the subject to itself, as a provider registers its data subjects
+        String link = """
+                { "identifier": "%s" }
                 """.formatted(subjectDid);
-        String subjectUserId;
-        try (Response response = post(HTTP_CLIENT, CONSENT_USER_ADDRESS + "/users/signup", signup)) {
+        try (Response response = post(HTTP_CLIENT, CONSENT_MANAGER_API + "/participants/me/users", link,
+                fetchProviderToken())) {
             assertTrue(response.isSuccessful(),
-                    "The subject should have been able to sign up, but was " + response.code());
-            subjectUserId = OBJECT_MAPPER.readTree(response.body().string()).path("user").path("_id").asText();
-        }
-        assertFalse(subjectUserId.isEmpty(), "The signup should have returned the subject's user id.");
-
-        // attaching the provider-side identifier is what makes the subject's own token resolve to
-        // that account; signup alone does not link identifiers
-        String attach = """
-                { "userId": "%s", "userIdentifiers": ["%s"] }
-                """.formatted(subjectUserId, userIdentifier);
-        try (Response response = post(HTTP_CLIENT, CONSENT_MANAGER_FACADE_ADDRESS + "/users/identifier",
-                attach, providerToken)) {
-            assertTrue(response.isSuccessful(),
-                    "The identifier should have been attached to the account, but was " + response.code());
+                    "The provider should have linked the subject, but got " + response.body().string());
         }
     }
 
@@ -338,31 +357,41 @@ public class ConsentStepDefinitions extends StepDefintions {
     @When("The data subject grants consent for its own data.")
     public void grantConsent() throws Exception {
         subjectToken = subjectToken();
-        fetchPrivacyNotice();
+        generatePrivacyNotice();
 
+        // no purposes/data election: the consent covers the whole notice
         String grant = """
-                { "privacyNoticeId": "%s", "event": "given", "data": %s }
-                """.formatted(privacyNoticeId, OBJECT_MAPPER.writeValueAsString(noticeData));
-        try (Response response = post(HTTP_CLIENT, CONSENT_USER_ADDRESS + "/consents/user", grant, subjectToken)) {
+                { "privacyNoticeId": "%s", "decision": "%s" }
+                """.formatted(privacyNoticeId, STATUS_GRANTED);
+        try (Response response = post(HTTP_CLIENT, CONSENT_MANAGER_API + "/consents", grant, subjectToken)) {
             String body = response.body().string();
             assertEquals(HttpStatus.SC_CREATED, response.code(),
                     "The subject should have been able to grant the consent, but got " + body);
-            consentId = OBJECT_MAPPER.readTree(body).path("record").path("recordId").asText();
+            JsonNode consent = OBJECT_MAPPER.readTree(body);
+            consentId = consent.path("id").asText();
+            assertEquals(STATUS_GRANTED, consent.path("status").asText(), "The consent should be granted: " + body);
+            // the plugin allows only a consent naming exactly this provider and consumer
+            assertEquals(PROVIDER_DID, consent.path("provider").asText(), "The consent should name the provider.");
+            assertEquals(CONSUMER_DID, consent.path("consumer").asText(), "The consent should name the consumer.");
         }
-        assertFalse(consentId.isEmpty(), "The grant should have returned a consent record id.");
+        assertFalse(consentId.isEmpty(), "The grant should have returned a consent id.");
         log.info("The subject granted the consent {}.", consentId);
+
+        assertConsentInForce(true);
     }
 
     @When("The data subject withdraws its consent.")
     public void withdrawConsent() throws Exception {
-        try (Response response = delete(HTTP_CLIENT, CONSENT_USER_ADDRESS + "/consents/" + consentId, subjectToken)) {
+        subjectToken = subjectToken();
+        try (Response response = post(HTTP_CLIENT, CONSENT_MANAGER_API + "/consents/" + consentId + "/revoke", "",
+                subjectToken)) {
             String body = response.body().string();
-            assertTrue(response.isSuccessful(), "The subject should have been able to revoke, but got " + body);
-            // the answer is the ISO 27560 receipt, where a withdrawal is an event in the consent's
-            // lifecycle log rather than a status field
-            assertTrue(OBJECT_MAPPER.readTree(body).findValuesAsText("eventState").contains(EVENT_STATE_REVOKED),
-                    "The receipt should log the withdrawal: " + body);
+            assertEquals(HttpStatus.SC_OK, response.code(), "The subject should have been able to revoke: " + body);
+            assertEquals(STATUS_REVOKED, OBJECT_MAPPER.readTree(body).path("status").asText(),
+                    "The consent should be revoked: " + body);
         }
+
+        assertConsentInForce(false);
     }
 
     // --- Then --------------------------------------------------------------------------------
@@ -446,58 +475,65 @@ public class ConsentStepDefinitions extends StepDefintions {
     }
 
     /**
-     * Fetches the notice the facade projected from <em>this scenario's</em> agreement - the offer the
-     * subject consents to.
+     * Has the provider generate the privacy notice of <em>this scenario's</em> agreement - the offer
+     * the subject consents to.
      *
-     * <p>Projection has to read the agreement, resolve both participants and the offering's
-     * specification, so it is awaited: an empty {@code data} or {@code purposes} means the projection
-     * has not caught up (or the agreement is not consent-ready).
-     *
-     * <p>The notice is asked for by <em>contract</em>, not by provider/consumer pair. The pair-wide
-     * listing only returns notices the consent-manager has already stored, and a notice outlives the
-     * agreement it was projected from: every scenario seeds a fresh agreement, so that listing grows
-     * by one stale entry per scenario and the notice of the current agreement is not among them (it
-     * was observed to appear ~16 minutes later). Consenting to a stale one records the consent
-     * against a contract the plugin no longer evaluates, and the access stays denied with a granted
-     * consent in the database. Naming the contract makes the consent-manager project that contract's
-     * notice on demand, and can only ever return the one this scenario's agreement stands for.
+     * <p>The notice is asked for by contract, so it can only be the one this scenario's agreement
+     * stands for; an older agreement's notice is never picked up. Generation reads the agreement
+     * through the consent-facade, which may not see it yet, so it is retried until the notice
+     * declares data and a purpose.
      */
-    private void fetchPrivacyNotice() {
-        String providerKey = base64(providerSelfDescription);
-        String consumerKey = base64(consumerSelfDescription);
-        String contractKey = base64(String.format(CONTRACT_URI_TEMPLATE, agreementId));
-        String noticeUrl = String.format("%s/consents/%s/%s/%s/%s",
-                CONSENT_MANAGER_FACADE_ADDRESS, subjectDid, providerKey, consumerKey, contractKey);
-
-        Awaitility.await("The privacy notice should have been projected from the agreement.")
+    private void generatePrivacyNotice() {
+        String request = """
+                { "contractUri": "%s" }
+                """.formatted(String.format(CONTRACT_URI_TEMPLATE, agreementId));
+        Awaitility.await("The privacy notice should have been generated from the agreement.")
                 .atMost(PROPAGATION_TIMEOUT)
                 .pollInterval(Duration.ofSeconds(2))
                 .untilAsserted(() -> {
-                    Request request = new Request.Builder()
-                            .get()
-                            .url(noticeUrl)
-                            .header("Authorization", "Bearer " + providerToken)
-                            .header("x-user-key", userIdentifier)
-                            .build();
-                    try (Response response = HTTP_CLIENT.newCall(request).execute()) {
+                    try (Response response = post(HTTP_CLIENT, CONSENT_MANAGER_API + "/privacy-notices/by-contract",
+                            request, fetchProviderToken())) {
                         String body = response.body().string();
-                        assertEquals(HttpStatus.SC_OK, response.code(), "The notice should be readable: " + body);
-                        JsonNode notices = OBJECT_MAPPER.readTree(body);
-                        assertTrue(notices.isArray() && !notices.isEmpty(),
-                                "A notice should have been projected from " + agreementId + ": " + body);
-                        JsonNode notice = notices.get(0);
+                        assertTrue(response.code() == HttpStatus.SC_OK || response.code() == HttpStatus.SC_CREATED,
+                                "The notice should be generated from " + agreementId + ": " + body);
+                        JsonNode notice = OBJECT_MAPPER.readTree(body);
                         assertFalse(notice.path("data").isEmpty(), "The notice needs a data resource: " + body);
                         assertFalse(notice.path("purposes").isEmpty(), "The notice needs a purpose: " + body);
-                        privacyNoticeId = notice.path("_id").asText();
-                        ArrayNode resources = OBJECT_MAPPER.createArrayNode();
-                        notice.path("data").forEach(data -> resources.add(data.path("resource").asText()));
-                        noticeData = resources;
+                        privacyNoticeId = notice.path("id").asText();
                     }
                 });
         // `asText()` yields "" rather than null for a missing field, so a null-check would
         // never fire and the grant would go out with an empty privacyNoticeId
         assertFalse(privacyNoticeId == null || privacyNoticeId.isEmpty(),
                 "The notice id is needed to grant the consent.");
+    }
+
+    /**
+     * Asserts what the provider reads at the consent-manager: the consent among the subject's
+     * granted ones, and its validity check against the notice.
+     */
+    private void assertConsentInForce(boolean expected) throws Exception {
+        String providerToken = fetchProviderToken();
+        HttpUrl listUrl = HttpUrl.get(CONSENT_MANAGER_API + "/consents").newBuilder()
+                .addQueryParameter("userIdentifier", subjectDid)
+                .build();
+        try (Response response = get(HTTP_CLIENT, listUrl.toString(), providerToken)) {
+            String body = response.body().string();
+            assertEquals(HttpStatus.SC_OK, response.code(), "The consents should be listable: " + body);
+            // the listing returns only GRANTED consents unless asked otherwise
+            boolean listed = OBJECT_MAPPER.readTree(body).path("content").findValuesAsText("id").contains(consentId);
+            assertEquals(expected, listed, "The granted consents of the subject were " + body);
+        }
+        HttpUrl checkUrl = HttpUrl.get(CONSENT_MANAGER_API + "/consents/check").newBuilder()
+                .addQueryParameter("userIdentifier", subjectDid)
+                .addQueryParameter("privacyNoticeId", privacyNoticeId)
+                .build();
+        try (Response response = get(HTTP_CLIENT, checkUrl.toString(), providerToken)) {
+            String body = response.body().string();
+            assertEquals(HttpStatus.SC_OK, response.code(), "The consent should be checkable: " + body);
+            assertEquals(expected, OBJECT_MAPPER.readTree(body).path("valid").asBoolean(),
+                    "The validity check answered " + body);
+        }
     }
 
     /**
@@ -520,47 +556,39 @@ public class ConsentStepDefinitions extends StepDefintions {
     }
 
     /**
-     * The lookup the consent-filter plugin performs on every request: it selects the subject at the
-     * provider. An empty result means the registration has not propagated yet.
+     * The consumer's participant token: its MembershipCredential, presented to the authority verifier.
      */
-    private String searchUserIdentifier() {
-        String searchBody = """
-                { "selfDescription": "%s", "email": "%s" }
-                """.formatted(providerSelfDescription, subjectDid);
-        List<String> resolved = new ArrayList<>();
-        Awaitility.await("The subject should be resolvable at the provider.")
-                .atMost(PROPAGATION_TIMEOUT)
-                .pollInterval(Duration.ofSeconds(2))
-                .untilAsserted(() -> {
-                    try (Response response = post(HTTP_CLIENT,
-                            CONSENT_MANAGER_FACADE_ADDRESS + "/users/identifier/search", searchBody, providerToken)) {
-                        String body = response.body().string();
-                        assertEquals(HttpStatus.SC_OK, response.code(), "The search should succeed: " + body);
-                        JsonNode result = OBJECT_MAPPER.readTree(body);
-                        assertTrue(result.path("userIdentifierExists").asBoolean(),
-                                "The subject's identifier should exist: " + body);
-                        String identifier = result.path("userIdentifier").asText();
-                        assertFalse(identifier.isEmpty(), "The identifier should not be empty: " + body);
-                        resolved.clear();
-                        resolved.add(identifier);
-                    }
-                });
-        return resolved.get(0);
+    private String consumerParticipantToken() throws Exception {
+        if (consumerWallet.getStoredCredential(MEMBERSHIP_CREDENTIAL) == null) {
+            String keycloakToken = FancyMarketplaceEnvironment.loginToConsumerKeycloak(MEMBERSHIP_CREDENTIAL_USERNAME);
+            consumerWallet.getCredentialFromIssuer(
+                    keycloakToken, FancyMarketplaceEnvironment.CONSUMER_KEYCLOAK_ADDRESS, MEMBERSHIP_CREDENTIAL);
+        }
+        return ScriptHelper.getAccessTokenViaOid4vp(
+                CONSENT_MANAGER_VERIFIER_ADDRESS, MEMBERSHIP_CREDENTIAL, PARTICIPANT_SCOPE, consumerWallet);
     }
 
-    private void registerParticipant(String legalName, String email, String did, String clientId,
+    /**
+     * Registers the participant the token names. A registration left by an earlier run answers 409
+     * and is updated instead, so the self-description always is the one this run's agreement uses.
+     */
+    private void registerParticipant(String participantToken, String legalName, String email,
                                      String selfDescription) throws Exception {
-        // the clientID/clientSecret are required by the participant schema; nothing in this flow uses them
         String participant = """
-                { "legalName": "%s", "email": "%s", "did": "%s",
-                  "clientID": "%s", "clientSecret": "consent-it",
-                  "selfDescriptionURL": "%s" }
-                """.formatted(legalName, email, did, clientId, selfDescription);
-        String url = "http://localhost:" + CONSENT_MANAGER_LOCAL_PORT + "/v1/participants";
-        try (Response response = post(DIRECT_CLIENT, url, participant)) {
-            // 201 = onboarded now, 409 = onboarded by an earlier run - both are fine
-            assertTrue(response.isSuccessful() || response.code() == HttpStatus.SC_CONFLICT,
-                    "The participant should be onboarded, but was " + response.code() + ": " + response.body().string());
+                { "legalName": "%s", "email": "%s", "selfDescriptionUri": "%s" }
+                """.formatted(legalName, email, selfDescription);
+        try (Response response = post(HTTP_CLIENT, CONSENT_MANAGER_API + "/participants", participant,
+                participantToken)) {
+            if (response.code() == HttpStatus.SC_CREATED) {
+                return;
+            }
+            assertEquals(HttpStatus.SC_CONFLICT, response.code(),
+                    "The participant should be onboarded, but got " + response.body().string());
+        }
+        try (Response response = put(HTTP_CLIENT, CONSENT_MANAGER_API + "/participants/me", participant,
+                participantToken)) {
+            assertEquals(HttpStatus.SC_OK, response.code(),
+                    "The registration should have been updated, but got " + response.body().string());
         }
     }
 
@@ -601,9 +629,8 @@ public class ConsentStepDefinitions extends StepDefintions {
     /**
      * Finds the TM Forum organization backing a participant, or creates it.
      *
-     * <p>Find-or-create keeps the self-description URLs stable across runs. That matters: a
-     * participant stays pinned to the self-description it was onboarded with, so a new organization
-     * would mismatch the agreement and the notice projection would find nothing.
+     * <p>Find-or-create keeps the self-description URLs stable across runs, so a registration left
+     * by an earlier run keeps pointing at a self-description that exists.
      */
     private String findOrCreateOrganization(String name, String did) throws Exception {
         String organizationApi = TMF_DIRECT_ADDRESS + "/tmf-api/party/v4/organization";
@@ -632,9 +659,15 @@ public class ConsentStepDefinitions extends StepDefintions {
      *
      * <p>The flow assumes a single agreement between the pair: the OwnerResolver takes the first
      * contract that permits the requested object, so a stale one from an earlier run can shadow the
-     * one seeded here.
+     * one seeded here. Agreements seeded before the participant DIDs were used still carry the
+     * provider's self-description URL as provider-id, so both forms are matched on a reused cluster.
      */
     private void cleanUpAgreementsOfPair() throws Exception {
+        Set<String> providerIds = new HashSet<>();
+        providerIds.add(PROVIDER_DID);
+        if (providerSelfDescription != null) {
+            providerIds.add(providerSelfDescription);
+        }
         try (Response response = get(HTTP_CLIENT, agreementApi() + "?limit=1000", null)) {
             if (!response.isSuccessful()) {
                 return;
@@ -643,7 +676,7 @@ public class ConsentStepDefinitions extends StepDefintions {
                 boolean isOfPair = false;
                 for (JsonNode characteristic : agreement.path("characteristic")) {
                     if ("provider-id".equals(characteristic.path("name").asText())
-                            && providerSelfDescription.equals(characteristic.path("value").asText())) {
+                            && providerIds.contains(characteristic.path("value").asText())) {
                         isOfPair = true;
                     }
                 }
@@ -690,10 +723,6 @@ public class ConsentStepDefinitions extends StepDefintions {
         return TMF_DIRECT_ADDRESS + "/tmf-api/agreementManagement/v4/agreement";
     }
 
-    private static String base64(String value) {
-        return Base64.getEncoder().encodeToString(value.getBytes(StandardCharsets.UTF_8));
-    }
-
     // --- plain http ---------------------------------------------------------------------------
 
     private Response post(OkHttpClient client, String url, String body) throws IOException {
@@ -708,6 +737,15 @@ public class ConsentStepDefinitions extends StepDefintions {
             request.header("Authorization", "Bearer " + token);
         }
         return client.newCall(request.build()).execute();
+    }
+
+    private Response put(OkHttpClient client, String url, String body, String token) throws IOException {
+        Request request = new Request.Builder()
+                .put(RequestBody.create(body, JSON))
+                .url(url)
+                .header("Authorization", "Bearer " + token)
+                .build();
+        return client.newCall(request).execute();
     }
 
     private Response get(OkHttpClient client, String url, String token) throws IOException {
