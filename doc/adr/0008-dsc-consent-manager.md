@@ -46,7 +46,7 @@ receipts, and derives privacy notices from the same contract-service API the con
   (`POST /internal/tokens`). The decisions of 0002 and 0003 carry over unchanged in that respect.
 - The provider's consent-filter plugin 1.0.0 calls the `/v1` API directly with that token. It
   resolves the provider via `GET /v1/participants/me`, requires the consumer DID to be a registered
-  participant, and allows only a consent that is `consented` with matching provider and consumer.
+  participant, and allows only a consent whose status is `GRANTED`, with matching provider and consumer.
 
 ## Consequences
 

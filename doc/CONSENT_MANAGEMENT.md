@@ -151,7 +151,8 @@ type per scope and checks the issuer against the TIR, so no participant can issu
 role. `participant_id` is the credential's `issuer`, the DID the TIR check covers, and not
 `credentialSubject.id`, which any issuer sets freely. Both DCQL queries ask for a single credential
 (`multiple: false`), because with several matching credentials the verifier lets the last one's claims
-win.
+win. That is only a wallet hint, which the verifier does not enforce (see
+[Known limitations](#known-limitations)).
 
 The relevant settings, from [`k3s/consent-trust-anchor-components.yaml`](../k3s/consent-trust-anchor-components.yaml):
 
@@ -221,6 +222,9 @@ The endpoint is specified in
   Agreements that name the participant DIDs, as in the [walkthrough](#walkthrough-on-the-local-k3s-scenario),
   work. The fix is upstream (contract-management or the consent-facade emitting the DID, or the
   consent-manager resolving parties by `selfDescriptionUri`) and still open.
+* **`multiple: false` is not enforced.** The DCQL queries ask for one credential, but VCVerifier 6.27.0
+  accepts a presentation with several matching ones and takes `participant_id` and `roles` from the
+  last. A wallet holding two matching credentials decides which identity the token carries.
 * **A missing processing purpose degrades silently**, see
   [Declaring the processing purpose](#declaring-the-processing-purpose).
 * **In-cluster transport is plain HTTP.** The plugin calls
@@ -793,10 +797,16 @@ read_profile   # -> HTTP 403, from the plugin, not from OPA
 ```
 
 **4. Both participants register.** Each needs a TM Forum organization carrying its DID; the authority
-consent-facade serves its self-description. Each registers with its own token:
+consent-facade serves its self-description. `org` finds the organization by name, as the IT does, and
+creates it only when it is missing, so a re-run keeps the same self-descriptions. Each participant
+registers with its own token; on a re-run `POST /v1/participants` answers `409`, which is expected
+(`PUT /v1/participants/me` updates an existing registration):
 
 ```shell
 org() {
+  id=$(curl -k -x localhost:8888 -s "$TMF/party/v4/organization?limit=1000" \
+    | jq -r --arg n "$1" 'map(select(.name == $n))[0].id // empty')
+  [ -n "$id" ] && { echo "$id"; return; }
   curl -k -x localhost:8888 -s -X POST $TMF/party/v4/organization -H 'Content-Type: application/json' \
     -d "{\"name\":\"$1\",\"tradingName\":\"$1\",\"isLegalEntity\":true,\"organizationType\":\"company\",
          \"contactMedium\":[{\"characteristic\":{\"country\":\"DE\"}}],
