@@ -1,11 +1,11 @@
 {{- if and .Values.consentManagement.enabled .Values.consentManagement.networkPolicy.enabled }}
 {{- /*
   Isolate the consent-manager and consent-facade so they are reachable only by their intended
-  in-cluster peers. Both are ClusterIP services with no ingress, but ClusterIP has no namespace
-  isolation - without these policies any pod in any namespace (e.g. a provider's APISIX consent
-  plugin) could reach them directly, bypassing the APISIX facade that enforces the participant
-  auth + consent-key injection. The `from` selectors are pod-selectors, so they match only pods in
-  this namespace; cross-namespace sources are denied. Requires a NetworkPolicy-enforcing CNI.
+  in-cluster peers. ClusterIP has no namespace isolation, so without these policies any pod in any
+  namespace could reach them. The consent-manager validates a verifier JWT on every call itself;
+  its policy narrows who may connect at all and never admits the management port. Plain
+  `podSelector` peers match only this namespace; cross-namespace callers are listed explicitly.
+  Requires a NetworkPolicy-enforcing CNI.
 */}}
 {{- /* nil-safe: the subchart values are not always coalesced into this context */}}
 {{- $manager := (index .Values "consent-manager") | default dict }}
@@ -19,20 +19,37 @@ metadata:
   labels:
     {{ include "trust-anchor.labels" . | nindent 4 }}
 spec:
-  # the consent-manager accepts traffic only from the authority APISIX - both the participant facade
-  # route (/consent-manager/*) and the allow-listed end-user routes (/consent-user/...) enter through it.
   podSelector:
     matchLabels:
       app.kubernetes.io/name: consent-manager
   policyTypes:
     - Ingress
   ingress:
+    {{- /* NetworkPolicy ports match the container port, not the Service port. */}}
+    {{- $port := dig "deployment" "containerPorts" "http" .Values.consentManagement.networkPolicy.consentManagerPort $manager }}
+    {{- $ingressController := .Values.consentManagement.networkPolicy.ingressController }}
     - from:
+        # the authority gateway publishing the consent-manager host
         - podSelector:
             matchLabels:
               app.kubernetes.io/name: apisix
+        # an ingress controller, for setups that publish the consent-manager with an Ingress
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ $ingressController.namespace }}
+          podSelector:
+            matchLabels:
+              {{- toYaml $ingressController.podLabels | nindent 14 }}
+        {{- range .Values.consentManagement.networkPolicy.consentManagerClients }}
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .namespace }}
+          podSelector:
+            matchLabels:
+              {{- toYaml .podLabels | nindent 14 }}
+        {{- end }}
       ports:
-        - port: {{ $manager.port | default .Values.consentManagement.networkPolicy.consentManagerPort }}
+        - port: {{ $port }}
 {{- end }}
 {{- /* nil-safe: the subchart values are not always coalesced into this context */}}
 {{- $facade := (index .Values "consent-facade") | default dict }}

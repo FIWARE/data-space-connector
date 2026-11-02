@@ -23,8 +23,13 @@ managedPostgres:
         - createdb
       til:
         - createdb
+      # -- the consent-manager's user. Fixed name: the setup Job reads its Zalando secret
+      # `consent-manager.postgres.credentials...` and `consent-manager.config.database.url` names the database.
+      consent_manager: []
     databases:
       tildb: til
+      # -- the consent-manager's database, owned by its user (fixed name, see the user above)
+      consent_manager: consent_manager
     patroni:
       pg_hba: # Allow connections without ssl as db is not exposed
         - local   all all           trust
@@ -58,81 +63,82 @@ trusted-issuers-list:
     name: tildb
 
 # ---------------------------------------------------------------------------
-# Consent management (ISO/IEC TS 27560) - the consent-manager + consent-facade
-# and their managed MongoDB. These live in the trust-anchor chart because the
-# authority (this trust anchor) is where consent records are held; the IAM that
-# backs them (keycloak issuer, did:web helper, APISIX facade route, vc-operator)
-# stays in the data-space-connector umbrella chart and is deployed as a separate
+# Consent management (ISO/IEC TS 27560) - the consent-manager + consent-facade.
+# These live in the trust-anchor chart because the authority (this trust anchor)
+# is where consent records are held; the consent-manager stores them in the
+# `consent_manager` database of `managedPostgres`. The IAM that backs them
+# (keycloak issuer, verifier, did:web helper, APISIX gateway, vc-operator) stays
+# in the data-space-connector umbrella chart and is deployed as a separate
 # `consent-authority` release in the same namespace (see doc/CONSENT_MANAGEMENT.md
 # and k3s/consent-trust-anchor.yaml). Everything here is off by default; the
 # consent scenario turns it on via k3s/consent-trust-anchor-components.yaml.
 # ---------------------------------------------------------------------------
-
-## Usage of the MongoDB community operator (installed cluster-wide, see
-## k3s/mongo-operator.yaml) - the managed replica set backing the consent-manager.
-managedMongo:
-  # -- should the managed MongoDB replica set be deployed? Requires the MongoDB
-  # community operator CRDs to be installed before applying the chart.
-  enabled: false
-  # -- generate the admin/consent password secrets in-cluster (once, kept across
-  # upgrades). Set to false to provide `mongodb-admin-password` /
-  # `mongodb-consent-password` externally.
-  generatePasswords: true
-  # -- name of the service account the mongod pods run as. The community operator
-  # defaults the generated StatefulSet to `mongodb-database`; the chart provisions
-  # this SA + its role/binding in the release namespace so the replica set can start
-  # (the operator's own chart only creates it in its `database.namespace`).
-  databaseServiceAccountName: mongodb-database
-  # -- spec as defined in https://github.com/mongodb/helm-charts/tree/main/charts/community-operator-crds
-  spec:
-    additionalMongodConfig:
-      storage.wiredTiger.engineConfig.journalCompressor: zlib
 
 consentManagement:
   # -- should consent management be deployed
   enabled: false
 
   # NetworkPolicies isolating the consent-manager and consent-facade so they are reachable only by
-  # their intended in-cluster peers - the authority APISIX and each other - and NOT by arbitrary
-  # pods (e.g. a provider's APISIX consent-plugin). The consent-manager's participant auth + consent
-  # key injection are enforced at the APISIX facade, so a direct path to consent-manager:3000 would
-  # bypass them; these policies close that. Requires a NetworkPolicy-enforcing CNI (k3s enforces).
+  # their intended in-cluster peers. The consent-manager authenticates every call itself, so its
+  # policy only narrows who can connect; its management port is never admitted.
+  # Requires a NetworkPolicy-enforcing CNI (k3s enforces).
   networkPolicy:
     # -- create the isolation NetworkPolicies
     enabled: true
-    ## the ingress controller that has to reach the consent-facade when it publishes its
-    ## self-description endpoints. A NetworkPolicy is L3/L4 and cannot express WHICH paths
-    ## are public - the facade's ingress decides that - so this admits the controller
-    ## only, and the contract endpoints stay unpublished.
-    # -- port the consent-manager listens on, used by its policy. Mirrors the
-    # consent-manager chart's own default.
-    consentManagerPort: 3000
+    # -- port the consent-manager listens on, used by its policy when
+    # `consent-manager.deployment.containerPorts.http` is not readable.
+    consentManagerPort: 8080
     # -- port the consent-facade listens on, used by its policy. Mirrors the
     # consent-facade chart's own default.
     consentFacadePort: 8080
+    ## the ingress controller that may reach the consent-manager and, when it publishes its
+    ## self-description endpoints, the consent-facade. A NetworkPolicy is L3/L4 and cannot
+    ## express WHICH paths are public - the ingress decides that.
     ingressController:
       # -- namespace of the ingress controller
       namespace: infra
       # -- pod labels of the ingress controller
       podLabels:
         app.kubernetes.io/name: traefik
+    # -- further callers of the consent-manager API from other namespaces, e.g. a provider's
+    # APISIX running the consent-filter plugin. Each entry is `{namespace, podLabels}`.
+    consentManagerClients: []
 
-  # The consent-manager (the ISO 27560 consent records and receipts) and the
-  # consent-facade (which projects the TM Forum agreements, catalog and parties into the
-  # contract-service API the consent-manager consumes) are both deployed from their own
-  # published charts; configure them under the top-level `consent-manager` and
-  # `consent-facade` keys below.
-  ## the user the managed MongoDB provisions for the consent-manager. It has to match the
-  ## `consent-manager.mongo` values, which is where the application reads them from.
-  mongo:
-    # -- user the managed MongoDB provisions
-    username: consent
-    # -- database that user is given readWrite on
-    database: consent
-    # -- name of the MongoDBCommunity resource, which is also the replica-set name (the
-    # operator derives the `<name>-svc` service from it). Has to match the
-    # consent-manager's `mongo.replicaSet`.
-    replicaSet: mongodb
+  ## the Job that provisions the consent-manager's database and Secrets
+  ## (`consent-manager-env`, `consent-manager-signing-keys`), see
+  ## templates/consent-manager-setup-job.yaml.
+  setup:
+    # -- image running the setup script; needs kubectl, jq, base64 and head
+    image: alpine/k8s:1.31.4
+    # -- image creating the database; needs psql
+    postgresImage: postgres:16-alpine
+    # -- image generating the receipt signing key; needs `step`
+    jwkImage: smallstep/step-cli:0.28.7
+    # -- container restarts before the Job gives up
+    backoffLimit: 30
+    # -- seconds the Job may run, counted from its creation, so including the wait for the
+    # Zalando secrets and image pulls on a cold cluster; null removes the limit
+    activeDeadlineSeconds: 1800
+    # -- seconds a finished Job is kept. Set to null with a self-healing GitOps tool (Argo CD),
+    # which would otherwise recreate the Job after every cleanup.
+    ttlSecondsAfterFinished: 300
+    # -- priorityClassName of the Job's pod
+    priorityClassName: ""
+
+  signingKey:
+    # -- generate the receipt signing key (an EC P-256 JWK) once, if
+    # `consent-manager-signing-keys` does not exist. Set to false to provide that Secret yourself.
+    generate: true
+
+  ## SMTP credentials for the consent-manager's e-mail notifications. Host and sender are set
+  ## under `consent-manager.config.smtp`.
+  smtp:
+    # -- existing Secret holding the SMTP credentials; empty sends no credentials
+    existingSecret: ""
+    # -- key of the SMTP user in that Secret
+    userKey: username
+    # -- key of the SMTP password in that Secret
+    passwordKey: password
 
 ## The consent-facade, deployed from its own published FIWARE chart
 ## (oci://quay.io/fiware/helm-charts/consent-facade). Only the keys the trust-anchor
@@ -147,38 +153,29 @@ consent-facade:
   # the owner-resolver all address it by that name.
   fullnameOverride: consent-facade
 
-## The consent-manager, deployed from its own published FIWARE chart
-## (oci://quay.io/fiware/helm-charts/consent-manager). Only the keys the trust-anchor
-## deployment needs to differ on are set here; everything else is the chart's default.
-## See https://github.com/FIWARE/helm-charts/tree/main/charts/consent-manager
+## The consent-manager, deployed from the published dsc-consent-manager chart
+## (oci://quay.io/fiware/helm-charts/dsc-consent-manager, aliased to `consent-manager`). Only
+## the keys the trust-anchor deployment needs to differ on are set here; everything else is the
+## chart's default. The authority deployment has to set `identityProviders.primary`.
 consent-manager:
-  # -- deploy the consent-manager. The authority runs it; a deployment that only needs the
-  # facade leaves it off.
+  # -- deploy the consent-manager. Requires `managedPostgres.enabled`.
   enabled: false
+  # -- pins the `app.kubernetes.io/name` label both consent NetworkPolicies select
+  nameOverride: consent-manager
   # -- keep the resource names stable (`consent-manager` rather than
-  # `<release>-consent-manager`): the authority's APISIX facade route, its NetworkPolicy
-  # and the participants that address the api all use that name.
+  # `<release>-consent-manager`): the authority gateway, the providers' consent-filter plugin
+  # and the setup Job address it by that name.
   fullnameOverride: consent-manager
-  ## the contract service the privacy notices are derived from - the consent-facade. Set a
-  ## cross-namespace FQDN when the two do not share a namespace.
-  contractService:
-    # -- base url of the consent-facade
-    url: http://consent-facade:8080
-  ## MongoDB: the managed replica set this chart declares (see `managedMongo`). The
-  ## username/database have to match `consentManagement.mongo`, which is what the operator
-  ## provisions, and the password secret is the one it creates for that user.
-  mongo:
-    # -- host of the managed replica set
-    host: mongodb-svc
-    # -- database to use
-    database: consent
-    # -- user to connect as
-    username: consent
-    # -- name of the replica set (the managed MongoDBCommunity resource name)
-    replicaSet: mongodb
-    auth:
-      existingSecret:
-        # -- the secret the managed MongoDB creates for this user
-        name: mongodb-consent-password
-        # -- key of the password inside it
-        key: password
+  config:
+    # -- base url of the contract service the privacy notices are derived from: the consent-facade
+    contractServiceUrl: http://consent-facade:8080
+    database:
+      # -- the `consent_manager` database of `managedPostgres` (cluster `postgres`)
+      url: jdbc:postgresql://postgres:5432/consent_manager
+  secrets:
+    # -- written by the setup Job (DB credentials, log-pseudonym and erasure keys, SMTP
+    # credentials); do not change
+    existingSecret: consent-manager-env
+  signingKeys:
+    # -- receipt signing key, written by the setup Job when `consentManagement.signingKey.generate`
+    secretName: consent-manager-signing-keys
