@@ -24,7 +24,7 @@ Feature: Consent-gated access to personal data as described in CONSENT_MANAGEMEN
     And The data subject published an operator profile it owns.
     And Both participants are onboarded at the consent-manager.
     And A signed agreement between the participants covers the operator profile.
-    And The data subject is registered at the provider and has a PDI account.
+    And The data subject is registered at the consent-manager and linked to the provider.
     When The data subject grants consent for its own data.
     Then The consumer can read the operator profile.
 
@@ -33,7 +33,7 @@ Feature: Consent-gated access to personal data as described in CONSENT_MANAGEMEN
     And The data subject published an operator profile it owns.
     And Both participants are onboarded at the consent-manager.
     And A signed agreement between the participants covers the operator profile.
-    And The data subject is registered at the provider and has a PDI account.
+    And The data subject is registered at the consent-manager and linked to the provider.
     And The data subject granted consent for its own data.
     # the positive control: without it a grant that has not propagated yet would leave the
     # stale 403 in place and the scenario would pass even if withdrawal did nothing

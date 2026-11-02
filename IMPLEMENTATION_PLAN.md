@@ -494,8 +494,9 @@ Files: `it/src/test/java/org/fiware/dataspace/it/components/ConsentEnvironment.j
   - the granted consent must name the provider DID as `provider` and the consumer DID
     (the value the plugin reads from `consumer_claim`) as `consumer`, plus the contract the
     owner-resolver reports, otherwise the plugin does not match it;
-  - privacy notices come from `GET /v1/privacy-notices` (filter by the contract URI; there
-    is no GET by contract);
+  - the provider generates the privacy notice with `POST /v1/privacy-notices/by-contract`
+    (`{contractUri}`; the API has no list GET, and the call answers 200 with the existing
+    notice when the contract is unchanged);
   - grant with `POST /v1/consents`, withdraw via the consent's revoke operation;
   - assert with `GET /v1/consents?userIdentifier=` and `GET /v1/consents/check`.
   Remove the `identifier/search` and `consents/participants` calls. Do not use

@@ -5,9 +5,8 @@ package org.fiware.dataspace.it.components;
  *
  * <p>These endpoints exist when the data space is deployed with consent management enabled
  * ({@code mvn clean deploy -Pconsent}). The consent components are split over two namespaces: the
- * consent-manager and the authority APISIX facade run at the authority ({@code trust-anchor}), while
- * the consent-filter plugin, the OwnerResolver and a provider-local consent-facade run at the
- * provider.
+ * consent-manager and its verifier run at the authority ({@code trust-anchor}), while the
+ * consent-filter plugin, the OwnerResolver and a provider-local consent-facade run at the provider.
  *
  * @see <a href="../../../../../../doc/CONSENT_MANAGEMENT.md">Consent Management Guide</a>
  */
@@ -16,35 +15,20 @@ public abstract class ConsentEnvironment {
     // --- authority endpoints, reached through the ingress + squid proxy ------------------------
 
     /**
-     * Participant-authenticated consent-manager API, behind the authority APISIX facade.
-     *
-     * <p>The routes under {@code /consent-manager/*} require a participant access token; the facade
-     * validates it and injects the shared consent key server-side. The routes are host-scoped to the
-     * ingress name, so they are only reachable under this host - not through a port-forward.
+     * The consent-manager's {@code /v1} API; every call carries a token of the verifier below.
      */
-    public static final String CONSENT_MANAGER_FACADE_ADDRESS =
-            "https://consent-manager.dataspace-authority.org/consent-manager/v1";
+    public static final String CONSENT_MANAGER_API = "https://consent-manager.dataspace-authority.org/v1";
 
     /**
-     * Subject routes of the consent-manager, behind the same facade.
-     *
-     * <p>Allow-listed: no participant authentication and no consent-key injection, so a data subject
-     * can sign up and grant with its own OID4VP token.
-     */
-    public static final String CONSENT_USER_ADDRESS =
-            "https://consent-manager.dataspace-authority.org/consent-user/v1";
-
-    /**
-     * The authority verifier service a data subject authenticates against to obtain the access token
-     * the consent-manager verifies (audience {@code consent-manager}).
+     * The authority verifier service that issues the consent-manager's tokens (audience
+     * {@code consent-manager}): scope {@code openid} for data subjects, {@code participant} for
+     * participants.
      */
     public static final String CONSENT_MANAGER_VERIFIER_ADDRESS =
             "https://verifier.dataspace-authority.org/services/consent-manager";
 
     /**
-     * Public base URL of the authority consent-facade - the id space participant self-descriptions
-     * and catalog data resources are built from. It MUST equal the facade's own {@code selfUrl}: the
-     * consent-manager matches participants on that exact string.
+     * Public base URL of the authority consent-facade, which serves the participant self-descriptions.
      */
     public static final String CONSENT_FACADE_ADDRESS = "https://consent-facade.dataspace-authority.org";
 
@@ -53,9 +37,9 @@ public abstract class ConsentEnvironment {
      * privacy notices from, plus the TM Forum agreement the contract stands for.
      *
      * <p>The base has to be the one the deployment configures
-     * ({@code consent-manager.contractService.url} in
-     * {@code k3s/consent-trust-anchor-components.yaml}), because the consent-manager stores exactly
-     * that string on the notice and resolves a contract by it.
+     * ({@code consent-manager.config.contractServiceUrl} in
+     * {@code k3s/consent-trust-anchor-components.yaml}): the consent-manager fetches the contract
+     * from there under the URI's last path segment and stores the URI verbatim on the notice.
      */
     public static final String CONTRACT_URI_TEMPLATE =
             "http://consent-facade.trust-anchor.svc.cluster.local:8080/bilaterals/default~%s";
@@ -63,23 +47,9 @@ public abstract class ConsentEnvironment {
     // --- endpoints that are not published and are reached via kubectl port-forward -------------
 
     /**
-     * Namespace of the authority deployment.
-     */
-    public static final String TRUST_ANCHOR_NAMESPACE = "trust-anchor";
-
-    /**
      * Namespace of the provider deployment.
      */
     public static final String PROVIDER_NAMESPACE = "provider";
-
-    /**
-     * Service and port of the consent-manager itself. Participant onboarding
-     * ({@code POST /participants}) is an unauthenticated authority action and therefore not exposed
-     * through the participant-authenticated facade.
-     */
-    public static final String CONSENT_MANAGER_SERVICE = "consent-manager";
-    public static final int CONSENT_MANAGER_PORT = 3000;
-    public static final int CONSENT_MANAGER_LOCAL_PORT = 13000;
 
     /**
      * Service and port of the provider-local consent-facade. Its {@code /internal/tokens} endpoint
@@ -108,7 +78,7 @@ public abstract class ConsentEnvironment {
     // --- fixtures ----------------------------------------------------------------------------
 
     /**
-     * The audience the participant token is minted for.
+     * The audience of every consent-manager token.
      */
     public static final String CONSENT_MANAGER_AUDIENCE = "consent-manager";
 
