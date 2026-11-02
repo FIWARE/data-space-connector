@@ -22,7 +22,9 @@ import java.io.IOException;
 import java.security.Security;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 import static org.fiware.dataspace.it.components.ConsentEnvironment.*;
 import static org.fiware.dataspace.it.components.FancyMarketplaceEnvironment.CONSUMER_DID;
@@ -104,8 +106,8 @@ public class ConsentStepDefinitions extends StepDefintions {
     private static final String PURPOSE_URI = "https://w3id.org/dpv#ServiceProvision";
 
     /**
-     * How long the policy needs to reach OPA, and the agreement the consent-manager's notice
-     * generation.
+     * How long the policy needs to reach OPA, and the agreement needs to reach the
+     * consent-manager's notice generation.
      */
     private static final Duration PROPAGATION_TIMEOUT = Duration.ofSeconds(30);
 
@@ -657,9 +659,15 @@ public class ConsentStepDefinitions extends StepDefintions {
      *
      * <p>The flow assumes a single agreement between the pair: the OwnerResolver takes the first
      * contract that permits the requested object, so a stale one from an earlier run can shadow the
-     * one seeded here.
+     * one seeded here. Agreements seeded before the participant DIDs were used still carry the
+     * provider's self-description URL as provider-id, so both forms are matched on a reused cluster.
      */
     private void cleanUpAgreementsOfPair() throws Exception {
+        Set<String> providerIds = new HashSet<>();
+        providerIds.add(PROVIDER_DID);
+        if (providerSelfDescription != null) {
+            providerIds.add(providerSelfDescription);
+        }
         try (Response response = get(HTTP_CLIENT, agreementApi() + "?limit=1000", null)) {
             if (!response.isSuccessful()) {
                 return;
@@ -668,7 +676,7 @@ public class ConsentStepDefinitions extends StepDefintions {
                 boolean isOfPair = false;
                 for (JsonNode characteristic : agreement.path("characteristic")) {
                     if ("provider-id".equals(characteristic.path("name").asText())
-                            && PROVIDER_DID.equals(characteristic.path("value").asText())) {
+                            && providerIds.contains(characteristic.path("value").asText())) {
                         isOfPair = true;
                     }
                 }

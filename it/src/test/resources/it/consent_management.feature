@@ -16,6 +16,10 @@ Feature: Consent-gated access to personal data as described in CONSENT_MANAGEMEN
   Scenario: A consumer is denied personal data while no consent exists.
     Given The provider allows reading operator profiles at OPA.
     And The data subject published an operator profile it owns.
+    # onboarded and registered like in the grant scenario, so the plugin's deny can only come
+    # from the missing consent and not from an unknown provider, consumer or subject
+    And Both participants are onboarded at the consent-manager.
+    And The data subject is registered at the consent-manager and linked to the provider.
     When The consumer requests the operator profile.
     Then The consumer stays denied access to the operator profile.
 
