@@ -77,7 +77,7 @@ new `charts/trust-anchor/templates/{consent-manager-setup-job.yaml,removed-value
   in `k3s/consent-trust-anchor.yaml`), so an upgrade from 1.x or a reused volume would
   lack the database; the setup Job below covers that.
 - `consent-manager:` values, using the new chart's keys: `enabled: false`,
-  `fullnameOverride: consent-manager`,
+  `nameOverride: consent-manager`, `fullnameOverride: consent-manager`,
   `config.contractServiceUrl: http://consent-facade:8080`,
   `config.database.url: jdbc:postgresql://postgres:5432/consent_manager`,
   `secrets.existingSecret: consent-manager-env` and
@@ -85,61 +85,124 @@ new `charts/trust-anchor/templates/{consent-manager-setup-job.yaml,removed-value
   `valueFrom` hook (its `deployment.yaml` renders only `envFrom` + a fixed `env`, and
   `extraEnv` refuses `DB_*`), and `lookup` is empty under `helm template` (the subchart's
   own `secret.yaml` warns the keys then rotate on every render). So neither Secret is a
-  Helm-templated object.
+  Helm-templated object. `nameOverride` is needed because the standalone chart labels its
+  pods `app.kubernetes.io/name: dsc-consent-manager`, while both NetworkPolicies select
+  `consent-manager` (pin the rendered label in a unit test).
 - New `templates/consent-manager-setup-job.yaml`, gated on `consent-manager.enabled`. It
   is the **single owner** of both Secrets, so nothing has two writers:
   - A **plain Job, not a Helm hook** (same as `ensure-ccsdb`, which is a plain Job in
     `extraManifests`): a pre-install hook would deadlock, because the Zalando secret only
     appears after the operator reconciles the `postgresql` CR, a normal release resource.
     `restartPolicy: OnFailure`, `backoffLimit: 30`, `activeDeadlineSeconds: 900`,
-    `ttlSecondsAfterFinished`. The consent-manager Deployment sits in
+    `ttlSecondsAfterFinished: 300`. The consent-manager Deployment sits in
     `CreateContainerConfigError` until `consent-manager-env` exists and recovers on its own;
     `deploy.sh --wait` covers that window (check its timeout, Step 4).
-  - Name it `consent-manager-setup-{{ .Release.Revision }}` so a `helm upgrade` never hits
-    the immutable Job spec (see the rotation-Job note in AGENTS.md); under `helm template`
-    the revision is constant and the completed Job is left alone. All steps are
-    idempotent, so a rerun is harmless.
-  - An init container (`postgres:16-alpine`) reads `PGUSER`/`PGPASSWORD` from the superuser
-    secret `postgres.postgres.credentials.postgresql.acid.zalan.do` via `secretKeyRef`
-    (the pod waits until it exists) and runs `CREATE DATABASE consent_manager OWNER
-    consent_manager` only when `pg_database` lacks it, exactly like `ensure-ccsdb`.
-  - The main container (an image with `kubectl`, `openssl` and `jq`; reuse one the repo
-    already pins if any) then:
-    1. reads `username`/`password` from the consent user's Zalando secret and applies
-       `consent-manager-env` with `DB_USER`/`DB_PASSWORD`, keeping `LOG_PSEUDONYM_KEY` and
-       `ERASURE_VERIFICATION_SECRET` from the existing Secret and generating them
-       (`openssl rand`) **only when absent** -- they must never rotate;
-    2. when `consentManagement.signingKey.generate` (default `true`) and
-       `consent-manager-signing-keys` does not exist, generates an EC P-256 JWK into it.
-       An existing key is **never** overwritten. `generate: false` means the operator
-       provides that Secret.
+  - Name it `consent-manager-setup-{{ .Release.Revision }}-<hash>`, where `<hash>` is
+    `sha256sum` of the rendered pod spec (script, images, the referenced values), truncated
+    to 8 characters. The revision part covers `helm upgrade` (see the rotation-Job note in
+    AGENTS.md). The hash covers the `helm template | kubectl apply` path (the pom.xml
+    deploys), where the revision is always 1: a changed spec gets a new Job instead of
+    `field is immutable`, and an unchanged spec re-applies the same Job, which is a no-op
+    while it exists and a harmless idempotent rerun after the short TTL removed it.
+  - Init container 1, `create-db` (`postgres:16-alpine`): reads `PGUSER`/`PGPASSWORD` from
+    the superuser secret `postgres.postgres.credentials.postgresql.acid.zalan.do` via
+    `secretKeyRef` (the kubelet resolves it and the pod waits until it exists, so no RBAC)
+    and runs `CREATE DATABASE consent_manager OWNER consent_manager` only when
+    `pg_database` lacks it, exactly like `ensure-ccsdb`.
+  - Init container 2, `generate-jwk`, only rendered when
+    `consentManagement.signingKey.generate` (default `true`): image
+    `consentManagement.setup.jwkImage` (default `smallstep/step-cli:0.28.7`, verified: runs
+    as uid 1000 and ships `step`). It always writes a fresh candidate key into the shared
+    `emptyDir`; the main container decides whether to use it:
+    `step crypto jwk create /work/pub.json /work/signing-key.jwk --kty EC --crv P-256
+    --use sig --no-password --insecure` (a private JWK with `kid` and `alg: ES256`). No
+    hand-rolled openssl/jq JWK encoding.
+  - Main container `setup`: image `consentManagement.setup.image` (default
+    `alpine/k8s:1.31.4`, verified to ship `kubectl`, `jq`, `base64` and `head` but **not**
+    `openssl`; it defaults to root, so set `runAsUser`/`runAsGroup`, for example 1000).
+    `DB_USER`/`DB_PASSWORD` come from the consent user's Zalando secret
+    `consent-manager.postgres.credentials.postgresql.acid.zalan.do` (keys `username` /
+    `password`) via `secretKeyRef`, and `SMTP_USER`/`SMTP_PASSWORD` from
+    `consentManagement.smtp.existingSecret` when it is set (see below), so the script never
+    reads those Secrets through the API. The script:
+    1. reads `LOG_PSEUDONYM_KEY` and `ERASURE_VERIFICATION_SECRET` from the existing
+       `consent-manager-env` (`kubectl get -o jsonpath`) and generates only the missing ones
+       with `head -c 32 /dev/urandom | base64` -- they must never rotate;
+    2. applies `consent-manager-env` (`kubectl create secret generic --dry-run=client -o
+       yaml | kubectl apply -f -`) with `DB_USER`, `DB_PASSWORD`, the two keys and, when
+       configured, `SMTP_USER`/`SMTP_PASSWORD`. Without an SMTP secret it does not write
+       the SMTP keys;
+    3. when the JWK init container ran and `consent-manager-signing-keys` does not exist,
+       creates it from `/work/signing-key.jwk` under the data key
+       `consent-manager.signingKeys.signingKeyFile` (default `signing-key.jwk`; the subchart
+       mounts exactly that key, any other name fails at pod start). An existing Secret is
+       **never** overwritten. `generate: false` means the operator provides that Secret.
+  - SMTP credentials: new optional values `consentManagement.smtp.existingSecret` (default
+    `""`), `consentManagement.smtp.userKey` (default `username`) and
+    `consentManagement.smtp.passwordKey` (default `password`). When the secret is set the
+    Job copies its two keys into `consent-manager-env`; the SMTP host and sender stay in
+    the subchart's `consent-manager.config.smtp.*`. Changed SMTP credentials take effect on
+    the next Job run (every `helm upgrade`; on the template path after the TTL or by
+    deleting the Job), followed by a consent-manager restart, as the subchart documents.
+    `removed-values.yaml` also `fail`s when `consent-manager.secrets.smtpUser` /
+    `smtpPassword` are set, pointing to the new option, since the subchart ignores them
+    once `existingSecret` is set.
   - Plain release resources (not hooks, so they exist before the Job runs): a
-    ServiceAccount, a Role with `get`/`create`/`patch` on `secrets` (`get` alone would not
-    let it create the two Secrets), and a RoleBinding. No cluster-wide RBAC.
+    ServiceAccount, a Role and a RoleBinding. No cluster-wide RBAC. The Role has two rules:
+    `get`/`patch` on `secrets` with `resourceNames: [consent-manager-env,
+    consent-manager-signing-keys]`, and `create` on `secrets` without `resourceNames`
+    (Kubernetes cannot scope `create` by name). The Job cannot read any other Secret in
+    the namespace, including the Postgres superuser and TIL credentials.
   - Strict pod security context (runAsNonRoot, readOnlyRootFilesystem with an `emptyDir`
-    for scratch files, drop ALL) and `priorityClassName` from
+    at `/work` for scratch files, drop ALL) and `priorityClassName` from
     `consentManagement.setup.priorityClassName` (`{{- with }}`, `nindent 8`) per the
-    AGENTS.md scheduling rules. Record the "why a plain Job" reasoning in a
-    `{{- /* */}}` block above it.
+    AGENTS.md scheduling rules. Record the "why a plain Job" and "why the hash in the name"
+    reasoning in a `{{- /* */}}` block above it.
 - `identityProviders.primary` defaults stay the subchart placeholders. The authority
   values (Step 4) set them.
-- `consent-network-policies.yaml`: the consent-manager policy targets port 8080
-  (`consentManagementPolicies.consentManagerPort`, default 8080, was 3000). Allow ingress
-  from the ingress controller, the consent-facade's clients and provider APISIX pods.
-  There is no facade-only path any more: the service authenticates every call itself.
-  Never allow the management port 9090 from outside the namespace. Update the comments
-  that describe facade-only access.
+- `consent-network-policies.yaml`, consent-manager policy:
+  - Port: read the subchart's container port, `dig "deployment" "containerPorts" "http"`
+    on the nil-safe `$manager` dict, falling back to
+    `consentManagement.networkPolicy.consentManagerPort` (default changes 3000 -> 8080).
+    Drop the `$manager.port` lookup: the new chart has no top-level `port`. NetworkPolicy
+    ports match the container port, not the Service port.
+  - Admitted peers, each only on that port:
+    1. same-namespace `app.kubernetes.io/name: apisix` pods (the authority gateway that
+       publishes `consent-manager.dataspace-authority.org`, Step 3), as today;
+    2. the ingress controller, from the existing
+       `consentManagement.networkPolicy.ingressController` (`namespaceSelector` +
+       `podSelector`), for setups that publish the manager with a plain Ingress;
+    3. a new list `consentManagement.networkPolicy.consentManagerClients` (default `[]`) of
+       `{namespace, podLabels}` entries, each rendered as a `namespaceSelector`
+       (`kubernetes.io/metadata.name`) + `podSelector` peer. This admits the providers'
+       APISIX, whose consent-filter plugin calls
+       `consent-manager.trust-anchor.svc.cluster.local:8080` from another namespace
+       (Step 4). `k3s/consent-trust-anchor-components.yaml` sets
+       `{namespace: provider, podLabels: {app.kubernetes.io/name: apisix}}`.
+  - The management port 9090 is never listed, so it stays unreachable for all of them.
+  - There is no facade-only path any more: the service authenticates every call itself.
+    Rewrite the comments that describe facade-only access and the consent key.
+  - The consent-facade policy stays as it is: it admits only the consent-manager pods,
+    because the manager calls the facade, not the other way round. Its `podSelector` on
+    `app.kubernetes.io/name: consent-manager` depends on the `nameOverride` above.
 - Rewrite `tests/consent_management_test.yaml` with one `it:` per behaviour:
-  - the dependency renders a `consent-manager` Deployment on port 8080;
+  - the dependency renders a `consent-manager` Deployment on port 8080 whose pod label is
+    `app.kubernetes.io/name: consent-manager` (the label both NetworkPolicies select);
   - no MongoDBCommunity is rendered;
   - `managedPostgres` carries the consent user and database;
-  - the NetworkPolicy port is 8080 and 9090 is not exposed;
+  - the NetworkPolicy port is 8080, 9090 is not exposed, and each
+    `consentManagerClients` entry renders a `namespaceSelector` + `podSelector` peer;
   - each removed value fails;
   - the setup Job, its ServiceAccount/Role/RoleBinding render without hook annotations
-    and only when `consent-manager.enabled`; the Role covers `get`/`create`/`patch` on
-    `secrets`;
-  - the signing-key generation is in the Job script only when
-    `consentManagement.signingKey.generate` is true;
+    and only when `consent-manager.enabled`; the Job name changes when the script or an
+    image changes;
+  - the Role grants `get`/`patch` only with `resourceNames` `consent-manager-env` and
+    `consent-manager-signing-keys`, and `create` without `resourceNames`;
+  - the `generate-jwk` init container and the signing-key step are rendered only when
+    `consentManagement.signingKey.generate` is true, and the script writes the data key
+    named by `consent-manager.signingKeys.signingKeyFile`;
+  - `SMTP_USER`/`SMTP_PASSWORD` are wired from `consentManagement.smtp.existingSecret` only
+    when it is set;
   - `consent-manager.secrets.existingSecret` / `signingKeys.secretName` match the names
     the Job writes.
 - Acceptance: `helm dependency update charts/trust-anchor && helm lint charts/trust-anchor
@@ -221,6 +284,10 @@ comment ~850), `k3s/deploy.sh` (comments only, unless ordering changes), `pom.xm
   - `allowInsecureTransport` only if discovery is http in-cluster;
   - `deployment.replicaCount: 1`, smaller resources for k3s.
   Postgres comes from Step 1. Leave SMTP empty, which disables notifications.
+  Set `consentManagement.networkPolicy.consentManagerClients` to the provider APISIX
+  (`{namespace: provider, podLabels: {app.kubernetes.io/name: apisix}}`), else the
+  plugin's in-cluster calls to `consent-manager.trust-anchor.svc.cluster.local:8080` are
+  dropped on a NetworkPolicy-enforcing CNI.
 - The trust-anchor Postgres now also has to be up for the consent-manager. Re-check the
   `--wait=false` / ordering notes in the `pom.xml` `consent` profile and `deploy.sh`, and
   update their comments. Mongo is gone from the trust-anchor; the provider's mongo stays.
@@ -300,7 +367,10 @@ PNGs as outdated), `doc/adr/0001`-`0005`, new `doc/adr/0008-dsc-consent-manager.
   - the plugin 1.0.0 config (`check_mode`, `consent_api_prefix`, `consumer_claim`,
     `require_purpose`/`require_contract`, the removed `consent_api_host`/`consent_key`),
     the matching rules and the provider/consumer registration it relies on;
-  - deployment values for both charts and the k3s `consent` profile;
+  - deployment values for both charts and the k3s `consent` profile, including the setup
+    Job (what it owns, the never-rotate rule, the signing-key options), SMTP credentials via
+    `consentManagement.smtp.existingSecret`, and `networkPolicy.consentManagerClients` for
+    providers in other namespaces;
   - migration from the old consent-manager. There is no data migration from Mongo:
     consents must be re-granted. Upgrading to trust-anchor 2.0.0 on an existing Postgres
     volume relies on the setup Job creating the `consent_manager` database; the plugin
