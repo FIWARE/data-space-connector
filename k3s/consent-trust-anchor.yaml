@@ -514,7 +514,19 @@ decentralizedIam:
           #   openid      - the data SUBJECT's UserCredential
           #   participant - a PARTICIPANT's MembershipCredential (issued by its own keycloak,
           #                 trusted because its issuer DID is registered in the trust-anchor
-          #                 TIR). The consent-manager resolves it to a Participant by `did`.
+          #                 TIR).
+          #
+          # Claim contract with the consent-manager (flatClaims: top-level JWT claims, read
+          # by its identityProviders.primary.claims / roleMapping):
+          #   sub            - holder DID of the presentation; the user identifier
+          #   roles          - the credential's `type` array. Neither credential carries a
+          #                    role claim, and the type IS what this verifier enforces per
+          #                    scope, so no issuer can grant itself a consent role:
+          #                    MembershipCredential -> PARTICIPANT, UserCredential -> USER.
+          #                    No credential maps to consent-catalog (CATALOG).
+          #   participant_id - credentialSubject.id of the MembershipCredential, the
+          #                    participant DID (participant scope only)
+          #   email, given_name, family_name - the UserCredential's profile (openid only)
           # See doc/CONSENT_MANAGEMENT.md.
           #
           # :warning: The provider mints that MembershipCredential with
@@ -526,6 +538,7 @@ decentralizedIam:
             authorizationType: "DEEPLINK"
             oidcScopes:
               "participant":
+                flatClaims: true
                 credentials:
                   - type: MembershipCredential
                     trustedParticipantsLists:
@@ -534,7 +547,12 @@ decentralizedIam:
                       - "*"
                     jwtInclusion:
                       enabled: true
-                      fullInclusion: true
+                      fullInclusion: false
+                      claimsToInclude:
+                        - originalKey: type
+                          newKey: roles
+                        - originalKey: credentialSubject.id
+                          newKey: participant_id
                 dcql:
                   credentials:
                     - id: participant-query
@@ -544,6 +562,7 @@ decentralizedIam:
                         type_values:
                           - ["MembershipCredential"]
               "openid":
+                flatClaims: true
                 credentials:
                   - type: UserCredential
                     trustedParticipantsLists:
@@ -552,7 +571,16 @@ decentralizedIam:
                       - "*"
                     jwtInclusion:
                       enabled: true
-                      fullInclusion: true
+                      fullInclusion: false
+                      claimsToInclude:
+                        - originalKey: type
+                          newKey: roles
+                        - originalKey: credentialSubject.email
+                          newKey: email
+                        - originalKey: credentialSubject.firstName
+                          newKey: given_name
+                        - originalKey: credentialSubject.lastName
+                          newKey: family_name
                 dcql:
                   credentials:
                     - id: user-query

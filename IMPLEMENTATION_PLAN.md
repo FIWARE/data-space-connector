@@ -12,9 +12,10 @@ Decisions from the analysis (ticket comments), binding for every step:
 - **Auth:** every caller (participants and data subjects) gets a JWT from the authority
   VCVerifier (service `consent-manager`, audience `consent-manager`). The consent-manager's
   `identityProviders.primary` trusts that verifier. Its claim paths and `roleMapping`
-  (`consent-user`, `consent-participant`, `consent-catalog`) must match what the verifier
-  puts in the token. The consent key (`x-visionstrust-consent-key`, `CONSENT_KEY`) and the
-  authority APISIX facade routes that injected it are removed.
+  must match what the verifier puts in the token (Step 3 settled on the credential type
+  as the role: `MembershipCredential` -> participant, `UserCredential` -> user). The
+  consent key (`x-visionstrust-consent-key`, `CONSENT_KEY`) and the authority APISIX
+  facade routes that injected it are removed.
 - **DB:** the consent MongoDB is removed. The service uses the trust-anchor's Zalando
   `managedPostgres`, with an extra user and database. A plain (non-hook) setup Job copies
   the operator-generated credentials into the Secret named by `secrets.existingSecret`;
@@ -336,6 +337,15 @@ credentials are issued, if their claims have to change.
 - Acceptance: `helm template consent-authority charts/data-space-connector -f
   k3s/consent-trust-anchor.yaml` renders and validates against the schema. A rendered
   verifier config shows both scopes with the claim mapping.
+- Outcome: neither credential carries a role claim, so neither 1. as written nor 2. was
+  used. VCVerifier 6.27.0 (`decentralizedIam` 2.1.28) copies the credential's `type` array
+  to `roles` (`claimsToInclude`, scope `flatClaims: true`), and the consent-manager's
+  `roleMapping` names the credential types instead of `consent-*` strings. The verifier
+  already enforces the type per scope, so no participant's issuer can grant itself a
+  consent role, and the credentials issued in `k3s/provider.yaml` / `k3s/consumer.yaml`
+  stay unchanged. `participant_id` is the MembershipCredential's `credentialSubject.id`;
+  the openid scope also maps `email`, `given_name` and `family_name` from the
+  UserCredential.
 
 ### Step 4: k3s scenario and build wiring
 Files: `k3s/consent-trust-anchor-components.yaml`, `k3s/consent-provider.yaml`,
@@ -354,7 +364,10 @@ comment ~850), `k3s/deploy.sh` (comments only, unless ordering changes), `pom.xm
     byte-for-byte with the discovery document's `issuer`, and the verifier publishes its
     `jwks_uri` under the public host, so an in-cluster http `discoveryUrl` with
     `allowInsecureTransport` would still fail at the JWKS fetch;
-  - claim paths and `roleMapping` from Step 3;
+  - claim paths and `roleMapping` from Step 3: `claims.userIdentifier: [sub]`,
+    `claims.participantIdentifier: [participant_id]`, `claims.roles: [roles]`,
+    `roleMapping.user: UserCredential`, `roleMapping.participant: MembershipCredential`.
+    `roleMapping.catalog` keeps the default `consent-catalog`: no credential carries it;
   - `deployment.replicaCount: 1`, smaller resources for k3s.
   Postgres comes from Step 1. Leave SMTP empty, which disables notifications.
 - Verifier reachability in k3s. `verifier.dataspace-authority.org` resolves to 127.0.0.1
