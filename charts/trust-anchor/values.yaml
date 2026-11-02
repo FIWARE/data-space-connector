@@ -114,6 +114,11 @@ consentManagement:
     postgresImage: postgres:16-alpine
     # -- image generating the receipt signing key; needs `step`
     jwkImage: smallstep/step-cli:0.28.7
+    # -- container restarts before the Job gives up
+    backoffLimit: 30
+    # -- seconds the Job may run, counted from its creation, so including the wait for the
+    # Zalando secrets and image pulls on a cold cluster; null removes the limit
+    activeDeadlineSeconds: 1800
     # -- seconds a finished Job is kept. Set to null with a self-healing GitOps tool (Argo CD),
     # which would otherwise recreate the Job after every cleanup.
     ttlSecondsAfterFinished: 300

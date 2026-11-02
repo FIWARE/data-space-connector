@@ -91,8 +91,10 @@ metadata:
     {{- include "trust-anchor.labels" . | nindent 4 }}
     app.kubernetes.io/component: {{ $name }}
 spec:
-  backoffLimit: 30
-  activeDeadlineSeconds: 900
+  backoffLimit: {{ $setup.backoffLimit }}
+  {{- with $setup.activeDeadlineSeconds }}
+  activeDeadlineSeconds: {{ . }}
+  {{- end }}
   {{- with $setup.ttlSecondsAfterFinished }}
   ttlSecondsAfterFinished: {{ . }}
   {{- end }}

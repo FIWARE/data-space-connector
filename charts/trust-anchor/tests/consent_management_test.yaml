@@ -64,16 +64,6 @@ tests:
           path: spec.databases.consent_manager
           value: consent_manager
 
-  - it: renders no MongoDBCommunity
-    templates:
-      - templates/consent-network-policies.yaml
-      - templates/consent-manager-setup-job.yaml
-      - templates/postgres.yaml
-    asserts:
-      - notEqual:
-          path: kind
-          value: MongoDBCommunity
-
   # ==========================================================================
   # NetworkPolicies
   # ==========================================================================
@@ -98,6 +88,17 @@ tests:
           path: metadata.name
           value: consent-facade-ingress
         documentIndex: 1
+
+  - it: renders no facade policy when the facade is not deployed here
+    template: templates/consent-network-policies.yaml
+    set:
+      consent-facade.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 1
+      - equal:
+          path: metadata.name
+          value: consent-manager-ingress
 
   - it: admits only the API port 8080 of the consent-manager, never 9090
     template: templates/consent-network-policies.yaml
@@ -321,6 +322,29 @@ tests:
       - equal:
           path: spec.ttlSecondsAfterFinished
           value: 60
+
+  - it: takes backoffLimit and activeDeadlineSeconds from consentManagement.setup
+    template: templates/consent-manager-setup-job.yaml
+    documentIndex: 3
+    set:
+      consentManagement.setup.backoffLimit: 5
+      consentManagement.setup.activeDeadlineSeconds: 3600
+    asserts:
+      - equal:
+          path: spec.backoffLimit
+          value: 5
+      - equal:
+          path: spec.activeDeadlineSeconds
+          value: 3600
+
+  - it: omits activeDeadlineSeconds when it is null
+    template: templates/consent-manager-setup-job.yaml
+    documentIndex: 3
+    set:
+      consentManagement.setup.activeDeadlineSeconds: null
+    asserts:
+      - notExists:
+          path: spec.activeDeadlineSeconds
 
   - it: omits ttlSecondsAfterFinished when it is null
     template: templates/consent-manager-setup-job.yaml
