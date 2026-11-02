@@ -63,6 +63,28 @@ consent-manager:
       discoveryUrl: https://verifier.dataspace-authority.org/services/consent-manager/.well-known/openid-configuration
       # the verifier service id, which the verifier puts into `aud`
       audience: consent-manager
+      # The claim contract of the verifier's `consent-manager` service (flat, top-level
+      # claims; see k3s/consent-trust-anchor.yaml): `roles` is the credential's `type`
+      # array, `participant_id` the MembershipCredential's issuer DID.
+      claims:
+        userIdentifier: [sub]
+        participantIdentifier: [participant_id]
+        roles: [roles]
+      # The credential type is the role; the verifier already pins the type per scope.
+      # `catalog` keeps the chart default, spelled out here: no credential carries it.
+      roleMapping:
+        user: UserCredential
+        participant: MembershipCredential
+        catalog: consent-catalog
+  deployment:
+    replicaCount: 1
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
 
 # The consent-facade, from its own published chart (see the `consent-facade` dependency
 # in charts/trust-anchor/Chart.yaml). It fronts multiple providers and authenticates its

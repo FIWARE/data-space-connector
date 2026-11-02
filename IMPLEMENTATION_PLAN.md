@@ -443,6 +443,36 @@ comment ~850), `k3s/deploy.sh` (comments only, unless ordering changes), `pom.xm
   `helm template`, and the verifier-reachability gate above passes. Since plugin 1.0.0 is published, the CI `consent` matrix leg
   (`test,consent,consent-test`) is expected to deploy; it may still fail on the IT until
   Step 5 lands, which is accepted for this step.
+- Outcome: the gate passed on a local `mvn deploy -Pconsent` run. The consent-manager got
+  Ready ("Identity provider 'primary' resolved on attempt 1", through squid with
+  trust-all). A token from the provider consent-facade (`POST /internal/tokens`, audience
+  `consent-manager`) carries `participant_id: did:web:mp-operations.org` (a plain DID, so
+  `vc.issuer` is a string and no `issuer.id` path is needed) and
+  `roles: [VerifiableCredential, MembershipCredential]`. With it,
+  `GET /v1/participants/me` answers 403 "not registered" (401 without a token), so the
+  JWKS fetch and the claim mapping work. The 1.0.0 route keeps `require_purpose` /
+  `require_contract` off: owner-resolver 0.2.0 returns only `ownerId` and `dataResource`
+  per claim, so either option would deny every request. `consumer_claim` stays at its
+  default, because the provider verifier's `data-service` scope uses `fullInclusion`.
+  `deploy.sh` needed no change.
+  Findings for Step 5:
+  - the consent-manager looks contract parties up by participant identifier (the token's
+    DID, `findByIdentifier`), while the consent-facade passes the agreement's
+    `provider-id`/`consumer-id` through verbatim. Contract-management writes self-description
+    URLs there (`CONSENT_SELF_DESCRIPTION_BASE_URL`). An agreement the IT seeds must
+    therefore name the participant DIDs in `provider-id`/`consumer-id`, or notice
+    generation by contract fails with "No active participant is registered under '<url>'".
+    The purchase-flow path (contract-management) has the same mismatch: a marketplace
+    purchase no longer yields a privacy notice. **Open decision for the ticket owner:** the
+    fix is upstream, not in this repo (contract-management or the consent-facade emitting or
+    mapping to the participant DID, or the consent-manager resolving parties by
+    `selfDescriptionUri`), followed by an image/chart bump here. Until it is decided, Step 6
+    documents the gap in `doc/CONSENT_MANAGEMENT.md`;
+  - k3s enforces NetworkPolicies (kube-router), and a freshly started pod is rejected
+    for its first seconds until its IP is synced. Retry the first in-cluster call;
+  - running k3s nested in a k3s pod needs `-Dk3s.clusterCidr=10.152.0.0/16
+    -Dk3s.serviceCidr=10.153.0.0/16 -Dk3s.clusterDns=10.153.0.10`, else the outer DNS
+    (10.43.0.10) falls into k3s's own service range and no image pulls.
 
 ### Step 5: IT tests -- move to the dsc-consent-manager /v1 API
 Files: `it/src/test/java/org/fiware/dataspace/it/components/ConsentEnvironment.java`,

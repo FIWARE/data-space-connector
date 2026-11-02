@@ -504,17 +504,20 @@ decentralizedIam:
               policy: policy/main
               with_body: true
         # same backend + auth/authz as mp-data-service, plus the consent-plugin.
-        # pre-req captures the request context (the JWT `sub`); post-resp runs the
-        # two-call consent check against the consent-manager (identifier/search +
-        # consents/participants) and denies unless a granted consent exists.
+        # pre-req captures the request context; post-resp asks the owner-resolver
+        # who owns the returned data and denies unless each owner granted consent.
         # The plugin holds NO participant credential. It asks the provider-local
-        # consent-facade (token_service_url) for a short-lived OID4VP access token,
-        # which that facade obtains by presenting this participant's credential as
-        # did:web:mp-operations.org; the token is then accepted by the authority
-        # gateway's openid-connect check and resolved to a Participant by `did`. The
-        # provider self-description is still derived from /participants/me, so no
-        # per-seed token/SD wiring is needed. No `consent_key` either: the authority's
-        # facade injects it server-side. See doc/CONSENT_MANAGEMENT.md.
+        # consent-facade (token_service_url) for a short-lived access token of the
+        # authority verifier, which that facade obtains by presenting this
+        # participant's MembershipCredential. With it the plugin calls the
+        # dsc-consent-manager in-cluster (/v1): it resolves the provider DID via
+        # /participants/me, checks that the consumer DID (`consumer_claim`, default
+        # verifiableCredential.issuer of the consumer's token) is a registered
+        # participant, then lists each owner's consents (`check_mode: list`) and
+        # matches consented + provider + consumer.
+        # `require_purpose` / `require_contract` stay off: the owner-resolver returns
+        # neither a purpose nor a contractUri/privacyNoticeId per claim, so either
+        # would deny every request. See doc/CONSENT_MANAGEMENT.md.
         # `audit_enabled` emits one access-decision event per request to the OTLP
         # collector (`audit_otlp_endpoint`) as a log record marked
         # service.name=consent-access-audit; off by default (turn on once the
@@ -547,11 +550,11 @@ decentralizedIam:
             ext-plugin-pre-req:
               conf:
                 - name: consent-filter
-                  value: '{"consent_api_url":"http://consent-authority-apisix-gateway.trust-anchor.svc.cluster.local/consent-manager","consent_api_host":"consent-manager.dataspace-authority.org","consent_api_prefix":"/v1","owner_resolver_url":"http://owner-resolver.provider.svc.cluster.local:8080/resolve","service":"mp-data-service","token_service_url":"http://consent-facade.provider.svc.cluster.local:8080/internal/tokens","token_audience":"consent-manager","fail_open":false,"audit_enabled":false,"audit_otlp_endpoint":"http://provider-opentelemetry-collector:4318"}'
+                  value: '{"consent_api_url":"http://consent-manager.trust-anchor.svc.cluster.local:8080","consent_api_prefix":"/v1","check_mode":"list","owner_resolver_url":"http://owner-resolver.provider.svc.cluster.local:8080/resolve","service":"mp-data-service","token_service_url":"http://consent-facade.provider.svc.cluster.local:8080/internal/tokens","token_audience":"consent-manager","fail_open":false,"audit_enabled":false,"audit_otlp_endpoint":"http://provider-opentelemetry-collector:4318"}'
             ext-plugin-post-resp:
               conf:
                 - name: consent-filter
-                  value: '{"consent_api_url":"http://consent-authority-apisix-gateway.trust-anchor.svc.cluster.local/consent-manager","consent_api_host":"consent-manager.dataspace-authority.org","consent_api_prefix":"/v1","owner_resolver_url":"http://owner-resolver.provider.svc.cluster.local:8080/resolve","service":"mp-data-service","token_service_url":"http://consent-facade.provider.svc.cluster.local:8080/internal/tokens","token_audience":"consent-manager","fail_open":false,"audit_enabled":false,"audit_otlp_endpoint":"http://provider-opentelemetry-collector:4318"}'
+                  value: '{"consent_api_url":"http://consent-manager.trust-anchor.svc.cluster.local:8080","consent_api_prefix":"/v1","check_mode":"list","owner_resolver_url":"http://owner-resolver.provider.svc.cluster.local:8080/resolve","service":"mp-data-service","token_service_url":"http://consent-facade.provider.svc.cluster.local:8080/internal/tokens","token_audience":"consent-manager","fail_open":false,"audit_enabled":false,"audit_otlp_endpoint":"http://provider-opentelemetry-collector:4318"}'
         - uri: /.well-known/openid-configuration
           host: mp-tmf-api.127.0.0.1.nip.io
           upstream:
@@ -847,8 +850,10 @@ contract-management:
     # Without it the consent-facade projects no privacy notice from a purchased offering.
     - name: CONSENT_ENABLED
       value: "true"
-    # MUST equal the consent-facade's own selfUrl - the consent-manager matches participants on
-    # this exact string, so a value that merely resolves is not enough.
+    # The facade passes provider-id/consumer-id through verbatim as the contract's parties.
+    # Known gap: those are self-description URLs here, but the consent-manager resolves
+    # contract parties by DID, so notices generated from purchased offerings currently fail
+    # ("No active participant is registered under '<url>'"). See doc/CONSENT_MANAGEMENT.md.
     - name: CONSENT_SELF_DESCRIPTION_BASE_URL
       value: https://consent-facade.dataspace-authority.org
 mongo-operator:
