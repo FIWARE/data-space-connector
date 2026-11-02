@@ -55,7 +55,8 @@ Files: `charts/trust-anchor/Chart.yaml`, `charts/trust-anchor/values.yaml`,
 new `charts/trust-anchor/templates/{consent-manager-setup-job.yaml,removed-values.yaml}`,
 `charts/trust-anchor/tests/consent_management_test.yaml`, `charts/trust-anchor/Chart.lock`
 (if present), `charts/trust-anchor/README.md` (if present; regenerate the values table),
-and the chart-key part of `k3s/consent-trust-anchor-components.yaml` (see the last bullet).
+the chart-key part of `k3s/consent-trust-anchor-components.yaml` and the authority APISIX
+routes in `k3s/consent-trust-anchor.yaml` (see the last two bullets).
 
 - `Chart.yaml`: replace the `consent-manager` 0.2.0 dependency with
   `name: dsc-consent-manager`, `version: 0.1.0`,
@@ -73,10 +74,18 @@ and the chart-key part of `k3s/consent-trust-anchor-components.yaml` (see the la
   database `consent_manager: consent_manager`. Zalando creates the secret
   `consent-manager.postgres.credentials.postgresql.acid.zalan.do` (keys `username` /
   `password`; cluster `postgres` per `templates/postgres.yaml`, underscores become dashes).
-  Expose these values with `# --` docs: `consentManagement.database.{user,name}`. The
-  operator creates databases only at initial provisioning (see the `ensure-ccsdb` comment
-  in `k3s/consent-trust-anchor.yaml`), so an upgrade from 1.x or a reused volume would
-  lack the database; the setup Job below covers that.
+  The user and database name are **hard-coded** to `consent_manager`, not exposed as
+  values: `postgres.yaml` renders `managedPostgres.config` verbatim, the Zalando secret
+  name the Job reads derives from the user, and `consent-manager.config.database.url` is a
+  subchart value the umbrella cannot template, so a configurable name would have three
+  places to keep in sync and a mismatch leaves the Job waiting on a secret that never
+  appears. Say so in a `{{- /* */}}` comment in the Job and a `# --` line next to the
+  `managedPostgres` entries. The operator creates databases only at initial provisioning
+  (see the `ensure-ccsdb` comment in `k3s/consent-trust-anchor.yaml`), so an upgrade from
+  1.x or a reused volume would lack the database; the setup Job below covers that.
+- External Postgres is out of scope for 2.0.0: the setup Job depends on the Zalando
+  secrets. `consent-manager-setup-job.yaml` `fail`s with a clear message when
+  `consent-manager.enabled` is true and `managedPostgres.enabled` is false.
 - `consent-manager:` values, using the new chart's keys: `enabled: false`,
   `nameOverride: consent-manager`, `fullnameOverride: consent-manager`,
   `config.contractServiceUrl: http://consent-facade:8080`,
@@ -86,9 +95,10 @@ and the chart-key part of `k3s/consent-trust-anchor-components.yaml` (see the la
   `valueFrom` hook (its `deployment.yaml` renders only `envFrom` + a fixed `env`, and
   `extraEnv` refuses `DB_*`), and `lookup` is empty under `helm template` (the subchart's
   own `secret.yaml` warns the keys then rotate on every render). So neither Secret is a
-  Helm-templated object. `nameOverride` is needed because the standalone chart labels its
-  pods `app.kubernetes.io/name: dsc-consent-manager`, while both NetworkPolicies select
-  `consent-manager` (pin the rendered label in a unit test).
+  Helm-templated object. Both NetworkPolicies select `app.kubernetes.io/name:
+  consent-manager`. Helm already renames an aliased dependency's `.Chart.Name` to the
+  alias, so `nameOverride` is not strictly needed; set it anyway so the label does not
+  depend on the alias, and pin the rendered label in a unit test.
 - New `templates/consent-manager-setup-job.yaml`, gated on `consent-manager.enabled`. It
   is the **single owner** of both Secrets, so nothing has two writers:
   - A **plain Job, not a Helm hook** (same as `ensure-ccsdb`, which is a plain Job in
@@ -117,13 +127,17 @@ and the chart-key part of `k3s/consent-trust-anchor-components.yaml` (see the la
     `consentManagement.signingKey.generate` (default `true`): image
     `consentManagement.setup.jwkImage` (default `smallstep/step-cli:0.28.7`, verified: runs
     as uid 1000 and ships `step`). It always writes a fresh candidate key into the shared
-    `emptyDir`; the main container decides whether to use it:
+    `emptyDir` (env `HOME=/work`, so `step` has a writable config dir under
+    `readOnlyRootFilesystem`); the main container decides whether to use it:
     `step crypto jwk create /work/pub.json /work/signing-key.jwk --kty EC --crv P-256
     --use sig --no-password --insecure` (a private JWK with `kid` and `alg: ES256`). No
     hand-rolled openssl/jq JWK encoding.
   - Main container `setup`: image `consentManagement.setup.image` (default
     `alpine/k8s:1.31.4`, verified to ship `kubectl`, `jq`, `base64` and `head` but **not**
     `openssl`; it defaults to root, so set `runAsUser`/`runAsGroup`, for example 1000).
+    Set env `HOME=/work`: with uid 1000 and `readOnlyRootFilesystem` there is no writable
+    home, so kubectl would print discovery-cache warnings to stderr on every call, and the
+    script parses `kubectl get` stderr for `NotFound` (step 1 below).
     `DB_USER`/`DB_PASSWORD` come from the consent user's Zalando secret
     `consent-manager.postgres.credentials.postgresql.acid.zalan.do` (keys `username` /
     `password`) via `secretKeyRef`, and `SMTP_USER`/`SMTP_PASSWORD` from
@@ -183,7 +197,8 @@ and the chart-key part of `k3s/consent-trust-anchor-components.yaml` (see the la
     ports match the container port, not the Service port.
   - Admitted peers, each only on that port:
     1. same-namespace `app.kubernetes.io/name: apisix` pods (the authority gateway that
-       publishes `consent-manager.dataspace-authority.org`, Step 3), as today;
+       publishes `consent-manager.dataspace-authority.org`, see the last bullets of this
+       step), as today;
     2. the ingress controller, from the existing
        `consentManagement.networkPolicy.ingressController` (`namespaceSelector` +
        `podSelector`), for setups that publish the manager with a plain Ingress;
@@ -224,7 +239,9 @@ and the chart-key part of `k3s/consent-trust-anchor-components.yaml` (see the la
   - `SMTP_USER`/`SMTP_PASSWORD` are wired from `consentManagement.smtp.existingSecret` only
     when it is set;
   - `consent-manager.secrets.existingSecret` / `signingKeys.secretName` match the names
-    the Job writes.
+    the Job writes;
+  - the `setup` and `generate-jwk` containers set `HOME=/work`;
+  - rendering fails when `consent-manager.enabled` and not `managedPostgres.enabled`.
 - `k3s/consent-trust-anchor-components.yaml`: the `fail`s above would break the `consent`
   profile (and its CI matrix leg) at render time from this step on, because the file still
   sets every removed key. So this step already drops `managedMongo`,
@@ -233,14 +250,34 @@ and the chart-key part of `k3s/consent-trust-anchor-components.yaml` (see the la
   `config.consentManagerUrl: https://consent-manager.dataspace-authority.org`,
   `config.contractServiceUrl: http://consent-facade.trust-anchor.svc.cluster.local:8080`,
   `identityProviders.primary.{issuer,discoveryUrl,audience}` (Step 4 lists the values) and
-  `consentManagement.networkPolicy.consentManagerClients`. Step 4 adds the claim mapping
-  and the verifier reachability settings. Until Step 4/5 land the consent leg renders and
-  deploys but its IT is expected to fail (plugin 0.0.12 against the new API); that is
-  accepted.
+  `consentManagement.networkPolicy.consentManagerClients`. It also sets the k3s-only
+  verifier reachability variables in `consent-manager.config.extraEnv` (proxy, contract
+  service `DIRECT`, trust-all; the list and the reasoning are in Step 4). They need
+  nothing from a later step, and without them the consent-manager never gets Ready (its
+  readiness probe includes IdP discovery), so `deploy.sh`'s final `wait_ready` and the
+  template path's per-apply wait in `pom.xml` would time out before any IT runs. Step 4
+  adds the claim mapping and runs the full verification gate.
+- `k3s/consent-trust-anchor.yaml`, authority APISIX (~lines 566-720): the new chart
+  renders no `consent-manager` Secret (`secrets.existingSecret` is set), so the
+  `extraEnvVars` entry `CONSENT_KEY` from `secretKeyRef: {name: consent-manager, key:
+  consentKey}` would leave the APISIX pod in `CreateContainerConfigError`. Delete that
+  entry, the facade routes to `consent-manager:3000` that inject
+  `x-visionstrust-consent-key`, and their comments. The gateway keeps only the published
+  host `consent-manager.dataspace-authority.org`, routed to `consent-manager:8080` (path
+  `/v1/*`, plus `/.well-known/jwks.json` for receipt verification), with no header
+  injection and no `openid-connect` plugin. Alternatively replace it with a plain Ingress
+  if APISIX is no longer needed at the authority (then the `ingressController` peer of
+  the NetworkPolicy applies). The verifier/keycloak parts of the file stay for Step 3.
+- Transition state: from this step on, the consent leg renders, deploys and gets Ready.
+  Its IT is expected to fail until Steps 3-5 land (plugin 0.0.12 against the new API, no
+  claim mapping yet); that is accepted, so do not chase those IT failures here.
 - Acceptance: `helm dependency update charts/trust-anchor && helm lint charts/trust-anchor
   && helm unittest charts/trust-anchor` pass. `helm template` renders both with
   `-f k3s/trust-anchor.yaml` and with
-  `-f k3s/trust-anchor.yaml -f k3s/consent-trust-anchor-components.yaml`.
+  `-f k3s/trust-anchor.yaml -f k3s/consent-trust-anchor-components.yaml`, and
+  `helm template consent-authority charts/data-space-connector -f
+  k3s/consent-trust-anchor.yaml` renders with no `consentKey`/`CONSENT_KEY` left. If a
+  cluster is available, `mvn clean deploy -Pconsent` completes (all pods Ready).
 
 ### Step 2: data-space-connector chart -- drop consent Mongo/consent-key leftovers
 Files: `charts/data-space-connector/values.yaml` (`consentManagement`, `consent-facade`,
@@ -295,12 +332,7 @@ credentials are issued, if their claims have to change.
   above the service and in the Step 6 docs.
 - `consent-catalog`: map it only if a caller needs it (the consent-facade does not call
   the manager). Otherwise leave the default mapping and document that no credential grants it.
-- Delete the authority APISIX facade routes to `consent-manager:3000`, the `CONSENT_KEY`
-  env from the `consent-manager` secret, and their comments (~lines 566-720). The
-  gateway now only routes the published host `consent-manager.dataspace-authority.org`
-  to `consent-manager:8080` (path `/v1/*`, plus `/.well-known/jwks.json` for receipt
-  verification), with no header injection and no `openid-connect` plugin. Alternatively
-  replace it with a plain Ingress if APISIX is no longer needed at the authority.
+- The authority APISIX facade routes and `CONSENT_KEY` are already gone (Step 1).
 - Acceptance: `helm template consent-authority charts/data-space-connector -f
   k3s/consent-trust-anchor.yaml` renders and validates against the schema. A rendered
   verifier config shows both scopes with the claim mapping.
@@ -332,7 +364,8 @@ comment ~850), `k3s/deploy.sh` (comments only, unless ordering changes), `pom.xm
   option, but the app (Micronaut) builds its discovery client from the global HTTP-client
   settings (`IdentityProviderRegistry.createDiscoveryClient` copies the global proxy and
   SSL config), and the JWKS fetch uses the default client too. `config.extraEnv` refuses
-  neither of the variables below, so set them there, k3s only, with a comment:
+  none of the variables below. Step 1 already sets them there, k3s only, with a comment;
+  this step verifies them:
   - `MICRONAUT_HTTP_CLIENT_PROXY_TYPE: HTTP` and
     `MICRONAUT_HTTP_CLIENT_PROXY_ADDRESS: squid-proxy.infra.svc.cluster.local:8888`: the
     squid forward proxy routes the public hosts to traefik, as for every other component;
@@ -456,7 +489,9 @@ PNGs as outdated), `doc/adr/0001`-`0005`, new `doc/adr/0008-dsc-consent-manager.
   - migration from the old consent-manager. There is no data migration from Mongo:
     consents must be re-granted. Upgrading to trust-anchor 2.0.0 on an existing Postgres
     volume relies on the setup Job creating the `consent_manager` database; the plugin
-    must be upgraded to 1.0.0 together with the route config.
+    must be upgraded to 1.0.0 together with the route config. The consent database and
+    user are fixed to `consent_manager` on the chart's managed Postgres; external
+    Postgres is not supported in 2.0.0 (the chart fails on that combination).
 - New ADR 0008 in the existing ADR format: context, decision, consequences. ADRs
   0001-0005 get `Status: Superseded by 0008`. Update the index in `doc/adr/README.md`.
 - Release notes: in `doc/release-notes/10-x.md`, a 10.16.0 entry. State plainly that the
