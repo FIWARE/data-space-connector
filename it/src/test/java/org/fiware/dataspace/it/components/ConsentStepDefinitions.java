@@ -288,8 +288,11 @@ public class ConsentStepDefinitions extends StepDefintions {
     public void seedAgreement() throws Exception {
         // a real deployment gets this from the marketplace or an EDC negotiation; the facade only
         // projects it into the contract the notice is generated from. provider-id/consumer-id are
-        // passed through verbatim, and the consent-manager resolves the parties by participant
-        // identifier, so they carry the participant DIDs and not self-description URLs
+        // passed through verbatim as the contract's parties, and they carry the participants'
+        // self-description URLs - what contract-management writes, and the only form the facade's
+        // /verify matches, which is the lookup the owner-resolver makes to find the governing
+        // contract. The consent-manager resolves a contract party under either name (ADR-0017 of
+        // dsc-consent-manager), so the notice is still generated for the two DIDs.
         cleanUpAgreementsOfPair();
         String specificationId = createProductSpecification();
         String offeringId = createProductOffering(specificationId);
@@ -307,7 +310,7 @@ public class ConsentStepDefinitions extends StepDefintions {
                     { "name": "signing-date", "value": %d } ]
                 }
                 """.formatted(offeringId, providerOrganizationId, consumerOrganizationId,
-                OPERATOR_PROFILE_ENTITY_ID, PROVIDER_DID, CONSUMER_DID,
+                OPERATOR_PROFILE_ENTITY_ID, providerSelfDescription, consumerSelfDescription,
                 System.currentTimeMillis() / 1000);
         try (Response response = post(HTTP_CLIENT, agreementApi(), agreement)) {
             String body = response.body().string();
@@ -659,8 +662,8 @@ public class ConsentStepDefinitions extends StepDefintions {
      *
      * <p>The flow assumes a single agreement between the pair: the OwnerResolver takes the first
      * contract that permits the requested object, so a stale one from an earlier run can shadow the
-     * one seeded here. Agreements seeded before the participant DIDs were used still carry the
-     * provider's self-description URL as provider-id, so both forms are matched on a reused cluster.
+     * one seeded here. Both names a provider-id may carry are matched, so an agreement an earlier
+     * run seeded with the provider's DID is removed on a reused cluster too.
      */
     private void cleanUpAgreementsOfPair() throws Exception {
         Set<String> providerIds = new HashSet<>();

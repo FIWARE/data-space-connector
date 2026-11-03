@@ -106,6 +106,37 @@ values are plumbed across releases.
 | consent-facade | `oci://quay.io/fiware/helm-charts/consent-facade` | 0.2.1 | `charts/trust-anchor` (authority) and `charts/data-space-connector` (provider) |
 | consent-owner-resolver | `oci://quay.io/fiware/helm-charts/consent-owner-resolver` | 0.2.0 | `charts/data-space-connector` |
 
+The consent-manager runs image **0.0.3**, which `charts/trust-anchor` pins with
+`consent-manager.deployment.image.tag` because the chart's own `appVersion` is still 0.0.1. Three
+fixes in it are what this deployment needs: the privacy notice is generated from the bilateral
+endpoint when the contract service answers the ecosystem one with `501` (which the consent-facade
+does); a client exempted from the global proxy with `proxy-type: DIRECT` no longer inherits the
+proxy address it was exempted from; and a contract may name its parties by the participants'
+self-description URLs. Remove the pin when the dependency moves to a chart whose `appVersion` is
+0.0.3 or newer.
+
+### How a contract names its parties
+
+One agreement feeds two readers, and until 0.0.3 they disagreed on what identifies a party:
+
+| reader | reads the parties from | identifies a party by |
+| --- | --- | --- |
+| consent-manager (privacy-notice generation) | the contract it fetches by `contractUri` | participant identifier **or** self-description URL (0.0.3+) |
+| consent-facade `/verify` → owner-resolver → consent-plugin | the same contract, looked up for the pair | self-description URL |
+
+The facade projects the agreement's `provider-id`/`consumer-id` characteristics verbatim into the
+contract's `dataProvider`/`dataConsumer`, so those characteristics decide what both readers see.
+They carry the **participants' self-description URLs** — the form `contract-management` writes
+(`CONSENT_SELF_DESCRIPTION_BASE_URL`), and the only form `/verify` matches, since that lookup is
+keyed by the self-description URLs the plugin reads off the consent-manager's participant records.
+A consent-manager before 0.0.3 accepted only the participant identifier there, so an agreement
+could satisfy notice generation or the access gate, never both: with DIDs every gated read was
+denied (`no signed contract between …`), with URLs generation answered `404 No active participant
+is registered under '<url>'`.
+
+Notices, consents and receipts still record the participant **identifier** whichever name the
+contract used, so nothing downstream of generation changes.
+
 Each pins `fullnameOverride` (and `nameOverride` where a NetworkPolicy selects on the name label), so
 resources are called `consent-manager`, `consent-facade` and `owner-resolver` in every release.
 

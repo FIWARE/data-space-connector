@@ -45,7 +45,9 @@ consent-manager:
     # discovery and JWKS fetches go through the squid proxy, as for every other component,
     # and skip the in-cluster TLS peer check (tokens are still verified against the JWKS).
     # The contract-service client stays DIRECT: the consent-facade NetworkPolicy admits
-    # only consent-manager pods, not squid. A verifier with a publicly trusted cert needs
+    # only consent-manager pods, not squid. That exemption needs consent-manager 0.0.2 or
+    # newer - before that, the client inherited the global proxy address alongside the
+    # DIRECT type and failed every request. A verifier with a publicly trusted cert needs
     # none of these.
     extraEnv:
       MICRONAUT_HTTP_CLIENT_PROXY_TYPE: HTTP

@@ -39,6 +39,16 @@ tests:
             containerPort: 8080
           any: true
 
+  - it: runs the consent-manager release this deployment's contracts need
+    template: charts/consent-manager/templates/deployment.yaml
+    asserts:
+      # 0.0.1 answers every privacy-notice generation with a 502 against a contract service
+      # that serves only /bilaterals, and cannot be exempted from a global proxy at all;
+      # before 0.0.3 a contract naming its parties by self-description URL named nobody.
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: quay.io/seamware/dsc-consent-manager:0.0.3
+
   - it: points the consent-manager at the Secrets the setup Job writes
     template: charts/consent-manager/templates/deployment.yaml
     asserts:

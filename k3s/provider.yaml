@@ -851,9 +851,10 @@ contract-management:
     - name: CONSENT_ENABLED
       value: "true"
     # The facade passes provider-id/consumer-id through verbatim as the contract's parties.
-    # Known gap: those are self-description URLs here, but the consent-manager resolves
-    # contract parties by DID, so notices generated from purchased offerings currently fail
-    # ("No active participant is registered under '<url>'"). See doc/CONSENT_MANAGEMENT.md.
+    # Self-description URLs are the right form: the consent-facade's /verify, which the
+    # owner-resolver uses to find the governing contract, matches only these, and
+    # dsc-consent-manager 0.0.3 resolves a contract party under either name, so a notice
+    # generated from a purchased offering finds its participants. See doc/CONSENT_MANAGEMENT.md.
     - name: CONSENT_SELF_DESCRIPTION_BASE_URL
       value: https://consent-facade.dataspace-authority.org
 mongo-operator:

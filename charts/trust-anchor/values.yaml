@@ -166,6 +166,21 @@ consent-manager:
   # `<release>-consent-manager`): the authority gateway, the providers' consent-filter plugin
   # and the setup Job address it by that name.
   fullnameOverride: consent-manager
+  deployment:
+    ## the application version, pinned here because the chart 0.1.0 this depends on carries
+    ## appVersion 0.0.1. 0.0.3 is the first release this deployment works on at all, for three
+    ## reasons: a privacy notice can be generated from a contract service that keeps only
+    ## bilateral contracts (it answers the ecosystem endpoint with 501, which 0.0.1 reported as
+    ## an upstream failure); a client exempted from the global proxy with `proxy-type: DIRECT`
+    ## works; and a contract may name its parties by the participants' self-description URLs,
+    ## which is the form contract-management writes and the only form the consent-facade's
+    ## /verify matches - before 0.0.3 only the participant DID was accepted, so notice
+    ## generation and the consent gate could not both work off one agreement (ADR-0017 of
+    ## dsc-consent-manager). Drop this override when the dependency moves to a chart whose
+    ## appVersion is 0.0.3 or newer.
+    image:
+      # -- overrides the image tag, whose default is the dsc-consent-manager chart's appVersion
+      tag: "0.0.3"
   config:
     # -- base url of the contract service the privacy notices are derived from: the consent-facade
     contractServiceUrl: http://consent-facade:8080
