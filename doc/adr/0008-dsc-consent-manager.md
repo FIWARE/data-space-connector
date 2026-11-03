@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-11-02
-**Applies to:** `FIWARE/data-space-connector`, [dsc-consent-manager](https://github.com/wistefan/dsc-consent-manager), [consent-plugin](https://github.com/SEAMWARE/consent-plugin)
+**Applies to:** `FIWARE/data-space-connector`, [dsc-consent-manager](https://github.com/SEAMWARE/dsc-consent-manager), [consent-plugin](https://github.com/SEAMWARE/consent-plugin)
 **Supersedes:** [0001](0001-oid4vp-for-participant-authentication.md), [0002](0002-reuse-facade-oid4vp-client.md), [0003](0003-token-endpoint-not-consent-proxy.md), [0004](0004-map-oid4vp-tokens-to-participants-by-did.md), [0005](0005-vc-based-participant-onboarding.md)
 **Context doc:** [`../CONSENT_MANAGEMENT.md`](../CONSENT_MANAGEMENT.md)
 

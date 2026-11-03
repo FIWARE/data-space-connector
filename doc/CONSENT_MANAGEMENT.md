@@ -2,7 +2,7 @@
 
 Some data spaces require that access to personal data is backed by the **explicit consent** of the
 data subject, recorded in an auditable way. The Data Space Connector can deploy an optional
-consent-management layer built on [dsc-consent-manager](https://github.com/wistefan/dsc-consent-manager)
+consent-management layer built on [dsc-consent-manager](https://github.com/SEAMWARE/dsc-consent-manager)
 (Java, PostgreSQL), which records consents against privacy notices, signs
 [ISO/IEC TS 27560](https://www.iso.org/standard/80392.html)-style consent receipts, and has the
 consent enforced at the provider's gateway on top of the existing ODRL/OPA authorization.
@@ -69,7 +69,7 @@ The releases share the namespace and address each other by fixed names (`consent
 `consent-facade`, the `dataspace-authority.org-tls` and `vc-operator-credential` secrets), so no
 values are plumbed across releases.
 
-* **consent-manager** - [dsc-consent-manager](https://github.com/wistefan/dsc-consent-manager), a
+* **consent-manager** - [dsc-consent-manager](https://github.com/SEAMWARE/dsc-consent-manager), a
   stateless OAuth2 resource server. It validates the authority verifier's JWT on every call, keeps
   participants, data subjects, privacy notices and consents in its own `consent_manager` PostgreSQL
   database, and signs consent receipts. API on port `8080` under `/v1`; health and metrics on the
@@ -266,7 +266,7 @@ The endpoint is specified in
 ## The `/v1` API
 
 The consent-manager's API is specified in
-[api/openapi.yaml](https://github.com/wistefan/dsc-consent-manager/blob/main/api/openapi.yaml). In the
+[api/openapi.yaml](https://github.com/SEAMWARE/dsc-consent-manager/blob/main/api/openapi.yaml). In the
 k3s scenario it is published as `https://consent-manager.dataspace-authority.org/v1`. The calls the
 connector relies on, by role:
 

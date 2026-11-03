@@ -485,7 +485,7 @@ Files: `it/src/test/java/org/fiware/dataspace/it/components/ConsentEnvironment.j
   Drop the consent-key constants. Keep the verifier URL and audience. Each public constant
   gets a one-line Javadoc.
 - `ConsentStepDefinitions`, following the new OpenAPI
-  (`wistefan/dsc-consent-manager` `api/openapi.yaml`):
+  (`SEAMWARE/dsc-consent-manager` `api/openapi.yaml`):
   - participant onboarding and the data-subject `POST /v1/users/register` use VCVerifier
     tokens (scopes `participant` / `openid`);
   - register **both** the provider and the consumer with `POST /v1/participants`, each

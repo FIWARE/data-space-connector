@@ -38,7 +38,7 @@ The folder [trust-anchor](./trust-anchor) contains a minimal example of a Trust 
 a [Helm Umbrella Chart](https://helm.sh/docs/howto/charts_tips_and_tricks/#complex-charts-with-many-dependencies). Basically it consists of a Trusted Issuers Registry with an attached database. This is also used in the local deployment of a Minimum Viable Dataspace described [here](../doc/deployment-integration/local-deployment/LOCAL.MD).
 
 With `consentManagement.enabled`, the chart also runs the authority side of consent management: the
-[dsc-consent-manager](https://github.com/wistefan/dsc-consent-manager) on the chart's Zalando Postgres,
+[dsc-consent-manager](https://github.com/SEAMWARE/dsc-consent-manager) on the chart's Zalando Postgres,
 a consent-facade as its contract service, and NetworkPolicies isolating both. Version 2.0.0 replaced the
 MongoDB-based consent-manager and its consent key, see [Consent Management](../doc/CONSENT_MANAGEMENT.md)
 and the [10.16.0 release notes](../doc/release-notes/10-x.md#10160--consent-management-moves-to-dsc-consent-manager).
