@@ -1,102 +1,219 @@
 # Consent Management
 
-Some data spaces require that access to personal data is backed by the **explicit consent** of the data subject, recorded in an auditable way. The Data Space Connector can deploy an optional consent-management layer based on the [Prometheus-X/consent-manager](https://github.com/Prometheus-X-association/consent-manager), producing [ISO/IEC TS 27560](https://www.iso.org/standard/80392.html) consent records, and enforce them at the gateway through the existing ODRL/OPA authorization stack.
+Some data spaces require that access to personal data is backed by the **explicit consent** of the
+data subject, recorded in an auditable way. The Data Space Connector can deploy an optional
+consent-management layer built on [dsc-consent-manager](https://github.com/SEAMWARE/dsc-consent-manager)
+(Java, PostgreSQL), which records consents against privacy notices, signs
+[ISO/IEC TS 27560](https://www.iso.org/standard/80392.html)-style consent receipts, and has the
+consent enforced at the provider's gateway on top of the existing ODRL/OPA authorization.
 
-The decisions behind this integration are recorded as [ADRs](adr/README.md).
+The decisions behind this integration are recorded as [ADRs](adr/README.md); the current design is
+[ADR 0008](adr/0008-dsc-consent-manager.md), which supersedes ADRs 0001-0005 (the OID4VP integration
+of the former Prometheus-X consent-manager). Upgrading from that setup is covered in
+[Migrating from the Prometheus-X consent-manager](#migrating-from-the-prometheus-x-consent-manager).
 
 ## The use case
 
-While sharing of personal data between organizations can extend the value and capabilities of a Data Space, it requires compliance with regulations like [General Data Protection Regulation - GDPR](https://gdpr-info.eu/) and standards like [ISO/IEC TS 27560](https://www.iso.org/standard/80392.html) for storing the consent of the data subject.
-In our example use case, `mp-operations.org` might store data about educational history of its registered operators, so that consumers can get information about the level of service they can expect. However, parts of that data are personal and belong to the operator itself. It can only be shared with others (for example the consumer organization `fancy-marketplace.biz`), when the data subject (e.g. the person that the data belongs to) explicitly consents to that. This might become even more important, if the data subject is not an employee of the organization, but a customer interacting with multiple participants of the Data Space. In order to respect its GDPR-Rights, the sharing organizations have to check its consent for every data exchange it is involved in.
-The Consent Management solves that:
-* Data Subjects (e.g. the persons whose data is shared) are first class citizens in the data space
-  * they are uniquely identified across all participants
-  * they can independently grant/revoke fine-grained consent on data and sharing contracts between organizations
-* An authority (`Data Space Authority`) keeps track of the consents, independently from the data holders and consumers
-* Data Providers check Consent on every interaction involving personal data
-* Consent Manager and Data Provider trace and log consent decisions and data access
+Sharing personal data between organizations extends what a data space can do, but it has to comply
+with regulations like the [General Data Protection Regulation - GDPR](https://gdpr-info.eu/) and
+standards like [ISO/IEC TS 27560](https://www.iso.org/standard/80392.html) for recording the consent
+of the data subject. In the example use case, `mp-operations.org` stores the educational history of
+its registered operators, so that consumers can see the level of service to expect. Parts of that
+data are personal and belong to the operator. They may only be shared with another organization (for
+example the consumer `fancy-marketplace.biz`) when the data subject explicitly consents. Consent
+management covers that:
+
+* Data subjects are first-class citizens of the data space: they are identified by their DID across
+  all participants, and grant or revoke consent on data and on the contracts between organizations
+  themselves.
+* An authority (the `Data Space Authority`) keeps the consents, independently of data holders and
+  consumers.
+* Data providers check consent on every interaction involving personal data.
+* Consent decisions and data access are logged and traceable.
 
 ![Overview](./img/consent/top-level.png)
 
-A concrete interaction would therefore look as follows:
-* Data Subject "Mipa Operator" provides its "OperatorProfile" personal data to `mp-operations.org`
-* `mp-operations.org` and `fancy-marketplace.biz` create a contract to give `fancy-marketplace.biz` access to all "OperatorProfile" entries of `mp-operations.org`
-* `mp-operations.org` requests "Mipa Operator" to consent to the data sharing of its "OperatorProfile" under the newly created contract
-* "Mipa Operator" interacts with the `Data Space Authority`'s consent-manager to grant consent for the sharing
-* `fancy-marketplace.biz` requests the profile of "Mipa Operator" at `mp-operations.org`
-* `mp-operations.org` checks the consent for that profile and contract at the consent-manager and responds the profile accordingly
+A concrete interaction:
 
-The detailed architecture and technical solution are described in the next chapters: the
-[Architecture](#architecture) and the [Flows](#flows) it is built from. Both demos execute the
-interaction above end to end - the [first demo](#demo-consent-gated-access-to-personal-data) seeds
-the provider↔consumer contract by hand and concentrates on the consent itself, while
-[Demo 2](#demo-2-consent-on-a-purchased-offering-the-full-tm-forum-lifecycle) also produces the
-contract the way a marketplace does: the provider publishes an offering, the consumer orders it,
-and contract-management turns the completed order into the agreement consent is scoped by.
+* The data subject "Mipa Operator" provides its "OperatorProfile" to `mp-operations.org`.
+* `mp-operations.org` and `fancy-marketplace.biz` agree on a contract giving `fancy-marketplace.biz`
+  access to "OperatorProfile" entries.
+* The consent-manager derives a privacy notice from that contract, and "Mipa Operator" grants
+  consent to it at the authority.
+* `fancy-marketplace.biz` requests the profile at `mp-operations.org`, which checks the consent at
+  the consent-manager and answers accordingly.
 
 ## Architecture
 
-Consent management spans **two namespaces**: a central **authority** (the trust-anchor - it knows all participants; in real deployments the consent-manager is operated by such a central authority, typically in its own environment) and the **provider** that serves the personal data.
+Consent management spans the **authority** (the trust-anchor namespace, which knows all participants)
+and the **provider** that serves the personal data. In production the consent-manager is operated by
+such a central authority in its own environment.
 
 ![Consent Architecture](./img/consent/arch.png)
 
 ### Components
 
-**Authority** (trust-anchor namespace). The authority is deployed as **two releases** in the same namespace, split along the chart boundary:
+**Authority** (namespace `trust-anchor`), deployed as **two releases** split along the chart boundary:
 
-* the **`trust-anchor` release** (the [`charts/trust-anchor`](../charts/trust-anchor) chart) carries the consent **data plane** - the consent-manager, the consent-facade and their managed MongoDB - turned on for the consent scenario by [`k3s/consent-trust-anchor-components.yaml`](../k3s/consent-trust-anchor-components.yaml);
-* the **`consent-authority` release** (the [`charts/data-space-connector`](../charts/data-space-connector) umbrella chart, via [`k3s/consent-trust-anchor.yaml`](../k3s/consent-trust-anchor.yaml)) carries the **IAM** that backs consent - the keycloak issuer, the `did:web:dataspace-authority.org` helper (which provisions the `dataspace-authority.org-tls` secret the facade mounts), the vc-operator (which mints the `vc-operator-credential` the facade presents) and the APISIX facade route.
+* the **`trust-anchor` release** ([`charts/trust-anchor`](../charts/trust-anchor)) carries the consent
+  **data plane**: the consent-manager, the authority consent-facade, the setup Job and the
+  NetworkPolicies, on the chart's Zalando `managedPostgres`. The k3s scenario turns it on with
+  [`k3s/consent-trust-anchor-components.yaml`](../k3s/consent-trust-anchor-components.yaml);
+* the **`consent-authority` release** ([`charts/data-space-connector`](../charts/data-space-connector),
+  via [`k3s/consent-trust-anchor.yaml`](../k3s/consent-trust-anchor.yaml)) carries the **IAM** that
+  backs consent: the keycloak issuer, the VCVerifier with its `consent-manager` service, the
+  `did:web:dataspace-authority.org` helper, the vc-operator, and an APISIX gateway that publishes
+  `consent-manager.dataspace-authority.org`.
 
-The two releases share the namespace and reference each other by well-known name (the facade route reads the `consent-manager` secret and targets the `consent-manager` service; the facade pod mounts the did/credential secrets), so no cross-release value plumbing is needed.
+The releases share the namespace and address each other by fixed names (`consent-manager`,
+`consent-facade`, the `dataspace-authority.org-tls` and `vc-operator-credential` secrets), so no
+values are plumbed across releases.
 
-* **consent-manager** - stores and serves the consent records/receipts (Node/MongoDB) on a managed MongoDB replica set. It derives its privacy notices from the contract-service API the consent-facade serves. Run from the published [`consent-manager` chart](https://github.com/FIWARE/helm-charts/tree/main/charts/consent-manager).
-* **APISIX facade route** - an internal APISIX in front of the consent-manager (route `/consent-manager/*`). It authenticates callers over **OID4VP** (`openid-connect`, `bearer_only`, against the authority verifier's JWKS) and **injects** the shared consent key server-side (read from the `consent-manager` secret), so callers present only their own access token and never hold the consent key. The gateway itself **is** public, so every route on it is internet-reachable and must carry its own authentication - see the `/consent-user` allow-list below.
-* **consent-facade** - a Micronaut service ([seamware/consent-facade](https://github.com/seamware/consent-facade)) that projects a provider's TMForum APIs (agreements, catalog, party) into the contract-service API the consent-manager consumes: bilateral contracts, catalog self-descriptions, and participant self-descriptions at `/participants/{tmforum-org-id}`. It runs at the authority so it can front **multiple providers**, authenticating its outbound TMForum reads to each provider's OID4VP-protected TMForum API under its own identity. Deployed from the published [`consent-facade` chart](https://github.com/FIWARE/helm-charts/tree/main/charts/consent-facade); a **second, provider-local instance** runs in the provider release, serving the owner-resolver's contract lookups and minting the provider's OID4VP tokens for the plugin.
+* **consent-manager** - [dsc-consent-manager](https://github.com/SEAMWARE/dsc-consent-manager), a
+  stateless OAuth2 resource server. It validates the authority verifier's JWT on every call, keeps
+  participants, data subjects, privacy notices and consents in its own `consent_manager` PostgreSQL
+  database, and signs consent receipts. API on port `8080` under `/v1`; health and metrics on the
+  management port `9090`, which no NetworkPolicy admits.
+* **authority consent-facade** - [consent-facade](https://github.com/SEAMWARE/consent-facade) projects
+  the providers' TM Forum data (agreements, catalog, organizations) into the contract-service API the
+  consent-manager derives privacy notices from (`consent-manager.config.contractServiceUrl`). It also
+  serves the public participant and catalog self-descriptions under
+  `https://consent-facade.dataspace-authority.org`. It authenticates its TM Forum reads to each
+  provider over OID4VP as `did:web:dataspace-authority.org`.
+* **authority gateway** - publishes `/v1/*` and `/.well-known/jwks.json` of the consent-manager. It
+  neither authenticates nor injects anything: the consent-manager checks every token itself.
 
-**Provider** (the [`k3s/consent-provider.yaml`](../k3s/consent-provider.yaml) overlay):
+**Provider** (the [`k3s/consent-provider.yaml`](../k3s/consent-provider.yaml) overlay on
+[`k3s/provider.yaml`](../k3s/provider.yaml)):
 
-* **consent-filter plugin** - an APISIX external plugin on the `mp-data-service-consent` route. It is the **canonical (and only) consent-enforcement path**: OPA/odrl-pap authorizes each request on the presented *credential*, and the plugin then gates on the data subject's *consent* by calling the authority's consent-manager (through the facade).
-* **consent-owner-resolver** - a service resolving the owner of the requested data, in order to correctly check its consent. Implementation should depend on the concrete use-case and data. Default implementation targets NGSI-LD Data, containing the data owner - [consent-owner-resolver](https://github.com/SEAMWARE/consent-owner-resolver)
+* **consent-filter plugin** - an external APISIX plugin
+  ([consent-plugin](https://github.com/SEAMWARE/consent-plugin), image
+  `quay.io/seamware/consent-plugin:1.0.0`) on the `mp-data-service-consent` route. It is the only
+  consent-enforcement path: OPA authorizes the request on the presented credential, then the plugin
+  gates the response on the data subjects' consent.
+* **consent-owner-resolver** - [consent-owner-resolver](https://github.com/SEAMWARE/consent-owner-resolver)
+  tells the plugin, from the response data, whether consent is required and who owns the data. It is
+  provider-side because the answer depends on the provider's data model.
+* **provider consent-facade** - a second, provider-local instance. It is the plugin's **token service**
+  (`POST /internal/tokens`: it presents the provider's MembershipCredential to the authority verifier)
+  and serves the provider's own contracts to the owner-resolver. It is never published.
 
-### Trust & authentication
+### Where the components come from
 
-* **Callers → consent-manager**: every `/consent-manager/*` call goes through the APISIX Gateway, which validates an **OID4VP access token** (`openid-connect`, `bearer_only`, against the authority verifier's JWKS, with `aud` checked explicitly) and injects the shared consent key downstream. The consent-manager then resolves the token subject to a `Participant` by its `did`. A participant obtains the token from **its own** consent-facade (`POST /internal/tokens`), which presents that participant's verifiable credential - so no component holds a participant secret, there is no `/participants/login`, and no APISIX consumer shares the consent-manager's `JWT_SECRET_KEY`. The details are in [Participant authentication over OID4VP](#participant-authentication-over-oid4vp) below.
-* **consent-facade → provider TMForum**: the facade authenticates its reads to the provider's OID4VP-protected `mp-tmf-api` by presenting a verifiable credential (holder `did:web:dataspace-authority.org`, an `OperatorCredential`) over OID4VP; the provider's verifier issues an access token, and the request passes the route's `openid-connect` (authn) and OPA (authz) checks.
-* **Consumer → personal data**: two gates on the data route - OPA authorizes the credential, then the consent-filter plugin (in the response phase) gates on consent.
-* **Subject → consent-manager**: the `/consent-user` routes carry **no gateway authentication** by design - the
-  consent-manager verifies the subject's OID4VP token itself. They are therefore an **allow-list**, not a prefix: each route
-  pins both `uris` and `methods`, and every allow-listed handler is `verifyUserJWT`-gated (the one exception, `POST
-  /users/signup`, is unauthenticated upstream by design).
+| component | chart | version | pulled by |
+|---|---|---|---|
+| consent-manager | `oci://quay.io/fiware/helm-charts/dsc-consent-manager` (alias `consent-manager`) | 0.1.0 | `charts/trust-anchor` |
+| consent-facade | `oci://quay.io/fiware/helm-charts/consent-facade` | 0.2.1 | `charts/trust-anchor` (authority) and `charts/data-space-connector` (provider) |
+| consent-owner-resolver | `oci://quay.io/fiware/helm-charts/consent-owner-resolver` | 0.2.0 | `charts/data-space-connector` |
 
-> :warning: **Never widen `/consent-user` to a wildcard.** The authority gateway is published via ingress, so
-> `uri: /consent-user/*` exposes the *entire* consent-manager API unauthenticated. Concretely it would publish endpoints
-> gated only by the shared consent key - which this route does not inject, so they cannot even be used legitimately
-> (`POST /v1/consents`, `GET /v1/consents/{userId}/{providerId}/{consumerId}`) - and endpoints with **no** gate at all:
-> `GET /v1/consents/emailverification`, and `GET /v1/users/{userId}`, which returns the subject's name, DID and its
-> `identifiers` - the `x-user-key` that authenticates **as that subject** on every `verifyUserKey` endpoint. Before adding a
-> uri here, check its middleware in the consent-manager's `src/routes/*.ts`; the method pinning exists because several paths
-> host differently-gated handlers per verb (`DELETE /v1/consents/{id}` is the subject's revoke, `POST /v1/consents` is the
-> consent-key-gated provider-on-behalf grant).
+The consent-manager runs image **0.0.3**, which `charts/trust-anchor` pins with
+`consent-manager.deployment.image.tag` because the chart's own `appVersion` is still 0.0.1. Three
+fixes in it are what this deployment needs: the privacy notice is generated from the bilateral
+endpoint when the contract service answers the ecosystem one with `501` (which the consent-facade
+does); a client exempted from the global proxy with `proxy-type: DIRECT` no longer inherits the
+proxy address it was exempted from; and a contract may name its parties by the participants'
+self-description URLs. Remove the pin when the dependency moves to a chart whose `appVersion` is
+0.0.3 or newer.
 
-### Participant authentication over OID4VP
+### How a contract names its parties
 
-Every consent check the provider makes crosses a participant boundary, and it is authenticated the
-same way as every other cross-participant call in the connector: over **OID4VP**, with a holder DID,
-a verifiable credential and the trust-anchor's TIR. No component holds a participant secret.
+One agreement feeds two readers, and until 0.0.3 they disagreed on what identifies a party:
 
-The provider's own consent-facade instance is its **OID4VP token service**: it holds the holder key,
-presents the participant credential and hands the consent-plugin a short-lived access token. It does
-not proxy consent traffic - the plugin keeps talking to the consent-manager directly, so the facade is
-on the token-refresh path only, not on every request.
+| reader | reads the parties from | identifies a party by |
+| --- | --- | --- |
+| consent-manager (privacy-notice generation) | the contract it fetches by `contractUri` | participant identifier **or** self-description URL (0.0.3+) |
+| consent-facade `/verify` → owner-resolver → consent-plugin | the same contract, looked up for the pair | self-description URL |
+
+The facade projects the agreement's `provider-id`/`consumer-id` characteristics verbatim into the
+contract's `dataProvider`/`dataConsumer`, so those characteristics decide what both readers see.
+They carry the **participants' self-description URLs** — the form `contract-management` writes
+(`CONSENT_SELF_DESCRIPTION_BASE_URL`), and the only form `/verify` matches, since that lookup is
+keyed by the self-description URLs the plugin reads off the consent-manager's participant records.
+A consent-manager before 0.0.3 accepted only the participant identifier there, so an agreement
+could satisfy notice generation or the access gate, never both: with DIDs every gated read was
+denied (`no signed contract between …`), with URLs generation answered `404 No active participant
+is registered under '<url>'`.
+
+Notices, consents and receipts still record the participant **identifier** whichever name the
+contract used, so nothing downstream of generation changes.
+
+Each pins `fullnameOverride` (and `nameOverride` where a NetworkPolicy selects on the name label), so
+resources are called `consent-manager`, `consent-facade` and `owner-resolver` in every release.
+
+## Authentication and roles
+
+Every caller - participant or data subject - presents an access token of the **authority VCVerifier**,
+service `consent-manager`. The consent-manager trusts that verifier as its
+`identityProviders.primary` and takes the caller's identity and role from the token's claims. There
+is no shared secret anywhere on the consent path.
 
 ![Check Flow](./img/consent/flow.png)
 
+The verifier service selects the credential by **scope**; every token it issues carries
+`aud: consent-manager`:
 
-#### The facade's token endpoint
+| scope | credential | who | issued by |
+|---|---|---|---|
+| `participant` | `MembershipCredential` | providers (through their consent-facade) and consumers | the participant's own keycloak, trusted because its issuer DID is in the trust-anchor TIR |
+| `openid` (default) | `UserCredential` | data subjects | an issuer in the TIR |
 
-Declared in its own spec, [api/consent-facade-internal.yaml](https://github.com/SEAMWARE/consent-facade/blob/main/api/consent-facade-internal.yaml),
-which holds the facade's internal surface (this endpoint plus the `/providers` admin API) and is deliberately separate from
-[api/consent-facade.yaml](https://github.com/SEAMWARE/consent-facade/blob/main/api/consent-facade.yaml) - the generated contract *towards the consent-manager*. Both specs generate Micronaut server interfaces; the internal one into `org.fiware.consent.internal.api`.
+### Claim and role contract
+
+The verifier writes flat, top-level claims (`flatClaims: true`, `jwtInclusion.claimsToInclude`), and
+`consent-manager.identityProviders.primary` reads them:
+
+| claim | content | read as |
+|---|---|---|
+| `sub` | holder DID of the presentation | `claims.userIdentifier: [sub]` - the data subject's identifier |
+| `participant_id` | the MembershipCredential's `issuer` (participant scope only) | `claims.participantIdentifier: [participant_id]` - the participant DID |
+| `roles` | the credential's `type` array | `claims.roles: [roles]`, mapped by `roleMapping` |
+| `email`, `given_name`, `family_name` | the UserCredential's profile (openid scope only) | profile data |
+
+`roleMapping` turns the credential type into the consent-manager's role:
+
+| credential type | role | grants |
+|---|---|---|
+| `MembershipCredential` | `PARTICIPANT` | register itself, link its data subjects, generate privacy notices, list / check / terminate consents it is a party to |
+| `UserCredential` | `USER` | register itself, grant / refuse / revoke its own consents, read its consents and receipts, erase its record |
+| `consent-catalog` (chart default) | `CATALOG` | not granted: no credential carries it |
+
+Neither credential carries a role claim of its own. The verifier already enforces the credential
+type per scope and checks the issuer against the TIR, so no participant can issue itself a consent
+role. `participant_id` is the credential's `issuer`, the DID the TIR check covers, and not
+`credentialSubject.id`, which any issuer sets freely. Both DCQL queries ask for a single credential
+(`multiple: false`), because with several matching credentials the verifier lets the last one's claims
+win. That is only a wallet hint, which the verifier does not enforce (see
+[Known limitations](#known-limitations)).
+
+The relevant settings, from [`k3s/consent-trust-anchor-components.yaml`](../k3s/consent-trust-anchor-components.yaml):
+
+```yaml
+consent-manager:
+  identityProviders:
+    primary:
+      # the verifier's bare server.host; compared byte-for-byte with the discovery `issuer`
+      issuer: https://verifier.dataspace-authority.org
+      # the verifier serves discovery only under the per-service path
+      discoveryUrl: https://verifier.dataspace-authority.org/services/consent-manager/.well-known/openid-configuration
+      audience: consent-manager
+      claims:
+        userIdentifier: [sub]
+        participantIdentifier: [participant_id]
+        roles: [roles]
+      roleMapping:
+        user: UserCredential
+        participant: MembershipCredential
+        catalog: consent-catalog
+```
+
+The verifier side is the `consent-manager` entry under
+`decentralizedIam.vcAuthentication.vcverifier.registration.services` in
+[`k3s/consent-trust-anchor.yaml`](../k3s/consent-trust-anchor.yaml).
+
+### The provider's token service
+
+The plugin holds no credential. It asks its provider-local consent-facade for a token, which the
+facade obtains by presenting the provider's MembershipCredential to the authority verifier:
 
 ```
 POST /internal/tokens
@@ -108,349 +225,108 @@ Content-Type: application/json
   { "access_token": "eyJ...", "token_type": "Bearer", "expires_in": 3540 }
 ```
 
-* **`audience` is a configured name, never a URL.** The facade resolves it against its configured
-  target list (url + OID4VP `client_id` + `scope` + `discoveryPath`). A caller-supplied URL would let
-  anything in the namespace make the facade present the participant's credential to an arbitrary
-  host, i.e. leak a signed VP naming it as holder. Unknown audience ⇒ `400`.
-* **`/internal/**` is never published.** The facade ingress allow-lists only `/participants` and
-  `/catalog`; reachability is further restricted by NetworkPolicy (see below).
-* Tokens are cached per audience until shortly before expiry, and concurrent misses are coalesced, so
-  a burst of requests costs one presentation.
-* Failure mapping - the plugin fails closed, so it must be able to tell "retry later" from "will
-  never work":
+* `audience` is a configured name (`consent-facade.oid4vp.tokenTargets[].audience`), never a URL, so
+  nothing in the namespace can make the facade present the credential to an arbitrary host. An
+  unknown audience answers `400`.
+* Tokens are cached per audience until shortly before expiry.
+* Errors tell "retry later" from "will never work": `502` verifier unreachable, `403` credential
+  refused, `400` unknown audience, `500` broken OID4VP setup of the facade itself.
+* `/internal/**` is never published. The provider facade's ingress is off and its NetworkPolicy
+  admits only the APISIX pods and the owner-resolver.
 
-  | Cause | Status |
-  |---|---|
-  | verifier unreachable, no `vp_token` grant advertised, empty token response | `502` |
-  | credential refused (not in the TIR, expired, invalid authorization request) | `403` |
-  | unknown or blank audience | `400` |
-  | the facade's own OID4VP setup broken (holder key, credential files) | `500` |
-
-Each target carries its own `discoveryPath`, because a FIWARE VCVerifier serves OIDC discovery per
-service (`/services/consent-manager/.well-known/openid-configuration`); asking at the host root
-returns a `404` the OID4VP client tries to parse as the configuration document.
-
-#### The verifier: one service, a scope per credential
-
-Subjects and participants authenticate to the **same relying party** - the consent-manager. They
-present different credentials, but a different
-credential is a different *policy*, not a different audience: the verifier stamps its **service id**
-as the token's `aud`. The credential policy is therefore selected by **scope** on the single
-`consent-manager` service - the pattern `k3s/provider.yaml` already uses for `data-service`:
-
-```yaml
-- id: consent-manager
-  defaultOidcScope: openid
-  oidcScopes:
-    openid:            # the data subject's UserCredential
-      credentials:
-        - type: UserCredential
-          ...
-    participant:       # a participant's MembershipCredential
-      credentials:
-        - type: MembershipCredential
-          trustedIssuersLists: ["*"]
-          trustedParticipantsLists: ["https://tir.127.0.0.1.nip.io"]
-          jwtInclusion: { enabled: true, fullInclusion: true }
-```
-
-Both scopes issue tokens with `aud: consent-manager`, so the consent-manager keeps a single expected
-audience and a single `discoveryPath`.
-
-#### The gateway route
-
-`/consent-manager/*` authenticates with `openid-connect` against that verifier service - the same
-plugin every other OID4VP-protected DSC route uses - and injects the shared consent key server-side:
-
-```yaml
-plugins:
-  openid-connect:
-    bearer_only: true
-    use_jwks: true
-    audience: consent-manager     # the token's `aud` is the verifier service id; check it explicitly
-    discovery: https://verifier.dataspace-authority.org/services/consent-manager/.well-known/openid-configuration
-    proxy_opts:                   # the verifier's ingress host resolves to 127.0.0.1 in-cluster
-      http_proxy: http://squid-proxy.infra.svc.cluster.local:8888
-      https_proxy: http://squid-proxy.infra.svc.cluster.local:8888
-    ssl_verify: false             # local demo only: its ingress cert is signed by the cluster CA; outside of it trust the CA instead, see the provider guide's "Trusting a private CA"
-  proxy-rewrite:
-    regex_uri: ["^/consent-manager/(.*)", "/$1"]
-    headers:
-      set:
-        x-visionstrust-consent-key: "$env://CONSENT_KEY"
-```
-
-The authority verifier has to sign its access tokens with `RS256`, its default: the `openid-connect` plugin rejects `ES256` tokens with `401`. See [Token signing algorithm](deployment-integration/roles/provider/README.md#token-signing-algorithm) in the provider guide.
-
-There is deliberately **no `/participants/login` route**: nothing issues consent-manager-signed
-participant tokens, and that endpoint is an unauthenticated credential exchange.
-
-#### Resolving the token to a participant
-
-The consent-manager verifies externally-issued OID4VP tokens (`consent-manager.externalIdp`) and maps
-the verified subject to a local identity. 
-
-A shared `aud` does **not** let a subject act as a participant: the role follows from the local record
-the token's subject resolves to, so a subject token only passes participant middleware if its DID is
-also registered as a `Participant.did`, and vice versa.
+The endpoint is specified in
+[api/consent-facade-internal.yaml](https://github.com/SEAMWARE/consent-facade/blob/main/api/consent-facade-internal.yaml).
 
 ### Known limitations
 
-Stated explicitly so the integration is not mistaken for a complete hardening:
+* **The provider's MembershipCredential is not holder-bound.** `k3s/provider.yaml` issues it with
+  `holderBinding.enabled: false`, so it carries no confirmation claim and anyone holding the JWT can
+  replay it. Enabling holder binding is the hardening step.
+* **The issuer of a `jwt_vc_json` credential is not cross-checked.** VCVerifier 6.27.0 does not compare
+  `vc.issuer` with the signed `iss`, so a hand-crafted credential can still name another DID as its
+  issuer until upstream rejects the mismatch (it already does on the `vc+jwt` path).
+* **An agreement that names its parties by DID gates nothing, silently.** Since 0.0.3 the
+  consent-manager resolves a contract party under either name, but the consent-facade's `/verify` -
+  the lookup the owner-resolver makes to find the governing contract - matches only the
+  participants' self-description URLs. An agreement whose `provider-id` / `consumer-id` carry the
+  DIDs therefore generates a privacy notice and accepts a consent, while every gated read stays
+  denied: the owner-resolver answers `422` ("contract matcher"), the plugin `403`. Write the
+  self-description URLs, as `contract-management` and the
+  [walkthrough](#walkthrough-on-the-local-k3s-scenario) do; see
+  [How a contract names its parties](#how-a-contract-names-its-parties).
+* **`multiple: false` is not enforced.** The DCQL queries ask for one credential, but VCVerifier 6.27.0
+  accepts a presentation with several matching ones and takes `participant_id` and `roles` from the
+  last. A wallet holding two matching credentials decides which identity the token carries.
+* **A missing processing purpose degrades silently**, see
+  [Declaring the processing purpose](#declaring-the-processing-purpose).
+* **In-cluster transport is plain HTTP.** The plugin calls
+  `consent-manager.trust-anchor.svc.cluster.local:8080` without TLS. The bearer is a short-lived,
+  audience-bound token, not a long-lived secret.
 
-* **The shared consent key carries no caller identity.** Any onboarded participant can look up any
-  subject at any other participant: `/users/identifier/search` and `/users/search` are gated by
-  `consentKeyCheck` alone, which only compares one global secret. OID4VP makes the caller's identity
-  verified and available at the gateway, which is the precondition for scoping those endpoints, but
-  the scoping itself is a consent-manager change - follow the open issues [consent-manager #34](https://github.com/Prometheus-X-association/consent-manager/issues/34) and [consent-manager #36](https://github.com/Prometheus-X-association/consent-manager/issues/36)
-* **`x-user-key` is a bearer-equivalent** validated by existence only: `verifyUserKey` accepts any
-  `UserIdentifier` id that resolves in the database - no signature, no expiry, no binding to the
-  caller. Anything that can read one can act as that subject on every `verifyUserKey` endpoint - follow the open issues [consent-manager #34](https://github.com/Prometheus-X-association/consent-manager/issues/34) and [consent-manager #36](https://github.com/Prometheus-X-association/consent-manager/issues/36)
-* **Onboarding asserts identity rather than proving it.** `POST /participants` has no authentication,
-  so anyone who can reach it may onboard a participant claiming any `did`, `legalName` and
-  `selfDescriptionURL`. The `did` uniqueness guard stops two participants *sharing* a DID, but not the
-  first one claiming a DID that is not theirs. In this deployment the endpoint is reached only
-  directly on the consent-manager (which no ingress exposes).
-* **Participant records still carry `clientID`/`clientSecret`.** These are mandatory in the
-  consent-manager's own schemas, stored in plaintext, and the secret doubles as the HMAC key of a
-  legacy `serviceKey` token path. Nothing in the consent flow uses them any more.
-* **A missing processing purpose degrades silently.** A product specification without a `purpose`
-  characteristic still yields a well-formed privacy notice - the facade substitutes the product's own
-  name - so consent is recorded against a product name rather than a declared purpose, and nothing
-  downstream can detect it. See
-  [Product modelling: declaring the processing purpose](#product-modelling-declaring-the-processing-purpose).
-* **In-cluster transport to the authority is plain HTTP.** The bearer is a short-lived,
-  audience-bound token rather than a long-lived secret, but there is no TLS between the namespaces.
+## The `/v1` API
 
-## Flows
+The consent-manager's API is specified in
+[api/openapi.yaml](https://github.com/SEAMWARE/dsc-consent-manager/blob/main/api/openapi.yaml). In the
+k3s scenario it is published as `https://consent-manager.dataspace-authority.org/v1`. The calls the
+connector relies on, by role:
 
-The [Demo](#demo-consent-gated-access-to-personal-data) below walks the *subject-authenticated* grant
-and the data access through as executable steps.
+| step | call | role | notes |
+|---|---|---|---|
+| register a participant | `POST /v1/participants` `{legalName, email, selfDescriptionUri}` | PARTICIPANT | the identifier is the DID in the token, never the body; `409` when registered, update with `PUT /v1/participants/me` |
+| read the own registration | `GET /v1/participants/me` | PARTICIPANT | `403` "not registered" until registered |
+| look up a participant | `GET /v1/participants?identifier=<did>` or `GET /v1/participants/{identifier}` | any | |
+| register a data subject | `POST /v1/users/register` (no body) | USER | the identifier is the token's `sub`; `201` first, `200` after |
+| link a subject to the provider | `POST /v1/participants/me/users` `{identifier}` | PARTICIPANT | |
+| generate a privacy notice | `POST /v1/privacy-notices/by-contract` `{contractUri}` | PARTICIPANT | `201` new, `200` when the contract is unchanged |
+| read a privacy notice | `GET /v1/privacy-notices/{id}` | any | `resolve=true` (default) dereferences contract, catalog and recipients |
+| grant or refuse | `POST /v1/consents` `{privacyNoticeId, decision}` | USER | `decision: GRANTED`; optional `purposes` / `data` elect a subset |
+| ask a subject to decide | `POST /v1/consents/requests` | PARTICIPANT | |
+| list | `GET /v1/consents?userIdentifier=&privacyNoticeId=&status=` | PARTICIPANT | only consents the caller is a party to; `GRANTED` unless `status` says otherwise |
+| list the own consents | `GET /v1/consents/me` | USER | |
+| check | `GET /v1/consents/check?userIdentifier=&privacyNoticeId=[&purpose=]` | PARTICIPANT | `{"valid": true}` only for a `GRANTED` consent whose scope covers the request |
+| revoke | `POST /v1/consents/{id}/revoke` | USER | also `refuse`, `re-confirm`, `resume` |
+| terminate | `POST /v1/consents/{id}/terminate` | PARTICIPANT | a party ends the consent |
+| receipt | `GET /v1/consents/{id}?format=receipt` or `GET /v1/consents/me/{id}?format=receipt` | PARTICIPANT / USER | `format=receipt` (ISO/IEC 29184) or `receipt-kantara`; answered as `{receipt, jws}` |
+| verify a receipt | `GET /.well-known/jwks.json` | public | at the origin root, not under `/v1` |
+| erase the own record | `DELETE /v1/users/me` | USER | |
 
-### Granting consent (a participant, on the subject's behalf)
+### Participants and data subjects
 
-This is the **alternative** path: a participant records the consent *for* the subject with its own
-participant token plus the subject's `x-user-key`. Both demos use the
-[subject-authenticated grant](#subject-authenticated-consent-verifiable-credential) below instead,
-which is the primary path - it takes the acting user from the subject's own token and needs neither
-the consent key nor a consumer-side registration.
+A participant registers itself with its MembershipCredential token and points `selfDescriptionUri` at
+its self-description. In the scenario that is the authority consent-facade's
+`https://consent-facade.dataspace-authority.org/participants/<tmforum-organization-id>`, projected from
+the TM Forum organization that carries the participant's DID as the `did` party characteristic.
+Both sides of a consent must be registered: the plugin denies when the provider is not found at
+`/participants/me` or the consumer DID is unknown or has no `selfDescriptionUri`.
 
-The consent-manager calls here go through the authority facade with a participant JWT (the facade
-injects the consent key the `x-user-key` endpoints require); the privacy notice is projected by the
-consent-facade from a TM Forum agreement. Participant **onboarding** is the exception - `POST
-/participants` is unauthenticated and is called directly on the consent-manager (step 3a of the
-[demo](#demo-consent-gated-access-to-personal-data)), so it is not shown here.
+A data subject registers itself with its UserCredential token; its identifier is the holder DID. The
+provider then links the subject to itself (`POST /v1/participants/me/users`), as it registers its data
+subjects.
 
-```mermaid
-sequenceDiagram
-  actor op as Operator (acts as both participants)
-  participant own as Each participant's own consent-facade
-  participant fac as Authority APISIX facade
-  participant cm as consent-manager
-  participant cf as consent-facade (authority)
-  participant tmf as Provider TMForum (mp-tmf-api)
+### Privacy notices
 
-  op->>own: POST /internal/tokens {audience} — once per participant
-  own-->>op: OID4VP access token (provider / consumer)
-  op->>tmf: seed agreement (offering, spec, purpose)
-  op->>fac: POST /users/register (provider Bearer)
-  op->>fac: POST /users/register (consumer Bearer) — giveConsent resolves the<br/>acting user only when BOTH identifiers exist
-  op->>fac: POST /users/identifier/search (Bearer) → x-user-key
-  op->>fac: GET /consents/{did}/{base64 providerSD}/{base64 consumerSD} (Bearer + x-user-key)
-  fac->>cm: forward (consent key injected)
-  cm->>cf: fetch bilateral contract / privacy notice
-  cf->>tmf: OID4VP-authenticated reads (agreement → offering → spec)
-  cf-->>cm: privacy notice (data + purposes)
-  cm-->>op: privacy notice
-  op->>fac: POST /consents {event: given} (Bearer + x-user-key)
-  fac->>cm: forward (consent key injected)
-  cm-->>op: 201 — consent receipt (recordId)
+A privacy notice is derived from a contract served by the contract service
+(`consent-manager.config.contractServiceUrl`, the authority consent-facade). A contract URI is that
+base plus the bilateral contract the facade projects from a TM Forum agreement:
+
+```
+http://consent-facade.trust-anchor.svc.cluster.local:8080/bilaterals/default~<agreement-id>
 ```
 
-### Subject-authenticated consent (verifiable credential)
+The agreement's `provider-id` and `consumer-id` characteristics must hold the participants'
+self-description URLs (see
+[How a contract names its parties](#how-a-contract-names-its-parties)). The notice's purposes come
+from the product specification, its data resources from the catalog.
 
-The subject grants for *itself* with its own OID4VP access token, reaching the consent-manager through the authority APISIX's `/consent-user` routes (no participant auth, no consent-key injection). The consent-manager verifies the token against the authority verifier's JWKS and maps the holder DID (`sub`) to the subject's local `User` - so there is no facade in the path and no `x-user-key`. The subject never holds the consent key or a participant token.
+`GET /v1/privacy-notices/{id}` resolves by default (`resolve=true`). Resolution never fails the request:
+whatever could not be read is marked `UNAVAILABLE`. `resolve=false` makes no external request.
 
-```mermaid
-sequenceDiagram
-  actor sub as Data subject (wallet)
-  participant ver as Authority verifier (consent-manager service)
-  participant gw as Authority APISIX (/consent-user)
-  participant cm as consent-manager
+### Declaring the processing purpose
 
-  sub->>ver: OID4VP presentation (UserCredential, holder DID)
-  ver-->>sub: access token (iss = https://verifier.dataspace-authority.org, aud = consent-manager, sub = holder DID)
-  sub->>gw: POST /consent-user/v1/consents/user (Bearer token, notice + data)
-  gw->>cm: proxy (no participant auth, no consent-key) -> POST /v1/consents/user
-  cm->>cm: iss trusted, verify via JWKS, map sub (DID) to local User
-  cm->>ver: (cached) OIDC discovery (per-service path) + JWKS
-  cm-->>sub: 201 - consent receipt
-```
-
-### Consent-gated data access
-
-A consumer reads personal data through the `mp-data-service-consent` route. OPA authorizes the credential; the consent-filter plugin then decides on consent in the response phase, so the decision can be made per data subject in the body.
-
-```mermaid
-sequenceDiagram
-  actor cons as Data consumer
-  participant apisix as Provider APISIX (consent route)
-  participant opa as OPA / odrl-pap
-  participant scorpio as Scorpio (personal data)
-  participant plugin as consent-filter plugin
-  participant fac as Authority facade
-  participant cm as consent-manager
-
-  cons->>apisix: GET /entities/{OperatorProfile} (OID4VP access token)
-  apisix->>opa: authorize on credential
-  opa-->>apisix: allow
-  apisix->>scorpio: read entities
-  scorpio-->>apisix: personal data
-  apisix->>plugin: consent check (response phase, per subject)
-  plugin->>fac: identifier/search + list consents (participant JWT)
-  fac->>cm: forward (consent key injected)
-  cm-->>plugin: consent status
-  alt a granted consent exists
-    plugin-->>cons: 200 + data
-  else no / withdrawn consent
-    plugin-->>cons: 403
-  end
-```
-
-### Authenticated projection (consent-facade → provider)
-
-When the consent-facade reads a provider's TMForum data (to serve self-descriptions and project privacy notices) it authenticates with a verifiable credential over OID4VP - the same protection any cross-organisation data access uses.
-
-```mermaid
-sequenceDiagram
-  participant cf as consent-facade (did:web:dataspace-authority.org)
-  participant mptmf as Provider mp-tmf-api (APISIX)
-  participant ver as Provider verifier
-  participant tmf as tm-forum-api
-
-  cf->>mptmf: GET /tmf-api/... (no token)
-  mptmf-->>cf: 401
-  cf->>ver: OID4VP — present OperatorCredential presentation
-  ver-->>cf: access token
-  cf->>mptmf: GET /tmf-api/... (Bearer)
-  Note over mptmf: openid-connect (authn) + OPA (authz)
-  mptmf->>tmf: proxied read
-  tmf-->>cf: TMForum data
-```
-
-## Enabling
-
-Consent management is **opt-in** via the dedicated `consent` maven profile. It is
-spread across three overlays:
-
-* [`k3s/consent-provider.yaml`](../k3s/consent-provider.yaml) (layered on `provider.yaml`) - the provider side: the **consent-filter plugin**, the **owner-resolver**, a provider-local **consent-facade** and the NetworkPolicies isolating them.
-* [`k3s/consent-trust-anchor-components.yaml`](../k3s/consent-trust-anchor-components.yaml) (layered on `trust-anchor.yaml`) - the consent **data plane** (consent-manager + consent-facade + managed MongoDB), added to the **`trust-anchor` release** (`charts/trust-anchor`).
-* [`k3s/consent-trust-anchor.yaml`](../k3s/consent-trust-anchor.yaml) - the **`consent-authority` release** (`charts/data-space-connector`) with the **IAM** that backs consent (keycloak issuer, `did:web` helper, APISIX facade route + verifier scopes, vc-operator).
-
-### Where the components come from
-
-The **consent-manager**, the **consent-facade** and the **owner-resolver** are published as
-their own FIWARE charts and consumed as subchart dependencies:
-
-| component | chart | pulled by |
-|---|---|---|
-| consent-manager | `oci://quay.io/fiware/helm-charts/consent-manager` | `charts/trust-anchor` |
-| consent-facade | `oci://quay.io/fiware/helm-charts/consent-facade` | `charts/trust-anchor` (the authority's instance) and `charts/data-space-connector` (a provider-local instance) |
-| consent-owner-resolver | `oci://quay.io/fiware/helm-charts/consent-owner-resolver` | `charts/data-space-connector` |
-
-They are configured under the top-level `consent-manager:`, `consent-facade:` and
-`consent-owner-resolver:` keys. Each pins `fullnameOverride` (and the resolver also
-`nameOverride`) so the resource names and labels are `consent-manager` / `consent-facade` /
-`owner-resolver` - the APISIX facade route, the consent-plugin's route config, the
-resolver's contract lookups and the NetworkPolicies all address them by those names.
-
-`consentManagement.*` covers what this repository templates itself: the **consent-filter
-plugin** wiring on the provider APISIX, the isolation policies, and the managed MongoDB user
-the consent-manager connects as.
-
-The provider overlay disables the consent-manager (it runs at the authority) and enables
-the plugin, the resolver and its local facade:
-
-```yaml
-consentManagement:
-  enabled: true      # the provider APISIX consent-plugin wiring
-consent-owner-resolver:
-  enabled: true      # provider-side: the answer depends on the provider's data model
-consent-facade:
-  enabled: true      # provider-local: serves the governing contract + the plugin's tokens
-```
-
-The consent-manager is not deployed at the provider at all - it is enabled in the
-trust-anchor release (`consent-manager.enabled: true`) at the authority.
-
-The shared `consentKey` (`X_VISIONSTRUST_CONSENT_KEY`) is set on the data-plane side in [`k3s/consent-trust-anchor-components.yaml`](../k3s/consent-trust-anchor-components.yaml) (`consent-manager.secret.consentKey`), seeded into the `consent-manager` secret; the consent-manager validates it and the `consent-authority` release's facade route injects it (reading it from that same secret by name), so callers never hold it.
-
-Deploy the consent scenario with `mvn clean deploy -Pconsent`. That profile layers the
-consent data plane onto the `trust-anchor` release (consent-manager + consent-facade +
-MongoDB, pulling `quay.io/wi_stefan/consent-manager`) and the IAM onto the
-`consent-authority` release, plus the provider's consent-filter plugin. A plain
-`mvn clean deploy -Plocal` brings up the connector **without** consent management.
-
-> :bulb: The consent-manager, its APISIX facade, the **consent-facade** and MongoDB all run in the `trust-anchor` namespace; the provider runs only the consent-filter plugin (inside its own APISIX). Check with `kubectl -n trust-anchor get pods` (consent-manager, consent-facade, `consent-authority-apisix`, `mongodb`).
-
-### Integration tests
-
-The consent flow has an automated counterpart to the [first demo](#demo-consent-gated-access-to-personal-data):
-the cucumber feature [`it/src/test/resources/it/consent_management.feature`](../it/src/test/resources/it/consent_management.feature),
-tagged `@consent` and implemented by `ConsentStepDefinitions`. It drives the same give-consent API -
-onboard both participants, seed the agreement the notice is projected from, register the subject, then
-grant, read, withdraw - and asserts the decision the consent-filter plugin makes at each stage
-(`403` without consent, `200` with it, `403` again after withdrawal).
-
-Run it the same one-shot, tag-filtered way as `local-test` / `central-test` / `dsp-test` - deploy and
-test in a single command:
-
-```shell
-  mvn clean integration-test -Ptest,consent,consent-test
-```
-
-`test` brings the cluster up and installs the releases, `consent` selects the consent-specific
-values files, and `consent-test` filters to `@consent`. The `consent` profile is otherwise deploy-only
-(it skips compiler and failsafe so that `mvn clean deploy -Pconsent` does not run tests), which
-`consent-test` re-enables. To test against an already-deployed data space instead, run
-`mvn verify -pl it -Pconsent,consent-test`.
-
-> :warning: `integration-test` stops before the teardown phase, so the k3s container stays up after the
-> run - convenient for inspecting the result (`export KUBECONFIG=$(pwd)/it/target/k3s.yaml`). Running
-> again against that cluster upgrades the existing releases in place (`helm upgrade --install`); to
-> start from a clean cluster, remove it first (`docker rm -f k3s-maven-plugin`). To keep logs from a
-> run, stream them (`kubectl logs -f`) while it is still in the test phase.
-
-Each run works on a **fresh data subject**: the test wallet generates a new `did:key`, which becomes
-the published entity's `dataOwner` and the identity consent is granted for. Scenarios are therefore
-independent of each other and of earlier runs. The TM Forum organizations backing the two participants
-are find-or-created by name, so the participant self-descriptions stay stable - a participant is pinned
-to the self-description it was onboarded with, and a new one would mismatch the agreement.
-
-The gated read sends an explicit `Accept: application/json`. That is not incidental: the OwnerResolver
-is configured to read the data owner at `/dataOwner/value`, which only exists in the **concise**
-NGSI-LD representation. Asking without an `Accept` header lets the broker answer in expanded JSON-LD,
-where the attribute is a full URI - the resolver then correctly reports `no owner at
-"/dataOwner/value"` and the request is denied, with the plugin logging only `owner resolver error:
-status 422`. Any client of a consent-gated NGSI-LD endpoint has to request the representation the
-deployment's owner pointer describes.
-
-Two endpoints are reached over `kubectl port-forward` rather than through the ingress, exactly as the
-walkthrough does: the consent-manager's unauthenticated onboarding API (not exposed through the
-participant-authenticated facade) and the provider consent-facade's token service (its NetworkPolicy
-admits only the APISIX pods and the owner-resolver; a port-forward originates from the node, so the pod
-selectors do not match it). Everything else goes through the ingress hosts via the squid proxy, which
-is what the tests' shared HTTP client already does.
-
-## Product modelling: declaring the processing purpose
-
-A consent record is consent *for a purpose*. Everything else the consent-manager needs is derived by
-the connector - the participants from onboarding, the contract and its data resources from the TM Forum
-agreement - but the **processing purpose cannot be derived**: it is a legal declaration by the data
-provider about what the data will be used for. No component can synthesise it, so the provider has to
-declare it on the **product specification**, and the rest of the chain carries it through.
-
-Declare it as a product-specification characteristic **named `purpose`**:
+A consent is consent *for a purpose*. Everything else is derived by the connector - participants from
+registration, contract and data resources from the TM Forum agreement - but the processing purpose is
+a legal declaration of the provider and cannot be derived. Declare it on the **product specification**
+as a characteristic **named `purpose`**:
 
 ```json
 {
@@ -474,149 +350,160 @@ Declare it as a product-specification characteristic **named `purpose`**:
 }
 ```
 
-How it is read:
+* The characteristic is matched on its `name` (`purpose`, configurable as the facade's
+  `spec.purposeCharacteristic`), unlike the ODRL policy, which contract-management matches on
+  `valueType`.
+* The value may be an object (as above), a JSON string, or a plain string, which is taken as the
+  purpose name. `name` and `description` become the notice's purpose; a DPV URI in `purpose`
+  documents it machine-readably.
 
-* The characteristic is matched on its **`name`** (`purpose`), configurable as the facade's
-  `spec.purposeCharacteristic`. Note the contrast with the ODRL policy on the same specification,
-  which contract-management matches on **`valueType`** (`authorizationPolicy`) - the two are not
-  selected the same way.
-* The value may be a structured object (as above), a JSON string, or a plain string; a plain string
-  is taken as the purpose *name*.
-* From the object, `name` becomes the software-resource name the consent-manager records as the
-  **consent purpose**, and `description` becomes its description. A DPV URI in `purpose` documents
-  the purpose in a machine-readable vocabulary; it is carried in the value, not used for matching.
+> :warning: **A missing purpose degrades silently.** Without the characteristic the facade uses the
+> product specification's `name` as the purpose, so the subject consents to a product name rather
+> than a processing purpose, and nothing downstream notices. Check that a notice's purposes carry the
+> value you declared. BAE's product UI has no field for it today, so BAE-created products need a
+> specification template that carries one.
 
-> :warning: **A missing purpose does not fail - it degrades silently.** When no `purpose`
-> characteristic is present, the facade falls back to the product specification's own **`name`** as
-> the purpose name (`CatalogMapper.toSoftwareResource`). The privacy notice is then well-formed and
-> the demo flow still passes, but the subject has consented to something like *"Operator Profile"* -
-> a product name, not a processing purpose. Nothing downstream can detect this, which is why it is
-> worth asserting on: check that a projected notice's `purposes[].purpose` is the value you declared
-> and not the product's name.
+### Granting, checking and revoking
 
-Where the declaration has to happen:
+The data subject grants with its own token: `POST /v1/consents` with the notice id and
+`"decision": "GRANTED"`. The response is the consent, with `status: GRANTED` and the contract's
+`provider` and `consumer` DIDs. Without `purposes` / `data` the consent covers the whole notice. A new
+decision on the same notice supersedes the previous one. The subject withdraws with
+`POST /v1/consents/{id}/revoke`; a participant that is a party can end a consent with `terminate`.
 
-* **TM Forum API** - include the characteristic when creating the `productSpecification`, as the
-  [Demo](#demo-consent-gated-access-to-personal-data) does in step 3b.
-* **BAE Marketplace** - BAE creates specifications through the same TM Forum APIs, so a specification
-  carrying the characteristic works unchanged. BAE's product-creation UI has **no field** for a
-  processing purpose today, so it needs either a specification template that carries one or a small
-  extension; without it, every BAE-created product falls into the silent fallback above.
+Participants read consents through `GET /v1/consents` (scoped to consents they are a party to) and ask
+`GET /v1/consents/check` whether one is in force right now.
 
-The other consent-relevant fields are *not* the provider's job: the agreement's `provider-id`,
-`consumer-id`, `signing-date` and `policy` characteristics are written by the component that concludes
-the contract (contract-management on a completed product order, or the EDC TM Forum extension after a
-DSP negotiation).
+### Receipts and the JWKS
 
-## Working with consent records
+Every decision can be read as a signed receipt: `format=receipt` (an ISO/IEC 29184 consent record) or
+`format=receipt-kantara` (Kantara KI-CR-v1.1.0), answered as `{receipt, jws}`. The receipt is rendered
+from the terms frozen when the decision was taken, so it reads the same after the notice is
+regenerated. Anyone holding a receipt verifies its `jws` against the public key set at
+`https://consent-manager.dataspace-authority.org/.well-known/jwks.json`, which lists the active key
+first and then any retired keys. `consent-manager.config.receiptsJurisdiction` (default `EU`) is
+stated in every receipt. Keys are covered in [Receipt signing key](#receipt-signing-key).
 
-The consent-manager is not exposed directly; reach it through its authority **APISIX facade** - the
-front door that authenticates callers over OID4VP (`openid-connect`) and injects the shared consent key
-server-side, so you present a participant token (`Authorization: Bearer`) and never hold the consent
-key. The facade is published at the ingress host `consent-manager.dataspace-authority.org`; reach it
-through the squid proxy (`-x localhost:8888`), trusting its self-signed cert with `-k` - the same way
-the provider demo reaches its ingresses. Set the same `$CM` base the
-[Demo](#demo-consent-gated-access-to-personal-data) uses:
+## Enforcement: the consent-filter plugin
 
-```shell
-  export CM=https://consent-manager.dataspace-authority.org/consent-manager/v1
-  # every $CM call goes through squid, e.g. curl -k -x localhost:8888 ... $CM/participants/me
+The plugin runs on the provider's `mp-data-service-consent` route, in both external-plugin phases:
+`ext-plugin-pre-req` captures the request, `ext-plugin-post-resp` decides. Gating on the response
+lets the decision be made per data subject in the returned data, not only on the caller's token. Both
+phases must carry the identical configuration, else the plugin finds no stored context and fails
+closed.
+
+```mermaid
+sequenceDiagram
+  actor cons as Consumer
+  participant apisix as Provider APISIX
+  participant opa as OPA / odrl-pap
+  participant scorpio as Scorpio
+  participant plugin as consent-filter plugin
+  participant or as owner-resolver
+  participant pcf as provider consent-facade
+  participant ver as authority VCVerifier
+  participant cm as consent-manager
+
+  cons->>apisix: GET /ngsi-ld/v1/entities/{id} (Bearer, provider verifier)
+  apisix->>opa: authorize on the credential
+  opa-->>apisix: allow
+  apisix->>scorpio: read
+  scorpio-->>apisix: personal data
+  apisix->>plugin: response phase
+  plugin->>or: POST /resolve (response data)
+  or-->>plugin: consent required, owner DID, data resource
+  plugin->>pcf: POST /internal/tokens {audience: consent-manager}
+  pcf->>ver: OID4VP, MembershipCredential (scope participant)
+  ver-->>pcf: access token (PARTICIPANT, participant_id)
+  pcf-->>plugin: access token (cached)
+  plugin->>cm: GET /v1/participants/me
+  plugin->>cm: GET /v1/participants?identifier={consumer DID}
+  plugin->>cm: GET /v1/consents?userIdentifier={owner DID}
+  alt a matching GRANTED consent per owner
+    plugin-->>cons: 200 + data
+  else
+    plugin-->>cons: 403
+  end
 ```
 
-> :key: **Reproducing the plugin's two calls by hand.** The plugin obtains both values itself (a
-> token from its own consent-facade, and the provider self-description from `/participants/me`), but
-> to run the two calls manually you need the same two: an *access token* and the *provider
-> self-description* URL. Ask the provider's facade for a token exactly as the plugin does - it
-> presents the provider's credential over OID4VP, so no secret is involved:
->
-> ```shell
->   export PROVIDER_JWT=$(curl -s -X POST $TOKENS -H 'Content-Type: application/json' \
->     -d '{"audience":"consent-manager"}' | jq -r .access_token)
->   export PROVIDER_SD=$(curl -s -k -x localhost:8888 $CM/participants/me \
->     -H "Authorization: Bearer $PROVIDER_JWT" | jq -r .selfDescriptionURL)
-> ```
+### Route configuration
 
-An identity in the consent-manager is a **`UserIdentifier`** - a record that binds an **e-mail** to a **participant** (`attachedParticipant`). The consent-manager keys its lookup and cross-participant matching on that `email` field, so the DSC uses the **access-token `sub` as-is** as the value (it may be a `did:key:…` or a real e-mail; either is stored verbatim). A consent record is thus tied to whatever `sub` appears in the presented credential's access token.
+The route conf in [`k3s/provider.yaml`](../k3s/provider.yaml):
 
-#### Registering a user identity (must happen before it can be resolved)
-
-```shell
-  mkdir cert
-  chmod o+rw cert
-  docker run -v $(pwd)/cert:/cert quay.io/wi_stefan/did-helper:0.1.1
-  # unsecure, only do that for demo
-  sudo chmod -R o+rw cert/private-key.pem
+```json
+{
+  "consent_api_url": "http://consent-manager.trust-anchor.svc.cluster.local:8080",
+  "consent_api_prefix": "/v1",
+  "check_mode": "list",
+  "owner_resolver_url": "http://owner-resolver.provider.svc.cluster.local:8080/resolve",
+  "service": "mp-data-service",
+  "token_service_url": "http://consent-facade.provider.svc.cluster.local:8080/internal/tokens",
+  "token_audience": "consent-manager",
+  "fail_open": false,
+  "audit_enabled": false,
+  "audit_otlp_endpoint": "http://provider-opentelemetry-collector:4318"
+}
 ```
 
-The `identifier/search` call below only finds a `UserIdentifier` that has been **registered first**. In the consent-manager's own model a participant registers one of its users' identifiers itself, authenticated with a **participant JWT** (`sub` = the participant's id in the consent-manager):
+| option | default | meaning |
+|---|---|---|
+| `consent_api_url` | | base URL of the consent-manager |
+| `consent_api_prefix` | `/v1` | API base path |
+| `check_mode` | `list` | `list` reads the owner's consents and matches them in the plugin; `check` asks the consent-manager's validity check, which is keyed by a privacy notice |
+| `owner_resolver_url` | | the owner-resolver's `/resolve` |
+| `service` | | service name the owner-resolver rules match on |
+| `token_service_url` | | the provider consent-facade's `/internal/tokens` |
+| `token_audience` | `consent-manager` | audience asked for at the token service |
+| `consumer_claim` | `verifiableCredential.issuer` | where the consumer DID is read from the consumer's (provider verifier) token |
+| `privacy_notice_id` | | pin the route to one privacy notice |
+| `purpose` | | pin the route to one purpose |
+| `require_purpose` | `false` | deny unless the consent covers a named purpose |
+| `require_contract` | `false` | deny unless the consent matches a named contract or privacy notice |
+| `fail_open` | `false` | keep `false`: an unreachable consent-manager then denies |
+| `audit_enabled`, `audit_otlp_endpoint` | off | see [Access audit log](#access-audit-log) |
 
-```shell
-  curl -s -k -x localhost:8888 -X POST $CM/users/register \
-    -H 'Content-Type: application/json' \
-    -H "Authorization: Bearer <participantToken>" \
-    -d '{ "email": "did:key:zDnaeeWrPc6G8GQEpBgLJGwPdFtHK1Mk7JbYhQyFu8waJNLBx" }'
-  # -> the created UserIdentifier (attachedParticipant = the participant from the token)
-```
+`consent_api_host`, `consent_key` and the `CONSENT_KEY` environment variable are gone in 1.0.0; if
+still set they only log a warning.
 
-The `email` is the holder DID; a throw-away one can be minted with the [did-helper](https://github.com/wistefan/did-helper) (`docker run -v $(pwd)/cert:/cert quay.io/wi_stefan/did-helper:0.1.1`, then read `cert/did.json`). A PDI `User` account can be created explicitly with `POST /v1/users/signup`, but the identifier matcher also **creates one automatically** the moment the *same* e-mail is registered as a `UserIdentifier` under a **second** participant (it links both identifiers into one `User`). The demo relies on that: registering the holder DID on both provider and consumer sides (3c) yields the `User` the subject's OID4VP token resolves to - no signup call needed.
+`require_purpose` and `require_contract` stay off in the scenario: owner-resolver 0.2.0 returns only
+the owner and the data resource per claim, no purpose and no contract URI or notice id, so either
+option would deny every request. `consumer_claim` stays at its default because the provider
+verifier's `data-service` scope includes the full credential in the token.
 
-> :warning: **Nothing registers users automatically.** The consent-manager is deployed **empty**, so out of the box `identifier/search` returns `userIdentifierExists: false`. The [Demo](#demo-consent-gated-access-to-personal-data) below performs this bootstrap through the consent-manager API - it registers the provider/consumer participants and the subject's `UserIdentifier` (`email` = the holder DID) before recording the granted consent.
+### Matching rules
 
-Once an identity is registered, the consent-filter plugin that gates access resolves and checks consent with a **two-call chain** against the consent-manager:
+For each owner the owner-resolver reports, the plugin allows only when a consent of that owner has
 
-1. Resolve the DID to a `UserIdentifier`. The consent-manager requires the shared consent key on this
-   endpoint; through the facade you present your **participant JWT** and the facade injects that key.
-   `selfDescription` must be the **provider self-description** (`providerSd`) the consent-facade serves
-   at `/participants/{tmforum-org-id}` - the value `GET /participants/me` returns for the provider
-   participant:
-```shell
-  curl -s -k -x localhost:8888 -X POST $CM/users/identifier/search \
-    -H 'Content-Type: application/json' \
-    -H "Authorization: Bearer <participantToken>" \
-    -d '{
-          "selfDescription": "http://consent-facade.trust-anchor.svc.cluster.local:8080/participants/urn:ngsi-ld:organization:<id>",
-          "email": "did:key:zDnaeeWrPc6G8GQEpBgLJGwPdFtHK1Mk7JbYhQyFu8waJNLBx"
-        }' | jq .
-  # -> { "participantExists": true, "userIdentifierExists": true, "userIdentifier": "<id>", ... }
-```
-2. List that user's consents (auth: the provider's OID4VP access token, whose subject the consent-manager resolves to the provider `Participant` by `did`); the plugin allows only if some consent has `status == "granted"`:
-```shell
-  curl -s -k -x localhost:8888 "$CM/consents/participants/<userIdentifier>?receipt=true" \
-    -H "Authorization: Bearer <participantToken>" | jq '.consents[] | .status'
-```
+* status `GRANTED`,
+* `provider` = the provider DID, taken from `GET /v1/participants/me` with the provider's token,
+* `consumer` = the consumer DID read from `consumer_claim`,
+* and the `contractUri` / `privacyNoticeId` / purpose, when the owner-resolver or the route names them.
 
-> :warning: `GET /consents/participants/...` **always builds a receipt** for every consent, which HTTP-fetches each participant's `selfDescriptionURL` and reads `legalPerson.legalAddress` from it. So the participants' `selfDescriptionURL` **must** resolve to a valid self-description - the consent-facade serves these at `/participants/{tmforum-org-id}` (backed by the party API), which is why each participant is backed by a real TMForum organization (created by the Demo below - step 3a provisions both the provider and consumer orgs). A participant whose SD URL 404s makes this call return `500`, which the plugin treats as "no consent".
+Before that, the consumer DID must be a registered participant with a `selfDescriptionUri`
+(`GET /v1/participants?identifier=`), and the provider must be registered. Every other case is a
+`403`.
 
-The full give-consent flow additionally needs a bootstrapped privacy notice - the consent-facade projects one from a TM Forum agreement. The [Demo](#demo-consent-gated-access-to-personal-data) below grants and revokes consent end to end through the consent-manager API (registering the participants and subject, seeding the agreement, then `POST /v1/consents`), with no direct database writes.
+What the plugin therefore relies on:
 
-## Enforcing consent on a concrete service
+* the provider consent-facade's token carries the `PARTICIPANT` role and `participant_id`, i.e. the
+  verifier claim contract [above](#claim-and-role-contract);
+* both provider and consumer are registered at the consent-manager;
+* the subject's consent names exactly that provider and consumer, i.e. the privacy notice comes from
+  their contract.
 
-Consent is enforced on the data path by the **APISIX consent-filter plugin** - the canonical, only enforcement path (used by the [demo below](#demo-consent-gated-access-to-personal-data)). A custom external plugin attached to the `mp-data-service-consent` route runs the **two-call consent check** against the consent-manager on every request - resolve the subject's `userIdentifier` (`POST /v1/users/identifier/search`, authenticated with the `consent_key`), then list its consents (`GET /v1/consents/participants/{id}`, authenticated with the participant token) - and blocks unless a granted consent exists for the credential subject. OPA still authorizes the request on the *credential* first; the plugin adds the *consent* gate on top, keeping the access policy free of consent logic. The plugin holds **no participant credential**: it asks its own provider-local consent-facade (`token_service_url` → `POST /internal/tokens`) for a short-lived **OID4VP access token**, caching it until shortly before the expiry the facade reports, and derives the provider self-description from `/participants/me`. The `consent_key` is injected by the authority facade. So nothing per-seed, and no secret, is wired into the plugin.
+### Access audit log
 
-The check runs in the **response phase** (`ext-plugin-post-resp`) rather than pre-request: a personal-data read can return entities belonging to several data subjects, and gating on the response lets the decision be made per subject in the body rather than only on the caller's token. The alternative - the odrl-pap `consent:hasValidConsent` PIP evaluating consent inside OPA - is **not used**; consent is decided by the plugin, and odrl-pap/OPA handles only credential authorization.
+The plugin can record every access decision to the OpenTelemetry Collector, separate from traces.
+With `audit_enabled: true` it emits one OTLP/HTTP log record per request to `audit_otlp_endpoint`
+(`.../v1/logs`, also settable via `CONSENT_AUDIT_OTLP_ENDPOINT`), with resource
+`service.name=consent-access-audit` and the attributes `event.domain=audit`, `consent.decision`,
+`consent.reason`, `enduser.id`, `http.request.method`, `url.path` and `http.request.id`. Emission is
+asynchronous and best-effort: it never changes the decision.
 
-The end-to-end behaviour is:
-
-1. Authenticate via OID4VP (see the [demo prerequisites](#demo-consent-gated-access-to-personal-data)) and call the service **without** a consent record &rarr; **403**.
-2. Grant consent for the holder DID in the consent-manager (see above) &rarr; the same request now returns **200**.
-3. Revoke the consent &rarr; the request returns **403** again.
-
-> :bulb: The consent-filter plugin implements the two-call check directly and gates the `mp-data-service-consent` route end to end (grant → 200 / revoke → 403). The [`@consent` integration tests](#integration-tests) assert exactly that.
-
-> :warning: A full local bring-up of the provider **with** consent management is resource-hungry; the &ge;24 GB recommendation in the [local deployment requirements](deployment-integration/local-deployment/LOCAL.MD#requirements) applies.
-
-## Access audit log
-
-The consent-filter plugin can record **every access decision** (who accessed what, under which decision) to the OpenTelemetry Collector, kept **separate from traces**. When `audit_enabled` is set in the route conf, the plugin emits one **OTLP/HTTP log record** per request to `audit_otlp_endpoint` (`…/v1/logs`), stamped with resource `service.name=consent-access-audit` and log attributes `event.domain=audit`, `consent.decision` (allow/deny), `consent.reason`, `enduser.id` (the subject), `http.request.method`, `url.path`, `http.request.id`. Emission is **asynchronous and best-effort** - it never blocks or changes the access decision, and drops (with a counter) if the Collector is slow/absent; durability and retention are the Collector's sink's job, not the plugin's.
-
-Enable it in two steps:
-
-1. Deploy the Collector (`opentelemetry-collector.enabled: true`) and set `audit_enabled: true` on the `mp-data-service-consent` route in [`k3s/provider.yaml`](../k3s/provider.yaml) (the endpoint defaults to `http://provider-opentelemetry-collector:4318`). The endpoint may also be supplied out-of-band via the `CONSENT_AUDIT_OTLP_ENDPOINT` env var.
-2. Give the Collector a **`logs/audit` pipeline** that routes on the marker to a durable, append-only sink - separate from the traces pipeline:
+Deploy the Collector (`opentelemetry-collector.enabled: true`) and give it a logs pipeline to a
+durable, append-only sink:
 
 ```yaml
-# routes audit records (service.name=consent-access-audit) to their own sink;
-# because the plugin is the only logs source today, a plain logs pipeline suffices.
 service:
   pipelines:
     logs:
@@ -625,546 +512,274 @@ service:
       exporters: [file/audit]      # or opensearch/audit, kafka/audit, ...
 ```
 
-If you later ingest other logs too, split them with the `routing` connector on `service.name == "consent-access-audit"` (see the OTEL notes). The plugin only *routes* the audit stream out; immutability/retention is enforced by the chosen sink (WORM volume, OpenSearch audit index with restricted deletes, Kafka→immudb, …). The **consent record** itself (its TS 27560 lifecycle log) is a separate concern that lives in the consent-manager, not here.
+Once other logs are ingested too, split them with the `routing` connector on
+`service.name == "consent-access-audit"`. Immutability and retention are the sink's job. The consent
+record's own lifecycle lives in the consent-manager.
 
-## Demo: consent-gated access to personal data
+## Deployment
 
-This walkthrough shows the core consent story end to end: a data subject publishes personal data at the provider, a consumer is **denied** access until the subject **grants consent**, after which the identical request **succeeds**.
+### trust-anchor chart (2.0.0)
 
-> :bulb: This demo seeds the provider↔consumer agreement by hand, standing in for the contract
-> negotiation. For the same story driven by a real **product order** - the provider publishes an
-> offering, the consumer buys it and contract-management writes the agreement - see
-> [Demo 2](#demo-2-consent-on-a-purchased-offering-the-full-tm-forum-lifecycle).
+Everything is off by default. The authority turns it on:
 
-> :bulb: **Two enforcement layers.** The `mp-data-service-consent` route runs each request through **two** gates: first OPA (fed by odrl-pap) authorizes the call on the presented *credential*, then the custom **consent-filter** APISIX plugin gates it on the data subject's *consent*. The plugin no longer uses the requestor's token to identify the subject: in the response phase it sends the returned data to the **OwnerResolver** (deployed provider-side), which returns the data owner (from the entity's `dataOwner`) and the resource (the entity `id`); the plugin then checks that owner's consent for that entity against the consent-manager. This walkthrough exercises exactly that split - OPA must **allow** the `OperatorProfile` read (step 0) so that the **plugin** is the component that denies the access when no consent exists and permits it once consent is granted. The data requests therefore target the plugin-enforced host `mp-data-service-consent.127.0.0.1.nip.io`; the access token is still obtained from `mp-data-service.127.0.0.1.nip.io`, which serves the OIDC discovery.
-
-**Prerequisites.** Deploy the data space with consent management enabled (`mvn clean deploy -Pconsent`, see [Enabling](#enabling)). All commands below are run from the repository root. The grant step reaches the consent-manager and TM Forum API through `kubectl port-forward`, so point `KUBECONFIG` at the local cluster:
-
-```shell
-  export KUBECONFIG=$(pwd)/target/k3s.yaml
+```yaml
+consentManagement:
+  enabled: true                  # NetworkPolicies
+consent-manager:
+  enabled: true                  # requires managedPostgres.enabled
+  config:
+    # written into receipts and e-mail links: the address a data subject can reach
+    consentManagerUrl: https://consent-manager.<authority-domain>
+    contractServiceUrl: http://consent-facade:8080   # chart default
+  identityProviders:
+    primary: {}                  # the verifier, see "Claim and role contract"
+consent-facade:
+  enabled: true
+  # tmForum, selfUrl, ingress, oid4vp: see k3s/consent-trust-anchor-components.yaml
 ```
 
-Then, on the consumer side, generate a holder identity and issue the credential the demo presents - the same steps as in the [local deployment guide](deployment-integration/local-deployment/LOCAL.MD#the-data-consumer), repeated here so this walkthrough is self-contained.
+The chart presets what the setup Job and the subchart have to agree on. Leave these alone:
 
-1. Generate the consumer's holder key material (a `did:key` plus signing key under `cert/`, read by `get_access_token_oid4vp.sh`):
+| value | preset |
+|---|---|
+| `managedPostgres.config.users.consent_manager`, `managedPostgres.config.databases.consent_manager` | the consent-manager's user and database |
+| `consent-manager.config.database.url` | `jdbc:postgresql://postgres:5432/consent_manager` |
+| `consent-manager.secrets.existingSecret` | `consent-manager-env` |
+| `consent-manager.signingKeys.secretName` | `consent-manager-signing-keys` |
+| `consent-manager.nameOverride`, `fullnameOverride` | `consent-manager` |
 
-```shell
-  mkdir -p cert && chmod o+rw cert
-  docker run -v $(pwd)/cert:/cert quay.io/wi_stefan/did-helper:0.1.1
-  # unsecure, demo only:
-  sudo chmod -R o+rw cert/private-key.pem
-```
+Database, user and cluster names are fixed to `consent_manager` on the chart's managed Postgres
+cluster `postgres`. An external PostgreSQL is not supported in 2.0.0: `consent-manager.enabled` with
+`managedPostgres.enabled: false` fails the render.
 
-2. Issue a `UserCredential` for the consumer's `employee` user and keep it in `$USER_CREDENTIAL`:
+### The setup Job
 
-```shell
-  export USER_CREDENTIAL=$(./doc/scripts/get_credential.sh https://keycloak-consumer.127.0.0.1.nip.io user-credential employee); echo ${USER_CREDENTIAL}
-```
+`templates/consent-manager-setup-job.yaml` provisions what the consent-manager needs before it can
+start, and is the **only writer** of its two Secrets:
 
-**0. Allow the read at OPA - consent is left to the plugin.** Register a policy that permits *read* of `OperatorProfile` entities to any credential holder (`vc:any`). It carries **no** consent refinement: OPA authorizes purely on the credential, so the request reaches the consent-filter plugin, which is the component that decides on consent. (Without this policy OPA denies the call outright and the plugin never runs.)
-
-```shell
-  curl -k -x localhost:8888 -s -X POST https://pap-provider.127.0.0.1.nip.io/policy \
-    -H 'Content-Type: application/json' \
-    -d '{
-          "@context": { "odrl": "http://www.w3.org/ns/odrl/2/" },
-          "@id": "https://mp-operation.org/policy/common/operatorProfileRead",
-          "odrl:uid": "https://mp-operation.org/policy/common/operatorProfileRead",
-          "@type": "odrl:Policy",
-          "odrl:permission": {
-            "odrl:assigner": { "@id": "https://www.mp-operation.org/" },
-            "odrl:target": {
-              "@type": "odrl:AssetCollection",
-              "odrl:source": "urn:asset",
-              "odrl:refinement": [
-                { "@type": "odrl:Constraint", "odrl:leftOperand": "ngsi-ld:entityType", "odrl:operator": { "@id": "odrl:eq" }, "odrl:rightOperand": "OperatorProfile" }
-              ]
-            },
-            "odrl:assignee": { "@id": "vc:any" },
-            "odrl:action": { "@id": "odrl:read" }
-          }
-        }'
-```
-
-**1. The subject publishes personal data.** The data owner creates an `OperatorProfile` entity in the provider's context broker (via the demo scorpio ingress). Crucially, the entity carries a **`dataOwner`** attribute = the subject's DID: this is what the OwnerResolver reads to decide *whose* data it is, so the consent gate is bound to the data owner and **not** to whoever requests it. (`SUBJECT_DID` is the holder DID from the `cert/` identity created in the prerequisites.)
-
-```shell
-  export SUBJECT_DID=$(jq -r '.id' cert/did.json); echo ${SUBJECT_DID}
-  export ENTITY_ID=urn:ngsi-ld:OperatorProfile:mipa
-  curl -k -x localhost:8888 -s -X POST https://scorpio-provider.127.0.0.1.nip.io/ngsi-ld/v1/entities \
-    -H 'Content-Type: application/json' \
-    -d "{
-      \"id\": \"urn:ngsi-ld:OperatorProfile:mipa\",
-      \"type\": \"OperatorProfile\",
-      \"dataOwner\": { \"type\": \"Property\", \"value\": \"${SUBJECT_DID}\" },
-      \"email\": { \"type\": \"Property\", \"value\": \"mipa@example.org\" },
-      \"educationalHistory\": { \"type\": \"Property\", \"value\": \"B.Sc. Industrial Engineering (2018), Certified Kubernetes Administrator (2022)\" }
-    }"
-```
-
-**2. The consumer requests the data &rarr; access denied.** Authenticate the consumer via OID4VP - the `get_access_token_oid4vp.sh` helper builds the `vp_token` from the `cert/` identity created in the prerequisites - and read the entity through the plugin-enforced host. OPA now authorizes the read (step 0), but no consent exists yet, so the **consent-filter plugin** denies the request:
-
-```shell
-  export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh https://mp-data-service.127.0.0.1.nip.io $USER_CREDENTIAL default); echo ${ACCESS_TOKEN}
-  curl -k -x localhost:8888 -s -o /dev/null -w 'HTTP %{http_code}\n' \
-    -X GET 'https://mp-data-service-consent.127.0.0.1.nip.io/ngsi-ld/v1/entities/urn:ngsi-ld:OperatorProfile:mipa' \
-    -H "Authorization: Bearer ${ACCESS_TOKEN}"
-  # -> HTTP 403 (denied by the consent-filter plugin, not by OPA)
-```
-
-**3. The subject grants consent.** The consent-filter plugin determines the data owner from the **data**, not the requestor: in the response phase it sends the returned entity to the **OwnerResolver**, which reads the entity's `dataOwner` (→ `$SUBJECT_DID`). The plugin then checks that this owner has a granted consent (v1 is **owner-level**: consent is recorded against the privacy notice's data resource, so the check is per data owner). Consent is therefore granted for `$SUBJECT_DID` (set in step 1):
-
-The consent-manager is deployed empty. Rather than seeding Mongo, the demo records consent through
-the **real give-consent API** (no direct database writes): it registers the two participants, seeds a
-TM Forum **agreement** (which the consent-facade projects into a privacy notice), registers the
-subject, then `POST /v1/consents`. Every consent-manager call goes through the authority's **APISIX
-facade** (`consent-authority-apisix-gateway`, route `/consent-manager/*`): it authenticates the caller
-**per participant** over OID4VP (`openid-connect`) and injects the shared consent key server-side - so you
-authenticate with a participant token (`Authorization: Bearer`) and never hold the consent key.
-The participant `$CM` calls reach the facade through its **ingress host**
-`consent-manager.dataspace-authority.org` over the squid proxy (`-k -x localhost:8888`) - the same
-squid the provider steps above already use. The authority onboarding in 3a additionally talks to the
-consent-manager **directly** (`$CM_DIRECT`), to the APISIX admin API and to the provider facade's
-token service (`$TOKENS`), so port-forward those. The facade's NetworkPolicy admits only the APISIX
-pods and the owner-resolver, but it does not get in the way here: `kubectl port-forward` is proxied by
-the kubelet, so the traffic originates from the **node**, not from a pod, and the policy's pod
-selectors never match it. No policy needs loosening for the demo.
-`FACADE` is the consent-facade's **public** base url on purpose: the participant self-descriptions and
-catalog data-resource ids built from it are written into privacy notices and ISO 27560 consent receipts,
-so they must be dereferenceable by a data subject, an auditor or another participant - not
-cluster-internal names. It must match the facade's `selfUrl`
-([`k3s/consent-trust-anchor-components.yaml`](../k3s/consent-trust-anchor-components.yaml)); only the
-read-only `/participants` and `/catalog` paths are published, while `/verify` and `/bilaterals` stay
-internal. The consent-manager still resolves these ids from inside the cluster (through the squid
-proxy, trusting the cluster CA):
-
-```shell
-  kubectl -n provider     port-forward svc/tm-forum-api-svc 8090:8080
-  kubectl -n trust-anchor port-forward svc/consent-authority-apisix-admin 9180:9180   # apisix admin (optional: inspecting routes)
-  kubectl -n trust-anchor port-forward svc/consent-manager 3000:3000                  # direct CM: participant onboarding (3a)
-  kubectl -n provider     port-forward svc/consent-facade 8081:8080                   # the provider's OID4VP token service (3a)
-
-  export CM=https://consent-manager.dataspace-authority.org/consent-manager/v1   # authority APISIX facade (via squid: -k -x localhost:8888)
-  export CM_DIRECT=http://localhost:3000/v1            # the consent-manager directly - participant onboarding only (3a)
-  export CU=https://consent-manager.dataspace-authority.org/consent-user/v1      # subject routes (allow-listed, no participant auth)
-  export TMF=http://localhost:8090/tmf-api
-  export TOKENS=http://localhost:8081/internal/tokens  # the provider facade's token service (3a)
-  export FACADE=https://consent-facade.dataspace-authority.org   # public id space (== the facade's selfUrl)
-  export DID=$SUBJECT_DID
-```
-
-> :warning: **`$CM` calls go through the facade over squid** - every one carries `-k -x localhost:8888`
-> and resolves the `consent-manager.dataspace-authority.org` ingress. The APISIX routes are host-scoped
-> to that name, so a plain `localhost` port-forward to the gateway would return `404 Route Not Found`.
-> The calls below authenticate per-participant with the participant JWT (`Authorization: Bearer`); the
-> facade validates it and injects the shared consent key server-side. Confirm you are on the facade
-> (a no-auth request is rejected by APISIX `openid-connect`, not the consent-manager):
->
-> ```shell
->   curl -s -k -x localhost:8888 -X POST $CM/users/identifier/search -d '{}'
->   # {"message":"Missing JWT token in request"}  -> facade (correct); the 3a calls add the Bearer token
-> ```
->
-> The access token is short-lived; if a call starts failing with an authentication error, re-run the
-> token fetch in 3a to refresh `$PROVIDER_JWT`.
-
-**3a. Participants.** Nothing pre-registers participants, so both are **onboarded the same way** -
-as they would be in a real dataspace. Onboarding is an **authority-side action**, not something a peer
-participant does: `POST /participants` is the consent-manager's onboarding entry point and is
-*unauthenticated* (see `src/routes/participants.ts`), so it is called **directly** on the
-consent-manager (`$CM_DIRECT`, the `svc/consent-manager` port-forward on `3000`) rather than through
-the participant-authenticated facade. Each participant then obtains its own access token.
-
-> :bulb: Why not through the facade? The authority APISIX applies OID4VP `openid-connect` to
-> `/consent-manager/*` (only the allow-listed subject routes under `/consent-user` are exempt),
-> so a call through the facade would need a participant token that does not exist yet at onboarding
-> time. Exempting `POST /participants` on the gateway (with its own onboarding credential) would let
-> both be onboarded through the public facade instead - the production shape.
-
-The provider participant's `did` **must** match the holder DID the provider's consent-facade presents
-(`did:web:mp-operations.org`), because that is what the consent-manager resolves the plugin's access
-token to. The `clientID`/`clientSecret` in the onboarding call below are required by the
-consent-manager's participant schema; nothing in this flow uses them (see
-[Known limitations](#known-limitations)).
-
-```shell
-  # --- 1) backing TM Forum orgs (find-or-create: stable selfDescriptionURLs across re-runs) ---
-  export PROV_ORG=$(curl -s "$TMF/party/v4/organization?limit=1000" \
-    | jq -r 'map(select(.name=="Consent Demo Provider"))[0].id // empty')
-  [ -n "$PROV_ORG" ] || export PROV_ORG=$(curl -s -X POST $TMF/party/v4/organization -H 'Content-Type: application/json' \
-    -d '{"name":"Consent Demo Provider","tradingName":"Consent Demo Provider","isLegalEntity":true,
-         "organizationType":"company","contactMedium":[{"characteristic":{"country":"DE"}}],
-         "partyCharacteristic":[{"name":"did","value":"did:web:mp-operations.org"}]}' | jq -r .id)
-  export CONS_ORG=$(curl -s "$TMF/party/v4/organization?limit=1000" \
-    | jq -r 'map(select(.name=="Consent Demo Consumer"))[0].id // empty')
-  [ -n "$CONS_ORG" ] || export CONS_ORG=$(curl -s -X POST $TMF/party/v4/organization -H 'Content-Type: application/json' \
-    -d '{"name":"Consent Demo Consumer","tradingName":"Consent Demo Consumer","isLegalEntity":true,
-         "organizationType":"company","contactMedium":[{"characteristic":{"country":"DE"}}],
-         "partyCharacteristic":[{"name":"did","value":"did:web:fancy-marketplace.biz"}]}' | jq -r .id)
-  export PROVIDER_SD=$FACADE/participants/$PROV_ORG
-  export CONSUMER_SD=$FACADE/participants/$CONS_ORG
-  echo "provider org: $PROV_ORG"; echo "consumer org: $CONS_ORG"
-
-  # --- 2) onboard BOTH participants identically (authority action, unauthenticated endpoint) ---
-  #     201 = created, 409 = already onboarded (both fine)
-  curl -s -w ' %{http_code}\n' -X POST $CM_DIRECT/participants -H 'Content-Type: application/json' \
-    -d "{\"legalName\":\"M&P Operations Inc.\",\"email\":\"provider@mp-operation.org\",
-         \"did\":\"did:web:mp-operations.org\",\"clientID\":\"consent-demo-provider\",
-         \"clientSecret\":\"demo\",\"selfDescriptionURL\":\"$PROVIDER_SD\"}"
-  curl -s -w ' %{http_code}\n' -X POST $CM_DIRECT/participants -H 'Content-Type: application/json' \
-    -d "{\"legalName\":\"Fancy Marketplace Co.\",\"email\":\"consumer@fancy-marketplace.biz\",
-         \"did\":\"did:web:fancy-marketplace.biz\",\"clientID\":\"consent-demo-consumer\",
-         \"clientSecret\":\"demo\",\"selfDescriptionURL\":\"$CONSUMER_SD\"}"
-
-  # --- 3) each participant obtains an OID4VP access token ----------------------------------
-  #     No jwt-auth consumers, no /participants/login, no shared jwtSecret: the gateway
-  #     validates an access token issued by the authority verifier, and the consent-manager
-  #     resolves its subject to a Participant by `did`. Each participant's own
-  #     consent-facade mints the token by presenting that participant's credential - here
-  #     asked for exactly as the consent-plugin asks for it.
-  export PROVIDER_JWT=$(curl -s -X POST $TOKENS -H 'Content-Type: application/json' \
-    -d '{"audience":"consent-manager"}' | jq -r .access_token)
-  echo "provider token: ${PROVIDER_JWT:0:24}..."
-
-  # sanity: the SD the consent-manager stored must match the one used above
-  curl -s -k -x localhost:8888 $CM/participants/me -H "Authorization: Bearer $PROVIDER_JWT" | jq -r .selfDescriptionURL
-```
-
-**3b. Contract source (the EDC stand-in).** In production the provider↔consumer **agreement** is
-written by the Marketplace / EDC contract negotiation; the facade only *projects* it. The demo has no
-negotiation, so it creates a product specification (carrying the `purpose` characteristic), an
-offering, and the agreement through the TM Forum API.
-
-The agreement's ODRL **`target` names the data object** the permission covers (`$ENTITY_ID`). That is
-what lets the consent gate work without any static configuration: the OwnerResolver looks up the signed
-contract for this provider↔consumer pair, matches the requested object's URI against the target, and
-takes the resource to check consent for from that contract. (A real EDC writes asset URNs here; the
-consent-facade preserves whatever the agreement carried as `assetTarget`.)
-
-```shell
-  export SPEC_ID=$(curl -s -X POST $TMF/productCatalogManagement/v4/productSpecification \
-    -H 'Content-Type: application/json' -d @- <<JSON | jq -r .id
-{ "name": "Operator Profile", "description": "The operator's profile",
-  "productSpecCharacteristic": [ { "name": "purpose", "valueType": "object",
-    "productSpecCharacteristicValue": [ { "value": {
-      "id": "profile-service-provision",
-      "name": "Operator profile for service provision",
-      "description": "Deliver the requested service.",
-      "purpose": "https://w3id.org/dpv#ServiceProvision" } } ] } ] }
-JSON
-  ); echo $SPEC_ID
-
-  export OFFERING_ID=$(curl -s -X POST $TMF/productCatalogManagement/v4/productOffering \
-    -H 'Content-Type: application/json' \
-    -d "{\"name\":\"Operator Profile Offering\",\"productSpecification\":{\"id\":\"$SPEC_ID\"}}" | jq -r .id); echo $OFFERING_ID
-
-  export AGREEMENT_ID=$(curl -s -X POST $TMF/agreementManagement/v4/agreement \
-    -H 'Content-Type: application/json' -d @- <<JSON | jq -r .id
-{ "name": "Profile sharing agreement", "status": "approved",
-  "agreementItem": [ { "productOffering": [ { "id": "$OFFERING_ID" } ] } ],
-  "engagedParty": [ { "id": "$PROV_ORG", "role": "Provider" }, { "id": "$CONS_ORG", "role": "Consumer" } ],
-  "characteristic": [
-    { "name": "policy", "value": { "@type": "Set", "uid": "urn:policy:profile",
-        "permission": [ { "target": "$ENTITY_ID", "action": "use" } ] } },
-    { "name": "provider-id", "value": "$PROVIDER_SD" },
-    { "name": "consumer-id", "value": "$CONSUMER_SD" },
-    { "name": "signing-date", "value": $(date +%s) } ] }
-JSON
-  ); echo $AGREEMENT_ID
-```
-
-**3c. Register the subject, then give it a PDI account.** A `UserIdentifier` binds the holder DID to a
-participant. It is registered **only at the provider** - the party that actually holds the subject's
-data; the consumer never needs to know the subject (`Consent.consumerUserIdentifier` is optional, and
-the consent-filter plugin resolves the subject against the *provider's* self-description).
-
-The subject then needs a **PDI `User`** account, because the subject-authenticated grant in 3e resolves
-its OID4VP token to a `User`. So the subject signs itself up and the provider-side identifier is
-**attached** to that account - the explicit link that makes the token resolve:
-
-```shell
-  # 1) the provider registers its data subject (idempotent - a repeat registration is a no-op)
-  curl -s -k -x localhost:8888 -o /dev/null -X POST $CM/users/register -H 'Content-Type: application/json' \
-    -H "Authorization: Bearer $PROVIDER_JWT" -d "{\"email\":\"$DID\",\"identifier\":\"$DID\"}"
-  export USER_KEY=$(curl -s -k -x localhost:8888 -X POST $CM/users/identifier/search -H 'Content-Type: application/json' \
-    -H "Authorization: Bearer $PROVIDER_JWT" \
-    -d "{\"selfDescription\":\"$PROVIDER_SD\",\"email\":\"$DID\"}" | jq -r .userIdentifier); echo $USER_KEY
-
-  # 2) the SUBJECT creates its own PDI account. /users/signup needs no auth, and the subject route
-  #    /consent-user/v1/users/signup is allow-listed with no participant auth, so the subject can do this itself.
-  #    The account e-mail is the holder DID - the same value the UserIdentifier carries (see the note
-  #    below); the consent-manager keys its identity lookups on that field.
-  export SUBJECT_USER_ID=$(curl -s -k -x localhost:8888 -X POST $CU/users/signup -H 'Content-Type: application/json' \
-    -d "{\"firstName\":\"Mipa\",\"lastName\":\"Operator\",\"email\":\"$DID\",\"password\":\"demo-password\"}" \
-    | jq -r '.user._id'); echo $SUBJECT_USER_ID
-
-  # 3) attach the provider-side identifier to that account (authority action - needs the consent key,
-  #    which the facade injects). This is what makes the subject's OID4VP token resolve to its User.
-  curl -s -k -x localhost:8888 -o /dev/null -w 'attach -> HTTP %{http_code}\n' -X POST $CM/users/identifier \
-    -H 'Content-Type: application/json' -H "Authorization: Bearer $PROVIDER_JWT" \
-    -d "{\"userId\":\"$SUBJECT_USER_ID\",\"userIdentifiers\":[\"$USER_KEY\"]}"
-```
-
-> :bulb: Why the explicit attach? The consent-manager creates a `User` implicitly only when the *same*
-> e-mail is registered under a **second** participant (its identifier matcher). Registering the subject
-> at the consumer purely to trip that matcher would misrepresent the model, so the demo creates the
-> account and links it explicitly instead. `POST /users/signup` alone does **not** link identifiers.
-> This needs `consent-manager` ≥ `0.0.5`: earlier images crash with `500` when a consent is granted for
-> a subject that has no consumer-side identifier (`Cannot read properties of null (reading '_id')`).
->
-> The PDI account is created with the **holder DID as its e-mail**, matching the `UserIdentifier`
-> registered in step 1. The subject's token itself resolves *via the attached identifier* and is
-> e-mail-independent, but the consent-manager's `identifier/search` reports `userExists` by looking up
-> `User.email == UserIdentifier.email` - so a different account e-mail still works, yet makes 3d report
-> `userExists: false` (a false negative). Keeping them equal also satisfies the e-mail fallback
-> `giveConsentUser` uses to re-attach a provider identifier, and avoids collisions between demo runs.
-
-**3d. Verify the resolution (the lookup the plugin does).** 3c already captured the provider-side
-`UserIdentifier._id` as `$USER_KEY` - the value that selects the subject when a *participant* grants on
-its behalf. This is the same `identifier/search` lookup the consent-filter plugin performs on every
-request, so it is worth confirming it resolves: you authenticate per-participant with the **provider
-token** (the facade injects the consent key this endpoint requires), and `selfDescription` must be the
-**provider** self-description (`$PROVIDER_SD`):
-
-```shell
-  curl -s -k -x localhost:8888 -X POST $CM/users/identifier/search -H 'Content-Type: application/json' \
-    -H "Authorization: Bearer $PROVIDER_JWT" \
-    -d "{\"selfDescription\":\"$PROVIDER_SD\",\"email\":\"$DID\"}" | jq '{userIdentifier, userIdentifierExists, userExists}'
-```
-
-`userIdentifierExists: true` with a non-empty `userIdentifier` (== `$USER_KEY`) is what the plugin
-needs; `userExists: true` confirms the PDI account attached in 3c. An empty result means the
-registration in 3c has not propagated yet - retry.
-
-**3e. Grant - the data subject consents for itself, authenticated with its Verifiable Credential.**
-The consent is given by the **actual data subject**, not the provider on its behalf: the subject
-authenticates to the consent-manager **directly** with its own OID4VP access token (no facade, no
-`x-user-key`, no consent key). The consent-manager (≥ 1.2.0) verifies that token against the authority
-verifier's JWKS and maps the holder DID (`sub`) to the subject's local `User`.
-
-> :information_source: **The subject's `User` comes from 3c.** The subject's OID4VP token resolves via
-> its provider-side `UserIdentifier` to the PDI `User` that 3c created (signup) and linked (attach).
-> Without that link the token verifies but resolution fails with *"User with subject doesn't exist"*.
-
-> :warning: This needs a `quay.io/wi_stefan/consent-manager` image with the external-JWKS feature
-> (*verify external IDP / OID4VP JWTs via OIDC discovery + JWKS*, plus the configurable
-> `EXTERNAL_OIDC_DISCOVERY_PATH`); pin `consent-manager.deployment.image.tag` accordingly.
-> The verifier issues tokens with `aud: consent-manager` and `iss:
-> https://verifier.dataspace-authority.org` - these must match `consent-manager.externalIdp.audience`
-> and `consent-manager.externalIdp.issuers`. The verifier serves OIDC discovery only under a
-> per-service path, so `consent-manager.externalIdp.discoveryPath` is set to
-> `/services/consent-manager/.well-known/openid-configuration` (discovery is fetched at
-> `<issuer><discoveryPath>` while the `iss` stays the bare host). Because the consent-manager reaches
-> the verifier's discovery/JWKS at that ingress host, its runtime must also (a) **trust the cluster
-> CA** (the verifier's ingress cert is cert-manager self-signed - mounted via `NODE_EXTRA_CA_CERTS`
-> from `externalIdp.caSecret`) and (b) **send the discovery/JWKS fetch through the squid proxy**
-> (`externalIdp.proxy`; the consent-manager uses explicit `http(s)-proxy-agent`s for the `jose` JWKS
-> fetch). Without both, verification fails with *"unable to verify the first certificate"* or
-> *"request timed out"* respectively.
-
-First fetch the privacy notice the facade projected from the 3b agreement (provider-authenticated -
-this is the *offer* the subject consents to, not the consent itself; it must have non-empty `data`
-**and** `purposes`):
-
-```shell
-  export PROV_B64=$(printf '%s' "$PROVIDER_SD" | base64 -w0)
-  export CONS_B64=$(printf '%s' "$CONSUMER_SD" | base64 -w0)
-
-  export NOTICE=$(curl -s -k -x localhost:8888 "$CM/consents/$DID/$PROV_B64/$CONS_B64" \
-    -H "Authorization: Bearer $PROVIDER_JWT" -H "x-user-key: $USER_KEY")
-  echo "$NOTICE" | jq '.[0] | {privacyNoticeId: ._id, data: [.data[].resource], purposes: [.purposes[].purpose]}'
-
-  export PN_ID=$(echo "$NOTICE" | jq -r '.[0]._id')
-  export DATA=$(echo "$NOTICE"  | jq -c '[.[0].data[].resource]')
-```
-
-Now the **subject** authenticates and grants. It presents its `$USER_CREDENTIAL` (issued in the
-prerequisites, held by the `cert/` identity) over **OID4VP exactly as in the
-[local deployment guide](deployment-integration/local-deployment/LOCAL.MD#authenticate-via-oid4vp)** to
-the **authority verifier's `consent-manager` service** and receives an access token whose `sub` is the
-holder DID. `get_access_token_oid4vp.sh` runs that whole flow (fetch the service's OIDC discovery →
-build the signed `vp_token` from `cert/` → exchange it for the access token) - the same script the
-provider demos use, only the base URL differs: the verifier's per-service discovery URL
-`https://verifier.dataspace-authority.org/services/consent-manager`, with the `openid` scope. The
-subject reaches the consent-manager through the authority APISIX's allow-listed **`/consent-user`** routes - a
-subject path with **no** participant authentication and **no** consent-key injection. The participant
-`/consent-manager/*` route would not do: its `openid-connect` would accept the subject's token (it is
-issued by the same verifier), but the consent-manager's participant middleware behind it resolves the
-caller to a *Participant* and would never find the subject - and that route also injects the consent
-key, which a subject must not act with; the consent-manager verifies the token itself. It is the same public ingress + squid
-the participant `$CM` calls use, so no port-forward is needed:
-
-```shell
-  # 1) authenticate the subject with its VC over OID4VP -> access token (sub = holder DID)
-  export SUBJECT_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh \
-    https://verifier.dataspace-authority.org/services/consent-manager $USER_CREDENTIAL openid); echo ${SUBJECT_TOKEN}
-
-  # 2) (proof) the consent-manager verifies the external token and resolves the subject's User;
-  #    listing the subject's own consents returns 200 once 3c has registered both sides.
-  curl -s -k -x localhost:8888 "$CU/consents/me" -H "Authorization: Bearer $SUBJECT_TOKEN" | jq '{totalCount, consents}'
-
-  # 3) the subject grants consent for ITS OWN identity via the user-authenticated endpoint
-  #    (verifyUserJWT -> the mapped User). It supplies the notice id, the `given` event and the notice
-  #    data. The consent is recorded against the notice's data resource; the plugin's owner-level check
-  #    then allows any data owned by this subject. This POST REGISTERS the consent.
-  export CONSENT_ID=$(curl -s -k -x localhost:8888 -X POST $CU/consents/user -H 'Content-Type: application/json' \
-    -H "Authorization: Bearer $SUBJECT_TOKEN" \
-    -d "{\"privacyNoticeId\":\"$PN_ID\",\"event\":\"given\",\"data\":$DATA}" | jq -r .record.recordId); echo "granted, consent id: $CONSENT_ID"
-```
-
-A `201` with a receipt is the grant - given by the subject with its own credential, no facade and no
-`x-user-key` in the path. The consent-filter plugin now sees it: it fetches an OID4VP access token
-from the provider's own consent-facade (`token_service_url` in the `mp-data-service-consent` route conf
-in [`k3s/provider.yaml`](../k3s/provider.yaml)) and derives the provider SD from `/participants/me`, so
-no per-grant wiring is needed. Step 4 then observes access exactly as before.
-
-> :bulb: **Provider-on-behalf alternative — needs a consumer-side identifier.** A participant can
-> record the consent *for* the subject with its own token plus the `x-user-key` (the `USER_KEY` from
-> 3c) - `POST $CM/consents` with `{"privacyNoticeId":…,"event":"given","data":…}` and header
-> `x-user-key: $USER_KEY`. It does **not** work with the provider-only registration of 3c: that
-> endpoint resolves the acting `User` only when a **consumer-side** `UserIdentifier` also exists
-> (`giveConsent` sets `userId` solely inside `if (providerUserIdentifier && consumerUserIdentifier …)`),
-> so without one it fails with `404 {"error":"No Matching user found"}`. To use it, additionally
-> register the subject at the consumer (`POST $CM/users/register` with `$CONSUMER_JWT`). The
-> subject-authenticated grant above needs none of that - it takes the user from the token.
-
-> :warning: **Consistency.** The participants' stored `selfDescriptionURL`s (3a), the agreement's
-> `provider-id`/`consumer-id` (3b), and therefore the projected notice (3e) must be **identical**. 3a
-> find-or-creates *both* backing TM Forum orgs, so re-runs reuse the same SDs and stay consistent by
-> construction. If you do point 3a at a *different* org while the participant already exists, the
-> participant stays pinned to its original SD (`POST /v1/participants` is then a no-op `409`), which
-> mismatches the agreement and fails notice projection. The steps also assume a **single**
-> agreement between the pair; delete stale ones (`DELETE $TMF/agreementManagement/v4/agreement/{id}`) if
-> you re-seed.
-
-**4. The consumer requests again &rarr; access allowed.** With a granted consent in place the plugin now lets the request through, and the identical call succeeds:
-
-```shell
-  export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh https://mp-data-service.127.0.0.1.nip.io $USER_CREDENTIAL default)
-  curl -k -x localhost:8888 -s -w '\nHTTP %{http_code}\n' \
-    -X GET 'https://mp-data-service-consent.127.0.0.1.nip.io/ngsi-ld/v1/entities/urn:ngsi-ld:OperatorProfile:mipa' \
-    -H "Authorization: Bearer ${ACCESS_TOKEN}"
-  # -> the entity + HTTP 200
-```
-
-**Withdraw the consent - again as the subject.** The subject revokes its own consent with its own
-token (the `CONSENT_ID` from 3e is still in scope). Its status flips to `revoked`, so the plugin stops
-allowing and the very next request returns `403` again. Access follows the subject's consent in real
-time:
-
-```shell
-  curl -s -k -x localhost:8888 -X DELETE $CU/consents/$CONSENT_ID -H "Authorization: Bearer $SUBJECT_TOKEN" | jq '.'   # status -> "revoked"
-```
-(A participant can equivalently terminate on the subject's behalf: `POST $CM/consents/$CONSENT_ID/terminate`
-with the provider token + `x-user-key: $USER_KEY`, via squid.) Re-running the grant in 3e issues a fresh
-`granted` consent, so access is allowed again.
-
-> :bulb: To run this whole check unattended, use the [`@consent` integration tests](#integration-tests): they drive the same give-consent API - grant → assert `200`, withdraw → assert the `403` holds - against a deployed data space, and fail the build on any deviation.
-
-## Demo 2: consent on a purchased offering (the full TM Forum lifecycle)
-
-The [first demo](#demo-consent-gated-access-to-personal-data) seeds the provider↔consumer agreement by
-hand, standing in for the contract negotiation. This one does not: the provider **publishes a real
-offering**, the consumer **orders it**, and **contract-management** turns the completed order into the
-agreement the consent-facade projects. It is the flow a marketplace (BAE, or the TM Forum APIs
-directly) actually produces.
-
-**This walkthrough is standalone** - it does not require demo 1. What differs between them:
-
-| | Demo 1 | Demo 2 |
+| Secret | keys | owner |
 |---|---|---|
-| the agreement | written by hand | written by contract-management from a completed product order |
-| the offering | a specification + offering, minimal | catalog, category, price, specification, offering |
-| the purpose | declared on the specification | the same, and now the *only* source (see [Product modelling](#product-modelling-declaring-the-processing-purpose)) |
-| ending the contract | not possible | cancelling the order revokes access even with consent granted |
-| what is exercised | the consent path | the consent path **plus** the contract lifecycle that feeds it |
+| `consent-manager-env` | `DB_USER`, `DB_PASSWORD` (copied from the Zalando secret `consent-manager.postgres.credentials.postgresql.acid.zalan.do`), `LOG_PSEUDONYM_KEY`, `ERASURE_VERIFICATION_SECRET`, and `SMTP_USER` / `SMTP_PASSWORD` when configured | the Job |
+| `consent-manager-signing-keys` | `signing-key.jwk` | the Job when `consentManagement.signingKey.generate`, else you |
 
-> :warning: **Requires a contract-management build that writes the agreement and enriches it.** Two
-> things have to be true of the deployed image, both newer than the released `3.3.9`:
->
-> 1. **The agreement is written outside the Rainbow path.** Creating it used to be a by-product of a
->    DSP contract negotiation, so with `enableRainbow: false` (as in
->    [`k3s/provider.yaml`](../k3s/provider.yaml)) a completed order produced *no agreement at all* -
->    step 5 shows an empty list and nothing downstream can work. It is now written by a TM Forum
->    handler that does not depend on Rainbow.
-> 2. **Consent enrichment is on**, so the `provider-id`, `consumer-id`, `signing-date` and `policy`
->    characteristics land on the agreement. Configured in
->    [`k3s/provider.yaml`](../k3s/provider.yaml) as `CONSENT_ENABLED` and
->    `CONSENT_SELF_DESCRIPTION_BASE_URL` (`consent.enabled` /
->    `consent.self-description-base-url`); the base URL **must equal the consent-facade's `selfUrl`**,
->    because the consent-manager matches participants on that exact string.
->
-> Without (1) step 5 finds no agreement. Without (2) the agreement exists but notice projection finds
-> no contract: step 8 denies with `access denied by consent policy` and the owner-resolver logs
-> `no signed contract between ...`.
+What it does, in order:
 
-> :warning: **If you already ran demo 1, delete its hand-seeded agreement first.** Two signed
-> agreements between the same provider↔consumer pair are not additive: the OwnerResolver takes the
-> **first** contract that permits the requested object (`findContractForTarget`), and each agreement
-> resolves its *own* product specification as the data resource - so the consent granted here can end
-> up checked against demo 1's resource, and the request is denied depending on ordering.
->
-> ```shell
->   curl -s "$TMF/agreementManagement/v4/agreement?limit=50" | jq -r '.[] | "\(.id)\t\(.name)"'
->   curl -s -X DELETE $TMF/agreementManagement/v4/agreement/<demo-1-agreement-id> -o /dev/null -w '%{http_code}\n'
-> ```
+1. `create-db` waits for Postgres and the `consent_manager` role, and creates the `consent_manager`
+   database if it is missing. The Zalando operator creates databases only when it first provisions a
+   cluster, so this is what makes an existing Postgres volume work.
+2. `generate-jwk` (only with `signingKey.generate`) creates a candidate EC P-256 signing key.
+3. `setup` writes `consent-manager-env` and, if it does not exist yet, `consent-manager-signing-keys`.
 
-### 0. Environment
+Rules it keeps:
 
-Deploy the data space with consent management enabled (`mvn clean deploy -Pconsent`, see
-[Enabling](#enabling)) and run everything from the repository root.
+* **Never rotate.** `LOG_PSEUDONYM_KEY` and `ERASURE_VERIFICATION_SECRET` are generated only when
+  absent or empty, and an existing signing-key Secret is kept as it is. Rotating the pseudonym key
+  breaks the linkage of logged pseudonyms; rotating the erasure secret breaks outstanding erasure
+  verifications.
+* **Fail rather than replace.** Any error other than "not found" while reading a Secret exits the
+  container, so the Job retries instead of overwriting live keys. The first write is create-only:
+  of two concurrent Jobs only one sets the keys, the other exits and its retry reads the winner's.
+* **Retries are bounded.** `consentManagement.setup.backoffLimit` (30) container restarts within
+  `activeDeadlineSeconds` (1800, counted from creation, so including the wait for the Zalando secrets
+  on a cold cluster; `null` removes the limit).
+* **No `lookup`, no hook.** It is a plain Job, not a Helm hook: the Zalando secrets only appear after
+  the operator reconciled the `postgresql` CR, a normal release resource. Its name carries the release
+  revision and a hash of its pod spec, so every `helm upgrade` and every changed
+  `helm template | kubectl apply` gets a fresh Job, and an unchanged re-apply is a no-op. Both
+  deployment paths behave the same ([ADR 0007](adr/0007-test-both-deployment-paths.md)).
+
+Until the Job has written `consent-manager-env`, the consent-manager pods sit in
+`CreateContainerConfigError` and then recover on their own. The Job's images are
+`consentManagement.setup.image` (kubectl, jq), `postgresImage` (psql) and `jwkImage` (step);
+`consentManagement.setup.priorityClassName` schedules its pod. The service account may only `get` and
+`patch` the two Secrets (plus `create`, which Kubernetes cannot scope by name).
+
+The pods do not restart when `consent-manager-env` changes: restart them after changing SMTP
+credentials.
+
+### Receipt signing key
+
+* `consentManagement.signingKey.generate: true` (default): the Job creates `signing-key.jwk` once,
+  if `consent-manager-signing-keys` does not exist, and never touches it afterwards.
+* `generate: false`: create the Secret yourself, under `consent-manager.signingKeys.secretName`
+  with the key file `consent-manager.signingKeys.signingKeyFile` (`signing-key.jwk`):
+
+  ```shell
+  kubectl -n trust-anchor create secret generic consent-manager-signing-keys \
+    --from-file=signing-key.jwk=./signing-key.jwk
+  ```
+
+To rotate, replace `signing-key.jwk` and keep the old public keys in the same Secret under
+`retired-verification-keys.jwks` with `consent-manager.signingKeys.retiredVerificationKeys.enabled:
+true`, so earlier receipts still verify against the JWKS.
+
+### SMTP
+
+E-mail notifications are off while `consent-manager.config.smtp.host` is empty. To enable them, set
+host, port and sender under `consent-manager.config.smtp`, and point the Job at a Secret with the
+credentials:
+
+```yaml
+consentManagement:
+  smtp:
+    existingSecret: consent-smtp   # empty sends no credentials
+    userKey: username
+    passwordKey: password
+```
+
+The Job copies them into `consent-manager-env` as `SMTP_USER` / `SMTP_PASSWORD` and drops them again
+when `existingSecret` is unset. `consent-manager.secrets.smtpUser` / `smtpPassword` fail the render:
+the Job owns that Secret.
+
+### NetworkPolicies
+
+With `consentManagement.networkPolicy.enabled` (default; needs a NetworkPolicy-enforcing CNI):
+
+* `consent-manager-ingress` admits the API port (8080) only from the authority APISIX in the namespace,
+  the ingress controller (`networkPolicy.ingressController.namespace` / `podLabels`, default traefik
+  in `infra`), and `networkPolicy.consentManagerClients`. The management port is never admitted.
+* `consent-facade-ingress` admits the facade only from the consent-manager, plus the ingress
+  controller when the facade publishes its self-descriptions.
+
+A provider in another namespace in the same cluster must be listed, else its plugin's calls are
+dropped:
+
+```yaml
+consentManagement:
+  networkPolicy:
+    consentManagerClients:
+      - namespace: provider
+        podLabels:
+          app.kubernetes.io/name: apisix
+```
+
+Providers in other clusters reach the consent-manager through its public host instead.
+
+### GitOps and uninstall
+
+* Under a self-healing GitOps tool (Argo CD), set `consentManagement.setup.ttlSecondsAfterFinished:
+  null`. Otherwise the tool recreates the Job after every TTL cleanup (default 300 s).
+* `helm uninstall` leaves `consent-manager-env` and `consent-manager-signing-keys` in place. They are
+  not release objects, which is what keeps the keys from rotating on a reinstall. Delete them by hand
+  to start from scratch:
+
+  ```shell
+  kubectl -n trust-anchor delete secret consent-manager-env consent-manager-signing-keys
+  ```
+
+### data-space-connector chart (provider side)
+
+The connector chart only wires the provider side; the consent-manager is never deployed by it:
+
+```yaml
+consentManagement:
+  enabled: true          # the provider APISIX consent-plugin wiring
+consent-owner-resolver:
+  enabled: true          # resolves the data owner from the provider's data model
+consent-facade:
+  enabled: true          # provider-local: the plugin's token service, the resolver's contracts
+  oid4vp:
+    enabled: true
+    tokenTargets:
+      - audience: consent-manager
+        url: https://verifier.<authority-domain>
+        clientId: consent-manager
+        scope: [participant]
+        discoveryPath: /services/consent-manager
+```
+
+The facade's credential is the provider's MembershipCredential
+(`consent-facade.oid4vp.credentials`), and the plugin image and its route are set on the provider's
+APISIX (`decentralizedIam.odrlAuthorization.apisix`): see
+[`k3s/consent-provider.yaml`](../k3s/consent-provider.yaml) and the
+`mp-data-service-consent` route in [`k3s/provider.yaml`](../k3s/provider.yaml).
+
+### The k3s `consent` profile
+
+```shell
+mvn clean deploy -Pconsent
+```
+
+The profile deploys the standard local data space plus three overlays:
+
+* [`k3s/consent-trust-anchor-components.yaml`](../k3s/consent-trust-anchor-components.yaml), on
+  `k3s/trust-anchor.yaml` - the consent data plane in the `trust-anchor` release;
+* [`k3s/consent-trust-anchor.yaml`](../k3s/consent-trust-anchor.yaml) - the `consent-authority`
+  release in namespace `trust-anchor`;
+* [`k3s/consent-provider.yaml`](../k3s/consent-provider.yaml), on `k3s/provider.yaml` - the plugin,
+  the owner-resolver and the provider consent-facade.
+
+`kubectl -n trust-anchor get pods` then shows `consent-manager`, `consent-facade`, `postgres-0`, the
+`consent-authority-*` IAM pods and a completed `consent-manager-setup-<revision>-<hash>` Job.
+`mvn clean deploy -Plocal` brings the connector up without consent management.
+
+> :warning: A local bring-up with consent management is resource-hungry; the &ge;24 GB of the
+> [local deployment requirements](deployment-integration/local-deployment/LOCAL.MD#requirements) apply.
+
+### k3s-only verifier reachability
+
+In k3s, `verifier.dataspace-authority.org` resolves to 127.0.0.1 inside pods, and its ingress
+certificate is signed by the cluster CA, which dsc-consent-manager 0.1.0 has no option to mount.
+The scenario therefore sets in `consent-manager.config.extraEnv`:
+
+| variable | why |
+|---|---|
+| `MICRONAUT_HTTP_CLIENT_PROXY_TYPE: HTTP`, `MICRONAUT_HTTP_CLIENT_PROXY_ADDRESS: squid-proxy.infra.svc.cluster.local:8888` | discovery and JWKS fetches go through the squid proxy that routes the public hosts to traefik, as for every other component |
+| `MICRONAUT_HTTP_SERVICES_CONTRACT_SERVICE_PROXY_TYPE: DIRECT` | keeps the contract-service client off the proxy: the consent-facade NetworkPolicy admits consent-manager pods, not squid |
+| `MICRONAUT_HTTP_CLIENT_SSL_INSECURE_TRUST_ALL_CERTIFICATES: "true"` | skips the TLS peer check of the in-cluster hop; tokens are still verified against the fetched JWKS |
+
+A production verifier with a resolvable host and a publicly trusted certificate needs none of them.
+The consent-manager only gets Ready once the identity provider resolves (its readiness probe includes
+it), so a wrong setting here shows up as a pod that never gets Ready.
+
+The self-descriptions are fetched through a separate client without the proxy, so
+`GET /v1/privacy-notices/{id}?resolve=true` (the default) cannot reach
+`consent-facade.dataspace-authority.org` in the local scenario and reports those sections as
+`UNAVAILABLE`. Use `resolve=false` there; `SELF_DESCRIPTION_ALLOWED_HOSTS` stays unset.
+
+k3s enforces NetworkPolicies (kube-router), and a freshly started pod is rejected for its first
+seconds until its IP is synced: retry the first in-cluster call.
+
+## Walkthrough on the local k3s scenario
+
+The steps mirror the [integration test](#integration-tests): a data subject publishes personal data at
+the provider, the consumer is denied until the subject grants consent, and denied again after it
+revokes. Run from the repository root after `mvn clean deploy -Pconsent`; every public host is reached
+through the squid proxy on `localhost:8888`.
+
+**Prerequisites.** Point `KUBECONFIG` at the cluster, create the holder identity in `cert/` and issue the
+credentials, as in the [local deployment guide](deployment-integration/local-deployment/LOCAL.MD#the-data-consumer).
+The `cert/` identity is both the data subject and the consumer's employee:
 
 ```shell
 export KUBECONFIG=$(pwd)/target/k3s.yaml
-```
-
-Generate the data subject's holder identity (a `did:key` plus signing key under `cert/`, read by
-`get_access_token_oid4vp.sh`):
-
-```shell
 mkdir -p cert && chmod o+rw cert
 docker run -v $(pwd)/cert:/cert quay.io/wi_stefan/did-helper:0.1.1
-# unsecure, demo only:
-sudo chmod -R o+rw cert/private-key.pem
+sudo chmod -R o+rw cert/private-key.pem   # demo only
+
+export SUBJECT_DID=$(jq -r '.id' cert/did.json)
+export USER_CREDENTIAL=$(./doc/scripts/get_credential.sh https://keycloak-consumer.127.0.0.1.nip.io user-credential employee)
+export MEMBERSHIP_CREDENTIAL=$(./doc/scripts/get_credential.sh https://keycloak-consumer.127.0.0.1.nip.io membership-credential employee)
+
+export CM=https://consent-manager.dataspace-authority.org/v1
+export TMF=https://tm-forum-api.127.0.0.1.nip.io/tmf-api
+export PROVIDER_DID=did:web:mp-operations.org
+export CONSUMER_DID=did:web:fancy-marketplace.biz
 ```
 
-Issue the credential the consumer and the subject present over OID4VP:
+The provider's token comes from its consent-facade, exactly as the plugin gets it. Its NetworkPolicy
+admits only pods, so reach it through a port-forward (which originates from the node):
 
 ```shell
-export USER_CREDENTIAL=$(./doc/scripts/get_credential.sh https://keycloak-consumer.127.0.0.1.nip.io user-credential employee); echo ${USER_CREDENTIAL}
+kubectl -n provider port-forward svc/consent-facade 18081:8080 &
+provider_token() {
+  curl -s -X POST http://localhost:18081/internal/tokens -H 'Content-Type: application/json' \
+    -d '{"audience":"consent-manager"}' | jq -r .access_token
+}
 ```
 
-Open the port-forwards and set the endpoints. `$SUBJECT_DID` is the holder DID from `cert/` and is
-both the data owner and the consenting identity:
-
-```shell
-  export SUBJECT_DID=$(jq -r '.id' cert/did.json); echo ${SUBJECT_DID}
-  export ENTITY_ID=urn:ngsi-ld:OperatorProfile:mipa
-
-kubectl -n provider     port-forward svc/tm-forum-api-svc 8090:8080
-kubectl -n trust-anchor port-forward svc/consent-authority-apisix-admin 9180:9180   # apisix admin (optional: inspecting routes)
-kubectl -n trust-anchor port-forward svc/consent-manager 3000:3000                  # direct CM: participant onboarding (3a)
-kubectl -n provider     port-forward svc/consent-facade 8081:8080                   # the provider's OID4VP token service (3a)
-
-export CM=https://consent-manager.dataspace-authority.org/consent-manager/v1   # authority APISIX facade (via squid: -k -x localhost:8888)
-export CM_DIRECT=http://localhost:3000/v1            # the consent-manager directly - participant onboarding only (3a)
-export CU=https://consent-manager.dataspace-authority.org/consent-user/v1      # subject routes (allow-listed, no participant auth)
-export TMF=http://localhost:8090/tmf-api
-export TOKENS=http://localhost:8081/internal/tokens  # the provider facade's token service (3a)
-export FACADE=https://consent-facade.dataspace-authority.org   # public id space (== the facade's selfUrl)
-export DID=$SUBJECT_DID
-```
-
-> :bulb: Every `$CM`/`$CU` call goes through the authority's APISIX facade at its ingress host over
-> the squid proxy (`-k -x localhost:8888`); the routes are host-scoped, so a plain `localhost`
-> port-forward to the gateway returns `404 Route Not Found`.
-
-### 1. Allow the read at OPA
-
-Register a policy that permits *read* of `OperatorProfile` entities to any credential holder
-(`vc:any`), carrying **no** consent refinement: OPA authorizes on the credential alone, so the request
-reaches the consent-filter plugin, which is the component that decides on consent. Without this OPA
-denies outright and the plugin never runs.
+**1. Allow the read at OPA.** The policy permits reading `OperatorProfile` entities to any credential
+holder and carries no consent refinement, so the request reaches the plugin, which decides on consent:
 
 ```shell
 curl -k -x localhost:8888 -s -X POST https://pap-provider.127.0.0.1.nip.io/policy \
@@ -1189,319 +804,234 @@ curl -k -x localhost:8888 -s -X POST https://pap-provider.127.0.0.1.nip.io/polic
       }'
 ```
 
-### 2. The subject provides its data to the provider
-
-The entity carries a **`dataOwner`** attribute - the subject's DID. That is what the OwnerResolver
-reads to decide *whose* data it is, so the consent gate is bound to the data owner and not to whoever
-requests it.
+**2. The subject publishes its data.** The entity's `dataOwner` is the subject's DID: the
+owner-resolver reads it, so consent is bound to the owner of the data, not to whoever asks. On a
+re-run Scorpio answers `409 AlreadyExists`, which is expected - the entity already carries the right
+owner:
 
 ```shell
-  curl -k -x localhost:8888 -s -X POST https://scorpio-provider.127.0.0.1.nip.io/ngsi-ld/v1/entities \
-    -H 'Content-Type: application/json' \
-    -d "{
-      \"id\": \"${ENTITY_ID}\",
-      \"type\": \"OperatorProfile\",
-      \"dataOwner\": { \"type\": \"Property\", \"value\": \"${SUBJECT_DID}\" },
-      \"email\": { \"type\": \"Property\", \"value\": \"mipa@example.org\" },
-      \"educationalHistory\": { \"type\": \"Property\", \"value\": \"B.Sc. Industrial Engineering (2018), Certified Kubernetes Administrator (2022)\" }
-    }"
+export ENTITY_ID=urn:ngsi-ld:OperatorProfile:mipa
+curl -k -x localhost:8888 -s -X POST https://scorpio-provider.127.0.0.1.nip.io/ngsi-ld/v1/entities \
+  -H 'Content-Type: application/json' \
+  -d "{ \"id\": \"${ENTITY_ID}\", \"type\": \"OperatorProfile\",
+        \"dataOwner\": { \"type\": \"Property\", \"value\": \"${SUBJECT_DID}\" },
+        \"email\": { \"type\": \"Property\", \"value\": \"mipa@example.org\" } }"
 ```
 
-### 3. Onboard both participants
-
-Nothing pre-registers participants, and contract-management does not onboard them either (see
-[Known limitations](#known-limitations)), so it is done here. `POST /participants` is the
-consent-manager's onboarding entry point and is *unauthenticated*, so it is called **directly**
-(`$CM_DIRECT`) rather than through the participant-authenticated facade. Each participant then obtains
-its own OID4VP access token from its own consent-facade.
-
-The provider participant's `did` **must** be the holder DID its consent-facade presents
-(`did:web:mp-operations.org`), because that is what the consent-manager resolves the plugin's token to.
+**3. The consumer reads it: denied.** The `Accept: application/json` matters: the owner-resolver reads
+`/dataOwner/value`, which only exists in the concise NGSI-LD representation.
 
 ```shell
-# --- 1) backing TM Forum orgs (find-or-create: stable selfDescriptionURLs across re-runs) ---
-export PROV_ORG=$(curl -s "$TMF/party/v4/organization?limit=1000" \
-  | jq -r 'map(select(.name=="Consent Demo Provider"))[0].id // empty')
-[ -n "$PROV_ORG" ] || export PROV_ORG=$(curl -s -X POST $TMF/party/v4/organization -H 'Content-Type: application/json' \
-  -d '{"name":"Consent Demo Provider","tradingName":"Consent Demo Provider","isLegalEntity":true,
-       "organizationType":"company","contactMedium":[{"characteristic":{"country":"DE"}}],
-       "partyCharacteristic":[{"name":"did","value":"did:web:mp-operations.org"}]}' | jq -r .id)
-export CONS_ORG=$(curl -s "$TMF/party/v4/organization?limit=1000" \
-  | jq -r 'map(select(.name=="Consent Demo Consumer"))[0].id // empty')
-[ -n "$CONS_ORG" ] || export CONS_ORG=$(curl -s -X POST $TMF/party/v4/organization -H 'Content-Type: application/json' \
-  -d '{"name":"Consent Demo Consumer","tradingName":"Consent Demo Consumer","isLegalEntity":true,
-       "organizationType":"company","contactMedium":[{"characteristic":{"country":"DE"}}],
-       "partyCharacteristic":[{"name":"did","value":"did:web:fancy-marketplace.biz"}]}' | jq -r .id)
-export PROVIDER_SD=$FACADE/participants/$PROV_ORG
-export CONSUMER_SD=$FACADE/participants/$CONS_ORG
-echo "provider org: $PROV_ORG"; echo "consumer org: $CONS_ORG"
-
-# --- 2) onboard BOTH participants identically (authority action, unauthenticated endpoint) ---
-#     201 = created, 409 = already onboarded (both fine)
-curl -s -w ' %{http_code}\n' -X POST $CM_DIRECT/participants -H 'Content-Type: application/json' \
-  -d "{\"legalName\":\"M&P Operations Inc.\",\"email\":\"provider@mp-operation.org\",
-       \"did\":\"did:web:mp-operations.org\",\"clientID\":\"consent-demo-provider\",
-       \"clientSecret\":\"demo\",\"selfDescriptionURL\":\"$PROVIDER_SD\"}"
-curl -s -w ' %{http_code}\n' -X POST $CM_DIRECT/participants -H 'Content-Type: application/json' \
-  -d "{\"legalName\":\"Fancy Marketplace Co.\",\"email\":\"consumer@fancy-marketplace.biz\",
-       \"did\":\"did:web:fancy-marketplace.biz\",\"clientID\":\"consent-demo-consumer\",
-       \"clientSecret\":\"demo\",\"selfDescriptionURL\":\"$CONSUMER_SD\"}"
-
-# --- 3) each participant obtains an OID4VP access token ----------------------------------
-#     No jwt-auth consumers, no /participants/login, no shared jwtSecret: the gateway
-#     validates an access token issued by the authority verifier, and the consent-manager
-#     resolves its subject to a Participant by `did`. Each participant's own
-#     consent-facade mints the token by presenting that participant's credential - here
-#     asked for exactly as the consent-plugin asks for it.
-export PROVIDER_JWT=$(curl -s -X POST $TOKENS -H 'Content-Type: application/json' \
-  -d '{"audience":"consent-manager"}' | jq -r .access_token)
-echo "provider token: ${PROVIDER_JWT:0:24}..."
-
-# sanity: the SD the consent-manager stored must match the one used above
-curl -s -k -x localhost:8888 $CM/participants/me -H "Authorization: Bearer $PROVIDER_JWT" | jq -r .selfDescriptionURL
-```
-
-### 4. The provider publishes the offering
-
-A catalog entry needs a category, a catalog, a price, a product specification and an offering. Two
-characteristics on the **specification** carry everything consent needs downstream:
-
-* `purpose` - the processing purpose. The provider's declaration; nothing can derive it, and a missing
-  one silently becomes the product's name
-  (see [Product modelling](#product-modelling-declaring-the-processing-purpose)).
-* `authorizationPolicy` - the ODRL, in the **JSON-LD form the ODRL PAP requires**: `odrl:`-prefixed
-  keys and a mandatory `odrl:uid`. contract-management registers it at the PAP *and* copies it onto
-  the agreement as the `policy` characteristic; the consent-facade normalizes the JSON-LD form
-  (`OdrlNormalizer`), so one declaration serves both. The OwnerResolver then matches the requested
-  object against the rule's target, so point `odrl:target` at `$ENTITY_ID` - a target naming an
-  `odrl:AssetCollection` collapses to its `odrl:source` and its refinements are lost, which a
-  plain-URI match will not equate with a concrete object.
-
-  > :warning: An unprefixed policy (`uid`/`permission`) is rejected by the PAP with
-  > `The provided policy does not contain an odrl:uid.`, the notification fails with `400`, and
-  > **no agreement is created at all** - step 5 then shows an empty list.
-
-```shell
-  export CATEGORY_ID=$(curl -s -X POST $TMF/productCatalogManagement/v4/category \
-    -H 'Content-Type: application/json' \
-    -d '{"name":"Personal Data","description":"Personal data products"}' | jq -r .id); echo $CATEGORY_ID
-
-  export CATALOG_ID=$(curl -s -X POST $TMF/productCatalogManagement/v4/catalog \
-    -H 'Content-Type: application/json' \
-    -d "{\"name\":\"Provider Catalog\",\"category\":[{\"id\":\"$CATEGORY_ID\"}]}" | jq -r .id); echo $CATALOG_ID
-
-  export PRICE_ID=$(curl -s -X POST $TMF/productCatalogManagement/v4/productOfferingPrice \
-    -H 'Content-Type: application/json' \
-    -d '{"name":"Flat","priceType":"recurring","price":{"unit":"EUR","value":10}}' | jq -r .id); echo $PRICE_ID
-
-  # the specification: the purpose AND the ODRL the consent is scoped by. The ODRL is the
-  # JSON-LD form the ODRL PAP requires (odrl:-prefixed, odrl:uid mandatory); the
-  # consent-facade normalizes it, so one declaration serves both.
-  export SPEC_ID=$(curl -s -X POST $TMF/productCatalogManagement/v4/productSpecification \
-    -H 'Content-Type: application/json' -d @- <<JSON | jq -r .id
-{
-  "name": "Operator Profile",
-  "description": "The operator's profile",
-  "relatedParty": [ { "id": "$PROV_ORG", "role": "provider" } ],
-  "productSpecCharacteristic": [
-    {
-      "name": "purpose",
-      "valueType": "object",
-      "productSpecCharacteristicValue": [ { "value": {
-        "id": "profile-service-provision",
-        "name": "Operator profile for service provision",
-        "description": "Deliver the requested service.",
-        "purpose": "https://w3id.org/dpv#ServiceProvision" } } ]
-    },
-    {
-      "name": "Access Policy",
-      "valueType": "authorizationPolicy",
-      "productSpecCharacteristicValue": [ { "value": [ {
-        "@context": { "odrl": "http://www.w3.org/ns/odrl/2/" },
-        "@type": "odrl:Policy",
-        "odrl:uid": "https://mp-operation.org/policy/profile",
-        "odrl:permission": {
-          "odrl:assigner": { "@id": "https://www.mp-operation.org/" },
-          "odrl:assignee": { "@id": "vc:any" },
-          "odrl:target": { "@id": "$ENTITY_ID" },
-          "odrl:action": { "@id": "odrl:read" }
-        }
-      } ] } ]
-    }
-  ]
+read_profile() {
+  ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh https://mp-data-service.127.0.0.1.nip.io $USER_CREDENTIAL default)
+  curl -k -x localhost:8888 -s -o /dev/null -w 'HTTP %{http_code}\n' \
+    "https://mp-data-service-consent.127.0.0.1.nip.io/ngsi-ld/v1/entities/${ENTITY_ID}" \
+    -H 'Accept: application/json' -H "Authorization: Bearer ${ACCESS_TOKEN}"
 }
-JSON
-  ); echo $SPEC_ID
-
-  export OFFERING_ID=$(curl -s -X POST $TMF/productCatalogManagement/v4/productOffering \
-    -H 'Content-Type: application/json' \
-    -d "{\"name\":\"Operator Profile Offering\",\"isBundle\":false,\"isSellable\":true,
-         \"lifecycleStatus\":\"Active\",
-         \"productSpecification\":{\"id\":\"$SPEC_ID\"},
-         \"productOfferingPrice\":[{\"id\":\"$PRICE_ID\"}],
-         \"category\":[{\"id\":\"$CATEGORY_ID\"}]}" | jq -r .id); echo $OFFERING_ID
+read_profile   # -> HTTP 403, from the plugin, not from OPA
 ```
 
-> :bulb: The `relatedParty` with role `provider` on the **specification** is how contract-management
-> finds the providing organisation (`general.organization.provider.role`, default `provider`). Without
-> it the agreement is written unenriched and the consent path finds no contract.
-
-### 5. The consumer orders it
-
-Placing the order and completing it is what triggers contract-management's notification listener. The
-consuming organisation is the order's related party - contract-management reads it as the `Customer`
-(`general.productOrder.customerRole`, default `Customer`; a lone party without a role also counts):
+**4. Both participants register.** Each needs a TM Forum organization carrying its DID; the authority
+consent-facade serves its self-description. `org` finds the organization by name, as the IT does, and
+creates it only when it is missing, so a re-run keeps the same self-descriptions. Each participant
+registers with its own token; on a re-run `POST /v1/participants` answers `409`, which is expected
+(`PUT /v1/participants/me` updates an existing registration):
 
 ```shell
-  export ORDER_ID=$(curl -s -X POST $TMF/productOrderingManagement/v4/productOrder \
-    -H 'Content-Type: application/json' \
-    -d "{
-          \"productOrderItem\": [ { \"id\": \"item-1\", \"action\": \"add\",
-                                   \"productOffering\": { \"id\": \"$OFFERING_ID\" } } ],
-          \"relatedParty\": [ { \"id\": \"$CONS_ORG\", \"role\": \"Customer\" } ]
-        }" | jq -r .id); echo $ORDER_ID
+org() {
+  id=$(curl -k -x localhost:8888 -s "$TMF/party/v4/organization?limit=1000" \
+    | jq -r --arg n "$1" 'map(select(.name == $n))[0].id // empty')
+  [ -n "$id" ] && { echo "$id"; return; }
+  curl -k -x localhost:8888 -s -X POST $TMF/party/v4/organization -H 'Content-Type: application/json' \
+    -d "{\"name\":\"$1\",\"tradingName\":\"$1\",\"isLegalEntity\":true,\"organizationType\":\"company\",
+         \"contactMedium\":[{\"characteristic\":{\"country\":\"DE\"}}],
+         \"partyCharacteristic\":[{\"name\":\"did\",\"value\":\"$2\"}]}" | jq -r .id
+}
+export PROVIDER_ORG=$(org "M&P Operations" $PROVIDER_DID)
+export CONSUMER_ORG=$(org "Fancy Marketplace" $CONSUMER_DID)
 
-  # completing the order is the event contract-management acts on
-  curl -s -X PATCH $TMF/productOrderingManagement/v4/productOrder/$ORDER_ID \
-    -H 'Content-Type: application/json' -d '{"state":"completed"}' | jq -r .state
+# the self-descriptions: what the registration records and what the agreement names its parties by
+export PROVIDER_SD=https://consent-facade.dataspace-authority.org/participants/${PROVIDER_ORG}
+export CONSUMER_SD=https://consent-facade.dataspace-authority.org/participants/${CONSUMER_ORG}
+
+export CONSUMER_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh \
+  https://verifier.dataspace-authority.org/services/consent-manager $MEMBERSHIP_CREDENTIAL participant); echo "Consumer Token: ${CONSUMER_TOKEN}"
+
+curl -k -x localhost:8888 -s -X POST $CM/participants -H "Authorization: Bearer $(provider_token)" \
+  -H 'Content-Type: application/json' \
+  -d "{\"legalName\":\"M&P Operations Inc.\",\"email\":\"provider@mp-operation.org\",
+       \"selfDescriptionUri\":\"${PROVIDER_SD}\"}"
+curl -k -x localhost:8888 -s -X POST $CM/participants -H "Authorization: Bearer ${CONSUMER_TOKEN}" \
+  -H 'Content-Type: application/json' \
+  -d "{\"legalName\":\"Fancy Marketplace Co.\",\"email\":\"consumer@fancy-marketplace.biz\",
+       \"selfDescriptionUri\":\"${CONSUMER_SD}\"}"
+
+# the two lookups the plugin makes
+curl -k -x localhost:8888 -s $CM/participants/me -H "Authorization: Bearer $(provider_token)" | jq
+curl -k -x localhost:8888 -s "$CM/participants?identifier=${CONSUMER_DID}" -H "Authorization: Bearer $(provider_token)" | jq
 ```
 
-On completion contract-management creates the trusted-issuers entry, registers the ODRL policy at the
-odrl-pap, and creates the **agreement** - once per order, so a retried notification does not produce a
-second one. Verify it carries what the consent-facade needs:
+**5. The agreement.** In production the marketplace or a DSP negotiation concludes it. Here it is
+seeded directly, with the participants' **self-description URLs** as `provider-id` / `consumer-id` -
+the only form the facade's `/verify` matches, which is the lookup the owner-resolver makes to find
+the governing contract, see
+[How a contract names its parties](#how-a-contract-names-its-parties) - and the purpose on the
+product specification.
+
+On a re-run, first drop the pair's earlier agreements and end the consents granted on their notices.
+The owner-resolver takes the **first** contract that permits the entity, and the plugin's `list`
+check allows on **any** `GRANTED` consent of the owner for this provider/consumer pair - so a
+leftover from an earlier run both shadows the new agreement and keeps step 8 at `200`. Unlike the
+[integration test](#integration-tests), which generates a fresh `did:key` per run, the walkthrough
+reuses the `cert/` subject, so its consents persist. The provider ends them itself with `terminate`,
+as a party to them:
 
 ```shell
-  # the agreement references the order under agreementItem[].product[]
-  export AGREEMENT_ID=$(curl -s "$TMF/agreementManagement/v4/agreement?limit=50" \
-    | jq -r --arg order "$ORDER_ID" '
-        map(select(any(.agreementItem[]?.product[]?; .id == $order))) | .[0].id // empty')
-  echo ${AGREEMENT_ID:-"NO AGREEMENT - see the prerequisites above"}
+curl -k -x localhost:8888 -s "$TMF/agreementManagement/v4/agreement?limit=1000" \
+  | jq -r --arg p "$PROVIDER_SD" --arg d "$PROVIDER_DID" \
+      '.[] | select([.characteristic[]? | select(.name == "provider-id") | .value] | any(. == $p or . == $d)) | .id' \
+  | xargs -r -I{} curl -k -x localhost:8888 -s -o /dev/null -X DELETE $TMF/agreementManagement/v4/agreement/{}
 
-  curl -s "$TMF/agreementManagement/v4/agreement/$AGREEMENT_ID" \
-    | jq '.characteristic | map({(.name): .value}) | add'
-  # -> provider-id / consumer-id (self-description URLs), signing-date, policy
+PT=$(provider_token)
+curl -k -x localhost:8888 -s "$CM/consents?userIdentifier=${SUBJECT_DID}" -H "Authorization: Bearer $PT" \
+  | jq -r '.content[]? | .id' \
+  | xargs -r -I{} curl -k -x localhost:8888 -s -o /dev/null -X POST $CM/consents/{}/terminate \
+      -H "Authorization: Bearer $PT"
 ```
 
-> :bulb: The agreement carries no `status` and no `name` - neither is needed. The consent-facade reads
-> a `signing-date` as "concluded by all parties" whatever the status says, which is also why
-> cancelling the order (step 9) has to *remove* that characteristic rather than only restate the
-> status.
-
-In a real deployment the consumer orders through the OID4VP-protected ingress with its own credential
-(`Authorization: Bearer $(./doc/scripts/get_access_token_oid4vp.sh https://mp-data-service.127.0.0.1.nip.io $USER_CREDENTIAL default)`
-against `https://tm-forum-api.127.0.0.1.nip.io`, as in [DSP integration](DSP_INTEGRATION.md)). The
-port-forwarded `$TMF` keeps this walkthrough about consent rather than about role credentials.
-
-### 6. Register the subject and give it a PDI account
-
-A `UserIdentifier` binds the holder DID to a participant. It is registered **only at the provider** -
-the party that actually holds the subject's data. The subject then needs a **PDI `User`** account,
-because the grant in step 7 resolves its OID4VP token to a `User`, so it signs itself up and the
-provider-side identifier is **attached** to that account:
+Then seed the agreement:
 
 ```shell
-# 1) the provider registers its data subject (idempotent - a repeat registration is a no-op)
-curl -s -k -x localhost:8888 -o /dev/null -X POST $CM/users/register -H 'Content-Type: application/json' \
-  -H "Authorization: Bearer $PROVIDER_JWT" -d "{\"email\":\"$DID\",\"identifier\":\"$DID\"}"
-export USER_KEY=$(curl -s -k -x localhost:8888 -X POST $CM/users/identifier/search -H 'Content-Type: application/json' \
-  -H "Authorization: Bearer $PROVIDER_JWT" \
-  -d "{\"selfDescription\":\"$PROVIDER_SD\",\"email\":\"$DID\"}" | jq -r .userIdentifier); echo $USER_KEY
-
-# 2) the SUBJECT creates its own PDI account. /users/signup needs no auth, and the subject route
-#    /consent-user/v1/users/signup is allow-listed with no participant auth, so the subject can do this itself.
-#    The account e-mail is the holder DID - the same value the UserIdentifier carries (see the note
-#    below); the consent-manager keys its identity lookups on that field.
-export SUBJECT_USER_ID=$(curl -s -k -x localhost:8888 -X POST $CU/users/signup -H 'Content-Type: application/json' \
-  -d "{\"firstName\":\"Mipa\",\"lastName\":\"Operator\",\"email\":\"$DID\",\"password\":\"demo-password\"}" \
-  | jq -r '.user._id'); echo $SUBJECT_USER_ID
-
-# 3) attach the provider-side identifier to that account (authority action - needs the consent key,
-#    which the facade injects). This is what makes the subject's OID4VP token resolve to its User.
-curl -s -k -x localhost:8888 -o /dev/null -w 'attach -> HTTP %{http_code}\n' -X POST $CM/users/identifier \
-  -H 'Content-Type: application/json' -H "Authorization: Bearer $PROVIDER_JWT" \
-  -d "{\"userId\":\"$SUBJECT_USER_ID\",\"userIdentifiers\":[\"$USER_KEY\"]}"
+export SPEC_ID=$(curl -k -x localhost:8888 -s -X POST $TMF/productCatalogManagement/v4/productSpecification \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"Operator Profile","productSpecCharacteristic":[{"name":"purpose","valueType":"object",
+       "productSpecCharacteristicValue":[{"value":{"id":"profile-service-provision",
+       "name":"Operator profile for service provision","description":"Deliver the requested service.",
+       "purpose":"https://w3id.org/dpv#ServiceProvision"}}]}]}' | jq -r .id); echo "Spec ID: ${SPEC_ID}"
+export OFFERING_ID=$(curl -k -x localhost:8888 -s -X POST $TMF/productCatalogManagement/v4/productOffering \
+  -H 'Content-Type: application/json' \
+  -d "{\"name\":\"Operator Profile Offering\",\"productSpecification\":{\"id\":\"${SPEC_ID}\"}}" | jq -r .id); echo "Offering ID: ${OFFERING_ID}"
+export AGREEMENT_ID=$(curl -k -x localhost:8888 -s -X POST $TMF/agreementManagement/v4/agreement \
+  -H 'Content-Type: application/json' \
+  -d "{\"name\":\"Profile sharing\",\"status\":\"approved\",
+       \"agreementItem\":[{\"productOffering\":[{\"id\":\"${OFFERING_ID}\"}]}],
+       \"engagedParty\":[{\"id\":\"${PROVIDER_ORG}\",\"role\":\"Provider\"},{\"id\":\"${CONSUMER_ORG}\",\"role\":\"Consumer\"}],
+       \"characteristic\":[
+         {\"name\":\"policy\",\"value\":{\"@type\":\"Set\",\"uid\":\"urn:policy:mipa\",
+           \"permission\":[{\"target\":\"${ENTITY_ID}\",\"action\":\"use\"}]}},
+         {\"name\":\"provider-id\",\"value\":\"${PROVIDER_SD}\"},
+         {\"name\":\"consumer-id\",\"value\":\"${CONSUMER_SD}\"},
+         {\"name\":\"signing-date\",\"value\":$(date +%s)}]}" | jq -r .id); echo "Agreement ID: ${AGREEMENT_ID}"
 ```
 
-Confirm the resolution the consent-filter plugin performs on every request:
+**6. The subject registers, the provider links it, the provider generates the notice.** Notice
+generation reads the agreement through the consent-facade; retry while it is not visible yet:
 
 ```shell
-curl -s -k -x localhost:8888 -X POST $CM/users/identifier/search -H 'Content-Type: application/json' \
-  -H "Authorization: Bearer $PROVIDER_JWT" \
-  -d "{\"selfDescription\":\"$PROVIDER_SD\",\"email\":\"$DID\"}" | jq '{userIdentifier, userIdentifierExists, userExists}'
-```
-
-`userIdentifierExists: true` with a non-empty `userIdentifier` is what the plugin needs;
-`userExists: true` confirms the attached PDI account.
-
-### 7. The subject gives consent
-
-First fetch the privacy notice the facade projected from the agreement created in step 5. It must have
-non-empty `data` **and** `purposes` - and the purpose must be the one declared in step 4 rather than
-the product's name:
-
-```shell
-export PROV_B64=$(printf '%s' "$PROVIDER_SD" | base64 -w0)
-export CONS_B64=$(printf '%s' "$CONSUMER_SD" | base64 -w0)
-
-export NOTICE=$(curl -s -k -x localhost:8888 "$CM/consents/$DID/$PROV_B64/$CONS_B64" \
-  -H "Authorization: Bearer $PROVIDER_JWT" -H "x-user-key: $USER_KEY")
-echo "$NOTICE" | jq '.[0] | {privacyNoticeId: ._id, data: [.data[].resource], purposes: [.purposes[].purpose]}'
-
-export PN_ID=$(echo "$NOTICE" | jq -r '.[0]._id')
-export DATA=$(echo "$NOTICE"  | jq -c '[.[0].data[].resource]')
-  # -> purposes: ["Operator profile for service provision"]   (not "Operator Profile")
-```
-
-Now the **subject** authenticates with its own credential over OID4VP and grants for its own identity.
-It reaches the consent-manager through the authority APISIX's allow-listed `/consent-user` routes - no
-participant auth, no consent key, no `x-user-key`:
-
-```shell
-# 1) authenticate the subject with its VC over OID4VP -> access token (sub = holder DID)
 export SUBJECT_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh \
-  https://verifier.dataspace-authority.org/services/consent-manager $USER_CREDENTIAL openid); echo ${SUBJECT_TOKEN}
+  https://verifier.dataspace-authority.org/services/consent-manager $USER_CREDENTIAL openid); echo "Subject Token: ${SUBJECT_TOKEN}"
+curl -k -x localhost:8888 -s -X POST $CM/users/register -H "Authorization: Bearer ${SUBJECT_TOKEN}"
+curl -k -x localhost:8888 -s -X POST $CM/participants/me/users -H "Authorization: Bearer $(provider_token)" \
+  -H 'Content-Type: application/json' -d "{\"identifier\":\"${SUBJECT_DID}\"}"
 
-# 2) (proof) the consent-manager verifies the external token and resolves the subject's User;
-#    listing the subject's own consents returns 200 once 3c has registered both sides.
-curl -s -k -x localhost:8888 "$CU/consents/me" -H "Authorization: Bearer $SUBJECT_TOKEN" | jq '{totalCount, consents}'
-
-# 3) the subject grants consent for ITS OWN identity via the user-authenticated endpoint
-#    (verifyUserJWT -> the mapped User). It supplies the notice id, the `given` event and the notice
-#    data. The consent is recorded against the notice's data resource; the plugin's owner-level check
-#    then allows any data owned by this subject. This POST REGISTERS the consent.
-export CONSENT_ID=$(curl -s -k -x localhost:8888 -X POST $CU/consents/user -H 'Content-Type: application/json' \
-  -H "Authorization: Bearer $SUBJECT_TOKEN" \
-  -d "{\"privacyNoticeId\":\"$PN_ID\",\"event\":\"given\",\"data\":$DATA}" | jq -r .record.recordId); echo "granted, consent id: $CONSENT_ID"
+export NOTICE_ID=$(curl -k -x localhost:8888 -s -X POST $CM/privacy-notices/by-contract \
+  -H "Authorization: Bearer $(provider_token)" -H 'Content-Type: application/json' \
+  -d "{\"contractUri\":\"http://consent-facade.trust-anchor.svc.cluster.local:8080/bilaterals/default~${AGREEMENT_ID}\"}" \
+  | jq -r .id); echo "Notice ID: ${NOTICE_ID}"
+curl -k -x localhost:8888 -s "$CM/privacy-notices/${NOTICE_ID}?resolve=false" \
+  -H "Authorization: Bearer ${SUBJECT_TOKEN}" | jq '{purposes, data}'
 ```
 
-A `201` with a receipt is the grant.
-
-### 8. The consumer accesses the data
-
-Denied before the grant, allowed after it - the identical request:
+Unresolved, both are catalog URIs of the authority consent-facade. The purpose declared on the
+product specification is the `name` / `description` of the **software** resource the offering lists,
+which `resolve=true` would inline but
+[cannot reach locally](#k3s-only-verifier-reachability). To check it in the k3s scenario, read the
+catalog directly:
 
 ```shell
-  export ACCESS_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh https://mp-data-service.127.0.0.1.nip.io $USER_CREDENTIAL default)
-  curl -k -x localhost:8888 -s -w '\nHTTP %{http_code}\n' \
-    -X GET "https://mp-data-service-consent.127.0.0.1.nip.io/ngsi-ld/v1/entities/$ENTITY_ID" \
-    -H "Authorization: Bearer ${ACCESS_TOKEN}"
-  # -> the entity + HTTP 200
+curl -k -x localhost:8888 -s \
+  "https://consent-facade.dataspace-authority.org/catalog/softwareresources/default~${SPEC_ID}" \
+  | jq '{name, description}'   # -> "Operator profile for service provision"
 ```
 
-### 9. Ending it - two independent levers
-
-The subject can **withdraw consent**, exactly as in demo 1:
+**7. The subject grants consent; the read succeeds.**
 
 ```shell
-curl -s -k -x localhost:8888 -X DELETE $CU/consents/$CONSENT_ID -H "Authorization: Bearer $SUBJECT_TOKEN" | jq '.'   # status -> "revoked"
+export CONSENT_ID=$(curl -k -x localhost:8888 -s -X POST $CM/consents \
+  -H "Authorization: Bearer ${SUBJECT_TOKEN}" -H 'Content-Type: application/json' \
+  -d "{\"privacyNoticeId\":\"${NOTICE_ID}\",\"decision\":\"GRANTED\"}" | tee /dev/stderr | jq -r .id); echo "Consent ID: ${CONSENT_ID}"
+# status GRANTED, provider = did:web:mp-operations.org, consumer = did:web:fancy-marketplace.biz
+
+curl -k -x localhost:8888 -s "$CM/consents/check?userIdentifier=${SUBJECT_DID}&privacyNoticeId=${NOTICE_ID}" \
+  -H "Authorization: Bearer $(provider_token)"     # {"valid":true,...}
+read_profile   # -> HTTP 200
+
+# the signed receipt, verifiable against the public JWKS
+curl -k -x localhost:8888 -s "$CM/consents/me/${CONSENT_ID}?format=receipt" -H "Authorization: Bearer ${SUBJECT_TOKEN}" | jq .jws
+curl -k -x localhost:8888 -s https://consent-manager.dataspace-authority.org/.well-known/jwks.json | jq
 ```
 
-Or the **order can be stopped**, which this demo can do and demo 1 cannot. contract-management drops
-the agreement's `signing-date` and sets its status to `cancelled`, so the facade stops reporting a
-signed contract and the next request is denied *even though the consent record is still* `granted` -
-consent alone is not authority to access:
+**8. The subject revokes; the read is denied again.**
 
 ```shell
-  curl -s -X PATCH $TMF/productOrderingManagement/v4/productOrder/$ORDER_ID \
-    -H 'Content-Type: application/json' -d '{"state":"cancelled"}' | jq -r .state
+curl -k -x localhost:8888 -s -X POST $CM/consents/${CONSENT_ID}/revoke -H "Authorization: Bearer ${SUBJECT_TOKEN}"
+read_profile   # -> HTTP 403
 ```
+
+Tokens are short-lived: fetch `SUBJECT_TOKEN` and `CONSUMER_TOKEN` again when a call answers `401`.
+Access can also end without the subject: the provider deleting the OPA policy denies at OPA, a party
+calling `terminate` ends the consent.
+
+## Integration tests
+
+The feature [`it/src/test/resources/it/consent_management.feature`](../it/src/test/resources/it/consent_management.feature)
+(tag `@consent`, implemented by `ConsentStepDefinitions`) runs the walkthrough above through the real
+`/v1` API, with nothing written into the database, in three scenarios: denied without consent,
+allowed after the grant, denied again after the revocation.
+
+```shell
+mvn clean integration-test -Ptest,consent,consent-test
+```
+
+`test` brings the cluster up, `consent` selects the consent values files, `consent-test` filters to
+`@consent`. Against an already-deployed data space run `mvn verify -pl it -Pconsent,consent-test`. To
+test the `helm install` path instead of the rendered-and-applied one, add `helm-install`
+([ADR 0007](adr/0007-test-both-deployment-paths.md)).
+
+Each run uses a fresh data subject: the test wallet generates a new `did:key`, which becomes the
+entity's `dataOwner`. The TM Forum organizations are find-or-created by name, so the participants'
+self-descriptions stay stable across runs; a registration left by an earlier run (`409`) is updated
+with `PUT /v1/participants/me`. The provider consent-facade's token service is reached through a
+port-forward, everything else through the ingress hosts via squid.
+
+> :warning: `integration-test` leaves the k3s container running for inspection
+> (`export KUBECONFIG=$(pwd)/it/target/k3s.yaml`). Remove it (`docker rm -f k3s-maven-plugin`) to start
+> from a clean cluster.
+
+## Migrating from the Prometheus-X consent-manager
+
+Trust-anchor chart **2.0.0** replaces the Prometheus-X consent-manager (Node, MongoDB, the shared
+consent key `x-visionstrust-consent-key` and the authority APISIX facade routes that injected it) with
+dsc-consent-manager. The data-space-connector chart (10.16.0) only changed docs and comments.
+
+* **No data migration.** Nothing is carried over from MongoDB. Participants and data subjects
+  register again, and consents must be re-granted under the new service.
+* **Removed values fail the render**, each with a pointer to this section: `managedMongo`,
+  `consentManagement.mongo`, `consent-manager.mongo`, `consent-manager.secret.consentKey`,
+  `consent-manager.externalIdp` (use `identityProviders.primary`), `consent-manager.appEndpoint` (use
+  `config.consentManagerUrl`), `consent-manager.contractService` (use `config.contractServiceUrl`),
+  and `consent-manager.secrets.smtpUser` / `smtpPassword` (use `consentManagement.smtp.existingSecret`).
+* **Postgres.** On an existing `managedPostgres` volume the operator adds the `consent_manager` user
+  but not the database; the setup Job creates it. The database and user are fixed to
+  `consent_manager` on the chart's managed Postgres; an external PostgreSQL is not supported in 2.0.0.
+* **Authority gateway.** Remove the facade routes, the `CONSENT_KEY` environment variable and the
+  `consent-manager` secret reference from the authority APISIX. The gateway only publishes `/v1/*` and
+  `/.well-known/jwks.json` to `consent-manager:8080` (the old service listened on 3000).
+* **Verifier.** Map the credentials to the claim contract in
+  [Claim and role contract](#claim-and-role-contract) and point
+  `consent-manager.identityProviders.primary` at the verifier.
+* **Provider.** Upgrade the plugin image to `quay.io/seamware/consent-plugin:1.0.0` together with the
+  route config: set `consent_api_url` to the consent-manager service, `consent_api_prefix: /v1` and
+  `check_mode`, drop `consent_api_host` and `consent_key`. Plugin versions before 1.0.0 only speak the
+  old API, and 1.0.0 only the new one.
+* **Cross-namespace providers.** List them in `consentManagement.networkPolicy.consentManagerClients`.

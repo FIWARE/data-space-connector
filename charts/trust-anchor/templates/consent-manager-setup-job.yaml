@@ -1,0 +1,280 @@
+{{- $manager := (index .Values "consent-manager") | default dict }}
+{{- if $manager.enabled }}
+{{- if not .Values.managedPostgres.enabled }}
+{{- fail "consent-manager.enabled requires managedPostgres.enabled: the setup Job reads the database credentials from the Zalando operator's secrets, an external PostgreSQL is not supported" }}
+{{- end }}
+{{- /*
+  Provisions what the consent-manager needs before it can start: its database in managedPostgres
+  and the Secrets `consent-manager-env` and `consent-manager-signing-keys`. It is the only writer of
+  both Secrets. Neither can be a Helm-templated object: the subchart has no env valueFrom hook for
+  the DB credentials, and `lookup` is empty under `helm template`, so templated keys would rotate on
+  every render.
+
+  A plain Job, not a hook: the Zalando secrets only appear once the operator has reconciled the
+  `postgresql` CR, a normal release resource, so a pre-install hook would wait forever. Until the
+  Job has written `consent-manager-env` the consent-manager pods sit in CreateContainerConfigError
+  and then recover on their own.
+
+  The name carries the release revision and a hash of the pod spec. A Job's pod template is
+  immutable: the revision gives every `helm upgrade` a new Job, the hash does the same on the
+  `helm template | kubectl apply` path, where the revision is always 1. An unchanged spec re-applies
+  the same Job, a no-op while it exists and an idempotent rerun once the TTL removed it.
+
+  Database, user and cluster names are fixed: postgres.yaml renders managedPostgres.config verbatim,
+  the Zalando secret name derives from the user, and consent-manager.config.database.url is a
+  subchart value this chart cannot template. A configurable name would need three places in sync.
+*/}}
+{{- $cluster := "postgres" }}
+{{- $database := "consent_manager" }}
+{{- $userSecret := printf "%s.%s.credentials.postgresql.acid.zalan.do" ($database | replace "_" "-") $cluster }}
+{{- $superuserSecret := printf "postgres.%s.credentials.postgresql.acid.zalan.do" $cluster }}
+{{- $envSecret := ($manager.secrets | default dict).existingSecret | default "consent-manager-env" }}
+{{- $keys := $manager.signingKeys | default dict }}
+{{- $keysSecret := $keys.secretName | default "consent-manager-signing-keys" }}
+{{- $keyFile := $keys.signingKeyFile | default "signing-key.jwk" }}
+{{- $setup := .Values.consentManagement.setup }}
+{{- $smtp := .Values.consentManagement.smtp }}
+{{- $generateKey := .Values.consentManagement.signingKey.generate }}
+{{- $name := "consent-manager-setup" }}
+{{- $podSpec := include "trust-anchor.consentManagerSetup.podTemplate" (dict
+      "root" . "name" $name "cluster" $cluster "database" $database "userSecret" $userSecret
+      "superuserSecret" $superuserSecret "envSecret" $envSecret "keysSecret" $keysSecret
+      "keyFile" $keyFile "setup" $setup "smtp" $smtp "generateKey" $generateKey) }}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ $name }}
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    {{- include "trust-anchor.labels" . | nindent 4 }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ $name }}
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    {{- include "trust-anchor.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    resourceNames: [{{ $envSecret | quote }}, {{ $keysSecret | quote }}]
+    verbs: ["get", "patch"]
+  {{- /* Kubernetes cannot scope `create` by name. */}}
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["create"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ $name }}
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    {{- include "trust-anchor.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ $name }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ $name }}
+    namespace: {{ .Release.Namespace | quote }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ printf "%s-%d-%s" $name (int .Release.Revision) ($podSpec | sha256sum | trunc 8) }}
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    {{- include "trust-anchor.labels" . | nindent 4 }}
+    app.kubernetes.io/component: {{ $name }}
+spec:
+  backoffLimit: {{ $setup.backoffLimit }}
+  {{- with $setup.activeDeadlineSeconds }}
+  activeDeadlineSeconds: {{ . }}
+  {{- end }}
+  {{- with $setup.ttlSecondsAfterFinished }}
+  ttlSecondsAfterFinished: {{ . }}
+  {{- end }}
+  template:
+{{- $podSpec }}
+{{- end }}
+
+{{- define "trust-anchor.consentManagerSetup.podTemplate" }}
+{{- $root := .root }}
+{{- $containerSecurityContext := dict "allowPrivilegeEscalation" false "readOnlyRootFilesystem" true "capabilities" (dict "drop" (list "ALL")) }}
+    metadata:
+      labels:
+        app.kubernetes.io/instance: {{ $root.Release.Name }}
+        app.kubernetes.io/component: {{ .name }}
+    spec:
+      restartPolicy: OnFailure
+      serviceAccountName: {{ .name }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      volumes:
+        - name: work
+          emptyDir: {}
+      initContainers:
+        - name: create-db
+          image: {{ .setup.postgresImage }}
+          securityContext:
+            {{- toYaml $containerSecurityContext | nindent 12 }}
+          env:
+            - name: PGHOST
+              value: {{ .cluster }}
+            - name: PGDATABASE
+              value: postgres
+            - name: PGUSER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .superuserSecret }}
+                  key: username
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .superuserSecret }}
+                  key: password
+          command: ["/bin/sh", "-ec"]
+          args:
+            - |
+              until pg_isready; do echo "waiting for postgres..."; sleep 3; done
+              until psql -tAc "SELECT 1 FROM pg_roles WHERE rolname='{{ .database }}'" | grep -q 1; do
+                echo "waiting for the {{ .database }} role..."; sleep 3
+              done
+              if psql -tAc "SELECT 1 FROM pg_database WHERE datname='{{ .database }}'" | grep -q 1; then
+                echo "{{ .database }} already exists"
+              else
+                psql -v ON_ERROR_STOP=1 -c "CREATE DATABASE {{ .database }} OWNER {{ .database }}"
+                echo "created {{ .database }}"
+              fi
+          volumeMounts:
+            - name: work
+              mountPath: /work
+        {{- if .generateKey }}
+        {{- /* A fresh candidate on every run; the setup container only uses it when no key exists. */}}
+        - name: generate-jwk
+          image: {{ .setup.jwkImage }}
+          securityContext:
+            {{- toYaml $containerSecurityContext | nindent 12 }}
+          env:
+            - name: HOME
+              value: /work
+          command: ["step", "crypto", "jwk", "create", "/work/pub.json", "/work/signing-key.jwk",
+                    "--kty", "EC", "--crv", "P-256", "--use", "sig", "--no-password", "--insecure", "--force"]
+          volumeMounts:
+            - name: work
+              mountPath: /work
+        {{- end }}
+      containers:
+        - name: setup
+          image: {{ .setup.image }}
+          securityContext:
+            {{- toYaml $containerSecurityContext | nindent 12 }}
+          env:
+            {{- /* without a writable home kubectl prints cache warnings into the stderr the script parses */}}
+            - name: HOME
+              value: /work
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .userSecret }}
+                  key: username
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .userSecret }}
+                  key: password
+            {{- with .smtp.existingSecret }}
+            - name: SMTP_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ . }}
+                  key: {{ $.smtp.userKey }}
+            - name: SMTP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ . }}
+                  key: {{ $.smtp.passwordKey }}
+            {{- end }}
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -eu
+              # fetch_secret NAME FILE: writes the Secret as JSON to FILE. Returns 1 only when it does
+              # not exist; any other error exits, so the Job retries instead of replacing live keys.
+              fetch_secret() {
+                if kubectl get secret "$1" -o json >"$2" 2>/work/err; then
+                  return 0
+                fi
+                if grep -q NotFound /work/err; then
+                  return 1
+                fi
+                cat /work/err >&2
+                exit 1
+              }
+
+              mkdir -p /work/env
+              envExists=true
+              if ! fetch_secret {{ .envSecret }} /work/env.json; then
+                envExists=false
+                echo '{}' >/work/env.json
+              fi
+              # existing keys never rotate; only an absent or empty one is generated
+              for key in LOG_PSEUDONYM_KEY ERASURE_VERIFICATION_SECRET; do
+                jq -j --arg k "$key" '.data[$k] // "" | @base64d' /work/env.json >"/work/env/$key"
+                if [ ! -s "/work/env/$key" ]; then
+                  echo "generating $key"
+                  printf '%s' "$(head -c 32 /dev/urandom | base64)" >"/work/env/$key"
+                fi
+              done
+              printf '%s' "$DB_USER" >/work/env/DB_USER
+              printf '%s' "$DB_PASSWORD" >/work/env/DB_PASSWORD
+              # the first write is create-only, so of two concurrent Jobs only one sets the keys; the
+              # loser exits and its retry reads the winner's keys. SMTP is left to the apply below:
+              # a key kubectl-create also owns would survive its removal from the apply.
+              if [ "$envExists" = false ]; then
+                if kubectl create secret generic {{ .envSecret }} --from-file=/work/env 2>/work/err; then
+                  echo "created {{ .envSecret }}"
+                elif grep -q AlreadyExists /work/err; then
+                  echo "{{ .envSecret }} was created concurrently, retrying with its keys" >&2
+                  exit 1
+                else
+                  cat /work/err >&2
+                  exit 1
+                fi
+              fi
+              {{- if .smtp.existingSecret }}
+              printf '%s' "$SMTP_USER" >/work/env/SMTP_USER
+              printf '%s' "$SMTP_PASSWORD" >/work/env/SMTP_PASSWORD
+              {{- end }}
+              # server-side apply keeps the data out of last-applied-configuration and drops keys
+              # this field manager wrote before but no longer writes (SMTP)
+              kubectl create secret generic {{ .envSecret }} --from-file=/work/env --dry-run=client -o yaml \
+                | kubectl apply --server-side --field-manager=consent-manager-setup --force-conflicts -f -
+              {{- if .generateKey }}
+
+              if fetch_secret {{ .keysSecret }} /work/keys.json; then
+                echo "{{ .keysSecret }} exists, keeping it"
+              elif kubectl create secret generic {{ .keysSecret }} --from-file={{ .keyFile }}=/work/signing-key.jwk 2>/work/err; then
+                echo "created {{ .keysSecret }}"
+              elif grep -q AlreadyExists /work/err; then
+                echo "{{ .keysSecret }} was created concurrently, keeping it"
+              else
+                cat /work/err >&2
+                exit 1
+              fi
+              {{- end }}
+          volumeMounts:
+            - name: work
+              mountPath: /work
+      {{- with .setup.priorityClassName }}
+      priorityClassName: {{ . }}
+      {{- end }}
+{{- end }}
