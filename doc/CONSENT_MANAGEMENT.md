@@ -245,14 +245,15 @@ The endpoint is specified in
 * **The issuer of a `jwt_vc_json` credential is not cross-checked.** VCVerifier 6.27.0 does not compare
   `vc.issuer` with the signed `iss`, so a hand-crafted credential can still name another DID as its
   issuer until upstream rejects the mismatch (it already does on the `vc+jwt` path).
-* **Contract parties are DIDs, purchase-created contracts are not.** The consent-manager resolves the
-  provider and consumer of a contract by participant identifier (the DID). The consent-facade passes
-  the agreement's `provider-id` / `consumer-id` characteristics through unchanged, and
-  contract-management writes self-description URLs there. So privacy-notice generation fails for an
-  agreement created by a marketplace purchase ("No active participant is registered under '<url>'").
-  Agreements that name the participant DIDs, as in the [walkthrough](#walkthrough-on-the-local-k3s-scenario),
-  work. The fix is upstream (contract-management or the consent-facade emitting the DID, or the
-  consent-manager resolving parties by `selfDescriptionUri`) and still open.
+* **An agreement that names its parties by DID gates nothing, silently.** Since 0.0.3 the
+  consent-manager resolves a contract party under either name, but the consent-facade's `/verify` -
+  the lookup the owner-resolver makes to find the governing contract - matches only the
+  participants' self-description URLs. An agreement whose `provider-id` / `consumer-id` carry the
+  DIDs therefore generates a privacy notice and accepts a consent, while every gated read stays
+  denied: the owner-resolver answers `422` ("contract matcher"), the plugin `403`. Write the
+  self-description URLs, as `contract-management` and the
+  [walkthrough](#walkthrough-on-the-local-k3s-scenario) do; see
+  [How a contract names its parties](#how-a-contract-names-its-parties).
 * **`multiple: false` is not enforced.** The DCQL queries ask for one credential, but VCVerifier 6.27.0
   accepts a presentation with several matching ones and takes `participant_id` and `roles` from the
   last. A wallet holding two matching credentials decides which identity the token carries.
@@ -312,9 +313,10 @@ base plus the bilateral contract the facade projects from a TM Forum agreement:
 http://consent-facade.trust-anchor.svc.cluster.local:8080/bilaterals/default~<agreement-id>
 ```
 
-The agreement's `provider-id` and `consumer-id` characteristics must hold the participant DIDs (see
-[Known limitations](#known-limitations)). The notice's purposes come from the product specification,
-its data resources from the catalog.
+The agreement's `provider-id` and `consumer-id` characteristics must hold the participants'
+self-description URLs (see
+[How a contract names its parties](#how-a-contract-names-its-parties)). The notice's purposes come
+from the product specification, its data resources from the catalog.
 
 `GET /v1/privacy-notices/{id}` resolves by default (`resolve=true`). Resolution never fails the request:
 whatever could not be read is marked `UNAVAILABLE`. `resolve=false` makes no external request.
@@ -803,7 +805,9 @@ curl -k -x localhost:8888 -s -X POST https://pap-provider.127.0.0.1.nip.io/polic
 ```
 
 **2. The subject publishes its data.** The entity's `dataOwner` is the subject's DID: the
-owner-resolver reads it, so consent is bound to the owner of the data, not to whoever asks:
+owner-resolver reads it, so consent is bound to the owner of the data, not to whoever asks. On a
+re-run Scorpio answers `409 AlreadyExists`, which is expected - the entity already carries the right
+owner:
 
 ```shell
 export ENTITY_ID=urn:ngsi-ld:OperatorProfile:mipa
@@ -846,26 +850,56 @@ org() {
 export PROVIDER_ORG=$(org "M&P Operations" $PROVIDER_DID)
 export CONSUMER_ORG=$(org "Fancy Marketplace" $CONSUMER_DID)
 
+# the self-descriptions: what the registration records and what the agreement names its parties by
+export PROVIDER_SD=https://consent-facade.dataspace-authority.org/participants/${PROVIDER_ORG}
+export CONSUMER_SD=https://consent-facade.dataspace-authority.org/participants/${CONSUMER_ORG}
+
 export CONSUMER_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh \
-  https://verifier.dataspace-authority.org/services/consent-manager $MEMBERSHIP_CREDENTIAL participant)
+  https://verifier.dataspace-authority.org/services/consent-manager $MEMBERSHIP_CREDENTIAL participant); echo "Consumer Token: ${CONSUMER_TOKEN}"
 
 curl -k -x localhost:8888 -s -X POST $CM/participants -H "Authorization: Bearer $(provider_token)" \
   -H 'Content-Type: application/json' \
   -d "{\"legalName\":\"M&P Operations Inc.\",\"email\":\"provider@mp-operation.org\",
-       \"selfDescriptionUri\":\"https://consent-facade.dataspace-authority.org/participants/${PROVIDER_ORG}\"}"
+       \"selfDescriptionUri\":\"${PROVIDER_SD}\"}"
 curl -k -x localhost:8888 -s -X POST $CM/participants -H "Authorization: Bearer ${CONSUMER_TOKEN}" \
   -H 'Content-Type: application/json' \
   -d "{\"legalName\":\"Fancy Marketplace Co.\",\"email\":\"consumer@fancy-marketplace.biz\",
-       \"selfDescriptionUri\":\"https://consent-facade.dataspace-authority.org/participants/${CONSUMER_ORG}\"}"
+       \"selfDescriptionUri\":\"${CONSUMER_SD}\"}"
 
 # the two lookups the plugin makes
 curl -k -x localhost:8888 -s $CM/participants/me -H "Authorization: Bearer $(provider_token)" | jq
 curl -k -x localhost:8888 -s "$CM/participants?identifier=${CONSUMER_DID}" -H "Authorization: Bearer $(provider_token)" | jq
 ```
 
-**5. The agreement.** In production the marketplace or a DSP negotiation concludes it (see
-[Known limitations](#known-limitations) for the purchase path). Here it is seeded directly, with the
-participant DIDs as `provider-id` / `consumer-id` and the purpose on the product specification:
+**5. The agreement.** In production the marketplace or a DSP negotiation concludes it. Here it is
+seeded directly, with the participants' **self-description URLs** as `provider-id` / `consumer-id` -
+the only form the facade's `/verify` matches, which is the lookup the owner-resolver makes to find
+the governing contract, see
+[How a contract names its parties](#how-a-contract-names-its-parties) - and the purpose on the
+product specification.
+
+On a re-run, first drop the pair's earlier agreements and end the consents granted on their notices.
+The owner-resolver takes the **first** contract that permits the entity, and the plugin's `list`
+check allows on **any** `GRANTED` consent of the owner for this provider/consumer pair - so a
+leftover from an earlier run both shadows the new agreement and keeps step 8 at `200`. Unlike the
+[integration test](#integration-tests), which generates a fresh `did:key` per run, the walkthrough
+reuses the `cert/` subject, so its consents persist. The provider ends them itself with `terminate`,
+as a party to them:
+
+```shell
+curl -k -x localhost:8888 -s "$TMF/agreementManagement/v4/agreement?limit=1000" \
+  | jq -r --arg p "$PROVIDER_SD" --arg d "$PROVIDER_DID" \
+      '.[] | select([.characteristic[]? | select(.name == "provider-id") | .value] | any(. == $p or . == $d)) | .id' \
+  | xargs -r -I{} curl -k -x localhost:8888 -s -o /dev/null -X DELETE $TMF/agreementManagement/v4/agreement/{}
+
+PT=$(provider_token)
+curl -k -x localhost:8888 -s "$CM/consents?userIdentifier=${SUBJECT_DID}" -H "Authorization: Bearer $PT" \
+  | jq -r '.content[]? | .id' \
+  | xargs -r -I{} curl -k -x localhost:8888 -s -o /dev/null -X POST $CM/consents/{}/terminate \
+      -H "Authorization: Bearer $PT"
+```
+
+Then seed the agreement:
 
 ```shell
 export SPEC_ID=$(curl -k -x localhost:8888 -s -X POST $TMF/productCatalogManagement/v4/productSpecification \
@@ -873,10 +907,10 @@ export SPEC_ID=$(curl -k -x localhost:8888 -s -X POST $TMF/productCatalogManagem
   -d '{"name":"Operator Profile","productSpecCharacteristic":[{"name":"purpose","valueType":"object",
        "productSpecCharacteristicValue":[{"value":{"id":"profile-service-provision",
        "name":"Operator profile for service provision","description":"Deliver the requested service.",
-       "purpose":"https://w3id.org/dpv#ServiceProvision"}}]}]}' | jq -r .id)
+       "purpose":"https://w3id.org/dpv#ServiceProvision"}}]}]}' | jq -r .id); echo "Spec ID: ${SPEC_ID}"
 export OFFERING_ID=$(curl -k -x localhost:8888 -s -X POST $TMF/productCatalogManagement/v4/productOffering \
   -H 'Content-Type: application/json' \
-  -d "{\"name\":\"Operator Profile Offering\",\"productSpecification\":{\"id\":\"${SPEC_ID}\"}}" | jq -r .id)
+  -d "{\"name\":\"Operator Profile Offering\",\"productSpecification\":{\"id\":\"${SPEC_ID}\"}}" | jq -r .id); echo "Offering ID: ${OFFERING_ID}"
 export AGREEMENT_ID=$(curl -k -x localhost:8888 -s -X POST $TMF/agreementManagement/v4/agreement \
   -H 'Content-Type: application/json' \
   -d "{\"name\":\"Profile sharing\",\"status\":\"approved\",
@@ -885,9 +919,9 @@ export AGREEMENT_ID=$(curl -k -x localhost:8888 -s -X POST $TMF/agreementManagem
        \"characteristic\":[
          {\"name\":\"policy\",\"value\":{\"@type\":\"Set\",\"uid\":\"urn:policy:mipa\",
            \"permission\":[{\"target\":\"${ENTITY_ID}\",\"action\":\"use\"}]}},
-         {\"name\":\"provider-id\",\"value\":\"${PROVIDER_DID}\"},
-         {\"name\":\"consumer-id\",\"value\":\"${CONSUMER_DID}\"},
-         {\"name\":\"signing-date\",\"value\":$(date +%s)}]}" | jq -r .id)
+         {\"name\":\"provider-id\",\"value\":\"${PROVIDER_SD}\"},
+         {\"name\":\"consumer-id\",\"value\":\"${CONSUMER_SD}\"},
+         {\"name\":\"signing-date\",\"value\":$(date +%s)}]}" | jq -r .id); echo "Agreement ID: ${AGREEMENT_ID}"
 ```
 
 **6. The subject registers, the provider links it, the provider generates the notice.** Notice
@@ -895,7 +929,7 @@ generation reads the agreement through the consent-facade; retry while it is not
 
 ```shell
 export SUBJECT_TOKEN=$(./doc/scripts/get_access_token_oid4vp.sh \
-  https://verifier.dataspace-authority.org/services/consent-manager $USER_CREDENTIAL openid)
+  https://verifier.dataspace-authority.org/services/consent-manager $USER_CREDENTIAL openid); echo "Subject Token: ${SUBJECT_TOKEN}"
 curl -k -x localhost:8888 -s -X POST $CM/users/register -H "Authorization: Bearer ${SUBJECT_TOKEN}"
 curl -k -x localhost:8888 -s -X POST $CM/participants/me/users -H "Authorization: Bearer $(provider_token)" \
   -H 'Content-Type: application/json' -d "{\"identifier\":\"${SUBJECT_DID}\"}"
@@ -903,9 +937,21 @@ curl -k -x localhost:8888 -s -X POST $CM/participants/me/users -H "Authorization
 export NOTICE_ID=$(curl -k -x localhost:8888 -s -X POST $CM/privacy-notices/by-contract \
   -H "Authorization: Bearer $(provider_token)" -H 'Content-Type: application/json' \
   -d "{\"contractUri\":\"http://consent-facade.trust-anchor.svc.cluster.local:8080/bilaterals/default~${AGREEMENT_ID}\"}" \
-  | jq -r .id)
+  | jq -r .id); echo "Notice ID: ${NOTICE_ID}"
 curl -k -x localhost:8888 -s "$CM/privacy-notices/${NOTICE_ID}?resolve=false" \
   -H "Authorization: Bearer ${SUBJECT_TOKEN}" | jq '{purposes, data}'
+```
+
+Unresolved, both are catalog URIs of the authority consent-facade. The purpose declared on the
+product specification is the `name` / `description` of the **software** resource the offering lists,
+which `resolve=true` would inline but
+[cannot reach locally](#k3s-only-verifier-reachability). To check it in the k3s scenario, read the
+catalog directly:
+
+```shell
+curl -k -x localhost:8888 -s \
+  "https://consent-facade.dataspace-authority.org/catalog/softwareresources/default~${SPEC_ID}" \
+  | jq '{name, description}'   # -> "Operator profile for service provision"
 ```
 
 **7. The subject grants consent; the read succeeds.**
@@ -913,7 +959,7 @@ curl -k -x localhost:8888 -s "$CM/privacy-notices/${NOTICE_ID}?resolve=false" \
 ```shell
 export CONSENT_ID=$(curl -k -x localhost:8888 -s -X POST $CM/consents \
   -H "Authorization: Bearer ${SUBJECT_TOKEN}" -H 'Content-Type: application/json' \
-  -d "{\"privacyNoticeId\":\"${NOTICE_ID}\",\"decision\":\"GRANTED\"}" | tee /dev/stderr | jq -r .id)
+  -d "{\"privacyNoticeId\":\"${NOTICE_ID}\",\"decision\":\"GRANTED\"}" | tee /dev/stderr | jq -r .id); echo "Consent ID: ${CONSENT_ID}"
 # status GRANTED, provider = did:web:mp-operations.org, consumer = did:web:fancy-marketplace.biz
 
 curl -k -x localhost:8888 -s "$CM/consents/check?userIdentifier=${SUBJECT_DID}&privacyNoticeId=${NOTICE_ID}" \

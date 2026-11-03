@@ -58,9 +58,12 @@ receipts, and derives privacy notices from the same contract-service API the con
   secrets.
 - The plugin and its route config must be upgraded together (1.0.0 drops `consent_api_host` and
   the key options).
-- The consent-manager looks contract parties up by participant DID, while contract-management writes
-  self-description URLs into an agreement's `provider-id` / `consumer-id`. Privacy-notice generation
-  from a marketplace purchase therefore fails until one side maps between them (an upstream fix).
+- An agreement names its parties in `provider-id` / `consumer-id` by the participants'
+  self-description URLs, as contract-management writes them: that is the only form the
+  consent-facade's `/verify` matches, which is the lookup the owner-resolver makes to find the
+  governing contract. Consent-manager 0.0.3 resolves a party under either name (its ADR-0017), so
+  privacy-notice generation accepts them too; before that pin, notice generation and the access gate
+  could not both work off one agreement.
 - VCVerifier 6.27.0 does not compare a `jwt_vc_json` credential's `vc.issuer` with the signed `iss`,
   so a hand-crafted VC can still name another DID as `participant_id` until upstream rejects that
   mismatch.
