@@ -1060,7 +1060,8 @@ port-forward, everything else through the ingress hosts via squid.
 
 Trust-anchor chart **2.0.0** replaces the Prometheus-X consent-manager (Node, MongoDB, the shared
 consent key `x-visionstrust-consent-key` and the authority APISIX facade routes that injected it) with
-dsc-consent-manager. The data-space-connector chart (10.16.0) only changed docs and comments.
+dsc-consent-manager. The data-space-connector chart (11.0.0) only dropped the unread
+`consentManagement.enabled`.
 
 * **No data migration.** Nothing is carried over from MongoDB. Participants and data subjects
   register again, and consents must be re-granted under the new service.

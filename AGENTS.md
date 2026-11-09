@@ -242,7 +242,7 @@ ports 8080 API / 9090 management).
 
 ## Important Files
 - `charts/data-space-connector/Chart.yaml` -- dependency graph (current
-  version 10.16.0).
+  version 11.0.0).
 - `charts/data-space-connector/values.yaml` -- ~4190-line config surface;
   top-level sections start at these approximate line numbers:
   `decentralizedIam` (26), `scorpio` (291), `keycloak` (420),
@@ -259,5 +259,5 @@ ports 8080 API / 9090 management).
 - `charts/data-space-connector/templates/rainbow-deployment.yaml` --
   simpler deployment with init container pattern.
 - `pom.xml` + `it/` -- integration test harness.
-- `doc/release-notes/9-x.md` -- follow existing format when adding entries.
+- `doc/release-notes/11-x.md` -- follow existing format when adding entries.
 - `doc/deployment-integration/observability/README.md` -- OTEL tracing docs.

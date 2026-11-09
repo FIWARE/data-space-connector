@@ -41,4 +41,4 @@ With `consentManagement.enabled`, the chart also runs the authority side of cons
 [dsc-consent-manager](https://github.com/SEAMWARE/dsc-consent-manager) on the chart's Zalando Postgres,
 a consent-facade as its contract service, and NetworkPolicies isolating both. Version 2.0.0 replaced the
 MongoDB-based consent-manager and its consent key, see [Consent Management](../doc/CONSENT_MANAGEMENT.md)
-and the [10.16.0 release notes](../doc/release-notes/10-x.md#10160--consent-management-moves-to-dsc-consent-manager).
+and the [11.0.0 release notes](../doc/release-notes/11-x.md#1100--consent-management-moves-to-dsc-consent-manager).

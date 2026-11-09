@@ -53,7 +53,7 @@ receipts, and derives privacy notices from the same contract-service API the con
 - No shared secret is left in the consent path, and each answer is scoped to the authenticated caller.
 - Existing consent data is not migrated: MongoDB records have to be re-granted under the new service.
   The trust-anchor chart takes a major bump (2.0.0) and `fail`s on the removed values. The DSC chart
-  only changes docs and comments (10.16.0).
+  only drops the unread `consentManagement.enabled` (11.0.0).
 - External Postgres is not supported in trust-anchor 2.0.0: the setup Job depends on the Zalando
   secrets.
 - The plugin and its route config must be upgraded together (1.0.0 drops `consent_api_host` and
