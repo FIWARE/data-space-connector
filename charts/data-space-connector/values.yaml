@@ -4114,14 +4114,12 @@ tempo:
       cpu: 100m
       memory: 256Mi
 
-# -- Consent Management -- provider-side wiring only. The consent-manager
-# (dsc-consent-manager on PostgreSQL) lives in the trust-anchor chart (charts/trust-anchor).
-# The provider APISIX consent-plugin calls its `/v1` API directly, with a VCVerifier JWT
-# from the provider-local `consent-facade`. See doc/CONSENT_MANAGEMENT.md.
-consentManagement:
-  # -- enable the provider-side consent-plugin wiring. The facade and the owner-resolver
-  # come from their own charts (see the keys at the end of this file).
-  enabled: false
+## Consent Management -- provider-side only. The consent-manager (dsc-consent-manager on
+## PostgreSQL) lives in the trust-anchor chart (charts/trust-anchor); the provider APISIX
+## consent-plugin calls its `/v1` API directly, with a VCVerifier JWT from the provider-local
+## `consent-facade`. This chart has no `consentManagement` key: the provider side is the two
+## subcharts below plus the consent-plugin wiring on the provider's APISIX
+## (`decentralizedIam.odrlAuthorization.apisix`). See doc/CONSENT_MANAGEMENT.md.
 
 ## The consent-facade, deployed from its own published FIWARE chart
 ## (oci://quay.io/fiware/helm-charts/consent-facade). A provider runs one locally when the

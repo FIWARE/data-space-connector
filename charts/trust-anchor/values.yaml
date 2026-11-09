@@ -80,7 +80,7 @@ consentManagement:
 
   # NetworkPolicies isolating the consent-manager and consent-facade so they are reachable only by
   # their intended in-cluster peers. The consent-manager authenticates every call itself, so its
-  # policy only narrows who can connect; its management port is never admitted.
+  # policy only narrows who can connect; its management port is admitted to `metricsScrapers` only.
   # Requires a NetworkPolicy-enforcing CNI (k3s enforces).
   networkPolicy:
     # -- create the isolation NetworkPolicies
@@ -88,6 +88,10 @@ consentManagement:
     # -- port the consent-manager listens on, used by its policy when
     # `consent-manager.deployment.containerPorts.http` is not readable.
     consentManagerPort: 8080
+    # -- management port of the consent-manager (health, metrics), used by its policy when
+    # `consent-manager.deployment.containerPorts.management` is not readable. Admitted to
+    # `metricsScrapers` only.
+    consentManagerManagementPort: 9090
     # -- port the consent-facade listens on, used by its policy. Mirrors the
     # consent-facade chart's own default.
     consentFacadePort: 8080
@@ -103,15 +107,18 @@ consentManagement:
     # -- further callers of the consent-manager API from other namespaces, e.g. a provider's
     # APISIX running the consent-filter plugin. Each entry is `{namespace, podLabels}`.
     consentManagerClients: []
+    # -- pods allowed to reach the consent-manager's management port, and nothing else: the
+    # Prometheus that scrapes `consent-manager.serviceMonitor`. Each entry is
+    # `{namespace, podLabels}`; empty leaves the management port closed to every pod.
+    metricsScrapers: []
 
-  ## the Job that provisions the consent-manager's database and Secrets
-  ## (`consent-manager-env`, `consent-manager-signing-keys`), see
-  ## templates/consent-manager-setup-job.yaml.
+  ## the Job that provisions the consent-manager's Secrets (`consent-manager-env`,
+  ## `consent-manager-signing-keys`), see templates/consent-manager-setup-job.yaml. The
+  ## database itself is created by the Zalando operator from
+  ## `managedPostgres.config.databases`.
   setup:
     # -- image running the setup script; needs kubectl, jq, base64 and head
     image: alpine/k8s:1.31.4
-    # -- image creating the database; needs psql
-    postgresImage: postgres:16-alpine
     # -- image generating the receipt signing key; needs `step`
     jwkImage: smallstep/step-cli:0.28.7
     # -- container restarts before the Job gives up
@@ -124,6 +131,24 @@ consentManagement:
     ttlSecondsAfterFinished: 300
     # -- priorityClassName of the Job's pod
     priorityClassName: ""
+    # -- resources of the Job's containers (`setup` and the `generate-jwk` init container). Empty
+    # renders nothing; set it where a ResourceQuota or a LimitRange demands requests and limits,
+    # which would otherwise reject the pod and leave the consent-manager without its Secrets.
+    resources: {}
+    ## the ServiceAccount the Job runs under. Switch creation off where RBAC is managed outside
+    ## the chart; the Job then uses `name`, which has to exist and carry the permissions below.
+    serviceAccount:
+      # -- create the ServiceAccount
+      create: true
+      # -- name of the ServiceAccount; empty uses `consent-manager-setup`
+      name: ""
+      # -- annotations of the created ServiceAccount
+      annotations: {}
+    rbac:
+      # -- create the Role and RoleBinding of the Job: `get` and `patch` on the two Secrets it
+      # owns, plus `create` on Secrets, which Kubernetes cannot scope by name. Switch off to
+      # grant those permissions yourself, see doc/CONSENT_MANAGEMENT.md.
+      create: true
 
   signingKey:
     # -- generate the receipt signing key (an EC P-256 JWK) once, if

@@ -211,14 +211,21 @@ post-26.4 OID4VCI model. Hard-won gotchas (full detail in `doc/release-notes/10-
   `wallets.issueCredentialsToUsers: true` auto-assigns realm VCs to declared users.
 
 ## Consent Management (ticket-109)
-Being migrated from the Prometheus-X consent-manager (Node, MongoDB, shared
-consent key, authority APISIX facade routes) to `dsc-consent-manager` (Java,
+Migrated from the Prometheus-X consent-manager (Node, MongoDB, shared consent
+key, authority APISIX facade routes) to `dsc-consent-manager` (Java,
 PostgreSQL, validates VCVerifier JWTs itself; chart
 `oci://quay.io/fiware/helm-charts/dsc-consent-manager`, API base `/v1`,
-ports 8080 API / 9090 management). Follow `IMPLEMENTATION_PLAN.md`.
+ports 8080 API / 9090 management).
 - Pieces: trust-anchor chart (manager, authority consent-facade,
-  NetworkPolicies, DB); DSC chart only wires the provider side
-  (`consent-facade`, `consent-owner-resolver`, `consentManagement`).
+  NetworkPolicies, setup Job, DB); DSC chart only wires the provider side
+  (`consent-facade`, `consent-owner-resolver`) and has no `consentManagement`
+  key of its own.
+- The consent-manager's database comes from the Zalando operator
+  (`managedPostgres.config.databases`), which creates it on every sync, on a
+  fresh cluster and an existing volume alike. The setup Job only owns the two
+  Secrets (`consent-manager-env`, `consent-manager-signing-keys`); its
+  ServiceAccount and RBAC are optional
+  (`consentManagement.setup.serviceAccount` / `.rbac`).
 - k3s scenario: `k3s/consent-trust-anchor.yaml` (2nd DSC release
   `consent-authority` in ns `trust-anchor`: keycloak issuer, VCVerifier
   service `consent-manager`), `k3s/consent-trust-anchor-components.yaml`
@@ -228,23 +235,23 @@ ports 8080 API / 9090 management). Follow `IMPLEMENTATION_PLAN.md`.
   `mvn clean integration-test -Ptest,consent,consent-test`.
 - IT: `it/src/test/java/.../components/Consent{Environment,StepDefinitions}.java`,
   `it/src/test/resources/it/consent_management.feature` (tag `@consent`).
-- Docs: `doc/CONSENT_MANAGEMENT.md`, ADRs `doc/adr/0001`-`0005` + index
-  `doc/adr/README.md`.
+- Docs: `doc/CONSENT_MANAGEMENT.md`, ADR `doc/adr/0008` (which supersedes
+  `0001`-`0005`) + index `doc/adr/README.md`.
 - The consent-filter plugin source is NOT in this repo; only its tag and
   route config live here.
 
 ## Important Files
 - `charts/data-space-connector/Chart.yaml` -- dependency graph (current
-  version 10.15.6).
+  version 10.16.0).
 - `charts/data-space-connector/values.yaml` -- ~4190-line config surface;
   top-level sections start at these approximate line numbers:
   `decentralizedIam` (26), `scorpio` (291), `keycloak` (420),
   `tm-forum-api` (1441), `rainbow` (1820), `contract-management` (1911),
   `dataSpaceConfig` (2079), `managedMongo` (2133), `marketplace` (2152),
   `fdsc-edc` (2362), `identityhub` (2973), `tracing` (3752),
-  `opentelemetry-collector` (3878), `consentManagement` (4123),
-  `consent-facade` (4140), `consent-owner-resolver` (4167).
-- `charts/trust-anchor/Chart.yaml` -- trust-anchor chart (version 1.3.4).
+  `opentelemetry-collector` (3878), `consent-facade` (4134),
+  `consent-owner-resolver` (4161).
+- `charts/trust-anchor/Chart.yaml` -- trust-anchor chart (version 2.0.0).
 - `charts/data-space-connector/templates/_helpers.tpl` -- shared Helm
   partials (`dsc.labels`, `dsc.otel.*`, etc.).
 - `charts/data-space-connector/templates/identityhub-deployment.yaml` --

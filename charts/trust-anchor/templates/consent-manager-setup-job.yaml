@@ -4,11 +4,12 @@
 {{- fail "consent-manager.enabled requires managedPostgres.enabled: the setup Job reads the database credentials from the Zalando operator's secrets, an external PostgreSQL is not supported" }}
 {{- end }}
 {{- /*
-  Provisions what the consent-manager needs before it can start: its database in managedPostgres
-  and the Secrets `consent-manager-env` and `consent-manager-signing-keys`. It is the only writer of
-  both Secrets. Neither can be a Helm-templated object: the subchart has no env valueFrom hook for
-  the DB credentials, and `lookup` is empty under `helm template`, so templated keys would rotate on
-  every render.
+  Provisions what the consent-manager needs before it can start: the Secrets `consent-manager-env`
+  and `consent-manager-signing-keys`. It is the only writer of both. Neither can be a Helm-templated
+  object: the subchart has no env valueFrom hook for the DB credentials, and `lookup` is empty under
+  `helm template`, so templated keys would rotate on every render. The database itself is not this
+  Job's business - the Zalando operator creates every database of `managedPostgres.config.databases`
+  on each sync of the `postgresql` CR, on a fresh cluster and on an existing volume alike.
 
   A plain Job, not a hook: the Zalando secrets only appear once the operator has reconciled the
   `postgresql` CR, a normal release resource, so a pre-install hook would wait forever. Until the
@@ -23,64 +24,25 @@
   Database, user and cluster names are fixed: postgres.yaml renders managedPostgres.config verbatim,
   the Zalando secret name derives from the user, and consent-manager.config.database.url is a
   subchart value this chart cannot template. A configurable name would need three places in sync.
+
+  The ServiceAccount and the RBAC this Job needs are in consent-manager-setup-rbac.yaml.
 */}}
 {{- $cluster := "postgres" }}
 {{- $database := "consent_manager" }}
 {{- $userSecret := printf "%s.%s.credentials.postgresql.acid.zalan.do" ($database | replace "_" "-") $cluster }}
-{{- $superuserSecret := printf "postgres.%s.credentials.postgresql.acid.zalan.do" $cluster }}
-{{- $envSecret := ($manager.secrets | default dict).existingSecret | default "consent-manager-env" }}
+{{- $envSecret := include "trust-anchor.consentManager.envSecretName" . }}
 {{- $keys := $manager.signingKeys | default dict }}
-{{- $keysSecret := $keys.secretName | default "consent-manager-signing-keys" }}
+{{- $keysSecret := include "trust-anchor.consentManager.signingKeysSecretName" . }}
 {{- $keyFile := $keys.signingKeyFile | default "signing-key.jwk" }}
 {{- $setup := .Values.consentManagement.setup }}
 {{- $smtp := .Values.consentManagement.smtp }}
 {{- $generateKey := .Values.consentManagement.signingKey.generate }}
-{{- $name := "consent-manager-setup" }}
+{{- $name := include "trust-anchor.consentManagerSetup.name" . }}
+{{- $serviceAccount := include "trust-anchor.consentManagerSetup.serviceAccountName" . }}
 {{- $podSpec := include "trust-anchor.consentManagerSetup.podTemplate" (dict
-      "root" . "name" $name "cluster" $cluster "database" $database "userSecret" $userSecret
-      "superuserSecret" $superuserSecret "envSecret" $envSecret "keysSecret" $keysSecret
+      "root" . "name" $name "serviceAccount" $serviceAccount "userSecret" $userSecret
+      "envSecret" $envSecret "keysSecret" $keysSecret
       "keyFile" $keyFile "setup" $setup "smtp" $smtp "generateKey" $generateKey) }}
----
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: {{ $name }}
-  namespace: {{ .Release.Namespace | quote }}
-  labels:
-    {{- include "trust-anchor.labels" . | nindent 4 }}
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
-metadata:
-  name: {{ $name }}
-  namespace: {{ .Release.Namespace | quote }}
-  labels:
-    {{- include "trust-anchor.labels" . | nindent 4 }}
-rules:
-  - apiGroups: [""]
-    resources: ["secrets"]
-    resourceNames: [{{ $envSecret | quote }}, {{ $keysSecret | quote }}]
-    verbs: ["get", "patch"]
-  {{- /* Kubernetes cannot scope `create` by name. */}}
-  - apiGroups: [""]
-    resources: ["secrets"]
-    verbs: ["create"]
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
-metadata:
-  name: {{ $name }}
-  namespace: {{ .Release.Namespace | quote }}
-  labels:
-    {{- include "trust-anchor.labels" . | nindent 4 }}
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: Role
-  name: {{ $name }}
-subjects:
-  - kind: ServiceAccount
-    name: {{ $name }}
-    namespace: {{ .Release.Namespace | quote }}
 ---
 apiVersion: batch/v1
 kind: Job
@@ -111,7 +73,7 @@ spec:
         app.kubernetes.io/component: {{ .name }}
     spec:
       restartPolicy: OnFailure
-      serviceAccountName: {{ .name }}
+      serviceAccountName: {{ .serviceAccount }}
       securityContext:
         runAsNonRoot: true
         runAsUser: 1000
@@ -121,48 +83,17 @@ spec:
       volumes:
         - name: work
           emptyDir: {}
+      {{- if .generateKey }}
       initContainers:
-        - name: create-db
-          image: {{ .setup.postgresImage }}
-          securityContext:
-            {{- toYaml $containerSecurityContext | nindent 12 }}
-          env:
-            - name: PGHOST
-              value: {{ .cluster }}
-            - name: PGDATABASE
-              value: postgres
-            - name: PGUSER
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .superuserSecret }}
-                  key: username
-            - name: PGPASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .superuserSecret }}
-                  key: password
-          command: ["/bin/sh", "-ec"]
-          args:
-            - |
-              until pg_isready; do echo "waiting for postgres..."; sleep 3; done
-              until psql -tAc "SELECT 1 FROM pg_roles WHERE rolname='{{ .database }}'" | grep -q 1; do
-                echo "waiting for the {{ .database }} role..."; sleep 3
-              done
-              if psql -tAc "SELECT 1 FROM pg_database WHERE datname='{{ .database }}'" | grep -q 1; then
-                echo "{{ .database }} already exists"
-              else
-                psql -v ON_ERROR_STOP=1 -c "CREATE DATABASE {{ .database }} OWNER {{ .database }}"
-                echo "created {{ .database }}"
-              fi
-          volumeMounts:
-            - name: work
-              mountPath: /work
-        {{- if .generateKey }}
         {{- /* A fresh candidate on every run; the setup container only uses it when no key exists. */}}
         - name: generate-jwk
           image: {{ .setup.jwkImage }}
           securityContext:
             {{- toYaml $containerSecurityContext | nindent 12 }}
+          {{- with .setup.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           env:
             - name: HOME
               value: /work
@@ -171,12 +102,16 @@ spec:
           volumeMounts:
             - name: work
               mountPath: /work
-        {{- end }}
+      {{- end }}
       containers:
         - name: setup
           image: {{ .setup.image }}
           securityContext:
             {{- toYaml $containerSecurityContext | nindent 12 }}
+          {{- with .setup.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           env:
             {{- /* without a writable home kubectl prints cache warnings into the stderr the script parses */}}
             - name: HOME

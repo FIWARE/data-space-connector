@@ -562,13 +562,14 @@ start, and is the **only writer** of its two Secrets:
 | `consent-manager-env` | `DB_USER`, `DB_PASSWORD` (copied from the Zalando secret `consent-manager.postgres.credentials.postgresql.acid.zalan.do`), `LOG_PSEUDONYM_KEY`, `ERASURE_VERIFICATION_SECRET`, and `SMTP_USER` / `SMTP_PASSWORD` when configured | the Job |
 | `consent-manager-signing-keys` | `signing-key.jwk` | the Job when `consentManagement.signingKey.generate`, else you |
 
-What it does, in order:
+The database itself is not its business: the Zalando operator creates every database of
+`managedPostgres.config.databases` on each sync of the `postgresql` CR, on a fresh cluster and on an
+existing volume alike, exactly as it does for `tildb`.
 
-1. `create-db` waits for Postgres and the `consent_manager` role, and creates the `consent_manager`
-   database if it is missing. The Zalando operator creates databases only when it first provisions a
-   cluster, so this is what makes an existing Postgres volume work.
-2. `generate-jwk` (only with `signingKey.generate`) creates a candidate EC P-256 signing key.
-3. `setup` writes `consent-manager-env` and, if it does not exist yet, `consent-manager-signing-keys`.
+What the Job does, in order:
+
+1. `generate-jwk` (only with `signingKey.generate`) creates a candidate EC P-256 signing key.
+2. `setup` writes `consent-manager-env` and, if it does not exist yet, `consent-manager-signing-keys`.
 
 Rules it keeps:
 
@@ -589,13 +590,43 @@ Rules it keeps:
   deployment paths behave the same ([ADR 0007](adr/0007-test-both-deployment-paths.md)).
 
 Until the Job has written `consent-manager-env`, the consent-manager pods sit in
-`CreateContainerConfigError` and then recover on their own. The Job's images are
-`consentManagement.setup.image` (kubectl, jq), `postgresImage` (psql) and `jwkImage` (step);
-`consentManagement.setup.priorityClassName` schedules its pod. The service account may only `get` and
-`patch` the two Secrets (plus `create`, which Kubernetes cannot scope by name).
+`CreateContainerConfigError`, and until the operator has created the database they restart on the
+failed connection. Both recover on their own, so a fresh install takes a few pod restarts.
+
+The Job's images are `consentManagement.setup.image` (kubectl, jq) and `jwkImage` (step);
+`consentManagement.setup.priorityClassName` schedules its pod and
+`consentManagement.setup.resources` sizes its containers. `resources` is empty by default, so
+nothing is rendered; set it where a `ResourceQuota` or a `LimitRange` demands requests and limits,
+otherwise admission rejects the pod and the consent-manager never gets its Secrets.
 
 The pods do not restart when `consent-manager-env` changes: restart them after changing SMTP
 credentials.
+
+#### ServiceAccount and RBAC
+
+`templates/consent-manager-setup-rbac.yaml` creates the ServiceAccount, Role and RoleBinding the Job
+runs with. Both are optional, for deployments whose RBAC is managed elsewhere:
+
+```yaml
+consentManagement:
+  setup:
+    serviceAccount:
+      create: true          # false: provide the ServiceAccount yourself
+      name: ""              # empty uses `consent-manager-setup`
+      annotations: {}
+    rbac:
+      create: true          # false: grant the permissions below yourself
+```
+
+The Job always runs under that `name`, created here or not. With `rbac.create: false` the
+ServiceAccount needs, in the release namespace:
+
+| verbs | resource | names |
+|---|---|---|
+| `get`, `patch` | `secrets` | `consent-manager-env`, `consent-manager-signing-keys` |
+| `create` | `secrets` | - (Kubernetes cannot scope `create` by name) |
+
+Nothing else: the Job reads no ConfigMap, lists no pods and touches no cluster-scoped object.
 
 ### Receipt signing key
 
@@ -637,7 +668,9 @@ With `consentManagement.networkPolicy.enabled` (default; needs a NetworkPolicy-e
 
 * `consent-manager-ingress` admits the API port (8080) only from the authority APISIX in the namespace,
   the ingress controller (`networkPolicy.ingressController.namespace` / `podLabels`, default traefik
-  in `infra`), and `networkPolicy.consentManagerClients`. The management port is never admitted.
+  in `infra`), and `networkPolicy.consentManagerClients`. The management port (9090: health and
+  `/prometheus`) is admitted to `networkPolicy.metricsScrapers` only, and those peers reach nothing
+  else.
 * `consent-facade-ingress` admits the facade only from the consent-manager, plus the ingress
   controller when the facade publishes its self-descriptions.
 
@@ -655,6 +688,21 @@ consentManagement:
 
 Providers in other clusters reach the consent-manager through its public host instead.
 
+Enabling `consent-manager.serviceMonitor` is not enough on its own: the Prometheus that scrapes it
+has to be listed too, or every scrape is dropped.
+
+```yaml
+consentManagement:
+  networkPolicy:
+    metricsScrapers:
+      - namespace: monitoring
+        podLabels:
+          app.kubernetes.io/name: prometheus
+```
+
+The port comes from `consent-manager.deployment.containerPorts.management`, falling back to
+`networkPolicy.consentManagerManagementPort` (9090).
+
 ### GitOps and uninstall
 
 * Under a self-healing GitOps tool (Argo CD), set `consentManagement.setup.ttlSecondsAfterFinished:
@@ -669,11 +717,11 @@ Providers in other clusters reach the consent-manager through its public host in
 
 ### data-space-connector chart (provider side)
 
-The connector chart only wires the provider side; the consent-manager is never deployed by it:
+The connector chart only wires the provider side; the consent-manager is never deployed by it.
+There is no `consentManagement` key here - the provider side is these two subcharts plus the
+consent-plugin on the provider's APISIX:
 
 ```yaml
-consentManagement:
-  enabled: true          # the provider APISIX consent-plugin wiring
 consent-owner-resolver:
   enabled: true          # resolves the data owner from the provider's data model
 consent-facade:

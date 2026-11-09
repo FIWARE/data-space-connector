@@ -62,21 +62,6 @@
       "title": "consent-owner-resolver",
       "type": "object"
     },
-    "consentManagement": {
-      "additionalProperties": false,
-      "description": "Consent Management -- provider-side wiring only. The consent-manager\n(dsc-consent-manager on PostgreSQL) lives in the trust-anchor chart (charts/trust-anchor).\nThe provider APISIX consent-plugin calls its `/v1` API directly, with a VCVerifier JWT\nfrom the provider-local `consent-facade`. See doc/CONSENT_MANAGEMENT.md.",
-      "properties": {
-        "enabled": {
-          "default": false,
-          "description": "enable the provider-side consent-plugin wiring. The facade and the owner-resolver\ncome from their own charts (see the keys at the end of this file).",
-          "title": "enabled",
-          "type": "boolean"
-        }
-      },
-      "required": [],
-      "title": "consentManagement",
-      "type": "object"
-    },
     "contract-management": {
       "additionalProperties": true,
       "description": "# configuration of the tm-forum-api - see https://github.com/FIWARE/helm-charts/tree/main/charts/contract-management for details",
