@@ -1,6 +1,6 @@
 # 0003 - The facade exposes an internal token endpoint, not a consent proxy
 
-**Status:** Accepted
+**Status:** Superseded by [0008](0008-dsc-consent-manager.md) (was: Accepted)
 **Date:** 2026-08-26
 **Applies to:** `FIWARE/data-space-connector`, `[consent-facade](https://github.com/SEAMWARE/consent-facade)`
 **Context doc:** [`../CONSENT_MANAGEMENT.md`](../CONSENT_MANAGEMENT.md)
