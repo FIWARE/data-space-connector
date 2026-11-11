@@ -49,9 +49,10 @@ interpreted as described in [RFC 2119](https://www.rfc-editor.org/rfc/rfc2119) a
 - [HTTP 1.1 Web Hooks for Event Delivery, 1.0.3-wip](https://github.com/cloudevents/spec/blob/56b54136a6088c47058ed43c2df45e433b4868f0/cloudevents/http-webhook.md),
   pinned to that commit. Only §4 (abuse protection) is used, as profiled in [§9](#9-webhook-validation-handshake).
   The released 1.0.2 differs only in callback validation and rate wording, neither of which this profile relies on.
-- [CloudEvents Subscriptions API, 0.1-wip](https://github.com/cloudevents/spec/blob/main/subscriptions/spec.md):
-  the shape of the subscription request is borrowed; conformance is **not** claimed ([§8](#8-subscription-profile)).
-- [OpenID for Verifiable Presentations 1.0](https://openid.net/specs/openid-4-verifiable-presentations-1_0.html) (OID4VP).
+- [CloudEvents Subscriptions API, 0.1-wip](https://github.com/cloudevents/spec/blob/56b54136a6088c47058ed43c2df45e433b4868f0/subscriptions/spec.md),
+  pinned to the same commit: the shape of the subscription request is borrowed; conformance is **not** claimed ([§8](#8-subscription-profile)).
+- [OpenID for Verifiable Presentations 1.0](https://openid.net/specs/openid-4-verifiable-presentations-1_0.html) (OID4VP),
+  as profiled in [§5.1](#51-token-flow-fiware-m2m-profile-of-oid4vp).
 
 ## 3. Event format
 
@@ -90,6 +91,7 @@ A participant was removed from the data space's trusted issuers registry.
   `data` member.
 - A receiver identifies the removed participant from `subject`, and falls back to
   `data.participantId` if `subject` is blank. If both are missing, the event is invalid (`400`).
+  The self-event rule of [§6](#6-authorization-rule) (check 8) applies to this resolved identifier.
 - A publisher MAY send further `data` members. A receiver MUST ignore unknown `data` members and MUST
   NOT depend on them.
 - There is deliberately no `reason` ([architecture §4](architecture.md#4-the-event-model)).
@@ -126,23 +128,46 @@ OID4VP-issued access token, sent as `Authorization: Bearer <token>`.
 - **Credential.** The caller presents a verifiable credential of the type the callee admits on that
   path. The type is local configuration of the callee, not a data space-wide parameter.
 - **401.** A callee answers `401` when the token is missing or invalid. The caller then runs the
-  flow below and repeats the request.
+  flow of [§5.1](#51-token-flow-fiware-m2m-profile-of-oid4vp) and repeats the request.
 - **Delivery.** When delivering to a sink, the publisher uses the subscriber's
   `protocolsettings.clientId` and `protocolsettings.scopes` ([§8](#8-subscription-profile)).
-- **Discovery.** On a `401`, the caller derives the verifier's metadata URL from the called URL
-  `<scheme>://<host>[:<port>]/<path>` as
-  `<scheme>://<host>[:<port>]/<path>/.well-known/openid-configuration`, with leading and trailing
-  `/` of `<path>` removed (`<scheme>://<host>[:<port>]/.well-known/openid-configuration` for an empty
-  path). The metadata MUST list `authorization_endpoint`, `token_endpoint`, `scopes_supported`
-  containing the requested scopes, `grant_types_supported` containing `vp_token`, and
-  `response_types_supported` containing `code`. The caller then follows the OID4VP same-device flow:
-  it calls `authorization_endpoint` with `client_id`, `scope`, `state`, `nonce` and
-  `response_type=code`, receives an authorization request with `response_type=vp_token` and
-  `response_mode=direct_post`, and posts the presentation to `token_endpoint` with
-  `grant_type=vp_token`, `vp_token`, `client_id` and `scope`. This is the behaviour of the FIWARE
-  client (contract-management `Oid4VpAuthHandler`, oid4vp-client-lib `0.0.7`).
+- **Flow.** The token is obtained with the profile of [§5.1](#51-token-flow-fiware-m2m-profile-of-oid4vp).
 
-**Caller identity.** The value the callee compares with the event's `source` (or with
+### 5.1 Token flow (FIWARE M2M profile of OID4VP)
+
+The token flow is a machine-to-machine profile of OID4VP, not the OID4VP same-device or cross-device
+flow: the presentation goes to the verifier's token endpoint, not to a `response_uri`. A verifier that
+implements only OID4VP 1.0 does not interoperate with it. It is the behaviour of the FIWARE client
+(contract-management `Oid4VpAuthHandler`, oid4vp-client-lib `0.0.7`, `OID4VPClient` and
+`AuthorizationClient`).
+
+1. **Discovery.** On a `401`, the caller derives the verifier's metadata URL from the called URL
+   `<scheme>://<host>[:<port>]/<path>` as
+   `<scheme>://<host>[:<port>]/<path>/.well-known/openid-configuration`, with leading and trailing
+   `/` of `<path>` removed (`<scheme>://<host>[:<port>]/.well-known/openid-configuration` for an empty
+   path). The metadata MUST list `authorization_endpoint`, `token_endpoint`, `scopes_supported`
+   containing the requested scopes, `grant_types_supported` containing `vp_token`, and
+   `response_types_supported` containing `code`.
+2. **Authorization call.** The caller sends `GET <authorization_endpoint>` with the query parameters
+   `client_id`, `scope`, `state`, `nonce` and `response_type=code`.
+3. **Redirect.** The verifier MUST answer `302` with a `Location` in the `openid4vp://` scheme. Its
+   query MUST carry `client_id` and either a `request` (the request object inline) or a
+   `request_uri` with `request_uri_method=get`, which the caller fetches with `GET` (answer `200`, the
+   JWT as body). Any other answer ends the flow.
+4. **Request object.** The request object MUST be a JWT signed by the verifier with an `RS*` or `ES*`
+   algorithm. The caller resolves the key from `client_id` (`did:key:`, `did:web:` or
+   `x509_san_dns:`) and verifies the signature. Its payload MUST echo the caller's `nonce` and carry
+   `response_type=vp_token` and `response_mode=direct_post`; it SHOULD carry a `dcql_query`
+   describing the credential the callee admits ([§5](#5-authentication-binding)). The caller does not check `state`.
+5. **Token request.** The caller posts `application/x-www-form-urlencoded` to `token_endpoint` with
+   `grant_type=vp_token`, `vp_token` (the signed presentation, holder = the caller's identifier),
+   `scope` (space-separated) and `client_id`. The verifier MUST accept `grant_type=vp_token` there
+   and MUST answer `200` with a JSON token response carrying `access_token`; any other status ends the
+   flow.
+
+### 5.2 Caller identity
+
+The value the callee compares with the event's `source` (or with
 `subscriberId`) is the `credentialSubject.id` of the presented credential, i.e. the holder's
 identifier.
 
@@ -172,7 +197,7 @@ status a publisher gets when several checks fail.
 | 6 | `type` unknown to the receiver (the event is complete) | `202`, dropped, not deduplicated |
 | 7 | Deduplication on (`source`, `id`): a repeat | `202` |
 |   | … the first copy is still being processed | `503` with `Retry-After` |
-| 8 | `subject` is the receiver's own identifier | `202`, no action; recorded for deduplication |
+| 8 | The event is about the receiver itself: `subject`, or the identifier the type resolves when `subject` is blank ([§4.1](#41-orgfiwaredataspaceparticipantremoved)), is the receiver's own identifier | `202`, no action; recorded for deduplication |
 | 9 | Otherwise the event is dispatched | `202` |
 |   | … a handler rejects the event as invalid | `400` |
 |   | … a downstream service fails | `502` |
@@ -191,8 +216,8 @@ Consequences a publisher must expect:
 
 The publisher × type check (4) is what keeps one data space member from announcing events about
 another ([architecture D-5](architecture.md#12-decision-register)). An ODRL left operand for the
-credential **issuer** does not exist today; it would only add defence in depth at the PEP and is not a
-dependency of this specification.
+credential **issuer** does not exist today. It would only add defence in depth at the PEP; it is a
+possible contribution to the PAP and not a dependency of this specification.
 
 ## 7. Receiving endpoint
 
@@ -328,9 +353,11 @@ A **publisher**:
 
 - sends structured-mode CloudEvents with `specversion` `"1.0"`, `id` unique per `source`, `source`
   equal to its own identifier, and a `type` of [§4](#4-event-types);
-- authenticates at the receiver's verifier over OID4VP ([§5](#5-authentication-binding)) with a
-  credential whose `credentialSubject.id` equals `source`, using the subscription's
-  `protocolsettings`;
+- authenticates at the receiver's verifier with the token flow of
+  [§5.1](#51-token-flow-fiware-m2m-profile-of-oid4vp) and a credential whose `credentialSubject.id`
+  equals `source`, using the subscription's `protocolsettings`;
+- protects `/subscriptions` with a verifier that implements the verifier side of
+  [§5.1](#51-token-flow-fiware-m2m-profile-of-oid4vp);
 - for `participant.removed`, sends `subject` and `data.participantId` with the same value;
 - validates every sink with the handshake before activating a subscription, and sends
   `WebHook-Request-Origin` on every delivery ([§9](#9-webhook-validation-handshake));
@@ -342,13 +369,21 @@ A **receiver**:
 
 - admits only tokens from its own verifier, and configures that verifier so that the presented
   credential's `credentialSubject.id` is the identity compared with `source`;
+- runs that verifier with the verifier side of [§5.1](#51-token-flow-fiware-m2m-profile-of-oid4vp):
+  the well-known metadata, a `302` to an `openid4vp://` URI carrying a signed request object
+  (`request`, or `request_uri` with `request_uri_method=get`) that echoes `nonce` and sets
+  `response_type=vp_token` and `response_mode=direct_post`, and a `token_endpoint` that accepts
+  `grant_type=vp_token` and answers `200` with a JSON token response;
+- ignores events about itself, judged by the resolved identifier ([§4.1](#41-orgfiwaredataspaceparticipantremoved));
 - applies the checks of [§6](#6-authorization-rule) in that order, with the listed answers;
 - accepts and ignores complete events of unknown types (`202`) and unknown `data` members;
 - is idempotent on (`source`, `id`);
 - answers `415` to non-structured requests and uses the status codes of [§7](#7-receiving-endpoint);
 - answers the unauthenticated `OPTIONS` handshake with `2xx`, and includes `WebHook-Allowed-Origin`
   only for the origin of a configured publisher;
-- as a subscriber, sends a `subscriberId` equal to its authenticated identity, renews before
+- as a subscriber, obtains its token at the publisher's verifier with the flow of
+  [§5.1](#51-token-flow-fiware-m2m-profile-of-oid4vp), sends a `subscriberId` equal to its
+  authenticated identity, renews before
   `expiresAt` and re-subscribes after a publisher restart.
 
 ## Relation to the architecture
