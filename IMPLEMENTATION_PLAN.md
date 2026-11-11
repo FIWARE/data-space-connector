@@ -3,9 +3,11 @@
 ## Overview
 Wire contract-management's (CM) data space eventing listener/subscriber into the umbrella chart, off
 by default: `contract-management.dataspace.events.*` values, a refreshable publishers ConfigMap
-(rendered by the CM subchart), `scope`/`scopeType` on `registration.issuer`, the APISIX route for
-the events path, an example ODRL policy, tests and docs. An upgrade with default values must not
-change any eventing-related resource.
+(rendered by the CM subchart), `scope`/`scopeType` on `registration.issuer`, the APISIX routes for
+the events path (rendered by odrl-authorization through a new extension point), an example ODRL
+policy, tests and docs. An upgrade with default values must not create or change any
+eventing-related resource; the other changes it does bring are listed under "Deviations from the
+ticket".
 
 **Sources the step agents must read** (read-only, clone outside the repo):
 - Design: `doc/eventing/architecture.md` §5–§9, §12 (D-5, D-8, D-12); `doc/eventing/specification.md`
@@ -21,7 +23,10 @@ change any eventing-related resource.
 - TIL API: `https://github.com/FIWARE/trusted-issuers-list` `api/trusted-issuers-list.yaml`.
   `POST /issuer` takes `scope` and `scopeType` as **query parameters**; `scopeType` is the enum
   `dataspace-membership` (the ticket's `dataspace` is not a valid value — the API wins). Scope types
-  exist from TIL 0.10.1.
+  exist from TIL 0.10.1: the 0.10.0 API has neither parameter.
+- Gateway chart: `https://github.com/FIWARE/odrl-authorization` (published at
+  `https://fiware.github.io/odrl-authorization/`), pulled in through
+  `https://github.com/FIWARE/decentralized-iam`.
 
 **Facts that shape the plan** (verified while planning):
 - CM reads the eventing config from Micronaut config files (`MICRONAUT_CONFIG_FILES`, comma list) and
@@ -37,20 +42,52 @@ change any eventing-related resource.
   caller id from the claim `dataspace.events.listener.identity.participant-claim` (`participantId`).
 - The `dataspace` removal mode revokes TIL grants with scope = publisher id and
   scopeType = `DATASPACE_MEMBERSHIP` (`ParticipantAdoption.grantMembership(did, publisherId, …)`).
-- The umbrella's APISIX routes are the plain list `decentralizedIam.odrlAuthorization.apisix.routes`,
-  inside a subchart (odrl-authorization 2.4.x renders it with `toYaml`). The umbrella cannot append a
-  route gated on a feature flag without replacing the user's list, and the subchart has no
-  extra-routes extension point. The route is therefore shipped as a documented, copy-ready snippet
-  (Step 4), not rendered.
+- **TIL version.** `decentralizedIam` 2.1.28 (pinned) deploys trusted-issuers-list chart 0.19.1, which
+  is TIL **0.10.0** and has no scopes. The latest releases, 2.1.29 and 2.1.30, deploy the same. TIL
+  chart 0.19.2 (TIL 0.10.3) exists in FIWARE/helm-charts. The umbrella sets no TIL image override.
+  Micronaut ignores query parameters it does not bind, so a scoped `POST /issuer` against TIL 0.10.0
+  succeeds and stores an unscoped grant. CM's `on-participant-removed.mode: dataspace` would then find
+  nothing to revoke.
+  **Decision:** upgrade the TIL through a `decentralizedIam` bump (Prerequisite B, Step 3), not through
+  an image override in the umbrella. An override would bypass the version pairing that decentralized-iam
+  tests. An external TIL (`registration.til` pointing outside the release) must be ≥ 0.10.1, and the
+  release notes say so.
+- **APISIX routes.** The routes are the subchart list `decentralizedIam.odrlAuthorization.apisix.routes`.
+  odrl-authorization (2.4.3 in 2.1.28, 2.4.4 in 2.1.30) renders it in one of three ways, depending on
+  the APISIX deployment mode:
+  - Default mode (`standalone`, `data_plane`, `config_provider: yaml`; the umbrella's `values.yaml`
+    does not change it): the routes go into the ConfigMap `apisix-routes` (`apisix.yaml`). **No admin
+    API is served.**
+  - etcd-backed modes (`traditional` + `etcd`, which `k3s/provider.yaml` uses; `standalone` +
+    `traditional`; `decoupled` control plane): a hook Job PUTs each entry to the admin API as
+    `<release>-<index>`.
+  - Ingress-controller mode: one `ApisixRoute` CR per entry.
+
+  Helm replaces lists instead of merging them. A default route in the umbrella's list is therefore lost
+  as soon as a user sets `routes`. The subchart has no extra-routes value.
+- **Rejected option: an umbrella hook Job that PUTs the route to the admin API** (the pattern of
+  `templates/apisix-otel-global-rule-job.yaml`):
+  - It only works in the etcd-backed modes. The default yaml mode has no admin API, so the Job would
+    wait forever and fail the install.
+  - It cannot clean up. odrl-authorization only PUTs its own `<release>-<index>` ids and never
+    deletes, so a route PUT from outside it survives turning the feature off and `helm uninstall`.
+  - It does not cover the ingress-controller mode.
+
+  The existing OTEL global-rule hook has the same yaml-mode limitation. That is outside this ticket
+  and is noted for a follow-up.
+- **Chosen option, as the ticket asks ("if the subchart does not support it, FIWARE/helm-charts
+  first"):** add an extension point to odrl-authorization (Prerequisite B). The umbrella then declares
+  the events routes under it, disabled by default (Step 3).
 - CI runs `helm unittest charts/data-space-connector` **without** `helm dependency build`, so suites
-  can only target the umbrella's own `templates/`. The subchart's rendering is asserted in the CM
-  chart's PR and by a local `helm template` check (Step 2).
+  can only target the umbrella's own `templates/`. Subchart rendering is checked in the upstream PRs
+  and by local `helm template` runs (Steps 2 and 3). The umbrella's own templates can still read
+  subchart values (`.Values.decentralizedIam...`), so validation across values is testable in CI.
 - `contract-management` is an open (subchart) key in `values.schema.json`, so declaring keys under it
   does not change the schema. Still run `.github/scripts/values-schema.sh --check`.
 - There is no helm-docs-generated values table in this repo. The `# --` comments are still required.
   If a step finds a generated table, regenerate it; otherwise report that there is none.
 
-**Prerequisite (outside this repo, blocks Step 2): contract-management chart change.**
+**Prerequisite A (outside this repo, blocks Step 2): contract-management chart change.**
 The Gitea fork `general-agent-3/helm-charts` exists but is stale (main `56cd6c9`, CM chart 3.5.23,
 far behind upstream 3.6.4). Before Step 2 can start, a human must either sync that fork's `main` to
 upstream and run the change there, or open the PR on FIWARE/helm-charts directly. The new chart
@@ -78,6 +115,52 @@ version must then be released to `oci://quay.io/fiware/helm-charts`. The PR must
 If this prerequisite is not met when Step 2 is picked up, Step 2 writes completion status `blocked`
 and names the missing chart version.
 
+**Prerequisite B (outside this repo, blocks Step 3): odrl-authorization extra routes and a
+decentralized-iam release.** These repos have no Gitea forks, so a human opens both PRs upstream.
+1. FIWARE/odrl-authorization, chart `odrl-authorization`:
+   - Add the value `apisix.extraRoutes`: a **map** from route name to
+     `{enabled: <bool>, route: <APISIX route object, same shape as an apisix.routes entry>}`.
+     It must be a map, not a list: Helm merges maps key by key, so a parent chart's defaults and the
+     user's values combine. Default `{}`, with `# --` docs.
+   - Render the `enabled` entries after `routes` in all three paths:
+     - the `apisix-routes` ConfigMap;
+     - the admin-API script, under the stable id `<release>-<name>`. A disabled entry is `DELETE`d by
+       that id (404 tolerated), so turning it off removes the route in the etcd-backed modes;
+     - one `ApisixRoute` per entry.
+   - With `extraRoutes: {}` the rendering must be byte-identical to before. Check it with a
+     `helm template` diff in all three modes.
+2. FIWARE/decentralized-iam: a release that pins that odrl-authorization version and
+   `trusted-issuers-list` chart ≥ 0.19.2 (TIL ≥ 0.10.1). The PR must state whether TIL 0.10.1+ migrates
+   its database at start-up, so that Step 3 can put it in the release notes.
+
+If Prerequisite B is not met when Step 3 is picked up, Step 3 writes completion status `blocked` and
+names the missing release.
+
+**Release gating.** Steps merge into `ticket-102/work`. That branch must not be merged to `main` or
+released until Steps 2 and 3 have landed. Step 1 alone would scope grants that the deployed TIL 0.10.0
+drops, for a CM version that has no listener.
+
+## Deviations from the ticket (need explicit human sign-off)
+1. **`scopeType`** is `dataspace-membership`, not `dataspace`. The TIL API enum wins.
+2. **"An upgrade with no new values changes nothing" does not fully hold.** The feature needs
+   CM ≥ 3.5.3 and TIL ≥ 0.10.1, so a default upgrade after Steps 2 and 3 does change things:
+   - the CM image moves to 3.5.3;
+   - the TIL image moves to ≥ 0.10.1, possibly with a DB migration;
+   - the CM, odrl-authorization and decentralized-iam chart labels change;
+   - every other change between decentralized-iam 2.1.28 and the new release comes along.
+
+   The criterion this plan enforces instead:
+   - no eventing ConfigMap, route, env entry or volume appears;
+   - the registration Job script is byte-identical;
+   - every other diff is listed in the Step 2 and Step 3 PR descriptions.
+3. **Two switches.** The events routes are off by default and are turned on separately from
+   `contract-management.dataspace.events.listener.enabled`. A subchart value cannot depend on another
+   value, and the verifier discovery URL depends on the deployment. The umbrella `fail`s on
+   inconsistent combinations (Step 3). A listener without the chart's route is allowed, for operators
+   who run their own gateway.
+4. **Unit tests** reach only the umbrella's templates, because CI does not build dependencies.
+   Subchart rendering is checked upstream and by local `helm template` runs.
+
 **Link check in the agent container.** `.github/scripts/check-links.sh` runs lychee in Docker with a
 bind mount that the sidecar cannot see ("lychee.toml not found"). That is a tooling failure. Use the
 static musl lychee 0.24.2 binary instead:
@@ -86,7 +169,8 @@ static musl lychee 0.24.2 binary instead:
 ## Steps
 
 ### Step 1: Attribute `registration.issuer` grants to the data space publisher
-Umbrella-only; not blocked by the prerequisite.
+Umbrella-only; not blocked by either prerequisite. It only takes effect once Steps 2 and 3 have
+landed (see "Release gating").
 - `charts/data-space-connector/templates/participant-registration.yaml`: send `scope` and
   `scopeType` as query parameters on `POST {til}/issuer`, URL-encoded (`urlquery`).
   - Per issuer entry, optional `scope` and `scopeType`. If `scope` is unset, it defaults to the `id`
@@ -99,9 +183,12 @@ Umbrella-only; not blocked by the prerequisite.
   - With no such publisher the generated script must be **byte-identical** to today's (upgrade no-op).
 - Add the `scope`/`scopeType` keys to the commented `registration.issuer` example in `values.yaml`
   with `# --` text. The text must say that the Job's existing `409` path leaves already-registered
-  issuers unscoped; CM's `on-participant-removed.adopt-unattributed` covers those.
-- Check which TIL image `decentralizedIam` 2.1.28 deploys. If it is older than 0.10.1, say so in the
-  values comment and the PR description; do not bump `decentralizedIam` in this step.
+  issuers unscoped; CM's `on-participant-removed.adopt-unattributed` covers those. It must also say:
+  - the scope needs TIL ≥ 0.10.1, which an older TIL silently drops; the chart's own TIL reaches that
+    version with Step 3;
+  - the default derives from `contract-management.dataspace.events.publishers`, which only takes
+    effect with the CM version of Step 2.
+- Do not bump `decentralizedIam` here. That is Step 3, decided above.
 - New suite `charts/data-space-connector/tests/eventing_test.yaml`, parameterized where helm-unittest
   allows. Cases:
   - default values render the old script (no `scope=` anywhere);
@@ -115,12 +202,12 @@ Umbrella-only; not blocked by the prerequisite.
 - Acceptance: all pass, and `helm template` with default values is unchanged against the base branch.
 
 ### Step 2: Bump contract-management and declare `contract-management.dataspace.events`
-Blocked until the prerequisite chart version is released.
+Blocked until the chart version of Prerequisite A is released.
 - `charts/data-space-connector/Chart.yaml`: set the `contract-management` dependency to the new
   chart version.
 - Diff `helm template` with default values before and after, and list every change in the PR
-  description. Expected: the image moves to appVersion 3.5.3 and chart labels change. Nothing
-  eventing-related may appear.
+  description. Expected: the image moves to appVersion 3.5.3 and chart labels change (Deviation 2).
+  Nothing eventing-related may appear.
 - `charts/data-space-connector/values.yaml`, under `contract-management:`, add
   `dataspace.events` with `# --` comments. Declare only keys whose default is safe:
   - `listener.enabled: false`;
@@ -155,7 +242,43 @@ Blocked until the prerequisite chart version is released.
 - Acceptance: `helm lint`, `helm unittest`, `values-schema.sh --check` pass; the default-values diff
   has no eventing resource in it.
 
-### Step 3: Example ODRL policy for the events path
+### Step 3: Bump decentralizedIam; declare the events routes
+Blocked until the decentralized-iam release of Prerequisite B is out.
+- `charts/data-space-connector/Chart.yaml`: set the `decentralizedIam` dependency to that release.
+  Diff `helm template` with default values before and after, and list every change in the PR
+  description: the TIL image (≥ 0.10.1), the odrl-authorization version, labels, and any other change
+  that comes with the release (Deviation 2). No route may appear.
+- `values.yaml`, under `decentralizedIam.odrlAuthorization.apisix.extraRoutes`, declare two entries,
+  both `enabled: false`, each with `# --` comments:
+  - `dataspace-events`: `POST` `/events`, upstream `contract-management:8080`. Plugins:
+    - `openid-connect` with `bearer_only`, `use_jwks` and `set_userinfo_header: true`. Its
+      `discovery` points at the verifier service of the events scope and is empty by default
+      (deployment-specific).
+    - `opa` (as on the existing routes).
+    - A `proxy-rewrite` that removes a client-sent `X-Userinfo` **before** `openid-connect` sets it.
+      APISIX runs higher priorities first (`openid-connect` 2599, `proxy-rewrite` 1008), so the
+      rewrite needs `_meta.priority` above 2599. Verify this against the APISIX version that ships and
+      against the CM README (~148–170).
+  - `dataspace-events-handshake`: `OPTIONS` `/events`, the same upstream, no auth plugins.
+  - Each entry also carries `hosts`, empty by default, documented to be set to the gateway host.
+- New template `templates/eventing-validation.yaml`: no output, `fail` only. It fails when
+  `dataspace-events` is enabled and:
+  - `contract-management.dataspace.events.listener.enabled` is not true, or
+  - its `openid-connect.discovery` is empty, or
+  - `dataspace-events-handshake` is not enabled.
+
+  It reads every value with `dig`, because the keys may be absent. A listener without the route stays
+  valid (Deviation 3).
+- Extend `tests/eventing_test.yaml`, parameterized: defaults render nothing; each inconsistent
+  combination gives `failedTemplate` with its message; the consistent combination renders.
+- Local only, not in CI: after `helm dependency update`, render with the routes enabled in the default
+  yaml mode and in `traditional`+`etcd` mode. Check that the `apisix-routes` ConfigMap and the admin
+  script both contain both routes, that the user's `routes` list is unchanged, and that there is a
+  `DELETE` when the routes are disabled. Paste the results into the PR description.
+- `values-schema.sh --check` (`decentralizedIam` is an open key), `helm lint`, `helm unittest`.
+- Acceptance: all pass; the default-values diff contains no route and no eventing resource.
+
+### Step 4: Example ODRL policy for the events path
 - New `it/src/test/resources/policies/allowDataSpaceEvents.json`, in the style of
   `allowContractManagement.json`:
   - target `http:path` `isInPath` `/events`;
@@ -169,31 +292,34 @@ Blocked until the prerequisite chart version is released.
   integration tests (`it/`); that is a separate ticket.
 - Acceptance: the file parses and mirrors the structure of the existing policies.
 
-### Step 4: Gateway snippet, docs, release notes, version bump
+### Step 5: Docs, release notes, version bump
 - New `doc/eventing/participant-setup.md` (doctoc ToC). Write it as an operator guide and link to
   specification/architecture for the reasons. Content:
   1. the values to enable the listener/subscriber, and which keys are startup-only (a rollout
      follows) vs. refreshed at runtime;
-  2. a copy-ready `decentralizedIam.odrlAuthorization.apisix.routes` snippet:
-     - a `POST /events` route to `contract-management:8080` with `openid-connect`
-       (`bearer_only`, `use_jwks`, `set_userinfo_header: true`, discovery at the verifier service
-       of the events scope) and `opa`;
-     - a `proxy-rewrite` that removes a client-sent `X-Userinfo` before the plugins run (check the
-       plugin order against the CM README);
-     - a separate unauthenticated `OPTIONS /events` route;
-     - say explicitly why it is not rendered by the chart (subchart list, no extension point);
+  2. the gateway: enable both `extraRoutes` entries of Step 3 and set `discovery` and `hosts`. Explain:
+     - why there are two switches (Deviation 3);
+     - what the `proxy-rewrite` priority is for;
+     - that operators with their own gateway must reproduce the same plugin chain, including removing
+       `X-Userinfo`;
   3. a verifier service registration
      (`decentralizedIam.vcAuthentication.vcverifier.registration.services`):
      - `jwtInclusion` maps `credentialSubject.id` to the top-level claim `participantId`;
      - check the field names in the credentials-config-service API;
-  4. the ODRL policy from Step 3;
-  5. that `registration.issuer` grants are scoped (Step 1);
+  4. the ODRL policy from Step 4;
+  5. that `registration.issuer` grants are scoped (Step 1) and need TIL ≥ 0.10.1;
   6. that management port 9090 (`/refresh`, `/participants-removed`) must stay cluster-internal.
 - `doc/README.md`: link the new page under the existing `### Data Space Eventing` subsection.
 - `doc/release-notes/10-x.md`: add a new top section for the minor version, in the existing
-  format. Cover the dependency bump and image change, the new values, the registration scope, the
-  route snippet, and "no change with default values".
+  format. Cover:
+  - the CM and decentralizedIam bumps, with the image changes and any TIL DB migration (Deviation 2,
+    listing what a default upgrade does change);
+  - the new values and the registration scope;
+  - that an external TIL must be ≥ 0.10.1;
+  - the gateway routes;
+  - that no eventing resource appears with default values.
 - `charts/data-space-connector/Chart.yaml`: minor version bump (10.15.10 → 10.16.0, or the next
   minor if the base has moved).
-- `AGENTS.md`: update the contract-management version mentions if any.
+- `AGENTS.md`: update the contract-management and decentralizedIam version mentions, if any, and
+  the eventing line on APISIX routes (it still describes the rejected snippet approach).
 - Acceptance: the link check passes (lychee fallback above), `helm lint` and `helm unittest` pass.
