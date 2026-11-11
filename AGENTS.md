@@ -149,7 +149,10 @@ pom.xml                       # drives local-deploy + integration tests
   `before-hook-creation`, so they are recreated.
 
 ## Documentation
-
+- Docs are link-checked by `.github/scripts/check-links.sh` (lychee in Docker, `lychee.toml`, offline): every
+  relative link and `#anchor` in Markdown must resolve. `doc/README.md` keeps a
+  doctoc ToC between the `START doctoc`/`END doctoc` markers -- update it
+  when adding a heading.
 - Every architectural decision should be documented in the ADR format in the folder doc/adr
 - Every new/modified feature should be documented in the README.md or its corresponding markdown document in doc/
 
@@ -201,9 +204,18 @@ post-26.4 OID4VCI model. Hard-won gotchas (full detail in `doc/release-notes/10-
 - **Wallet preset + per-user VCs:** `keycloak.realm.wallets` (Lissi/EUDI clients);
   `wallets.issueCredentialsToUsers: true` auto-assigns realm VCs to declared users.
 
+## Data Space Eventing (ticket-97 epic)
+- Design: `doc/eventing/architecture.md` (§4 event model, §5 APIs, §6 trust,
+  §7 delivery, §12 decisions D-1..D-12), `ticket.md`, `questions.md`. They come
+  from the `step-1-eventing-design` branch of local-claude/data-space-connector.
+- Wire contract of record: FIWARE/contract-management `api/dataspace-events.yaml`
+  (`POST`/`OPTIONS /events`, `POST /subscriptions`,
+  `DELETE /subscriptions/{subscriptionId}`), code in `org.fiware.iam.dataspace.*`.
+  Where it and architecture.md differ (status codes, defaults), the API wins.
+
 ## Important Files
 - `charts/data-space-connector/Chart.yaml` -- dependency graph (current
-  version 9.1.0).
+  version 10.15.10).
 - `charts/data-space-connector/values.yaml` -- ~2930-line config surface;
   top-level sections start at these approximate line numbers:
   `decentralizedIam` (9), `scorpio` (183), `keycloak` (262),
