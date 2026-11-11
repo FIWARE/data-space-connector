@@ -3,7 +3,9 @@
 ## Overview
 Write `doc/eventing/specification.md`: the interoperability contract that a second, non-FIWARE
 implementation needs in order to publish events to, or subscribe at, a FIWARE participant. Link it
-from `doc/README.md`. This is a docs-only change. No chart, values or schema files are touched.
+from `doc/README.md`. Steps 1–3 are docs-only: they touch no chart, values or schema files. (The
+plan PR itself also carries the intended CLAUDE.md → AGENTS.md rename and the three comment lines
+that point to it; that is repository housekeeping, not part of the eventing steps.)
 The spec is normative and kept short. The rationale stays in `doc/eventing/architecture.md`, and the
 wire details follow FIWARE/contract-management `api/dataspace-events.yaml` (main @ `c7da3c4`).
 
@@ -30,6 +32,13 @@ wire details follow FIWARE/contract-management `api/dataspace-events.yaml` (main
   - the defaults differ (dedup 1h, lease 24h, cap 10 per subscriber). Defaults are implementation
     choices and must not be specified as normative values.
 
+**Link check in the agent container.** Every step's acceptance requires
+`.github/scripts/check-links.sh` to pass. That script runs lychee in Docker with a bind mount of
+`$(pwd)`; the Docker sidecar cannot see the workspace, so it fails with "lychee.toml not found". That
+is a tooling failure, not a doc defect: do not report it as one. Run the same check with the static
+musl lychee 0.24.2 binary instead (the gnu build needs glibc 2.38+):
+`lychee --config lychee.toml --root-dir "$(pwd)" '**/*.md'`. It must report 0 errors.
+
 ## Steps
 
 ### Step 1: Bring the eventing design documents onto the work branch
@@ -40,13 +49,20 @@ wire details follow FIWARE/contract-management `api/dataspace-events.yaml` (main
 - If `doc/eventing/architecture.md` already exists on `ticket-97/work` (design PR #2 has landed
   upstream and the branch has been updated), this step has nothing to do. Report that and stop.
 - Otherwise run `git fetch http://gitea-http.gitea.svc.cluster.local:3001/local-claude/data-space-connector.git step-1-eventing-design`
-  and `git merge --no-ff FETCH_HEAD`. Merge, do not cherry-pick: that keeps the commit SHAs, so the
-  later merge of PR #2 is a no-op. Its base `topic/participant-eventing` is already an ancestor of
+  and `git merge --no-ff FETCH_HEAD`. Merge, do not cherry-pick: that keeps the commit SHAs, so a
+  later merge of PR #2 is a no-op, but only if PR #2 lands with a merge commit and gets no further
+  commits after this step. If it is squash- or rebase-merged, or changes again, the final ticket PR
+  must first re-sync `doc/eventing/{architecture,ticket,questions}.md` from upstream (see below). Its base `topic/participant-eventing` is already an ancestor of
   `main`, so the merge adds only `doc/eventing/{architecture,ticket,questions}.md`. Check that with
   `git diff --stat HEAD~1`. Do not edit their content.
 - Acceptance: the three files are present and byte-identical to `step-1-eventing-design`, no other
-  file changes, and `.github/scripts/check-links.sh` passes. If it fails, the failure must be caused
-  by the design docs themselves. Report it and do not fix it in this step.
+  file changes, and the link check passes (see "Link check in the agent container"). If lychee
+  itself reports broken links, they must come from the design docs. Report them and do not fix them
+  in this step.
+- Before the final `ticket-97/work` PR goes upstream: if PR #2 has landed in a way that changed the
+  SHAs (squash/rebase) or its content after this step, replace the three files with the upstream
+  version (`git checkout <upstream main> -- doc/eventing/{architecture,ticket,questions}.md`), so
+  the ticket diff carries no design-doc changes of its own.
 
 ### Step 2: Write `doc/eventing/specification.md`
 Create the spec. It is normative, uses RFC 2119 keywords (MUST/SHOULD/MAY, with a one-line
@@ -166,7 +182,7 @@ Acceptance:
   classes listed above. List any remaining deviation from architecture.md in one "Relation to the
   architecture" note, not inline.
 - Every `architecture.md#…` anchor resolves.
-- `.github/scripts/check-links.sh` passes.
+- The link check passes (`.github/scripts/check-links.sh`, or the lychee fallback above).
 - There is no chart change and no ADR. D-9 already records the decision; the ADR is the separate
   DSC ticket.
 
@@ -182,4 +198,5 @@ Acceptance:
   PR #2 is still open any edit here would conflict with its review changes. The back-links from
   §5.2 and the D-9 row to `specification.md` belong in PR #2 or in a follow-up after it has landed;
   note that in the Step 3 PR description.
-- Acceptance: `.github/scripts/check-links.sh` passes, and the ToC entry anchor resolves.
+- Acceptance: the link check passes (`.github/scripts/check-links.sh`, or the lychee fallback
+  above), and the ToC entry anchor resolves.
