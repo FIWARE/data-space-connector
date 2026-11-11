@@ -269,8 +269,8 @@ Blocked until the decentralized-iam release of Prerequisite B is out.
   Diff `helm template` with default values before and after, and list every change in the PR
   description: the TIL image (≥ 0.10.1), the odrl-authorization version, labels, and any other change
   that comes with the release (Deviation 2). No route may appear.
-- `values.yaml`, under `decentralizedIam.odrlAuthorization.apisix.extraRoutes`, declare two entries,
-  both `enabled: false`, each with `# --` comments:
+- `values.yaml`, under `decentralizedIam.odrlAuthorization.apisix.extraRoutes`, declare three
+  entries, all `enabled: false`, each with `# --` comments:
   - `dataspace-events`: `POST` `/events`, upstream `contract-management:8080`. The name comes from
     the umbrella's `contract-management.fullnameOverride` and matches the existing CM route in
     `k3s/provider.yaml`. Do not trust that: check name and port against the Service in a
@@ -285,6 +285,22 @@ Blocked until the decentralized-iam release of Prerequisite B is out.
       rewrite needs `_meta.priority` above 2599. Verify this against the APISIX version that ships and
       against the CM README (~148–170).
   - `dataspace-events-handshake`: `OPTIONS` `/events`, the same upstream, no auth plugins.
+  - `dataspace-events-discovery`: `GET` `/events/.well-known/openid-configuration`, upstream
+    `verifier:3000`, no auth plugins, and a `proxy-rewrite` whose `uri` is
+    `/services/<events-service>/.well-known/openid-configuration`. Empty by default
+    (deployment-specific).
+    - Why: on a `401` the publisher's OID4VP client fetches `<sink>/.well-known/openid-configuration`
+      (specification §5.1 step 1), and the callee MUST serve it for every protected path, with the
+      events scope in `scopes_supported`. Without this route that `GET` hits the host's catch-all: a
+      `401` behind `openid-connect`, a `404`, or on the k3s CM host the priority-100 `/*` +
+      `vars` route (`k3s/provider.yaml` ~443–454) that serves the **contract-management** service's
+      metadata, which lacks the events scope. The publisher can then never get a token.
+    - The path assumes the announced sink is `<scheme>://<host>/events`. Say in the `# --` comment
+      that a sink under another path needs both `uri`s changed.
+    - `<events-service>` is the verifier service of Step 5 item 3, and the same service that
+      `dataspace-events`' `openid-connect.discovery` points at.
+    - `verifier:3000` comes from `decentralizedIam.vcAuthentication.vcverifier.fullnameOverride:
+      verifier` and the k3s routes. Check it against the rendered Service, as for the CM upstream.
   - **A host binding is required once enabled, but there is none in the defaults.**
     - Why required: APISIX's default router `radixtree_host_uri` tries host-bound routes first and
       falls back to host-less routes only when no host-bound route matches. DSC deployments bind
@@ -300,36 +316,44 @@ Blocked until the decentralized-iam release of Prerequisite B is out.
     - Both keys exist: the existing routes use the singular `host`. APISIX does not allow `host` and
       `hosts` on the same route (a `not`/`anyOf` clause in the route schema).
     - Verify against the APISIX version that ships: the `minItems`, the host/hosts exclusion, the
-      host-first fallback of `radixtree_host_uri`, and that an exact `/events` beats a `/*` on the
-      **same** host (lua-resty-radixtree matches the exact path before prefixes). If `/*` wins, give
-      both entries a default `priority` above the catch-alls and say so in the PR description.
+      host-first fallback of `radixtree_host_uri`, and that the exact `/events` and
+      `/events/.well-known/openid-configuration` beat a `/*` on the **same** host, including the
+      priority-100 `/*` + `vars` discovery route (lua-resty-radixtree matches the exact path before
+      prefixes, and `priority` only orders routes of the same path). If a `/*` wins, give all three
+      entries a default `priority` above the catch-alls and say so in the PR description.
 - New template `templates/eventing-validation.yaml`: no output, `fail` only. It fails when
   `dataspace-events` is enabled and:
   - `contract-management.enabled` is true and `contract-management.dataspace.events.listener.enabled`
     is not true (with an external CM the umbrella's listener flag means nothing), or
   - its `openid-connect.discovery` is empty, or
-  - `dataspace-events-handshake` is not enabled.
+  - `dataspace-events-handshake` or `dataspace-events-discovery` is not enabled, or
+  - the `proxy-rewrite.uri` of `dataspace-events-discovery` is empty or is not a suffix of
+    `dataspace-events`' `openid-connect.discovery` (both must name the same verifier service).
 
-  It also fails when either entry is enabled and its `route`:
+  It also fails when any of the three entries is enabled and its `route`:
   - has neither a non-empty `host` nor a non-empty `hosts`, or
   - has both `host` and `hosts`, or
-  - binds other hosts than the other entry (the handshake must answer where the events arrive).
+  - binds other hosts than another enabled entry (handshake and discovery must answer where the
+    events arrive).
 
   The keys may be absent, so it reads them as described under "Reading subchart values", starting
   from `index .Values "decentralizedIam"` and `index .Values "contract-management"`. A listener without the
   route stays valid (Deviation 3).
 - Extend `tests/eventing_test.yaml`, parameterized: defaults render nothing; each inconsistent
-  combination gives `failedTemplate` with its message, including on either enabled entry: no host,
-  `host: ""`, `hosts: []`, both keys set, and hosts that differ between the entries. The consistent
+  combination gives `failedTemplate` with its message, including on each enabled entry: no host,
+  `host: ""`, `hosts: []`, both keys set, and hosts that differ between the entries; the discovery
+  entry disabled, with an empty rewrite `uri`, and with a service other than `discovery`'s. The consistent
   combination renders with `host`, with one entry in `hosts` and with two; and with
   `contract-management.enabled: false` and the listener off.
 - Local only, not in CI: after `helm dependency update`, render with the routes enabled in the default
   yaml mode and in `traditional`+`etcd` mode. Check that the `apisix-routes` ConfigMap and the admin
-  script both contain both routes, that the user's `routes` list is unchanged, and that there is a
-  `DELETE` when the routes are disabled. Then run the rendered yaml-mode config in an APISIX
+  script both contain all three routes, that the user's `routes` list is unchanged, and that there is
+  a `DELETE` per route when they are disabled. Then run the rendered yaml-mode config in an APISIX
   container of the shipped version, with a host-bound `/*` catch-all on the same host and on another
-  host, and show with `curl` that `POST /events` and `OPTIONS /events` on the bound host reach the
-  events routes (an echo upstream is enough). Paste the results into the PR description.
+  host, plus a copy of the k3s priority-100 `/*` + `vars` discovery route on the same host. Show with
+  `curl` that `POST /events`, `OPTIONS /events` and `GET /events/.well-known/openid-configuration` on
+  the bound host reach the events routes, the last one with the rewritten path (an echo upstream is
+  enough). Paste the results into the PR description.
 - `values-schema.sh --check` (`decentralizedIam` is an open key), `helm lint`, `helm unittest`.
 - Acceptance: all pass; the default-values diff contains no route and no eventing resource.
 
@@ -352,16 +376,21 @@ Blocked until the decentralized-iam release of Prerequisite B is out.
   specification/architecture for the reasons. Content:
   1. the values to enable the listener/subscriber, and which keys are startup-only (a rollout
      follows) vs. refreshed at runtime;
-  2. the gateway: enable both `extraRoutes` entries of Step 3, set `discovery`, and bind both to the
-     host of the announced sink URL with `host` or `hosts` (never empty, not both). Override
-     `upstream.nodes` if CM is not `contract-management:8080`. Explain:
+  2. the gateway: enable the three `extraRoutes` entries of Step 3, set `discovery` and the
+     discovery route's rewrite `uri` to the events verifier service, and bind all three to the host
+     of the announced sink URL with `host` or `hosts` (never empty, not both). Override
+     `upstream.nodes` if CM is not `contract-management:8080` or the verifier not `verifier:3000`;
+     change the `uri`s if the sink path is not `/events`. Explain:
      - why the host is required (host-bound catch-alls win under `radixtree_host_uri`);
+     - why the discovery route is needed (specification §5.1 step 1);
      - why there are two switches (Deviation 3);
      - what the `proxy-rewrite` priority is for;
-     - that operators with their own gateway must reproduce the same plugin chain, including removing
-       `X-Userinfo`;
+     - that operators with their own gateway must reproduce the same routes and plugin chain,
+       including the discovery route and removing `X-Userinfo`;
   3. a verifier service registration
-     (`decentralizedIam.vcAuthentication.vcverifier.registration.services`):
+     (`decentralizedIam.vcAuthentication.vcverifier.registration.services`), whose id is the
+     `<events-service>` of the `dataspace-events` and `dataspace-events-discovery` routes, and whose
+     scope is the one subscribers request:
      - `jwtInclusion` maps `credentialSubject.id` to the top-level claim `participantId`;
      - check the field names in the credentials-config-service API;
   4. the ODRL policy from Step 4;
@@ -382,5 +411,5 @@ Blocked until the decentralized-iam release of Prerequisite B is out.
   minor if the base has moved).
 - `AGENTS.md`: update the contract-management and decentralizedIam version mentions, if any, and
   the two stale eventing lines (see "Stale AGENTS.md lines"), unless a plan-mode agent already did;
-  add the required host binding of the events routes.
+  add the required host binding of the events routes and the discovery route next to them.
 - Acceptance: the link check passes (lychee fallback above), `helm lint` and `helm unittest` pass.
