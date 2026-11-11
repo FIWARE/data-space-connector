@@ -147,7 +147,9 @@ implements only OID4VP 1.0 does not interoperate with it. It is the behaviour of
    `/` of `<path>` removed (`<scheme>://<host>[:<port>]/.well-known/openid-configuration` for an empty
    path). The metadata MUST list `authorization_endpoint`, `token_endpoint`, `scopes_supported`
    containing the requested scopes, `grant_types_supported` containing `vp_token`, and
-   `response_types_supported` containing `code`.
+   `response_types_supported` containing `code`. Because the URL carries the full request path, the
+   callee MUST serve the metadata under every path it protects: the sink, `/subscriptions` and every
+   `/subscriptions/{subscriptionId}`.
 2. **Authorization call.** The caller sends `GET <authorization_endpoint>` with the query parameters
    `client_id`, `scope`, `state`, `nonce` and `response_type=code`.
 3. **Redirect.** The verifier MUST answer `302` with a `Location` in the `openid4vp://` scheme. Its
@@ -339,7 +341,8 @@ Receiver (sink):
 - The sink MUST answer `2xx` and SHOULD include `Allow` (listing `POST`).
 - The sink MUST include `WebHook-Allowed-Origin` only when the requesting origin belongs to a
   publisher it is configured to receive from; otherwise it answers without that header.
-- The sink MAY include `WebHook-Allowed-Rate`.
+- The sink SHOULD include `WebHook-Allowed-Rate` (the publisher sends no `WebHook-Request-Rate`).
+  A publisher treats a missing header as unlimited.
 
 ## 10. Not specified
 
@@ -362,8 +365,8 @@ A **publisher**:
 - authenticates at the receiver's verifier with the token flow of
   [§5.1](#51-token-flow-fiware-m2m-profile-of-oid4vp) and a credential whose `credentialSubject.id`
   equals `source`, using the subscription's `protocolsettings`;
-- protects `/subscriptions` with a verifier that implements the verifier side of
-  [§5.1](#51-token-flow-fiware-m2m-profile-of-oid4vp);
+- protects `/subscriptions` and `/subscriptions/{subscriptionId}` with a verifier that implements
+  the verifier side of [§5.1](#51-token-flow-fiware-m2m-profile-of-oid4vp);
 - for `participant.removed`, sends `subject` and `data.participantId` with the same value;
 - validates every sink with the handshake before activating a subscription, and sends
   `WebHook-Request-Origin` on every delivery ([§9](#9-webhook-validation-handshake));
@@ -375,11 +378,7 @@ A **receiver**:
 
 - admits only tokens from its own verifier, and configures that verifier so that the presented
   credential's `credentialSubject.id` is the identity compared with `source`;
-- runs that verifier with the verifier side of [§5.1](#51-token-flow-fiware-m2m-profile-of-oid4vp):
-  the well-known metadata, a `302` to an `openid4vp://` URI carrying a signed request object
-  (`request`, or `request_uri` with `request_uri_method=get`) that echoes `nonce` and sets
-  `response_type=vp_token` and `response_mode=direct_post`, and a `token_endpoint` that accepts
-  `grant_type=vp_token` and answers `200` with a JSON token response;
+- runs that verifier with the verifier side of [§5.1](#51-token-flow-fiware-m2m-profile-of-oid4vp);
 - ignores events about itself, judged by the resolved identifier ([§4.1](#41-orgfiwaredataspaceparticipantremoved));
 - applies the checks of [§6](#6-authorization-rule) in that order, with the listed answers;
 - accepts and ignores complete events of unknown types (`202`) and unknown `data` members;
