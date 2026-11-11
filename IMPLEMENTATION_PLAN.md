@@ -66,6 +66,14 @@ Until a plan-mode agent or Step 5 updates them, **this plan wins**:
   an image override in the umbrella. An override would bypass the version pairing that decentralized-iam
   tests. An external TIL (`registration.til` pointing outside the release) must be ≥ 0.10.1, and the
   release notes say so.
+- **TIL `409` on a scoped create.** In TIL 0.10.1, 0.10.3 and 0.10.4 (`TrustedIssuersListController
+  .createTrustedIssuer`), `POST /issuer` answers `409` whenever the issuer DID exists
+  (`existsById(did)`), before it looks at `scope`. A scoped create never adds a second grant to an
+  existing issuer. So the registration Job's `409` path leaves an issuer registered before the upgrade
+  with its unscoped grant, and it also skips the membership grant of an issuer that exists for another
+  reason (e.g. a ProductOrder grant written through `PUT /issuer/{did}/scopes`). CM's
+  `adopt-unattributed` covers the first case only. Moving the Job to `PUT /issuer/{did}/scopes` would
+  cover both, but changes the upgrade no-op of Step 1; it is out of scope here and noted for a follow-up.
 - **APISIX routes.** The routes are the subchart list `decentralizedIam.odrlAuthorization.apisix.routes`.
   odrl-authorization (2.4.3 in 2.1.28, 2.4.4 in 2.1.30) renders it in one of three ways, depending on
   the APISIX deployment mode:
@@ -198,7 +206,8 @@ landed (see "Release gating").
   - With no such publisher the generated script must be **byte-identical** to today's (upgrade no-op).
 - Add the `scope`/`scopeType` keys to the commented `registration.issuer` example in `values.yaml`
   with `# --` text. The text must say that the Job's existing `409` path leaves already-registered
-  issuers unscoped; CM's `on-participant-removed.adopt-unattributed` covers those. It must also say:
+  issuers unscoped (verified, see "TIL `409` on a scoped create"); CM's
+  `on-participant-removed.adopt-unattributed` covers those. It must also say:
   - the scope needs TIL ≥ 0.10.1, which an older TIL silently drops; the chart's own TIL reaches that
     version with Step 3;
   - the default derives from `contract-management.dataspace.events.publishers`, which only takes
@@ -382,6 +391,13 @@ Blocked until the decentralized-iam release of Prerequisite B is out.
      `upstream.nodes` if CM is not `contract-management:8080` or the verifier not `verifier:3000`;
      change the `uri`s if the sink path is not `/events`. Explain:
      - why the host is required (host-bound catch-alls win under `radixtree_host_uri`);
+     - that the sink host should be the host whose catch-all already routes to CM (e.g. the k3s
+       `contract-management` host), so the exact `/events` routes shadow it. Any other route whose
+       upstream is CM (a `/*` on another host) also forwards `POST /events`, with that route's
+       verifier scope and policy and without the `X-Userinfo` strip. The events scope and policy
+       then do not apply, and unless that route's `openid-connect` sets `X-Userinfo` itself, a
+       client-sent header reaches CM's source == identity check. Such routes must exclude
+       `/events` (a `vars` condition or an ODRL policy that denies it);
      - why the discovery route is needed (specification §5.1 step 1);
      - why there are two switches (Deviation 3);
      - what the `proxy-rewrite` priority is for;
