@@ -17,6 +17,7 @@ specific flows and its deployment and integration with other frameworks.
   - [Contract Management](#contract-management)
   - [M2M Service Interaction](#m2m-service-interaction)
   - [Consent Management](#consent-management)
+  - [Data Space Eventing](#data-space-eventing)
 - [Deployment / Integration](#deployment--integration)
   - [Quick Start Guide](#quick-start-guide)
   - [Deployment by Role](#deployment-by-role)
@@ -63,6 +64,15 @@ Optional consent management (ISO/IEC TS 27560) - its architecture, trust model a
 * [Consent Management](./CONSENT_MANAGEMENT.md) - architecture, trust model, participant
   authentication over OID4VP, and the end-to-end demo
 * [Architecture Decision Records](./adr/README.md)
+
+### Data Space Eventing
+
+Participants publish events to, and subscribe at, other participants of the data space. The design and the
+wire contract are documented here:
+* [Architecture](./eventing/architecture.md) - event model, APIs, trust and authorization, delivery, and the
+  design decisions behind them
+* [Interoperability specification](./eventing/specification.md) - normative contract a non-FIWARE
+  implementation must follow to publish events to, or subscribe at, a FIWARE participant
 
 
 
