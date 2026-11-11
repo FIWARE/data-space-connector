@@ -278,10 +278,12 @@ Responses:
 - `401`: the caller was not identified.
 - `403`: `subscriberId` differs from the caller's identity.
 - `503`: the subscription cannot be accepted now (no publisher origin configured, or a subscription
-  cap reached). The subscriber SHOULD retry later.
+  cap reached, possibly by a concurrent registration during the handshake). The subscriber SHOULD
+  retry later.
 
 Check order: `401` → missing `subscriberId` `400` → `subscriberId` mismatch `403` → other missing or
-invalid fields `400` → `503` → handshake (`400` on failure) → `201`.
+invalid fields `400` → `503` → handshake (`400` on failure) → `201`, or `503` if a cap was reached
+during the handshake. A `503` therefore does not prove that no handshake ran.
 
 Leases ([architecture D-4](architecture.md#12-decision-register)):
 
