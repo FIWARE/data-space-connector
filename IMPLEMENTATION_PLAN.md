@@ -18,7 +18,8 @@ wire details follow FIWARE/contract-management `api/dataspace-events.yaml` (main
   `WebhookHeaders`, `WebhookHandshake` (accepts any 2xx; `WebHook-Allowed-Origin` must equal the
   origin, case-insensitive, or `*`; parses `WebHook-Allowed-Rate`, where `*` means unlimited),
   `EventListener`, `EventAuthorizer`, `EventDeduplicator`, `EventDelivery` (sends
-  `WebHook-Request-Origin` on every delivery; retries on 5xx/408/429; a `410 Gone` from the sink drops
+  `WebHook-Request-Origin` on every delivery; retries on 5xx/408/429 and on transport failures with no
+  HTTP status (`isRetryable` ends in `.orElse(true)`); a `410 Gone` from the sink drops
   the subscription), `SubscriptionController`, `ParticipantRemovedHandler`, `TirWatcher`,
   `ParticipantResolver` (CM does not verify the token: the API gateway passes the verified claims in
   a header, `X-Userinfo` by default, and CM reads the caller's id from the top-level claim
@@ -86,6 +87,8 @@ Sections:
 3. **Event format.** CloudEvents attributes table:
    - `specversion`, `id`, `source` and `type` are REQUIRED. `subject`, `time`, `datacontenttype` and
      `dataschema` are optional.
+   - `specversion` MUST be `"1.0"` (the API pins `enum: ['1.0']`); a receiver does not accept other
+     CloudEvents versions.
    - `id` is unique per `source`.
    - `source` is the publisher's participant identifier. Any DID method is allowed.
    - `dataspaceid` is an OPTIONAL extension. If the event carries it and the receiver has a data
@@ -174,13 +177,17 @@ Sections:
    - Give the full status-code table, exactly as in `dataspace-events.yaml`:
      202/400/401/403/415/500/502/503.
    - Say which codes the publisher retries (5xx, 408, 429) and that `410 Gone` ends the subscription.
+     State (informative) that the publisher also retries transport failures without an HTTP status
+     (connection refused, timeout, TLS error), so an unreachable sink sees redeliveries.
    - Delivery is at-least-once and best-effort, with no ordering. Receivers MUST be idempotent.
    - The path is relative to a base URL that the receiver announces (the `sink`).
 8. **Subscription profile.**
    - `POST /subscriptions`:
      - The request fields are `subscriberId`, `sink`, `types` (minItems 1), `protocol` (`HTTP` only),
        and `protocolsettings` with `clientId` (required) and `scopes`.
-     - The `201` response is `Subscription` with `id` and `expiresAt`.
+     - The `201` response is `Subscription`: the request fields echoed back plus `id` and `expiresAt`.
+       All seven (`id`, `subscriberId`, `sink`, `types`, `protocol`, `protocolsettings`, `expiresAt`)
+       are required.
      - The `400` response is `SubscriptionError {reason}`.
      - Give the check order from the schema description: 401 → missing `subscriberId` 400 →
        mismatch 403 → other fields 400. Also list 503.
