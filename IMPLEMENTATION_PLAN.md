@@ -1,244 +1,199 @@
-# Implementation Plan: [DSC] Interoperability specification for data space eventing
+# Implementation Plan: [DSC] Chart: participant side of data space eventing
 
 ## Overview
-Write `doc/eventing/specification.md`: the interoperability contract that a second, non-FIWARE
-implementation needs in order to publish events to, or subscribe at, a FIWARE participant. Link it
-from `doc/README.md`. Steps 1–3 are docs-only: they touch no chart, values or schema files. (The
-plan PR itself also carries the intended CLAUDE.md → AGENTS.md rename and the three comment lines
-that point to it; that is repository housekeeping, not part of the eventing steps.)
-The spec is normative and kept short. The rationale stays in `doc/eventing/architecture.md`, and the
-wire details follow FIWARE/contract-management `api/dataspace-events.yaml` (main @ `c7da3c4`).
+Wire contract-management's (CM) data space eventing listener/subscriber into the umbrella chart, off
+by default: `contract-management.dataspace.events.*` values, a refreshable publishers ConfigMap
+(rendered by the CM subchart), `scope`/`scopeType` on `registration.issuer`, the APISIX route for
+the events path, an example ODRL policy, tests and docs. An upgrade with default values must not
+change any eventing-related resource.
 
-**Sources the step agents must read** (none of them may be edited, apart from the files named in a step):
-- Design: `doc/eventing/architecture.md` §4 (event model), §5.1/§5.2 (APIs, handshake),
-  §6 (trust and authorization), §7 (delivery), §12 D-2/D-5/D-7/D-8/D-9; `doc/eventing/questions.md`
-  (Q10: no ODRL left operand for the issuer); `doc/eventing/ticket.md` section "DSC-3".
-- API of record: `git clone https://github.com/FIWARE/contract-management /tmp/cm` (read-only, outside
-  the repo). Use `api/dataspace-events.yaml` and these classes in `src/main/java/org/fiware/iam/dataspace/`:
-  `WebhookHeaders`, `WebhookHandshake` (accepts any 2xx; `WebHook-Allowed-Origin` must equal the
-  origin, case-insensitive, or `*`; parses `WebHook-Allowed-Rate`, where `*` means unlimited),
-  `EventListener`, `EventAuthorizer`, `EventDeduplicator`, `EventDelivery` (sends
-  `WebHook-Request-Origin` on every delivery; retries on 5xx/408/429 and on transport failures with no
-  HTTP status (`isRetryable` ends in `.orElse(true)`); a `410 Gone` from the sink drops
-  the subscription), `SubscriptionController`, `ParticipantRemovedHandler`, `TirWatcher`,
-  `ParticipantResolver` (CM does not verify the token: the API gateway passes the verified claims in
-  a header, `X-Userinfo` by default, and CM reads the caller's id from the top-level claim
-  `dataspace.events.listener.identity.participant-claim`, `participantId` by default).
-- Verifier claim mapping: `jwtInclusion` in the credentials-config-service API
-  (https://github.com/FIWARE/credentials-config-service, `api/credentials-config-service.yaml`) is
-  what puts a credential field into a top-level claim of the verifier's access token.
-- **Where architecture.md and the API differ, the API wins.** Known differences:
-  - status codes: the API has 415, 500 and 503 + `Retry-After`, and no 422;
-  - the API returns 202 for duplicates, unknown types and self-events;
-  - the defaults differ (dedup 1h, lease 24h, cap 10 per subscriber). Defaults are implementation
-    choices and must not be specified as normative values.
+**Sources the step agents must read** (read-only, clone outside the repo):
+- Design: `doc/eventing/architecture.md` §5–§9, §12 (D-5, D-8, D-12); `doc/eventing/specification.md`
+  (§5 authentication binding, §6 authorization, §9 handshake); `doc/eventing/ticket.md` "DSC-1".
+- CM application: `git clone https://github.com/FIWARE/contract-management /tmp/cm` (main @ `c7da3c4`,
+  release 3.5.3). Property tree: `src/main/java/org/fiware/iam/configuration/DataSpaceEventsProperties.java`
+  (`@ConfigurationProperties("dataspace.events")`); commented example in
+  `src/main/resources/application.yaml` (lines ~115–209); deployment notes in `README.md` (~148–170
+  gateway/`X-Userinfo`, ~742–760 refresh and mounting). Eventing ships in CM 3.5.0, the TIR watcher
+  in 3.5.1, `on-participant-removed` and adoption in **3.5.3**.
+- CM chart: `https://github.com/FIWARE/helm-charts` `charts/contract-management` (3.6.4, appVersion
+  3.5.1; DSC pins 3.6.3).
+- TIL API: `https://github.com/FIWARE/trusted-issuers-list` `api/trusted-issuers-list.yaml`.
+  `POST /issuer` takes `scope` and `scopeType` as **query parameters**; `scopeType` is the enum
+  `dataspace-membership` (the ticket's `dataspace` is not a valid value — the API wins). Scope types
+  exist from TIL 0.10.1.
 
-**Link check in the agent container.** Every step's acceptance requires
-`.github/scripts/check-links.sh` to pass. That script runs lychee in Docker with a bind mount of
-`$(pwd)`; the Docker sidecar cannot see the workspace, so it fails with "lychee.toml not found". That
-is a tooling failure, not a doc defect: do not report it as one. Run the same check with the static
-musl lychee 0.24.2 binary instead (the gnu build needs glibc 2.38+):
+**Facts that shape the plan** (verified while planning):
+- CM reads the eventing config from Micronaut config files (`MICRONAUT_CONFIG_FILES`, comma list) and
+  re-reads it on a `micronaut.io.watch` event under `dataspace.events.listener.watch.path` (reacts to
+  the kubelet `..data` symlink swap) or on `POST :9090/refresh`. A `subPath` mount never updates.
+  Startup-only keys: the `enabled` flags of listener/publisher/subscriber/tir-watcher,
+  `listener.watch.*`, `publisher.sink-*-timeout`. Everything else reloads at runtime.
+- The CM chart 3.6.4 has no eventing values. It mounts `application.yaml` with `subPath` and sets
+  `MICRONAUT_CONFIG_FILES=/application.yaml` itself. A `config:` override replaces the whole file.
+  The chart has no Ingress or route template.
+- CM does not verify tokens. The API gateway must run `openid-connect` with
+  `set_userinfo_header: true` and must drop any `X-Userinfo` sent by the client. CM then reads the
+  caller id from the claim `dataspace.events.listener.identity.participant-claim` (`participantId`).
+- The `dataspace` removal mode revokes TIL grants with scope = publisher id and
+  scopeType = `DATASPACE_MEMBERSHIP` (`ParticipantAdoption.grantMembership(did, publisherId, …)`).
+- The umbrella's APISIX routes are the plain list `decentralizedIam.odrlAuthorization.apisix.routes`,
+  inside a subchart (odrl-authorization 2.4.x renders it with `toYaml`). The umbrella cannot append a
+  route gated on a feature flag without replacing the user's list, and the subchart has no
+  extra-routes extension point. The route is therefore shipped as a documented, copy-ready snippet
+  (Step 4), not rendered.
+- CI runs `helm unittest charts/data-space-connector` **without** `helm dependency build`, so suites
+  can only target the umbrella's own `templates/`. The subchart's rendering is asserted in the CM
+  chart's PR and by a local `helm template` check (Step 2).
+- `contract-management` is an open (subchart) key in `values.schema.json`, so declaring keys under it
+  does not change the schema. Still run `.github/scripts/values-schema.sh --check`.
+- There is no helm-docs-generated values table in this repo. The `# --` comments are still required.
+  If a step finds a generated table, regenerate it; otherwise report that there is none.
+
+**Prerequisite (outside this repo, blocks Step 2): contract-management chart change.**
+The Gitea fork `general-agent-3/helm-charts` exists but is stale (main `56cd6c9`, CM chart 3.5.23,
+far behind upstream 3.6.4). Before Step 2 can start, a human must either sync that fork's `main` to
+upstream and run the change there, or open the PR on FIWARE/helm-charts directly. The new chart
+version must then be released to `oci://quay.io/fiware/helm-charts`. The PR must:
+- Add `dataspace.events` to `charts/contract-management/values.yaml` as the Micronaut
+  `dataspace.events` property tree, verbatim (kebab-case keys as in `DataSpaceEventsProperties`).
+  Default `{}`; every feature stays off; `# --` docs and a commented participant example with
+  `on-participant-removed.mode: report`.
+- Render the tree into a **separate** ConfigMap `<fullname>-dataspace-events` (key
+  `dataspace-events.yaml`, content `dataspace: {events: …}`) only when
+  `listener.enabled`, `publisher.enabled` or `subscriber.enabled` is true. Mount it as a directory
+  **without `subPath`** at a fixed path (named in a helper, e.g. `/dataspace-events`). Append that
+  file to `MICRONAUT_CONFIG_FILES` (`/application.yaml,/dataspace-events/dataspace-events.yaml`;
+  check the comma handling in Micronaut's `DefaultEnvironment`). Default
+  `listener.watch.enabled: true` and `listener.watch.path` to the mount path; a user-set value wins
+  (`mergeOverwrite` with the user tree last).
+- Put a checksum annotation over the **startup-only subset only**, so a change to those keys rolls
+  the pod while a change to `publishers` reaches the running pod through the watch.
+- Leave `additionalEnvVars`, `deployment.additionalVolumes` and `deployment.additionalVolumeMounts`
+  untouched: append to them, never replace them.
+- With eventing off, the rendering must be byte-identical to before (assert it with a diff of
+  `helm template` against the previous chart version).
+- Bump `appVersion` to 3.5.3 (the first CM release with `on-participant-removed`).
+- Version via the PR label; FIWARE/helm-charts bumps chart versions in CI (see its `AGENTS.md`).
+If this prerequisite is not met when Step 2 is picked up, Step 2 writes completion status `blocked`
+and names the missing chart version.
+
+**Link check in the agent container.** `.github/scripts/check-links.sh` runs lychee in Docker with a
+bind mount that the sidecar cannot see ("lychee.toml not found"). That is a tooling failure. Use the
+static musl lychee 0.24.2 binary instead:
 `lychee --config lychee.toml --root-dir "$(pwd)" '**/*.md'`. It must report 0 errors.
 
 ## Steps
 
-### Step 1: Bring the eventing design documents onto the work branch
-`ticket-97/work` was cut from `main` and does not contain `doc/eventing/`. The spec links into
-`architecture.md` §-anchors, and the lychee link check (`.github/scripts/check-links.sh`, offline,
-`include_fragments = "anchor-only"`) fails on dangling relative links. Step 2 therefore needs those files on the branch.
+### Step 1: Attribute `registration.issuer` grants to the data space publisher
+Umbrella-only; not blocked by the prerequisite.
+- `charts/data-space-connector/templates/participant-registration.yaml`: send `scope` and
+  `scopeType` as query parameters on `POST {til}/issuer`, URL-encoded (`urlquery`).
+  - Per issuer entry, optional `scope` and `scopeType`. If `scope` is unset, it defaults to the `id`
+    of the one entry in `contract-management.dataspace.events.publishers` whose `types` contain
+    `org.fiware.dataspace.participant.removed`. Read it with `dig`/`default`; the key may be absent.
+  - `scopeType` defaults to `dataspace-membership` whenever a scope is in effect.
+  - An explicit `scope: ""` opts the entry out (unscoped, as today).
+  - If several publishers subscribe to `participant.removed` and an entry sets no scope, `fail` with a
+    message saying to set `scope` per issuer.
+  - With no such publisher the generated script must be **byte-identical** to today's (upgrade no-op).
+- Add the `scope`/`scopeType` keys to the commented `registration.issuer` example in `values.yaml`
+  with `# --` text. The text must say that the Job's existing `409` path leaves already-registered
+  issuers unscoped; CM's `on-participant-removed.adopt-unattributed` covers those.
+- Check which TIL image `decentralizedIam` 2.1.28 deploys. If it is older than 0.10.1, say so in the
+  values comment and the PR description; do not bump `decentralizedIam` in this step.
+- New suite `charts/data-space-connector/tests/eventing_test.yaml`, parameterized where helm-unittest
+  allows. Cases:
+  - default values render the old script (no `scope=` anywhere);
+  - one publisher → `?scope=<id>&scopeType=dataspace-membership`;
+  - explicit `scope` and `scopeType` win;
+  - `scope: ""` → unscoped;
+  - two publishers without a scope → `failedTemplate`.
+  Leave `tests/participant-registration_test.yaml` passing unchanged.
+- Run `.github/scripts/values-schema.sh` (regenerate if needed), `helm lint charts/data-space-connector`
+  and `helm unittest charts/data-space-connector`.
+- Acceptance: all pass, and `helm template` with default values is unchanged against the base branch.
 
-- If `doc/eventing/architecture.md` already exists on `ticket-97/work` (design PR #2 has landed
-  upstream and the branch has been updated), this step has nothing to do. Report that and stop.
-- Otherwise run `git fetch http://gitea-http.gitea.svc.cluster.local:3001/local-claude/data-space-connector.git step-1-eventing-design`
-  and `git merge --no-ff FETCH_HEAD`. Merge, do not cherry-pick: that keeps the commit SHAs, so a
-  later merge of PR #2 is a no-op, but only if PR #2 lands with a merge commit and gets no further
-  commits after this step. If it is squash- or rebase-merged, or changes again, the final ticket PR
-  must first re-sync `doc/eventing/{architecture,ticket,questions}.md` from upstream (see below). Its base `topic/participant-eventing` is already an ancestor of
-  `main`, so the merge adds only `doc/eventing/{architecture,ticket,questions}.md`. Check that with
-  `git diff --stat HEAD~1`. Do not edit their content.
-- Acceptance: the three files are present and byte-identical to `step-1-eventing-design`, no other
-  file changes, and the link check passes (see "Link check in the agent container"). If lychee
-  itself reports broken links, they must come from the design docs. Report them and do not fix them
-  in this step.
-- Before the final `ticket-97/work` PR goes upstream: if PR #2 has landed in a way that changed the
-  SHAs (squash/rebase) or its content after this step, replace the three files with the upstream
-  version (`git checkout <upstream main> -- doc/eventing/{architecture,ticket,questions}.md`), so
-  the ticket diff carries no design-doc changes of its own.
+### Step 2: Bump contract-management and declare `contract-management.dataspace.events`
+Blocked until the prerequisite chart version is released.
+- `charts/data-space-connector/Chart.yaml`: set the `contract-management` dependency to the new
+  chart version.
+- Diff `helm template` with default values before and after, and list every change in the PR
+  description. Expected: the image moves to appVersion 3.5.3 and chart labels change. Nothing
+  eventing-related may appear.
+- `charts/data-space-connector/values.yaml`, under `contract-management:`, add
+  `dataspace.events` with `# --` comments. Declare only keys whose default is safe:
+  - `listener.enabled: false`;
+  - `subscriber.enabled: false`;
+  - `publishers: []`, with a commented participant example:
+    - `id`, `origin`, `types: [org.fiware.dataspace.participant.removed]`,
+      `subscriptions-url`, `client-id`, `scopes`;
+    - `on-participant-removed.mode: report`, `registry-url`.
 
-### Step 2: Write `doc/eventing/specification.md`
-Create the spec. It is normative, uses RFC 2119 keywords (MUST/SHOULD/MAY, with a one-line
-conventions note), and has a doctoc ToC like `architecture.md`. Aim for about 200–300 lines. Explain
-nothing that is not needed for interoperability; for the reasons, link to `architecture.md#…`.
-Sections:
+  Do **not** declare empty-string defaults that would override CM's own fallbacks, e.g.
+  `own-participant-id` (falls back to `general.did`) or `dataspace-id`. Document them in comments
+  instead.
+- Explain in a comment that the namespace is `dataspace.events`, not `events` (D-12), and that the
+  publisher/tir-watcher side belongs to the trust anchor and is not configured here.
+- Add a `# @schema` object block (`type: object`, `additionalProperties: true`, `properties: {}`)
+  only if the generator needs it, then run `.github/scripts/values-schema.sh --check`.
+- Do not touch the existing `contract-management.additionalEnvVars` (OTEL list). Eventing must not add
+  env entries there.
+- Extend `tests/eventing_test.yaml` with the umbrella-renderable cases:
+  - Step 1's default-publisher derivation reads the new `values.yaml` example shape;
+  - the values schema accepts a full participant block (if `values-schema_test.yaml` style allows it).
+- Local only, not in CI: after `helm dependency update charts/data-space-connector`, script three
+  `helm template` checks and paste the results into the PR description:
+  1. defaults → no `*-dataspace-events` ConfigMap;
+  2. `listener.enabled` + one publisher → ConfigMap, a directory mount without `subPath`, and
+     `MICRONAUT_CONFIG_FILES` that contains the events file;
+  3. the same plus a custom `additionalEnvVars` entry → the OTEL entries and the custom entry are
+     all present.
 
-1. **Status and scope.** Version `1.0` (draft), date, and the source API version (`dataspace-events.yaml`
-   `0.0.1`, contract-management `c7da3c4`). Say that the document is not a submission to a governance
-   body, that DSBA, Gaia-X and IDSA are unaffected, and that it is the document to hand over if one
-   ever asks. Name the roles: *publisher* and *receiver/subscriber*.
-2. **Normative references.**
-   - CloudEvents 1.0.2 core.
-   - HTTP Protocol Binding 1.0.2, structured mode.
-   - JSON Event Format.
-   - HTTP 1.1 Web Hooks for Event Delivery, `1.0.3-wip`: pinned, and only §4 (abuse protection) is used.
-   - CloudEvents Subscriptions API: the shape is borrowed, conformance is **not** claimed.
-   - OID4VP.
-   Link the cloudevents/spec documents at their tagged versions (`v1.0.2`). External URLs are not
-   link-checked, so get them right by hand.
-3. **Event format.** CloudEvents attributes table:
-   - `specversion`, `id`, `source` and `type` are REQUIRED. `subject`, `time`, `datacontenttype` and
-     `dataschema` are optional.
-   - `specversion` MUST be `"1.0"` (the API pins `enum: ['1.0']`); a receiver does not accept other
-     CloudEvents versions.
-   - `id` is unique per `source`.
-   - `source` is the publisher's participant identifier. Any DID method is allowed.
-   - `dataspaceid` is an OPTIONAL extension. If the event carries it and the receiver has a data
-     space id configured, the two MUST be equal; otherwise the receiver answers `403`
-     (`EventAuthorizer.isOtherDataspace`). If either side leaves it blank, it is not checked.
-   - Transport: structured mode only, `Content-Type: application/cloudevents+json`. Binary mode → 415.
-   - Type naming: `org.fiware.dataspace.<entity>.<past-tense-verb>`. A breaking payload change is a new type.
-   - A receiver MUST accept and ignore unknown types (`202`), after authentication and the
-     `source`/`dataspaceid` checks of §6, but before the publisher×type check. The `202` applies
-     only to a complete event: an incomplete event of an unknown type gets `400` (§6).
-4. **Event types.**
-   - `org.fiware.dataspace.participant.removed`:
-     - `subject` is the removed participant's identifier.
-     - `data.participantId` (string, equal to `subject`) is the only defined `data` member, and the
-       publisher MUST send it. The reference publisher (`TirWatcher.java:233`, `c7da3c4`) sends
-       `data = {participantId}` and nothing else. The receiver identifies the participant from
-       `subject`, and falls back to `data.participantId` (`ParticipantRemovedHandler`).
-     - architecture §4 also lists `observedAt` and `registry`. The API does not have them, so they are
-       OPTIONAL at most: a publisher MAY send them, a receiver MUST ignore unknown `data` members and
-       MUST NOT depend on these two. Put this gap in the "Relation to the architecture" note.
-     - There is deliberately no `reason`.
-     - Give a JSON example that matches what the reference publisher sends (§4's example minus
-       `observedAt`/`registry`), not the §4 example verbatim.
-     - Rule for any other mismatch between architecture §4 and the code: the code wins. A field the
-       reference publisher does not emit is never REQUIRED.
-   - Reserved names, not specified: `participant.registered`, `participant.credentials.changed`,
-     `participant.suspended`, `service.configuration.provided`.
-5. **Authentication binding.**
-   - The publisher obtains an access token over OID4VP at the **receiver's** verifier, i.e. the
-     verifier that protects the receiver's events path. It sends the token as `Authorization: Bearer`.
-   - It presents a verifiable credential of the type the receiver admits on that path. The type is
-     local configuration of the receiver, not a data space-wide parameter.
-   - A receiver answers `401` when the token is missing or invalid, and the publisher then runs the
-     flow.
-   - The same binding applies to subscription calls, in the opposite direction: the subscriber
-     authenticates at the publisher's verifier. For delivery, the publisher uses the subscriber's
-     `protocolsettings.clientId`/`scopes`.
-   - **Publisher identity.** State normatively which value is compared with `source`: the
-     `credentialSubject.id` of the presented credential (the holder's DID). The publisher MUST present
-     a credential whose `credentialSubject.id` equals the `source` it sends. The receiver MUST configure
-     its verifier so that exactly this value reaches the comparison. How it gets there is receiver-local
-     and informative only: in a FIWARE receiver, `jwtInclusion` maps `credentialSubject.id` to the
-     top-level token claim `participantId`, the gateway passes the claims in `X-Userinfo`, and CM reads
-     `participant-claim`. Before writing this, check in the credentials-config-service API that
-     `jwtInclusion` can map `credentialSubject.id` to a top-level claim. If it cannot, do not invent
-     a mapping: say that the claim is receiver-local and that the publisher learns it from the
-     receiver's verifier metadata (the presentation definition / DCQL query of the events scope).
-   - Describe how a client discovers the verifier exactly as contract-management's OID4VP client
-     does; do not invent a new discovery mechanism. `doc/CENTRAL_MARKETPLACE.md` step 4 only says
-     that the client authenticates at the verifier, so take the mechanism from the code:
-     `org.fiware.iam.http.Oid4VpAuthHandler` reacts to a `401` by calling the OID4VP client with the
-     called URL's `scheme://host[:port]`, the request path, `clientId` and `scope`. Read the FIWARE
-     OID4VP client library it uses to find which well-known metadata URL it fetches from those
-     values, and specify that URL.
-6. **Authorization rule** (architecture §6, D-5). The receiver admits only tokens issued by its
-   own verifier, then applies the checks below **in this order**; the first that matches decides the
-   answer. The order is normative, because it decides which status a publisher gets when several
-   checks fail. Copy it from `EventAuthorizer.authorize` + `EventListener.process` (c7da3c4) and
-   re-check it there:
-   1. no authenticated identifier (missing/invalid token) → `401`;
-   2. authenticated identifier (§5, the credential's `credentialSubject.id`) ≠ `source` → `403`;
-   3. `dataspaceid` present on both sides and different (§3) → `403`;
-   4. `type` known to the receiver and publisher not configured for that `type` → `403`
-      (skipped for an unknown type);
-   5. `specversion`, `id`, `source` or `type` missing → `400`;
-   6. unknown `type` (the event is complete) → `202`, dropped, not deduplicated;
-   7. deduplication on (`source`, `id`): a repeat → `202`; first copy still in flight → `503` +
-      `Retry-After`;
-   8. `subject` is the receiver's own identifier → `202`, no action (counted for dedup);
-   9. otherwise dispatch: `202`; a handler rejecting the event as invalid → `400`, a downstream
-      failure → `502`, any other failure → `500`.
+  Do not commit `charts/data-space-connector/charts/*.tgz` or `Chart.lock` changes unless the repo
+  already tracks them.
+- Acceptance: `helm lint`, `helm unittest`, `values-schema.sh --check` pass; the default-values diff
+  has no eventing resource in it.
 
-   Items 1–4 are `EventAuthorizer.authorize`; `EventListener.process` returns their rejection
-   before it checks completeness, then returns the unknown-type `202`. Spell out the consequences in
-   the spec:
-   - an unconfigured publisher that sends a complete event of an unknown type gets `202`, not `403`;
-   - an incomplete event of an unknown type gets `400`, not `202`;
-   - a malformed event whose `source` differs from the token gets `403`, not `400` (a missing
-     `source` is a mismatch too);
-   - a malformed event of a known type from a publisher not configured for it gets `403`, not `400`.
+### Step 3: Example ODRL policy for the events path
+- New `it/src/test/resources/policies/allowDataSpaceEvents.json`, in the style of
+  `allowContractManagement.json`:
+  - target `http:path` `isInPath` `/events`;
+  - the assignee constrained by the credential type the receiver admits for events
+    (architecture §6 / specification §5; the type is local configuration, so use the type the
+    integration-test publisher would present and say so in the PR description);
+  - action limited to `POST`, if the existing policies express methods.
 
-   Note that an ODRL left operand for the credential **issuer** does not exist today. It would only
-   add defence in depth (a possible PAP contribution, Q10), and it is not a dependency.
-7. **Receiving endpoint** `POST /events`.
-   - List the request headers: `Authorization`, `Content-Type`, `WebHook-Request-Origin`.
-   - Give the full status-code table, exactly as in `dataspace-events.yaml`:
-     202/400/401/403/415/500/502/503.
-   - Say which codes the publisher retries (5xx, 408, 429) and that `410 Gone` ends the subscription.
-     State (informative) that the publisher also retries transport failures without an HTTP status
-     (connection refused, timeout, TLS error), so an unreachable sink sees redeliveries.
-   - Delivery is at-least-once and best-effort, with no ordering. Receivers MUST be idempotent.
-   - The path is relative to a base URL that the receiver announces (the `sink`).
-8. **Subscription profile.**
-   - `POST /subscriptions`:
-     - The request fields are `subscriberId`, `sink`, `types` (minItems 1), `protocol` (`HTTP` only),
-       and `protocolsettings` with `clientId` (required) and `scopes`.
-     - The `201` response is `Subscription`: the request fields echoed back plus `id` and `expiresAt`.
-       All seven (`id`, `subscriberId`, `sink`, `types`, `protocol`, `protocolsettings`, `expiresAt`)
-       are required.
-     - The `400` response is `SubscriptionError {reason}`.
-     - Give the check order from the schema description: 401 → missing `subscriberId` 400 →
-       mismatch 403 → other fields 400. Also list 503.
-     - The same subscriber + sink renews the lease in place. Subscribers MUST renew before `expiresAt`
-       and MUST re-subscribe after a publisher restart, because leases are not durable.
-   - `DELETE /subscriptions/{subscriptionId}`: 204/401/404.
-   - A table maps the Subscriptions API fields that are used against those that are not: no
-     `filters`, `config`, `source`, `subscriptionId` in the request, and no `GET`/`PUT`/discovery.
-9. **Webhook validation handshake**, pinned because the source document is `1.0.3-wip`:
-   - Before it activates a subscription, the publisher sends `OPTIONS <sink>` with
-     `WebHook-Request-Origin: <publisher DNS name>`.
-   - The sink MUST answer 2xx with `WebHook-Allowed-Origin` equal to that origin (case-insensitive)
-     or `*`, and MAY add `WebHook-Allowed-Rate` (an integer, or `*`); also `Allow`.
-   - Receiver side: the `OPTIONS` call is unauthenticated. The sink MUST include
-     `WebHook-Allowed-Origin` only when the requesting origin belongs to a configured publisher, and
-     otherwise answers without it (`EventListener.validateWebhook`, `dataspace-events.yaml`
-     `validateWebhook`). Put this rule into the receiver conformance list as well.
-   - Any other answer leaves the subscription inactive (400 to the subscriber).
-   - Every delivery repeats `WebHook-Request-Origin`.
-   - The publisher honours `WebHook-Allowed-Rate`.
-   - Callback-request validation (`WebHook-Request-Callback`) is NOT used.
-   - The origin is configured together with the identifier and never derived from it (D-8).
-10. **Not specified.**
-    - The receiver's reaction to an event: local policy (architecture §9).
-    - How a publisher detects a removal (§8).
-    - Reconciliation (§10).
-    - The publisher list configuration and the chart values.
-    - Payload signatures (D-7; a future `signature` extension would be additive).
-    - A catch-up feed and brokers (§5.3).
-11. **Conformance checklist.** Two short bullet lists, one for a publisher and one for a receiver.
+  `OPTIONS /events` (the handshake) is unauthenticated and does not go through OPA.
+- Validate that it is well-formed JSON (`python3 -I -m json.tool`). Do not wire it into the
+  integration tests (`it/`); that is a separate ticket.
+- Acceptance: the file parses and mirrors the structure of the existing policies.
 
-Acceptance:
-- Every status code, header, field name and required flag matches `dataspace-events.yaml` and the
-  classes listed above. List any remaining deviation from architecture.md in one "Relation to the
-  architecture" note, not inline.
-- Every `architecture.md#…` anchor resolves.
-- The link check passes (`.github/scripts/check-links.sh`, or the lychee fallback above).
-- There is no chart change and no ADR. D-9 already records the decision; the ADR is the separate
-  DSC ticket.
-
-### Step 3: Link the specification from `doc/README.md`
-- `doc/README.md`:
-  - Add a `### Data Space Eventing` subsection under `## Details about flows and interfaces`,
-    after `### Consent Management`. It gets bullet links to
-    `[Architecture](./eventing/architecture.md)` and
-    `[Interoperability specification](./eventing/specification.md)`, with a one-line description each.
-  - Add the matching ToC entry by hand, between the doctoc markers, in the existing indentation
-    style. If `doctoc` is available, run it instead.
-- Do **not** edit `doc/eventing/architecture.md`. It arrives by merge in Step 1, and while design
-  PR #2 is still open any edit here would conflict with its review changes. The back-links from
-  §5.2 and the D-9 row to `specification.md` belong in PR #2 or in a follow-up after it has landed;
-  note that in the Step 3 PR description.
-- Acceptance: the link check passes (`.github/scripts/check-links.sh`, or the lychee fallback
-  above), and the ToC entry anchor resolves.
+### Step 4: Gateway snippet, docs, release notes, version bump
+- New `doc/eventing/participant-setup.md` (doctoc ToC). Write it as an operator guide and link to
+  specification/architecture for the reasons. Content:
+  1. the values to enable the listener/subscriber, and which keys are startup-only (a rollout
+     follows) vs. refreshed at runtime;
+  2. a copy-ready `decentralizedIam.odrlAuthorization.apisix.routes` snippet:
+     - a `POST /events` route to `contract-management:8080` with `openid-connect`
+       (`bearer_only`, `use_jwks`, `set_userinfo_header: true`, discovery at the verifier service
+       of the events scope) and `opa`;
+     - a `proxy-rewrite` that removes a client-sent `X-Userinfo` before the plugins run (check the
+       plugin order against the CM README);
+     - a separate unauthenticated `OPTIONS /events` route;
+     - say explicitly why it is not rendered by the chart (subchart list, no extension point);
+  3. a verifier service registration
+     (`decentralizedIam.vcAuthentication.vcverifier.registration.services`):
+     - `jwtInclusion` maps `credentialSubject.id` to the top-level claim `participantId`;
+     - check the field names in the credentials-config-service API;
+  4. the ODRL policy from Step 3;
+  5. that `registration.issuer` grants are scoped (Step 1);
+  6. that management port 9090 (`/refresh`, `/participants-removed`) must stay cluster-internal.
+- `doc/README.md`: link the new page under the existing `### Data Space Eventing` subsection.
+- `doc/release-notes/10-x.md`: add a new top section for the minor version, in the existing
+  format. Cover the dependency bump and image change, the new values, the registration scope, the
+  route snippet, and "no change with default values".
+- `charts/data-space-connector/Chart.yaml`: minor version bump (10.15.10 → 10.16.0, or the next
+  minor if the base has moved).
+- `AGENTS.md`: update the contract-management version mentions if any.
+- Acceptance: the link check passes (lychee fallback above), `helm lint` and `helm unittest` pass.
