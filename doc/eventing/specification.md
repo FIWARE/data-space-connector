@@ -286,7 +286,9 @@ invalid fields `400` → `503` → handshake (`400` on failure) → `201`.
 Leases ([architecture D-4](architecture.md#12-decision-register)):
 
 - A request by the same subscriber for the same sink renews the existing subscription in place: same
-  `id`, new `expiresAt`. The handshake runs again.
+  `id`, new `expiresAt`. The `types` and `protocolsettings` of the request replace the previous ones,
+  so a renewal MUST carry every type the subscriber still wants. The handshake runs again, and its
+  `WebHook-Allowed-Rate` replaces the previous rate.
 - A subscriber MUST renew before `expiresAt`.
 - Leases are not durable. A subscriber MUST re-subscribe after a publisher restart; since it cannot
   observe the restart directly, renewing on a timer well within the lease covers it.
@@ -343,6 +345,8 @@ Receiver (sink):
 - How a publisher detects a removal ([architecture §8](architecture.md#8-detecting-the-removal-at-the-trust-anchor)).
 - Reconciliation ([architecture §10](architecture.md#10-reconciliation-the-backstop)).
 - How a receiver configures its publisher list, and the Helm chart values.
+- How a subscriber learns a publisher's base URL for `/subscriptions`, and the client id, scope and
+  credential type of the publisher's verifier: out-of-band configuration, like the publisher list.
 - Payload signatures ([architecture D-7](architecture.md#12-decision-register)); a future `signature`
   extension attribute would be additive.
 - A catch-up feed and brokers ([architecture §5.3](architecture.md#53-what-is-deliberately-not-added)).
