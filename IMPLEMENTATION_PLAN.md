@@ -9,6 +9,16 @@ policy, tests and docs. An upgrade with default values must not create or change
 eventing-related resource; the other changes it does bring are listed under "Deviations from the
 ticket".
 
+**Stale AGENTS.md line.** The "Data Space Eventing" section of `AGENTS.md` still says the events
+route is a documented snippet. That approach was rejected (see "APISIX routes" below). Until a
+plan-mode agent or Step 5 updates the line, **this plan wins**: events routes go through the
+odrl-authorization `apisix.extraRoutes` map (Prerequisite B, Step 3). The default APISIX mode is
+standalone/yaml and serves no admin API, so admin-API hook Jobs do not work there.
+
+**Reading subchart values.** `.Values` is `chartutil.Values`, not a plain map. Do not pass it to
+`dig`. Index into the subchart map first, as `_helpers.tpl` (`dsc.identityhub.assertHolderKid`) does:
+`dig "dataspace" "events" "publishers" list (index .Values "contract-management" | default dict)`.
+
 **Sources the step agents must read** (read-only, clone outside the repo):
 - Design: `doc/eventing/architecture.md` §5–§9, §12 (D-5, D-8, D-12); `doc/eventing/specification.md`
   (§5 authentication binding, §6 authorization, §9 handshake); `doc/eventing/ticket.md` "DSC-1".
@@ -175,7 +185,8 @@ landed (see "Release gating").
   `scopeType` as query parameters on `POST {til}/issuer`, URL-encoded (`urlquery`).
   - Per issuer entry, optional `scope` and `scopeType`. If `scope` is unset, it defaults to the `id`
     of the one entry in `contract-management.dataspace.events.publishers` whose `types` contain
-    `org.fiware.dataspace.participant.removed`. Read it with `dig`/`default`; the key may be absent.
+    `org.fiware.dataspace.participant.removed`. The key may be absent; read it as described under
+    "Reading subchart values".
   - `scopeType` defaults to `dataspace-membership` whenever a scope is in effect.
   - An explicit `scope: ""` opts the entry out (unscoped, as today).
   - If several publishers subscribe to `participant.removed` and an entry sets no scope, `fail` with a
@@ -260,17 +271,26 @@ Blocked until the decentralized-iam release of Prerequisite B is out.
       rewrite needs `_meta.priority` above 2599. Verify this against the APISIX version that ships and
       against the CM README (~148–170).
   - `dataspace-events-handshake`: `OPTIONS` `/events`, the same upstream, no auth plugins.
-  - Each entry also carries `hosts`, empty by default, documented to be set to the gateway host.
+  - **No `hosts` key in the defaults.** APISIX's route schema requires `hosts` to have at least one
+    item (`minItems: 1` in `apisix/schema_def.lua`). With `hosts: []`, the yaml mode logs
+    "failed to check item data" and silently drops the route, and the admin-API mode rejects the
+    PUT with 400, which fails the hook Job. Mention `hosts` only in the `# --` comment, as a key the
+    user adds when the gateway serves more than one host. Helm merges maps, so the user's key reaches
+    the route. Check the `minItems` against the APISIX version that ships.
 - New template `templates/eventing-validation.yaml`: no output, `fail` only. It fails when
   `dataspace-events` is enabled and:
   - `contract-management.dataspace.events.listener.enabled` is not true, or
   - its `openid-connect.discovery` is empty, or
   - `dataspace-events-handshake` is not enabled.
 
-  It reads every value with `dig`, because the keys may be absent. A listener without the route stays
-  valid (Deviation 3).
+  It also fails when either entry is enabled and its `route` has a `hosts` key that is empty.
+
+  The keys may be absent, so it reads them as described under "Reading subchart values", starting
+  from `index .Values "decentralizedIam"` and `index .Values "contract-management"`. A listener without the
+  route stays valid (Deviation 3).
 - Extend `tests/eventing_test.yaml`, parameterized: defaults render nothing; each inconsistent
-  combination gives `failedTemplate` with its message; the consistent combination renders.
+  combination gives `failedTemplate` with its message, including `hosts: []` on either enabled entry;
+  the consistent combination renders, both without `hosts` and with one host.
 - Local only, not in CI: after `helm dependency update`, render with the routes enabled in the default
   yaml mode and in `traditional`+`etcd` mode. Check that the `apisix-routes` ConfigMap and the admin
   script both contain both routes, that the user's `routes` list is unchanged, and that there is a
@@ -297,7 +317,8 @@ Blocked until the decentralized-iam release of Prerequisite B is out.
   specification/architecture for the reasons. Content:
   1. the values to enable the listener/subscriber, and which keys are startup-only (a rollout
      follows) vs. refreshed at runtime;
-  2. the gateway: enable both `extraRoutes` entries of Step 3 and set `discovery` and `hosts`. Explain:
+  2. the gateway: enable both `extraRoutes` entries of Step 3, set `discovery`, and add `hosts` (one
+     or more entries, never empty) if the gateway serves more than one host. Explain:
      - why there are two switches (Deviation 3);
      - what the `proxy-rewrite` priority is for;
      - that operators with their own gateway must reproduce the same plugin chain, including removing
