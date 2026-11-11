@@ -94,7 +94,8 @@ Sections:
    - Transport: structured mode only, `Content-Type: application/cloudevents+json`. Binary mode → 415.
    - Type naming: `org.fiware.dataspace.<entity>.<past-tense-verb>`. A breaking payload change is a new type.
    - A receiver MUST accept and ignore unknown types (`202`), after authentication and the
-     `source`/`dataspaceid` checks of §6, but before the publisher×type check.
+     `source`/`dataspaceid` checks of §6, but before the publisher×type check. The `202` applies
+     only to a complete event: an incomplete event of an unknown type gets `400` (§6).
 4. **Event types.**
    - `org.fiware.dataspace.participant.removed`:
      - `subject` is the removed participant's identifier.
@@ -132,9 +133,13 @@ Sections:
      `jwtInclusion` can map `credentialSubject.id` to a top-level claim. If it cannot, do not invent
      a mapping: say that the claim is receiver-local and that the publisher learns it from the
      receiver's verifier metadata (the presentation definition / DCQL query of the events scope).
-   - Describe how a client discovers the verifier exactly as the central-marketplace flow does
-     (`doc/CENTRAL_MARKETPLACE.md` step 4; check the contract-management OID4VP client path). Do not
-     invent a new discovery mechanism.
+   - Describe how a client discovers the verifier exactly as contract-management's OID4VP client
+     does; do not invent a new discovery mechanism. `doc/CENTRAL_MARKETPLACE.md` step 4 only says
+     that the client authenticates at the verifier, so take the mechanism from the code:
+     `org.fiware.iam.http.Oid4VpAuthHandler` reacts to a `401` by calling the OID4VP client with the
+     called URL's `scheme://host[:port]`, the request path, `clientId` and `scope`. Read the FIWARE
+     OID4VP client library it uses to find which well-known metadata URL it fetches from those
+     values, and specify that URL.
 6. **Authorization rule** (architecture §6, D-5). The receiver admits only tokens issued by its
    own verifier, then applies the checks below **in this order**; the first that matches decides the
    answer. The order is normative, because it decides which status a publisher gets when several
@@ -143,17 +148,24 @@ Sections:
    1. no authenticated identifier (missing/invalid token) → `401`;
    2. authenticated identifier (§5, the credential's `credentialSubject.id`) ≠ `source` → `403`;
    3. `dataspaceid` present on both sides and different (§3) → `403`;
-   4. `specversion`, `id`, `source` or `type` missing → `400`;
-   5. unknown `type` → `202`, dropped, not deduplicated;
-   6. publisher not configured for that `type` → `403`;
+   4. `type` known to the receiver and publisher not configured for that `type` → `403`
+      (skipped for an unknown type);
+   5. `specversion`, `id`, `source` or `type` missing → `400`;
+   6. unknown `type` (the event is complete) → `202`, dropped, not deduplicated;
    7. deduplication on (`source`, `id`): a repeat → `202`; first copy still in flight → `503` +
       `Retry-After`;
    8. `subject` is the receiver's own identifier → `202`, no action (counted for dedup);
    9. otherwise dispatch: `202`; a handler rejecting the event as invalid → `400`, a downstream
       failure → `502`, any other failure → `500`.
 
-   Spell out the consequences in the spec: an unconfigured publisher that sends an unknown type gets
-   `202`, not `403`; a malformed event whose `source` differs from the token gets `403`, not `400`.
+   Items 1–4 are `EventAuthorizer.authorize`; `EventListener.process` returns their rejection
+   before it checks completeness, then returns the unknown-type `202`. Spell out the consequences in
+   the spec:
+   - an unconfigured publisher that sends a complete event of an unknown type gets `202`, not `403`;
+   - an incomplete event of an unknown type gets `400`, not `202`;
+   - a malformed event whose `source` differs from the token gets `403`, not `400` (a missing
+     `source` is a mismatch too);
+   - a malformed event of a known type from a publisher not configured for it gets `403`, not `400`.
 
    Note that an ODRL left operand for the credential **issuer** does not exist today. It would only
    add defence in depth (a possible PAP contribution, Q10), and it is not a dependency.
