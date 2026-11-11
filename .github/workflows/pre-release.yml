@@ -9,44 +9,25 @@ on:
       - labeled
       - unlabeled
 
+# one run at a time per pull request: opening one with a label fires two events at once, and both
+# would publish the same pre-release
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
 jobs:
 
+  # The version from the semver label of the pull request, X.Y.Z-PRE-<number>, read when the job
+  # runs. See https://github.com/FIWARE/github-workflows
   generate-version:
-    name: Generate version
-    runs-on: ubuntu-latest
-    
-    outputs:
-      version: ${{ steps.out.outputs.version }}
-      plain-version: ${{ steps.out.outputs.plain-version }}
+    uses: FIWARE/github-workflows/.github/workflows/semver-version.yml@v1
+    permissions:
+      contents: read
+      pull-requests: write
+    with:
+      tag-prefix: ""
 
-    steps:
-      - uses: actions/checkout@v5
-
-      - id: bump
-        uses: zwaldowski/match-label-action@v1
-        with:
-          allowed: major,minor,patch
-
-      - uses: zwaldowski/semver-release-action@v2
-        with:
-          dry_run: true
-          bump: ${{ steps.bump.outputs.match }}
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Get PR Number
-        id: pr_number
-        run: |
-          NR=$(echo $GITHUB_REF | awk 'BEGIN { FS = "/" } ; { print $3 }')
-          echo "nr=$NR" >> $GITHUB_OUTPUT
-
-      - name: Set version output
-        id: out
-        run: |
-          echo "version=${VERSION}-PRE-${{ steps.pr_number.outputs.nr }}" >> $GITHUB_OUTPUT
-          echo "plain-version=${VERSION}" >> $GITHUB_OUTPUT
-
-          
-  git-release:
+  toc:
     needs: ["generate-version"]
     runs-on: ubuntu-latest
 
@@ -60,12 +41,14 @@ jobs:
           TARGET_PATHS: "./README.md,./doc/README.md"
           COMMIT_MESSAGE: "Update ToC"
 
-      - uses: "marvinpinto/action-automatic-releases@latest"
-        with:
-          repo_token: "${{ secrets.GITHUB_TOKEN }}"
-          automatic_release_tag: ${{ needs.generate-version.outputs.version }}
-          prerelease: true
-          title: ${{ needs.generate-version.outputs.version }}
+  git-release:
+    needs: ["generate-version"]
+    uses: FIWARE/github-workflows/.github/workflows/github-release.yml@v1
+    permissions:
+      contents: write
+    with:
+      version: ${{ needs.generate-version.outputs.version }}
+      prerelease: true
 
   oci-release:
     name: Publish OCI snapshot (${{ matrix.chart }})
