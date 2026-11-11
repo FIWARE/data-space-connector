@@ -95,12 +95,18 @@ Sections:
 4. **Event types.**
    - `org.fiware.dataspace.participant.removed`:
      - `subject` is the removed participant's identifier.
-     - `data` has `participantId` (string, equal to `subject`), `observedAt` (RFC 3339) and `registry`
-       (the URL of the trusted issuers registry it was removed from).
+     - `data.participantId` (string, equal to `subject`) is the only defined `data` member, and the
+       publisher MUST send it. The reference publisher (`TirWatcher.java:233`, `c7da3c4`) sends
+       `data = {participantId}` and nothing else. The receiver identifies the participant from
+       `subject`, and falls back to `data.participantId` (`ParticipantRemovedHandler`).
+     - architecture §4 also lists `observedAt` and `registry`. The API does not have them, so they are
+       OPTIONAL at most: a publisher MAY send them, a receiver MUST ignore unknown `data` members and
+       MUST NOT depend on these two. Put this gap in the "Relation to the architecture" note.
      - There is deliberately no `reason`.
-     - Include the §4 JSON example.
-     - Check the field names and the `subject`/`data.participantId` fallback against
-       `ParticipantRemovedHandler` and `TirWatcher`.
+     - Give a JSON example that matches what the reference publisher sends (§4's example minus
+       `observedAt`/`registry`), not the §4 example verbatim.
+     - Rule for any other mismatch between architecture §4 and the code: the code wins. A field the
+       reference publisher does not emit is never REQUIRED.
    - Reserved names, not specified: `participant.registered`, `participant.credentials.changed`,
      `participant.suspended`, `service.configuration.provided`.
 5. **Authentication binding.**
