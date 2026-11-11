@@ -9,11 +9,15 @@ policy, tests and docs. An upgrade with default values must not create or change
 eventing-related resource; the other changes it does bring are listed under "Deviations from the
 ticket".
 
-**Stale AGENTS.md line.** The "Data Space Eventing" section of `AGENTS.md` still says the events
-route is a documented snippet. That approach was rejected (see "APISIX routes" below). Until a
-plan-mode agent or Step 5 updates the line, **this plan wins**: events routes go through the
-odrl-authorization `apisix.extraRoutes` map (Prerequisite B, Step 3). The default APISIX mode is
-standalone/yaml and serves no admin API, so admin-API hook Jobs do not work there.
+**Stale AGENTS.md lines.** Two lines of the "Data Space Eventing" section of `AGENTS.md` are wrong.
+Until a plan-mode agent or Step 5 updates them, **this plan wins**:
+- It says the events route is a documented snippet. That approach was rejected (see "APISIX routes"
+  below). Events routes go through the odrl-authorization `apisix.extraRoutes` map (Prerequisite B,
+  Step 3). The default APISIX mode is standalone/yaml and serves no admin API, so admin-API hook
+  Jobs do not work there.
+- It says the CM subchart renders `contract-management.dataspace.events` into a refreshable
+  ConfigMap. The pinned CM chart (3.6.3) and the latest (3.6.4) do not; only the chart version of
+  Prerequisite A will.
 
 **Reading subchart values.** `.Values` is `chartutil.Values`, not a plain map. Do not pass it to
 `dig`. Index into the subchart map first, as `_helpers.tpl` (`dsc.identityhub.assertHolderKid`) does:
@@ -198,7 +202,13 @@ landed (see "Release gating").
   - the scope needs TIL ≥ 0.10.1, which an older TIL silently drops; the chart's own TIL reaches that
     version with Step 3;
   - the default derives from `contract-management.dataspace.events.publishers`, which only takes
-    effect with the CM version of Step 2.
+    effect with the CM version of Step 2;
+  - the default is right only for a **membership** grant (the ticket scopes membership grants only)
+    that lands in a TIL whose CM subscribes to the **same** publisher id. That holds for this
+    release's own TIL, and for another release's TIL (e.g. `k3s/consumer-*.yaml` registering at the
+    provider's TIL) when both releases subscribe to the same data space publisher. Otherwise, or for
+    a grant that does not come from membership (e.g. an eIDAS `UserCredential` issuer, which a
+    `participant.removed` for that DID would revoke), set `scope` explicitly or `scope: ""`.
 - Do not bump `decentralizedIam` here. That is Step 3, decided above.
 - New suite `charts/data-space-connector/tests/eventing_test.yaml`, parameterized where helm-unittest
   allows. Cases:
@@ -261,7 +271,11 @@ Blocked until the decentralized-iam release of Prerequisite B is out.
   that comes with the release (Deviation 2). No route may appear.
 - `values.yaml`, under `decentralizedIam.odrlAuthorization.apisix.extraRoutes`, declare two entries,
   both `enabled: false`, each with `# --` comments:
-  - `dataspace-events`: `POST` `/events`, upstream `contract-management:8080`. Plugins:
+  - `dataspace-events`: `POST` `/events`, upstream `contract-management:8080`. The name comes from
+    the umbrella's `contract-management.fullnameOverride` and matches the existing CM route in
+    `k3s/provider.yaml`. Do not trust that: check name and port against the Service in a
+    `helm template` render, and say in the `# --` comment that `route.upstream.nodes` must be
+    overridden when `fullnameOverride` changes or CM runs outside the release. Plugins:
     - `openid-connect` with `bearer_only`, `use_jwks` and `set_userinfo_header: true`. Its
       `discovery` points at the verifier service of the events scope and is empty by default
       (deployment-specific).
@@ -271,30 +285,51 @@ Blocked until the decentralized-iam release of Prerequisite B is out.
       rewrite needs `_meta.priority` above 2599. Verify this against the APISIX version that ships and
       against the CM README (~148–170).
   - `dataspace-events-handshake`: `OPTIONS` `/events`, the same upstream, no auth plugins.
-  - **No `hosts` key in the defaults.** APISIX's route schema requires `hosts` to have at least one
-    item (`minItems: 1` in `apisix/schema_def.lua`). With `hosts: []`, the yaml mode logs
-    "failed to check item data" and silently drops the route, and the admin-API mode rejects the
-    PUT with 400, which fails the hook Job. Mention `hosts` only in the `# --` comment, as a key the
-    user adds when the gateway serves more than one host. Helm merges maps, so the user's key reaches
-    the route. Check the `minItems` against the APISIX version that ships.
+  - **A host binding is required once enabled, but there is none in the defaults.**
+    - Why required: APISIX's default router `radixtree_host_uri` tries host-bound routes first and
+      falls back to host-less routes only when no host-bound route matches. DSC deployments bind
+      their routes to hosts, with `/*` catch-alls (e.g. `k3s/provider.yaml`, `tpp-data-service`,
+      `contract-management`). A host-less `/events` would lose to the catch-all of whatever host the
+      publisher delivers to, which applies the wrong verifier scope and policy. The host must be the
+      host of the sink URL the subscriber announces.
+    - Why no default: the host is deployment-specific, and APISIX rejects an empty one. `hosts`
+      has `minItems: 1` in `apisix/schema_def.lua`; with `hosts: []` the yaml mode logs "failed to
+      check item data" and drops the route, and the admin-API mode answers the PUT with 400, which
+      fails the hook Job. Document `host` / `hosts` in the `# --` comment only. Helm merges maps, so
+      the user's key reaches the route.
+    - Both keys exist: the existing routes use the singular `host`. APISIX does not allow `host` and
+      `hosts` on the same route (a `not`/`anyOf` clause in the route schema).
+    - Verify against the APISIX version that ships: the `minItems`, the host/hosts exclusion, the
+      host-first fallback of `radixtree_host_uri`, and that an exact `/events` beats a `/*` on the
+      **same** host (lua-resty-radixtree matches the exact path before prefixes). If `/*` wins, give
+      both entries a default `priority` above the catch-alls and say so in the PR description.
 - New template `templates/eventing-validation.yaml`: no output, `fail` only. It fails when
   `dataspace-events` is enabled and:
-  - `contract-management.dataspace.events.listener.enabled` is not true, or
+  - `contract-management.enabled` is true and `contract-management.dataspace.events.listener.enabled`
+    is not true (with an external CM the umbrella's listener flag means nothing), or
   - its `openid-connect.discovery` is empty, or
   - `dataspace-events-handshake` is not enabled.
 
-  It also fails when either entry is enabled and its `route` has a `hosts` key that is empty.
+  It also fails when either entry is enabled and its `route`:
+  - has neither a non-empty `host` nor a non-empty `hosts`, or
+  - has both `host` and `hosts`, or
+  - binds other hosts than the other entry (the handshake must answer where the events arrive).
 
   The keys may be absent, so it reads them as described under "Reading subchart values", starting
   from `index .Values "decentralizedIam"` and `index .Values "contract-management"`. A listener without the
   route stays valid (Deviation 3).
 - Extend `tests/eventing_test.yaml`, parameterized: defaults render nothing; each inconsistent
-  combination gives `failedTemplate` with its message, including `hosts: []` on either enabled entry;
-  the consistent combination renders, both without `hosts` and with one host.
+  combination gives `failedTemplate` with its message, including on either enabled entry: no host,
+  `host: ""`, `hosts: []`, both keys set, and hosts that differ between the entries. The consistent
+  combination renders with `host`, with one entry in `hosts` and with two; and with
+  `contract-management.enabled: false` and the listener off.
 - Local only, not in CI: after `helm dependency update`, render with the routes enabled in the default
   yaml mode and in `traditional`+`etcd` mode. Check that the `apisix-routes` ConfigMap and the admin
   script both contain both routes, that the user's `routes` list is unchanged, and that there is a
-  `DELETE` when the routes are disabled. Paste the results into the PR description.
+  `DELETE` when the routes are disabled. Then run the rendered yaml-mode config in an APISIX
+  container of the shipped version, with a host-bound `/*` catch-all on the same host and on another
+  host, and show with `curl` that `POST /events` and `OPTIONS /events` on the bound host reach the
+  events routes (an echo upstream is enough). Paste the results into the PR description.
 - `values-schema.sh --check` (`decentralizedIam` is an open key), `helm lint`, `helm unittest`.
 - Acceptance: all pass; the default-values diff contains no route and no eventing resource.
 
@@ -317,8 +352,10 @@ Blocked until the decentralized-iam release of Prerequisite B is out.
   specification/architecture for the reasons. Content:
   1. the values to enable the listener/subscriber, and which keys are startup-only (a rollout
      follows) vs. refreshed at runtime;
-  2. the gateway: enable both `extraRoutes` entries of Step 3, set `discovery`, and add `hosts` (one
-     or more entries, never empty) if the gateway serves more than one host. Explain:
+  2. the gateway: enable both `extraRoutes` entries of Step 3, set `discovery`, and bind both to the
+     host of the announced sink URL with `host` or `hosts` (never empty, not both). Override
+     `upstream.nodes` if CM is not `contract-management:8080`. Explain:
+     - why the host is required (host-bound catch-alls win under `radixtree_host_uri`);
      - why there are two switches (Deviation 3);
      - what the `proxy-rewrite` priority is for;
      - that operators with their own gateway must reproduce the same plugin chain, including removing
@@ -328,7 +365,9 @@ Blocked until the decentralized-iam release of Prerequisite B is out.
      - `jwtInclusion` maps `credentialSubject.id` to the top-level claim `participantId`;
      - check the field names in the credentials-config-service API;
   4. the ODRL policy from Step 4;
-  5. that `registration.issuer` grants are scoped (Step 1) and need TIL ≥ 0.10.1;
+  5. that `registration.issuer` grants are scoped (Step 1) and need TIL ≥ 0.10.1, and when the
+     default scope is wrong (Step 1: a non-membership grant, or a TIL whose CM subscribes to another
+     publisher) so that `scope` or `scope: ""` must be set;
   6. that management port 9090 (`/refresh`, `/participants-removed`) must stay cluster-internal.
 - `doc/README.md`: link the new page under the existing `### Data Space Eventing` subsection.
 - `doc/release-notes/10-x.md`: add a new top section for the minor version, in the existing
@@ -342,5 +381,6 @@ Blocked until the decentralized-iam release of Prerequisite B is out.
 - `charts/data-space-connector/Chart.yaml`: minor version bump (10.15.10 → 10.16.0, or the next
   minor if the base has moved).
 - `AGENTS.md`: update the contract-management and decentralizedIam version mentions, if any, and
-  the eventing line on APISIX routes (it still describes the rejected snippet approach).
+  the two stale eventing lines (see "Stale AGENTS.md lines"), unless a plan-mode agent already did;
+  add the required host binding of the events routes.
 - Acceptance: the link check passes (lychee fallback above), `helm lint` and `helm unittest` pass.
