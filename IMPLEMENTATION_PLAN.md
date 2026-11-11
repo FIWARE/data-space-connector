@@ -88,10 +88,13 @@ Sections:
      `dataschema` are optional.
    - `id` is unique per `source`.
    - `source` is the publisher's participant identifier. Any DID method is allowed.
-   - `dataspaceid` is an OPTIONAL extension. No receiver behaviour depends on it.
+   - `dataspaceid` is an OPTIONAL extension. If the event carries it and the receiver has a data
+     space id configured, the two MUST be equal; otherwise the receiver answers `403`
+     (`EventAuthorizer.isOtherDataspace`). If either side leaves it blank, it is not checked.
    - Transport: structured mode only, `Content-Type: application/cloudevents+json`. Binary mode → 415.
    - Type naming: `org.fiware.dataspace.<entity>.<past-tense-verb>`. A breaking payload change is a new type.
-   - A receiver MUST accept and ignore unknown types.
+   - A receiver MUST accept and ignore unknown types (`202`), after authentication and the
+     `source`/`dataspaceid` checks of §6, but before the publisher×type check.
 4. **Event types.**
    - `org.fiware.dataspace.participant.removed`:
      - `subject` is the removed participant's identifier.
@@ -132,15 +135,25 @@ Sections:
    - Describe how a client discovers the verifier exactly as the central-marketplace flow does
      (`doc/CENTRAL_MARKETPLACE.md` step 4; check the contract-management OID4VP client path). Do not
      invent a new discovery mechanism.
-6. **Authorization rule** (architecture §6, D-5). The receiver MUST, in this order:
-   - (a) admit only tokens issued by its own verifier;
-   - (b) reject with `403` if the authenticated identifier (§5, the credential's
-     `credentialSubject.id`) ≠ `source`, or if that publisher is not
-     configured for that `type`;
-   - (c) ignore events whose `subject` is the receiver's own identifier: return `202` and do not act.
+6. **Authorization rule** (architecture §6, D-5). The receiver admits only tokens issued by its
+   own verifier, then applies the checks below **in this order**; the first that matches decides the
+   answer. The order is normative, because it decides which status a publisher gets when several
+   checks fail. Copy it from `EventAuthorizer.authorize` + `EventListener.process` (c7da3c4) and
+   re-check it there:
+   1. no authenticated identifier (missing/invalid token) → `401`;
+   2. authenticated identifier (§5, the credential's `credentialSubject.id`) ≠ `source` → `403`;
+   3. `dataspaceid` present on both sides and different (§3) → `403`;
+   4. `specversion`, `id`, `source` or `type` missing → `400`;
+   5. unknown `type` → `202`, dropped, not deduplicated;
+   6. publisher not configured for that `type` → `403`;
+   7. deduplication on (`source`, `id`): a repeat → `202`; first copy still in flight → `503` +
+      `Retry-After`;
+   8. `subject` is the receiver's own identifier → `202`, no action (counted for dedup);
+   9. otherwise dispatch: `202`; a handler rejecting the event as invalid → `400`, a downstream
+      failure → `502`, any other failure → `500`.
 
-   Deduplicate on (`source`, `id`): a repeat gets `202`, and `503` + `Retry-After` while the first
-   copy is still in flight.
+   Spell out the consequences in the spec: an unconfigured publisher that sends an unknown type gets
+   `202`, not `403`; a malformed event whose `source` differs from the token gets `403`, not `400`.
 
    Note that an ODRL left operand for the credential **issuer** does not exist today. It would only
    add defence in depth (a possible PAP contribution, Q10), and it is not a dependency.
@@ -169,6 +182,10 @@ Sections:
      `WebHook-Request-Origin: <publisher DNS name>`.
    - The sink MUST answer 2xx with `WebHook-Allowed-Origin` equal to that origin (case-insensitive)
      or `*`, and MAY add `WebHook-Allowed-Rate` (an integer, or `*`); also `Allow`.
+   - Receiver side: the `OPTIONS` call is unauthenticated. The sink MUST include
+     `WebHook-Allowed-Origin` only when the requesting origin belongs to a configured publisher, and
+     otherwise answers without it (`EventListener.validateWebhook`, `dataspace-events.yaml`
+     `validateWebhook`). Put this rule into the receiver conformance list as well.
    - Any other answer leaves the subscription inactive (400 to the subscriber).
    - Every delivery repeats `WebHook-Request-Origin`.
    - The publisher honours `WebHook-Allowed-Rate`.
