@@ -17,7 +17,13 @@ wire details follow FIWARE/contract-management `api/dataspace-events.yaml` (main
   origin, case-insensitive, or `*`; parses `WebHook-Allowed-Rate`, where `*` means unlimited),
   `EventListener`, `EventAuthorizer`, `EventDeduplicator`, `EventDelivery` (sends
   `WebHook-Request-Origin` on every delivery; retries on 5xx/408/429; a `410 Gone` from the sink drops
-  the subscription), `SubscriptionController`, `ParticipantRemovedHandler`, `TirWatcher`.
+  the subscription), `SubscriptionController`, `ParticipantRemovedHandler`, `TirWatcher`,
+  `ParticipantResolver` (CM does not verify the token: the API gateway passes the verified claims in
+  a header, `X-Userinfo` by default, and CM reads the caller's id from the top-level claim
+  `dataspace.events.listener.identity.participant-claim`, `participantId` by default).
+- Verifier claim mapping: `jwtInclusion` in the credentials-config-service API
+  (https://github.com/FIWARE/credentials-config-service, `api/credentials-config-service.yaml`) is
+  what puts a credential field into a top-level claim of the verifier's access token.
 - **Where architecture.md and the API differ, the API wins.** Known differences:
   - status codes: the API has 415, 500 and 503 + `Retry-After`, and no 422;
   - the API returns 202 for duplicates, unknown types and self-events;
@@ -91,12 +97,23 @@ Sections:
    - The same binding applies to subscription calls, in the opposite direction: the subscriber
      authenticates at the publisher's verifier. For delivery, the publisher uses the subscriber's
      `protocolsettings.clientId`/`scopes`.
+   - **Publisher identity.** State normatively which value is compared with `source`: the
+     `credentialSubject.id` of the presented credential (the holder's DID). The publisher MUST present
+     a credential whose `credentialSubject.id` equals the `source` it sends. The receiver MUST configure
+     its verifier so that exactly this value reaches the comparison. How it gets there is receiver-local
+     and informative only: in a FIWARE receiver, `jwtInclusion` maps `credentialSubject.id` to the
+     top-level token claim `participantId`, the gateway passes the claims in `X-Userinfo`, and CM reads
+     `participant-claim`. Before writing this, check in the credentials-config-service API that
+     `jwtInclusion` can map `credentialSubject.id` to a top-level claim. If it cannot, do not invent
+     a mapping: say that the claim is receiver-local and that the publisher learns it from the
+     receiver's verifier metadata (the presentation definition / DCQL query of the events scope).
    - Describe how a client discovers the verifier exactly as the central-marketplace flow does
      (`doc/CENTRAL_MARKETPLACE.md` step 4; check the contract-management OID4VP client path). Do not
      invent a new discovery mechanism.
 6. **Authorization rule** (architecture §6, D-5). The receiver MUST, in this order:
    - (a) admit only tokens issued by its own verifier;
-   - (b) reject with `403` if the authenticated identifier ≠ `source`, or if that publisher is not
+   - (b) reject with `403` if the authenticated identifier (§5, the credential's
+     `credentialSubject.id`) ≠ `source`, or if that publisher is not
      configured for that `type`;
    - (c) ignore events whose `subject` is the receiver's own identifier: return `202` and do not act.
 
@@ -153,15 +170,16 @@ Acceptance:
 - There is no chart change and no ADR. D-9 already records the decision; the ADR is the separate
   DSC ticket.
 
-### Step 3: Link the specification from `doc/README.md` and the design documents
+### Step 3: Link the specification from `doc/README.md`
 - `doc/README.md`:
   - Add a `### Data Space Eventing` subsection under `## Details about flows and interfaces`,
     after `### Consent Management`. It gets bullet links to
-    [Architecture](./eventing/architecture.md) and [Interoperability specification](./eventing/specification.md),
-    with a one-line description each.
+    `[Architecture](./eventing/architecture.md)` and
+    `[Interoperability specification](./eventing/specification.md)`, with a one-line description each.
   - Add the matching ToC entry by hand, between the doctoc markers, in the existing indentation
     style. If `doctoc` is available, run it instead.
-- `doc/eventing/architecture.md`: replace "pins the behaviour here" in §5.2 and the D-9 row with a
-  pointer to `specification.md`. Use one link each and change nothing else, so that the later merge
-  of design PR #2 stays trivial.
+- Do **not** edit `doc/eventing/architecture.md`. It arrives by merge in Step 1, and while design
+  PR #2 is still open any edit here would conflict with its review changes. The back-links from
+  §5.2 and the D-9 row to `specification.md` belong in PR #2 or in a follow-up after it has landed;
+  note that in the Step 3 PR description.
 - Acceptance: `.github/scripts/check-links.sh` passes, and the ToC entry anchor resolves.
