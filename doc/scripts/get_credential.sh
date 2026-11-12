@@ -1,4 +1,7 @@
 #!/bin/bash
+# Gets a credential from the Keycloak of the local environment: get_credential.sh <keycloak url>
+# <credential configuration id> <user> [format]. It logs in with the password grant, which the k3s
+# profiles turn on for the account-console client and the chart leaves off.
 
 format=${4:-jwt_vc} 
 
