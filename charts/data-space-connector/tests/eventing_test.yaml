@@ -39,6 +39,10 @@ tests:
               - id: did:web:other.org
                 types: [org.fiware.dataspace.example]
               - types: [org.fiware.dataspace.participant.removed]
+              # CM's removalPublishers() treats missing or empty types as "may publish nothing"
+              - id: did:web:untyped.org
+              - id: did:web:empty.org
+                types: []
     asserts:
       - notMatchRegex:
           path: data["init.sh"]
@@ -65,6 +69,27 @@ tests:
       - matchRegex:
           path: data["init.sh"]
           pattern: 'echo "POST http://til:8080/issuer\?scope=did%3Aweb%3Aoperator.org&scopeType=dataspace-membership \(did:web:example.org\)'
+
+  - it: falls back to the publisher scope when scope is null, unlike an empty scope
+    set:
+      registration:
+        enabled: true
+        til: http://til:8080
+        issuer:
+          - did: did:web:example.org
+            credentialTypes:
+              - LegalPersonCredential
+            scope: null
+      contract-management:
+        dataspace:
+          events:
+            publishers:
+              - id: did:web:operator.org
+                types: [org.fiware.dataspace.participant.removed]
+    asserts:
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: "'http://til:8080/issuer\\?scope=did%3Aweb%3Aoperator.org&scopeType=dataspace-membership' \\\\"
 
   - it: lets an explicit scope and scopeType win, even with several publishers
     set:
