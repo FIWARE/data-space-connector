@@ -60,9 +60,10 @@ can be found here:
 
 Optional consent management (ISO/IEC TS 27560) - its architecture, trust model and the consent-gated
 data access flow are documented here:
-* [Consent Management](./CONSENT_MANAGEMENT.md) - the dsc-consent-manager at the authority,
-  authentication with the VCVerifier JWT, the consent-filter plugin, deployment, migration from the
-  MongoDB-based consent-manager, and the end-to-end demo
+* [Consent Management](./CONSENT_MANAGEMENT.md) - why consent management, how it works, and a
+  step-by-step walkthrough on the local k3s data space; followed by the reference part: the `/v1`
+  API, authentication with the VCVerifier JWT, the consent-filter plugin, deployment and the
+  migration from the MongoDB-based consent-manager
 * [Architecture Decision Records](./adr/README.md)
 
 
