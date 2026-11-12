@@ -549,7 +549,11 @@ keycloak:
     frontendURL: http://localhost:8080
     # -- custom displayNameHtml for the realm. If empty, defaults to "<div class="kc-logo-text"><span>{realm.name}</span></div>"
     displayNameHtml: ""
-    sslRequired: none
+    # -- when the realm requires HTTPS: `external` (except for requests from private addresses,
+    # such as the components calling Keycloak inside the cluster), `all` or `none`. Keycloak takes
+    # the client address from the ingress (`keycloak.keycloak.proxyHeaders`) and the scheme from
+    # `frontendURL`: with an https frontendURL, refusing plain HTTP is the ingress's job.
+    sslRequired: external
     # -- realm attributes. Support string (old style) or key-value
     attributes:
     defaultClientScopes:

@@ -372,7 +372,7 @@ are resolved by the caller via tpl.
   "verifiableCredentialsEnabled": true,
   "enabled": true,
   "attributes": {{ include "dsc.realmAttributes" . | indent 4 | trim }},
-  "sslRequired": {{ .Values.keycloak.realm.sslRequired | default "none" | quote }},
+  "sslRequired": {{ .Values.keycloak.realm.sslRequired | default "external" | quote }},
   "roles": {
     "realm": {{ include "dsc.realmRoles" . | indent 6 | trim }},
     "client": {{ include "dsc.clientRoles" . | indent 6 | trim }}

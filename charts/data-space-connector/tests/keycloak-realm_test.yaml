@@ -58,3 +58,23 @@ tests:
       - matchRegex:
           path: data["test-realm-realm.json"]
           pattern: '"clientId": "account-console"'
+
+  # With `none`, a realm served over plain HTTP answered requests from anywhere. `external`, the
+  # default Keycloak itself gives a new realm, still accepts HTTP from private addresses, which is
+  # how the components inside the cluster call it.
+  - it: should require HTTPS for external requests by default
+    set:
+      keycloak.enabled: true
+    asserts:
+      - matchRegex:
+          path: data["test-realm-realm.json"]
+          pattern: '"sslRequired": "external"'
+
+  - it: should let a deployment choose when HTTPS is required
+    set:
+      keycloak.enabled: true
+      keycloak.realm.sslRequired: all
+    asserts:
+      - matchRegex:
+          path: data["test-realm-realm.json"]
+          pattern: '"sslRequired": "all"'
