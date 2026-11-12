@@ -206,29 +206,89 @@ When this block is enabled, remember to also override `contract-management.organ
 
 **4. Issue the marketplace's authentication credential from Keycloak**
 
-The Contract Management sends the notifications authenticated with a Verifiable Credential issued by the marketplace's own Keycloak. In this documentation and in the shipped examples this credential is a `MarketplaceCredential` (`format: jwt_vc`, `scope: MarketplaceCredential`, `vct: MarketplaceCredential`), and the `credentials` helper below fetches it into the pod so Contract Management can present it at each provider.
+The Contract Management sends the notifications authenticated with a Verifiable Credential issued by the marketplace's own Keycloak. In this documentation and in the shipped examples this credential is a `MarketplaceCredential`, defined in the realm as the `marketplace-credential` entry of `keycloak.realm.verifiableCredentials` (see [`k3s/consumer.yaml`](../../../../k3s/consumer.yaml)).
 
-```yaml
-credentials:
-  enabled: true
-  keycloak:
-    address: http://<release>-keycloak:8080
-    realm: <realm>
-    clientId: account-console
-    username: <user>
-    scope: openid
-    password: <password>
-  configurations:
-    - id: marketplace-credential
-      format: jwt_vc
-      targetFile: marketplace-credential.jwt
-```
+The [vc-operator](https://github.com/SEAMWARE/vc-operator) requests the credential and keeps it renewed in a Secret, which is mounted into the Contract Management pod. It authenticates at Keycloak as a confidential client of its own, with the client credentials grant, so no user password is involved:
+
+1. **A client in the realm** for the Contract Management, with a service account and no other flow. The credential is issued to its service account user, so the roles it carries are the client roles of that user:
+
+    ```yaml
+    keycloak:
+      realm:
+        clients:
+          - clientId: contract-management
+            enabled: true
+            clientAuthenticatorType: client-secret
+            secret: ${CM_CLIENT_SECRET}               # from a Secret, through keycloak.extraEnvVars
+            publicClient: false
+            serviceAccountsEnabled: true
+            standardFlowEnabled: false
+            directAccessGrantsEnabled: false
+            protocol: openid-connect
+            attributes:
+              oid4vci.enabled: "true"
+            optionalClientScopes: ["marketplace-credential"]
+        users:
+          - username: service-account-contract-management
+            enabled: true
+            serviceAccountClientId: contract-management
+            clientRoles:
+              <marketplace-DID>: [REPRESENTATIVE]
+            verifiableCredentials:
+              - credentialScopeName: marketplace-credential
+    ```
+
+2. **The credential request**, with `vcCredentials`, which writes the credential into the `vc-marketplace-credential` Secret:
+
+    ```yaml
+    vcCredentials:
+      enabled: true
+      issuers:
+        - name: marketplace-issuer
+          issuerURL: http://<release>-keycloak:8080/realms/<realm>
+          issuerType: keycloak
+          tokenURL: http://<release>-keycloak:8080/realms/<realm>/protocol/openid-connect/token
+          auth:
+            secretName: contract-management-client-auth
+            clientId: contract-management
+            clientSecret: <client-secret>             # or auth.existingSecret
+          requests:
+            - name: marketplace-credential
+              credentialType: marketplace-credential  # the key under keycloak.realm.verifiableCredentials
+              format: jwt_vc_json
+              targetSecretName: vc-marketplace-credential
+              targetSecretKey: credential
+              renewBefore: 5m
+
+    vc-operator:
+      enabled: true
+      watchNamespaces: [<namespace>]
+    ```
+
+3. **The Secret in the Contract Management pod**, in the folder `oid4vp.credentialsFolder` points to (step 1):
+
+    ```yaml
+    contract-management:
+      deployment:
+        additionalVolumes:
+          - name: credential-repo
+            secret:
+              secretName: vc-marketplace-credential
+              items:
+                - key: credential
+                  path: marketplace-credential.jwt
+        additionalVolumeMounts:
+          - name: credential-repo
+            mountPath: /credential-repo
+    ```
+
+[`k3s/consumer-auth.yaml`](../../../../k3s/consumer-auth.yaml) and [`k3s/consumer-tmf.yaml`](../../../../k3s/consumer-tmf.yaml) do the same for the local demo, together with a `LegalPersonCredential`.
 
 ##### Authentication credential type
 
 The `MarketplaceCredential` type is **not mandatory** — it is simply the type used throughout this documentation, the [local demo](../../../CENTRAL_MARKETPLACE.md) and the shipped examples (see [`k3s/consumer.yaml`](../../../../k3s/consumer.yaml) Keycloak realm and [`k3s/provider.yaml`](../../../../k3s/provider.yaml) policies). Any credential type can be used as long as the three sides agree on it:
 
-1. **Keycloak (this realm)** must issue the chosen type — adjust `scope` and `vct` in the `verifiableCredentials.<id>` entry, the `id` under `credentials.configurations`, and the `targetFile` that Contract Management will read.
+1. **Keycloak (this realm)** must issue the chosen type — adjust the `verifiable_credential_type` of its `verifiableCredentials.<id>` entry, the `credentialType` of the request under `vcCredentials`, and the file name the Secret is mounted as, which Contract Management reads.
 2. **Central Marketplace VCVerifier + PAP** use that same type to let its Contract Management present it to providers. No extra configuration is typically needed here.
 3. **Each provider's VCVerifier + PAP** must accept that type on the Contract Management endpoint (see step 3 and step 4 of [Participating in a Central Marketplace](../provider/README.md#participating-in-a-central-marketplace) — the `type` field in the service registered with `vcverifier.registration.services` and the `allowContractManagement` policy at the PAP).
 
