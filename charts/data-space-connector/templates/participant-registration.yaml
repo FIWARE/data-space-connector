@@ -21,7 +21,9 @@ data:
     {{- $membershipScopeType := "dataspace-membership" }}
     {{- $cm := index .Values "contract-management" | default dict }}
     {{- $removalPublishers := list }}
-    {{- range (dig "dataspace" "events" "publishers" list $cm) }}
+    {{- /* Not dig: it panics on a null level, e.g. an `events:` whose children are commented out. */}}
+    {{- $events := ($cm.dataspace | default dict).events | default dict }}
+    {{- range ($events.publishers | default list) }}
     {{- $types := .types | default list }}
     {{- /* Micronaut binds a comma-separated string to a List, so CM accepts that form too. */}}
     {{- if kindIs "string" $types }}

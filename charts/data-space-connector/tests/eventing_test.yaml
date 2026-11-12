@@ -29,6 +29,28 @@ tests:
           path: data["init.sh"]
           pattern: 'scope'
 
+  # An `events:` with its children commented out is null; dig would panic on it.
+  - it: registers unscoped when the events key is null
+    set:
+      registration: *registration
+      contract-management:
+        dataspace:
+          events: null
+    asserts: &unscoped
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: "'http://til:8080/issuer' \\\\"
+      - notMatchRegex:
+          path: data["init.sh"]
+          pattern: 'scope'
+
+  - it: registers unscoped when the dataspace key is null
+    set:
+      registration: *registration
+      contract-management:
+        dataspace: null
+    asserts: *unscoped
+
   - it: ignores publishers that may not send participant.removed
     set:
       registration: *registration
