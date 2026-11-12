@@ -42,3 +42,19 @@ tests:
       - matchRegex:
           path: data["test-realm-realm.json"]
           pattern: '"frontendUrl": "https://explicit\.example\.org"'
+
+  # defaultClients is a map so that a deployment can change one field of a standard client without
+  # copying it whole, and null is how a values file removes one. helm template and helm install
+  # keep the null and the template has to skip it (it failed with a nil pointer); helm-unittest
+  # drops it while merging the values, so this only pins the result, not that failure.
+  - it: should leave out a default client set to null
+    set:
+      keycloak.enabled: true
+      keycloak.realm.defaultClients.admin-cli: null
+    asserts:
+      - notMatchRegex:
+          path: data["test-realm-realm.json"]
+          pattern: '"clientId": "admin-cli"'
+      - matchRegex:
+          path: data["test-realm-realm.json"]
+          pattern: '"clientId": "account-console"'

@@ -1005,7 +1005,8 @@ keycloak:
             - manage-account
         groups: []
 
-    # -- clients to be imported - be aware the env vars can be used and will be replaced. Support string (old style) or array
+    # -- the standard Keycloak clients, keyed by clientId. Values given for a client are merged into
+    # its defaults; set a client to null to leave it out of the realm. Env vars are replaced.
     defaultClients:
       account:
         name: ${client_account}
