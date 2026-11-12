@@ -22,7 +22,15 @@ data:
     {{- $cm := index .Values "contract-management" | default dict }}
     {{- $removalPublishers := list }}
     {{- range (dig "dataspace" "events" "publishers" list $cm) }}
-    {{- if and .id (has $removedType (.types | default list)) }}
+    {{- $types := .types | default list }}
+    {{- /* Micronaut binds a comma-separated string to a List, so CM accepts that form too. */}}
+    {{- if kindIs "string" $types }}
+    {{- $types = splitList "," (nospace $types) }}
+    {{- end }}
+    {{- if not (kindIs "slice" $types) }}
+    {{- fail (printf "contract-management.dataspace.events.publishers[].types of publisher %v must be a list or a comma-separated string, got %s" .id (kindOf $types)) }}
+    {{- end }}
+    {{- if and .id (has $removedType $types) }}
     {{- $removalPublishers = append $removalPublishers (.id | toString) | uniq }}
     {{- end }}
     {{- end }}
