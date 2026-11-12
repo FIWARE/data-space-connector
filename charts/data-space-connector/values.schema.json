@@ -1937,7 +1937,7 @@
           "type": "object"
         },
         "issuer": {
-          "description": "issuer:\n- did: ${DID}\n  credentialTypes:\n    - LegalPersonCredential\n    - OperatorCredential",
+          "description": "issuers to register. `scope`/`scopeType` are sent as query parameters of `POST /issuer`, so\ncontract-management's `on-participant-removed.mode: dataspace` can revoke the grant on a\n`participant.removed`. When `scope` is unset it defaults to the `id` of the one\n`contract-management.dataspace.events.publishers` entry whose `types` contain\n`org.fiware.dataspace.participant.removed` (several such publishers fail the render), and\n`scopeType` to `dataspace-membership`; `scope: \"\"` registers the issuer unscoped, as before.\nThat default fits a membership grant only, in a TIL whose contract-management subscribes to the\nsame publisher id: this release's own TIL, or another release's TIL subscribing to the same data\nspace publisher. For any other grant (e.g. an eIDAS `UserCredential` issuer, which a\n`participant.removed` for that DID would revoke) set `scope` explicitly or `scope: \"\"`.\nNeeds a trusted-issuers-list \u003e= 0.10.1, an older one silently drops the scope, and a\ncontract-management \u003e= 3.5.3 to act on it. An issuer that is already registered answers 409 and\nkeeps its unscoped grant; contract-management's `on-participant-removed.adopt-unattributed`\ncovers those.\nissuer:\n- did: ${DID}\n  credentialTypes:\n    - LegalPersonCredential\n    - OperatorCredential\n  scope: did:web:dataspace-operator.org\n  scopeType: dataspace-membership",
           "items": {
             "required": []
           },

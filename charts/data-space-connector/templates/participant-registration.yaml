@@ -15,7 +15,30 @@ data:
     {{- $registration := .Values.registration}}
 
     {{- $values := .Values -}}
+    {{- /* Grants default to the scope contract-management revokes on participant.removed: the id of
+    the one publisher allowed to send it, deduplicated and blank ids skipped as CM does. */}}
+    {{- $removedType := "org.fiware.dataspace.participant.removed" }}
+    {{- $membershipScopeType := "dataspace-membership" }}
+    {{- $cm := index .Values "contract-management" | default dict }}
+    {{- $removalPublishers := list }}
+    {{- range (dig "dataspace" "events" "publishers" list $cm) }}
+    {{- if and .id (has $removedType (.types | default list)) }}
+    {{- $removalPublishers = append $removalPublishers (.id | toString) | uniq }}
+    {{- end }}
+    {{- end }}
     {{- range $index, $issuer := .Values.registration.issuer }}
+    {{- $scope := "" }}
+    {{- if and (hasKey $issuer "scope") (not (kindIs "invalid" $issuer.scope)) }}
+    {{- $scope = $issuer.scope | toString }}
+    {{- else if gt (len $removalPublishers) 1 }}
+    {{- fail (printf "registration.issuer %s sets no scope, but several contract-management.dataspace.events.publishers may publish %s (%s): set registration.issuer[].scope per issuer, or scope: \"\" to register it unscoped" $issuer.did $removedType (join ", " $removalPublishers)) }}
+    {{- else if $removalPublishers }}
+    {{- $scope = first $removalPublishers }}
+    {{- end }}
+    {{- $query := "" }}
+    {{- if $scope }}
+    {{- $query = printf "?scope=%s&scopeType=%s" (urlquery $scope) (urlquery ($issuer.scopeType | default $membershipScopeType)) }}
+    {{- end }}
     # A 409 means this issuer is already on the list, which is the normal outcome of every run
     # after the first. `curl -f` turned that into a non-zero exit, and since the Job's exit status
     # is the last curl's, the Job failed on every re-run - which made the registration effectively
@@ -23,7 +46,7 @@ data:
     # entry is left as it is: it may have been changed through the API since, and a re-run must
     # not undo that.
     http_code=$(curl -s -o /tmp/til_resp.json -w '%{http_code}' -X 'POST' \
-      '{{ $registration.til }}/issuer' \
+      '{{ $registration.til }}/issuer{{ $query }}' \
       -H 'accept: */*' \
       -H 'Content-Type: application/json' \
       -d "{
@@ -37,7 +60,7 @@ data:
         {{- end }}
       ]
     }")
-    echo "POST {{ $registration.til }}/issuer ({{ $issuer.did }}) -> HTTP ${http_code}"
+    echo "POST {{ $registration.til }}/issuer{{ $query }} ({{ $issuer.did }}) -> HTTP ${http_code}"
     cat /tmp/til_resp.json 2>/dev/null || true
     echo
     case "${http_code}" in

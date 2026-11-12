@@ -1,0 +1,116 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/helm-unittest/helm-unittest/main/schema/helm-testsuite.json
+#
+# ---------------------------------------------------------------------------
+# Helm-unittest suite for the participant side of data space eventing.
+#
+# contract-management revokes the TIL grants scoped to the publisher of a
+# participant.removed, so the registration Job scopes its grants to that
+# publisher by default. Without such a publisher the script must stay exactly
+# as before, so that upgrading a release changes nothing.
+# ---------------------------------------------------------------------------
+suite: data space eventing - participant side
+templates:
+  - templates/participant-registration.yaml
+tests:
+  - it: registers unscoped when no publisher may send participant.removed
+    set:
+      registration: &registration
+        enabled: true
+        til: http://til:8080
+        issuer:
+          - did: did:web:example.org
+            credentialTypes:
+              - LegalPersonCredential
+    asserts:
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: "'http://til:8080/issuer' \\\\"
+      - notMatchRegex:
+          path: data["init.sh"]
+          pattern: 'scope'
+
+  - it: ignores publishers that may not send participant.removed
+    set:
+      registration: *registration
+      contract-management:
+        dataspace:
+          events:
+            publishers:
+              - id: did:web:other.org
+                types: [org.fiware.dataspace.example]
+              - types: [org.fiware.dataspace.participant.removed]
+    asserts:
+      - notMatchRegex:
+          path: data["init.sh"]
+          pattern: 'scope'
+
+  - it: scopes the grant to the one participant.removed publisher
+    set:
+      registration: *registration
+      contract-management:
+        dataspace:
+          events:
+            publishers:
+              # CM deduplicates publishers by id, so a repeated id is still one publisher
+              - id: did:web:operator.org
+                types: [org.fiware.dataspace.participant.removed]
+              - id: did:web:operator.org
+                types: [org.fiware.dataspace.participant.removed]
+              - id: did:web:other.org
+                types: [org.fiware.dataspace.example]
+    asserts:
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: "'http://til:8080/issuer\\?scope=did%3Aweb%3Aoperator.org&scopeType=dataspace-membership' \\\\"
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: 'echo "POST http://til:8080/issuer\?scope=did%3Aweb%3Aoperator.org&scopeType=dataspace-membership \(did:web:example.org\)'
+
+  - it: lets an explicit scope and scopeType win, even with several publishers
+    set:
+      registration:
+        enabled: true
+        til: http://til:8080
+        issuer:
+          - did: did:web:example.org
+            credentialTypes:
+              - LegalPersonCredential
+            scope: did:web:own.org
+            scopeType: custom-type
+      contract-management: &twoPublishers
+        dataspace:
+          events:
+            publishers:
+              - id: did:web:operator.org
+                types: [org.fiware.dataspace.participant.removed]
+              - id: did:web:second.org
+                types: [org.fiware.dataspace.participant.removed]
+    asserts:
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: 'issuer\?scope=did%3Aweb%3Aown.org&scopeType=custom-type'
+
+  - it: registers unscoped when the issuer opts out with an empty scope
+    set:
+      registration:
+        enabled: true
+        til: http://til:8080
+        issuer:
+          - did: did:web:example.org
+            credentialTypes:
+              - LegalPersonCredential
+            scope: ""
+            scopeType: ignored-without-scope
+      contract-management: *twoPublishers
+    asserts:
+      - notMatchRegex:
+          path: data["init.sh"]
+          pattern: 'scope'
+
+  - it: fails when several publishers may send participant.removed and no scope is set
+    set:
+      registration: *registration
+      contract-management: *twoPublishers
+    asserts:
+      - failedTemplate:
+          errorPattern: 'registration.issuer did:web:example.org sets no scope, but several contract-management.dataspace.events.publishers may publish org.fiware.dataspace.participant.removed \(did:web:operator.org, did:web:second.org\): set registration.issuer\[\].scope per issuer'

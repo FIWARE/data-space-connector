@@ -2065,11 +2065,27 @@ registration:
   extraEnvVars: []
   extraVolumes: []
   extraVolumeMounts: []
+  # -- issuers to register. `scope`/`scopeType` are sent as query parameters of `POST /issuer`, so
+  # contract-management's `on-participant-removed.mode: dataspace` can revoke the grant on a
+  # `participant.removed`. When `scope` is unset it defaults to the `id` of the one
+  # `contract-management.dataspace.events.publishers` entry whose `types` contain
+  # `org.fiware.dataspace.participant.removed` (several such publishers fail the render), and
+  # `scopeType` to `dataspace-membership`; `scope: ""` registers the issuer unscoped, as before.
+  # That default fits a membership grant only, in a TIL whose contract-management subscribes to the
+  # same publisher id: this release's own TIL, or another release's TIL subscribing to the same data
+  # space publisher. For any other grant (e.g. an eIDAS `UserCredential` issuer, which a
+  # `participant.removed` for that DID would revoke) set `scope` explicitly or `scope: ""`.
+  # Needs a trusted-issuers-list >= 0.10.1, an older one silently drops the scope, and a
+  # contract-management >= 3.5.3 to act on it. An issuer that is already registered answers 409 and
+  # keeps its unscoped grant; contract-management's `on-participant-removed.adopt-unattributed`
+  # covers those.
   # issuer:
   # - did: ${DID}
   #   credentialTypes:
   #     - LegalPersonCredential
   #     - OperatorCredential
+  #   scope: did:web:dataspace-operator.org
+  #   scopeType: dataspace-membership
   issuer: []
   # -- priority class to be assigned to the pods
   # ref: https://kubernetes.io/docs/concepts/scheduling-eviction/pod-priority-preemption/
