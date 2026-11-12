@@ -199,6 +199,13 @@ decentralizedIam:
       apisix:
         prometheus:
           enabled: true
+      etcd:
+        # -- deploy an etcd for APISIX. Only needed when APISIX reads its configuration from etcd,
+        # e.g. in traditional mode with `config_provider: etcd`; the default standalone mode reads
+        # the routes from a ConfigMap. odrl-authorization defaults to false as well, but this chart
+        # has to repeat it: three charts down, Helm decides whether to deploy the etcd chart
+        # without odrl-authorization's default.
+        enabled: false
 
     # -- configuration for the odrl-pap to be deployed as part of the connector, see https://github.com/FIWARE/helm-charts/tree/main/charts/odrl-pap for all options
     odrl-pap:
