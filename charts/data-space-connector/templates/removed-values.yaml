@@ -9,3 +9,9 @@ is rejected by the schema. Renders nothing.
 {{- if hasKey (index .Values "tm-forum-api") "registration" }}
 {{- fail "tm-forum-api.registration was removed in 10.11.0: register the TM Forum API through decentralizedIam.vcAuthentication.vcverifier.registration.services instead, see doc/release-notes/10-x.md" }}
 {{- end }}
+{{- $opa := index (.Values.decentralizedIam.odrlAuthorization | default dict) "opa" | default dict }}
+{{- range $key := list "enabled" "resourceUrl" "port" "policies" "methods" "data" }}
+{{- if hasKey $opa $key }}
+{{- fail (printf "decentralizedIam.odrlAuthorization.opa.%s was removed: odrl-authorization never read it. Configure the OPA sidecar under decentralizedIam.odrlAuthorization.opa.config instead (resourceUrl, port, policies, methods, data), see doc/release-notes/10-x.md" $key) }}
+{{- end }}
+{{- end }}

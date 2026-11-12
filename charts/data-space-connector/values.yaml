@@ -251,27 +251,6 @@ decentralizedIam:
           enabled: true
           name: postgres.postgres.credentials.postgresql.acid.zalan.do
           key: password
-    # -- configuration for the open-policy-agent to be deployed as part of the connector fulfilling the role of the PDP, as a sidecar to apisix
-    opa:
-      # -- should an opa sidecar be deployed to apisix
-      enabled: true
-      # -- address of the pap to get the policies from
-      resourceUrl: http://odrl-pap:8080/bundles/service/v1
-      # -- port to make opa available at
-      port: 8181
-      # -- pull delays for the policies bundle
-      policies:
-        minDelay: 2
-        maxDelay: 4
-      # -- pull delays for the methods bundle
-      methods:
-        minDelay: 1
-        maxDelay: 3
-      # -- pull delays for the data bundle
-      data:
-        minDelay: 1
-        maxDelay: 15
-
     # -- integration of checks for the transfer process protocol
     tpp:
       # -- should checking for a running transfer process be enabled
