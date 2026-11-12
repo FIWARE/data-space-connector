@@ -30,8 +30,9 @@ data:
     {{- if not (kindIs "slice" $types) }}
     {{- fail (printf "contract-management.dataspace.events.publishers[].types of publisher %v must be a list or a comma-separated string, got %s" .id (kindOf $types)) }}
     {{- end }}
-    {{- if and .id (has $removedType $types) }}
-    {{- $removalPublishers = append $removalPublishers (.id | toString) | uniq }}
+    {{- $id := .id | default "" | toString }}
+    {{- if and (trim $id) (has $removedType $types) }}
+    {{- $removalPublishers = append $removalPublishers $id | uniq }}
     {{- end }}
     {{- end }}
     {{- range $index, $issuer := .Values.registration.issuer }}

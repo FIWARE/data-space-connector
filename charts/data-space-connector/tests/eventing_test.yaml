@@ -39,6 +39,9 @@ tests:
               - id: did:web:other.org
                 types: [org.fiware.dataspace.example]
               - types: [org.fiware.dataspace.participant.removed]
+              # CM skips blank ids with isBlank, which includes whitespace-only ones
+              - id: "   "
+                types: [org.fiware.dataspace.participant.removed]
               # CM's removalPublishers() treats missing or empty types as "may publish nothing"
               - id: did:web:untyped.org
               - id: did:web:empty.org
@@ -114,6 +117,42 @@ tests:
       - matchRegex:
           path: data["init.sh"]
           pattern: 'issuer\?scope=did%3Aweb%3Aown.org&scopeType=custom-type'
+
+  - it: defaults scopeType for an explicit scope
+    set:
+      registration:
+        enabled: true
+        til: http://til:8080
+        issuer:
+          - did: did:web:example.org
+            credentialTypes:
+              - LegalPersonCredential
+            scope: did:web:own.org
+    asserts:
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: 'issuer\?scope=did%3Aweb%3Aown.org&scopeType=dataspace-membership'
+
+  - it: combines the publisher scope with an explicit scopeType
+    set:
+      registration:
+        enabled: true
+        til: http://til:8080
+        issuer:
+          - did: did:web:example.org
+            credentialTypes:
+              - LegalPersonCredential
+            scopeType: custom-type
+      contract-management:
+        dataspace:
+          events:
+            publishers:
+              - id: did:web:operator.org
+                types: [org.fiware.dataspace.participant.removed]
+    asserts:
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: 'issuer\?scope=did%3Aweb%3Aoperator.org&scopeType=custom-type'
 
   - it: registers unscoped when the issuer opts out with an empty scope
     set:
