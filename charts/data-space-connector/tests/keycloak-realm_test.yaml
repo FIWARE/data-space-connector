@@ -78,3 +78,35 @@ tests:
       - matchRegex:
           path: data["test-realm-realm.json"]
           pattern: '"sslRequired": "all"'
+
+  # account-console and admin-cli are public clients: with the password grant, anyone who knows a
+  # password gets a token straight from the token endpoint, without the login page and its second
+  # factor. The rendered JSON has its keys sorted, so a client's flags follow its clientId with no
+  # object in between, which is what `[^}]*` relies on.
+  - it: should leave the password grant off on the public default clients
+    set:
+      keycloak.enabled: true
+    asserts:
+      - matchRegex:
+          path: data["test-realm-realm.json"]
+          pattern: '"clientId": "account-console",[^}]*"directAccessGrantsEnabled": false'
+      - matchRegex:
+          path: data["test-realm-realm.json"]
+          pattern: '"clientId": "admin-cli",[^}]*"directAccessGrantsEnabled": false'
+
+  # The k3s profiles turn it back on for the integration tests, merging one flag into the default
+  # client: the rest of it, such as the OID4VCI opt-in, stays.
+  - it: should let a deployment turn the password grant back on for one client
+    set:
+      keycloak.enabled: true
+      keycloak.realm.defaultClients.account-console.directAccessGrantsEnabled: true
+    asserts:
+      - matchRegex:
+          path: data["test-realm-realm.json"]
+          pattern: '"clientId": "account-console",[^}]*"directAccessGrantsEnabled": true'
+      - matchRegex:
+          path: data["test-realm-realm.json"]
+          pattern: '"oid4vci.enabled": "true",[^{}]*\},\s*"authenticationFlowBindingOverrides": \{\},[^{}]*"clientId": "account-console"'
+      - matchRegex:
+          path: data["test-realm-realm.json"]
+          pattern: '"clientId": "admin-cli",[^}]*"directAccessGrantsEnabled": false'

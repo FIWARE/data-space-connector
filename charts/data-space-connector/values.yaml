@@ -1011,6 +1011,10 @@ keycloak:
 
     # -- the standard Keycloak clients, keyed by clientId. Values given for a client are merged into
     # its defaults; set a client to null to leave it out of the realm. Env vars are replaced.
+    # `account-console` and `admin-cli` are public clients and come without the password grant
+    # (`directAccessGrantsEnabled`), which would let anyone who knows a password get a token
+    # without the login page, and so without its second factor. Machines get their credentials
+    # with a confidential client (client credentials, see `vcCredentials`), people with a wallet.
     defaultClients:
       account:
         name: ${client_account}
@@ -1067,7 +1071,8 @@ keycloak:
         consentRequired: false
         standardFlowEnabled: true
         implicitFlowEnabled: false
-        directAccessGrantsEnabled: true
+        # the password grant is off: see `keycloak.realm.defaultClients`
+        directAccessGrantsEnabled: false
         serviceAccountsEnabled: false
         publicClient: true
         frontchannelLogout: false
@@ -1116,7 +1121,8 @@ keycloak:
         consentRequired: false
         standardFlowEnabled: false
         implicitFlowEnabled: false
-        directAccessGrantsEnabled: true
+        # the password grant is off: see `keycloak.realm.defaultClients`
+        directAccessGrantsEnabled: false
         serviceAccountsEnabled: false
         publicClient: true
         frontchannelLogout: false
