@@ -20,6 +20,7 @@ specific flows and its deployment and integration with other frameworks.
 - [Deployment / Integration](#deployment--integration)
   - [Quick Start Guide](#quick-start-guide)
   - [Deployment by Role](#deployment-by-role)
+  - [Configuration tool (design)](#configuration-tool-design)
   - [Verifying a deployment](#verifying-a-deployment)
   - [Local Deployment (Maven)](#local-deployment-maven)
   - [Packet Delivery Company (ArgoCD)](#packet-delivery-company-argocd)
@@ -89,6 +90,18 @@ Documentation for deploying the FIWARE DSC according to your organization's role
     * [Running a local marketplace](./deployment-integration/roles/provider/LOCAL_MARKETPLACE.md)
   * [Consumer + Provider](./deployment-integration/roles/consumer-provider/README.md)
   * [Operator (Data Space Governance)](./deployment-integration/roles/operator/README.md)
+
+### Configuration tool (design)
+
+Design documents for a graphical tool that configures and installs the connector: it asks for a role and for the values that cross-cut the whole chart (domain, DID, Trust Anchor), lets every feature be enabled individually and later, reuses the cert-manager, databases and operators a cluster already has, generates the `values.yaml`, and creates, seals or references the Secrets it needs. Not implemented yet.
+
+* [Configuration tool — design](./config-tool/README.md)
+  * [User journey](./config-tool/USER_JOURNEY.md)
+  * [Feature model](./config-tool/FEATURE_MODEL.md)
+  * [Secret handling](./config-tool/SECRETS.md)
+  * [Mockups](./config-tool/MOCKUPS.md) — and a [clickable prototype](./config-tool/mockups/prototype.html)
+  * [Tech stack](./config-tool/TECH_STACK.md)
+  * [User stories](./config-tool/USER_STORIES.md)
 
 ### Verifying a deployment
 

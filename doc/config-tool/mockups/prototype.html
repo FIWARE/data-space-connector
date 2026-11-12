@@ -1,0 +1,760 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DSC Configurator</title>
+<style>
+:root{
+  --bg:#f6f7f9; --panel:#ffffff; --panel-2:#f0f2f5; --line:#d8dce3;
+  --fg:#15181d; --fg-dim:#5b6472; --fg-faint:#868f9d;
+  --accent:#1f6feb; --accent-weak:#e8f0fe;
+  --ok:#1a7f45; --warn:#9a6700; --warn-bg:#fff6e0; --err:#b42318;
+  --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+  --sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --r:8px;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0d1117; --panel:#161b22; --panel-2:#1c232d; --line:#2d3540;
+    --fg:#e6edf3; --fg-dim:#9aa6b2; --fg-faint:#6e7b8a;
+    --accent:#4493f8; --accent-weak:#132743;
+    --ok:#3fb950; --warn:#d29922; --warn-bg:#2a2112; --err:#f85149;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0d1117; --panel:#161b22; --panel-2:#1c232d; --line:#2d3540;
+  --fg:#e6edf3; --fg-dim:#9aa6b2; --fg-faint:#6e7b8a;
+  --accent:#4493f8; --accent-weak:#132743;
+  --ok:#3fb950; --warn:#d29922; --warn-bg:#2a2112; --err:#f85149;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--sans);font-size:14px;line-height:1.5}
+.app{display:flex;flex-direction:column;min-height:100vh}
+header.bar{display:flex;align-items:center;gap:12px;padding:10px 16px;background:var(--panel);border-bottom:1px solid var(--line)}
+header.bar .name{font-weight:650}
+header.bar .ctx{color:var(--fg-dim);font-size:12.5px;margin-left:auto;font-family:var(--mono)}
+button.ghost{background:none;border:1px solid var(--line);color:var(--fg-dim);border-radius:6px;padding:4px 9px;cursor:pointer;font:inherit;font-size:12.5px}
+button.ghost:hover{color:var(--fg);border-color:var(--accent)}
+.body{display:flex;flex:1;min-height:0}
+nav.rail{width:214px;flex:none;background:var(--panel);border-right:1px solid var(--line);padding:14px 10px;display:flex;flex-direction:column;gap:2px}
+nav.rail button{display:flex;gap:9px;align-items:center;width:100%;text-align:left;background:none;border:0;color:var(--fg-dim);padding:7px 9px;border-radius:6px;cursor:pointer;font:inherit}
+nav.rail button:hover{background:var(--panel-2);color:var(--fg)}
+nav.rail button[aria-current="true"]{background:var(--accent-weak);color:var(--fg);font-weight:600}
+nav.rail button .st{width:14px;flex:none;text-align:center;color:var(--fg-faint)}
+nav.rail button .st.done{color:var(--ok)}
+nav.rail .sep{height:1px;background:var(--line);margin:12px 4px}
+nav.rail .tip{color:var(--fg-faint);font-size:12px;padding:4px 9px}
+main{flex:1;min-width:0;overflow:auto;padding:26px 30px 40px}
+.wrap{max-width:960px}
+h1{font-size:21px;margin:0 0 4px}
+h2{font-size:15px;margin:26px 0 10px}
+.lede{color:var(--fg-dim);margin:0 0 22px}
+footer.bar{display:flex;align-items:center;gap:14px;padding:10px 16px;background:var(--panel);border-top:1px solid var(--line);font-size:12.5px}
+footer .counts span{margin-right:14px;color:var(--fg-dim)}
+footer .spacer{flex:1}
+button.primary{background:var(--accent);border:1px solid var(--accent);color:#fff;border-radius:6px;padding:7px 15px;cursor:pointer;font:inherit;font-weight:600}
+button.primary:hover{filter:brightness(1.08)}
+button.sec{background:var(--panel-2);border:1px solid var(--line);color:var(--fg);border-radius:6px;padding:7px 15px;cursor:pointer;font:inherit}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(224px,1fr));gap:14px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:16px;cursor:pointer;transition:.12s}
+.card:hover{border-color:var(--accent)}
+.card[aria-pressed="true"]{border-color:var(--accent);background:var(--accent-weak);box-shadow:inset 0 0 0 1px var(--accent)}
+.card h3{margin:0 0 6px;font-size:14.5px}
+.card p{margin:0;color:var(--fg-dim);font-size:13px}
+.card .meta{margin-top:10px;font-family:var(--mono);font-size:11.5px;color:var(--fg-faint)}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:16px 18px;margin-bottom:16px}
+.panel > h3{margin:0 0 14px;font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:var(--fg-dim)}
+.row{display:flex;gap:12px;align-items:center;margin-bottom:10px;flex-wrap:wrap}
+.row label{width:150px;flex:none;color:var(--fg-dim)}
+input[type=text],select{background:var(--bg);border:1px solid var(--line);color:var(--fg);border-radius:6px;padding:6px 9px;font:inherit;min-width:260px}
+input[type=text]:focus,select:focus{outline:2px solid var(--accent);outline-offset:-1px}
+.used{font-size:12px;color:var(--accent);cursor:help;border-bottom:1px dotted var(--accent)}
+.derived{font-family:var(--mono);font-size:12.5px;color:var(--fg)}
+.hint{color:var(--fg-faint);font-size:12.5px;margin:4px 0 0 162px}
+.warn{background:var(--warn-bg);border:1px solid color-mix(in srgb,var(--warn) 45%,transparent);border-radius:6px;padding:9px 12px;color:var(--fg);font-size:13px;margin:10px 0}
+.modes{display:flex;flex-direction:column;gap:7px}
+.mode{display:flex;gap:10px;align-items:flex-start;padding:9px 11px;border:1px solid var(--line);border-radius:6px;cursor:pointer}
+.mode[aria-pressed="true"]{border-color:var(--accent);background:var(--accent-weak)}
+.mode .dot{width:13px;height:13px;border-radius:50%;border:2px solid var(--fg-faint);margin-top:3px;flex:none}
+.mode[aria-pressed="true"] .dot{border-color:var(--accent);background:var(--accent);box-shadow:inset 0 0 0 2px var(--panel)}
+.mode .txt b{font-weight:600}
+.mode .txt span{display:block;color:var(--fg-dim);font-size:12.5px}
+.feat{display:flex;gap:11px;padding:10px 4px;border-bottom:1px solid var(--line);align-items:flex-start}
+.feat:last-child{border-bottom:0}
+.sw{width:34px;height:19px;border-radius:11px;background:var(--line);position:relative;flex:none;cursor:pointer;border:0;margin-top:2px}
+.sw::after{content:"";position:absolute;top:2px;left:2px;width:15px;height:15px;border-radius:50%;background:var(--panel);transition:.12s}
+.sw[aria-pressed="true"]{background:var(--accent)}
+.sw[aria-pressed="true"]::after{left:17px}
+.feat .t{flex:1;min-width:0}
+.feat .t b{font-weight:600}
+.feat .t p{margin:2px 0 0;color:var(--fg-dim);font-size:12.5px}
+.badge{font-size:11px;padding:1px 7px;border-radius:999px;border:1px solid var(--line);color:var(--fg-dim);white-space:nowrap}
+.badge.req{border-color:var(--accent);color:var(--accent)}
+.group{color:var(--fg-dim);font-size:12px;text-transform:uppercase;letter-spacing:.06em;margin:20px 0 2px}
+.split{display:grid;grid-template-columns:300px 1fr;gap:16px;align-items:start}
+pre.yaml{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:14px 16px;overflow:auto;font-family:var(--mono);font-size:12.3px;line-height:1.65;margin:0;max-height:62vh}
+pre.yaml .k{color:var(--accent)}
+pre.yaml .c{color:var(--fg-faint)}
+pre.yaml .add{background:color-mix(in srgb,var(--ok) 16%,transparent);display:block}
+.kv{display:flex;justify-content:space-between;gap:10px;padding:5px 0;border-bottom:1px solid var(--line);font-size:13px}
+.kv:last-child{border-bottom:0}
+.kv span:last-child{color:var(--fg-dim);font-family:var(--mono);font-size:12px}
+.chip{display:inline-flex;gap:6px;align-items:center;background:var(--panel-2);border:1px solid var(--line);border-radius:999px;padding:2px 10px;font-size:12px;color:var(--fg-dim)}
+.tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px}
+.tabs button{background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:5px 12px;color:var(--fg-dim);cursor:pointer;font:inherit;font-size:12.5px}
+.tabs button[aria-current="true"]{border-color:var(--accent);color:var(--fg);background:var(--accent-weak)}
+table.grid{width:100%;border-collapse:collapse;font-size:13px}
+table.grid th{text-align:left;color:var(--fg-dim);font-weight:500;font-size:12px;padding:6px 8px;border-bottom:1px solid var(--line)}
+table.grid td{padding:6px 8px;border-bottom:1px solid var(--line);font-family:var(--mono);font-size:12.3px}
+details.adv{margin-top:14px;border-top:1px solid var(--line);padding-top:12px}
+details.adv summary{cursor:pointer;color:var(--fg-dim);font-size:13px}
+.note{color:var(--fg-faint);font-size:12px;margin-top:20px}
+@media (max-width:860px){
+  nav.rail{display:none}
+  main{padding:18px 16px 32px}
+  .split{grid-template-columns:1fr}
+  .row label{width:100%}
+  input[type=text],select{min-width:0;width:100%}
+  .hint{margin-left:0}
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="bar">
+    <span class="name">DSC Configurator</span>
+    <span class="chip">mockup &mdash; nothing is installed</span>
+    <span class="ctx" id="ctx"></span>
+    <button class="ghost" id="theme">theme</button>
+  </header>
+  <div class="body">
+    <nav class="rail" id="rail"></nav>
+    <main><div class="wrap" id="view"></div></main>
+  </div>
+  <footer class="bar">
+    <span class="counts" id="counts"></span>
+    <span class="spacer"></span>
+    <button class="sec" id="back">Back</button>
+    <button class="primary" id="next">Next</button>
+  </footer>
+</div>
+<script>
+const STAGES = ["Start","Target","Role","Foundations","Infrastructure","Features","Configuration","Review","Secrets","Install"];
+
+const FEATURES = [
+ {id:"identity.issuer", g:"Identity", t:"Credential issuance",
+  s:"Issue Verifiable Credentials to your users with Keycloak (OID4VCI).",
+  r:{consumer:"R",provider:"R",both:"R",operator:"-",custom:"o"}, q:4},
+ {id:"identity.did", g:"Identity", t:"DID document",
+  s:"Publish your did:web so others can verify your signatures.",
+  r:{consumer:"R",provider:"R",both:"R",operator:"-",custom:"o"}, q:1},
+ {id:"identity.statuslist", g:"Identity", t:"Credential revocation",
+  s:"A token status list so issued credentials can be revoked. Needs PostgreSQL.",
+  r:{consumer:"o",provider:"o",both:"o",operator:"-",custom:"o"}, q:2},
+ {id:"identity.wallets", g:"Identity", t:"Wallet presets (Lissi, EUDI)",
+  s:"Pre-configured clients for the wallets your users carry.",
+  r:{consumer:"o",provider:"o",both:"o",operator:"-",custom:"o"}, q:1},
+ {id:"identity.eidas", g:"Identity", t:"eIDAS / ELSI certificates",
+  s:"Certificate-based organizational identity and chain validation.",
+  r:{consumer:"o",provider:"o",both:"o",operator:"-",custom:"o"}, q:3},
+ {id:"access.verification", g:"Access", t:"Credential verification",
+  s:"Check incoming credentials against the data space's trusted issuers, hand out tokens.",
+  r:{consumer:"-",provider:"R",both:"R",operator:"-",custom:"o"}, q:2},
+ {id:"access.policies", g:"Access", t:"Policy enforcement",
+  s:"APISIX as the gateway, OPA as the decision point, ODRL policies you define.",
+  r:{consumer:"-",provider:"R",both:"R",operator:"-",custom:"o"}, q:3},
+ {id:"data.scorpio", g:"Data", t:"NGSI-LD data service (Scorpio)",
+  s:"A context broker as the data service behind the gateway.",
+  r:{consumer:"-",provider:"R",both:"R",operator:"-",custom:"o"}, q:1},
+ {id:"data.external", g:"Data", t:"Protect my own services",
+  s:"Put your existing APIs behind the gateway and the policies.",
+  r:{consumer:"-",provider:"o",both:"o",operator:"-",custom:"o"}, q:2},
+ {id:"contract.tmforum", g:"Contracts", t:"TMForum contract APIs",
+  s:"Standard product, offering and order APIs for your data products.",
+  r:{consumer:"-",provider:"R",both:"R",operator:"-",custom:"o"}, q:1},
+ {id:"contract.management", g:"Contracts", t:"Contract management",
+  s:"Turn orders into access policies automatically.",
+  r:{consumer:"-",provider:"R",both:"R",operator:"-",custom:"o"}, q:1, needs:["contract.tmforum","access.policies"]},
+ {id:"market.local", g:"Contracts", t:"A marketplace of my own",
+  s:"The Business API Ecosystem, hosted by you. Needs MongoDB.",
+  r:{consumer:"-",provider:"o",both:"o",operator:"-",custom:"o"}, q:4, needs:["contract.tmforum"], infra:"mongo"},
+ {id:"market.central", g:"Contracts", t:"Publish to the central marketplace",
+  s:"Offer your products in the data space's shared marketplace.",
+  r:{consumer:"-",provider:"o",both:"o",operator:"-",custom:"o"}, q:1, needs:["contract.tmforum"]},
+ {id:"dsp.edc", g:"Interoperability", t:"Dataspace Protocol (DSP / EDC)",
+  s:"Contract negotiation and transfer with any DSP-compliant connector.",
+  r:{consumer:"o",provider:"o",both:"o",operator:"-",custom:"o"}, q:3, infra:"vault"},
+ {id:"dsp.rainbow", g:"Interoperability", t:"Rainbow (Rust DSP)",
+  s:"The lightweight DSP implementation.",
+  r:{consumer:"o",provider:"o",both:"o",operator:"-",custom:"o"}, q:2},
+ {id:"dsp.config", g:"Interoperability", t:"Data space configuration endpoint",
+  s:"Serve /.well-known/data-space-configuration for other participants.",
+  r:{consumer:"o",provider:"o",both:"o",operator:"o",custom:"o"}, q:1},
+ {id:"consent.provider", g:"Consent", t:"Consent enforcement",
+  s:"Check the data subject's consent before data leaves your APIs.",
+  r:{consumer:"-",provider:"o",both:"o",operator:"-",custom:"o"}, q:2, needs:["access.policies"]},
+ {id:"ta.registry", g:"Trust infrastructure", t:"Trusted Issuers Registry",
+  s:"The registry and the list API the data space's participants are checked against.",
+  r:{consumer:"-",provider:"-",both:"-",operator:"R",custom:"o"}, q:2},
+ {id:"consent.authority", g:"Trust infrastructure", t:"Consent authority",
+  s:"Run the data space's consent manager and its facade.",
+  r:{consumer:"-",provider:"-",both:"-",operator:"o",custom:"o"}, q:3},
+ {id:"obs.tracing", g:"Observability", t:"Distributed tracing",
+  s:"OpenTelemetry traces from every component.",
+  r:{consumer:"o",provider:"o",both:"o",operator:"o",custom:"o"}, q:1},
+ {id:"obs.metrics", g:"Observability", t:"Metrics and dashboards",
+  s:"Prometheus, Grafana and the connector dashboard.",
+  r:{consumer:"o",provider:"o",both:"o",operator:"o",custom:"o"}, q:2},
+];
+
+const ROLES = [
+ {id:"consumer", t:"Consumer", p:"Uses data and services offered by others.", m:"2 features · ~0.8 GiB"},
+ {id:"provider", t:"Provider", p:"Offers data and services to other participants.", m:"7 features · ~2.3 GiB"},
+ {id:"both", t:"Consumer + Provider", p:"Both. The common case in a real data space.", m:"7 features · ~2.3 GiB"},
+ {id:"operator", t:"Operator", p:"Runs the trust infrastructure of the data space. Uses the trust-anchor chart.", m:"1 feature · ~0.3 GiB"},
+ {id:"custom", t:"Custom", p:"Nothing preselected. Pick from the whole catalogue yourself.", m:"0 features"},
+];
+
+const INFRA = [
+ {id:"postgres", t:"PostgreSQL", need:"required by 5 components", modes:[
+   ["bundled","Install with the connector","The chart deploys the Zalando operator and one cluster. Suitable for development."],
+   ["cluster","Already in the cluster","An operator someone else installed creates the databases."],
+   ["external","An existing database","A managed service or your own. Host, databases, users and Secret names."]]},
+ {id:"certs", t:"TLS certificates", need:"required by 6 hosts", modes:[
+   ["bundled","Install cert-manager with the connector","Only correct if no cert-manager runs here yet."],
+   ["cluster","Use the cert-manager already in the cluster","Found in namespace cert-manager — issuers: letsencrypt-prod, selfsigned-issuer."],
+   ["external","I provide a TLS Secret per host","The tool only emits the host names."]]},
+ {id:"mongo", t:"MongoDB", need:"only for a marketplace of your own", modes:[
+   ["bundled","Install with the connector","The Community Operator plus one MongoDBCommunity resource."],
+   ["cluster","Already in the cluster","An operator someone else installed."],
+   ["external","An existing database","Connection string and Secret."],
+   ["off","Not needed","No component here uses MongoDB."]]},
+ {id:"vault", t:"Secret store", need:"required by the Dataspace Protocol", modes:[
+   ["bundled","HashiCorp Vault, installed with the connector","Development."],
+   ["external","An existing Vault","Address, auth method and role."],
+   ["off","Kubernetes Secrets only","Not recommended in production."]]},
+ {id:"obs", t:"Observability", need:"optional", modes:[
+   ["bundled","Deploy collector, Tempo and Grafana","A turnkey trace stack in this namespace."],
+   ["external","Send to an existing collector","An OTLP endpoint you already run."],
+   ["off","Off","No tracing configuration is written."]]},
+];
+
+const S = {
+  stage:0, role:"both",
+  org:"MP Operations", domain:"mp-operations.org", didMethod:"did:web",
+  tir:"https://tir.dataspace.org", ns:"provider", release:"provider",
+  env:"production", chart:"10.16.0", target:"cluster",
+  ingress:"nginx", storage:"gp3", issuer:"letsencrypt-prod",
+  feat:{}, touched:{}, infra:{postgres:"external",certs:"cluster",mongo:"off",vault:"external",obs:"external"},
+  cfgTab:0, yamlTab:"generated",
+  sealedAvailable:true, esoAvailable:true,
+  sec:{"issuance-secret":"sealed","mongodb-admin-password":"chart","vc-operator-key":"chart",
+       "pg-keycloak":"reference","pg-scorpio":"reference","vault-approle":"external",
+       "edc-identity":"reference"}
+};
+
+const SECRET_MODES = [["chart","let the chart"],["reference","reference only"],
+  ["apply","generate and apply"],["sealed","seal for Git"],["external","external secret"]];
+
+const SECRETS = [
+ {g:"Bootstrap credentials", note:"the chart can generate these itself", rows:[
+  {n:"issuance-secret", k:"keycloak-admin", by:"Keycloak admin", need:()=>on("identity.issuer")},
+  {n:"mongodb-admin-password", k:"password", by:"marketplace", need:()=>on("market.local")},
+  {n:"vc-operator-key", k:"ecdsa private key", by:"vc-operator", need:()=>on("identity.vcoperator")}]},
+ {g:"External systems", note:"only you can know these values", rows:[
+  {n:"pg-keycloak", k:"username, password", by:"Keycloak \u2192 DB", exists:true, need:()=>on("identity.issuer")},
+  {n:"pg-scorpio", k:"username, password", by:"Scorpio \u2192 DB", exists:false, need:()=>on("data.scorpio")},
+  {n:"vault-approle", k:"roleId, secretId", by:"EDC \u2192 Vault", exists:true, need:()=>on("dsp.edc")}]},
+ {g:"Identity material", note:"losing one means re-registering at the Trust Anchor", rows:[
+  {n:"edc-identity", k:"private key", by:"EDC, Identity Hub", exists:true, need:()=>on("dsp.edc")}]}
+];
+
+function applyPreset(){
+  FEATURES.forEach(f=>{
+    if(S.touched[f.id]) return;
+    S.feat[f.id] = f.r[S.role]==="R";
+  });
+}
+function did(){ return S.didMethod==="did:web" ? "did:web:"+S.domain : "did:key:z6Mk…"; }
+function host(sub){ return sub ? sub+"."+S.domain : S.domain; }
+function on(id){ return !!S.feat[id]; }
+function enabled(){ return FEATURES.filter(f=>on(f.id)); }
+function openQuestions(){ return enabled().reduce((n,f)=>n+(f.q>2?1:0),0); }
+
+const el=(h)=>{const d=document.createElement("div");d.innerHTML=h.trim();return d.firstElementChild;};
+const esc=(s)=>String(s).replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
+
+/* ---------- screens ---------- */
+function vStart(){
+  return `<h1>FIWARE Data Space Connector — Configurator</h1>
+  <p class="lede">Configure and install a connector for your organization.</p>
+  <div class="cards">
+    ${[["＋","New configuration","Start from a role and go through the wizard."],
+       ["📂","Open values.yaml","Read an existing file, change it, keep everything it already contains."],
+       ["⟲","Open profile","Continue a configuration saved earlier."],
+       ["⚡","Try it locally","A whole data space on this machine: trust anchor, provider and consumer."]]
+      .map(([i,t,p],n)=>`<button class="card" data-go="1" aria-pressed="${n===0}">
+        <h3>${i} &nbsp;${t}</h3><p>${p}</p></button>`).join("")}
+  </div>
+  <h2>Recent</h2>
+  <div class="panel">
+    <div class="kv"><span>mp-operations · provider · chart 10.16.0</span><span>2 days ago</span></div>
+    <div class="kv"><span>dataspace-authority · operator · chart 10.16.0</span><span>last week</span></div>
+  </div>
+  <p class="note">Mockup of the start screen (S0). Every card leads into the same wizard.</p>`;
+}
+
+function vTarget(){
+  return `<h1>Where is this going?</h1>
+  <p class="lede">The target decides what can be detected and what has to be typed.</p>
+  <div class="panel"><h3>Target</h3>
+    <div class="modes">
+      ${[["file","File only","Generate values.yaml and install it yourself."],
+         ["cluster","Kubernetes cluster","Read the cluster to pre-fill the next screens. Nothing is installed before step 8."]]
+        .map(([v,t,p])=>`<button class="mode" data-set="target" data-val="${v}" aria-pressed="${S.target===v}">
+          <span class="dot"></span><span class="txt"><b>${t}</b><span>${p}</span></span></button>`).join("")}
+    </div>
+    ${S.target==="cluster"?`<div class="row" style="margin-top:12px"><label>Context</label>
+      <select><option>prod-eu-central</option><option>staging</option><option>k3d-local</option></select>
+      <span style="color:var(--ok)">✓ Kubernetes v1.31.4 · 6 nodes</span></div>`:""}
+  </div>
+  <div class="panel"><h3>Release</h3>
+    <div class="row"><label>Namespace</label><input type="text" data-bind="ns" value="${esc(S.ns)}"></div>
+    <div class="row"><label>Release name</label><input type="text" data-bind="release" value="${esc(S.release)}"></div>
+    <p class="hint">Both appear in generated service URLs and in the Trust Anchor registration.</p>
+  </div>
+  <div class="panel"><h3>Chart</h3>
+    <div class="row"><label>Chart</label>
+      <select><option>data-space-connector</option><option>trust-anchor</option></select></div>
+    <div class="row"><label>Version</label>
+      <select data-bind="chart"><option>10.16.0</option><option>10.15.7</option></select></div>
+  </div>
+  <div class="panel"><h3>Environment</h3>
+    <div class="modes">
+      ${[["development","Development","Self-signed certificates, did:key, chart-deployed databases, no resource limits."],
+         ["production","Production","ACME or your own CA, did:web, resource limits, replicas."]]
+        .map(([v,t,p])=>`<button class="mode" data-set="env" data-val="${v}" aria-pressed="${S.env===v}">
+          <span class="dot"></span><span class="txt"><b>${t}</b><span>${p}</span></span></button>`).join("")}
+    </div>
+    <p class="hint" style="margin-left:0">Only changes defaults. Every one of them stays editable.</p>
+  </div>`;
+}
+
+function vRole(){
+  const r=ROLES.find(x=>x.id===S.role);
+  const req=FEATURES.filter(f=>f.r[S.role]==="R").map(f=>f.t);
+  return `<h1>What does this organization do in the data space?</h1>
+  <p class="lede">The role sets the recommended features. Nothing here is locked.</p>
+  <div class="cards">
+    ${ROLES.map(x=>`<button class="card" data-set="role" data-val="${x.id}" aria-pressed="${S.role===x.id}">
+      <h3>${x.t}</h3><p>${x.p}</p><div class="meta">${x.m}</div></button>`).join("")}
+  </div>
+  <h2>${r.t} turns on</h2>
+  <div class="panel">
+    ${req.length? req.map(t=>`<span class="chip" style="margin:0 6px 6px 0">${t}</span>`).join("")
+                : `<span style="color:var(--fg-dim)">Nothing. Choose features yourself on step 5.</span>`}
+    <p class="hint" style="margin:12px 0 0">Everything else stays available on step 5 — and anything here can be turned off.
+       Memory and CPU figures are the measured floor per role, without load.</p>
+  </div>`;
+}
+
+function vFoundations(){
+  const hosts=[["DID document",host("")],["Verifier",host("verifier")],["Gateway (APISIX)",host("api")],
+               ["Keycloak",host("keycloak")],["TMForum API",host("tmf")]];
+  return `<h1>Foundations</h1>
+  <p class="lede">Asked once, used everywhere. Every later screen inherits from here.</p>
+  <div class="panel"><h3>Organization</h3>
+    <div class="row"><label>Display name</label><input type="text" data-bind="org" value="${esc(S.org)}"></div>
+    <div class="row"><label>Base domain</label><input type="text" data-bind="domain" value="${esc(S.domain)}">
+      <span class="used" title="every ingress host, every TLS secret name, every certificate annotation, the DID, the verifier host, the APISIX discovery URLs…">used by 41 values</span></div>
+    <div class="row"><label>DID method</label>
+      <select data-bind="didMethod"><option>did:web</option><option>did:key</option></select></div>
+    <div class="row"><label>DID</label><span class="derived">${esc(did())}</span>
+      <span class="used" title="verifier, Keycloak issuerDid, the registration job, EDC, the Identity Hub, the data space configuration document, APISIX, contract-management">used by 15 values</span>
+      <button class="ghost">override</button></div>
+    ${S.didMethod==="did:key"&&S.env==="production"?`<div class="warn">⚠ did:key has no discoverability or key rotation — use did:web in production.</div>`:""}
+  </div>
+  <div class="panel"><h3>Data space</h3>
+    <div class="row"><label>Trust Anchor (TIR)</label><input type="text" data-bind="tir" value="${esc(S.tir)}">
+      <span style="color:var(--ok)">✓ reachable</span></div>
+    <div class="row"><label>Credential types</label>
+      <table class="grid" style="flex:1"><tr><th>type</th><th>meaning</th></tr>
+        <tr><td>MembershipCredential</td><td>issued to the organization</td></tr>
+        <tr><td>UserCredential</td><td>issued to employees</td></tr>
+        <tr><td style="color:var(--accent)">+ add</td><td></td></tr></table></div>
+    <p class="hint">These seed the issuance page, the verifier registration and the local trusted-issuers list.</p>
+  </div>
+  <div class="panel"><h3>Network</h3>
+    <table class="grid">
+      <tr><th>component</th><th>public host</th><th></th></tr>
+      ${hosts.map(([t,h])=>`<tr><td style="font-family:var(--sans);color:var(--fg-dim)">${t}</td><td>${esc(h)}</td>
+        <td style="text-align:right"><button class="ghost">edit</button></td></tr>`).join("")}
+    </table>
+    <div class="warn">⚠ These names are called from inside the cluster as well as from outside. Check that they
+      resolve to the ingress from a pod — hairpin NAT, split-horizon DNS or a CoreDNS rewrite.</div>
+    <div class="row"><label>Ingress class</label><select data-bind="ingress"><option>nginx</option><option>traefik</option></select>
+      <span style="color:var(--fg-faint);font-size:12.5px">detected in the cluster</span></div>
+    <div class="row"><label>TLS</label><select data-bind="issuer"><option>letsencrypt-prod</option><option>letsencrypt-staging</option><option>selfsigned-issuer</option></select>
+      <span style="color:var(--fg-faint);font-size:12.5px">cert-manager ClusterIssuer</span></div>
+  </div>
+  <div class="panel"><h3>Platform</h3>
+    <div class="row"><label>Storage class</label><select data-bind="storage"><option>gp3</option><option>gp2</option></select></div>
+    <div class="row"><label>Resource profile</label><select><option>production</option><option>development</option></select>
+      <span style="color:var(--fg-faint);font-size:12.5px">sets requests and limits on the Java components</span></div>
+  </div>`;
+}
+
+function vInfra(){
+  return `<h1>Infrastructure</h1>
+  <p class="lede">What is already there, and what should be installed with the connector.</p>
+  <div class="panel" style="display:flex;gap:16px;flex-wrap:wrap;align-items:center">
+    <div><b style="color:var(--ok)">Found</b> &nbsp;cert-manager v1.21 · ingress-nginx · storage classes gp3, gp2</div>
+    <div><b style="color:var(--warn)">Not found</b> &nbsp;Zalando Postgres Operator · MongoDB operator · OpenTelemetry</div>
+    <button class="ghost" style="margin-left:auto">scan again</button>
+  </div>
+  ${INFRA.map(d=>{
+    const dim = d.id==="mongo" && !on("market.local");
+    const needVault = d.id==="vault" && !on("dsp.edc");
+    return `<div class="panel" style="${dim||needVault?"opacity:.6":""}">
+      <h3>${d.t} <span style="text-transform:none;letter-spacing:0;float:right;font-weight:400">${d.need}</span></h3>
+      <div class="modes">${d.modes.map(([v,t,p])=>`
+        <button class="mode" data-infra="${d.id}" data-val="${v}" aria-pressed="${S.infra[d.id]===v}">
+          <span class="dot"></span><span class="txt"><b>${t}</b><span>${p}</span></span></button>`).join("")}</div>
+      ${d.id==="postgres"&&S.infra.postgres==="external"?`
+        <table class="grid" style="margin-top:12px">
+          <tr><th>component</th><th>database</th><th>user</th><th>secret</th></tr>
+          ${[["Keycloak","keycloak","kc","pg-keycloak"],["Trusted Issuers List","til","til","pg-til"],
+             ["VCVerifier","verifier","verifier","pg-verifier"],["ODRL-PAP","pap","pap","pg-pap"],
+             ["Scorpio","ngb","scorpio","pg-scorpio"]]
+            .map(r=>`<tr><td style="font-family:var(--sans);color:var(--fg-dim)">${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td><td>${r[3]}</td></tr>`).join("")}
+        </table>
+        <div class="warn">⚠ Scorpio's database needs the PostGIS extension. The Secrets are not created by the tool —
+          they are listed in NEXT_STEPS.md.</div>`:""}
+      ${d.id==="postgres"&&S.infra.postgres==="cluster"?`
+        <div class="warn">⚠ No Zalando Postgres Operator found in this cluster. Install it once, outside this release:
+        <pre class="yaml" style="margin-top:8px">helm install postgres-operator postgres-operator-charts/postgres-operator \\
+  --version 1.15.1 --namespace postgres-operator --create-namespace</pre></div>`:""}
+      ${d.id==="certs"&&S.infra.certs==="bundled"?`
+        <div class="warn">⚠ cert-manager already runs in this cluster. Installing it again here would fail on
+          resources the other release owns.</div>`:""}
+    </div>`;}).join("")}`;
+}
+
+function vFeatures(){
+  let out="", g=null;
+  FEATURES.forEach(f=>{
+    const role=f.r[S.role];
+    if(role==="-"&&!on(f.id)) return;
+    if(f.g!==g){ g=f.g; out+=`<div class="group">${g}</div>`; }
+    const badge = role==="R" ? `<span class="badge req">required for ${ROLES.find(r=>r.id===S.role).t}</span>`
+                             : `<span class="badge">optional</span>`;
+    const deps = on(f.id)&&f.needs ? `<p style="color:var(--fg-faint);font-size:12px;margin-top:4px">
+         └ needs ${f.needs.map(n=>FEATURES.find(x=>x.id===n).t).join(", ")} — enabled</p>`:"";
+    const infraNote = on(f.id)&&f.infra&&S.infra[f.infra]==="off"
+      ? `<p style="color:var(--warn);font-size:12px;margin-top:4px">└ needs a ${f.infra==="mongo"?"MongoDB":"secret store"} — set it on step 4</p>`:"";
+    out+=`<div class="feat">
+      <button class="sw" data-feat="${f.id}" aria-pressed="${on(f.id)}" aria-label="${f.t}"></button>
+      <div class="t"><b>${f.t}</b> <p>${f.s}</p>${deps}${infraNote}</div>
+      ${badge}${on(f.id)&&f.q>2?`<span class="badge">⚙ ${f.q}</span>`:""}
+    </div>`;
+  });
+  return `<h1>Features</h1>
+  <p class="lede">What the connector should do. Each one maps to chart keys you never have to see.</p>
+  <div class="panel">${out}</div>
+  <p class="note">⚙ n — questions still open on step 6. Turning a feature off that another needs asks first.</p>`;
+}
+
+function vConfig(){
+  const list=enabled();
+  if(!list.length) return `<h1>Configuration</h1><p class="lede">No feature is enabled yet.</p>`;
+  const i=Math.min(S.cfgTab,list.length-1), f=list[i];
+  const tabs=`<div class="tabs">${list.map((x,n)=>`<button data-cfg="${n}" aria-current="${n===i}">${x.t}${x.q>2?" ⚙":" ✓"}</button>`).join("")}</div>`;
+  const inherited=(label,val,src)=>`<div class="row"><label>${label}</label>
+    <span class="derived">${esc(val)}</span>
+    <span class="chip">inherited from ${src}</span><button class="ghost">override</button></div>`;
+  let form="";
+  if(f.id==="identity.issuer"){
+    form=`${inherited("Issuer host",host("keycloak"),"Network")}
+      ${inherited("Issuer DID",did(),"Organization")}
+      <div class="row"><label>Realm name</label><input type="text" value="${esc(S.ns)}"></div>
+      <div class="row"><label>Database</label><span class="derived">pg.internal / keycloak</span>
+        <span class="chip">from step 4</span></div>
+      <div class="warn">⚠ The realm keystore must stay under <code>/opt/keycloak/data/${esc(S.ns)}/</code> —
+        Keycloak 26.6.4 and later read realm keystores only from there.</div>
+      <h2>Credentials this organization issues</h2>
+      <table class="grid">
+        <tr><th>type</th><th>format</th><th>claims</th><th>issued to</th></tr>
+        <tr><td>MembershipCredential</td><td>jwt_vc</td><td>did, legalName</td><td>the organization</td></tr>
+        <tr><td>UserCredential</td><td>jwt_vc</td><td>email, firstName, roles</td><td>group: employees</td></tr>
+        <tr><td style="color:var(--accent)">+ add a credential type</td><td></td><td></td><td></td></tr>
+      </table>`;
+  } else if(f.id==="dsp.edc"){
+    form=`${inherited("Participant ID",did(),"Organization")}
+      ${inherited("Public host",host("dsp"),"Network")}
+      <div class="row"><label>Secret store</label><span class="derived">existing Vault</span>
+        <span class="chip">from step 4</span><button class="ghost">change</button></div>
+      <div class="row"><label>Identity protocol</label>
+        <select><option>DCP — the Identity Hub serves the DID document</option><option>OID4VP — keep the DID helper</option></select></div>
+      <div class="warn">ⓘ DCP replaces the DID document component with the Identity Hub.</div>`;
+  } else {
+    form=`${inherited("Public host",host(f.id.split(".")[1]),"Network")}
+      ${inherited("Participant DID",did(),"Organization")}
+      <div class="row"><label>Replicas</label><input type="text" value="1"></div>
+      <p class="hint">Everything else uses the chart's defaults. Nothing is written for a question you do not answer.</p>`;
+  }
+  return `<h1>Configuration</h1>
+  <p class="lede">One page per enabled feature. Inherited fields show where they came from.</p>
+  ${tabs}
+  <div class="panel"><h3>${f.t}</h3>${form}
+    <details class="adv"><summary>▸ Advanced (${20+f.q*7} chart keys)</summary>
+      <table class="grid" style="margin-top:10px">
+        <tr><th>key</th><th>type</th><th>value</th><th>default</th></tr>
+        <tr><td>${f.id.split(".")[0]}.deployment.replicaCount</td><td>integer</td><td>1</td><td>1</td></tr>
+        <tr><td>${f.id.split(".")[0]}.deployment.resources</td><td>object</td><td>{ … }</td><td>not set</td></tr>
+      </table>
+      <p class="hint" style="margin-left:0">Generated from the chart's values.schema.json. Anything set here is kept
+        exactly as typed and never re-rendered.</p>
+    </details>
+  </div>`;
+}
+
+function yaml(){
+  const L=[];
+  const c=(s)=>L.push(`<span class="c">${esc(s)}</span>`);
+  const k=(ind,key,val,add)=>L.push(`<span class="${add?"add":""}">${" ".repeat(ind)}<span class="k">${key}</span>:${val!==undefined?" "+esc(val):""}</span>`);
+  c(`# Generated by dsc-config 0.4.0 — profile 9f2c1a`);
+  c(`# chart data-space-connector ${S.chart} · role ${S.role} · namespace ${S.ns}`);
+  L.push("");
+  k(0,"decentralizedIam");
+  k(2,"enabled", String(on("access.verification")||on("access.policies")));
+  if(on("access.verification")){
+    k(2,"vcAuthentication");
+    k(4,"managedPostgres"); k(6,"enabled", String(S.infra.postgres==="bundled"||S.infra.postgres==="cluster"));
+    k(4,"postgres-operator"); k(6,"enabled", String(S.infra.postgres==="bundled"));
+    k(4,"vcverifier");
+    k(6,"deployment");
+    k(8,"did", did());
+    k(8,"host", "https://"+host("verifier"));
+    k(8,"tirAddress", S.tir);
+    k(6,"ingress");
+    k(8,"hosts");
+    L.push(`        - ${esc(host("verifier"))}`);
+  }
+  if(on("access.policies")){
+    k(2,"odrlAuthorization");
+    k(4,"apisix");
+    k(6,"ingress"); k(8,"hostname", host("api"));
+  }
+  k(0,"keycloak");
+  k(2,"enabled", String(on("identity.issuer")));
+  if(on("identity.issuer")){
+    k(2,"issuerDid", did());
+    k(2,"ingress"); k(4,"hostname", host("keycloak"));
+    k(2,"database"); k(4,"host","pg.internal."+S.domain); k(4,"existingSecret","pg-keycloak");
+  }
+  k(0,"did"); k(2,"enabled", String(on("identity.did")&&!on("dsp.edc")));
+  k(0,"scorpio"); k(2,"enabled", String(on("data.scorpio")));
+  k(0,"tm-forum-api"); k(2,"enabled", String(on("contract.tmforum")));
+  k(0,"contract-management"); k(2,"enabled", String(on("contract.management")));
+  k(0,"marketplace"); k(2,"enabled", String(on("market.local")));
+  k(0,"fdsc-edc"); k(2,"enabled", String(on("dsp.edc")));
+  if(on("dsp.edc")){ k(2,"common"); k(4,"config"); k(6,"participantId", did()); k(0,"identityhub"); k(2,"enabled","true"); }
+  k(0,"cert-manager"); k(2,"enabled", String(S.infra.certs==="bundled"));
+  k(0,"tracing"); k(2,"enabled", String(on("obs.tracing")), true);
+  if(on("obs.tracing")) k(2,"endpoint","http://otel-collector.observability:4318", true);
+  k(0,"consent-facade"); k(2,"enabled", String(on("consent.provider")), on("consent.provider"));
+  return L.join("\n");
+}
+
+function vReview(){
+  const n=enabled().length, off=FEATURES.length-n;
+  const warns=[];
+  if(S.infra.postgres==="external") warns.push("Scorpio's database needs the PostGIS extension — verify it is enabled on <code>ngb</code>.");
+  if(S.env==="production"&&on("contract.tmforum")) warns.push("No memory limit on the TMForum API. Without one the JVM sizes its heap from the node.");
+  if(S.didMethod==="did:key"&&S.env==="production") warns.push("did:key in a production environment.");
+  return `<h1>Review</h1>
+  <p class="lede">Nothing is written until you export. Validation runs on every change.</p>
+  <div class="split">
+    <div>
+      <div class="panel"><h3>Summary</h3>
+        <div class="kv"><span>Role</span><span>${ROLES.find(r=>r.id===S.role).t}</span></div>
+        <div class="kv"><span>Chart</span><span>${S.chart}</span></div>
+        <div class="kv"><span>Namespace / release</span><span>${esc(S.ns)} / ${esc(S.release)}</span></div>
+        <div class="kv"><span>Features on</span><span>${n}</span></div>
+        <div class="kv"><span>Features off</span><span>${off}</span></div>
+        <div class="kv"><span>PostgreSQL</span><span>${S.infra.postgres}</span></div>
+        <div class="kv"><span>TLS</span><span>${S.infra.certs}</span></div>
+        <div class="kv"><span>Secret store</span><span>${S.infra.vault}</span></div>
+        <div class="kv"><span>Secrets the tool owns</span><span>${Object.values(S.sec).filter(m=>m==="apply"||m==="sealed").length}</span></div>
+        <div class="kv"><span>Secrets referenced</span><span>${Object.values(S.sec).filter(m=>m==="reference").length}</span></div>
+        <div class="kv"><span>DNS records to add</span><span>5</span></div>
+      </div>
+      <div class="panel"><h3>Validation</h3>
+        <div class="kv"><span style="color:var(--ok)">✓ schema</span><span>values.schema.json</span></div>
+        <div class="kv"><span style="color:var(--ok)">✓ rules</span><span>24 checked</span></div>
+        <div class="kv"><span style="color:var(--ok)">✓ render</span><span>helm template</span></div>
+        <div class="kv"><span style="color:var(--ok)">✓ preflight</span><span>cluster</span></div>
+        ${warns.map(w=>`<div class="warn" style="margin-top:10px">⚠ ${w} <a href="#" style="color:var(--accent)">go</a></div>`).join("")}
+        ${openQuestions()?`<div class="kv" style="margin-top:8px"><span>○ open questions</span><span>${openQuestions()}</span></div>`:""}
+      </div>
+    </div>
+    <div>
+      <div class="tabs">
+        ${["generated","diff","as loaded"].map(t=>`<button data-yaml="${t}" aria-current="${S.yamlTab===t}">${t}</button>`).join("")}
+      </div>
+      <pre class="yaml">${yaml()}</pre>
+      <p class="note">Green lines are what this session added. Keys the tool does not own are carried over untouched.</p>
+    </div>
+  </div>
+  <div style="margin-top:18px;display:flex;gap:10px;flex-wrap:wrap">
+    <button class="sec">Save profile</button>
+    <button class="sec">Export values.yaml</button>
+    <button class="primary" data-go="8">Secrets ›</button>
+  </div>`;
+}
+
+
+function secretState(r){
+  const m=S.sec[r.n];
+  if(m==="chart")     return ['\u25CB','var(--fg-faint)','generated on first install'];
+  if(m==="apply")     return ['\u25CF','var(--accent)','generated, applied to the cluster'];
+  if(m==="sealed")    return ['\u25CF','var(--accent)','generated, sealed for Git'];
+  if(m==="external")  return ['\u25CF','var(--accent)','ExternalSecret, store vault-prod'];
+  return r.exists===false ? ['\u2716','var(--err)','not found in the namespace']
+                          : ['\u2713','var(--ok)','exists in cluster'];
+}
+function vSecrets(){
+  const gitops = S.target==="file";
+  const chartOnGitops = Object.entries(S.sec).filter(([n,m])=>m==="chart").length && gitops;
+  let tables="";
+  SECRETS.forEach(grp=>{
+    const rows=grp.rows.filter(r=>r.need());
+    if(!rows.length) return;
+    tables+=`<h2>${grp.g} <span style="font-weight:400;color:var(--fg-dim);font-size:13px">&mdash; ${grp.note}</span></h2>
+    <div class="panel"><table class="grid">
+      <tr><th>secret / keys</th><th>used by</th><th>delivery</th><th>state</th></tr>
+      ${rows.map(r=>{const [i,c,t]=secretState(r);return `<tr>
+        <td>${r.n}<br><span style="color:var(--fg-faint)">${r.k}</span></td>
+        <td style="font-family:var(--sans);color:var(--fg-dim)">${r.by}</td>
+        <td><select data-secret="${r.n}">${SECRET_MODES.map(([v,l])=>
+            `<option value="${v}" ${S.sec[r.n]===v?"selected":""} ${(v==="sealed"&&!S.sealedAvailable)||(v==="external"&&!S.esoAvailable)||((v==="apply")&&S.target==="file")?"disabled":""}>${l}</option>`).join("")}</select></td>
+        <td><span style="color:${c}">${i}</span> <span style="font-family:var(--sans);color:var(--fg-dim)">${t}</span>
+          ${S.sec[r.n]==="sealed"||S.sec[r.n]==="apply"?`<br><button class="ghost" style="margin-top:4px">reveal once</button>`:""}
+        </td></tr>`;}).join("")}
+    </table></div>`;
+  });
+  return `<h1>Secrets</h1>
+  <p class="lede">One row per credential this configuration needs. Values are never shown here, never written
+     to values.yaml and never written to the profile.</p>
+  <div class="panel" style="display:flex;gap:18px;flex-wrap:wrap;align-items:center">
+    <div><b style="color:${S.sealedAvailable?"var(--ok)":"var(--warn)"}">${S.sealedAvailable?"\u2713":"\u2716"}</b>
+      &nbsp;Sealed Secrets ${S.sealedAvailable?"\u2014 controller in kube-system, certificate 41 days":"\u2014 no controller found"}</div>
+    <div><b style="color:${S.esoAvailable?"var(--ok)":"var(--warn)"}">${S.esoAvailable?"\u2713":"\u2716"}</b>
+      &nbsp;External Secrets ${S.esoAvailable?"\u2014 ClusterSecretStore vault-prod":""}</div>
+    <div style="margin-left:auto;display:flex;gap:8px">
+      <button class="ghost" data-toggle="sealedAvailable">toggle sealed-secrets</button>
+      <button class="ghost" data-toggle="esoAvailable">toggle ESO</button>
+    </div>
+  </div>
+  ${chartOnGitops?`<div class="warn" style="border-color:var(--err)">\u2716 <b>Error.</b> A secret is left to the chart while the
+     target is "file only". The chart stabilises those values with Helm's <code>lookup</code>, which is empty under
+     <code>helm template</code> and in ArgoCD or Flux \u2014 so a new random value is rendered on every sync.
+     Use <i>generate and apply</i>, <i>seal for Git</i>, or <i>reference only</i> with a Secret of your own.</div>`:""}
+  ${S.sec["issuance-secret"]!=="chart"&&on("identity.issuer")?`<div class="warn">\u26A0 The Keycloak admin account is created from
+     this Secret only while the realm has no administrator (<code>KC_BOOTSTRAP_ADMIN_*</code>). Changing the Secret later
+     does not change the password \u2014 create a named admin through the admin API and delete the bootstrap account.</div>`:""}
+  ${tables}
+  <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:6px">
+    <button class="sec">Generate the missing values</button>
+    <button class="sec" ${S.target==="file"?"disabled":""}>Apply to the cluster</button>
+    <button class="sec">Seal all</button>
+  </div>
+  <p class="note">Applying lists every Secret by name and keys first \u2014 never values \u2014 and never overwrites an
+    existing Secret without asking. Choosing a tool-owned mode sets the chart's matching
+    <code>generatePasswords</code> flag to false in the same render.</p>`;
+}
+
+function vInstall(){
+  return `<h1>Install into prod-eu-central / ${esc(S.ns)}</h1>
+  <p class="lede">Iteration 2. The equivalent helm command is always shown.</p>
+  <div class="panel">
+    ${[["✓","Preflight","storage class, ingress class, CRDs, hostnames","0:04"],
+       ["✓","helm dependency update","14 subcharts","0:21"],
+       ["●","helm upgrade --install "+S.release,"waiting for 9 of 14 workloads","3:12"],
+       ["○","Register at the Trust Anchor","hook job participant-registration",""],
+       ["○","Verify","fdsc-verify -n "+S.ns,""]]
+      .map(([i,t,d,x])=>`<div class="kv"><span><b style="color:${i==="✓"?"var(--ok)":i==="●"?"var(--accent)":"var(--fg-faint)"}">${i}</b> &nbsp;${t}
+        <span style="color:var(--fg-dim)"> — ${d}</span></span><span>${x}</span></div>`).join("")}
+    <pre class="yaml" style="margin-top:14px">helm upgrade --install ${esc(S.release)} fiware/data-space-connector \\
+  --version ${esc(S.chart)} --namespace ${esc(S.ns)} --create-namespace \\
+  -f values.yaml --wait --wait-for-jobs --timeout 25m</pre>
+  </div>`;
+}
+
+const VIEWS=[vStart,vTarget,vRole,vFoundations,vInfra,vFeatures,vConfig,vReview,vSecrets,vInstall];
+
+/* ---------- shell ---------- */
+function render(){
+  document.getElementById("ctx").textContent =
+    S.stage===0 ? "" : `${S.domain} · ${ROLES.find(r=>r.id===S.role).t.toLowerCase()} · chart ${S.chart}`;
+  const rail=document.getElementById("rail");
+  rail.innerHTML = STAGES.map((t,i)=>i===0?"":`
+     <button data-go="${i}" aria-current="${i===S.stage}">
+       <span class="st ${i<S.stage?"done":""}">${i<S.stage?"✓":i===S.stage?"●":"○"}</span>
+       <span>${i} ${t}</span></button>`).join("")
+    + `<div class="sep"></div>
+       <button data-go="0"><span class="st">⌂</span><span>Start screen</span></button>
+       <div class="tip">⌘E Expert: YAML</div><div class="tip">⌘S Save profile</div>`;
+  document.getElementById("view").innerHTML = VIEWS[S.stage]();
+  const w = (S.env==="production"&&S.didMethod==="did:key"?1:0)+(S.infra.postgres==="external"?1:0);
+  const errs = (S.target==="file" && Object.values(S.sec).includes("chart")) ? 1 : 0;
+  document.getElementById("counts").innerHTML =
+    `<span style="color:var(--warn)">⚠ ${w} warnings</span><span style="color:${errs?"var(--err)":"var(--ok)"}">✖ ${errs} errors</span>
+     <span>○ ${openQuestions()} open questions</span>`;
+  document.getElementById("back").disabled = S.stage===0;
+  document.getElementById("next").textContent =
+    S.stage>=VIEWS.length-1 ? "Done" : "Next: "+STAGES[S.stage+1];
+  window.scrollTo(0,0);
+  document.querySelector("main").scrollTop=0;
+}
+
+document.addEventListener("click",e=>{
+  const t=e.target.closest("[data-go],[data-set],[data-infra],[data-feat],[data-cfg],[data-yaml],[data-toggle]");
+  if(!t) return;
+  if(t.dataset.go!==undefined){ S.stage=+t.dataset.go; }
+  else if(t.dataset.set){ S[t.dataset.set]=t.dataset.val; if(t.dataset.set==="role") applyPreset(); }
+  else if(t.dataset.infra){ S.infra[t.dataset.infra]=t.dataset.val; }
+  else if(t.dataset.feat){ const id=t.dataset.feat; S.feat[id]=!S.feat[id]; S.touched[id]=true;
+    const f=FEATURES.find(x=>x.id===id);
+    if(S.feat[id]&&f.needs) f.needs.forEach(n=>{S.feat[n]=true;});
+    if(S.feat[id]&&f.infra&&S.infra[f.infra]==="off") S.infra[f.infra]="external";
+    if(!S.feat[id]) FEATURES.forEach(x=>{ if(x.needs&&x.needs.includes(id)) S.feat[x.id]=false; });
+  }
+  else if(t.dataset.cfg){ S.cfgTab=+t.dataset.cfg; }
+  else if(t.dataset.yaml){ S.yamlTab=t.dataset.yaml; }
+  else if(t.dataset.toggle){ S[t.dataset.toggle]=!S[t.dataset.toggle]; }
+  render();
+});
+/* text inputs update the state while typing but only re-render on blur, so the caret stays put */
+document.addEventListener("input",e=>{
+  const b=e.target.dataset.bind; if(!b) return;
+  S[b]=e.target.value;
+  document.getElementById("ctx").textContent =
+    `${S.domain} · ${ROLES.find(r=>r.id===S.role).t.toLowerCase()} · chart ${S.chart}`;
+});
+document.addEventListener("blur",e=>{ if(e.target.dataset && e.target.dataset.bind) render(); }, true);
+document.addEventListener("change",e=>{
+  if(e.target.dataset.secret){ S.sec[e.target.dataset.secret]=e.target.value; render(); return; }
+  if(e.target.dataset.bind){ S[e.target.dataset.bind]=e.target.value; render(); }
+});
+document.getElementById("next").onclick=()=>{ if(S.stage<VIEWS.length-1){S.stage++;render();} };
+document.getElementById("back").onclick=()=>{ if(S.stage>0){S.stage--;render();} };
+document.getElementById("theme").onclick=()=>{
+  const cur=document.documentElement.getAttribute("data-theme");
+  document.documentElement.setAttribute("data-theme", cur==="dark"?"light":"dark");
+};
+applyPreset(); render();
+</script>
+</body>
+</html>
