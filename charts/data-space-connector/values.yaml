@@ -983,31 +983,16 @@ keycloak:
           clientRole: true
           attributes: {}
 
-    # -- client roles to be imported - be aware the env vars can be used and will be replaced. Support string (old style) or key-value
+    # -- client roles to be imported, as a map of clientId to its roles; a string (old style) is
+    # taken as the JSON fields of that map. Env vars are replaced. None by default: the roles a
+    # deployment's credentials carry are its own decision.
     clientRoles:
-      ${DID}:
-        - name: ADMIN
-          description: Is allowed to do everything
-          clientRole: true
 
     defaultUsers: []
-    # -- users to be imported - be aware the env vars can be used and will be replaced. Support string (old style) or array
-    users:
-      - username: admin-user
-        enabled: true
-        email: admin@provider.org
-        firstName: Test
-        lastName: Admin
-        credentials:
-          - type: password
-            value: test
-        clientRoles:
-          ${DID}:
-            - ADMIN
-          account:
-            - view-profile
-            - manage-account
-        groups: []
+    # -- users to be imported, as a list; a string (old style) is taken as its JSON elements. Env
+    # vars are replaced. None by default: a user shipped with the chart has a password everyone
+    # knows.
+    users: []
 
     # -- the standard Keycloak clients, keyed by clientId. Values given for a client are merged into
     # its defaults; set a client to null to leave it out of the realm. Env vars are replaced.

@@ -110,3 +110,40 @@ tests:
       - matchRegex:
           path: data["test-realm-realm.json"]
           pattern: '"clientId": "admin-cli",[^}]*"directAccessGrantsEnabled": false'
+
+  # The chart shipped `admin-user`, with the password `test` and the ADMIN role of the connector's
+  # own client: in a deployment that did not replace the users, anyone could log in and get a
+  # credential with that role, issued by the organisation.
+  - it: should import no users and no roles of the connector's client by default
+    set:
+      keycloak.enabled: true
+    asserts:
+      - matchRegex:
+          path: data["test-realm-realm.json"]
+          pattern: '"users": \[\]'
+      - notMatchRegex:
+          path: data["test-realm-realm.json"]
+          pattern: '"ADMIN"'
+
+  # A map of client roles is merged into the default one, so a role in the default reached every
+  # deployment that declared its own roles as a map.
+  - it: should import only the users and client roles a deployment declares
+    set:
+      keycloak.enabled: true
+      keycloak.realm.clientRoles:
+        did:web:example.org:
+          - name: READER
+            clientRole: true
+      keycloak.realm.users:
+        - username: someone
+          enabled: true
+    asserts:
+      - matchRegex:
+          path: data["test-realm-realm.json"]
+          pattern: '"did:web:example.org": \[\s*\{\s*"clientRole": true,\s*"name": "READER"'
+      - matchRegex:
+          path: data["test-realm-realm.json"]
+          pattern: '"username": "someone"'
+      - notMatchRegex:
+          path: data["test-realm-realm.json"]
+          pattern: '"ADMIN"|"admin-user"'
