@@ -18,7 +18,7 @@ dependencies:
   # issuance
   - name: keycloak
     condition: keycloak.enabled
-    version: 0.21.49
+    version: 0.22.0
     repository: oci://registry-1.docker.io/cloudpirates
   # contract management
   - name: tm-forum-api
@@ -75,11 +75,11 @@ dependencies:
     repository: oci://quay.io/seamware/helm-charts
   - name: prometheus
     condition: prometheus.enabled
-    version: 29.39.0
+    version: 29.40.3
     repository: https://prometheus-community.github.io/helm-charts
   - name: grafana
     condition: grafana.enabled
-    version: 14.2.0
+    version: 14.3.1
     repository: https://grafana-community.github.io/helm-charts
   # observability - OpenTelemetry Operator for auto-instrumentation (opt-in)
   - name: opentelemetry-operator
