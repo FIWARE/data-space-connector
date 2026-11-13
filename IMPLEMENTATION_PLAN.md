@@ -107,8 +107,14 @@ Add `config-tool/internal/server/` (the only package that knows HTTP) and
   whole run, so the printed URL still works when `xdg-open` picked the wrong browser or profile.
   Each `GET /?token=` that matches (constant-time compare) sets an `HttpOnly`, `SameSite=Strict`,
   `Path=/` session cookie holding a separate random session secret (the server keeps the set of
-  issued secrets), then redirects to `/` to strip the token from the address bar. After that,
-  every request (static assets, `/api/*`, the WebSocket) must carry the cookie.
+  issued secrets). It answers `200`, not a redirect, with a tiny page that carries
+  `<meta http-equiv="refresh" content="0;url=/">`, `Cache-Control: no-store` and
+  `Referrer-Policy: no-referrer`, which strips the token from the address bar. A `302` would
+  break: when the token URL is opened from another site (the `file://` launcher page below, the
+  Wails bootstrap page, a link on a web page), Chromium and WebKit keep that cross-site initiator
+  across the redirect and do not send the fresh `Strict` cookie, so the user would land on the
+  `401` page. The meta refresh is a new navigation initiated by the tool's own origin, so the
+  cookie travels and `SameSite=Strict` stays. After that, every request (static assets, `/api/*`, the WebSocket) must carry the cookie.
   `Authorization: Bearer <token>` with the run token is also accepted for non-browser clients,
   tests and the Vite dev proxy (step 3). Without either, the response is `401`, except for the
   bare `/` without a cookie, which gets a short "open the link printed by dsc-config" page with
@@ -144,7 +150,12 @@ Add `config-tool/internal/server/` (the only package that knows HTTP) and
   ignores `config-tool/ui/dist/*` and keeps `!config-tool/ui/dist/.gitkeep`.
 - **Launcher (default build, no build tag):** `launcher.Open(url)` opens the default browser with
   `xdg-open`, `open` or `rundll32 url.dll,FileProtocolHandler` per `runtime.GOOS`, with no extra
-  dependency. `dsc-config` with no args starts the server, prints the URL to stdout, opens it and
+  dependency. The token never goes on a command line, because every local user can read argv
+  through `ps` or `/proc/<pid>/cmdline`. Like Jupyter, `Open` writes a launch page with
+  `os.CreateTemp` (mode `0600`, so only the owner can read it) that meta-refreshes to the token
+  URL, passes the file's path to the opener, and removes the file on shutdown. That `file://`
+  initiator is cross-site, which is why the token exchange above answers `200` and not `302`.
+  A pure function builds the opener's argv, so a test can assert it holds no token. `dsc-config` with no args starts the server, prints the URL to stdout, opens it and
   serves until SIGINT/SIGTERM, then shuts down gracefully. A `--no-browser` flag only prints the
   URL; Playwright and headless hosts use it.
 
@@ -152,7 +163,8 @@ Tests (table-driven `httptest` against the real handler and a real loopback list
 - the listener address is `127.0.0.1`;
 - each endpoint without credentials returns `401`;
 - a wrong token returns `401`;
-- the URL token exchange sets the cookie and works repeatedly within one run;
+- the URL token exchange returns `200` (never `3xx`) with `no-store`, `no-referrer`, the cookie
+  and a meta refresh to `/`, and works repeatedly within one run;
 - two servers on two listeners use different cookie names, and one server's cookie is `401` on
   the other;
 - `Authorization: Bearer` with the run token is accepted, with a session secret or a wrong value
@@ -162,7 +174,9 @@ Tests (table-driven `httptest` against the real handler and a real loopback list
 - with the cookie, a `POST` with a foreign-port `Origin` (`http://127.0.0.1:<other port>`) or no
   `Origin` returns `403`, and one with the server's own `Origin` reaches the handler;
 - the WebSocket upgrade without a cookie fails, and with a cookie it receives `ready`;
-- the missing-UI fallback page is served.
+- the missing-UI fallback page is served;
+- the launcher's argv for each `GOOS` contains no token, and the launch page it writes has mode
+  `0600`, contains the token URL and is removed by the cleanup function.
 
 Acceptance: `dsc-config` with no args prints a `127.0.0.1` URL and opens a tab. `curl` without
 the token gets `401`.
@@ -218,7 +232,8 @@ Create the SPA under `config-tool/ui/` and the shell every later stage hangs in.
   - `config-tool/internal/launcher/window_wails.go` is behind `//go:build wails`, with
     `window_browser.go` as its `!wails` counterpart.
   - In the Wails build, the window loads a tiny bootstrap page that navigates the webview to the
-    loopback URL. The window then talks to the same server, so the cookie, the token and the
+    loopback URL. That page is cross-site to `127.0.0.1`, which the step-2 `200` + meta-refresh
+    token exchange handles; the ADR says so. The window then talks to the same server, so the cookie, the token and the
     WebSocket behave exactly as in the browser.
   - If the reviewer rejected the build-tag approach (see *Window vs. browser tab* above), follow
     the alternative recorded there instead of this one.
@@ -341,6 +356,9 @@ Make CI build and test the tool, keep the chart pipelines out of tool-only PRs, 
   `dsc-config --no-browser` and parses the printed URL. Tests:
   - a request without the token returns `401`;
   - the token URL loads S0;
+  - the token URL opened from a link on a page of another origin (a second local static server
+    in the global setup) also loads S0, which pins the cross-site cookie behaviour that a plain
+    `page.goto` would not exercise;
   - *New configuration* reaches S1;
   - fill all fields (cluster target with a fixture `KUBECONFIG` from `e2e/fixtures/`);
   - jump to a placeholder stage and see the placeholder;
@@ -381,9 +399,10 @@ Make CI build and test the tool, keep the chart pipelines out of tool-only PRs, 
   - prerequisites (Go version, Node 22);
   - `make ui`, `make build`, `make test`, `make cross` and `make build-window`;
   - running it: no args opens a tab, and `--no-browser`;
-  - the security model in three lines: loopback, per-run token (the printed URL stays valid
-    until the process exits, so do not share it), read-only kubeconfig whose path is never
-    stored;
+  - the security model in four lines: loopback, per-run token (the printed URL stays valid
+    until the process exits, so do not share it), the token is never passed on a command line
+    (the browser opens a `0600` launch file instead), and read-only kubeconfig whose path is
+    never stored;
   - `npm run dev` with `DSC_CONFIG_URL` (step 3), and the proxy rule: it adds the run token
     only to requests from the dev server's own origin and answers `403` to any other;
   - the package layout, and that the core never imports `net/http`;
