@@ -63,6 +63,34 @@ tests:
       - hasDocuments:
           count: 0
 
+  - it: accepts a full data space eventing participant block
+    set:
+      contract-management:
+        dataspace:
+          events:
+            own-participant-id: did:web:provider.org
+            dataspace-id: example-dataspace
+            listener:
+              enabled: true
+              watch:
+                enabled: true
+            subscriber:
+              enabled: true
+              sink: https://cm.provider.org/events
+            publishers:
+              - id: did:web:trust-anchor.org
+                origin: cm.trust-anchor.org
+                types: [org.fiware.dataspace.participant.removed]
+                subscriptions-url: https://cm.trust-anchor.org/subscriptions
+                client-id: contract-management
+                scopes: [default]
+                on-participant-removed:
+                  mode: report
+                  registry-url: https://tir.trust-anchor.org
+    asserts:
+      - hasDocuments:
+          count: 0
+
   - it: refuses rainbow.ccs, removed in 10.11.0
     set:
       rainbow:
