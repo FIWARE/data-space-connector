@@ -2027,6 +2027,8 @@ contract-management:
   # subchart renders it into the ConfigMap `contract-management-dataspace-events`, mounted as a directory
   # and watched, so a change to `publishers` reaches the running pod. Only the participant side is
   # configured here; the publisher and tir-watcher belong to the trust anchor.
+  # Never leave `dataspace:` empty (null): contract-management 3.6.6 then fails the render with
+  # `nil pointer evaluating interface {}.events`. Remove the key instead; an empty `events:` is fine.
   dataspace:
     events:
       # Not declared here, so contract-management's own fallbacks apply:
