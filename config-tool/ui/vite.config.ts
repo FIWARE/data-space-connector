@@ -19,7 +19,6 @@ export default defineConfig(({ command, mode, isPreview }) => {
       : undefined,
     test: {
       environment: 'jsdom',
-      globals: true,
       setupFiles: ['./src/test/setup.ts'],
     },
   }
