@@ -24,6 +24,7 @@ func Open(src LaunchSource) error {
 		return err
 	}
 	cmd := exec.Command(name, args...)
+	detach(cmd)
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("start %s: %w", name, err)
 	}
