@@ -18,6 +18,14 @@ describe('api', () => {
   })
 
   it.each([
+    ['204 No Content', 204, null],
+    ['empty 200', 200, ''],
+  ])('resolves a %s to undefined', async (_name, status, body) => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(body, { status })))
+    await expect(api('/profile', { method: 'PUT', body: '{}' })).resolves.toBeUndefined()
+  })
+
+  it.each([
     [401, UnauthorizedError],
     [501, NotImplementedError],
     [500, ApiError],

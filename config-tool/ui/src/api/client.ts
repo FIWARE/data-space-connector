@@ -63,7 +63,8 @@ async function errorFrom(response: Response): Promise<ApiError> {
   }
 }
 
-/** Calls `path` under /api and decodes JSON; throws an ApiError subclass on failure. */
+/** Calls `path` under /api and decodes JSON; throws an ApiError subclass on failure.
+ *  An empty answer (204, or a 2xx without a body) resolves to `undefined`. */
 export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers)
   if (init.body !== undefined && !headers.has('Content-Type')) {
@@ -73,7 +74,8 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   if (!response.ok) {
     throw await errorFrom(response)
   }
-  return (await response.json()) as T
+  const text = await response.text()
+  return (text === '' ? undefined : JSON.parse(text)) as T
 }
 
 /** One message on the progress WebSocket. */
