@@ -46,9 +46,14 @@ export function parseConfigUrl(raw: string | undefined): ConfigTarget {
   return { port, token }
 }
 
+/** The dev server's own `Host` values; any other one is a DNS-rebinding attempt. */
+export function devHosts(devPort: number): string[] {
+  return [`${LOOPBACK_HOST}:${devPort}`, `${LOCALHOST}:${devPort}`]
+}
+
 /** The dev server's own origins, the only ones the proxy forwards for. */
 export function devOrigins(devPort: number): string[] {
-  return [`http://${LOOPBACK_HOST}:${devPort}`, `http://${LOCALHOST}:${devPort}`]
+  return devHosts(devPort).map((host) => `http://${host}`)
 }
 
 function single(value: string | string[] | undefined): string | undefined {
@@ -56,11 +61,17 @@ function single(value: string | string[] | undefined): string | undefined {
 }
 
 /**
- * Applies the server's Origin rules before the proxy adds the token, so no other page can use it.
+ * Applies the server's Host and Origin rules before the proxy adds the token, so no other page can use it.
+ * Host is checked here because `changeOrigin` hides the browser's Host from dsc-config's own guard.
  * Returns why the request gets a 403, or undefined when it may pass.
  */
-export function devProxyGuard(method: string, headers: IncomingHttpHeaders, ownOrigins: readonly string[]): string | undefined {
+export function devProxyGuard(method: string, headers: IncomingHttpHeaders, devPort: number): string | undefined {
+  const host = headers.host
+  if (host === undefined || !devHosts(devPort).includes(host)) {
+    return `foreign Host ${host ?? '(missing)'}`
+  }
   const origin = single(headers.origin)
+  const ownOrigins = devOrigins(devPort)
   const unsafe = !SAFE_METHODS.has(method.toUpperCase()) || headers.upgrade !== undefined
   if (origin !== undefined && !ownOrigins.includes(origin)) {
     return `foreign Origin ${origin}`
@@ -78,7 +89,6 @@ export function devProxyGuard(method: string, headers: IncomingHttpHeaders, ownO
 /** Builds the `/api` proxy entry; the guard runs in `bypass`, which Vite calls for HTTP and WebSocket alike. */
 export function devProxy(target: ConfigTarget, devPort: number): Record<string, ProxyOptions> {
   const backend = `http://${LOOPBACK_HOST}:${target.port}`
-  const ownOrigins = devOrigins(devPort)
   return {
     [API_PREFIX]: {
       target: backend,
@@ -86,7 +96,7 @@ export function devProxy(target: ConfigTarget, devPort: number): Record<string, 
       ws: true,
       // Headers are set on req before the proxy copies them, so they reach the WebSocket too.
       bypass(req: IncomingMessage, res: ServerResponse | undefined) {
-        const reason = devProxyGuard(req.method ?? '', req.headers, ownOrigins)
+        const reason = devProxyGuard(req.method ?? '', req.headers, devPort)
         if (reason === undefined) {
           req.headers.authorization = `Bearer ${target.token}`
           if (req.headers.origin !== undefined) {

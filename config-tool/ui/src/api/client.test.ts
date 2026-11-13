@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { ApiError, NotImplementedError, UnauthorizedError, api, connectProgress } from './client'
+import { ApiError, NotImplementedError, UnauthorizedError, api, apiNoContent, connectProgress } from './client'
 
 function respond(status: number, body: unknown) {
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify(body), { status })))
@@ -20,9 +20,18 @@ describe('api', () => {
   it.each([
     ['204 No Content', 204, null],
     ['empty 200', 200, ''],
-  ])('resolves a %s to undefined', async (_name, status, body) => {
+    ['200 with a body', 200, '{"saved":true}'],
+  ])('apiNoContent resolves a %s', async (_name, status, body) => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(body, { status })))
-    await expect(api('/profile', { method: 'PUT', body: '{}' })).resolves.toBeUndefined()
+    await expect(apiNoContent('/profile', { method: 'PUT', body: '{}' })).resolves.toBeUndefined()
+  })
+
+  it.each([
+    ['204 No Content', 204, null],
+    ['empty 200', 200, ''],
+  ])('api rejects a %s with an ApiError', async (_name, status, body) => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(body, { status })))
+    await expect(api('/model')).rejects.toMatchObject({ name: 'ApiError', status })
   })
 
   it.each([

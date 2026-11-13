@@ -41,7 +41,8 @@ good validation messages.
 
 **A Go backend with an embedded TypeScript/React single-page front end, shipped as one
 binary per platform.** The binary serves the UI on `127.0.0.1` and opens it in a native
-window (Wails) or, as a fallback, in the default browser.
+window (Wails) or, as a fallback, in the default browser. Release binaries open the browser;
+the window is an opt-in build tag, see [ADR 0011](../adr/0011-config-tool-window-build-tag.md).
 
 ```
   dsc-config                       → opens the GUI
@@ -131,7 +132,7 @@ keeps `dsc-config generate` honest and makes the core testable without a browser
 | JSON Schema | `santhosh-tekuri/jsonschema/v6` | Draft-07, what the chart's schema is |
 | Sealed Secrets | `github.com/bitnami-labs/sealed-secrets/pkg/crypto` | Seals in process (AES-256-GCM session key wrapped with RSA-OAEP); `kubeseal` is used only to fetch a certificate when it is on the PATH |
 | Secret generation | `crypto/rand`, `crypto/ecdsa`, `go-jose` for JWKs | See [Generation](SECRETS.md#generation) |
-| Desktop window | `github.com/wailsapp/wails/v2` | OS webview; browser fallback when unavailable |
+| Desktop window | `github.com/wailsapp/wails/v2` | OS webview; opt-in `wails` build tag, release binaries open the browser ([ADR 0011](../adr/0011-config-tool-window-build-tag.md)) |
 | CLI | `spf13/cobra` | `generate`, `validate`, `install` |
 | Front end | React 18, TypeScript, Vite | Built into `embed.FS` at compile time |
 | Editor / diff | CodeMirror 6 with the YAML mode | Expert mode and the diff pane |

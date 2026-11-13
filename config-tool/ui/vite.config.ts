@@ -6,6 +6,8 @@ export default defineConfig(({ command, mode, isPreview }) => {
   const devServer = command === 'serve' && !isPreview && mode !== 'test'
   return {
     plugins: [react()],
+    // emptyOutDir deletes the tracked dist/.gitkeep that go:embed needs on a fresh clone;
+    // public/.gitkeep is what copies it back, so keep both files.
     build: { outDir: 'dist', emptyOutDir: true },
     server: devServer
       ? {

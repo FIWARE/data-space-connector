@@ -32,7 +32,7 @@ dsc-config --no-browser                    # prints http://127.0.0.1:<port>/?tok
 cd ui && DSC_CONFIG_URL='<printed URL>' npm run dev
 ```
 
-Open `http://127.0.0.1:5173`. The proxy applies the server's Origin and `Sec-Fetch-Site` rules
+Open `http://127.0.0.1:5173`. The proxy applies the server's Host, Origin and `Sec-Fetch-Site` rules
 before it adds the token, so other pages in the browser cannot use it; the server itself has no
 relaxed dev mode. `npm test`, `npm run lint` and `npm run typecheck` run in `ui/`.
 

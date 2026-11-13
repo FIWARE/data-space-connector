@@ -63,9 +63,7 @@ async function errorFrom(response: Response): Promise<ApiError> {
   }
 }
 
-/** Calls `path` under /api and decodes JSON; throws an ApiError subclass on failure.
- *  An empty answer (204, or a 2xx without a body) resolves to `undefined`. */
-export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
+async function request(path: string, init: RequestInit): Promise<Response> {
   const headers = new Headers(init.headers)
   if (init.body !== undefined && !headers.has('Content-Type')) {
     headers.set('Content-Type', CONTENT_TYPE_JSON)
@@ -74,8 +72,23 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   if (!response.ok) {
     throw await errorFrom(response)
   }
+  return response
+}
+
+/** Calls `path` under /api and decodes the JSON body; throws an ApiError subclass on failure.
+ *  An empty body (204 included) is an ApiError too; use apiNoContent for routes that answer without one. */
+export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const response = await request(path, init)
   const text = await response.text()
-  return (text === '' ? undefined : JSON.parse(text)) as T
+  if (text === '') {
+    throw new ApiError(response.status, `${API_BASE}${path}: empty answer where a JSON body was expected`)
+  }
+  return JSON.parse(text) as T
+}
+
+/** Calls `path` under /api for its effect only (PUT, DELETE); any 2xx body is ignored. */
+export async function apiNoContent(path: string, init: RequestInit = {}): Promise<void> {
+  await request(path, init)
 }
 
 /** One message on the progress WebSocket. */
