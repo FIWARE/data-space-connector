@@ -1,6 +1,6 @@
 # 0001 - Authenticate participants to the consent-manager over OID4VP
 
-**Status:** Accepted
+**Status:** Superseded by [0008](0008-dsc-consent-manager.md) (was: Accepted)
 **Date:** 2026-08-26
 **Context doc:** [`../CONSENT_MANAGEMENT.md`](../CONSENT_MANAGEMENT.md)
 
