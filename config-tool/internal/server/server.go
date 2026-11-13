@@ -42,6 +42,7 @@ type Server struct {
 	http       *http.Server
 	// shutdown is cancelled when the server shuts down, which ends open WebSockets.
 	shutdown context.Context
+	cancel   context.CancelFunc
 	now      func() time.Time
 
 	mu          sync.Mutex
@@ -75,10 +76,9 @@ func New(ui fs.FS) (*Server, error) {
 		sessions:    map[string]struct{}{},
 		launchCodes: map[string]time.Time{},
 	}
-	shutdown, cancel := context.WithCancel(context.Background())
-	s.shutdown = shutdown
+	s.shutdown, s.cancel = context.WithCancel(context.Background())
 	s.http = &http.Server{Handler: s.Handler(), ReadHeaderTimeout: readHeaderTimeout}
-	s.http.RegisterOnShutdown(cancel)
+	s.http.RegisterOnShutdown(s.cancel)
 	return s, nil
 }
 
@@ -138,6 +138,8 @@ func (s *Server) Serve(ctx context.Context) error {
 
 // Close stops the server at once, dropping open connections; for tests and failed starts.
 func (s *Server) Close() error {
+	// http.Server.Close neither runs the shutdown hooks nor closes hijacked WebSockets.
+	s.cancel()
 	err := s.http.Close()
 	if lerr := s.listener.Close(); lerr != nil && !errors.Is(lerr, net.ErrClosed) && err == nil {
 		err = lerr

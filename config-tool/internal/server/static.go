@@ -4,6 +4,7 @@ import (
 	"errors"
 	"io/fs"
 	"net/http"
+	"path"
 	"strings"
 )
 
@@ -16,6 +17,7 @@ const uiMissingPage = `<!doctype html>
 `
 
 // staticHandler serves files from ui and falls back to index.html for client-side routes.
+// A missing path with a file extension is a 404, so a stale tab gets no HTML for a script.
 func staticHandler(ui fs.FS) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet && r.Method != http.MethodHead {
@@ -37,6 +39,10 @@ func staticHandler(ui fs.FS) http.Handler {
 				http.ServeFileFS(w, r, ui, name)
 				return
 			}
+		}
+		if name != indexFile && path.Ext(name) != "" {
+			http.NotFound(w, r)
+			return
 		}
 		w.Header().Set(headerContentType, contentTypeHTML)
 		w.Header().Set(headerCacheControl, "no-cache")

@@ -31,6 +31,8 @@ const (
 	ticketProfile = "CT-4"
 )
 
+var errTrailingData = errors.New("unexpected data after the JSON value")
+
 type errorBody struct {
 	Error  string `json:"error"`
 	Ticket string `json:"ticket,omitempty"`
@@ -61,8 +63,8 @@ func notImplemented(msg, ticket string) http.Handler {
 
 func handleRender(w http.ResponseWriter, r *http.Request) {
 	var p profile.Profile
-	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxBodyBytes)).Decode(&p); err != nil && !errors.Is(err, io.EOF) {
-		writeError(w, http.StatusBadRequest, "invalid profile: "+err.Error(), "")
+	if err := decodeJSON(w, r, &p); err != nil {
+		writeError(w, bodyErrorStatus(err), "invalid profile: "+err.Error(), "")
 		return
 	}
 	values, err := render.Render(r.Context(), p)
@@ -80,11 +82,7 @@ func handleRender(w http.ResponseWriter, r *http.Request) {
 func handleValidate(w http.ResponseWriter, r *http.Request) {
 	values, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxBodyBytes))
 	if err != nil {
-		status := http.StatusBadRequest
-		if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
-			status = http.StatusRequestEntityTooLarge
-		}
-		writeError(w, status, err.Error(), "")
+		writeError(w, bodyErrorStatus(err), err.Error(), "")
 		return
 	}
 	err = validate.Validate(r.Context(), values)
@@ -96,6 +94,35 @@ func handleValidate(w http.ResponseWriter, r *http.Request) {
 	default:
 		w.WriteHeader(http.StatusNoContent)
 	}
+}
+
+// decodeJSON reads exactly one JSON value from the capped body into v; an empty body leaves v
+// unchanged and anything after the value is an error.
+func decodeJSON(w http.ResponseWriter, r *http.Request, v any) error {
+	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxBodyBytes))
+	if err := dec.Decode(v); err != nil {
+		if errors.Is(err, io.EOF) {
+			return nil
+		}
+		return err
+	}
+	var extra json.RawMessage
+	switch err := dec.Decode(&extra); {
+	case errors.Is(err, io.EOF):
+		return nil
+	case err != nil:
+		return err
+	default:
+		return errTrailingData
+	}
+}
+
+// bodyErrorStatus maps a request-body error to 413 when the body exceeded maxBodyBytes, else 400.
+func bodyErrorStatus(err error) int {
+	if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
+		return http.StatusRequestEntityTooLarge
+	}
+	return http.StatusBadRequest
 }
 
 // handleWebSocket sends the ready event, then forwards progress events until either side ends.

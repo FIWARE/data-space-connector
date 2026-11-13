@@ -22,9 +22,20 @@ const (
 	headerCacheControl   = "Cache-Control"
 	headerReferrerPolicy = "Referrer-Policy"
 	headerContentType    = "Content-Type"
+	headerCSP            = "Content-Security-Policy"
+	headerFrameOptions   = "X-Frame-Options"
+	headerContentOptions = "X-Content-Type-Options"
 	upgradeWebSocket     = "websocket"
 	contentTypeHTML      = "text/html; charset=utf-8"
 )
+
+// Every other port on 127.0.0.1 is the same site and gets the Strict cookie inside an iframe,
+// so every response forbids framing to stop clickjacking from a local dev server.
+var securityHeaders = map[string]string{
+	headerCSP:            "frame-ancestors 'none'",
+	headerFrameOptions:   "DENY",
+	headerContentOptions: "nosniff",
+}
 
 // The exchange answers 200 with a meta refresh, not a 302: a redirect keeps a cross-site
 // initiator, and the browser would then withhold the fresh SameSite=Strict cookie.
@@ -41,10 +52,14 @@ const unauthorizedPage = `<!doctype html>
 <p>Not signed in. Open the link printed by <code>dsc-config</code> in its terminal.</p>
 `
 
-// guard wraps next with the Host check, the token and launch-code exchange, authentication
-// and the Origin check for cookie-authenticated unsafe requests and WebSocket upgrades.
+// guard wraps next with the security headers, the Host check, the token and launch-code
+// exchange, authentication and the Origin check for cookie-authenticated unsafe requests and
+// WebSocket upgrades.
 func (s *Server) guard(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		for name, value := range securityHeaders {
+			w.Header().Set(name, value)
+		}
 		if !s.hosts[strings.ToLower(r.Host)] {
 			writeError(w, http.StatusForbidden, "forbidden host", "")
 			return

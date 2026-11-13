@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"io/fs"
 	"net"
@@ -27,7 +28,12 @@ const (
 	appJS       = "console.log('app')"
 	metaRefresh = `<meta http-equiv="refresh" content="0;url=/">`
 	testTimeout = 5 * time.Second
+	// maxNameBody keeps the oversized body out of subtest names.
+	maxNameBody = 20
 )
+
+// oversized is one byte over the body cap, so the server rejects it without a reset.
+var oversized = `"` + strings.Repeat("a", maxBodyBytes)
 
 var builtUI = fstest.MapFS{
 	indexFile:       {Data: []byte(indexHTML)},
@@ -315,12 +321,17 @@ func TestEndpoints(t *testing.T) {
 		{request{method: http.MethodPost, path: "/api/render", origin: origin}, http.StatusNotImplemented, ticketRender},
 		{request{method: http.MethodPost, path: "/api/render", origin: origin, body: `{"target":{"namespace":"x"}}`}, http.StatusNotImplemented, ticketRender},
 		{request{method: http.MethodPost, path: "/api/render", origin: origin, body: "{"}, http.StatusBadRequest, ""},
+		{request{method: http.MethodPost, path: "/api/render", origin: origin, body: "{}xyz"}, http.StatusBadRequest, ""},
+		{request{method: http.MethodPost, path: "/api/render", origin: origin, body: "{} {}"}, http.StatusBadRequest, ""},
+		{request{method: http.MethodPost, path: "/api/render", origin: origin, body: "{}\n"}, http.StatusNotImplemented, ticketRender},
+		{request{method: http.MethodPost, path: "/api/render", origin: origin, body: oversized}, http.StatusRequestEntityTooLarge, ""},
 		{request{method: http.MethodPost, path: "/api/validate", origin: origin, body: "a: 1\n"}, http.StatusNotImplemented, ""},
+		{request{method: http.MethodPost, path: "/api/validate", origin: origin, body: oversized}, http.StatusRequestEntityTooLarge, ""},
 		{request{method: http.MethodPost, path: "/api/load", origin: origin}, http.StatusNotImplemented, ticketLoad},
 		{request{path: "/api/unknown"}, http.StatusNotFound, ""},
 	}
 	for _, tc := range tests {
-		t.Run(tc.req.method+" "+tc.req.path+" "+tc.req.body, func(t *testing.T) {
+		t.Run(fmt.Sprintf("%s %s %.*s", tc.req.method, tc.req.path, maxNameBody, tc.req.body), func(t *testing.T) {
 			tc.req.cookie = cookie
 			resp, body := do(t, srv, tc.req)
 			if resp.StatusCode != tc.want {
@@ -483,7 +494,10 @@ func TestStatic(t *testing.T) {
 		{"root serves index", builtUI, request{path: "/"}, http.StatusOK, indexHTML},
 		{"asset", builtUI, request{path: "/assets/app.js"}, http.StatusOK, appJS},
 		{"client route falls back to index", builtUI, request{path: "/target/details"}, http.StatusOK, indexHTML},
+		{"index by name", builtUI, request{path: "/index.html"}, http.StatusOK, indexHTML},
 		{"directory falls back to index", builtUI, request{path: "/assets/"}, http.StatusOK, indexHTML},
+		{"missing asset is not found", builtUI, request{path: "/assets/app-oldhash.js"}, http.StatusNotFound, ""},
+		{"missing file with extension is not found", builtUI, request{path: "/favicon.ico"}, http.StatusNotFound, ""},
 		{"unsafe method", builtUI, request{method: http.MethodPost, path: "/"}, http.StatusMethodNotAllowed, ""},
 		{"missing UI", fstest.MapFS{".gitkeep": {}}, request{path: "/"}, http.StatusServiceUnavailable, "make ui"},
 	}
@@ -500,6 +514,59 @@ func TestStatic(t *testing.T) {
 				t.Errorf("body = %q, want it to contain %q", body, tc.wantBody)
 			}
 		})
+	}
+}
+
+func TestSecurityHeaders(t *testing.T) {
+	srv := started(t, builtUI)
+	cookie := login(t, srv)
+	tests := []struct {
+		name string
+		req  request
+	}{
+		{"unauthorized page", request{path: "/"}},
+		{"token exchange", request{path: pathAndQuery(t, srv.URL())}},
+		{"foreign host", request{path: "/", host: "evil.example:80"}},
+		{"api", request{path: "/api/model", cookie: cookie}},
+		{"ui", request{path: "/", cookie: cookie}},
+		{"asset", request{path: "/assets/app.js", cookie: cookie}},
+	}
+	want := map[string]string{
+		"Content-Security-Policy": "frame-ancestors 'none'",
+		"X-Frame-Options":         "DENY",
+		"X-Content-Type-Options":  "nosniff",
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			resp, _ := do(t, srv, tc.req)
+			for header, value := range want {
+				if got := resp.Header.Get(header); got != value {
+					t.Errorf("%s = %q, want %q", header, got, value)
+				}
+			}
+		})
+	}
+}
+
+func TestCloseEndsWebSockets(t *testing.T) {
+	srv := newServer(t, builtUI)
+	serve(t, srv)
+	conn, _, err := dialWS(srv, login(t, srv), ownOrigin(srv))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.CloseNow()
+	ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
+	defer cancel()
+	var ev Event
+	if err := wsjson.Read(ctx, conn, &ev); err != nil {
+		t.Fatal(err)
+	}
+	if err := srv.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := conn.Read(ctx); websocket.CloseStatus(err) != websocket.StatusGoingAway {
+		t.Errorf("read after Close = %v, want close status %d", err, websocket.StatusGoingAway)
 	}
 }
 
