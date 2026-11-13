@@ -14,6 +14,12 @@ import (
 	"github.com/FIWARE/data-space-connector/config-tool/internal/version"
 )
 
+var errFakeGUI = errors.New("fake GUI")
+
+func fakeGUI(context.Context, GUIOptions) error {
+	return errFakeGUI
+}
+
 func execute(t *testing.T, runGUI GUIRunner, args ...string) (string, error) {
 	t.Helper()
 	root := NewRootCommand(runGUI)
@@ -49,12 +55,12 @@ func TestCommands(t *testing.T) {
 		},
 		{
 			name:    "no subcommand starts the GUI",
-			wantErr: ErrGUIUnavailable,
+			wantErr: errFakeGUI,
 		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			out, err := execute(t, stubGUI, tc.args...)
+			out, err := execute(t, fakeGUI, tc.args...)
 			if !errors.Is(err, tc.wantErr) {
 				t.Fatalf("error = %v, want %v", err, tc.wantErr)
 			}
@@ -68,7 +74,7 @@ func TestCommands(t *testing.T) {
 }
 
 func TestGenerateRequiresProfile(t *testing.T) {
-	_, err := execute(t, stubGUI, "generate")
+	_, err := execute(t, fakeGUI, "generate")
 	if err == nil || !strings.Contains(err.Error(), flagProfile) {
 		t.Errorf("error = %v, want a missing --%s error", err, flagProfile)
 	}
@@ -78,7 +84,7 @@ func TestRootPassesContextToGUI(t *testing.T) {
 	type key struct{}
 	ctx := context.WithValue(context.Background(), key{}, true)
 	var got bool
-	root := NewRootCommand(func(ctx context.Context) error {
+	root := NewRootCommand(func(ctx context.Context, _ GUIOptions) error {
 		got, _ = ctx.Value(key{}).(bool)
 		return nil
 	})
@@ -90,9 +96,50 @@ func TestRootPassesContextToGUI(t *testing.T) {
 	}
 }
 
+func TestNoBrowserFlag(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+		want bool
+	}{
+		{"default opens a browser", nil, false},
+		{"--no-browser only prints the URL", []string{"--" + flagNoBrowser}, true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			var got GUIOptions
+			_, err := execute(t, func(_ context.Context, opts GUIOptions) error {
+				got = opts
+				return nil
+			}, tc.args...)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got.NoBrowser != tc.want {
+				t.Errorf("NoBrowser = %v, want %v", got.NoBrowser, tc.want)
+			}
+		})
+	}
+}
+
+func TestRunGUIPrintsLoopbackURL(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	var stdout, stderr bytes.Buffer
+	if err := runGUI(ctx, GUIOptions{NoBrowser: true, Stdout: &stdout, Stderr: &stderr}); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(stdout.String(), "http://127.0.0.1:") || !strings.Contains(stdout.String(), "/?token=") {
+		t.Errorf("stdout = %q, want the loopback token URL", stdout.String())
+	}
+	if stderr.Len() != 0 {
+		t.Errorf("stderr = %q, want nothing", stderr.String())
+	}
+}
+
 func TestRunReportsErrors(t *testing.T) {
 	var stderr bytes.Buffer
-	code := run(context.Background(), NewRootCommand(stubGUI), []string{"generate", "-p", "profile.yaml"}, &stderr)
+	code := run(context.Background(), NewRootCommand(fakeGUI), []string{"generate", "-p", "profile.yaml"}, &stderr)
 	if code == 0 {
 		t.Fatal("exit code = 0, want non-zero")
 	}
