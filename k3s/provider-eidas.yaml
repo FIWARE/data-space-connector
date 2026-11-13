@@ -8,6 +8,14 @@ decentralizedIam:
   enabled: true
 
   vcAuthentication:
+    credentials-config-service:
+      # own user instead of the chart's default `postgres` (local and test environments)
+      database:
+        username: ccs
+        existingSecret:
+          enabled: true
+          name: ccs.postgres.credentials.postgresql.acid.zalan.do
+          key: password
 
     postgres-operator:
       enabled: false
@@ -17,13 +25,13 @@ decentralizedIam:
       config:
         volume:
           storageClass: "local-path"
-        users:
-          ngb:
-            - createdb
-        databases:
-          ngb: ngb
         preparedDatabases:
+          # Scorpio's database, created with PostGIS by the operator. Scorpio connects as
+          # ngb_owner_user (defaultUsers), not as the superuser; its migrations need the public schema
           ngb:
+            defaultUsers: true
+            schemas:
+              public: {}
             extensions:
               postgis: public
 
@@ -46,6 +54,10 @@ decentralizedIam:
             hosts:
               - provider-verifier.127.0.0.1.nip.io
       deployment:
+        # own user instead of the chart's default `postgres` (local and test environments)
+        database:
+          existingSecret:
+            name: ccs.postgres.credentials.postgresql.acid.zalan.do
         verifier:
           tirAddress: https://tir.127.0.0.1.nip.io:8080/
           did: did:web:mp-operations.org
@@ -279,6 +291,13 @@ decentralizedIam:
                         vct_values:
                           - OperatorCredential
     trusted-issuers-list:
+      # own user instead of the chart's default `postgres` (local and test environments)
+      database:
+        username: til
+        existingSecret:
+          enabled: true
+          name: til.postgres.credentials.postgresql.acid.zalan.do
+          key: password
       # only open for clean up in the tests
       ingress:
         til:
@@ -412,6 +431,13 @@ decentralizedIam:
               with_body: true
 
     odrl-pap:
+      # own user instead of the chart's default `postgres` (local and test environments)
+      database:
+        username: pap
+        existingSecret:
+          enabled: true
+          name: pap.postgres.credentials.postgresql.acid.zalan.do
+          key: password
       additionalEnvVars:
         - name: GENERAL_ORGANIZATION_DID
           value: did:web:mp-operations.org
@@ -489,6 +515,13 @@ dataSpaceConfig:
     - oid4vp
 
 scorpio:
+  # own user instead of the chart's default `postgres` (local and test environments)
+  db:
+    user: ngb_owner_user
+    existingSecret:
+      enabled: true
+      name: ngb-owner-user.postgres.credentials.postgresql.acid.zalan.do
+      key: password
   ingress:
     enabled: true
     # only to make it available for the test initialization
