@@ -2039,9 +2039,10 @@ contract-management:
         # through a gateway that verifies the token and sets `X-Userinfo`; contract-management does not.
         enabled: false
       subscriber:
-        # -- register at the publishers' subscriptions APIs. Requires the listener and `sink`, the public
-        # URL of the own `POST /events`. Startup-only: a change rolls the pod.
+        # -- register at the publishers' subscriptions APIs. Requires the listener and `subscriber.sink`,
+        # the public URL of the own `POST /events`. Startup-only: a change rolls the pod.
         enabled: false
+        # sink: "https://cm.provider.org/events"
       # -- publishers whose events are accepted. Reloaded at runtime. The id of the one publisher with
       # `org.fiware.dataspace.participant.removed` in `types` is also the default `scope` of the
       # `registration.issuer` grants.
