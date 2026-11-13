@@ -1158,6 +1158,11 @@ keycloak:
           name: keystore-password
           key: password
   realm:
+    # local and test environments only: the integration tests and doc/scripts/get_credential.sh
+    # log in with the password grant, which the chart leaves off
+    defaultClients:
+      account-console:
+        directAccessGrantsEnabled: true
     frontendUrl: https://keycloak-provider.127.0.0.1.nip.io
     import: true
     name: test-realm
