@@ -2,6 +2,10 @@ cert-manager:
   enabled: false
 
 keycloak:
+  # own user instead of the chart's default `postgres` (local and test environments)
+  database:
+    username: keycloak
+    existingSecret: keycloak.postgres.credentials.postgresql.acid.zalan.do
   resources:
     requests:
       cpu: "100m"
@@ -897,10 +901,29 @@ decentralizedIam:
     postgres-operator:
       enabled: false
     vcverifier:
+      deployment:
+        # own user instead of the chart's default `postgres` (local and test environments)
+        database:
+          existingSecret:
+            name: ccs.postgres.credentials.postgresql.acid.zalan.do
       enabled: false
     credentials-config-service:
+      # own user instead of the chart's default `postgres` (local and test environments)
+      database:
+        username: ccs
+        existingSecret:
+          enabled: true
+          name: ccs.postgres.credentials.postgresql.acid.zalan.do
+          key: password
       enabled: false
     trusted-issuers-list:
+      # own user instead of the chart's default `postgres` (local and test environments)
+      database:
+        username: til
+        existingSecret:
+          enabled: true
+          name: til.postgres.credentials.postgresql.acid.zalan.do
+          key: password
       enabled: false
     managedPostgres:
       enabled: true
@@ -908,19 +931,28 @@ decentralizedIam:
         volume:
           storageClass: "local-path"
         users:
-          ngb:
-            - createdb
           statuslist:
             - createdb
         databases:
-          ngb: ngb
           statuslistdb: statuslist
         preparedDatabases:
+          # Scorpio's database, created with PostGIS by the operator. Scorpio connects as
+          # ngb_owner_user (defaultUsers), not as the superuser; its migrations need the public schema
           ngb:
+            defaultUsers: true
+            schemas:
+              public: {}
             extensions:
               postgis: public
   odrlAuthorization:
     odrl-pap:
+      # own user instead of the chart's default `postgres` (local and test environments)
+      database:
+        username: pap
+        existingSecret:
+          enabled: true
+          name: pap.postgres.credentials.postgresql.acid.zalan.do
+          key: password
       enabled: false
     apisix:
       enabled: false
@@ -992,6 +1024,13 @@ statusListServer:
         memory: "128Mi"
 
 scorpio:
+  # own user instead of the chart's default `postgres` (local and test environments)
+  db:
+    user: ngb_owner_user
+    existingSecret:
+      enabled: true
+      name: ngb-owner-user.postgres.credentials.postgresql.acid.zalan.do
+      key: password
   enabled: false
 
 fdsc-dashboard:
