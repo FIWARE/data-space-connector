@@ -39,6 +39,8 @@ func TestTargetValidate(t *testing.T) {
 		{"namespace too long", func(t *Target) { t.Namespace = strings.Repeat("a", MaxNamespaceLength+1) }, []string{FieldNamespace}},
 		{"release at limit", func(t *Target) { t.ReleaseName = strings.Repeat("a", MaxReleaseNameLength) }, nil},
 		{"release too long", func(t *Target) { t.ReleaseName = strings.Repeat("a", MaxReleaseNameLength+1) }, []string{FieldReleaseName}},
+		{"empty chart", func(t *Target) { t.Chart = "" }, []string{FieldChart}},
+		{"empty chart version", func(t *Target) { t.ChartVersion = "" }, []string{FieldChartVersion}},
 		{"unknown environment", func(t *Target) { t.Environment = "staging" }, []string{FieldEnvironment}},
 		{"several errors", func(t *Target) { t.Context = ""; t.ReleaseName = "DSC" }, []string{FieldContext, FieldReleaseName}},
 	}

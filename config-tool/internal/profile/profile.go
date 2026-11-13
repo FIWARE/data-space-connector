@@ -39,12 +39,16 @@ const (
 
 // Field names reported in FieldError, matching the JSON keys of Target.
 const (
-	FieldType        = "type"
-	FieldContext     = "context"
-	FieldNamespace   = "namespace"
-	FieldReleaseName = "releaseName"
-	FieldEnvironment = "environment"
+	FieldType         = "type"
+	FieldContext      = "context"
+	FieldNamespace    = "namespace"
+	FieldReleaseName  = "releaseName"
+	FieldChart        = "chart"
+	FieldChartVersion = "chartVersion"
+	FieldEnvironment  = "environment"
 )
+
+const msgRequired = "is required"
 
 var dns1123Label = regexp.MustCompile(`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`)
 
@@ -90,6 +94,13 @@ func (t Target) Validate() []FieldError {
 	if msg := checkLabel(t.ReleaseName, MaxReleaseNameLength); msg != "" {
 		errs = append(errs, FieldError{FieldReleaseName, msg})
 	}
+	// Semver and known-chart checks need the model bundle (step 4); presence is enough here.
+	if t.Chart == "" {
+		errs = append(errs, FieldError{FieldChart, msgRequired})
+	}
+	if t.ChartVersion == "" {
+		errs = append(errs, FieldError{FieldChartVersion, msgRequired})
+	}
 	if t.Environment != EnvDevelopment && t.Environment != EnvProduction {
 		errs = append(errs, FieldError{FieldEnvironment, fmt.Sprintf("must be %q or %q", EnvDevelopment, EnvProduction)})
 	}
@@ -100,7 +111,7 @@ func (t Target) Validate() []FieldError {
 func checkLabel(name string, maxLen int) string {
 	switch {
 	case name == "":
-		return "is required"
+		return msgRequired
 	case len(name) > maxLen:
 		return fmt.Sprintf("must be at most %d characters", maxLen)
 	case !dns1123Label.MatchString(name):

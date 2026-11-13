@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -95,5 +97,57 @@ func TestRunReportsErrors(t *testing.T) {
 	}
 	if !strings.Contains(stderr.String(), render.ErrNotImplemented.Error()) {
 		t.Errorf("stderr = %q, want the render error", stderr.String())
+	}
+}
+
+func TestWriteOutput(t *testing.T) {
+	const content = "global: {}\n"
+	tests := []struct {
+		name     string
+		existing string
+		path     func(dir string) string
+		wantErr  bool
+	}{
+		{"new file", "", func(dir string) string { return filepath.Join(dir, "values.yaml") }, false},
+		{"replaces a longer file", strings.Repeat("x", 4*len(content)), func(dir string) string { return filepath.Join(dir, "values.yaml") }, false},
+		{"missing directory", "", func(dir string) string { return filepath.Join(dir, "absent", "values.yaml") }, true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			path := tc.path(dir)
+			if tc.existing != "" {
+				if err := os.WriteFile(path, []byte(tc.existing), outputFileMode); err != nil {
+					t.Fatal(err)
+				}
+			}
+			err := writeOutput(&bytes.Buffer{}, path, []byte(content))
+			if (err != nil) != tc.wantErr {
+				t.Fatalf("error = %v, wantErr %v", err, tc.wantErr)
+			}
+			if !tc.wantErr {
+				got, err := os.ReadFile(path)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if string(got) != content {
+					t.Errorf("file = %q, want %q", got, content)
+				}
+			}
+			leftovers, _ := filepath.Glob(filepath.Join(dir, tempPattern))
+			if len(leftovers) != 0 {
+				t.Errorf("temp files left behind: %v", leftovers)
+			}
+		})
+	}
+}
+
+func TestWriteOutputStdout(t *testing.T) {
+	var out bytes.Buffer
+	if err := writeOutput(&out, stdoutPath, []byte("a: 1\n")); err != nil {
+		t.Fatal(err)
+	}
+	if out.String() != "a: 1\n" {
+		t.Errorf("stdout = %q", out.String())
 	}
 }

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 
 	"github.com/spf13/cobra"
 
@@ -21,6 +22,10 @@ const (
 	stdoutPath  = "-"
 	flagProfile = "profile"
 	flagOutput  = "output"
+	// outputFileMode is the mode of a written values file; it holds no secrets.
+	outputFileMode = 0o644
+	// tempPattern names the scratch file the output is staged in before the rename.
+	tempPattern = ".dsc-config-*.tmp"
 )
 
 // ErrGUIUnavailable is returned by the GUI stub until the local server lands.
@@ -70,12 +75,30 @@ func newGenerateCommand() *cobra.Command {
 	return cmd
 }
 
+// writeOutput writes data to stdout or, atomically, to path: a failure never leaves a partial file.
+// CT-2: decide whether an existing file at path may be replaced; today it is.
 func writeOutput(stdout io.Writer, path string, data []byte) error {
 	if path == stdoutPath {
 		_, err := stdout.Write(data)
 		return err
 	}
-	return os.WriteFile(path, data, 0o644)
+	tmp, err := os.CreateTemp(filepath.Dir(path), tempPattern)
+	if err != nil {
+		return err
+	}
+	defer os.Remove(tmp.Name())
+	if _, err := tmp.Write(data); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Chmod(outputFileMode); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	return os.Rename(tmp.Name(), path)
 }
 
 // Execute runs dsc-config with the process arguments and returns the exit code.
