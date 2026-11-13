@@ -115,7 +115,7 @@ below), and Step 2 picks it up. It has no `dataspace.events` value and no events
 FIWARE/helm-charts `main` (`bcc4207`) has neither. Every other bullet below is still open, and
 Step 3 waits for a chart version > 3.6.5 that has them.
 The Gitea fork `general-agent-3/helm-charts` exists but is stale (main `56cd6c9`, CM chart 3.5.23,
-far behind upstream 3.6.4). Before Step 3 can start, a human must either sync that fork's `main` to
+far behind upstream 3.6.5). Before Step 3 can start, a human must either sync that fork's `main` to
 upstream and run the change there, or open the PR on FIWARE/helm-charts directly. The new chart
 version must then be released to `oci://quay.io/fiware/helm-charts`. The PR must:
 - Add `dataspace.events` to `charts/contract-management/values.yaml` as the Micronaut
