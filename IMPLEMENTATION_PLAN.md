@@ -10,13 +10,13 @@ eventing-related resource; the other changes it does bring are listed under "Dev
 ticket".
 
 **Stale AGENTS.md lines.** Two lines of the "Data Space Eventing" section of `AGENTS.md` are wrong.
-Until a plan-mode agent or Step 5 updates them, **this plan wins**:
+Until a plan-mode agent or Step 6 updates them, **this plan wins**:
 - It says the events route is a documented snippet. That approach was rejected (see "APISIX routes"
   below). Events routes go through the odrl-authorization `apisix.extraRoutes` map (Prerequisite B,
-  Step 3). The default APISIX mode is standalone/yaml and serves no admin API, so admin-API hook
+  Step 4). The default APISIX mode is standalone/yaml and serves no admin API, so admin-API hook
   Jobs do not work there.
 - It says the CM subchart renders `contract-management.dataspace.events` into a refreshable
-  ConfigMap. The pinned CM chart (3.6.3) and the latest (3.6.4) do not; only the chart version of
+  ConfigMap. CM charts up to the latest (3.6.5, pinned by Step 2) do not; only the chart version of
   Prerequisite A will.
 
 **Reading subchart values.** `.Values` is `chartutil.Values`, not a plain map. Do not pass it to
@@ -32,8 +32,8 @@ Until a plan-mode agent or Step 5 updates them, **this plan wins**:
   `src/main/resources/application.yaml` (lines ~115–209); deployment notes in `README.md` (~148–170
   gateway/`X-Userinfo`, ~742–760 refresh and mounting). Eventing ships in CM 3.5.0, the TIR watcher
   in 3.5.1, `on-participant-removed` and adoption in **3.5.3**.
-- CM chart: `https://github.com/FIWARE/helm-charts` `charts/contract-management` (3.6.4, appVersion
-  3.5.1; DSC pins 3.6.3).
+- CM chart: `https://github.com/FIWARE/helm-charts` `charts/contract-management` (3.6.5, appVersion
+  3.5.3; DSC pins 3.6.3, 3.6.5 after Step 2).
 - TIL API: `https://github.com/FIWARE/trusted-issuers-list` `api/trusted-issuers-list.yaml`.
   `POST /issuer` takes `scope` and `scopeType` as **query parameters**; `scopeType` is the enum
   `dataspace-membership` (the ticket's `dataspace` is not a valid value — the API wins). Scope types
@@ -48,7 +48,7 @@ Until a plan-mode agent or Step 5 updates them, **this plan wins**:
   the kubelet `..data` symlink swap) or on `POST :9090/refresh`. A `subPath` mount never updates.
   Startup-only keys: the `enabled` flags of listener/publisher/subscriber/tir-watcher,
   `listener.watch.*`, `publisher.sink-*-timeout`. Everything else reloads at runtime.
-- The CM chart 3.6.4 has no eventing values. It mounts `application.yaml` with `subPath` and sets
+- The CM charts 3.6.4 and 3.6.5 have no eventing values. They mount `application.yaml` with `subPath` and set
   `MICRONAUT_CONFIG_FILES=/application.yaml` itself. A `config:` override replaces the whole file.
   The chart has no Ingress or route template.
 - CM does not verify tokens. The API gateway must run `openid-connect` with
@@ -62,7 +62,7 @@ Until a plan-mode agent or Step 5 updates them, **this plan wins**:
   Micronaut ignores query parameters it does not bind, so a scoped `POST /issuer` against TIL 0.10.0
   succeeds and stores an unscoped grant. CM's `on-participant-removed.mode: dataspace` would then find
   nothing to revoke.
-  **Decision:** upgrade the TIL through a `decentralizedIam` bump (Prerequisite B, Step 3), not through
+  **Decision:** upgrade the TIL through a `decentralizedIam` bump (Prerequisite B, Step 4), not through
   an image override in the umbrella. An override would bypass the version pairing that decentralized-iam
   tests. An external TIL (`registration.til` pointing outside the release) must be ≥ 0.10.1, and the
   release notes say so.
@@ -99,19 +99,23 @@ Until a plan-mode agent or Step 5 updates them, **this plan wins**:
   and is noted for a follow-up.
 - **Chosen option, as the ticket asks ("if the subchart does not support it, FIWARE/helm-charts
   first"):** add an extension point to odrl-authorization (Prerequisite B). The umbrella then declares
-  the events routes under it, disabled by default (Step 3).
+  the events routes under it, disabled by default (Step 4).
 - CI runs `helm unittest charts/data-space-connector` **without** `helm dependency build`, so suites
   can only target the umbrella's own `templates/`. Subchart rendering is checked in the upstream PRs
-  and by local `helm template` runs (Steps 2 and 3). The umbrella's own templates can still read
+  and by local `helm template` runs (Steps 3 and 4). The umbrella's own templates can still read
   subchart values (`.Values.decentralizedIam...`), so validation across values is testable in CI.
 - `contract-management` is an open (subchart) key in `values.schema.json`, so declaring keys under it
   does not change the schema. Still run `.github/scripts/values-schema.sh --check`.
 - There is no helm-docs-generated values table in this repo. The `# --` comments are still required.
   If a step finds a generated table, regenerate it; otherwise report that there is none.
 
-**Prerequisite A (outside this repo, blocks Step 2): contract-management chart change.**
+**Prerequisite A (outside this repo, blocks Step 3): contract-management chart change.**
+Status 2026-11-13: CM chart **3.6.5** is released. It only bumps `appVersion` to 3.5.3 (the last bullet
+below), and Step 2 picks it up. It has no `dataspace.events` value and no events ConfigMap, and
+FIWARE/helm-charts `main` (`bcc4207`) has neither. Every other bullet below is still open, and
+Step 3 waits for a chart version > 3.6.5 that has them.
 The Gitea fork `general-agent-3/helm-charts` exists but is stale (main `56cd6c9`, CM chart 3.5.23,
-far behind upstream 3.6.4). Before Step 2 can start, a human must either sync that fork's `main` to
+far behind upstream 3.6.5). Before Step 3 can start, a human must either sync that fork's `main` to
 upstream and run the change there, or open the PR on FIWARE/helm-charts directly. The new chart
 version must then be released to `oci://quay.io/fiware/helm-charts`. The PR must:
 - Add `dataspace.events` to `charts/contract-management/values.yaml` as the Micronaut
@@ -132,12 +136,12 @@ version must then be released to `oci://quay.io/fiware/helm-charts`. The PR must
   untouched: append to them, never replace them.
 - With eventing off, the rendering must be byte-identical to before (assert it with a diff of
   `helm template` against the previous chart version).
-- Bump `appVersion` to 3.5.3 (the first CM release with `on-participant-removed`).
+- Bump `appVersion` to 3.5.3 (the first CM release with `on-participant-removed`). Done in 3.6.5.
 - Version via the PR label; FIWARE/helm-charts bumps chart versions in CI (see its `AGENTS.md`).
-If this prerequisite is not met when Step 2 is picked up, Step 2 writes completion status `blocked`
+If this prerequisite is not met when Step 3 is picked up, Step 3 writes completion status `blocked`
 and names the missing chart version.
 
-**Prerequisite B (outside this repo, blocks Step 3): odrl-authorization extra routes and a
+**Prerequisite B (outside this repo, blocks Step 4): odrl-authorization extra routes and a
 decentralized-iam release.** These repos have no Gitea forks, so a human opens both PRs upstream.
 1. FIWARE/odrl-authorization, chart `odrl-authorization`:
    - Add the value `apisix.extraRoutes`: a **map** from route name to
@@ -153,20 +157,30 @@ decentralized-iam release.** These repos have no Gitea forks, so a human opens b
      `helm template` diff in all three modes.
 2. FIWARE/decentralized-iam: a release that pins that odrl-authorization version and
    `trusted-issuers-list` chart ≥ 0.19.2 (TIL ≥ 0.10.1). The PR must state whether TIL 0.10.1+ migrates
-   its database at start-up, so that Step 3 can put it in the release notes.
+   its database at start-up, so that Step 4 can put it in the release notes.
 
-If Prerequisite B is not met when Step 3 is picked up, Step 3 writes completion status `blocked` and
+If Prerequisite B is not met when Step 4 is picked up, Step 4 writes completion status `blocked` and
 names the missing release.
 
 **Release gating.** Steps merge into `ticket-102/work`. That branch must not be merged to `main` or
-released until Steps 2 and 3 have landed. Step 1 alone would scope grants that the deployed TIL 0.10.0
+released until Steps 2 to 4 have landed. Step 1 alone would scope grants that the deployed TIL 0.10.0
 drops, for a CM version that has no listener.
 
 ## Deviations from the ticket (need explicit human sign-off)
 1. **`scopeType`** is `dataspace-membership`, not `dataspace`. The TIL API enum wins.
 2. **"An upgrade with no new values changes nothing" does not fully hold.** The feature needs
-   CM ≥ 3.5.3 and TIL ≥ 0.10.1, so a default upgrade after Steps 2 and 3 does change things:
-   - the CM image moves to 3.5.3;
+   CM ≥ 3.5.3 and TIL ≥ 0.10.1, so a default upgrade after Steps 2 to 4 does change things:
+   - the CM image moves to 3.5.3. That changes app behaviour `helm template` cannot show: CM 3.5.3's
+     bundled `application.yaml` sets `endpoints.refresh: {enabled: true, sensitive: false}`
+     (`SerializedRefreshEndpoint` replaces Micronaut's `RefreshEndpoint`), so **every** CM pod now
+     answers an unauthenticated `POST :9090/refresh` (re-reads config, rebinds `@Refreshable` beans),
+     even with eventing off. In 3.4.2 the endpoint was sensitive and answered `401`. The CM Service
+     only exposes 8080, so 9090 is reachable by pod IP inside the cluster only. Operators who want the
+     old behaviour add `ENDPOINTS_REFRESH_SENSITIVE=true` to `contract-management.additionalEnvVars`.
+     That value is a list, and Helm replaces lists instead of merging them, so the operator must copy
+     the whole default list (the nine `OTEL_*` entries in the umbrella's `values.yaml`) into their
+     values and add the entry to it; setting only the new entry drops the tracing env vars.
+     `/events` and `/participants-removed` on 9090 stay off unless their eventing feature is enabled;
    - the TIL image moves to ≥ 0.10.1, possibly with a DB migration;
    - the CM, odrl-authorization and decentralized-iam chart labels change;
    - every other change between decentralized-iam 2.1.28 and the new release comes along.
@@ -174,11 +188,11 @@ drops, for a CM version that has no listener.
    The criterion this plan enforces instead:
    - no eventing ConfigMap, route, env entry or volume appears;
    - the registration Job script is byte-identical;
-   - every other diff is listed in the Step 2 and Step 3 PR descriptions.
+   - every other diff is listed in the Step 2, 3 and 4 PR descriptions.
 3. **Two switches.** The events routes are off by default and are turned on separately from
    `contract-management.dataspace.events.listener.enabled`. A subchart value cannot depend on another
    value, and the verifier discovery URL depends on the deployment. The umbrella `fail`s on
-   inconsistent combinations (Step 3). A listener without the chart's route is allowed, for operators
+   inconsistent combinations (Step 4). A listener without the chart's route is allowed, for operators
    who run their own gateway.
 4. **Unit tests** reach only the umbrella's templates, because CI does not build dependencies.
    Subchart rendering is checked upstream and by local `helm template` runs.
@@ -191,7 +205,7 @@ static musl lychee 0.24.2 binary instead:
 ## Steps
 
 ### Step 1: Attribute `registration.issuer` grants to the data space publisher
-Umbrella-only; not blocked by either prerequisite. It only takes effect once Steps 2 and 3 have
+Umbrella-only; not blocked by either prerequisite. It only takes effect once Steps 2 to 4 have
 landed (see "Release gating").
 - `charts/data-space-connector/templates/participant-registration.yaml`: send `scope` and
   `scopeType` as query parameters on `POST {til}/issuer`, URL-encoded (`urlquery`).
@@ -209,16 +223,16 @@ landed (see "Release gating").
   issuers unscoped (verified, see "TIL `409` on a scoped create"); CM's
   `on-participant-removed.adopt-unattributed` covers those. It must also say:
   - the scope needs TIL ≥ 0.10.1, which an older TIL silently drops; the chart's own TIL reaches that
-    version with Step 3;
+    version with Step 4;
   - the default derives from `contract-management.dataspace.events.publishers`, which only takes
-    effect with the CM version of Step 2;
+    effect with the CM chart version of Step 3;
   - the default is right only for a **membership** grant (the ticket scopes membership grants only)
     that lands in a TIL whose CM subscribes to the **same** publisher id. That holds for this
     release's own TIL, and for another release's TIL (e.g. `k3s/consumer-*.yaml` registering at the
     provider's TIL) when both releases subscribe to the same data space publisher. Otherwise, or for
     a grant that does not come from membership (e.g. an eIDAS `UserCredential` issuer, which a
     `participant.removed` for that DID would revoke), set `scope` explicitly or `scope: ""`.
-- Do not bump `decentralizedIam` here. That is Step 3, decided above.
+- Do not bump `decentralizedIam` here. That is Step 4, decided above.
 - New suite `charts/data-space-connector/tests/eventing_test.yaml`, parameterized where helm-unittest
   allows. Cases:
   - default values render the old script (no `scope=` anywhere);
@@ -231,12 +245,36 @@ landed (see "Release gating").
   and `helm unittest charts/data-space-connector`.
 - Acceptance: all pass, and `helm template` with default values is unchanged against the base branch.
 
-### Step 2: Bump contract-management and declare `contract-management.dataspace.events`
-Blocked until the chart version of Prerequisite A is released.
+### Step 2: Bump contract-management to 3.6.5 (CM 3.5.3)
+Split out of the original Step 2 because 3.6.5 carries only the `appVersion` part of Prerequisite A.
+- `charts/data-space-connector/Chart.yaml`: set the `contract-management` dependency to 3.6.5.
+- Diff `helm template` with default values before and after, and list every change in the PR
+  description. Expected: the image moves from 3.4.2 to 3.5.3 and chart labels change (Deviation 2).
+  Nothing eventing-related may appear. CM 3.5.3 keeps every eventing feature off by default.
+  Also list the app-level change `helm template` cannot show: the unauthenticated `POST :9090/refresh`
+  (Deviation 2).
+- Do not declare `dataspace.events` values yet: chart 3.6.5 ignores them, so they would be inert.
+- Acceptance: `helm lint`, `helm unittest`, `values-schema.sh --check` pass; the default-values diff
+  has no eventing resource in it.
+- **Result (PR #20).** Fix agents cannot edit a PR description, so the evidence is recorded here.
+  A human must copy it into the PR #20 description before merging.
+  `helm template` used the umbrella's `values.yaml`, rendering CM chart 3.6.3 against 3.6.5. Both
+  renders are 214 lines, and the diff has exactly these changes:
+  - the ConfigMap, Service and Deployment metadata labels, and the pod-template labels:
+    `helm.sh/chart` `contract-management-3.6.3` → `contract-management-3.6.5`, and
+    `app.kubernetes.io/version` `"3.4.2"` → `"3.5.3"`. The pod rolls once;
+  - the container image: `quay.io/fiware/contract-management:3.4.2` → `3.5.3`.
+
+  The diff adds no ConfigMap, env entry, volume, port or eventing resource. The Service still
+  exposes only 8080, and the mounted `application.yaml` is unchanged. One change does not show in
+  the render: the app now answers an unauthenticated `POST :9090/refresh` (Deviation 2).
+
+### Step 3: Bump contract-management and declare `contract-management.dataspace.events`
+Blocked until a CM chart version > 3.6.5 that implements the rest of Prerequisite A is released.
 - `charts/data-space-connector/Chart.yaml`: set the `contract-management` dependency to the new
   chart version.
 - Diff `helm template` with default values before and after, and list every change in the PR
-  description. Expected: the image moves to appVersion 3.5.3 and chart labels change (Deviation 2).
+  description. Expected: only chart labels change; the image stays 3.5.3 unless the new chart moves it.
   Nothing eventing-related may appear.
 - `charts/data-space-connector/values.yaml`, under `contract-management:`, add
   `dataspace.events` with `# --` comments. Declare only keys whose default is safe:
@@ -272,7 +310,7 @@ Blocked until the chart version of Prerequisite A is released.
 - Acceptance: `helm lint`, `helm unittest`, `values-schema.sh --check` pass; the default-values diff
   has no eventing resource in it.
 
-### Step 3: Bump decentralizedIam; declare the events routes
+### Step 4: Bump decentralizedIam; declare the events routes
 Blocked until the decentralized-iam release of Prerequisite B is out.
 - `charts/data-space-connector/Chart.yaml`: set the `decentralizedIam` dependency to that release.
   Diff `helm template` with default values before and after, and list every change in the PR
@@ -306,7 +344,7 @@ Blocked until the decentralized-iam release of Prerequisite B is out.
       metadata, which lacks the events scope. The publisher can then never get a token.
     - The path assumes the announced sink is `<scheme>://<host>/events`. Say in the `# --` comment
       that a sink under another path needs both `uri`s changed.
-    - `<events-service>` is the verifier service of Step 5 item 3, and the same service that
+    - `<events-service>` is the verifier service of Step 6 item 3, and the same service that
       `dataspace-events`' `openid-connect.discovery` points at.
     - `verifier:3000` comes from `decentralizedIam.vcAuthentication.vcverifier.fullnameOverride:
       verifier` and the k3s routes. Check it against the rendered Service, as for the CM upstream.
@@ -366,7 +404,7 @@ Blocked until the decentralized-iam release of Prerequisite B is out.
 - `values-schema.sh --check` (`decentralizedIam` is an open key), `helm lint`, `helm unittest`.
 - Acceptance: all pass; the default-values diff contains no route and no eventing resource.
 
-### Step 4: Example ODRL policy for the events path
+### Step 5: Example ODRL policy for the events path
 - New `it/src/test/resources/policies/allowDataSpaceEvents.json`, in the style of
   `allowContractManagement.json`:
   - target `http:path` `isInPath` `/events`;
@@ -380,12 +418,12 @@ Blocked until the decentralized-iam release of Prerequisite B is out.
   integration tests (`it/`); that is a separate ticket.
 - Acceptance: the file parses and mirrors the structure of the existing policies.
 
-### Step 5: Docs, release notes, version bump
+### Step 6: Docs, release notes, version bump
 - New `doc/eventing/participant-setup.md` (doctoc ToC). Write it as an operator guide and link to
   specification/architecture for the reasons. Content:
   1. the values to enable the listener/subscriber, and which keys are startup-only (a rollout
      follows) vs. refreshed at runtime;
-  2. the gateway: enable the three `extraRoutes` entries of Step 3, set `discovery` and the
+  2. the gateway: enable the three `extraRoutes` entries of Step 4, set `discovery` and the
      discovery route's rewrite `uri` to the events verifier service, and bind all three to the host
      of the announced sink URL with `host` or `hosts` (never empty, not both). Override
      `upstream.nodes` if CM is not `contract-management:8080` or the verifier not `verifier:3000`;
@@ -409,20 +447,34 @@ Blocked until the decentralized-iam release of Prerequisite B is out.
      scope is the one subscribers request:
      - `jwtInclusion` maps `credentialSubject.id` to the top-level claim `participantId`;
      - check the field names in the credentials-config-service API;
-  4. the ODRL policy from Step 4;
+  4. the ODRL policy from Step 5;
   5. that `registration.issuer` grants are scoped (Step 1) and need TIL ≥ 0.10.1, and when the
      default scope is wrong (Step 1: a non-membership grant, or a TIL whose CM subscribes to another
      publisher) so that `scope` or `scope: ""` must be set;
-  6. that management port 9090 (`/refresh`, `/participants-removed`) must stay cluster-internal.
+  6. that management port 9090 (`/refresh`, `/participants-removed`) must stay cluster-internal; link
+     the release-notes entry, since `/refresh` is open on every CM ≥ 3.5.3, eventing on or off.
 - `doc/README.md`: link the new page under the existing `### Data Space Eventing` subsection.
 - `doc/release-notes/10-x.md`: add a new top section for the minor version, in the existing
   format. Cover:
   - the CM and decentralizedIam bumps, with the image changes and any TIL DB migration (Deviation 2,
     listing what a default upgrade does change);
+  - that CM ≥ 3.5.3 serves an unauthenticated `POST :9090/refresh` in **every** deployment with CM
+    enabled, not only with eventing on, so port 9090 must stay cluster-internal (no Service, Ingress or
+    route for it; a NetworkPolicy where pod IPs are reachable), and the `ENDPOINTS_REFRESH_SENSITIVE=true`
+    opt-out: copy the full default `contract-management.additionalEnvVars` list into the values and add
+    the entry to it, because Helm replaces the list (Deviation 2);
   - the new values and the registration scope;
   - that an external TIL must be ≥ 0.10.1;
   - the gateway routes;
   - that no eventing resource appears with default values.
+- `charts/data-space-connector/values.yaml`, the `contract-management.tracing` comment (~line 1927):
+  drop the `--set contract-management.additionalEnvVars[0].value=false` hint. Helm replaces the list,
+  so it renders `[{value: false}]` (verified with Helm 3.17: one entry, no `name`, a boolean value) and
+  drops every `OTEL_*` entry. Say instead: copy the full default list into a values file and change
+  `OTEL_SDK_DISABLED` there, as the release notes say for `ENDPOINTS_REFRESH_SENSITIVE`. The
+  scorpio (`additionalEnvVars[0]`), tm-forum-api (`defaultConfig.additionalEnvVars[4]`) and
+  marketplace (`extraEnvVars[0]`) tracing comments carry the same hint. They are outside this
+  ticket; name them in the PR description as a follow-up.
 - `charts/data-space-connector/Chart.yaml`: minor version bump (10.15.10 → 10.16.0, or the next
   minor if the base has moved).
 - `AGENTS.md`: update the contract-management and decentralizedIam version mentions, if any, and
