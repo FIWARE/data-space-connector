@@ -46,7 +46,7 @@ Cross-cutting decisions for every step:
   binaries, which open a browser tab, and makes the window an opt-in `wails` build tag (step 3,
   ADR 0011). If the reviewer wants the window in the released binaries instead, step 3 replaces
   the single cross-compile job in step 5 with one native build job per OS (`ubuntu`, `macos`,
-  `windows` runners) using `-tags wails`, and ADR 0011 records that instead.
+  `windows` runners) using the window tags from step 3, and ADR 0011 records that instead.
 
 ## Steps
 
@@ -83,10 +83,15 @@ Files:
   directly imports `net/http`, `.../internal/server`, `.../internal/cli` or
   `.../internal/launcher`. Check direct imports only, because client-go pulls `net/http` in
   transitively.
-- `config-tool/Makefile`: targets `build`, `test`, `lint` (`go vet` +
-  `gofmt -l $(go list -f '{{.Dir}}' ./...)`, never `gofmt -l .`, which would enter
-  `node_modules`), with the version ldflags.
-- `.gitignore` entries: `config-tool/bin/`.
+- `config-tool/Makefile`: targets `build`, `test`, `lint` (`go vet` + `gofmt -l $(GO_FILES)`,
+  output must be empty), with the version ldflags. `GO_FILES` is
+  `git ls-files --cached --others --exclude-standard '*.go'`, a list of files. gofmt recurses into
+  every directory it is given and ignores the go.mod `ignore` directive, so neither `gofmt -l .`
+  nor the package directories from `go list` work: `ui` becomes a Go package in step 2 and its
+  directory holds `node_modules`. `go list -f '{{.GoFiles}}'` is no fix either, because it
+  drops files whose build tags do not match, such as the `wails` window file.
+- `.gitignore` entries: `config-tool/bin/` and `config-tool/ui/node_modules/` (the second keeps
+  `GO_FILES` out of the npm tree).
 
 Tests (table-driven): CLI `--version` output; `generate --help` lists `--profile` and `--output`;
 `generate` returns `ErrNotImplemented`; `Target.Validate` cases (valid, uppercase, too long,
@@ -250,18 +255,24 @@ Create the SPA under `config-tool/ui/` and the shell every later stage hangs in.
     WebSocket behave exactly as in the browser.
   - If the reviewer rejected the build-tag approach (see *Window vs. browser tab* above), follow
     the alternative recorded there instead of this one.
-  - If the window cannot start (no webview runtime), it falls back to `launcher.Open`.
+  - If the window cannot start (no webview runtime, or `wails.Run` returns an error), it logs the
+    error to stderr and falls back to `launcher.Open`, so a broken window build is visible.
   - The default build stays pure Go (`CGO_ENABLED=0`). That is how one job cross-compiles all five
-    targets (Wails needs CGO and the native webview SDKs). A native build is
-    `go build -tags wails` on macOS/Windows, or `-tags wails,webkit2_41` on Linux with
-    `libwebkit2gtk-4.1-dev`.
+    targets (Wails needs CGO and the native webview SDKs). The window tags are
+    `wails,desktop,production` on macOS/Windows and `wails,desktop,production,webkit2_41` on Linux
+    with `libwebkit2gtk-4.1-dev` (a named Makefile variable, `WINDOW_TAGS`, picked by `GOOS`).
+    `desktop,production` are Wails v2's own tags: without one of `dev`, `production` or
+    `bindings`, `wails.Run` only returns "Wails applications will not build without the correct
+    build tags", and the window would silently fall back to a tab every time.
 - **ADR:** add `doc/adr/0011-config-tool-window-build-tag.md`. It records that release binaries
   from the single cross-compile job are pure Go and open a browser tab, that the Wails window is an
   opt-in `wails` build tag built natively per OS, and why: CGO plus the webview SDKs versus "one CI
   job". This follows TECH_STACK's "dropping it leaves a working tool". Add the row to
-  `doc/adr/README.md` and its "belong to `../config-tool/`" sentence.
+  `doc/adr/README.md` and its "belong to `../config-tool/`" sentence. In the same change, correct
+  "six binaries" / "six signed binaries" / "six artifacts" to five in `TECH_STACK.md` (lines 62
+  and 230) and ADR 0009 (line 61), matching TECH_STACK line 145 and the ticket.
 - **Makefile:** `ui` (`npm ci && npm run build` in `ui/`). `build` depends on `ui`. `test` adds
-  `npm test` in `ui/` after `go test ./...`. Add `build-window` (`-tags wails`) and `cross`
+  `npm test` in `ui/` after `go test ./...`. Add `build-window` (`-tags $(WINDOW_TAGS)`) and `cross`
   (depends on `ui`): it loops over the five `GOOS/GOARCH` pairs `linux/amd64 linux/arm64
   darwin/amd64 darwin/arm64 windows/amd64` (a named Makefile variable) with `CGO_ENABLED=0` and
   the version ldflags, writing `bin/dsc-config-<os>-<arch>[.exe]`.
@@ -361,15 +372,16 @@ Make CI build and test the tool, keep the chart pipelines out of tool-only PRs, 
   1. `test`: `actions/setup-go` (`go-version-file: config-tool/go.mod`) and `actions/setup-node`
      (22, `cache: npm`, `cache-dependency-path: config-tool/ui/package-lock.json`, because there
      is no lockfile at the repo root). Runs `npm ci`, `lint`, `typecheck`, `test` and `build` in
-     `config-tool/ui`, then `gofmt -l $(go list -f '{{.Dir}}' ./...)` (must be empty),
-     `go vet ./...` and `go test ./...`.
+     `config-tool/ui`, then `make lint` (`go vet` and `gofmt -l $(GO_FILES)` from step 1, which
+     must be empty) and `go test ./...`.
   2. `build` (needs `test`, same `setup-node` cache settings): **one job** that runs
      `make cross` (step 3), so CI and local builds use the same target list and ldflags. It
      uploads the five binaries from `bin/` with `actions/upload-artifact`.
   3. `e2e` (needs `build`): runs Playwright (Chromium) against the linux/amd64 binary.
   4. `window` (optional, non-blocking, `continue-on-error: true`): installs
-     `libgtk-3-dev libwebkit2gtk-4.1-dev` and runs `go build -tags wails,webkit2_41
-     ./cmd/dsc-config`, so the build-tagged code does not rot.
+     `libgtk-3-dev libwebkit2gtk-4.1-dev` and runs `make build-window`
+     (`wails,desktop,production,webkit2_41`), so the build-tagged code does not rot. It only
+     compiles; the stderr log on fallback (step 3) is what shows a window that does not open.
 - **Playwright smoke** (`config-tool/ui/e2e/`, `playwright.config.ts`): a global setup starts
   `dsc-config --no-browser` and parses the printed URL. Tests:
   - a request without the token returns `401`;
