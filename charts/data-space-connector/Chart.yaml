@@ -97,8 +97,8 @@ dependencies:
     version: 1.24.4
     repository: https://grafana.github.io/helm-charts
   # The consent components are published as their own FIWARE charts. A provider enables
-  # the owner-resolver (it knows the provider's data model) and, when it wants contract-
-  # driven resolution, a provider-local consent-facade.
+  # the owner-resolver (it knows the provider's data model) and a provider-local
+  # consent-facade (the consent-plugin's token service, and contract-driven resolution).
   - name: consent-facade
     condition: consent-facade.enabled
     version: 0.2.1
