@@ -3,7 +3,6 @@ package cli
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -18,21 +17,28 @@ import (
 const (
 	binaryName = "dsc-config"
 	// stdoutPath as --output writes the values to standard output.
-	stdoutPath  = "-"
-	flagProfile = "profile"
-	flagOutput  = "output"
+	stdoutPath    = "-"
+	flagProfile   = "profile"
+	flagOutput    = "output"
+	flagNoBrowser = "no-browser"
 	// outputFileMode is the mode of a new values file before the umask; it holds no secrets.
 	outputFileMode = 0o644
 )
 
-// ErrGUIUnavailable is returned by the GUI stub until the local server lands.
-var ErrGUIUnavailable = errors.New("GUI not available yet")
+// GUIOptions are the root command's settings for the GUI.
+type GUIOptions struct {
+	// NoBrowser only prints the URL instead of also opening a browser.
+	NoBrowser bool
+	Stdout    io.Writer
+	Stderr    io.Writer
+}
 
 // GUIRunner starts the GUI and blocks until it is closed or ctx is cancelled.
-type GUIRunner func(ctx context.Context) error
+type GUIRunner func(ctx context.Context, opts GUIOptions) error
 
 // NewRootCommand builds the dsc-config command tree; runGUI runs when no subcommand is given.
 func NewRootCommand(runGUI GUIRunner) *cobra.Command {
+	var noBrowser bool
 	root := &cobra.Command{
 		Use:   binaryName,
 		Short: "Guided configuration of the FIWARE Data Space Connector chart",
@@ -43,9 +49,10 @@ func NewRootCommand(runGUI GUIRunner) *cobra.Command {
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return runGUI(cmd.Context())
+			return runGUI(cmd.Context(), GUIOptions{NoBrowser: noBrowser, Stdout: cmd.OutOrStdout(), Stderr: cmd.ErrOrStderr()})
 		},
 	}
+	root.Flags().BoolVar(&noBrowser, flagNoBrowser, false, "only print the URL of the GUI, do not open a browser")
 	root.SetVersionTemplate(binaryName + " {{.Version}}\n")
 	root.AddCommand(newGenerateCommand())
 	return root
@@ -96,7 +103,7 @@ func writeOutput(stdout io.Writer, path string, data []byte) error {
 
 // Execute runs dsc-config with the process arguments and returns the exit code.
 func Execute(ctx context.Context) int {
-	return run(ctx, NewRootCommand(stubGUI), os.Args[1:], os.Stderr)
+	return run(ctx, NewRootCommand(runGUI), os.Args[1:], os.Stderr)
 }
 
 func run(ctx context.Context, root *cobra.Command, args []string, stderr io.Writer) int {
@@ -106,8 +113,4 @@ func run(ctx context.Context, root *cobra.Command, args []string, stderr io.Writ
 		return 1
 	}
 	return 0
-}
-
-func stubGUI(context.Context) error {
-	return ErrGUIUnavailable
 }
