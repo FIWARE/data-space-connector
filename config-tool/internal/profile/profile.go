@@ -48,6 +48,7 @@ const (
 	FieldEnvironment  = "environment"
 )
 
+// msgRequired marks an unanswered field, which the UI counts as an open question rather than an error.
 const msgRequired = "is required"
 
 // Release names prefix Service names, which must be DNS-1035 labels (leading letter);
@@ -90,6 +91,8 @@ func (e FieldError) Error() string {
 func (t Target) Validate() []FieldError {
 	var errs []FieldError
 	switch t.Type {
+	case "":
+		errs = append(errs, FieldError{FieldType, msgRequired})
 	case TargetFile:
 	case TargetCluster:
 		if t.Context == "" {
@@ -111,7 +114,11 @@ func (t Target) Validate() []FieldError {
 	if t.ChartVersion == "" {
 		errs = append(errs, FieldError{FieldChartVersion, msgRequired})
 	}
-	if t.Environment != EnvDevelopment && t.Environment != EnvProduction {
+	switch t.Environment {
+	case EnvDevelopment, EnvProduction:
+	case "":
+		errs = append(errs, FieldError{FieldEnvironment, msgRequired})
+	default:
 		errs = append(errs, FieldError{FieldEnvironment, fmt.Sprintf("must be %q or %q", EnvDevelopment, EnvProduction)})
 	}
 	return errs
