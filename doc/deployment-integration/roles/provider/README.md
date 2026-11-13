@@ -613,6 +613,8 @@ The following ingresses are useful for development but must **not** be publicly 
 
 ### APISIX configuration
 
+- Publish the gateway through its Ingress (`decentralizedIam.odrlAuthorization.apisix.ingress`), which carries the host and TLS. Its Service is a ClusterIP one by default; making it a NodePort or LoadBalancer (`apisix.service.type`) opens the gateway outside of the Ingress as well
+- APISIX's etcd is only deployed when `apisix.etcd.enabled` is set, and only needed in a mode that reads the configuration from it, such as `traditional` with `config_provider: etcd` (the mode the routes registered through the Admin API need). The default standalone mode reads the routes from a ConfigMap. A mode that needs etcd without one fails to render
 - Change the APISIX `admin` credentials from defaults
 - Configure proper error responses (do not leak internal service details)
 - Keep `ssl_verify: true` in the `openid-connect` plugin. Even when `discovery` points to the verifier inside the cluster, the discovery document announces the verifier's public `jwks_uri`, so APISIX fetches the keys that validate every token over HTTPS. Without verification, whoever can intercept that call can make APISIX accept forged tokens.

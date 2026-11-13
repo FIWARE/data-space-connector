@@ -177,6 +177,11 @@ keycloak:
     - name: providers
       emptyDir: {}
   realm:
+    # local and test environments only: the integration tests and doc/scripts/get_credential.sh
+    # log in with the password grant, which the chart leaves off
+    defaultClients:
+      account-console:
+        directAccessGrantsEnabled: true
     # no port: 8080 is the http port, so an https frontendUrl carrying it makes every URL
     # keycloak advertises - issuer, credential offer, oid4vc endpoints - unreachable
     frontendUrl: https://keycloak-consumer.127.0.0.1.nip.io
