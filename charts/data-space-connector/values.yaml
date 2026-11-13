@@ -40,10 +40,9 @@ decentralizedIam:
           version: "16"
         volume:
           size: 1Gi
+        # one user and database per component (`ih` is the IdentityHub's); the operator creates its
+        # `postgres` superuser itself
         users:
-          admin: # maintainer
-            - superuser
-            - createdb
           til:
             - createdb
           ccs:
@@ -54,15 +53,12 @@ decentralizedIam:
             - createdb
           ih:
             - createdb
-          issuer:
-            - createdb
         databases:
           tildb: til
           ccsdb: ccs
           papdb: pap
           keycloakdb: keycloak
           ih: ih
-          issuer: issuer
 
     # -- configuration for the trusted-issuers-list to be deployed as part of the connector, see https://github.com/FIWARE/helm-charts/tree/main/charts/trusted-issuers-list for all options
     trusted-issuers-list:
