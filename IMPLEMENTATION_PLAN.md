@@ -54,7 +54,10 @@ Cross-cutting decisions for every step:
 Create the module and the CLI, which proves that the core is shared.
 
 Files:
-- `config-tool/go.mod` / `go.sum`: module `github.com/FIWARE/data-space-connector/config-tool`.
+- `config-tool/go.mod` / `go.sum`: module `github.com/FIWARE/data-space-connector/config-tool`,
+  with `ignore ./ui/node_modules` (go.mod `ignore` directive, Go 1.25+). The npm project sits
+  inside the module and some npm packages ship `.go` files, so `go vet ./...` and
+  `go test ./...` must not walk them.
 - `config-tool/cmd/dsc-config/main.go`: calls `internal/cli`.
 - `config-tool/internal/cli/`: cobra root command `dsc-config`.
   - `--version` prints `dsc-config <version> (<commit>)`.
@@ -80,8 +83,9 @@ Files:
   directly imports `net/http`, `.../internal/server`, `.../internal/cli` or
   `.../internal/launcher`. Check direct imports only, because client-go pulls `net/http` in
   transitively.
-- `config-tool/Makefile`: targets `build`, `test`, `lint` (`go vet` + `gofmt -l`), with the
-  version ldflags.
+- `config-tool/Makefile`: targets `build`, `test`, `lint` (`go vet` +
+  `gofmt -l $(go list -f '{{.Dir}}' ./...)`, never `gofmt -l .`, which would enter
+  `node_modules`), with the version ldflags.
 - `.gitignore` entries: `config-tool/bin/`.
 
 Tests (table-driven): CLI `--version` output; `generate --help` lists `--profile` and `--output`;
@@ -114,7 +118,14 @@ Add `config-tool/internal/server/` (the only package that knows HTTP) and
   provider and consumer for CT-5) then do not overwrite each other's session, and an instance
   only ever reads its own cookie.
 - **DNS-rebinding guard:** reject a `Host` header other than `127.0.0.1:<port>` or
-  `localhost:<port>` with `403`. On the WebSocket upgrade, also require a same-origin `Origin`.
+  `localhost:<port>` with `403`.
+- **Cross-origin guard (CSRF):** `SameSite=Strict` does not help here, because every other port on
+  `127.0.0.1` is the same *site*, so a page from any local dev server could send a credentialed
+  `POST`. Every cookie-authenticated request with an unsafe method (anything but `GET`/`HEAD`) and
+  the WebSocket upgrade must carry an `Origin` equal to `http://127.0.0.1:<port>` or
+  `http://localhost:<port>`; a missing or foreign `Origin` returns `403`. Bearer-authenticated
+  requests skip this check, because a browser never attaches that header on its own. `GET`
+  handlers have no side effects (the token exchange only sets the cookie, and needs the token).
 - **Routes** (stdlib `http.ServeMux` with method patterns, JSON errors `{ "error": "...",
   "ticket": "CT-n" }`):
   - `GET /api/model`: stub `501` for now; step 4 fills it.
@@ -148,6 +159,8 @@ Tests (table-driven `httptest` against the real handler and a real loopback list
   it is `401`;
 - with the cookie, the stubs return their documented codes;
 - a foreign `Host` returns `403`;
+- with the cookie, a `POST` with a foreign-port `Origin` (`http://127.0.0.1:<other port>`) or no
+  `Origin` returns `403`, and one with the server's own `Origin` reaches the handler;
 - the WebSocket upgrade without a cookie fails, and with a cookie it receives `ready`;
 - the missing-UI fallback page is served.
 
@@ -165,7 +178,7 @@ Create the SPA under `config-tool/ui/` and the shell every later stage hangs in.
   Vite proxy forwards `/api` (with `ws: true`) to `http://127.0.0.1:<port>` with
   `changeOrigin: true`, so the `Host` is the server's own. Its `configure` hook adds
   `Authorization: Bearer <token>` to every proxied request and rewrites `Origin` to
-  `http://127.0.0.1:<port>` on the WebSocket upgrade. The server's Host, Origin and auth guards
+  `http://127.0.0.1:<port>` on every proxied request, the WebSocket upgrade included. The server's Host, Origin and auth guards
   stay exactly as in step 2; never add a dev mode that relaxes them. Without `DSC_CONFIG_URL`,
   `npm run dev` fails with a message saying how to get it.
 - **`src/api/client.ts`:** same-origin `fetch` wrapper (the cookie travels by itself), typed
@@ -226,18 +239,22 @@ Implement the two stages and the two endpoints they need.
 
 - **Model bundle:** `config-tool/model/10.16.0/bundle.yaml` holds only `chart:
   data-space-connector` and `version: 10.16.0` (the chart's current version). Later epics extend
-  the file. `config-tool/model/embed.go` (package `model`, `//go:embed */bundle.yaml`).
+  the file. `config-tool/model/embed.go` declares package `bundles` (`//go:embed */bundle.yaml`),
+  so importers of both it and `internal/model` need no alias; its package doc says why the name
+  differs from the directory.
   `internal/model` provides `Versions(fs.FS) ([]Bundle, error)`, sorted by semver descending,
   with the first marked `latest`, and `Charts()`. It is core and has no HTTP.
 - **`GET /api/model`:** returns `{ charts: ["data-space-connector"], versions: [{version,
   latest}] }`. The full question model arrives with Epics 2, 3 and 5. Remove the `501` stub for
   this route.
-- **`internal/cluster`:** `Contexts(kubeconfigPath string) (path string, contexts []string,
-  current string, err error)`. It uses `clientcmd.NewDefaultClientConfigLoadingRules()`, honours
-  `KUBECONFIG`, and uses an explicit path when one is given. It reads the file and nothing else: it
-  never connects to the cluster and never writes the file. A missing file returns an empty list,
-  not an error.
-- **`GET /api/cluster/contexts?kubeconfig=<path>`:** in `internal/server`, returns the path,
+- **`internal/cluster`:** `Contexts(explicitPath string) (Kubeconfig, error)` with
+  `Kubeconfig{Paths []string; Contexts []string; Current string}`. An empty `explicitPath` uses
+  `clientcmd.NewDefaultClientConfigLoadingRules()`: `KUBECONFIG` (possibly several files, merged
+  with clientcmd's rules, so the first file that sets `current-context` wins) or
+  `~/.kube/config`. A non-empty one reads only that file. `Paths` is the precedence list actually
+  read. It reads the files and nothing else: it never connects to the cluster and never writes a
+  file. A missing file returns an empty list, not an error.
+- **`GET /api/cluster/contexts?kubeconfig=<path>`:** in `internal/server`, returns `paths`,
   context names and the current context. It returns no credentials and no server URLs.
 - **S0 Start** (MOCKUPS *S0*, wording from the prototype):
   - heading and subtitle;
@@ -250,8 +267,10 @@ Implement the two stages and the two endpoints they need.
 - **S1 Target** (MOCKUPS *S1*, wording from the prototype):
   - **Target radio:** *File only* / *Kubernetes cluster*.
   - **Kubeconfig path and Context dropdown:** rendered **only** when the cluster target is chosen.
-    The path is a text field defaulting to the server-reported path; there is no Browse button in
-    the browser build. The dropdown is filled from `/api/cluster/contexts` and preselects the
+    The path is a text field; there is no Browse button in the browser build. When the server
+    reports exactly one path, the field is pre-filled with it. With several (`KUBECONFIG` with
+    more than one file), the field stays empty, an empty field means "default loading rules", and
+    a note lists the files read; the dropdown then shows the merged contexts. The dropdown is filled from `/api/cluster/contexts` and preselects the
     current context. Show the "The cluster is only read… Nothing is installed before step 8" note.
     There is no connection or version probe (stage 4 detection is a later epic).
   - **Namespace** with *create it*. The checkbox is shown only for the cluster target.
@@ -272,10 +291,13 @@ Implement the two stages and the two endpoints they need.
 
 Tests:
 - Go table tests: `model.Versions` (ordering, `latest`); `cluster.Contexts` against fixture
-  kubeconfigs in `testdata/` (two contexts, empty file, missing file, `KUBECONFIG` with two
-  paths); `/api/model` and `/api/cluster/contexts` behind auth.
+  kubeconfigs in `testdata/` (two contexts, empty file, missing file, and `KUBECONFIG` with two
+  paths: `Paths` lists both in order, contexts are the union, `Current` comes from the first file
+  that sets it); `/api/model` and `/api/cluster/contexts` behind auth.
 - Vitest, parameterized:
   - S0 shows four entries, exactly one enabled, and *New configuration* reaches S1;
+  - the kubeconfig field is pre-filled for one reported path and empty, with the file list shown,
+    for two;
   - **no unneeded question:** with *File only*, the Kubeconfig, Context and *create it* controls
     are absent from the DOM; with *Kubernetes cluster*, they are present;
   - every S1 field keeps its value after switching to each other stage and back;
@@ -288,9 +310,11 @@ Make CI build and test the tool, keep the chart pipelines out of tool-only PRs, 
 - **`.github/workflows/config-tool.yaml`:** `on: pull_request` and `push` to `main`, with `paths:
   ['config-tool/**', '.github/workflows/config-tool.yaml']`. Jobs:
   1. `test`: `actions/setup-go` (`go-version-file: config-tool/go.mod`) and `actions/setup-node`
-     (22, npm cache). Runs `npm ci`, `lint`, `typecheck`, `test` and `build` in `config-tool/ui`,
-     then `gofmt -l` (must be empty), `go vet ./...` and `go test ./...`.
-  2. `build` (needs `test`): **one job** that builds the UI once, then loops over
+     (22, `cache: npm`, `cache-dependency-path: config-tool/ui/package-lock.json`, because there
+     is no lockfile at the repo root). Runs `npm ci`, `lint`, `typecheck`, `test` and `build` in
+     `config-tool/ui`, then `gofmt -l $(go list -f '{{.Dir}}' ./...)` (must be empty),
+     `go vet ./...` and `go test ./...`.
+  2. `build` (needs `test`, same `setup-node` cache settings): **one job** that builds the UI once, then loops over
      `linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64` with `CGO_ENABLED=0` and
      the version ldflags. It uploads the five binaries with `actions/upload-artifact`.
   3. `e2e` (needs `build`): runs Playwright (Chromium) against the linux/amd64 binary.
@@ -325,9 +349,16 @@ Make CI build and test the tool, keep the chart pipelines out of tool-only PRs, 
   - `pre-release.yml`: add `paths-ignore: ['config-tool/**', '.github/workflows/config-tool.yaml']`
     to its `pull_request` trigger, keeping the existing `types`. Otherwise a tool-only PR needs a
     semver label and pushes chart snapshots to quay.io for a change that touches no chart
-    (TECH_STACK: "a pull request that touches `config-tool/` alone publishes no chart"). If any
-    of its jobs is a required status check on `main`, the skipped run leaves it pending: say so
-    in the PR description so the maintainer can adjust branch protection.
+    (TECH_STACK: "a pull request that touches `config-tool/` alone publishes no chart").
+  - `release.yml`: add the same `paths-ignore` to its `push` trigger. With `chart-version` and
+    `pre-release.yml` skipped, nothing makes a tool-only PR carry a semver label, so merging it
+    would otherwise fail `generate-version` or cut a chart-numbered GitHub release that ships no
+    chart. The tool is released separately under `config-tool/v*` tags (TECH_STACK), which is not
+    part of CT-1.
+  - Required checks: `test.yaml`, `pre-release.yml` and `release.yml` are skipped at workflow
+    level, so a required status check from one of them stays *pending* on a tool-only PR; the
+    job-level `if:` in `check.yaml` reports *skipped* and does not hang. Say so in the PR
+    description so the maintainer can adjust branch protection.
 - **`lychee.toml`:** add `"(^|/)node_modules/"` to `exclude_path`, so local link checks skip
   `config-tool/ui/node_modules`.
 - **`config-tool/README.md`:**
@@ -348,6 +379,8 @@ Make CI build and test the tool, keep the chart pipelines out of tool-only PRs, 
 Acceptance:
 - a PR touching only `config-tool/` runs `config-tool.yaml` (test, build with five binaries, e2e)
   and none of `test.yaml`, `pre-release.yml`, `chart-lint` or `values-schema`;
+- merging a tool-only PR to `main` does not run `release.yml`, so no GitHub release is cut and no
+  chart is published;
 - a PR touching `config-tool/` and any file outside it (e.g. `lychee.toml`) still runs
   `chart-lint`;
 - a PR touching only `charts/` does not run `config-tool.yaml`;
