@@ -1,4 +1,4 @@
-# values.schema.json is generated from this file, see CLAUDE.md. The `# @schema` blocks adjust what
+# values.schema.json is generated from this file, see AGENTS.md. The `# @schema` blocks adjust what
 # the generator infers from the defaults. Every subchart's key is left open there: Helm validates
 # this chart's schema against values that already contain the subchart's own defaults, and the
 # subchart's keys are the subchart's to validate.
@@ -196,15 +196,16 @@ decentralizedIam:
         prometheus.io/scrape: "true"
         prometheus.io/path: /apisix/prometheus/metrics
         prometheus.io/port: "9091"
-      service:
-        # -- traffic policy of the gateway service. Left empty so that Kubernetes applies its own
-        # default (`Cluster` for NodePort and LoadBalancer) and the service can also be set to
-        # `ClusterIP`: the apisix chart writes the field for every type, and the API server rejects
-        # it on a ClusterIP service. Set it to `Local` to keep the client source IP.
-        externalTrafficPolicy: ""
       apisix:
         prometheus:
           enabled: true
+      etcd:
+        # -- deploy an etcd for APISIX. Only needed when APISIX reads its configuration from etcd,
+        # e.g. in traditional mode with `config_provider: etcd`; the default standalone mode reads
+        # the routes from a ConfigMap. odrl-authorization defaults to false as well, but this chart
+        # has to repeat it: three charts down, Helm decides whether to deploy the etcd chart
+        # without odrl-authorization's default.
+        enabled: false
 
     # -- configuration for the odrl-pap to be deployed as part of the connector, see https://github.com/FIWARE/helm-charts/tree/main/charts/odrl-pap for all options
     odrl-pap:
@@ -251,27 +252,6 @@ decentralizedIam:
           enabled: true
           name: postgres.postgres.credentials.postgresql.acid.zalan.do
           key: password
-    # -- configuration for the open-policy-agent to be deployed as part of the connector fulfilling the role of the PDP, as a sidecar to apisix
-    opa:
-      # -- should an opa sidecar be deployed to apisix
-      enabled: true
-      # -- address of the pap to get the policies from
-      resourceUrl: http://odrl-pap:8080/bundles/service/v1
-      # -- port to make opa available at
-      port: 8181
-      # -- pull delays for the policies bundle
-      policies:
-        minDelay: 2
-        maxDelay: 4
-      # -- pull delays for the methods bundle
-      methods:
-        minDelay: 1
-        maxDelay: 3
-      # -- pull delays for the data bundle
-      data:
-        minDelay: 1
-        maxDelay: 15
-
     # -- integration of checks for the transfer process protocol
     tpp:
       # -- should checking for a running transfer process be enabled
@@ -549,7 +529,11 @@ keycloak:
     frontendURL: http://localhost:8080
     # -- custom displayNameHtml for the realm. If empty, defaults to "<div class="kc-logo-text"><span>{realm.name}</span></div>"
     displayNameHtml: ""
-    sslRequired: none
+    # -- when the realm requires HTTPS: `external` (except for requests from private addresses,
+    # such as the components calling Keycloak inside the cluster), `all` or `none`. Keycloak takes
+    # the client address from the ingress (`keycloak.keycloak.proxyHeaders`) and the scheme from
+    # `frontendURL`: with an https frontendURL, refusing plain HTTP is the ingress's job.
+    sslRequired: external
     # -- realm attributes. Support string (old style) or key-value
     attributes:
     defaultClientScopes:
@@ -979,33 +963,23 @@ keycloak:
           clientRole: true
           attributes: {}
 
-    # -- client roles to be imported - be aware the env vars can be used and will be replaced. Support string (old style) or key-value
+    # -- client roles to be imported, as a map of clientId to its roles; a string (old style) is
+    # taken as the JSON fields of that map. Env vars are replaced. None by default: the roles a
+    # deployment's credentials carry are its own decision.
     clientRoles:
-      ${DID}:
-        - name: ADMIN
-          description: Is allowed to do everything
-          clientRole: true
 
     defaultUsers: []
-    # -- users to be imported - be aware the env vars can be used and will be replaced. Support string (old style) or array
-    users:
-      - username: admin-user
-        enabled: true
-        email: admin@provider.org
-        firstName: Test
-        lastName: Admin
-        credentials:
-          - type: password
-            value: test
-        clientRoles:
-          ${DID}:
-            - ADMIN
-          account:
-            - view-profile
-            - manage-account
-        groups: []
+    # -- users to be imported, as a list; a string (old style) is taken as its JSON elements. Env
+    # vars are replaced. None by default: a user shipped with the chart has a password everyone
+    # knows.
+    users: []
 
-    # -- clients to be imported - be aware the env vars can be used and will be replaced. Support string (old style) or array
+    # -- the standard Keycloak clients, keyed by clientId. Values given for a client are merged into
+    # its defaults; set a client to null to leave it out of the realm. Env vars are replaced.
+    # `account-console` and `admin-cli` are public clients and come without the password grant
+    # (`directAccessGrantsEnabled`), which would let anyone who knows a password get a token
+    # without the login page, and so without its second factor. Machines get their credentials
+    # with a confidential client (client credentials, see `vcCredentials`), people with a wallet.
     defaultClients:
       account:
         name: ${client_account}
@@ -1062,7 +1036,8 @@ keycloak:
         consentRequired: false
         standardFlowEnabled: true
         implicitFlowEnabled: false
-        directAccessGrantsEnabled: true
+        # the password grant is off: see `keycloak.realm.defaultClients`
+        directAccessGrantsEnabled: false
         serviceAccountsEnabled: false
         publicClient: true
         frontchannelLogout: false
@@ -1111,7 +1086,8 @@ keycloak:
         consentRequired: false
         standardFlowEnabled: false
         implicitFlowEnabled: false
-        directAccessGrantsEnabled: true
+        # the password grant is off: see `keycloak.realm.defaultClients`
+        directAccessGrantsEnabled: false
         serviceAccountsEnabled: false
         publicClient: true
         frontchannelLogout: false
@@ -4114,23 +4090,17 @@ tempo:
       cpu: 100m
       memory: 256Mi
 
-# -- Consent Management -- provider-side wiring only. The consent-manager and its
-# managed MongoDB live in the trust-anchor chart (charts/trust-anchor). This umbrella 
-# chart provides the IAM that backs consent (keycloak issuer, did:web helper, APISIX facade route,
-# vc-operator), the provider APISIX consent-plugin wiring below, and - through the
-# `consent-facade` / `consent-owner-resolver` dependencies - the provider-side
-# consent services. See doc/CONSENT_MANAGEMENT.md.
-consentManagement:
-  # -- enable the provider-side consent-plugin wiring (the Go consent-plugin that
-  # runs on the provider APISIX and calls the authority's consent-manager). The
-  # consent-manager itself is deployed from the trust-anchor chart; the facade and
-  # the owner-resolver come from their own charts (see the keys at the end of this
-  # file).
-  enabled: false
+## Consent Management -- provider-side only. The consent-manager (dsc-consent-manager on
+## PostgreSQL) lives in the trust-anchor chart (charts/trust-anchor); the provider APISIX
+## consent-plugin calls its `/v1` API directly, with a VCVerifier JWT from the provider-local
+## `consent-facade`. This chart has no `consentManagement` key: the provider side is the two
+## subcharts below plus the consent-plugin wiring on the provider's APISIX
+## (`decentralizedIam.odrlAuthorization.apisix`). See doc/CONSENT_MANAGEMENT.md.
 
 ## The consent-facade, deployed from its own published FIWARE chart
 ## (oci://quay.io/fiware/helm-charts/consent-facade). A provider runs one locally when the
-## owner-resolver resolves the governing contract
+## owner-resolver resolves the governing contract, and as the token service of the
+## consent-plugin (`POST /internal/tokens`, a VCVerifier JWT for the consent-manager).
 ## See https://github.com/FIWARE/helm-charts/tree/main/charts/consent-facade
 # @schema
 # type: object

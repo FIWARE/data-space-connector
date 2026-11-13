@@ -58,10 +58,12 @@ can be found here:
 
 ### Consent Management
 
-Optional consent management (ISO/IEC TS 27560) - its architecture, trust model and the demo flow charts 
-(granting consent, consent-gated data access, authenticated projection) are documented here:
-* [Consent Management](./CONSENT_MANAGEMENT.md) - architecture, trust model, participant
-  authentication over OID4VP, and the end-to-end demo
+Optional consent management (ISO/IEC TS 27560) - its architecture, trust model and the consent-gated
+data access flow are documented here:
+* [Consent Management](./CONSENT_MANAGEMENT.md) - why consent management, how it works, and a
+  step-by-step walkthrough on the local k3s data space; followed by the reference part: the `/v1`
+  API, authentication with the VCVerifier JWT, the consent-filter plugin, deployment and the
+  migration from the MongoDB-based consent-manager
 * [Architecture Decision Records](./adr/README.md)
 
 
