@@ -455,6 +455,14 @@ Blocked until the decentralized-iam release of Prerequisite B is out.
   - that an external TIL must be ≥ 0.10.1;
   - the gateway routes;
   - that no eventing resource appears with default values.
+- `charts/data-space-connector/values.yaml`, the `contract-management.tracing` comment (~line 1927):
+  drop the `--set contract-management.additionalEnvVars[0].value=false` hint. Helm replaces the list,
+  so it renders `[{value: false}]` (verified with Helm 3.17: one entry, no `name`, a boolean value) and
+  drops every `OTEL_*` entry. Say instead: copy the full default list into a values file and change
+  `OTEL_SDK_DISABLED` there, as the release notes say for `ENDPOINTS_REFRESH_SENSITIVE`. The
+  scorpio (`additionalEnvVars[0]`), tm-forum-api (`defaultConfig.additionalEnvVars[4]`) and
+  marketplace (`extraEnvVars[0]`) tracing comments carry the same hint. They are outside this
+  ticket; name them in the PR description as a follow-up.
 - `charts/data-space-connector/Chart.yaml`: minor version bump (10.15.10 → 10.16.0, or the next
   minor if the base has moved).
 - `AGENTS.md`: update the contract-management and decentralizedIam version mentions, if any, and
