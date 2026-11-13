@@ -7,7 +7,7 @@ dependencies:
   - name: decentralized-iam
     alias: decentralizedIam
     condition: decentralizedIam.enabled
-    version: 2.1.28
+    version: 2.2.0
     repository: https://fiware.github.io/decentralized-iam
   # data-service
   - name: scorpio-broker-aaio
@@ -79,7 +79,7 @@ dependencies:
     repository: https://prometheus-community.github.io/helm-charts
   - name: grafana
     condition: grafana.enabled
-    version: 14.2.0
+    version: 14.3.1
     repository: https://grafana-community.github.io/helm-charts
   # observability - OpenTelemetry Operator for auto-instrumentation (opt-in)
   - name: opentelemetry-operator
@@ -89,7 +89,7 @@ dependencies:
   # observability - OpenTelemetry Collector for distributed tracing (opt-in)
   - name: opentelemetry-collector
     condition: opentelemetry-collector.enabled
-    version: 0.176.1
+    version: 0.178.2
     repository: https://open-telemetry.github.io/opentelemetry-helm-charts
   # observability - Grafana Tempo for trace storage backend (opt-in)
   - name: tempo
@@ -97,11 +97,11 @@ dependencies:
     version: 1.24.4
     repository: https://grafana.github.io/helm-charts
   # The consent components are published as their own FIWARE charts. A provider enables
-  # the owner-resolver (it knows the provider's data model) and, when it wants contract-
-  # driven resolution, a provider-local consent-facade.
+  # the owner-resolver (it knows the provider's data model) and a provider-local
+  # consent-facade (the consent-plugin's token service, and contract-driven resolution).
   - name: consent-facade
     condition: consent-facade.enabled
-    version: 0.2.1
+    version: 0.2.2
     repository: oci://quay.io/fiware/helm-charts
   - name: consent-owner-resolver
     condition: consent-owner-resolver.enabled
