@@ -2,7 +2,7 @@ package launcher
 
 import "errors"
 
-// WindowTitle is the native window's title, matching APP_TITLE in ui/src/state/title.ts.
+// WindowTitle is the native window's title; window_test.go pins it to ui/index.html, title.test.ts pins APP_TITLE to the same.
 const WindowTitle = "DSC Configurator"
 
 // ErrNoWindow reports a build without the wails tag; the caller opens a browser tab instead.

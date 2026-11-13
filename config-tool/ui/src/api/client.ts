@@ -76,14 +76,18 @@ async function request(path: string, init: RequestInit): Promise<Response> {
 }
 
 /** Calls `path` under /api and decodes the JSON body; throws an ApiError subclass on failure.
- *  An empty body (204 included) is an ApiError too; use apiNoContent for routes that answer without one. */
+ *  An empty or non-JSON body (204 included) is an ApiError too; use apiNoContent for routes that answer without one. */
 export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   const response = await request(path, init)
   const text = await response.text()
   if (text === '') {
     throw new ApiError(response.status, `${API_BASE}${path}: empty answer where a JSON body was expected`)
   }
-  return JSON.parse(text) as T
+  try {
+    return JSON.parse(text) as T
+  } catch {
+    throw new ApiError(response.status, `${API_BASE}${path}: answer is not JSON`)
+  }
 }
 
 /** Calls `path` under /api for its effect only (PUT, DELETE); any 2xx body is ignored. */

@@ -29,6 +29,7 @@ describe('api', () => {
   it.each([
     ['204 No Content', 204, null],
     ['empty 200', 200, ''],
+    ['200 with a non-JSON body', 200, '<html>'],
   ])('api rejects a %s with an ApiError', async (_name, status, body) => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(body, { status })))
     await expect(api('/model')).rejects.toMatchObject({ name: 'ApiError', status })
