@@ -3,8 +3,10 @@
 ## Overview
 Umbrella Helm chart repository that bundles all components of the FIWARE Data
 Space Connector (DSC) -- identity, DSP (EDC/Rainbow), contract management,
-marketplace -- into a single deployable artifact. No application code lives
-here; this repo is packaging and integration glue.
+marketplace -- into a single deployable artifact. The chart side is packaging
+and integration glue. Since ticket #116 the repo also hosts the configuration
+tool `dsc-config` (Go module under `config-tool/`), a guided wizard that
+produces the chart's `values.yaml`; design in `doc/config-tool/`.
 
 ## Tech Stack
 - Packaging: Helm 3 (umbrella chart with subchart dependencies).
@@ -18,6 +20,10 @@ here; this repo is packaging and integration glue.
   integration tests (`it/`).
 - Test: helm lint, helm template, helm-unittest (`charts/data-space-connector/tests/`),
   k3s integration tests under `it/`.
+- Config tool (`config-tool/`): Go (cobra CLI, net/http on 127.0.0.1,
+  client-go read-only, later Helm SDK + yaml.v3 node API), React 18 + TypeScript
+  + Vite UI embedded via `embed.FS`, optional Wails v2 window. Libraries are
+  fixed by `doc/config-tool/TECH_STACK.md` / ADR 0009 -- deviating needs an ADR.
 
 ## Project Structure
 ```
@@ -27,7 +33,7 @@ charts/
                               # scorpio, tm-forum-api, contract-management,
                               # marketplace, fdsc-edc, vault, did, cert-manager,
                               # opentelemetry-collector
-    values.yaml               # ~2930 lines -- every knob lives here
+    values.yaml               # ~4190 lines -- every knob lives here
     templates/                # in-chart manifests (see below)
     tests/                    # helm-unittest suites
       tracing_test.yaml       # OTEL tracing tests (33 tests, 361 asserts)
@@ -48,8 +54,16 @@ charts/data-space-connector/templates/
   extra-manifests.yaml, realm.yaml
   _helpers.tpl, _realm.tpl
 
+config-tool/                  # dsc-config Go module (see "Config tool" below)
+  cmd/dsc-config/             # binary: GUI (no args) + CLI subcommands
+  internal/                   # core library (no HTTP) + internal/server (API)
+  ui/                         # React/TS SPA (Vite), built into ui/dist, embedded
+  model/<chart-version>/      # question-model bundle per chart version
+
 doc/
   README.md                   # docs index
+  config-tool/                # tool design: TECH_STACK, USER_JOURNEY, MOCKUPS,
+                              # FEATURE_MODEL, SECRETS, USER_STORIES, prototype
   deployment-integration/     # role-based and scenario-based guides
     observability/README.md   # OTEL tracing guide (architecture, per-component)
   flows/                      # mermaid sequence diagrams
@@ -78,11 +92,19 @@ pom.xml                       # drives local-deploy + integration tests
 - Integration (local k3s, slow): `mvn -f pom.xml verify`
 - CI entry points: `.github/workflows/check.yaml` (lint) and
   `.github/workflows/test.yaml` (helm-unittest + integration).
+- Links: `.github/scripts/check-links.sh` (lychee in docker, `lychee.toml`).
+- Config tool (from `config-tool/`, once CT-1 lands; see its README):
+  `make ui` (npm ci + vite build into `ui/dist`), `make build`, `make test`
+  (`go test ./...` + `npm test`), `make cross` (5 targets, CGO_ENABLED=0).
+  CI: `.github/workflows/config-tool.yaml`.
 
 ## Key Conventions
 - Every `values.yaml` key carries a `# --` comment (helm-docs format) so
   the values table in `README.md` regenerates cleanly. Keep new values
   documented the same way.
+- Comment density elsewhere is low: templates are mostly uncommented,
+  workflows carry one short "why" comment block above a job or a pinned
+  version. Match that; do not pad.
 - `values.schema.json` is generated from `values.yaml` and validates this
   chart's own keys: a key that is not in `values.yaml` is refused. Every key
   a template reads must therefore be declared, with a default the template
@@ -148,6 +170,16 @@ pom.xml                       # drives local-deploy + integration tests
   instance is bumped. The other five Jobs are hooks with
   `before-hook-creation`, so they are recreated.
 
+## Config tool (`config-tool/`)
+- Layering is fixed: the core (`internal/*` except `internal/server`) never
+  imports `net/http`; the web UI and the CLI are two front ends over it.
+- The HTTP API binds `127.0.0.1:0` (random port) and requires the per-run token;
+  no endpoint writes to a cluster. Only the kube *context name* is ever stored.
+- Ticket order of the epic: CT-1 shell (#116) -> CT-2 round-trip (#117) ->
+  CT-3 (#118) -> CT-4 profiles (#119) -> CT-5 local trial (#120).
+- Doc comments: one-line GoDoc on every exported identifier and package; TSX
+  components get a one-line JSDoc. No `@param` echoes.
+
 ## Documentation
 
 - Every architectural decision should be documented in the ADR format in the folder doc/adr
@@ -203,14 +235,9 @@ post-26.4 OID4VCI model. Hard-won gotchas (full detail in `doc/release-notes/10-
 
 ## Important Files
 - `charts/data-space-connector/Chart.yaml` -- dependency graph (current
-  version 9.1.0).
-- `charts/data-space-connector/values.yaml` -- ~2930-line config surface;
-  top-level sections start at these approximate line numbers:
-  `decentralizedIam` (9), `scorpio` (183), `keycloak` (262),
-  `tm-forum-api` (1168), `rainbow` (1299), `contract-management` (1351),
-  `dataSpaceConfig` (1417), `marketplace` (1450), `fdsc-edc` (1556),
-  `identityhub` (1913), `tracing` (2731),
-  `opentelemetry-collector` (2776).
+  version 10.16.0).
+- `charts/data-space-connector/values.yaml` -- ~4190-line config surface;
+  `grep -n '^[a-z]' values.yaml` lists the top-level sections.
 - `charts/data-space-connector/templates/_helpers.tpl` -- shared Helm
   partials (`dsc.labels`, `dsc.otel.*`, etc.).
 - `charts/data-space-connector/templates/identityhub-deployment.yaml` --
@@ -220,3 +247,6 @@ post-26.4 OID4VCI model. Hard-won gotchas (full detail in `doc/release-notes/10-
 - `pom.xml` + `it/` -- integration test harness.
 - `doc/release-notes/9-x.md` -- follow existing format when adding entries.
 - `doc/deployment-integration/observability/README.md` -- OTEL tracing docs.
+- `doc/config-tool/TECH_STACK.md`, `doc/adr/0009-config-tool-stack.md` --
+  config tool architecture, libraries, layout; `MOCKUPS.md` + `mockups/prototype.html`
+  for screen layout and wording (take wording, not code, from the prototype).
