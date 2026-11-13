@@ -1,11 +1,12 @@
 # ---------------------------------------------------------------------------
 # Consent authority overlay (trust-anchor namespace).
 #
-# Deploys the consent-manager + an internal APISIX facade + a managed MongoDB
-# using the DSC umbrella chart as a SECOND release (name `consent-authority`) in
-# the trust-anchor namespace - the "central authority" that knows all
-# participants. Everything else the umbrella chart offers is disabled. The
-# consent-facade stays at the provider and is reached cross-namespace.
+# Deploys the IAM around the consent-manager (keycloak issuer, verifier, and an
+# APISIX gateway publishing consent-manager.dataspace-authority.org) using the DSC
+# umbrella chart as a SECOND release (name `consent-authority`) in the
+# trust-anchor namespace - the "central authority" that knows all participants.
+# The consent-manager itself comes from the trust-anchor release. Everything else
+# the umbrella chart offers is disabled.
 #
 # Installed by k3s/deploy.sh in the `consent` maven profile:
 #   helm upgrade --install consent-authority charts/data-space-connector \
@@ -514,11 +515,28 @@ decentralizedIam:
           # The credential policy is therefore selected by SCOPE, not by a second service -
           # the pattern k3s/provider.yaml already uses for `data-service` (default/legal/
           # operator). Every token this service issues carries `aud: consent-manager`, which
-          # is what the consent-manager's externalIdp.audience expects.
+          # is what the consent-manager's identityProviders.primary.audience expects.
           #   openid      - the data SUBJECT's UserCredential
           #   participant - a PARTICIPANT's MembershipCredential (issued by its own keycloak,
           #                 trusted because its issuer DID is registered in the trust-anchor
-          #                 TIR). The consent-manager resolves it to a Participant by `did`.
+          #                 TIR).
+          #
+          # Claim contract with the consent-manager (flatClaims: top-level JWT claims, read
+          # by its identityProviders.primary.claims / roleMapping):
+          #   sub            - holder DID of the presentation; the user identifier
+          #   roles          - the credential's `type` array. Neither credential carries a
+          #                    role claim, and the type IS what this verifier enforces per
+          #                    scope, so no issuer can grant itself a consent role:
+          #                    MembershipCredential -> PARTICIPANT, UserCredential -> USER.
+          #                    No credential maps to consent-catalog (CATALOG).
+          #   participant_id - the MembershipCredential's `issuer`, the participant DID that
+          #                    the TIR check covers (participant scope only); the plugin's
+          #                    `consumer_claim` reads the same field. Not credentialSubject.id,
+          #                    which any issuer sets freely. VCVerifier 6.27.0 does not yet
+          #                    compare `vc.issuer` with the signed `iss` for jwt_vc_json.
+          #   email, given_name, family_name - the UserCredential's profile (openid only)
+          # With several matching credentials the last one's claims win, so the DCQL asks for
+          # one (`multiple: false`, a wallet hint the verifier does not enforce).
           # See doc/CONSENT_MANAGEMENT.md.
           #
           # :warning: The provider mints that MembershipCredential with
@@ -530,6 +548,7 @@ decentralizedIam:
             authorizationType: "DEEPLINK"
             oidcScopes:
               "participant":
+                flatClaims: true
                 credentials:
                   - type: MembershipCredential
                     trustedParticipantsLists:
@@ -538,16 +557,22 @@ decentralizedIam:
                       - "*"
                     jwtInclusion:
                       enabled: true
-                      fullInclusion: true
+                      fullInclusion: false
+                      claimsToInclude:
+                        - originalKey: type
+                          newKey: roles
+                        - originalKey: issuer
+                          newKey: participant_id
                 dcql:
                   credentials:
                     - id: participant-query
                       format: "jwt_vc_json"
-                      multiple: true
+                      multiple: false
                       meta:
                         type_values:
                           - ["MembershipCredential"]
               "openid":
+                flatClaims: true
                 credentials:
                   - type: UserCredential
                     trustedParticipantsLists:
@@ -556,12 +581,21 @@ decentralizedIam:
                       - "*"
                     jwtInclusion:
                       enabled: true
-                      fullInclusion: true
+                      fullInclusion: false
+                      claimsToInclude:
+                        - originalKey: type
+                          newKey: roles
+                        - originalKey: credentialSubject.email
+                          newKey: email
+                        - originalKey: credentialSubject.firstName
+                          newKey: given_name
+                        - originalKey: credentialSubject.lastName
+                          newKey: family_name
                 dcql:
                   credentials:
                     - id: user-query
                       format: "jwt_vc_json"
-                      multiple: true
+                      multiple: false
                       meta:
                         type_values:
                           - ["UserCredential"]
@@ -607,170 +641,24 @@ decentralizedIam:
               - consent-manager.dataspace-authority.org
       catchAllRoute:
         enabled: false
-      # the consent key is sourced from the `consent-manager` secret the consent-manager
-      # chart creates (not a literal in git/etcd): mounted here as env CONSENT_KEY and
-      # referenced in the facade route header as $env://CONSENT_KEY, which APISIX resolves
-      # at runtime.
-      extraEnvVars:
-        - name: CONSENT_KEY
-          valueFrom:
-            secretKeyRef:
-              name: consent-manager
-              key: consentKey
       routes:
-        # NB there is deliberately NO /participants/login route. Participants
-        # authenticate over OID4VP (see the /consent-manager/* route below), so nothing
-        # issues consent-manager-signed participant tokens any more - and the login
-        # endpoint was an unauthenticated, published, unthrottled credential exchange.
-        # See doc/CONSENT_MANAGEMENT.md.
-        # ---------------------------------------------------------------------------------------
-        # Subject-authenticated path: the data subject presents its OWN OID4VP access token, which the
-        # consent-manager verifies itself via external JWKS (its externalIdp values) and maps to its
-        # local User. Deliberately NO participant authentication and NO consent-key injection. The
-        # participant `/consent-manager/*` route would not do: its `openid-connect` would accept this
-        # token (same verifier), but the consent-manager's participant middleware behind it resolves
-        # the caller to a Participant and would never find the subject - and that route injects the
-        # consent key, which a subject must not act with. This lets the subject reach its
-        # user-authenticated endpoints through the public ingress without a port-forward.
-        #
-        # :warning: Because these routes apply NO gateway authentication, each one is an ALLOW-LIST of
-        # (uris x methods) whose handlers are `verifyUserJWT`-gated in the consent-manager itself, i.e.
-        # they authenticate the SUBJECT's OID4VP token. Never widen this to `/consent-user/*`: this
-        # gateway is published (ingress `consent-authority-apisix`, host
-        # consent-manager.dataspace-authority.org), so a wildcard exposes the WHOLE consent-manager API
-        # unauthenticated - including endpoints gated only by the shared consent key (`POST /v1/consents`,
-        # `GET /v1/consents/{userId}/{providerId}/{consumerId}`, which this route does not inject and so
-        # cannot satisfy), and endpoints with NO gate at all
-        # (`GET /v1/consents/emailverification`, `GET /v1/users/{userId}` - the latter returns the
-        # subject's name, DID and its `identifiers`, i.e. the `x-user-key` that authenticates AS that
-        # subject). Anything added here must be checked against src/routes/*.ts for its middleware first.
-        #
-        # Methods are pinned per route so a path wildcard cannot pull in a differently-gated handler on
-        # the same path (e.g. `DELETE /v1/consents/{id}` is the subject's revoke, while `POST /v1/consents`
-        # is the consent-key-gated provider-on-behalf grant).
-        # ---------------------------------------------------------------------------------------
-        # subject reads: its own consent list/detail, available exchanges and its own account
-        - uris:
-            - /consent-user/v1/consents/me
-            - /consent-user/v1/consents/me/*
-            - /consent-user/v1/consents/exchanges/user
-            - /consent-user/v1/users/me
+        # The gateway only publishes the consent-manager host. It neither authenticates nor
+        # injects headers: dsc-consent-manager validates the authority verifier's JWT on every
+        # call itself (identityProviders.primary in k3s/consent-trust-anchor-components.yaml).
+        - uri: /v1/*
+          host: consent-manager.dataspace-authority.org
+          upstream:
+            nodes:
+              consent-manager:8080: 1
+            type: roundrobin
+        # the receipt-signing JWKS, for verifying ISO 27560 consent receipts
+        - uri: /.well-known/jwks.json
           methods: ["GET"]
-          priority: 5
           host: consent-manager.dataspace-authority.org
           upstream:
             nodes:
-              consent-manager:3000: 1
+              consent-manager:8080: 1
             type: roundrobin
-          plugins:
-            proxy-rewrite:
-              regex_uri: ["^/consent-user/(.*)", "/$1"]
-        # subject grants consent for itself (POST /v1/consents/user, `verifyUserJWT`)
-        - uris:
-            - /consent-user/v1/consents/user
-          methods: ["POST"]
-          priority: 5
-          host: consent-manager.dataspace-authority.org
-          upstream:
-            nodes:
-              consent-manager:3000: 1
-            type: roundrobin
-          plugins:
-            proxy-rewrite:
-              regex_uri: ["^/consent-user/(.*)", "/$1"]
-        # subject withdraws a consent (DELETE /v1/consents/{id}, `verifyUserJWT`). The wildcard is safe
-        # because `/:id` is the ONLY delete on the consents router.
-        - uris:
-            - /consent-user/v1/consents/*
-          methods: ["DELETE"]
-          priority: 5
-          host: consent-manager.dataspace-authority.org
-          upstream:
-            nodes:
-              consent-manager:3000: 1
-            type: roundrobin
-          plugins:
-            proxy-rewrite:
-              regex_uri: ["^/consent-user/(.*)", "/$1"]
-        # subject self-service PDI signup. Unauthenticated BY DESIGN upstream (src/routes/users.ts has no
-        # middleware on /signup) - it is the only endpoint here that is not `verifyUserJWT`-gated, and it
-        # is exposed as a single exact uri+method rather than via a wildcard. It creates an account keyed
-        # on the holder DID; a deployment that onboards subjects out-of-band should drop this route.
-        - uris:
-            - /consent-user/v1/users/signup
-          methods: ["POST"]
-          priority: 5
-          host: consent-manager.dataspace-authority.org
-          upstream:
-            nodes:
-              consent-manager:3000: 1
-            type: roundrobin
-          plugins:
-            proxy-rewrite:
-              regex_uri: ["^/consent-user/(.*)", "/$1"]
-        # Participant path. Authentication is OID4VP: the caller presents an access token
-        # issued by this authority's verifier for the `consent-manager` service, which the
-        # gateway validates against the verifier's JWKS (bearer_only - the gateway never
-        # runs a browser flow). The consent-manager then resolves the token subject to a
-        # Participant by its `did`.
-        #
-        # This replaces the former `jwt-auth`, which validated a consent-manager-signed
-        # HS256 token against APISIX consumers that had to be provisioned by hand and all
-        # shared the consent-manager's jwtSecret - so any holder could mint a token as any
-        # participant. Nothing here holds a participant credential any more.
-        #
-        # The consent key is still injected server-side, unchanged: callers never hold it.
-        - uri: /consent-manager/*
-          priority: 0
-          host: consent-manager.dataspace-authority.org
-          upstream:
-            nodes:
-              consent-manager:3000: 1
-            type: roundrobin
-          plugins:
-            openid-connect:
-              bearer_only: true
-              use_jwks: true
-              client_id: consent-manager
-              # The token's `aud` is the verifier service id; check it explicitly rather
-              # than trusting the signature alone, or a token minted for another service
-              # of the same verifier would be accepted here. It has to be expressed as
-              # `claim_validator.audience` - openid-connect reads the audience only from
-              # there (a top-level `audience` key is silently ignored), and
-              # `match_with_client_id` compares it against `client_id` above.
-              claim_validator:
-                audience:
-                  claim: aud
-                  required: true
-                  match_with_client_id: true
-              client_secret: unused-bearer-only
-              discovery: https://verifier.dataspace-authority.org/services/consent-manager/.well-known/openid-configuration
-              # The verifier is addressed by its PUBLIC ingress host, because that host is the token's
-              # `iss` and the discovery document's `issuer`/`jwks_uri`. In the local cluster that name
-              # resolves to 127.0.0.1 and CoreDNS only rewrites *.nip.io, so both the discovery fetch
-              # and the JWKS fetch go through the squid forward proxy - the same mechanism the
-              # consent-manager (externalIdp.proxy) and the facades already use. Without this the
-              # gateway 401s every request with "failed to query the DNS server: name error".
-              proxy_opts:
-                http_proxy: http://squid-proxy.infra.svc.cluster.local:8888
-                https_proxy: http://squid-proxy.infra.svc.cluster.local:8888
-              # the verifier's ingress cert is signed by the cluster CA (selfsigned-ca), which this
-              # gateway has no trust bundle for; the hop is in-cluster via squid
-              ssl_verify: false
-            proxy-rewrite:
-              regex_uri: ["^/consent-manager/(.*)", "/$1"]
-              headers:
-                set:
-                  x-visionstrust-consent-key: "$env://CONSENT_KEY"
-        - uri: /.well-known/openid-configuration
-          host: consent-manager.dataspace-authority.org
-          upstream:
-            nodes:
-              verifier:3000: 1
-            type: roundrobin
-          plugins:
-            proxy-rewrite:
-              uri: /services/consent-manager/.well-known/openid-configuration
     # the PAP/PDP are not needed at the authority
     odrl-pap:
       enabled: false

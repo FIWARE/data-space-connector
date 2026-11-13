@@ -33,7 +33,7 @@ jobs:
       - name: Check documentation links
         run: ./.github/scripts/check-links.sh
 
-  # values.schema.json is generated from values.yaml, see CLAUDE.md. A change to values.yaml that
+  # values.schema.json is generated from values.yaml, see AGENTS.md. A change to values.yaml that
   # is not followed by regenerating the schema fails here.
   values-schema:
     runs-on: ubuntu-latest
