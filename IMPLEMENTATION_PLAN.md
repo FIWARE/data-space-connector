@@ -256,6 +256,18 @@ Split out of the original Step 2 because 3.6.5 carries only the `appVersion` par
 - Do not declare `dataspace.events` values yet: chart 3.6.5 ignores them, so they would be inert.
 - Acceptance: `helm lint`, `helm unittest`, `values-schema.sh --check` pass; the default-values diff
   has no eventing resource in it.
+- **Result (PR #20).** Fix agents cannot edit a PR description, so the evidence is recorded here.
+  A human must copy it into the PR #20 description before merging.
+  `helm template` used the umbrella's `values.yaml`, rendering CM chart 3.6.3 against 3.6.5. Both
+  renders are 214 lines, and the diff has exactly these changes:
+  - the ConfigMap, Service and Deployment metadata labels, and the pod-template labels:
+    `helm.sh/chart` `contract-management-3.6.3` → `contract-management-3.6.5`, and
+    `app.kubernetes.io/version` `"3.4.2"` → `"3.5.3"`. The pod rolls once;
+  - the container image: `quay.io/fiware/contract-management:3.4.2` → `3.5.3`.
+
+  The diff adds no ConfigMap, env entry, volume, port or eventing resource. The Service still
+  exposes only 8080, and the mounted `application.yaml` is unchanged. One change does not show in
+  the render: the app now answers an unauthenticated `POST :9090/refresh` (Deviation 2).
 
 ### Step 3: Bump contract-management and declare `contract-management.dataspace.events`
 Blocked until a CM chart version > 3.6.5 that implements the rest of Prerequisite A is released.
