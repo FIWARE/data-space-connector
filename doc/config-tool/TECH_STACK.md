@@ -59,7 +59,7 @@ Why this and not something else:
 - **Kubernetes in-process.** `client-go` and the discovery API give stage 4 its detection
   (CRDs, ingress classes, storage classes, operators) and stage 8 its install, with the same
   kubeconfig handling every other Kubernetes tool has.
-- **One artifact.** `GOOS`/`GOARCH` cross-compilation produces six binaries from one CI job,
+- **One artifact.** `GOOS`/`GOARCH` cross-compilation produces five binaries from one CI job,
   statically linked, no runtime, ~25–40 MB with the UI embedded via `embed.FS`. A platform
   engineer downloads and runs it; that is the whole installation.
 - **The GUI is optional.** The same core answers `generate` in a pipeline, which is what a
@@ -227,7 +227,7 @@ free for the tool:
 |---|---|---|
 | Version | `Chart.yaml` + semver label on the pull request | its own, tagged `config-tool/vX.Y.Z` |
 | Released by | `release.yml` on push to `main` | a new `config-tool-release.yml` on `push: tags: ['config-tool/v*']` |
-| Artifacts | charts to `quay.io/fiware/helm-charts` and `gh-pages` | six signed binaries on the GitHub release |
+| Artifacts | charts to `quay.io/fiware/helm-charts` and `gh-pages` | five signed binaries on the GitHub release |
 | Cadence | every chart change, including automated subchart bumps | when the tool changes |
 
 `config-tool/vX.Y.Z` is also exactly the tag form Go requires for a module in a subdirectory, so

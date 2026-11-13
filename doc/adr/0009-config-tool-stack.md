@@ -58,7 +58,7 @@ cluster side.
 - Rendering, schema validation, dependency resolution and later install behave exactly as
   `helm` does, because they are `helm`. A chart-side change to templates or schema needs no
   change in the tool.
-- One CI job cross-compiles six artifacts. macOS notarization and Windows signing become
+- One CI job cross-compiles five artifacts. macOS notarization and Windows signing become
   release-engineering work that has to be budgeted.
 - The GUI never becomes load-bearing: `dsc-config generate` produces the same file in CI, and a
   terminal front end or a hosted mode can be added over the same core without touching it.

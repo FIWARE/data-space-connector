@@ -9,13 +9,39 @@ LDFLAGS     := -s -w -X $(MODULE)/internal/version.Version=$(VERSION) -X $(MODUL
 # wildcard drops tracked files deleted from the working tree, which gofmt would fail on.
 GO_FILES     = $(wildcard $(shell git ls-files --cached --others --exclude-standard '*.go'))
 
-.PHONY: build test lint
+UI_DIR       := ui
+# Release targets: pure Go, so one job cross-compiles them all (ADR 0011).
+CROSS_TARGETS := linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64
+# The native window needs CGO and the OS webview SDK; desktop,production are Wails' own tags.
+WINDOW_TAGS_BASE := wails,desktop,production
+ifeq ($(shell go env GOOS),linux)
+WINDOW_TAGS  := $(WINDOW_TAGS_BASE),webkit2_41
+else
+WINDOW_TAGS  := $(WINDOW_TAGS_BASE)
+endif
 
-build:
+.PHONY: ui build build-window cross test lint
+
+ui:
+	cd $(UI_DIR) && npm ci && npm run build
+
+build: ui
 	CGO_ENABLED=0 go build -trimpath -ldflags '$(LDFLAGS)' -o $(BIN_DIR)/$(BINARY) ./cmd/dsc-config
+
+build-window: ui
+	CGO_ENABLED=1 go build -trimpath -tags '$(WINDOW_TAGS)' -ldflags '$(LDFLAGS)' -o $(BIN_DIR)/$(BINARY)-window ./cmd/dsc-config
+
+cross: ui
+	@set -e; for target in $(CROSS_TARGETS); do \
+		os=$${target%/*}; arch=$${target#*/}; ext=; [ "$$os" = windows ] && ext=.exe; \
+		echo "build $$os/$$arch"; \
+		CGO_ENABLED=0 GOOS=$$os GOARCH=$$arch go build -trimpath -ldflags '$(LDFLAGS)' \
+			-o $(BIN_DIR)/$(BINARY)-$$os-$$arch$$ext ./cmd/dsc-config; \
+	done
 
 test:
 	go test ./...
+	cd $(UI_DIR) && npm test
 
 lint:
 	go vet ./...
