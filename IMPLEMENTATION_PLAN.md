@@ -176,8 +176,10 @@ drops, for a CM version that has no listener.
      answers an unauthenticated `POST :9090/refresh` (re-reads config, rebinds `@Refreshable` beans),
      even with eventing off. In 3.4.2 the endpoint was sensitive and answered `401`. The CM Service
      only exposes 8080, so 9090 is reachable by pod IP inside the cluster only. Operators who want the
-     old behaviour set `ENDPOINTS_REFRESH_SENSITIVE=true` through
-     `contract-management.additionalEnvVars` (append, do not replace the OTEL entries).
+     old behaviour add `ENDPOINTS_REFRESH_SENSITIVE=true` to `contract-management.additionalEnvVars`.
+     That value is a list, and Helm replaces lists instead of merging them, so the operator must copy
+     the whole default list (the nine `OTEL_*` entries in the umbrella's `values.yaml`) into their
+     values and add the entry to it; setting only the new entry drops the tracing env vars.
      `/events` and `/participants-removed` on 9090 stay off unless their eventing feature is enabled;
    - the TIL image moves to ≥ 0.10.1, possibly with a DB migration;
    - the CM, odrl-authorization and decentralized-iam chart labels change;
@@ -447,7 +449,8 @@ Blocked until the decentralized-iam release of Prerequisite B is out.
   - that CM ≥ 3.5.3 serves an unauthenticated `POST :9090/refresh` in **every** deployment with CM
     enabled, not only with eventing on, so port 9090 must stay cluster-internal (no Service, Ingress or
     route for it; a NetworkPolicy where pod IPs are reachable), and the `ENDPOINTS_REFRESH_SENSITIVE=true`
-    opt-out through `contract-management.additionalEnvVars` (Deviation 2);
+    opt-out: copy the full default `contract-management.additionalEnvVars` list into the values and add
+    the entry to it, because Helm replaces the list (Deviation 2);
   - the new values and the registration scope;
   - that an external TIL must be ≥ 0.10.1;
   - the gateway routes;
