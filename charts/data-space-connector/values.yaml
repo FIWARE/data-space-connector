@@ -196,15 +196,16 @@ decentralizedIam:
         prometheus.io/scrape: "true"
         prometheus.io/path: /apisix/prometheus/metrics
         prometheus.io/port: "9091"
-      service:
-        # -- traffic policy of the gateway service. Left empty so that Kubernetes applies its own
-        # default (`Cluster` for NodePort and LoadBalancer) and the service can also be set to
-        # `ClusterIP`: the apisix chart writes the field for every type, and the API server rejects
-        # it on a ClusterIP service. Set it to `Local` to keep the client source IP.
-        externalTrafficPolicy: ""
       apisix:
         prometheus:
           enabled: true
+      etcd:
+        # -- deploy an etcd for APISIX. Only needed when APISIX reads its configuration from etcd,
+        # e.g. in traditional mode with `config_provider: etcd`; the default standalone mode reads
+        # the routes from a ConfigMap. odrl-authorization defaults to false as well, but this chart
+        # has to repeat it: three charts down, Helm decides whether to deploy the etcd chart
+        # without odrl-authorization's default.
+        enabled: false
 
     # -- configuration for the odrl-pap to be deployed as part of the connector, see https://github.com/FIWARE/helm-charts/tree/main/charts/odrl-pap for all options
     odrl-pap:
@@ -251,27 +252,6 @@ decentralizedIam:
           enabled: true
           name: postgres.postgres.credentials.postgresql.acid.zalan.do
           key: password
-    # -- configuration for the open-policy-agent to be deployed as part of the connector fulfilling the role of the PDP, as a sidecar to apisix
-    opa:
-      # -- should an opa sidecar be deployed to apisix
-      enabled: true
-      # -- address of the pap to get the policies from
-      resourceUrl: http://odrl-pap:8080/bundles/service/v1
-      # -- port to make opa available at
-      port: 8181
-      # -- pull delays for the policies bundle
-      policies:
-        minDelay: 2
-        maxDelay: 4
-      # -- pull delays for the methods bundle
-      methods:
-        minDelay: 1
-        maxDelay: 3
-      # -- pull delays for the data bundle
-      data:
-        minDelay: 1
-        maxDelay: 15
-
     # -- integration of checks for the transfer process protocol
     tpp:
       # -- should checking for a running transfer process be enabled
