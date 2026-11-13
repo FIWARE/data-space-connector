@@ -110,11 +110,12 @@ Add `config-tool/internal/server/` (the only package that knows HTTP) and
   issued secrets). It answers `200`, not a redirect, with a tiny page that carries
   `<meta http-equiv="refresh" content="0;url=/">`, `Cache-Control: no-store` and
   `Referrer-Policy: no-referrer`, which strips the token from the address bar. A `302` would
-  break: when the token URL is opened from another site (the `file://` launcher page below, the
-  Wails bootstrap page, a link on a web page), Chromium and WebKit keep that cross-site initiator
-  across the redirect and do not send the fresh `Strict` cookie, so the user would land on the
-  `401` page. The meta refresh is a new navigation initiated by the tool's own origin, so the
-  cookie travels and `SameSite=Strict` stays. After that, every request (static assets, `/api/*`, the WebSocket) must carry the cookie.
+  break: when the token URL is opened from another site (the Wails bootstrap page, a link on a
+  web page), Chromium and WebKit keep that cross-site initiator across the redirect and do not
+  send the fresh `Strict` cookie, so the user would land on the `401` page. The meta refresh is a
+  new navigation initiated by the tool's own origin, so the cookie travels and `SameSite=Strict`
+  stays. `GET /?launch=<code>` with a valid launch code (see *Launcher*) is exchanged the same
+  way. After that, every request (static assets, `/api/*`, the WebSocket) must carry the cookie.
   `Authorization: Bearer <token>` with the run token is also accepted for non-browser clients,
   tests and the Vite dev proxy (step 3). Without either, the response is `401`, except for the
   bare `/` without a cookie, which gets a short "open the link printed by dsc-config" page with
@@ -150,14 +151,25 @@ Add `config-tool/internal/server/` (the only package that knows HTTP) and
   ignores `config-tool/ui/dist/*` and keeps `!config-tool/ui/dist/.gitkeep`.
 - **Launcher (default build, no build tag):** `launcher.Open(url)` opens the default browser with
   `xdg-open`, `open` or `rundll32 url.dll,FileProtocolHandler` per `runtime.GOOS`, with no extra
-  dependency. The token never goes on a command line, because every local user can read argv
-  through `ps` or `/proc/<pid>/cmdline`. Like Jupyter, `Open` writes a launch page with
-  `os.CreateTemp` (mode `0600`, so only the owner can read it) that meta-refreshes to the token
-  URL, passes the file's path to the opener, and removes the file on shutdown. That `file://`
-  initiator is cross-site, which is why the token exchange above answers `200` and not `302`.
-  A pure function builds the opener's argv, so a test can assert it holds no token. `dsc-config` with no args starts the server, prints the URL to stdout, opens it and
-  serves until SIGINT/SIGTERM, then shuts down gracefully. A `--no-browser` flag only prints the
-  URL; Playwright and headless hosts use it.
+  dependency. The run token never goes on a command line, because every local user can read argv
+  through `ps` or `/proc/<pid>/cmdline`, and the browser process keeps its argv for its whole
+  lifetime. Instead, `Open` asks the server for a **launch code**: a separate 32-byte random
+  value that is single-use, expires after a short TTL (named constant, 60 s) and is never
+  accepted as a Bearer token. It opens `http://127.0.0.1:<port>/?launch=<code>`. Once the
+  browser has exchanged the code for the cookie, the code left in argv is worthless.
+  - Why not a `0600` temp launch page (Jupyter's redirect file): Ubuntu ships Firefox and
+    Chromium as snaps, which get a private `/tmp` and cannot read hidden directories in `$HOME`,
+    so the file shows "File not found" and no-args launch fails on a stock Ubuntu desktop. One
+    code path on every OS beats detecting snap browsers.
+  - Residual risk: another local account that polls `/proc` can race the browser for the code
+    within the TTL. The user then lands on the 401 page and sees it. `--no-browser` avoids
+    argv entirely; the README says so.
+  - A pure function builds the opener's argv, so a test can assert it holds no run token.
+
+  `dsc-config` with no args starts the server, prints the token URL to stdout (the documented
+  fallback when the launch fails or the code was consumed), opens the launch URL and serves until
+  SIGINT/SIGTERM, then shuts down gracefully. A `--no-browser` flag only prints the URL;
+  Playwright and headless hosts use it.
 
 Tests (table-driven `httptest` against the real handler and a real loopback listener):
 - the listener address is `127.0.0.1`;
@@ -175,8 +187,9 @@ Tests (table-driven `httptest` against the real handler and a real loopback list
   `Origin` returns `403`, and one with the server's own `Origin` reaches the handler;
 - the WebSocket upgrade without a cookie fails, and with a cookie it receives `ready`;
 - the missing-UI fallback page is served;
-- the launcher's argv for each `GOOS` contains no token, and the launch page it writes has mode
-  `0600`, contains the token URL and is removed by the cleanup function.
+- a launch code is exchanged once (`200`, cookie, meta refresh); a second use, an expired code
+  (injected clock) and the code sent as `Authorization: Bearer` all return `401`;
+- the launcher's argv for each `GOOS` contains the launch URL and never the run token.
 
 Acceptance: `dsc-config` with no args prints a `127.0.0.1` URL and opens a tab. `curl` without
 the token gets `401`.
@@ -284,7 +297,10 @@ Implement the two stages and the two endpoints they need.
   with clientcmd's rules, so the first file that sets `current-context` wins) or
   `~/.kube/config`. A non-empty one reads only that file. `Paths` is the precedence list actually
   read. It reads the files and nothing else: it never connects to the cluster and never writes a
-  file. A missing file returns an empty list, not an error.
+  file. Under the default rules a missing file is normal and returns an empty list. A missing or
+  unreadable `explicitPath` returns `cluster.ErrKubeconfigNotFound` (wrapping the OS error), which
+  the endpoint maps to `404` and S1 shows under the path field, so a typo does not just leave the
+  Context dropdown empty.
 - **`GET /api/cluster/contexts?kubeconfig=<path>`:** in `internal/server`, returns `paths`,
   context names and the current context. It returns no credentials and no server URLs.
 - **S0 Start** (MOCKUPS *S0*, wording from the prototype):
@@ -322,13 +338,15 @@ Implement the two stages and the two endpoints they need.
 
 Tests:
 - Go table tests: `model.Versions` (ordering, `latest`); `cluster.Contexts` against fixture
-  kubeconfigs in `testdata/` (two contexts, empty file, missing file, and `KUBECONFIG` with two
-  paths: `Paths` lists both in order, contexts are the union, `Current` comes from the first file
-  that sets it); `/api/model` and `/api/cluster/contexts` behind auth.
+  kubeconfigs in `testdata/` (two contexts, empty file, missing default file gives an empty
+  list, missing explicit path gives `ErrKubeconfigNotFound`, and `KUBECONFIG` with two paths:
+  `Paths` lists both in order, contexts are the union, `Current` comes from the first file that
+  sets it); `/api/model` and `/api/cluster/contexts` behind auth, the latter `404` for a missing
+  explicit path.
 - Vitest, parameterized:
   - S0 shows four entries, exactly one enabled, and *New configuration* reaches S1;
   - the kubeconfig field is pre-filled for one reported path and empty, with the file list shown,
-    for two;
+    for two; a `404` shows the not-found message under the field;
   - **no unneeded question:** with *File only*, the Kubeconfig, Context and *create it* controls
     are absent from the DOM; with *Kubernetes cluster*, they are present;
   - every S1 field keeps its value after switching to each other stage and back;
@@ -356,8 +374,10 @@ Make CI build and test the tool, keep the chart pipelines out of tool-only PRs, 
   `dsc-config --no-browser` and parses the printed URL. Tests:
   - a request without the token returns `401`;
   - the token URL loads S0;
-  - the token URL opened from a link on a page of another origin (a second local static server
-    in the global setup) also loads S0, which pins the cross-site cookie behaviour that a plain
+  - the token URL opened from a link on a page of another **site** also ends on S0, not on the
+    401 page. The global setup serves that page from `http://localhost:<p>`: a different host
+    from `127.0.0.1`, so a cross-site initiator (another port on `127.0.0.1` would be same-site
+    and stay green with a `302`). This pins the `200` + meta-refresh exchange that a plain
     `page.goto` would not exercise;
   - *New configuration* reaches S1;
   - fill all fields (cluster target with a fixture `KUBECONFIG` from `e2e/fixtures/`);
@@ -400,9 +420,10 @@ Make CI build and test the tool, keep the chart pipelines out of tool-only PRs, 
   - `make ui`, `make build`, `make test`, `make cross` and `make build-window`;
   - running it: no args opens a tab, and `--no-browser`;
   - the security model in four lines: loopback, per-run token (the printed URL stays valid
-    until the process exits, so do not share it), the token is never passed on a command line
-    (the browser opens a `0600` launch file instead), and read-only kubeconfig whose path is
-    never stored;
+    until the process exits, so do not share it), the run token is never passed on a command
+    line (the browser gets a single-use, short-lived launch code; on a shared host another
+    account could race for it, so use `--no-browser` and paste the printed URL there), and
+    read-only kubeconfig whose path is never stored;
   - `npm run dev` with `DSC_CONFIG_URL` (step 3), and the proxy rule: it adds the run token
     only to requests from the dev server's own origin and answers `403` to any other;
   - the package layout, and that the core never imports `net/http`;
