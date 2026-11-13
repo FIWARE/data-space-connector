@@ -6,7 +6,8 @@ VERSION     ?= $(patsubst $(TAG_PREFIX)%,%,$(shell git describe --tags --match '
 COMMIT      ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
 LDFLAGS     := -s -w -X $(MODULE)/internal/version.Version=$(VERSION) -X $(MODULE)/internal/version.Commit=$(COMMIT)
 # A file list, not directories: gofmt recurses into ui/node_modules and ignores go.mod's ignore.
-GO_FILES     = $(shell git ls-files --cached --others --exclude-standard '*.go')
+# wildcard drops tracked files deleted from the working tree, which gofmt would fail on.
+GO_FILES     = $(wildcard $(shell git ls-files --cached --others --exclude-standard '*.go'))
 
 .PHONY: build test lint
 

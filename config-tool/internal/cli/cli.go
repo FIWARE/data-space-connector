@@ -6,8 +6,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
+	"math/rand/v2"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -22,8 +26,10 @@ const (
 	stdoutPath  = "-"
 	flagProfile = "profile"
 	flagOutput  = "output"
-	// outputFileMode is the mode of a written values file; it holds no secrets.
+	// outputFileMode is the mode of a new values file before the umask; it holds no secrets.
 	outputFileMode = 0o644
+	// stagingAttempts bounds the retries when a random scratch file name is already taken.
+	stagingAttempts = 10
 	// tempPattern names the scratch file the output is staged in before the rename.
 	tempPattern = ".dsc-config-*.tmp"
 )
@@ -76,13 +82,19 @@ func newGenerateCommand() *cobra.Command {
 }
 
 // writeOutput writes data to stdout or, atomically, to path: a failure never leaves a partial file.
+// A symlink at path is followed and its target replaced, keeping that file's mode; a new file
+// gets outputFileMode minus the umask. Ownership is not carried over.
 // CT-2: decide whether an existing file at path may be replaced; today it is.
 func writeOutput(stdout io.Writer, path string, data []byte) error {
 	if path == stdoutPath {
 		_, err := stdout.Write(data)
 		return err
 	}
-	tmp, err := os.CreateTemp(filepath.Dir(path), tempPattern)
+	target, existingMode, err := resolveOutput(path)
+	if err != nil {
+		return err
+	}
+	tmp, err := createStaged(filepath.Dir(target))
 	if err != nil {
 		return err
 	}
@@ -91,14 +103,45 @@ func writeOutput(stdout io.Writer, path string, data []byte) error {
 		tmp.Close()
 		return err
 	}
-	if err := tmp.Chmod(outputFileMode); err != nil {
-		tmp.Close()
-		return err
+	if existingMode != nil {
+		if err := tmp.Chmod(*existingMode); err != nil {
+			tmp.Close()
+			return err
+		}
 	}
 	if err := tmp.Close(); err != nil {
 		return err
 	}
-	return os.Rename(tmp.Name(), path)
+	return os.Rename(tmp.Name(), target)
+}
+
+// resolveOutput follows symlinks at path and returns the file to replace and, if it exists, its mode.
+func resolveOutput(path string) (string, *os.FileMode, error) {
+	if _, err := os.Lstat(path); errors.Is(err, fs.ErrNotExist) {
+		return path, nil, nil
+	}
+	target, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		return "", nil, err
+	}
+	info, err := os.Stat(target)
+	if err != nil {
+		return "", nil, err
+	}
+	mode := info.Mode().Perm()
+	return target, &mode, nil
+}
+
+// createStaged creates a fresh scratch file in dir; unlike os.CreateTemp it lets the umask apply.
+func createStaged(dir string) (*os.File, error) {
+	for range stagingAttempts {
+		name := filepath.Join(dir, strings.Replace(tempPattern, "*", strconv.FormatUint(rand.Uint64(), 36), 1))
+		f, err := os.OpenFile(name, os.O_RDWR|os.O_CREATE|os.O_EXCL, outputFileMode)
+		if !errors.Is(err, fs.ErrExist) {
+			return f, err
+		}
+	}
+	return nil, fmt.Errorf("no free scratch file name in %s", dir)
 }
 
 // Execute runs dsc-config with the process arguments and returns the exit code.
