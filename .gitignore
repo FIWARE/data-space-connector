@@ -10,3 +10,6 @@ maven-status
 # local consent-demo artifacts (holder identity incl. private key, local CA)
 /cert/
 /local-ca.crt
+# dsc-config build output and npm tree
+config-tool/bin/
+config-tool/ui/node_modules/
