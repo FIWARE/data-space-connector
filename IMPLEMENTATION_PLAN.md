@@ -170,7 +170,15 @@ drops, for a CM version that has no listener.
 1. **`scopeType`** is `dataspace-membership`, not `dataspace`. The TIL API enum wins.
 2. **"An upgrade with no new values changes nothing" does not fully hold.** The feature needs
    CM ≥ 3.5.3 and TIL ≥ 0.10.1, so a default upgrade after Steps 2 to 4 does change things:
-   - the CM image moves to 3.5.3;
+   - the CM image moves to 3.5.3. That changes app behaviour `helm template` cannot show: CM 3.5.3's
+     bundled `application.yaml` sets `endpoints.refresh: {enabled: true, sensitive: false}`
+     (`SerializedRefreshEndpoint` replaces Micronaut's `RefreshEndpoint`), so **every** CM pod now
+     answers an unauthenticated `POST :9090/refresh` (re-reads config, rebinds `@Refreshable` beans),
+     even with eventing off. In 3.4.2 the endpoint was sensitive and answered `401`. The CM Service
+     only exposes 8080, so 9090 is reachable by pod IP inside the cluster only. Operators who want the
+     old behaviour set `ENDPOINTS_REFRESH_SENSITIVE=true` through
+     `contract-management.additionalEnvVars` (append, do not replace the OTEL entries).
+     `/events` and `/participants-removed` on 9090 stay off unless their eventing feature is enabled;
    - the TIL image moves to ≥ 0.10.1, possibly with a DB migration;
    - the CM, odrl-authorization and decentralized-iam chart labels change;
    - every other change between decentralized-iam 2.1.28 and the new release comes along.
@@ -241,6 +249,8 @@ Split out of the original Step 2 because 3.6.5 carries only the `appVersion` par
 - Diff `helm template` with default values before and after, and list every change in the PR
   description. Expected: the image moves from 3.4.2 to 3.5.3 and chart labels change (Deviation 2).
   Nothing eventing-related may appear. CM 3.5.3 keeps every eventing feature off by default.
+  Also list the app-level change `helm template` cannot show: the unauthenticated `POST :9090/refresh`
+  (Deviation 2).
 - Do not declare `dataspace.events` values yet: chart 3.6.5 ignores them, so they would be inert.
 - Acceptance: `helm lint`, `helm unittest`, `values-schema.sh --check` pass; the default-values diff
   has no eventing resource in it.
@@ -427,12 +437,17 @@ Blocked until the decentralized-iam release of Prerequisite B is out.
   5. that `registration.issuer` grants are scoped (Step 1) and need TIL ≥ 0.10.1, and when the
      default scope is wrong (Step 1: a non-membership grant, or a TIL whose CM subscribes to another
      publisher) so that `scope` or `scope: ""` must be set;
-  6. that management port 9090 (`/refresh`, `/participants-removed`) must stay cluster-internal.
+  6. that management port 9090 (`/refresh`, `/participants-removed`) must stay cluster-internal; link
+     the release-notes entry, since `/refresh` is open on every CM ≥ 3.5.3, eventing on or off.
 - `doc/README.md`: link the new page under the existing `### Data Space Eventing` subsection.
 - `doc/release-notes/10-x.md`: add a new top section for the minor version, in the existing
   format. Cover:
   - the CM and decentralizedIam bumps, with the image changes and any TIL DB migration (Deviation 2,
     listing what a default upgrade does change);
+  - that CM ≥ 3.5.3 serves an unauthenticated `POST :9090/refresh` in **every** deployment with CM
+    enabled, not only with eventing on, so port 9090 must stay cluster-internal (no Service, Ingress or
+    route for it; a NetworkPolicy where pod IPs are reachable), and the `ENDPOINTS_REFRESH_SENSITIVE=true`
+    opt-out through `contract-management.additionalEnvVars` (Deviation 2);
   - the new values and the registration scope;
   - that an external TIL must be ≥ 0.10.1;
   - the gateway routes;
