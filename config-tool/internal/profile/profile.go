@@ -50,7 +50,17 @@ const (
 
 const msgRequired = "is required"
 
-var dns1123Label = regexp.MustCompile(`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`)
+// Release names prefix Service names, which must be DNS-1035 labels (leading letter);
+// namespaces only need DNS-1123 labels.
+var (
+	dns1123Label = regexp.MustCompile(`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`)
+	dns1035Label = regexp.MustCompile(`^[a-z]([-a-z0-9]*[a-z0-9])?$`)
+)
+
+const (
+	msgDNS1123 = "must consist of lowercase letters, digits and '-', and start and end with a letter or digit"
+	msgDNS1035 = "must consist of lowercase letters, digits and '-', start with a letter and end with a letter or digit"
+)
 
 // Target is where and how the connector is deployed.
 // It holds only the kube context name; the kubeconfig path is session state and never stored.
@@ -88,10 +98,10 @@ func (t Target) Validate() []FieldError {
 	default:
 		errs = append(errs, FieldError{FieldType, fmt.Sprintf("must be %q or %q", TargetFile, TargetCluster)})
 	}
-	if msg := checkLabel(t.Namespace, MaxNamespaceLength); msg != "" {
+	if msg := checkLabel(t.Namespace, MaxNamespaceLength, dns1123Label, msgDNS1123); msg != "" {
 		errs = append(errs, FieldError{FieldNamespace, msg})
 	}
-	if msg := checkLabel(t.ReleaseName, MaxReleaseNameLength); msg != "" {
+	if msg := checkLabel(t.ReleaseName, MaxReleaseNameLength, dns1035Label, msgDNS1035); msg != "" {
 		errs = append(errs, FieldError{FieldReleaseName, msg})
 	}
 	// Semver and known-chart checks need the model bundle (step 4); presence is enough here.
@@ -107,15 +117,15 @@ func (t Target) Validate() []FieldError {
 	return errs
 }
 
-// checkLabel returns why name is not a DNS-1123 label of at most maxLen characters, or "".
-func checkLabel(name string, maxLen int) string {
+// checkLabel returns why name is not a label matching pattern of at most maxLen characters, or "".
+func checkLabel(name string, maxLen int, pattern *regexp.Regexp, patternMsg string) string {
 	switch {
 	case name == "":
 		return msgRequired
 	case len(name) > maxLen:
 		return fmt.Sprintf("must be at most %d characters", maxLen)
-	case !dns1123Label.MatchString(name):
-		return "must consist of lowercase letters, digits and '-', and start and end with a letter or digit"
+	case !pattern.MatchString(name):
+		return patternMsg
 	}
 	return ""
 }

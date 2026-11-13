@@ -19,5 +19,5 @@ test:
 
 lint:
 	go vet ./...
-	@unformatted="$$(gofmt -l $(GO_FILES))"; \
+	@unformatted="$$($(if $(GO_FILES),gofmt -l $(GO_FILES)))"; \
 	if [ -n "$$unformatted" ]; then echo "gofmt needed:"; echo "$$unformatted"; exit 1; fi

@@ -33,6 +33,8 @@ func TestTargetValidate(t *testing.T) {
 		{"unknown target type", func(t *Target) { t.Type = "ftp" }, []string{FieldType}},
 		{"uppercase namespace", func(t *Target) { t.Namespace = "Provider" }, []string{FieldNamespace}},
 		{"leading dash in namespace", func(t *Target) { t.Namespace = "-provider" }, []string{FieldNamespace}},
+		{"leading digit in release", func(t *Target) { t.ReleaseName = "1dsc" }, []string{FieldReleaseName}},
+		{"leading digit in namespace", func(t *Target) { t.Namespace = "1provider" }, nil},
 		{"trailing dash in release", func(t *Target) { t.ReleaseName = "dsc-" }, []string{FieldReleaseName}},
 		{"empty namespace", func(t *Target) { t.Namespace = "" }, []string{FieldNamespace}},
 		{"namespace at limit", func(t *Target) { t.Namespace = strings.Repeat("a", MaxNamespaceLength) }, nil},

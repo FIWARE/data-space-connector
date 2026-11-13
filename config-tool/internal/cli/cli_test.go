@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -101,42 +102,63 @@ func TestRunReportsErrors(t *testing.T) {
 }
 
 func TestWriteOutput(t *testing.T) {
-	const content = "global: {}\n"
+	const (
+		content  = "global: {}\n"
+		existing = "kept: true\n"
+		readOnly = 0o444
+	)
+	writeExisting := func(mode os.FileMode) func(t *testing.T, path string) {
+		return func(t *testing.T, path string) {
+			if err := os.WriteFile(path, []byte(existing), mode); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	symlinkTo := func(target string) func(t *testing.T, path string) {
+		return func(t *testing.T, path string) {
+			if target != "" {
+				writeExisting(outputFileMode)(t, filepath.Join(filepath.Dir(path), target))
+			}
+			if err := os.Symlink(filepath.Join(filepath.Dir(path), "target.yaml"), path); err != nil {
+				t.Skipf("symlinks unavailable: %v", err)
+			}
+		}
+	}
+	// An empty wantFile means nothing may be readable at the path afterwards.
 	tests := []struct {
 		name     string
-		existing string
-		path     func(dir string) string
-		wantErr  bool
+		setup    func(t *testing.T, path string)
+		sub      string
+		wantErr  error
+		wantFile string
 	}{
-		{"new file", "", func(dir string) string { return filepath.Join(dir, "values.yaml") }, false},
-		{"replaces a longer file", strings.Repeat("x", 4*len(content)), func(dir string) string { return filepath.Join(dir, "values.yaml") }, false},
-		{"missing directory", "", func(dir string) string { return filepath.Join(dir, "absent", "values.yaml") }, true},
+		{"new file", func(*testing.T, string) {}, "", nil, content},
+		{"existing file is kept", writeExisting(outputFileMode), "", fs.ErrExist, existing},
+		{"read-only file is kept", writeExisting(readOnly), "", fs.ErrExist, existing},
+		{"symlink is kept", symlinkTo("target.yaml"), "", fs.ErrExist, existing},
+		{"dangling symlink is kept", symlinkTo(""), "", fs.ErrExist, ""},
+		{"missing directory", func(*testing.T, string) {}, "absent", fs.ErrNotExist, ""},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			dir := t.TempDir()
-			path := tc.path(dir)
-			if tc.existing != "" {
-				if err := os.WriteFile(path, []byte(tc.existing), outputFileMode); err != nil {
-					t.Fatal(err)
-				}
-			}
+			path := filepath.Join(t.TempDir(), tc.sub, "values.yaml")
+			tc.setup(t, path)
 			err := writeOutput(&bytes.Buffer{}, path, []byte(content))
-			if (err != nil) != tc.wantErr {
-				t.Fatalf("error = %v, wantErr %v", err, tc.wantErr)
+			if (tc.wantErr == nil) != (err == nil) || !errors.Is(err, tc.wantErr) {
+				t.Fatalf("error = %v, want %v", err, tc.wantErr)
 			}
-			if !tc.wantErr {
-				got, err := os.ReadFile(path)
-				if err != nil {
-					t.Fatal(err)
+			got, err := os.ReadFile(path)
+			if tc.wantFile == "" {
+				if !errors.Is(err, fs.ErrNotExist) {
+					t.Errorf("read %q (err %v), want nothing at the path", got, err)
 				}
-				if string(got) != content {
-					t.Errorf("file = %q, want %q", got, content)
-				}
+				return
 			}
-			leftovers, _ := filepath.Glob(filepath.Join(dir, tempPattern))
-			if len(leftovers) != 0 {
-				t.Errorf("temp files left behind: %v", leftovers)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if string(got) != tc.wantFile {
+				t.Errorf("file = %q, want %q", got, tc.wantFile)
 			}
 		})
 	}
