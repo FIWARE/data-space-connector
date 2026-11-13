@@ -34,7 +34,7 @@ func TestTargetValidate(t *testing.T) {
 	}{
 		{"valid cluster target", func(*Target) {}, nil},
 		{"file target needs no context", func(t *Target) { t.Type = TargetFile; t.Context = "" }, nil},
-		{"cluster target needs a context", func(t *Target) { t.Context = "" }, []FieldError{{FieldContext, "a kube context is required to deploy to a cluster"}}},
+		{"cluster target needs a context", func(t *Target) { t.Context = "" }, []FieldError{{FieldContext, msgRequired}}},
 		{"empty target type", func(t *Target) { t.Type = "" }, []FieldError{{FieldType, msgRequired}}},
 		{"unknown target type", func(t *Target) { t.Type = "ftp" }, []FieldError{{FieldType, msgType}}},
 		{"uppercase namespace", func(t *Target) { t.Namespace = "Provider" }, []FieldError{{FieldNamespace, msgDNS1123}}},
@@ -53,7 +53,7 @@ func TestTargetValidate(t *testing.T) {
 		{"empty environment", func(t *Target) { t.Environment = "" }, []FieldError{{FieldEnvironment, msgRequired}}},
 		{"unknown environment", func(t *Target) { t.Environment = "staging" }, []FieldError{{FieldEnvironment, msgEnv}}},
 		{"several errors", func(t *Target) { t.Context = ""; t.ReleaseName = "DSC" }, []FieldError{
-			{FieldContext, "a kube context is required to deploy to a cluster"},
+			{FieldContext, msgRequired},
 			{FieldReleaseName, msgDNS1035},
 		}},
 	}

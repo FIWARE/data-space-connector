@@ -96,7 +96,7 @@ func (t Target) Validate() []FieldError {
 	case TargetFile:
 	case TargetCluster:
 		if t.Context == "" {
-			errs = append(errs, FieldError{FieldContext, "a kube context is required to deploy to a cluster"})
+			errs = append(errs, FieldError{FieldContext, msgRequired})
 		}
 	default:
 		errs = append(errs, FieldError{FieldType, fmt.Sprintf("must be %q or %q", TargetFile, TargetCluster)})
