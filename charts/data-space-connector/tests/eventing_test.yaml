@@ -44,10 +44,12 @@ tests:
           path: data["init.sh"]
           pattern: 'scope'
 
+  # Only valid with an external contract-management: its 3.6.6 subchart fails on a null `dataspace`.
   - it: registers unscoped when the dataspace key is null
     set:
       registration: *registration
       contract-management:
+        enabled: false
         dataspace: null
     asserts: *unscoped
 
@@ -243,3 +245,41 @@ tests:
     asserts:
       - failedTemplate:
           errorPattern: 'contract-management.dataspace.events.publishers\[\].types of publisher did:web:operator.org must be a list or a comma-separated string, got map'
+
+  # The participant block as documented under contract-management.dataspace.events in values.yaml.
+  - it: derives the scope from the full participant block of values.yaml
+    set:
+      registration: *registration
+      contract-management:
+        dataspace:
+          events:
+            own-participant-id: did:web:provider.org
+            listener:
+              enabled: true
+            subscriber:
+              enabled: true
+              sink: https://cm.provider.org/events
+            publishers:
+              - id: did:web:trust-anchor.org
+                origin: cm.trust-anchor.org
+                types: [org.fiware.dataspace.participant.removed]
+                subscriptions-url: https://cm.trust-anchor.org/subscriptions
+                client-id: contract-management
+                scopes: [default]
+                on-participant-removed:
+                  mode: report
+                  registry-url: https://tir.trust-anchor.org
+    asserts:
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: "'http://til:8080/issuer\\?scope=did%3Aweb%3Atrust-anchor.org&scopeType=dataspace-membership' \\\\"
+
+  - it: registers unscoped with the listener on and the declared empty publishers
+    set:
+      registration: *registration
+      contract-management:
+        dataspace:
+          events:
+            listener:
+              enabled: true
+    asserts: *unscoped

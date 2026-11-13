@@ -110,6 +110,8 @@ Until a plan-mode agent or Step 6 updates them, **this plan wins**:
   If a step finds a generated table, regenerate it; otherwise report that there is none.
 
 **Prerequisite A (outside this repo, blocks Step 3): contract-management chart change.**
+**Met:** CM chart **3.6.6** (appVersion 3.5.3) ships `dataspace.events`, the `<fullname>-dataspace-events`
+ConfigMap and the startup checksum; Step 3 pins it. The history below is kept for reference.
 Status 2026-11-13: CM chart **3.6.5** is released. It only bumps `appVersion` to 3.5.3 (the last bullet
 below), and Step 2 picks it up. It has no `dataspace.events` value and no events ConfigMap, and
 FIWARE/helm-charts `main` (`bcc4207`) has neither. Every other bullet below is still open, and
@@ -270,7 +272,7 @@ Split out of the original Step 2 because 3.6.5 carries only the `appVersion` par
   the render: the app now answers an unauthenticated `POST :9090/refresh` (Deviation 2).
 
 ### Step 3: Bump contract-management and declare `contract-management.dataspace.events`
-Blocked until a CM chart version > 3.6.5 that implements the rest of Prerequisite A is released.
+Unblocked by CM chart 3.6.6 (Prerequisite A).
 - `charts/data-space-connector/Chart.yaml`: set the `contract-management` dependency to the new
   chart version.
 - Diff `helm template` with default values before and after, and list every change in the PR

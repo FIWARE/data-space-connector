@@ -2021,6 +2021,45 @@ contract-management:
     # -- disable logs exporter (traces-only configuration).
     - name: OTEL_LOGS_EXPORTER
       value: "none"
+  # Data space eventing, participant side (needs contract-management >= 3.5.3). The namespace is
+  # `dataspace.events`, not `events` (D-12 of doc/eventing/architecture.md). The tree is passed verbatim
+  # as the Micronaut property tree, so keys are kebab-case. With listener or subscriber enabled the
+  # subchart renders it into the ConfigMap `contract-management-dataspace-events`, mounted as a directory
+  # and watched, so a change to `publishers` reaches the running pod. Only the participant side is
+  # configured here; the publisher and tir-watcher belong to the trust anchor.
+  # Never leave `dataspace:` empty (null): contract-management 3.6.6 then fails the render with
+  # `nil pointer evaluating interface {}.events`. Remove the key instead; an empty `events:` is fine.
+  dataspace:
+    events:
+      # Not declared here, so contract-management's own fallbacks apply:
+      # own-participant-id: falls back to `general.did`;
+      # dataspace-id: when set, events carrying another dataspaceid are rejected.
+      listener:
+        # -- receive events on `POST /events`. Startup-only: a change rolls the pod. Expose the path
+        # through a gateway that verifies the token and sets `X-Userinfo`; contract-management does not.
+        enabled: false
+      subscriber:
+        # -- register at the publishers' subscriptions APIs. Requires the listener and `subscriber.sink`,
+        # the public URL of the own `POST /events`. Startup-only: a change rolls the pod.
+        enabled: false
+        # sink: "https://cm.provider.org/events"
+      # -- publishers whose events are accepted. Reloaded at runtime. The id of the one publisher with
+      # `org.fiware.dataspace.participant.removed` in `types` is also the default `scope` of the
+      # `registration.issuer` grants.
+      publishers: []
+      # publishers:
+      #   - id: "did:web:trust-anchor.org"
+      #     origin: "cm.trust-anchor.org"
+      #     types: [ "org.fiware.dataspace.participant.removed" ]
+      #     # without it the publisher is listener-only and never subscribed to
+      #     subscriptions-url: "https://cm.trust-anchor.org/subscriptions"
+      #     # fall back to subscriber.client-id and subscriber.scopes
+      #     client-id: "contract-management"
+      #     scopes: [ "default" ]
+      #     on-participant-removed:
+      #       # report (writes nothing), dataspace, granted or full; writing modes require registry-url
+      #       mode: report
+      #       registry-url: "https://tir.trust-anchor.org"
 
 # -- configuration for the did-helper, see https://github.com/wistefan/did-helper
 # @schema
