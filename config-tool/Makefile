@@ -14,12 +14,17 @@ UI_DIR       := ui
 UI_DEPS      := $(UI_DIR)/node_modules/.package-lock.json
 # Release targets: pure Go, so one job cross-compiles them all (ADR 0011).
 CROSS_TARGETS := linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64
-# The native window needs CGO and the OS webview SDK; desktop,production are Wails' own tags.
+# The native window needs the OS webview SDK, and CGO except on Windows (go-webview2 is pure Go);
+# desktop,production are Wails' own tags.
 WINDOW_TAGS_BASE := wails,desktop,production
-ifeq ($(shell go env GOOS),linux)
-WINDOW_TAGS  := $(WINDOW_TAGS_BASE),webkit2_41
-else
+HOST_GOOS    := $(shell go env GOOS)
 WINDOW_TAGS  := $(WINDOW_TAGS_BASE)
+WINDOW_CGO   := 1
+ifeq ($(HOST_GOOS),linux)
+WINDOW_TAGS  := $(WINDOW_TAGS_BASE),webkit2_41
+endif
+ifeq ($(HOST_GOOS),windows)
+WINDOW_CGO   := 0
 endif
 
 .PHONY: ui build build-window cross test lint
@@ -34,7 +39,7 @@ build: ui
 	CGO_ENABLED=0 go build -trimpath -ldflags '$(LDFLAGS)' -o $(BIN_DIR)/$(BINARY) ./cmd/dsc-config
 
 build-window: ui
-	CGO_ENABLED=1 go build -trimpath -tags '$(WINDOW_TAGS)' -ldflags '$(LDFLAGS)' -o $(BIN_DIR)/$(BINARY)-window ./cmd/dsc-config
+	CGO_ENABLED=$(WINDOW_CGO) go build -trimpath -tags '$(WINDOW_TAGS)' -ldflags '$(LDFLAGS)' -o $(BIN_DIR)/$(BINARY)-window ./cmd/dsc-config
 
 cross: ui
 	@set -e; for target in $(CROSS_TARGETS); do \

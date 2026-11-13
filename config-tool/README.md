@@ -11,15 +11,17 @@ Needs Go (version from `go.mod`) and Node 22 with npm.
 make ui            # npm ci + vite build into ui/dist, which the binary embeds
 make build         # ui, then bin/dsc-config (pure Go, opens a browser tab)
 make cross         # ui, then bin/dsc-config-<os>-<arch> for the five release targets
-make build-window  # ui, then bin/dsc-config-window with a native window (CGO, see below)
+make build-window  # ui, then bin/dsc-config-window with a native window (see below)
 make test          # go test ./... and the UI's Vitest suite
 make lint
 ```
 
 Release binaries are pure Go and open a browser tab. The native window is the opt-in `wails`
 build tag ([ADR 0011](../doc/adr/0011-config-tool-window-build-tag.md)); build it on the target
-OS with CGO and its webview SDK (`libwebkit2gtk-4.1-dev` on Linux). If the window cannot start,
-the binary says so on stderr and opens a browser tab instead.
+OS with its webview SDK (`libwebkit2gtk-4.1-dev` on Linux) and, except on Windows, CGO. When Wails
+reports a failed start (an error, or a panic such as no display), the binary says so on stderr
+and opens a browser tab instead; some Wails start-up failures exit the process on their own. The
+window has been run on Linux only so far.
 
 ## Developing the UI
 

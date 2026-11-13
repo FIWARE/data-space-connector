@@ -10,6 +10,12 @@ import (
 	"github.com/FIWARE/data-space-connector/config-tool/ui"
 )
 
+// openWindow and openTab are the launcher entry points, variables so tests can replace them.
+var (
+	openWindow = launcher.Window
+	openTab    = launcher.Open
+)
+
 // runGUI serves the UI on loopback until ctx is cancelled or the native window closes. The token
 // URL goes to stdout as the fallback for a failed or consumed launch; a browser or window only
 // ever gets a launch code.
@@ -25,8 +31,12 @@ func runGUI(ctx context.Context, opts GUIOptions) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	served := make(chan error, 1)
-	go func() { served <- srv.Serve(ctx) }()
-	switch err := launcher.Window(ctx, srv); {
+	go func() {
+		served <- srv.Serve(ctx)
+		// A server that stopped on its own must also close a window still showing it.
+		cancel()
+	}()
+	switch err := openWindow(ctx, srv); {
 	case err == nil:
 		// The user closed the window: that ends the run.
 		cancel()
@@ -40,7 +50,7 @@ func runGUI(ctx context.Context, opts GUIOptions) error {
 }
 
 func openBrowser(src launcher.LaunchSource, opts GUIOptions) {
-	if err := launcher.Open(src); err != nil {
+	if err := openTab(src); err != nil {
 		fmt.Fprintf(opts.Stderr, "%s: could not open a browser: %v; open the URL above instead\n", binaryName, err)
 	}
 }

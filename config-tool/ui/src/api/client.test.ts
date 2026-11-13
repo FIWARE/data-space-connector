@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { ApiError, NotImplementedError, UnauthorizedError, api } from './client'
+import { ApiError, NotImplementedError, UnauthorizedError, api, connectProgress } from './client'
 
 function respond(status: number, body: unknown) {
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify(body), { status })))
@@ -7,6 +7,7 @@ function respond(status: number, body: unknown) {
 
 afterEach(() => {
   vi.unstubAllGlobals()
+  vi.restoreAllMocks()
 })
 
 describe('api', () => {
@@ -30,5 +31,51 @@ describe('api', () => {
   it('keeps the ticket of a 501', async () => {
     respond(501, { error: 'later', ticket: 'CT-4' })
     await expect(api('/profile')).rejects.toMatchObject({ ticket: 'CT-4' })
+  })
+})
+
+/** Stands in for the browser WebSocket so a test can push frames into the listener. */
+class FakeWebSocket extends EventTarget {
+  constructor(readonly url: string) {
+    super()
+  }
+
+  receive(data: string) {
+    this.dispatchEvent(new MessageEvent('message', { data }))
+  }
+}
+
+describe('connectProgress', () => {
+  const location = { protocol: 'http:', host: '127.0.0.1:41234' } as Location
+
+  function connect() {
+    vi.stubGlobal('WebSocket', FakeWebSocket)
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const onEvent = vi.fn()
+    const socket = connectProgress(onEvent, location) as unknown as FakeWebSocket
+    return { onEvent, socket }
+  }
+
+  it('connects to /api/ws on the page origin', () => {
+    const { socket } = connect()
+    expect(socket.url).toBe('ws://127.0.0.1:41234/api/ws')
+  })
+
+  it('hands a well-formed event to the caller', () => {
+    const { onEvent, socket } = connect()
+    socket.receive('{"type":"ready","version":"dev"}')
+    expect(onEvent).toHaveBeenCalledWith({ type: 'ready', version: 'dev' })
+  })
+
+  it.each([
+    ['not JSON', 'ready'],
+    ['JSON null', 'null'],
+    ['a JSON string', '"ready"'],
+    ['an object without type', '{"version":"dev"}'],
+  ])('drops a frame that is %s without throwing', (_name, frame) => {
+    const { onEvent, socket } = connect()
+    expect(() => socket.receive(frame)).not.toThrow()
+    expect(onEvent).not.toHaveBeenCalled()
+    expect(console.warn).toHaveBeenCalled()
   })
 })

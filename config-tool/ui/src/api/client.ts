@@ -88,7 +88,23 @@ export function connectProgress(onEvent: (event: ProgressEvent) => void, locatio
   const scheme = location.protocol === 'https:' ? 'wss:' : 'ws:'
   const socket = new WebSocket(`${scheme}//${location.host}${WS_PATH}`)
   socket.addEventListener('message', (message: MessageEvent<string>) => {
-    onEvent(JSON.parse(message.data) as ProgressEvent)
+    const event = parseProgressEvent(message.data)
+    if (event === undefined) {
+      console.warn('dropped a malformed progress frame')
+      return
+    }
+    onEvent(event)
   })
   return socket
+}
+
+function parseProgressEvent(data: string): ProgressEvent | undefined {
+  let value: unknown
+  try {
+    value = JSON.parse(data)
+  } catch {
+    return undefined
+  }
+  const isEvent = typeof value === 'object' && value !== null && typeof (value as ProgressEvent).type === 'string'
+  return isEvent ? (value as ProgressEvent) : undefined
 }
