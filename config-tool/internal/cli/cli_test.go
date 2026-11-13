@@ -114,12 +114,13 @@ func TestWriteOutput(t *testing.T) {
 			}
 		}
 	}
-	symlinkTo := func(target string) func(t *testing.T, path string) {
+	symlink := func(withTarget bool) func(t *testing.T, path string) {
 		return func(t *testing.T, path string) {
-			if target != "" {
-				writeExisting(outputFileMode)(t, filepath.Join(filepath.Dir(path), target))
+			target := filepath.Join(filepath.Dir(path), "target.yaml")
+			if withTarget {
+				writeExisting(outputFileMode)(t, target)
 			}
-			if err := os.Symlink(filepath.Join(filepath.Dir(path), "target.yaml"), path); err != nil {
+			if err := os.Symlink(target, path); err != nil {
 				t.Skipf("symlinks unavailable: %v", err)
 			}
 		}
@@ -135,8 +136,8 @@ func TestWriteOutput(t *testing.T) {
 		{"new file", func(*testing.T, string) {}, "", nil, content},
 		{"existing file is kept", writeExisting(outputFileMode), "", fs.ErrExist, existing},
 		{"read-only file is kept", writeExisting(readOnly), "", fs.ErrExist, existing},
-		{"symlink is kept", symlinkTo("target.yaml"), "", fs.ErrExist, existing},
-		{"dangling symlink is kept", symlinkTo(""), "", fs.ErrExist, ""},
+		{"symlink is kept", symlink(true), "", fs.ErrExist, existing},
+		{"dangling symlink is kept", symlink(false), "", fs.ErrExist, ""},
 		{"missing directory", func(*testing.T, string) {}, "absent", fs.ErrNotExist, ""},
 	}
 	for _, tc := range tests {

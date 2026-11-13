@@ -19,5 +19,6 @@ test:
 
 lint:
 	go vet ./...
+	$(if $(GO_FILES),,@echo "warning: git listed no Go files; gofmt check skipped" >&2)
 	@unformatted="$$($(if $(GO_FILES),gofmt -l $(GO_FILES)))"; \
 	if [ -n "$$unformatted" ]; then echo "gofmt needed:"; echo "$$unformatted"; exit 1; fi
