@@ -175,12 +175,22 @@ Create the SPA under `config-tool/ui/` and the shell every later stage hangs in.
   No CDN, web fonts or telemetry: everything is bundled (TECH_STACK requirement 7).
 - **Dev proxy (development only, no server change):** `npm run dev` reads `DSC_CONFIG_URL`, the
   URL printed by a running `dsc-config --no-browser`, and takes the port and token from it. The
-  Vite proxy forwards `/api` (with `ws: true`) to `http://127.0.0.1:<port>` with
-  `changeOrigin: true`, so the `Host` is the server's own. Its `configure` hook adds
-  `Authorization: Bearer <token>` to every proxied request and rewrites `Origin` to
-  `http://127.0.0.1:<port>` on every proxied request, the WebSocket upgrade included. The server's Host, Origin and auth guards
-  stay exactly as in step 2; never add a dev mode that relaxes them. Without `DSC_CONFIG_URL`,
-  `npm run dev` fails with a message saying how to get it.
+  Vite dev server binds `127.0.0.1` only. The Vite proxy forwards `/api` (with `ws: true`) to
+  `http://127.0.0.1:<port>` with `changeOrigin: true`, so the `Host` is the server's own.
+  Because the proxy adds the run token, it must apply the step-2 guards itself, otherwise any
+  page in the developer's browser could use it as an authenticated, CSRF-free front for the API.
+  Its `configure` hook calls a pure function `devProxyGuard(method, headers, devOrigin)` in
+  `ui/dev-proxy.ts` on every proxied request, the WebSocket upgrade included, and answers `403`
+  (and drops the WebSocket) when:
+  - `Origin` is present and is not the dev server's own origin (`http://127.0.0.1:<vite port>`
+    or `http://localhost:<vite port>`);
+  - `Origin` is missing on an unsafe method (anything but `GET`/`HEAD`) or the upgrade;
+  - `Sec-Fetch-Site` is present and is not `same-origin`.
+
+  Only a request that passes gets `Authorization: Bearer <token>` added and, if it has an
+  `Origin`, that header rewritten to `http://127.0.0.1:<port>`. The server's Host, Origin and
+  auth guards stay exactly as in step 2; never add a dev mode that relaxes them. Without
+  `DSC_CONFIG_URL`, `npm run dev` fails with a message saying how to get it.
 - **`src/api/client.ts`:** same-origin `fetch` wrapper (the cookie travels by itself), typed
   errors for `401` and `501`, and `connectProgress()` for `/api/ws`.
 - **`src/state/`:** a single store, either a React context with `useReducer` or a small hand-rolled
@@ -222,10 +232,16 @@ Create the SPA under `config-tool/ui/` and the shell every later stage hangs in.
   opt-in `wails` build tag built natively per OS, and why: CGO plus the webview SDKs versus "one CI
   job". This follows TECH_STACK's "dropping it leaves a working tool". Add the row to
   `doc/adr/README.md` and its "belong to `../config-tool/`" sentence.
-- **Makefile:** `ui` (`npm ci && npm run build` in `ui/`). `build` depends on `ui`. Add
-  `build-window` (`-tags wails`).
+- **Makefile:** `ui` (`npm ci && npm run build` in `ui/`). `build` depends on `ui`. `test` adds
+  `npm test` in `ui/` after `go test ./...`. Add `build-window` (`-tags wails`) and `cross`
+  (depends on `ui`): it loops over the five `GOOS/GOARCH` pairs `linux/amd64 linux/arm64
+  darwin/amd64 darwin/arm64 windows/amd64` (a named Makefile variable) with `CGO_ENABLED=0` and
+  the version ldflags, writing `bin/dsc-config-<os>-<arch>[.exe]`.
 
 Tests (Vitest, parameterized with `it.each`):
+- `devProxyGuard`: own origin passes (GET, POST, upgrade); foreign-port and remote `Origin`
+  return `403`; a POST or upgrade without `Origin` returns `403`; a GET without `Origin` passes;
+  `Sec-Fetch-Site: cross-site` and `same-site` return `403`;
 - the rail lists the 8 stages in order;
 - clicking each stage selects it and renders either Target or the placeholder, with no thrown
   error;
@@ -314,9 +330,9 @@ Make CI build and test the tool, keep the chart pipelines out of tool-only PRs, 
      is no lockfile at the repo root). Runs `npm ci`, `lint`, `typecheck`, `test` and `build` in
      `config-tool/ui`, then `gofmt -l $(go list -f '{{.Dir}}' ./...)` (must be empty),
      `go vet ./...` and `go test ./...`.
-  2. `build` (needs `test`, same `setup-node` cache settings): **one job** that builds the UI once, then loops over
-     `linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64` with `CGO_ENABLED=0` and
-     the version ldflags. It uploads the five binaries with `actions/upload-artifact`.
+  2. `build` (needs `test`, same `setup-node` cache settings): **one job** that runs
+     `make cross` (step 3), so CI and local builds use the same target list and ldflags. It
+     uploads the five binaries from `bin/` with `actions/upload-artifact`.
   3. `e2e` (needs `build`): runs Playwright (Chromium) against the linux/amd64 binary.
   4. `window` (optional, non-blocking, `continue-on-error: true`): installs
      `libgtk-3-dev libwebkit2gtk-4.1-dev` and runs `go build -tags wails,webkit2_41
@@ -368,7 +384,8 @@ Make CI build and test the tool, keep the chart pipelines out of tool-only PRs, 
   - the security model in three lines: loopback, per-run token (the printed URL stays valid
     until the process exits, so do not share it), read-only kubeconfig whose path is never
     stored;
-  - `npm run dev` with `DSC_CONFIG_URL` (step 3);
+  - `npm run dev` with `DSC_CONFIG_URL` (step 3), and the proxy rule: it adds the run token
+    only to requests from the dev server's own origin and answers `403` to any other;
   - the package layout, and that the core never imports `net/http`;
   - the Wails build tag, with a link to ADR 0011;
   - links to `doc/config-tool/`.
@@ -383,5 +400,9 @@ Acceptance:
   chart is published;
 - a PR touching `config-tool/` and any file outside it (e.g. `lychee.toml`) still runs
   `chart-lint`;
-- a PR touching only `charts/` does not run `config-tool.yaml`;
+- a PR touching only `charts/` does not run `config-tool.yaml`. This holds for CT-1 only: the
+  `model/10.16.0` bundle falls behind as soon as the chart version moves, and TECH_STACK wants
+  the model-versus-chart check to run on both chart and tool PRs. The ticket that adds that
+  check also adds `charts/data-space-connector/Chart.yaml` to the `config-tool.yaml` paths.
+  Record this in the PR description as a follow-up;
 - `.github/scripts/check-links.sh` passes.
