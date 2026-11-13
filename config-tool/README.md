@@ -34,7 +34,8 @@ cd ui && DSC_CONFIG_URL='<printed URL>' npm run dev
 
 Open `http://127.0.0.1:5173`. The proxy applies the server's Host, Origin and `Sec-Fetch-Site` rules
 before it adds the token, so other pages in the browser cannot use it; the server itself has no
-relaxed dev mode. `npm test`, `npm run lint` and `npm run typecheck` run in `ui/`.
+relaxed dev mode. The proxy authenticates nothing itself: any local process can send it any
+`Host` or `Origin`, so do not run `npm run dev` on a shared host. `npm test`, `npm run lint` and `npm run typecheck` run in `ui/`.
 
 ## Running
 

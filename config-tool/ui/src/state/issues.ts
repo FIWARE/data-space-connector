@@ -59,13 +59,13 @@ export const STATUS_LEGEND: Record<StageStatus, string> = {
   none: 'not visited',
 }
 
-/** A visited, implemented stage without issues is complete; a placeholder never is. */
+/** A visited stage without issues is complete only if it has a selector; otherwise there is nothing to vouch for it. */
 export function stageStatus(state: AppState, stage: StageDef): StageStatus {
   if (stage.id === state.stage) return StageStatus.Current
   const issues = stageIssues(state, stage)
   if (issues.errors > 0) return StageStatus.Error
   if (issues.warnings > 0) return StageStatus.Warning
   if (issues.open > 0) return StageStatus.Open
-  if (stage.component !== undefined && state.visited.includes(stage.id)) return StageStatus.Complete
+  if (stage.selector !== undefined && state.visited.includes(stage.id)) return StageStatus.Complete
   return StageStatus.None
 }
