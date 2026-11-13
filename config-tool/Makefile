@@ -10,6 +10,8 @@ LDFLAGS     := -s -w -X $(MODULE)/internal/version.Version=$(VERSION) -X $(MODUL
 GO_FILES     = $(wildcard $(shell git ls-files --cached --others --exclude-standard '*.go'))
 
 UI_DIR       := ui
+# npm ci writes this file, so make reinstalls only when the lockfile changes.
+UI_DEPS      := $(UI_DIR)/node_modules/.package-lock.json
 # Release targets: pure Go, so one job cross-compiles them all (ADR 0011).
 CROSS_TARGETS := linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64
 # The native window needs CGO and the OS webview SDK; desktop,production are Wails' own tags.
@@ -22,8 +24,11 @@ endif
 
 .PHONY: ui build build-window cross test lint
 
-ui:
-	cd $(UI_DIR) && npm ci && npm run build
+$(UI_DEPS): $(UI_DIR)/package-lock.json
+	cd $(UI_DIR) && npm ci
+
+ui: $(UI_DEPS)
+	cd $(UI_DIR) && npm run build
 
 build: ui
 	CGO_ENABLED=0 go build -trimpath -ldflags '$(LDFLAGS)' -o $(BIN_DIR)/$(BINARY) ./cmd/dsc-config
@@ -39,7 +44,7 @@ cross: ui
 			-o $(BIN_DIR)/$(BINARY)-$$os-$$arch$$ext ./cmd/dsc-config; \
 	done
 
-test:
+test: $(UI_DEPS)
 	go test ./...
 	cd $(UI_DIR) && npm test
 

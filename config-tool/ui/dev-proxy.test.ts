@@ -1,6 +1,6 @@
-import type { IncomingHttpHeaders } from 'node:http'
-import { describe, expect, it } from 'vitest'
-import { DEV_PORT, devOrigins, devProxyGuard, parseConfigUrl } from './dev-proxy.ts'
+import type { IncomingHttpHeaders, IncomingMessage, ServerResponse } from 'node:http'
+import { describe, expect, it, vi } from 'vitest'
+import { API_PREFIX, DEV_PORT, devOrigins, devProxy, devProxyGuard, parseConfigUrl } from './dev-proxy.ts'
 
 const OWN = devOrigins(DEV_PORT)
 const UPGRADE: IncomingHttpHeaders = { upgrade: 'websocket', connection: 'Upgrade' }
@@ -30,6 +30,70 @@ describe('devProxyGuard', () => {
     ['Sec-Fetch-Site none', 'GET', { 'sec-fetch-site': 'none' }],
   ])('answers 403 to %s', (_name, method, headers) => {
     expect(devProxyGuard(method, headers, OWN)).toBeDefined()
+  })
+})
+
+describe('devProxy bypass', () => {
+  const TARGET = { port: 41234, token: 'run-token' }
+  const BACKEND = `http://127.0.0.1:${TARGET.port}`
+  const OWN_ORIGIN = `http://127.0.0.1:${DEV_PORT}`
+  const FOREIGN_ORIGIN = 'http://127.0.0.1:8080'
+  const URL_PATH = `${API_PREFIX}/model`
+
+  /** Fakes what Vite hands to bypass: res for HTTP, none for a WebSocket upgrade. */
+  function call(method: string, headers: IncomingHttpHeaders, upgrade: boolean) {
+    const socketEnd = vi.fn()
+    const req = { method, url: URL_PATH, headers: { ...headers }, socket: { end: socketEnd } }
+    const res = { writeHead: vi.fn(), end: vi.fn() }
+    res.writeHead.mockReturnValue(res)
+    const bypass = devProxy(TARGET, DEV_PORT)[API_PREFIX]?.bypass
+    if (!bypass) {
+      throw new Error(`devProxy has no ${API_PREFIX} bypass`)
+    }
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const result = bypass(
+      req as unknown as IncomingMessage,
+      (upgrade ? undefined : res) as unknown as ServerResponse,
+      {},
+    )
+    return { result, req, res, socketEnd }
+  }
+
+  it.each<[string, string, IncomingHttpHeaders, boolean]>([
+    ['HTTP POST', 'POST', { origin: OWN_ORIGIN }, false],
+    ['upgrade', 'GET', { ...UPGRADE, origin: OWN_ORIGIN }, true],
+  ])('proxies a passing %s with the token and the backend Origin', (_name, method, headers, upgrade) => {
+    const { result, req, res, socketEnd } = call(method, headers, upgrade)
+    expect(result).toBeUndefined()
+    expect(req.headers.authorization).toBe(`Bearer ${TARGET.token}`)
+    expect(req.headers.origin).toBe(BACKEND)
+    expect(res.writeHead).not.toHaveBeenCalled()
+    expect(socketEnd).not.toHaveBeenCalled()
+  })
+
+  it('leaves a missing Origin missing on a passing GET', () => {
+    const { result, req } = call('GET', {}, false)
+    expect(result).toBeUndefined()
+    expect(req.headers.authorization).toBe(`Bearer ${TARGET.token}`)
+    expect(req.headers).not.toHaveProperty('origin')
+  })
+
+  it.each<[string, string, IncomingHttpHeaders, boolean]>([
+    ['HTTP POST with a foreign Origin', 'POST', { origin: FOREIGN_ORIGIN }, false],
+    ['HTTP POST without Origin', 'POST', {}, false],
+    ['upgrade with a foreign Origin', 'GET', { ...UPGRADE, origin: FOREIGN_ORIGIN }, true],
+    ['upgrade without Origin', 'GET', UPGRADE, true],
+  ])('answers 403 to a %s without adding the token', (_name, method, headers, upgrade) => {
+    const { result, req, res, socketEnd } = call(method, headers, upgrade)
+    expect(typeof result).toBe('string')
+    expect(req.headers).not.toHaveProperty('authorization')
+    expect(req.headers.origin).toBe(headers.origin)
+    if (upgrade) {
+      expect(socketEnd).toHaveBeenCalledWith(expect.stringMatching(/^HTTP\/1\.1 403 /))
+    } else {
+      expect(res.writeHead).toHaveBeenCalledWith(403)
+      expect(res.end).toHaveBeenCalled()
+    }
   })
 })
 
