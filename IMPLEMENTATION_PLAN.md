@@ -16,10 +16,16 @@ Cross-cutting decisions for every step:
 - **Toolchain:** Go is the current stable release, pinned by the `go` directive in
   `config-tool/go.mod`; CI uses `go-version-file`. Node is 22 LTS with npm and a committed
   `package-lock.json`.
-- **Layering:** the core is `internal/{version,model,profile,cluster,render,validate}`. It never
-  imports `net/http` or `internal/server`, and a Go test enforces this (step 1). Do not create
+- **Layering:** the front ends are `internal/server`, `internal/cli` and `internal/launcher`.
+  Every other package under `internal/` is core: in CT-1 that is
+  `internal/{version,model,profile,cluster,render,validate}`. The core never imports `net/http`
+  or a front-end package, and a Go test enforces this (step 1) with a deny-list of the three
+  front ends, so core packages added later are covered without editing the test. Do not create
   empty packages for later tickets (`roundtrip`, `chart`, `secrets`, `export`). They arrive with
   CT-2 and later tickets.
+- **Profile contents:** only the kube *context name* goes into the answer set
+  (`profile.Target`). The kubeconfig path is session state of the running tool and is never
+  stored (TECH_STACK *Security*).
 - **Libraries are the ones TECH_STACK names:** cobra, client-go (`tools/clientcmd`, read-only),
   wails/v2, React 18, TypeScript and Vite. TECH_STACK names no WebSocket library, so use
   `github.com/coder/websocket`. Vitest and React Testing Library are the UI unit-test runner, next
@@ -29,7 +35,18 @@ Cross-cutting decisions for every step:
   and TS.
 - **Doc comments:** one-line GoDoc on every exported identifier and package, and a one-line JSDoc
   on every exported component, hook and store function.
-- **No chart change:** no `Chart.yaml` bump and no `values.yaml` or schema regeneration.
+- **No chart change:** no file under `charts/` changes, not even a comment, because
+  `chart-version` bumps and publishes every chart a pull request touches. The first comment of
+  `values.yaml` still says `see CLAUDE.md`; fix it to `AGENTS.md` with the next chart change, not
+  here.
+- **Window vs. browser tab (deviation from the ticket wording, needs confirmation before
+  step 3):** the ticket and TECH_STACK name the Wails window as primary and the browser tab as
+  fallback. TECH_STACK also asks for statically linked binaries from one CI job, and Wails needs
+  CGO and each OS's webview SDK, so both cannot hold. This plan keeps the one-job, pure-Go release
+  binaries, which open a browser tab, and makes the window an opt-in `wails` build tag (step 3,
+  ADR 0011). If the reviewer wants the window in the released binaries instead, step 3 replaces
+  the single cross-compile job in step 5 with one native build job per OS (`ubuntu`, `macos`,
+  `windows` runners) using `-tags wails`, and ADR 0011 records that instead.
 
 ## Steps
 
@@ -52,14 +69,16 @@ Files:
   and stub entry points (`Render`, `Validate`). The CLI calls them here, and the HTTP stubs call
   them in step 2.
 - `config-tool/internal/profile/`: the answer-set types needed now.
-  - `Target{Type TargetType; Kubeconfig, Context, Namespace string; CreateNamespace bool;
-    ReleaseName, Chart, ChartVersion string; Environment Environment}`.
+  - `Target{Type TargetType; Context, Namespace string; CreateNamespace bool;
+    ReleaseName, Chart, ChartVersion string; Environment Environment}`. There is deliberately no
+    kubeconfig field: the path stays out of the profile (see *Profile contents*).
   - Enum constants `TargetFile`/`TargetCluster` and `EnvDevelopment`/`EnvProduction`.
   - `(Target) Validate() []FieldError`: DNS-1123 label checks, namespace ≤ 63, release ≤ 53, and
     the context required only when `Type == TargetCluster`.
-- `config-tool/internal/layering_test.go` (or one test per core package): uses `go/parser` to
-  assert that no core package directly imports `net/http`, `.../internal/server` or
-  `.../internal/cli`. Check direct imports only, because client-go pulls `net/http` in
+- `config-tool/internal/layering_test.go`: walks every package directory under `internal/` except
+  the front ends `server`, `cli` and `launcher`, and uses `go/parser` to assert that none of them
+  directly imports `net/http`, `.../internal/server`, `.../internal/cli` or
+  `.../internal/launcher`. Check direct imports only, because client-go pulls `net/http` in
   transitively.
 - `config-tool/Makefile`: targets `build`, `test`, `lint` (`go vet` + `gofmt -l`), with the
   version ldflags.
@@ -67,10 +86,12 @@ Files:
 
 Tests (table-driven): CLI `--version` output; `generate --help` lists `--profile` and `--output`;
 `generate` returns `ErrNotImplemented`; `Target.Validate` cases (valid, uppercase, too long,
-leading dash, missing context for the cluster target, no context needed for the file target).
+leading dash, missing context for the cluster target, no context needed for the file target);
+`Target` marshalled to JSON and YAML has no key containing `kubeconfig`.
 
 Acceptance: `cd config-tool && go build ./... && go test ./...` passes, `dsc-config --version` and
-`dsc-config generate --help` work, and the layering test fails if a core file imports `net/http`.
+`dsc-config generate --help` work, and the layering test fails if a core file imports `net/http`,
+including a file in a newly created core package.
 
 ### Step 2: Loopback HTTP API, token, WebSocket, stub endpoints and browser launcher
 Add `config-tool/internal/server/` (the only package that knows HTTP) and
@@ -78,14 +99,20 @@ Add `config-tool/internal/server/` (the only package that knows HTTP) and
 
 - **Listener:** `net.Listen("tcp", "127.0.0.1:0")`. The address is never configurable to a
   non-loopback host. `Server.URL()` returns `http://127.0.0.1:<port>/?token=<t>`.
-- **Token:** 32 bytes from `crypto/rand`, base64url, generated once per run. The token in the URL
-  is single-use. The first `GET /?token=` that matches (constant-time compare) sets an `HttpOnly`,
-  `SameSite=Strict`, `Path=/` session cookie holding a separate random session secret, then
-  redirects to `/` to strip the token from the address bar. After that, every request (static
-  assets, `/api/*`, the WebSocket) must carry the cookie. `Authorization: Bearer <session>` is also
-  accepted for non-browser clients and tests. Without it the response is `401`, except for the bare
-  `/` without a cookie, which gets a short "open the link printed by dsc-config" page with status
-  401.
+- **Token:** 32 bytes from `crypto/rand`, base64url, generated once per run and valid for the
+  whole run, so the printed URL still works when `xdg-open` picked the wrong browser or profile.
+  Each `GET /?token=` that matches (constant-time compare) sets an `HttpOnly`, `SameSite=Strict`,
+  `Path=/` session cookie holding a separate random session secret (the server keeps the set of
+  issued secrets), then redirects to `/` to strip the token from the address bar. After that,
+  every request (static assets, `/api/*`, the WebSocket) must carry the cookie.
+  `Authorization: Bearer <token>` with the run token is also accepted for non-browser clients,
+  tests and the Vite dev proxy (step 3). Without either, the response is `401`, except for the
+  bare `/` without a cookie, which gets a short "open the link printed by dsc-config" page with
+  status 401.
+- **Cookie name carries the port:** cookies are scoped by host, not port, so the name is
+  `dsc_session_<port>` (prefix as a named constant). Two instances running side by side (e.g.
+  provider and consumer for CT-5) then do not overwrite each other's session, and an instance
+  only ever reads its own cookie.
 - **DNS-rebinding guard:** reject a `Host` header other than `127.0.0.1:<port>` or
   `localhost:<port>` with `403`. On the WebSocket upgrade, also require a same-origin `Origin`.
 - **Routes** (stdlib `http.ServeMux` with method patterns, JSON errors `{ "error": "...",
@@ -114,7 +141,11 @@ Tests (table-driven `httptest` against the real handler and a real loopback list
 - the listener address is `127.0.0.1`;
 - each endpoint without credentials returns `401`;
 - a wrong token returns `401`;
-- the URL token exchange sets the cookie and works only once;
+- the URL token exchange sets the cookie and works repeatedly within one run;
+- two servers on two listeners use different cookie names, and one server's cookie is `401` on
+  the other;
+- `Authorization: Bearer` with the run token is accepted, with a session secret or a wrong value
+  it is `401`;
 - with the cookie, the stubs return their documented codes;
 - a foreign `Host` returns `403`;
 - the WebSocket upgrade without a cookie fails, and with a cookie it receives `ready`;
@@ -128,8 +159,15 @@ Create the SPA under `config-tool/ui/` and the shell every later stage hangs in.
 
 - **Project:** Vite + React 18 + TypeScript (`strict`), ESLint, and Vitest + React Testing Library
   (jsdom). The npm scripts are `dev`, `build` (output to `dist/`), `test`, `lint` and `typecheck`.
-  The Vite dev server proxies `/api` to a running `dsc-config --no-browser`, for development only.
   No CDN, web fonts or telemetry: everything is bundled (TECH_STACK requirement 7).
+- **Dev proxy (development only, no server change):** `npm run dev` reads `DSC_CONFIG_URL`, the
+  URL printed by a running `dsc-config --no-browser`, and takes the port and token from it. The
+  Vite proxy forwards `/api` (with `ws: true`) to `http://127.0.0.1:<port>` with
+  `changeOrigin: true`, so the `Host` is the server's own. Its `configure` hook adds
+  `Authorization: Bearer <token>` to every proxied request and rewrites `Origin` to
+  `http://127.0.0.1:<port>` on the WebSocket upgrade. The server's Host, Origin and auth guards
+  stay exactly as in step 2; never add a dev mode that relaxes them. Without `DSC_CONFIG_URL`,
+  `npm run dev` fails with a message saying how to get it.
 - **`src/api/client.ts`:** same-origin `fetch` wrapper (the cookie travels by itself), typed
   errors for `401` and `501`, and `connectProgress()` for `/api/ws`.
 - **`src/state/`:** a single store, either a React context with `useReducer` or a small hand-rolled
@@ -159,6 +197,8 @@ Create the SPA under `config-tool/ui/` and the shell every later stage hangs in.
   - In the Wails build, the window loads a tiny bootstrap page that navigates the webview to the
     loopback URL. The window then talks to the same server, so the cookie, the token and the
     WebSocket behave exactly as in the browser.
+  - If the reviewer rejected the build-tag approach (see *Window vs. browser tab* above), follow
+    the alternative recorded there instead of this one.
   - If the window cannot start (no webview runtime), it falls back to `launcher.Open`.
   - The default build stays pure Go (`CGO_ENABLED=0`). That is how one job cross-compiles all five
     targets (Wails needs CGO and the native webview SDKs). A native build is
@@ -225,8 +265,10 @@ Implement the two stages and the two endpoints they need.
   uses the same named limits.
 - **State:** every field writes to the store from step 3, so values survive switching to any rail
   stage and back. Kubeconfig and context are kept in the store when the user switches to *File
-  only*, but they are hidden and do not count. `profile.Target` (Go) and `Target` (TS) carry the
-  same field names, so CT-4 can PUT the store as-is.
+  only*, but they are hidden and do not count. The kubeconfig path lives in a separate `session`
+  slice of the store, outside the answer set. `profile.Target` (Go) and the answer set's `Target`
+  (TS) carry the same field names, neither has a kubeconfig field, so CT-4 can PUT the answer set
+  as-is without storing the path.
 
 Tests:
 - Go table tests: `model.Versions` (ordering, `latest`); `cluster.Contexts` against fixture
@@ -237,6 +279,7 @@ Tests:
   - **no unneeded question:** with *File only*, the Kubeconfig, Context and *create it* controls
     are absent from the DOM; with *Kubernetes cluster*, they are present;
   - every S1 field keeps its value after switching to each other stage and back;
+  - the serialised answer set has no `kubeconfig` key while the session still holds the path;
   - the footer counts open questions and errors for empty, invalid and complete inputs.
 
 ### Step 5: CI workflow, path filters, Playwright smoke and documentation
@@ -266,18 +309,35 @@ Make CI build and test the tool, keep the chart pipelines out of tool-only PRs, 
   - `test.yaml`: replace `on: [push, pull_request]` with `push` and `pull_request`, each with
     `paths-ignore: ['config-tool/**', '.github/workflows/config-tool.yaml']`. A mixed PR still
     runs both, because `paths-ignore` only skips when every changed file matches.
-  - `check.yaml`: add a `changes` job (`dorny/paths-filter@v3`, filter `chart: ['charts/**',
-    '.github/scripts/values-schema.sh', ...]`, or invert it as "anything outside `config-tool/`")
-    and gate `chart-lint` and `values-schema` with `if: needs.changes.outputs.chart == 'true'`.
-    `chart-version` already `needs: chart-lint` and skips with it. The `links` job keeps running.
-    Add a one-line "why" comment above the filter.
+  - `check.yaml`: add a `changes` job (`dorny/paths-filter@v3`, `permissions: pull-requests:
+    read`) with the inverted filter, so any file outside the tool counts as a chart change and
+    nothing has to be enumerated:
+    ```yaml
+    predicate-quantifier: every
+    filters: |
+      chart:
+        - '!config-tool/**'
+        - '!.github/workflows/config-tool.yaml'
+    ```
+    Gate `chart-lint` and `values-schema` with `needs: changes` and
+    `if: needs.changes.outputs.chart == 'true'`. `chart-version` already `needs: chart-lint` and
+    skips with it. The `links` job keeps running. Add a one-line "why" comment above the filter.
+  - `pre-release.yml`: add `paths-ignore: ['config-tool/**', '.github/workflows/config-tool.yaml']`
+    to its `pull_request` trigger, keeping the existing `types`. Otherwise a tool-only PR needs a
+    semver label and pushes chart snapshots to quay.io for a change that touches no chart
+    (TECH_STACK: "a pull request that touches `config-tool/` alone publishes no chart"). If any
+    of its jobs is a required status check on `main`, the skipped run leaves it pending: say so
+    in the PR description so the maintainer can adjust branch protection.
 - **`lychee.toml`:** add `"(^|/)node_modules/"` to `exclude_path`, so local link checks skip
   `config-tool/ui/node_modules`.
 - **`config-tool/README.md`:**
   - prerequisites (Go version, Node 22);
   - `make ui`, `make build`, `make test`, `make cross` and `make build-window`;
   - running it: no args opens a tab, and `--no-browser`;
-  - the security model in three lines: loopback, per-run token, read-only kubeconfig;
+  - the security model in three lines: loopback, per-run token (the printed URL stays valid
+    until the process exits, so do not share it), read-only kubeconfig whose path is never
+    stored;
+  - `npm run dev` with `DSC_CONFIG_URL` (step 3);
   - the package layout, and that the core never imports `net/http`;
   - the Wails build tag, with a link to ADR 0011;
   - links to `doc/config-tool/`.
@@ -287,6 +347,8 @@ Make CI build and test the tool, keep the chart pipelines out of tool-only PRs, 
 
 Acceptance:
 - a PR touching only `config-tool/` runs `config-tool.yaml` (test, build with five binaries, e2e)
-  and neither `test.yaml` nor `chart-lint`;
+  and none of `test.yaml`, `pre-release.yml`, `chart-lint` or `values-schema`;
+- a PR touching `config-tool/` and any file outside it (e.g. `lychee.toml`) still runs
+  `chart-lint`;
 - a PR touching only `charts/` does not run `config-tool.yaml`;
 - `.github/scripts/check-links.sh` passes.
