@@ -120,12 +120,15 @@ before it is returned. The API is the one TECH_STACK names: `Parse`, `Classify`,
   decoded tree (`any`) with the original tree after the same edits were applied to a deep copy
   of the node tree. Both sides go through `decodeValue` (see *Duplicate keys*). If they differ, `Write` returns `ErrPatchVerification` and no bytes.
   A wrong write is an error, never a file.
-- **Value equality.** The synthetic node for a new scalar is built from its rendered text, with
-  the tag yaml.v3 resolves for that text, so `float64(2)` rendered as `2` is an `!!int` on both
-  sides of the self-check. The self-check and the no-op rule compare through one helper,
+- **Value equality.** The expected node for a new scalar is derived from the **Go value**, never
+  from the rendered text: string → `!!str`, bool → `!!bool`, int/int64 → `!!int`, float64 →
+  `!!float`, nil → `!!null`. So a renderer that writes the wrong type (`Set(x, 9090)` on
+  `x: "8080"` written as `"9090"`, or a bool-looking string written plain) fails the self-check
+  with `ErrPatchVerification`. The self-check and the no-op rule compare through one helper,
   `equalValue`: numbers are equal when their values are, whatever the int/float type (Helm
-  decodes every number as float64), and NaN equals NaN. So `Set(port, 8080.0)` on `port: 8080`
-  adds no patch.
+  decodes every number as float64), so `float64(2)` written as `2` passes; NaN equals NaN; a
+  string never equals a number, bool or null. So `Set(port, 8080.0)` on `port: 8080` adds no
+  patch, and `Set(port, "8080")` on it does.
 - **Aliases.** A path that passes *through* an alias node is refused with `ErrAliasPath`, because
   editing it would also change every other user of the anchor. A path that *ends* at an alias
   leaf (`b: *a`, or `*a` inside a flow collection) may be set: the replacement covers the
@@ -171,7 +174,9 @@ before it is returned. The API is the one TECH_STACK names: `Parse`, `Classify`,
     pending value tree.
 - **Value style on edit.** The original quoting style is kept when it can represent the new
   value: plain stays plain, `'…'` stays single, `"…"` stays double, and `|`/`>` keep their
-  indicator and chomping. Otherwise yaml.v3's scalar encoding chooses the style for the new
+  indicator and chomping. Quoted and block styles hold only strings, so an int, float, bool or
+  null set on a quoted scalar is written plain (`x: "8080"` + `9090` → `x: 9090`), and a string
+  that would resolve to another type as plain (`true`, `8080`, `null`) is quoted. Otherwise yaml.v3's scalar encoding chooses the style for the new
   value. A plain multi-line scalar is supported (the chart's own `values.yaml` has one: the
   `acr` client scope's `description:` at lines 912-914). Its span is defined in Step 3, and an
   edit replaces the whole span with the new value at the original start column, as one plain
@@ -406,8 +411,11 @@ In `internal/roundtrip/`:
   Add `ErrPatchVerification` and `ErrPatchConflict`.
 - Tests:
   - **Per-leaf property test over the corpus.** For every scalar leaf from `Classify` in every
-    corpus file, `Set` a sentinel value of the same Go type and `Write`; a null leaf gets a
-    string sentinel, since `nil` over a null is a no-op. Each file is a parallel subtest, and
+    corpus file, `Set` a sentinel value of the same Go type that differs from the current
+    value (a bool is negated, a number gets a different number, a string a fixed sentinel
+    string unless it already equals it) and `Write`; a null leaf gets a string sentinel, since
+    `nil` over a null is a no-op. Every leaf that is not refused must record exactly one
+    pending patch, so a no-op cannot pass as an edit. Each file is a parallel subtest, and
     its leaves are split into parallel shards of a fixed size (a named constant, e.g. 100
     leaves). The chart's `values.yaml` alone has about 1600 leaves at roughly 25 ms each, so
     sharding keeps that file from serialising the run. Under `testing.Short()` only every Nth
@@ -434,6 +442,10 @@ In `internal/roundtrip/`:
     the items of a flow sequence with non-ASCII items (`ä: [é, x]`). Implicit-null rows:
     `key:` → `key: v`, `key:   # c` → `key: v   # c`, an empty `- ` item, and `key:` at EOF
     without a trailing newline.
+  - Types, from the Go value: `Set(x, 9090)` on `x: "8080"` writes `x: 9090`;
+    `Set(x, "true")` on `x: a` writes a quoted `"true"`; `Set(port, "8080")` on `port: 8080`
+    writes a quoted string. An internal test feeds the self-check a write whose text has the
+    wrong type (`"9090"` for int `9090`) and gets `ErrPatchVerification`.
   - Numbers, through `equalValue`: `Set(x, float64(2))` writes `x: 2` and the self-check
     passes; `Set(port, 8080.0)` on `port: 8080` adds no patch; `Set(x, math.NaN())` writes
     `.nan`, and setting NaN again adds no patch.
