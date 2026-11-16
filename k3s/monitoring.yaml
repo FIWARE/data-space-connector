@@ -133,9 +133,14 @@ contract-management:
   deployment:
     additionalAnnotations:
       instrumentation.opentelemetry.io/inject-java: "true"
+  # a list replaces the one of provider.yaml, so it repeats provider.yaml's variables
   additionalEnvVars:
     - name: LOGGER_LEVELS_ROOT
       value: DEBUG
+    - name: CONSENT_ENABLED
+      value: "true"
+    - name: CONSENT_SELF_DESCRIPTION_BASE_URL
+      value: https://consent-facade.dataspace-authority.org
 
 decentralizedIam:
   vcAuthentication:
@@ -236,7 +241,10 @@ marketplace:
     deployment:
       additionalAnnotations:
         instrumentation.opentelemetry.io/inject-python: "true"
+    # the lists below replace those of provider.yaml, so they repeat provider.yaml's variables
     extraEnvVars:
+      - name: BAE_CB_CUSTOMER_BILL
+        value: "http://tm-forum-api-svc:8080/tmf-api/customerBillManagement/v4"
       - name: OTEL_SDK_DISABLED
         value: "false"
       - name: OTEL_SERVICE_NAME
@@ -246,6 +254,20 @@ marketplace:
       additionalAnnotations:
         instrumentation.opentelemetry.io/inject-nodejs: "true"
     additionalEnvVars:
+      - name: BAE_LP_SIOP_IS_REDIRECTION
+        value: "true"
+      - name: BAE_LP_PURCHASE_ENABLED
+        value: "true"
+      - name: NODE_TLS_REJECT_UNAUTHORIZED
+        value: "0"
+      - name: HTTPS_PROXY
+        value: "http://squid-proxy.infra.svc.cluster.local:8888"
+      - name: BAE_LP_SIOP_CLIENT_ID
+        value: did:web:mp-operations.org
+      - name: BAE_LP_SIOP_PRIVATE_KEY_PEM
+        value: /certs-did/tls.key
+      - name: DATASPACE_ENABLED
+        value: "true"
       - name: OTEL_SDK_DISABLED
         value: "false"
       - name: OTEL_SERVICE_NAME
