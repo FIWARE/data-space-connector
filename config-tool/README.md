@@ -5,11 +5,37 @@ Guided configuration of the FIWARE Data Space Connector chart. Design:
 
 ## Building
 
+Needs Go (version from `go.mod`) and Node 22 with npm.
+
 ```shell
-make build   # bin/dsc-config
-make test
+make ui            # npm ci + vite build into ui/dist, which the binary embeds
+make build         # ui, then bin/dsc-config[.exe] (pure Go, opens a browser tab)
+make cross         # ui, then bin/dsc-config-<os>-<arch> for the five release targets
+make build-window  # ui, then bin/dsc-config-window[.exe] with a native window (see below)
+make test          # go test ./... and the UI's Vitest suite
 make lint
 ```
+
+Release binaries are pure Go and open a browser tab. The native window is the opt-in `wails`
+build tag ([ADR 0011](../doc/adr/0011-config-tool-window-build-tag.md)); build it on the target
+OS with its webview SDK (`libwebkit2gtk-4.1-dev` on Linux) and, except on Windows, CGO. When Wails
+reports a failed start (an error, or a panic such as no display), the binary says so on stderr
+and opens a browser tab instead; some Wails start-up failures exit the process on their own. The
+window has been run on Linux only so far.
+
+## Developing the UI
+
+The Vite dev server proxies `/api` to a running `dsc-config` and adds the run token itself:
+
+```shell
+dsc-config --no-browser                    # prints http://127.0.0.1:<port>/?token=...
+cd ui && DSC_CONFIG_URL='<printed URL>' npm run dev
+```
+
+Open `http://127.0.0.1:5173`. The proxy applies the server's Host, Origin and `Sec-Fetch-Site` rules
+before it adds the token, so other pages in the browser cannot use it; the server itself has no
+relaxed dev mode. The proxy authenticates nothing itself: any local process can send it any
+`Host` or `Origin`, so do not run `npm run dev` on a shared host. `npm test`, `npm run lint` and `npm run typecheck` run in `ui/`.
 
 ## Running
 

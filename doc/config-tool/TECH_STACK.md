@@ -41,7 +41,8 @@ good validation messages.
 
 **A Go backend with an embedded TypeScript/React single-page front end, shipped as one
 binary per platform.** The binary serves the UI on `127.0.0.1` and opens it in a native
-window (Wails) or, as a fallback, in the default browser.
+window (Wails) or, as a fallback, in the default browser. Release binaries open the browser;
+the window is an opt-in build tag, see [ADR 0011](../adr/0011-config-tool-window-build-tag.md).
 
 ```
   dsc-config                       → opens the GUI
@@ -59,7 +60,7 @@ Why this and not something else:
 - **Kubernetes in-process.** `client-go` and the discovery API give stage 4 its detection
   (CRDs, ingress classes, storage classes, operators) and stage 8 its install, with the same
   kubeconfig handling every other Kubernetes tool has.
-- **One artifact.** `GOOS`/`GOARCH` cross-compilation produces six binaries from one CI job,
+- **One artifact.** `GOOS`/`GOARCH` cross-compilation produces five binaries from one CI job,
   statically linked, no runtime, ~25–40 MB with the UI embedded via `embed.FS`. A platform
   engineer downloads and runs it; that is the whole installation.
 - **The GUI is optional.** The same core answers `generate` in a pipeline, which is what a
@@ -131,7 +132,7 @@ keeps `dsc-config generate` honest and makes the core testable without a browser
 | JSON Schema | `santhosh-tekuri/jsonschema/v6` | Draft-07, what the chart's schema is |
 | Sealed Secrets | `github.com/bitnami-labs/sealed-secrets/pkg/crypto` | Seals in process (AES-256-GCM session key wrapped with RSA-OAEP); `kubeseal` is used only to fetch a certificate when it is on the PATH |
 | Secret generation | `crypto/rand`, `crypto/ecdsa`, `go-jose` for JWKs | See [Generation](SECRETS.md#generation) |
-| Desktop window | `github.com/wailsapp/wails/v2` | OS webview; browser fallback when unavailable |
+| Desktop window | `github.com/wailsapp/wails/v2` | OS webview; opt-in `wails` build tag, release binaries open the browser ([ADR 0011](../adr/0011-config-tool-window-build-tag.md)) |
 | CLI | `spf13/cobra` | `generate`, `validate`, `install` |
 | Front end | React 18, TypeScript, Vite | Built into `embed.FS` at compile time |
 | Editor / diff | CodeMirror 6 with the YAML mode | Expert mode and the diff pane |
@@ -227,7 +228,7 @@ free for the tool:
 |---|---|---|
 | Version | `Chart.yaml` + semver label on the pull request | its own, tagged `config-tool/vX.Y.Z` |
 | Released by | `release.yml` on push to `main` | a new `config-tool-release.yml` on `push: tags: ['config-tool/v*']` |
-| Artifacts | charts to `quay.io/fiware/helm-charts` and `gh-pages` | six signed binaries on the GitHub release |
+| Artifacts | charts to `quay.io/fiware/helm-charts` and `gh-pages` | five signed binaries on the GitHub release |
 | Cadence | every chart change, including automated subchart bumps | when the tool changes |
 
 `config-tool/vX.Y.Z` is also exactly the tag form Go requires for a module in a subdirectory, so
