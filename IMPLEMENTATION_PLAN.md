@@ -4,20 +4,15 @@
 Wire contract-management's (CM) data space eventing listener/subscriber into the umbrella chart, off
 by default: `contract-management.dataspace.events.*` values, a refreshable publishers ConfigMap
 (rendered by the CM subchart), `scope`/`scopeType` on `registration.issuer`, the APISIX routes for
-the events path (rendered by odrl-authorization through a new extension point), an example ODRL
-policy, tests and docs. An upgrade with default values must not create or change any
+the events path (ordinary `decentralizedIam.odrlAuthorization.apisix.routes` entries the operator
+adds, from a documented example the umbrella validates), an example ODRL policy, tests and docs. An upgrade with default values must not create or change any
 eventing-related resource; the other changes it does bring are listed under "Deviations from the
 ticket".
 
-**Stale AGENTS.md lines.** Two lines of the "Data Space Eventing" section of `AGENTS.md` are wrong.
-Until a plan-mode agent or Step 6 updates them, **this plan wins**:
-- It says the events route is a documented snippet. That approach was rejected (see "APISIX routes"
-  below). Events routes go through the odrl-authorization `apisix.extraRoutes` map (Prerequisite B,
-  Step 4). The default APISIX mode is standalone/yaml and serves no admin API, so admin-API hook
-  Jobs do not work there.
-- It says the CM subchart renders `contract-management.dataspace.events` into a refreshable
-  ConfigMap. CM charts up to the latest (3.6.5, pinned by Step 2) do not; only the chart version of
-  Prerequisite A will.
+**AGENTS.md.** The "Data Space Eventing" section of `AGENTS.md` matches this plan again: the events
+routes are a documented snippet in the normal `routes` list (plan update after the Step 4 review
+question), and CM chart 3.6.6 (Prerequisite A, pinned by Step 3) renders
+`contract-management.dataspace.events` into its refreshable ConfigMap.
 
 **Reading subchart values.** `.Values` is `chartutil.Values`, not a plain map. Do not pass it to
 `dig`. Index into the subchart map first, as `_helpers.tpl` (`dsc.identityhub.assertHolderKid`) does:
@@ -85,8 +80,15 @@ Until a plan-mode agent or Step 6 updates them, **this plan wins**:
     `<release>-<index>`.
   - Ingress-controller mode: one `ApisixRoute` CR per entry.
 
-  Helm replaces lists instead of merging them. A default route in the umbrella's list is therefore lost
-  as soon as a user sets `routes`. The subchart has no extra-routes value.
+  Helm replaces lists instead of merging them. A default route in the umbrella's list would therefore
+  be lost as soon as a user sets `routes`. But the umbrella declares no `routes` default at all: the
+  list is entirely operator-owned (see `k3s/provider.yaml`), every existing DSC route lives there, and
+  every entry may carry a `name`, which odrl-authorization uses as the route name in all three paths
+  (2.5.0, shipped by decentralized-iam 2.3.0).
+  In ingress-controller mode the `ApisixRoute` template reads only `host`, `uri`, `upstream.nodes`
+  and `plugins`: it drops `methods`, `hosts` and `priority`. The `OPTIONS` handshake route would then
+  match every method on `/events` without authentication, so the events routes are refused in that
+  mode (Step 4).
 - **Rejected option: an umbrella hook Job that PUTs the route to the admin API** (the pattern of
   `templates/apisix-otel-global-rule-job.yaml`):
   - It only works in the etcd-backed modes. The default yaml mode has no admin API, so the Job would
@@ -97,9 +99,21 @@ Until a plan-mode agent or Step 6 updates them, **this plan wins**:
 
   The existing OTEL global-rule hook has the same yaml-mode limitation. That is outside this ticket
   and is noted for a follow-up.
-- **Chosen option, as the ticket asks ("if the subchart does not support it, FIWARE/helm-charts
-  first"):** add an extension point to odrl-authorization (Prerequisite B). The umbrella then declares
-  the events routes under it, disabled by default (Step 4).
+- **Rejected option: a new odrl-authorization `apisix.extraRoutes` map** (the earlier Prerequisite B).
+  It would only buy two things: route defaults shipped by the umbrella that survive a user-set `routes`
+  list, and a `DELETE` of a disabled route in the etcd-backed modes. Neither is worth an upstream
+  chart change and two releases: the umbrella ships no route defaults anywhere else (the events routes
+  need a deployment-specific host and verifier service anyway, so a default could not be enabled
+  as-is), and the stale-route problem in etcd mode (`<release>-<index>` ids are only PUT, never
+  deleted) applies to every route in the list today and belongs in odrl-authorization as a general
+  fix, not an events feature.
+- **Chosen option (Step 4): the normal `routes` list.** The operator appends three named entries
+  (`dataspace-events`, `dataspace-events-handshake`, `dataspace-events-discovery`) to their own
+  `decentralizedIam.odrlAuthorization.apisix.routes`, copied from an example values file that the
+  repo ships and the docs explain (Steps 4 and 6). The umbrella finds them by `name` and `fail`s on
+  inconsistent or unsafe combinations. Removing them works in yaml mode (the ConfigMap is rewritten);
+  in the etcd-backed modes it leaves stale `<release>-<index>` routes, as for any route removed from
+  the list today, which the docs state.
 - CI runs `helm unittest charts/data-space-connector` **without** `helm dependency build`, so suites
   can only target the umbrella's own `templates/`. Subchart rendering is checked in the upstream PRs
   and by local `helm template` runs (Steps 3 and 4). The umbrella's own templates can still read
@@ -143,26 +157,12 @@ version must then be released to `oci://quay.io/fiware/helm-charts`. The PR must
 If this prerequisite is not met when Step 3 is picked up, Step 3 writes completion status `blocked`
 and names the missing chart version.
 
-**Prerequisite B (outside this repo, blocks Step 4): odrl-authorization extra routes and a
-decentralized-iam release.** These repos have no Gitea forks, so a human opens both PRs upstream.
-1. FIWARE/odrl-authorization, chart `odrl-authorization`:
-   - Add the value `apisix.extraRoutes`: a **map** from route name to
-     `{enabled: <bool>, route: <APISIX route object, same shape as an apisix.routes entry>}`.
-     It must be a map, not a list: Helm merges maps key by key, so a parent chart's defaults and the
-     user's values combine. Default `{}`, with `# --` docs.
-   - Render the `enabled` entries after `routes` in all three paths:
-     - the `apisix-routes` ConfigMap;
-     - the admin-API script, under the stable id `<release>-<name>`. A disabled entry is `DELETE`d by
-       that id (404 tolerated), so turning it off removes the route in the etcd-backed modes;
-     - one `ApisixRoute` per entry.
-   - With `extraRoutes: {}` the rendering must be byte-identical to before. Check it with a
-     `helm template` diff in all three modes.
-2. FIWARE/decentralized-iam: a release that pins that odrl-authorization version and
-   `trusted-issuers-list` chart ≥ 0.19.2 (TIL ≥ 0.10.1). The PR must state whether TIL 0.10.1+ migrates
-   its database at start-up, so that Step 4 can put it in the release notes.
-
-If Prerequisite B is not met when Step 4 is picked up, Step 4 writes completion status `blocked` and
-names the missing release.
+**Prerequisite B (blocks Step 4): a decentralized-iam release with TIL ≥ 0.10.1.**
+**Met:** decentralized-iam **2.3.0** pins vc-authentication 1.6.0 → `trusted-issuers-list` chart
+0.19.2 (TIL 0.10.3) and odrl-authorization 2.5.0. No odrl-authorization change is needed any more
+(see "APISIX routes"; the `extraRoutes` patch drafted in the blocked Step 4 run is dropped). Step 4
+itself finds out whether TIL 0.10.1+ migrates its database at start-up (its Flyway/Liquibase
+migrations in FIWARE/trusted-issuers-list) and records it for the release notes.
 
 **Release gating.** Steps merge into `ticket-102/work`. That branch must not be merged to `main` or
 released until Steps 2 to 4 have landed. Step 1 alone would scope grants that the deployed TIL 0.10.0
@@ -191,11 +191,11 @@ drops, for a CM version that has no listener.
    - no eventing ConfigMap, route, env entry or volume appears;
    - the registration Job script is byte-identical;
    - every other diff is listed in the Step 2, 3 and 4 PR descriptions.
-3. **Two switches.** The events routes are off by default and are turned on separately from
-   `contract-management.dataspace.events.listener.enabled`. A subchart value cannot depend on another
-   value, and the verifier discovery URL depends on the deployment. The umbrella `fail`s on
-   inconsistent combinations (Step 4). A listener without the chart's route is allowed, for operators
-   who run their own gateway.
+3. **Two switches.** The events routes are not added by the chart: the operator appends them to
+   their `routes` list, separately from `contract-management.dataspace.events.listener.enabled`. A
+   subchart value cannot depend on another value, and host and verifier service are
+   deployment-specific. The umbrella `fail`s on inconsistent combinations (Step 4). A listener without
+   the routes is allowed, for operators who run their own gateway.
 4. **Unit tests** reach only the umbrella's templates, because CI does not build dependencies.
    Subchart rendering is checked upstream and by local `helm template` runs.
 
@@ -312,98 +312,116 @@ Unblocked by CM chart 3.6.6 (Prerequisite A).
 - Acceptance: `helm lint`, `helm unittest`, `values-schema.sh --check` pass; the default-values diff
   has no eventing resource in it.
 
-### Step 4: Bump decentralizedIam; declare the events routes
-Blocked until the decentralized-iam release of Prerequisite B is out.
-- `charts/data-space-connector/Chart.yaml`: set the `decentralizedIam` dependency to that release.
+### Step 4: Bump decentralizedIam; validate the events routes
+Prerequisite B is met (decentralized-iam 2.3.0). The events routes are ordinary entries of the
+operator's `decentralizedIam.odrlAuthorization.apisix.routes` list (see "APISIX routes"); the chart
+ships an example and validates it, but adds no route itself.
+- `charts/data-space-connector/Chart.yaml`: set the `decentralizedIam` dependency to **2.3.0**.
   Diff `helm template` with default values before and after, and list every change in the PR
-  description: the TIL image (≥ 0.10.1), the odrl-authorization version, labels, and any other change
-  that comes with the release (Deviation 2). No route may appear.
-- `values.yaml`, under `decentralizedIam.odrlAuthorization.apisix.extraRoutes`, declare three
-  entries, all `enabled: false`, each with `# --` comments:
-  - `dataspace-events`: `POST` `/events`, upstream `contract-management:8080`. The name comes from
-    the umbrella's `contract-management.fullnameOverride` and matches the existing CM route in
-    `k3s/provider.yaml`. Do not trust that: check name and port against the Service in a
-    `helm template` render, and say in the `# --` comment that `route.upstream.nodes` must be
-    overridden when `fullnameOverride` changes or CM runs outside the release. Plugins:
-    - `openid-connect` with `bearer_only`, `use_jwks` and `set_userinfo_header: true`. Its
-      `discovery` points at the verifier service of the events scope and is empty by default
-      (deployment-specific).
+  description: the TIL image (≥ 0.10.1, and whether it migrates its DB at start-up), the
+  odrl-authorization and vc-authentication versions, labels, and any other change that comes with
+  the release (Deviation 2). No route may appear. If 2.2.0/2.3.0 changed or removed a value the
+  umbrella's `values.yaml` sets under `decentralizedIam`, adapt it and say so.
+- New example values file `doc/eventing/examples/events-routes.yaml`: a
+  `decentralizedIam.odrlAuthorization.apisix.routes` list with the three named entries below, every
+  deployment-specific field a visible placeholder (`events.example.org`, `<events-service>`), and a
+  header comment saying the entries must be **appended** to the operator's own `routes` list (Helm
+  replaces lists, so passing this file with `-f` next to another `routes` list drops one of them).
+  The `values.yaml` `odrlAuthorization.apisix` block gets a one-line comment pointing at the file;
+  no `routes` key is declared there.
+  - `name: dataspace-events`: `methods: [POST]`, `uri: /events`, upstream `contract-management:8080`.
+    The name comes from the umbrella's `contract-management.fullnameOverride` and matches the existing
+    CM route in `k3s/provider.yaml`. Do not trust that: check name and port against the Service in a
+    `helm template` render, and say in a comment that `upstream.nodes` must change when
+    `fullnameOverride` changes or CM runs outside the release. Plugins:
+    - `openid-connect` with `bearer_only`, `use_jwks` and `set_userinfo_header: true`; `discovery`
+      points at `http://verifier:3000/services/<events-service>/.well-known/openid-configuration`.
     - `opa` (as on the existing routes).
     - A `proxy-rewrite` that removes a client-sent `X-Userinfo` **before** `openid-connect` sets it.
       APISIX runs higher priorities first (`openid-connect` 2599, `proxy-rewrite` 1008), so the
       rewrite needs `_meta.priority` above 2599. Verify this against the APISIX version that ships and
       against the CM README (~148–170).
-  - `dataspace-events-handshake`: `OPTIONS` `/events`, the same upstream, no auth plugins.
-  - `dataspace-events-discovery`: `GET` `/events/.well-known/openid-configuration`, upstream
-    `verifier:3000`, no auth plugins, and a `proxy-rewrite` whose `uri` is
-    `/services/<events-service>/.well-known/openid-configuration`. Empty by default
-    (deployment-specific).
+  - `name: dataspace-events-handshake`: `methods: [OPTIONS]`, `uri: /events`, the same upstream, no
+    auth plugins.
+  - `name: dataspace-events-discovery`: `methods: [GET]`,
+    `uri: /events/.well-known/openid-configuration`, upstream `verifier:3000`, no auth plugins, and a
+    `proxy-rewrite` whose `uri` is `/services/<events-service>/.well-known/openid-configuration`.
     - Why: on a `401` the publisher's OID4VP client fetches `<sink>/.well-known/openid-configuration`
       (specification §5.1 step 1), and the callee MUST serve it for every protected path, with the
       events scope in `scopes_supported`. Without this route that `GET` hits the host's catch-all: a
       `401` behind `openid-connect`, a `404`, or on the k3s CM host the priority-100 `/*` +
       `vars` route (`k3s/provider.yaml` ~443–454) that serves the **contract-management** service's
       metadata, which lacks the events scope. The publisher can then never get a token.
-    - The path assumes the announced sink is `<scheme>://<host>/events`. Say in the `# --` comment
-      that a sink under another path needs both `uri`s changed.
+    - The path assumes the announced sink is `<scheme>://<host>/events`. Say in a comment that a sink
+      under another path needs both `uri`s changed.
     - `<events-service>` is the verifier service of Step 6 item 3, and the same service that
       `dataspace-events`' `openid-connect.discovery` points at.
     - `verifier:3000` comes from `decentralizedIam.vcAuthentication.vcverifier.fullnameOverride:
       verifier` and the k3s routes. Check it against the rendered Service, as for the CM upstream.
-  - **A host binding is required once enabled, but there is none in the defaults.**
-    - Why required: APISIX's default router `radixtree_host_uri` tries host-bound routes first and
-      falls back to host-less routes only when no host-bound route matches. DSC deployments bind
-      their routes to hosts, with `/*` catch-alls (e.g. `k3s/provider.yaml`, `tpp-data-service`,
+  - **All three are bound to the sink host** (`host: events.example.org`).
+    - Why: APISIX's default router `radixtree_host_uri` tries host-bound routes first and falls back
+      to host-less routes only when no host-bound route matches. DSC deployments bind their routes to
+      hosts, with `/*` catch-alls (e.g. `k3s/provider.yaml`, `tpp-data-service`,
       `contract-management`). A host-less `/events` would lose to the catch-all of whatever host the
       publisher delivers to, which applies the wrong verifier scope and policy. The host must be the
       host of the sink URL the subscriber announces.
-    - Why no default: the host is deployment-specific, and APISIX rejects an empty one. `hosts`
-      has `minItems: 1` in `apisix/schema_def.lua`; with `hosts: []` the yaml mode logs "failed to
-      check item data" and drops the route, and the admin-API mode answers the PUT with 400, which
-      fails the hook Job. Document `host` / `hosts` in the `# --` comment only. Helm merges maps, so
-      the user's key reaches the route.
-    - Both keys exist: the existing routes use the singular `host`. APISIX does not allow `host` and
-      `hosts` on the same route (a `not`/`anyOf` clause in the route schema).
+    - APISIX rejects an empty binding: `hosts` has `minItems: 1` in `apisix/schema_def.lua`; with
+      `hosts: []` the yaml mode logs "failed to check item data" and drops the route, and the
+      admin-API mode answers the PUT with 400, which fails the hook Job. APISIX does not allow `host`
+      and `hosts` on the same route (a `not`/`anyOf` clause in the route schema). The existing routes
+      use the singular `host`; mention `hosts` in a comment.
     - Verify against the APISIX version that ships: the `minItems`, the host/hosts exclusion, the
       host-first fallback of `radixtree_host_uri`, and that the exact `/events` and
       `/events/.well-known/openid-configuration` beat a `/*` on the **same** host, including the
       priority-100 `/*` + `vars` discovery route (lua-resty-radixtree matches the exact path before
       prefixes, and `priority` only orders routes of the same path). If a `/*` wins, give all three
-      entries a default `priority` above the catch-alls and say so in the PR description.
-- New template `templates/eventing-validation.yaml`: no output, `fail` only. It fails when
-  `dataspace-events` is enabled and:
+      entries a `priority` above the catch-alls in the example and say so in the PR description.
+- New template `templates/eventing-validation.yaml`: no output, `fail` only. It finds the entries
+  of `decentralizedIam.odrlAuthorization.apisix.routes` by `name` (the list and every key may be
+  absent: read them as described under "Reading subchart values", starting from
+  `index .Values "decentralizedIam"` and `index .Values "contract-management"`). It fails when
+  `dataspace-events` is present and:
   - `contract-management.enabled` is true and `contract-management.dataspace.events.listener.enabled`
     is not true (with an external CM the umbrella's listener flag means nothing), or
   - its `openid-connect.discovery` is empty, or
-  - `dataspace-events-handshake` or `dataspace-events-discovery` is not enabled, or
+  - `dataspace-events-handshake` or `dataspace-events-discovery` is missing, or
   - the `proxy-rewrite.uri` of `dataspace-events-discovery` is empty or is not a suffix of
     `dataspace-events`' `openid-connect.discovery` (both must name the same verifier service).
 
-  It also fails when any of the three entries is enabled and its `route`:
-  - has neither a non-empty `host` nor a non-empty `hosts`, or
-  - has both `host` and `hosts`, or
-  - binds other hosts than another enabled entry (handshake and discovery must answer where the
-    events arrive).
+  It also fails when any of the three names is present and:
+  - the name appears more than once, or
+  - the entry has neither a non-empty `host` nor a non-empty `hosts`, or has both, or
+  - it binds other hosts than another of the three (handshake and discovery must answer where the
+    events arrive), or
+  - the unauthenticated entries widen their method: `dataspace-events-handshake` has `methods` other
+    than exactly `[OPTIONS]`, or `dataspace-events-discovery` other than exactly `[GET]` (without
+    `methods` APISIX matches every method, so a forgotten key would open `POST /events` without
+    authentication), or
+  - `decentralizedIam.odrlAuthorization.apisix.ingress-controller.enabled` is true: the subchart's
+    `ApisixRoute` template drops `methods` and `hosts`, with the same effect.
 
-  The keys may be absent, so it reads them as described under "Reading subchart values", starting
-  from `index .Values "decentralizedIam"` and `index .Values "contract-management"`. A listener without the
-  route stays valid (Deviation 3).
-- Extend `tests/eventing_test.yaml`, parameterized: defaults render nothing; each inconsistent
-  combination gives `failedTemplate` with its message, including on each enabled entry: no host,
-  `host: ""`, `hosts: []`, both keys set, and hosts that differ between the entries; the discovery
-  entry disabled, with an empty rewrite `uri`, and with a service other than `discovery`'s. The consistent
-  combination renders with `host`, with one entry in `hosts` and with two; and with
-  `contract-management.enabled: false` and the listener off.
-- Local only, not in CI: after `helm dependency update`, render with the routes enabled in the default
-  yaml mode and in `traditional`+`etcd` mode. Check that the `apisix-routes` ConfigMap and the admin
-  script both contain all three routes, that the user's `routes` list is unchanged, and that there is
-  a `DELETE` per route when they are disabled. Then run the rendered yaml-mode config in an APISIX
-  container of the shipped version, with a host-bound `/*` catch-all on the same host and on another
-  host, plus a copy of the k3s priority-100 `/*` + `vars` discovery route on the same host. Show with
-  `curl` that `POST /events`, `OPTIONS /events` and `GET /events/.well-known/openid-configuration` on
-  the bound host reach the events routes, the last one with the rewritten path (an echo upstream is
-  enough). Paste the results into the PR description.
-- `values-schema.sh --check` (`decentralizedIam` is an open key), `helm lint`, `helm unittest`.
+  A listener without the routes stays valid (Deviation 3).
+- Extend `tests/eventing_test.yaml`, parameterized: defaults render nothing; other routes without
+  these names render nothing; each inconsistent combination gives `failedTemplate` with its message,
+  including on each entry: no host, `host: ""`, `hosts: []`, both keys set, hosts that differ
+  between the entries, a duplicate name, missing or widened `methods` on handshake and discovery,
+  the ingress controller on; the discovery entry missing, with an empty rewrite `uri`, and with a
+  service other than `discovery`'s. The consistent combination (the three entries of the example
+  file, next to an unrelated route) renders with `host`, with one entry in `hosts` and with two; and
+  with `contract-management.enabled: false` and the listener off.
+- Local only, not in CI: after `helm dependency update`, render with the example entries appended
+  to a `routes` list that holds an unrelated route, in the default yaml mode and in
+  `traditional`+`etcd` mode. Check that the `apisix-routes` ConfigMap and the admin script both
+  contain the unrelated route and all three events routes, under their `name`. Then run the rendered
+  yaml-mode config in an APISIX container of the shipped version, with a host-bound `/*` catch-all on
+  the same host and on another host, plus a copy of the k3s priority-100 `/*` + `vars` discovery
+  route on the same host. Show with `curl` that `POST /events`, `OPTIONS /events` and
+  `GET /events/.well-known/openid-configuration` on the bound host reach the events routes, the last
+  one with the rewritten path, and that `POST /events` does not reach the handshake route (an echo
+  upstream is enough). Paste the results into the PR description.
+- `values-schema.sh --check` (`decentralizedIam` is an open key), `helm lint`, `helm unittest`,
+  lychee (the example file is linked from `values.yaml` only as a comment; Step 6 links it from the
+  docs).
 - Acceptance: all pass; the default-values diff contains no route and no eventing resource.
 
 ### Step 5: Example ODRL policy for the events path
@@ -425,11 +443,16 @@ Blocked until the decentralized-iam release of Prerequisite B is out.
   specification/architecture for the reasons. Content:
   1. the values to enable the listener/subscriber, and which keys are startup-only (a rollout
      follows) vs. refreshed at runtime;
-  2. the gateway: enable the three `extraRoutes` entries of Step 4, set `discovery` and the
-     discovery route's rewrite `uri` to the events verifier service, and bind all three to the host
-     of the announced sink URL with `host` or `hosts` (never empty, not both). Override
-     `upstream.nodes` if CM is not `contract-management:8080` or the verifier not `verifier:3000`;
-     change the `uri`s if the sink path is not `/events`. Explain:
+  2. the gateway: append the three entries of `doc/eventing/examples/events-routes.yaml` (Step 4)
+     to the operator's own `decentralizedIam.odrlAuthorization.apisix.routes` list (Helm replaces
+     lists), set `discovery` and the discovery route's rewrite `uri` to the events verifier service,
+     and bind all three to the host of the announced sink URL with `host` or `hosts` (never empty, not
+     both). Override `upstream.nodes` if CM is not `contract-management:8080` or the verifier not
+     `verifier:3000`; change the `uri`s if the sink path is not `/events`. Explain:
+     - that removing the entries again leaves stale `<release>-<index>` routes in the etcd-backed
+       APISIX modes (odrl-authorization only PUTs, as for any route removed from the list), and how
+       to delete them through the admin API;
+     - that the ingress-controller mode is refused (Step 4) and why;
      - why the host is required (host-bound catch-alls win under `radixtree_host_uri`);
      - that the sink host should be the host whose catch-all already routes to CM (e.g. the k3s
        `contract-management` host), so the exact `/events` routes shadow it. Any other route whose
@@ -479,7 +502,7 @@ Blocked until the decentralized-iam release of Prerequisite B is out.
   ticket; name them in the PR description as a follow-up.
 - `charts/data-space-connector/Chart.yaml`: minor version bump (10.15.10 → 10.16.0, or the next
   minor if the base has moved).
-- `AGENTS.md`: update the contract-management and decentralizedIam version mentions, if any, and
-  the two stale eventing lines (see "Stale AGENTS.md lines"), unless a plan-mode agent already did;
-  add the required host binding of the events routes and the discovery route next to them.
+- `AGENTS.md`: update the contract-management and decentralizedIam version mentions, if any;
+  next to the "documented snippet" line, name the example file, the validation by route `name`, the
+  required host binding and the discovery route.
 - Acceptance: the link check passes (lychee fallback above), `helm lint` and `helm unittest` pass.
