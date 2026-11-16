@@ -53,3 +53,11 @@ printed URL yourself. `dsc-config --no-browser` only prints the URL.
 - The token never goes on a command line. The browser is started with a single-use launch code
   that expires after 60 seconds. On a shared host another account could race for that code, so
   use `--no-browser` there and paste the printed URL into the browser.
+- The Target stage reads kubeconfig files (`KUBECONFIG`, else `~/.kube/config`, or the path
+  typed in) for context names only. It never connects to a cluster, never returns credentials
+  or server URLs, and never stores the kubeconfig path; only the context name joins the answers.
+
+## Chart versions
+
+Each supported chart version has a question-model bundle in `model/<version>/bundle.yaml`,
+embedded into the binary. The highest version is offered as the default on the Target stage.

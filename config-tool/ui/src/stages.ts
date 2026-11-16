@@ -2,6 +2,7 @@
 import type { ComponentType } from 'react'
 import type { IssueSelector } from './state/issues'
 import { StageId } from './state/stageIds'
+import { targetIssues } from './state/target'
 import { Target } from './stages/Target'
 
 /** One rail entry; a stage without a component renders the placeholder naming `comingIn`. */
@@ -15,7 +16,7 @@ export interface StageDef {
 
 /** The rail in journey order. */
 export const STAGES: readonly StageDef[] = [
-  { id: StageId.Target, label: 'Target', component: Target },
+  { id: StageId.Target, label: 'Target', component: Target, selector: targetIssues },
   { id: StageId.Role, label: 'Role', comingIn: 'Epic 2 — Role presets' },
   { id: StageId.Foundations, label: 'Foundations', comingIn: 'Epic 3 — Cross-cutting foundations' },
   { id: StageId.Infrastructure, label: 'Infrastructure', comingIn: 'Epic 4 — Integrating with what is already there' },

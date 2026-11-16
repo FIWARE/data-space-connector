@@ -6,6 +6,8 @@ export const API_BASE = '/api'
 export const WS_PATH = `${API_BASE}/ws`
 
 const HTTP_UNAUTHORIZED = 401
+/** The status of a missing resource, such as an explicit kubeconfig path that does not exist. */
+export const HTTP_NOT_FOUND = 404
 const HTTP_NOT_IMPLEMENTED = 501
 const CONTENT_TYPE_JSON = 'application/json'
 

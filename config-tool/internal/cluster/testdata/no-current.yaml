@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Config
+contexts:
+  - name: kind-kind
+    context:
+      cluster: kind
+      user: kind

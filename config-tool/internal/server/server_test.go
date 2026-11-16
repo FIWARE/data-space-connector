@@ -206,6 +206,7 @@ func TestRequiresCredentials(t *testing.T) {
 		{path: "/assets/app.js"},
 		{path: "/some/route"},
 		{path: "/api/model"},
+		{path: "/api/cluster/contexts"},
 		{path: "/api/profile"},
 		{method: http.MethodPut, path: "/api/profile"},
 		{method: http.MethodPost, path: "/api/render"},
@@ -248,8 +249,8 @@ func TestTokenExchangeIsRepeatable(t *testing.T) {
 			t.Errorf("exchange %d reused a session secret", i)
 		}
 		seen[c.Value] = true
-		if resp, _ := do(t, srv, request{path: "/api/model", cookie: c}); resp.StatusCode != http.StatusNotImplemented {
-			t.Errorf("exchange %d: cookie gives status %d, want %d", i, resp.StatusCode, http.StatusNotImplemented)
+		if resp, _ := do(t, srv, request{path: "/api/model", cookie: c}); resp.StatusCode != http.StatusOK {
+			t.Errorf("exchange %d: cookie gives status %d, want %d", i, resp.StatusCode, http.StatusOK)
 		}
 	}
 }
@@ -290,7 +291,7 @@ func TestBearer(t *testing.T) {
 		cookie *http.Cookie
 		want   int
 	}{
-		{"run token", srv.token, nil, http.StatusNotImplemented},
+		{"run token", srv.token, nil, http.StatusOK},
 		{"session secret", session.Value, nil, http.StatusUnauthorized},
 		{"launch code", launchCode.Query().Get(queryLaunch), nil, http.StatusUnauthorized},
 		{"wrong value", "wrong", nil, http.StatusUnauthorized},
@@ -315,7 +316,6 @@ func TestEndpoints(t *testing.T) {
 		want       int
 		wantTicket string
 	}{
-		{request{path: "/api/model"}, http.StatusNotImplemented, ticketModel},
 		{request{path: "/api/profile"}, http.StatusNotImplemented, ticketProfile},
 		{request{method: http.MethodPut, path: "/api/profile", origin: origin}, http.StatusNotImplemented, ticketProfile},
 		{request{method: http.MethodPost, path: "/api/render", origin: origin}, http.StatusNotImplemented, ticketRender},
@@ -355,9 +355,9 @@ func TestHostGuard(t *testing.T) {
 		host string
 		want int
 	}{
-		{"127.0.0.1:" + port, http.StatusNotImplemented},
-		{"localhost:" + port, http.StatusNotImplemented},
-		{"LOCALHOST:" + port, http.StatusNotImplemented},
+		{"127.0.0.1:" + port, http.StatusOK},
+		{"localhost:" + port, http.StatusOK},
+		{"LOCALHOST:" + port, http.StatusOK},
 		{"evil.example:" + port, http.StatusForbidden},
 		{"evil.example", http.StatusForbidden},
 		{"127.0.0.1:" + otherPort(srv), http.StatusForbidden},
@@ -593,8 +593,8 @@ func TestLaunchCode(t *testing.T) {
 		path := launch(t)
 		resp, body := do(t, srv, request{path: path})
 		cookie := assertExchange(t, srv, resp, body)
-		if resp, _ := do(t, srv, request{path: "/api/model", cookie: cookie}); resp.StatusCode != http.StatusNotImplemented {
-			t.Errorf("cookie gives status %d, want %d", resp.StatusCode, http.StatusNotImplemented)
+		if resp, _ := do(t, srv, request{path: "/api/model", cookie: cookie}); resp.StatusCode != http.StatusOK {
+			t.Errorf("cookie gives status %d, want %d", resp.StatusCode, http.StatusOK)
 		}
 		if resp, _ := do(t, srv, request{path: path}); resp.StatusCode != http.StatusUnauthorized {
 			t.Errorf("second use: status = %d, want %d", resp.StatusCode, http.StatusUnauthorized)

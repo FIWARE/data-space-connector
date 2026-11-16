@@ -1,0 +1,131 @@
+package cluster
+
+import (
+	"errors"
+	"io/fs"
+	"os"
+	"path/filepath"
+	"reflect"
+	"strings"
+	"testing"
+
+	"k8s.io/client-go/tools/clientcmd"
+)
+
+func fixture(t *testing.T, name string) string {
+	t.Helper()
+	path, err := filepath.Abs(filepath.Join("testdata", name))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+func TestContexts(t *testing.T) {
+	twoContexts := fixture(t, "two-contexts.yaml")
+	other := fixture(t, "other.yaml")
+	noCurrent := fixture(t, "no-current.yaml")
+	empty := fixture(t, "empty.yaml")
+	missing := filepath.Join(t.TempDir(), "missing.yaml")
+	home := t.TempDir()
+	if err := os.WriteFile(filepath.Join(home, "config.yaml"), []byte("current-context: at-home\ncontexts:\n- name: at-home\n  context: {}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	tests := []struct {
+		name string
+		// kubeconfigEnv is the KUBECONFIG list; it is only read when explicit is empty.
+		kubeconfigEnv []string
+		explicit      string
+		want          Kubeconfig
+		wantNotFound  bool
+		wantErr       bool
+	}{
+		{
+			name:     "explicit file with two contexts",
+			explicit: twoContexts,
+			want:     Kubeconfig{Paths: []string{twoContexts}, Contexts: []string{"prod-eu-central", "staging"}, Current: "prod-eu-central"},
+		},
+		{
+			name:     "explicit empty file",
+			explicit: empty,
+			want:     Kubeconfig{Paths: []string{empty}, Contexts: []string{}},
+		},
+		{
+			name:     "explicit path under ~",
+			explicit: "~/config.yaml",
+			want:     Kubeconfig{Paths: []string{filepath.Join(home, "config.yaml")}, Contexts: []string{"at-home"}, Current: "at-home"},
+		},
+		{name: "explicit missing file", explicit: missing, wantNotFound: true},
+		{name: "explicit directory", explicit: t.TempDir(), wantNotFound: true},
+		{name: "explicit malformed file", explicit: fixture(t, "malformed.yaml"), wantErr: true},
+		{
+			name:          "KUBECONFIG with two files merges them",
+			kubeconfigEnv: []string{other, twoContexts},
+			want:          Kubeconfig{Paths: []string{other, twoContexts}, Contexts: []string{"k3d-local", "prod-eu-central", "staging"}, Current: "k3d-local"},
+		},
+		{
+			name:          "current context comes from the first file that sets it",
+			kubeconfigEnv: []string{noCurrent, twoContexts},
+			want:          Kubeconfig{Paths: []string{noCurrent, twoContexts}, Contexts: []string{"kind-kind", "prod-eu-central", "staging"}, Current: "prod-eu-central"},
+		},
+		{
+			name:          "missing files in KUBECONFIG are skipped",
+			kubeconfigEnv: []string{missing, twoContexts},
+			want:          Kubeconfig{Paths: []string{twoContexts}, Contexts: []string{"prod-eu-central", "staging"}, Current: "prod-eu-central"},
+		},
+		{
+			name:          "KUBECONFIG with only missing files is empty",
+			kubeconfigEnv: []string{missing},
+			want:          Kubeconfig{Paths: []string{}, Contexts: []string{}},
+		},
+		{
+			name:          "explicit path ignores KUBECONFIG",
+			kubeconfigEnv: []string{other},
+			explicit:      twoContexts,
+			want:          Kubeconfig{Paths: []string{twoContexts}, Contexts: []string{"prod-eu-central", "staging"}, Current: "prod-eu-central"},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("HOME", home)
+			t.Setenv(clientcmd.RecommendedConfigPathEnvVar, strings.Join(tc.kubeconfigEnv, string(os.PathListSeparator)))
+			got, err := Contexts(tc.explicit)
+			switch {
+			case tc.wantNotFound:
+				if !errors.Is(err, ErrKubeconfigNotFound) {
+					t.Fatalf("err = %v, want ErrKubeconfigNotFound", err)
+				}
+				return
+			case tc.wantErr:
+				if err == nil || errors.Is(err, ErrKubeconfigNotFound) {
+					t.Fatalf("err = %v, want a read error other than ErrKubeconfigNotFound", err)
+				}
+				return
+			case err != nil:
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(got, tc.want) {
+				t.Errorf("Contexts = %+v, want %+v", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestMissingExplicitPathWrapsTheOSError(t *testing.T) {
+	_, err := Contexts(filepath.Join(t.TempDir(), "missing.yaml"))
+	if !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("err = %v, want it to wrap fs.ErrNotExist", err)
+	}
+}
+
+// The default ~/.kube/config is fixed when client-go initializes, so its absence is tested one level down.
+func TestMissingDefaultFileIsEmpty(t *testing.T) {
+	got, err := fromPrecedence([]string{filepath.Join(t.TempDir(), ".kube", "config")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := (Kubeconfig{Paths: []string{}, Contexts: []string{}}); !reflect.DeepEqual(got, want) {
+		t.Errorf("fromPrecedence = %+v, want %+v", got, want)
+	}
+}
