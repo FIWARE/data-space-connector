@@ -209,6 +209,11 @@ drops, for a CM version that has no listener.
    - **Checks are opt-in by name.** The umbrella finds the routes by their `name`. A renamed or
      unnamed copy is checked only by the narrow guard of Step 4 (a route at `/events` to the
      release's CM).
+   - **One opt-out.** The validation has many `fail` conditions on operator-owned routes, and a
+     setup it does not foresee (another auth chain, an `X-Userinfo` strip through a global rule, an
+     APISIX upgrade that moves `openid-connect`'s priority) would block install and upgrade.
+     `eventingRouteValidation.enabled: false` (umbrella key, default `true`, Step 4) switches the
+     whole validation off; the operator then owns the route security, as with their own gateway.
 4. **Unit tests** reach only the umbrella's templates, because CI does not build dependencies.
    Subchart rendering is checked upstream and by local `helm template` runs.
 
@@ -414,15 +419,37 @@ ships an example and validates it, but adds no route itself.
       priority-100 `/*` + `vars` discovery route (lua-resty-radixtree matches the exact path before
       prefixes, and `priority` only orders routes of the same path). If a `/*` wins, give all three
       entries a `priority` above the catch-alls in the example and say so in the PR description.
-- New template `templates/eventing-validation.yaml`: no output, `fail` only. The whole file is gated
-  on `decentralizedIam.enabled`, and on `decentralizedIam.odrlAuthorization.enabled` (the condition
-  decentralized-iam 2.3.0's `Chart.yaml` puts on odrl-authorization; its `values.yaml` defaults it to
-  `true`). The umbrella does not declare that key and CI builds no dependencies, so the template
-  treats an **absent** key as deployed: only an explicit `false` turns it off
-  (`ne (toString (dig "enabled" true $odrl)) "false"` on the subchart map). Treating absent as off
-  would make every failure case pass in CI. Otherwise the subchart renders no routes, so route values left in an operator's
-  file (e.g. after switching to an external gateway) are inert and must not fail the install; the
-  narrow unnamed-route guard below is gated the same way. It finds the entries
+- New template `templates/eventing-validation.yaml`: no output, `fail` only. The whole file
+  (including the narrow unnamed-route guard below) is gated on all of:
+  - `eventingRouteValidation.enabled` (new umbrella key, see below);
+  - `decentralizedIam.enabled`;
+  - `decentralizedIam.odrlAuthorization.enabled`, the condition decentralized-iam 2.3.0's
+    `Chart.yaml` puts on odrl-authorization (its `values.yaml` defaults it to `true`);
+  - `decentralizedIam.odrlAuthorization.apisix.enabled`, the condition odrl-authorization 2.5.0's
+    `Chart.yaml` puts on the `apisix` dependency (default `true`). Its `routes.yaml` and
+    `routes-script.yaml` are gated on `.Values.enabled` only, so with `apisix.enabled: false` they
+    still render, but no gateway reads them. `k3s/consumer.yaml` uses this shape.
+
+  The umbrella declares neither subchart key and CI builds no dependencies, so the template treats an
+  **absent** key as deployed: only an explicit `false` turns it off
+  (`ne (toString (dig "enabled" true $odrl)) "false"` on the subchart map, and
+  `dig "apisix" "enabled" true $odrl` likewise). Treating absent as off would make every failure case
+  pass in CI. With any of them off, no bundled gateway serves the routes, so route values left in an
+  operator's file (e.g. after switching to an external gateway) are inert and must not fail the
+  install.
+
+  `eventingRouteValidation.enabled` is the escape hatch (Deviation 3, "One opt-out"): a top-level
+  umbrella key, so it is not rendered into CM's Micronaut config the way a key under
+  `contract-management.dataspace.events` would be. Declare it in `values.yaml` as
+  `eventingRouteValidation: {enabled: true}` with a `# --` comment saying that `false` skips every
+  check below and leaves the route security to the operator, and regenerate `values.schema.json`.
+  One switch, not one per check and not a smaller hard-fail set: the checks that guard against a
+  spoofed identity or an open `POST /events` are the same ones an unforeseen setup trips (another
+  auth chain, a global-rule strip and a moved priority all hit the `X-Userinfo`/priority checks), so a partial switch would not help
+  such a setup, and per-check switches would add a value for every rule. Test that the key skips the
+  whole file.
+
+  The template finds the entries
   of `decentralizedIam.odrlAuthorization.apisix.routes` by `name` (the list and every key may be
   absent: read them as described under "Reading subchart values", starting from
   `index .Values "decentralizedIam"` and `index .Values "contract-management"`). It fails when
@@ -469,7 +496,7 @@ ships an example and validates it, but adds no route itself.
       rules that out and pins the service id.
     - Why "ends with" and not equality: a verifier published behind a gateway path prefix
       (`https://gw.example.org/verifier/services/x/...`, internally `/services/x/...`) is a correct
-      setup, and the chart has no opt-out for a refused one.
+      setup, and the only opt-out for a refused one switches off every check.
     - Get the path by stripping scheme and authority, then query and fragment:
       `regexReplaceAll "^[a-zA-Z][a-zA-Z0-9+.-]*://[^/?#]+" … ""`, then
       `regexReplaceAll "[?#].*$" … ""`, and test it with `hasSuffix`. The rewrite `uri` starts with
@@ -509,6 +536,10 @@ ships an example and validates it, but adds no route itself.
       `fullnameOverride` if set; otherwise, with `$name := default "contract-management" nameOverride`,
       `.Release.Name` if it contains `$name`, else `printf "%s-%s" .Release.Name $name`; then
       `trunc 63 | trimSuffix "-"`. A comment names the chart version the rule was copied from.
+      CI cannot render the subchart, so a change of that rule in a later CM chart (e.g. a newer
+      common chart) would silently stop the guard from matching. The local check below therefore
+      pins the rendered Service name, and every later `contract-management` bump must re-run that
+      check and re-read the helper (Step 6 puts this note in `AGENTS.md`).
       Also accept `<name>.<Release.Namespace>`, `<name>.<Release.Namespace>.svc` and
       `<name>.<Release.Namespace>.svc.cluster.local`.
     - **CM port.** `contract-management.service.port` (8080 in the chart), with a named constant
@@ -520,14 +551,16 @@ ships an example and validates it, but adds no route itself.
       `service_id`, or a `nodes` of any other shape, has no node to compare; it is not caught and the
       Step 6 guide says so.
   - A route to another upstream, or with another sink path, is not caught. A broader guard would
-    refuse unrelated `/events` routes of other applications, with no way to opt out. The Step 6 guide
-    states the limit.
+    refuse unrelated `/events` routes of other applications, and the only opt-out would switch off
+    every check. The Step 6 guide states the limit.
 
   A listener without the routes stays valid (Deviation 3).
 - Extend `tests/eventing_test.yaml`, parameterized: defaults render nothing; an otherwise failing
   combination (e.g. the listener off, the ingress controller on, the unnamed CM route) renders
-  nothing with `decentralizedIam.enabled: false` and with `decentralizedIam.odrlAuthorization.enabled:
-  false`, and still fails with that key absent; a `dataspace-events` without `opa` fails; other routes without
+  nothing with `eventingRouteValidation.enabled: false`, with `decentralizedIam.enabled: false`,
+  with `decentralizedIam.odrlAuthorization.enabled: false` and with
+  `decentralizedIam.odrlAuthorization.apisix.enabled: false`, and still fails with the last two keys
+  absent; a `dataspace-events` without `opa` fails; other routes without
   these names render nothing; each inconsistent combination gives `failedTemplate` with its message,
   including on each entry: no host, `host: ""`, `hosts: []`, both keys set, hosts that differ
   between the entries, a duplicate name, missing or widened `methods` on handshake and discovery,
@@ -556,7 +589,11 @@ ships an example and validates it, but adds no route itself.
   path prefix (`https://gw.example.org/verifier/services/x/...`), and with a query string on the
   discovery URL; and with
   `contract-management.enabled: false` and the listener off.
-- Local only, not in CI: after `helm dependency update`, render with the example entries appended
+- Local only, not in CI: after `helm dependency update`, pin the CM Service name and port the
+  guard's helper computes against the rendered Service, for the default `fullnameOverride` and for
+  `fullnameOverride: ""` with release names `dsc` and `my-contract-management`; script it so a later
+  CM bump re-runs it, and paste the result into the PR description. Then render with the example
+  entries appended
   to a `routes` list that holds an unrelated route, in the default yaml mode and in
   `traditional`+`etcd` mode. Check that the `apisix-routes` ConfigMap and the admin script both
   contain the unrelated route and all three events routes, under their `name` (the admin script
@@ -567,7 +604,8 @@ ships an example and validates it, but adds no route itself.
   `GET /events/.well-known/openid-configuration` on the bound host reach the events routes, the last
   one with the rewritten path, and that `POST /events` does not reach the handshake route (an echo
   upstream is enough). Paste the results into the PR description.
-- `values-schema.sh --check` (`decentralizedIam` is an open key), `helm lint`, `helm unittest`,
+- `values-schema.sh` (regenerate for `eventingRouteValidation`; `decentralizedIam` is an open key),
+  `helm lint`, `helm unittest`,
   lychee (the example file is linked from `values.yaml` only as a comment; Step 6 links it from the
   docs).
 - Acceptance: all pass; the default-values diff contains no route and no eventing resource.
@@ -629,7 +667,12 @@ ships an example and validates it, but adds no route itself.
      - what the `proxy-rewrite` priority is for;
      - that operators with their own gateway must reproduce the same routes and plugin chain,
        including the discovery route and removing `X-Userinfo`; the chart checks nothing then (the
-       validation only runs when `decentralizedIam` deploys the gateway, Step 4);
+       validation only runs when `decentralizedIam` deploys odrl-authorization with its bundled
+       APISIX, i.e. none of `decentralizedIam.enabled`, `odrlAuthorization.enabled`,
+       `odrlAuthorization.apisix.enabled` is `false`, Step 4);
+     - `eventingRouteValidation.enabled: false` as the opt-out when a correct setup is refused: it
+       switches off every check, so the operator then verifies the list of enforced settings above
+       by hand;
   3. a verifier service registration
      (`decentralizedIam.vcAuthentication.vcverifier.registration.services`), whose id is the
      `<events-service>` of the `dataspace-events` and `dataspace-events-discovery` routes, and whose
@@ -654,7 +697,7 @@ ships an example and validates it, but adds no route itself.
     the entry to it, because Helm replaces the list (Deviation 2);
   - the new values and the registration scope;
   - that an external TIL must be ≥ 0.10.1;
-  - the gateway routes;
+  - the gateway routes, their validation and the `eventingRouteValidation.enabled` opt-out;
   - that no eventing resource appears with default values.
 - `charts/data-space-connector/values.yaml`, the `contract-management.tracing` comment (~line 1927):
   drop the `--set contract-management.additionalEnvVars[0].value=false` hint. Helm replaces the list,
@@ -668,5 +711,7 @@ ships an example and validates it, but adds no route itself.
   minor if the base has moved).
 - `AGENTS.md`: update the contract-management and decentralizedIam version mentions, if any;
   next to the "documented snippet" line, name the example file, the validation by route `name`, the
-  required host binding and the discovery route.
+  required host binding and the discovery route. Add that the unnamed-route guard's helper mirrors
+  CM chart 3.6.6's `fiwareCommon.names.fullname` (common chart 0.1.2), so every `contract-management`
+  bump re-runs Step 4's local Service-name check and re-reads the helper.
 - Acceptance: the link check passes (lychee fallback above), `helm lint` and `helm unittest` pass.
