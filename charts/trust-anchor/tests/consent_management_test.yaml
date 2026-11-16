@@ -1,34 +1,94 @@
 # yaml-language-server: $schema=https://raw.githubusercontent.com/helm-unittest/helm-unittest/main/schema/helm-testsuite.json
 #
 # ---------------------------------------------------------------------------
-# Helm-unittest suite for the Consent Management pieces this chart templates: the
-# NetworkPolicies that isolate the consent-manager and the consent-facade, both gated by
-# consentManagement.enabled.
-#
-# The two services themselves come from their own published charts
-# (oci://quay.io/fiware/helm-charts/consent-manager and .../consent-facade), so their
-# behaviour is covered there. What this chart owns is the reachability around them.
+# Helm-unittest suite for the Consent Management pieces of this chart: the dsc-consent-manager
+# dependency's wiring, its database in managedPostgres, the setup Job owning its Secrets and its
+# optional RBAC, the NetworkPolicies isolating the consent-manager and the consent-facade, and the
+# removed 1.x values.
 # ---------------------------------------------------------------------------
 suite: Consent Management - deployable components
 templates:
   - templates/consent-network-policies.yaml
+  - templates/consent-manager-setup-job.yaml
+  - templates/consent-manager-setup-rbac.yaml
+  - templates/removed-values.yaml
+  - templates/postgres.yaml
+  - charts/consent-manager/templates/deployment.yaml
+  # deployment.yaml checksums these, so they have to be loaded with it
+  - charts/consent-manager/templates/configmap.yaml
+  - charts/consent-manager/templates/configmap-identity-providers.yaml
+set:
+  consentManagement.enabled: true
+  consent-manager.enabled: true
+  consent-facade.enabled: true
 tests:
   # ==========================================================================
-  # Disabled by default -> nothing renders
+  # The dsc-consent-manager dependency
   # ==========================================================================
-  - it: renders nothing when consentManagement is disabled (default)
+  - it: renders the consent-manager Deployment on port 8080 with the label the policies select
+    template: charts/consent-manager/templates/deployment.yaml
+    asserts:
+      - equal:
+          path: metadata.name
+          value: consent-manager
+      - equal:
+          path: spec.template.metadata.labels["app.kubernetes.io/name"]
+          value: consent-manager
+      - contains:
+          path: spec.template.spec.containers[0].ports
+          content:
+            name: http
+            containerPort: 8080
+          any: true
+
+  - it: runs the consent-manager release this deployment's contracts need
+    template: charts/consent-manager/templates/deployment.yaml
+    asserts:
+      # 0.0.1 answers every privacy-notice generation with a 502 against a contract service
+      # that serves only /bilaterals, and cannot be exempted from a global proxy at all;
+      # before 0.0.3 a contract naming its parties by self-description URL named nobody.
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: quay.io/seamware/dsc-consent-manager:0.0.3
+
+  - it: points the consent-manager at the Secrets the setup Job writes
+    template: charts/consent-manager/templates/deployment.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].envFrom
+          content:
+            secretRef:
+              name: consent-manager-env
+      - equal:
+          path: spec.template.spec.volumes[?(@.name == "signing-keys")].secret.secretName
+          value: consent-manager-signing-keys
+
+  # ==========================================================================
+  # Database
+  # ==========================================================================
+  - it: provisions the consent user and database in managedPostgres
+    template: templates/postgres.yaml
+    asserts:
+      - equal:
+          path: spec.users.consent_manager
+          value: []
+      - equal:
+          path: spec.databases.consent_manager
+          value: consent_manager
+
+  # ==========================================================================
+  # NetworkPolicies
+  # ==========================================================================
+  - it: renders nothing when consentManagement is disabled
+    template: templates/consent-network-policies.yaml
+    set:
+      consentManagement.enabled: false
     asserts:
       - hasDocuments:
           count: 0
 
-
-  # ==========================================================================
-  - it: isolates the consent-manager and the facade, keyed off the facade subchart
+  - it: isolates the consent-manager and the facade
     template: templates/consent-network-policies.yaml
-    set:
-      consentManagement.enabled: true
-      consent-manager.enabled: true
-      consent-facade.enabled: true
     asserts:
       - hasDocuments:
           count: 2
@@ -44,8 +104,6 @@ tests:
   - it: renders no facade policy when the facade is not deployed here
     template: templates/consent-network-policies.yaml
     set:
-      consentManagement.enabled: true
-      consent-manager.enabled: true
       consent-facade.enabled: false
     asserts:
       - hasDocuments:
@@ -53,17 +111,88 @@ tests:
       - equal:
           path: metadata.name
           value: consent-manager-ingress
-        documentIndex: 0
+
+  - it: admits only the API port 8080 of the consent-manager, never 9090 without metricsScrapers
+    template: templates/consent-network-policies.yaml
+    documentIndex: 0
+    asserts:
+      - equal:
+          path: spec.ingress[0].ports
+          value:
+            - port: 8080
+      - notContains:
+          path: spec.ingress[0].ports
+          content:
+            port: 9090
+
+  - it: admits metricsScrapers to the management port only
+    template: templates/consent-network-policies.yaml
+    documentIndex: 0
+    set:
+      consentManagement.networkPolicy.metricsScrapers:
+        - namespace: monitoring
+          podLabels:
+            app.kubernetes.io/name: prometheus
+    asserts:
+      - lengthEqual:
+          path: spec.ingress
+          count: 2
+      - equal:
+          path: spec.ingress[1]
+          value:
+            from:
+              - namespaceSelector:
+                  matchLabels:
+                    kubernetes.io/metadata.name: monitoring
+                podSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: prometheus
+            ports:
+              - port: 9090
+      - equal:
+          path: spec.ingress[0].ports
+          value:
+            - port: 8080
+
+  - it: takes the management port from the subchart's container ports
+    template: templates/consent-network-policies.yaml
+    documentIndex: 0
+    set:
+      consent-manager.deployment.containerPorts.management: 9464
+      consentManagement.networkPolicy.metricsScrapers:
+        - namespace: monitoring
+          podLabels:
+            app.kubernetes.io/name: prometheus
+    asserts:
+      - equal:
+          path: spec.ingress[1].ports
+          value:
+            - port: 9464
+
+  - it: renders each consentManagerClients entry as a namespace + pod selector peer
+    template: templates/consent-network-policies.yaml
+    documentIndex: 0
+    set:
+      consentManagement.networkPolicy.consentManagerClients:
+        - namespace: provider
+          podLabels:
+            app.kubernetes.io/name: apisix
+    asserts:
+      - contains:
+          path: spec.ingress[0].from
+          content:
+            namespaceSelector:
+              matchLabels:
+                kubernetes.io/metadata.name: provider
+            podSelector:
+              matchLabels:
+                app.kubernetes.io/name: apisix
 
   - it: admits the ingress controller only while the facade publishes an ingress
     template: templates/consent-network-policies.yaml
     documentIndex: 1
     set:
-      consentManagement.enabled: true
-      consent-manager.enabled: true
-      consent-facade.enabled: true
       consent-facade.ingress.enabled: true
-      consentManagement.networkPolicy.ingressController.namespace: infra
     asserts:
       - lengthEqual:
           path: spec.ingress
@@ -75,13 +204,515 @@ tests:
   - it: renders no manager policy when the consent-manager is not deployed here
     template: templates/consent-network-policies.yaml
     set:
-      consentManagement.enabled: true
       consent-manager.enabled: false
-      consent-facade.enabled: true
     asserts:
       - hasDocuments:
           count: 1
       - equal:
           path: metadata.name
           value: consent-facade-ingress
+
+  # ==========================================================================
+  # Removed 1.x values
+  # ==========================================================================
+  - it: fails on managedMongo
+    template: templates/removed-values.yaml
+    set:
+      managedMongo.enabled: true
+    asserts:
+      - failedTemplate:
+          errorPattern: "managedMongo was removed in 2.0.0"
+
+  - it: fails on consentManagement.mongo
+    template: templates/removed-values.yaml
+    set:
+      consentManagement.mongo.username: consent
+    asserts:
+      - failedTemplate:
+          errorPattern: "consentManagement.mongo was removed in 2.0.0"
+
+  - it: fails on consent-manager.mongo
+    template: templates/removed-values.yaml
+    set:
+      consent-manager.mongo.host: mongodb-svc
+    asserts:
+      - failedTemplate:
+          errorPattern: "consent-manager.mongo was removed in 2.0.0"
+
+  - it: fails on consent-manager.secret.consentKey
+    template: templates/removed-values.yaml
+    set:
+      consent-manager.secret.consentKey: changeme
+    asserts:
+      - failedTemplate:
+          errorPattern: "consent-manager.secret.consentKey was removed in 2.0.0"
+
+  - it: fails on consent-manager.externalIdp
+    template: templates/removed-values.yaml
+    set:
+      consent-manager.externalIdp.enabled: true
+    asserts:
+      - failedTemplate:
+          errorPattern: "consent-manager.externalIdp was removed in 2.0.0"
+
+  - it: fails on consent-manager.appEndpoint
+    template: templates/removed-values.yaml
+    set:
+      consent-manager.appEndpoint: https://consent-manager.example.org
+    asserts:
+      - failedTemplate:
+          errorPattern: "consent-manager.appEndpoint was removed in 2.0.0"
+
+  - it: fails on consent-manager.contractService
+    template: templates/removed-values.yaml
+    set:
+      consent-manager.contractService.url: http://consent-facade:8080
+    asserts:
+      - failedTemplate:
+          errorPattern: "consent-manager.contractService was removed in 2.0.0"
+
+  - it: fails on consent-manager.secrets.smtpUser / smtpPassword
+    template: templates/removed-values.yaml
+    set:
+      consent-manager.secrets.smtpPassword: secret
+    asserts:
+      - failedTemplate:
+          errorPattern: "set consentManagement.smtp.existingSecret instead"
+
+  # ==========================================================================
+  # Setup Job and its RBAC
+  # ==========================================================================
+  - it: renders the setup Job only when the consent-manager is enabled
+    template: templates/consent-manager-setup-job.yaml
+    set:
+      consent-manager.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: renders the setup RBAC only when the consent-manager is enabled
+    template: templates/consent-manager-setup-rbac.yaml
+    set:
+      consent-manager.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: renders the Job as a plain release resource, without hook annotations
+    template: templates/consent-manager-setup-job.yaml
+    asserts:
+      - hasDocuments:
+          count: 1
+      - equal:
+          path: kind
+          value: Job
+      - notExists:
+          path: metadata.annotations
+
+  - it: renders ServiceAccount, Role and RoleBinding next to it
+    template: templates/consent-manager-setup-rbac.yaml
+    asserts:
+      - hasDocuments:
+          count: 3
+      - equal:
+          path: kind
+          value: ServiceAccount
         documentIndex: 0
+      - equal:
+          path: kind
+          value: Role
+        documentIndex: 1
+      - equal:
+          path: kind
+          value: RoleBinding
+        documentIndex: 2
+      - notExists:
+          path: metadata.annotations
+        documentIndex: 0
+
+  - it: leaves the database to the Zalando operator, with no superuser secret in reach
+    template: templates/consent-manager-setup-job.yaml
+    asserts:
+      - lengthEqual:
+          path: spec.template.spec.initContainers
+          count: 1
+      - equal:
+          path: spec.template.spec.initContainers[0].name
+          value: generate-jwk
+      - notMatchRegex:
+          path: spec.template.spec.containers[0].args[0]
+          pattern: CREATE DATABASE
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: PGPASSWORD
+          any: true
+      - notMatchRegex:
+          path: spec.template.spec.containers[0].env[1].valueFrom.secretKeyRef.name
+          pattern: ^postgres\.postgres\.credentials
+
+  - it: fails without managedPostgres
+    template: templates/consent-manager-setup-job.yaml
+    set:
+      managedPostgres.enabled: false
+    asserts:
+      - failedTemplate:
+          errorPattern: "consent-manager.enabled requires managedPostgres.enabled"
+
+  - it: grants get/patch only on the two Secrets and create without resourceNames
+    template: templates/consent-manager-setup-rbac.yaml
+    documentIndex: 1
+    asserts:
+      - equal:
+          path: rules
+          value:
+            - apiGroups: [""]
+              resources: ["secrets"]
+              resourceNames: ["consent-manager-env", "consent-manager-signing-keys"]
+              verbs: ["get", "patch"]
+            - apiGroups: [""]
+              resources: ["secrets"]
+              verbs: ["create"]
+
+  - it: names the Job after the release revision and a hash of its pod spec
+    template: templates/consent-manager-setup-job.yaml
+    release:
+      revision: 7
+    asserts:
+      - matchRegex:
+          path: metadata.name
+          pattern: ^consent-manager-setup-7-[0-9a-f]{8}$
+
+  - it: pins the Job name of the default pod spec
+    template: templates/consent-manager-setup-job.yaml
+    asserts:
+      - equal:
+          path: metadata.name
+          value: consent-manager-setup-0-9fbc9d0c
+
+  - it: renames the Job when the setup image changes
+    template: templates/consent-manager-setup-job.yaml
+    set:
+      consentManagement.setup.image: alpine/k8s:1.32.0
+    asserts:
+      - notEqual:
+          path: metadata.name
+          value: consent-manager-setup-0-9fbc9d0c
+
+  - it: renames the Job when the JWK image changes
+    template: templates/consent-manager-setup-job.yaml
+    set:
+      consentManagement.setup.jwkImage: smallstep/step-cli:0.29.0
+    asserts:
+      - notEqual:
+          path: metadata.name
+          value: consent-manager-setup-0-9fbc9d0c
+
+  - it: keeps finished Jobs for ttlSecondsAfterFinished
+    template: templates/consent-manager-setup-job.yaml
+    set:
+      consentManagement.setup.ttlSecondsAfterFinished: 60
+    asserts:
+      - equal:
+          path: spec.ttlSecondsAfterFinished
+          value: 60
+
+  - it: takes backoffLimit and activeDeadlineSeconds from consentManagement.setup
+    template: templates/consent-manager-setup-job.yaml
+    set:
+      consentManagement.setup.backoffLimit: 5
+      consentManagement.setup.activeDeadlineSeconds: 3600
+    asserts:
+      - equal:
+          path: spec.backoffLimit
+          value: 5
+      - equal:
+          path: spec.activeDeadlineSeconds
+          value: 3600
+
+  - it: omits activeDeadlineSeconds when it is null
+    template: templates/consent-manager-setup-job.yaml
+    set:
+      consentManagement.setup.activeDeadlineSeconds: null
+    asserts:
+      - notExists:
+          path: spec.activeDeadlineSeconds
+
+  - it: omits ttlSecondsAfterFinished when it is null
+    template: templates/consent-manager-setup-job.yaml
+    set:
+      consentManagement.setup.ttlSecondsAfterFinished: null
+    asserts:
+      - notExists:
+          path: spec.ttlSecondsAfterFinished
+
+  - it: runs the script under set -eu and generates keys only on NotFound or an empty key
+    template: templates/consent-manager-setup-job.yaml
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].args[0]
+          pattern: "^set -eu\n"
+      - matchRegex:
+          path: spec.template.spec.containers[0].args[0]
+          pattern: 'if grep -q NotFound /work/err; then\s+return 1\s+fi\s+cat /work/err >&2\s+exit 1'
+      - matchRegex:
+          path: spec.template.spec.containers[0].args[0]
+          pattern: 'if \[ ! -s "/work/env/\$key" \]; then'
+      - notMatchRegex:
+          path: spec.template.spec.containers[0].args[0]
+          pattern: '\|\| true'
+
+  - it: creates consent-manager-env create-only and exits on a concurrent AlreadyExists
+    template: templates/consent-manager-setup-job.yaml
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].args[0]
+          pattern: 'if \[ "\$envExists" = false \]; then\s+if kubectl create secret generic consent-manager-env --from-file=/work/env 2>/work/err; then'
+      - matchRegex:
+          path: spec.template.spec.containers[0].args[0]
+          pattern: 'elif grep -q AlreadyExists /work/err; then\s+echo "consent-manager-env was created concurrently[^\n]*\s+exit 1'
+
+  - it: applies consent-manager-env server-side under its own field manager
+    template: templates/consent-manager-setup-job.yaml
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].args[0]
+          pattern: 'kubectl create secret generic consent-manager-env .*--dry-run=client -o yaml \\\n\s+\| kubectl apply --server-side --field-manager=consent-manager-setup --force-conflicts -f -'
+
+  - it: generates the signing key into the data key the subchart mounts
+    template: templates/consent-manager-setup-job.yaml
+    set:
+      consent-manager.signingKeys.signingKeyFile: key.jwk
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].name
+          value: generate-jwk
+      - matchRegex:
+          path: spec.template.spec.containers[0].args[0]
+          pattern: 'kubectl create secret generic consent-manager-signing-keys --from-file=key\.jwk=/work/signing-key\.jwk'
+
+  - it: neither generates nor writes a signing key when signingKey.generate is false
+    template: templates/consent-manager-setup-job.yaml
+    set:
+      consentManagement.signingKey.generate: false
+    asserts:
+      - notExists:
+          path: spec.template.spec.initContainers
+      - notMatchRegex:
+          path: spec.template.spec.containers[0].args[0]
+          pattern: consent-manager-signing-keys
+
+  - it: wires SMTP credentials from consentManagement.smtp.existingSecret
+    template: templates/consent-manager-setup-job.yaml
+    set:
+      consentManagement.smtp.existingSecret: smtp
+      consentManagement.smtp.userKey: user
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: SMTP_USER
+            valueFrom:
+              secretKeyRef:
+                name: smtp
+                key: user
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: SMTP_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: smtp
+                key: password
+      - matchRegex:
+          path: spec.template.spec.containers[0].args[0]
+          pattern: /work/env/SMTP_PASSWORD
+
+  - it: writes no SMTP credentials without an SMTP secret
+    template: templates/consent-manager-setup-job.yaml
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: SMTP_USER
+          any: true
+      - notMatchRegex:
+          path: spec.template.spec.containers[0].args[0]
+          pattern: SMTP_
+
+  - it: gives the setup and generate-jwk containers a writable HOME
+    template: templates/consent-manager-setup-job.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: HOME
+            value: /work
+      - contains:
+          path: spec.template.spec.initContainers[0].env
+          content:
+            name: HOME
+            value: /work
+
+  - it: runs every container non-root with a read-only root filesystem
+    template: templates/consent-manager-setup-job.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.securityContext.runAsNonRoot
+          value: true
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.readOnlyRootFilesystem
+          value: true
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.capabilities.drop
+          value: [ALL]
+      - equal:
+          path: spec.template.spec.initContainers[0].securityContext.readOnlyRootFilesystem
+          value: true
+
+  - it: sets the priorityClassName only when configured
+    template: templates/consent-manager-setup-job.yaml
+    set:
+      consentManagement.setup.priorityClassName: high
+    asserts:
+      - equal:
+          path: spec.template.spec.priorityClassName
+          value: high
+
+  # ==========================================================================
+  # Setup Job: ServiceAccount, RBAC and resources
+  # ==========================================================================
+  - it: omits resources by default and renders them on every container when set
+    template: templates/consent-manager-setup-job.yaml
+    asserts:
+      - notExists:
+          path: spec.template.spec.containers[0].resources
+      - notExists:
+          path: spec.template.spec.initContainers[0].resources
+
+  - it: renders setup.resources on the setup and generate-jwk containers
+    template: templates/consent-manager-setup-job.yaml
+    set:
+      consentManagement.setup.resources:
+        requests:
+          cpu: 50m
+          memory: 64Mi
+        limits:
+          cpu: 200m
+          memory: 128Mi
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources
+          value:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+      - equal:
+          path: spec.template.spec.initContainers[0].resources
+          value:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+
+  - it: renames the Job when the resources change
+    template: templates/consent-manager-setup-job.yaml
+    set:
+      consentManagement.setup.resources:
+        requests:
+          cpu: 50m
+    asserts:
+      - notEqual:
+          path: metadata.name
+          value: consent-manager-setup-0-9fbc9d0c
+
+  - it: annotates the created ServiceAccount
+    template: templates/consent-manager-setup-rbac.yaml
+    documentIndex: 0
+    set:
+      consentManagement.setup.serviceAccount.annotations:
+        eks.amazonaws.com/role-arn: arn:aws:iam::123456789012:role/consent-setup
+    asserts:
+      - equal:
+          path: metadata.annotations
+          value:
+            eks.amazonaws.com/role-arn: arn:aws:iam::123456789012:role/consent-setup
+
+  - it: creates no ServiceAccount when serviceAccount.create is false
+    template: templates/consent-manager-setup-rbac.yaml
+    set:
+      consentManagement.setup.serviceAccount.create: false
+    asserts:
+      - hasDocuments:
+          count: 2
+      - equal:
+          path: kind
+          value: Role
+        documentIndex: 0
+      - equal:
+          path: kind
+          value: RoleBinding
+        documentIndex: 1
+
+  - it: creates no Role and RoleBinding when rbac.create is false
+    template: templates/consent-manager-setup-rbac.yaml
+    set:
+      consentManagement.setup.rbac.create: false
+    asserts:
+      - hasDocuments:
+          count: 1
+      - equal:
+          path: kind
+          value: ServiceAccount
+
+  - it: renders nothing when neither the ServiceAccount nor the RBAC is created
+    template: templates/consent-manager-setup-rbac.yaml
+    set:
+      consentManagement.setup.serviceAccount.create: false
+      consentManagement.setup.rbac.create: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: binds and runs under the configured ServiceAccount name
+    template: templates/consent-manager-setup-rbac.yaml
+    set:
+      consentManagement.setup.serviceAccount.name: consent-setup
+    asserts:
+      - equal:
+          path: metadata.name
+          value: consent-setup
+        documentIndex: 0
+      - equal:
+          path: subjects[0].name
+          value: consent-setup
+        documentIndex: 2
+      - equal:
+          path: metadata.name
+          value: consent-manager-setup
+        documentIndex: 1
+
+  - it: runs the Job under the configured ServiceAccount name, created here or not
+    template: templates/consent-manager-setup-job.yaml
+    set:
+      consentManagement.setup.serviceAccount.create: false
+      consentManagement.setup.serviceAccount.name: consent-setup
+    asserts:
+      - equal:
+          path: spec.template.spec.serviceAccountName
+          value: consent-setup
+      - notEqual:
+          path: metadata.name
+          value: consent-manager-setup-0-9fbc9d0c
+
+  - it: runs the Job under consent-manager-setup by default
+    template: templates/consent-manager-setup-job.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.serviceAccountName
+          value: consent-manager-setup

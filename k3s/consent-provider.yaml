@@ -37,12 +37,10 @@ decentralizedIam:
       # container from the plugin image; APISIX spawns it and manages the socket.
       extraInitContainers:
         - name: install-consent-plugin
-          # 0.0.5 replaces participant client credentials with the OID4VP token service
-          # (token_service_url): the plugin no longer logs in and holds no secret.
-          # 0.0.12 also matches the consumer against the consent's `recipients[0]`: on a
-          # `?receipt=true` record the consent-manager names the consumer only as an
-          # internal id, so matching consumer/dataConsumer alone denied valid consents.
-          image: quay.io/seamware/consent-plugin:0.0.12
+          # 1.0.0 speaks only the dsc-consent-manager /v1 API (no consent key, no
+          # consent_api_host). It gets its token from the OID4VP token service
+          # (token_service_url) and holds no secret.
+          image: quay.io/seamware/consent-plugin:1.0.0
           imagePullPolicy: IfNotPresent
           command: ["/bin/sh", "-c", "cp /app/go-runner /ext-plugin/go-runner"]
           volumeMounts:

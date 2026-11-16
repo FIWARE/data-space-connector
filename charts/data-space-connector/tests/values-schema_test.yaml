@@ -89,3 +89,28 @@ tests:
     asserts:
       - failedTemplate:
           errorPattern: "tm-forum-api.registration was removed in 10.11.0: register the TM Forum API through decentralizedIam.vcAuthentication.vcverifier.registration.services"
+
+  # odrl-authorization reads the OPA sidecar's settings from opa.config; these keys sat next to it
+  # in this chart's values and changed nothing.
+  - it: refuses the opa keys odrl-authorization never read, naming opa.config
+    set:
+      decentralizedIam:
+        odrlAuthorization:
+          opa:
+            resourceUrl: http://odrl-pap:8080/bundles/service/v1
+    asserts:
+      - failedTemplate:
+          errorPattern: "decentralizedIam.odrlAuthorization.opa.resourceUrl was removed: odrl-authorization never read it. Configure the OPA sidecar under decentralizedIam.odrlAuthorization.opa.config"
+
+  - it: accepts the OPA sidecar settings under opa.config
+    set:
+      decentralizedIam:
+        odrlAuthorization:
+          opa:
+            config:
+              policies:
+                minDelay: 1
+                maxDelay: 2
+    asserts:
+      - hasDocuments:
+          count: 0

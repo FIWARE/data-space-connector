@@ -1,0 +1,31 @@
+{{- /*
+Values 2.0.0 no longer reads. Without these checks they would be ignored without a word, leaving a
+Mongo-era configuration silently half-applied. Renders nothing.
+*/ -}}
+{{- $migration := "see doc/CONSENT_MANAGEMENT.md for the migration to dsc-consent-manager" }}
+{{- $manager := (index .Values "consent-manager") | default dict }}
+{{- $managerSecrets := $manager.secrets | default dict }}
+{{- if hasKey .Values "managedMongo" }}
+{{- fail (printf "managedMongo was removed in 2.0.0: the consent-manager stores its data in managedPostgres, %s" $migration) }}
+{{- end }}
+{{- if hasKey .Values.consentManagement "mongo" }}
+{{- fail (printf "consentManagement.mongo was removed in 2.0.0: the consent-manager stores its data in managedPostgres, %s" $migration) }}
+{{- end }}
+{{- if hasKey $manager "mongo" }}
+{{- fail (printf "consent-manager.mongo was removed in 2.0.0: the consent-manager stores its data in managedPostgres, %s" $migration) }}
+{{- end }}
+{{- if hasKey ($manager.secret | default dict) "consentKey" }}
+{{- fail (printf "consent-manager.secret.consentKey was removed in 2.0.0: callers authenticate with a verifier JWT, configure consent-manager.identityProviders.primary instead, %s" $migration) }}
+{{- end }}
+{{- if hasKey $manager "externalIdp" }}
+{{- fail (printf "consent-manager.externalIdp was removed in 2.0.0: configure consent-manager.identityProviders.primary instead, %s" $migration) }}
+{{- end }}
+{{- if hasKey $manager "appEndpoint" }}
+{{- fail (printf "consent-manager.appEndpoint was removed in 2.0.0: set consent-manager.config.consentManagerUrl instead, %s" $migration) }}
+{{- end }}
+{{- if hasKey $manager "contractService" }}
+{{- fail (printf "consent-manager.contractService was removed in 2.0.0: set consent-manager.config.contractServiceUrl instead, %s" $migration) }}
+{{- end }}
+{{- if or $managerSecrets.smtpUser $managerSecrets.smtpPassword }}
+{{- fail "consent-manager.secrets.smtpUser/smtpPassword are ignored because the setup Job owns consent-manager.secrets.existingSecret: set consentManagement.smtp.existingSecret instead" }}
+{{- end }}

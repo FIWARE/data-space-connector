@@ -1,6 +1,6 @@
 # 0005 - Onboard participants with a verifiable credential, not client credentials
 
-**Status:** Proposed (design only - not implemented)
+**Status:** Superseded by [0008](0008-dsc-consent-manager.md) (was: Proposed (design only - not implemented))
 **Date:** 2026-08-26
 **Applies to:** `FIWARE/data-space-connector`,  [Prometheus-X/consent-manager](https://github.com/Prometheus-X-association/consent-manager)
 **Context doc:** [`../CONSENT_MANAGEMENT.md`](../CONSENT_MANAGEMENT.md)

@@ -142,7 +142,9 @@ In order to retrieve an actual credential two ways are available:
 >           unset VP_TOKEN; unset DATA_SERVICE_ACCESS_TOKEN;
 > ```
 
-Get an AccessToken from Keycloak:
+Get an AccessToken from Keycloak. This logs in with the password grant, which the local environment turns on for the
+`account-console` client: the chart leaves it off, so outside the local environment a user logs in through the browser
+or with a wallet (see [Keycloak](../roles/KEYCLOAK.md#realm-clients)).
 
 ```shell
   export ACCESS_TOKEN=$(curl -s -k -x localhost:8888 -X POST https://keycloak-consumer.127.0.0.1.nip.io/realms/test-realm/protocol/openid-connect/token \

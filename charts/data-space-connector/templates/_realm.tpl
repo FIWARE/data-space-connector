@@ -156,6 +156,7 @@ that user out entirely).
 {{/*
 Transform defaultClients (map keyed by clientId) into a list, injecting clientId from the key.
 Also extends each client's optionalClientScopes with all clientScope names.
+A client set to null (`defaultClients.<clientId>: null`) is left out of the realm.
 */}}
 {{- define "dsc.defaultClients" -}}
 {{- $defaultScopes := .Values.keycloak.realm.defaultClientScopes | default list -}}
@@ -170,6 +171,7 @@ Also extends each client's optionalClientScopes with all clientScope names.
 {{- end -}}
 {{- $clients := list -}}
 {{- range $key, $val := .Values.keycloak.realm.defaultClients | default dict -}}
+{{- if $val -}}
 {{- $clientDefaultScopes := $val.defaultClientScopes | default list -}}
 {{- $optScopes := $val.optionalClientScopes | default list -}}
 {{- range $scopeNames -}}
@@ -179,6 +181,7 @@ Also extends each client's optionalClientScopes with all clientScope names.
 {{- end -}}
 {{- $optScopes = $optScopes | uniq -}}
 {{- $clients = append $clients (merge (dict "clientId" $key "optionalClientScopes" $optScopes) $val) -}}
+{{- end -}}
 {{- end -}}
 {{- dict "list" $clients | toPrettyJson -}}
 {{- end -}}
@@ -369,7 +372,7 @@ are resolved by the caller via tpl.
   "verifiableCredentialsEnabled": true,
   "enabled": true,
   "attributes": {{ include "dsc.realmAttributes" . | indent 4 | trim }},
-  "sslRequired": {{ .Values.keycloak.realm.sslRequired | default "none" | quote }},
+  "sslRequired": {{ .Values.keycloak.realm.sslRequired | default "external" | quote }},
   "roles": {
     "realm": {{ include "dsc.realmRoles" . | indent 6 | trim }},
     "client": {{ include "dsc.clientRoles" . | indent 6 | trim }}

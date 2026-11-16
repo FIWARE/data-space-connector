@@ -152,11 +152,11 @@ public class KubernetesHelper {
     /**
      * Forwards a local port to a service in the cluster, and returns once it accepts connections.
      *
-     * <p>Needed for endpoints that are deliberately not published: the consent-manager's
-     * unauthenticated onboarding API, and the provider consent-facade, whose NetworkPolicy admits
-     * only the APISIX pods and the OwnerResolver. A port-forward is proxied by the kubelet, so the
-     * traffic originates from the node and the policy's pod selectors do not match it - which is
-     * exactly how the documented walkthrough reaches them.
+     * <p>Needed for endpoints that are deliberately not published, such as the provider
+     * consent-facade, whose NetworkPolicy admits only the APISIX pods and the OwnerResolver. A
+     * port-forward is proxied by the kubelet, so the traffic originates from the node and the
+     * policy's pod selectors do not match it - which is exactly how the documented walkthrough
+     * reaches it.
      *
      * @param namespace  namespace of the service
      * @param service    name of the service

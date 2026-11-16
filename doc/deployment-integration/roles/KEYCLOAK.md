@@ -354,6 +354,8 @@ Each user definition includes credentials and role assignments:
 
 The `clientRoles` section assigns the roles defined above to this user. The `account` roles are standard Keycloak roles for account self-management. To define multiple users, separate them with commas in the JSON string.
 
+The chart imports no users and no client roles by default: a realm only has the ones its values declare.
+
 > **Production note:** Do not hardcode passwords in values files. Use Kubernetes Secrets or an external identity provider for user management.
 
 ### Realm: protocol mappers per VC
@@ -451,9 +453,26 @@ Keycloak clients represent the organizations your users can interact with. Each 
 
 Most fields are Keycloak defaults that should be kept as-is. The key field to customize is `clientId`, which must be the DID of the target organization. Add one client block per external organization, separated by commas.
 
-In addition to the DID-based clients, include the standard Keycloak clients (`account`, `account-console`, `admin-cli`). The `account-console` client's `optionalClientScopes` must list your VC credential scope names (e.g., `LegalPersonCredential`, `UserCredential`) for the Keycloak console to support credential issuance.
+The standard Keycloak clients (`account`, `account-console`, `admin-cli`) do not need to be listed: the chart adds them from `keycloak.realm.defaultClients`, with every credential scope of the realm among their optional client scopes, so that the account console can issue the credentials. That value is a map keyed by clientId, and what a deployment sets for a client is merged into its defaults. Setting a client to `null` leaves it out of the realm:
 
-For a complete example including all standard clients, see [k3s/consumer.yaml](../../../k3s/consumer.yaml).
+```yaml
+keycloak:
+  realm:
+    defaultClients:
+      admin-cli: null
+```
+
+`account-console` and `admin-cli` are public clients, and they come without the password grant (`directAccessGrantsEnabled: false`): with it, anyone who knows a user's password could get a token from the token endpoint, without the login page and whatever it enforces, such as a second factor. Users log in to the account console through the browser, or get their credentials with a wallet. Components get theirs with a confidential client of their own and the client credentials grant, which is how the vc-operator requests them (`vcCredentials`, see the [Central Marketplace](operator/README.md#central-marketplace) for an example).
+
+The local environment turns the password grant back on for `account-console`, because the integration tests and [`doc/scripts/get_credential.sh`](../../scripts/get_credential.sh) log in with it ([k3s/consumer.yaml](../../../k3s/consumer.yaml)):
+
+```yaml
+keycloak:
+  realm:
+    defaultClients:
+      account-console:
+        directAccessGrantsEnabled: true   # local and test environments only
+```
 
 ### PostgreSQL database
 
@@ -494,5 +513,5 @@ A complete working example with multiple credential types, users, and clients is
 ### Production considerations
 
 - Use an **external PostgreSQL** instance with proper backups and high availability instead of the built-in managed PostgreSQL
-- Configure **TLS** for Keycloak's endpoints
+- Configure **TLS** for Keycloak's endpoints, and have the ingress refuse or redirect plain HTTP. The realm requires HTTPS for requests from public addresses (`keycloak.realm.sslRequired: external`, the default) and accepts plain HTTP from private ones, such as the components that call Keycloak inside the cluster. Keycloak takes the client address from the `X-Forwarded-For` header of the ingress (`keycloak.keycloak.proxyHeaders: xforwarded`), so it must not be reachable around the ingress, and it takes the scheme from the realm's `frontendURL`: with an `https` frontend URL, which wallets need anyway, it does not see a request that reached the ingress over HTTP, so that check is the ingress's. `all` requires HTTPS for internal calls too
 - Set strong **admin credentials** and rotate them regularly

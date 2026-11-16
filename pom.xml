@@ -517,10 +517,12 @@
             <properties>
                 <deploy.skip>false</deploy.skip>
                 <deploy.trustAnchor.values>${main.basedir}/k3s/trust-anchor.yaml,${main.basedir}/k3s/consent-trust-anchor-components.yaml</deploy.trustAnchor.values>
-                <!-- the consent components of the trust anchor mount secrets that the
-                     consent-authority release creates, and consent-authority needs the TIR
-                     and the consent-manager secret of the trust anchor. Do not wait for the
-                     trust anchor here; deploy.sh waits for every release at the end. -->
+                <!-- the consent-facade of the trust anchor mounts secrets that the
+                     consent-authority release creates, and the consent-manager only gets
+                     Ready once that release's verifier serves discovery and JWKS, while
+                     consent-authority needs the TIR of the trust anchor. Do not wait for the
+                     trust anchor here; deploy.sh waits for every release at the end. The
+                     consent-manager's setup Job waits for the trust anchor's own Postgres. -->
                 <deploy.trustAnchor.args>--wait=false</deploy.trustAnchor.args>
                 <deploy.consentAuthority.values>${main.basedir}/k3s/consent-trust-anchor.yaml</deploy.consentAuthority.values>
                 <deploy.provider.values>${main.basedir}/k3s/provider.yaml,${main.basedir}/k3s/consent-provider.yaml</deploy.provider.values>
