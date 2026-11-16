@@ -10,6 +10,14 @@ certManagerResources:
 decentralizedIam:
   enabled: true
   vcAuthentication:
+    credentials-config-service:
+      # own user instead of the chart's default `postgres` (local and test environments)
+      database:
+        username: ccs
+        existingSecret:
+          enabled: true
+          name: ccs.postgres.credentials.postgresql.acid.zalan.do
+          key: password
     postgres-operator:
       enabled: false
     managedPostgres:
@@ -18,18 +26,27 @@ decentralizedIam:
         volume:
           storageClass: "local-path"
         users:
-          ngb:
-            - createdb
           statuslist:
             - createdb
         databases:
-          ngb: ngb
           statuslistdb: statuslist
         preparedDatabases:
+          # Scorpio's database, created with PostGIS by the operator. Scorpio connects as
+          # ngb_owner_user (defaultUsers), not as the superuser; its migrations need the public schema
           ngb:
+            defaultUsers: true
+            schemas:
+              public: {}
             extensions:
               postgis: public
     trusted-issuers-list:
+      # own user instead of the chart's default `postgres` (local and test environments)
+      database:
+        username: til
+        existingSecret:
+          enabled: true
+          name: til.postgres.credentials.postgresql.acid.zalan.do
+          key: password
       deployment:
         resources:
           limits:
@@ -90,6 +107,10 @@ decentralizedIam:
             hosts:
               - provider-ccs.127.0.0.1.nip.io
       deployment:
+        # own user instead of the chart's default `postgres` (local and test environments)
+        database:
+          existingSecret:
+            name: ccs.postgres.credentials.postgresql.acid.zalan.do
         logging:
           level: DEBUG
         verifier:
@@ -664,6 +685,13 @@ decentralizedIam:
             nodes:
               provider-vault:8200: 1
     odrl-pap:
+      # own user instead of the chart's default `postgres` (local and test environments)
+      database:
+        username: pap
+        existingSecret:
+          enabled: true
+          name: pap.postgres.credentials.postgresql.acid.zalan.do
+          key: password
       additionalEnvVars:
         - name: GENERAL_ORGANIZATION_DID
           value: did:web:mp-operations.org
@@ -747,6 +775,13 @@ dataSpaceConfig:
 
 # context broker as tmforum backend and data provider
 scorpio:
+  # own user instead of the chart's default `postgres` (local and test environments)
+  db:
+    user: ngb_owner_user
+    existingSecret:
+      enabled: true
+      name: ngb-owner-user.postgres.credentials.postgresql.acid.zalan.do
+      key: password
   resources:
     limits:
       # room for the bursts of a start or a busy node; a throttled broker misses its probes
@@ -1041,6 +1076,10 @@ marketplace:
         secret:
           secretName: mp-operations.org-tls
 keycloak:
+  # own user instead of the chart's default `postgres` (local and test environments)
+  database:
+    username: keycloak
+    existingSecret: keycloak.postgres.credentials.postgresql.acid.zalan.do
   resources:
     requests:
       cpu: "100m"
