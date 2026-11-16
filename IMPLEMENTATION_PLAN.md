@@ -559,13 +559,18 @@ ships an example and validates it, but adds no route itself.
      disabled plugin, and one whose `filter` does not match the request (`plugin.lua` `meta_filter`,
      3.19.0), so checks 5 to 7 would pass while the token check, the ODRL policy or the strip is gone
      for some or all requests (both added after the PR #24 reviews).
-  9. **Route-level bypass** (`dataspace-events`): `script`, `filter_func` or `remote_addr` is set,
+  9. **Route-level bypass** (`dataspace-events`): `script`, `service_id`, `filter_func` or `remote_addr` is set,
      `vars` or `remote_addrs` is non-empty, or `status` is set to anything but `1`. APISIX 3.19.0 runs a route's `script` instead
-     of its `plugins` (`init.lua` 995–998), so `openid-connect`, `opa` and the strip are skipped; and
+     of its `plugins` (`init.lua` 995–998), so `openid-connect`, `opa` and the strip are skipped. A
+     `service_id` brings in that service's `script` the same way (`init.lua` 961–969,
+     `plugin.merge_service_route` keeps the service's `script` unless the route sets one); route
+     plugins override service plugins, so `script` is the only bypass through it. And
      it skips a route with `status: 0` or whose `vars`/`filter_func`/`remote_addrs`/`remote_addr` do
      not match the request (`http/router/radixtree_host_uri.lua` 74–79, 111–113), so `POST /events`
      falls through to the host's `/*` catch-all, the bypass check 4 guards against (added after the
-     PR #24 reviews; `remote_addrs`/`remote_addr` after the 215ef7c review).
+     PR #24 reviews; `remote_addrs`/`remote_addr` after the 215ef7c review; `service_id` after the
+     7a62c17 review). An operator who shares upstreams through services sets `upstream` on the route
+     instead, as the example does.
 
   Every check above depends on the exact names. An operator who renames the entries, drops `name`
   while merging lists, or writes their own events routes gets none of them (Deviation 3). There is
@@ -607,7 +612,7 @@ ships an example and validates it, but adds no route itself.
   | 6 | F | `opa` |
   | 7 | no `proxy-rewrite`; `proxy-rewrite` without `headers.remove`; `headers.remove` without `X-Userinfo`; `_meta.priority` absent, `1008`, `2599`; `2600` with `openid-connect._meta.priority: 3000` | `X-Userinfo` or `priority` |
   | 8 | `_meta.disable: true` on `openid-connect`, on `opa`, on `proxy-rewrite` (and `disable: false` passes); `_meta.filter` set on each of the three | `<plugin>._meta.disable` or `<plugin>._meta.filter` |
-  | 9 | `script`, `filter_func`, a non-empty `vars`, a non-empty `remote_addrs`, `remote_addr`, `status: 0` (and `status: 1` with `vars: []` and `remote_addrs: []` passes) | `script`, `filter_func`, `vars`, `remote_addrs`, `remote_addr` or `status` |
+  | 9 | `script`, `service_id`, `filter_func`, a non-empty `vars`, a non-empty `remote_addrs`, `remote_addr`, `status: 0` (and `status: 1` with `vars: []` and `remote_addrs: []` passes) | `script`, `service_id`, `filter_func`, `vars`, `remote_addrs`, `remote_addr` or `status` |
 
   (c) Passing variants (render nothing):
 
@@ -777,8 +782,8 @@ ships an example and validates it, but adds no route itself.
        `[OPTIONS]` on the handshake, `[GET]` on discovery, and on `dataspace-events` a host,
        `bearer_only` and `set_userinfo_header`, `opa`, the `X-Userinfo` strip and its priority above
        `openid-connect`'s effective priority, none of those three plugins switched off with
-       `_meta.disable` or made conditional with `_meta.filter`, and no `script`, `filter_func`,
-       `vars`, `remote_addrs`, `remote_addr` or `status: 0` on the route) and why (for the strip: the Step 4 result on whether
+       `_meta.disable` or made conditional with `_meta.filter`, and no `script`, `service_id`,
+       `filter_func`, `vars`, `remote_addrs`, `remote_addr` or `status: 0` on the route) and why (for the strip: the Step 4 result on whether
        `openid-connect` overwrites a client-sent header);
      - a checklist of what the chart does **not** check, because a mistake there breaks the flow
        visibly rather than weakening access control (Step 4, "Scope of the checks"): all three

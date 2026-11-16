@@ -107,9 +107,10 @@ APISIX skips a plugin whose _meta.disable is set, or whose _meta.filter does not
 {{- /*
 APISIX 3.19.0 runs a route's script instead of its plugins (init.lua), and skips a route with
 status 0 or whose vars/filter_func/remote_addrs do not match (http/router/radixtree_host_uri.lua), so /events
-falls through to the host's catch-all, as for a host-less route.
+falls through to the host's catch-all, as for a host-less route. A service_id can bring in the
+service's script (plugin.merge_service_route keeps it unless the route sets its own).
 */ -}}
-{{- range $key := list "script" "filter_func" "remote_addr" }}
+{{- range $key := list "script" "service_id" "filter_func" "remote_addr" }}
 {{- if not (kindIs "invalid" (index $route $key)) }}
 {{- fail (printf "%s: %s must not be set; it bypasses the route's plugins or its match" $where $key) }}
 {{- end }}

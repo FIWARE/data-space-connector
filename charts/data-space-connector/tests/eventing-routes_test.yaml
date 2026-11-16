@@ -1047,6 +1047,21 @@ tests:
       - failedTemplate:
           errorPattern: 'route "dataspace-events": remote_addr must not be set'
 
+  - it: check 9 refuses a service_id on dataspace-events
+    set:
+      decentralizedIam:
+        odrlAuthorization:
+          apisix:
+            routes:
+              - *unrelated
+              - <<: *events
+                service_id: events-service
+              - *handshake
+              - *discovery
+    asserts:
+      - failedTemplate:
+          errorPattern: 'route "dataspace-events": service_id must not be set'
+
   - it: check 9 refuses status 0 on dataspace-events
     set:
       decentralizedIam:
