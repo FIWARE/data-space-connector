@@ -16,6 +16,7 @@ Short records of decisions that are expensive to reverse or easy to re-litigate.
 | [0010](0010-config-tool-secret-handling.md) | The configuration tool creates secrets, but never stores their values | Proposed | |
 | [0011](0011-config-tool-window-build-tag.md) | Release binaries of the configuration tool open a browser tab; the native window is an opt-in build tag | Proposed | |
 | [0012](0012-config-tool-semver-library.md) | Order the configuration tool's model bundles with Masterminds/semver, the library Helm uses | Proposed | |
+| [0013](0013-config-tool-roundtrip-byte-patches.md) | Round-trip values.yaml through byte patches over the source, with yaml.v3 only as the index | Proposed | |
 
 ADRs 0002 and 0003 constrain the consent-facade's own API, so they are **mirrored** in
 [consent-facade](https://github.com/SEAMWARE/consent-facade) under `doc/adr/` with the same numbers. This repository holds the
@@ -25,4 +26,4 @@ Design document ADRs 0001-0005 belong to:
 [`../CONSENT_MANAGEMENT.md`](../CONSENT_MANAGEMENT.md). ADR 0006 belongs to
 [`../deployment-integration/eidas/README.md`](../deployment-integration/eidas/README.md). ADR 0007 belongs to
 [`../deployment-integration/local-deployment/LOCAL.MD`](../deployment-integration/local-deployment/LOCAL.MD). ADRs 0009 to
-0012 belong to [`../config-tool/`](../config-tool/README.md).
+0013 belong to [`../config-tool/`](../config-tool/README.md).
