@@ -165,9 +165,35 @@ before it is returned. The API is the one TECH_STACK names: `Parse`, `Classify`,
   and the most common edit, takes the new value as plain where plain can hold it; Step 3 defines
   its empty span. Only a span that fails the span self-check (Step 3) gives
   `ErrUnsupportedScalar`, so the scanner refuses to edit instead of guessing.
+- **Span of a replaced value.** Replacing a collection, or changing a value's kind (scalar,
+  mapping, sequence), never touches the key line's own decoration: the key, the anchor, and the
+  whitespace and line comment after the value stay byte-equal (`admin: # maintainer`, chart
+  `values.yaml` line 44). The span has up to two parts:
+  - the *inline part*: the value text on the key line (or `-` line), from the value node's
+    offset, which is past any anchor or tag, to the end of that text, before the whitespace and
+    line comment that follow. It is empty for a block collection and for an implicit null;
+  - the *block part*: from the start of the line after the key line to the end of the last line
+    of the subtree, excluding following comment lines at or left of the key's column (or the
+    `-` column for a sequence item). It is empty for a scalar or flow value.
+
+  The new value goes inline when it is a scalar, an empty collection (`[]`, `{}`), or a
+  collection replacing a non-empty flow collection (it stays flow, on one line). Otherwise it
+  is a block fragment that replaces the block part, and the inline part is removed together with
+  the one space before it. So `k: v # c` → map gives `k: # c` plus the block lines,
+  `admin: # maintainer` + list gives a new block list under the unchanged key line, and a block
+  map → scalar removes the block part and inserts ` s` as for an implicit null. An anchor always
+  stays, so every alias keeps a target and resolves to the new value. A tag stays when the kind
+  is unchanged (and, for a scalar, the new value decodes under it); otherwise it is removed with
+  the old value, since e.g. `!!map` on a scalar does not decode.
 - **Merge semantics.** `render(profile) ⊕ overrides`, and the override wins. Two maps merge
   recursively. Any other pair, including a type change, replaces the value span of that key. A
   `nil` override writes `null`; key deletion is out of scope.
+  A map override that meets an alias to a mapping (`m: *base`) merges with the alias's resolved
+  value, as Helm sees it. If the result equals the resolved value, nothing is written and `*base`
+  stays. Otherwise `Merge` sets `m` to the merged map: the `*base` use is replaced by a block
+  mapping (an alias leaf may be set, see *Aliases*), and the anchor site and the other aliases
+  stay byte-equal. The expansion writes values, so aliases nested inside `base` are written out
+  too. A direct `Set(m.x, …)` still gives `ErrAliasPath`, because it passes through the alias.
 - **Classify is a surface only.** Classify does a structural leaf walk plus a pluggable
   `Classifier`. The default classifier returns `ClassUnknown` for every leaf, and CT-3 supplies
   the real one without changing the API.
@@ -379,10 +405,9 @@ In `internal/roundtrip/`:
   - `Set` with a `map[string]any` or `[]any` value renders a block fragment. Keys are sorted,
     and the fragment uses the detected indent unit, the detected sequence dash style and the
     file's line ending.
-  - Replacing a non-scalar value, or changing a value's type, replaces the value span of the
-    key: from after `key:` to the end of the last line of its subtree, which excludes
-    following comment lines at a lower or equal indentation. Comments inside a replaced
-    subtree go with it; the GoDoc of `Set` says so.
+  - Replacing a non-scalar value, or changing a value's kind, replaces the span defined in
+    *Span of a replaced value*: the key line's anchor and line comment stay. Comments inside a
+    replaced subtree (in its block part) go with it; the GoDoc of `Set` says so.
   - Empty flow, null and non-empty flow parents are handled as described in the Decisions.
   - When the source has no trailing newline and an insertion lands at EOF, a line ending is
     written before the fragment and the file still ends without one.
@@ -422,6 +447,16 @@ In `internal/roundtrip/`:
   - `{}` → block, `[]` → block, null → block, and appending into a non-empty flow mapping and
     flow sequence.
   - Type change from a scalar to a map and from a map to a scalar.
+  - Key-line decoration survives a replacement: `users.admin` in the chart's `values.yaml`
+    (`admin: # maintainer`, a block list) set to a new list keeps line 44 byte-equal;
+    `k: v # c` → map gives `k: # c` plus the block; `k: # c\n  a: 1` → `"s"` gives `k: s # c`;
+    `k: &x {a: 1}` with `y: *x` elsewhere, set to `{a: 2}`, gives `k: &x {a: 2}` and `y` resolves
+    to it; `k: &x\n  a: 1` set to a scalar keeps `&x`; `k: !!str v` → map drops the tag.
+  - Flow stays flow: `[a, b]` → `[c]` on the same line; `[]` → non-empty list becomes block;
+    a block list → `[]` gives `key: []` with the line comment kept.
+  - Alias to a mapping, on `base: &b\n  a: 1\n  b: 2\nm: *b\nn: *b`: `Merge({m: {b: 3}})`
+    gives `m:` with `a: 1` and `b: 3` as a block, and `base` and `n: *b` stay byte-equal;
+    `Merge({m: {a: 1}})` is a no-op that keeps `*b`; `Set(m.b, 3)` gives `ErrAliasPath`.
   - No-trailing-newline file.
   - Empty document.
   - A top-level key inserted into `a: 1\n---\n` or `a: 1\n...\n` lands before the marker,
