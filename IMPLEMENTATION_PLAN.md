@@ -24,7 +24,21 @@ before it is returned. The API is the one TECH_STACK names: `Parse`, `Classify`,
   `consent-trust-anchor.yaml`), and the output must keep that. None of the corpus
   files uses anchors or aliases, so anchors, aliases, merge keys (`<<: *x`) and tags are tested
   with fixtures in `internal/roundtrip/testdata/`. Block scalars (`|`, `>`) and flow
-  collections (`[]`, `{}`, `[a, b]`) do occur in the corpus.
+  collections (`[]`, `{}`, `[a, b]`) do occur in the corpus. `k3s/consumer.yaml` has
+  **duplicate mapping keys**: `optionalClientScopes: []` directly followed by a second
+  `optionalClientScopes: [...]` at lines 816/817 and 845/846. No other corpus file has any.
+  yaml.v3 decodes such a file into a `yaml.Node` but refuses it with `Decode(&any)`
+  ("mapping key … already defined"), so no step may decode a corpus file into `any`
+  directly; see *Duplicate keys*.
+- **Duplicate keys.** `Parse` accepts them and the file round-trips byte-identically. Helm
+  reads values non-strictly, so the last occurrence of a key wins, and the engine follows that:
+  `Lookup`, `Set` and `Merge` resolve a duplicated key to its **last** occurrence, and earlier
+  occurrences are *shadowed*. A shadowed key/value pair is never edited, never a leaf in
+  `Classify` and stays byte-equal. Wherever a tree is decoded to `any` (the write self-check, and
+  tests that compare decoded trees), the code goes through one helper, `decodeValue(*yaml.Node)`.
+  It deep-copies the node, drops every shadowed key/value pair from each mapping, then calls
+  `Decode(&any)`. Alias targets stay reachable through `Node.Alias`, so a shadowed anchor still
+  resolves.
 - **One YAML document per file.** A stream with more than one document gives
   `ErrMultiDocument`. A single leading `---` is allowed and stays as it is. Trailing document
   markers are accepted. A marker line is `---` or `...` at column 0 with nothing after it but
@@ -75,9 +89,23 @@ before it is returned. The API is the one TECH_STACK names: `Parse`, `Classify`,
     each with a value tree. All new keys of one parent live in that one group, so two inserts
     at the same offset never collide. The group is rendered as one fragment with its keys in
     lexicographic order, regardless of the order of the `Set` calls.
+  - **A new value for a path supersedes everything pending below it.** When a replacement or
+    an insert-group entry is recorded for path P, every pending replacement on a strict
+    descendant of P is dropped, and so is every insert group whose parent is P or lies below
+    P. The new value fully defines that subtree. So `Set(a.b.c, 2)` (an insert under `b`)
+    followed by `Set(a.b, "s")` writes only `b: s`, and a descendant scalar replacement
+    followed by a replacement of its ancestor writes only the ancestor's value. The reverse
+    order, ancestor first and then a descendant, edits the pending value tree (see *Edits below
+    a pending value*). Both orders give the last-wins result that *Merge semantics* promises,
+    also across successive `Merge` calls on one document (CT-4: profile render, then
+    overrides). The no-op rule compares against the in-memory tree, which already carries the
+    pending edits. A `Set` equal to that tree adds nothing and keeps the descendant patches
+    that produce it.
   - An insert offset strictly inside a replacement span gives `ErrPatchConflict`. At equal
     offsets, a replacement that ends there is applied before the insert group that starts
-    there. `Write` applies everything back to front by offset.
+    there. `Write` applies everything back to front by offset. Under the supersede rule, nested
+    patches cannot arise, so `ErrPatchConflict` is a guard against span bugs and not a result
+    of any `Set` sequence.
 - **Edits below a pending value.** A key created by an insert, a parent created on the way, or a
   collection that a replacement installs has no source Line/Column, so it is never addressed by
   offset. It lives as a value tree inside its insert group or replacement, and a later `Set` whose
@@ -90,7 +118,7 @@ before it is returned. The API is the one TECH_STACK names: `Parse`, `Classify`,
   as a single map.
 - **Self-check on write.** After patching, `Write` re-parses its own output and compares the
   decoded tree (`any`) with the original tree after the same edits were applied to a deep copy
-  of the node tree. If they differ, `Write` returns `ErrPatchVerification` and no bytes.
+  of the node tree. Both sides go through `decodeValue` (see *Duplicate keys*). If they differ, `Write` returns `ErrPatchVerification` and no bytes.
   A wrong write is an error, never a file.
 - **Aliases.** A path that passes *through* an alias node is refused with `ErrAliasPath`, because
   editing it would also change every other user of the anchor. A path that *ends* at an alias
@@ -223,7 +251,8 @@ Read-only API that later steps and CT-3 build on. In `internal/roundtrip/`:
     and readable in a load report.
   - `ParsePath(string)` is the inverse of `String()` for every `Path`; malformed input (an
     unclosed quote, a bad index, an empty bare segment) gives `ErrInvalidPath`.
-- `(*Document) Lookup(Path) (*yaml.Node, error)` gives `ErrNotFound` or `ErrAliasPath`.
+- `(*Document) Lookup(Path) (*yaml.Node, error)` gives `ErrNotFound` or `ErrAliasPath`. A
+  duplicated key resolves to its last occurrence (see *Duplicate keys*).
 - `classify.go`:
   - `Class` enum: `ClassUnknown` (zero value), `ClassRecognized`, `ClassOwned`, with
     `String()`.
@@ -233,14 +262,21 @@ Read-only API that later steps and CT-3 build on. In `internal/roundtrip/`:
   - `Classify(doc *Document, c Classifier) []Leaf`.
   - The walk is in document order. A leaf is a scalar, an empty collection or an alias node.
     Aliases are not followed, and a merge key `<<` is one leaf. Anchored collections are
-    walked once, at the anchor.
+    walked once, at the anchor. Shadowed duplicate keys are skipped together with their
+    subtrees.
+- `decodeValue` (see *Duplicate keys*) lives in this step, because the leaf-count test needs it.
 - Tests (table-driven):
   - Paths through mappings, sequences, flow collections, dotted keys and aliases.
   - `String`/`ParsePath` round-trip, including the keys `x.y`, `x[0]`, `a"b`, `a\b`, `a\"`,
     the empty key and `<<`, and malformed inputs that give `ErrInvalidPath`.
   - Leaf order and count on the anchor fixtures.
   - On every corpus file, `Classify` returns as many leaves as an independent recursive count
-    over the decoded tree, and every leaf path resolves through `Lookup`.
+    over the tree from `decodeValue`, and every leaf path resolves through `Lookup`.
+    `consumer.yaml` is a named case: it must not be skipped because `Decode(&any)` refuses it.
+  - Duplicate keys, from a testdata fixture (`a: []\na: [x]\nb: 1`, plus a duplicated mapping
+    key whose shadowed value holds an anchor that a later alias uses): `Lookup(a)` returns the
+    second `a`, `Classify` reports only its leaves, and `decodeValue` gives Helm's last-wins
+    map.
   - `Classify` passes a custom classifier's result through unchanged.
 
 Acceptance:
@@ -286,7 +322,8 @@ In `internal/roundtrip/`:
     keeps its indicator, chomping and content indentation.
   - The edit is recorded as a replacement (see *Patch model* in the Decisions), and the
     in-memory node tree is updated so that later `Lookup` calls see the new value. A second
-    `Set` on the same path wins; overlapping spans give `ErrPatchConflict`.
+    `Set` on the same path wins. The applier refuses overlapping spans with
+    `ErrPatchConflict` as a guard, and Step 4 adds the supersede rule for ancestors.
 - `Write` applies the patches back to front, then runs the self-check from the Decisions.
   Add `ErrPatchVerification` and `ErrPatchConflict`.
 - Tests:
@@ -306,6 +343,9 @@ In `internal/roundtrip/`:
     Leaves that return `ErrUnsupportedScalar` are counted and listed. The test fails if any of
     them is in `charts/data-space-connector/values.yaml`, because the chart's own file must be
     fully editable. The `acr` scope's multi-line `description` is an explicitly named case.
+    So are the items of the duplicated `optionalClientScopes` in `consumer.yaml`: an edit
+    changes line 817 (or 846), and the shadowed line 816 (or 845) stays byte-equal. The
+    re-parse checks go through `Lookup` and `decodeValue`, never `Decode(&any)`.
   - **Style table (parameterized).** Plain → plain; plain → needs quoting; plain multi-line
     (two and three lines, with a blank line inside, followed by a comment line, at EOF) → one
     line at the original column; plain multi-line with ` # …` on a continuation line (the
@@ -316,8 +356,10 @@ In `internal/roundtrip/`:
     the items of a flow sequence with non-ASCII items (`ä: [é, x]`). Implicit-null rows:
     `key:` → `key: v`, `key:   # c` → `key: v   # c`, an empty `- ` item, and `key:` at EOF
     without a trailing newline.
-  - Two `Set`s on one path: the second value is written. Two overlapping spans (a scalar and
-    the collection that contains it, set as a replacement) give `ErrPatchConflict`.
+  - Two `Set`s on one path: the second value is written. The patch applier, fed two
+    overlapping spans directly (an internal test, since no `Set` sequence produces them), gives
+    `ErrPatchConflict`.
+  - Duplicate-key fixture: `Set(a[0], x)` on `a: [y]\na: [z]` gives `a: [y]\na: [x]`.
   - `Set` through an alias gives `ErrAliasPath`. Editing the anchor changes only the anchor
     site. Alias-leaf rows on `b: &a 1\nc: *a\nd: [*a, x]`: `Set(c, 2)` gives `c: 2`, and
     `Set(d[0], 2)` gives `d: [2, x]`; in both, the anchor site and the other alias stay
@@ -368,6 +410,14 @@ In `internal/roundtrip/`:
     `a:` block with `b` and `c`; `Set(x, map)` then `Set(x.y, v)` changes `y` inside the
     pending map; a replacement with a map followed by a `Set` below it does the same. `Merge`
     of a missing subtree gives the same bytes as one `Set` of that subtree as a map.
+  - A new value supersedes pending edits below it, on `a:\n  b:\n    x: 1\n`:
+    `Set(a.b.c, 2)` then `Set(a.b, "s")` gives `b: s`; `Set(a.b.c, 2)` then
+    `Set(a.b, map{y: 3})` gives `b` with only `y: 3`; `Set(a.b.x, 5)` then `Set(a.b, "s")`
+    gives `b: s` (last wins, no `ErrPatchConflict`). Two successive `Merge` calls on one
+    document, where the second changes the type of a subtree the first one edited, give the
+    second's value, and the self-check passes.
+  - `Set` of a list on the duplicated `optionalClientScopes` in `consumer.yaml` replaces line
+    817 and leaves line 816 byte-equal.
   - Indent detection on 2- and 4-space fixtures and on both dash styles.
   - `{}` → block, `[]` → block, null → block, and appending into a non-empty flow mapping and
     flow sequence.
@@ -394,7 +444,7 @@ Acceptance:
   `internal/roundtrip  core: parse / classify / merge / write of a values.yaml, byte-preserving`.
   Add a short "Round-trip" paragraph covering the byte-identity guarantee, the header, the
   refusals (`ErrMultiDocument`, `ErrAliasPath` for paths through an alias or onto `<<`,
-  `ErrUnsupportedScalar`) and the corpus test,
+  `ErrUnsupportedScalar`), the last-wins rule for duplicate keys and the corpus test,
   with a link to ADR 0013.
 - `doc/config-tool/TECH_STACK.md`: in the YAML round-trip row of the Libraries table, note
   that yaml.v3 is the parse index and writes are byte patches (ADR 0013). In the Testing
