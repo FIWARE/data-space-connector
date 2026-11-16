@@ -32,17 +32,35 @@
       "@type": "odrl:PartyCollection",
       "odrl:source": "urn:user",
       "odrl:refinement": {
-        "@type": "odrl:Constraint",
-        "odrl:leftOperand": {
-          "@id": "vc:type"
-        },
-        "odrl:operator": {
-          "@id": "odrl:hasPart"
-        },
-        "odrl:rightOperand": {
-          "@value": "OperatorCredential",
-          "@type": "xsd:string"
-        }
+        "@type": "odrl:LogicalConstraint",
+        "odrl:and": [
+          {
+            "@type": "odrl:Constraint",
+            "odrl:leftOperand": {
+              "@id": "vc:type"
+            },
+            "odrl:operator": {
+              "@id": "odrl:hasPart"
+            },
+            "odrl:rightOperand": {
+              "@value": "OperatorCredential",
+              "@type": "xsd:string"
+            }
+          },
+          {
+            "@type": "odrl:Constraint",
+            "odrl:leftOperand": {
+              "@id": "vc:currentParty"
+            },
+            "odrl:operator": {
+              "@id": "odrl:eq"
+            },
+            "odrl:rightOperand": {
+              "@value": "did:web:dataspace-authority.org",
+              "@type": "xsd:string"
+            }
+          }
+        ]
       }
     },
     "odrl:action": {
