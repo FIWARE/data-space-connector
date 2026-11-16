@@ -73,7 +73,7 @@ An operator is cluster-wide: its CustomResourceDefinitions, ClusterRoles and web
 
 ### MongoDB deployed by the charts
 
-`managedMongo` creates a `MongoDBCommunity` resource, handled by the MongoDB Community Operator or its successor, MongoDB Controllers for Kubernetes, which has to be installed beforehand. The connector chart can also install the Community Operator (`mongo-operator.enabled`, chart 0.13.0, off by default). [Running a local marketplace](provider/LOCAL_MARKETPLACE.md#mongodb) explains the installation options, including the database namespace and its service account.
+`managedMongo` creates a `MongoDBCommunity` resource, handled by the MongoDB Community Operator or its successor, MongoDB Controllers for Kubernetes, which has to be installed beforehand. The connector chart can also install the Community Operator (`mongo-operator.enabled`, chart 0.13.0, off by default). [Running a local marketplace](provider/LOCAL_MARKETPLACE.md#mongodb) explains how to install it.
 
 ### Installing the operators once
 

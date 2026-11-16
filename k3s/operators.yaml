@@ -4,10 +4,10 @@
 # ClusterIssuer that every participant requests its certificates from.
 # Every other component of the chart is disabled.
 
+# The MongoDB of the provider runs as the chart's own service account (managedMongo.serviceAccount),
+# so the operator keeps its `mongodb-database` in its own namespace.
 mongo-operator:
   enabled: true
-  database:
-    namespace: provider
   operator:
     watchNamespace: "*"
     resources:
