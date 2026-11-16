@@ -3680,6 +3680,18 @@ cert-manager:
       "helm.sh/hook": post-install,post-upgrade
       "helm.sh/hook-weight": "0"
       "helm.sh/hook-delete-policy": hook-succeeded,before-hook-creation
+    # -- The job's service account and RBAC are hooks too, deleted once they succeed: they have to
+    # be created again on every upgrade, or the job finds no service account and never starts.
+    serviceAccount:
+      annotations:
+        "helm.sh/hook": post-install,post-upgrade
+        "helm.sh/hook-weight": "-5"
+        "helm.sh/hook-delete-policy": hook-succeeded,before-hook-creation
+    rbac:
+      annotations:
+        "helm.sh/hook": post-install,post-upgrade
+        "helm.sh/hook-weight": "-5"
+        "helm.sh/hook-delete-policy": hook-succeeded,before-hook-creation
 
 # -- configuration for additional resources to be deployed for cert-manager, like ClusterIssuers
 certManagerResources:
