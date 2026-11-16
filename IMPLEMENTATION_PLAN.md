@@ -26,12 +26,17 @@ before it is returned. The API is the one TECH_STACK names: `Parse`, `Classify`,
   with fixtures in `internal/roundtrip/testdata/`. Block scalars (`|`, `>`) and flow
   collections (`[]`, `{}`, `[a, b]`) do occur in the corpus.
 - **One YAML document per file.** A stream with more than one document gives
-  `ErrMultiDocument`. A single leading `---` is allowed and stays as it is. A trailing `---` is
-  accepted: yaml.v3 decodes it as a second document. When that document is a single null
-  scalar with an empty value and no comments, no third document follows, and only blank lines
-  come after the `---` line, then that line and everything after it form a **tail**. The tail
-  is kept byte for byte after the body, and inserts at the end of the body go before it. A
-  second document with content or comments still gives `ErrMultiDocument`. Empty and
+  `ErrMultiDocument`. A single leading `---` is allowed and stays as it is. Trailing document
+  markers are accepted. A marker line is `---` or `...` at column 0 with nothing after it but
+  whitespace. The **tail** is the run at the end of the file made only of marker lines and
+  blank lines, starting at its first marker line: `a: 1\n---\n`, `a: 1\n...\n`,
+  `a: 1\n...\n---\n`. yaml.v3 decodes a trailing `---` as a second document; the tail is
+  accepted only when that document is a single null scalar with an empty value and no
+  comments, and no third document follows (`...` alone adds no document). The tail is kept
+  byte for byte after the body, and inserts at the end of the body go before it. Any marker
+  left in the body other than the single leading `---` gives `ErrMultiDocument`, e.g.
+  `a: 1\n...\n# c\n`: an insert after it would start a second document. A second document
+  with content or comments still gives `ErrMultiDocument`. Empty and
   comment-only files parse into an empty document. A UTF-8 BOM and CRLF line endings are kept,
   and inserted fragments use the line ending the file already has.
 - **Header.** Rendered by `Header.Render()`. It is two comment lines plus one blank line:
@@ -88,15 +93,20 @@ before it is returned. The API is the one TECH_STACK names: `Parse`, `Classify`,
   of the node tree. If they differ, `Write` returns `ErrPatchVerification` and no bytes.
   A wrong write is an error, never a file.
 - **Aliases.** A path that passes *through* an alias node is refused with `ErrAliasPath`, because
-  editing it would also change every other user of the anchor. Editing an anchored or tagged
-  scalar (`&a foo`, `!!str 1`) keeps the anchor and the tag and replaces only the value text.
+  editing it would also change every other user of the anchor. A path that *ends* at an alias
+  leaf (`b: *a`, or `*a` inside a flow collection) may be set: the replacement covers the
+  `*name` text and changes only that use; the anchor site and other aliases stay byte-equal.
+  The no-op rule compares against the alias's resolved value, so a `Merge` whose value equals
+  it keeps the alias. Anchors used for repetition (one domain on many lines) therefore
+  survive a merge that does not change the value. Editing an anchored or tagged scalar
+  (`&a foo`, `!!str 1`) keeps the anchor and the tag and replaces only the value text.
 - **Merge keys are not resolved.** `Lookup` sees only a mapping's explicit children. In
   `m:\n  <<: *a\n  y: 2`, `Lookup(m.x)` for an `x` that comes only from `&a` gives
   `ErrNotFound`, so `Set` and `Merge` insert an explicit `x` under `m`, which overrides the
   inherited value. The no-op rule (an equal existing value adds no patch) compares against
   explicit children only, so an override equal to the inherited value still writes the key;
-  a second `Merge` with the same overrides is then a byte-level no-op. `Set` on a path that
-  ends at an alias node, including the value of `<<`, gives `ErrAliasPath`.
+  a second `Merge` with the same overrides is then a byte-level no-op. `Set` on the value of
+  `<<` gives `ErrAliasPath`, because replacing it would change what the mapping inherits.
 - **Deterministic insertion.**
   - A new key is appended after the last child subtree of the parent mapping. Comment lines
     indented deeper than the sibling column belong to that last child and are skipped; the key
@@ -173,8 +183,10 @@ Create `config-tool/internal/roundtrip/`:
     `SetHeader` there is exactly one header, the rendered one.
   - **Edge cases.** An empty file, a comment-only file, no trailing newline, CRLF, BOM, a
     leading `---`, BOM + header, CRLF + header (detected, and `SetHeader` writes CRLF).
-    Trailing separator: `a: 1\n---\n` and `a: 1\n---` round-trip byte-identically;
-    `a: 1\n---\n# c\n` and `a: 1\n---\nb: 2\n` give `ErrMultiDocument`.
+    Trailing markers: `a: 1\n---\n`, `a: 1\n---`, `a: 1\n...\n`, `a: 1\n...`,
+    `a: 1\n...\n---\n` and `a: 1\n---\n...\n` round-trip byte-identically;
+    `a: 1\n---\n# c\n`, `a: 1\n...\n# c\n` and `a: 1\n---\nb: 2\n` give
+    `ErrMultiDocument`.
   - A native Go fuzz target `FuzzRoundTrip`, seeded with the testdata fixtures: for every
     input that `Parse` accepts, `Write` returns the input unchanged. The seeds run under
     plain `go test`.
@@ -205,9 +217,12 @@ Read-only API that later steps and CT-3 build on. In `internal/roundtrip/`:
 - `path.go`:
   - `Path` is a `[]Segment`, where `Segment` is either a mapping key or a sequence index;
     constructors `Key(string)` and `Index(int)`.
-  - `Path.String()` prints `a.b[0]`, and keys that contain `.` are quoted: `a."x.y"`. The
-    output is stable and readable in a load report.
-  - `ParsePath(string)` is the inverse of `String()`.
+  - `Path.String()` prints `a.b[0]`. A key is quoted when it is empty or contains `.`, `[`,
+    `]` or `"`: `a."x.y"`, `"x[0]"`, `""`. Inside quotes, `"` and `\` are escaped with `\`.
+    Other keys, `<<` included, print bare and are read back literally. The output is stable
+    and readable in a load report.
+  - `ParsePath(string)` is the inverse of `String()` for every `Path`; malformed input (an
+    unclosed quote, a bad index, an empty bare segment) gives `ErrInvalidPath`.
 - `(*Document) Lookup(Path) (*yaml.Node, error)` gives `ErrNotFound` or `ErrAliasPath`.
 - `classify.go`:
   - `Class` enum: `ClassUnknown` (zero value), `ClassRecognized`, `ClassOwned`, with
@@ -221,7 +236,8 @@ Read-only API that later steps and CT-3 build on. In `internal/roundtrip/`:
     walked once, at the anchor.
 - Tests (table-driven):
   - Paths through mappings, sequences, flow collections, dotted keys and aliases.
-  - `String`/`ParsePath` round-trip.
+  - `String`/`ParsePath` round-trip, including the keys `x.y`, `x[0]`, `a"b`, `a\b`, `a\"`,
+    the empty key and `<<`, and malformed inputs that give `ErrInvalidPath`.
   - Leaf order and count on the anchor fixtures.
   - On every corpus file, `Classify` returns as many leaves as an independent recursive count
     over the decoded tree, and every leaf path resolves through `Lookup`.
@@ -257,11 +273,14 @@ In `internal/roundtrip/`:
     that swallowed a comment still decodes to the same value and the write self-check compares
     trees without comments. A failure gives `ErrUnsupportedScalar`. An empty implicit-null span
     is exempt from decoding.
+  - alias leaf: yaml.v3 puts the node at the `*` and its `Value` is the anchor name. The span
+    ends at whitespace, or in a flow collection at `,`, `]` or `}`. A lone alias does not
+    decode, so its check is that the span text equals `*` + `node.Value`.
 - `edit.go`:
   - `(*Document) Set(path Path, value any) error`. The value is a string, bool, int, int64,
     float64 or nil. Maps and slices are added in Step 4.
-  - The path must resolve to an existing scalar, or `Set` returns `ErrNotFound` or
-    `ErrNotScalar`; Step 4 widens this.
+  - The path must resolve to an existing scalar or alias leaf, or `Set` returns `ErrNotFound`
+    or `ErrNotScalar`; Step 4 widens this.
   - The new text is rendered in the original style where that style can hold the value (see
     Decisions), otherwise from yaml.v3's encoding of a single scalar node. A block scalar
     keeps its indicator, chomping and content indentation.
@@ -300,7 +319,9 @@ In `internal/roundtrip/`:
   - Two `Set`s on one path: the second value is written. Two overlapping spans (a scalar and
     the collection that contains it, set as a replacement) give `ErrPatchConflict`.
   - `Set` through an alias gives `ErrAliasPath`. Editing the anchor changes only the anchor
-    site.
+    site. Alias-leaf rows on `b: &a 1\nc: *a\nd: [*a, x]`: `Set(c, 2)` gives `c: 2`, and
+    `Set(d[0], 2)` gives `d: [2, x]`; in both, the anchor site and the other alias stay
+    byte-equal. `Set(c, 1)`, equal to the resolved value, adds no patch and keeps `*a`.
   - Determinism: the same edits on the same input give equal bytes.
 
 Acceptance:
@@ -353,11 +374,12 @@ In `internal/roundtrip/`:
   - Type change from a scalar to a map and from a map to a scalar.
   - No-trailing-newline file.
   - Empty document.
-  - A top-level key inserted into `a: 1\n---\n` lands before the `---`, which stays last.
+  - A top-level key inserted into `a: 1\n---\n` or `a: 1\n...\n` lands before the marker,
+    which stays last.
   - Merge-key fixture `m:\n  <<: *a\n  y: 2` with `x` inherited from `&a`: `Lookup(m.x)` gives
     `ErrNotFound`; `Set(m.x)` and a `Merge` over `m.x` each insert an explicit `x` after
     `y: 2` and leave the `<<` line and the anchor site byte-equal; repeating the `Merge` on
-    the output is a byte-level no-op; `Set(m."<<")` gives `ErrAliasPath`.
+    the output is a byte-level no-op; `Set(m.<<)` gives `ErrAliasPath`.
   - Merge over `k3s/provider.yaml` with a nested override tree: the diff contains only the
     overridden and added lines, and the re-parsed tree equals a reference deep merge of the
     decoded maps. The reference implementation lives in the test.
@@ -371,7 +393,8 @@ Acceptance:
 - `config-tool/README.md` "Package layout": add the line
   `internal/roundtrip  core: parse / classify / merge / write of a values.yaml, byte-preserving`.
   Add a short "Round-trip" paragraph covering the byte-identity guarantee, the header, the
-  refusals (`ErrMultiDocument`, `ErrAliasPath`, `ErrUnsupportedScalar`) and the corpus test,
+  refusals (`ErrMultiDocument`, `ErrAliasPath` for paths through an alias or onto `<<`,
+  `ErrUnsupportedScalar`) and the corpus test,
   with a link to ADR 0013.
 - `doc/config-tool/TECH_STACK.md`: in the YAML round-trip row of the Libraries table, note
   that yaml.v3 is the parse index and writes are byte patches (ADR 0013). In the Testing
