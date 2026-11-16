@@ -142,6 +142,7 @@ function ClusterFields({ target, session }: { target: TargetAnswers; session: Se
   }
 
   const several = path === '' && kubeconfig && kubeconfig.paths.length > 1
+  const noneFound = path === '' && kubeconfig?.paths.length === 0
   // A relative or ~ path is resolved by the server; show which file that turned out to be.
   const [resolved] = path !== '' && kubeconfig?.paths.length === 1 ? kubeconfig.paths : []
   const resolvedElsewhere = resolved !== undefined && resolved !== path ? resolved : undefined
@@ -162,6 +163,7 @@ function ClusterFields({ target, session }: { target: TargetAnswers; session: Se
         />
       </Row>
       {several && <p className="hint">Read from KUBECONFIG, in this order: {kubeconfig.paths.join(', ')}</p>}
+      {noneFound && <p className="hint">No kubeconfig found (KUBECONFIG or ~/.kube/config). Type the path to one.</p>}
       {resolvedElsewhere && <p className="hint">Read from {resolvedElsewhere}</p>}
       <Row id="context" label="Context">
         <select id="context" value={target.context ?? ''} onChange={(e) => choose(e.target.value)}>

@@ -52,17 +52,18 @@ const kubeconfigField = () => screen.getByLabelText('Kubeconfig')
 const contextSelect = () => screen.getByLabelText('Context')
 
 describe('Target', () => {
-  it.each<[string, ContextsAnswer, string, string, boolean]>([
-    ['one reported path', ONE_FILE, KUBECONFIG, 'dev', false],
-    ['two reported paths', TWO_FILES, '', 'prod', true],
-  ])('fills the kubeconfig field for %s', async (_name, answer, field, context, listsFiles) => {
+  it.each<[string, ContextsAnswer, string, string, string | null]>([
+    ['one reported path', ONE_FILE, KUBECONFIG, 'dev', null],
+    ['two reported paths', TWO_FILES, '', 'prod', 'Read from KUBECONFIG, in this order: /a/config, /b/config'],
+    ['no reported path', NO_FILE, '', '', 'No kubeconfig found (KUBECONFIG or ~/.kube/config). Type the path to one.'],
+  ])('fills the kubeconfig field for %s', async (_name, answer, field, context, note) => {
     mockApi(() => answer)
     renderTarget({ type: TargetType.Cluster })
+    await waitFor(() => expect(kubeconfigField()).toHaveValue(field))
     await waitFor(() => expect(contextSelect()).toHaveValue(context))
-    expect(kubeconfigField()).toHaveValue(field)
-    const note = screen.queryByText(/Read from KUBECONFIG/)
-    if (listsFiles) expect(note).toHaveTextContent('/a/config, /b/config')
-    else expect(note).toBeNull()
+    const hint = /Read from KUBECONFIG|No kubeconfig found/
+    if (note) expect(await screen.findByText(hint)).toHaveTextContent(note)
+    else expect(screen.queryByText(hint)).toBeNull()
   })
 
   it.each<[string, string, string | null]>([

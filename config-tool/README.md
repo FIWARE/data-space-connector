@@ -59,6 +59,7 @@ printed URL yourself. `dsc-config --no-browser` only prints the URL.
   Every file read, typed or from `KUBECONFIG`, must be a regular file of at most 8 MiB, so a
   device or FIFO (e.g. `KUBECONFIG=<(...)`) is refused unread. A `KUBECONFIG` entry that does
   not exist is skipped; any other failure (permission denied, not a directory) is reported.
+  When no default file exists, S1 says so and asks for a path.
   A relative typed path is resolved against the directory `dsc-config` was started in, and S1
   shows the absolute file it read.
 

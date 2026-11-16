@@ -20,22 +20,30 @@ func TestFIFOIsRefusedWithoutBlocking(t *testing.T) {
 	if err := syscall.Mkfifo(fifo, 0o600); err != nil {
 		t.Skipf("mkfifo: %v", err)
 	}
+	contexts := func(explicit string) func() error {
+		return func() error {
+			_, err := Contexts(explicit)
+			return err
+		}
+	}
 	tests := []struct {
 		name          string
 		kubeconfigEnv string
-		explicit      string
+		read          func() error
 	}{
-		{name: "explicit path", explicit: fifo},
-		{name: "KUBECONFIG", kubeconfigEnv: fifo},
+		{name: "explicit path", read: contexts(fifo)},
+		{name: "KUBECONFIG", kubeconfigEnv: fifo, read: contexts("")},
+		// readOpened is what runs when the path is swapped for a FIFO after the stat check.
+		{name: "swapped after stat", read: func() error {
+			_, err := readOpened(fifo)
+			return err
+		}},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Setenv(clientcmd.RecommendedConfigPathEnvVar, tc.kubeconfigEnv)
 			done := make(chan error, 1)
-			go func() {
-				_, err := Contexts(tc.explicit)
-				done <- err
-			}()
+			go func() { done <- tc.read() }()
 			select {
 			case err := <-done:
 				if !errors.Is(err, ErrKubeconfigNotFound) {

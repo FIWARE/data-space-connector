@@ -105,13 +105,18 @@ func readRegular(path string) ([]byte, error) {
 	if err := checkFile(path, info, err); err != nil {
 		return nil, err
 	}
-	f, err := os.Open(path)
+	return readOpened(path)
+}
+
+// readOpened opens path without blocking and re-checks what it opened, since the path may have
+// been swapped for a FIFO or device after readRegular's stat.
+func readOpened(path string) ([]byte, error) {
+	f, err := os.OpenFile(path, openFlags, 0)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrKubeconfigNotFound, err)
 	}
 	defer f.Close()
-	// The path may have been swapped between Stat and Open.
-	info, err = f.Stat()
+	info, err := f.Stat()
 	if err := checkFile(path, info, err); err != nil {
 		return nil, err
 	}
