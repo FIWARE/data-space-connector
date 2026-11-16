@@ -89,7 +89,7 @@ question), and CM chart 3.6.6 (Prerequisite A, pinned by Step 3) renders
   carries through all three paths: verbatim in the yaml ConfigMap, as the `name` field of the route
   body in the admin-API path, and as `<name>-route` in the `ApisixRoute` metadata. `name` is a label,
   never the route id, so duplicate names do not overwrite each other in yaml or admin-API mode; the
-  validation only refuses duplicates of the three events names, because it looks them up by name.
+  validation checks every entry that carries one of the three events names.
   In ingress-controller mode the `ApisixRoute` template reads only `host`, `uri`, `upstream.nodes`
   and `plugins`: it drops `methods`, `hosts` and `priority`. The `OPTIONS` handshake route would then
   match every method on `/events` without authentication, so the events routes are refused in that
@@ -116,7 +116,8 @@ question), and CM chart 3.6.6 (Prerequisite A, pinned by Step 3) renders
   (`dataspace-events`, `dataspace-events-handshake`, `dataspace-events-discovery`) to their own
   `decentralizedIam.odrlAuthorization.apisix.routes`, copied from an example values file that the
   repo ships and the docs explain (Steps 4 and 6). The umbrella finds them by `name` and `fail`s on
-  inconsistent or unsafe combinations. Removing them works in yaml mode (the ConfigMap is rewritten);
+  settings that weaken access control; consistency between the entries is a guide checklist (Step 4,
+  "Scope of the checks"). Removing them works in yaml mode (the ConfigMap is rewritten);
   in the etcd-backed modes it leaves stale `<release>-<index>` routes, as for any route removed from
   the list today, which the docs state.
 - **How the yaml-mode ConfigMap reaches APISIX** (read from odrl-authorization 2.5.0, apisix chart
@@ -217,9 +218,9 @@ drops, for a CM version that has no listener.
    change. Signing off on this plan signs off on that replacement. Consequences:
    - **Two switches.** The operator appends the routes to their `routes` list, separately from
      `contract-management.dataspace.events.listener.enabled`. A subchart value cannot depend on
-     another value, and host and verifier service are deployment-specific. The umbrella `fail`s on
-     inconsistent combinations (Step 4). A listener without the routes is allowed, for operators who
-     run their own gateway.
+     another value, and host and verifier service are deployment-specific. The umbrella does not
+     check that the two agree: routes without the listener answer `404`, which a first delivery shows
+     at once. A listener without the routes is allowed, for operators who run their own gateway.
    - **Checks are opt-in by name.** The umbrella finds the routes by their `name`. A renamed or
      unnamed copy is not checked at all. The example header and the Step 6 guide say "keep the
      names". An earlier revision also caught an unnamed route at `/events` to the release's CM
@@ -228,7 +229,15 @@ drops, for a CM version that has no listener.
      two node shapes and a re-run local check on every CM bump. In return it caught only a renamed
      copy with exactly that upstream and path, and it added an upgrade `fail` for routes no
      operator named for this feature.
-   - **One opt-out.** The validation has many `fail` conditions on operator-owned routes, and a
+   - **Access-control checks only.** The validation `fail`s only on settings that weaken access
+     control without breaking delivery (seven checks, Step 4 "Scope of the checks"). Consistency
+     between the three entries (matching `uri`s and hosts, the discovery service path, entries
+     present, `methods: [POST]`, the listener flag) is a checklist in the Step 6 guide: a mistake
+     there breaks the handshake, discovery or delivery visibly. An earlier revision of this plan
+     checked those too (about 20 rules); they are dropped because every APISIX or
+     odrl-authorization bump can invalidate Go-template logic that CI cannot test against the
+     subchart, and a wrong rule blocks install and upgrade.
+   - **One opt-out.** The validation still has `fail` conditions on operator-owned routes, and a
      setup it does not foresee (another auth chain, an `X-Userinfo` strip through a global rule, an
      APISIX upgrade that moves `openid-connect`'s priority) would block install and upgrade.
      `eventingRouteValidation.enabled: false` (umbrella key, default `true`, Step 4) switches the
@@ -418,8 +427,8 @@ ships an example and validates it, but adds no route itself.
       `vars` route (`k3s/provider.yaml` ~443–454) that serves the **contract-management** service's
       metadata, which lacks the events scope. The publisher can then never get a token.
     - The path assumes the announced sink is `<scheme>://<host>/events`. Say in a comment that a sink
-      under another path needs the `uri` of all three entries changed (the chart checks that they
-      agree, Step 4).
+      under another path needs the `uri` of all three entries changed (the chart does not check that
+      they agree; it is on the Step 6 checklist).
     - `<events-service>` is the verifier service of Step 6 item 3, and the same service that
       `dataspace-events`' `openid-connect.discovery` points at.
     - `verifier:3000` comes from `decentralizedIam.vcAuthentication.vcverifier.fullnameOverride:
@@ -484,126 +493,113 @@ ships an example and validates it, but adds no route itself.
   `contract-management.dataspace.events` would be. Declare it in `values.yaml` as
   `eventingRouteValidation: {enabled: true}` with a `# --` comment saying that `false` skips every
   check below and leaves the route security to the operator, and regenerate `values.schema.json`.
-  One switch, not one per check and not a smaller hard-fail set: the checks that guard against a
-  spoofed identity or an open `POST /events` are the same ones an unforeseen setup trips (another
-  auth chain, a global-rule strip and a moved priority all hit the `X-Userinfo`/priority checks), so a partial switch would not help
+  One switch, not one per check: the checks that guard against a spoofed identity or an open
+  `POST /events` are the same ones an unforeseen setup trips (another auth chain, a global-rule strip
+  and a moved priority all hit the `X-Userinfo`/priority checks), so a partial switch would not help
   such a setup, and per-check switches would add a value for every rule. Test that the key skips the
   whole file.
 
-  The template finds the entries
-  of `decentralizedIam.odrlAuthorization.apisix.routes` by `name` (the list and every key may be
-  absent: read them as described under "Reading subchart values", starting from
-  `index .Values "decentralizedIam"` and `index .Values "contract-management"`). It fails when
-  `dataspace-events` is present and:
-  - `contract-management.enabled` is true and `contract-management.dataspace.events.listener.enabled`
-    is not true (with an external CM the umbrella's listener flag means nothing), or
-  - its `methods` is not exactly `[POST]` (without it the route also matches `OPTIONS` on the same
-    host and path, and at equal priority may shadow the handshake, which then answers `401`), or
-  - its `uri` is empty, or it sets `uris` (the three entries use the singular `uri`, so the
-    comparisons below have one path to compare), or
-  - its `openid-connect.discovery` is empty, or
-  - its `openid-connect.set_userinfo_header` is not `true`, or
-  - it has no `opa` plugin (the ODRL policy of Step 5 only takes effect through `opa`; the verifier
-    scope alone admits any holder of the events credential, so trimming `opa` silently drops the
-    policy), or
-  - it has no `proxy-rewrite` whose `headers.remove` contains `X-Userinfo` (compared
-    case-insensitively, as HTTP header names are), or
-  - that `proxy-rewrite`'s `_meta.priority` is missing or not above `openid-connect`'s **effective**
-    priority: `openid-connect._meta.priority` if the route sets it, else the default below.
-    - Why: CM does not verify tokens and trusts `X-Userinfo` for its source == identity check.
-      With `bearer_only`, `openid-connect` answers `401` without a valid token and on success
-      replaces `X-Userinfo` (`core.request.set_header`; APISIX master also clears the client value
-      first). So on this route the strip is defence in depth, as the CM README asks, and the
-      priority check mainly prevents a functional break: a `proxy-rewrite` at its default 1008 runs
-      after `openid-connect` and removes the header it just set, so CM gets no identity. Step 4
-      verifies the overwrite against the shipped APISIX and states the result in the template
-      comment and the Step 6 guide; if the shipped version does **not** overwrite it, the strip is
-      the security control and the comment says so.
-    - Define `openid-connect`'s default priority as a named constant in the template, verified
-      against the APISIX version that ships (2599 in the APISIX source as of planning), with a
-      comment naming that version.
-  - `dataspace-events-handshake` or `dataspace-events-discovery` is missing, or
-  - the handshake's `uri` differs from the events `uri`, or the discovery entry's `uri` is not the
-    events `uri` followed by `/.well-known/openid-configuration` (either sets `uris` instead). This
-    keeps a non-`/events` sink path possible while handshake and discovery still answer where the
-    events arrive, or
-  - the `proxy-rewrite.uri` of `dataspace-events-discovery` is not of the form
-    `/services/<id>/.well-known/openid-configuration` (`<id>` non-empty, no further `/`, `?` or `#`),
-    or the **path** of `dataspace-events`' `openid-connect.discovery` does not end with that rewrite
-    `uri`.
-    - Why: both routes must name the same verifier service. A plain suffix check is not enough:
-      `/.well-known/openid-configuration` is a suffix of every discovery URL, and it serves the
-      verifier's default metadata, without the events scope. Requiring the `/services/<id>/` form
-      rules that out and pins the service id.
-    - Why "ends with" and not equality: a verifier published behind a gateway path prefix
-      (`https://gw.example.org/verifier/services/x/...`, internally `/services/x/...`) is a correct
-      setup, and the only opt-out for a refused one switches off every check.
-    - Get the path by stripping scheme and authority, then query and fragment:
-      `regexReplaceAll "^[a-zA-Z][a-zA-Z0-9+.-]*://[^/?#]+" … ""`, then
-      `regexReplaceAll "[?#].*$" … ""`, and test it with `hasSuffix`. The rewrite `uri` starts with
-      `/`, so the match always falls on a path-segment boundary.
-    - The `/services/<id>/` form is the verifier's own path (`k3s/provider.yaml`); the discovery
-      route's upstream is the verifier itself, never a prefixing gateway. Verify the path against
-      the shipped verifier in Step 4.
-    - The upstream of `dataspace-events-discovery` is **not** compared with the authority of the
-      discovery URL. The DSC pattern (`k3s/provider.yaml`) points `discovery` at the verifier's
-      external HTTPS host and sends the `/.well-known` routes to the internal `verifier:3000`, so an
-      authority check would refuse a correct setup. That both reach the same verifier is a
-      documented requirement (Step 6), not a check.
+  **Scope of the checks.** A check ships only if it guards access control: a misconfiguration it
+  catches lets a request through that should be refused, or drops the policy, and the event flow may
+  still work, so nobody notices. Consistency between the three entries is **not** checked: a mistake
+  there (a handshake `uri` that differs, hosts that differ, a discovery rewrite to the wrong verifier
+  service, a missing handshake or discovery entry, `dataspace-events` without `methods: [POST]`, the
+  listener off) breaks the handshake, the token fetch or the delivery, and the first test delivery
+  shows it. Those items are the Step 6 checklist (Deviation 3, "Access-control checks only"). Do not
+  add them back without human sign-off.
 
-  It also fails when any of the three names is present and:
-  - the name appears more than once, or
-  - the entry has neither a non-empty `host` nor a non-empty `hosts`, or has both, or
-  - it binds other hosts than another of the three (handshake and discovery must answer where the
-    events arrive). Normalize before comparing: `host` → `[host]`, `hosts` as given, then `uniq`
-    and `sortAlpha`, so `host: a` equals `hosts: [a]` and `[a, b]` equals `[b, a]`, or
-  - the unauthenticated entries widen their method: `dataspace-events-handshake` has `methods` other
-    than exactly `[OPTIONS]`, or `dataspace-events-discovery` other than exactly `[GET]` (without
-    `methods` APISIX matches every method, so a forgotten key would open `POST /events` without
-    authentication), or
-  - `decentralizedIam.odrlAuthorization.apisix.ingress-controller.enabled` is true: the subchart's
-    `ApisixRoute` template drops `methods` and `hosts`, with the same effect. This check runs even
-    with `apisix.enabled: false` (see the gate above), so it is the only one that can fire then.
+  The template walks `decentralizedIam.odrlAuthorization.apisix.routes` (the list and every key may be
+  absent: read them as described under "Reading subchart values", starting from
+  `index .Values "decentralizedIam"`) and checks **every** entry whose `name` is one of the three, so a
+  duplicated name is checked twice rather than refused. It reads no `contract-management` value. The
+  checks, one `fail` message each (the message names the route and the setting):
+  1. **Ingress controller** (any of the three names present):
+     `decentralizedIam.odrlAuthorization.apisix.ingress-controller.enabled` is on. The subchart's
+     `ApisixRoute` template drops `methods` and `hosts`, so the handshake route would match every
+     method on `/events` without authentication. This check runs even with `apisix.enabled: false`
+     (see the gate above), so it is the only one that can fire then.
+  2. **Handshake method** (`dataspace-events-handshake`): `methods` is not exactly `[OPTIONS]`.
+     Without `methods` APISIX matches every method, so a forgotten key opens `POST /events` without
+     authentication.
+  3. **Discovery method** (`dataspace-events-discovery`): `methods` is not exactly `[GET]`, for the
+     same reason.
+  4. **Host binding** (`dataspace-events`): neither a non-empty `host` nor a non-empty `hosts`. A
+     host-less `/events` loses to the host-bound `/*` catch-all of the sink host (see "All three are
+     bound to the sink host"), which may accept the events token under another verifier scope and
+     ODRL policy. Handshake and discovery are not checked here: a host-less copy of them only breaks
+     the flow. Both keys set or `hosts: []` is rejected by APISIX itself.
+  5. **Identity header** (`dataspace-events`): `openid-connect.set_userinfo_header` is not the boolean
+     `true` (APISIX's plugin schema rejects a string, so a string is refused here too).
+  6. **Policy** (`dataspace-events`): no `opa` plugin. The ODRL policy of Step 5 only takes effect
+     through `opa`; the verifier scope alone admits any holder of the events credential, so trimming
+     `opa` silently drops the policy.
+  7. **`X-Userinfo` strip** (`dataspace-events`): no `proxy-rewrite` whose `headers.remove` contains
+     `X-Userinfo` (compared case-insensitively, as HTTP header names are), or that `proxy-rewrite`'s
+     `_meta.priority` is missing or not above `openid-connect`'s **effective** priority:
+     `openid-connect._meta.priority` if the route sets it, else the default below.
+     - Why: CM does not verify tokens and trusts `X-Userinfo` for its source == identity check.
+       With `bearer_only`, `openid-connect` answers `401` without a valid token and on success
+       replaces `X-Userinfo` (`core.request.set_header`; APISIX master also clears the client value
+       first). So on this route the strip is defence in depth, as the CM README asks, and the
+       priority check mainly prevents a functional break: a `proxy-rewrite` at its default 1008 runs
+       after `openid-connect` and removes the header it just set, so CM gets no identity. Step 4
+       verifies the overwrite against the shipped APISIX and states the result in the template
+       comment and the Step 6 guide; if the shipped version does **not** overwrite it, the strip is
+       the security control and the comment says so.
+     - Define `openid-connect`'s default priority as a named constant in the template, verified
+       against the APISIX version that ships (2599 in the APISIX source as of planning), with a
+       comment naming that version.
 
   Every check above depends on the exact names. An operator who renames the entries, drops `name`
   while merging lists, or writes their own events routes gets none of them (Deviation 3). There is
   no guard for unnamed routes (dropped, see Deviation 3); the example header and the Step 6 guide
   say to keep the names.
 
-  A listener without the routes stays valid (Deviation 3).
-- Extend `tests/eventing_test.yaml`, parameterized: defaults render nothing; an otherwise failing
-  combination (e.g. the listener off, the ingress controller on) renders
-  nothing with `eventingRouteValidation.enabled: false`, with `decentralizedIam.enabled: false` and
-  with `decentralizedIam.odrlAuthorization.enabled: false`, and still fails with
-  `odrlAuthorization.enabled` and `apisix.enabled` absent and with each gate switch set to the
-  **string** `"false"` (Helm deploys the subchart then);
-  a non-ingress failure (e.g. the listener off) renders nothing with
-  `decentralizedIam.odrlAuthorization.apisix.enabled: false`, while `apisix.enabled: false` with
-  `ingress-controller.enabled: true` and an events name present still gives `failedTemplate`, and so
-  does `ingress-controller.enabled: "false"` (a truthy string); a `dataspace-events` without `opa` fails; other routes without
-  these names render nothing; each inconsistent combination gives `failedTemplate` with its message,
-  including on each entry: no host, `host: ""`, `hosts: []`, both keys set, hosts that differ
-  between the entries, a duplicate name, missing or widened `methods` on handshake and discovery,
-  `uris` set instead of `uri`, the ingress controller on; the discovery entry missing, with an empty
-  rewrite `uri`, with a service other than `discovery`'s, with the rewrite `uri`
-  `/.well-known/openid-configuration` or `/services/x/.well-known/openid-configuration?a=b`, with a
-  discovery URL whose path ends in `/xservices/...` instead of `/services/...`, and with a route `uri` that is not the events `uri` +
-  `/.well-known/openid-configuration`; a handshake `uri` that differs from the events `uri`;
-  on `dataspace-events`: `methods` missing or other than `[POST]`, an empty `uri`,
-  `set_userinfo_header` missing or `false`, no `proxy-rewrite`, a
-  `proxy-rewrite` without `X-Userinfo` in `headers.remove`, its `_meta.priority` missing, equal to
-  or below the default 2599, and above 2599 but not above an `openid-connect._meta.priority` set on
-  the route (e.g. 2600 against 3000). `X-Userinfo` matches in any case (`x-userinfo` passes), and an
-  unnamed route at `/events` to `contract-management:8080` renders (no guard, Deviation 3). The
-  consistent combination (the three entries of the example
-  file, next to an unrelated route) renders with `host`, with one entry in `hosts` and with two;
-  with `host: a` on one entry and `hosts: [a]` on the others; with `hosts: [a, b]` and `[b, a]`;
-  with a sink path other than `/events` on all three `uri`s;
-  with an external `https://` discovery URL and a `verifier:3000` discovery upstream (the k3s
-  pattern), with an internal `http://verifier:3000/...` URL, with a discovery URL behind a gateway
-  path prefix (`https://gw.example.org/verifier/services/x/...`), and with a query string on the
-  discovery URL; and with
-  `contract-management.enabled: false` and the listener off.
+  A listener without the routes stays valid, and so do routes without the listener (Deviation 3).
+- Extend `tests/eventing_test.yaml`, parameterized, with one row per line of the tables below.
+  Fixtures: **E** = the three entries of the example file next to an unrelated route; **F** = E with
+  `opa` removed from `dataspace-events` (fails check 6 only); **I** = E plus
+  `apisix.ingress-controller.enabled: true` (fails check 1 only). "absent" means the test does not
+  set the key (CI builds no dependencies, so the subchart default is not merged in).
+
+  (a) Gate and opt-out:
+
+  | # | Values | Expected |
+  |---|--------|----------|
+  | G1 | chart defaults | renders nothing |
+  | G2 | F, I, each with `eventingRouteValidation.enabled: false` | renders nothing |
+  | G3 | F, I, each with `decentralizedIam.enabled: false` | renders nothing |
+  | G4 | F, I, each with `decentralizedIam.odrlAuthorization.enabled: false` | renders nothing |
+  | G5 | F with `odrlAuthorization.apisix.enabled: false` | renders nothing |
+  | G6 | I with `odrlAuthorization.apisix.enabled: false` | fails, check 1 |
+  | G7 | F with `odrlAuthorization.enabled` and `apisix.enabled` absent | fails, check 6 |
+  | G8 | F with each of the three gate switches set to the **string** `"false"` (one row each) | fails, check 6 |
+  | G9 | E with `ingress-controller.enabled: "false"` (a truthy string) | fails, check 1 |
+  | G10 | only routes without the three names, `ingress-controller.enabled: true` | renders nothing |
+
+  (b) One row per check, each case a parameterized line, asserting `failedTemplate` with the
+  message fragment:
+
+  | Check | Cases (on E unless stated) | Message fragment |
+  |-------|----------------------------|------------------|
+  | 1 | I | `ingress-controller` |
+  | 2 | handshake `methods` absent, `[OPTIONS, POST]`, `[GET]`; a second `dataspace-events-handshake` without `methods` | `dataspace-events-handshake`, `methods` |
+  | 3 | discovery `methods` absent, `[GET, POST]`, `[POST]` | `dataspace-events-discovery`, `methods` |
+  | 4 | `dataspace-events` without `host`/`hosts`, `host: ""`, `hosts: []` | `dataspace-events`, `host` |
+  | 5 | `set_userinfo_header` absent, `false`, `"true"` | `set_userinfo_header` |
+  | 6 | F | `opa` |
+  | 7 | no `proxy-rewrite`; `proxy-rewrite` without `headers.remove`; `headers.remove` without `X-Userinfo`; `_meta.priority` absent, `1008`, `2599`; `2600` with `openid-connect._meta.priority: 3000` | `X-Userinfo` or `priority` |
+
+  (c) Passing variants (render nothing):
+
+  | # | Values |
+  |---|--------|
+  | P1 | E (singular `host` on all three) |
+  | P2 | E with `dataspace-events` `hosts: [a]`, and with `hosts: [a, b]` |
+  | P3 | E with `headers.remove: [x-userinfo]` |
+  | P4 | E with `openid-connect._meta.priority: 3000` and the rewrite at `3001` |
+  | P5 | E with handshake and discovery entries removed, with a handshake `uri` other than the events `uri`, with hosts that differ between the entries, with the discovery rewrite `/.well-known/openid-configuration`, with `dataspace-events` `methods` absent, and with `listener.enabled: false` (consistency is not checked; pins "Scope of the checks") |
+  | P6 | an unnamed route at `/events` to `contract-management:8080` without `methods` (no guard, Deviation 3) |
 - Local only, not in CI: after `helm dependency update`, render with the example entries appended
   to a `routes` list that holds an unrelated route, in the default yaml mode and in
   `traditional`+`etcd` mode. Check that the `apisix-routes` ConfigMap and the admin script both
@@ -644,11 +640,7 @@ ships an example and validates it, but adds no route itself.
      follows) vs. refreshed at runtime;
   2. the gateway: append the three entries of `doc/eventing/examples/events-routes.yaml` (Step 4)
      to the operator's own `decentralizedIam.odrlAuthorization.apisix.routes` list (Helm replaces
-     lists), set `discovery` and the discovery route's rewrite `uri` to the events verifier service
-     (the discovery route's upstream must reach the same verifier as the `discovery` URL; the chart
-     checks that the `discovery` URL's path ends with the rewrite `uri`
-     `/services/<id>/.well-known/openid-configuration`, not the host; a gateway path prefix in front
-     of the verifier is allowed),
+     lists), set `discovery` and the discovery route's rewrite `uri` to the events verifier service,
      and bind all three to the host of the announced sink URL with `host` or `hosts` (never empty, not
      both). Override `upstream.nodes` if CM is not `contract-management:8080` or the verifier not
      `verifier:3000`; change the `uri`s if the sink path is not `/events`. Explain:
@@ -667,10 +659,22 @@ ships an example and validates it, but adds no route itself.
        install/upgrade;
      - why `discovery` uses the verifier's external URL (Step 4: `issuer` and `jwks_uri` come from the
        verifier's `server.host`), with `proxy_opts` where the gateway needs a proxy;
-     - which settings the chart enforces on `dataspace-events` (`methods: [POST]`,
-       `set_userinfo_header`, `opa`, the `X-Userinfo` strip and its priority above `openid-connect`'s
-       effective priority) and why (for the strip: the Step 4 result on whether `openid-connect`
-       overwrites a client-sent header), and that the three `uri`s must agree;
+     - which settings the chart enforces (the seven checks of Step 4: no ingress controller,
+       `[OPTIONS]` on the handshake, `[GET]` on discovery, and on `dataspace-events` a host,
+       `set_userinfo_header`, `opa`, the `X-Userinfo` strip and its priority above
+       `openid-connect`'s effective priority) and why (for the strip: the Step 4 result on whether
+       `openid-connect` overwrites a client-sent header);
+     - a checklist of what the chart does **not** check, because a mistake there breaks the flow
+       visibly rather than weakening access control (Step 4, "Scope of the checks"): all three
+       entries present; `dataspace-events` has `methods: [POST]` (otherwise it may shadow the
+       handshake, which then answers `401`); the handshake `uri` equals the events `uri` and the
+       discovery `uri` is the events `uri` + `/.well-known/openid-configuration`; all three bind the
+       same hosts; the discovery rewrite `uri` is `/services/<id>/.well-known/openid-configuration`
+       for the same verifier service as `dataspace-events`' `discovery` URL (a gateway path prefix in
+       front of the verifier in the `discovery` URL is fine; the discovery route's upstream must
+       reach the same verifier); `contract-management.dataspace.events.listener.enabled: true` when
+       CM runs in this release. Then send one test event: the handshake, the token fetch and the
+       delivery each fail visibly when an item is wrong;
      - why the host is required (host-bound catch-alls win under `radixtree_host_uri`);
      - that the sink host should be the host whose catch-all already routes to CM (e.g. the k3s
        `contract-management` host), so the exact `/events` routes shadow it. Any other route whose
@@ -715,11 +719,13 @@ ships an example and validates it, but adds no route itself.
   - decision: the chart ships no events route; operators append the three named entries of
     `doc/eventing/examples/events-routes.yaml`, and `templates/eventing-validation.yaml` checks them
     by `name`, with `eventingRouteValidation.enabled` as the single opt-out;
-  - consequences: two switches, checks are opt-in by name, a new upgrade `fail` path for routes that
+  - consequences: two switches, checks are opt-in by name, only access-control checks (consistency is
+    a guide checklist), a new upgrade `fail` path for routes that
     carry the names, stale `<release>-<index>` routes in the etcd-backed modes on removal, the
     ingress-controller mode refused;
   - rejected alternatives: an odrl-authorization `apisix.extraRoutes` map, an umbrella hook Job
-    PUTting to the admin API, the unnamed-route guard (with the reason for each, as in this plan).
+    PUTting to the admin API, the unnamed-route guard, and full consistency validation of the three
+    entries (with the reason for each, as in this plan).
 
   Link the ADR from `participant-setup.md` and from `doc/eventing/architecture.md` §12 as a one-line
   note (no new D-x entry: §12 records design decisions of the protocol, the ADR records this chart's
