@@ -712,6 +712,10 @@ ships an example and validates it, but adds no route itself.
        self-issued, as in k3s; a wrong DID makes OPA answer `403` to every delivery), or use a
        dedicated credential type. The holder is checked by CM (`publishers[].id` against
        `credentialSubject.id`), not by the policy;
+     - the issuer check needs a **string** `issuer` in the credential: ODRL-PAP's `current_party`
+       returns `credential.issuer` unchanged, so an object issuer (`{"id": "did:..."}`, allowed by
+       VCDM) never matches `odrl:eq` and OPA answers `403` to every delivery. The IT ticket that
+       wires the policy in checks that Keycloak's `OperatorCredential` emits a string `issuer`;
      - the events verifier service must still trust only the publisher's issuer
        (`trustedIssuersLists`/`trustedParticipantsLists`); the policy is the second line, CM's
        source == identity check on `X-Userinfo` the third;
