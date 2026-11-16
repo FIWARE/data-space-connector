@@ -52,8 +52,9 @@ question), and CM chart 3.6.6 (Prerequisite A, pinned by Step 3) renders
 - The `dataspace` removal mode revokes TIL grants with scope = publisher id and
   scopeType = `DATASPACE_MEMBERSHIP` (`ParticipantAdoption.grantMembership(did, publisherId, …)`).
 - **TIL version.** `decentralizedIam` 2.1.28 (pinned) deploys trusted-issuers-list chart 0.19.1, which
-  is TIL **0.10.0** and has no scopes. The latest releases, 2.1.29 and 2.1.30, deploy the same. TIL
-  chart 0.19.2 (TIL 0.10.3) exists in FIWARE/helm-charts. The umbrella sets no TIL image override.
+  is TIL **0.10.0** and has no scopes. The other 2.1.x releases (up to 2.1.30) deploy the same;
+  2.3.0 is the first with TIL ≥ 0.10.1 (TIL chart 0.19.2, TIL 0.10.3, see Prerequisite B). The
+  umbrella sets no TIL image override.
   Micronaut ignores query parameters it does not bind, so a scoped `POST /issuer` against TIL 0.10.0
   succeeds and stores an unscoped grant. CM's `on-participant-removed.mode: dataspace` would then find
   nothing to revoke.
@@ -76,15 +77,19 @@ question), and CM chart 3.6.6 (Prerequisite A, pinned by Step 3) renders
     does not change it): the routes go into the ConfigMap `apisix-routes` (`apisix.yaml`). **No admin
     API is served.**
   - etcd-backed modes (`traditional` + `etcd`, which `k3s/provider.yaml` uses; `standalone` +
-    `traditional`; `decoupled` control plane): a hook Job PUTs each entry to the admin API as
-    `<release>-<index>`.
+    `traditional`; `decoupled` control plane): a hook Job PUTs each entry to the admin API with the
+    id `<release>-<index>` (`/apisix/admin/routes/<release>-<index>`). The entry's `name` goes only
+    into the route body (verified in odrl-authorization 2.5.0 `routes-script.yaml`).
   - Ingress-controller mode: one `ApisixRoute` CR per entry.
 
   Helm replaces lists instead of merging them. A default route in the umbrella's list would therefore
   be lost as soon as a user sets `routes`. But the umbrella declares no `routes` default at all: the
   list is entirely operator-owned (see `k3s/provider.yaml`), every existing DSC route lives there, and
-  every entry may carry a `name`, which odrl-authorization uses as the route name in all three paths
-  (2.5.0, shipped by decentralized-iam 2.3.0).
+  every entry may carry a `name`, which odrl-authorization 2.5.0 (shipped by decentralized-iam 2.3.0)
+  carries through all three paths: verbatim in the yaml ConfigMap, as the `name` field of the route
+  body in the admin-API path, and as `<name>-route` in the `ApisixRoute` metadata. `name` is a label,
+  never the route id, so duplicate names do not overwrite each other in yaml or admin-API mode; the
+  validation only refuses duplicates of the three events names, because it looks them up by name.
   In ingress-controller mode the `ApisixRoute` template reads only `host`, `uri`, `upstream.nodes`
   and `plugins`: it drops `methods`, `hosts` and `priority`. The `OPTIONS` handshake route would then
   match every method on `/events` without authentication, so the events routes are refused in that
@@ -325,7 +330,10 @@ Prerequisite B is met (decentralized-iam 2.3.0). The events routes are ordinary 
 operator's `decentralizedIam.odrlAuthorization.apisix.routes` list (see "APISIX routes"); the chart
 ships an example and validates it, but adds no route itself.
 - Before anything else, confirm that decentralized-iam 2.3.0 is published and that its
-  odrl-authorization (2.5.0) carries `name` through all three render paths. If not, write `blocked`.
+  odrl-authorization (2.5.0) carries `name` through all three render paths, with the admin-API ids
+  still `<release>-<index>` (as read from the 2.5.0 chart while revising this plan; see "APISIX
+  routes"). If not, write `blocked`; if the ids are keyed by name, fix the stale-route text here and
+  in Step 6 first.
 - `charts/data-space-connector/Chart.yaml`: set the `decentralizedIam` dependency to **2.3.0**.
   Diff `helm template` with default values before and after, and list every change in the PR
   description: the TIL image (≥ 0.10.1, and whether it migrates its DB at start-up), the
@@ -428,13 +436,24 @@ ships an example and validates it, but adds no route itself.
     events `uri` followed by `/.well-known/openid-configuration` (either sets `uris` instead). This
     keeps a non-`/events` sink path possible while handshake and discovery still answer where the
     events arrive, or
-  - the `proxy-rewrite.uri` of `dataspace-events-discovery` is empty or differs from the **path** of
-    `dataspace-events`' `openid-connect.discovery`.
-    - Why: both routes must name the same verifier service. A suffix check is not enough:
+  - the `proxy-rewrite.uri` of `dataspace-events-discovery` is not of the form
+    `/services/<id>/.well-known/openid-configuration` (`<id>` non-empty, no further `/`, `?` or `#`),
+    or the **path** of `dataspace-events`' `openid-connect.discovery` does not end with that rewrite
+    `uri`.
+    - Why: both routes must name the same verifier service. A plain suffix check is not enough:
       `/.well-known/openid-configuration` is a suffix of every discovery URL, and it serves the
-      verifier's default metadata, without the events scope.
-    - Get the path with `regexReplaceAll "^[a-zA-Z][a-zA-Z0-9+.-]*://[^/]+" … ""` and compare for
-      equality.
+      verifier's default metadata, without the events scope. Requiring the `/services/<id>/` form
+      rules that out and pins the service id.
+    - Why "ends with" and not equality: a verifier published behind a gateway path prefix
+      (`https://gw.example.org/verifier/services/x/...`, internally `/services/x/...`) is a correct
+      setup, and the chart has no opt-out for a refused one.
+    - Get the path by stripping scheme and authority, then query and fragment:
+      `regexReplaceAll "^[a-zA-Z][a-zA-Z0-9+.-]*://[^/?#]+" … ""`, then
+      `regexReplaceAll "[?#].*$" … ""`, and test it with `hasSuffix`. The rewrite `uri` starts with
+      `/`, so the match always falls on a path-segment boundary.
+    - The `/services/<id>/` form is the verifier's own path (`k3s/provider.yaml`); the discovery
+      route's upstream is the verifier itself, never a prefixing gateway. Verify the path against
+      the shipped verifier in Step 4.
     - The upstream of `dataspace-events-discovery` is **not** compared with the authority of the
       discovery URL. The DSC pattern (`k3s/provider.yaml`) points `discovery` at the verifier's
       external HTTPS host and sends the `/.well-known` routes to the internal `verifier:3000`, so an
@@ -488,7 +507,8 @@ ships an example and validates it, but adds no route itself.
   between the entries, a duplicate name, missing or widened `methods` on handshake and discovery,
   `uris` set instead of `uri`, the ingress controller on; the discovery entry missing, with an empty
   rewrite `uri`, with a service other than `discovery`'s, with the rewrite `uri`
-  `/.well-known/openid-configuration`, and with a route `uri` that is not the events `uri` +
+  `/.well-known/openid-configuration` or `/services/x/.well-known/openid-configuration?a=b`, with a
+  discovery URL whose path ends in `/xservices/...` instead of `/services/...`, and with a route `uri` that is not the events `uri` +
   `/.well-known/openid-configuration`; a handshake `uri` that differs from the events `uri`;
   on `dataspace-events`: `methods` missing or other than `[POST]`, an empty `uri`,
   `set_userinfo_header` missing or `false`, no `proxy-rewrite`, a
@@ -504,14 +524,17 @@ ships an example and validates it, but adds no route itself.
   port, and with only an `upstream_id`. The consistent combination (the three entries of the example
   file, next to an unrelated route) renders with `host`, with one entry in `hosts` and with two;
   with `host: a` on one entry and `hosts: [a]` on the others; with `hosts: [a, b]` and `[b, a]`;
-  with a sink path other than `/events` on all three `uri`s and the discovery rewrite;
+  with a sink path other than `/events` on all three `uri`s;
   with an external `https://` discovery URL and a `verifier:3000` discovery upstream (the k3s
-  pattern) and with an internal `http://verifier:3000/...` URL; and with
+  pattern), with an internal `http://verifier:3000/...` URL, with a discovery URL behind a gateway
+  path prefix (`https://gw.example.org/verifier/services/x/...`), and with a query string on the
+  discovery URL; and with
   `contract-management.enabled: false` and the listener off.
 - Local only, not in CI: after `helm dependency update`, render with the example entries appended
   to a `routes` list that holds an unrelated route, in the default yaml mode and in
   `traditional`+`etcd` mode. Check that the `apisix-routes` ConfigMap and the admin script both
-  contain the unrelated route and all three events routes, under their `name`. Then run the rendered
+  contain the unrelated route and all three events routes, under their `name` (the admin script
+  PUTs them with the ids `<release>-<index>`). Then run the rendered
   yaml-mode config in an APISIX container of the shipped version, with a host-bound `/*` catch-all on
   the same host and on another host, plus a copy of the k3s priority-100 `/*` + `vars` discovery
   route on the same host. Show with `curl` that `POST /events`, `OPTIONS /events` and
@@ -546,13 +569,17 @@ ships an example and validates it, but adds no route itself.
      to the operator's own `decentralizedIam.odrlAuthorization.apisix.routes` list (Helm replaces
      lists), set `discovery` and the discovery route's rewrite `uri` to the events verifier service
      (the discovery route's upstream must reach the same verifier as the `discovery` URL; the chart
-     checks the service path, not the host),
+     checks that the `discovery` URL's path ends with the rewrite `uri`
+     `/services/<id>/.well-known/openid-configuration`, not the host; a gateway path prefix in front
+     of the verifier is allowed),
      and bind all three to the host of the announced sink URL with `host` or `hosts` (never empty, not
      both). Override `upstream.nodes` if CM is not `contract-management:8080` or the verifier not
      `verifier:3000`; change the `uri`s if the sink path is not `/events`. Explain:
      - that removing the entries again leaves stale `<release>-<index>` routes in the etcd-backed
-       APISIX modes (odrl-authorization only PUTs, as for any route removed from the list), and how
-       to delete them through the admin API;
+       APISIX modes (odrl-authorization PUTs each entry under the id `<release>-<index>`, `name`
+       is only a field of the route body, and it never deletes, as for any route removed from the
+       list; shortening the list leaves the trailing ids behind), and how to delete them through the
+       admin API;
      - that the ingress-controller mode is refused (Step 4) and why;
      - keep the three `name`s, or the chart cannot check the routes: the checks find them by name,
        and only a route at `/events` to the release's CM is caught without one (Step 4), and not when
