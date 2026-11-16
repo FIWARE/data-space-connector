@@ -1016,6 +1016,37 @@ tests:
       - failedTemplate:
           errorPattern: 'route "dataspace-events": vars must not be set'
 
+  - it: check 9 refuses remote_addrs on dataspace-events
+    set:
+      decentralizedIam:
+        odrlAuthorization:
+          apisix:
+            routes:
+              - *unrelated
+              - <<: *events
+                remote_addrs:
+                  - 10.0.0.0/8
+              - *handshake
+              - *discovery
+    asserts:
+      - failedTemplate:
+          errorPattern: 'route "dataspace-events": remote_addrs must not be set'
+
+  - it: check 9 refuses remote_addr on dataspace-events
+    set:
+      decentralizedIam:
+        odrlAuthorization:
+          apisix:
+            routes:
+              - *unrelated
+              - <<: *events
+                remote_addr: 10.0.0.1
+              - *handshake
+              - *discovery
+    asserts:
+      - failedTemplate:
+          errorPattern: 'route "dataspace-events": remote_addr must not be set'
+
   - it: check 9 refuses status 0 on dataspace-events
     set:
       decentralizedIam:
@@ -1031,7 +1062,7 @@ tests:
       - failedTemplate:
           errorPattern: 'route "dataspace-events": status must be 1 or unset'
 
-  - it: check 9 passes status 1 and an empty vars list
+  - it: check 9 passes status 1 and empty vars and remote_addrs lists
     set:
       decentralizedIam:
         odrlAuthorization:
@@ -1041,6 +1072,7 @@ tests:
               - <<: *events
                 status: 1
                 vars: []
+                remote_addrs: []
               - *handshake
               - *discovery
     asserts: *passes
