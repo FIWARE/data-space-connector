@@ -1,0 +1,20 @@
+# Head comment: literal, folded and multi-line scalars.
+literal: | # line comment
+  line one
+  # not a comment, content of the literal
+  line three
+folded: >-
+  folded text
+  continues here
+
+keep: |+
+  kept trailing newlines
+
+
+strip: |2-
+    indented by the indicator
+plainMulti: this plain scalar
+  spans two lines # line comment
+quotedMulti: "a double quoted
+  scalar over two lines"
+# Foot comment.

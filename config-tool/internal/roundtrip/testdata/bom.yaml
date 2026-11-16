@@ -1,0 +1,5 @@
+﻿# Head comment: a UTF-8 BOM and non-ASCII text.
+größe: 1 # line comment
+name: "Café ☕"
+ä: {ö: ü, k: v}
+# Foot comment.
