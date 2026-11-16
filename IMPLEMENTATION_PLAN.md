@@ -120,6 +120,12 @@ before it is returned. The API is the one TECH_STACK names: `Parse`, `Classify`,
   decoded tree (`any`) with the original tree after the same edits were applied to a deep copy
   of the node tree. Both sides go through `decodeValue` (see *Duplicate keys*). If they differ, `Write` returns `ErrPatchVerification` and no bytes.
   A wrong write is an error, never a file.
+- **Value equality.** The synthetic node for a new scalar is built from its rendered text, with
+  the tag yaml.v3 resolves for that text, so `float64(2)` rendered as `2` is an `!!int` on both
+  sides of the self-check. The self-check and the no-op rule compare through one helper,
+  `equalValue`: numbers are equal when their values are, whatever the int/float type (Helm
+  decodes every number as float64), and NaN equals NaN. So `Set(port, 8080.0)` on `port: 8080`
+  adds no patch.
 - **Aliases.** A path that passes *through* an alias node is refused with `ErrAliasPath`, because
   editing it would also change every other user of the anchor. A path that *ends* at an alias
   leaf (`b: *a`, or `*a` inside a flow collection) may be set: the replacement covers the
@@ -136,13 +142,19 @@ before it is returned. The API is the one TECH_STACK names: `Parse`, `Classify`,
   a second `Merge` with the same overrides is then a byte-level no-op. `Set` on the value of
   `<<` gives `ErrAliasPath`, because replacing it would change what the mapping inherits.
 - **Deterministic insertion.**
-  - A new key is appended after the last child subtree of the parent mapping. Comment lines
-    indented deeper than the sibling column belong to that last child and are skipped; the key
-    goes before the first blank line, or comment line at or left of the sibling column, that
-    follows. If the last child ends in a keep-chomped block scalar (`|+`, `>+`), its trailing
-    blank lines are part of the value, so the key goes after them. When one save adds several
-    keys to the same parent, they are ordered lexicographically. Missing parents are created
-    on the way.
+  - A new key is appended after the last child subtree of the parent mapping. That subtree ends
+    where Step 3's scanner ends its last leaf (a block scalar's content, a multi-line plain or
+    quoted value, a multi-line flow collection), so `#` lines inside a literal block are
+    content. Only after that end, comment lines indented deeper than the sibling column belong
+    to that last child and are skipped; the key goes before the first blank line, or comment
+    line at or left of the sibling column, that follows. If the last child ends in a
+    keep-chomped block scalar (`|+`, `>+`), its trailing blank lines are part of the value, so
+    the key goes after them. When one save adds several keys to the same parent, they are
+    ordered lexicographically. Missing parents are created on the way, and a null parent gains
+    children (see below). A `Key` segment that runs into a non-null scalar or a sequence, in
+    the source or pending, gives `ErrNotMapping`: `Set(a.b, 1)` on `a: 5` or after
+    `Set(a, "s")`. `Merge` never hits it, because a map override on a scalar is a type change
+    and sets the whole map on `a`.
   - Only mapping keys are created. A path with an `Index` segment that is out of range, or that
     runs below a parent that does not exist yet, gives `ErrNotFound`; CT-2 never appends to or
     creates a sequence item. `Merge` does not need it, because it replaces lists whole.
@@ -179,14 +191,20 @@ before it is returned. The API is the one TECH_STACK names: `Parse`, `Classify`,
   and tag tokens and the whitespace after each (also Step 3's scanner). A key line where no `:`
   follows the key's span (a complex `?` key) gives `ErrUnsupportedScalar`. The span has up to two
   parts:
-  - the *inline part*: the value text from the value point to the end of that text, before the
-    whitespace and line comment that follow. It is empty for a block collection and for an
-    implicit null. For a flow collection it runs from the opening bracket to the matching
-    closing bracket, honouring quotes and nesting, and may cross lines (`additionalContexts: [`
-    at chart `values.yaml` line 2823, `scopeMappings: {` at line 2836);
-  - the *block part*: from the start of the line after the key line to the end of the last line
-    of the subtree, excluding following comment lines at or left of the key's column (or the
-    `-` column for a sequence item). It is empty for a scalar or flow value.
+  - the *inline part*: the value text that starts on the key line (or the `-` line), from the
+    value point to the end of that text, before the whitespace and line comment that follow.
+    For a literal or folded scalar it is the header (`|`, `>-`, `|2+`). For a flow collection
+    it runs from the opening bracket to the matching closing bracket, honouring quotes and
+    nesting, and may cross lines (`additionalContexts: [` at chart `values.yaml` line 2823,
+    `scopeMappings: {` at line 2836). It is empty for a block collection, an implicit null, and
+    a plain or quoted scalar whose text starts on a later line (the `acr` `description:`);
+  - the *block part*, whole lines below the key line: for a block collection, from the line
+    after the key line to the last line of the subtree, excluding following comment lines at
+    or left of the key's column (or the `-` column for a sequence item); for a literal or
+    folded scalar, its content lines as Step 3 scans them; for a plain or quoted scalar that
+    starts below the key line, the lines from its first to its last text line, so a line
+    comment on that last line goes with it. Otherwise it is empty and sits at the start of the
+    line after the inline part's last line.
 
   A *compact* sequence item is one whose collection's first child sits on the `-` line
   (`- a: 1\n  b: 2`, `- - a`; about 150 lines of the chart's `values.yaml`). It has no inline
@@ -202,8 +220,10 @@ before it is returned. The API is the one TECH_STACK names: `Parse`, `Classify`,
   (`encoding/json` with `SetEscapeHTML(false)` and the detected indent unit, sorted keys), which
   is valid flow YAML: the closing bracket goes at the indentation of the line that holds the
   opening bracket, and the inner lines one unit deeper. Comments inside a replaced flow
-  collection go with it, as in a block part. Otherwise the new value is a block fragment that
-  replaces the block part, and the inline part is removed together with the one space before it.
+  collection go with it, as in a block part. An inline value replaces the inline part and the
+  block part is removed. Otherwise the new value is a block fragment that replaces the block
+  part, and the inline part is removed together with the one space before it. A same-kind scalar
+  edit is not affected by this split: it replaces Step 3's text span.
   So `k: v # c` → map gives `k: # c` plus the block lines, `admin: # maintainer` + list gives a
   new block list under the unchanged key line, and a block map → scalar removes the block part
   and inserts one space plus the value at the value point, as for an implicit null
@@ -414,6 +434,9 @@ In `internal/roundtrip/`:
     the items of a flow sequence with non-ASCII items (`ä: [é, x]`). Implicit-null rows:
     `key:` → `key: v`, `key:   # c` → `key: v   # c`, an empty `- ` item, and `key:` at EOF
     without a trailing newline.
+  - Numbers, through `equalValue`: `Set(x, float64(2))` writes `x: 2` and the self-check
+    passes; `Set(port, 8080.0)` on `port: 8080` adds no patch; `Set(x, math.NaN())` writes
+    `.nan`, and setting NaN again adds no patch.
   - Two `Set`s on one path: the second value is written. The patch applier, fed two
     overlapping spans directly (an internal test, since no `Set` sequence produces them), gives
     `ErrPatchConflict`.
@@ -433,7 +456,7 @@ Acceptance:
 In `internal/roundtrip/`:
 - `insert.go`:
   - `Set` on a path whose key is missing inserts it, creating missing parents, under the
-    insertion rule in the Decisions.
+    insertion rule in the Decisions. Add `ErrNotMapping`.
   - `Set` with a `map[string]any` or `[]any` value renders a block fragment. Keys are sorted,
     and the fragment uses the detected indent unit, the detected sequence dash style and the
     file's line ending.
@@ -461,6 +484,11 @@ In `internal/roundtrip/`:
   - `Set(a[5])` with two items in `a`, and a path with an `Index` under a missing parent,
     give `ErrNotFound`.
   - Nested parent creation.
+  - `Set(a.b, 1)` on `a: 5`, and after `Set(a, "s")`, gives `ErrNotMapping`; `Merge({a: {b: 1}})`
+    on `a: 5` replaces `a` with the map.
+  - A last child ending in a literal block with `#` lines,
+    `a:\n  s: |\n    # not a comment\n    echo\nx: 1` with `Set(a.t, 1)`: `t` goes after
+    `    echo`, and the block's content is unchanged.
   - Sibling ordering when several keys are added to one parent: `Set(p.b)` then `Set(p.a)`
     (reverse order) writes `a` before `b`, and both survive.
   - Edits below a pending value: `Set(a.b, 1)` with `a` missing, then `Set(a.c, 2)` gives one
@@ -478,7 +506,10 @@ In `internal/roundtrip/`:
   - Indent detection on 2- and 4-space fixtures and on both dash styles.
   - `{}` → block, `[]` → block, null → block, and appending into a non-empty flow mapping and
     flow sequence.
-  - Type change from a scalar to a map and from a map to a scalar.
+  - Type change from a scalar to a map and from a map to a scalar. Scalars whose text starts
+    below the key line: `k:\n  long plain\n  text` → map gives `k:` plus the block, and → `[]`
+    gives `k: []`; `k: |\n  x` → map gives `k:` plus the block, with no `|` and no content
+    line left.
   - Key-line decoration survives a replacement: `users.admin` in the chart's `values.yaml`
     (`admin: # maintainer`, a block list) set to a new list keeps line 44 byte-equal;
     `k: v # c` → map gives `k: # c` plus the block; `k: # c\n  a: 1` → `"s"` gives `k: s # c`;
@@ -533,7 +564,8 @@ Acceptance:
   table's Round-trip row, add the per-leaf edit test and the chart's `values.yaml`.
 - `doc/config-tool/FEATURE_MODEL.md`, *Round-trip and provenance* step 4: change the header
   example to the final format, with the chart version. Also align `MOCKUPS.md` line ~456 if its
-  header wording differs.
+  header wording differs, and the two header lines that `doc/config-tool/mockups/prototype.html`
+  (line ~526) renders, so that both match `Header.Render()`.
 - Fix the stale references:
   - `internal/render/render.go` `ErrNotImplemented` says "lands with CT-2"; rendering is Epic
     3/5.
