@@ -375,7 +375,9 @@ ships an example and validates it, but adds no route itself.
       run in the `rewrite` phase, and that `proxy-rewrite` applies `headers.remove` there (so the
       header is gone before `openid-connect` sets it). If any of the three does not hold, write
       completion status `blocked` and say which; do not ship the example or the priority check
-      against a mechanism that has no effect.
+      against a mechanism that has no effect. Also record whether the shipped `openid-connect`
+      overwrites (or clears) a client-sent `X-Userinfo` with `bearer_only` (see the "Why" of the
+      priority check below); that sets the rationale, not whether the check ships.
   - `name: dataspace-events-handshake`: `methods: [OPTIONS]`, `uri: /events`, the same upstream, no
     auth plugins.
   - `name: dataspace-events-discovery`: `methods: [GET]`,
@@ -413,9 +415,12 @@ ships an example and validates it, but adds no route itself.
       prefixes, and `priority` only orders routes of the same path). If a `/*` wins, give all three
       entries a `priority` above the catch-alls in the example and say so in the PR description.
 - New template `templates/eventing-validation.yaml`: no output, `fail` only. The whole file is gated
-  on `decentralizedIam.enabled`, and on odrl-authorization being deployed (the condition key
-  decentralized-iam 2.3.0 puts on its odrl-authorization dependency, if it has one; confirm it in
-  its `Chart.yaml`). Otherwise the subchart renders no routes, so route values left in an operator's
+  on `decentralizedIam.enabled`, and on `decentralizedIam.odrlAuthorization.enabled` (the condition
+  decentralized-iam 2.3.0's `Chart.yaml` puts on odrl-authorization; its `values.yaml` defaults it to
+  `true`). The umbrella does not declare that key and CI builds no dependencies, so the template
+  treats an **absent** key as deployed: only an explicit `false` turns it off
+  (`ne (toString (dig "enabled" true $odrl)) "false"` on the subchart map). Treating absent as off
+  would make every failure case pass in CI. Otherwise the subchart renders no routes, so route values left in an operator's
   file (e.g. after switching to an external gateway) are inert and must not fail the install; the
   narrow unnamed-route guard below is gated the same way. It finds the entries
   of `decentralizedIam.odrlAuthorization.apisix.routes` by `name` (the list and every key may be
@@ -430,13 +435,22 @@ ships an example and validates it, but adds no route itself.
     comparisons below have one path to compare), or
   - its `openid-connect.discovery` is empty, or
   - its `openid-connect.set_userinfo_header` is not `true`, or
+  - it has no `opa` plugin (the ODRL policy of Step 5 only takes effect through `opa`; the verifier
+    scope alone admits any holder of the events credential, so trimming `opa` silently drops the
+    policy), or
   - it has no `proxy-rewrite` whose `headers.remove` contains `X-Userinfo` (compared
     case-insensitively, as HTTP header names are), or
   - that `proxy-rewrite`'s `_meta.priority` is missing or not above `openid-connect`'s **effective**
     priority: `openid-connect._meta.priority` if the route sets it, else the default below.
-    - Why: CM does not verify tokens. It trusts `X-Userinfo` for its source == identity check, so
-      the strip of a client-sent header is the security-critical part of the route. Trimming the
-      rewrite must not give a green install.
+    - Why: CM does not verify tokens and trusts `X-Userinfo` for its source == identity check.
+      With `bearer_only`, `openid-connect` answers `401` without a valid token and on success
+      replaces `X-Userinfo` (`core.request.set_header`; APISIX master also clears the client value
+      first). So on this route the strip is defence in depth, as the CM README asks, and the
+      priority check mainly prevents a functional break: a `proxy-rewrite` at its default 1008 runs
+      after `openid-connect` and removes the header it just set, so CM gets no identity. Step 4
+      verifies the overwrite against the shipped APISIX and states the result in the template
+      comment and the Step 6 guide; if the shipped version does **not** overwrite it, the strip is
+      the security control and the comment says so.
     - Define `openid-connect`'s default priority as a named constant in the template, verified
       against the APISIX version that ships (2599 in the APISIX source as of planning), with a
       comment naming that version.
@@ -512,8 +526,8 @@ ships an example and validates it, but adds no route itself.
   A listener without the routes stays valid (Deviation 3).
 - Extend `tests/eventing_test.yaml`, parameterized: defaults render nothing; an otherwise failing
   combination (e.g. the listener off, the ingress controller on, the unnamed CM route) renders
-  nothing with `decentralizedIam.enabled: false` (and with odrl-authorization off, if that switch
-  exists); other routes without
+  nothing with `decentralizedIam.enabled: false` and with `decentralizedIam.odrlAuthorization.enabled:
+  false`, and still fails with that key absent; a `dataspace-events` without `opa` fails; other routes without
   these names render nothing; each inconsistent combination gives `failedTemplate` with its message,
   including on each entry: no host, `host: ""`, `hosts: []`, both keys set, hosts that differ
   between the entries, a duplicate name, missing or widened `methods` on handshake and discovery,
@@ -599,8 +613,9 @@ ships an example and validates it, but adds no route itself.
      - why `discovery` uses the verifier's external URL (Step 4: `issuer` and `jwks_uri` come from the
        verifier's `server.host`), with `proxy_opts` where the gateway needs a proxy;
      - which settings the chart enforces on `dataspace-events` (`methods: [POST]`,
-       `set_userinfo_header`, the `X-Userinfo` strip and its priority above `openid-connect`'s
-       effective priority) and why, and that the three `uri`s must agree;
+       `set_userinfo_header`, `opa`, the `X-Userinfo` strip and its priority above `openid-connect`'s
+       effective priority) and why (for the strip: the Step 4 result on whether `openid-connect`
+       overwrites a client-sent header), and that the three `uri`s must agree;
      - why the host is required (host-bound catch-alls win under `radixtree_host_uri`);
      - that the sink host should be the host whose catch-all already routes to CM (e.g. the k3s
        `contract-management` host), so the exact `/events` routes shadow it. Any other route whose
