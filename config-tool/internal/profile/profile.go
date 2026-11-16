@@ -107,7 +107,8 @@ func (t Target) Validate() []FieldError {
 	if msg := checkLabel(t.ReleaseName, MaxReleaseNameLength, dns1035Label, msgDNS1035); msg != "" {
 		errs = append(errs, FieldError{FieldReleaseName, msg})
 	}
-	// Semver and known-chart checks need the model bundle (step 4); presence is enough here.
+	// The UI only offers bundled charts and versions; checking them against the bundles comes with
+	// loading profiles in CT-4 (#119). Presence is enough here.
 	if t.Chart == "" {
 		errs = append(errs, FieldError{FieldChart, msgRequired})
 	}

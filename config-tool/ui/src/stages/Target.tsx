@@ -1,5 +1,5 @@
 /** S1 Target: where the configuration goes, which release and chart, and which defaults. */
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { ApiError, HTTP_NOT_FOUND } from '../api/client'
 import { fetchContexts, fetchModel, type Kubeconfig, type ModelInfo } from '../api/target'
 import { releaseNotesUrl } from '../links'
@@ -42,20 +42,23 @@ function useModel(): { model?: ModelInfo; error?: string } {
   return result
 }
 
+/** Outcome of reading the contexts of `path`; a later path replaces it. */
 interface ContextsResult {
+  path: string
   kubeconfig?: Kubeconfig
   notFound?: boolean
   error?: string
 }
 
-function useContexts(path: string): ContextsResult {
-  const [result, setResult] = useState<ContextsResult>({})
+function useContexts(path: string): ContextsResult | undefined {
+  const [result, setResult] = useState<ContextsResult>()
   useEffect(() => {
     const controller = new AbortController()
     fetchContexts(path, controller.signal).then(
-      (kubeconfig) => setResult({ kubeconfig }),
+      (kubeconfig) => setResult({ path, kubeconfig }),
       (err: Error) =>
-        controller.signal.aborted || setResult({ notFound: err instanceof ApiError && err.status === HTTP_NOT_FOUND, error: err.message }),
+        controller.signal.aborted ||
+        setResult({ path, notFound: err instanceof ApiError && err.status === HTTP_NOT_FOUND, error: err.message }),
     )
     return () => controller.abort()
   }, [path])
@@ -109,30 +112,45 @@ function Row({ id, label, children, error }: { id: string; label: string; childr
 function ClusterFields({ target, session }: { target: TargetAnswers; session: Session }) {
   const { dispatch } = useStore()
   const path = session.kubeconfig ?? ''
-  const { kubeconfig, notFound, error } = useContexts(useDebounced(path, KUBECONFIG_DEBOUNCE_MS))
+  const result = useContexts(useDebounced(path, KUBECONFIG_DEBOUNCE_MS))
+  // Only a result for the path in the field counts (the prefill swaps '' for the one default file
+  // read); while the next one is read, nothing is reported.
+  const read = result?.kubeconfig?.paths
+  const checked = result && (result.path === path || (read?.length === 1 && read[0] === path)) ? result : undefined
+  const kubeconfig = checked?.kubeconfig
+  const reconciled = useRef<ContextsResult>()
 
   useEffect(() => {
-    if (!kubeconfig) return
-    if (session.kubeconfig === undefined) {
-      const [only] = kubeconfig.paths
-      dispatch({ type: 'setSession', session: { kubeconfig: kubeconfig.paths.length === 1 && only ? only : '' } })
+    if (result?.kubeconfig && session.kubeconfig === undefined) {
+      const [only] = result.kubeconfig.paths
+      dispatch({ type: 'setSession', session: { kubeconfig: result.kubeconfig.paths.length === 1 && only ? only : '' } })
     }
-    if (target.context && kubeconfig.contexts.includes(target.context)) return
-    const current = kubeconfig.contexts.includes(kubeconfig.current) ? kubeconfig.current : undefined
+  }, [result, session.kubeconfig, dispatch])
+
+  // Once per read: keep a context the file still has, else preselect its current one. A failed
+  // read clears it, so the footer counts it open. Later choices, the empty one included, stand.
+  useEffect(() => {
+    if (!checked || reconciled.current === checked) return
+    reconciled.current = checked
+    const names = checked.kubeconfig?.contexts ?? []
+    if (target.context && names.includes(target.context)) return
+    const current = checked.kubeconfig && names.includes(checked.kubeconfig.current) ? checked.kubeconfig.current : undefined
     if (current !== target.context) dispatch({ type: 'setTarget', target: { context: current } })
-  }, [kubeconfig, session.kubeconfig, target.context, dispatch])
+  }, [checked, target.context, dispatch])
 
   const several = path === '' && kubeconfig && kubeconfig.paths.length > 1
-  const contexts = kubeconfig?.contexts ?? (target.context ? [target.context] : [])
+  const error = checked?.notFound ? `No kubeconfig found at ${checked.path}.` : checked?.error
+  // While a path is read, the chosen context stays selectable so a revisit does not blank it.
+  const contexts = checked ? (kubeconfig?.contexts ?? []) : target.context ? [target.context] : []
   return (
     <div className="cluster">
-      <Row id="kubeconfig" label="Kubeconfig" error={notFound ? `No kubeconfig found at ${path}.` : error}>
+      <Row id="kubeconfig" label="Kubeconfig" error={error}>
         <input
           id="kubeconfig"
           type="text"
           value={path}
           placeholder="default loading rules"
-          aria-describedby={notFound || error ? 'kubeconfig-error' : undefined}
+          aria-describedby={error ? 'kubeconfig-error' : undefined}
           onChange={(e) => dispatch({ type: 'setSession', session: { kubeconfig: e.target.value } })}
         />
       </Row>

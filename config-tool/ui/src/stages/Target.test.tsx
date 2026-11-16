@@ -73,6 +73,35 @@ describe('Target', () => {
     expect(await screen.findByText('No kubeconfig found at /nope.')).toHaveAttribute('id', 'kubeconfig-error')
   })
 
+  it('hides the not-found message until the edited path is checked', async () => {
+    mockApi((path) => (path === '' ? NO_FILE : HTTP_NOT_FOUND))
+    renderTarget({ type: TargetType.Cluster })
+    await userEvent.type(kubeconfigField(), '/nope')
+    await screen.findByText('No kubeconfig found at /nope.')
+    await userEvent.type(kubeconfigField(), 'x')
+    expect(screen.queryByText(/No kubeconfig found/)).toBeNull()
+    expect(await screen.findByText('No kubeconfig found at /nopex.')).toBeInTheDocument()
+  })
+
+  it('clears the context when the kubeconfig in the field cannot be read', async () => {
+    mockApi((path) => (path === KUBECONFIG ? ONE_FILE : HTTP_NOT_FOUND))
+    renderTarget({ type: TargetType.Cluster }, { kubeconfig: KUBECONFIG })
+    await waitFor(() => expect(contextSelect()).toHaveValue('dev'))
+    await userEvent.type(kubeconfigField(), '.bak')
+    await screen.findByText(`No kubeconfig found at ${KUBECONFIG}.bak.`)
+    await waitFor(() => expect(probe.state.answers.target.context).toBeUndefined())
+    expect(screen.queryByRole('option', { name: 'dev' })).toBeNull()
+  })
+
+  it('keeps the empty context once the user chose it', async () => {
+    mockApi(() => ONE_FILE)
+    renderTarget({ type: TargetType.Cluster }, { kubeconfig: KUBECONFIG })
+    await waitFor(() => expect(contextSelect()).toHaveValue('dev'))
+    await userEvent.selectOptions(contextSelect(), '')
+    expect(contextSelect()).toHaveValue('')
+    expect(probe.state.answers.target.context).toBeUndefined()
+  })
+
   it.each<[TargetType, boolean]>([
     [TargetType.File, false],
     [TargetType.Cluster, true],

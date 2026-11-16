@@ -22,11 +22,12 @@ const semverPrefix = "v"
 type Bundle struct {
 	Chart   string `yaml:"chart"`
 	Version string `yaml:"version"`
-	// Latest marks the highest version; Versions sets it, bundle files never do.
+	// Latest marks the default version; Versions sets it, bundle files never do.
 	Latest bool `yaml:"-"`
 }
 
-// Versions loads every bundle in fsys, highest semver first, with only the first marked Latest.
+// Versions loads every bundle in fsys, highest semver first. Latest marks the highest release,
+// or the highest pre-release when there is no release, so an rc never becomes the default.
 // A bundle whose version is not semver or differs from its directory name is an error.
 func Versions(fsys fs.FS) ([]Bundle, error) {
 	files, err := fs.Glob(fsys, bundlePattern)
@@ -45,7 +46,11 @@ func Versions(fsys fs.FS) ([]Bundle, error) {
 		return semver.Compare(semverPrefix+bundles[i].Version, semverPrefix+bundles[j].Version) > 0
 	})
 	if len(bundles) > 0 {
-		bundles[0].Latest = true
+		latest := 0
+		if i := slices.IndexFunc(bundles, isRelease); i >= 0 {
+			latest = i
+		}
+		bundles[latest].Latest = true
 	}
 	return bundles, nil
 }
@@ -59,6 +64,10 @@ func Charts(bundles []Bundle) []string {
 		}
 	}
 	return charts
+}
+
+func isRelease(b Bundle) bool {
+	return semver.Prerelease(semverPrefix+b.Version) == ""
 }
 
 func readBundle(fsys fs.FS, file string) (Bundle, error) {

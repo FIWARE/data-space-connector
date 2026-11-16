@@ -45,6 +45,28 @@ func TestVersions(t *testing.T) {
 				{Chart: chart, Version: "9.2.0"},
 			},
 		},
+		{
+			name: "a newer pre-release is not latest",
+			fs: fstest.MapFS{
+				"10.16.0/bundle.yaml":      bundleFile(chart, "10.16.0"),
+				"10.17.0-rc.1/bundle.yaml": bundleFile(chart, "10.17.0-rc.1"),
+			},
+			want: []Bundle{
+				{Chart: chart, Version: "10.17.0-rc.1"},
+				{Chart: chart, Version: "10.16.0", Latest: true},
+			},
+		},
+		{
+			name: "only pre-releases: the highest is latest",
+			fs: fstest.MapFS{
+				"10.17.0-rc.1/bundle.yaml": bundleFile(chart, "10.17.0-rc.1"),
+				"10.17.0-rc.2/bundle.yaml": bundleFile(chart, "10.17.0-rc.2"),
+			},
+			want: []Bundle{
+				{Chart: chart, Version: "10.17.0-rc.2", Latest: true},
+				{Chart: chart, Version: "10.17.0-rc.1"},
+			},
+		},
 		{name: "version is not semver", fs: fstest.MapFS{"latest/bundle.yaml": bundleFile(chart, "latest")}, wantErr: "not semver"},
 		{name: "version differs from directory", fs: fstest.MapFS{"10.16.0/bundle.yaml": bundleFile(chart, "10.15.0")}, wantErr: "does not match"},
 		{name: "chart missing", fs: fstest.MapFS{"10.16.0/bundle.yaml": bundleFile("", "10.16.0")}, wantErr: "chart is missing"},

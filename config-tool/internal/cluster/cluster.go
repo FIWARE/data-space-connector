@@ -5,6 +5,7 @@ package cluster
 import (
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"slices"
@@ -14,11 +15,20 @@ import (
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 )
 
-// homePrefix is the "~/" a user may type for the home directory.
-const homePrefix = "~" + string(filepath.Separator)
+// home is the "~" a user may type for the home directory, alone or followed by a separator.
+const home = "~"
 
-// ErrKubeconfigNotFound reports an explicit kubeconfig path that is missing or unreadable.
-var ErrKubeconfigNotFound = errors.New("kubeconfig not found")
+// maxKubeconfigBytes caps an explicit kubeconfig read; real files with embedded certificates stay
+// far below it, while a mistyped path to a huge file must not be loaded whole.
+const maxKubeconfigBytes = 8 << 20
+
+var (
+	// ErrKubeconfigNotFound reports an explicit kubeconfig path that is missing, unreadable or not
+	// a regular file.
+	ErrKubeconfigNotFound = errors.New("kubeconfig not found")
+	// ErrKubeconfigTooLarge reports an explicit kubeconfig above maxKubeconfigBytes.
+	ErrKubeconfigTooLarge = errors.New("kubeconfig too large")
+)
 
 // Kubeconfig is what the Target stage needs from the kubeconfig files: names only, no credentials
 // and no server URLs.
@@ -40,9 +50,9 @@ func Contexts(explicitPath string) (Kubeconfig, error) {
 	if err != nil {
 		return Kubeconfig{}, err
 	}
-	data, err := os.ReadFile(path)
+	data, err := readRegular(path)
 	if err != nil {
-		return Kubeconfig{}, fmt.Errorf("%w: %w", ErrKubeconfigNotFound, err)
+		return Kubeconfig{}, err
 	}
 	config, err := clientcmd.Load(data)
 	if err != nil {
@@ -72,6 +82,41 @@ func fromPrecedence(precedence []string) (Kubeconfig, error) {
 	return summarize(existing, config), nil
 }
 
+// readRegular reads path, which must be a regular file of at most maxKubeconfigBytes. The check
+// comes before the open, so a FIFO or device such as /dev/zero can neither block nor fill memory.
+func readRegular(path string) ([]byte, error) {
+	if err := checkRegular(os.Stat(path)); err != nil {
+		return nil, err
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrKubeconfigNotFound, err)
+	}
+	defer f.Close()
+	// The path may have been swapped between Stat and Open.
+	if err := checkRegular(f.Stat()); err != nil {
+		return nil, err
+	}
+	data, err := io.ReadAll(io.LimitReader(f, maxKubeconfigBytes+1))
+	switch {
+	case err != nil:
+		return nil, fmt.Errorf("%w: %w", ErrKubeconfigNotFound, err)
+	case len(data) > maxKubeconfigBytes:
+		return nil, fmt.Errorf("%w: %s exceeds %d bytes", ErrKubeconfigTooLarge, path, maxKubeconfigBytes)
+	}
+	return data, nil
+}
+
+func checkRegular(info os.FileInfo, err error) error {
+	switch {
+	case err != nil:
+		return fmt.Errorf("%w: %w", ErrKubeconfigNotFound, err)
+	case !info.Mode().IsRegular():
+		return fmt.Errorf("%w: %s is not a regular file", ErrKubeconfigNotFound, info.Name())
+	}
+	return nil
+}
+
 func summarize(paths []string, config *clientcmdapi.Config) Kubeconfig {
 	contexts := make([]string, 0, len(config.Contexts))
 	for name := range config.Contexts {
@@ -84,13 +129,15 @@ func summarize(paths []string, config *clientcmdapi.Config) Kubeconfig {
 	return Kubeconfig{Paths: paths, Contexts: contexts, Current: config.CurrentContext}
 }
 
+// expandHome replaces a leading "~", "~/" or (on Windows) "~\" with the home directory.
 func expandHome(path string) (string, error) {
-	if !strings.HasPrefix(path, homePrefix) {
+	rest, ok := strings.CutPrefix(path, home)
+	if !ok || (rest != "" && rest[0] != '/' && rest[0] != filepath.Separator) {
 		return path, nil
 	}
-	home, err := os.UserHomeDir()
+	dir, err := os.UserHomeDir()
 	if err != nil {
 		return "", fmt.Errorf("expand %s: %w", path, err)
 	}
-	return filepath.Join(home, strings.TrimPrefix(path, homePrefix)), nil
+	return filepath.Join(dir, rest), nil
 }
