@@ -1,5 +1,16 @@
 name: Test
-on: [push, pull_request]
+
+# A config-tool-only change has no chart to test. paths-ignore skips only when every changed file
+# matches, so a mixed change still runs.
+on:
+  push:
+    paths-ignore:
+      - 'config-tool/**'
+      - '.github/workflows/config-tool.yaml'
+  pull_request:
+    paths-ignore:
+      - 'config-tool/**'
+      - '.github/workflows/config-tool.yaml'
 
 # Pinned tool versions for CI.
 # - HELM_UNITTEST_VERSION: the helm-unittest plugin (keep in sync with local dev).

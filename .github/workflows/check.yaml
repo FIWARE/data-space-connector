@@ -18,8 +18,29 @@ concurrency:
 
 jobs:
 
+  # Any file outside the config tool counts as a chart change, so nothing has to be listed. A job-level
+  # skip, unlike a workflow-level one, does not leave a required check pending.
+  changes:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: read
+    outputs:
+      chart: ${{ steps.filter.outputs.chart }}
+
+    steps:
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          predicate-quantifier: every
+          filters: |
+            chart:
+              - '!config-tool/**'
+              - '!.github/workflows/config-tool.yaml'
+
   # Lints the charts and validates what they render, see https://github.com/FIWARE/github-workflows
   chart-lint:
+    needs: changes
+    if: needs.changes.outputs.chart == 'true'
     uses: FIWARE/github-workflows/.github/workflows/chart-lint.yml@v1
 
   # Relative links and anchors of the Markdown documentation, see lychee.toml.
@@ -33,9 +54,11 @@ jobs:
       - name: Check documentation links
         run: ./.github/scripts/check-links.sh
 
-  # values.schema.json is generated from values.yaml, see CLAUDE.md. A change to values.yaml that
+  # values.schema.json is generated from values.yaml, see AGENTS.md. A change to values.yaml that
   # is not followed by regenerating the schema fails here.
   values-schema:
+    needs: changes
+    if: needs.changes.outputs.chart == 'true'
     runs-on: ubuntu-latest
 
     steps:

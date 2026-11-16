@@ -93,7 +93,7 @@ Documentation for deploying the FIWARE DSC according to your organization's role
 
 ### Configuration tool (design)
 
-Design documents for a graphical tool that configures and installs the connector: it asks for a role and for the values that cross-cut the whole chart (domain, DID, Trust Anchor), lets every feature be enabled individually and later, reuses the cert-manager, databases and operators a cluster already has, generates the `values.yaml`, and creates, seals or references the Secrets it needs. Not implemented yet.
+Design documents for a graphical tool that configures and installs the connector: it asks for a role and for the values that cross-cut the whole chart (domain, DID, Trust Anchor), lets every feature be enabled individually and later, reuses the cert-manager, databases and operators a cluster already has, generates the `values.yaml`, and creates, seals or references the Secrets it needs. So far it has its application shell, the start screen and the target stage.
 
 * [Configuration tool — design](./config-tool/README.md)
   * [User journey](./config-tool/USER_JOURNEY.md)
@@ -102,6 +102,7 @@ Design documents for a graphical tool that configures and installs the connector
   * [Mockups](./config-tool/MOCKUPS.md) — and a [clickable prototype](./config-tool/mockups/prototype.html)
   * [Tech stack](./config-tool/TECH_STACK.md)
   * [User stories](./config-tool/USER_STORIES.md)
+* [Configuration tool — building and running](../config-tool/README.md)
 
 ### Verifying a deployment
 

@@ -1,9 +1,13 @@
 name: Release
 
+# The tool is released under its own config-tool/v* tags; merging it alone cuts no chart release.
 on:
   push:
     branches:
       - main
+    paths-ignore:
+      - 'config-tool/**'
+      - '.github/workflows/config-tool.yaml'
 
 # releases one after the other, each reading the tags left by the previous one
 concurrency:

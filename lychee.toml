@@ -17,6 +17,7 @@ exclude_path = [
   "(^|/)helm/",
   "(^|/)maven-status/",
   "^charts/[^/]+/charts/",
+  "(^|/)node_modules/",
 ]
 
 # The minimal values these links point to do not exist yet; remove this entry
