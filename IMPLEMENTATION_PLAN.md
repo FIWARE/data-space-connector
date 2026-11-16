@@ -111,7 +111,9 @@ before it is returned. The API is the one TECH_STACK names: `Parse`, `Classify`,
   `acr` client scope's `description:` at lines 912-914). Its span is defined in Step 3, and an
   edit replaces the whole span with the new value at the original start column, as one plain
   line when plain can hold it and otherwise in yaml.v3's choice of style. The source's line
-  breaks inside that value are not kept. Only a span that fails the span self-check (Step 3) gives
+  breaks inside that value are not kept. An implicit null (`key:`), the chart's empty default
+  and the most common edit, takes the new value as plain where plain can hold it; Step 3 defines
+  its empty span. Only a span that fails the span self-check (Step 3) gives
   `ErrUnsupportedScalar`, so the scanner refuses to edit instead of guessing.
 - **Merge semantics.** `render(profile) ⊕ overrides`, and the override wins. Two maps merge
   recursively. Any other pair, including a type change, replaces the value span of that key. A
@@ -166,9 +168,9 @@ Create `config-tool/internal/roundtrip/`:
 - Corpus paths are resolved relative to the package directory (`../../../k3s`) with
   named constants. `internal/layering_test.go` already covers the new package, so it needs
   no change. Confirm that it passes.
-- `.github/workflows/config-tool.yaml`: add `k3s/*.yaml`, `charts/data-space-connector/values.yaml`
-  and `charts/trust-anchor/values.yaml` to both `paths:` filters, so a corpus change re-runs
-  the property test.
+- `.github/workflows/config-tool.yaml`: add `k3s/**`, `charts/data-space-connector/values.yaml`
+  and `charts/trust-anchor/values.yaml` to both `paths:` filters, so a change to the corpus or
+  to a manifest under `k3s/*/` re-runs the tests that cover it.
 - `doc/adr/0013-config-tool-roundtrip-byte-patches.md`, status Proposed:
   - Context: the yaml.v3 encoder is not byte-faithful.
   - Decision: keep the source bytes, use the node tree as the index, write through byte
@@ -225,13 +227,20 @@ In `internal/roundtrip/`:
     the first line at or below the owning column, or EOF. A ` #` on a continuation line ends
     the scalar there; the comment after it is not in the span. Blank lines between
     continuation lines are inside the span; trailing blank lines are not.
+  - implicit null (`key:`, `key:   # c`, an empty `- `): yaml.v3 puts the node right after
+    the `:` or `-`, so the span is empty. An edit inserts one space plus the new value text at
+    that offset, before any whitespace and line comment that follow, so `key:   # c` becomes
+    `key: v   # c`. Without the space the result would be the single scalar `key:v`.
   - single-quoted: ends at the closing quote; `''` is an escaped quote.
   - double-quoted: ends at the closing quote; backslash escapes are honoured; the span may
     cross lines.
   - literal and folded: from the indicator through the last line indented deeper than the
     owning key, excluding trailing blank lines that the chomping does not own.
-  - Each span is checked by decoding its own text and comparing it with `node.Value`. A
-    mismatch gives `ErrUnsupportedScalar`.
+  - Each span is checked by decoding its own text: the value must equal `node.Value`, and the
+    decoded nodes must carry no `HeadComment`, `LineComment` or `FootComment`, because a span
+    that swallowed a comment still decodes to the same value and the write self-check compares
+    trees without comments. A failure gives `ErrUnsupportedScalar`. An empty implicit-null span
+    is exempt from decoding.
 - `edit.go`:
   - `(*Document) Set(path Path, value any) error`. The value is a string, bool, int, int64,
     float64 or nil. Maps and slices are added in Step 4.
@@ -247,7 +256,9 @@ In `internal/roundtrip/`:
   Add `ErrPatchVerification` and `ErrPatchConflict`.
 - Tests:
   - **Per-leaf property test over the corpus.** For every scalar leaf from `Classify` in every
-    corpus file, `Set` a sentinel value of the same Go type and `Write`. Then check:
+    corpus file, `Set` a sentinel value of the same Go type and `Write`; a null leaf gets a
+    string sentinel, since `nil` over a null is a no-op. Each file is a parallel subtest (the
+    chart's `values.yaml` alone has about 1600 leaves). Then check:
     - a line diff against the source touches only the leaf's own lines; a single-line scalar
       changes exactly one line;
     - the preceding `# --` comment lines and any trailing ` # …` line comment are byte-equal;
@@ -263,7 +274,9 @@ In `internal/roundtrip/`:
     CRLF file; `'…'`; `"…"` with escapes; `|`, `|-`, `>`, `>+`; scalars inside `[a, b]` and
     `{k: v}`; anchored and tagged scalars; a string that looks like a bool stays quoted.
     Non-ASCII rows, from a testdata fixture: a value after a key with an umlaut (`ä: x`), and
-    the items of a flow sequence with non-ASCII items (`ä: [é, x]`).
+    the items of a flow sequence with non-ASCII items (`ä: [é, x]`). Implicit-null rows:
+    `key:` → `key: v`, `key:   # c` → `key: v   # c`, an empty `- ` item, and `key:` at EOF
+    without a trailing newline.
   - Two `Set`s on one path: the second value is written. Two overlapping spans (a scalar and
     the collection that contains it, set as a replacement) give `ErrPatchConflict`.
   - `Set` through an alias gives `ErrAliasPath`. Editing the anchor changes only the anchor
