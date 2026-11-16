@@ -50,7 +50,8 @@ func DefaultClassifier(Path, *yaml.Node) Class {
 }
 
 // Classify returns doc's leaves in document order, classified by c (DefaultClassifier when nil).
-// Aliases are not followed and shadowed duplicate keys are skipped with their subtrees.
+// Aliases are not followed. Shadowed duplicate keys and pairs whose key is not a scalar (an
+// alias or complex key, which no Path addresses) are skipped with their subtrees.
 func Classify(doc *Document, c Classifier) []Leaf {
 	if c == nil {
 		c = DefaultClassifier
@@ -72,10 +73,10 @@ func Classify(doc *Document, c Classifier) []Leaf {
 			return
 		}
 		for i, live := range livePairs(n) {
-			if !live {
+			key, value := n.Content[2*i], n.Content[2*i+1]
+			if !live || key.Kind != yaml.ScalarNode {
 				continue
 			}
-			key, value := n.Content[2*i], n.Content[2*i+1]
 			sub := append(p[:len(p):len(p)], Key(key.Value))
 			if key.Tag == mergeTag {
 				leaves = append(leaves, Leaf{Path: sub, Node: value, Line: key.Line, Class: c(sub, value)})

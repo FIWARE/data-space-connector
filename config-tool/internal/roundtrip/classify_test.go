@@ -209,6 +209,11 @@ func TestClassifyFixtures(t *testing.T) {
 			{"c.e", 8, alias},
 			{"c.f", 9, scalar},
 		}},
+		{fixture: "non-scalar-keys.yaml", want: []leafSummary{
+			{"x", 2, scalar},
+			{"k", 4, scalar},
+			{"plain", 9, scalar},
+		}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.fixture, func(t *testing.T) {
