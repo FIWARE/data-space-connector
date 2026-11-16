@@ -55,10 +55,7 @@
             "odrl:operator": {
               "@id": "odrl:eq"
             },
-            "odrl:rightOperand": {
-              "@value": "did:web:dataspace-authority.org",
-              "@type": "xsd:string"
-            }
+            "odrl:rightOperand": "did:web:dataspace-authority.org"
           }
         ]
       }
