@@ -67,7 +67,12 @@ func notImplemented(msg, ticket string) http.Handler {
 
 // modelBody is the chart and version choice of the Target stage; the questions arrive with later epics.
 type modelBody struct {
-	Charts   []string       `json:"charts"`
+	Charts []modelChart `json:"charts"`
+}
+
+// modelChart carries its own versions, so the Version dropdown only offers the selected chart's.
+type modelChart struct {
+	Name     string         `json:"name"`
 	Versions []modelVersion `json:"versions"`
 }
 
@@ -82,9 +87,14 @@ func (s *Server) handleModel(w http.ResponseWriter, _ *http.Request) {
 		writeError(w, http.StatusInternalServerError, err.Error(), "")
 		return
 	}
-	body := modelBody{Charts: model.Charts(bundles), Versions: make([]modelVersion, 0, len(bundles))}
-	for _, b := range bundles {
-		body.Versions = append(body.Versions, modelVersion{Version: b.Version, Latest: b.Latest})
+	charts := model.Charts(bundles)
+	body := modelBody{Charts: make([]modelChart, 0, len(charts))}
+	for _, c := range charts {
+		chart := modelChart{Name: c.Name, Versions: make([]modelVersion, 0, len(c.Versions))}
+		for _, b := range c.Versions {
+			chart.Versions = append(chart.Versions, modelVersion{Version: b.Version, Latest: b.Latest})
+		}
+		body.Charts = append(body.Charts, chart)
 	}
 	writeJSON(w, body)
 }

@@ -35,7 +35,8 @@ function visit(visited: readonly StageId[], stage: StageId): readonly StageId[] 
 export function reducer(state: AppState, action: Action): AppState {
   switch (action.type) {
     case 'newConfiguration':
-      return { ...state, entered: true, stage: FIRST_STAGE, visited: [FIRST_STAGE], answers: emptyAnswers() }
+      // The kubeconfig path is kept for the new configuration; the old one's context pick is not.
+      return { ...state, entered: true, stage: FIRST_STAGE, visited: [FIRST_STAGE], answers: emptyAnswers(), session: { ...state.session, chosenContext: undefined } }
     case 'goTo':
       return { ...state, stage: action.stage, visited: visit(state.visited, action.stage) }
     case 'setTarget':

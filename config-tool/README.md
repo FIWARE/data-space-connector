@@ -62,5 +62,8 @@ printed URL yourself. `dsc-config --no-browser` only prints the URL.
 
 Each supported chart version has a question-model bundle in `model/<version>/bundle.yaml`,
 embedded into the binary. Its directory name and `version` must be strict `MAJOR.MINOR.PATCH`
-semver, checked and ordered with Helm's own library (`Masterminds/semver`). The highest release is offered as the default on the Target stage; a
-pre-release becomes the default only when no release is bundled.
+semver, checked and ordered with Helm's own library (`Masterminds/semver`). `GET /api/model`
+groups the versions by the bundle's `chart`, and the Target stage offers only the selected chart's.
+Per chart, the highest release is the default; a pre-release becomes the default only when that
+chart has no release bundled. The layout holds one bundle per version, so two charts cannot share
+a version number yet.

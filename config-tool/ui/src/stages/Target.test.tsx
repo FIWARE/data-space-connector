@@ -10,7 +10,7 @@ import { useStore } from '../state/context'
 import { initialState, type AppState } from '../state/reducer'
 import { StageId } from '../state/stageIds'
 import { StoreProvider } from '../state/store'
-import { mockApi, type ContextsAnswer } from '../test/api'
+import { MODEL, mockApi, type ContextsAnswer } from '../test/api'
 
 const KUBECONFIG = '/home/me/.kube/config'
 const ONE_FILE: ContextsAnswer = { paths: [KUBECONFIG], contexts: ['dev', 'prod'], current: 'dev' }
@@ -102,6 +102,19 @@ describe('Target', () => {
     expect(probe.state.answers.target.context).toBeUndefined()
   })
 
+  it('restores the chosen context after the path is edited and reverted', async () => {
+    mockApi((path) => (path === KUBECONFIG ? ONE_FILE : HTTP_NOT_FOUND))
+    renderTarget({ type: TargetType.Cluster }, { kubeconfig: KUBECONFIG })
+    await waitFor(() => expect(contextSelect()).toHaveValue('dev'))
+    await userEvent.selectOptions(contextSelect(), 'prod')
+    await userEvent.type(kubeconfigField(), 'x')
+    await screen.findByText(`No kubeconfig found at ${KUBECONFIG}x.`)
+    await waitFor(() => expect(probe.state.answers.target.context).toBeUndefined())
+    await userEvent.type(kubeconfigField(), '{Backspace}')
+    await waitFor(() => expect(contextSelect()).toHaveValue('prod'))
+    expect(probe.state.answers.target.context).toBe('prod')
+  })
+
   it.each<[TargetType, boolean]>([
     [TargetType.File, false],
     [TargetType.Cluster, true],
@@ -154,6 +167,15 @@ describe('Target', () => {
     renderTarget()
     await waitFor(() => expect(screen.getByLabelText('Version')).toHaveValue('10.16.0'))
     expect(screen.getByRole('option', { name: '10.16.0 (latest)' })).toBeInTheDocument()
+  })
+
+  it('offers only the versions of the selected chart, defaulting to its latest', async () => {
+    mockApi(undefined, { charts: [...MODEL.charts, { name: 'trust-anchor', versions: [{ version: '0.2.0', latest: true }] }] })
+    renderTarget()
+    await waitFor(() => expect(screen.getByLabelText('Version')).toHaveValue('10.16.0'))
+    await userEvent.selectOptions(screen.getByLabelText('Chart'), 'trust-anchor')
+    await waitFor(() => expect(screen.getByLabelText('Version')).toHaveValue('0.2.0'))
+    expect(screen.queryByRole('option', { name: /10\.16\.0/ })).toBeNull()
   })
 
   it.each<[string, Partial<Target>, number, number]>([

@@ -28,8 +28,8 @@ type versioned struct {
 	version *semver.Version
 }
 
-// Versions loads every bundle in fsys, highest semver first. Latest marks the highest release,
-// or the highest pre-release when there is no release, so an rc never becomes the default.
+// Versions loads every bundle in fsys, highest semver first. Per chart, Latest marks the highest
+// release, or the highest pre-release when there is no release, so an rc never becomes the default.
 // A bundle whose version is not strict MAJOR.MINOR.PATCH semver (Helm's library, so both agree on
 // validity and order) or differs from its directory name is an error.
 func Versions(fsys fs.FS) ([]Bundle, error) {
@@ -50,23 +50,35 @@ func Versions(fsys fs.FS) ([]Bundle, error) {
 	for i, v := range found {
 		bundles[i] = v.bundle
 	}
-	if len(found) > 0 {
-		latest := 0
-		if i := slices.IndexFunc(found, isRelease); i >= 0 {
-			latest = i
+	latest := map[string]int{}
+	for i, v := range found {
+		j, seen := latest[v.bundle.Chart]
+		if !seen || (!isRelease(found[j]) && isRelease(v)) {
+			latest[v.bundle.Chart] = i
 		}
-		bundles[latest].Latest = true
+	}
+	for _, i := range latest {
+		bundles[i].Latest = true
 	}
 	return bundles, nil
 }
 
-// Charts lists the distinct charts of bundles in their first-seen order.
-func Charts(bundles []Bundle) []string {
-	charts := []string{}
+// Chart is one chart with its bundled versions, in the order Versions returns them.
+type Chart struct {
+	Name     string
+	Versions []Bundle
+}
+
+// Charts groups bundles by chart, in first-seen order, so a version is only offered for its chart.
+func Charts(bundles []Bundle) []Chart {
+	charts := []Chart{}
 	for _, b := range bundles {
-		if !slices.Contains(charts, b.Chart) {
-			charts = append(charts, b.Chart)
+		i := slices.IndexFunc(charts, func(c Chart) bool { return c.Name == b.Chart })
+		if i < 0 {
+			charts = append(charts, Chart{Name: b.Chart})
+			i = len(charts) - 1
 		}
+		charts[i].Versions = append(charts[i].Versions, b)
 	}
 	return charts
 }

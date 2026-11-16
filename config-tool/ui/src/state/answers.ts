@@ -50,4 +50,6 @@ export function emptyAnswers(): Answers {
 /** State of the running tool that never goes into the answer set; `kubeconfig` is undefined until pre-filled or typed. */
 export interface Session {
   kubeconfig?: string
+  /** The context the user last picked, restored when a later kubeconfig read contains it again. */
+  chosenContext?: string
 }

@@ -7,10 +7,15 @@ export interface ModelVersion {
   latest: boolean
 }
 
-/** Body of GET /api/model; versions are sorted newest first. */
-export interface ModelInfo {
-  charts: string[]
+/** One chart and its versions, sorted newest first; `latest` is per chart. */
+export interface ModelChart {
+  name: string
   versions: ModelVersion[]
+}
+
+/** Body of GET /api/model. */
+export interface ModelInfo {
+  charts: ModelChart[]
 }
 
 /** Body of GET /api/cluster/contexts: context names only, never credentials or server URLs. */

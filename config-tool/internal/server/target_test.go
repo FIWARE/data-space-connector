@@ -14,11 +14,15 @@ import (
 	"github.com/FIWARE/data-space-connector/config-tool/internal/cluster"
 )
 
-const kubeconfigEnv = "KUBECONFIG"
+const (
+	kubeconfigEnv    = "KUBECONFIG"
+	dscChart         = "data-space-connector"
+	trustAnchorChart = "trust-anchor"
+)
 
 func TestModel(t *testing.T) {
-	bundle := func(version string) *fstest.MapFile {
-		return &fstest.MapFile{Data: []byte("chart: data-space-connector\nversion: " + version + "\n")}
+	bundle := func(chart, version string) *fstest.MapFile {
+		return &fstest.MapFile{Data: []byte("chart: " + chart + "\nversion: " + version + "\n")}
 	}
 	tests := []struct {
 		name     string
@@ -28,15 +32,23 @@ func TestModel(t *testing.T) {
 	}{
 		{
 			name:   "versions highest first",
-			models: fstest.MapFS{"10.9.0/bundle.yaml": bundle("10.9.0"), "10.16.0/bundle.yaml": bundle("10.16.0")},
+			models: fstest.MapFS{"10.9.0/bundle.yaml": bundle(dscChart, "10.9.0"), "10.16.0/bundle.yaml": bundle(dscChart, "10.16.0")},
 			want:   http.StatusOK,
-			wantBody: modelBody{
-				Charts:   []string{"data-space-connector"},
-				Versions: []modelVersion{{Version: "10.16.0", Latest: true}, {Version: "10.9.0"}},
-			},
+			wantBody: modelBody{Charts: []modelChart{
+				{Name: dscChart, Versions: []modelVersion{{Version: "10.16.0", Latest: true}, {Version: "10.9.0"}}},
+			}},
 		},
-		{name: "no bundles", models: fstest.MapFS{}, want: http.StatusOK, wantBody: modelBody{Charts: []string{}, Versions: []modelVersion{}}},
-		{name: "broken bundle", models: fstest.MapFS{"10.16.0/bundle.yaml": bundle("10.15.0")}, want: http.StatusInternalServerError},
+		{
+			name:   "versions keyed by chart",
+			models: fstest.MapFS{"10.16.0/bundle.yaml": bundle(dscChart, "10.16.0"), "0.2.0/bundle.yaml": bundle(trustAnchorChart, "0.2.0")},
+			want:   http.StatusOK,
+			wantBody: modelBody{Charts: []modelChart{
+				{Name: dscChart, Versions: []modelVersion{{Version: "10.16.0", Latest: true}}},
+				{Name: trustAnchorChart, Versions: []modelVersion{{Version: "0.2.0", Latest: true}}},
+			}},
+		},
+		{name: "no bundles", models: fstest.MapFS{}, want: http.StatusOK, wantBody: modelBody{Charts: []modelChart{}}},
+		{name: "broken bundle", models: fstest.MapFS{"10.16.0/bundle.yaml": bundle(dscChart, "10.15.0")}, want: http.StatusInternalServerError},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -68,8 +80,8 @@ func TestModelServesTheEmbeddedBundles(t *testing.T) {
 	if err := json.Unmarshal([]byte(body), &got); err != nil {
 		t.Fatal(err)
 	}
-	if len(got.Versions) == 0 || !got.Versions[0].Latest {
-		t.Errorf("body = %+v, want the embedded versions with the first marked latest", got)
+	if len(got.Charts) == 0 || got.Charts[0].Name != dscChart || len(got.Charts[0].Versions) == 0 || !got.Charts[0].Versions[0].Latest {
+		t.Errorf("body = %+v, want the embedded %s versions with the first marked latest", got, dscChart)
 	}
 }
 

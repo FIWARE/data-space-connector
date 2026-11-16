@@ -4,10 +4,14 @@ import type { Kubeconfig, ModelInfo } from '../api/target'
 
 /** The model the real 10.16.0 bundle produces. */
 export const MODEL: ModelInfo = {
-  charts: ['data-space-connector'],
-  versions: [
-    { version: '10.16.0', latest: true },
-    { version: '10.15.0', latest: false },
+  charts: [
+    {
+      name: 'data-space-connector',
+      versions: [
+        { version: '10.16.0', latest: true },
+        { version: '10.15.0', latest: false },
+      ],
+    },
   ],
 }
 

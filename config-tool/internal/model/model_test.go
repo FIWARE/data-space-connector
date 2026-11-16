@@ -9,7 +9,10 @@ import (
 	"github.com/FIWARE/data-space-connector/config-tool/model"
 )
 
-const chart = "data-space-connector"
+const (
+	chart       = "data-space-connector"
+	trustAnchor = "trust-anchor"
+)
 
 func bundleFile(chart, version string) *fstest.MapFile {
 	return &fstest.MapFile{Data: []byte("chart: " + chart + "\nversion: " + version + "\n")}
@@ -67,6 +70,21 @@ func TestVersions(t *testing.T) {
 				{Chart: chart, Version: "10.17.0-rc.1"},
 			},
 		},
+		{
+			name: "latest per chart",
+			fs: fstest.MapFS{
+				"10.16.0/bundle.yaml":    bundleFile(chart, "10.16.0"),
+				"10.15.0/bundle.yaml":    bundleFile(chart, "10.15.0"),
+				"0.2.0/bundle.yaml":      bundleFile(trustAnchor, "0.2.0"),
+				"0.3.0-rc.1/bundle.yaml": bundleFile(trustAnchor, "0.3.0-rc.1"),
+			},
+			want: []Bundle{
+				{Chart: chart, Version: "10.16.0", Latest: true},
+				{Chart: chart, Version: "10.15.0"},
+				{Chart: trustAnchor, Version: "0.3.0-rc.1"},
+				{Chart: trustAnchor, Version: "0.2.0", Latest: true},
+			},
+		},
 		{name: "version is not semver", fs: fstest.MapFS{"latest/bundle.yaml": bundleFile(chart, "latest")}, wantErr: "not semver"},
 		{name: "major.minor only", fs: fstest.MapFS{"10.16/bundle.yaml": bundleFile(chart, "10.16")}, wantErr: "not semver"},
 		{name: "major only", fs: fstest.MapFS{"10/bundle.yaml": bundleFile(chart, "10")}, wantErr: "not semver"},
@@ -95,18 +113,24 @@ func TestVersions(t *testing.T) {
 }
 
 func TestCharts(t *testing.T) {
+	dsc10, dsc9 := Bundle{Chart: chart, Version: "10.16.0", Latest: true}, Bundle{Chart: chart, Version: "9.2.0"}
+	ta := Bundle{Chart: trustAnchor, Version: "0.2.0", Latest: true}
 	tests := []struct {
 		name    string
 		bundles []Bundle
-		want    []string
+		want    []Chart
 	}{
-		{"none", nil, []string{}},
-		{"distinct in first-seen order", []Bundle{{Chart: chart}, {Chart: "trust-anchor"}, {Chart: chart}}, []string{chart, "trust-anchor"}},
+		{"none", nil, []Chart{}},
+		{
+			"grouped by chart in first-seen order",
+			[]Bundle{dsc10, ta, dsc9},
+			[]Chart{{Name: chart, Versions: []Bundle{dsc10, dsc9}}, {Name: trustAnchor, Versions: []Bundle{ta}}},
+		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			if got := Charts(tc.bundles); !reflect.DeepEqual(got, tc.want) {
-				t.Errorf("Charts = %v, want %v", got, tc.want)
+				t.Errorf("Charts = %+v, want %+v", got, tc.want)
 			}
 		})
 	}

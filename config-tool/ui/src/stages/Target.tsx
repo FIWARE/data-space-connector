@@ -127,16 +127,23 @@ function ClusterFields({ target, session }: { target: TargetAnswers; session: Se
     }
   }, [result, session.kubeconfig, dispatch])
 
-  // Once per read: keep a context the file still has, else preselect its current one. A failed
-  // read clears it, so the footer counts it open. Later choices, the empty one included, stand.
+  // Once per read: keep a context the file still has, else restore the user's last pick, else
+  // preselect the file's current one. A failed read clears it, so the footer counts it open, but
+  // the pick survives in the session for when the path is corrected. Later choices stand.
   useEffect(() => {
     if (!checked || reconciled.current === checked) return
     reconciled.current = checked
     const names = checked.kubeconfig?.contexts ?? []
     if (target.context && names.includes(target.context)) return
-    const current = checked.kubeconfig && names.includes(checked.kubeconfig.current) ? checked.kubeconfig.current : undefined
-    if (current !== target.context) dispatch({ type: 'setTarget', target: { context: current } })
-  }, [checked, target.context, dispatch])
+    const preferred = [session.chosenContext, checked.kubeconfig?.current].find((name) => name && names.includes(name))
+    if (preferred !== target.context) dispatch({ type: 'setTarget', target: { context: preferred } })
+  }, [checked, target.context, session.chosenContext, dispatch])
+
+  const choose = (name: string) => {
+    const context = name || undefined
+    dispatch({ type: 'setTarget', target: { context } })
+    dispatch({ type: 'setSession', session: { chosenContext: context } })
+  }
 
   const several = path === '' && kubeconfig && kubeconfig.paths.length > 1
   const error = checked?.notFound ? `No kubeconfig found at ${checked.path}.` : checked?.error
@@ -156,7 +163,7 @@ function ClusterFields({ target, session }: { target: TargetAnswers; session: Se
       </Row>
       {several && <p className="hint">Read from KUBECONFIG, in this order: {kubeconfig.paths.join(', ')}</p>}
       <Row id="context" label="Context">
-        <select id="context" value={target.context ?? ''} onChange={(e) => dispatch({ type: 'setTarget', target: { context: e.target.value || undefined } })}>
+        <select id="context" value={target.context ?? ''} onChange={(e) => choose(e.target.value)}>
           <option value="">— choose a context —</option>
           {contexts.map((name) => (
             <option key={name} value={name}>
@@ -178,16 +185,18 @@ export function Target() {
   const { model, error: modelError } = useModel()
   const cluster = target.type === TargetType.Cluster
 
+  const chartVersions = model?.charts.find((c) => c.name === target.chart)?.versions
+
   useEffect(() => {
-    const latest = model?.versions.find((v) => v.latest)
+    const latest = chartVersions?.find((v) => v.latest)
     if (latest && target.chartVersion === '') dispatch({ type: 'setTarget', target: { chartVersion: latest.version } })
-  }, [model, target.chartVersion, dispatch])
+  }, [chartVersions, target.chartVersion, dispatch])
 
   const errors = validateTarget(target)
   const errorOf = (field: TargetField) => errors.find((e) => e.field === field && e.message !== MSG_REQUIRED)?.message
-  const charts = model?.charts ?? [target.chart]
+  const charts = model?.charts.map((c) => c.name) ?? [target.chart]
   // Until the model arrives, the chosen version stays selectable so a revisit does not blank it.
-  const versions = model?.versions ?? (target.chartVersion ? [{ version: target.chartVersion, latest: false }] : [])
+  const versions = model ? (chartVersions ?? []) : target.chartVersion ? [{ version: target.chartVersion, latest: false }] : []
 
   return (
     <section>
@@ -219,7 +228,7 @@ export function Target() {
         <h3>Chart</h3>
         {modelError && <p className="field-error">{modelError}</p>}
         <Row id="chart" label="Chart">
-          <select id="chart" value={target.chart} onChange={(e) => set({ chart: e.target.value })}>
+          <select id="chart" value={target.chart} onChange={(e) => set({ chart: e.target.value, chartVersion: '' })}>
             {charts.map((name) => (
               <option key={name} value={name}>
                 {name}
