@@ -15,9 +15,10 @@ on:
 permissions:
   contents: read
 
+# Cancel superseded PR runs only; every push to main keeps its binaries and e2e signal.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 defaults:
   run:

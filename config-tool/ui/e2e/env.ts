@@ -8,7 +8,9 @@ export const CROSS_SITE_URL_ENV = 'DSC_E2E_CROSS_SITE_URL'
 /** Overrides the binary under test; the default is the one `make build` writes. */
 export const BINARY_ENV = 'DSC_CONFIG_BIN'
 
-export const DEFAULT_BINARY = join(import.meta.dirname, '..', '..', 'bin', 'dsc-config')
+/** Suffix `make build` appends on Windows, mirroring the Makefile's `$(EXE)`. */
+const EXE_SUFFIX = process.platform === 'win32' ? '.exe' : ''
+export const DEFAULT_BINARY = join(import.meta.dirname, '..', '..', 'bin', `dsc-config${EXE_SUFFIX}`)
 export const KUBECONFIG_FIXTURE = join(import.meta.dirname, 'fixtures', 'kubeconfig.yaml')
 /** The fixture's current-context, and the other context it holds. */
 export const FIXTURE_CURRENT_CONTEXT = 'prod-eu-central'

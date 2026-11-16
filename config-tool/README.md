@@ -16,8 +16,8 @@ make test          # go test ./... and the UI's Vitest suite
 make lint          # go vet, and gofmt must list no file
 ```
 
-The Playwright smoke test runs against a built binary, `bin/dsc-config` unless `DSC_CONFIG_BIN`
-names another one. It starts `dsc-config --no-browser` with the kubeconfig in `ui/e2e/fixtures/`:
+The Playwright smoke test runs against a built binary, `bin/dsc-config` (`bin/dsc-config.exe` on
+Windows) unless `DSC_CONFIG_BIN` names another one. It starts `dsc-config --no-browser` with the kubeconfig in `ui/e2e/fixtures/`:
 
 ```shell
 make build
