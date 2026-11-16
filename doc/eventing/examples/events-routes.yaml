@@ -1,0 +1,82 @@
+# APISIX routes for the data space events sink of contract-management.
+#
+# APPEND these three entries to your own decentralizedIam.odrlAuthorization.apisix.routes list.
+# Helm replaces lists instead of merging them: passing this file with `-f` next to a values file
+# that has its own `routes` list keeps only one of the two lists.
+#
+# KEEP THE THREE `name`s. The chart finds these routes by name and refuses settings that weaken
+# access control (templates/eventing-validation.yaml). A renamed or unnamed copy is not checked.
+#
+# Replace the placeholders:
+# - events.example.org: the host of the sink URL your subscriptions announce. Bind all three
+#   entries to it, with `host` or `hosts` (never both, never empty). APISIX tries host-bound
+#   routes first, so a host-less /events would lose to that host's /* catch-all.
+# - <events-service>: the verifier service the publishers request their token for.
+# - verifier.example.org: the external host of the verifier (its `server.host`).
+# The sink is assumed to be <scheme>://<host>/events. A sink under another path needs the `uri`
+# of all three entries changed. Setup guide: doc/eventing/participant-setup.md.
+decentralizedIam:
+  odrlAuthorization:
+    apisix:
+      routes:
+        # ... your own routes ...
+        - name: dataspace-events
+          uri: /events
+          methods: [POST]
+          host: events.example.org
+          # hosts: [events.example.org, events.example.net]
+          upstream:
+            # The contract-management Service of this release (contract-management.fullnameOverride).
+            # Change it when that override changes or contract-management runs outside the release.
+            nodes:
+              contract-management:8080: 1
+            type: roundrobin
+          plugins:
+            # contract-management does not verify tokens; it trusts X-Userinfo. Remove a client-sent
+            # header before openid-connect (default priority 2599) runs and sets it. At its default
+            # priority (1008) proxy-rewrite would run after openid-connect and remove the identity.
+            proxy-rewrite:
+              _meta:
+                priority: 2600
+              headers:
+                remove: [X-Userinfo]
+            openid-connect:
+              bearer_only: true
+              use_jwks: true
+              set_userinfo_header: true
+              client_id: <events-service>
+              client_secret: unused
+              # The verifier builds `issuer` and `jwks_uri` from its external `server.host`, so the
+              # gateway fetches the keys from there whichever discovery URL it uses. An internal
+              # http://verifier:3000/services/<events-service>/... URL works as well, as long as the
+              # gateway reaches the advertised jwks_uri.
+              discovery: https://verifier.example.org/services/<events-service>/.well-known/openid-configuration
+              # proxy_opts:
+              #   https_proxy: http://proxy.example.org:8888
+            opa:
+              host: http://localhost:8181
+              policy: policy/main
+              with_body: true
+        # The publisher's handshake (OPTIONS) carries no token.
+        - name: dataspace-events-handshake
+          uri: /events
+          methods: [OPTIONS]
+          host: events.example.org
+          upstream:
+            nodes:
+              contract-management:8080: 1
+            type: roundrobin
+        # On a 401 the publisher fetches <sink>/.well-known/openid-configuration to find out how to
+        # get a token; serve the events service's metadata there.
+        - name: dataspace-events-discovery
+          uri: /events/.well-known/openid-configuration
+          methods: [GET]
+          host: events.example.org
+          upstream:
+            # The verifier Service of this release (decentralizedIam.vcAuthentication.vcverifier.fullnameOverride).
+            nodes:
+              verifier:3000: 1
+            type: roundrobin
+          plugins:
+            proxy-rewrite:
+              uri: /services/<events-service>/.well-known/openid-configuration

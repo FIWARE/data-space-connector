@@ -188,6 +188,7 @@ decentralizedIam:
   # configuration for the odrl-authorization to be deployed as part of the connector, see https://github.com/FIWARE/odrl-authorization/tree/master
   odrlAuthorization:
     # -- configuration for the odrl-pap to be deployed as part of the connector, see https://apisix.apache.org/
+    # The data space events routes go into `routes`: see doc/eventing/examples/events-routes.yaml.
     apisix:
       ingress-controller:
         enabled: false
@@ -2069,6 +2070,13 @@ contract-management:
 # @schema
 did:
   enabled: false
+
+# -- checks of the data space events routes (templates/eventing-validation.yaml)
+eventingRouteValidation:
+  # -- refuse install/upgrade when a route named dataspace-events, dataspace-events-handshake or
+  # dataspace-events-discovery weakens access control. false skips every check and leaves the
+  # route security to the operator.
+  enabled: true
 
 # -- configuration for registering a participant at the til. Allows to preconfigure trust-relationships on deployment
 registration:

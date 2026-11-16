@@ -1,0 +1,95 @@
+{{- /*
+Refuses events routes that weaken access control. Renders nothing; it only `fail`s.
+The routes are operator-owned entries of decentralizedIam.odrlAuthorization.apisix.routes
+(doc/eventing/examples/events-routes.yaml), found by `name`: unnamed or renamed copies are not
+checked. Consistency between the three entries is a guide checklist, not checked here
+(doc/eventing/participant-setup.md). A gate switch is off only when it is the boolean false:
+Helm ignores a non-bool dependency condition and deploys the subchart.
+*/ -}}
+{{- if .Values.eventingRouteValidation.enabled }}
+{{- /* plugins/openid-connect.lua priority in APISIX 3.19.0 (apisix chart 2.18.2, odrl-authorization 2.5.0) */ -}}
+{{- $openidConnectDefaultPriority := 2599 }}
+{{- $eventsRoute := "dataspace-events" }}
+{{- $handshakeRoute := "dataspace-events-handshake" }}
+{{- $discoveryRoute := "dataspace-events-discovery" }}
+{{- $eventsNames := list $eventsRoute $handshakeRoute $discoveryRoute }}
+{{- $prefix := "decentralizedIam.odrlAuthorization.apisix.routes" }}
+{{- $iam := index .Values "decentralizedIam" | default dict }}
+{{- $odrl := index $iam "odrlAuthorization" | default dict }}
+{{- $apisix := index $odrl "apisix" | default dict }}
+{{- $deployed := true }}
+{{- range $switch := list $iam $odrl }}
+{{- $v := dig "enabled" true $switch }}
+{{- if and (kindIs "bool" $v) (not $v) }}{{ $deployed = false }}{{ end }}
+{{- end }}
+{{- $apisixOn := true }}
+{{- $v := dig "enabled" true $apisix }}
+{{- if and (kindIs "bool" $v) (not $v) }}{{ $apisixOn = false }}{{ end }}
+{{- $ingressController := index $apisix "ingress-controller" | default dict }}
+{{- $routes := index $apisix "routes" | default list }}
+{{- if and $deployed (kindIs "slice" $routes) }}
+{{- range $route := $routes }}
+{{- if kindIs "map" $route }}
+{{- $name := index $route "name" }}
+{{- if has $name $eventsNames }}
+{{- $where := printf "%s: route %q" $prefix $name }}
+{{- /* odrl-authorization's ApisixRoute template drops methods and hosts: the handshake route would open POST /events */ -}}
+{{- if index $ingressController "enabled" }}
+{{- fail (printf "%s: the APISIX ingress-controller mode (decentralizedIam.odrlAuthorization.apisix.ingress-controller.enabled) drops methods and hosts of the events routes; use the yaml or etcd mode" $where) }}
+{{- end }}
+{{- if $apisixOn }}
+{{- /* Without methods APISIX matches every method, so these unauthenticated routes would accept POST /events. */ -}}
+{{- if and (eq $name $handshakeRoute) (ne (toJson (index $route "methods")) (toJson (list "OPTIONS"))) }}
+{{- fail (printf "%s: methods must be exactly [OPTIONS]; this route has no authentication" $where) }}
+{{- end }}
+{{- if and (eq $name $discoveryRoute) (ne (toJson (index $route "methods")) (toJson (list "GET"))) }}
+{{- fail (printf "%s: methods must be exactly [GET]; this route has no authentication" $where) }}
+{{- end }}
+{{- if eq $name $eventsRoute }}
+{{- $host := index $route "host" }}
+{{- $hosts := index $route "hosts" }}
+{{- /* A host-less route loses to the sink host's /* catch-all, with its own verifier scope and policy. */ -}}
+{{- if not (or (and (kindIs "string" $host) $host) (and (kindIs "slice" $hosts) $hosts)) }}
+{{- fail (printf "%s: set host or hosts to the host of the announced sink URL" $where) }}
+{{- end }}
+{{- $plugins := index $route "plugins" | default dict }}
+{{- $oidc := index $plugins "openid-connect" | default dict }}
+{{- $userinfo := index $oidc "set_userinfo_header" }}
+{{- if not (and (kindIs "bool" $userinfo) $userinfo) }}
+{{- fail (printf "%s: openid-connect.set_userinfo_header must be true; contract-management reads the caller from X-Userinfo" $where) }}
+{{- end }}
+{{- if not (kindIs "map" (index $plugins "opa")) }}
+{{- fail (printf "%s: the opa plugin is required; without it the ODRL policy does not apply" $where) }}
+{{- end }}
+{{- /*
+APISIX 3.19.0 openid-connect clears a client-sent X-Userinfo and sets its own, so the strip is
+defence in depth (the contract-management README asks for it). Run at its default priority (1008),
+after openid-connect, it would remove the identity openid-connect just set.
+*/ -}}
+{{- $rewrite := index $plugins "proxy-rewrite" | default dict }}
+{{- $headers := index $rewrite "headers" | default dict }}
+{{- $remove := index $headers "remove" | default list }}
+{{- $strips := false }}
+{{- if kindIs "slice" $remove }}
+{{- range $header := $remove }}
+{{- if eq (lower (toString $header)) "x-userinfo" }}{{ $strips = true }}{{ end }}
+{{- end }}
+{{- end }}
+{{- if not $strips }}
+{{- fail (printf "%s: proxy-rewrite.headers.remove must contain X-Userinfo; contract-management trusts that header" $where) }}
+{{- end }}
+{{- $oidcMeta := index $oidc "_meta" | default dict }}
+{{- $oidcPriority := $openidConnectDefaultPriority }}
+{{- if hasKey $oidcMeta "priority" }}{{ $oidcPriority = index $oidcMeta "priority" }}{{ end }}
+{{- $rewritePriority := index (index $rewrite "_meta" | default dict) "priority" }}
+{{- $numeric := list "int" "int64" "float64" }}
+{{- if not (and (has (kindOf $rewritePriority) $numeric) (has (kindOf $oidcPriority) $numeric) (gt (float64 $rewritePriority) (float64 $oidcPriority))) }}
+{{- fail (printf "%s: proxy-rewrite._meta.priority must be above the openid-connect priority (%v), so that X-Userinfo is removed before openid-connect sets it" $where $oidcPriority) }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- end }}

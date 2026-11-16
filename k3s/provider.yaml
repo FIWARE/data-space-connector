@@ -342,7 +342,9 @@ decentralizedIam:
     
   odrlAuthorization:
     apisix:
+      # traditional mode reads the routes from etcd; odrl-authorization >= 2.5.0 deploys none by default
       etcd:
+        enabled: true
         replicaCount: 1
         persistence:
           enabled: false

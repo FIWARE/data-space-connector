@@ -265,6 +265,21 @@
       "title": "elsi",
       "type": "object"
     },
+    "eventingRouteValidation": {
+      "additionalProperties": false,
+      "description": "checks of the data space events routes (templates/eventing-validation.yaml)",
+      "properties": {
+        "enabled": {
+          "default": true,
+          "description": "refuse install/upgrade when a route named dataspace-events, dataspace-events-handshake or\ndataspace-events-discovery weakens access control. false skips every check and leaves the\nroute security to the operator.",
+          "title": "enabled",
+          "type": "boolean"
+        }
+      },
+      "required": [],
+      "title": "eventingRouteValidation",
+      "type": "object"
+    },
     "extraManifests": {
       "description": "list of extra Kubernetes manifests to deploy alongside the chart.\nEach entry can be a string (raw YAML, supports Helm templating) or an object.\nSet `metadata.namespace: {{ .Release.Namespace }}` on every entry: unlike the chart's own\ntemplates these manifests are passed through verbatim, so an object without a namespace is\napplied to `default` whenever the rendered tree is applied without an explicit `-n`.",
       "items": {
