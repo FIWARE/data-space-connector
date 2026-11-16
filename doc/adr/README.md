@@ -12,6 +12,7 @@ Short records of decisions that are expensive to reverse or easy to re-litigate.
 | [0005](0005-vc-based-participant-onboarding.md) | Onboard participants with a verifiable credential, not client credentials | Proposed | |
 | [0006](0006-eidas-validation-in-vcverifier.md) | Validate eIDAS certificate chains inside VCVerifier, not in an external DSS service | Accepted | |
 | [0007](0007-test-both-deployment-paths.md) | Test the charts both rendered and applied, and installed as Helm releases | Accepted | |
+| [0008](0008-events-routes-as-validated-operator-snippet.md) | Ship the data space events routes as a validated operator snippet, not as chart routes | Accepted | |
 
 ADRs 0002 and 0003 constrain the consent-facade's own API, so they are **mirrored** in
 [consent-facade](https://github.com/SEAMWARE/consent-facade) under `doc/adr/` with the same numbers. This repository holds the
@@ -20,4 +21,5 @@ canonical copy; change it here first.
 Design document ADRs 0001-0005 belong to:
 [`../CONSENT_MANAGEMENT.md`](../CONSENT_MANAGEMENT.md). ADR 0006 belongs to
 [`../deployment-integration/eidas/README.md`](../deployment-integration/eidas/README.md). ADR 0007 belongs to
-[`../deployment-integration/local-deployment/LOCAL.MD`](../deployment-integration/local-deployment/LOCAL.MD).
+[`../deployment-integration/local-deployment/LOCAL.MD`](../deployment-integration/local-deployment/LOCAL.MD). ADR 0008 belongs to
+[`../eventing/participant-setup.md`](../eventing/participant-setup.md).
