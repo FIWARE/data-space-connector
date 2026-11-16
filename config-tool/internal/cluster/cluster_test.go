@@ -66,6 +66,11 @@ func TestContexts(t *testing.T) {
 			explicit: "~" + string(filepath.Separator) + "config.yaml",
 			want:     Kubeconfig{Paths: []string{filepath.Join(home, "config.yaml")}, Contexts: []string{"at-home"}, Current: "at-home"},
 		},
+		{
+			name:     "relative explicit path resolves against the working directory",
+			explicit: filepath.Join("testdata", "two-contexts.yaml"),
+			want:     Kubeconfig{Paths: []string{twoContexts}, Contexts: []string{"prod-eu-central", "staging"}, Current: "prod-eu-central"},
+		},
 		{name: "explicit missing file", explicit: missing, wantNotFound: true},
 		{name: "explicit directory", explicit: t.TempDir(), wantNotFound: true},
 		{name: "explicit device", explicit: os.DevNull, wantNotFound: true},

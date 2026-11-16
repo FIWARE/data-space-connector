@@ -142,6 +142,9 @@ function ClusterFields({ target, session }: { target: TargetAnswers; session: Se
   }
 
   const several = path === '' && kubeconfig && kubeconfig.paths.length > 1
+  // A relative or ~ path is resolved by the server; show which file that turned out to be.
+  const [resolved] = path !== '' && kubeconfig?.paths.length === 1 ? kubeconfig.paths : []
+  const resolvedElsewhere = resolved !== undefined && resolved !== path ? resolved : undefined
   // The server's message names the file and the cause: missing, not a regular file, or denied.
   const error = checked?.error
   // While a path is read, the chosen context stays selectable so a revisit does not blank it.
@@ -159,6 +162,7 @@ function ClusterFields({ target, session }: { target: TargetAnswers; session: Se
         />
       </Row>
       {several && <p className="hint">Read from KUBECONFIG, in this order: {kubeconfig.paths.join(', ')}</p>}
+      {resolvedElsewhere && <p className="hint">Read from {resolvedElsewhere}</p>}
       <Row id="context" label="Context">
         <select id="context" value={target.context ?? ''} onChange={(e) => choose(e.target.value)}>
           <option value="">— choose a context —</option>

@@ -65,6 +65,19 @@ describe('Target', () => {
     else expect(note).toBeNull()
   })
 
+  it.each<[string, string, string | null]>([
+    ['a relative path', 'kube/dev.yaml', `Read from ${KUBECONFIG}`],
+    ['the absolute path', KUBECONFIG, null],
+  ])('names the file read for %s', async (_name, typed, note) => {
+    mockApi((path) => (path === '' ? NO_FILE : ONE_FILE))
+    renderTarget({ type: TargetType.Cluster })
+    await userEvent.type(kubeconfigField(), typed)
+    await waitFor(() => expect(contextSelect()).toHaveValue('dev'))
+    const hint = screen.queryByText(/^Read from \//)
+    if (note) expect(hint).toHaveTextContent(note)
+    else expect(hint).toBeNull()
+  })
+
   it('shows the server message under the kubeconfig field for a refused path', async () => {
     mockApi((path) => (path === '' ? NO_FILE : HTTP_NOT_FOUND))
     renderTarget({ type: TargetType.Cluster })

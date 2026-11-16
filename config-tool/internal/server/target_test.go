@@ -85,6 +85,9 @@ func TestModelServesTheEmbeddedBundles(t *testing.T) {
 	}
 }
 
+// oversizedKubeconfigBytes is above the 8 MiB read cap of internal/cluster.
+const oversizedKubeconfigBytes = 9 << 20
+
 func TestClusterContexts(t *testing.T) {
 	dir := t.TempDir()
 	kubeconfig := filepath.Join(dir, "config")
@@ -106,6 +109,18 @@ contexts:
 	if err := os.WriteFile(kubeconfig, []byte(contents), 0o600); err != nil {
 		t.Fatal(err)
 	}
+	malformed := filepath.Join(dir, "malformed")
+	if err := os.WriteFile(malformed, []byte("contexts: [unclosed"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// Sparse, so the test writes nothing; the size alone exceeds the cluster package's cap.
+	oversized := filepath.Join(dir, "oversized")
+	if err := os.WriteFile(oversized, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Truncate(oversized, oversizedKubeconfigBytes); err != nil {
+		t.Fatal(err)
+	}
 	found := cluster.Kubeconfig{Paths: []string{kubeconfig}, Contexts: []string{"dev", "prod"}, Current: "dev"}
 	tests := []struct {
 		name     string
@@ -118,6 +133,8 @@ contexts:
 		{name: "default rules without a file", env: filepath.Join(dir, "missing"), want: http.StatusOK, wantBody: cluster.Kubeconfig{Paths: []string{}, Contexts: []string{}}},
 		{name: "explicit path", env: filepath.Join(dir, "missing"), explicit: kubeconfig, want: http.StatusOK, wantBody: found},
 		{name: "missing explicit path", explicit: filepath.Join(dir, "missing"), want: http.StatusNotFound},
+		{name: "malformed explicit kubeconfig", explicit: malformed, want: http.StatusUnprocessableEntity},
+		{name: "oversized explicit kubeconfig", explicit: oversized, want: http.StatusUnprocessableEntity},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

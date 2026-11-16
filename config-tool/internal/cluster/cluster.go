@@ -43,6 +43,7 @@ type Kubeconfig struct {
 // Contexts lists the contexts of explicitPath, or under clientcmd's default loading rules
 // (KUBECONFIG, else ~/.kube/config) when it is empty. Missing default files are skipped; a missing
 // explicitPath, or any file that is not a regular one, yields an error wrapping ErrKubeconfigNotFound.
+// A relative explicitPath is resolved against the working directory, and Paths holds the result.
 func Contexts(explicitPath string) (Kubeconfig, error) {
 	if explicitPath == "" {
 		return fromPrecedence(clientcmd.NewDefaultClientConfigLoadingRules().GetLoadingPrecedence())
@@ -50,6 +51,10 @@ func Contexts(explicitPath string) (Kubeconfig, error) {
 	path, err := expandHome(explicitPath)
 	if err != nil {
 		return Kubeconfig{}, err
+	}
+	// The browser cannot see the tool's working directory, so report the file actually read.
+	if path, err = filepath.Abs(path); err != nil {
+		return Kubeconfig{}, fmt.Errorf("resolve %s: %w", explicitPath, err)
 	}
 	data, err := readRegular(path)
 	if err != nil {
