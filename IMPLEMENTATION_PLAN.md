@@ -115,7 +115,7 @@ question), and CM chart 3.6.6 (Prerequisite A, pinned by Step 3) renders
 - **Chosen option (Step 4): the normal `routes` list.** The operator appends three named entries
   (`dataspace-events`, `dataspace-events-handshake`, `dataspace-events-discovery`) to their own
   `decentralizedIam.odrlAuthorization.apisix.routes`, copied from an example values file that the
-  repo ships and the docs explain (Steps 4 and 6). The umbrella finds them by `name` and `fail`s on
+  repo ships and the docs explain (Steps 4 and 7). The umbrella finds them by `name` and `fail`s on
   settings that weaken access control; consistency between the entries is a guide checklist (Step 4,
   "Scope of the checks"). Removing them works in yaml mode (the ConfigMap is rewritten);
   in the etcd-backed modes it leaves stale `<release>-<index>` routes, as for any route removed from
@@ -180,7 +180,7 @@ itself finds out whether TIL 0.10.1+ migrates its database at start-up (its Flyw
 migrations in FIWARE/trusted-issuers-list) and records it for the release notes.
 
 **Release gating.** Steps merge into `ticket-102/work`. That branch must not be merged to `main` or
-released until Steps 2 to 4 have landed. Step 1 alone would scope grants that the deployed TIL 0.10.0
+released until Steps 2 to 4 have landed (Step 4's code with Step 6). Step 1 alone would scope grants that the deployed TIL 0.10.0
 drops, for a CM version that has no listener.
 
 ## Deviations from the ticket (need explicit human sign-off)
@@ -222,7 +222,7 @@ drops, for a CM version that has no listener.
      check that the two agree: routes without the listener answer `404`, which a first delivery shows
      at once. A listener without the routes is allowed, for operators who run their own gateway.
    - **Checks are opt-in by name.** The umbrella finds the routes by their `name`. A renamed or
-     unnamed copy is not checked at all. The example header and the Step 6 guide say "keep the
+     unnamed copy is not checked at all. The example header and the Step 7 guide say "keep the
      names". An earlier revision also caught an unnamed route at `/events` to the release's CM
      Service. It is dropped: it needed a copy of the CM chart's fullname helper that CI cannot check
      against the subchart (so it would silently stop matching after a CM bump), three name forms,
@@ -230,9 +230,9 @@ drops, for a CM version that has no listener.
      copy with exactly that upstream and path, and it added an upgrade `fail` for routes no
      operator named for this feature.
    - **Access-control checks only.** The validation `fail`s only on settings that weaken access
-     control without breaking delivery (seven checks, Step 4 "Scope of the checks"). Consistency
+     control without breaking delivery (nine checks, Step 4 "Scope of the checks"). Consistency
      between the three entries (matching `uri`s and hosts, the discovery service path, entries
-     present, `methods: [POST]`, the listener flag) is a checklist in the Step 6 guide: a mistake
+     present, `methods: [POST]`, the listener flag) is a checklist in the Step 7 guide: a mistake
      there breaks the handshake, discovery or delivery visibly. An earlier revision of this plan
      checked those too (about 20 rules); they are dropped because every APISIX or
      odrl-authorization bump can invalidate Go-template logic that CI cannot test against the
@@ -359,6 +359,8 @@ Unblocked by CM chart 3.6.6 (Prerequisite A).
   has no eventing resource in it.
 
 ### Step 4: Bump decentralizedIam; validate the events routes
+**Status:** PR #22 merged only the revision of this step's plan text; the implementation below
+lands as Step 6.
 Prerequisite B is met (decentralized-iam 2.3.0). The events routes are ordinary entries of the
 operator's `decentralizedIam.odrlAuthorization.apisix.routes` list (see "APISIX routes"); the chart
 ships an example and validates it, but adds no route itself.
@@ -366,9 +368,9 @@ ships an example and validates it, but adds no route itself.
   odrl-authorization (2.5.0) carries `name` through all three render paths, with the admin-API ids
   still `<release>-<index>` (as read from the 2.5.0 chart while revising this plan; see "APISIX
   routes"). If not, write `blocked`; if the ids are keyed by name, fix the stale-route text here and
-  in Step 6 first. Also confirm how the yaml-mode ConfigMap reaches APISIX (see "How the yaml-mode
+  in Step 7 first. Also confirm how the yaml-mode ConfigMap reaches APISIX (see "How the yaml-mode
   ConfigMap reaches APISIX": a directory mount without `subPath`, a symlink, no checksum on
-  `apisix-routes`); if 2.3.0 mounts it with `subPath` or rolls the pod on it, fix the Step 6
+  `apisix-routes`); if 2.3.0 mounts it with `subPath` or rolls the pod on it, fix the Step 7
   restart text first.
 - `charts/data-space-connector/Chart.yaml`: set the `decentralizedIam` dependency to **2.3.0**.
   Diff `helm template` with default values before and after, and list every change in the PR
@@ -428,8 +430,8 @@ ships an example and validates it, but adds no route itself.
       metadata, which lacks the events scope. The publisher can then never get a token.
     - The path assumes the announced sink is `<scheme>://<host>/events`. Say in a comment that a sink
       under another path needs the `uri` of all three entries changed (the chart does not check that
-      they agree; it is on the Step 6 checklist).
-    - `<events-service>` is the verifier service of Step 6 item 3, and the same service that
+      they agree; it is on the Step 7 checklist).
+    - `<events-service>` is the verifier service of Step 7 item 3, and the same service that
       `dataspace-events`' `openid-connect.discovery` points at.
     - `verifier:3000` comes from `decentralizedIam.vcAuthentication.vcverifier.fullnameOverride:
       verifier` and the k3s routes. Check it against the rendered Service, as for the CM upstream.
@@ -505,7 +507,7 @@ ships an example and validates it, but adds no route itself.
   there (a handshake `uri` that differs, hosts that differ, a discovery rewrite to the wrong verifier
   service, a missing handshake or discovery entry, `dataspace-events` without `methods: [POST]`, the
   listener off) breaks the handshake, the token fetch or the delivery, and the first test delivery
-  shows it. Those items are the Step 6 checklist (Deviation 3, "Access-control checks only"). Do not
+  shows it. Those items are the Step 7 checklist (Deviation 3, "Access-control checks only"). Do not
   add them back without human sign-off.
 
   The template walks `decentralizedIam.odrlAuthorization.apisix.routes` (the list and every key may be
@@ -528,8 +530,11 @@ ships an example and validates it, but adds no route itself.
      bound to the sink host"), which may accept the events token under another verifier scope and
      ODRL policy. Handshake and discovery are not checked here: a host-less copy of them only breaks
      the flow. Both keys set or `hosts: []` is rejected by APISIX itself.
-  5. **Identity header** (`dataspace-events`): `openid-connect.set_userinfo_header` is not the boolean
-     `true` (APISIX's plugin schema rejects a string, so a string is refused here too).
+  5. **Token and identity header** (`dataspace-events`): `openid-connect.bearer_only` or
+     `openid-connect.set_userinfo_header` is not the boolean `true` (APISIX's plugin schema rejects a
+     string, so a string is refused here too). Without `bearer_only` a request without a token falls
+     through to `openidc.authenticate`, and with `unauth_action: pass` reaches CM unauthenticated
+     (`openid-connect.lua` 1005–1008, 1368, 3.19.0; `bearer_only` added after the PR #24 reviews).
   6. **Policy** (`dataspace-events`): no `opa` plugin. The ODRL policy of Step 5 only takes effect
      through `opa`; the verifier scope alone admits any holder of the events credential, so trimming
      `opa` silently drops the policy.
@@ -544,15 +549,32 @@ ships an example and validates it, but adds no route itself.
        priority check mainly prevents a functional break: a `proxy-rewrite` at its default 1008 runs
        after `openid-connect` and removes the header it just set, so CM gets no identity. Step 4
        verifies the overwrite against the shipped APISIX and states the result in the template
-       comment and the Step 6 guide; if the shipped version does **not** overwrite it, the strip is
+       comment and the Step 7 guide; if the shipped version does **not** overwrite it, the strip is
        the security control and the comment says so.
      - Define `openid-connect`'s default priority as a named constant in the template, verified
        against the APISIX version that ships (2599 in the APISIX source as of planning), with a
        comment naming that version.
+  8. **Disabled or filtered plugin** (`dataspace-events`): `_meta.disable` is truthy, or `_meta.filter`
+     is set (any non-null value), on `openid-connect`, `opa` or `proxy-rewrite`. APISIX skips a
+     disabled plugin, and one whose `filter` does not match the request (`plugin.lua` `meta_filter`,
+     3.19.0), so checks 5 to 7 would pass while the token check, the ODRL policy or the strip is gone
+     for some or all requests (both added after the PR #24 reviews).
+  9. **Route-level bypass** (`dataspace-events`): `script`, `service_id`, `filter_func` or `remote_addr` is set,
+     `vars` or `remote_addrs` is non-empty, or `status` is set to anything but `1`. APISIX 3.19.0 runs a route's `script` instead
+     of its `plugins` (`init.lua` 995–998), so `openid-connect`, `opa` and the strip are skipped. A
+     `service_id` brings in that service's `script` the same way (`init.lua` 961–969,
+     `plugin.merge_service_route` keeps the service's `script` unless the route sets one); route
+     plugins override service plugins, so `script` is the only bypass through it. And
+     it skips a route with `status: 0` or whose `vars`/`filter_func`/`remote_addrs`/`remote_addr` do
+     not match the request (`http/router/radixtree_host_uri.lua` 74–79, 111–113), so `POST /events`
+     falls through to the host's `/*` catch-all, the bypass check 4 guards against (added after the
+     PR #24 reviews; `remote_addrs`/`remote_addr` after the 215ef7c review; `service_id` after the
+     7a62c17 review). An operator who shares upstreams through services sets `upstream` on the route
+     instead, as the example does.
 
   Every check above depends on the exact names. An operator who renames the entries, drops `name`
   while merging lists, or writes their own events routes gets none of them (Deviation 3). There is
-  no guard for unnamed routes (dropped, see Deviation 3); the example header and the Step 6 guide
+  no guard for unnamed routes (dropped, see Deviation 3); the example header and the Step 7 guide
   say to keep the names.
 
   A listener without the routes stays valid, and so do routes without the listener (Deviation 3).
@@ -586,9 +608,11 @@ ships an example and validates it, but adds no route itself.
   | 2 | handshake `methods` absent, `[OPTIONS, POST]`, `[GET]`; a second `dataspace-events-handshake` without `methods` | `dataspace-events-handshake`, `methods` |
   | 3 | discovery `methods` absent, `[GET, POST]`, `[POST]` | `dataspace-events-discovery`, `methods` |
   | 4 | `dataspace-events` without `host`/`hosts`, `host: ""`, `hosts: []` | `dataspace-events`, `host` |
-  | 5 | `set_userinfo_header` absent, `false`, `"true"` | `set_userinfo_header` |
+  | 5 | `set_userinfo_header` absent, `false`, `"true"`; `bearer_only` absent, `false`, `"true"` | `set_userinfo_header` or `bearer_only` |
   | 6 | F | `opa` |
   | 7 | no `proxy-rewrite`; `proxy-rewrite` without `headers.remove`; `headers.remove` without `X-Userinfo`; `_meta.priority` absent, `1008`, `2599`; `2600` with `openid-connect._meta.priority: 3000` | `X-Userinfo` or `priority` |
+  | 8 | `_meta.disable: true` on `openid-connect`, on `opa`, on `proxy-rewrite` (and `disable: false` passes); `_meta.filter` set on each of the three | `<plugin>._meta.disable` or `<plugin>._meta.filter` |
+  | 9 | `script`, `service_id`, `filter_func`, a non-empty `vars`, a non-empty `remote_addrs`, `remote_addr`, `status: 0` (and `status: 1` with `vars: []` and `remote_addrs: []` passes) | `script`, `service_id`, `filter_func`, `vars`, `remote_addrs`, `remote_addr` or `status` |
 
   (c) Passing variants (render nothing):
 
@@ -615,7 +639,7 @@ ships an example and validates it, but adds no route itself.
   and show that APISIX drops it without a restart. Paste the results into the PR description.
 - `values-schema.sh` (regenerate for `eventingRouteValidation`; `decentralizedIam` is an open key),
   `helm lint`, `helm unittest`,
-  lychee (the example file is linked from `values.yaml` only as a comment; Step 6 links it from the
+  lychee (the example file is linked from `values.yaml` only as a comment; Step 7 links it from the
   docs).
 - Acceptance: all pass; the default-values diff contains no route and no eventing resource.
 
@@ -633,7 +657,102 @@ ships an example and validates it, but adds no route itself.
   integration tests (`it/`); that is a separate ticket.
 - Acceptance: the file parses and mirrors the structure of the existing policies.
 
-### Step 6: Docs, release notes, version bump
+### Step 6: Implement Step 4
+- Everything listed under Step 4, unchanged: the `decentralizedIam` 2.3.0 bump, the example file
+  `doc/eventing/examples/events-routes.yaml`, `templates/eventing-validation.yaml`,
+  `eventingRouteValidation.enabled`, and the parameterized suite (`tests/eventing-routes_test.yaml`).
+- odrl-authorization 2.5.0 deploys no etcd by default, so the k3s values that run APISIX in
+  `traditional` mode set `apisix.etcd.enabled: true`.
+- Acceptance: as for Step 4.
+- **Result (PR #24).** Fix agents cannot edit a PR description, so the evidence is recorded here.
+  A human must copy it into the PR #24 description before merging.
+  - **How the diff was made.** The whole umbrella was rendered (`helm template dsc`, Helm 3.17.3,
+    dependencies built, default values) at the base `b4d0aec` (decentralized-iam 2.1.28) and at
+    this branch (2.3.0), and compared resource by resource. A first revision rendered the
+    decentralized-iam subchart alone. That was wrong: Helm does not apply odrl-authorization's own
+    `apisix.etcd.enabled: false` to the condition of the apisix chart's `etcd` dependency three
+    levels down, so the umbrella still rendered etcd with 2.3.0.
+  - **Umbrella values added by this PR** (`decentralizedIam.odrlAuthorization.apisix`):
+    - `etcd.enabled: false`, so the etcd removal that odrl-authorization 2.5.0 intends is real;
+    - `service.type: NodePort`, which keeps the gateway Service type of 2.1.28 (2.5.0 defaults to
+      `ClusterIP`). **Open for wistefan:** keep the pin, or drop it and list the move to
+      `ClusterIP` in the release notes.
+  - The bump moves odrl-authorization 2.4.3 → 2.5.0, the apisix chart 2.16.0 → 2.18.2 and
+    vc-authentication 1.5.2 → 1.6.0. No route, `ApisixRoute` or eventing resource appears.
+  - **Removed** (by the explicit `etcd.enabled: false`):
+    - StatefulSet `dsc-etcd` (3 replicas);
+    - Services `dsc-etcd` and `dsc-etcd-headless`;
+    - PDB, NetworkPolicy and ServiceAccount `dsc-etcd`;
+    - Secret `dsc-etcd-jwt-token`;
+    - the pre-upgrade hook Job `dsc-etcd-pre-upgrade`.
+
+    The umbrella's default APISIX mode is `standalone` (`data_plane`, `config_provider: yaml`), so
+    that etcd was deployed but never used. The PVCs `data-dsc-etcd-{0,1,2}` (8Gi each) are not
+    deleted by Helm and stay orphaned until removed by hand.
+  - **Added:**
+    - ClusterIP Service `dsc-apisix-control`, port 9090. APISIX binds its control API to
+      `127.0.0.1:9090`, so the Service reaches nothing.
+    - Secret `etcd-dsc-apisix`, holding an empty `etcd-root-password` that the APISIX pod reads as
+      `APISIX_ETCD_PASSWORD`.
+  - **Changed:**
+    - APISIX `apache/apisix:3.17.0-ubuntu` → `3.19.0-ubuntu`. The `wait-etcd` init container is
+      gone, the start command uses `exec`, and `terminationGracePeriodSeconds: 30` is added. The
+      only change in `config.yaml` is the quoting of `control.ip`.
+    - The gateway Service `dsc-apisix-gateway` stays `NodePort` (pinned, see above); only its
+      labels change.
+    - odrl-authorization's `catchAllRoute.enabled` default flips from `true` to `false`, which
+      drops the example `/*` → `http://my-broker:8080` route from `apisix-routes`.
+    - Images: TIL `0.10.0` → `0.10.3` (chart 0.19.1 → 0.19.2), vcverifier `6.27.0` → `6.31.0`,
+      odrl-pap `1.7.1` → `1.8.1`. credentials-config-service moves `3.4.3` → `3.5.0`, but the
+      umbrella does not render it.
+    - `helm.sh/chart` and `app.kubernetes.io/version` labels on the decentralized-iam resources.
+  - **New upgrade `fail`:** odrl-authorization 2.5.0's `apisix-etcd-check.yaml` fails any
+    etcd-backed APISIX mode that has neither `apisix.etcd.enabled: true` nor a real
+    `apisix.externalEtcd.host` (checked: `traditional` + `config_provider: etcd` through the
+    umbrella fails with that message, and renders etcd again with `etcd.enabled: true`). An operator
+    who ran `traditional`+etcd on the old default etcd must set
+    `decentralizedIam.odrlAuthorization.apisix.etcd.enabled: true`, as the k3s files do.
+  - **TIL DB migration:** yes, at start-up and on by default. TIL runs Liquibase and the chart
+    0.19.2 does not switch it off. The only new changeset since 0.10.0 is `changelog-v0_0_7.xml`
+    (TIL 0.10.1): it adds a nullable `VARCHAR(255)` column `scope_type` to `credential`, so existing
+    rows stay unscoped. There is no rollback changeset. After a rollback to 0.10.0 the column stays
+    (expected to be ignored, not tested), and grants written with a `scopeType` lose it.
+  - **Runtime checks of Step 4** (APISIX `apache/apisix:3.19.0-ubuntu`, source tag `3.19.0` @
+    `4730436`, the image's Lua files byte-identical to the tag; lab: standalone yaml mode, an echo
+    upstream and an OIDC mock with an RS256 JWKS). All hold; nothing blocks:
+    - Render (umbrella, deps built): the example entries appended to a list with an unrelated route
+      land in `apisix-routes` with their `name`s, ending in `#END`; in `traditional`+etcd mode the
+      script PUTs `routes/dsc-0`…`dsc-3`, `name` only in the body. `apisix-routes` is mounted as a
+      directory without `subPath` and symlinked to `conf/apisix.yaml`; `checksum/config` does not
+      change with the routes.
+    - `_meta.priority` orders a route's plugins (`plugin.lua` 617–648). `openid-connect` 2599 and
+      `proxy-rewrite` 1008 both run in `rewrite`; `proxy-rewrite` applies `headers.remove` there.
+    - `openid-connect` clears a client-sent `X-Userinfo` (`openid-connect.lua` 1185) and sets its
+      own (1322). At runtime a spoofed header is replaced, even with `proxy-rewrite` removed. So the
+      strip is defence in depth; with `proxy-rewrite` at its default 1008 the upstream gets **no**
+      `X-Userinfo` (the functional break check 7 prevents).
+    - `POST /events` without a token → `401`; with a valid token → the events upstream.
+      `OPTIONS /events` → the handshake route. `GET /events/.well-known/openid-configuration` → the
+      discovery upstream at `/services/<id>/.well-known/openid-configuration`, beating a host-bound
+      `/*` and a copy of the k3s priority-100 `/*` + `vars` route. A host-less `/events` loses to
+      the host's `/*`.
+    - `schema_def.lua` 651–715: `hosts` has `minItems: 1`, `host` and `hosts` exclude each other;
+      at runtime both a `hosts: []` route and a `host`+`hosts` route are logged as schema errors and
+      dropped.
+    - `iss` check: lua-resty-openidc 1.9.0's `bearer_jwt_verify` does not compare `iss` itself;
+      APISIX passes the discovery `issuer` as `valid_issuers` (`openid-connect.lua` 1045–1048). A
+      token with a wrong `iss` gets `401`.
+    - Reload: after a kubelet-style `..data` symlink swap without the handshake route,
+      `OPTIONS /events` stopped matching within ~1 s, without a restart (APISIX re-reads
+      `apisix.yaml` when its mtime changes).
+    - Verifier 6.31.0 (source only; the container needs a DB-backed config service): the metadata
+      handler takes only the service id; `issuer`, `token_endpoint` and `jwks_uri` come from
+      `server.host` (+ `pathPrefix`) (`verifier.go` 620–623, 1243–1246), and tokens are minted with
+      the same `iss`. So internal and external discovery URLs return identical metadata.
+    - **Not verified:** the `opa` plugin (no OPA in the lab); it is the same plugin configuration
+      the existing k3s routes use.
+
+### Step 7: Docs, release notes, version bump
 - New `doc/eventing/participant-setup.md` (doctoc ToC). Write it as an operator guide and link to
   specification/architecture for the reasons. Content:
   1. the values to enable the listener/subscriber, and which keys are startup-only (a rollout
@@ -659,10 +778,12 @@ ships an example and validates it, but adds no route itself.
        install/upgrade;
      - why `discovery` uses the verifier's external URL (Step 4: `issuer` and `jwks_uri` come from the
        verifier's `server.host`), with `proxy_opts` where the gateway needs a proxy;
-     - which settings the chart enforces (the seven checks of Step 4: no ingress controller,
+     - which settings the chart enforces (the nine checks of Step 4: no ingress controller,
        `[OPTIONS]` on the handshake, `[GET]` on discovery, and on `dataspace-events` a host,
-       `set_userinfo_header`, `opa`, the `X-Userinfo` strip and its priority above
-       `openid-connect`'s effective priority) and why (for the strip: the Step 4 result on whether
+       `bearer_only` and `set_userinfo_header`, `opa`, the `X-Userinfo` strip and its priority above
+       `openid-connect`'s effective priority, none of those three plugins switched off with
+       `_meta.disable` or made conditional with `_meta.filter`, and no `script`, `service_id`,
+       `filter_func`, `vars`, `remote_addrs`, `remote_addr` or `status: 0` on the route) and why (for the strip: the Step 4 result on whether
        `openid-connect` overwrites a client-sent header);
      - a checklist of what the chart does **not** check, because a mistake there breaks the flow
        visibly rather than weakening access control (Step 4, "Scope of the checks"): all three
@@ -752,7 +873,16 @@ ships an example and validates it, but adds no route itself.
 - `doc/release-notes/10-x.md`: add a new top section for the minor version, in the existing
   format. Cover:
   - the CM and decentralizedIam bumps, with the image changes and any TIL DB migration (Deviation 2,
-    listing what a default upgrade does change);
+    listing what a default upgrade does change). From the Step 6 result, cover at least:
+    - the removed etcd (now `etcd.enabled: false` in the umbrella) and its orphaned PVCs
+      (`data-<release>-etcd-*`, delete them by hand);
+    - the required `apisix.etcd.enabled: true` for etcd-backed modes, which otherwise fail;
+    - the APISIX gateway Service: pinned to `NodePort` (or, if wistefan drops the pin, the move to
+      `ClusterIP`);
+    - the dropped default catch-all route;
+    - the new `<release>-apisix-control` Service;
+    - APISIX 3.19.0;
+    - the TIL `scope_type` column migration;
   - that CM ≥ 3.5.3 serves an unauthenticated `POST :9090/refresh` in **every** deployment with CM
     enabled, not only with eventing on, so port 9090 must stay cluster-internal (no Service, Ingress or
     route for it; a NetworkPolicy where pod IPs are reachable), and the `ENDPOINTS_REFRESH_SENSITIVE=true`

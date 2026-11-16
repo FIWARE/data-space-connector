@@ -188,6 +188,7 @@ decentralizedIam:
   # configuration for the odrl-authorization to be deployed as part of the connector, see https://github.com/FIWARE/odrl-authorization/tree/master
   odrlAuthorization:
     # -- configuration for the odrl-pap to be deployed as part of the connector, see https://apisix.apache.org/
+    # The data space events routes go into `routes`: see doc/eventing/examples/events-routes.yaml.
     apisix:
       ingress-controller:
         enabled: false
@@ -197,11 +198,19 @@ decentralizedIam:
         prometheus.io/path: /apisix/prometheus/metrics
         prometheus.io/port: "9091"
       service:
-        # -- traffic policy of the gateway service. Left empty so that Kubernetes applies its own
-        # default (`Cluster` for NodePort and LoadBalancer) and the service can also be set to
-        # `ClusterIP`: the apisix chart writes the field for every type, and the API server rejects
-        # it on a ClusterIP service. Set it to `Local` to keep the client source IP.
+        # -- type of the gateway service. Pinned to the pre-10.16 type: odrl-authorization >= 2.5.0
+        # defaults to `ClusterIP`, which would close the node port on upgrade. Set `ClusterIP` when
+        # the gateway is only reached through an Ingress.
+        type: NodePort
+        # -- traffic policy of the gateway service, for NodePort and LoadBalancer. Empty: the
+        # Kubernetes default (`Cluster`). Set it to `Local` to keep the client source IP.
         externalTrafficPolicy: ""
+      # The etcd is only read in the etcd-backed APISIX modes; the default standalone mode reads the
+      # routes from a ConfigMap.
+      etcd:
+        # -- deploy the APISIX etcd. Set explicitly because Helm does not apply odrl-authorization's
+        # own `false` default to this nested condition. Set `true` for `traditional` + etcd mode.
+        enabled: false
       apisix:
         prometheus:
           enabled: true
@@ -2069,6 +2078,13 @@ contract-management:
 # @schema
 did:
   enabled: false
+
+# -- checks of the data space events routes (templates/eventing-validation.yaml)
+eventingRouteValidation:
+  # -- refuse install/upgrade when a route named dataspace-events, dataspace-events-handshake or
+  # dataspace-events-discovery weakens access control. false skips every check and leaves the
+  # route security to the operator.
+  enabled: true
 
 # -- configuration for registering a participant at the til. Allows to preconfigure trust-relationships on deployment
 registration:
