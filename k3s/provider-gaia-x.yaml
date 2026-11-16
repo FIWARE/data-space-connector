@@ -154,7 +154,7 @@ decentralizedIam:
 
     apisix:
       # APISIX runs standalone here (routes from values, no admin API) and needs no etcd;
-      # odrl-authorization >= 2.5.0 deploys none by default, this only makes it explicit
+      # the chart deploys none by default, this only makes it explicit
       etcd:
         enabled: false
       # the apisix subchart exposes the gateway through `ingress`, not `dataPlane.ingress`;

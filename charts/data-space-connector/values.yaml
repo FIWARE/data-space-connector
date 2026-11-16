@@ -198,11 +198,19 @@ decentralizedIam:
         prometheus.io/path: /apisix/prometheus/metrics
         prometheus.io/port: "9091"
       service:
-        # -- traffic policy of the gateway service. Left empty so that Kubernetes applies its own
-        # default (`Cluster` for NodePort and LoadBalancer) and the service can also be set to
-        # `ClusterIP`: the apisix chart writes the field for every type, and the API server rejects
-        # it on a ClusterIP service. Set it to `Local` to keep the client source IP.
+        # -- type of the gateway service. Pinned to the pre-10.16 type: odrl-authorization >= 2.5.0
+        # defaults to `ClusterIP`, which would close the node port on upgrade. Set `ClusterIP` when
+        # the gateway is only reached through an Ingress.
+        type: NodePort
+        # -- traffic policy of the gateway service, for NodePort and LoadBalancer. Empty: the
+        # Kubernetes default (`Cluster`). Set it to `Local` to keep the client source IP.
         externalTrafficPolicy: ""
+      # The etcd is only read in the etcd-backed APISIX modes; the default standalone mode reads the
+      # routes from a ConfigMap.
+      etcd:
+        # -- deploy the APISIX etcd. Set explicitly because Helm does not apply odrl-authorization's
+        # own `false` default to this nested condition. Set `true` for `traditional` + etcd mode.
+        enabled: false
       apisix:
         prometheus:
           enabled: true

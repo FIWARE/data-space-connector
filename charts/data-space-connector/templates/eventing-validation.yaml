@@ -62,8 +62,8 @@ Helm ignores a non-bool dependency condition and deploys the subchart.
 {{- fail (printf "%s: the opa plugin is required; without it the ODRL policy does not apply" $where) }}
 {{- end }}
 {{- /*
-APISIX 3.19.0 openid-connect clears a client-sent X-Userinfo and sets its own, so the strip is
-defence in depth (the contract-management README asks for it). Run at its default priority (1008),
+APISIX 3.19.0 openid-connect clears a client-sent X-Userinfo and sets its own (openid-connect.lua
+1185/1322, confirmed in an apache/apisix:3.19.0-ubuntu container), so the strip is defence in depth (the contract-management README asks for it). Run at its default priority (1008),
 after openid-connect, it would remove the identity openid-connect just set.
 */ -}}
 {{- $rewrite := index $plugins "proxy-rewrite" | default dict }}

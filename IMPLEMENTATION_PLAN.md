@@ -647,22 +647,30 @@ ships an example and validates it, but adds no route itself.
   `traditional` mode set `apisix.etcd.enabled: true`.
 - Acceptance: as for Step 4.
 - **Result (PR #24).** Fix agents cannot edit a PR description, so the evidence is recorded here.
-  A human must copy it into the PR #24 description before merging. The decentralized-iam subchart
-  was rendered at 2.1.28 and at 2.3.0 with the umbrella's `decentralizedIam` values (release `dsc`).
-  Those values differ only by the comment pointing at the example file. The bump moves
-  odrl-authorization 2.4.3 → 2.5.0, the apisix chart 2.16.0 → 2.18.2 and vc-authentication
-  1.5.2 → 1.6.0. No route and no eventing resource appears.
-  - **Removed:** odrl-authorization 2.5.0 defaults `apisix.etcd.enabled` to `false`, and the
-    umbrella does not set it. A default upgrade therefore deletes the following resources:
-    - StatefulSet `dsc-etcd`;
+  A human must copy it into the PR #24 description before merging.
+  - **How the diff was made.** The whole umbrella was rendered (`helm template dsc`, Helm 3.17.3,
+    dependencies built, default values) at the base `b4d0aec` (decentralized-iam 2.1.28) and at
+    this branch (2.3.0), and compared resource by resource. A first revision rendered the
+    decentralized-iam subchart alone. That was wrong: Helm does not apply odrl-authorization's own
+    `apisix.etcd.enabled: false` to the condition of the apisix chart's `etcd` dependency three
+    levels down, so the umbrella still rendered etcd with 2.3.0.
+  - **Umbrella values added by this PR** (`decentralizedIam.odrlAuthorization.apisix`):
+    - `etcd.enabled: false`, so the etcd removal that odrl-authorization 2.5.0 intends is real;
+    - `service.type: NodePort`, which keeps the gateway Service type of 2.1.28 (2.5.0 defaults to
+      `ClusterIP`). **Open for wistefan:** keep the pin, or drop it and list the move to
+      `ClusterIP` in the release notes.
+  - The bump moves odrl-authorization 2.4.3 → 2.5.0, the apisix chart 2.16.0 → 2.18.2 and
+    vc-authentication 1.5.2 → 1.6.0. No route, `ApisixRoute` or eventing resource appears.
+  - **Removed** (by the explicit `etcd.enabled: false`):
+    - StatefulSet `dsc-etcd` (3 replicas);
     - Services `dsc-etcd` and `dsc-etcd-headless`;
     - PDB, NetworkPolicy and ServiceAccount `dsc-etcd`;
     - Secret `dsc-etcd-jwt-token`;
     - the pre-upgrade hook Job `dsc-etcd-pre-upgrade`.
 
     The umbrella's default APISIX mode is `standalone` (`data_plane`, `config_provider: yaml`), so
-    that etcd was deployed but never used. The PVCs `data-dsc-etcd-{0,1,2}` (8Gi each, persistence
-    was on by default) are not deleted by Helm and stay orphaned until removed by hand.
+    that etcd was deployed but never used. The PVCs `data-dsc-etcd-{0,1,2}` (8Gi each) are not
+    deleted by Helm and stay orphaned until removed by hand.
   - **Added:**
     - ClusterIP Service `dsc-apisix-control`, port 9090. APISIX binds its control API to
       `127.0.0.1:9090`, so the Service reaches nothing.
@@ -670,24 +678,61 @@ ships an example and validates it, but adds no route itself.
       `APISIX_ETCD_PASSWORD`.
   - **Changed:**
     - APISIX `apache/apisix:3.17.0-ubuntu` → `3.19.0-ubuntu`. The `wait-etcd` init container is
-      gone, the start command uses `exec`, and `terminationGracePeriodSeconds: 30` is added.
-    - The **APISIX gateway Service type changes from `NodePort` to `ClusterIP`**. Anyone who
-      reached the gateway through the node port loses that access.
+      gone, the start command uses `exec`, and `terminationGracePeriodSeconds: 30` is added. The
+      only change in `config.yaml` is the quoting of `control.ip`.
+    - The gateway Service `dsc-apisix-gateway` stays `NodePort` (pinned, see above); only its
+      labels change.
     - odrl-authorization's `catchAllRoute.enabled` default flips from `true` to `false`, which
       drops the example `/*` → `http://my-broker:8080` route from `apisix-routes`.
     - Images: TIL `0.10.0` → `0.10.3` (chart 0.19.1 → 0.19.2), vcverifier `6.27.0` → `6.31.0`,
       odrl-pap `1.7.1` → `1.8.1`. credentials-config-service moves `3.4.3` → `3.5.0`, but the
       umbrella does not render it.
-    - `helm.sh/chart` and `app.kubernetes.io/version` labels on 14 resources.
+    - `helm.sh/chart` and `app.kubernetes.io/version` labels on the decentralized-iam resources.
   - **New upgrade `fail`:** odrl-authorization 2.5.0's `apisix-etcd-check.yaml` fails any
     etcd-backed APISIX mode that has neither `apisix.etcd.enabled: true` nor a real
-    `apisix.externalEtcd.host`. An operator who ran `traditional`+etcd on the old default etcd must
-    set `decentralizedIam.odrlAuthorization.apisix.etcd.enabled: true`, as the k3s files now do.
+    `apisix.externalEtcd.host` (checked: `traditional` + `config_provider: etcd` through the
+    umbrella fails with that message, and renders etcd again with `etcd.enabled: true`). An operator
+    who ran `traditional`+etcd on the old default etcd must set
+    `decentralizedIam.odrlAuthorization.apisix.etcd.enabled: true`, as the k3s files do.
   - **TIL DB migration:** yes, at start-up and on by default. TIL runs Liquibase and the chart
     0.19.2 does not switch it off. The only new changeset since 0.10.0 is `changelog-v0_0_7.xml`
     (TIL 0.10.1): it adds a nullable `VARCHAR(255)` column `scope_type` to `credential`, so existing
     rows stay unscoped. There is no rollback changeset. After a rollback to 0.10.0 the column stays
     (expected to be ignored, not tested), and grants written with a `scopeType` lose it.
+  - **Runtime checks of Step 4** (APISIX `apache/apisix:3.19.0-ubuntu`, source tag `3.19.0` @
+    `4730436`, the image's Lua files byte-identical to the tag; lab: standalone yaml mode, an echo
+    upstream and an OIDC mock with an RS256 JWKS). All hold; nothing blocks:
+    - Render (umbrella, deps built): the example entries appended to a list with an unrelated route
+      land in `apisix-routes` with their `name`s, ending in `#END`; in `traditional`+etcd mode the
+      script PUTs `routes/dsc-0`…`dsc-3`, `name` only in the body. `apisix-routes` is mounted as a
+      directory without `subPath` and symlinked to `conf/apisix.yaml`; `checksum/config` does not
+      change with the routes.
+    - `_meta.priority` orders a route's plugins (`plugin.lua` 617–648). `openid-connect` 2599 and
+      `proxy-rewrite` 1008 both run in `rewrite`; `proxy-rewrite` applies `headers.remove` there.
+    - `openid-connect` clears a client-sent `X-Userinfo` (`openid-connect.lua` 1185) and sets its
+      own (1322). At runtime a spoofed header is replaced, even with `proxy-rewrite` removed. So the
+      strip is defence in depth; with `proxy-rewrite` at its default 1008 the upstream gets **no**
+      `X-Userinfo` (the functional break check 7 prevents).
+    - `POST /events` without a token → `401`; with a valid token → the events upstream.
+      `OPTIONS /events` → the handshake route. `GET /events/.well-known/openid-configuration` → the
+      discovery upstream at `/services/<id>/.well-known/openid-configuration`, beating a host-bound
+      `/*` and a copy of the k3s priority-100 `/*` + `vars` route. A host-less `/events` loses to
+      the host's `/*`.
+    - `schema_def.lua` 651–715: `hosts` has `minItems: 1`, `host` and `hosts` exclude each other;
+      at runtime both a `hosts: []` route and a `host`+`hosts` route are logged as schema errors and
+      dropped.
+    - `iss` check: lua-resty-openidc 1.9.0's `bearer_jwt_verify` does not compare `iss` itself;
+      APISIX passes the discovery `issuer` as `valid_issuers` (`openid-connect.lua` 1045–1048). A
+      token with a wrong `iss` gets `401`.
+    - Reload: after a kubelet-style `..data` symlink swap without the handshake route,
+      `OPTIONS /events` stopped matching within ~1 s, without a restart (APISIX re-reads
+      `apisix.yaml` when its mtime changes).
+    - Verifier 6.31.0 (source only; the container needs a DB-backed config service): the metadata
+      handler takes only the service id; `issuer`, `token_endpoint` and `jwks_uri` come from
+      `server.host` (+ `pathPrefix`) (`verifier.go` 620–623, 1243–1246), and tokens are minted with
+      the same `iss`. So internal and external discovery URLs return identical metadata.
+    - **Not verified:** the `opa` plugin (no OPA in the lab); it is the same plugin configuration
+      the existing k3s routes use.
 
 ### Step 7: Docs, release notes, version bump
 - New `doc/eventing/participant-setup.md` (doctoc ToC). Write it as an operator guide and link to
@@ -810,9 +855,11 @@ ships an example and validates it, but adds no route itself.
   format. Cover:
   - the CM and decentralizedIam bumps, with the image changes and any TIL DB migration (Deviation 2,
     listing what a default upgrade does change). From the Step 6 result, cover at least:
-    - the removed etcd and its orphaned PVCs (`data-<release>-etcd-*`, delete them by hand);
+    - the removed etcd (now `etcd.enabled: false` in the umbrella) and its orphaned PVCs
+      (`data-<release>-etcd-*`, delete them by hand);
     - the required `apisix.etcd.enabled: true` for etcd-backed modes, which otherwise fail;
-    - the APISIX gateway Service moving from `NodePort` to `ClusterIP`;
+    - the APISIX gateway Service: pinned to `NodePort` (or, if wistefan drops the pin, the move to
+      `ClusterIP`);
     - the dropped default catch-all route;
     - the new `<release>-apisix-control` Service;
     - APISIX 3.19.0;
