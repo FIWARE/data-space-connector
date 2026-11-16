@@ -9,9 +9,9 @@ Needs Go (version from `go.mod`) and Node 22 with npm.
 
 ```shell
 make ui            # npm ci + vite build into ui/dist, which the binary embeds
-make build         # ui, then bin/dsc-config (pure Go, opens a browser tab)
+make build         # ui, then bin/dsc-config[.exe] (pure Go, opens a browser tab)
 make cross         # ui, then bin/dsc-config-<os>-<arch> for the five release targets
-make build-window  # ui, then bin/dsc-config-window with a native window (see below)
+make build-window  # ui, then bin/dsc-config-window[.exe] with a native window (see below)
 make test          # go test ./... and the UI's Vitest suite
 make lint
 ```

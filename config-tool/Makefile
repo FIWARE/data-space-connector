@@ -26,6 +26,7 @@ endif
 ifeq ($(HOST_GOOS),windows)
 WINDOW_CGO   := 0
 endif
+EXE          := $(if $(filter windows,$(HOST_GOOS)),.exe,)
 
 .PHONY: ui build build-window cross test lint
 
@@ -36,10 +37,10 @@ ui: $(UI_DEPS)
 	cd $(UI_DIR) && npm run build
 
 build: ui
-	CGO_ENABLED=0 go build -trimpath -ldflags '$(LDFLAGS)' -o $(BIN_DIR)/$(BINARY) ./cmd/dsc-config
+	CGO_ENABLED=0 go build -trimpath -ldflags '$(LDFLAGS)' -o $(BIN_DIR)/$(BINARY)$(EXE) ./cmd/dsc-config
 
 build-window: ui
-	CGO_ENABLED=$(WINDOW_CGO) go build -trimpath -tags '$(WINDOW_TAGS)' -ldflags '$(LDFLAGS)' -o $(BIN_DIR)/$(BINARY)-window ./cmd/dsc-config
+	CGO_ENABLED=$(WINDOW_CGO) go build -trimpath -tags '$(WINDOW_TAGS)' -ldflags '$(LDFLAGS)' -o $(BIN_DIR)/$(BINARY)-window$(EXE) ./cmd/dsc-config
 
 cross: ui
 	@set -e; for target in $(CROSS_TARGETS); do \
