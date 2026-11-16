@@ -447,19 +447,37 @@ ships an example and validates it, but adds no route itself.
   - `eventingRouteValidation.enabled` (new umbrella key, see below);
   - `decentralizedIam.enabled`;
   - `decentralizedIam.odrlAuthorization.enabled`, the condition decentralized-iam 2.3.0's
-    `Chart.yaml` puts on odrl-authorization (its `values.yaml` defaults it to `true`);
-  - `decentralizedIam.odrlAuthorization.apisix.enabled`, the condition odrl-authorization 2.5.0's
-    `Chart.yaml` puts on the `apisix` dependency (default `true`). Its `routes.yaml` and
-    `routes-script.yaml` are gated on `.Values.enabled` only, so with `apisix.enabled: false` they
-    still render, but no gateway reads them. `k3s/consumer.yaml` uses this shape.
+    `Chart.yaml` puts on odrl-authorization (its `values.yaml` defaults it to `true`).
 
-  The umbrella declares neither subchart key and CI builds no dependencies, so the template treats an
-  **absent** key as deployed: only an explicit `false` turns it off
-  (`ne (toString (dig "enabled" true $odrl)) "false"` on the subchart map, and
-  `dig "apisix" "enabled" true $odrl` likewise). Treating absent as off would make every failure case
-  pass in CI. With any of them off, no bundled gateway serves the routes, so route values left in an
-  operator's file (e.g. after switching to an external gateway) are inert and must not fail the
-  install.
+  Every check **except the ingress-controller refusal** is further gated on
+  `decentralizedIam.odrlAuthorization.apisix.enabled`, the condition odrl-authorization 2.5.0's
+  `Chart.yaml` puts on the `apisix` dependency (default `true`). In 2.5.0 only `routes.yaml` is gated
+  on `.Values.enabled` alone; `routes-script.yaml` additionally requires `.Values.apisix.enabled`, and
+  `routes-job.yaml` is gated on `and .Values.enabled .Values.apisix.enabled`. So with
+  `apisix.enabled: false` the admin script and Job do not render, and the `apisix-routes` ConfigMap
+  still renders but no gateway reads it. `k3s/consumer.yaml` uses this shape.
+  The ingress-controller refusal (below) is **not** gated on `apisix.enabled`: `routes.yaml` renders
+  one `ApisixRoute` per entry whenever `.Values.enabled` and `apisix.ingress-controller.enabled` are
+  true, even with the bundled APISIX off, and an ingress controller deployed outside the release that
+  watches the same `ingressClass` (default `apisix`) would serve those method- and host-less routes.
+
+  **How a subchart switch is read.** The umbrella declares neither `decentralizedIam.odrlAuthorization.enabled`
+  nor `...apisix.enabled`, and CI builds no dependencies, so an **absent** key counts as deployed.
+  All three gate switches (`decentralizedIam.enabled`, `odrlAuthorization.enabled`,
+  `odrlAuthorization.apisix.enabled`) use one form: a switch is off **only when it is the boolean
+  `false`**, i.e. `$v := dig "enabled" true $map` and off is `and (kindIs "bool" $v) (not $v)`.
+  - Why not `ne (toString $v) "false"`: Helm evaluates a dependency `condition` only when it is a
+    bool. A string `"false"` (`--set-string`) logs "returned non-bool value", is ignored, and the
+    subchart **is deployed** (checked with Helm 3.17.3 and a toy parent/child chart); the subchart's
+    own `if .Values.enabled` / `and .Values.apisix.enabled` then see a non-empty, truthy string. So a
+    string `"false"` must count as on, or the validation would skip a gateway that is running.
+  - `ingress-controller.enabled` is read the way `routes.yaml` reads it, Go-template truthiness
+    (`if`): absent (the umbrella declares `false`), `false` or empty is off, anything else, including
+    the string `"false"`, is on.
+
+  Treating absent as off would make every failure case pass in CI. With any gate switch off, no
+  bundled gateway serves the routes, so route values left in an operator's file (e.g. after switching
+  to an external gateway) are inert and must not fail the install.
 
   `eventingRouteValidation.enabled` is the escape hatch (Deviation 3, "One opt-out"): a top-level
   umbrella key, so it is not rendered into CM's Micronaut config the way a key under
@@ -544,7 +562,8 @@ ships an example and validates it, but adds no route itself.
     `methods` APISIX matches every method, so a forgotten key would open `POST /events` without
     authentication), or
   - `decentralizedIam.odrlAuthorization.apisix.ingress-controller.enabled` is true: the subchart's
-    `ApisixRoute` template drops `methods` and `hosts`, with the same effect.
+    `ApisixRoute` template drops `methods` and `hosts`, with the same effect. This check runs even
+    with `apisix.enabled: false` (see the gate above), so it is the only one that can fire then.
 
   Every check above depends on the exact names. An operator who renames the entries, drops `name`
   while merging lists, or writes their own events routes gets none of them (Deviation 3). There is
@@ -554,10 +573,14 @@ ships an example and validates it, but adds no route itself.
   A listener without the routes stays valid (Deviation 3).
 - Extend `tests/eventing_test.yaml`, parameterized: defaults render nothing; an otherwise failing
   combination (e.g. the listener off, the ingress controller on) renders
-  nothing with `eventingRouteValidation.enabled: false`, with `decentralizedIam.enabled: false`,
-  with `decentralizedIam.odrlAuthorization.enabled: false` and with
-  `decentralizedIam.odrlAuthorization.apisix.enabled: false`, and still fails with the last two keys
-  absent; a `dataspace-events` without `opa` fails; other routes without
+  nothing with `eventingRouteValidation.enabled: false`, with `decentralizedIam.enabled: false` and
+  with `decentralizedIam.odrlAuthorization.enabled: false`, and still fails with
+  `odrlAuthorization.enabled` and `apisix.enabled` absent and with each gate switch set to the
+  **string** `"false"` (Helm deploys the subchart then);
+  a non-ingress failure (e.g. the listener off) renders nothing with
+  `decentralizedIam.odrlAuthorization.apisix.enabled: false`, while `apisix.enabled: false` with
+  `ingress-controller.enabled: true` and an events name present still gives `failedTemplate`, and so
+  does `ingress-controller.enabled: "false"` (a truthy string); a `dataspace-events` without `opa` fails; other routes without
   these names render nothing; each inconsistent combination gives `failedTemplate` with its message,
   including on each entry: no host, `host: ""`, `hosts: []`, both keys set, hosts that differ
   between the entries, a duplicate name, missing or widened `methods` on handshake and discovery,
@@ -660,10 +683,12 @@ ships an example and validates it, but adds no route itself.
      - why there are two switches (Deviation 3);
      - what the `proxy-rewrite` priority is for;
      - that operators with their own gateway must reproduce the same routes and plugin chain,
-       including the discovery route and removing `X-Userinfo`; the chart checks nothing then (the
-       validation only runs when `decentralizedIam` deploys odrl-authorization with its bundled
-       APISIX, i.e. none of `decentralizedIam.enabled`, `odrlAuthorization.enabled`,
-       `odrlAuthorization.apisix.enabled` is `false`, Step 4);
+       including the discovery route and removing `X-Userinfo`; the route checks do not run then (they
+       only run when `decentralizedIam` deploys odrl-authorization with its bundled APISIX, i.e.
+       none of `decentralizedIam.enabled`, `odrlAuthorization.enabled`,
+       `odrlAuthorization.apisix.enabled` is the boolean `false`, Step 4). The ingress-controller
+       refusal still runs with `apisix.enabled: false`, because odrl-authorization still renders
+       `ApisixRoute` CRs that an external controller may serve;
      - `eventingRouteValidation.enabled: false` as the opt-out when a correct setup is refused: it
        switches off every check, so the operator then verifies the list of enforced settings above
        by hand;
@@ -680,6 +705,25 @@ ships an example and validates it, but adds no route itself.
   6. that management port 9090 (`/refresh`, `/participants-removed`) must stay cluster-internal; link
      the release-notes entry, since `/refresh` is open on every CM ≥ 3.5.3, eventing on or off.
 - `doc/README.md`: link the new page under the existing `### Data Space Eventing` subsection.
+- New ADR `doc/adr/0008-events-routes-as-validated-operator-snippet.md` (AGENTS.md: every
+  architectural decision gets an ADR), in the MADR-lite format of the existing ADRs, and a row for it
+  in `doc/adr/README.md` (Status `Accepted`, "Also in" empty; name `doc/eventing/participant-setup.md`
+  as the document it belongs to). This plan file is not kept after the ticket, so the ADR is where
+  the reasoning survives. Content, from "APISIX routes" and Deviation 3:
+  - context: the events routes need a deployment-specific host and verifier service, Helm replaces
+    lists, the umbrella declares no `routes` default, odrl-authorization's three render modes;
+  - decision: the chart ships no events route; operators append the three named entries of
+    `doc/eventing/examples/events-routes.yaml`, and `templates/eventing-validation.yaml` checks them
+    by `name`, with `eventingRouteValidation.enabled` as the single opt-out;
+  - consequences: two switches, checks are opt-in by name, a new upgrade `fail` path for routes that
+    carry the names, stale `<release>-<index>` routes in the etcd-backed modes on removal, the
+    ingress-controller mode refused;
+  - rejected alternatives: an odrl-authorization `apisix.extraRoutes` map, an umbrella hook Job
+    PUTting to the admin API, the unnamed-route guard (with the reason for each, as in this plan).
+
+  Link the ADR from `participant-setup.md` and from `doc/eventing/architecture.md` §12 as a one-line
+  note (no new D-x entry: §12 records design decisions of the protocol, the ADR records this chart's
+  packaging decision).
 - `doc/release-notes/10-x.md`: add a new top section for the minor version, in the existing
   format. Cover:
   - the CM and decentralizedIam bumps, with the image changes and any TIL DB migration (Deviation 2,
