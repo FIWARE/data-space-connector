@@ -129,6 +129,7 @@ keeps `dsc-config generate` honest and makes the core testable without a browser
 | Helm | `helm.sh/helm/v3/pkg/{action,chart,chartutil,engine,downloader}` | Render, schema validation, dependency update, install/upgrade |
 | Kubernetes | `k8s.io/client-go`, `k8s.io/apimachinery` | Discovery for detection; apply for install |
 | YAML round-trip | `gopkg.in/yaml.v3` node API | Keeps comments and order; `sigs.k8s.io/yaml` for the schema path, since Helm uses it |
+| Versions | `github.com/Masterminds/semver/v3` | Orders the model bundles; the library Helm compares chart versions with |
 | JSON Schema | `santhosh-tekuri/jsonschema/v6` | Draft-07, what the chart's schema is |
 | Sealed Secrets | `github.com/bitnami-labs/sealed-secrets/pkg/crypto` | Seals in process (AES-256-GCM session key wrapped with RSA-OAEP); `kubeseal` is used only to fetch a certificate when it is on the PATH |
 | Secret generation | `crypto/rand`, `crypto/ecdsa`, `go-jose` for JWKs | See [Generation](SECRETS.md#generation) |

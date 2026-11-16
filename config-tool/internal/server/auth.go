@@ -19,6 +19,8 @@ const (
 	headerAuthorization  = "Authorization"
 	headerOrigin         = "Origin"
 	headerUpgrade        = "Upgrade"
+	headerSecFetchSite   = "Sec-Fetch-Site"
+	fetchSiteSameOrigin  = "same-origin"
 	headerCacheControl   = "Cache-Control"
 	headerReferrerPolicy = "Referrer-Policy"
 	headerContentType    = "Content-Type"
@@ -53,8 +55,8 @@ const unauthorizedPage = `<!doctype html>
 `
 
 // guard wraps next with the security headers, the Host check, the token and launch-code
-// exchange, authentication and the Origin check for cookie-authenticated unsafe requests and
-// WebSocket upgrades.
+// exchange, authentication and, for cookie-authenticated requests, the Origin check on unsafe
+// methods and WebSocket upgrades plus the Sec-Fetch-Site check on every API call.
 func (s *Server) guard(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		for name, value := range securityHeaders {
@@ -74,6 +76,10 @@ func (s *Server) guard(next http.Handler) http.Handler {
 		}
 		if !bearer && needsOrigin(r) && !s.origins[r.Header.Get(headerOrigin)] {
 			writeError(w, http.StatusForbidden, "forbidden origin", "")
+			return
+		}
+		if !bearer && crossOriginAPI(r) {
+			writeError(w, http.StatusForbidden, "forbidden fetch site", "")
 			return
 		}
 		next.ServeHTTP(w, r)
@@ -147,6 +153,14 @@ func (s *Server) redeemLaunchCode(code string) bool {
 func needsOrigin(r *http.Request) bool {
 	safe := r.Method == http.MethodGet || r.Method == http.MethodHead
 	return !safe || r.URL.Path == pathWS || strings.EqualFold(r.Header.Get(headerUpgrade), upgradeWebSocket)
+}
+
+// crossOriginAPI flags an API call another page made: a same-site page on another loopback port
+// gets the Strict cookie, so even a GET (e.g. an <img> making the server stat a UNC path) is refused.
+// Browsers without Sec-Fetch-Site send none and pass.
+func crossOriginAPI(r *http.Request) bool {
+	site := r.Header.Get(headerSecFetchSite)
+	return strings.HasPrefix(r.URL.Path, pathAPI) && site != "" && site != fetchSiteSameOrigin
 }
 
 func unauthorized(w http.ResponseWriter, r *http.Request) {

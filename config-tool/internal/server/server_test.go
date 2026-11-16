@@ -94,6 +94,7 @@ type request struct {
 	cookie *http.Cookie
 	bearer string
 	body   string
+	site   string
 }
 
 func do(t *testing.T, srv *Server, r request) (*http.Response, string) {
@@ -117,6 +118,9 @@ func do(t *testing.T, srv *Server, r request) (*http.Response, string) {
 	}
 	if r.bearer != "" {
 		req.Header.Set(headerAuthorization, bearerPrefix+r.bearer)
+	}
+	if r.site != "" {
+		req.Header.Set(headerSecFetchSite, r.site)
 	}
 	resp, err := client.Do(req)
 	if err != nil {
@@ -401,6 +405,37 @@ func TestOriginGuard(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			resp, _ := do(t, srv, request{method: http.MethodPost, path: "/api/render", origin: tc.origin, cookie: tc.cookie, bearer: tc.bearer})
+			if resp.StatusCode != tc.want {
+				t.Errorf("status = %d, want %d", resp.StatusCode, tc.want)
+			}
+		})
+	}
+}
+
+func TestFetchSiteGuard(t *testing.T) {
+	srv := started(t, builtUI)
+	cookie := login(t, srv)
+	tests := []struct {
+		name   string
+		path   string
+		site   string
+		cookie *http.Cookie
+		bearer string
+		want   int
+	}{
+		{"api same-origin", "/api/model", fetchSiteSameOrigin, cookie, "", http.StatusOK},
+		{"api without header", "/api/model", "", cookie, "", http.StatusOK},
+		{"api same-site", "/api/model", "same-site", cookie, "", http.StatusForbidden},
+		{"api cross-site", "/api/model", "cross-site", cookie, "", http.StatusForbidden},
+		{"api typed address", "/api/model", "none", cookie, "", http.StatusForbidden},
+		{"contexts same-site", "/api/cluster/contexts?kubeconfig=x", "same-site", cookie, "", http.StatusForbidden},
+		{"api bearer same-site", "/api/model", "same-site", nil, srv.token, http.StatusOK},
+		{"static typed address", "/", "none", cookie, "", http.StatusOK},
+		{"static cross-site", "/", "cross-site", cookie, "", http.StatusOK},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			resp, _ := do(t, srv, request{path: tc.path, site: tc.site, cookie: tc.cookie, bearer: tc.bearer})
 			if resp.StatusCode != tc.want {
 				t.Errorf("status = %d, want %d", resp.StatusCode, tc.want)
 			}
