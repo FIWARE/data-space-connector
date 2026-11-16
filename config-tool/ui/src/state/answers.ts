@@ -50,6 +50,9 @@ export function emptyAnswers(): Answers {
 /** State of the running tool that never goes into the answer set; `kubeconfig` is undefined until pre-filled or typed. */
 export interface Session {
   kubeconfig?: string
-  /** The context the user last picked, restored when a later kubeconfig read contains it again. */
+  /** The context the user last picked, restored when a later read has it; CLEARED_CONTEXT blocks the preselection. */
   chosenContext?: string
 }
+
+/** `Session.chosenContext` once the user picked the empty option; undefined means never picked. */
+export const CLEARED_CONTEXT = ''

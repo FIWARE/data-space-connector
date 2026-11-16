@@ -3,7 +3,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { ApiError, HTTP_NOT_FOUND } from '../api/client'
 import { fetchContexts, fetchModel, type Kubeconfig, type ModelInfo } from '../api/target'
 import { releaseNotesUrl } from '../links'
-import { Environment, TargetType, type Session, type Target as TargetAnswers } from '../state/answers'
+import { CLEARED_CONTEXT, Environment, TargetType, type Session, type Target as TargetAnswers } from '../state/answers'
 import { useStore } from '../state/context'
 import { MSG_REQUIRED, TargetField, validateTarget } from '../state/target'
 
@@ -128,21 +128,21 @@ function ClusterFields({ target, session }: { target: TargetAnswers; session: Se
   }, [result, session.kubeconfig, dispatch])
 
   // Once per read: keep a context the file still has, else restore the user's last pick, else
-  // preselect the file's current one. A failed read clears it, so the footer counts it open, but
-  // the pick survives in the session for when the path is corrected. Later choices stand.
+  // preselect the file's current one unless the user cleared the pick. A failed read clears it, so
+  // the footer counts it open, but the pick survives in the session for when the path is corrected.
   useEffect(() => {
     if (!checked || reconciled.current === checked) return
     reconciled.current = checked
     const names = checked.kubeconfig?.contexts ?? []
     if (target.context && names.includes(target.context)) return
-    const preferred = [session.chosenContext, checked.kubeconfig?.current].find((name) => name && names.includes(name))
+    const fallback = session.chosenContext === CLEARED_CONTEXT ? undefined : checked.kubeconfig?.current
+    const preferred = [session.chosenContext, fallback].find((name) => name && names.includes(name))
     if (preferred !== target.context) dispatch({ type: 'setTarget', target: { context: preferred } })
   }, [checked, target.context, session.chosenContext, dispatch])
 
   const choose = (name: string) => {
-    const context = name || undefined
-    dispatch({ type: 'setTarget', target: { context } })
-    dispatch({ type: 'setSession', session: { chosenContext: context } })
+    dispatch({ type: 'setTarget', target: { context: name || undefined } })
+    dispatch({ type: 'setSession', session: { chosenContext: name } })
   }
 
   const several = path === '' && kubeconfig && kubeconfig.paths.length > 1

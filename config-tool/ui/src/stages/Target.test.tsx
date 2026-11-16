@@ -93,11 +93,16 @@ describe('Target', () => {
     expect(screen.queryByRole('option', { name: 'dev' })).toBeNull()
   })
 
-  it('keeps the empty context once the user chose it', async () => {
+  it('keeps the empty context once the user chose it, also after switching stage and back', async () => {
     mockApi(() => ONE_FILE)
     renderTarget({ type: TargetType.Cluster }, { kubeconfig: KUBECONFIG })
     await waitFor(() => expect(contextSelect()).toHaveValue('dev'))
     await userEvent.selectOptions(contextSelect(), '')
+    expect(contextSelect()).toHaveValue('')
+    expect(probe.state.answers.target.context).toBeUndefined()
+    await userEvent.click(railEntry(1))
+    await userEvent.click(railEntry(0))
+    await screen.findByRole('option', { name: 'dev' })
     expect(contextSelect()).toHaveValue('')
     expect(probe.state.answers.target.context).toBeUndefined()
   })
