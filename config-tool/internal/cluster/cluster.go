@@ -40,8 +40,8 @@ type Kubeconfig struct {
 }
 
 // Contexts lists the contexts of explicitPath, or under clientcmd's default loading rules
-// (KUBECONFIG, else ~/.kube/config) when it is empty. Missing default files yield an empty list;
-// a missing or unreadable explicitPath yields an error wrapping ErrKubeconfigNotFound.
+// (KUBECONFIG, else ~/.kube/config) when it is empty. Missing default files are skipped; a missing
+// explicitPath, or any file that is not a regular one, yields an error wrapping ErrKubeconfigNotFound.
 func Contexts(explicitPath string) (Kubeconfig, error) {
 	if explicitPath == "" {
 		return fromPrecedence(clientcmd.NewDefaultClientConfigLoadingRules().GetLoadingPrecedence())
@@ -62,13 +62,19 @@ func Contexts(explicitPath string) (Kubeconfig, error) {
 }
 
 // fromPrecedence merges the existing files of precedence with clientcmd's rules: the first file
-// that sets a context or current-context wins.
+// that sets a context or current-context wins. Each must pass the same checks as an explicit path,
+// so a file pre-filled from this list reads the same when it is read again explicitly.
 func fromPrecedence(precedence []string) (Kubeconfig, error) {
 	var existing []string
 	for _, path := range precedence {
-		if _, err := os.Stat(path); err == nil {
-			existing = append(existing, path)
+		info, err := os.Stat(path)
+		if err != nil {
+			continue
 		}
+		if err := checkFile(path, info, nil); err != nil {
+			return Kubeconfig{}, err
+		}
+		existing = append(existing, path)
 	}
 	if len(existing) == 0 {
 		return summarize(nil, clientcmdapi.NewConfig()), nil
@@ -82,10 +88,10 @@ func fromPrecedence(precedence []string) (Kubeconfig, error) {
 	return summarize(existing, config), nil
 }
 
-// readRegular reads path, which must be a regular file of at most maxKubeconfigBytes. The check
-// comes before the open, so a FIFO or device such as /dev/zero can neither block nor fill memory.
+// readRegular reads path, which must pass checkFile. The check comes before the open, so a FIFO or device such as /dev/zero can neither block nor fill memory.
 func readRegular(path string) ([]byte, error) {
-	if err := checkRegular(os.Stat(path)); err != nil {
+	info, err := os.Stat(path)
+	if err := checkFile(path, info, err); err != nil {
 		return nil, err
 	}
 	f, err := os.Open(path)
@@ -94,7 +100,8 @@ func readRegular(path string) ([]byte, error) {
 	}
 	defer f.Close()
 	// The path may have been swapped between Stat and Open.
-	if err := checkRegular(f.Stat()); err != nil {
+	info, err = f.Stat()
+	if err := checkFile(path, info, err); err != nil {
 		return nil, err
 	}
 	data, err := io.ReadAll(io.LimitReader(f, maxKubeconfigBytes+1))
@@ -107,12 +114,14 @@ func readRegular(path string) ([]byte, error) {
 	return data, nil
 }
 
-func checkRegular(info os.FileInfo, err error) error {
+func checkFile(path string, info os.FileInfo, err error) error {
 	switch {
 	case err != nil:
 		return fmt.Errorf("%w: %w", ErrKubeconfigNotFound, err)
 	case !info.Mode().IsRegular():
-		return fmt.Errorf("%w: %s is not a regular file", ErrKubeconfigNotFound, info.Name())
+		return fmt.Errorf("%w: %s is not a regular file", ErrKubeconfigNotFound, path)
+	case info.Size() > maxKubeconfigBytes:
+		return fmt.Errorf("%w: %s exceeds %d bytes", ErrKubeconfigTooLarge, path, maxKubeconfigBytes)
 	}
 	return nil
 }

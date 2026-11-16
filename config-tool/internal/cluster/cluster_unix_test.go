@@ -8,6 +8,8 @@ import (
 	"syscall"
 	"testing"
 	"time"
+
+	"k8s.io/client-go/tools/clientcmd"
 )
 
 // fifoTimeout bounds the test; reading a FIFO without a writer would otherwise block for good.
@@ -18,17 +20,30 @@ func TestFIFOIsRefusedWithoutBlocking(t *testing.T) {
 	if err := syscall.Mkfifo(fifo, 0o600); err != nil {
 		t.Skipf("mkfifo: %v", err)
 	}
-	done := make(chan error, 1)
-	go func() {
-		_, err := Contexts(fifo)
-		done <- err
-	}()
-	select {
-	case err := <-done:
-		if !errors.Is(err, ErrKubeconfigNotFound) {
-			t.Errorf("err = %v, want ErrKubeconfigNotFound", err)
-		}
-	case <-time.After(fifoTimeout):
-		t.Fatal("Contexts blocked on a FIFO")
+	tests := []struct {
+		name          string
+		kubeconfigEnv string
+		explicit      string
+	}{
+		{name: "explicit path", explicit: fifo},
+		{name: "KUBECONFIG", kubeconfigEnv: fifo},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv(clientcmd.RecommendedConfigPathEnvVar, tc.kubeconfigEnv)
+			done := make(chan error, 1)
+			go func() {
+				_, err := Contexts(tc.explicit)
+				done <- err
+			}()
+			select {
+			case err := <-done:
+				if !errors.Is(err, ErrKubeconfigNotFound) {
+					t.Errorf("err = %v, want ErrKubeconfigNotFound", err)
+				}
+			case <-time.After(fifoTimeout):
+				t.Fatal("Contexts blocked on a FIFO")
+			}
+		})
 	}
 }

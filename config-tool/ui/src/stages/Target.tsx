@@ -146,7 +146,8 @@ function ClusterFields({ target, session }: { target: TargetAnswers; session: Se
   }
 
   const several = path === '' && kubeconfig && kubeconfig.paths.length > 1
-  const error = checked?.notFound ? `No kubeconfig found at ${checked.path}.` : checked?.error
+  // An empty field means the default rules; only the server's message names the refused file then.
+  const error = checked?.notFound && checked.path ? `No kubeconfig found at ${checked.path}.` : checked?.error
   // While a path is read, the chosen context stays selectable so a revisit does not blank it.
   const contexts = checked ? (kubeconfig?.contexts ?? []) : target.context ? [target.context] : []
   return (

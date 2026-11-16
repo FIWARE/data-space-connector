@@ -56,7 +56,8 @@ printed URL yourself. `dsc-config --no-browser` only prints the URL.
 - The Target stage reads kubeconfig files (`KUBECONFIG`, else `~/.kube/config`, or the path
   typed in) for context names only. It never connects to a cluster, never returns credentials
   or server URLs, and never stores the kubeconfig path; only the context name joins the answers.
-  A typed path must be a regular file of at most 8 MiB, so a device or FIFO is refused unread.
+  Every file read, typed or from `KUBECONFIG`, must be a regular file of at most 8 MiB, so a
+  device or FIFO (e.g. `KUBECONFIG=<(...)`) is refused unread.
 
 ## Chart versions
 

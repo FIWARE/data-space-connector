@@ -73,6 +73,14 @@ describe('Target', () => {
     expect(await screen.findByText('No kubeconfig found at /nope.')).toHaveAttribute('id', 'kubeconfig-error')
   })
 
+  it('shows the server message and no prefill when a default-rules file is refused', async () => {
+    mockApi(() => HTTP_NOT_FOUND)
+    renderTarget({ type: TargetType.Cluster })
+    expect(await screen.findByText('kubeconfig not found')).toHaveAttribute('id', 'kubeconfig-error')
+    expect(kubeconfigField()).toHaveValue('')
+    expect(probe.state.answers.target.context).toBeUndefined()
+  })
+
   it('hides the not-found message until the edited path is checked', async () => {
     mockApi((path) => (path === '' ? NO_FILE : HTTP_NOT_FOUND))
     renderTarget({ type: TargetType.Cluster })
