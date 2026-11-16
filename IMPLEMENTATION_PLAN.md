@@ -191,11 +191,19 @@ drops, for a CM version that has no listener.
    - no eventing ConfigMap, route, env entry or volume appears;
    - the registration Job script is byte-identical;
    - every other diff is listed in the Step 2, 3 and 4 PR descriptions.
-3. **Two switches.** The events routes are not added by the chart: the operator appends them to
-   their `routes` list, separately from `contract-management.dataspace.events.listener.enabled`. A
-   subchart value cannot depend on another value, and host and verifier service are
-   deployment-specific. The umbrella `fail`s on inconsistent combinations (Step 4). A listener without
-   the routes is allowed, for operators who run their own gateway.
+3. **The chart ships no events route; the ticket item is replaced.** The ticket (`doc/eventing/ticket.md`
+   "DSC-1") asks for an "Events path on the contract-management ingress (and, if the subchart does
+   not support it, `FIWARE/helm-charts` first)". This plan delivers it as an example values file plus
+   a `fail`-only validation instead (Step 4). There is no route in the chart and no upstream chart
+   change. Signing off on this plan signs off on that replacement. Consequences:
+   - **Two switches.** The operator appends the routes to their `routes` list, separately from
+     `contract-management.dataspace.events.listener.enabled`. A subchart value cannot depend on
+     another value, and host and verifier service are deployment-specific. The umbrella `fail`s on
+     inconsistent combinations (Step 4). A listener without the routes is allowed, for operators who
+     run their own gateway.
+   - **Checks are opt-in by name.** The umbrella finds the routes by their `name`. A renamed or
+     unnamed copy is checked only by the narrow guard of Step 4 (a route at `/events` to the
+     release's CM).
 4. **Unit tests** reach only the umbrella's templates, because CI does not build dependencies.
    Subchart rendering is checked upstream and by local `helm template` runs.
 
@@ -337,7 +345,8 @@ ships an example and validates it, but adds no route itself.
     - `openid-connect` with `bearer_only`, `use_jwks` and `set_userinfo_header: true`; `discovery`
       points at `http://verifier:3000/services/<events-service>/.well-known/openid-configuration`.
     - `opa` (as on the existing routes).
-    - A `proxy-rewrite` that removes a client-sent `X-Userinfo` **before** `openid-connect` sets it.
+    - A `proxy-rewrite` with `headers.remove: [X-Userinfo]`, which removes a client-sent `X-Userinfo`
+      **before** `openid-connect` sets it.
       APISIX runs higher priorities first (`openid-connect` 2599, `proxy-rewrite` 1008), so the
       rewrite needs `_meta.priority` above 2599. Verify this against the APISIX version that ships and
       against the CM README (~148–170).
@@ -384,9 +393,26 @@ ships an example and validates it, but adds no route itself.
   - `contract-management.enabled` is true and `contract-management.dataspace.events.listener.enabled`
     is not true (with an external CM the umbrella's listener flag means nothing), or
   - its `openid-connect.discovery` is empty, or
+  - its `openid-connect.set_userinfo_header` is not `true`, or
+  - it has no `proxy-rewrite` whose `headers.remove` contains `X-Userinfo` (compared
+    case-insensitively, as HTTP header names are), or
+  - that `proxy-rewrite`'s `_meta.priority` is missing or not above `openid-connect`'s priority.
+    - Why: CM does not verify tokens. It trusts `X-Userinfo` for its source == identity check, so
+      the strip of a client-sent header is the security-critical part of the route. Trimming the
+      rewrite must not give a green install.
+    - Define `openid-connect`'s priority as a named constant in the template, verified against the
+      APISIX version that ships (2599 in the APISIX source as of planning), with a comment naming
+      that version.
   - `dataspace-events-handshake` or `dataspace-events-discovery` is missing, or
-  - the `proxy-rewrite.uri` of `dataspace-events-discovery` is empty or is not a suffix of
-    `dataspace-events`' `openid-connect.discovery` (both must name the same verifier service).
+  - the `proxy-rewrite.uri` of `dataspace-events-discovery` is empty or differs from the **path** of
+    `dataspace-events`' `openid-connect.discovery`, or
+  - the `upstream.nodes` of `dataspace-events-discovery` is not exactly one node whose `host:port`
+    equals the authority of that discovery URL (the scheme's default port when the URL names none).
+    - Why: both routes must name the same verifier service. A suffix check is not enough:
+      `/.well-known/openid-configuration` is a suffix of every discovery URL, and it serves the
+      verifier's default metadata, without the events scope.
+    - Get the path with `regexReplaceAll "^[a-zA-Z][a-zA-Z0-9+.-]*://[^/]+" … ""` and compare for
+      equality; take the authority from the same match.
 
   It also fails when any of the three names is present and:
   - the name appears more than once, or
@@ -400,13 +426,31 @@ ships an example and validates it, but adds no route itself.
   - `decentralizedIam.odrlAuthorization.apisix.ingress-controller.enabled` is true: the subchart's
     `ApisixRoute` template drops `methods` and `hosts`, with the same effect.
 
+  Every check above depends on the exact names. An operator who renames the entries, drops `name`
+  while merging lists, or writes their own events routes gets none of them (Deviation 3). The
+  template therefore also fails on one narrow, unambiguous case:
+  - `contract-management.enabled` is true, and a route whose `name` is none of the three has
+    `uri: /events` and an upstream node `<CM Service name>:<CM port>`. Take the name from
+    `contract-management.fullnameOverride` and the port from a named constant; both are the ones
+    Step 4 checks against the rendered Service. The message says to keep the example names, or the
+    chart cannot check the route.
+  - A route to another upstream, or with another sink path, is not caught. A broader guard would
+    refuse unrelated `/events` routes of other applications, with no way to opt out. The Step 6 guide
+    states the limit.
+
   A listener without the routes stays valid (Deviation 3).
 - Extend `tests/eventing_test.yaml`, parameterized: defaults render nothing; other routes without
   these names render nothing; each inconsistent combination gives `failedTemplate` with its message,
   including on each entry: no host, `host: ""`, `hosts: []`, both keys set, hosts that differ
   between the entries, a duplicate name, missing or widened `methods` on handshake and discovery,
-  the ingress controller on; the discovery entry missing, with an empty rewrite `uri`, and with a
-  service other than `discovery`'s. The consistent combination (the three entries of the example
+  the ingress controller on; the discovery entry missing, with an empty rewrite `uri`, with a
+  service other than `discovery`'s, with the rewrite `uri` `/.well-known/openid-configuration`, and
+  with an upstream other than the discovery URL's authority (another host, another port, two nodes);
+  on `dataspace-events`: `set_userinfo_header` missing or `false`, no `proxy-rewrite`, a
+  `proxy-rewrite` without `X-Userinfo` in `headers.remove`, its `_meta.priority` missing, equal to
+  or below `openid-connect`'s; an unnamed route and a route with another name at `/events` to the CM
+  upstream. `X-Userinfo` matches in any case (`x-userinfo` passes), and a route at `/events` to
+  another upstream renders. The consistent combination (the three entries of the example
   file, next to an unrelated route) renders with `host`, with one entry in `hosts` and with two; and
   with `contract-management.enabled: false` and the listener off.
 - Local only, not in CI: after `helm dependency update`, render with the example entries appended
@@ -453,6 +497,10 @@ ships an example and validates it, but adds no route itself.
        APISIX modes (odrl-authorization only PUTs, as for any route removed from the list), and how
        to delete them through the admin API;
      - that the ingress-controller mode is refused (Step 4) and why;
+     - keep the three `name`s, or the chart cannot check the routes: the checks find them by name,
+       and only a route at `/events` to the release's CM is caught without one (Step 4);
+     - which plugin settings the chart enforces on `dataspace-events` (`set_userinfo_header`, the
+       `X-Userinfo` strip and its priority) and why;
      - why the host is required (host-bound catch-alls win under `radixtree_host_uri`);
      - that the sink host should be the host whose catch-all already routes to CM (e.g. the k3s
        `contract-management` host), so the exact `/events` routes shadow it. Any other route whose
