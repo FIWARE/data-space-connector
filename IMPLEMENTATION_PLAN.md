@@ -119,6 +119,15 @@ question), and CM chart 3.6.6 (Prerequisite A, pinned by Step 3) renders
   inconsistent or unsafe combinations. Removing them works in yaml mode (the ConfigMap is rewritten);
   in the etcd-backed modes it leaves stale `<release>-<index>` routes, as for any route removed from
   the list today, which the docs state.
+- **How the yaml-mode ConfigMap reaches APISIX** (read from odrl-authorization 2.5.0, apisix chart
+  2.18.2, APISIX 3.19.0): `apisix.deployment.standalone.existingConfigMap: apisix-routes` is mounted
+  as a directory at `/apisix-config`, **without `subPath`**, and the container command symlinks
+  `/usr/local/apisix/conf/apisix.yaml` to `/apisix-config/apisix.yaml`; the rendered file ends with
+  the `#END` marker standalone mode requires. The pod's `checksum/config` annotation covers only the
+  apisix chart's own `config.yaml`, not `apisix-routes`, so a route change does not roll the pod. It
+  relies on the kubelet updating the mounted file (within its sync period, about a minute) and on
+  standalone APISIX re-reading `apisix.yaml` when its modification time changes. Step 4 confirms the
+  reload in its APISIX container run.
 - CI runs `helm unittest charts/data-space-connector` **without** `helm dependency build`, so suites
   can only target the umbrella's own `templates/`. Subchart rendering is checked in the upstream PRs
   and by local `helm template` runs (Steps 3 and 4). The umbrella's own templates can still read
@@ -190,7 +199,12 @@ drops, for a CM version that has no listener.
      `/events` and `/participants-removed` on 9090 stay off unless their eventing feature is enabled;
    - the TIL image moves to ≥ 0.10.1, possibly with a DB migration;
    - the CM, odrl-authorization and decentralized-iam chart labels change;
-   - every other change between decentralized-iam 2.1.28 and the new release comes along.
+   - every other change between decentralized-iam 2.1.28 and the new release comes along;
+   - a new `fail` path: `templates/eventing-validation.yaml` (Step 4) is on by default. It only
+     inspects routes named `dataspace-events`, `dataspace-events-handshake` or
+     `dataspace-events-discovery`, which no release has before this feature, so an upgrade without
+     them cannot fail. An existing route that happens to carry one of those names can fail
+     `helm upgrade`; the fix is to rename it or set `eventingRouteValidation.enabled: false`.
 
    The criterion this plan enforces instead:
    - no eventing ConfigMap, route, env entry or volume appears;
@@ -207,8 +221,13 @@ drops, for a CM version that has no listener.
      inconsistent combinations (Step 4). A listener without the routes is allowed, for operators who
      run their own gateway.
    - **Checks are opt-in by name.** The umbrella finds the routes by their `name`. A renamed or
-     unnamed copy is checked only by the narrow guard of Step 4 (a route at `/events` to the
-     release's CM).
+     unnamed copy is not checked at all. The example header and the Step 6 guide say "keep the
+     names". An earlier revision also caught an unnamed route at `/events` to the release's CM
+     Service. It is dropped: it needed a copy of the CM chart's fullname helper that CI cannot check
+     against the subchart (so it would silently stop matching after a CM bump), three name forms,
+     two node shapes and a re-run local check on every CM bump. In return it caught only a renamed
+     copy with exactly that upstream and path, and it added an upgrade `fail` for routes no
+     operator named for this feature.
    - **One opt-out.** The validation has many `fail` conditions on operator-owned routes, and a
      setup it does not foresee (another auth chain, an `X-Userinfo` strip through a global rule, an
      APISIX upgrade that moves `openid-connect`'s priority) would block install and upgrade.
@@ -338,7 +357,10 @@ ships an example and validates it, but adds no route itself.
   odrl-authorization (2.5.0) carries `name` through all three render paths, with the admin-API ids
   still `<release>-<index>` (as read from the 2.5.0 chart while revising this plan; see "APISIX
   routes"). If not, write `blocked`; if the ids are keyed by name, fix the stale-route text here and
-  in Step 6 first.
+  in Step 6 first. Also confirm how the yaml-mode ConfigMap reaches APISIX (see "How the yaml-mode
+  ConfigMap reaches APISIX": a directory mount without `subPath`, a symlink, no checksum on
+  `apisix-routes`); if 2.3.0 mounts it with `subPath` or rolls the pod on it, fix the Step 6
+  restart text first.
 - `charts/data-space-connector/Chart.yaml`: set the `decentralizedIam` dependency to **2.3.0**.
   Diff `helm template` with default values before and after, and list every change in the PR
   description: the TIL image (≥ 0.10.1, and whether it migrates its DB at start-up), the
@@ -349,7 +371,8 @@ ships an example and validates it, but adds no route itself.
   `decentralizedIam.odrlAuthorization.apisix.routes` list with the three named entries below, every
   deployment-specific field a visible placeholder (`events.example.org`, `<events-service>`), and a
   header comment saying the entries must be **appended** to the operator's own `routes` list (Helm
-  replaces lists, so passing this file with `-f` next to another `routes` list drops one of them).
+  replaces lists, so passing this file with `-f` next to another `routes` list drops one of them)
+  and that the three `name`s must be kept, because the chart checks the routes by name only.
   The `values.yaml` `odrlAuthorization.apisix` block gets a one-line comment pointing at the file;
   no `routes` key is declared there.
   - `name: dataspace-events`: `methods: [POST]`, `uri: /events`, upstream `contract-management:8080`.
@@ -419,8 +442,8 @@ ships an example and validates it, but adds no route itself.
       priority-100 `/*` + `vars` discovery route (lua-resty-radixtree matches the exact path before
       prefixes, and `priority` only orders routes of the same path). If a `/*` wins, give all three
       entries a `priority` above the catch-alls in the example and say so in the PR description.
-- New template `templates/eventing-validation.yaml`: no output, `fail` only. The whole file
-  (including the narrow unnamed-route guard below) is gated on all of:
+- New template `templates/eventing-validation.yaml`: no output, `fail` only. The whole file is gated
+  on all of:
   - `eventingRouteValidation.enabled` (new umbrella key, see below);
   - `decentralizedIam.enabled`;
   - `decentralizedIam.odrlAuthorization.enabled`, the condition decentralized-iam 2.3.0's
@@ -524,39 +547,13 @@ ships an example and validates it, but adds no route itself.
     `ApisixRoute` template drops `methods` and `hosts`, with the same effect.
 
   Every check above depends on the exact names. An operator who renames the entries, drops `name`
-  while merging lists, or writes their own events routes gets none of them (Deviation 3). The
-  template therefore also fails on one narrow, unambiguous case:
-  - `contract-management.enabled` is true, and a route whose `name` is none of the three has
-    `uri: /events` (or `/events` among its `uris`) and an upstream node
-    `<CM Service name>:<CM port>`. The message says to keep the
-    example names, or the chart cannot check the route.
-    - **CM Service name.** CM chart 3.6.6 names its Service with `fiwareCommon.names.fullname` (common
-      chart 0.1.2). Reproduce that rule in a helper; do not skip the guard when
-      `fullnameOverride` is `""`:
-      `fullnameOverride` if set; otherwise, with `$name := default "contract-management" nameOverride`,
-      `.Release.Name` if it contains `$name`, else `printf "%s-%s" .Release.Name $name`; then
-      `trunc 63 | trimSuffix "-"`. A comment names the chart version the rule was copied from.
-      CI cannot render the subchart, so a change of that rule in a later CM chart (e.g. a newer
-      common chart) would silently stop the guard from matching. The local check below therefore
-      pins the rendered Service name, and every later `contract-management` bump must re-run that
-      check and re-read the helper (Step 6 puts this note in `AGENTS.md`).
-      Also accept `<name>.<Release.Namespace>`, `<name>.<Release.Namespace>.svc` and
-      `<name>.<Release.Namespace>.svc.cluster.local`.
-    - **CM port.** `contract-management.service.port` (8080 in the chart), with a named constant
-      as the fallback when the key is absent. Check both against the rendered Service.
-    - **Node forms.** Handle both forms APISIX accepts for `upstream.nodes`: the map
-      (`"host:port": weight`, as in the repo) and the list of `{host, port, weight}` objects (port
-      compared as a number or a string). A map key or list entry without a port uses the scheme's
-      default port and so never matches the CM port. An upstream given only as `upstream_id` or
-      `service_id`, or a `nodes` of any other shape, has no node to compare; it is not caught and the
-      Step 6 guide says so.
-  - A route to another upstream, or with another sink path, is not caught. A broader guard would
-    refuse unrelated `/events` routes of other applications, and the only opt-out would switch off
-    every check. The Step 6 guide states the limit.
+  while merging lists, or writes their own events routes gets none of them (Deviation 3). There is
+  no guard for unnamed routes (dropped, see Deviation 3); the example header and the Step 6 guide
+  say to keep the names.
 
   A listener without the routes stays valid (Deviation 3).
 - Extend `tests/eventing_test.yaml`, parameterized: defaults render nothing; an otherwise failing
-  combination (e.g. the listener off, the ingress controller on, the unnamed CM route) renders
+  combination (e.g. the listener off, the ingress controller on) renders
   nothing with `eventingRouteValidation.enabled: false`, with `decentralizedIam.enabled: false`,
   with `decentralizedIam.odrlAuthorization.enabled: false` and with
   `decentralizedIam.odrlAuthorization.apisix.enabled: false`, and still fails with the last two keys
@@ -573,14 +570,9 @@ ships an example and validates it, but adds no route itself.
   `set_userinfo_header` missing or `false`, no `proxy-rewrite`, a
   `proxy-rewrite` without `X-Userinfo` in `headers.remove`, its `_meta.priority` missing, equal to
   or below the default 2599, and above 2599 but not above an `openid-connect._meta.priority` set on
-  the route (e.g. 2600 against 3000); an unnamed route and a route with another name at `/events` to
-  the CM upstream (by `uri` and by `uris: [/events]`),
-  each in the map and the list node form, with the default `fullnameOverride`, with
-  `fullnameOverride: ""` (release name `dsc` → node `dsc-contract-management:8080`; a release name
-  that contains `contract-management` → the release name), with a namespace-qualified node, and with
-  a custom `contract-management.service.port`. `X-Userinfo` matches in any case (`x-userinfo`
-  passes), and these render: a route at `/events` to another upstream, to the CM name on another
-  port, and with only an `upstream_id`. The consistent combination (the three entries of the example
+  the route (e.g. 2600 against 3000). `X-Userinfo` matches in any case (`x-userinfo` passes), and an
+  unnamed route at `/events` to `contract-management:8080` renders (no guard, Deviation 3). The
+  consistent combination (the three entries of the example
   file, next to an unrelated route) renders with `host`, with one entry in `hosts` and with two;
   with `host: a` on one entry and `hosts: [a]` on the others; with `hosts: [a, b]` and `[b, a]`;
   with a sink path other than `/events` on all three `uri`s;
@@ -589,11 +581,7 @@ ships an example and validates it, but adds no route itself.
   path prefix (`https://gw.example.org/verifier/services/x/...`), and with a query string on the
   discovery URL; and with
   `contract-management.enabled: false` and the listener off.
-- Local only, not in CI: after `helm dependency update`, pin the CM Service name and port the
-  guard's helper computes against the rendered Service, for the default `fullnameOverride` and for
-  `fullnameOverride: ""` with release names `dsc` and `my-contract-management`; script it so a later
-  CM bump re-runs it, and paste the result into the PR description. Then render with the example
-  entries appended
+- Local only, not in CI: after `helm dependency update`, render with the example entries appended
   to a `routes` list that holds an unrelated route, in the default yaml mode and in
   `traditional`+`etcd` mode. Check that the `apisix-routes` ConfigMap and the admin script both
   contain the unrelated route and all three events routes, under their `name` (the admin script
@@ -603,7 +591,9 @@ ships an example and validates it, but adds no route itself.
   route on the same host. Show with `curl` that `POST /events`, `OPTIONS /events` and
   `GET /events/.well-known/openid-configuration` on the bound host reach the events routes, the last
   one with the rewritten path, and that `POST /events` does not reach the handshake route (an echo
-  upstream is enough). Paste the results into the PR description.
+  upstream is enough). Then mount the config as a directory with the symlink the apisix chart uses,
+  replace the file the way the kubelet does (a `..data` symlink swap) with one events route removed,
+  and show that APISIX drops it without a restart. Paste the results into the PR description.
 - `values-schema.sh` (regenerate for `eventingRouteValidation`; `decentralizedIam` is an open key),
   `helm lint`, `helm unittest`,
   lychee (the example file is linked from `values.yaml` only as a comment; Step 6 links it from the
@@ -646,8 +636,12 @@ ships an example and validates it, but adds no route itself.
        admin API;
      - that the ingress-controller mode is refused (Step 4) and why;
      - keep the three `name`s, or the chart cannot check the routes: the checks find them by name,
-       and only a route at `/events` to the release's CM is caught without one (Step 4), and not when
-       its upstream is an `upstream_id`/`service_id` reference;
+       and a renamed or unnamed copy is not checked at all (Deviation 3);
+     - when a route change takes effect: in the default yaml mode the kubelet updates the mounted
+       `apisix-routes` file within its sync period (about a minute) and APISIX reloads it, with no
+       restart (the Step 4 result; if Step 4 found otherwise, say `kubectl rollout restart` of the
+       APISIX Deployment instead); in the etcd-backed modes the routes hook Job PUTs them on
+       install/upgrade;
      - why `discovery` uses the verifier's external URL (Step 4: `issuer` and `jwks_uri` come from the
        verifier's `server.host`), with `proxy_opts` where the gateway needs a proxy;
      - which settings the chart enforces on `dataspace-events` (`methods: [POST]`,
@@ -698,6 +692,9 @@ ships an example and validates it, but adds no route itself.
   - the new values and the registration scope;
   - that an external TIL must be ≥ 0.10.1;
   - the gateway routes, their validation and the `eventingRouteValidation.enabled` opt-out;
+  - that `helm upgrade` can now `fail` on an existing route named `dataspace-events`,
+    `dataspace-events-handshake` or `dataspace-events-discovery` that does not pass the checks
+    (Deviation 2), and the fix: rename it or set `eventingRouteValidation.enabled: false`;
   - that no eventing resource appears with default values.
 - `charts/data-space-connector/values.yaml`, the `contract-management.tracing` comment (~line 1927):
   drop the `--set contract-management.additionalEnvVars[0].value=false` hint. Helm replaces the list,
@@ -711,7 +708,5 @@ ships an example and validates it, but adds no route itself.
   minor if the base has moved).
 - `AGENTS.md`: update the contract-management and decentralizedIam version mentions, if any;
   next to the "documented snippet" line, name the example file, the validation by route `name`, the
-  required host binding and the discovery route. Add that the unnamed-route guard's helper mirrors
-  CM chart 3.6.6's `fiwareCommon.names.fullname` (common chart 0.1.2), so every `contract-management`
-  bump re-runs Step 4's local Service-name check and re-reads the helper.
+  required host binding and the discovery route.
 - Acceptance: the link check passes (lychee fallback above), `helm lint` and `helm unittest` pass.
