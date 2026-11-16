@@ -41,6 +41,7 @@ decentralizedIam:
               headers:
                 remove: [X-Userinfo]
             openid-connect:
+              # Required: without it a request with no token can pass (unauth_action: pass).
               bearer_only: true
               use_jwks: true
               set_userinfo_header: true

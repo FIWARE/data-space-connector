@@ -230,7 +230,7 @@ drops, for a CM version that has no listener.
      copy with exactly that upstream and path, and it added an upgrade `fail` for routes no
      operator named for this feature.
    - **Access-control checks only.** The validation `fail`s only on settings that weaken access
-     control without breaking delivery (eight checks, Step 4 "Scope of the checks"). Consistency
+     control without breaking delivery (nine checks, Step 4 "Scope of the checks"). Consistency
      between the three entries (matching `uri`s and hosts, the discovery service path, entries
      present, `methods: [POST]`, the listener flag) is a checklist in the Step 7 guide: a mistake
      there breaks the handshake, discovery or delivery visibly. An earlier revision of this plan
@@ -530,8 +530,11 @@ ships an example and validates it, but adds no route itself.
      bound to the sink host"), which may accept the events token under another verifier scope and
      ODRL policy. Handshake and discovery are not checked here: a host-less copy of them only breaks
      the flow. Both keys set or `hosts: []` is rejected by APISIX itself.
-  5. **Identity header** (`dataspace-events`): `openid-connect.set_userinfo_header` is not the boolean
-     `true` (APISIX's plugin schema rejects a string, so a string is refused here too).
+  5. **Token and identity header** (`dataspace-events`): `openid-connect.bearer_only` or
+     `openid-connect.set_userinfo_header` is not the boolean `true` (APISIX's plugin schema rejects a
+     string, so a string is refused here too). Without `bearer_only` a request without a token falls
+     through to `openidc.authenticate`, and with `unauth_action: pass` reaches CM unauthenticated
+     (`openid-connect.lua` 1005–1008, 1368, 3.19.0; `bearer_only` added after the PR #24 reviews).
   6. **Policy** (`dataspace-events`): no `opa` plugin. The ODRL policy of Step 5 only takes effect
      through `opa`; the verifier scope alone admits any holder of the events credential, so trimming
      `opa` silently drops the policy.
@@ -556,6 +559,12 @@ ships an example and validates it, but adds no route itself.
      disabled plugin, and one whose `filter` does not match the request (`plugin.lua` `meta_filter`,
      3.19.0), so checks 5 to 7 would pass while the token check, the ODRL policy or the strip is gone
      for some or all requests (both added after the PR #24 reviews).
+  9. **Route-level bypass** (`dataspace-events`): `script` or `filter_func` is set, `vars` is
+     non-empty, or `status` is set to anything but `1`. APISIX 3.19.0 runs a route's `script` instead
+     of its `plugins` (`init.lua` 995–998), so `openid-connect`, `opa` and the strip are skipped; and
+     it skips a route with `status: 0` or whose `vars`/`filter_func` do not match the request
+     (`http/router/radixtree_host_uri.lua`), so `POST /events` falls through to the host's `/*`
+     catch-all, the bypass check 4 guards against (added after the PR #24 reviews).
 
   Every check above depends on the exact names. An operator who renames the entries, drops `name`
   while merging lists, or writes their own events routes gets none of them (Deviation 3). There is
@@ -593,10 +602,11 @@ ships an example and validates it, but adds no route itself.
   | 2 | handshake `methods` absent, `[OPTIONS, POST]`, `[GET]`; a second `dataspace-events-handshake` without `methods` | `dataspace-events-handshake`, `methods` |
   | 3 | discovery `methods` absent, `[GET, POST]`, `[POST]` | `dataspace-events-discovery`, `methods` |
   | 4 | `dataspace-events` without `host`/`hosts`, `host: ""`, `hosts: []` | `dataspace-events`, `host` |
-  | 5 | `set_userinfo_header` absent, `false`, `"true"` | `set_userinfo_header` |
+  | 5 | `set_userinfo_header` absent, `false`, `"true"`; `bearer_only` absent, `false`, `"true"` | `set_userinfo_header` or `bearer_only` |
   | 6 | F | `opa` |
   | 7 | no `proxy-rewrite`; `proxy-rewrite` without `headers.remove`; `headers.remove` without `X-Userinfo`; `_meta.priority` absent, `1008`, `2599`; `2600` with `openid-connect._meta.priority: 3000` | `X-Userinfo` or `priority` |
   | 8 | `_meta.disable: true` on `openid-connect`, on `opa`, on `proxy-rewrite` (and `disable: false` passes); `_meta.filter` set on each of the three | `<plugin>._meta.disable` or `<plugin>._meta.filter` |
+  | 9 | `script`, `filter_func`, a non-empty `vars`, `status: 0` (and `status: 1` with `vars: []` passes) | `script`, `filter_func`, `vars` or `status` |
 
   (c) Passing variants (render nothing):
 
@@ -762,11 +772,12 @@ ships an example and validates it, but adds no route itself.
        install/upgrade;
      - why `discovery` uses the verifier's external URL (Step 4: `issuer` and `jwks_uri` come from the
        verifier's `server.host`), with `proxy_opts` where the gateway needs a proxy;
-     - which settings the chart enforces (the eight checks of Step 4: no ingress controller,
+     - which settings the chart enforces (the nine checks of Step 4: no ingress controller,
        `[OPTIONS]` on the handshake, `[GET]` on discovery, and on `dataspace-events` a host,
-       `set_userinfo_header`, `opa`, the `X-Userinfo` strip and its priority above
+       `bearer_only` and `set_userinfo_header`, `opa`, the `X-Userinfo` strip and its priority above
        `openid-connect`'s effective priority, none of those three plugins switched off with
-       `_meta.disable` or made conditional with `_meta.filter`) and why (for the strip: the Step 4 result on whether
+       `_meta.disable` or made conditional with `_meta.filter`, and no `script`, `filter_func`,
+       `vars` or `status: 0` on the route) and why (for the strip: the Step 4 result on whether
        `openid-connect` overwrites a client-sent header);
      - a checklist of what the chart does **not** check, because a mistake there breaks the flow
        visibly rather than weakening access control (Step 4, "Scope of the checks"): all three

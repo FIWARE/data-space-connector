@@ -912,3 +912,135 @@ tests:
     asserts:
       - failedTemplate:
           errorPattern: 'route "dataspace-events": proxy-rewrite._meta.filter must not be set'
+
+  - it: check 5 refuses openid-connect without bearer_only
+    set:
+      decentralizedIam:
+        odrlAuthorization:
+          apisix:
+            routes:
+              - *unrelated
+              - <<: *events
+                plugins:
+                  proxy-rewrite: *strip
+                  openid-connect:
+                    use_jwks: true
+                    set_userinfo_header: true
+                    discovery: https://verifier.example.org/services/events/.well-known/openid-configuration
+                  opa: *opa
+              - *handshake
+              - *discovery
+    asserts: &failsBearerOnly
+      - failedTemplate:
+          errorPattern: 'route "dataspace-events": openid-connect.bearer_only must be true'
+
+  - it: check 5 refuses bearer_only false
+    set:
+      decentralizedIam:
+        odrlAuthorization:
+          apisix:
+            routes:
+              - *unrelated
+              - <<: *events
+                plugins:
+                  proxy-rewrite: *strip
+                  openid-connect:
+                    <<: *oidc
+                    bearer_only: false
+                  opa: *opa
+              - *handshake
+              - *discovery
+    asserts: *failsBearerOnly
+
+  - it: check 5 refuses bearer_only as the string "true"
+    set:
+      decentralizedIam:
+        odrlAuthorization:
+          apisix:
+            routes:
+              - *unrelated
+              - <<: *events
+                plugins:
+                  proxy-rewrite: *strip
+                  openid-connect:
+                    <<: *oidc
+                    bearer_only: "true"
+                  opa: *opa
+              - *handshake
+              - *discovery
+    asserts: *failsBearerOnly
+
+  - it: check 9 refuses a script on dataspace-events
+    set:
+      decentralizedIam:
+        odrlAuthorization:
+          apisix:
+            routes:
+              - *unrelated
+              - <<: *events
+                script: "local _M = {} return _M"
+              - *handshake
+              - *discovery
+    asserts:
+      - failedTemplate:
+          errorPattern: 'route "dataspace-events": script must not be set'
+
+  - it: check 9 refuses a filter_func on dataspace-events
+    set:
+      decentralizedIam:
+        odrlAuthorization:
+          apisix:
+            routes:
+              - *unrelated
+              - <<: *events
+                filter_func: "function(vars) return false end"
+              - *handshake
+              - *discovery
+    asserts:
+      - failedTemplate:
+          errorPattern: 'route "dataspace-events": filter_func must not be set'
+
+  - it: check 9 refuses vars on dataspace-events
+    set:
+      decentralizedIam:
+        odrlAuthorization:
+          apisix:
+            routes:
+              - *unrelated
+              - <<: *events
+                vars:
+                  - [http_x_skip, "==", "1"]
+              - *handshake
+              - *discovery
+    asserts:
+      - failedTemplate:
+          errorPattern: 'route "dataspace-events": vars must not be set'
+
+  - it: check 9 refuses status 0 on dataspace-events
+    set:
+      decentralizedIam:
+        odrlAuthorization:
+          apisix:
+            routes:
+              - *unrelated
+              - <<: *events
+                status: 0
+              - *handshake
+              - *discovery
+    asserts:
+      - failedTemplate:
+          errorPattern: 'route "dataspace-events": status must be 1 or unset'
+
+  - it: check 9 passes status 1 and an empty vars list
+    set:
+      decentralizedIam:
+        odrlAuthorization:
+          apisix:
+            routes:
+              - *unrelated
+              - <<: *events
+                status: 1
+                vars: []
+              - *handshake
+              - *discovery
+    asserts: *passes
