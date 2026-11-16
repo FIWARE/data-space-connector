@@ -18,6 +18,14 @@ export const MODEL: ModelInfo = {
 /** A kubeconfig answer, or a status code the route fails with. */
 export type ContextsAnswer = Kubeconfig | number
 
+/** The KUBECONFIG file refusedKubeconfig names when the field is empty. */
+export const DEFAULT_RULES_FILE = '/dev/fd/63'
+
+/** The server's message for a kubeconfig it refused; the default rules name the file they read. */
+export function refusedKubeconfig(path: string): string {
+  return `cannot read kubeconfig: ${path || DEFAULT_RULES_FILE} is not a regular file`
+}
+
 /** Answers GET /api/model with `model` and GET /api/cluster/contexts with `contexts(path)`. */
 export function mockApi(contexts: (path: string) => ContextsAnswer = () => ({ paths: [], contexts: [], current: '' }), model: ModelInfo = MODEL) {
   const fetchMock = vi.fn((input: RequestInfo | URL) => {
@@ -26,7 +34,7 @@ export function mockApi(contexts: (path: string) => ContextsAnswer = () => ({ pa
     if (url.pathname === '/api/model') return json(model)
     if (url.pathname === '/api/cluster/contexts') {
       const answer = contexts(url.searchParams.get('kubeconfig') ?? '')
-      return typeof answer === 'number' ? json({ error: 'kubeconfig not found' }, answer) : json(answer)
+      return typeof answer === 'number' ? json({ error: refusedKubeconfig(url.searchParams.get('kubeconfig') ?? '') }, answer) : json(answer)
     }
     return json({ error: 'not found' }, 404)
   })

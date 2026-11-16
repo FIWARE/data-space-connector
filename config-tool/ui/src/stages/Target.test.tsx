@@ -10,7 +10,7 @@ import { useStore } from '../state/context'
 import { initialState, type AppState } from '../state/reducer'
 import { StageId } from '../state/stageIds'
 import { StoreProvider } from '../state/store'
-import { MODEL, mockApi, type ContextsAnswer } from '../test/api'
+import { MODEL, mockApi, refusedKubeconfig, type ContextsAnswer } from '../test/api'
 
 const KUBECONFIG = '/home/me/.kube/config'
 const ONE_FILE: ContextsAnswer = { paths: [KUBECONFIG], contexts: ['dev', 'prod'], current: 'dev' }
@@ -66,29 +66,29 @@ describe('Target', () => {
     else expect(note).toBeNull()
   })
 
-  it('shows a not-found message under the kubeconfig field for a 404', async () => {
+  it('shows the server message under the kubeconfig field for a refused path', async () => {
     mockApi((path) => (path === '' ? NO_FILE : HTTP_NOT_FOUND))
     renderTarget({ type: TargetType.Cluster })
     await userEvent.type(kubeconfigField(), '/nope')
-    expect(await screen.findByText('No kubeconfig found at /nope.')).toHaveAttribute('id', 'kubeconfig-error')
+    expect(await screen.findByText(refusedKubeconfig('/nope'))).toHaveAttribute('id', 'kubeconfig-error')
   })
 
   it('shows the server message and no prefill when a default-rules file is refused', async () => {
     mockApi(() => HTTP_NOT_FOUND)
     renderTarget({ type: TargetType.Cluster })
-    expect(await screen.findByText('kubeconfig not found')).toHaveAttribute('id', 'kubeconfig-error')
+    expect(await screen.findByText(refusedKubeconfig(''))).toHaveAttribute('id', 'kubeconfig-error')
     expect(kubeconfigField()).toHaveValue('')
     expect(probe.state.answers.target.context).toBeUndefined()
   })
 
-  it('hides the not-found message until the edited path is checked', async () => {
+  it('hides the refusal until the edited path is checked', async () => {
     mockApi((path) => (path === '' ? NO_FILE : HTTP_NOT_FOUND))
     renderTarget({ type: TargetType.Cluster })
     await userEvent.type(kubeconfigField(), '/nope')
-    await screen.findByText('No kubeconfig found at /nope.')
+    await screen.findByText(refusedKubeconfig('/nope'))
     await userEvent.type(kubeconfigField(), 'x')
-    expect(screen.queryByText(/No kubeconfig found/)).toBeNull()
-    expect(await screen.findByText('No kubeconfig found at /nopex.')).toBeInTheDocument()
+    expect(screen.queryByText(/cannot read kubeconfig/)).toBeNull()
+    expect(await screen.findByText(refusedKubeconfig('/nopex'))).toBeInTheDocument()
   })
 
   it('clears the context when the kubeconfig in the field cannot be read', async () => {
@@ -96,7 +96,7 @@ describe('Target', () => {
     renderTarget({ type: TargetType.Cluster }, { kubeconfig: KUBECONFIG })
     await waitFor(() => expect(contextSelect()).toHaveValue('dev'))
     await userEvent.type(kubeconfigField(), '.bak')
-    await screen.findByText(`No kubeconfig found at ${KUBECONFIG}.bak.`)
+    await screen.findByText(refusedKubeconfig(`${KUBECONFIG}.bak`))
     await waitFor(() => expect(probe.state.answers.target.context).toBeUndefined())
     expect(screen.queryByRole('option', { name: 'dev' })).toBeNull()
   })
@@ -121,7 +121,7 @@ describe('Target', () => {
     await waitFor(() => expect(contextSelect()).toHaveValue('dev'))
     await userEvent.selectOptions(contextSelect(), 'prod')
     await userEvent.type(kubeconfigField(), 'x')
-    await screen.findByText(`No kubeconfig found at ${KUBECONFIG}x.`)
+    await screen.findByText(refusedKubeconfig(`${KUBECONFIG}x`))
     await waitFor(() => expect(probe.state.answers.target.context).toBeUndefined())
     await userEvent.type(kubeconfigField(), '{Backspace}')
     await waitFor(() => expect(contextSelect()).toHaveValue('prod'))

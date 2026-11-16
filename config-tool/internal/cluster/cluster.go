@@ -18,15 +18,15 @@ import (
 // home is the "~" a user may type for the home directory, alone or followed by a separator.
 const home = "~"
 
-// maxKubeconfigBytes caps an explicit kubeconfig read; real files with embedded certificates stay
+// maxKubeconfigBytes caps every kubeconfig read; real files with embedded certificates stay
 // far below it, while a mistyped path to a huge file must not be loaded whole.
 const maxKubeconfigBytes = 8 << 20
 
 var (
-	// ErrKubeconfigNotFound reports an explicit kubeconfig path that is missing, unreadable or not
-	// a regular file.
-	ErrKubeconfigNotFound = errors.New("kubeconfig not found")
-	// ErrKubeconfigTooLarge reports an explicit kubeconfig above maxKubeconfigBytes.
+	// ErrKubeconfigNotFound reports a kubeconfig path that is missing, unreadable or not a regular
+	// file; the wrapped error says which.
+	ErrKubeconfigNotFound = errors.New("cannot read kubeconfig")
+	// ErrKubeconfigTooLarge reports a kubeconfig above maxKubeconfigBytes.
 	ErrKubeconfigTooLarge = errors.New("kubeconfig too large")
 )
 
@@ -62,33 +62,38 @@ func Contexts(explicitPath string) (Kubeconfig, error) {
 }
 
 // fromPrecedence merges the existing files of precedence with clientcmd's rules: the first file
-// that sets a context or current-context wins. Each must pass the same checks as an explicit path,
-// so a file pre-filled from this list reads the same when it is read again explicitly.
+// that sets a context or current-context wins. Each is read through readRegular, so it gets the
+// same checks as an explicit path and a file pre-filled from this list reads the same again.
 func fromPrecedence(precedence []string) (Kubeconfig, error) {
 	var existing []string
+	merged := clientcmdapi.NewConfig()
 	for _, path := range precedence {
-		info, err := os.Stat(path)
-		if err != nil {
+		if _, err := os.Stat(path); err != nil {
 			continue
 		}
-		if err := checkFile(path, info, nil); err != nil {
+		data, err := readRegular(path)
+		if err != nil {
 			return Kubeconfig{}, err
+		}
+		config, err := clientcmd.Load(data)
+		if err != nil {
+			return Kubeconfig{}, fmt.Errorf("read kubeconfig %s: %w", path, err)
+		}
+		for name, context := range config.Contexts {
+			if _, ok := merged.Contexts[name]; !ok {
+				merged.Contexts[name] = context
+			}
+		}
+		if merged.CurrentContext == "" {
+			merged.CurrentContext = config.CurrentContext
 		}
 		existing = append(existing, path)
 	}
-	if len(existing) == 0 {
-		return summarize(nil, clientcmdapi.NewConfig()), nil
-	}
-	// Without MigrationRules, Load never copies a legacy kubeconfig into place.
-	rules := &clientcmd.ClientConfigLoadingRules{Precedence: existing}
-	config, err := rules.Load()
-	if err != nil {
-		return Kubeconfig{}, fmt.Errorf("read kubeconfig: %w", err)
-	}
-	return summarize(existing, config), nil
+	return summarize(existing, merged), nil
 }
 
-// readRegular reads path, which must pass checkFile. The check comes before the open, so a FIFO or device such as /dev/zero can neither block nor fill memory.
+// readRegular reads path, which must pass checkFile. The check comes before the open, so a FIFO
+// or device such as /dev/zero can neither block nor fill memory.
 func readRegular(path string) ([]byte, error) {
 	info, err := os.Stat(path)
 	if err := checkFile(path, info, err); err != nil {

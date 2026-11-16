@@ -1,6 +1,5 @@
 /** S1 Target: where the configuration goes, which release and chart, and which defaults. */
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { ApiError, HTTP_NOT_FOUND } from '../api/client'
 import { fetchContexts, fetchModel, type Kubeconfig, type ModelInfo } from '../api/target'
 import { releaseNotesUrl } from '../links'
 import { CLEARED_CONTEXT, Environment, TargetType, type Session, type Target as TargetAnswers } from '../state/answers'
@@ -46,7 +45,6 @@ function useModel(): { model?: ModelInfo; error?: string } {
 interface ContextsResult {
   path: string
   kubeconfig?: Kubeconfig
-  notFound?: boolean
   error?: string
 }
 
@@ -56,9 +54,7 @@ function useContexts(path: string): ContextsResult | undefined {
     const controller = new AbortController()
     fetchContexts(path, controller.signal).then(
       (kubeconfig) => setResult({ path, kubeconfig }),
-      (err: Error) =>
-        controller.signal.aborted ||
-        setResult({ path, notFound: err instanceof ApiError && err.status === HTTP_NOT_FOUND, error: err.message }),
+      (err: Error) => controller.signal.aborted || setResult({ path, error: err.message }),
     )
     return () => controller.abort()
   }, [path])
@@ -146,8 +142,8 @@ function ClusterFields({ target, session }: { target: TargetAnswers; session: Se
   }
 
   const several = path === '' && kubeconfig && kubeconfig.paths.length > 1
-  // An empty field means the default rules; only the server's message names the refused file then.
-  const error = checked?.notFound && checked.path ? `No kubeconfig found at ${checked.path}.` : checked?.error
+  // The server's message names the file and the cause: missing, not a regular file, or denied.
+  const error = checked?.error
   // While a path is read, the chosen context stays selectable so a revisit does not blank it.
   const contexts = checked ? (kubeconfig?.contexts ?? []) : target.context ? [target.context] : []
   return (
@@ -247,7 +243,7 @@ export function Target() {
             ))}
           </select>
           {target.chartVersion && (
-            <a href={releaseNotesUrl(target.chartVersion)} target="_blank" rel="noreferrer">
+            <a href={releaseNotesUrl(target.chart, target.chartVersion)} target="_blank" rel="noreferrer">
               Release notes ↗
             </a>
           )}
