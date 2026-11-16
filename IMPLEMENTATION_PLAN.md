@@ -324,6 +324,8 @@ Unblocked by CM chart 3.6.6 (Prerequisite A).
 Prerequisite B is met (decentralized-iam 2.3.0). The events routes are ordinary entries of the
 operator's `decentralizedIam.odrlAuthorization.apisix.routes` list (see "APISIX routes"); the chart
 ships an example and validates it, but adds no route itself.
+- Before anything else, confirm that decentralized-iam 2.3.0 is published and that its
+  odrl-authorization (2.5.0) carries `name` through all three render paths. If not, write `blocked`.
 - `charts/data-space-connector/Chart.yaml`: set the `decentralizedIam` dependency to **2.3.0**.
   Diff `helm template` with default values before and after, and list every change in the PR
   description: the TIL image (≥ 0.10.1, and whether it migrates its DB at start-up), the
@@ -343,7 +345,19 @@ ships an example and validates it, but adds no route itself.
     `helm template` render, and say in a comment that `upstream.nodes` must change when
     `fullnameOverride` changes or CM runs outside the release. Plugins:
     - `openid-connect` with `bearer_only`, `use_jwks` and `set_userinfo_header: true`; `discovery`
-      points at `http://verifier:3000/services/<events-service>/.well-known/openid-configuration`.
+      points at the verifier's **external** URL,
+      `https://verifier.example.org/services/<events-service>/.well-known/openid-configuration`, as
+      every route in `k3s/provider.yaml` does (with `proxy_opts` where the gateway needs a proxy to
+      reach it; show it commented out).
+      - Why external: the verifier builds `issuer` and `jwks_uri` in its metadata from its configured
+        `server.host` (`https://verifier.mp-operations.org` in k3s), not from the URL the metadata was
+        fetched from. So `openid-connect` fetches the JWKS from that external host whichever
+        discovery URL it uses, and an internal `http://verifier:3000/...` URL saves nothing.
+      - An internal URL works too when the gateway can reach the advertised `jwks_uri`. Say so in the
+        example comment.
+      - Verify this in Step 4 against the shipped verifier (metadata from both URLs is identical) and
+        lua-resty-openidc (`bearer_jwt_verify` checks `iss` against the discovery document's
+        `issuer`), and record the result in the PR description.
     - `opa` (as on the existing routes).
     - A `proxy-rewrite` with `headers.remove: [X-Userinfo]`, which removes a client-sent `X-Userinfo`
       **before** `openid-connect` sets it.
@@ -405,14 +419,17 @@ ships an example and validates it, but adds no route itself.
       that version.
   - `dataspace-events-handshake` or `dataspace-events-discovery` is missing, or
   - the `proxy-rewrite.uri` of `dataspace-events-discovery` is empty or differs from the **path** of
-    `dataspace-events`' `openid-connect.discovery`, or
-  - the `upstream.nodes` of `dataspace-events-discovery` is not exactly one node whose `host:port`
-    equals the authority of that discovery URL (the scheme's default port when the URL names none).
+    `dataspace-events`' `openid-connect.discovery`.
     - Why: both routes must name the same verifier service. A suffix check is not enough:
       `/.well-known/openid-configuration` is a suffix of every discovery URL, and it serves the
       verifier's default metadata, without the events scope.
     - Get the path with `regexReplaceAll "^[a-zA-Z][a-zA-Z0-9+.-]*://[^/]+" … ""` and compare for
-      equality; take the authority from the same match.
+      equality.
+    - The upstream of `dataspace-events-discovery` is **not** compared with the authority of the
+      discovery URL. The DSC pattern (`k3s/provider.yaml`) points `discovery` at the verifier's
+      external HTTPS host and sends the `/.well-known` routes to the internal `verifier:3000`, so an
+      authority check would refuse a correct setup. That both reach the same verifier is a
+      documented requirement (Step 6), not a check.
 
   It also fails when any of the three names is present and:
   - the name appears more than once, or
@@ -430,10 +447,24 @@ ships an example and validates it, but adds no route itself.
   while merging lists, or writes their own events routes gets none of them (Deviation 3). The
   template therefore also fails on one narrow, unambiguous case:
   - `contract-management.enabled` is true, and a route whose `name` is none of the three has
-    `uri: /events` and an upstream node `<CM Service name>:<CM port>`. Take the name from
-    `contract-management.fullnameOverride` and the port from a named constant; both are the ones
-    Step 4 checks against the rendered Service. The message says to keep the example names, or the
-    chart cannot check the route.
+    `uri: /events` and an upstream node `<CM Service name>:<CM port>`. The message says to keep the
+    example names, or the chart cannot check the route.
+    - **CM Service name.** CM chart 3.6.6 names its Service with `fiwareCommon.names.fullname` (common
+      chart 0.1.2). Reproduce that rule in a helper; do not skip the guard when
+      `fullnameOverride` is `""`:
+      `fullnameOverride` if set; otherwise, with `$name := default "contract-management" nameOverride`,
+      `.Release.Name` if it contains `$name`, else `printf "%s-%s" .Release.Name $name`; then
+      `trunc 63 | trimSuffix "-"`. A comment names the chart version the rule was copied from.
+      Also accept `<name>.<Release.Namespace>`, `<name>.<Release.Namespace>.svc` and
+      `<name>.<Release.Namespace>.svc.cluster.local`.
+    - **CM port.** `contract-management.service.port` (8080 in the chart), with a named constant
+      as the fallback when the key is absent. Check both against the rendered Service.
+    - **Node forms.** Handle both forms APISIX accepts for `upstream.nodes`: the map
+      (`"host:port": weight`, as in the repo) and the list of `{host, port, weight}` objects (port
+      compared as a number or a string). A map key or list entry without a port uses the scheme's
+      default port and so never matches the CM port. An upstream given only as `upstream_id` or
+      `service_id`, or a `nodes` of any other shape, has no node to compare; it is not caught and the
+      Step 6 guide says so.
   - A route to another upstream, or with another sink path, is not caught. A broader guard would
     refuse unrelated `/events` routes of other applications, with no way to opt out. The Step 6 guide
     states the limit.
@@ -444,15 +475,20 @@ ships an example and validates it, but adds no route itself.
   including on each entry: no host, `host: ""`, `hosts: []`, both keys set, hosts that differ
   between the entries, a duplicate name, missing or widened `methods` on handshake and discovery,
   the ingress controller on; the discovery entry missing, with an empty rewrite `uri`, with a
-  service other than `discovery`'s, with the rewrite `uri` `/.well-known/openid-configuration`, and
-  with an upstream other than the discovery URL's authority (another host, another port, two nodes);
+  service other than `discovery`'s, and with the rewrite `uri` `/.well-known/openid-configuration`;
   on `dataspace-events`: `set_userinfo_header` missing or `false`, no `proxy-rewrite`, a
   `proxy-rewrite` without `X-Userinfo` in `headers.remove`, its `_meta.priority` missing, equal to
   or below `openid-connect`'s; an unnamed route and a route with another name at `/events` to the CM
-  upstream. `X-Userinfo` matches in any case (`x-userinfo` passes), and a route at `/events` to
-  another upstream renders. The consistent combination (the three entries of the example
-  file, next to an unrelated route) renders with `host`, with one entry in `hosts` and with two; and
-  with `contract-management.enabled: false` and the listener off.
+  upstream, each in the map and the list node form, with the default `fullnameOverride`, with
+  `fullnameOverride: ""` (release name `dsc` → node `dsc-contract-management:8080`; a release name
+  that contains `contract-management` → the release name), with a namespace-qualified node, and with
+  a custom `contract-management.service.port`. `X-Userinfo` matches in any case (`x-userinfo`
+  passes), and these render: a route at `/events` to another upstream, to the CM name on another
+  port, and with only an `upstream_id`. The consistent combination (the three entries of the example
+  file, next to an unrelated route) renders with `host`, with one entry in `hosts` and with two;
+  with an external `https://` discovery URL and a `verifier:3000` discovery upstream (the k3s
+  pattern) and with an internal `http://verifier:3000/...` URL; and with
+  `contract-management.enabled: false` and the listener off.
 - Local only, not in CI: after `helm dependency update`, render with the example entries appended
   to a `routes` list that holds an unrelated route, in the default yaml mode and in
   `traditional`+`etcd` mode. Check that the `apisix-routes` ConfigMap and the admin script both
@@ -489,7 +525,9 @@ ships an example and validates it, but adds no route itself.
      follows) vs. refreshed at runtime;
   2. the gateway: append the three entries of `doc/eventing/examples/events-routes.yaml` (Step 4)
      to the operator's own `decentralizedIam.odrlAuthorization.apisix.routes` list (Helm replaces
-     lists), set `discovery` and the discovery route's rewrite `uri` to the events verifier service,
+     lists), set `discovery` and the discovery route's rewrite `uri` to the events verifier service
+     (the discovery route's upstream must reach the same verifier as the `discovery` URL; the chart
+     checks the service path, not the host),
      and bind all three to the host of the announced sink URL with `host` or `hosts` (never empty, not
      both). Override `upstream.nodes` if CM is not `contract-management:8080` or the verifier not
      `verifier:3000`; change the `uri`s if the sink path is not `/events`. Explain:
@@ -498,7 +536,10 @@ ships an example and validates it, but adds no route itself.
        to delete them through the admin API;
      - that the ingress-controller mode is refused (Step 4) and why;
      - keep the three `name`s, or the chart cannot check the routes: the checks find them by name,
-       and only a route at `/events` to the release's CM is caught without one (Step 4);
+       and only a route at `/events` to the release's CM is caught without one (Step 4), and not when
+       its upstream is an `upstream_id`/`service_id` reference;
+     - why `discovery` uses the verifier's external URL (Step 4: `issuer` and `jwks_uri` come from the
+       verifier's `server.host`), with `proxy_opts` where the gateway needs a proxy;
      - which plugin settings the chart enforces on `dataspace-events` (`set_userinfo_header`, the
        `X-Userinfo` strip and its priority) and why;
      - why the host is required (host-bound catch-alls win under `radixtree_host_uri`);
