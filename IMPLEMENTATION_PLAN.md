@@ -28,7 +28,7 @@ question), and CM chart 3.6.6 (Prerequisite A, pinned by Step 3) renders
   gateway/`X-Userinfo`, ~742–760 refresh and mounting). Eventing ships in CM 3.5.0, the TIR watcher
   in 3.5.1, `on-participant-removed` and adoption in **3.5.3**.
 - CM chart: `https://github.com/FIWARE/helm-charts` `charts/contract-management` (3.6.5, appVersion
-  3.5.3; DSC pins 3.6.3, 3.6.5 after Step 2).
+  3.5.3; DSC pinned 3.6.3, then 3.6.5 in Step 2, and pins **3.6.6** since Step 3).
 - TIL API: `https://github.com/FIWARE/trusted-issuers-list` `api/trusted-issuers-list.yaml`.
   `POST /issuer` takes `scope` and `scopeType` as **query parameters**; `scopeType` is the enum
   `dataspace-membership` (the ticket's `dataspace` is not a valid value — the API wins). Scope types
@@ -131,7 +131,7 @@ question), and CM chart 3.6.6 (Prerequisite A, pinned by Step 3) renders
 **Prerequisite A (outside this repo, blocks Step 3): contract-management chart change.**
 **Met:** CM chart **3.6.6** (appVersion 3.5.3) ships `dataspace.events`, the `<fullname>-dataspace-events`
 ConfigMap and the startup checksum; Step 3 pins it. The history below is kept for reference.
-Status 2026-11-13: CM chart **3.6.5** is released. It only bumps `appVersion` to 3.5.3 (the last bullet
+Status 2026-11-13 (history; superseded by 3.6.6 above): CM chart **3.6.5** is released. It only bumps `appVersion` to 3.5.3 (the last bullet
 below), and Step 2 picks it up. It has no `dataspace.events` value and no events ConfigMap, and
 FIWARE/helm-charts `main` (`bcc4207`) has neither. Every other bullet below is still open, and
 Step 3 waits for a chart version > 3.6.5 that has them.
@@ -371,7 +371,11 @@ ships an example and validates it, but adds no route itself.
       **before** `openid-connect` sets it.
       APISIX runs higher priorities first (`openid-connect` 2599, `proxy-rewrite` 1008), so the
       rewrite needs `_meta.priority` above 2599. Verify this against the APISIX version that ships and
-      against the CM README (~148–170).
+      against the CM README (~148–170): that it honours a plugin's `_meta.priority`, that both plugins
+      run in the `rewrite` phase, and that `proxy-rewrite` applies `headers.remove` there (so the
+      header is gone before `openid-connect` sets it). If any of the three does not hold, write
+      completion status `blocked` and say which; do not ship the example or the priority check
+      against a mechanism that has no effect.
   - `name: dataspace-events-handshake`: `methods: [OPTIONS]`, `uri: /events`, the same upstream, no
     auth plugins.
   - `name: dataspace-events-discovery`: `methods: [GET]`,
@@ -408,7 +412,12 @@ ships an example and validates it, but adds no route itself.
       priority-100 `/*` + `vars` discovery route (lua-resty-radixtree matches the exact path before
       prefixes, and `priority` only orders routes of the same path). If a `/*` wins, give all three
       entries a `priority` above the catch-alls in the example and say so in the PR description.
-- New template `templates/eventing-validation.yaml`: no output, `fail` only. It finds the entries
+- New template `templates/eventing-validation.yaml`: no output, `fail` only. The whole file is gated
+  on `decentralizedIam.enabled`, and on odrl-authorization being deployed (the condition key
+  decentralized-iam 2.3.0 puts on its odrl-authorization dependency, if it has one; confirm it in
+  its `Chart.yaml`). Otherwise the subchart renders no routes, so route values left in an operator's
+  file (e.g. after switching to an external gateway) are inert and must not fail the install; the
+  narrow unnamed-route guard below is gated the same way. It finds the entries
   of `decentralizedIam.odrlAuthorization.apisix.routes` by `name` (the list and every key may be
   absent: read them as described under "Reading subchart values", starting from
   `index .Values "decentralizedIam"` and `index .Values "contract-management"`). It fails when
@@ -501,7 +510,10 @@ ships an example and validates it, but adds no route itself.
     states the limit.
 
   A listener without the routes stays valid (Deviation 3).
-- Extend `tests/eventing_test.yaml`, parameterized: defaults render nothing; other routes without
+- Extend `tests/eventing_test.yaml`, parameterized: defaults render nothing; an otherwise failing
+  combination (e.g. the listener off, the ingress controller on, the unnamed CM route) renders
+  nothing with `decentralizedIam.enabled: false` (and with odrl-authorization off, if that switch
+  exists); other routes without
   these names render nothing; each inconsistent combination gives `failedTemplate` with its message,
   including on each entry: no host, `host: ""`, `hosts: []`, both keys set, hosts that differ
   between the entries, a duplicate name, missing or widened `methods` on handshake and discovery,
@@ -601,7 +613,8 @@ ships an example and validates it, but adds no route itself.
      - why there are two switches (Deviation 3);
      - what the `proxy-rewrite` priority is for;
      - that operators with their own gateway must reproduce the same routes and plugin chain,
-       including the discovery route and removing `X-Userinfo`;
+       including the discovery route and removing `X-Userinfo`; the chart checks nothing then (the
+       validation only runs when `decentralizedIam` deploys the gateway, Step 4);
   3. a verifier service registration
      (`decentralizedIam.vcAuthentication.vcverifier.registration.services`), whose id is the
      `<events-service>` of the `dataspace-events` and `dataspace-events-discovery` routes, and whose
