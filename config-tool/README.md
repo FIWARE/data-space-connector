@@ -49,7 +49,26 @@ printed URL yourself. `dsc-config --no-browser` only prints the URL.
   `127.0.0.1:<port>` and `localhost:<port>`.
 - The printed URL holds a per-run token that stays valid until the process exits. Do not share
   it. Opening it sets a session cookie; state-changing requests also need the server's own
-  `Origin`.
+  `Origin`, and API calls whose `Sec-Fetch-Site` is not `same-origin` are refused.
 - The token never goes on a command line. The browser is started with a single-use launch code
   that expires after 60 seconds. On a shared host another account could race for that code, so
   use `--no-browser` there and paste the printed URL into the browser.
+- The Target stage reads kubeconfig files (`KUBECONFIG`, else `~/.kube/config`, or the path
+  typed in) for context names only. It never connects to a cluster, never returns credentials
+  or server URLs, and never stores the kubeconfig path; only the context name joins the answers.
+  Every file read, typed or from `KUBECONFIG`, must be a regular file of at most 8 MiB, so a
+  device or FIFO (e.g. `KUBECONFIG=<(...)`) is refused unread. A `KUBECONFIG` entry that does
+  not exist is skipped; any other failure (permission denied, not a directory) is reported.
+  When no default file exists, S1 says so and asks for a path.
+  A relative typed path is resolved against the directory `dsc-config` was started in, and S1
+  shows the absolute file it read.
+
+## Chart versions
+
+Each supported chart version has a question-model bundle in `model/<version>/bundle.yaml`,
+embedded into the binary. Its directory name and `version` must be strict `MAJOR.MINOR.PATCH`
+semver, checked and ordered with Helm's own library (`Masterminds/semver`). `GET /api/model`
+groups the versions by the bundle's `chart`, and the Target stage offers only the selected chart's.
+Per chart, the highest release is the default; a pre-release becomes the default only when that
+chart has no release bundled. The layout holds one bundle per version, so two charts cannot share
+a version number yet.

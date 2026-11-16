@@ -94,6 +94,7 @@ type request struct {
 	cookie *http.Cookie
 	bearer string
 	body   string
+	site   string
 }
 
 func do(t *testing.T, srv *Server, r request) (*http.Response, string) {
@@ -117,6 +118,9 @@ func do(t *testing.T, srv *Server, r request) (*http.Response, string) {
 	}
 	if r.bearer != "" {
 		req.Header.Set(headerAuthorization, bearerPrefix+r.bearer)
+	}
+	if r.site != "" {
+		req.Header.Set(headerSecFetchSite, r.site)
 	}
 	resp, err := client.Do(req)
 	if err != nil {
@@ -206,6 +210,7 @@ func TestRequiresCredentials(t *testing.T) {
 		{path: "/assets/app.js"},
 		{path: "/some/route"},
 		{path: "/api/model"},
+		{path: "/api/cluster/contexts"},
 		{path: "/api/profile"},
 		{method: http.MethodPut, path: "/api/profile"},
 		{method: http.MethodPost, path: "/api/render"},
@@ -248,8 +253,8 @@ func TestTokenExchangeIsRepeatable(t *testing.T) {
 			t.Errorf("exchange %d reused a session secret", i)
 		}
 		seen[c.Value] = true
-		if resp, _ := do(t, srv, request{path: "/api/model", cookie: c}); resp.StatusCode != http.StatusNotImplemented {
-			t.Errorf("exchange %d: cookie gives status %d, want %d", i, resp.StatusCode, http.StatusNotImplemented)
+		if resp, _ := do(t, srv, request{path: "/api/model", cookie: c}); resp.StatusCode != http.StatusOK {
+			t.Errorf("exchange %d: cookie gives status %d, want %d", i, resp.StatusCode, http.StatusOK)
 		}
 	}
 }
@@ -290,7 +295,7 @@ func TestBearer(t *testing.T) {
 		cookie *http.Cookie
 		want   int
 	}{
-		{"run token", srv.token, nil, http.StatusNotImplemented},
+		{"run token", srv.token, nil, http.StatusOK},
 		{"session secret", session.Value, nil, http.StatusUnauthorized},
 		{"launch code", launchCode.Query().Get(queryLaunch), nil, http.StatusUnauthorized},
 		{"wrong value", "wrong", nil, http.StatusUnauthorized},
@@ -315,7 +320,6 @@ func TestEndpoints(t *testing.T) {
 		want       int
 		wantTicket string
 	}{
-		{request{path: "/api/model"}, http.StatusNotImplemented, ticketModel},
 		{request{path: "/api/profile"}, http.StatusNotImplemented, ticketProfile},
 		{request{method: http.MethodPut, path: "/api/profile", origin: origin}, http.StatusNotImplemented, ticketProfile},
 		{request{method: http.MethodPost, path: "/api/render", origin: origin}, http.StatusNotImplemented, ticketRender},
@@ -355,9 +359,9 @@ func TestHostGuard(t *testing.T) {
 		host string
 		want int
 	}{
-		{"127.0.0.1:" + port, http.StatusNotImplemented},
-		{"localhost:" + port, http.StatusNotImplemented},
-		{"LOCALHOST:" + port, http.StatusNotImplemented},
+		{"127.0.0.1:" + port, http.StatusOK},
+		{"localhost:" + port, http.StatusOK},
+		{"LOCALHOST:" + port, http.StatusOK},
 		{"evil.example:" + port, http.StatusForbidden},
 		{"evil.example", http.StatusForbidden},
 		{"127.0.0.1:" + otherPort(srv), http.StatusForbidden},
@@ -401,6 +405,37 @@ func TestOriginGuard(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			resp, _ := do(t, srv, request{method: http.MethodPost, path: "/api/render", origin: tc.origin, cookie: tc.cookie, bearer: tc.bearer})
+			if resp.StatusCode != tc.want {
+				t.Errorf("status = %d, want %d", resp.StatusCode, tc.want)
+			}
+		})
+	}
+}
+
+func TestFetchSiteGuard(t *testing.T) {
+	srv := started(t, builtUI)
+	cookie := login(t, srv)
+	tests := []struct {
+		name   string
+		path   string
+		site   string
+		cookie *http.Cookie
+		bearer string
+		want   int
+	}{
+		{"api same-origin", "/api/model", fetchSiteSameOrigin, cookie, "", http.StatusOK},
+		{"api without header", "/api/model", "", cookie, "", http.StatusOK},
+		{"api same-site", "/api/model", "same-site", cookie, "", http.StatusForbidden},
+		{"api cross-site", "/api/model", "cross-site", cookie, "", http.StatusForbidden},
+		{"api typed address", "/api/model", "none", cookie, "", http.StatusForbidden},
+		{"contexts same-site", "/api/cluster/contexts?kubeconfig=x", "same-site", cookie, "", http.StatusForbidden},
+		{"api bearer same-site", "/api/model", "same-site", nil, srv.token, http.StatusOK},
+		{"static typed address", "/", "none", cookie, "", http.StatusOK},
+		{"static cross-site", "/", "cross-site", cookie, "", http.StatusOK},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			resp, _ := do(t, srv, request{path: tc.path, site: tc.site, cookie: tc.cookie, bearer: tc.bearer})
 			if resp.StatusCode != tc.want {
 				t.Errorf("status = %d, want %d", resp.StatusCode, tc.want)
 			}
@@ -593,8 +628,8 @@ func TestLaunchCode(t *testing.T) {
 		path := launch(t)
 		resp, body := do(t, srv, request{path: path})
 		cookie := assertExchange(t, srv, resp, body)
-		if resp, _ := do(t, srv, request{path: "/api/model", cookie: cookie}); resp.StatusCode != http.StatusNotImplemented {
-			t.Errorf("cookie gives status %d, want %d", resp.StatusCode, http.StatusNotImplemented)
+		if resp, _ := do(t, srv, request{path: "/api/model", cookie: cookie}); resp.StatusCode != http.StatusOK {
+			t.Errorf("cookie gives status %d, want %d", resp.StatusCode, http.StatusOK)
 		}
 		if resp, _ := do(t, srv, request{path: path}); resp.StatusCode != http.StatusUnauthorized {
 			t.Errorf("second use: status = %d, want %d", resp.StatusCode, http.StatusUnauthorized)

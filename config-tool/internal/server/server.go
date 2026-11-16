@@ -14,6 +14,8 @@ import (
 	"strconv"
 	"sync"
 	"time"
+
+	"github.com/FIWARE/data-space-connector/config-tool/model"
 )
 
 const (
@@ -38,8 +40,10 @@ type Server struct {
 	origins    map[string]bool
 	hosts      map[string]bool
 	ui         fs.FS
-	progress   *Progress
-	http       *http.Server
+	// models holds the question-model bundles; tests swap it before serving.
+	models   fs.FS
+	progress *Progress
+	http     *http.Server
 	// shutdown is cancelled when the server shuts down, which ends open WebSockets.
 	shutdown context.Context
 	cancel   context.CancelFunc
@@ -71,6 +75,7 @@ func New(ui fs.FS) (*Server, error) {
 		origins:     map[string]bool{"http://" + hostPort(loopbackHost): true, "http://" + hostPort(localhost): true},
 		hosts:       map[string]bool{hostPort(loopbackHost): true, hostPort(localhost): true},
 		ui:          ui,
+		models:      bundles.FS,
 		progress:    NewProgress(),
 		now:         time.Now,
 		sessions:    map[string]struct{}{},

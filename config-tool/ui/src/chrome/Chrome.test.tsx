@@ -73,7 +73,7 @@ describe('Chrome', () => {
   ])('counts issues with %s', (_name, results, expected) => {
     const stages = STAGES.map((stage, i) => {
       const result = results[i]
-      return result ? { ...stage, selector: () => result } : stage
+      return { ...stage, selector: result ? () => result : undefined }
     })
     renderChrome(stages)
     expect(screen.getByLabelText('Validation')).toHaveTextContent(expected)

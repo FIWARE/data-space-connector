@@ -15,6 +15,7 @@ Short records of decisions that are expensive to reverse or easy to re-litigate.
 | [0009](0009-config-tool-stack.md) | Build the configuration tool as a Go core with an embedded web UI, in this repository | Proposed | |
 | [0010](0010-config-tool-secret-handling.md) | The configuration tool creates secrets, but never stores their values | Proposed | |
 | [0011](0011-config-tool-window-build-tag.md) | Release binaries of the configuration tool open a browser tab; the native window is an opt-in build tag | Proposed | |
+| [0012](0012-config-tool-semver-library.md) | Order the configuration tool's model bundles with Masterminds/semver, the library Helm uses | Proposed | |
 
 ADRs 0002 and 0003 constrain the consent-facade's own API, so they are **mirrored** in
 [consent-facade](https://github.com/SEAMWARE/consent-facade) under `doc/adr/` with the same numbers. This repository holds the
@@ -23,5 +24,5 @@ canonical copy; change it here first.
 Design document ADRs 0001-0005 belong to:
 [`../CONSENT_MANAGEMENT.md`](../CONSENT_MANAGEMENT.md). ADR 0006 belongs to
 [`../deployment-integration/eidas/README.md`](../deployment-integration/eidas/README.md). ADR 0007 belongs to
-[`../deployment-integration/local-deployment/LOCAL.MD`](../deployment-integration/local-deployment/LOCAL.MD). ADRs 0009, 0010 and
-0011 belong to [`../config-tool/`](../config-tool/README.md).
+[`../deployment-integration/local-deployment/LOCAL.MD`](../deployment-integration/local-deployment/LOCAL.MD). ADRs 0009 to
+0012 belong to [`../config-tool/`](../config-tool/README.md).

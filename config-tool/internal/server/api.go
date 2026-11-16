@@ -11,6 +11,8 @@ import (
 	"github.com/coder/websocket"
 	"github.com/coder/websocket/wsjson"
 
+	"github.com/FIWARE/data-space-connector/config-tool/internal/cluster"
+	"github.com/FIWARE/data-space-connector/config-tool/internal/model"
 	"github.com/FIWARE/data-space-connector/config-tool/internal/profile"
 	"github.com/FIWARE/data-space-connector/config-tool/internal/render"
 	"github.com/FIWARE/data-space-connector/config-tool/internal/validate"
@@ -23,9 +25,10 @@ const (
 	contentTypeJSON = "application/json"
 	contentTypeYAML = "application/yaml"
 	eventReady      = "ready"
+	// queryKubeconfig names the explicit kubeconfig path; empty means clientcmd's default rules.
+	queryKubeconfig = "kubeconfig"
 
 	// The tickets that replace a stub, reported with its 501.
-	ticketModel   = "CT-1"
 	ticketRender  = "CT-2"
 	ticketLoad    = "CT-2"
 	ticketProfile = "CT-4"
@@ -41,7 +44,8 @@ type errorBody struct {
 // Handler is the full HTTP handler: guards, API routes and the UI.
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
-	mux.Handle("GET /api/model", notImplemented("the question model is not available yet", ticketModel))
+	mux.HandleFunc("GET /api/model", s.handleModel)
+	mux.HandleFunc("GET /api/cluster/contexts", handleContexts)
 	mux.Handle("GET /api/profile", notImplemented("profiles are not available yet", ticketProfile))
 	mux.Handle("PUT /api/profile", notImplemented("profiles are not available yet", ticketProfile))
 	mux.Handle("POST /api/load", notImplemented("loading a values.yaml is not available yet", ticketLoad))
@@ -59,6 +63,53 @@ func notImplemented(msg, ticket string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		writeError(w, http.StatusNotImplemented, msg, ticket)
 	})
+}
+
+// modelBody is the chart and version choice of the Target stage; the questions arrive with later epics.
+type modelBody struct {
+	Charts []modelChart `json:"charts"`
+}
+
+// modelChart carries its own versions, so the Version dropdown only offers the selected chart's.
+type modelChart struct {
+	Name     string         `json:"name"`
+	Versions []modelVersion `json:"versions"`
+}
+
+type modelVersion struct {
+	Version string `json:"version"`
+	Latest  bool   `json:"latest"`
+}
+
+func (s *Server) handleModel(w http.ResponseWriter, _ *http.Request) {
+	bundles, err := model.Versions(s.models)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error(), "")
+		return
+	}
+	charts := model.Charts(bundles)
+	body := modelBody{Charts: make([]modelChart, 0, len(charts))}
+	for _, c := range charts {
+		chart := modelChart{Name: c.Name, Versions: make([]modelVersion, 0, len(c.Versions))}
+		for _, b := range c.Versions {
+			chart.Versions = append(chart.Versions, modelVersion{Version: b.Version, Latest: b.Latest})
+		}
+		body.Charts = append(body.Charts, chart)
+	}
+	writeJSON(w, body)
+}
+
+// handleContexts lists kube context names; cluster.Kubeconfig carries no credentials or server URLs.
+func handleContexts(w http.ResponseWriter, r *http.Request) {
+	kubeconfig, err := cluster.Contexts(r.URL.Query().Get(queryKubeconfig))
+	switch {
+	case errors.Is(err, cluster.ErrKubeconfigNotFound):
+		writeError(w, http.StatusNotFound, err.Error(), "")
+	case err != nil:
+		writeError(w, http.StatusUnprocessableEntity, err.Error(), "")
+	default:
+		writeJSON(w, kubeconfig)
+	}
 }
 
 func handleRender(w http.ResponseWriter, r *http.Request) {
@@ -154,6 +205,11 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+}
+
+func writeJSON(w http.ResponseWriter, v any) {
+	w.Header().Set(headerContentType, contentTypeJSON)
+	_ = json.NewEncoder(w).Encode(v)
 }
 
 func writeError(w http.ResponseWriter, status int, msg, ticket string) {
