@@ -6,17 +6,13 @@ import (
 	"io/fs"
 	"path"
 	"slices"
-	"sort"
 
-	"golang.org/x/mod/semver"
+	"github.com/Masterminds/semver/v3"
 	"gopkg.in/yaml.v3"
 )
 
 // bundlePattern matches the bundle file of every version directory.
 const bundlePattern = "*/bundle.yaml"
-
-// semverPrefix is the "v" golang.org/x/mod/semver insists on and chart versions leave out.
-const semverPrefix = "v"
 
 // Bundle is the question model of one chart version.
 type Bundle struct {
@@ -26,28 +22,37 @@ type Bundle struct {
 	Latest bool `yaml:"-"`
 }
 
+// versioned pairs a bundle with its parsed version for ordering.
+type versioned struct {
+	bundle  Bundle
+	version *semver.Version
+}
+
 // Versions loads every bundle in fsys, highest semver first. Latest marks the highest release,
 // or the highest pre-release when there is no release, so an rc never becomes the default.
-// A bundle whose version is not semver or differs from its directory name is an error.
+// A bundle whose version is not strict MAJOR.MINOR.PATCH semver (Helm's library, so both agree on
+// validity and order) or differs from its directory name is an error.
 func Versions(fsys fs.FS) ([]Bundle, error) {
 	files, err := fs.Glob(fsys, bundlePattern)
 	if err != nil {
 		return nil, err
 	}
-	bundles := make([]Bundle, 0, len(files))
+	found := make([]versioned, 0, len(files))
 	for _, file := range files {
-		b, err := readBundle(fsys, file)
+		v, err := readBundle(fsys, file)
 		if err != nil {
 			return nil, err
 		}
-		bundles = append(bundles, b)
+		found = append(found, v)
 	}
-	sort.Slice(bundles, func(i, j int) bool {
-		return semver.Compare(semverPrefix+bundles[i].Version, semverPrefix+bundles[j].Version) > 0
-	})
-	if len(bundles) > 0 {
+	slices.SortFunc(found, func(a, b versioned) int { return b.version.Compare(a.version) })
+	bundles := make([]Bundle, len(found))
+	for i, v := range found {
+		bundles[i] = v.bundle
+	}
+	if len(found) > 0 {
 		latest := 0
-		if i := slices.IndexFunc(bundles, isRelease); i >= 0 {
+		if i := slices.IndexFunc(found, isRelease); i >= 0 {
 			latest = i
 		}
 		bundles[latest].Latest = true
@@ -66,27 +71,28 @@ func Charts(bundles []Bundle) []string {
 	return charts
 }
 
-func isRelease(b Bundle) bool {
-	return semver.Prerelease(semverPrefix+b.Version) == ""
+func isRelease(v versioned) bool {
+	return v.version.Prerelease() == ""
 }
 
-func readBundle(fsys fs.FS, file string) (Bundle, error) {
+func readBundle(fsys fs.FS, file string) (versioned, error) {
 	data, err := fs.ReadFile(fsys, file)
 	if err != nil {
-		return Bundle{}, err
+		return versioned{}, err
 	}
 	var b Bundle
 	if err := yaml.Unmarshal(data, &b); err != nil {
-		return Bundle{}, fmt.Errorf("%s: %w", file, err)
+		return versioned{}, fmt.Errorf("%s: %w", file, err)
 	}
-	dir := path.Dir(file)
-	switch {
-	case b.Chart == "":
-		return Bundle{}, fmt.Errorf("%s: chart is missing", file)
-	case !semver.IsValid(semverPrefix + b.Version):
-		return Bundle{}, fmt.Errorf("%s: version %q is not semver", file, b.Version)
-	case b.Version != dir:
-		return Bundle{}, fmt.Errorf("%s: version %q does not match its directory %q", file, b.Version, dir)
+	if b.Chart == "" {
+		return versioned{}, fmt.Errorf("%s: chart is missing", file)
 	}
-	return b, nil
+	v, err := semver.StrictNewVersion(b.Version)
+	if err != nil {
+		return versioned{}, fmt.Errorf("%s: version %q is not semver: %w", file, b.Version, err)
+	}
+	if dir := path.Dir(file); b.Version != dir {
+		return versioned{}, fmt.Errorf("%s: version %q does not match its directory %q", file, b.Version, dir)
+	}
+	return versioned{bundle: b, version: v}, nil
 }

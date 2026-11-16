@@ -61,5 +61,6 @@ printed URL yourself. `dsc-config --no-browser` only prints the URL.
 ## Chart versions
 
 Each supported chart version has a question-model bundle in `model/<version>/bundle.yaml`,
-embedded into the binary. The highest release is offered as the default on the Target stage; a
+embedded into the binary. Its directory name and `version` must be strict `MAJOR.MINOR.PATCH`
+semver, checked and ordered with Helm's own library (`Masterminds/semver`). The highest release is offered as the default on the Target stage; a
 pre-release becomes the default only when no release is bundled.

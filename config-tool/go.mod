@@ -6,10 +6,10 @@ go 1.27.4
 ignore ./ui/node_modules
 
 require (
+	github.com/Masterminds/semver/v3 v3.5.0
 	github.com/coder/websocket v1.8.15
 	github.com/spf13/cobra v1.10.2
 	github.com/wailsapp/wails/v2 v2.17.1
-	golang.org/x/mod v0.43.0
 	gopkg.in/yaml.v3 v3.0.1
 	k8s.io/client-go v0.37.2
 )
