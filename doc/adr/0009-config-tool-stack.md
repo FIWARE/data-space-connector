@@ -99,3 +99,9 @@ cluster side.
   function and its test there — with neither side able to run against the other until one of them
   publishes. The benefit claimed for it, an independent release cadence, comes from the tag scheme
   instead and costs nothing.
+
+## Amendments
+
+- CT-1 (#116): `github.com/Masterminds/semver/v3` joins the library table in `TECH_STACK.md` to
+  order the model bundles. It is the library the Helm SDK compares chart versions with and
+  arrives with it anyway, so the stack and this decision are unchanged.

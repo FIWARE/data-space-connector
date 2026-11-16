@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
@@ -62,13 +63,13 @@ func Contexts(explicitPath string) (Kubeconfig, error) {
 }
 
 // fromPrecedence merges the existing files of precedence with clientcmd's rules: the first file
-// that sets a context or current-context wins. Each is read through readRegular, so it gets the
-// same checks as an explicit path and a file pre-filled from this list reads the same again.
+// that sets a context or current-context wins. Only a file that does not exist is skipped; every
+// other one is read through readRegular, so it gets the same checks as an explicit path.
 func fromPrecedence(precedence []string) (Kubeconfig, error) {
 	var existing []string
 	merged := clientcmdapi.NewConfig()
 	for _, path := range precedence {
-		if _, err := os.Stat(path); err != nil {
+		if _, err := os.Stat(path); errors.Is(err, fs.ErrNotExist) {
 			continue
 		}
 		data, err := readRegular(path)

@@ -57,7 +57,8 @@ printed URL yourself. `dsc-config --no-browser` only prints the URL.
   typed in) for context names only. It never connects to a cluster, never returns credentials
   or server URLs, and never stores the kubeconfig path; only the context name joins the answers.
   Every file read, typed or from `KUBECONFIG`, must be a regular file of at most 8 MiB, so a
-  device or FIFO (e.g. `KUBECONFIG=<(...)`) is refused unread.
+  device or FIFO (e.g. `KUBECONFIG=<(...)`) is refused unread. A `KUBECONFIG` entry that does
+  not exist is skipped; any other failure (permission denied, not a directory) is reported.
 
 ## Chart versions
 

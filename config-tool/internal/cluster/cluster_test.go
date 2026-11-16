@@ -89,6 +89,7 @@ func TestContexts(t *testing.T) {
 		{name: "device in KUBECONFIG is refused", kubeconfigEnv: []string{twoContexts, os.DevNull}, wantNotFound: true},
 		{name: "directory in KUBECONFIG is refused", kubeconfigEnv: []string{t.TempDir()}, wantNotFound: true},
 		{name: "file in KUBECONFIG above the size limit", kubeconfigEnv: []string{oversized}, wantTooLarge: true},
+		{name: "path under a file in KUBECONFIG is refused", kubeconfigEnv: []string{filepath.Join(twoContexts, "config")}, wantNotFound: true},
 		{
 			name:          "KUBECONFIG with only missing files is empty",
 			kubeconfigEnv: []string{missing},

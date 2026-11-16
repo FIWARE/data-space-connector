@@ -15,6 +15,9 @@ export const MODEL: ModelInfo = {
   ],
 }
 
+/** The status the contexts route answers for a kubeconfig it cannot read. */
+export const HTTP_NOT_FOUND = 404
+
 /** A kubeconfig answer, or a status code the route fails with. */
 export type ContextsAnswer = Kubeconfig | number
 
@@ -36,7 +39,7 @@ export function mockApi(contexts: (path: string) => ContextsAnswer = () => ({ pa
       const answer = contexts(url.searchParams.get('kubeconfig') ?? '')
       return typeof answer === 'number' ? json({ error: refusedKubeconfig(url.searchParams.get('kubeconfig') ?? '') }, answer) : json(answer)
     }
-    return json({ error: 'not found' }, 404)
+    return json({ error: 'not found' }, HTTP_NOT_FOUND)
   })
   vi.stubGlobal('fetch', fetchMock)
   return fetchMock
