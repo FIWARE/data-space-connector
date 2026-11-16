@@ -35,6 +35,7 @@ export const StageStatus = {
   Warning: 'warning',
   Open: 'open',
   Complete: 'complete',
+  Visited: 'visited',
   None: 'none',
 } as const
 export type StageStatus = (typeof StageStatus)[keyof typeof StageStatus]
@@ -46,6 +47,7 @@ export const STATUS_GLYPH: Record<StageStatus, string> = {
   warning: '⚠',
   open: '○',
   complete: '✓',
+  visited: '',
   none: '',
 }
 
@@ -56,16 +58,17 @@ export const STATUS_LEGEND: Record<StageStatus, string> = {
   warning: 'has warnings',
   open: 'has open questions',
   complete: 'complete',
+  visited: 'visited, no status',
   none: 'not visited',
 }
 
-/** A visited stage without issues is complete only if it has a selector; otherwise there is nothing to vouch for it. */
+/** A visited stage without issues is complete only if it has a selector; without one it is merely visited. */
 export function stageStatus(state: AppState, stage: StageDef): StageStatus {
   if (stage.id === state.stage) return StageStatus.Current
   const issues = stageIssues(state, stage)
   if (issues.errors > 0) return StageStatus.Error
   if (issues.warnings > 0) return StageStatus.Warning
   if (issues.open > 0) return StageStatus.Open
-  if (stage.selector !== undefined && state.visited.includes(stage.id)) return StageStatus.Complete
-  return StageStatus.None
+  if (!state.visited.includes(stage.id)) return StageStatus.None
+  return stage.selector !== undefined ? StageStatus.Complete : StageStatus.Visited
 }

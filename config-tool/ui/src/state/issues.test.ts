@@ -9,7 +9,8 @@ const ON_ROLE = { ...initialState, entered: true, stage: StageId.Role }
 
 describe('stageStatus', () => {
   it.each<[string, Issues | undefined, boolean, StageStatus]>([
-    ['visited without a selector', undefined, true, StageStatus.None],
+    ['visited without a selector', undefined, true, StageStatus.Visited],
+    ['not visited without a selector', undefined, false, StageStatus.None],
     ['visited, selector without issues', NO_ISSUES, true, StageStatus.Complete],
     ['not visited, selector without issues', NO_ISSUES, false, StageStatus.None],
     ['visited with open questions', { warnings: 0, errors: 0, open: 1 }, true, StageStatus.Open],
