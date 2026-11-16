@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-11-16
-**Context doc:** [`../eventing/participant-setup.md`](../eventing/participant-setup.md#2-gateway-routes)
+**Context doc:** [`../eventing/participant-setup.md`](../eventing/participant-setup.md#2-expose-the-events-endpoint-at-the-gateway)
 
 ## Context
 

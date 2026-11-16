@@ -73,8 +73,8 @@ wire contract are documented here:
   design decisions behind them
 * [Interoperability specification](./eventing/specification.md) - normative contract a non-FIWARE
   implementation must follow to publish events to, or subscribe at, a FIWARE participant
-* [Participant setup](./eventing/participant-setup.md) - operator guide: enable the listener and the
-  subscriber in the chart, add the gateway routes, the verifier service and the ODRL policy
+* [Participant setup](./eventing/participant-setup.md) - what the connector does with the data space's
+  events, and how to enable it: contract-management, the gateway routes, the verifier service and the ODRL policy
 
 
 
