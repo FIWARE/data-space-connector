@@ -179,6 +179,11 @@ pom.xml                       # drives local-deploy + integration tests
   CT-3 (#118) -> CT-4 profiles (#119) -> CT-5 local trial (#120).
 - Doc comments: one-line GoDoc on every exported identifier and package; TSX
   components get a one-line JSDoc. No `@param` echoes.
+- `internal/roundtrip` (CT-2, ADR 0013): keeps the source bytes; the yaml.v3 node tree is only
+  an index (Line/Column). Edits are byte patches and `Write` re-parses its output to verify it.
+  Never re-encode a `yaml.Node` to write a file, because the encoder is not byte-faithful. The
+  corpus is `k3s/*.yaml` plus both charts' `values.yaml`. Five k3s files have no trailing
+  newline, and none of them uses anchors, so anchors are covered by fixtures in `testdata/`.
 
 ## Documentation
 
