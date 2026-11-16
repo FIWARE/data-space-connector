@@ -73,6 +73,10 @@ statusListServer:
         memory: "128Mi"
 
 keycloak:
+  # own user instead of the chart's default `postgres` (local and test environments)
+  database:
+    username: keycloak
+    existingSecret: keycloak.postgres.credentials.postgresql.acid.zalan.do
   ingress:
     enabled: true
     annotations:
