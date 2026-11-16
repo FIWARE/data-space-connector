@@ -32,6 +32,15 @@ metadata:
   namespace: {{ .Release.Namespace | default "default" | quote }}
   labels:
     {{- include "dsc.labels" . | nindent 4 }}
+  # A hook, built when it runs: the operator subchart installs the Instrumentation CRD as a
+  # template, so on a first install the kind does not exist yet when Helm builds the release's
+  # resources. It runs after the otel-webhook-wait job (otel-restart-job.yaml), because the
+  # operator's webhook validates it, and before the restart of the annotated pods. It is not
+  # deleted once it succeeds: the operator reads it whenever it injects a pod.
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "3"
+    "helm.sh/hook-delete-policy": before-hook-creation
 spec:
   exporter:
     endpoint: {{ include "dsc.otel.endpoint" . | quote }}
