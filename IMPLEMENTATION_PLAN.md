@@ -152,8 +152,11 @@ before it is returned. The API is the one TECH_STACK names: `Parse`, `Classify`,
     column or indented.
   - New maps are rendered with sorted keys. An empty flow value (`{}`, `[]`) or a null value
     (`key:`, `key: null`, `~`) that gains children is replaced by a block collection. A
-    non-empty flow mapping or sequence gets the new entry appended inside its brackets, in
-    flow style.
+    non-empty flow mapping or sequence on one line gets the new entry appended inside its
+    brackets, in flow style. A flow collection that crosses lines is not appended to: the new
+    key turns into a replacement of that collection with its merged value from the in-memory
+    tree, rendered as in *Span of a replaced value*, and later `Set`s below it edit that
+    pending value tree.
 - **Value style on edit.** The original quoting style is kept when it can represent the new
   value: plain stays plain, `'…'` stays single, `"…"` stays double, and `|`/`>` keep their
   indicator and chomping. Otherwise yaml.v3's scalar encoding chooses the style for the new
@@ -168,23 +171,50 @@ before it is returned. The API is the one TECH_STACK names: `Parse`, `Classify`,
 - **Span of a replaced value.** Replacing a collection, or changing a value's kind (scalar,
   mapping, sequence), never touches the key line's own decoration: the key, the anchor, and the
   whitespace and line comment after the value stay byte-equal (`admin: # maintainer`, chart
-  `values.yaml` line 44). The span has up to two parts:
-  - the *inline part*: the value text on the key line (or `-` line), from the value node's
-    offset, which is past any anchor or tag, to the end of that text, before the whitespace and
-    line comment that follow. It is empty for a block collection and for an implicit null;
+  `values.yaml` line 44). yaml.v3 does not give the value text's position directly: an anchored
+  or tagged node sits at its `&` or `!` (`k: &a foo` gives 1:4), and an unanchored block
+  collection sits at its first child on the next line (`k: # c\n  a: 1` gives 2:3). The span is
+  therefore measured from the *value point*: the offset right after the `:` that follows the key
+  node's span (Step 3's scanner), or right after the `-` of a sequence item, then past any anchor
+  and tag tokens and the whitespace after each (also Step 3's scanner). A key line where no `:`
+  follows the key's span (a complex `?` key) gives `ErrUnsupportedScalar`. The span has up to two
+  parts:
+  - the *inline part*: the value text from the value point to the end of that text, before the
+    whitespace and line comment that follow. It is empty for a block collection and for an
+    implicit null. For a flow collection it runs from the opening bracket to the matching
+    closing bracket, honouring quotes and nesting, and may cross lines (`additionalContexts: [`
+    at chart `values.yaml` line 2823, `scopeMappings: {` at line 2836);
   - the *block part*: from the start of the line after the key line to the end of the last line
     of the subtree, excluding following comment lines at or left of the key's column (or the
     `-` column for a sequence item). It is empty for a scalar or flow value.
 
+  A *compact* sequence item is one whose collection's first child sits on the `-` line
+  (`- a: 1\n  b: 2`, `- - a`; about 150 lines of the chart's `values.yaml`). It has no inline
+  and block split: its span runs from the value point to the end of its subtree, under the same
+  comment exclusion. A scalar or flow replacement is written at the value point (`- s`), and a
+  block replacement is rendered compact again: the first entry on the `-` line, the rest at the
+  column of that first entry. `- &x\n  a: 1` is not compact, because its first child is on the
+  next line.
+
   The new value goes inline when it is a scalar, an empty collection (`[]`, `{}`), or a
-  collection replacing a non-empty flow collection (it stays flow, on one line). Otherwise it
-  is a block fragment that replaces the block part, and the inline part is removed together with
-  the one space before it. So `k: v # c` → map gives `k: # c` plus the block lines,
-  `admin: # maintainer` + list gives a new block list under the unchanged key line, and a block
-  map → scalar removes the block part and inserts ` s` as for an implicit null. An anchor always
-  stays, so every alias keeps a target and resolves to the new value. A tag stays when the kind
-  is unchanged (and, for a scalar, the new value decodes under it); otherwise it is removed with
-  the old value, since e.g. `!!map` on a scalar does not decode.
+  collection replacing a non-empty flow collection (it stays flow). A flow collection that sat
+  on one line is rendered on one line. One that crossed lines is rendered multi-line as JSON
+  (`encoding/json` with `SetEscapeHTML(false)` and the detected indent unit, sorted keys), which
+  is valid flow YAML: the closing bracket goes at the indentation of the line that holds the
+  opening bracket, and the inner lines one unit deeper. Comments inside a replaced flow
+  collection go with it, as in a block part. Otherwise the new value is a block fragment that
+  replaces the block part, and the inline part is removed together with the one space before it.
+  So `k: v # c` → map gives `k: # c` plus the block lines, `admin: # maintainer` + list gives a
+  new block list under the unchanged key line, and a block map → scalar removes the block part
+  and inserts one space plus the value at the value point, as for an implicit null
+  (`k: # c\n  a: 1` → `k: s # c`). An anchor always stays, so every alias keeps a target and
+  resolves to the new value. A tag stays when the kind is unchanged (and, for a scalar, the new
+  value decodes under it). Otherwise the removal widens back over the tag token and the
+  whitespace after it, but never over the anchor, since e.g. `!!map` on a scalar does not
+  decode. Inline text is preceded by one space only when the byte before it is not already a
+  space, so `k: !!map` → scalar gives `k: s`, not `k:  s`.
+  A `<<: *x` that uses an anchor whose mapping becomes a scalar no longer decodes; the write
+  self-check refuses it with `ErrPatchVerification`.
 - **Merge semantics.** `render(profile) ⊕ overrides`, and the override wins. Two maps merge
   recursively. Any other pair, including a type change, replaces the value span of that key. A
   `nil` override writes `null`; key deletion is out of scope.
@@ -311,8 +341,10 @@ Acceptance:
 
 ### Step 3: In-place scalar edit via byte-span patches, with the write self-check
 In `internal/roundtrip/`:
-- `span.go`: the byte span of a scalar node's value text, from its Line/Column offset, past
-  any anchor or tag. Per style:
+- `span.go`: the byte span of a scalar node's value text. yaml.v3 puts an anchored or tagged
+  node at its `&` or `!`, so the scanner starts at the node's Line/Column offset and skips the
+  anchor and tag tokens and the whitespace after each. Step 4 reuses this scanner for the value
+  point and for key spans. Per style:
   - plain: ends before ` #` or at the end of the line, trimmed of trailing whitespace
     (spaces, tabs and `\r`). Inside flow collections it also ends at `,`, `]` or `}`. A
     block-context plain value continues over the following lines that are indented deeper
@@ -454,6 +486,21 @@ In `internal/roundtrip/`:
     to it; `k: &x\n  a: 1` set to a scalar keeps `&x`; `k: !!str v` → map drops the tag.
   - Flow stays flow: `[a, b]` → `[c]` on the same line; `[]` → non-empty list becomes block;
     a block list → `[]` gives `key: []` with the line comment kept.
+  - Multi-line flow, against the chart's `values.yaml`: `Set` of a new list on
+    `additionalContexts` (line 2823) and a `Merge` that replaces `scopeMappings.mappings`
+    (inside the flow map at line 2836) each rewrite only the bracketed span, as multi-line JSON
+    at the documented indentation, and leave the `## --` comment above the key byte-equal; a
+    `Merge` that adds a key to `scopeMappings` re-renders that flow map with the new key.
+    A fixture `k: [\n  1,\n  2\n]  # c` set to a scalar gives `k: s  # c`.
+  - Value point and tags: `k: # c\n  a: 1` and `k: &x # c\n  a: 1` → scalar give `k: s # c` and
+    `k: &x s # c`; `k: !!map\n  a: 1` → scalar gives `k: s`; `k: &x !!str v` → map keeps
+    `&x` and drops `!!str`; `k: !!str v` → `"w"` keeps the tag.
+  - Compact items: on `l:\n  - a: 1\n    b: 2\n  - x`, `Set(l[0], "s")` gives `  - s`,
+    `Set(l[0], map{c: 3})` gives `  - c: 3` with no `a`/`b` left, and `l[1]` stays byte-equal;
+    `- - a\n  - b` with `Set(l[0], [c])` gives `- - c`; `- &x\n    a: 1` → scalar keeps `&x` on
+    the `-` line.
+  - An anchored map used by a merge key, `a: &x\n  p: 1\nm:\n  <<: *x`, with `Set(a, "s")`:
+    `Write` gives `ErrPatchVerification` and no bytes.
   - Alias to a mapping, on `base: &b\n  a: 1\n  b: 2\nm: *b\nn: *b`: `Merge({m: {b: 3}})`
     gives `m:` with `a: 1` and `b: 3` as a block, and `base` and `n: *b` stay byte-equal;
     `Merge({m: {a: 1}})` is a no-op that keeps `*b`; `Set(m.b, 3)` gives `ErrAliasPath`.
