@@ -376,7 +376,8 @@ ships an example and validates it, but adds no route itself.
       `vars` route (`k3s/provider.yaml` ~443–454) that serves the **contract-management** service's
       metadata, which lacks the events scope. The publisher can then never get a token.
     - The path assumes the announced sink is `<scheme>://<host>/events`. Say in a comment that a sink
-      under another path needs both `uri`s changed.
+      under another path needs the `uri` of all three entries changed (the chart checks that they
+      agree, Step 4).
     - `<events-service>` is the verifier service of Step 6 item 3, and the same service that
       `dataspace-events`' `openid-connect.discovery` points at.
     - `verifier:3000` comes from `decentralizedIam.vcAuthentication.vcverifier.fullnameOverride:
@@ -406,18 +407,27 @@ ships an example and validates it, but adds no route itself.
   `dataspace-events` is present and:
   - `contract-management.enabled` is true and `contract-management.dataspace.events.listener.enabled`
     is not true (with an external CM the umbrella's listener flag means nothing), or
+  - its `methods` is not exactly `[POST]` (without it the route also matches `OPTIONS` on the same
+    host and path, and at equal priority may shadow the handshake, which then answers `401`), or
+  - its `uri` is empty, or it sets `uris` (the three entries use the singular `uri`, so the
+    comparisons below have one path to compare), or
   - its `openid-connect.discovery` is empty, or
   - its `openid-connect.set_userinfo_header` is not `true`, or
   - it has no `proxy-rewrite` whose `headers.remove` contains `X-Userinfo` (compared
     case-insensitively, as HTTP header names are), or
-  - that `proxy-rewrite`'s `_meta.priority` is missing or not above `openid-connect`'s priority.
+  - that `proxy-rewrite`'s `_meta.priority` is missing or not above `openid-connect`'s **effective**
+    priority: `openid-connect._meta.priority` if the route sets it, else the default below.
     - Why: CM does not verify tokens. It trusts `X-Userinfo` for its source == identity check, so
       the strip of a client-sent header is the security-critical part of the route. Trimming the
       rewrite must not give a green install.
-    - Define `openid-connect`'s priority as a named constant in the template, verified against the
-      APISIX version that ships (2599 in the APISIX source as of planning), with a comment naming
-      that version.
+    - Define `openid-connect`'s default priority as a named constant in the template, verified
+      against the APISIX version that ships (2599 in the APISIX source as of planning), with a
+      comment naming that version.
   - `dataspace-events-handshake` or `dataspace-events-discovery` is missing, or
+  - the handshake's `uri` differs from the events `uri`, or the discovery entry's `uri` is not the
+    events `uri` followed by `/.well-known/openid-configuration` (either sets `uris` instead). This
+    keeps a non-`/events` sink path possible while handshake and discovery still answer where the
+    events arrive, or
   - the `proxy-rewrite.uri` of `dataspace-events-discovery` is empty or differs from the **path** of
     `dataspace-events`' `openid-connect.discovery`.
     - Why: both routes must name the same verifier service. A suffix check is not enough:
@@ -435,7 +445,8 @@ ships an example and validates it, but adds no route itself.
   - the name appears more than once, or
   - the entry has neither a non-empty `host` nor a non-empty `hosts`, or has both, or
   - it binds other hosts than another of the three (handshake and discovery must answer where the
-    events arrive), or
+    events arrive). Normalize before comparing: `host` → `[host]`, `hosts` as given, then `uniq`
+    and `sortAlpha`, so `host: a` equals `hosts: [a]` and `[a, b]` equals `[b, a]`, or
   - the unauthenticated entries widen their method: `dataspace-events-handshake` has `methods` other
     than exactly `[OPTIONS]`, or `dataspace-events-discovery` other than exactly `[GET]` (without
     `methods` APISIX matches every method, so a forgotten key would open `POST /events` without
@@ -447,7 +458,8 @@ ships an example and validates it, but adds no route itself.
   while merging lists, or writes their own events routes gets none of them (Deviation 3). The
   template therefore also fails on one narrow, unambiguous case:
   - `contract-management.enabled` is true, and a route whose `name` is none of the three has
-    `uri: /events` and an upstream node `<CM Service name>:<CM port>`. The message says to keep the
+    `uri: /events` (or `/events` among its `uris`) and an upstream node
+    `<CM Service name>:<CM port>`. The message says to keep the
     example names, or the chart cannot check the route.
     - **CM Service name.** CM chart 3.6.6 names its Service with `fiwareCommon.names.fullname` (common
       chart 0.1.2). Reproduce that rule in a helper; do not skip the guard when
@@ -474,18 +486,25 @@ ships an example and validates it, but adds no route itself.
   these names render nothing; each inconsistent combination gives `failedTemplate` with its message,
   including on each entry: no host, `host: ""`, `hosts: []`, both keys set, hosts that differ
   between the entries, a duplicate name, missing or widened `methods` on handshake and discovery,
-  the ingress controller on; the discovery entry missing, with an empty rewrite `uri`, with a
-  service other than `discovery`'s, and with the rewrite `uri` `/.well-known/openid-configuration`;
-  on `dataspace-events`: `set_userinfo_header` missing or `false`, no `proxy-rewrite`, a
+  `uris` set instead of `uri`, the ingress controller on; the discovery entry missing, with an empty
+  rewrite `uri`, with a service other than `discovery`'s, with the rewrite `uri`
+  `/.well-known/openid-configuration`, and with a route `uri` that is not the events `uri` +
+  `/.well-known/openid-configuration`; a handshake `uri` that differs from the events `uri`;
+  on `dataspace-events`: `methods` missing or other than `[POST]`, an empty `uri`,
+  `set_userinfo_header` missing or `false`, no `proxy-rewrite`, a
   `proxy-rewrite` without `X-Userinfo` in `headers.remove`, its `_meta.priority` missing, equal to
-  or below `openid-connect`'s; an unnamed route and a route with another name at `/events` to the CM
-  upstream, each in the map and the list node form, with the default `fullnameOverride`, with
+  or below the default 2599, and above 2599 but not above an `openid-connect._meta.priority` set on
+  the route (e.g. 2600 against 3000); an unnamed route and a route with another name at `/events` to
+  the CM upstream (by `uri` and by `uris: [/events]`),
+  each in the map and the list node form, with the default `fullnameOverride`, with
   `fullnameOverride: ""` (release name `dsc` → node `dsc-contract-management:8080`; a release name
   that contains `contract-management` → the release name), with a namespace-qualified node, and with
   a custom `contract-management.service.port`. `X-Userinfo` matches in any case (`x-userinfo`
   passes), and these render: a route at `/events` to another upstream, to the CM name on another
   port, and with only an `upstream_id`. The consistent combination (the three entries of the example
   file, next to an unrelated route) renders with `host`, with one entry in `hosts` and with two;
+  with `host: a` on one entry and `hosts: [a]` on the others; with `hosts: [a, b]` and `[b, a]`;
+  with a sink path other than `/events` on all three `uri`s and the discovery rewrite;
   with an external `https://` discovery URL and a `verifier:3000` discovery upstream (the k3s
   pattern) and with an internal `http://verifier:3000/...` URL; and with
   `contract-management.enabled: false` and the listener off.
@@ -540,8 +559,9 @@ ships an example and validates it, but adds no route itself.
        its upstream is an `upstream_id`/`service_id` reference;
      - why `discovery` uses the verifier's external URL (Step 4: `issuer` and `jwks_uri` come from the
        verifier's `server.host`), with `proxy_opts` where the gateway needs a proxy;
-     - which plugin settings the chart enforces on `dataspace-events` (`set_userinfo_header`, the
-       `X-Userinfo` strip and its priority) and why;
+     - which settings the chart enforces on `dataspace-events` (`methods: [POST]`,
+       `set_userinfo_header`, the `X-Userinfo` strip and its priority above `openid-connect`'s
+       effective priority) and why, and that the three `uri`s must agree;
      - why the host is required (host-bound catch-alls win under `radixtree_host_uri`);
      - that the sink host should be the host whose catch-all already routes to CM (e.g. the k3s
        `contract-management` host), so the exact `/events` routes shadow it. Any other route whose
