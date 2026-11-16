@@ -17,10 +17,8 @@ managedPostgres:
       version: "16"
     volume:
       size: 1Gi
+    # the operator creates its `postgres` superuser itself
     users:
-      admin: # maintainer
-        - superuser
-        - createdb
       til:
         - createdb
       # -- the consent-manager's user. Fixed name: the setup Job reads its Zalando secret

@@ -40,10 +40,9 @@ decentralizedIam:
           version: "16"
         volume:
           size: 1Gi
+        # one user and database per component (`ih` is the IdentityHub's); the operator creates its
+        # `postgres` superuser itself
         users:
-          admin: # maintainer
-            - superuser
-            - createdb
           til:
             - createdb
           ccs:
@@ -54,15 +53,12 @@ decentralizedIam:
             - createdb
           ih:
             - createdb
-          issuer:
-            - createdb
         databases:
           tildb: til
           ccsdb: ccs
           papdb: pap
           keycloakdb: keycloak
           ih: ih
-          issuer: issuer
 
     # -- configuration for the trusted-issuers-list to be deployed as part of the connector, see https://github.com/FIWARE/helm-charts/tree/main/charts/trusted-issuers-list for all options
     trusted-issuers-list:
@@ -332,6 +328,7 @@ scorpio:
   #     value: "grpc"
   #   - name: QUARKUS_OTEL_SERVICE_NAME
   #     value: "scorpio"
+  # The Flyway vars after them keep the migrations in the `public` schema, see below.
   additionalEnvVars:
     # -- Quarkus OTEL runtime gate. Set to "true" to enable tracing.
     - name: QUARKUS_OTEL_ENABLED
@@ -347,6 +344,14 @@ scorpio:
     # `scorpio.tracing.serviceName`.
     - name: QUARKUS_OTEL_SERVICE_NAME
       value: "scorpio"
+    # -- schema of Scorpio's migrations. They name `public.` explicitly, and Flyway reads a search
+    # path such as `"$user", data` (the one the operator gives the users of a prepared database) as a
+    # single schema name, so it is set: needed when Scorpio connects with its own user of a prepared
+    # database (`ngb_owner_user`), the same as the default for the `postgres` superuser.
+    - name: QUARKUS_FLYWAY_SCHEMAS
+      value: public
+    - name: QUARKUS_FLYWAY_DEFAULT_SCHEMA
+      value: public
 
 # -- configuration to issue credentials, using a did:elsi
 elsi:
