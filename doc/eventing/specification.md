@@ -217,9 +217,10 @@ Consequences a publisher must expect:
   MAY be answered `202`.
 
 The publisher × type check (4) is what keeps one data space member from announcing events about
-another ([architecture D-5](architecture.md#12-decision-register)). An ODRL left operand for the
-credential **issuer** does not exist today. It would only add defence in depth at the PEP; it is a
-possible contribution to the PAP and not a dependency of this specification.
+another ([architecture D-5](architecture.md#12-decision-register)). An ODRL policy at the PEP can
+also constrain the credential **issuer** (ODRL-PAP's `vc:currentParty` left operand). That only adds
+defence in depth: it pins who issued the credential, not which publisher holds it, so it does not
+replace check 4 and is not a dependency of this specification.
 
 ## 7. Receiving endpoint
 

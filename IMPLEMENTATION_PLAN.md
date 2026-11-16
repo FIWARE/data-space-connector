@@ -704,11 +704,14 @@ ships an example and validates it, but adds no route itself.
      - check the field names in the credentials-config-service API;
   4. the ODRL policy from Step 5 (`it/src/test/resources/policies/allowDataSpaceEvents.json`). Say:
      - it admits `POST` (`tmf:create`, a plain method check in ODRL-PAP) on `/events` for an
-       `OperatorCredential` whose issuer (`vc:currentParty`) is the publisher,
-       `did:web:dataspace-authority.org` in k3s. Every participant's Keycloak issues
-       `OperatorCredential`, so the type alone would admit any participant's operator: the operator
-       must replace the issuer DID with their data space publisher's id, or use a dedicated
-       credential type;
+       `OperatorCredential` whose issuer (`vc:currentParty`, the credential's `issuer`, not its
+       holder) is `did:web:dataspace-authority.org`, the k3s authority that issues the publisher's
+       credential to itself. Every participant's Keycloak issues `OperatorCredential`, so the type
+       alone would admit any participant's operator: the operator must set the right operand to the
+       DID that **issues** the publisher's credential (the publisher's own id only when it is
+       self-issued, as in k3s; a wrong DID makes OPA answer `403` to every delivery), or use a
+       dedicated credential type. The holder is checked by CM (`publishers[].id` against
+       `credentialSubject.id`), not by the policy;
      - the events verifier service must still trust only the publisher's issuer
        (`trustedIssuersLists`/`trustedParticipantsLists`); the policy is the second line, CM's
        source == identity check on `X-Userinfo` the third;
