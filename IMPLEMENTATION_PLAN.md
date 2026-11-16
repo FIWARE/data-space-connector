@@ -230,7 +230,7 @@ drops, for a CM version that has no listener.
      copy with exactly that upstream and path, and it added an upgrade `fail` for routes no
      operator named for this feature.
    - **Access-control checks only.** The validation `fail`s only on settings that weaken access
-     control without breaking delivery (seven checks, Step 4 "Scope of the checks"). Consistency
+     control without breaking delivery (eight checks, Step 4 "Scope of the checks"). Consistency
      between the three entries (matching `uri`s and hosts, the discovery service path, entries
      present, `methods: [POST]`, the listener flag) is a checklist in the Step 7 guide: a mistake
      there breaks the handshake, discovery or delivery visibly. An earlier revision of this plan
@@ -551,6 +551,9 @@ ships an example and validates it, but adds no route itself.
      - Define `openid-connect`'s default priority as a named constant in the template, verified
        against the APISIX version that ships (2599 in the APISIX source as of planning), with a
        comment naming that version.
+  8. **Disabled plugin** (`dataspace-events`): `_meta.disable` is truthy on `openid-connect`, `opa`
+     or `proxy-rewrite`. APISIX skips such a plugin, so checks 5 to 7 would pass while the token
+     check, the ODRL policy or the strip is gone (added after the PR #24 review).
 
   Every check above depends on the exact names. An operator who renames the entries, drops `name`
   while merging lists, or writes their own events routes gets none of them (Deviation 3). There is
@@ -591,6 +594,7 @@ ships an example and validates it, but adds no route itself.
   | 5 | `set_userinfo_header` absent, `false`, `"true"` | `set_userinfo_header` |
   | 6 | F | `opa` |
   | 7 | no `proxy-rewrite`; `proxy-rewrite` without `headers.remove`; `headers.remove` without `X-Userinfo`; `_meta.priority` absent, `1008`, `2599`; `2600` with `openid-connect._meta.priority: 3000` | `X-Userinfo` or `priority` |
+  | 8 | `_meta.disable: true` on `openid-connect`, on `opa`, on `proxy-rewrite` (and `disable: false` passes) | `<plugin>._meta.disable` |
 
   (c) Passing variants (render nothing):
 
@@ -642,6 +646,48 @@ ships an example and validates it, but adds no route itself.
 - odrl-authorization 2.5.0 deploys no etcd by default, so the k3s values that run APISIX in
   `traditional` mode set `apisix.etcd.enabled: true`.
 - Acceptance: as for Step 4.
+- **Result (PR #24).** Fix agents cannot edit a PR description, so the evidence is recorded here.
+  A human must copy it into the PR #24 description before merging. The decentralized-iam subchart
+  was rendered at 2.1.28 and at 2.3.0 with the umbrella's `decentralizedIam` values (release `dsc`).
+  Those values differ only by the comment pointing at the example file. The bump moves
+  odrl-authorization 2.4.3 → 2.5.0, the apisix chart 2.16.0 → 2.18.2 and vc-authentication
+  1.5.2 → 1.6.0. No route and no eventing resource appears.
+  - **Removed:** odrl-authorization 2.5.0 defaults `apisix.etcd.enabled` to `false`, and the
+    umbrella does not set it. A default upgrade therefore deletes the following resources:
+    - StatefulSet `dsc-etcd`;
+    - Services `dsc-etcd` and `dsc-etcd-headless`;
+    - PDB, NetworkPolicy and ServiceAccount `dsc-etcd`;
+    - Secret `dsc-etcd-jwt-token`;
+    - the pre-upgrade hook Job `dsc-etcd-pre-upgrade`.
+
+    The umbrella's default APISIX mode is `standalone` (`data_plane`, `config_provider: yaml`), so
+    that etcd was deployed but never used. The PVCs `data-dsc-etcd-{0,1,2}` (8Gi each, persistence
+    was on by default) are not deleted by Helm and stay orphaned until removed by hand.
+  - **Added:**
+    - ClusterIP Service `dsc-apisix-control`, port 9090. APISIX binds its control API to
+      `127.0.0.1:9090`, so the Service reaches nothing.
+    - Secret `etcd-dsc-apisix`, holding an empty `etcd-root-password` that the APISIX pod reads as
+      `APISIX_ETCD_PASSWORD`.
+  - **Changed:**
+    - APISIX `apache/apisix:3.17.0-ubuntu` → `3.19.0-ubuntu`. The `wait-etcd` init container is
+      gone, the start command uses `exec`, and `terminationGracePeriodSeconds: 30` is added.
+    - The **APISIX gateway Service type changes from `NodePort` to `ClusterIP`**. Anyone who
+      reached the gateway through the node port loses that access.
+    - odrl-authorization's `catchAllRoute.enabled` default flips from `true` to `false`, which
+      drops the example `/*` → `http://my-broker:8080` route from `apisix-routes`.
+    - Images: TIL `0.10.0` → `0.10.3` (chart 0.19.1 → 0.19.2), vcverifier `6.27.0` → `6.31.0`,
+      odrl-pap `1.7.1` → `1.8.1`. credentials-config-service moves `3.4.3` → `3.5.0`, but the
+      umbrella does not render it.
+    - `helm.sh/chart` and `app.kubernetes.io/version` labels on 14 resources.
+  - **New upgrade `fail`:** odrl-authorization 2.5.0's `apisix-etcd-check.yaml` fails any
+    etcd-backed APISIX mode that has neither `apisix.etcd.enabled: true` nor a real
+    `apisix.externalEtcd.host`. An operator who ran `traditional`+etcd on the old default etcd must
+    set `decentralizedIam.odrlAuthorization.apisix.etcd.enabled: true`, as the k3s files now do.
+  - **TIL DB migration:** yes, at start-up and on by default. TIL runs Liquibase and the chart
+    0.19.2 does not switch it off. The only new changeset since 0.10.0 is `changelog-v0_0_7.xml`
+    (TIL 0.10.1): it adds a nullable `VARCHAR(255)` column `scope_type` to `credential`, so existing
+    rows stay unscoped. There is no rollback changeset. After a rollback to 0.10.0 the column stays
+    (expected to be ignored, not tested), and grants written with a `scopeType` lose it.
 
 ### Step 7: Docs, release notes, version bump
 - New `doc/eventing/participant-setup.md` (doctoc ToC). Write it as an operator guide and link to
@@ -669,10 +715,11 @@ ships an example and validates it, but adds no route itself.
        install/upgrade;
      - why `discovery` uses the verifier's external URL (Step 4: `issuer` and `jwks_uri` come from the
        verifier's `server.host`), with `proxy_opts` where the gateway needs a proxy;
-     - which settings the chart enforces (the seven checks of Step 4: no ingress controller,
+     - which settings the chart enforces (the eight checks of Step 4: no ingress controller,
        `[OPTIONS]` on the handshake, `[GET]` on discovery, and on `dataspace-events` a host,
        `set_userinfo_header`, `opa`, the `X-Userinfo` strip and its priority above
-       `openid-connect`'s effective priority) and why (for the strip: the Step 4 result on whether
+       `openid-connect`'s effective priority, none of those three plugins switched off with
+       `_meta.disable`) and why (for the strip: the Step 4 result on whether
        `openid-connect` overwrites a client-sent header);
      - a checklist of what the chart does **not** check, because a mistake there breaks the flow
        visibly rather than weakening access control (Step 4, "Scope of the checks"): all three
@@ -762,7 +809,14 @@ ships an example and validates it, but adds no route itself.
 - `doc/release-notes/10-x.md`: add a new top section for the minor version, in the existing
   format. Cover:
   - the CM and decentralizedIam bumps, with the image changes and any TIL DB migration (Deviation 2,
-    listing what a default upgrade does change);
+    listing what a default upgrade does change). From the Step 6 result, cover at least:
+    - the removed etcd and its orphaned PVCs (`data-<release>-etcd-*`, delete them by hand);
+    - the required `apisix.etcd.enabled: true` for etcd-backed modes, which otherwise fail;
+    - the APISIX gateway Service moving from `NodePort` to `ClusterIP`;
+    - the dropped default catch-all route;
+    - the new `<release>-apisix-control` Service;
+    - APISIX 3.19.0;
+    - the TIL `scope_type` column migration;
   - that CM ≥ 3.5.3 serves an unauthenticated `POST :9090/refresh` in **every** deployment with CM
     enabled, not only with eventing on, so port 9090 must stay cluster-internal (no Service, Ingress or
     route for it; a NetworkPolicy where pod IPs are reachable), and the `ENDPOINTS_REFRESH_SENSITIVE=true`

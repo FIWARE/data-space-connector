@@ -155,6 +155,105 @@ tests:
               - *discovery
     asserts: *passes
 
+  # P5 pins that consistency between the three entries is not checked (a guide checklist).
+  - it: P5 passes dataspace-events without handshake and discovery entries
+    set:
+      decentralizedIam:
+        odrlAuthorization:
+          apisix:
+            routes:
+              - *unrelated
+              - *events
+    asserts: *passes
+
+  - it: P5 passes a handshake uri other than the events uri
+    set:
+      decentralizedIam:
+        odrlAuthorization:
+          apisix:
+            routes:
+              - *unrelated
+              - *events
+              - <<: *handshake
+                uri: /other-events
+              - *discovery
+    asserts: *passes
+
+  - it: P5 passes hosts that differ between the entries
+    set:
+      decentralizedIam:
+        odrlAuthorization:
+          apisix:
+            routes:
+              - *unrelated
+              - *events
+              - <<: *handshake
+                host: handshake.example.org
+              - <<: *discovery
+                host: discovery.example.org
+    asserts: *passes
+
+  - it: P5 passes a discovery rewrite without the verifier service path
+    set:
+      decentralizedIam:
+        odrlAuthorization:
+          apisix:
+            routes:
+              - *unrelated
+              - *events
+              - *handshake
+              - <<: *discovery
+                plugins:
+                  proxy-rewrite:
+                    uri: /.well-known/openid-configuration
+    asserts: *passes
+
+  - it: P5 passes dataspace-events without methods
+    set:
+      decentralizedIam:
+        odrlAuthorization:
+          apisix:
+            routes:
+              - *unrelated
+              - name: dataspace-events
+                uri: /events
+                host: events.example.org
+                upstream: *cm
+                plugins: *eventsPlugins
+              - *handshake
+              - *discovery
+    asserts: *passes
+
+  - it: P5 passes the routes with the listener off
+    set:
+      contract-management:
+        dataspace:
+          events:
+            listener:
+              enabled: false
+      decentralizedIam:
+        odrlAuthorization:
+          apisix:
+            routes:
+              - *unrelated
+              - *events
+              - *handshake
+              - *discovery
+    asserts: *passes
+
+  # P6 pins that unnamed routes are not checked (no guard, Deviation 3 of the plan).
+  - it: P6 passes an unnamed route at /events without methods
+    set:
+      decentralizedIam:
+        odrlAuthorization:
+          apisix:
+            routes:
+              - *unrelated
+              - uri: /events
+                host: events.example.org
+                upstream: *cm
+    asserts: *passes
+
   # (a) gate and opt-out
   - it: G1 renders nothing with the chart defaults
     asserts: *passes
@@ -666,3 +765,86 @@ tests:
               - *handshake
               - *discovery
     asserts: *failsPriority
+
+  - it: check 8 refuses a disabled openid-connect
+    set:
+      decentralizedIam:
+        odrlAuthorization:
+          apisix:
+            routes:
+              - *unrelated
+              - <<: *events
+                plugins:
+                  proxy-rewrite: *strip
+                  openid-connect:
+                    <<: *oidc
+                    _meta:
+                      disable: true
+                  opa: *opa
+              - *handshake
+              - *discovery
+    asserts:
+      - failedTemplate:
+          errorPattern: 'route "dataspace-events": openid-connect._meta.disable must not be set'
+
+  - it: check 8 refuses a disabled opa
+    set:
+      decentralizedIam:
+        odrlAuthorization:
+          apisix:
+            routes:
+              - *unrelated
+              - <<: *events
+                plugins:
+                  proxy-rewrite: *strip
+                  openid-connect: *oidc
+                  opa:
+                    <<: *opa
+                    _meta:
+                      disable: true
+              - *handshake
+              - *discovery
+    asserts:
+      - failedTemplate:
+          errorPattern: 'route "dataspace-events": opa._meta.disable must not be set'
+
+  - it: check 8 refuses a disabled proxy-rewrite
+    set:
+      decentralizedIam:
+        odrlAuthorization:
+          apisix:
+            routes:
+              - *unrelated
+              - <<: *events
+                plugins:
+                  proxy-rewrite:
+                    <<: *strip
+                    _meta:
+                      priority: 2600
+                      disable: true
+                  openid-connect: *oidc
+                  opa: *opa
+              - *handshake
+              - *discovery
+    asserts:
+      - failedTemplate:
+          errorPattern: 'route "dataspace-events": proxy-rewrite._meta.disable must not be set'
+
+  - it: check 8 passes _meta.disable false
+    set:
+      decentralizedIam:
+        odrlAuthorization:
+          apisix:
+            routes:
+              - *unrelated
+              - <<: *events
+                plugins:
+                  proxy-rewrite: *strip
+                  openid-connect:
+                    <<: *oidc
+                    _meta:
+                      disable: false
+                  opa: *opa
+              - *handshake
+              - *discovery
+    asserts: *passes
