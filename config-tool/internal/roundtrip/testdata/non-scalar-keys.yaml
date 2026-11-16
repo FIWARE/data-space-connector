@@ -1,0 +1,10 @@
+# Head comment: keys that no Path addresses, so Classify skips their pairs.
+x: &k 1 # line comment on the anchor reused as a key
+*k : 2
+k: 3
+? [a]
+: 1
+? {b: c}
+: {d: 4}
+plain: 5
+# Foot comment.

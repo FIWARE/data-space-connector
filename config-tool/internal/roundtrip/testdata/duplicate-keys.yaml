@@ -1,0 +1,11 @@
+# Head comment: duplicate mapping keys; the last occurrence wins, as in Helm.
+a: [] # line comment on the shadowed a
+a: [x]
+b: 1
+c:
+  d: &shared {port: 80}
+c:
+  e: *shared
+  f: 2
+  # foot comment of c
+# Foot comment.

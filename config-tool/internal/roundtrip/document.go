@@ -16,6 +16,12 @@ var (
 	ErrMultiDocument = errors.New("roundtrip: more than one YAML document")
 	// ErrInvalidHeader refuses a header passed to SetHeader whose field contains a line break.
 	ErrInvalidHeader = errors.New("roundtrip: header field contains a line break")
+	// ErrInvalidPath refuses a malformed path string.
+	ErrInvalidPath = errors.New("roundtrip: invalid path")
+	// ErrNotFound reports a path whose key or index does not exist.
+	ErrNotFound = errors.New("roundtrip: path not found")
+	// ErrAliasPath refuses a path that runs through an alias, since editing it would change the anchor.
+	ErrAliasPath = errors.New("roundtrip: path runs through an alias")
 )
 
 const (
