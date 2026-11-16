@@ -1,5 +1,6 @@
 name: Pre-Release
 
+# A tool-only pull request publishes no chart snapshot and needs no semver label.
 on:
   pull_request:
     types:
@@ -8,6 +9,9 @@ on:
       - reopened
       - labeled
       - unlabeled
+    paths-ignore:
+      - 'config-tool/**'
+      - '.github/workflows/config-tool.yaml'
 
 # one run at a time per pull request: opening one with a label fires two events at once, and both
 # would publish the same pre-release

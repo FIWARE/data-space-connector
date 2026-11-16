@@ -5,7 +5,7 @@ import reactRefresh from 'eslint-plugin-react-refresh'
 import tseslint from 'typescript-eslint'
 
 export default tseslint.config(
-  { ignores: ['dist', 'node_modules'] },
+  { ignores: ['dist', 'node_modules', 'test-results', 'playwright-report'] },
   {
     files: ['**/*.{ts,tsx}'],
     extends: [js.configs.recommended, ...tseslint.configs.strict],
@@ -16,9 +16,9 @@ export default tseslint.config(
       'react-refresh/only-export-components': ['warn', { allowConstantExport: true }],
     },
   },
-  // Only the Vite config and the dev proxy run in Node; src/ ships to the browser.
+  // Only the configs, the dev proxy and the Playwright suite run in Node; src/ ships to the browser.
   {
-    files: ['vite.config.ts', 'dev-proxy*.ts', 'eslint.config.js'],
+    files: ['vite.config.ts', 'playwright.config.ts', 'dev-proxy*.ts', 'e2e/**', 'eslint.config.js'],
     languageOptions: { globals: globals.node },
   },
 )

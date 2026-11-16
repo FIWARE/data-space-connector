@@ -13,8 +13,19 @@ make build         # ui, then bin/dsc-config[.exe] (pure Go, opens a browser tab
 make cross         # ui, then bin/dsc-config-<os>-<arch> for the five release targets
 make build-window  # ui, then bin/dsc-config-window[.exe] with a native window (see below)
 make test          # go test ./... and the UI's Vitest suite
-make lint
+make lint          # go vet, and gofmt must list no file
 ```
+
+The Playwright smoke test runs against a built binary, `bin/dsc-config` unless `DSC_CONFIG_BIN`
+names another one. It starts `dsc-config --no-browser` with the kubeconfig in `ui/e2e/fixtures/`:
+
+```shell
+make build
+cd ui && npx playwright install chromium && npm run e2e
+```
+
+CI (`.github/workflows/config-tool.yaml`) runs the lint, tests and build, `make cross` and the
+smoke test on every change under `config-tool/`, and compiles the window build without blocking.
 
 Release binaries are pure Go and open a browser tab. The native window is the opt-in `wails`
 build tag ([ADR 0011](../doc/adr/0011-config-tool-window-build-tag.md)); build it on the target
@@ -32,9 +43,10 @@ dsc-config --no-browser                    # prints http://127.0.0.1:<port>/?tok
 cd ui && DSC_CONFIG_URL='<printed URL>' npm run dev
 ```
 
-Open `http://127.0.0.1:5173`. The proxy applies the server's Host, Origin and `Sec-Fetch-Site` rules
-before it adds the token, so other pages in the browser cannot use it; the server itself has no
-relaxed dev mode. The proxy authenticates nothing itself: any local process can send it any
+Open `http://127.0.0.1:5173`. The proxy adds the run token only to requests from the dev server's
+own origin: it applies the server's Host, Origin and `Sec-Fetch-Site` rules first and answers `403`
+to anything else, so other pages in the browser cannot use it. The server itself has no relaxed
+dev mode. The proxy authenticates nothing itself: any local process can send it any
 `Host` or `Origin`, so do not run `npm run dev` on a shared host. `npm test`, `npm run lint` and `npm run typecheck` run in `ui/`.
 
 ## Running
@@ -62,6 +74,26 @@ printed URL yourself. `dsc-config --no-browser` only prints the URL.
   When no default file exists, S1 says so and asks for a path.
   A relative typed path is resolved against the directory `dsc-config` was started in, and S1
   shows the absolute file it read.
+
+## Package layout
+
+```
+cmd/dsc-config/     the binary: GUI with no arguments, CLI subcommands otherwise
+internal/server     front end: loopback HTTP API, WebSocket and the embedded UI
+internal/cli        front end: cobra commands
+internal/launcher   front end: browser tab, or the window under the wails tag
+internal/version    core: build identity stamped through -ldflags
+internal/model      core: question-model bundles per chart version
+internal/profile    core: the answer set
+internal/cluster    core: kube context names from kubeconfig files, read-only
+internal/render     core: profile to values tree
+internal/validate   core: values against the chart's schema
+model/<version>/    question-model bundles, embedded
+ui/                 React/TypeScript SPA, built into ui/dist and embedded
+```
+
+The core never imports `net/http` or a front-end package; `internal/layering_test.go` fails `go test`
+when one does (directly; client-go pulls it in transitively).
 
 ## Chart versions
 
