@@ -14,6 +14,8 @@ import (
 var (
 	// ErrMultiDocument refuses a stream with more than one YAML document.
 	ErrMultiDocument = errors.New("roundtrip: more than one YAML document")
+	// ErrInvalidHeader refuses a header passed to SetHeader whose field contains a line break.
+	ErrInvalidHeader = errors.New("roundtrip: header field contains a line break")
 )
 
 const (
@@ -70,9 +72,13 @@ func Parse(src []byte) (*Document, error) {
 }
 
 // Write returns the document's bytes: BOM, header, body and tail.
+// It gives ErrInvalidHeader, and no bytes, when a field passed to SetHeader has a line break.
 func (d *Document) Write() ([]byte, error) {
 	header := d.headerRaw
 	if d.headerSet {
+		if !d.header.valid() {
+			return nil, ErrInvalidHeader
+		}
 		header = d.header.Render()
 		if d.eol == crlf {
 			header = bytes.ReplaceAll(header, []byte(lineFeed), []byte(crlf))

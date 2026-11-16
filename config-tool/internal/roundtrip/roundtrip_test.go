@@ -251,6 +251,10 @@ func TestHeaderDetection(t *testing.T) {
 			wantSplit: true, wantHeader: Header{ToolVersion: "v1", Profile: "dev for chart 10.0.0", ProfileHash: "abc"}, wantBody: body,
 		},
 		{
+			name: "line break inside line 1", src: HeaderPrefix + "v1\u2028foo: bar\n" + line2 + "\n" + body,
+			wantBody: HeaderPrefix + "v1\u2028foo: bar\n" + line2 + "\n" + body,
+		},
+		{
 			name: "profile containing a dash", src: string(Header{ToolVersion: "v1", Profile: "a — b", ProfileHash: "h"}.Render()) + body,
 			wantSplit: true, wantHeader: Header{ToolVersion: "v1", Profile: "a — b", ProfileHash: "h"}, wantBody: body,
 		},
@@ -315,6 +319,33 @@ func TestHeaderRenderParse(t *testing.T) {
 	}
 	if got := (Header{}).Render(); got != nil {
 		t.Errorf("zero Header renders %q, want nothing", got)
+	}
+}
+
+func TestSetHeaderRefusesLineBreak(t *testing.T) {
+	const src = "a: 1\n"
+	tests := []struct {
+		name   string
+		header Header
+	}{
+		{name: "LF in profile", header: Header{ToolVersion: "v1", Profile: "x\nfoo: bar"}},
+		{name: "CR in profile", header: Header{ToolVersion: "v1", Profile: "x\rfoo: bar"}},
+		{name: "CRLF in tool version", header: Header{ToolVersion: "v1\r\nfoo: bar"}},
+		{name: "LF in chart version", header: Header{ChartVersion: "10\nfoo: bar"}},
+		{name: "LF in hash", header: Header{ProfileHash: "h\nfoo: bar"}},
+		{name: "NEL in profile", header: Header{Profile: "x\u0085foo: bar"}},
+		{name: "LS in profile", header: Header{Profile: "x\u2028foo: bar"}},
+		{name: "PS in profile", header: Header{Profile: "x\u2029foo: bar"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			d := mustParse(t, []byte(src))
+			d.SetHeader(tt.header)
+			got, err := d.Write()
+			if !errors.Is(err, ErrInvalidHeader) || got != nil {
+				t.Fatalf("Write = %q, %v; want no bytes and ErrInvalidHeader", got, err)
+			}
+		})
 	}
 }
 

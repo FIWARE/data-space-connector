@@ -18,6 +18,9 @@ const (
 	headerHashSep     = " — profile hash "
 	headerLineCount   = 3
 	headerFieldSpacer = " "
+
+	// yamlLineBreaks are the characters yaml.v3 ends a comment line at: LF, CR, NEL, LS and PS.
+	yamlLineBreaks = "\n\r\u0085\u2028\u2029"
 )
 
 // Header is the provenance block dsc-config writes at the top of a generated values.yaml.
@@ -33,8 +36,20 @@ func (h Header) IsZero() bool {
 	return h == Header{}
 }
 
+// valid reports whether every field fits on the comment line; a line break would turn the
+// rest of the field into YAML content.
+func (h Header) valid() bool {
+	for _, f := range []string{h.ToolVersion, h.ChartVersion, h.Profile, h.ProfileHash} {
+		if strings.ContainsAny(f, yamlLineBreaks) {
+			return false
+		}
+	}
+	return true
+}
+
 // Render returns the header as LF lines: two comment lines and one blank line, nil when zero.
-// An empty field drops its segment of line 1.
+// An empty field drops its segment of line 1. Fields are written verbatim; Write refuses a
+// field with a line break.
 func (h Header) Render() []byte {
 	if h.IsZero() {
 		return nil
@@ -70,7 +85,8 @@ func splitHeader(src []byte) ([]byte, Header, []byte) {
 		lines[i] = strings.TrimSuffix(string(src[end:end+nl]), "\r")
 		end += nl + 1
 	}
-	if !strings.HasPrefix(lines[0], HeaderPrefix) || lines[1] != HeaderOwnedLine || lines[2] != "" {
+	if !strings.HasPrefix(lines[0], HeaderPrefix) || strings.ContainsAny(lines[0], yamlLineBreaks) ||
+		lines[1] != HeaderOwnedLine || lines[2] != "" {
 		return nil, Header{}, src
 	}
 	return src[:end], parseHeaderLine(lines[0]), src[end:]
