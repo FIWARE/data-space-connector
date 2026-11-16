@@ -86,9 +86,16 @@ before it is returned. The API is the one TECH_STACK names: `Parse`, `Classify`,
   editing it would also change every other user of the anchor. Editing an anchored or tagged
   scalar (`&a foo`, `!!str 1`) keeps the anchor and the tag and replaces only the value text.
 - **Deterministic insertion.**
-  - A new key is appended after the last line of the parent mapping's last child subtree,
-    before any blank or comment lines that follow it. When one save adds several keys to the
-    same parent, they are ordered lexicographically. Missing parents are created on the way.
+  - A new key is appended after the last child subtree of the parent mapping. Comment lines
+    indented deeper than the sibling column belong to that last child and are skipped; the key
+    goes before the first blank line, or comment line at or left of the sibling column, that
+    follows. If the last child ends in a keep-chomped block scalar (`|+`, `>+`), its trailing
+    blank lines are part of the value, so the key goes after them. When one save adds several
+    keys to the same parent, they are ordered lexicographically. Missing parents are created
+    on the way.
+  - Only mapping keys are created. A path with an `Index` segment that is out of range, or that
+    runs below a parent that does not exist yet, gives `ErrNotFound`; CT-2 never appends to or
+    creates a sequence item. `Merge` does not need it, because it replaces lists whole.
   - The indentation is the column of the siblings. A new nesting level uses the document's
     detected indent unit, which is the most common positive indent step, with 2 as the
     fallback. Sequences use the dash style the document already uses: `- ` at the parent's
@@ -124,7 +131,8 @@ Create `config-tool/internal/roundtrip/`:
   via byte patches over the source.
 - `document.go`:
   - `Document` holds the source body bytes, the yaml.v3 root `*yaml.Node`, the parsed
-    `Header`, the line-start offset table (to map Line/Column to a byte offset), the line
+    `Header`, the line-start offset table (to map Line/Column to a byte offset; yaml.v3's
+    `Column` counts runes, not bytes, so the mapping walks the line's runes), the line
     ending, a trailing-newline flag, the BOM flag, the raw header bytes, a header-replaced flag
     and the pending edits (empty for now).
   - `Parse(src []byte) (*Document, error)` splits off the BOM and a recognized header, decodes
@@ -209,12 +217,14 @@ Acceptance:
 In `internal/roundtrip/`:
 - `span.go`: the byte span of a scalar node's value text, from its Line/Column offset, past
   any anchor or tag. Per style:
-  - plain: ends before ` #` or at the end of the line, trimmed of trailing whitespace. Inside
-    flow collections it also ends at `,`, `]` or `}`. A block-context plain value continues
-    over the following lines that are indented deeper than the owning key's column; the span
-    ends at the end of the last such non-blank line, before the first comment line, the first
-    line at or below the key's column, or EOF. Blank lines between continuation lines are
-    inside the span; trailing blank lines are not.
+  - plain: ends before ` #` or at the end of the line, trimmed of trailing whitespace
+    (spaces, tabs and `\r`). Inside flow collections it also ends at `,`, `]` or `}`. A
+    block-context plain value continues over the following lines that are indented deeper
+    than the owning column: the key's column, or for a sequence item the column of its `-`.
+    The span ends at the end of the last such non-blank line, before the first comment line,
+    the first line at or below the owning column, or EOF. A ` #` on a continuation line ends
+    the scalar there; the comment after it is not in the span. Blank lines between
+    continuation lines are inside the span; trailing blank lines are not.
   - single-quoted: ends at the closing quote; `''` is an escaped quote.
   - double-quoted: ends at the closing quote; backslash escapes are honoured; the span may
     cross lines.
@@ -248,9 +258,12 @@ In `internal/roundtrip/`:
     fully editable. The `acr` scope's multi-line `description` is an explicitly named case.
   - **Style table (parameterized).** Plain → plain; plain → needs quoting; plain multi-line
     (two and three lines, with a blank line inside, followed by a comment line, at EOF) → one
-    line at the original column; `'…'`; `"…"` with escapes; `|`, `|-`, `>`, `>+`; scalars
-    inside `[a, b]` and `{k: v}`; anchored and tagged scalars; a string that looks like a bool
-    stays quoted.
+    line at the original column; plain multi-line with ` # …` on a continuation line (the
+    comment stays); a plain multi-line sequence item (`- foo` / `  bar`); a plain scalar in a
+    CRLF file; `'…'`; `"…"` with escapes; `|`, `|-`, `>`, `>+`; scalars inside `[a, b]` and
+    `{k: v}`; anchored and tagged scalars; a string that looks like a bool stays quoted.
+    Non-ASCII rows, from a testdata fixture: a value after a key with an umlaut (`ä: x`), and
+    the items of a flow sequence with non-ASCII items (`ä: [é, x]`).
   - Two `Set`s on one path: the second value is written. Two overlapping spans (a scalar and
     the collection that contains it, set as a replacement) give `ErrPatchConflict`.
   - `Set` through an alias gives `ErrAliasPath`. Editing the anchor changes only the anchor
@@ -289,7 +302,11 @@ In `internal/roundtrip/`:
   - **Insert, then re-parse, then insert again with the same value** is a no-op at the byte
     level: setting an existing equal value adds no patch.
   - Insertion position next to commented-out examples (the `values.yaml` style) and next to
-    foot comments.
+    foot comments. `Set(a.e)` on `a:\n  b:\n    c: 1\n    # d: 2\nx:` puts `e` after
+    `    # d: 2`, which stays with `b`. A last child ending in `|+` keeps its trailing blank
+    lines, and the key goes after them.
+  - `Set(a[5])` with two items in `a`, and a path with an `Index` under a missing parent,
+    give `ErrNotFound`.
   - Nested parent creation.
   - Sibling ordering when several keys are added to one parent: `Set(p.b)` then `Set(p.a)`
     (reverse order) writes `a` before `b`, and both survive.
