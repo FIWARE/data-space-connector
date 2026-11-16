@@ -15,3 +15,5 @@ config-tool/bin/
 config-tool/ui/node_modules/
 config-tool/ui/dist/*
 !config-tool/ui/dist/.gitkeep
+config-tool/ui/test-results/
+config-tool/ui/playwright-report/
