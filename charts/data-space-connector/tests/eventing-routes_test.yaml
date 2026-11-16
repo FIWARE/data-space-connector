@@ -848,3 +848,67 @@ tests:
               - *handshake
               - *discovery
     asserts: *passes
+
+  - it: check 8 refuses a filtered openid-connect
+    set:
+      decentralizedIam:
+        odrlAuthorization:
+          apisix:
+            routes:
+              - *unrelated
+              - <<: *events
+                plugins:
+                  proxy-rewrite: *strip
+                  openid-connect:
+                    <<: *oidc
+                    _meta:
+                      filter: [["http_x_internal", "==", "1"]]
+                  opa: *opa
+              - *handshake
+              - *discovery
+    asserts:
+      - failedTemplate:
+          errorPattern: 'route "dataspace-events": openid-connect._meta.filter must not be set'
+
+  - it: check 8 refuses a filtered opa
+    set:
+      decentralizedIam:
+        odrlAuthorization:
+          apisix:
+            routes:
+              - *unrelated
+              - <<: *events
+                plugins:
+                  proxy-rewrite: *strip
+                  openid-connect: *oidc
+                  opa:
+                    <<: *opa
+                    _meta:
+                      filter: [["http_x_internal", "==", "1"]]
+              - *handshake
+              - *discovery
+    asserts:
+      - failedTemplate:
+          errorPattern: 'route "dataspace-events": opa._meta.filter must not be set'
+
+  - it: check 8 refuses a filtered proxy-rewrite
+    set:
+      decentralizedIam:
+        odrlAuthorization:
+          apisix:
+            routes:
+              - *unrelated
+              - <<: *events
+                plugins:
+                  proxy-rewrite:
+                    <<: *strip
+                    _meta:
+                      priority: 2600
+                      filter: []
+                  openid-connect: *oidc
+                  opa: *opa
+              - *handshake
+              - *discovery
+    asserts:
+      - failedTemplate:
+          errorPattern: 'route "dataspace-events": proxy-rewrite._meta.filter must not be set'

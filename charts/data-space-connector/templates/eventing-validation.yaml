@@ -86,10 +86,17 @@ after openid-connect, it would remove the identity openid-connect just set.
 {{- if not (and (has (kindOf $rewritePriority) $numeric) (has (kindOf $oidcPriority) $numeric) (gt (float64 $rewritePriority) (float64 $oidcPriority))) }}
 {{- fail (printf "%s: proxy-rewrite._meta.priority must be above the openid-connect priority (%v), so that X-Userinfo is removed before openid-connect sets it" $where $oidcPriority) }}
 {{- end }}
-{{- /* APISIX skips a plugin whose _meta.disable is set, which would pass the presence checks above. */ -}}
+{{- /*
+APISIX skips a plugin whose _meta.disable is set, or whose _meta.filter does not match the request
+(plugin.lua meta_filter in 3.19.0), which would pass the presence checks above.
+*/ -}}
 {{- range $plugin := list "openid-connect" "opa" "proxy-rewrite" }}
-{{- if index (index (index $plugins $plugin | default dict) "_meta" | default dict) "disable" }}
+{{- $meta := index (index $plugins $plugin | default dict) "_meta" | default dict }}
+{{- if index $meta "disable" }}
 {{- fail (printf "%s: %s._meta.disable must not be set; the route relies on that plugin" $where $plugin) }}
+{{- end }}
+{{- if not (kindIs "invalid" (index $meta "filter")) }}
+{{- fail (printf "%s: %s._meta.filter must not be set; requests it does not match skip that plugin" $where $plugin) }}
 {{- end }}
 {{- end }}
 {{- end }}

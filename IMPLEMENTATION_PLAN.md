@@ -551,9 +551,11 @@ ships an example and validates it, but adds no route itself.
      - Define `openid-connect`'s default priority as a named constant in the template, verified
        against the APISIX version that ships (2599 in the APISIX source as of planning), with a
        comment naming that version.
-  8. **Disabled plugin** (`dataspace-events`): `_meta.disable` is truthy on `openid-connect`, `opa`
-     or `proxy-rewrite`. APISIX skips such a plugin, so checks 5 to 7 would pass while the token
-     check, the ODRL policy or the strip is gone (added after the PR #24 review).
+  8. **Disabled or filtered plugin** (`dataspace-events`): `_meta.disable` is truthy, or `_meta.filter`
+     is set (any non-null value), on `openid-connect`, `opa` or `proxy-rewrite`. APISIX skips a
+     disabled plugin, and one whose `filter` does not match the request (`plugin.lua` `meta_filter`,
+     3.19.0), so checks 5 to 7 would pass while the token check, the ODRL policy or the strip is gone
+     for some or all requests (both added after the PR #24 reviews).
 
   Every check above depends on the exact names. An operator who renames the entries, drops `name`
   while merging lists, or writes their own events routes gets none of them (Deviation 3). There is
@@ -594,7 +596,7 @@ ships an example and validates it, but adds no route itself.
   | 5 | `set_userinfo_header` absent, `false`, `"true"` | `set_userinfo_header` |
   | 6 | F | `opa` |
   | 7 | no `proxy-rewrite`; `proxy-rewrite` without `headers.remove`; `headers.remove` without `X-Userinfo`; `_meta.priority` absent, `1008`, `2599`; `2600` with `openid-connect._meta.priority: 3000` | `X-Userinfo` or `priority` |
-  | 8 | `_meta.disable: true` on `openid-connect`, on `opa`, on `proxy-rewrite` (and `disable: false` passes) | `<plugin>._meta.disable` |
+  | 8 | `_meta.disable: true` on `openid-connect`, on `opa`, on `proxy-rewrite` (and `disable: false` passes); `_meta.filter` set on each of the three | `<plugin>._meta.disable` or `<plugin>._meta.filter` |
 
   (c) Passing variants (render nothing):
 
@@ -764,7 +766,7 @@ ships an example and validates it, but adds no route itself.
        `[OPTIONS]` on the handshake, `[GET]` on discovery, and on `dataspace-events` a host,
        `set_userinfo_header`, `opa`, the `X-Userinfo` strip and its priority above
        `openid-connect`'s effective priority, none of those three plugins switched off with
-       `_meta.disable`) and why (for the strip: the Step 4 result on whether
+       `_meta.disable` or made conditional with `_meta.filter`) and why (for the strip: the Step 4 result on whether
        `openid-connect` overwrites a client-sent header);
      - a checklist of what the chart does **not** check, because a mistake there breaks the flow
        visibly rather than weakening access control (Step 4, "Scope of the checks"): all three
