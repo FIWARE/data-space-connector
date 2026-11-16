@@ -26,7 +26,12 @@ before it is returned. The API is the one TECH_STACK names: `Parse`, `Classify`,
   with fixtures in `internal/roundtrip/testdata/`. Block scalars (`|`, `>`) and flow
   collections (`[]`, `{}`, `[a, b]`) do occur in the corpus.
 - **One YAML document per file.** A stream with more than one document gives
-  `ErrMultiDocument`. A single leading `---` is allowed and stays as it is. Empty and
+  `ErrMultiDocument`. A single leading `---` is allowed and stays as it is. A trailing `---` is
+  accepted: yaml.v3 decodes it as a second document. When that document is a single null
+  scalar with an empty value and no comments, no third document follows, and only blank lines
+  come after the `---` line, then that line and everything after it form a **tail**. The tail
+  is kept byte for byte after the body, and inserts at the end of the body go before it. A
+  second document with content or comments still gives `ErrMultiDocument`. Empty and
   comment-only files parse into an empty document. A UTF-8 BOM and CRLF line endings are kept,
   and inserted fragments use the line ending the file already has.
 - **Header.** Rendered by `Header.Render()`. It is two comment lines plus one blank line:
@@ -55,7 +60,7 @@ before it is returned. The API is the one TECH_STACK names: `Parse`, `Classify`,
   of `SetHeader(h)` + `Write` is therefore `bom + eol(h.Render()) + body`, never
   `h.Render() + input`.
 - **Byte patches, not re-encoding.** `Write` = BOM + header + source body with the patches
-  applied. With no edits, the body is the source bytes unchanged.
+  applied + tail. With no edits, the body is the source bytes unchanged.
 - **Patch model.** There are two kinds of pending edit, and both are rendered only at `Write`:
   - A **replacement** covers the byte span `[start, end)` of one existing node's value and is
     keyed by that node's path. A second `Set` on the same path replaces the first (last wins).
@@ -85,6 +90,13 @@ before it is returned. The API is the one TECH_STACK names: `Parse`, `Classify`,
 - **Aliases.** A path that passes *through* an alias node is refused with `ErrAliasPath`, because
   editing it would also change every other user of the anchor. Editing an anchored or tagged
   scalar (`&a foo`, `!!str 1`) keeps the anchor and the tag and replaces only the value text.
+- **Merge keys are not resolved.** `Lookup` sees only a mapping's explicit children. In
+  `m:\n  <<: *a\n  y: 2`, `Lookup(m.x)` for an `x` that comes only from `&a` gives
+  `ErrNotFound`, so `Set` and `Merge` insert an explicit `x` under `m`, which overrides the
+  inherited value. The no-op rule (an equal existing value adds no patch) compares against
+  explicit children only, so an override equal to the inherited value still writes the key;
+  a second `Merge` with the same overrides is then a byte-level no-op. `Set` on a path that
+  ends at an alias node, including the value of `<<`, gives `ErrAliasPath`.
 - **Deterministic insertion.**
   - A new key is appended after the last child subtree of the parent mapping. Comment lines
     indented deeper than the sibling column belong to that last child and are skipped; the key
@@ -135,10 +147,12 @@ Create `config-tool/internal/roundtrip/`:
   - `Document` holds the source body bytes, the yaml.v3 root `*yaml.Node`, the parsed
     `Header`, the line-start offset table (to map Line/Column to a byte offset; yaml.v3's
     `Column` counts runes, not bytes, so the mapping walks the line's runes), the line
-    ending, a trailing-newline flag, the BOM flag, the raw header bytes, a header-replaced flag
-    and the pending edits (empty for now).
+    ending, a trailing-newline flag, the BOM flag, the raw header bytes, a header-replaced flag,
+    the tail bytes and the pending edits (empty for now).
   - `Parse(src []byte) (*Document, error)` splits off the BOM and a recognized header, decodes
-    with `yaml.NewDecoder`, and gives `ErrMultiDocument` if a second `Decode` yields a document.
+    with `yaml.NewDecoder`, splits off a tail (see *One YAML document per file*), and gives
+    `ErrMultiDocument` if a second `Decode` yields any other document. A first `Decode` that
+    returns `io.EOF` (empty or comment-only file) maps to the empty document.
   - `(*Document) Write() ([]byte, error)` returns BOM + header (raw, or rendered in the
     document's line ending after `SetHeader`) + body.
   - `(*Document) Header() Header` and `SetHeader(Header)`.
@@ -159,6 +173,8 @@ Create `config-tool/internal/roundtrip/`:
     `SetHeader` there is exactly one header, the rendered one.
   - **Edge cases.** An empty file, a comment-only file, no trailing newline, CRLF, BOM, a
     leading `---`, BOM + header, CRLF + header (detected, and `SetHeader` writes CRLF).
+    Trailing separator: `a: 1\n---\n` and `a: 1\n---` round-trip byte-identically;
+    `a: 1\n---\n# c\n` and `a: 1\n---\nb: 2\n` give `ErrMultiDocument`.
   - A native Go fuzz target `FuzzRoundTrip`, seeded with the testdata fixtures: for every
     input that `Parse` accepts, `Write` returns the input unchanged. The seeds run under
     plain `go test`.
@@ -257,8 +273,12 @@ In `internal/roundtrip/`:
 - Tests:
   - **Per-leaf property test over the corpus.** For every scalar leaf from `Classify` in every
     corpus file, `Set` a sentinel value of the same Go type and `Write`; a null leaf gets a
-    string sentinel, since `nil` over a null is a no-op. Each file is a parallel subtest (the
-    chart's `values.yaml` alone has about 1600 leaves). Then check:
+    string sentinel, since `nil` over a null is a no-op. Each file is a parallel subtest, and
+    its leaves are split into parallel shards of a fixed size (a named constant, e.g. 100
+    leaves). The chart's `values.yaml` alone has about 1600 leaves at roughly 25 ms each, so
+    sharding keeps that file from serialising the run. Under `testing.Short()` only every Nth
+    leaf (a named constant) runs, plus the named cases below. `make test` and CI run without
+    `-short`, so they cover every leaf. Then check:
     - a line diff against the source touches only the leaf's own lines; a single-line scalar
       changes exactly one line;
     - the preceding `# --` comment lines and any trailing ` # …` line comment are byte-equal;
@@ -333,6 +353,11 @@ In `internal/roundtrip/`:
   - Type change from a scalar to a map and from a map to a scalar.
   - No-trailing-newline file.
   - Empty document.
+  - A top-level key inserted into `a: 1\n---\n` lands before the `---`, which stays last.
+  - Merge-key fixture `m:\n  <<: *a\n  y: 2` with `x` inherited from `&a`: `Lookup(m.x)` gives
+    `ErrNotFound`; `Set(m.x)` and a `Merge` over `m.x` each insert an explicit `x` after
+    `y: 2` and leave the `<<` line and the anchor site byte-equal; repeating the `Merge` on
+    the output is a byte-level no-op; `Set(m."<<")` gives `ErrAliasPath`.
   - Merge over `k3s/provider.yaml` with a nested override tree: the diff contains only the
     overridden and added lines, and the re-parsed tree equals a reference deep merge of the
     decoded maps. The reference implementation lives in the test.
