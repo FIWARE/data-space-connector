@@ -1618,6 +1618,27 @@
           "title": "enabled",
           "type": "boolean"
         },
+        "serviceAccount": {
+          "additionalProperties": false,
+          "description": "service account of the MongoDB pods. Without one of its own, they run as the operator's\n`mongodb-database`, which the operator's chart creates in a single namespace only",
+          "properties": {
+            "create": {
+              "default": true,
+              "description": "create a service account, with its Role and RoleBinding, for the MongoDB pods. With false,\nthey run as `name` if given, or as the operator's `mongodb-database`",
+              "title": "create",
+              "type": "boolean"
+            },
+            "name": {
+              "default": "",
+              "description": "name of the service account; empty for `\u003crelease\u003e-mongodb`",
+              "title": "name",
+              "type": "string"
+            }
+          },
+          "required": [],
+          "title": "serviceAccount",
+          "type": "object"
+        },
         "spec": {
           "additionalProperties": true,
           "description": "spec as defined in https://github.com/mongodb/helm-charts/tree/main/charts/community-operator-crds",

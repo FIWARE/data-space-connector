@@ -2114,6 +2114,14 @@ mongo-operator:
 managedMongo:
   # -- should it be enabled?
   enabled: false
+  # -- service account of the MongoDB pods. Without one of its own, they run as the operator's
+  # `mongodb-database`, which the operator's chart creates in a single namespace only
+  serviceAccount:
+    # -- create a service account, with its Role and RoleBinding, for the MongoDB pods. With false,
+    # they run as `name` if given, or as the operator's `mongodb-database`
+    create: true
+    # -- name of the service account; empty for `<release>-mongodb`
+    name: ""
   # -- spec as defined in https://github.com/mongodb/helm-charts/tree/main/charts/community-operator-crds
   # @schema
   # type: object
