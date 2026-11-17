@@ -2,13 +2,19 @@
 package model
 
 import (
+	"bytes"
+	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"path"
+	"regexp"
 	"slices"
 
 	"github.com/Masterminds/semver/v3"
 	"gopkg.in/yaml.v3"
+
+	"github.com/FIWARE/data-space-connector/config-tool/internal/roundtrip"
 )
 
 // bundlePattern matches the bundle file of every version directory.
@@ -18,8 +24,139 @@ const bundlePattern = "*/bundle.yaml"
 type Bundle struct {
 	Chart   string `yaml:"chart"`
 	Version string `yaml:"version"`
+	// Recognize maps chart keys back to answers when an existing values file is loaded.
+	Recognize []Rule `yaml:"recognize"`
 	// Latest marks the default version; Versions sets it, bundle files never do.
 	Latest bool `yaml:"-"`
+	// rules is Recognize compiled; readBundle sets it after validating every rule.
+	rules []CompiledRule
+}
+
+// Rules returns the validated recognition rules in bundle order.
+func (b Bundle) Rules() []CompiledRule {
+	return b.rules
+}
+
+// Kind says how a recognition rule reads its leaf.
+type Kind string
+
+const (
+	// KindToggle takes a !!bool scalar as the answer.
+	KindToggle Kind = "toggle"
+	// KindValue takes any scalar, optionally narrowed by the rule's pattern.
+	KindValue Kind = "value"
+)
+
+// Stage is a wizard stage id; the values mirror ui/src/state/stageIds.ts.
+type Stage string
+
+// Stage ids, in wizard order.
+const (
+	StageTarget         Stage = "target"
+	StageRole           Stage = "role"
+	StageFoundations    Stage = "foundations"
+	StageInfrastructure Stage = "infrastructure"
+	StageFeatures       Stage = "features"
+	StageConfiguration  Stage = "configuration"
+	StageReview         Stage = "review"
+	StageInstall        Stage = "install"
+)
+
+var (
+	knownKinds  = []Kind{KindToggle, KindValue}
+	knownStages = []Stage{
+		StageTarget, StageRole, StageFoundations, StageInfrastructure,
+		StageFeatures, StageConfiguration, StageReview, StageInstall,
+	}
+)
+
+// patternGroups is the number of capture groups a rule pattern must have: the one that holds the answer.
+const patternGroups = 1
+
+// Rule maps one chart key to an answer, as written in a bundle's recognize list.
+type Rule struct {
+	// Path is an exact chart key in roundtrip.ParsePath syntax.
+	Path   string `yaml:"path"`
+	Answer string `yaml:"answer"`
+	Stage  Stage  `yaml:"stage"`
+	Kind   Kind   `yaml:"kind"`
+	// Pattern is an optional regexp for value rules whose single capture group is the answer.
+	Pattern string `yaml:"pattern"`
+}
+
+// CompiledRule is a validated Rule. Pattern is nil when the rule has none.
+type CompiledRule struct {
+	Path    roundtrip.Path
+	Answer  string
+	Stage   Stage
+	Kind    Kind
+	Pattern *regexp.Regexp
+}
+
+// compileRules validates rules and compiles them; an error names the offending rule's index.
+func compileRules(rules []Rule) ([]CompiledRule, error) {
+	if len(rules) == 0 {
+		return nil, nil
+	}
+	compiled := make([]CompiledRule, len(rules))
+	seen := map[string]int{}
+	// firstByAnswer keeps the first rule per answer, because the report gives an answer one stage and type.
+	firstByAnswer := map[string]int{}
+	for i, r := range rules {
+		c, err := compileRule(r)
+		if err != nil {
+			return nil, fmt.Errorf("recognize[%d]: %w", i, err)
+		}
+		key := c.Path.String()
+		if j, dup := seen[key]; dup {
+			return nil, fmt.Errorf("recognize[%d]: path %q is already used by recognize[%d]", i, key, j)
+		}
+		seen[key] = i
+		j, ok := firstByAnswer[c.Answer]
+		switch {
+		case !ok:
+			firstByAnswer[c.Answer] = i
+		case compiled[j].Stage != c.Stage:
+			return nil, fmt.Errorf("recognize[%d]: answer %q has stage %s, recognize[%d] has %s", i, c.Answer, c.Stage, j, compiled[j].Stage)
+		case compiled[j].Kind != c.Kind:
+			return nil, fmt.Errorf("recognize[%d]: answer %q has kind %s, recognize[%d] has %s", i, c.Answer, c.Kind, j, compiled[j].Kind)
+		}
+		compiled[i] = c
+	}
+	return compiled, nil
+}
+
+func compileRule(r Rule) (CompiledRule, error) {
+	p, err := roundtrip.ParsePath(r.Path)
+	if err != nil {
+		return CompiledRule{}, err
+	}
+	if len(p) == 0 {
+		return CompiledRule{}, fmt.Errorf("path is missing")
+	}
+	if r.Answer == "" {
+		return CompiledRule{}, fmt.Errorf("answer is missing")
+	}
+	if !slices.Contains(knownStages, r.Stage) {
+		return CompiledRule{}, fmt.Errorf("stage %q is unknown", r.Stage)
+	}
+	if !slices.Contains(knownKinds, r.Kind) {
+		return CompiledRule{}, fmt.Errorf("kind %q is unknown", r.Kind)
+	}
+	c := CompiledRule{Path: p, Answer: r.Answer, Stage: r.Stage, Kind: r.Kind}
+	if r.Pattern == "" {
+		return c, nil
+	}
+	if r.Kind != KindValue {
+		return CompiledRule{}, fmt.Errorf("pattern is only allowed on %s rules", KindValue)
+	}
+	if c.Pattern, err = regexp.Compile(r.Pattern); err != nil {
+		return CompiledRule{}, fmt.Errorf("pattern: %w", err)
+	}
+	if n := c.Pattern.NumSubexp(); n != patternGroups {
+		return CompiledRule{}, fmt.Errorf("pattern %q has %d capture groups, want %d", r.Pattern, n, patternGroups)
+	}
+	return c, nil
 }
 
 // versioned pairs a bundle with its parsed version for ordering.
@@ -92,8 +229,11 @@ func readBundle(fsys fs.FS, file string) (versioned, error) {
 	if err != nil {
 		return versioned{}, err
 	}
+	// KnownFields makes a misspelled key an error instead of a silently dropped field.
+	dec := yaml.NewDecoder(bytes.NewReader(data))
+	dec.KnownFields(true)
 	var b Bundle
-	if err := yaml.Unmarshal(data, &b); err != nil {
+	if err := dec.Decode(&b); err != nil && !errors.Is(err, io.EOF) {
 		return versioned{}, fmt.Errorf("%s: %w", file, err)
 	}
 	if b.Chart == "" {
@@ -105,6 +245,9 @@ func readBundle(fsys fs.FS, file string) (versioned, error) {
 	}
 	if dir := path.Dir(file); b.Version != dir {
 		return versioned{}, fmt.Errorf("%s: version %q does not match its directory %q", file, b.Version, dir)
+	}
+	if b.rules, err = compileRules(b.Recognize); err != nil {
+		return versioned{}, fmt.Errorf("%s: %w", file, err)
 	}
 	return versioned{bundle: b, version: v}, nil
 }
