@@ -154,10 +154,14 @@ decentralized-iam 2.3.0 / TIL 0.10.3).
 - **Provider `registration.issuer`** (~1685–1706) holds mp-operations, fancy-marketplace
   (LegalPerson, User, Membership) and dataspace-authority (OperatorCredential). Helm replaces lists, so
   an overlay must copy the whole list.
-- **In-cluster DNS.** `*.127.0.0.1.nip.io` resolves to Traefik in-cluster (`k3s/infra/coredns`), so a
-  sink such as `https://contract-management.127.0.0.1.nip.io/events` is reachable from the trust
-  anchor's pods. `*.dataspace-authority.org` / `*.mp-operations.org` hosts go through Squid
-  (`squid-proxy.infra.svc.cluster.local:8888`).
+- **In-cluster DNS.** `*.127.0.0.1.nip.io` is a CNAME for `traefik-loadbalancer.infra` in-cluster
+  (`k3s/infra/coredns`). That Service listens on **8080/8443 only**, so a direct `https://<host>/…`
+  (port 443) from a pod is refused (verified in Step 1). A pod reaches such a host either through Squid
+  (`squid-proxy.infra.svc.cluster.local:8888`, port 443 works) or directly at `https://<host>:8443`.
+  Step 2 must therefore give every in-cluster URL to a nip.io host (the subscribers'
+  `publishers[].url`, the sinks they register) a `:8443` port or a Squid proxy, and check that the
+  publisher's delivery client reaches the sink. `*.dataspace-authority.org` / `*.mp-operations.org`
+  hosts always go through Squid.
 - **IT harness** (`it/src/test/java/org/fiware/dataspace/it/components/`):
   - `RunCucumberTest` is the runner. Features are selected by `cucumber.filter.tags` per `*-test`
     profile in `it/pom.xml`.
