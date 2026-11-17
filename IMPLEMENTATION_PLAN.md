@@ -351,6 +351,22 @@ decentralized-iam 2.3.0 / TIL 0.10.3).
     route, the `consent-manager` service and the `CONSENT_KEY` env var are still present.
 
 ### Step 2: Listener, subscriber, routes and policy at provider and consumer
+- **Lists are copied whole.** Helm replaces lists, so every list-valued key either overlay sets is a
+  **full copy** of the base value files' list with the additions appended, as Step 1 does for the
+  authority. The keys are:
+
+  | Key | Provider base (`provider.yaml`) | Consumer base |
+  |-----|---------------------------------|---------------|
+  | `decentralizedIam.vcAuthentication.vcverifier.registration.services` | ~162 (`tmf-api`, `contract-management`, …) | `consumer-auth.yaml` ~151 (`tm-forum`, `dsp`) |
+  | `decentralizedIam.odrlAuthorization.apisix.routes` | ~417 | `consumer-auth.yaml` ~262 |
+  | APISIX `ingress.hosts` and `ingress.tls[].hosts` | untouched: the sink host is already listed (~381) | `consumer-auth.yaml` ~232/~251, plus the new sink host |
+  | `contract-management.additionalEnvVars` | ~844 | `consumer-tmf.yaml` ~75 |
+  | `contract-management.deployment.additionalVolumes` / `additionalVolumeMounts` | only if the oid4vp mounts need them (the base sets none) | `consumer-tmf.yaml` ~152/~184 (already mount the holder key and credentials) |
+  | `registration.issuer` | ~1685 | `consumer-auth.yaml` :8 |
+
+  A key not in this table is a list the overlay must not set. A naive partial list fails far from
+  the cause: without the old verifier services the Background's order steps fail with "service
+  not found" or a 302.
 - New `k3s/eventing-provider.yaml`, added to the `eventing` profile after `provider.yaml`:
   - `contract-management.dataspace.events`:
     - `listener.enabled`;
@@ -387,6 +403,22 @@ decentralized-iam 2.3.0 / TIL 0.10.3).
   - The base set is `consumer.yaml`, `consumer-auth.yaml` and `consumer-tmf.yaml`, as the `central`
     profile uses: CM, gateway, verifier and TIL. Use the smallest set that gives the consumer all
     four, and document it.
+  - **The consumer's sink host is `contract-management-fancy-marketplace.127.0.0.1.nip.io`**, a new
+    host on the consumer APISIX, which mirrors the provider's `contract-management.127.0.0.1.nip.io`.
+    The existing `fancy-marketplace.127.0.0.1.nip.io` is not reused: its `/*` and
+    `/.well-known/openid-configuration` routes belong to the `tm-forum` service, and a separate
+    host keeps the events surface apart from it. The host appears in four places:
+    - appended to full copies of the consumer APISIX `ingress.hosts` and `ingress.tls[0].hosts`
+      (`consumer-auth.yaml` ~232/~251), so Traefik routes it and cert-manager adds it to
+      `apisix-consumer-tls`;
+    - the consumer subscriber's `sink: https://contract-management-fancy-marketplace.127.0.0.1.nip.io/events`;
+    - the `host` of all three consumer `dataspace-events*` routes;
+    - the demo script's and the docs' consumer references.
+
+    The routes' upstreams are `contract-management:8080` (the consumer CM Service; the umbrella's
+    `contract-management.fullnameOverride` is `contract-management`, ns `consumer`) and
+    `verifier:3000`, as on the provider. The consumer CM reaches the publisher through Squid, which
+    its `MICRONAUT_HTTP_CLIENT_PROXY_*` env vars already configure.
   - Consumer `keep: [did:web:dataspace-authority.org, did:web:fancy-marketplace.biz]`, and the same
     `subscriber.retry` values and `ENDPOINTS_HEALTH_DETAILS_VISIBLE=ANONYMOUS` entry as the provider.
   - `registration.issuer`: a full copy of the `consumer-auth.yaml` list (Helm replaces lists) plus
@@ -405,11 +437,18 @@ decentralized-iam 2.3.0 / TIL 0.10.3).
   - `remove <did>`: `DELETE https://til.127.0.0.1.nip.io/issuer/<did>`;
   - `restore <did>`: re-`POST /issuer` with `credentials: []`, as the participants' init containers
     do;
-  - `report [provider|consumer]`: `kubectl port-forward deploy/<cm> <local>:9090` (the Service has
-    no 9090) and print `GET /participants-removed`;
+  - `report [provider|consumer]`: `kubectl port-forward -n <provider|consumer>
+    deploy/contract-management <local>:9090` (the Service has no 9090) and print
+    `GET /participants-removed`;
   - `publish <did>`: a manual `POST :9090/events` at the publisher, the immediate path of §8.
 - Acceptance (local deploy, results in the PR description):
   - `helm template` of all overlays passes the umbrella's validation;
+  - the overlays only add. Diff `helm template` of the base value files against base +
+    `eventing-{provider,consumer}.yaml`, for each participant: every pre-existing APISIX route,
+    ingress host, verifier service, `registration.issuer` entry, CM env entry, volume and volume
+    mount is still present. The only differences are the eventing config, the three
+    `dataspace-events*` routes, the `dataspace-events` verifier service, the added issuer, the
+    added env entries, the policy Job and, at the consumer, the new sink host;
   - `publish` of an unknown DID (e.g. `did:web:probe-<timestamp>.org`, fresh per run) returns
     `subscriptions: 2`, **and** within ~30 s both the provider report and the consumer report list
     that DID with `trigger: event` and a `lastSeen` after the publish. `subscriptions: 2` only counts
