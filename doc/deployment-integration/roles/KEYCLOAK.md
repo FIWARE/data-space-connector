@@ -122,7 +122,7 @@ keycloak:
     enabled: true
     className: <your-ingress-class>                             # add the annotations your ingress controller needs
     annotations:
-      cert-manager.io/cluster-issuer: "selfsigned-issuer"       # Cert-manager issuer (use "prod" for production)
+      cert-manager.io/cluster-issuer: "selfsigned-issuer"       # Cert-manager issuer (use "prod-issuer" for production)
       cert-manager.io/private-key-algorithm: "ECDSA"            # Key algorithm for the TLS certificate
       cert-manager.io/common-name: "<your-keycloak-domain>"
     hosts:

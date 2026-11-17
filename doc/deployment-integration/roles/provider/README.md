@@ -289,6 +289,8 @@ The provider uses the `fiware/data-space-connector` chart with authentication an
 
    The Ingresses in the example only carry the cert-manager annotations and use the cluster's default ingress class unless `className` is set. Add the class and the annotations your ingress controller needs; the [local deployment](../../local-deployment/LOCAL.MD) uses Traefik, for example.
 
+   With `certManagerResources.enabled: true` and `type: "prod"`, the chart creates the `prod-issuer` ClusterIssuer referenced below. Set `certManagerResources.acmeEmail` and `certManagerResources.ingressClass` for your environment. If your cluster already manages its own ClusterIssuer, disable `certManagerResources.enabled` and use that issuer's actual name in the annotations.
+
 ```yaml
 # Key settings for provider deployment
 
@@ -336,7 +338,7 @@ did:
     enabled: true
     className: <your-ingress-class>   # add the annotations your ingress controller needs
     annotations:
-      cert-manager.io/cluster-issuer: "prod" # Use self-signed for testing
+      cert-manager.io/cluster-issuer: "prod-issuer" # Use selfsigned-issuer with the selfsigned setup for testing
       cert-manager.io/private-key-algorithm: "ECDSA"
       # the Secret also holds the DID's key: renewals must keep it (cert-manager >= 1.18
       # generates a new one by default)
@@ -362,7 +364,7 @@ decentralizedIam:
       ingress:
         enabled: true
         annotations:
-          cert-manager.io/cluster-issuer: "prod"
+          cert-manager.io/cluster-issuer: "prod-issuer"
           cert-manager.io/private-key-algorithm: "ECDSA"
           cert-manager.io/common-name: "<your_verifier_domain>"
         tls:
@@ -403,7 +405,7 @@ decentralizedIam:
         til:
           enabled: true
           annotations:
-            cert-manager.io/cluster-issuer: "prod"
+            cert-manager.io/cluster-issuer: "prod-issuer"
             cert-manager.io/private-key-algorithm: "ECDSA"
             cert-manager.io/common-name: "<your_til_domain>"
           hosts:
@@ -432,7 +434,7 @@ decentralizedIam:
       ingress:
         enabled: true
         annotations:
-          cert-manager.io/cluster-issuer: "prod"
+          cert-manager.io/cluster-issuer: "prod-issuer"
           cert-manager.io/private-key-algorithm: "ECDSA"
         hosts:
           - host: <your_data_service_domain>       # Domain for the protected data service
@@ -479,7 +481,7 @@ decentralizedIam:
       ingress:
         enabled: true
         annotations:
-          cert-manager.io/cluster-issuer: "prod"
+          cert-manager.io/cluster-issuer: "prod-issuer"
           cert-manager.io/private-key-algorithm: "ECDSA"
           cert-manager.io/common-name: "<your_pap_domain>"
         hosts:

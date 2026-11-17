@@ -206,7 +206,7 @@ marketplace:
       enabled: true
       className: <your-ingress-class>    # add the annotations your ingress controller needs
       annotations:
-        cert-manager.io/cluster-issuer: "prod"
+        cert-manager.io/cluster-issuer: "prod-issuer"
       hosts:
         - host: <your_marketplace_domain>
           paths: ["/"]
