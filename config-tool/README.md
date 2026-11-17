@@ -120,3 +120,9 @@ groups the versions by the bundle's `chart`, and the Target stage offers only th
 Per chart, the highest release is the default; a pre-release becomes the default only when that
 chart has no release bundled. The layout holds one bundle per version, so two charts cannot share
 a version number yet.
+
+A bundle's `recognize:` list maps chart keys back to answers when an existing `values.yaml` is
+opened (ADR 0014). Each rule has an exact `path`, an `answer` id, a `stage`, a `kind` (`toggle`
+for a `!!bool`, `value` for any scalar) and, on `value` rules only, an optional `pattern` with
+one capture group. A bundle with an invalid or duplicate-path rule fails to load, and a test
+checks every shipped rule path against the chart's `values.yaml`.
