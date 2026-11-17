@@ -24,6 +24,12 @@ writes nothing to disk; CT-4 wires saving.
    - Scope: the marker owns that key's whole subtree and every following sibling key of the same
      mapping. The scope ends at the first blank source line between siblings, at the next sibling
      that has a head comment of its own, or at the end of the mapping.
+   - "Between siblings" means after the end of the previous sibling's subtree and before the next
+     sibling's key line. The end of the subtree is where `subtreeEnd` in `insert.go` puts it: past
+     the last leaf's text as the scanner ends it (`lastEnd`) and the deeper-indented comment lines
+     right below it. Blank lines inside a value (a block scalar with an empty line or `|+` keep
+     chomping, a nested mapping spaced out with blank lines) are content, so they never end the
+     scope; ending it there would leave owned keys unowned, the unsafe direction.
    - Markers count only when the file carries the generated header, i.e. when `roundtrip.Parse`
      actually stripped the three-line header shape (`HeaderPrefix` on line 1). That is decided by
      whether the header was stripped, not by `Header().IsZero()`: a header line whose fields do not
@@ -120,8 +126,9 @@ writes nothing to disk; CT-4 wires saving.
     file line, via `FileLine`.
   - `func (d *Document) OwnedMarkers() []OwnedMarker`. It returns nil when `!d.hasHeader()`.
     Otherwise it walks the mapping nodes, reads markers from key `HeadComment`s only, and applies
-    the scope rule of decision 2. Blank-line detection uses the source line table the document
-    already has; do not re-encode nodes.
+    the scope rule of decision 2. Blank-line detection scans the source lines from
+    `subtreeEnd(prevValue)` up to the next sibling's key line, reusing `subtreeEnd`/`lastEnd`
+    from `insert.go`; it never looks inside a value's own lines. Do not re-encode nodes.
   - `func (d *Document) OwnedBy(markers []OwnedMarker, p Path) (OwnedMarker, bool)`, or an
     equivalent helper. It reports whether a leaf path is in scope, and `internal/load` can use it.
     Keep the API minimal and decide its exact shape here.
@@ -129,6 +136,9 @@ writes nothing to disk; CT-4 wires saving.
   inline strings get long. Cases:
   - the FEATURE_MODEL example, where one marker covers `did` and `host`;
   - a blank line ends the scope;
+  - a blank line inside a value does not: an owned key whose value is a `|` block scalar with an
+    empty line inside, one with `|+` and trailing empty lines, and one whose nested mapping has a
+    blank line between its keys, each followed directly by a sibling that must still be owned;
   - the next commented sibling ends the scope;
   - a nested subtree is owned;
   - a marker without the header is ignored;
