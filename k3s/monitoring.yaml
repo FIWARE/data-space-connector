@@ -148,6 +148,14 @@ decentralizedIam:
       deployment:
         additionalAnnotations:
           instrumentation.opentelemetry.io/inject-java: "true"
+        # The Java agent instruments the classes on startup. Under provider.yaml's 300m limit the
+        # list did not start within its liveness probe (60s) on a slower machine, and was killed
+        # again and again; the other instrumented Java components run without a CPU limit.
+        resources:
+          limits:
+            cpu: "1"
+        livenessProbe:
+          initialDelaySeconds: 60
   odrlAuthorization:
     odrl-pap:
       deployment:
