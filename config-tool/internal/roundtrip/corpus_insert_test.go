@@ -1,6 +1,7 @@
 package roundtrip
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"path/filepath"
@@ -177,6 +178,40 @@ func TestCorpusCollectionEdits(t *testing.T) {
 				t.Logf("%d collections refused with ErrUnsupportedScalar: %s", len(unsupported), strings.Join(unsupported, ", "))
 				if path == chartValues {
 					t.Errorf("the chart's own values.yaml must be fully editable")
+				}
+			}
+		})
+	}
+}
+
+// multiLineScript is a newline-terminated multi-line string, the shape of a script in a values.yaml.
+const multiLineScript = "echo hi\necho there\n"
+
+// TestCorpusMultiLineValue merges a newline-terminated multi-line string into every corpus file,
+// as a new top-level key and as the new value of the last top-level key; five files end without
+// a line break, where the string must not become a literal that lost its final one.
+func TestCorpusMultiLineValue(t *testing.T) {
+	for _, path := range corpusFiles(t) {
+		name := filepath.Base(filepath.Dir(path)) + "/" + filepath.Base(path)
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			src := readFile(t, path)
+			top := mustParse(t, src).root.Content[0].Content
+			last, _ := Key(top[len(top)-2].Value).Key()
+			for _, k := range []string{sentinelKey, last} {
+				d := mustParse(t, src)
+				if err := Merge(d, m{k: multiLineScript}); err != nil {
+					t.Fatalf("Merge(%s): %v", k, err)
+				}
+				out, err := d.Write()
+				if err != nil {
+					t.Fatalf("Write after Merge(%s): %v", k, err)
+				}
+				if got := lookupValue(t, out, Path{Key(k)}); got != multiLineScript {
+					t.Errorf("%s = %q after re-parse, want %q", k, got, multiLineScript)
+				}
+				if bytes.HasSuffix(src, []byte(lineFeed)) != bytes.HasSuffix(out, []byte(lineFeed)) {
+					t.Errorf("Merge(%s) changed whether the file ends with a line break", k)
 				}
 			}
 		})

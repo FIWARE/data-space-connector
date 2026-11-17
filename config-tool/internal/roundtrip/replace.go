@@ -228,7 +228,7 @@ func (d *Document) renderReplacement(r *replacement) ([]*patch, error) {
 	case s.compact:
 		text := d.inlineText(s, v)
 		if !inline {
-			lines := d.blockLines(v, s.childCol)
+			lines := d.blockLines(v, s.childCol, d.openEnd(s.blEnd))
 			lines[0] = lines[0][s.childCol:]
 			text = strings.Join(lines, d.eol)
 		}
@@ -245,7 +245,7 @@ func (d *Document) renderReplacement(r *replacement) ([]*patch, error) {
 		if !isBlank(b[from-1]) {
 			col++
 		}
-		lines := d.blockLines(v, col)
+		lines := d.blockLines(v, col, d.openEnd(s.blEnd))
 		p := &patch{start: from, end: s.inEnd, text: []byte(d.lead(from, "") + lines[0][col:])}
 		if len(lines) == 1 {
 			if s.blStart == s.blEnd {
@@ -267,7 +267,7 @@ func (d *Document) renderReplacement(r *replacement) ([]*patch, error) {
 	if _, ok := v.([]any); ok {
 		col = s.dashCol
 	}
-	return append(ps, &patch{start: s.blStart, end: s.blEnd, text: []byte(d.joinLines(d.blockLines(v, col), s.blStart, s.blEnd))}), nil
+	return append(ps, &patch{start: s.blStart, end: s.blEnd, text: []byte(d.joinLines(d.blockLines(v, col, d.openEnd(s.blEnd)), s.blStart, s.blEnd))}), nil
 }
 
 // combine returns a and b as one patch when b starts where a ends, which two patches starting at
@@ -312,7 +312,7 @@ func (d *Document) lead(from int, prefix string) string {
 // removeLines removes the whole lines [start, end). At an EOF without a line break it also takes
 // the line break before them, so the file still ends without one.
 func (d *Document) removeLines(start, end int) *patch {
-	if end == len(d.body) && d.unterminated() && start > 0 {
+	if d.openEnd(end) && start > 0 {
 		start--
 		if start > 0 && d.body[start-1] == '\r' {
 			start--
@@ -325,7 +325,7 @@ func (d *Document) removeLines(start, end int) *patch {
 // and its lack of a final line break.
 func (d *Document) joinLines(lines []string, start, end int) string {
 	text := strings.Join(lines, d.eol) + d.lineEnd(end)
-	if start == len(d.body) && d.unterminated() {
+	if d.openEnd(start) {
 		text = d.eol + text
 	}
 	return text
@@ -333,10 +333,15 @@ func (d *Document) joinLines(lines []string, start, end int) string {
 
 // lineEnd is the line break text ending at end needs: none at an EOF without one.
 func (d *Document) lineEnd(end int) string {
-	if end == len(d.body) && d.unterminated() {
+	if d.openEnd(end) {
 		return ""
 	}
 	return d.eol
+}
+
+// openEnd reports whether text ending at end ends the body without a final line break.
+func (d *Document) openEnd(end int) bool {
+	return end == len(d.body) && d.unterminated()
 }
 
 func (d *Document) unterminated() bool {

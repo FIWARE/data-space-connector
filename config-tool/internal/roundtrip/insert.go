@@ -148,7 +148,8 @@ func (d *Document) newGroup(q Path, src *yaml.Node, c leafCtx, n *yaml.Node) (*g
 func (d *Document) renderGroup(g *group) (*patch, error) {
 	var lines []string
 	var flow strings.Builder
-	for _, k := range slices.Sorted(maps.Keys(g.keys)) {
+	keys := slices.Sorted(maps.Keys(g.keys))
+	for i, k := range keys {
 		_, vn := child(g.node, Key(k))
 		v, err := decodeValue(vn)
 		if err != nil {
@@ -158,7 +159,7 @@ func (d *Document) renderGroup(g *group) (*patch, error) {
 			flow.WriteString(flowSeparator + flowKey(k) + ": " + flowText(v))
 			continue
 		}
-		lines = append(lines, d.pairLines(blockKey(k), v, g.col)...)
+		lines = append(lines, d.pairLines(blockKey(k), v, g.col, i == len(keys)-1 && d.openEnd(g.offset))...)
 	}
 	text := flow.String()
 	if !g.flow {

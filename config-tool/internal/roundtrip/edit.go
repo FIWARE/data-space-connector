@@ -20,6 +20,8 @@ const (
 	boolTag  = "!!bool"
 	intTag   = "!!int"
 	floatTag = "!!float"
+	// nullText is the canonical text of null.
+	nullText = "null"
 	// defaultIndentUnit indents a block scalar's content past its owner when the source shows none.
 	defaultIndentUnit = 2
 )
@@ -258,7 +260,7 @@ func (d *Document) pendingPatches() ([]*patch, error) {
 func scalarFor(v any) (string, string, error) {
 	switch v := v.(type) {
 	case nil:
-		return nullTag, "null", nil
+		return nullTag, nullText, nil
 	case string:
 		return strTag, v, nil
 	case bool:

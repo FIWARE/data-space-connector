@@ -2,6 +2,7 @@ package roundtrip
 
 import (
 	"errors"
+	"fmt"
 	"maps"
 	"slices"
 
@@ -54,11 +55,53 @@ func (d *Document) mergeAlias(p Path, n *yaml.Node, over map[string]any) error {
 	if err != nil {
 		return err
 	}
-	base, ok := cur.(map[string]any)
-	if !ok {
-		return d.Set(p, over)
+	if cur, err = stringKeys(cur); err != nil {
+		return fmt.Errorf("%w: %s: %v", ErrUnsupportedValue, p, err)
 	}
+	base, _ := cur.(map[string]any)
 	return d.Set(p, deepMerge(base, over))
+}
+
+// stringKeys turns every map[any]any in v into a map[string]any, its keys formatted as Helm's
+// JSON conversion does (`1` → "1", `~` → "null"). Two keys with one string form give an error.
+func stringKeys(v any) (any, error) {
+	switch v := v.(type) {
+	case map[string]any:
+		out := make(map[string]any, len(v))
+		for k, sub := range v {
+			var err error
+			if out[k], err = stringKeys(sub); err != nil {
+				return nil, err
+			}
+		}
+		return out, nil
+	case map[any]any:
+		out := make(map[string]any, len(v))
+		for k, sub := range v {
+			s := nullText
+			if k != nil {
+				s = fmt.Sprint(k)
+			}
+			if _, dup := out[s]; dup {
+				return nil, fmt.Errorf("keys collide as %q", s)
+			}
+			var err error
+			if out[s], err = stringKeys(sub); err != nil {
+				return nil, err
+			}
+		}
+		return out, nil
+	case []any:
+		out := make([]any, len(v))
+		for i, sub := range v {
+			var err error
+			if out[i], err = stringKeys(sub); err != nil {
+				return nil, err
+			}
+		}
+		return out, nil
+	}
+	return v, nil
 }
 
 // deepMerge returns base with over merged in, over winning; neither input is changed.

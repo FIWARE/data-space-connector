@@ -45,6 +45,10 @@ func TestMerge(t *testing.T) {
 			want: "base: &b\n  a: 1\n  b: 2\nm:\n  a: 1\n  b: 3\nn: *b\n"},
 		{name: "alias to a mapping, equal", src: "base: &b\n  a: 1\n  b: 2\nm: *b\nn: *b\n", overrides: []map[string]any{{"m": m{"a": 1}}},
 			want: "base: &b\n  a: 1\n  b: 2\nm: *b\nn: *b\n"},
+		{name: "alias to a mapping with non-string keys", src: "base: &b {1: x, a: y, ~: v}\nm: *b\n", overrides: []map[string]any{{"m": m{"a": "z"}}},
+			want: "base: &b {1: x, a: y, ~: v}\nm:\n  \"1\": x\n  a: z\n  \"null\": v\n"},
+		{name: "alias to a mapping with nested non-string keys", src: "base: &b\n  p: {1: x, a: y}\nm: *b\n", overrides: []map[string]any{{"m": m{"p": m{"a": "z"}}}},
+			want: "base: &b\n  p: {1: x, a: y}\nm:\n  p:\n    \"1\": x\n    a: z\n"},
 		{name: "merge key override", src: "base: &a\n  x: 1\nm:\n  <<: *a\n  w: 2\n", overrides: []map[string]any{{"m": m{"x": 1}}},
 			want: "base: &a\n  x: 1\nm:\n  <<: *a\n  w: 2\n  x: 1\n"},
 	}
@@ -107,6 +111,7 @@ func TestMergeErrors(t *testing.T) {
 		{name: "root is a list", src: "- a\n", overrides: m{"a": 1}, wantErr: ErrNotMapping},
 		{name: "merge key value", src: "base: &a {x: 1}\nm:\n  <<: *a\n", overrides: m{"m": m{"<<": 1}}, wantErr: ErrAliasPath},
 		{name: "unsupported value", src: "a: 1\n", overrides: m{"a": uint8(1)}, wantErr: ErrUnsupportedValue},
+		{name: "alias keys colliding as strings", src: "base: &b {1.0: x, 1: y}\nm: *b\n", overrides: m{"m": m{"a": 1}}, wantErr: ErrUnsupportedValue},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

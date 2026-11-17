@@ -84,52 +84,56 @@ func (d *Document) detectLayout() layout {
 }
 
 // blockLines renders the non-empty map or list v as block lines whose entries start at column col.
-func (d *Document) blockLines(v any, col int) []string {
+// tail is set when the lines end the body without a final line break (see scalarLines).
+func (d *Document) blockLines(v any, col int, tail bool) []string {
 	var out []string
 	if items, ok := v.([]any); ok {
-		for _, item := range items {
-			out = append(out, d.itemLines(item, col)...)
+		for i, item := range items {
+			out = append(out, d.itemLines(item, col, tail && i == len(items)-1)...)
 		}
 		return out
 	}
-	for _, e := range entries(v) {
-		out = append(out, d.pairLines(blockKey(e.key), e.value, col)...)
+	es := entries(v)
+	for i, e := range es {
+		out = append(out, d.pairLines(blockKey(e.key), e.value, col, tail && i == len(es)-1)...)
 	}
 	return out
 }
 
 // pairLines renders `key: v` at column col; a nested collection goes one indent unit deeper, or a
 // sequence at col itself in an indentless document.
-func (d *Document) pairLines(key string, v any, col int) []string {
+func (d *Document) pairLines(key string, v any, col int, tail bool) []string {
 	head := strings.Repeat(" ", col) + key + ":"
 	if !isBlockCollection(v) {
-		return d.scalarLines(head, v, col)
+		return d.scalarLines(head, v, col, tail)
 	}
 	l := d.layout()
 	sub := col + l.unit
 	if _, ok := v.([]any); ok && l.indentless {
 		sub = col
 	}
-	return append([]string{head}, d.blockLines(v, sub)...)
+	return append([]string{head}, d.blockLines(v, sub, tail)...)
 }
 
 // itemLines renders the sequence item v with its dash at column col; a collection is written
 // compact, its first entry on the dash line.
-func (d *Document) itemLines(v any, col int) []string {
+func (d *Document) itemLines(v any, col int, tail bool) []string {
 	dash := strings.Repeat(" ", col) + string(sequenceDash)
 	if !isBlockCollection(v) {
-		return d.scalarLines(dash, v, col)
+		return d.scalarLines(dash, v, col, tail)
 	}
-	lines := d.blockLines(v, col+itemIndent)
+	lines := d.blockLines(v, col+itemIndent, tail)
 	lines[0] = dash + " " + lines[0][col+itemIndent:]
 	return lines
 }
 
 // scalarLines writes v after head: a multi-line string as a literal block one indent unit past
-// col, anything else on the line.
-func (d *Document) scalarLines(head string, v any, col int) []string {
+// col, anything else on the line. With tail set, a literal that owns its final line break is
+// written double-quoted instead, as the body has no line break left to end it.
+func (d *Document) scalarLines(head string, v any, col int, tail bool) []string {
 	if s, ok := v.(string); ok {
-		if header, content, ok := literalBlock(s, strings.Repeat(" ", col+d.layout().unit)); ok {
+		header, content, ok := literalBlock(s, strings.Repeat(" ", col+d.layout().unit))
+		if ok && (!tail || header[len(header)-1] == chompStrip) {
 			return append([]string{head + " " + header}, content...)
 		}
 	}
