@@ -55,7 +55,8 @@ decentralized-iam 2.3.0 / TIL 0.10.3).
     `ANONYMOUS` (the default is `AUTHENTICATED`). Set that with the env var
     `ENDPOINTS_HEALTH_DETAILS_VISIBLE=ANONYMOUS`.
 
-  The CM Service exposes 8080 only.
+  The CM Service exposes 8080 only, so 9090 is reached by a port-forward to the Deployment's pod
+  (`deploy/<name>`), never through the Service.
 - **CM verifies no tokens.** `/events` and `/subscriptions` only read `X-Userinfo.participantId`, so
   the publisher's `/subscriptions` needs the same gateway pattern (openid-connect +
   `set_userinfo_header` + `X-Userinfo` strip) as a participant's `/events`.
@@ -154,7 +155,10 @@ decentralized-iam 2.3.0 / TIL 0.10.3).
     Marketplace registers itself at M&P Operations.` (sets `fancyMarketplaceRegistration`) and
     `Fancy Marketplace buys access to M&P's k8s services.` (`buyAccess`).
   - Helpers:
-    - `KubernetesHelper` (`portForward`, k8s client using `it/target/k3s.yaml`/`KUBECONFIG`);
+    - `KubernetesHelper` (`portForward`, k8s client using `it/target/k3s.yaml`/`KUBECONFIG`).
+      `portForward(namespace, service, localPort, remotePort)` runs `kubectl port-forward
+      svc/<service>`, so `remotePort` must be a *Service* port; the forward is bound to one pod for
+      the life of the `kubectl` process;
     - `TestUtils.OK_HTTP_CLIENT` (via Squid);
     - `MPOperationsEnvironment.TIL_DIRECT_ADDRESS`;
     - `TrustAnchorEnvironment.TIR_ADDRESS`;
@@ -315,7 +319,8 @@ decentralized-iam 2.3.0 / TIL 0.10.3).
   - the authority APISIX pod is Ready;
   - `GET :9090/health` shows `dataspace-tir-watcher` with a `lastSuccessfulCycle` and a
     `snapshotSize` > 0;
-  - a port-forwarded `POST :9090/events` returns `subscriptions: 0`;
+  - `POST :9090/events`, through `kubectl port-forward deploy/<publisher> <local>:9090`, returns
+    `subscriptions: 0`;
   - `POST /subscriptions` through the new host returns `401` without a token, and the discovery
     route serves the service's metadata;
   - the consent scenario is unchanged. `mvn package -Pconsent` renders
@@ -372,7 +377,8 @@ decentralized-iam 2.3.0 / TIL 0.10.3).
   - `remove <did>`: `DELETE https://til.127.0.0.1.nip.io/issuer/<did>`;
   - `restore <did>`: re-`POST /issuer` with `credentials: []`, as the participants' init containers
     do;
-  - `report [provider|consumer]`: port-forward 9090 and print `GET /participants-removed`;
+  - `report [provider|consumer]`: `kubectl port-forward deploy/<cm> <local>:9090` (the Service has
+    no 9090) and print `GET /participants-removed`;
   - `publish <did>`: a manual `POST :9090/events` at the publisher, the immediate path of §8.
 - Acceptance (local deploy, results in the PR description):
   - `helm template` of all overlays passes the umbrella's validation;
@@ -406,11 +412,28 @@ decentralized-iam 2.3.0 / TIL 0.10.3).
   - `DataSpaceEventingEnvironment`: constants for DIDs, hosts, namespaces, the publisher id, the
     ConfigMap, Deployment and registration Job names, and the timeouts of D5 and D3
     (`REMOVAL_TIMEOUT`, `MODE_SWITCH_TIMEOUT`, `SUBSCRIPTION_RECOVERY_TIMEOUT`);
-  - `ContractManagementManagementClient`: a port-forward to 9090 through `KubernetesHelper`, with
-    `report()`, `publish(type, subject)`, `awaitMode(publisher, mode)`,
-    `awaitSubscriptions(n, timeout)` and, for the publisher, `awaitWatcherSaw(since)` (D6: wait for
-    `WATCHER_CYCLES_TO_SEE` distinct `lastSuccessfulCycle` values after `since`, within
-    `WATCHER_SEEN_TIMEOUT`);
+  - `KubernetesHelper.portForwardToDeployment(namespace, deployment, remotePort)`, a new variant
+    of `portForward` that runs `kubectl port-forward deploy/<deployment> <local>:<remotePort>`, so
+    `remotePort` is the **container** port 9090. The CM Service keeps 8080 only: 9090 stays
+    cluster-internal, as the docs say, and no chart or overlay adds a Service port for it. The
+    variant picks a free local port itself (`new ServerSocket(0)`), so a forward that is still
+    shutting down cannot collide with the next one, and it shares the start-up probe and timeout
+    of `portForward`;
+  - `ContractManagementManagementClient`, for one CM Deployment (namespace + Deployment name from
+    `DataSpaceEventingEnvironment`), with `report()`, `publish(type, subject)`,
+    `awaitMode(publisher, mode)`, `awaitSubscriptions(n, timeout)` and, for the publisher,
+    `awaitWatcherSaw(since)` (D6: wait for `WATCHER_CYCLES_TO_SEE` distinct `lastSuccessfulCycle`
+    values after `since`, within `WATCHER_SEEN_TIMEOUT`).
+    - **A fresh forward per request.** A forward is bound to the pod it started on and dies with it,
+      and scenario 6 scales the publisher to 0 and back and runs `rollout restart` on the provider
+      CM. So the client holds no long-lived forward: every `report()`/`publish()`/health read opens
+      one through `portForwardToDeployment`, sends the request and closes it in a
+      try-with-resources. The `await*` methods do this once per poll attempt and treat a forward
+      that fails to start (no Ready pod yet) like a failed poll, retrying until their timeout, so
+      they work across a scale-up or restart.
+    - As a safety net every forward the client opens is also registered in a list that the
+      `@After("@eventing")` closes last, as `ConsentStepDefinitions` closes its `portForwards`, so a
+      failed step leaves no `kubectl` process behind;
   - `TrustAnchorClient`: `removeParticipant` / `restoreParticipant` against the trust anchor's TIL.
     `removeParticipant` checks the TIR listing and calls `awaitWatcherSaw` before the `DELETE` (D6).
     `removeParticipantWhilePublisherDown` (scenario 6 only) asserts the publisher has no pod and
@@ -458,6 +481,8 @@ decentralized-iam 2.3.0 / TIL 0.10.3).
        `did:web:kept-member.org` issuer (Steps 4–5);
     6. then it waits for `subscriptions == 2`, so a failed recovery is reported by the scenario that
        caused it, not by the next one's `@Before`.
+    7. last, it closes any port-forward the management clients still hold (normally none, since
+       each request closes its own).
 
     The TMF/PAP fixtures are cleaned by `StandardStepDefinitions.cleanUpEventingFixtures()`, above.
     Each restore step runs in its own try/catch and the hook fails at the end with all errors, so
