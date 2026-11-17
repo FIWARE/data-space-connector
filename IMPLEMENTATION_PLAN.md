@@ -365,21 +365,14 @@ decentralized-iam 2.3.0 / TIL 0.10.3).
 
   `k3s/deploy.sh` needs no new release: it already installs `consent-authority` whenever
   `CONSENT_AUTHORITY_VALUES` is set, and its `*_VALUES` variables take comma-separated files.
-- Acceptance (local `mvn clean deploy -Peventing`, results in the PR description):
-  - the publisher pod is Ready;
-  - the authority APISIX pod is Ready;
-  - `GET :9090/health` shows `dataspace-tir-watcher` with a `lastSuccessfulCycle` and a
-    `snapshotSize` > 0;
-  - `POST :9090/events`, through `kubectl port-forward deploy/<publisher> <local>:9090`, returns
-    `subscriptions: 0`;
-  - `POST /subscriptions` through the new host returns `401` without a token, and the discovery
-    route serves the service's metadata;
-  - a token the `dataspace-subscriptions` service issues for the provider's MembershipCredential
-    carries `participantId: did:web:mp-operations.org` (the credential's issuer); check it in the
-    verifier log or by decoding the token the subscriber obtains in Step 2;
+- Acceptance (render checks, results in the PR description). The cluster checks of the publisher
+  (pods Ready, watcher health, `401` on `/subscriptions`, discovery route, the provider token's
+  `participantId`) are not run in Step 1: they are items **S1-a** to **S1-e** of Step 2's acceptance,
+  whose deploy is the first with a subscriber that can obtain a subscription token. The old
+  `POST :9090/events` → `subscriptions: 0` check is replaced there by `subscriptions: 2`.
   - the consent scenario is unchanged. `mvn package -Pconsent` renders
     `target/rendered/participants/consent-authority` byte-identical before and after the `pom.xml`
-    change;
+    change, apart from the randomly generated secrets and the checksums derived from them;
   - the overlay only adds. Diff `helm template consent-authority` with
     `consent-trust-anchor.yaml` against `consent-trust-anchor.yaml,eventing-trust-anchor.yaml`: the
     only differences are the CM objects, the three `dataspace-subscriptions*` routes in the APISIX
@@ -498,6 +491,18 @@ decentralized-iam 2.3.0 / TIL 0.10.3).
   - `publish <did>`: a manual `POST :9090/events` at the publisher, the immediate path of §8.
 - Acceptance (local deploy, results in the PR description):
   - `helm template` of all overlays passes the umbrella's validation;
+  - the publisher checks deferred from Step 1, run on this deploy:
+    - **S1-a** the publisher pod and the authority APISIX pod are Ready;
+    - **S1-b** `GET :9090/health` at the publisher shows `dataspace-tir-watcher` with a
+      `lastSuccessfulCycle` and a `snapshotSize` > 0;
+    - **S1-c** `POST /subscriptions` through `dataspace-events.127.0.0.1.nip.io` returns `401`
+      without a token;
+    - **S1-d** the discovery route `/.well-known/openid-configuration` on that host serves the
+      `dataspace-subscriptions` service's metadata;
+    - **S1-e** the subscription token the publisher's `dataspace-subscriptions` service issues to the
+      provider carries `participantId: did:web:mp-operations.org` (the credential's issuer, not its
+      subject); verifier log or decoded token. This is the safeguard against one participant
+      subscribing or unsubscribing as another, so the PR must show the token claim;
   - the overlays only add. Diff `helm template` of the base value files against base +
     `eventing-{provider,consumer}.yaml`, for each participant: every pre-existing APISIX route,
     ingress host, verifier service, `registration.issuer` entry, CM env entry, volume and volume
@@ -507,7 +512,7 @@ decentralized-iam 2.3.0 / TIL 0.10.3).
     MembershipCredential source in the `credential-repo` projection;
   - the subscription token the publisher's `dataspace-subscriptions` service issues to the consumer
     carries `participantId: did:web:fancy-marketplace.biz` (verifier log or decoded token), as the
-    provider's carries `did:web:mp-operations.org` (Step 1);
+    provider's carries `did:web:mp-operations.org` (S1-e above);
   - `publish` of an unknown DID (e.g. `did:web:probe-<timestamp>.org`, fresh per run) returns
     `subscriptions: 2`, **and** within ~30 s both the provider report and the consumer report list
     that DID with `trigger: event` and a `lastSeen` after the publish. `subscriptions: 2` only counts
