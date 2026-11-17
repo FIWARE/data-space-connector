@@ -19,6 +19,7 @@ const (
 	foldedHeader    = '>'
 	chompStrip      = '-'
 	chompKeep       = '+'
+	sequenceDash    = '-'
 	// noOwner is the owning column of the root node, which no line has to be indented past.
 	noOwner = -1
 	// checkKey is the key under which a span's text is decoded on its own.

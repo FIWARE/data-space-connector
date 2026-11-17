@@ -69,6 +69,8 @@ type corpusFile struct {
 	leaves   []Leaf
 	states   []leafState
 	comments map[int][]string
+	// allComments is every comment line of the tree in walk order, independent of any span.
+	allComments []string
 }
 
 func loadCorpusFile(t *testing.T, path string) *corpusFile {
@@ -90,7 +92,38 @@ func loadCorpusFile(t *testing.T, path string) *corpusFile {
 		}
 	}
 	walk(d.root)
+	f.allComments = commentLines(d.root)
 	return f
+}
+
+// commentLines returns the head, line and foot comment lines of the tree at n in walk order.
+func commentLines(n *yaml.Node) []string {
+	var out []string
+	add := func(c string) {
+		for _, l := range strings.Split(c, lineFeed) {
+			if l = strings.TrimSpace(l); l != "" {
+				out = append(out, l)
+			}
+		}
+	}
+	add(n.HeadComment)
+	add(n.LineComment)
+	for _, c := range n.Content {
+		out = append(out, commentLines(c)...)
+	}
+	add(n.FootComment)
+	return out
+}
+
+// nextLeafLine returns the line of the first leaf after leaf i that starts below leaf i's value,
+// or 0 when there is none. An edit of leaf i must end above it.
+func (f *corpusFile) nextLeafLine(i int) int {
+	for _, l := range f.leaves[i+1:] {
+		if l.Line > f.leaves[i].Node.Line {
+			return l.Line
+		}
+	}
+	return 0
 }
 
 // editResult is what checkLeafEdit saw, for the named-case assertions.
@@ -143,6 +176,9 @@ func checkLeafEdit(t *testing.T, f *corpusFile, i int) editResult {
 		t.Errorf("%s: lines outside %d-%d changed", leaf.Path, first+1, last+1)
 		return editResult{}
 	}
+	if next := f.nextLeafLine(i); next > 0 && last+1 >= next {
+		t.Errorf("%s: span lines %d-%d reach the next leaf at line %d", leaf.Path, first+1, last+1, next)
+	}
 	changed := outLines[first : len(outLines)-after]
 	if first == last && len(changed) != 1 {
 		t.Errorf("%s: a single-line scalar changed %d lines", leaf.Path, len(changed))
@@ -157,6 +193,9 @@ func checkLeafEdit(t *testing.T, f *corpusFile, i int) editResult {
 	}
 
 	again := mustParse(t, out)
+	if got := commentLines(again.root); !equalLines(got, f.allComments) {
+		t.Errorf("%s: comments changed: %d comment lines, want %d", leaf.Path, len(got), len(f.allComments))
+	}
 	n, err := again.Lookup(leaf.Path)
 	if err != nil {
 		t.Errorf("%s: re-parse Lookup: %v", leaf.Path, err)

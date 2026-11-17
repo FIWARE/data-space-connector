@@ -1,7 +1,9 @@
 package roundtrip
 
 import (
+	"bytes"
 	"fmt"
+	"unicode/utf8"
 
 	"gopkg.in/yaml.v3"
 )
@@ -43,13 +45,34 @@ func (d *Document) locate(p Path) (located, error) {
 		case key != nil:
 			loc.ctx.owner = key.Column - 1
 		default:
-			// Every `-` of a block sequence sits at the sequence's own column.
-			loc.ctx.owner = n.Column - 1
+			loc.ctx.owner = d.dashColumn(n)
 		}
 		loc.merge = loc.merge || (key != nil && key.Tag == mergeTag)
 		loc.node = next
 	}
 	return loc, nil
+}
+
+// dashColumn returns the 0-based column of block sequence n's first `-`, which every item
+// shares. yaml.v3 places an anchored or tagged sequence at its `&` or `!`, not at the dash.
+func (d *Document) dashColumn(n *yaml.Node) int {
+	off, ok := d.offset(n.Line, n.Column)
+	for ok && off < len(d.body) {
+		switch ch := d.body[off]; {
+		case ch == sequenceDash:
+			ls := bytes.LastIndexByte(d.body[:off], '\n') + 1
+			return utf8.RuneCount(d.body[ls:off])
+		case ch == anchorIndicator || ch == tagIndicator:
+			off = d.tokenEnd(off, leafCtx{})
+		case ch == commentStart:
+			off = lineAfter(d.body, off)
+		case isSpace(ch):
+			off++
+		default:
+			ok = false
+		}
+	}
+	return n.Column - 1
 }
 
 // child returns the key and value seg selects below n, or nil values; key is nil for an index.
