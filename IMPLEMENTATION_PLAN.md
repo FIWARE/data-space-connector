@@ -56,6 +56,13 @@ decentralized-iam 2.3.0 / TIL 0.10.3).
     `NOTIFICATION_ENABLED=false`. Helm replaces lists, so copy the whole default
     `contract-management.additionalEnvVars` list (the OTEL entries) and add the entry to it.
   - CM has no DB and keeps all state in memory, so run a single replica.
+- **Leases and re-subscription.** The publisher keeps subscriptions in memory: a restart loses them.
+  A subscription lives for `publisher.lease-ttl` (default `PT24H`). The subscriber renews it after
+  `subscriber.renewal-fraction` (0.5) of the remaining lease, never sooner than `min-renewal-delay`
+  (`PT10S`). Its 1 min reconcile backstop only reacts to changes in its *own* `publishers[]`, so it
+  does not notice that a restarted publisher lost the subscription: only the next renewal re-registers
+  it. A failed registration is retried from `subscriber.retry.initial-backoff` (`PT5S`), doubling up
+  to `retry.max-backoff` (`PT5M`), without an attempt limit.
 - **OID4VP.** `oid4vp.{enabled, holder.{holderId, keyType, keyPath, signatureAlgorithm},
   credentialsFolder, trustAnchors, proxyConfig}`. The chart has no secret-mount value, so mount the
   key and the credential with `deployment.additionalVolumes`/`additionalVolumeMounts`. The subscriber
@@ -102,7 +109,20 @@ decentralized-iam 2.3.0 / TIL 0.10.3).
   - `RunCucumberTest` is the runner. Features are selected by `cucumber.filter.tags` per `*-test`
     profile in `it/pom.xml`.
   - `StandardStepDefinitions` `@Before("not @consent and not @eidas")` (:111) wipes the provider TIL
-    and PAP, so the new tag must be excluded there.
+    and PAP, so the new tag must be excluded there. The same hook also does the per-scenario init
+    the order flow needs: `CryptoIntegration.init`, the BouncyCastle provider and a fresh
+    `fancyMarketplaceEmployeeWallet`. `cleanUpTIL` and `cleanUpPolicies` delete **every** entry, not
+    only the test's.
+  - The IT uses plain cucumber-java, with no DI container. Each glue class is instantiated once per
+    scenario, so a feature may call steps of any glue class, and each class's fields hold that
+    scenario's state (e.g. `fancyMarketplaceRegistration`, `createdPolicies`).
+  - The order flow (`mvds_basic.feature`, scenario 2) is built by these `StandardStepDefinitions`
+    steps: `M&P Operations offers a managed kubernetes.` (TMF category, catalog, spec with an
+    OperatorCredential `credentialsConfig`, offering), `… allows self-registration of organizations.`
+    and `… allows to buy its offerings.` (PAP policies, tracked in `createdPolicies`), `Fancy
+    Marketplace issues a user credential to its employee.` (consumer Keycloak → wallet), `Fancy
+    Marketplace registers itself at M&P Operations.` (sets `fancyMarketplaceRegistration`) and
+    `Fancy Marketplace buys access to M&P's k8s services.` (`buyAccess`).
   - Helpers:
     - `KubernetesHelper` (`portForward`, k8s client using `it/target/k3s.yaml`/`KUBECONFIG`);
     - `TestUtils.OK_HTTP_CLIENT` (via Squid);
@@ -129,12 +149,36 @@ decentralized-iam 2.3.0 / TIL 0.10.3).
   `reconcile.initial-delay`. The k3s overlay sets the reconcile `interval` long (`PT6H`), so no sweep
   races the push scenarios. The report's `trigger` tells event from sweep (check the enum values in
   `RemovedParticipantsEndpoint`/the report model).
+
+  **Recovery.** Scaling the publisher down drops all subscriptions, and with CM's defaults they come
+  back only at the next lease renewal, ~12 h later. The k3s values therefore shorten both clocks:
+  - the publisher's `lease-ttl` is `PT2M` (`k3s/eventing-trust-anchor.yaml`), so every subscriber
+    renews about once a minute;
+  - the subscribers' `retry.max-backoff` is `PT20S` (`k3s/eventing-{provider,consumer}.yaml`), so a
+    registration that failed while the publisher was down is retried within 20 s. This also covers
+    the provider CM restarted while the publisher is down.
+
+  A subscription is thus back within one renewal (≤ 60 s) plus one backoff (≤ 20 s) after the
+  publisher is Ready. `SUBSCRIPTION_RECOVERY_TIMEOUT` (3 min) covers that plus the publisher's
+  start-up. The removed consumer cannot renew until it is back at the TIR, because the publisher's
+  `dataspace-subscriptions` verifier service checks the TIR. Its recovery therefore counts from the
+  `@After`'s TIR restore, plus the authority verifier's TIR cache. Step 1 reads that cache's TTL from
+  the verifier config and shortens it in the overlay if it exceeds 30 s. The overlay values are
+  demo/test values; `trust-anchor-setup.md` gives the production defaults.
+
+  Restarting both participant CMs in the `@After` was rejected: a restart also runs the start-up
+  sweep, which would act on whatever mode the ConfigMap holds at that moment. Blocking only the
+  delivery (a NetworkPolicy, or dropping the provider's `/events` route) was rejected: the publisher
+  stays up, so its delivery retries (`delivery.max-attempts` 5) can still land the event once the
+  block is lifted. The scenario could then no longer tell which path removed the grant. Scaling to 0
+  is also the outage the sweep exists for.
 - **D4: the second publisher (scenario 7).** It is simulated: the IT writes a grant
   `scope=did:web:other-dataspace.org&scopeType=dataspace-membership` for the consumer directly into
   the provider's TIL. No second CM is deployed.
 - **D5: timing.** The k3s values for the publisher's `tir-watcher` are `initial-delay: PT10S`,
   `interval: PT10S`, `confirmations: 2`. A removal therefore propagates in ~30 s; the IT polls with a
-  3 min timeout.
+  3 min timeout. The lease and retry values of D3 (`lease-ttl: PT2M`, `retry.initial-backoff: PT5S`,
+  `retry.max-backoff: PT20S`) size `SUBSCRIPTION_RECOVERY_TIMEOUT` (3 min).
 
 ## Deviations from the ticket (need human sign-off)
 1. **The demo command is `mvn clean deploy -Peventing`, not `-Plocal`.** It is a scenario profile, as
@@ -160,6 +204,8 @@ decentralized-iam 2.3.0 / TIL 0.10.3).
     http://tir.trust-anchor.svc.cluster.local:8080` (check the TIR Service name/port).
   - `dataspace.events.publisher`: `enabled`, `origin` (the publisher host).
   - `dataspace.events.tir-watcher`: `enabled`, with the timing of D5; `max-removals-per-cycle` stays 5.
+  - `dataspace.events.publisher.lease-ttl: PT2M` (D3), so subscriptions lost by a publisher restart
+    come back within a minute instead of ~12 h.
   - `oid4vp` holder `did:web:dataspace-authority.org`: key from `dataspace-authority.org-tls`,
     credential from `vc-operator-credential`, dsc-ca as trust anchor, Squid proxy. Mount them through
     `deployment.additionalVolumes`/`additionalVolumeMounts`. Copy the converter/init pattern of
@@ -212,7 +258,8 @@ decentralized-iam 2.3.0 / TIL 0.10.3).
         `types: [org.fiware.dataspace.participant.removed]`, `subscriptions-url`;
       - `on-participant-removed.mode: report`, `registry-url` = the TIR;
       - `keep: [did:web:dataspace-authority.org, did:web:mp-operations.org]`;
-    - `participant-removed.reconcile`: `initial-delay: PT20S`, `interval: PT6H` (D3).
+    - `participant-removed.reconcile`: `initial-delay: PT20S`, `interval: PT6H` (D3);
+    - `subscriber.retry`: `initial-backoff: PT5S`, `max-backoff: PT20S` (D3).
   - Provider CM `oid4vp` for the subscriber: present `vc-fdsc-edc-credential` as
     `did:web:mp-operations.org`, following `consent-provider.yaml`.
   - The three routes of `doc/eventing/examples/events-routes.yaml`, appended to a **copy** of the
@@ -233,7 +280,8 @@ decentralized-iam 2.3.0 / TIL 0.10.3).
   - The base set is `consumer.yaml`, `consumer-auth.yaml` and `consumer-tmf.yaml`, as the `central`
     profile uses: CM, gateway, verifier and TIL. Use the smallest set that gives the consumer all
     four, and document it.
-  - Consumer `keep: [did:web:dataspace-authority.org, did:web:fancy-marketplace.biz]`.
+  - Consumer `keep: [did:web:dataspace-authority.org, did:web:fancy-marketplace.biz]`, and the same
+    `subscriber.retry` values as the provider.
 - Update the `eventing` profile and `k3s/deploy.sh` with both overlays.
 - New `doc/scripts/dataspace-eventing-demo.sh` (shellcheck-clean, `set -euo pipefail`, named
   constants for hosts and DIDs, proxy `127.0.0.1:8888` as the other scripts use):
@@ -245,6 +293,8 @@ decentralized-iam 2.3.0 / TIL 0.10.3).
 - Acceptance (local deploy, results in the PR description):
   - `helm template` of all overlays passes the umbrella's validation;
   - `publish` of an unknown DID returns `subscriptions: 2`;
+  - after `kubectl rollout restart` of the publisher, `publish` returns `subscriptions: 2` again
+    within ~90 s (the lease and backoff of D3);
   - `remove did:web:fancy-marketplace.biz`: within ~1 min the provider report lists it with mode
     `report` and the membership grant in `held`, and its TIL is unchanged;
   - `restore` puts it back.
@@ -254,35 +304,94 @@ decentralized-iam 2.3.0 / TIL 0.10.3).
   profile with `cucumber.filter.tags=@eventing`.
 - `.github/workflows/test.yaml`: add the matrix entry `eventing` (`test,eventing,eventing-test`). It
   runs in both deployments per ADR 0007, which adds 2 CI jobs; say so in the PR.
-- `StandardStepDefinitions` (:111): change the hook to `@Before("not @consent and not @eidas and not
-  @eventing")`.
+- `StandardStepDefinitions`: split `setup()` (:111) in two hooks.
+  - `@Before(order = 0)` `initWallet()`, untagged: `CryptoIntegration.init`, the BouncyCastle
+    provider, a fresh `fancyMarketplaceEmployeeWallet` and the mapper setting. It only creates
+    in-memory objects, so it is safe for `@consent`/`@eidas` too, and it lets the eventing feature
+    reuse the order steps.
+  - `@Before("not @consent and not @eidas and not @eventing")` `setup()`: `clean()`, `prepareTil()`
+    and the sleep, as today. `@eventing` must stay out, because `cleanUpTIL` would delete the grants
+    the registration Job wrote (scenario 1's proof and the authority's OperatorCredential grant that
+    the provider's `dataspace-events` service needs) and `cleanUpPolicies` would delete the
+    `allowDataSpaceEvents` policy loaded by the Step 2 Job.
+  - A new `@After("@eventing")` `cleanUpEventingFixtures()` in the same class, because only it sees
+    that scenario's `createdPolicies`. It deletes those policies by their `Location`, then calls
+    `cleanUpTMForum()`. The eventing deployment holds no other TMF fixtures. It does **not** call
+    `cleanUpPolicies`, `cleanUpTIL`, `cleanUpEntities`, `cleanUpDcatCatalog` or `cleanUpAgreements`.
 - New support classes:
   - `DataSpaceEventingEnvironment`: constants for DIDs, hosts, namespaces, the publisher id, the
-    ConfigMap and Deployment names, and the timeouts of D5;
+    ConfigMap, Deployment and registration Job names, and the timeouts of D5 and D3
+    (`REMOVAL_TIMEOUT`, `MODE_SWITCH_TIMEOUT`, `SUBSCRIPTION_RECOVERY_TIMEOUT`);
   - `ContractManagementManagementClient`: a port-forward to 9090 through `KubernetesHelper`, with
-    `report()`, `publish(type, subject)` and `awaitMode(publisher, mode)`;
-  - `TrustAnchorClient`: `removeParticipant` / `restoreParticipant` against the trust anchor's TIL.
+    `report()`, `publish(type, subject)`, `awaitMode(publisher, mode)` and
+    `awaitSubscriptions(n, timeout)`;
+  - `TrustAnchorClient`: `removeParticipant` / `restoreParticipant` against the trust anchor's TIL;
+  - `ProviderTilClient`: `scopes(did)`, `addGrant(did, scope, scopeType, credentials)` (`PUT
+    /issuer/{did}/credential`, or `POST /issuer?scope=` when the issuer is gone) and
+    `removeGrant(did, scope)`.
 
   Each gets a one-line Javadoc; parse JSON into small records, not maps.
 - New `DataSpaceEventingStepDefinitions`:
-  - `@Before("@eventing")` ensures the starting state:
+  - `@Before("@eventing")` **checks** the starting state and never writes trust:
     - the consumer is registered at the TIR;
-    - the provider TIL holds the consumer's membership grant (`PUT .../credential?scope=<publisher>
-      &scopeType=dataspace-membership`, if missing);
-    - mode is `report`;
-    - both participants are subscribed: poll `publish` of an unknown DID until `subscriptions == 2`.
-  - `@After("@eventing")` restores the TIR entry and the original ConfigMap, and removes test-only
-    TIL grants.
-  - To get the order-scoped grant, reuse the TMF order flow of `StandardStepDefinitions.buyAccess`.
-    Extract a shared helper rather than copy it. Then check that CM wrote a grant with
-    `scope=<order id>` for the consumer. If CM's write fails because the issuer already exists (TIL
-    `409` on a scoped create), record it and use `PUT /issuer/{did}/credential?scope=` semantics as
-    CM does; do not paper over it in the test.
-- New `it/src/test/resources/it/dataspace_eventing.feature`, tagged `@eventing`, with a `Background`
-  (subscriptions active) and
+    - the provider TIL holds the consumer's `dataspace-membership` grant scoped to the publisher.
+      If it is missing, the hook **fails** with "registration Job grant missing"; it does not add
+      it. The first `@eventing` `@Before` of the JVM also asserts that the registration Job
+      succeeded, stores the grant (scope, scopeType, credentials) in a static `jobGrant` and sets the
+      static `jobGrantVerified`. At that point no fixture of this run has written trust yet;
+    - mode is `report`.
+
+    The subscription check is the `Background`'s first step, `The data space publisher has two
+    active subscriptions.`. It polls `publish` of an unknown DID until `subscriptions == 2`, within
+    `SUBSCRIPTION_RECOVERY_TIMEOUT`.
+  - `@After("@eventing")` restores, in this order, everything a scenario may have changed:
+    1. the consumer's TIR entry (`restoreParticipant`, if it is gone);
+    2. the publisher's replicas (back to 1 and Ready, see Step 5);
+    3. the original ConfigMap (D2);
+    4. the membership grant, re-added from `jobGrant` **only** if the scenario removed it. This is the
+       only place that writes it;
+    5. test-only TIL state: the consumer's order-scoped grants (every scope other than the
+       publisher's, read from `scopes(did)`), the `other-dataspace` grant and the
+       `did:web:kept-member.org` issuer (Steps 4–5);
+    6. then it waits for `subscriptions == 2`, so a failed recovery is reported by the scenario that
+       caused it, not by the next one's `@Before`.
+
+    The TMF/PAP fixtures are cleaned by `StandardStepDefinitions.cleanUpEventingFixtures()`, above.
+    Each restore step runs in its own try/catch and the hook fails at the end with all errors, so
+    one failed restore does not skip the others.
+- The order-scoped grant comes from the existing order steps, not from a copy of them. The
+  feature's `Background` lists them after the subscription check:
+  ```gherkin
+  Background:
+    Given The data space publisher has two active subscriptions.
+    And M&P Operations offers a managed kubernetes.
+    And M&P Operations allows self-registration of organizations.
+    And M&P Operations allows to buy its offerings.
+    And Fancy Marketplace issues a user credential to its employee.
+    And Fancy Marketplace registers itself at M&P Operations.
+  ```
+  Scenarios that need an order add `When Fancy Marketplace buys access to M&P's k8s services.`, then
+  `Then the provider's TIL holds an order-scoped grant for Fancy Marketplace.` That step finds the
+  order id through the TMF API and checks that CM wrote a grant with `scope=<order id>`. If CM's write
+  fails because the issuer already exists (TIL `409` on a scoped create), record it and use `PUT
+  /issuer/{did}/credential?scope=` semantics as CM does; do not paper over it in the test.
+  - Two preconditions to check at the start of Step 3, and to report rather than work around:
+    - the consumer's UserCredential is accepted at the provider only through the registration Job's
+      scoped grant (`prepareTil` no longer runs), so the provider verifier must read scoped grants
+      through the TIL's TIR API;
+    - `buyAccess` uses `offers.stream().findFirst()`, so the `@After` must leave no offering behind
+      (`cleanUpTMForum`).
+- New `it/src/test/resources/it/dataspace_eventing.feature`, tagged `@eventing`, with the
+  `Background` above and
   `Scenario: With the default report mode a removal changes nothing`, covering ticket items 1–3:
-  - an order grants the consumer an order-scoped entry at the provider, and the provider's TIL holds
-    a `dataspace-membership` grant scoped to the publisher for the same DID;
+  - first, `Then the provider's registration Job wrote the membership grant for Fancy Marketplace.`
+    It asserts `jobGrantVerified` (set from the deployment's own state before any fixture ran) and
+    that the current grant has `scopeType: dataspace-membership`, `scope` = the publisher id and
+    the credentials of the provider's `registration.issuer` entry (LegalPerson, User, Membership).
+    A restore by an earlier scenario cannot satisfy it alone, because the static flag is only set
+    by the first `@Before`. On a cluster reused for a second run, the first check sees the grant the
+    previous run restored. CI always deploys fresh, which is where the Job is proven;
+  - an order grants the consumer an order-scoped entry at the provider;
   - the operator deletes the consumer from the trust anchor's TIR;
   - the provider report lists the consumer for the publisher, with `action` = reported/none (check
     the CM value), both grants in `held`, `attributable: true`;
@@ -317,8 +426,12 @@ decentralized-iam 2.3.0 / TIL 0.10.3).
   - `kubectl rollout restart` the provider CM and wait for Ready;
   - within `initial-delay` + margin, the provider TIL matches scenario 4, and the report's `trigger`
     names the sweep;
-  - `@After` scales the publisher back to 1 and waits for the `subscriptions == 2` check of the
-    Background.
+  - `@After` (Step 3 order) first restores the consumer at the TIR, so the watcher's first snapshot
+    after the restart already contains it. Then it scales the publisher back to 1 and waits for
+    Ready. Then it waits up to `SUBSCRIPTION_RECOVERY_TIMEOUT` for `subscriptions == 2`. That
+    relies on the short lease and backoff of D3: without them the wait would time out, and every
+    later `Background` with it. On a timeout the hook fails with each subscriber's last
+    registration state, read from its CM log or health.
 - `Scenario: An entry attributed to another data space survives` (ticket item 7), following D4:
   - give the consumer an additional grant `scope=did:web:other-dataspace.org,
     scopeType=dataspace-membership` at the provider TIL, in `dataspace` mode;
