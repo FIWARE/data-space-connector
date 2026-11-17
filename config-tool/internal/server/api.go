@@ -29,8 +29,8 @@ const (
 	queryKubeconfig = "kubeconfig"
 
 	// The tickets that replace a stub, reported with its 501.
-	ticketRender  = "CT-2"
-	ticketLoad    = "CT-2"
+	ticketRender  = "Epic 3/5"
+	ticketLoad    = "CT-3"
 	ticketProfile = "CT-4"
 )
 

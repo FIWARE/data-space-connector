@@ -28,6 +28,12 @@ tree. A mismatch is an error (`ErrPatchVerification`), never a file.
 Without edits `Write` returns the input byte for byte. A test over the whole corpus, and a
 fuzz target, pin that. A stream with more than one document is refused (`ErrMultiDocument`).
 
+A map override over a key that a mapping only inherits through a merge key (`<<: *base`)
+writes an explicit key holding the inherited map merged with the override, so the inherited
+sibling keys stay. Replacing an existing file on disk goes through this package (`Parse` the
+existing file, `Merge`, `Write`) and is written atomically: a temporary file in the same
+directory, renamed over the target, keeping its mode. The CLI wires that in CT-4.
+
 The library choice of ADR 0009 is unchanged; this record only fixes how the library is used.
 
 ## Consequences

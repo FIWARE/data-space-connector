@@ -128,7 +128,7 @@ keeps `dsc-config generate` honest and makes the core testable without a browser
 |---|---|---|
 | Helm | `helm.sh/helm/v3/pkg/{action,chart,chartutil,engine,downloader}` | Render, schema validation, dependency update, install/upgrade |
 | Kubernetes | `k8s.io/client-go`, `k8s.io/apimachinery` | Discovery for detection; apply for install |
-| YAML round-trip | `gopkg.in/yaml.v3` node API | Keeps comments and order; `sigs.k8s.io/yaml` for the schema path, since Helm uses it |
+| YAML round-trip | `gopkg.in/yaml.v3` node API | The parse index only: edits are byte patches over the source, never a re-encode ([ADR 0013](../adr/0013-config-tool-roundtrip-byte-patches.md)); `sigs.k8s.io/yaml` for the schema path, since Helm uses it |
 | Versions | `github.com/Masterminds/semver/v3` | Orders the model bundles; the library Helm compares chart versions with |
 | JSON Schema | `santhosh-tekuri/jsonschema/v6` | Draft-07, what the chart's schema is |
 | Sealed Secrets | `github.com/bitnami-labs/sealed-secrets/pkg/crypto` | Seals in process (AES-256-GCM session key wrapped with RSA-OAEP); `kubeseal` is used only to fetch a certificate when it is on the PATH |
@@ -181,7 +181,7 @@ No telemetry library, by design.
 | Layer | How |
 |---|---|
 | `core` units | Table-driven Go tests over the model: toggle resolution, preset application, render functions, classification |
-| **Round-trip** | Property test: load each of `k3s/*.yaml`, save without changes, assert the file is byte-identical apart from the generated header |
+| **Round-trip** | Property test: load each of `k3s/*.yaml` and both charts' `values.yaml`, save without changes, assert the file is byte-identical apart from the generated header. Per-leaf edit test: edit every scalar leaf of the corpus on its own and assert that only that value's lines change and its comments stay |
 | **Reproduction** | The acceptance test that matters: the tool must be able to **reproduce the repository's own scenario profiles**. Feed it the answers behind `k3s/provider.yaml`, `k3s/consumer.yaml` and `k3s/trust-anchor.yaml`, render, and assert the result installs the same workloads. This keeps the model and the chart from drifting |
 | Validation rules | One test per L2 rule, with the failure it was written for |
 | Render | `helm template` the generated values for every role preset, in CI, against the pinned chart version |

@@ -8,7 +8,7 @@ import (
 	"github.com/FIWARE/data-space-connector/config-tool/internal/profile"
 )
 
-// ErrNotImplemented is returned until rendering lands with CT-2.
+// ErrNotImplemented is returned until rendering lands with Epic 3/5.
 var ErrNotImplemented = errors.New("rendering a values.yaml is not implemented yet")
 
 // Render produces the values.yaml for p.

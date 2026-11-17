@@ -17,7 +17,7 @@ describe('Start', () => {
   })
 
   it.each([
-    ['Open values.yaml', 'CT-2/CT-3'],
+    ['Open values.yaml', 'CT-3'],
     ['Open profile', 'CT-4'],
     ['Try it locally', 'CT-5'],
   ])('names the ticket that enables %s', (title, ticket) => {
