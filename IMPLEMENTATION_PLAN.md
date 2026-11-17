@@ -24,6 +24,10 @@ writes nothing to disk; CT-4 wires saving.
    - Markers count only when the file carries the generated header (`roundtrip.Header`, `HeaderPrefix`
      on line 1). A file without the header was not written by the tool, so nothing in it is owned.
    - A marker anywhere else (on a sequence item, or in a line or foot comment) is ignored.
+   - A marker directly above the first key of a mapping counts for that key even where yaml.v3
+     attaches the comment to the document node or to the parent mapping node instead of the key's
+     `HeadComment`, provided no blank line separates it from the key. This is the most likely
+     layout of a rendered file: the marker on the first top-level key right after the header.
 3. **Recognition rules are data in the bundle**, not code. Each rule has these fields:
    - `path`: exact, `roundtrip.ParsePath` syntax, no wildcards yet.
    - `answer`: an answer id such as `domain.base` or `identity.did.enabled`.
@@ -35,11 +39,26 @@ writes nothing to disk; CT-4 wires saving.
    - **owned:** under a marker in scope.
    - **recognized:** the leaf is a scalar (not an alias, not a merge key), its path matches a rule,
      the rule's type or pattern matches, and the derived value equals the answer's value.
-   - The answer's value comes from the **first** matching leaf in document order.
-   - A later matching leaf whose derived value differs is **unknown**, with a note:
-     `differs from <answer> = <value>`. It was pinned by hand, so rendering must never overwrite it.
-   - A leaf whose type or pattern does not match is also unknown, with a note.
+   - **Owned leaves back-derive too.** The class decides what a re-render may touch; it does not
+     stop an owned leaf from answering. CT-3 loads a bare file without its profile, and a generated
+     file is exactly the one with markers, so without this its owned answers (`domain.base`,
+     `did.value` in the FEATURE_MODEL example) would be lost, and a recognized leaf elsewhere could
+     set them to a value the next re-render then writes over the owned block.
+   - **Two passes, owned first.** Pass 1 visits only owned leaves in document order and applies the
+     same rule, kind and pattern check; the first matching owned leaf sets the answer. Pass 2
+     visits the remaining leaves in document order; an answer still unset is set by the first
+     matching one. So an owned value always wins over a recognized one.
+   - A matching leaf whose derived value differs from the answer's value keeps its class if owned
+     (with the note) and is otherwise **unknown**, with the note `differs from <answer> = <value>`.
+     A non-owned one was pinned by hand, so rendering must never overwrite it.
+   - A leaf whose type or pattern does not match gets a note; it is unknown unless owned.
    - Everything else is unknown. Each leaf of `roundtrip.Classify` gets exactly one `Class`.
+   - Answer ids that a marker names but no owned leaf derived are listed in the report as owned but
+     not derived, so the user sees which answers the profile would have to supply.
+   - **Line numbers in the report are file lines.** `roundtrip.Parse` strips the three-line header
+     before decoding, so `yaml.Node.Line` and `Leaf.Line` count from the body. The offset is added
+     in one place, `roundtrip`, and every line that leaves the core (report entries,
+     `OwnedMarker.Line`) is the line an editor shows.
 5. **Choosing the bundle.**
    - When the file has a header whose chart version has a bundle, that bundle is used and the
      version is back-derived into `target.chartVersion`.
@@ -64,11 +83,18 @@ writes nothing to disk; CT-4 wires saving.
     loses comments, and wildcard rule paths.
 - **`doc/adr/README.md`**: add 0014 to the index and change the "ADRs 0009 to 0013" sentence to
   "0009 to 0014".
+- **`config-tool/internal/roundtrip/document.go`:** `func (d *Document) FileLine(bodyLine int) int`
+  maps a body line (`yaml.Node.Line`, `Leaf.Line`) to its line in the file: it adds the number of
+  lines in the stripped header (`headerLineCount` when the header is present, 0 otherwise). This is
+  the only place the offset is computed. Test: in a file with a header, the first key's
+  `Leaf.Line` is 1 and its `FileLine` is 4; without a header both are equal.
 - **`config-tool/internal/roundtrip/marker.go`** (new):
   - `const MarkerPrefix = "# dsc-config:owned "`, next to the header constants' style.
-  - `type OwnedMarker struct { Path Path; Line int; AnswerIDs []string }`.
+  - `type OwnedMarker struct { Path Path; Line int; AnswerIDs []string }`. `Line` is the marker's
+    file line, via `FileLine`.
   - `func (d *Document) OwnedMarkers() []OwnedMarker`. It returns nil when `d.Header().IsZero()`.
-    Otherwise it walks the mapping nodes and applies the scope rule of decision 2. Blank-line
+    Otherwise it walks the mapping nodes and applies the scope rule of decision 2, including the
+    first-key case where yaml.v3 puts the comment on the document or parent mapping node. Blank-line
     detection uses the source line table the document already has; do not re-encode nodes.
   - `func (d *Document) OwnedBy(markers []OwnedMarker, p Path) (OwnedMarker, bool)`, or an
     equivalent helper. It reports whether a leaf path is in scope, and `internal/load` can use it.
@@ -82,7 +108,10 @@ writes nothing to disk; CT-4 wires saving.
   - a marker without the header is ignored;
   - a marker on a sequence item is ignored;
   - several ids, with whitespace trimmed;
-  - CRLF input.
+  - CRLF input;
+  - the marker on the first top-level key right after the header (no other comment between);
+  - the marker on the first key of a nested mapping (`parent:` then the marker, then the key);
+  - in both, assert the owned path and that `OwnedMarker.Line` is the marker's file line.
 - **Acceptance:** `go test ./internal/roundtrip/...` passes, and `TestCorpusRoundTrip` is unchanged
   and green. Every exported identifier has a one-line GoDoc comment.
 
@@ -116,9 +145,11 @@ writes nothing to disk; CT-4 wires saving.
   - one cross-cutting `value` rule that uses `pattern`: `domain.base` from two host keys;
   - one plain `value` rule.
 - **Tests:** parameterized `model_test.go` cases for every validation error. Add a test that every
-  real bundle loads and that each rule path resolves in the chart's `values.yaml` at
-  `../charts/data-space-connector/values.yaml`, loaded through `roundtrip.Parse` and `Lookup`, so a
-  renamed chart key breaks the build.
+  real bundle loads and that each rule path resolves in the chart's `values.yaml`, loaded through
+  `roundtrip.Parse` and `Lookup`, so a renamed chart key breaks the build. The test runs in
+  `config-tool/internal/model`, so use the `repoRoot = "../../.."` constant pattern of
+  `internal/roundtrip/roundtrip_test.go`: `repoRoot + "/charts/data-space-connector/values.yaml"`.
+  The test fails, rather than skips, when the file is missing.
 - **Acceptance:** `go test ./...` passes, and `GET /api/model` behaves as before.
 
 ### Step 3: `internal/load` core — classifier, back-derivation, overrides, report, corpus test
@@ -129,9 +160,10 @@ New core package `config-tool/internal/load`. It imports no `net/http`; check th
   - `roundtrip.Parse`. Its errors are returned wrapped, and `ErrMultiDocument` stays matchable with
     `errors.Is`.
   - Choose the bundle as in decision 5.
-  - Build a `roundtrip.Classifier` from `OwnedMarkers` plus the bundle's rules, with the precedence of
-    decision 4.
-  - Run `roundtrip.Classify`.
+  - Build the classifier from `OwnedMarkers` plus the bundle's rules, with the precedence and the two
+    passes of decision 4: pass 1 derives answers from owned leaves, pass 2 runs
+    `roundtrip.Classify` with those answers pre-set.
+  - Convert every line it reports with `Doc.FileLine`.
 - **`Result` holds:**
   - `Doc *roundtrip.Document`, the untouched source, which is the overrides layer;
   - `Report`.
@@ -141,10 +173,13 @@ New core package `config-tool/internal/load`. It imports no `net/http`; check th
   - `chartVersionFrom`: `header` or `latest`;
   - `generated`: the header is present;
   - `counts {owned, recognized, unknown, total}`;
-  - `owned`, `recognized` and `unknown`, each `[]Entry{path, line, value, answer?, note?}`. `value`
-    is a short display string of the scalar, `""` for collections, `*name` for an alias;
-  - `answers []Answer{id, stage, value, paths}`. `value` is typed: a bool for toggles, a string or
-    number for values.
+  - `owned`, `recognized` and `unknown`, each `[]Entry{path, line, value, answer?, note?}`. `line`
+    is the file line. `value` is a short display string of the scalar, `""` for collections,
+    `*name` for an alias;
+  - `answers []Answer{id, stage, value, paths, from}`. `value` is typed: a bool for toggles, a
+    string or number for values. `from` is `owned` or `recognized`;
+  - `markers []Marker{path, line, answerIds, underived}`: each owned marker, and the answer ids it
+    names that no owned leaf derived.
 - **Name the limits.** `maxValuePreview`, for example, truncates long scalars in entries. No magic
   numbers.
 - **Never touch the document.** `Load` makes no `Set`, `Merge` or `SetHeader` call.
@@ -156,6 +191,11 @@ New core package `config-tool/internal/load`. It imports no `net/http`; check th
   - alias and merge-key leaves are unknown;
   - a header chart version with a bundle gives `chartVersionFrom=header`, and one without a bundle
     falls back to `latest`;
+  - an owned leaf that matches a rule stays `owned` and sets the answer with `from=owned`;
+  - an owned value wins over a recognized leaf with a different value that comes **earlier** in
+    the document; that recognized leaf becomes unknown with the `differs` note;
+  - a marker id with no matching owned leaf appears in `markers[].underived`;
+  - in a file with a header, an entry's `line` is its file line (body line + 3).
   - for each case, `counts.total == len(roundtrip.Classify(doc, nil))`, the three lists add up to
     it, and no path appears twice.
 - **Corpus test (`corpus_test.go`):**
@@ -215,7 +255,7 @@ Under `config-tool/ui/src/`, TypeScript with one-line JSDoc on components:
   - When `loaded` is set, it shows the load report: source name, chart version and where it came
     from, the counts per class, and lists per class. Unknown entries are grouped by top-level key in
     collapsed `<details>`, with path, line, value and note. It also shows the back-derived answers
-    grouped by stage, with a "go" link (`goTo`).
+    grouped by stage, with a "go" link (`goTo`), and the marker answers that were not derived.
   - The heading wording follows MOCKUPS S7 and the prototype, e.g. *Opened `<name>`: understood N,
     carried over untouched M*.
   - When `loaded` is not set, it keeps the old placeholder text for Epic 6. Review's `comingIn`
