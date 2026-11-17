@@ -51,6 +51,12 @@ func TestMerge(t *testing.T) {
 			want: "base: &b\n  p: {1: x, a: y}\nm:\n  p:\n    \"1\": x\n    a: z\n"},
 		{name: "merge key override", src: "base: &a\n  x: 1\nm:\n  <<: *a\n  w: 2\n", overrides: []map[string]any{{"m": m{"x": 1}}},
 			want: "base: &a\n  x: 1\nm:\n  <<: *a\n  w: 2\n  x: 1\n"},
+		{name: "map over a map inherited through a merge key", src: "base: &a\n  x:\n    y: 0\n    z: 2\nm:\n  <<: *a\n  w: 1\n",
+			overrides: []map[string]any{{"m": m{"x": m{"y": 1}}}},
+			want:      "base: &a\n  x:\n    y: 0\n    z: 2\nm:\n  <<: *a\n  w: 1\n  x:\n    \"y\": 1\n    z: 2\n"},
+		{name: "map over a scalar inherited through a merge key", src: "base: &a\n  x: 0\nm:\n  <<: *a\n",
+			overrides: []map[string]any{{"m": m{"x": m{"y": 1}}}},
+			want:      "base: &a\n  x: 0\nm:\n  <<: *a\n  x:\n    \"y\": 1\n"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -68,6 +74,7 @@ func TestMergeIdempotent(t *testing.T) {
 		overrides map[string]any
 	}{
 		{name: "merge key", src: "base: &a\n  x: 1\nm:\n  <<: *a\n  w: 2\n", overrides: m{"m": m{"x": 1, "v": 2}}},
+		{name: "map inherited through a merge key", src: "base: &a\n  x:\n    y: 0\n    z: 2\nm:\n  <<: *a\n  w: 1\n", overrides: m{"m": m{"x": m{"y": 1}}}},
 		{name: "nested", src: "a:\n  b: 1\n", overrides: m{"a": m{"c": m{"d": l{1, m{"e": "f"}}}}, "g": true}},
 		{name: "type change", src: "a: 5 # c\n", overrides: m{"a": m{"b": 1}}},
 	}

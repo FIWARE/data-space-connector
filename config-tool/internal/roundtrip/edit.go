@@ -249,7 +249,7 @@ func (d *Document) pendingPatches() ([]*patch, error) {
 		return ps, nil
 	}
 	cp := d.eofChompPatch()
-	if cp == nil || slices.ContainsFunc(ps, func(p *patch) bool { return !p.insert && p.start <= cp.end && cp.start < p.end }) {
+	if cp == nil || slices.ContainsFunc(ps, func(p *patch) bool { return !p.insert && p.start <= cp.end && cp.start <= p.end }) {
 		return ps, nil
 	}
 	return append(ps, cp), nil

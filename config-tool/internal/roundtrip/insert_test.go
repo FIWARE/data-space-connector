@@ -86,6 +86,8 @@ func TestSetInsert(t *testing.T) {
 		{name: "after a kept block at EOF", src: "a:\n  s: >+ # c\n    x", edits: []edit{{"a.t", 1}}, want: "a:\n  s: >- # c\n    x\n  t: 1"},
 		{name: "after an indented block at EOF", src: "l:\n  - |2\n     x", edits: []edit{{"b", 1}}, want: "l:\n  - |2-\n     x\nb: 1"},
 		{name: "after a stripped block at EOF", src: "a: |-\n  x", edits: []edit{{"b", 1}}, want: "a: |-\n  x\nb: 1"},
+		{name: "clipped block at EOF replaced by a map", src: "a: |\n  x", edits: []edit{{"a", m{"q": 1}}, {"z", 1}}, want: "a:\n  q: 1\nz: 1"},
+		{name: "kept block at EOF replaced by a map", src: "a: |+\n  x", edits: []edit{{"a", m{"q": 1}}, {"z", 1}}, want: "a:\n  q: 1\nz: 1"},
 		{name: "clipped string at EOF", src: "a: 1", edits: []edit{{"b", "x\ny\n"}}, want: "a: 1\nb: \"x\\ny\\n\""},
 		{name: "clipped string in a map at EOF", src: "a: 1", edits: []edit{{"b", m{"s": "x\n"}}}, want: "a: 1\nb:\n  s: \"x\\n\""},
 		{name: "kept string in a list at EOF", src: "a: 1", edits: []edit{{"b", l{"x\n\n"}}}, want: "a: 1\nb:\n  - \"x\\n\\n\""},

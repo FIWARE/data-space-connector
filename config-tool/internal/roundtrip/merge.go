@@ -11,7 +11,8 @@ import (
 
 // Merge deep-merges overrides into doc through Set: maps merge recursively, the override wins
 // otherwise. Sorted key order makes equal overrides give equal bytes. A map over an alias to a
-// mapping merges with its resolved value, replacing the alias only on change. Edits before an error stay pending.
+// mapping, or over a map inherited through `<<`, merges with that value as Helm sees it; an alias is
+// replaced only on change. Edits before an error stay pending.
 func Merge(doc *Document, overrides map[string]any) error {
 	if !isEmptyDoc(doc.root) && doc.root.Content[0].Kind != yaml.MappingNode {
 		return ErrNotMapping
@@ -33,7 +34,7 @@ func (d *Document) merge(p Path, overrides map[string]any) error {
 		n, err := d.Lookup(q)
 		switch {
 		case errors.Is(err, ErrNotFound):
-			err = d.Set(q, v)
+			err = d.mergeInherited(p, k, sub)
 		case err != nil:
 		case n.Kind == yaml.MappingNode:
 			err = d.merge(q, sub)
@@ -60,6 +61,41 @@ func (d *Document) mergeAlias(p Path, n *yaml.Node, over map[string]any) error {
 	}
 	base, _ := cur.(map[string]any)
 	return d.Set(p, deepMerge(base, over))
+}
+
+// mergeInherited sets the missing key k under p to sub, deep-merged with the map that p
+// inherits for k through a merge key `<<`, so the inherited siblings are not lost.
+func (d *Document) mergeInherited(p Path, k string, sub map[string]any) error {
+	q := append(p[:len(p):len(p)], Key(k))
+	parent, err := d.Lookup(p)
+	if err != nil || !hasMergeKey(parent) {
+		return d.Set(q, sub)
+	}
+	cur, err := decodeValue(parent)
+	if err != nil {
+		return err
+	}
+	if cur, err = stringKeys(cur); err != nil {
+		return fmt.Errorf("%w: %s: %v", ErrUnsupportedValue, p, err)
+	}
+	inherited, ok := cur.(map[string]any)[k].(map[string]any)
+	if !ok {
+		return d.Set(q, sub)
+	}
+	return d.Set(q, deepMerge(inherited, sub))
+}
+
+// hasMergeKey reports whether mapping n has a `<<` key.
+func hasMergeKey(n *yaml.Node) bool {
+	if n.Kind != yaml.MappingNode {
+		return false
+	}
+	for i := 0; i < len(n.Content); i += 2 {
+		if n.Content[i].Tag == mergeTag {
+			return true
+		}
+	}
+	return false
 }
 
 // stringKeys turns every map[any]any in v into a map[string]any, its keys formatted as Helm's
