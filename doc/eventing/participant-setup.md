@@ -317,7 +317,10 @@ The registration Job only creates issuers: for a DID the TIL already holds it ge
 nothing, so the snippet only works on a first registration. Two cases need more:
 
 - **The DID is already in `registration.issuer`** (as in `k3s/provider.yaml`): add
-  `OperatorCredential` to that entry instead of adding a second one, which would only get the `409`.
+  `OperatorCredential` to that entry and set `scope: ""` on it, instead of adding a second entry,
+  which would only get the `409`. Without `scope: ""` the entry gets the membership mark as soon as
+  a `participant.removed` publisher is configured. If the TIL already holds the DID, the entry keeps
+  the scope it was first written with (next case).
 - **The DID is already registered in the TIL** (for example by an earlier install): changed
   `credentialTypes` or `scope` values never reach it. Add the type through the TIL API with
   `PUT <til>/issuer/<did>`. It replaces the issuer's unscoped credentials, so send the full list,
