@@ -22,8 +22,8 @@ var (
 	ErrNotFound = errors.New("roundtrip: path not found")
 	// ErrAliasPath refuses a path that runs through an alias, since editing it would change the anchor.
 	ErrAliasPath = errors.New("roundtrip: path runs through an alias")
-	// ErrNotScalar refuses a Set on a path that holds a collection.
-	ErrNotScalar = errors.New("roundtrip: path does not hold a scalar")
+	// ErrNotMapping refuses a Set whose path needs a key below a non-null scalar or a sequence.
+	ErrNotMapping = errors.New("roundtrip: path runs into a value that is not a mapping")
 	// ErrUnsupportedValue refuses a Set with a Go value of a type the engine does not write.
 	ErrUnsupportedValue = errors.New("roundtrip: unsupported value type")
 	// ErrUnsupportedScalar refuses an edit whose source text the scanner cannot place exactly.
@@ -37,6 +37,7 @@ var (
 const (
 	utf8BOM        = "\xef\xbb\xbf"
 	lineFeed       = "\n"
+	tab            = "\t"
 	crlf           = "\r\n"
 	docStartMarker = "---"
 	docEndMarker   = "..."
@@ -56,8 +57,12 @@ type Document struct {
 	lineStarts   []int
 	eol          string
 	finalNewline bool
-	// patches holds the pending edits by path string; Write applies them to body.
-	patches map[string]*patch
+	// src is the tree as parsed, kept unedited once root carries edits; positions are read from it.
+	src *yaml.Node
+	// reps and groups are the pending edits keyed by path string; Write renders them from root.
+	reps   map[string]*replacement
+	groups map[string]*group
+	lay    *layout
 }
 
 // Parse reads src into a Document. It refuses more than one YAML document with
@@ -94,9 +99,13 @@ func Parse(src []byte) (*Document, error) {
 // ErrPatchConflict or ErrPatchVerification it returns no bytes.
 func (d *Document) Write() ([]byte, error) {
 	body := d.body
-	if len(d.patches) > 0 {
-		var err error
-		if body, err = applyPatches(d.body, d.sortedPatches()); err != nil {
+	edited := len(d.reps)+len(d.groups) > 0
+	if edited {
+		ps, err := d.pendingPatches()
+		if err != nil {
+			return nil, err
+		}
+		if body, err = applyPatches(d.body, ps); err != nil {
 			return nil, err
 		}
 	}
@@ -117,7 +126,7 @@ func (d *Document) Write() ([]byte, error) {
 	out.Write(header)
 	out.Write(body)
 	out.Write(d.tail)
-	if len(d.patches) > 0 {
+	if edited {
 		if err := d.verify(out.Bytes()); err != nil {
 			return nil, err
 		}

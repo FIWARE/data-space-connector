@@ -2,7 +2,9 @@ package roundtrip
 
 import (
 	"bytes"
+	"cmp"
 	"fmt"
+	"maps"
 	"math"
 	"math/big"
 	"reflect"
@@ -18,17 +20,40 @@ const (
 	boolTag  = "!!bool"
 	intTag   = "!!int"
 	floatTag = "!!float"
+	// nullText is the canonical text of null.
+	nullText = "null"
 	// defaultIndentUnit indents a block scalar's content past its owner when the source shows none.
 	defaultIndentUnit = 2
 )
 
-// patch is a pending replacement of the body bytes [start, end), recorded for one path.
+// patch is a concrete edit of the body bytes [start, end).
 type patch struct {
 	start, end int
 	text       []byte
-	// span and ctx describe the source value, so a later Set of the same path re-renders it.
+	// insert marks an insert group's zero-length patch: at equal offsets it follows replacements,
+	// and of two groups the one at the deeper column col goes first.
+	insert bool
+	col    int
+	// span and ctx describe a scalar's source text, so a later Set of the same path re-renders it.
 	span valueSpan
 	ctx  leafCtx
+}
+
+// replacement is a pending new value for one source node; Write renders it from the current tree.
+type replacement struct {
+	path Path
+	// cur is the node in root, edited in place so that aliases to it see the new value; src is
+	// the same node in the source tree.
+	cur, src *yaml.Node
+	// key is the source key node; nil for a sequence item or the root.
+	key  *yaml.Node
+	item bool
+	ctx  leafCtx
+	// scalar is set while source and new value are both scalars: leaf is then the in-place text
+	// edit. Otherwise span places the new value around the key line.
+	scalar bool
+	leaf   *patch
+	span   *replacedSpan
 }
 
 // candidate is one way to write a new value: an inline text, or a block scalar's header and
@@ -39,47 +64,195 @@ type candidate struct {
 	block   bool
 }
 
-// Set replaces the scalar or alias leaf at p with value: a string, bool, int, int64, float64 or
-// nil. The edit is a byte patch rendered at Write; a value equal to the current one adds none.
-// Errors: ErrNotFound, ErrNotScalar, ErrAliasPath, ErrUnsupportedValue, ErrUnsupportedScalar.
+// Set writes value at p: a string, bool, int, int64, float64 or nil, or a map[string]any or []any
+// of them. A missing key is inserted, with any missing parent mappings; no sequence item is ever
+// created. A collection, or a value of another kind, replaces the old value's text, and comments
+// inside the old value's block lines go with it; the key line's anchor and line comment stay.
+// A value equal to the current one adds no edit. Edits are rendered at Write.
+// Errors: ErrNotFound, ErrNotMapping, ErrAliasPath, ErrUnsupportedValue, ErrUnsupportedScalar.
 func (d *Document) Set(p Path, value any) error {
-	tag, text, err := scalarFor(value)
+	if err := checkValue(value); err != nil {
+		return err
+	}
+	if d.src == nil {
+		d.src = cloneTree(d.root, map[*yaml.Node]*yaml.Node{})
+	}
+	if isEmptyDoc(d.root) {
+		if len(p) == 0 {
+			return fmt.Errorf("%w: empty document", ErrNotFound)
+		}
+		return d.insert(p, 0, nil, value)
+	}
+	nodes, err := d.resolve(p)
 	if err != nil {
 		return err
 	}
-	loc, err := d.locate(p)
-	if err != nil {
-		return err
+	if i := len(nodes) - 1; i < len(p) {
+		return d.insert(p, i, nodes[i], value)
 	}
-	if loc.merge {
-		return fmt.Errorf("%w: %s sets a merge key's value", ErrAliasPath, p)
+	return d.replace(p, nodes[len(p)], value)
+}
+
+// resolve walks p in the current tree and returns the nodes of its longest existing prefix, the
+// top node first. A path through an alias or onto a merge key gives ErrAliasPath.
+func (d *Document) resolve(p Path) ([]*yaml.Node, error) {
+	n := d.root.Content[0]
+	nodes := []*yaml.Node{n}
+	for i, seg := range p {
+		if n.Kind == yaml.AliasNode {
+			return nil, fmt.Errorf("%w: %s passes through alias *%s at %s", ErrAliasPath, p, n.Value, p[:i])
+		}
+		key, next := child(n, seg)
+		if key != nil && key.Tag == mergeTag {
+			return nil, fmt.Errorf("%w: %s sets a merge key's value", ErrAliasPath, p)
+		}
+		if next == nil {
+			break
+		}
+		nodes = append(nodes, next)
+		n = next
 	}
-	n := loc.node
-	if n.Kind != yaml.ScalarNode && n.Kind != yaml.AliasNode {
-		return fmt.Errorf("%w: %s", ErrNotScalar, p)
-	}
-	if cur, err := decodeValue(n); err == nil && equalValue(cur, value) {
+	return nodes, nil
+}
+
+// replace sets the existing node cur at p to value.
+func (d *Document) replace(p Path, cur *yaml.Node, value any) error {
+	if v, err := decodeValue(cur); err == nil && equalValue(v, value) {
 		return nil
 	}
-	key := p.String()
-	pt, ok := d.patches[key]
-	if !ok {
-		s, err := d.scanSpan(n, loc.ctx)
-		if err != nil {
-			return fmt.Errorf("%s: %w", p, err)
+	r, exact, inGroup := d.owner(p)
+	if inGroup || (r != nil && !exact) {
+		setNode(cur, value)
+		return nil
+	}
+	if r == nil {
+		var err error
+		if r, err = d.newReplacement(p, cur); err != nil {
+			return err
 		}
-		pt = &patch{span: s, ctx: loc.ctx}
 	}
-	if err := d.render(pt, value); err != nil {
-		return fmt.Errorf("%s: %w", p, err)
+	var err error
+	if isScalarValue(value) && (r.src.Kind == yaml.ScalarNode || r.src.Kind == yaml.AliasNode) {
+		err = d.prepareScalar(r, value)
+	} else {
+		err = d.prepareCollection(r)
 	}
-	if d.patches == nil {
-		d.patches = map[string]*patch{}
+	if err != nil {
+		return err
 	}
-	d.patches[key] = pt
-	*n = yaml.Node{Kind: yaml.ScalarNode, Tag: tag, Value: text, Anchor: n.Anchor, Line: n.Line, Column: n.Column,
-		HeadComment: n.HeadComment, LineComment: n.LineComment, FootComment: n.FootComment}
+	d.supersede(p)
+	if d.reps == nil {
+		d.reps = map[string]*replacement{}
+	}
+	d.reps[p.String()] = r
+	setNode(cur, value)
 	return nil
+}
+
+// newReplacement starts a replacement of the source node at p, whose current node is cur.
+func (d *Document) newReplacement(p Path, cur *yaml.Node) (*replacement, error) {
+	loc, err := d.locateIn(d.src, p)
+	if err != nil {
+		return nil, err
+	}
+	r := &replacement{path: slices.Clone(p), cur: cur, src: loc.node, key: loc.key, ctx: loc.ctx}
+	if len(p) > 0 {
+		_, r.item = p[len(p)-1].Index()
+	}
+	return r, nil
+}
+
+// prepareScalar renders value over r's source scalar text in place.
+func (d *Document) prepareScalar(r *replacement, value any) error {
+	if r.leaf == nil {
+		s, err := d.scanSpan(r.src, r.ctx)
+		if err != nil {
+			return fmt.Errorf("%s: %w", r.path, err)
+		}
+		r.leaf = &patch{span: s, ctx: r.ctx}
+	}
+	if err := d.render(r.leaf, value); err != nil {
+		return fmt.Errorf("%s: %w", r.path, err)
+	}
+	r.scalar = true
+	return nil
+}
+
+// prepareCollection switches r to rendering around the key line, whose span it locates once.
+func (d *Document) prepareCollection(r *replacement) error {
+	if r.span == nil {
+		s, err := d.replacedSpan(r)
+		if err != nil {
+			return fmt.Errorf("%s: %w", r.path, err)
+		}
+		r.span = s
+	}
+	r.scalar = false
+	return nil
+}
+
+// owner finds the pending edit p lies in: a replacement at or above p (exact when at p), or a key
+// inserted at or above p (inGroup). Everything below either is edited in the current tree only.
+func (d *Document) owner(p Path) (r *replacement, exact, inGroup bool) {
+	for j := 0; j <= len(p); j++ {
+		q := p[:j].String()
+		if r := d.reps[q]; r != nil {
+			return r, j == len(p), false
+		}
+		if j == len(p) {
+			break
+		}
+		if k, ok := p[j].Key(); ok && d.groups[q] != nil && d.groups[q].keys[k] {
+			return nil, false, true
+		}
+	}
+	return nil, false, false
+}
+
+// supersede drops the pending edits a new value at p replaces: replacements strictly below p and
+// insert groups at or below it.
+func (d *Document) supersede(p Path) {
+	for k, r := range d.reps {
+		if len(r.path) > len(p) && hasPrefix(r.path, p) {
+			delete(d.reps, k)
+		}
+	}
+	for k, g := range d.groups {
+		if hasPrefix(g.parent, p) {
+			delete(d.groups, k)
+		}
+	}
+}
+
+func hasPrefix(p, q Path) bool {
+	return len(p) >= len(q) && slices.Equal(p[:len(q)], q)
+}
+
+// pendingPatches renders every pending edit from the current tree.
+func (d *Document) pendingPatches() ([]*patch, error) {
+	var ps []*patch
+	for _, k := range slices.Sorted(maps.Keys(d.reps)) {
+		rp, err := d.renderReplacement(d.reps[k])
+		if err != nil {
+			return nil, err
+		}
+		ps = append(ps, rp...)
+	}
+	for _, k := range slices.Sorted(maps.Keys(d.groups)) {
+		gp, err := d.renderGroup(d.groups[k])
+		if err != nil {
+			return nil, err
+		}
+		ps = append(ps, gp)
+	}
+	if !slices.ContainsFunc(ps, func(p *patch) bool { return p.insert && p.start == len(d.body) }) {
+		return ps, nil
+	}
+	cp := d.eofChompPatch()
+	if cp == nil || slices.ContainsFunc(ps, func(p *patch) bool { return !p.insert && p.start <= cp.end && cp.start <= p.end }) {
+		return ps, nil
+	}
+	return append(ps, cp), nil
 }
 
 // scalarFor returns the tag and canonical text of a Go value; the tag comes from the Go type, so
@@ -87,7 +260,7 @@ func (d *Document) Set(p Path, value any) error {
 func scalarFor(v any) (string, string, error) {
 	switch v := v.(type) {
 	case nil:
-		return nullTag, "null", nil
+		return nullTag, nullText, nil
 	case string:
 		return strTag, v, nil
 	case bool:
@@ -261,20 +434,31 @@ func (d *Document) blockIndent(s valueSpan, c leafCtx) int {
 	return max(c.owner, 0) + defaultIndentUnit
 }
 
-// applyPatches returns body with ps applied. Overlapping spans give ErrPatchConflict.
+// applyPatches returns body with ps applied. Overlapping spans, and two replacements starting at
+// one offset, give ErrPatchConflict.
 func applyPatches(body []byte, ps []*patch) ([]byte, error) {
 	ps = slices.Clone(ps)
-	slices.SortFunc(ps, func(a, b *patch) int {
-		if a.start != b.start {
-			return a.start - b.start
+	slices.SortStableFunc(ps, func(a, b *patch) int {
+		switch {
+		case a.start != b.start:
+			return cmp.Compare(a.start, b.start)
+		case a.insert != b.insert && a.insert:
+			return 1
+		case a.insert != b.insert:
+			return -1
+		case a.insert:
+			return cmp.Compare(b.col, a.col)
 		}
-		return a.end - b.end
+		return cmp.Compare(a.end, b.end)
 	})
 	var out bytes.Buffer
 	last := 0
 	for i, p := range ps {
-		if i > 0 && (p.start < ps[i-1].end || p.start == ps[i-1].start) {
-			return nil, fmt.Errorf("%w: [%d, %d) and [%d, %d)", ErrPatchConflict, ps[i-1].start, ps[i-1].end, p.start, p.end)
+		if i > 0 {
+			prev := ps[i-1]
+			if p.start < prev.end || (!p.insert && !prev.insert && p.start == prev.start) {
+				return nil, fmt.Errorf("%w: [%d, %d) and [%d, %d)", ErrPatchConflict, prev.start, prev.end, p.start, p.end)
+			}
 		}
 		out.Write(body[last:p.start])
 		out.Write(p.text)
@@ -282,20 +466,6 @@ func applyPatches(body []byte, ps []*patch) ([]byte, error) {
 	}
 	out.Write(body[last:])
 	return out.Bytes(), nil
-}
-
-// sortedPatches returns the pending patches in path order, for a deterministic apply.
-func (d *Document) sortedPatches() []*patch {
-	keys := make([]string, 0, len(d.patches))
-	for k := range d.patches {
-		keys = append(keys, k)
-	}
-	slices.Sort(keys)
-	ps := make([]*patch, len(keys))
-	for i, k := range keys {
-		ps[i] = d.patches[k]
-	}
-	return ps
 }
 
 // verify re-parses out and compares its values with the edited in-memory tree.

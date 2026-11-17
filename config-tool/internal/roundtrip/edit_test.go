@@ -19,6 +19,11 @@ func mustPath(t *testing.T, s string) Path {
 	return p
 }
 
+// pendingEdits counts the pending replacements and insert groups.
+func pendingEdits(d *Document) int {
+	return len(d.reps) + len(d.groups)
+}
+
 // setAndWrite applies one Set to src and returns the written bytes.
 func setAndWrite(t *testing.T, src, path string, value any) string {
 	t.Helper()
@@ -163,8 +168,8 @@ func TestSetEqualValueAddsNoPatch(t *testing.T) {
 			if err := d.Set(mustPath(t, tt.path), tt.value); err != nil {
 				t.Fatalf("Set: %v", err)
 			}
-			if len(d.patches) != 0 {
-				t.Errorf("%d patches recorded, want none", len(d.patches))
+			if n := pendingEdits(d); n != 0 {
+				t.Errorf("%d edits recorded, want none", n)
 			}
 			if got := string(mustWrite(t, d)); got != tt.src {
 				t.Errorf("Write = %q, want the source", got)
@@ -180,8 +185,8 @@ func TestSetNaNTwice(t *testing.T) {
 			t.Fatalf("Set: %v", err)
 		}
 	}
-	if len(d.patches) != 1 {
-		t.Errorf("%d patches, want 1", len(d.patches))
+	if n := pendingEdits(d); n != 1 {
+		t.Errorf("%d edits, want 1", n)
 	}
 	if got := string(mustWrite(t, d)); got != "x: .nan\n" {
 		t.Errorf("Write = %q", got)
@@ -243,7 +248,7 @@ func TestSelfCheckRefusesWrongType(t *testing.T) {
 	if err := d.Set(Path{Key("x")}, 9090); err != nil {
 		t.Fatal(err)
 	}
-	d.patches["x"].text = []byte(`"9090"`)
+	d.reps["x"].leaf.text = []byte(`"9090"`)
 	if got, err := d.Write(); !errors.Is(err, ErrPatchVerification) || got != nil {
 		t.Fatalf("Write = %q, %v; want no bytes and ErrPatchVerification", got, err)
 	}
@@ -283,14 +288,15 @@ func TestSetErrors(t *testing.T) {
 		value   any
 		wantErr error
 	}{
-		{name: "missing key", path: Path{Key("nope")}, value: 1, wantErr: ErrNotFound},
-		{name: "inherited key", path: Path{Key("m"), Key("x")}, value: 1, wantErr: ErrNotFound},
 		{name: "index out of range", path: Path{Key("list"), Index(1)}, value: 1, wantErr: ErrNotFound},
-		{name: "mapping", path: Path{Key("base")}, value: 1, wantErr: ErrNotScalar},
-		{name: "empty collection", path: Path{Key("map")}, value: 1, wantErr: ErrNotScalar},
+		{name: "index below a missing key", path: Path{Key("nope"), Index(0)}, value: 1, wantErr: ErrNotFound},
+		{name: "key below a scalar", path: Path{Key("m"), Key("y"), Key("z")}, value: 1, wantErr: ErrNotMapping},
+		{name: "key below a sequence", path: Path{Key("list"), Key("z")}, value: 1, wantErr: ErrNotMapping},
 		{name: "through an alias", path: Path{Key("ref"), Key("x")}, value: 2, wantErr: ErrAliasPath},
 		{name: "merge key value", path: Path{Key("m"), Key("<<")}, value: 2, wantErr: ErrAliasPath},
 		{name: "unsupported type", path: Path{Key("m"), Key("y")}, value: uint(3), wantErr: ErrUnsupportedValue},
+		{name: "unsupported type in a map", path: Path{Key("m"), Key("y")}, value: map[string]any{"a": []any{uint(3)}}, wantErr: ErrUnsupportedValue},
+		{name: "alias leaf below", path: Path{Key("ref"), Key("x"), Key("y")}, value: 2, wantErr: ErrAliasPath},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

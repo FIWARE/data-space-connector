@@ -477,7 +477,10 @@ In `internal/roundtrip/`:
     replaced subtree (in its block part) go with it; the GoDoc of `Set` says so.
   - Empty flow, null and non-empty flow parents are handled as described in the Decisions.
   - When the source has no trailing newline and an insertion lands at EOF, a line ending is
-    written before the fragment and the file still ends without one.
+    written before the fragment and the file still ends without one. If the body ends in a
+    clip- or keep-chomped block scalar (`k3s/consent-trust-anchor.yaml`), that line ending would
+    become part of its value, so its indicator gets strip chomping (`|` → `|-`, `>+` → `>-`),
+    which keeps the value.
   - Inserting into an empty document appends top-level keys at column 0.
   - New keys go into the insert group of their nearest existing parent, and paths below a
     pending value edit its value tree (see *Patch model* and *Edits below a pending value*).
