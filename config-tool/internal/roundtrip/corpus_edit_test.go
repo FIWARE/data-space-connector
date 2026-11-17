@@ -151,12 +151,13 @@ func checkLeafEdit(t *testing.T, f *corpusFile, i int) editResult {
 		t.Errorf("Set(%s): %v", leaf.Path, err)
 		return editResult{}
 	}
-	if len(d.patches) != 1 {
-		t.Errorf("Set(%s) recorded %d patches, want 1", leaf.Path, len(d.patches))
+	if len(d.reps) != 1 || len(d.groups) != 0 {
+		t.Errorf("Set(%s) recorded %d replacements and %d inserts, want one replacement", leaf.Path, len(d.reps), len(d.groups))
 		return editResult{}
 	}
 	var p *patch
-	for _, p = range d.patches {
+	for _, r := range d.reps {
+		p = r.leaf
 	}
 	out, err := d.Write()
 	if err != nil {

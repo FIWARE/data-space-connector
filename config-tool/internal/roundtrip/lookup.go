@@ -11,24 +11,27 @@ import (
 // Lookup returns the node at p. A duplicated key resolves to its last occurrence. It gives
 // ErrNotFound for a missing key or index and ErrAliasPath when p runs through an alias.
 func (d *Document) Lookup(p Path) (*yaml.Node, error) {
-	loc, err := d.locate(p)
+	loc, err := d.locateIn(d.root, p)
 	return loc.node, err
 }
 
 // located is a node found by locate, with the context its value text is scanned in.
 type located struct {
 	node *yaml.Node
-	ctx  leafCtx
+	// key is the key node of p's last segment; nil for an index or the root.
+	key *yaml.Node
+	ctx leafCtx
 	// merge is set when the path runs through a `<<` key.
 	merge bool
 }
 
-// locate resolves p like Lookup and tracks the owning column and flow context on the way.
-func (d *Document) locate(p Path) (located, error) {
-	if len(d.root.Content) == 0 {
+// locateIn resolves p in the document node root like Lookup, and tracks the owning column and flow
+// context on the way. Positions are only meaningful in the source tree.
+func (d *Document) locateIn(root *yaml.Node, p Path) (located, error) {
+	if len(root.Content) == 0 {
 		return located{}, fmt.Errorf("%w: %s: empty document", ErrNotFound, p)
 	}
-	loc := located{node: d.root.Content[0], ctx: leafCtx{owner: noOwner}}
+	loc := located{node: root.Content[0], ctx: leafCtx{owner: noOwner}}
 	for i, seg := range p {
 		n := loc.node
 		if n.Kind == yaml.AliasNode {
@@ -48,7 +51,7 @@ func (d *Document) locate(p Path) (located, error) {
 			loc.ctx.owner = d.dashColumn(n)
 		}
 		loc.merge = loc.merge || (key != nil && key.Tag == mergeTag)
-		loc.node = next
+		loc.node, loc.key = next, key
 	}
 	return loc, nil
 }
@@ -122,6 +125,25 @@ func decodeValue(n *yaml.Node) (any, error) {
 		return nil, fmt.Errorf("roundtrip: %w", err)
 	}
 	return v, nil
+}
+
+// cloneTree deep-copies n; copies maps each node to its copy, so aliases point into the copy.
+func cloneTree(n *yaml.Node, copies map[*yaml.Node]*yaml.Node) *yaml.Node {
+	if c, ok := copies[n]; ok {
+		return c
+	}
+	c := *n
+	copies[n] = &c
+	if n.Alias != nil {
+		c.Alias = cloneTree(n.Alias, copies)
+	}
+	if n.Content != nil {
+		c.Content = make([]*yaml.Node, len(n.Content))
+		for i, sub := range n.Content {
+			c.Content[i] = cloneTree(sub, copies)
+		}
+	}
+	return &c
 }
 
 // withoutShadowed deep-copies n without shadowed pairs. Alias targets are copied too, even
