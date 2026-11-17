@@ -220,10 +220,22 @@ post-26.4 OID4VCI model. Hard-won gotchas (full detail in `doc/release-notes/10-
 - APISIX routes are a subchart list (`decentralizedIam.odrlAuthorization.apisix.routes`): the
   umbrella cannot inject a gated route, so the events route is a documented snippet.
 - CI runs `helm unittest` without `helm dependency build`: suites can only target `templates/`.
+- Trust anchor side (ticket-106): the publisher is the `contract-management` of the
+  `consent-authority` release (DSC chart, ns `trust-anchor`, identity `did:web:dataspace-authority.org`,
+  key secret `dataspace-authority.org-tls`, OperatorCredential in secret `vc-operator-credential`).
+- CM 3.5.3 publisher gotchas: chart `notification.enabled: false` does not disable notifications (set
+  env `NOTIFICATION_ENABLED=false`, copying the OTEL `additionalEnvVars` list); the TIR watcher reads
+  the Micronaut service `services.trusted-issuers-registry` (no URL key under `tir-watcher`); CM trusts
+  `X-Userinfo`, so `/subscriptions` needs a gateway route like `/events`. Management port 9090 serves
+  `POST /events` (manual publish, returns `subscriptions` count), `GET /participants-removed`
+  (report) and `POST /refresh`; there is no reconcile trigger (it runs once after
+  `participant-removed.reconcile.initial-delay`, then every `interval`).
+- IT: `StandardStepDefinitions`' `@Before("not @consent and not @eidas")` wipes the provider TIL;
+  every new tag must be excluded there. In-cluster, `*.127.0.0.1.nip.io` resolves to Traefik (coredns).
 
 ## Important Files
 - `charts/data-space-connector/Chart.yaml` -- dependency graph (current
-  version 10.15.10).
+  version 10.16.0).
 - `charts/data-space-connector/values.yaml` -- ~2930-line config surface;
   top-level sections start at these approximate line numbers:
   `decentralizedIam` (9), `scorpio` (183), `keycloak` (262),
