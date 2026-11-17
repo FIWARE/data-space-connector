@@ -116,6 +116,10 @@ func walkPairs(doc *Document, leaf func(Path, *yaml.Node, int), skip func(Skippe
 		for i := range live {
 			key, value := n.Content[2*i], n.Content[2*i+1]
 			switch {
+			// livePairs gives every collection key the same identity, so they are never "shadowed".
+			case key.Kind == yaml.MappingNode || key.Kind == yaml.SequenceNode:
+				skip(SkippedPair{Parent: p, Key: key, Value: value, Line: key.Line, Reason: SkipNonScalarKey})
+				continue
 			case !live[i]:
 				skip(SkippedPair{Parent: p, Key: key, Value: value, Line: key.Line,
 					ShadowedBy: shadowingKey(n, live, i).Line, Reason: SkipShadowed})

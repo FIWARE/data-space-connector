@@ -376,6 +376,12 @@ func TestSkipped(t *testing.T) {
 			{"", "", 5, 0, SkipNonScalarKey},
 			{"", "", 7, 0, SkipNonScalarKey},
 		}},
+		{name: "distinct complex keys", src: []byte("? {a: 1}\n: x\n? {b: 2}\n: y\n? [c]\n: z\n? [d]\n: w\n"), want: []skipSummary{
+			{"", "", 1, 0, SkipNonScalarKey},
+			{"", "", 3, 0, SkipNonScalarKey},
+			{"", "", 5, 0, SkipNonScalarKey},
+			{"", "", 7, 0, SkipNonScalarKey},
+		}},
 		{name: "duplicate inside a shadowed subtree", src: []byte("a:\n  x: 1\n  x: 2\na: 3\n"), want: []skipSummary{
 			{"", "a", 1, 4, SkipShadowed},
 		}},
