@@ -93,7 +93,7 @@ pom.xml                       # drives local-deploy + integration tests
 - CI entry points: `.github/workflows/check.yaml` (lint) and
   `.github/workflows/test.yaml` (helm-unittest + integration).
 - Links: `.github/scripts/check-links.sh` (lychee in docker, `lychee.toml`).
-- Config tool (from `config-tool/`, once CT-1 lands; see its README):
+- Config tool (from `config-tool/`; see its README):
   `make ui` (npm ci + vite build into `ui/dist`), `make build`, `make test`
   (`go test ./...` + `npm test`), `make cross` (5 targets, CGO_ENABLED=0).
   CI: `.github/workflows/config-tool.yaml`.
@@ -184,6 +184,10 @@ pom.xml                       # drives local-deploy + integration tests
   Never re-encode a `yaml.Node` to write a file, because the encoder is not byte-faithful. The
   corpus is `k3s/*.yaml` plus both charts' `values.yaml`. Five k3s files have no trailing
   newline, and none of them uses anchors, so anchors are covered by fixtures in `testdata/`.
+- CT-3 (#118, planned, ADR 0014): loading lives in core package `internal/load` (classify each
+  leaf owned > recognized > unknown, back-derive answers, build the report). Recognition rules are
+  data in `model/<version>/bundle.yaml` under `recognize:`. `POST /api/load` takes the uploaded
+  bytes. `profile.Profile` stays untouched because CT-4 extends it in parallel.
 
 ## Documentation
 
