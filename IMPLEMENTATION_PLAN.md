@@ -467,10 +467,15 @@ decentralized-iam 2.3.0 / TIL 0.10.3).
 - `.github/workflows/test.yaml`: add the matrix entry `eventing` (`test,eventing,eventing-test`). It
   runs in both deployments per ADR 0007, which adds 2 CI jobs; say so in the PR.
 - `StandardStepDefinitions`: split `setup()` (:111) in two hooks.
-  - `@Before(order = 0)` `initWallet()`, untagged: `CryptoIntegration.init`, the BouncyCastle
-    provider, a fresh `fancyMarketplaceEmployeeWallet` and the mapper setting. It only creates
-    in-memory objects, so it is safe for `@consent`/`@eidas` too, and it lets the eventing feature
-    reuse the order steps.
+  - `@Before(value = "not @consent and not @eidas", order = 0)` `initWallet()`:
+    `CryptoIntegration.init`, the BouncyCastle provider, a fresh `fancyMarketplaceEmployeeWallet`
+    and `OBJECT_MAPPER.setSerializationInclusion(NON_EMPTY)`. It carries the same tag expression as
+    today's `setup()`. An untagged hook would be wrong: `OBJECT_MAPPER` is the JVM-global
+    `protected static final` mapper of `StepDefintions` (:27), and `ConsentStepDefinitions` and
+    `EidasStepDefinitions` inherit it. Applying `NON_EMPTY` in those runs would silently drop
+    empty or null fields from the bodies they serialize (e.g. ConsentStepDefinitions:345). With
+    this expression `@consent`/`@eidas` behave exactly as today, and `@eventing` still gets the
+    init the order steps need.
   - `@Before("not @consent and not @eidas and not @eventing")` `setup()`: `clean()`, `prepareTil()`
     and the sleep, as today. `@eventing` must stay out, because `cleanUpTIL` would delete the grants
     the registration Job wrote (scenario 1's proof and the authority's OperatorCredential grant that
