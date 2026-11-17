@@ -291,20 +291,45 @@ decentralized-iam 2.3.0 / TIL 0.10.3).
       (`bearer_only`, `set_userinfo_header`), a `proxy-rewrite` that removes `X-Userinfo` with
       `_meta.priority` 3000, and an unauthenticated discovery route
       `/.well-known/openid-configuration` → verifier `/services/<id>/...`;
-    - mirror the three participant routes of `doc/eventing/examples/events-routes.yaml`, but use
-      **different names** (e.g. `dataspace-subscriptions*`): the umbrella validates the three
+    - follow the shape of the three participant routes of `doc/eventing/examples/events-routes.yaml`,
+      but use **different names** (e.g. `dataspace-subscriptions*`): the umbrella validates the three
       `dataspace-events*` names against participant rules;
+    - the subscription routes carry **no `opa` plugin**. `consent-trust-anchor.yaml` sets
+      `odrl-pap.enabled: false` (~769), so the authority has no PDP. Authorization is the verifier
+      service below (a TIR-listed participant's MembershipCredential) plus CM, which takes the
+      subscriber's identity from `X-Userinfo.participantId`;
     - the overlay sets the authority APISIX `routes` to a **full copy** of the list in
       `consent-trust-anchor.yaml` (~614–769) with the three subscription routes appended. Helm
       replaces lists, so setting only the new routes would drop every consent route. `extraEnvVars`
-      and `catchAllRoute` are not touched.
+      and `catchAllRoute` are not touched;
+    - the new host is added to the authority APISIX Ingress (`consent-trust-anchor.yaml` ~588–600),
+      otherwise Traefik never forwards it and every call gets a Traefik `404`: append it to **full
+      copies** of `ingress.hosts` and `ingress.tls[0].hosts`, and to the comma-separated
+      `cert-manager.io/alt-names` annotation (a copy of the whole `annotations` map is not needed:
+      Helm merges maps, so setting that one key is enough).
   - **A verifier service** (e.g. `dataspace-subscriptions`), appended to a **full copy** of the
     authority verifier's `registration.services` (which holds `consent-manager`):
-    - it admits a participant's MembershipCredential with `trustedParticipantsLists` = the TIR, so a
-      removed participant can no longer subscribe;
-    - `jwtInclusion` maps the subscriber's DID to the top-level claim `participantId` (as in
-      `participant-setup.md` §3). Check which credential field holds the organisation DID in the
-      provider's and the consumer's MembershipCredential.
+    - it admits a participant's MembershipCredential with `trustedIssuersLists: ["*"]` and
+      `trustedParticipantsLists` = the TIR, as `consent-manager` does. That checks the credential's
+      **issuer** against the TIR, nothing else;
+    - **`participantId` is mapped from the credential's `issuer`, not from `credentialSubject.id`.**
+      The subject is a value the issuer writes freely, so with a subject mapping any TIR-listed
+      participant could mint a MembershipCredential for `did:web:fancy-marketplace.biz` and
+      subscribe, or unsubscribe someone, as the removed consumer. The issuer is the one DID the TIR
+      check binds. In k3s it is the participant's own DID: both MembershipCredentials are minted by
+      the participant's own Keycloak (`provider.yaml` ~1726, `consumer-auth.yaml` ~409), so the issuer
+      is `did:web:mp-operations.org` and `did:web:fancy-marketplace.biz` respectively. The contract
+      this records: a subscriber is identified by the DID that issued its MembershipCredential, so a
+      data space whose memberships are issued by a third party needs another binding (documented in
+      `trust-anchor-setup.md`);
+    - the mapping is explicit, as `participant-setup.md` §3 requires: `jwtInclusion.enabled: true`,
+      `fullInclusion: false`, `flatClaims: true`, `claimsToInclude: [{originalKey: issuer, newKey:
+      participantId}]`. `fullInclusion: true` would make the verifier ignore the mapping. No
+      `verifiableCredential.*` claims are needed, as no ODRL policy reads them here;
+    - residual risk: both MembershipCredentials are minted with `holderBinding.enabled: false`, so
+      anyone who obtains a participant's JWT can replay it, exactly as the warning at
+      `consent-trust-anchor.yaml` ~518 records for consent. `trust-anchor-setup.md` repeats it and
+      names holder binding as the hardening step.
 - **Decision: the trust anchor keeps the consent components.** The authority APISIX needs the
   `consent-manager` secret, so the `eventing` profile deploys the `trust-anchor` release exactly as
   `consent` does: `trust-anchor.yaml,consent-trust-anchor-components.yaml` with `--wait=false`
@@ -341,13 +366,17 @@ decentralized-iam 2.3.0 / TIL 0.10.3).
     `subscriptions: 0`;
   - `POST /subscriptions` through the new host returns `401` without a token, and the discovery
     route serves the service's metadata;
+  - a token the `dataspace-subscriptions` service issues for the provider's MembershipCredential
+    carries `participantId: did:web:mp-operations.org` (the credential's issuer); check it in the
+    verifier log or by decoding the token the subscriber obtains in Step 2;
   - the consent scenario is unchanged. `mvn package -Pconsent` renders
     `target/rendered/participants/consent-authority` byte-identical before and after the `pom.xml`
     change;
   - the overlay only adds. Diff `helm template consent-authority` with
     `consent-trust-anchor.yaml` against `consent-trust-anchor.yaml,eventing-trust-anchor.yaml`: the
     only differences are the CM objects, the three `dataspace-subscriptions*` routes in the APISIX
-    route config and the `dataspace-subscriptions` service in the verifier config. Every consent
+    route config, the new host in the APISIX Ingress (`hosts`, `tls[0].hosts`, `alt-names`) and
+    the `dataspace-subscriptions` service in the verifier config. Every consent
     route, the `consent-manager` service and the `CONSENT_KEY` env var are still present.
 
 ### Step 2: Listener, subscriber, routes and policy at provider and consumer
@@ -391,8 +420,14 @@ decentralized-iam 2.3.0 / TIL 0.10.3).
   - A verifier service `dataspace-events`:
     - it admits the OperatorCredential, with the provider TIL as `trustedIssuersLists` and the TIR as
       `trustedParticipantsLists`;
-    - `jwtInclusion` with `fullInclusion: true` + the `participantId` mapping
-      (`participant-setup.md` §3).
+    - `flatClaims: true` and `jwtInclusion` with `fullInclusion: false` and the explicit
+      `claimsToInclude` of `participant-setup.md` §3: `credentialSubject.id` → `participantId`,
+      `type` → `verifiableCredential.type`, `issuer` → `verifiableCredential.issuer` (the last two
+      for the ODRL policy). `fullInclusion: true` must not be used: the verifier then ignores the
+      mapping, the token has no `participantId`, CM refuses every delivery and the Background's
+      probe step times out. The subject is safe here, unlike at the authority (Step 1): the
+      provider TIL trusts only `did:web:dataspace-authority.org` as issuer of the
+      OperatorCredential, so no one else can choose its subject.
   - The `allowDataSpaceEvents.json` policy at the PAP, loaded by a Job the way
     `k3s/consent-provider.yaml` posts its policy, so the demo works without the IT.
   - `registration.issuer`: a full copy of the provider list. mp-operations and dataspace-authority get
@@ -715,6 +750,9 @@ decentralized-iam 2.3.0 / TIL 0.10.3).
   - the identity reuse: which DID, key secret and credential, and that nothing new is registered;
   - the `/subscriptions` gateway routes and verifier service, and why CM needs `X-Userinfo`
     (link `participant-setup.md`);
+  - that `participantId` is the MembershipCredential's issuer, not its subject (Step 1), what that
+    requires of a data space whose memberships a third party issues, and the replay risk of
+    credentials minted without holder binding;
   - the TIR-watcher safeguards and timing (§8: first snapshot silent, `confirmations`,
     `max-removals-per-cycle`), and the production defaults vs. the k3s values;
   - the CM pitfalls: `NOTIFICATION_ENABLED`, `services.trusted-issuers-registry`, a single replica
