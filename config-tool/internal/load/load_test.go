@@ -3,9 +3,11 @@ package load
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"os"
 	"slices"
 	"testing"
+	"testing/fstest"
 
 	"github.com/FIWARE/data-space-connector/config-tool/internal/model"
 	"github.com/FIWARE/data-space-connector/config-tool/internal/roundtrip"
@@ -315,6 +317,63 @@ func TestLoad(t *testing.T) {
 			}
 			if tt.skipped != nil && !slices.Equal(r.Skipped, tt.skipped) {
 				t.Errorf("skipped = %+v, want %+v", r.Skipped, tt.skipped)
+			}
+		})
+	}
+}
+
+// TestChooseBundle tells the header's bundle from the latest one: only the older bundle
+// recognizes old.enabled, so the classification shows which rules were applied.
+func TestChooseBundle(t *testing.T) {
+	const (
+		olderVersion  = "1.0.0"
+		latestVersion = "2.0.0"
+		missing       = "9.9.9"
+		body          = "old:\n  enabled: true\n"
+		olderBundle   = "chart: " + DefaultChart + "\nversion: " + olderVersion + "\nrecognize:\n" +
+			"  - {path: old.enabled, answer: old.enabled, stage: features, kind: toggle}\n"
+		latestBundle = "chart: " + DefaultChart + "\nversion: " + latestVersion + "\n"
+	)
+	bundles, err := model.Versions(fstest.MapFS{
+		olderVersion + "/bundle.yaml":  {Data: []byte(olderBundle)},
+		latestVersion + "/bundle.yaml": {Data: []byte(latestBundle)},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	headerFor := func(chart string) string {
+		return roundtrip.HeaderPrefix + "v0.2.0" + chart + "\n" + roundtrip.HeaderOwnedLine + "\n\n"
+	}
+	tests := []struct {
+		name        string
+		src         string
+		wantVersion string
+		wantFrom    VersionSource
+		wantNote    string
+		wantClass   string
+	}{
+		{name: "header version with a bundle", src: headerFor(" for chart "+olderVersion) + body,
+			wantVersion: olderVersion, wantFrom: FromHeader, wantClass: "recognized"},
+		{name: "no header", src: body,
+			wantVersion: latestVersion, wantFrom: FromLatest, wantNote: noteNoHeader, wantClass: "unknown"},
+		{name: "header without a chart version", src: headerFor("") + body,
+			wantVersion: latestVersion, wantFrom: FromLatest, wantNote: noteHeaderNoChart, wantClass: "unknown"},
+		{name: "header version without a bundle", src: headerFor(" for chart "+missing) + body,
+			wantVersion: latestVersion, wantFrom: FromLatest, wantNote: fmt.Sprintf(noteNoBundle, missing), wantClass: "unknown"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			res, err := Load([]byte(tt.src), "values.yaml", bundles)
+			if err != nil {
+				t.Fatal(err)
+			}
+			r := res.Report
+			if r.ChartVersion != tt.wantVersion || r.ChartVersionFrom != tt.wantFrom || r.ChartVersionNote != tt.wantNote {
+				t.Errorf("chart %s from %s note %q, want %s from %s note %q",
+					r.ChartVersion, r.ChartVersionFrom, r.ChartVersionNote, tt.wantVersion, tt.wantFrom, tt.wantNote)
+			}
+			if got := byPath(r)["old.enabled"].class; got != tt.wantClass {
+				t.Errorf("old.enabled is %s, want %s", got, tt.wantClass)
 			}
 		})
 	}
