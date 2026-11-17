@@ -113,13 +113,15 @@ configured publisher sends `participant.removed` events. Without such a publishe
 
 - Set `scope` on an issuer entry, or `scope: ""` to leave it unmarked, when the default is wrong:
   - the grant does not come from the data space membership (for example an eIDAS `UserCredential`
-    issuer, which a removal of that DID would otherwise revoke);
+    issuer, which a removal of that DID would otherwise revoke, or the publisher's own issuer of
+    [step 3](#3-register-the-verifier-service));
   - the grant goes to a TIL whose contract-management subscribes to another publisher.
 - With several publishers of `participant.removed` events, set `scope` on every entry; the chart
   refuses to guess.
 - Issuers registered before this feature stay unmarked (the TIL keeps the existing entry).
   `on-participant-removed.adopt-unattributed` lets contract-management attribute them.
 - The marking needs TIL ≥ 0.10.1. An older TIL accepts the request and silently drops the mark.
+  The reactions need a newer TIL still, see [Requirements](#requirements).
 
 ### Who may send events
 
@@ -146,8 +148,13 @@ ODRL policy.
 ### Requirements
 
 - contract-management ≥ 3.5.3: the chart ships it (CM chart 3.6.6) since 10.16.0.
-- TIL ≥ 0.10.1 for the membership marking: the chart ships 0.10.3 (decentralizedIam 2.3.0) since
-  10.16.0. A TIL outside the release (`registration.til`) must be upgraded by its operator.
+- TIL ≥ 0.10.3: the chart ships 0.10.3 (decentralizedIam 2.3.0) since 10.16.0. A TIL outside the
+  release (`registration.til`) must be upgraded by its operator. Each part of the feature needs:
+  - 0.10.1 for the membership marking; an older TIL silently drops it;
+  - 0.10.2 for the `dataspace`, `granted` and `full` reactions and for a complete `report`. With an
+    older TIL, contract-management fails to start in a writing mode; in `report` mode it runs
+    degraded (health `DEGRADED`) and reports removals without what the participant holds;
+  - 0.10.3 for `adopt-unattributed`; with an older TIL, contract-management fails to start.
 - The bundled APISIX gateway, or an own gateway (see
   [Own gateway](#own-gateway-and-switching-the-checks-off)).
 
@@ -286,6 +293,24 @@ decentralizedIam:
 ```
 
 This mapping is not yet covered by an integration test.
+
+The verifier checks the credential's issuer against `trustedIssuersLists`, here this participant's
+own TIL. That TIL must therefore list the issuer of the publisher's credential
+(`did:web:dataspace-authority.org`) for `OperatorCredential`, or the verifier refuses the credential
+and the publisher never gets a token. Add it to your `registration.issuer` list (Helm replaces lists,
+so keep your other entries) with `scope: ""`: this trust does not come from the membership, so it
+must not carry the membership mark (see
+[Which trust comes from the membership](#which-trust-comes-from-the-membership)).
+
+```yaml
+registration:
+  issuer:
+    # ... your other issuers ...
+    - did: did:web:dataspace-authority.org
+      credentialTypes:
+        - OperatorCredential
+      scope: ""
+```
 
 ### 4. Create the ODRL policy
 

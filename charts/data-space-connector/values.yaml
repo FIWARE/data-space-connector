@@ -2132,9 +2132,10 @@ registration:
   # space publisher. For any other grant (e.g. an eIDAS `UserCredential` issuer, which a
   # `participant.removed` for that DID would revoke) set `scope` explicitly or `scope: ""`.
   # Needs a trusted-issuers-list >= 0.10.1, an older one silently drops the scope, and a
-  # contract-management >= 3.5.3 to act on it. An issuer that is already registered answers 409 and
-  # keeps its unscoped grant; contract-management's `on-participant-removed.adopt-unattributed`
-  # covers those.
+  # contract-management >= 3.5.3 to act on it; contract-management's removal handling needs
+  # trusted-issuers-list >= 0.10.2 (>= 0.10.3 with `adopt-unattributed`). An issuer that is
+  # already registered answers 409 and keeps its unscoped grant; contract-management's
+  # `on-participant-removed.adopt-unattributed` covers those.
   # issuer:
   # - did: ${DID}
   #   credentialTypes:
