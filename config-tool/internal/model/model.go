@@ -2,7 +2,10 @@
 package model
 
 import (
+	"bytes"
+	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"path"
 	"regexp"
@@ -97,6 +100,8 @@ func compileRules(rules []Rule) ([]CompiledRule, error) {
 	}
 	compiled := make([]CompiledRule, len(rules))
 	seen := map[string]int{}
+	// firstByAnswer keeps the first rule per answer, because the report gives an answer one stage and type.
+	firstByAnswer := map[string]int{}
 	for i, r := range rules {
 		c, err := compileRule(r)
 		if err != nil {
@@ -107,6 +112,15 @@ func compileRules(rules []Rule) ([]CompiledRule, error) {
 			return nil, fmt.Errorf("recognize[%d]: path %q is already used by recognize[%d]", i, key, j)
 		}
 		seen[key] = i
+		j, ok := firstByAnswer[c.Answer]
+		switch {
+		case !ok:
+			firstByAnswer[c.Answer] = i
+		case compiled[j].Stage != c.Stage:
+			return nil, fmt.Errorf("recognize[%d]: answer %q has stage %s, recognize[%d] has %s", i, c.Answer, c.Stage, j, compiled[j].Stage)
+		case compiled[j].Kind != c.Kind:
+			return nil, fmt.Errorf("recognize[%d]: answer %q has kind %s, recognize[%d] has %s", i, c.Answer, c.Kind, j, compiled[j].Kind)
+		}
 		compiled[i] = c
 	}
 	return compiled, nil
@@ -215,8 +229,11 @@ func readBundle(fsys fs.FS, file string) (versioned, error) {
 	if err != nil {
 		return versioned{}, err
 	}
+	// KnownFields makes a misspelled key an error instead of a silently dropped field.
+	dec := yaml.NewDecoder(bytes.NewReader(data))
+	dec.KnownFields(true)
 	var b Bundle
-	if err := yaml.Unmarshal(data, &b); err != nil {
+	if err := dec.Decode(&b); err != nil && !errors.Is(err, io.EOF) {
 		return versioned{}, fmt.Errorf("%s: %w", file, err)
 	}
 	if b.Chart == "" {

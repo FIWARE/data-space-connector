@@ -179,6 +179,9 @@ func TestRuleValidation(t *testing.T) {
 		{"pattern without group", "  - {path: a, answer: a, stage: features, kind: value, pattern: 'x'}\n", "has 0 capture groups, want 1"},
 		{"pattern with two groups", "  - {path: a, answer: a, stage: features, kind: value, pattern: '(x)(y)'}\n", "has 2 capture groups, want 1"},
 		{"duplicate path", toggle + toggle, "recognize[1]: path \"did.enabled\" is already used by recognize[0]"},
+		{"answer with two stages", toggle + "  - {path: x.enabled, answer: identity.did.enabled, stage: configuration, kind: toggle}\n", `recognize[1]: answer "identity.did.enabled" has stage configuration, recognize[0] has features`},
+		{"answer with two kinds", toggle + "  - {path: x.host, answer: identity.did.enabled, stage: features, kind: value}\n", `recognize[1]: answer "identity.did.enabled" has kind value, recognize[0] has toggle`},
+		{"unknown rule field", "  - {path: a, answer: a, stage: features, kind: value, patern: '^[^.]+\\.(.+)$'}\n", "field patern not found"},
 		{"duplicate path in another spelling", toggle + "  - {path: 'did.\"enabled\"', answer: b, stage: features, kind: toggle}\n", "already used by recognize[0]"},
 	}
 	for _, tc := range tests {
