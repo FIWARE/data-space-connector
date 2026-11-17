@@ -581,6 +581,10 @@
                 <deploy.trustAnchor.args>--wait=false</deploy.trustAnchor.args>
                 <deploy.consentAuthority.values>${main.basedir}/k3s/consent-trust-anchor.yaml,${main.basedir}/k3s/eventing-trust-anchor.yaml</deploy.consentAuthority.values>
                 <deploy.consentAuthority.template.skip>${deploy.template.skip}</deploy.consentAuthority.template.skip>
+                <!-- listener + subscriber at both participants. The consumer needs the set with
+                     contract-management, gateway, verifier and TIL, as in `central`. -->
+                <deploy.provider.values>${main.basedir}/k3s/provider.yaml,${main.basedir}/k3s/eventing-provider.yaml</deploy.provider.values>
+                <deploy.consumer.values>${main.basedir}/k3s/consumer.yaml,${main.basedir}/k3s/consumer-auth.yaml,${main.basedir}/k3s/consumer-tmf.yaml,${main.basedir}/k3s/eventing-consumer.yaml</deploy.consumer.values>
             </properties>
             <build>
                 <plugins>

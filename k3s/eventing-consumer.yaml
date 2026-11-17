@@ -1,0 +1,446 @@
+# ---------------------------------------------------------------------------
+# Data space eventing overlay for the consumer (Fancy Marketplace), layered on the
+# consumer set with contract-management, gateway, verifier and TIL - the one the
+# `central` profile uses:
+#   -f k3s/consumer.yaml -f k3s/consumer-auth.yaml -f k3s/consumer-tmf.yaml \
+#   -f k3s/eventing-consumer.yaml
+#
+# Turns the consumer's contract-management into a listener + subscriber of the trust
+# anchor's event publisher (k3s/eventing-trust-anchor.yaml) and exposes its `/events`
+# sink at a host of its own, contract-management-fancy-marketplace.127.0.0.1.nip.io:
+# the `/*` routes of fancy-marketplace.127.0.0.1.nip.io belong to the TM Forum API.
+# Setup guide: doc/eventing/participant-setup.md.
+#
+# This file only ADDS to the consumer. Helm replaces lists, so the lists it extends
+# (verifier services, APISIX routes, ingress hosts/tls, contract-management env vars
+# and volumes, registration issuers) are full copies of the ones in consumer-auth.yaml
+# and consumer-tmf.yaml plus the eventing entries: keep them in sync.
+#
+# In-cluster, *.127.0.0.1.nip.io resolves to the Traefik Service, which listens on
+# 8443 only (not 443). Every in-cluster URL to such a host therefore carries `:8443`.
+#
+# The timings below are demo/test values, sized for the integration test.
+# ---------------------------------------------------------------------------
+
+contract-management:
+  dataspace:
+    events:
+      # receive the publisher's events
+      listener:
+        enabled: true
+      subscriber:
+        enabled: true
+        # the `/events` routes below; the publisher delivers here from inside the cluster
+        sink: https://contract-management-fancy-marketplace.127.0.0.1.nip.io:8443/events
+        # the verifier service `dataspace-events` below; the publisher requests its token there
+        protocol-settings:
+          client-id: dataspace-events
+          scopes: ["default"]
+        # a registration that failed while the publisher was down is retried within 20 s
+        # (CM defaults PT5S, PT5M)
+        retry:
+          initial-backoff: PT5S
+          max-backoff: PT20S
+      publishers:
+        - id: did:web:dataspace-authority.org
+          # publisher.origin of the trust anchor
+          origin: dataspace-events.127.0.0.1.nip.io
+          types: ["org.fiware.dataspace.participant.removed"]
+          subscriptions-url: https://dataspace-events.127.0.0.1.nip.io:8443/subscriptions
+          # the publisher's verifier service; the token carries this participant's DID
+          client-id: dataspace-subscriptions
+          scopes: ["default"]
+          on-participant-removed:
+            mode: report
+            # the TIR this publisher watches: an event for a DID still listed there is stale
+            registry-url: http://tir.trust-anchor.svc.cluster.local:8080
+            keep:
+              - did:web:dataspace-authority.org
+              - did:web:fancy-marketplace.biz
+      # the sweep runs once ~20 s after start-up and then only every 6 h, so that it never
+      # races the event path in the integration test (CM defaults PT1M, PT15M)
+      participant-removed:
+        reconcile:
+          initial-delay: PT20S
+          interval: PT6H
+  # copy of consumer-tmf.yaml's list, plus the eventing entry
+  additionalEnvVars:
+    - name: MICRONAUT_HTTP_CLIENT_PROXY_TYPE
+      value: "HTTP"
+    - name: MICRONAUT_HTTP_CLIENT_PROXY_ADDRESS
+      value: "squid-proxy.infra.svc.cluster.local:8888"
+    - name: LOGGER_LEVELS_ROOT
+      value: DEBUG
+    # show each subscription's state and expiresAt on the cluster-internal port 9090
+    - name: ENDPOINTS_HEALTH_DETAILS_VISIBLE
+      value: "ANONYMOUS"
+  deployment:
+    # copy of consumer-tmf.yaml's list; the credential-repo projection also gets the
+    # MembershipCredential, the one credential the publisher's verifier service admits
+    additionalVolumes:
+      - name: signing-key
+        emptyDir: {}
+      - name: signing-key-raw
+        secret:
+          secretName: fancy-marketplace.biz-tls
+          defaultMode: 0755
+      - name: ca-certs-script
+        configMap:
+          name: ca-certs-script
+          defaultMode: 0755
+      - name: credential-repo
+        projected:
+          sources:
+            - secret:
+                name: vc-marketplace-credential
+                items:
+                  - key: credential
+                    path: marketplace-credential.jwt
+            - secret:
+                name: vc-legal-person-credential
+                items:
+                  - key: credential
+                    path: legal-person-credential.jwt
+            - secret:
+                name: vc-fdsc-edc-credential
+                items:
+                  - key: credential
+                    path: membership-credential.jwt
+      - name: root-ca
+        secret:
+          secretName: fancy-marketplace.biz-tls
+          items:
+            - key: ca.crt
+              path: ca.crt
+      - name: cacerts
+        emptyDir: {}
+
+decentralizedIam:
+  vcAuthentication:
+    vcverifier:
+      registration:
+        # copy of consumer-auth.yaml's list, plus `dataspace-events`
+        services:
+          - id: tm-forum
+            defaultOidcScope: "default"
+            authorizationType: "DEEPLINK"
+            oidcScopes:
+              "default":
+                credentials:
+                  - type: LegalPersonCredential
+                    trustedParticipantsLists:
+                      - https://tir.127.0.0.1.nip.io
+                    # we want that every participant can access the marketplace and register
+                    trustedIssuersLists:
+                      - "*"
+                    jwtInclusion:
+                      enabled: true
+                      fullInclusion: true
+                dcql:
+                  credentials:
+                    - id: legal-person-query
+                      format: "vc+sd-jwt"
+                      multiple: false
+                      claims:
+                        - id: roles-claim
+                          path:
+                            - roles
+                      meta:
+                        vct_values:
+                          - LegalPersonCredential
+          - id: dsp
+            defaultOidcScope: "openid"
+            authorizationType: "DEEPLINK"
+            oidcScopes:
+              "openid":
+                credentials:
+                  - type: MembershipCredential
+                    trustedParticipantsLists:
+                      - https://tir.127.0.0.1.nip.io
+                    trustedIssuersLists:
+                      - "*"
+                    jwtInclusion:
+                      enabled: true
+                      fullInclusion: true
+                dcql:
+                  credentials:
+                    - id: mc-query
+                      format: "jwt_vc_json"
+                      multiple: true
+                      meta:
+                        type_values:
+                          - [MembershipCredential]
+          # Who may deliver events: the publisher's OperatorCredential, issued by
+          # did:web:dataspace-authority.org. Only that issuer is listed for the type in this
+          # participant's TIL, so no one else can choose the credential's subject.
+          # The ODRL policy (allowDataSpaceEvents) reads verifiableCredential.{type,issuer};
+          # contract-management compares participantId with the event's sender.
+          - id: dataspace-events
+            defaultOidcScope: "default"
+            authorizationType: "DEEPLINK"
+            oidcScopes:
+              "default":
+                # put the mapped claims at the top level of the token
+                flatClaims: true
+                credentials:
+                  - type: OperatorCredential
+                    trustedParticipantsLists:
+                      - https://tir.127.0.0.1.nip.io
+                    trustedIssuersLists:
+                      - http://trusted-issuers-list:8080
+                    jwtInclusion:
+                      enabled: true
+                      # fullInclusion would make the verifier ignore claimsToInclude
+                      fullInclusion: false
+                      # a "." in newKey creates a nested claim
+                      claimsToInclude:
+                        - originalKey: credentialSubject.id
+                          newKey: participantId
+                        - originalKey: type
+                          newKey: verifiableCredential.type
+                        - originalKey: issuer
+                          newKey: verifiableCredential.issuer
+                dcql:
+                  credentials:
+                    - id: operator-query
+                      format: "jwt_vc_json"
+                      multiple: true
+                      meta:
+                        type_values:
+                          - [OperatorCredential]
+  odrlAuthorization:
+    apisix:
+      # copies of consumer-auth.yaml's lists, plus the sink host
+      ingress:
+        hosts:
+          - host: fancy-marketplace.127.0.0.1.nip.io
+            paths: ["/"]
+          - host: dsp-fancy-marketplace.127.0.0.1.nip.io
+            paths: ["/"]
+          - host: dcp-fancy-marketplace.127.0.0.1.nip.io
+            paths: ["/"]
+          - host: identityhub-fancy-marketplace.127.0.0.1.nip.io
+            paths: ["/"]
+          - host: identityhub-management-fancy-marketplace.127.0.0.1.nip.io
+            paths: ["/"]
+          - host: dsp-dcp-management.127.0.0.1.nip.io
+            paths: ["/"]
+          - host: dsp-oid4vc-management.127.0.0.1.nip.io
+            paths: ["/"]
+          - host: vault-fancy-marketplace.127.0.0.1.nip.io
+            paths: ["/"]
+          - host: contract-management-fancy-marketplace.127.0.0.1.nip.io
+            paths: ["/"]
+        tls:
+          - secretName: apisix-consumer-tls
+            hosts:
+              - fancy-marketplace.127.0.0.1.nip.io
+              - dsp-fancy-marketplace.127.0.0.1.nip.io
+              - dcp-fancy-marketplace.127.0.0.1.nip.io
+              - identityhub-fancy-marketplace.127.0.0.1.nip.io
+              - identityhub-management-fancy-marketplace.127.0.0.1.nip.io
+              - dsp-dcp-management.127.0.0.1.nip.io
+              - dsp-oid4vc-management.127.0.0.1.nip.io
+              - vault-fancy-marketplace.127.0.0.1.nip.io
+              - contract-management-fancy-marketplace.127.0.0.1.nip.io
+      # copy of consumer-auth.yaml's list, plus the three routes of
+      # doc/eventing/examples/events-routes.yaml
+      routes:
+        - uri: /.well-known/openid-configuration
+          host: fancy-marketplace.127.0.0.1.nip.io
+          upstream:
+            nodes:
+              verifier:3000: 1
+            type: roundrobin
+          plugins:
+            proxy-rewrite:
+              uri: /services/tm-forum/.well-known/openid-configuration
+        - uri: /*
+          host: fancy-marketplace.127.0.0.1.nip.io
+          upstream:
+            nodes:
+              tm-forum-api-svc:8080: 1
+            type: roundrobin
+          plugins:
+            openid-connect:
+              proxy_opts:
+                https_proxy: http://squid-proxy.infra.svc.cluster.local:8888
+              bearer_only: true
+              use_jwks: true
+              client_id: tm-forum
+              client_secret: unused
+              ssl_verify: false
+              discovery: https://verifier.fancy-marketplace.biz/services/tm-forum/.well-known/openid-configuration
+            opa:
+              host: "http://localhost:8181"
+              policy: policy/main
+              with_body: true
+        - uri: /*
+          host: dsp-dcp-management.127.0.0.1.nip.io
+          upstream:
+            nodes:
+              consumer-fdsc-edc-dcp:8085: 1
+            type: roundrobin
+        - uri: /*
+          host: dsp-oid4vc-management.127.0.0.1.nip.io
+          upstream:
+            nodes:
+              consumer-fdsc-edc-oid4vc:8085: 1
+            type: roundrobin
+        - uri: /.well-known/openid-configuration
+          host: dsp-fancy-marketplace.127.0.0.1.nip.io
+          upstream:
+            nodes:
+              verifier:3000: 1
+            type: roundrobin
+          plugins:
+            proxy-rewrite:
+              uri: /services/dsp/.well-known/openid-configuration
+        - uri: /api/identity/*
+          host: identityhub-management-fancy-marketplace.127.0.0.1.nip.io
+          upstream:
+            nodes:
+              identityhub-service:8082: 1
+        - uri: /api/credentials/*
+          host: identityhub-fancy-marketplace.127.0.0.1.nip.io
+          upstream:
+            nodes:
+              identityhub-service:8083: 1
+        - uri: /*
+          host: dcp-fancy-marketplace.127.0.0.1.nip.io
+          upstream:
+            nodes:
+              consumer-fdsc-edc-dcp:8080: 1
+        - uri: /*
+          host: dsp-fancy-marketplace.127.0.0.1.nip.io
+          upstream:
+            nodes:
+              consumer-fdsc-edc-oid4vc:8080: 1
+          plugins:
+            openid-connect:
+              proxy_opts:
+                https_proxy: http://squid-proxy.infra.svc.cluster.local:8888
+              bearer_only: true
+              use_jwks: true
+              client_id: dsp
+              client_secret: unused
+              ssl_verify: false
+              discovery: https://verifier.fancy-marketplace.biz/services/dsp/.well-known/openid-configuration
+        - uri: /*
+          host: vault-fancy-marketplace.127.0.0.1.nip.io
+          upstream:
+            nodes:
+              consumer-vault:8200: 1
+        # Data space eventing: the publisher's deliveries. contract-management verifies no
+        # token itself and takes the sender from X-Userinfo.participantId; the umbrella
+        # checks these three routes by name (templates/eventing-validation.yaml).
+        - name: dataspace-events
+          uri: /events
+          methods: ["POST"]
+          host: contract-management-fancy-marketplace.127.0.0.1.nip.io
+          upstream:
+            nodes:
+              contract-management:8080: 1
+            type: roundrobin
+          plugins:
+            # remove a caller-supplied X-Userinfo BEFORE openid-connect (priority 2599) sets it
+            proxy-rewrite:
+              _meta:
+                priority: 2600
+              headers:
+                remove: ["X-Userinfo"]
+            openid-connect:
+              bearer_only: true
+              use_jwks: true
+              set_userinfo_header: true
+              client_id: dataspace-events
+              # only tokens minted for this service
+              claim_validator:
+                audience:
+                  claim: aud
+                  required: true
+                  match_with_client_id: true
+              client_secret: unused
+              discovery: https://verifier.fancy-marketplace.biz/services/dataspace-events/.well-known/openid-configuration
+              proxy_opts:
+                https_proxy: http://squid-proxy.infra.svc.cluster.local:8888
+              ssl_verify: false
+            opa:
+              host: http://localhost:8181
+              policy: policy/main
+              with_body: true
+        # the publisher's handshake (OPTIONS) carries no token
+        - name: dataspace-events-handshake
+          uri: /events
+          methods: ["OPTIONS"]
+          host: contract-management-fancy-marketplace.127.0.0.1.nip.io
+          upstream:
+            nodes:
+              contract-management:8080: 1
+            type: roundrobin
+        # on a 401 the publisher fetches <sink>/.well-known/openid-configuration
+        - name: dataspace-events-discovery
+          uri: /events/.well-known/openid-configuration
+          methods: ["GET"]
+          host: contract-management-fancy-marketplace.127.0.0.1.nip.io
+          upstream:
+            nodes:
+              verifier:3000: 1
+            type: roundrobin
+          plugins:
+            proxy-rewrite:
+              uri: /services/dataspace-events/.well-known/openid-configuration
+
+# copy of consumer-auth.yaml's list (Helm replaces lists), plus the authority. With a
+# participant.removed publisher configured, an entry without `scope` is registered as a
+# data space membership grant: mp-operations' MembershipCredential is trusted because it
+# is a member. The authority's OperatorCredential (the publisher's deliveries) is not.
+registration:
+  issuer:
+    - did: did:web:mp-operations.org
+      credentialTypes:
+        - MembershipCredential
+    - did: did:web:dataspace-authority.org
+      credentialTypes:
+        - OperatorCredential
+      scope: ""
+
+# The ODRL policy that admits the publisher's deliveries: the content of
+# it/src/test/resources/policies/allowDataSpaceEvents.json, an OperatorCredential issued by
+# did:web:dataspace-authority.org. Loaded by a Job, so the demo works without the IT.
+extraManifests:
+  - |
+    apiVersion: batch/v1
+    kind: Job
+    metadata:
+      name: {{ .Release.Name }}-allow-dataspace-events
+      namespace: {{ .Release.Namespace }}
+    spec:
+      ttlSecondsAfterFinished: 86400
+      backoffLimit: 10
+      template:
+        spec:
+          restartPolicy: OnFailure
+          securityContext:
+            runAsNonRoot: true
+            # curlimages/curl's curl_user; a numeric uid lets the kubelet check runAsNonRoot
+            runAsUser: 100
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: register-policy
+              image: curlimages/curl:8.18.0
+              securityContext:
+                readOnlyRootFilesystem: true
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop: ["ALL"]
+              command: ["/bin/sh", "-ec"]
+              args:
+                - |
+                  echo "waiting for odrl-pap..."
+                  until curl -sf http://odrl-pap:8080/policy > /dev/null; do sleep 5; done
+                  code=$(curl -s -o /dev/stderr -w '%{http_code}' -X POST http://odrl-pap:8080/policy -H 'Content-Type: application/json' --data '{"@context":{"dc":"http://purl.org/dc/elements/1.1/","dct":"http://purl.org/dc/terms/","owl":"http://www.w3.org/2002/07/owl#","odrl":"http://www.w3.org/ns/odrl/2/","rdfs":"http://www.w3.org/2000/01/rdf-schema#","skos":"http://www.w3.org/2004/02/skos/core#"},"@id":"https://mp-operation.org/policy/common/dataSpaceEvents","odrl:uid":"https://mp-operation.org/policy/common/dataSpaceEvents","@type":"odrl:Policy","odrl:permission":{"odrl:assigner":{"@id":"https://www.mp-operation.org/"},"odrl:target":{"@type":"odrl:AssetCollection","odrl:source":"urn:asset","odrl:refinement":[{"@type":"odrl:Constraint","odrl:leftOperand":"http:path","odrl:operator":{"@id":"http:isInPath"},"odrl:rightOperand":"/events"}]},"odrl:assignee":{"@type":"odrl:PartyCollection","odrl:source":"urn:user","odrl:refinement":{"@type":"odrl:LogicalConstraint","odrl:and":[{"@type":"odrl:Constraint","odrl:leftOperand":{"@id":"vc:type"},"odrl:operator":{"@id":"odrl:hasPart"},"odrl:rightOperand":{"@value":"OperatorCredential","@type":"xsd:string"}},{"@type":"odrl:Constraint","odrl:leftOperand":{"@id":"vc:currentParty"},"odrl:operator":{"@id":"odrl:eq"},"odrl:rightOperand":"did:web:dataspace-authority.org"}]}},"odrl:action":{"@id":"tmf:create"}}}')
+                  echo "odrl-pap POST /policy -> HTTP $code"
+                  # 2xx = created; a conflict on re-run is fine (policy already present)
+                  case "$code" in 2*) exit 0;; 409) echo "already registered"; exit 0;; *) exit 1;; esac
