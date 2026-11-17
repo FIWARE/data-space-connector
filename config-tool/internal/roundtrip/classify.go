@@ -49,21 +49,61 @@ func DefaultClassifier(Path, *yaml.Node) Class {
 	return ClassUnknown
 }
 
+// SkipReason is why Classify left a key/value pair out.
+type SkipReason int
+
+// The reasons a pair is skipped.
+const (
+	// SkipShadowed marks a duplicate key that a later key of the same mapping shadows.
+	SkipShadowed SkipReason = iota
+	// SkipNonScalarKey marks a pair whose key is an alias or complex key, which no Path addresses.
+	SkipNonScalarKey
+)
+
+// SkippedPair is a pair Classify skips with its subtree; its bytes stay in the document.
+// Line is the key's body line; ShadowedBy is the live key's body line, 0 unless shadowed.
+type SkippedPair struct {
+	Parent     Path
+	Key, Value *yaml.Node
+	Line       int
+	ShadowedBy int
+	Reason     SkipReason
+}
+
 // Classify returns doc's leaves in document order, classified by c (DefaultClassifier when nil).
 // Aliases are not followed. Shadowed duplicate keys and pairs whose key is not a scalar (an
-// alias or complex key, which no Path addresses) are skipped with their subtrees.
+// alias or complex key, which no Path addresses) are skipped with their subtrees; see Skipped.
 func Classify(doc *Document, c Classifier) []Leaf {
 	if c == nil {
 		c = DefaultClassifier
 	}
-	if len(doc.root.Content) == 0 {
-		return nil
-	}
 	var leaves []Leaf
+	walkPairs(doc, func(p Path, n *yaml.Node, line int) {
+		leaves = append(leaves, Leaf{Path: p, Node: n, Line: line, Class: c(p, n)})
+	}, func(SkippedPair) {})
+	return leaves
+}
+
+// Skipped returns the pairs Classify skips, in document order. Pairs nested inside a skipped
+// pair are not listed again.
+func Skipped(doc *Document) []SkippedPair {
+	var skipped []SkippedPair
+	walkPairs(doc, func(Path, *yaml.Node, int) {}, func(s SkippedPair) {
+		skipped = append(skipped, s)
+	})
+	return skipped
+}
+
+// walkPairs walks doc's current tree in document order, calling leaf for each leaf and skip for
+// each skipped pair, whose subtree it does not enter.
+func walkPairs(doc *Document, leaf func(Path, *yaml.Node, int), skip func(SkippedPair)) {
+	if len(doc.root.Content) == 0 {
+		return
+	}
 	var walk func(p Path, n *yaml.Node, line int)
 	walk = func(p Path, n *yaml.Node, line int) {
 		if n.Kind == yaml.AliasNode || n.Kind == yaml.ScalarNode || len(n.Content) == 0 {
-			leaves = append(leaves, Leaf{Path: p, Node: n, Line: line, Class: c(p, n)})
+			leaf(p, n, line)
 			return
 		}
 		if n.Kind == yaml.SequenceNode {
@@ -72,14 +112,21 @@ func Classify(doc *Document, c Classifier) []Leaf {
 			}
 			return
 		}
-		for i, live := range livePairs(n) {
+		live := livePairs(n)
+		for i := range live {
 			key, value := n.Content[2*i], n.Content[2*i+1]
-			if !live || key.Kind != yaml.ScalarNode {
+			switch {
+			case !live[i]:
+				skip(SkippedPair{Parent: p, Key: key, Value: value, Line: key.Line,
+					ShadowedBy: shadowingKey(n, live, i).Line, Reason: SkipShadowed})
+				continue
+			case key.Kind != yaml.ScalarNode:
+				skip(SkippedPair{Parent: p, Key: key, Value: value, Line: key.Line, Reason: SkipNonScalarKey})
 				continue
 			}
 			sub := append(p[:len(p):len(p)], Key(key.Value))
 			if key.Tag == mergeTag {
-				leaves = append(leaves, Leaf{Path: sub, Node: value, Line: key.Line, Class: c(sub, value)})
+				leaf(sub, value, key.Line)
 				continue
 			}
 			walk(sub, value, key.Line)
@@ -87,5 +134,15 @@ func Classify(doc *Document, c Classifier) []Leaf {
 	}
 	top := doc.root.Content[0]
 	walk(nil, top, top.Line)
-	return leaves
+}
+
+// shadowingKey returns the live key of mapping m that shadows its i-th pair.
+func shadowingKey(m *yaml.Node, live []bool, i int) *yaml.Node {
+	key := m.Content[2*i]
+	for j := i + 1; j < len(live); j++ {
+		if k := m.Content[2*j]; live[j] && k.Kind == key.Kind && k.Value == key.Value {
+			return k
+		}
+	}
+	return key
 }
