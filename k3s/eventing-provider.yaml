@@ -347,7 +347,7 @@ decentralizedIam:
                           - ["MarketplaceCredential"]
           # Who may deliver events: the publisher's OperatorCredential, issued by
           # did:web:dataspace-authority.org. Only that issuer is listed for the type in this
-          # participant's TIL, so no one else can choose the credential's subject.
+          # participant's TIL, so that issuer is the publisher and is mapped to participantId.
           # The ODRL policy (allowDataSpaceEvents) reads verifiableCredential.{type,issuer};
           # contract-management compares participantId with the event's sender.
           - id: dataspace-events
@@ -369,7 +369,8 @@ decentralizedIam:
                       fullInclusion: false
                       # a "." in newKey creates a nested claim
                       claimsToInclude:
-                        - originalKey: credentialSubject.id
+                        # the authority's OperatorCredential has no credentialSubject.id
+                        - originalKey: issuer
                           newKey: participantId
                         - originalKey: type
                           newKey: verifiableCredential.type
