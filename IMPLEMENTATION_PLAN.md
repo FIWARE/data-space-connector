@@ -527,7 +527,9 @@ decentralized-iam 2.3.0 / TIL 0.10.3).
     skips that wait;
   - `ProviderTilClient`:
     - `scopes(did)` (`GET /issuer/{did}/scopes`) and `credentials(did)` (the `credentials` field of
-      `GET /issuer/{did}`);
+      `GET /issuer/{did}`). Both return an empty list on `404`: `dataspace` mode deletes the whole
+      issuer when the membership grant was its last grant (CM's `RemovalPlan` turns the revoke into
+      `DeleteIfEmpty`), so a missing issuer is a normal state, not an error;
     - `putGrant(did, scope, scopeType, credentials)`, which is `PUT
       /issuer/{did}/credential?scope=&scopeType=` only. It creates a missing issuer and replaces the
       scope's credentials, so the callers pass the complete list;
@@ -571,12 +573,15 @@ decentralized-iam 2.3.0 / TIL 0.10.3).
        both when the scenario never patched it. Without the wait the next `@Before`'s `mode is
        report` check fails inside the reload window (≤ ~2 min), and item 4 would re-add the grant
        while the provider may still act in `dataspace` mode;
-    4. the membership grant, re-added from `jobGrant` **only** if the scenario removed it. This is the
-       only place that writes it;
+    4. the membership grant, re-added from `jobGrant` **only** if `scopes(did)` no longer lists it
+       (removed grant, or the whole issuer deleted). This is the only place that writes it;
     5. test-only trust state:
        - at the provider TIL, every grant of the consumer other than the Job's, read from
          `scopes(did)` and deleted with **its own** `scopeType`: the untyped order grants with no
-         `scopeType` parameter, the `other-dataspace` grant with `dataspace-membership`;
+         `scopeType` parameter, the `other-dataspace` grant with `dataspace-membership`. If the
+         issuer is gone (`DeleteIfEmpty`, e.g. a scenario that failed before its order step),
+         `scopes(did)` is empty and there is nothing to delete; item 4's `PUT` has already
+         recreated it with the Job's grant, so in practice the list holds that grant only;
        - at the provider TIL, the `did:web:kept-member.org` issuer (Steps 4–5);
        - at the trust anchor TIL, `did:web:kept-member.org` (`removeIfPresent`). Scenario 5 registers
          it there, and if the scenario fails before its removal step the DID would otherwise stay in
@@ -664,15 +669,21 @@ decentralized-iam 2.3.0 / TIL 0.10.3).
 - `Scenario: With the push path blocked the reconciliation sweep reaches the same state` (ticket
   item 6), following D3:
   - switch to `dataspace` mode;
+  - `When Fancy Marketplace buys access to M&P's k8s services.` and `Then the provider's TIL holds
+    an order-scoped grant for Fancy Marketplace.`, **before** the publisher is scaled down (the
+    order flow does not use the publisher). Without the order the membership grant is the
+    consumer's only grant, CM's `dataspace` plan becomes `DeleteIfEmpty` and the sweep deletes the
+    whole issuer, so the scenario could not show item 6's "same state as item 4";
   - scale the publisher Deployment (`consent-authority` release, ns `trust-anchor`) to 0 and wait
     until no pod is left;
   - remove the consumer with `removeParticipantWhilePublisherDown`. It is the one removal that skips
     the D6 wait: the publisher is down, so its health cannot be read, and the sweep compares the
     local grants with the TIR directly, without any watcher snapshot;
   - `kubectl rollout restart` the provider CM and wait for Ready;
-  - within `initial-delay` + margin, the provider TIL matches scenario 4, and
+  - within `initial-delay` + margin, the provider TIL holds exactly what scenario 4 asserts: no
+    `dataspace-membership` grant scoped to the publisher, and the untyped order grant still present.
     `awaitOutcome(publisher, consumer, reconciliation, since)` returns `action: revoked_membership`,
-    `applied: true`. The restart empties the in-memory report, so no entry of an earlier scenario
+    `applied: true`, with the order grant in `held`. The restart empties the in-memory report, so no entry of an earlier scenario
     can match;
   - `@After` (Step 3 order) first restores the consumer at the TIR, so the watcher's first snapshot
     after the restart already contains it. Then it scales the publisher back to 1 and waits for
