@@ -15,6 +15,9 @@ writes nothing to disk; CT-4 wires saving.
      Wails webview.
    - The UI sends `POST /api/load?name=<basename>` with `Content-Type: application/yaml`. The cap is
      the existing `maxBodyBytes` (8 MiB), so a larger file gives 413.
+   - The body is the `File` itself, never decoded text: `Blob.text()` strips a UTF-8 BOM and turns
+     invalid UTF-8 into U+FFFD, and the server slot keeps these bytes as the overrides layer that
+     CT-4 writes back. The name goes through `encodeURIComponent`.
    - The server reads no new paths. Choosing where to save is CT-4's concern.
 2. **The owned marker.**
    - Syntax: a comment line `# dsc-config:owned <id>[,<id>...]` in the head comment of a mapping key.
@@ -241,7 +244,8 @@ New core package `config-tool/internal/load`. It imports no `net/http`; check th
   - 413 above the cap;
   - 401 without the token, through the existing guard helpers;
   - a path in `name` is reduced to its base name;
-  - a second load replaces the slot.
+  - a second load replaces the slot;
+  - a BOM-prefixed body: `s.loaded.Doc.Write()` equals the uploaded bytes exactly.
   - the existing `/api/load` row in the 501 stub table of `server_test.go` (with `ticketLoad`) is
     removed; the cases above replace it.
 - **`config-tool/ui/src/test/api.ts`:** if it mocks endpoints, add the load route there for Step 5.
@@ -252,9 +256,13 @@ New core package `config-tool/internal/load`. It imports no `net/http`; check th
 Under `config-tool/ui/src/`, TypeScript with one-line JSDoc on components:
 
 - **`api/load.ts`:**
-  - `loadValues(file: File): Promise<LoadReport>`. It posts `await file.text()` as
-    `application/yaml` to `/api/load?name=<file.name>` through the existing `api` client, so the
-    token and errors are handled there.
+  - `loadValues(file: File): Promise<LoadReport>`. It posts the `File` itself as the fetch body
+    (not `file.text()`, which decodes; see decision 1) to
+    `/api/load?name=${encodeURIComponent(file.name)}` through the existing `api` client, so the
+    token and errors are handled there. Set `Content-Type: application/yaml` explicitly, because
+    `request` in `api/client.ts` defaults any body without one to JSON.
+  - `api/load.test.ts` (Vitest, stubbed `fetch`): the request body is the same `File` object, the
+    header is `application/yaml`, and a name such as `a&b #1%.yaml` arrives encoded.
   - `LoadReport` and its types mirror the Go JSON.
 - **`state/reducer.ts`:**
   - `AppState.loaded?: LoadReport`.
