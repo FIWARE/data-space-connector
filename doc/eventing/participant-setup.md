@@ -129,7 +129,8 @@ contract-management does not verify tokens itself; it relies on the gateway. Thr
 make sure only the publisher gets through:
 
 1. the **verifier** only accepts the publisher's credential, from the issuers you trust for it
-   ([step 3](#3-register-the-verifier-service));
+   ([step 3](#3-register-the-verifier-service)). That trust also applies to your other services
+   that accept the same credential type;
 2. the **ODRL policy** at the gateway only admits that credential on `POST /events`
    ([step 4](#4-create-the-odrl-policy));
 3. **contract-management** compares the authenticated caller, passed on by the gateway, with the
@@ -321,6 +322,13 @@ nothing, so the snippet only works on a first registration. Two cases need more:
   `credentialTypes` or `scope` values never reach it. Add the type through the TIL API with
   `PUT <til>/issuer/<did>`. It replaces the issuer's unscoped credentials, so send the full list,
   including the ones it already has; credentials granted under a scope are left untouched.
+
+This trust is not limited to the events service. A TIL entry applies to every verifier service that
+reads this TIL for `OperatorCredential`. In `k3s/provider.yaml` these are `tmf-api`, `tpp-service`
+and the `operator` scope of `data-service`, which all accept the authority's operator credential
+(there the entry already exists for `tmf-api`). Only the ODRL policies of those services keep the
+authority out, so none of them may admit a request on the credential type alone. To avoid widening the trust at all, let the publisher present a dedicated
+credential type and register the authority for that type only (see [step 4](#4-create-the-odrl-policy)).
 
 ### 4. Create the ODRL policy
 
