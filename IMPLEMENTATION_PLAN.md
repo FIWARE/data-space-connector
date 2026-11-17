@@ -481,6 +481,11 @@ decentralized-iam 2.3.0 / TIL 0.10.3).
     provider's fancy-marketplace grant. It is not on the consumer's `keep`, but no scenario removes
     mp-operations. The provider gives its own DID `scope: ""` only because a participant's own entry
     is never attributed to the data space.
+- **The publisher's delivery client.** The Step 1 publisher (`k3s/eventing-trust-anchor.yaml`) sets
+  no `MICRONAUT_HTTP_CLIENT_PROXY_*`, so it would deliver to the `*.127.0.0.1.nip.io` sinks directly
+  on 443, which is refused in-cluster (see the repo facts). Either register the sinks with `:8443`
+  or add the Squid proxy env vars to the publisher's `additionalEnvVars` copy. The reports of the
+  `publish` acceptance check below prove which one works.
 - Update the `eventing` profile and `k3s/deploy.sh` with both overlays.
 - New `doc/scripts/dataspace-eventing-demo.sh` (shellcheck-clean, `set -euo pipefail`, named
   constants for hosts and DIDs, proxy `127.0.0.1:8888` as the other scripts use):
@@ -516,7 +521,12 @@ decentralized-iam 2.3.0 / TIL 0.10.3).
   - `restore` puts it back.
 
 ### Step 3: Integration test scaffolding and scenarios 1–3
-- `it/pom.xml`: an `eventing-test` profile with `cucumber.filter.tags=@eventing`. (The `eventing`
+- `it/pom.xml`: an `eventing-test` profile that mirrors `consent-test` (~415–432): it sets
+  `cucumber.filter.tags=@eventing` **and** re-enables `maven-compiler-plugin` and
+  `maven-failsafe-plugin` (`<skip>false</skip>`), with a comment saying why. The root `eventing`
+  profile skips both so that `mvn clean deploy -Peventing` only deploys, and the `it` module inherits
+  that; a profile that only sets the tag filter yields a CI job that compiles and runs nothing and
+  still goes green. Check the job log for the `@eventing` scenario count. (The `it` `eventing`
   profile that skips the module's deploy, as `consent` does, came with Step 1: `mvn clean deploy
   -Peventing` would otherwise deploy twice.)
 - `.github/workflows/test.yaml`: add the matrix entry `eventing` (`test,eventing,eventing-test`). It
