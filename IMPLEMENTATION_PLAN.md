@@ -173,7 +173,7 @@ decentralized-iam 2.3.0 / TIL 0.10.3).
 - **D2: switching modes in the IT.** The IT patches the provider's `contract-management-dataspace-events`
   ConfigMap (refreshable keys only) and polls `GET :9090/participants-removed` until the publisher's
   `mode` shows the new value (kubelet sync + watch, ≤ ~2 min). An `@After` hook restores the
-  original. This needs no helm upgrade and no restart, and it also exercises the refresh path.
+  original and waits the same way until `mode` reads `report` again (Step 3). This needs no helm upgrade and no restart, and it also exercises the refresh path.
 - **D3: blocking the push path (scenario 6).** The IT scales the publisher Deployment to 0, deletes
   the participant, then restarts the provider CM. The sweep runs once at start-up, after the k3s
   `reconcile.initial-delay`. The k3s overlay sets the reconcile `interval` long (`PT6H`), so no sweep
@@ -437,7 +437,8 @@ decentralized-iam 2.3.0 / TIL 0.10.3).
       if `scopes(did)` lists exactly that one grant and its `credentialCount` equals
       `credentials.length`, i.e. the issuer holds nothing else. Otherwise the hook fails with
       "cannot isolate the registration Job grant";
-    - mode is `report`.
+    - mode is `report`. This is a plain assertion without a wait: the previous scenario's `@After`
+      already waited for the reload.
 
     The subscription check is the `Background`'s first step, `The data space publisher has two
     active subscriptions.`. It polls `publish` of an unknown DID until `subscriptions == 2`, within
@@ -445,7 +446,11 @@ decentralized-iam 2.3.0 / TIL 0.10.3).
   - `@After("@eventing")` restores, in this order, everything a scenario may have changed:
     1. the consumer's TIR entry (`restoreParticipant`, if it is gone);
     2. the publisher's replicas (back to 1 and Ready, see Step 5);
-    3. the original ConfigMap (D2);
+    3. the original ConfigMap (D2), then `awaitMode(publisher, report)` within
+       `MODE_SWITCH_TIMEOUT`. A scenario field `configMapPatched`, set by the mode-switch step, skips
+       both when the scenario never patched it. Without the wait the next `@Before`'s `mode is
+       report` check fails inside the reload window (≤ ~2 min), and item 4 would re-add the grant
+       while the provider may still act in `dataspace` mode;
     4. the membership grant, re-added from `jobGrant` **only** if the scenario removed it. This is the
        only place that writes it;
     5. test-only TIL state: the consumer's order-scoped grants (every scope other than the
