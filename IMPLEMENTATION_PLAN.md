@@ -46,10 +46,18 @@ decentralized-iam 2.3.0 / TIL 0.10.3).
 - **Management port 9090.** It serves:
   - `POST /events` `{type, subject}`, which publishes manually and returns `202 {"id","subscriptions":n}`;
   - `GET /participants-removed`, the report: a list of `{publisher, mode, …, participants:[{id,
-    trigger, mode, action, applied, attributable, held:[{scope, scopeType, credentialCount}],
-    unattributedCount}]}`. `action` is a `RemovalAction` (`REPORTED`, `KEPT`,
-    `REVOKED_MEMBERSHIP`, …) and `trigger` is a `RemovalTrigger` (`EVENT`, `RECONCILIATION`), both
-    as lower-case tags. The report does **not** show `keep`;
+    trigger, lastSeen, mode, action, applied, attributable, held:[{scope, scopeType,
+    credentialCount}], unattributedCount}]}`. `action` is a `RemovalAction` and `trigger` a
+    `RemovalTrigger` (`event`, `reconciliation`), both as lower-case tags. The actions the IT asserts
+    are `reported` (nothing written: report mode), `kept` (on a keep list), `revoked_membership` and
+    `not_held`. The report does **not** show `keep`.
+
+    The report keeps **only the latest outcome per (publisher, DID)**, in memory until the pod
+    restarts: `RemovedParticipantsReport.record` replaces the old entry. `lastSeen` is when that
+    entry was last written. `ParticipantReconciler` also calls `touch`, which bumps `lastSeen` and
+    keeps the old outcome; with the k3s `interval: PT6H` that only happens in the start-up sweep,
+    i.e. right after a CM restart (scenario 6). So an entry is only evidence of *this* removal if its
+    `lastSeen` is after the removal and its `trigger` is the expected one;
   - `POST /refresh`;
   - `GET /health`. It shows indicator details only if `endpoints.health.details-visible` is
     `ANONYMOUS` (the default is `AUTHENTICATED`). Set that with the env var
@@ -90,6 +98,13 @@ decentralized-iam 2.3.0 / TIL 0.10.3).
     credentials to exactly the body and leaves other grants alone. It creates the issuer if it does
     not exist, so it is the only write the IT needs. `POST /issuer?scope=` 409s on an existing issuer.
   - `DELETE /issuer/{did}` removes the issuer.
+  - With `scopeType` omitted, the scoped calls address only **untyped** grants.
+
+  CM writes an order grant with `replaceCredentialsByScope(did, <order id>, credentials,
+  ORDER_SCOPE_TYPE)`, and `ORDER_SCOPE_TYPE` is `null` (`TrustedIssuersListAdapter`:56, 109). An order
+  grant is therefore an **untyped** grant (`scopeType: null`) written by `PUT`, so it cannot `409`.
+  Reading, asserting and deleting it must send no `scopeType`; never `dataspace-membership` or an
+  invented type.
 
   The trust anchor removes a participant with `DELETE /issuer/{did}` on its TIL
   (`https://til.127.0.0.1.nip.io` in k3s); the TIR (`https://tir.127.0.0.1.nip.io`) is read-only.
@@ -129,6 +144,9 @@ decentralized-iam 2.3.0 / TIL 0.10.3).
   verifier service `contract-management` ~320.
 - **Consumer CM.** It is off in `consumer.yaml` and on in `consumer-tmf.yaml`, with the OID4VP holder
   `did:web:fancy-marketplace.biz`.
+- **Consumer `registration.issuer`** (`k3s/consumer-auth.yaml` :8–11) holds only `did:web:mp-operations.org`
+  (MembershipCredential). `did:web:dataspace-authority.org` is not in the consumer TIL, so as it
+  stands the consumer's gateway would refuse every delivery from the publisher.
 - **Provider `registration.issuer`** (~1685–1706) holds mp-operations, fancy-marketplace
   (LegalPerson, User, Membership) and dataspace-authority (OperatorCredential). Helm replaces lists, so
   an overlay must copy the whole list.
@@ -371,6 +389,16 @@ decentralized-iam 2.3.0 / TIL 0.10.3).
     four, and document it.
   - Consumer `keep: [did:web:dataspace-authority.org, did:web:fancy-marketplace.biz]`, and the same
     `subscriber.retry` values and `ENDPOINTS_HEALTH_DETAILS_VISIBLE=ANONYMOUS` entry as the provider.
+  - `registration.issuer`: a full copy of the `consumer-auth.yaml` list (Helm replaces lists) plus
+    `did:web:dataspace-authority.org` with `OperatorCredential` and `scope: ""`, as at the provider.
+    Without it the consumer's `dataspace-events` verifier service refuses the publisher's
+    credential and no event reaches the consumer.
+  - The `mp-operations` entry keeps the derived default (scope = publisher id, `scopeType:
+    dataspace-membership`). This is intended: mp-operations is a data space member whose
+    MembershipCredential the consumer trusts *because* of that membership, the mirror of the
+    provider's fancy-marketplace grant. It is not on the consumer's `keep`, but no scenario removes
+    mp-operations. The provider gives its own DID `scope: ""` only because a participant's own entry
+    is never attributed to the data space.
 - Update the `eventing` profile and `k3s/deploy.sh` with both overlays.
 - New `doc/scripts/dataspace-eventing-demo.sh` (shellcheck-clean, `set -euo pipefail`, named
   constants for hosts and DIDs, proxy `127.0.0.1:8888` as the other scripts use):
@@ -382,11 +410,16 @@ decentralized-iam 2.3.0 / TIL 0.10.3).
   - `publish <did>`: a manual `POST :9090/events` at the publisher, the immediate path of §8.
 - Acceptance (local deploy, results in the PR description):
   - `helm template` of all overlays passes the umbrella's validation;
-  - `publish` of an unknown DID returns `subscriptions: 2`;
+  - `publish` of an unknown DID (e.g. `did:web:probe-<timestamp>.org`, fresh per run) returns
+    `subscriptions: 2`, **and** within ~30 s both the provider report and the consumer report list
+    that DID with `trigger: event` and a `lastSeen` after the publish. `subscriptions: 2` only counts
+    subscriptions; the reports prove that both gateways accepted the delivery;
   - after `kubectl rollout restart` of the publisher, `publish` returns `subscriptions: 2` again
     within ~90 s (the lease and backoff of D3);
-  - `remove did:web:fancy-marketplace.biz`: within ~1 min the provider report lists it with mode
-    `report` and the membership grant in `held`, and its TIL is unchanged;
+  - `remove did:web:fancy-marketplace.biz` (note the time first): within ~1 min the provider report
+    lists it with `trigger: event`, a `lastSeen` after that time, mode `report`, `action: reported`
+    and the membership grant in `held`, and its TIL is unchanged. An entry from an earlier removal of
+    the same DID does not count;
   - `restore` puts it back.
 
 ### Step 3: Integration test scaffolding and scenarios 1–3
@@ -411,7 +444,7 @@ decentralized-iam 2.3.0 / TIL 0.10.3).
 - New support classes:
   - `DataSpaceEventingEnvironment`: constants for DIDs, hosts, namespaces, the publisher id, the
     ConfigMap, Deployment and registration Job names, and the timeouts of D5 and D3
-    (`REMOVAL_TIMEOUT`, `MODE_SWITCH_TIMEOUT`, `SUBSCRIPTION_RECOVERY_TIMEOUT`);
+    (`REMOVAL_TIMEOUT`, `MODE_SWITCH_TIMEOUT`, `SUBSCRIPTION_RECOVERY_TIMEOUT`, `DELIVERY_TIMEOUT`);
   - `KubernetesHelper.portForwardToDeployment(namespace, deployment, remotePort)`, a new variant
     of `portForward` that runs `kubectl port-forward deploy/<deployment> <local>:<remotePort>`, so
     `remotePort` is the **container** port 9090. The CM Service keeps 8080 only: 9090 stays
@@ -421,9 +454,19 @@ decentralized-iam 2.3.0 / TIL 0.10.3).
     of `portForward`;
   - `ContractManagementManagementClient`, for one CM Deployment (namespace + Deployment name from
     `DataSpaceEventingEnvironment`), with `report()`, `publish(type, subject)`,
-    `awaitMode(publisher, mode)`, `awaitSubscriptions(n, timeout)` and, for the publisher,
+    `awaitMode(publisher, mode)`, `awaitSubscriptions(n, timeout)`,
+    `awaitOutcome(publisher, did, trigger, since, timeout)` and, for the publisher,
     `awaitWatcherSaw(since)` (D6: wait for `WATCHER_CYCLES_TO_SEE` distinct `lastSuccessfulCycle`
     values after `since`, within `WATCHER_SEEN_TIMEOUT`).
+    - **Only fresh report entries count.** The report keeps one entry per (publisher, DID) across
+      scenarios (see the CM facts), and the consumer is removed in scenarios 3, 4, 6 and 7. So
+      `awaitOutcome` polls until the entry for `did` has a `lastSeen` **after** `since` **and** the
+      expected `trigger`, and returns that entry; every report assertion is made on the returned
+      entry, never on a plain "the report lists the DID". `since` is the instant the removal step
+      took right before its `DELETE` (scenario 6: before the provider CM restart, which empties the
+      report anyway). k3s runs on the IT's host, so the pod and the IT share one clock. Scenario 6
+      expects `trigger: reconciliation`; a `touch` by a later sweep only bumps that entry's
+      `lastSeen` and keeps its outcome, so it cannot fake a result there.
     - **A fresh forward per request.** A forward is bound to the pod it started on and dies with it,
       and scenario 6 scales the publisher to 0 and back and runs `rollout restart` on the provider
       CM. So the client holds no long-lived forward: every `report()`/`publish()`/health read opens
@@ -434,8 +477,13 @@ decentralized-iam 2.3.0 / TIL 0.10.3).
     - As a safety net every forward the client opens is also registered in a list that the
       `@After("@eventing")` closes last, as `ConsentStepDefinitions` closes its `portForwards`, so a
       failed step leaves no `kubectl` process behind;
-  - `TrustAnchorClient`: `removeParticipant` / `restoreParticipant` against the trust anchor's TIL.
-    `removeParticipant` checks the TIR listing and calls `awaitWatcherSaw` before the `DELETE` (D6).
+  - `TrustAnchorClient`: `registerParticipant` / `removeParticipant` / `restoreParticipant`
+    against the trust anchor's TIL. `registerParticipant` and `restoreParticipant` are idempotent:
+    `POST /issuer` with `credentials: []`, and a `409` counts as success once `GET /issuer/{did}`
+    confirms the DID is there. `removeParticipant` checks the TIR listing and calls
+    `awaitWatcherSaw` before the `DELETE` (D6), and returns the instant taken right before the
+    `DELETE`, the `since` of `awaitOutcome`. `removeIfPresent(did)` is the cleanup form (`404` is
+    fine).
     `removeParticipantWhilePublisherDown` (scenario 6 only) asserts the publisher has no pod and
     skips that wait;
   - `ProviderTilClient`:
@@ -445,6 +493,10 @@ decentralized-iam 2.3.0 / TIL 0.10.3).
       /issuer/{did}/credential?scope=&scopeType=` only. It creates a missing issuer and replaces the
       scope's credentials, so the callers pass the complete list;
     - `removeGrant(did, scope, scopeType)` (`DELETE /issuer/{did}/credential?scope=&scopeType=`).
+    - `scopeType` is nullable throughout, and `null` sends **no** `scopeType` parameter, which
+      addresses an untyped grant. Order grants are untyped (CM's `ORDER_SCOPE_TYPE` is `null`), so
+      they are read, asserted and deleted with `scopeType` `null`. The record for a grant keeps
+      `scopeType` as a nullable field, never a default value.
 
   Each gets a one-line Javadoc; parse JSON into small records, not maps.
 - New `DataSpaceEventingStepDefinitions`:
@@ -463,9 +515,15 @@ decentralized-iam 2.3.0 / TIL 0.10.3).
     - mode is `report`. This is a plain assertion without a wait: the previous scenario's `@After`
       already waited for the reload.
 
-    The subscription check is the `Background`'s first step, `The data space publisher has two
-    active subscriptions.`. It polls `publish` of an unknown DID until `subscriptions == 2`, within
-    `SUBSCRIPTION_RECOVERY_TIMEOUT`.
+    The subscription check is the `Background`'s first step, `The data space publisher delivers
+    events to both participants.`. It picks one fresh probe DID (`did:web:probe-<uuid>.example`,
+    held by no one) and polls `publish` of it until `subscriptions == 2`, within
+    `SUBSCRIPTION_RECOVERY_TIMEOUT`. Then it calls `awaitOutcome(publisher, probe, event, t)` on
+    **both** the provider's and the consumer's client, `t` being the instant before the first
+    publish, within `DELIVERY_TIMEOUT` (30 s). `subscriptions == 2` only counts subscriptions; the
+    two report entries prove that both gateways accepted the publisher's credential and that both
+    listeners processed the event. One probe DID per step keeps repeated publishes to one report
+    entry. The action is not asserted (`not_held` or `reported`, depending on the mode).
   - `@After("@eventing")` restores, in this order, everything a scenario may have changed:
     1. the consumer's TIR entry (`restoreParticipant`, if it is gone);
     2. the publisher's replicas (back to 1 and Ready, see Step 5);
@@ -476,11 +534,17 @@ decentralized-iam 2.3.0 / TIL 0.10.3).
        while the provider may still act in `dataspace` mode;
     4. the membership grant, re-added from `jobGrant` **only** if the scenario removed it. This is the
        only place that writes it;
-    5. test-only TIL state: the consumer's order-scoped grants (every scope other than the
-       publisher's, read from `scopes(did)`), the `other-dataspace` grant and the
-       `did:web:kept-member.org` issuer (Steps 4–5);
-    6. then it waits for `subscriptions == 2`, so a failed recovery is reported by the scenario that
-       caused it, not by the next one's `@Before`.
+    5. test-only trust state:
+       - at the provider TIL, every grant of the consumer other than the Job's, read from
+         `scopes(did)` and deleted with **its own** `scopeType`: the untyped order grants with no
+         `scopeType` parameter, the `other-dataspace` grant with `dataspace-membership`;
+       - at the provider TIL, the `did:web:kept-member.org` issuer (Steps 4–5);
+       - at the trust anchor TIL, `did:web:kept-member.org` (`removeIfPresent`). Scenario 5 registers
+         it there, and if the scenario fails before its removal step the DID would otherwise stay in
+         the TIR for every later scenario and run;
+    6. then it waits for `subscriptions == 2` (the probe publish of the `Background` step, without
+       the report check), so a failed recovery is reported by the scenario that caused it, not by
+       the next one's `Background`.
     7. last, it closes any port-forward the management clients still hold (normally none, since
        each request closes its own).
 
@@ -491,7 +555,7 @@ decentralized-iam 2.3.0 / TIL 0.10.3).
   feature's `Background` lists them after the subscription check:
   ```gherkin
   Background:
-    Given The data space publisher has two active subscriptions.
+    Given The data space publisher delivers events to both participants.
     And M&P Operations offers a managed kubernetes.
     And M&P Operations allows self-registration of organizations.
     And M&P Operations allows to buy its offerings.
@@ -500,9 +564,8 @@ decentralized-iam 2.3.0 / TIL 0.10.3).
   ```
   Scenarios that need an order add `When Fancy Marketplace buys access to M&P's k8s services.`, then
   `Then the provider's TIL holds an order-scoped grant for Fancy Marketplace.` That step finds the
-  order id through the TMF API and checks that CM wrote a grant with `scope=<order id>`. If CM's write
-  fails because the issuer already exists (TIL `409` on a scoped create), record it and use `PUT
-  /issuer/{did}/credential?scope=` semantics as CM does; do not paper over it in the test.
+  order id through the TMF API and checks that CM wrote a grant with `scope=<order id>` and
+  `scopeType: null` (CM writes it untyped by `PUT`, see the TIL facts).
   - Two preconditions to check at the start of Step 3, and to report rather than work around:
     - the consumer's UserCredential is accepted at the provider only through the registration Job's
       scoped grant (`prepareTil` no longer runs), so the provider verifier must read scoped grants
@@ -519,10 +582,11 @@ decentralized-iam 2.3.0 / TIL 0.10.3).
     A restore by an earlier scenario cannot satisfy it alone, because the static flag is only set
     by the first `@Before`. On a cluster reused for a second run, the first check sees the grant the
     previous run restored. CI always deploys fresh, which is where the Job is proven;
-  - an order grants the consumer an order-scoped entry at the provider;
+  - an order grants the consumer an order-scoped entry at the provider (`scopeType: null`);
   - the operator deletes the consumer from the trust anchor's TIR;
-  - the provider report lists the consumer for the publisher, with `action` = reported/none (check
-    the CM value), both grants in `held`, `attributable: true`;
+  - `awaitOutcome(publisher, consumer, event, since)` returns an entry with mode `report`,
+    `action: reported`, `applied: false`, `attributable: true`, and in `held` both the membership
+    grant (`scopeType: dataspace-membership`) and the order grant (`scopeType: null`);
   - `GET /issuer/{did}/scopes` at the provider TIL is unchanged.
 - Acceptance: `mvn clean integration-test -Ptest,eventing,eventing-test` is green locally (output
   summary in the PR); `@local` features are unaffected (`-Ptest,local-test` locally or in CI).
@@ -541,15 +605,19 @@ decentralized-iam 2.3.0 / TIL 0.10.3).
     mode equals the current one, so this cannot happen by accident.
 - `Scenario: In dataspace mode only the membership grant is removed` (ticket item 4). Switch to
   `dataspace`, place an order, then remove the consumer. Then:
-  - the provider TIL has no `dataspace-membership` grant for the consumer, and the order-scoped grant
-    remains;
-  - the report shows `applied: true`.
+  - the provider TIL has no `dataspace-membership` grant for the consumer, and the untyped
+    order-scoped grant remains;
+  - `awaitOutcome(publisher, consumer, event, since)` returns `action: revoked_membership`,
+    `applied: true`.
 - `Scenario: An identifier on keep is untouched` (ticket item 5). Add a simulated participant
   `did:web:kept-member.org`: register it at the TIR and give it a membership grant at the provider.
-  Then switch to `dataspace` mode with `did:web:kept-member.org` appended to the default `keep`, in
-  one write. Then remove it; the removal step waits for the watcher first (D6), so the event is
-  really published. Its grant stays, and the report lists it with `action: kept`. Without the D6
-  wait this assertion could pass with no event at all.
+  The TIR registration goes through the idempotent `registerParticipant`, so a DID left over by an
+  aborted run does not fail it (the `@After` also removes it, Step 3 item 5). Then switch to
+  `dataspace` mode with `did:web:kept-member.org` appended to the default `keep`, in one write. Then
+  remove it; the removal step waits for the watcher first (D6), so the event is really published.
+  Its grant stays, and `awaitOutcome(publisher, kept-member, event, since)` returns `action: kept`,
+  `applied: false`. Without the D6 wait and the `since` filter this assertion could pass with no
+  event at all.
 - Acceptance: as Step 3, all `@eventing` scenarios green; scenario order does not matter
   (`@After` restores state).
 
@@ -563,8 +631,10 @@ decentralized-iam 2.3.0 / TIL 0.10.3).
     the D6 wait: the publisher is down, so its health cannot be read, and the sweep compares the
     local grants with the TIR directly, without any watcher snapshot;
   - `kubectl rollout restart` the provider CM and wait for Ready;
-  - within `initial-delay` + margin, the provider TIL matches scenario 4, and the report's `trigger`
-    names the sweep;
+  - within `initial-delay` + margin, the provider TIL matches scenario 4, and
+    `awaitOutcome(publisher, consumer, reconciliation, since)` returns `action: revoked_membership`,
+    `applied: true`. The restart empties the in-memory report, so no entry of an earlier scenario
+    can match;
   - `@After` (Step 3 order) first restores the consumer at the TIR, so the watcher's first snapshot
     after the restart already contains it. Then it scales the publisher back to 1 and waits for
     Ready. Then it waits up to `SUBSCRIPTION_RECOVERY_TIMEOUT` for `subscriptions == 2`. That
@@ -572,11 +642,13 @@ decentralized-iam 2.3.0 / TIL 0.10.3).
     later `Background` with it. On a timeout the hook fails with each subscriber's last
     registration state, read from its CM log or health.
 - `Scenario: An entry attributed to another data space survives` (ticket item 7), following D4:
-  - give the consumer an additional grant `scope=did:web:other-dataspace.org,
-    scopeType=dataspace-membership` at the provider TIL, in `dataspace` mode;
+  - in `dataspace` mode, place an order and give the consumer an additional grant
+    `scope=did:web:other-dataspace.org, scopeType=dataspace-membership` at the provider TIL;
   - remove the consumer from the trust anchor;
-  - the publisher's membership grant is gone, the other data space's grant and the order grant
-    remain, and the report's `held` lists the remaining scope.
+  - the publisher's membership grant is gone, the other data space's grant and the untyped order
+    grant remain, and `awaitOutcome(publisher, consumer, event, since)` returns `action:
+    revoked_membership`, `applied: true`, with both remaining grants in `held`. Without the `since`
+    filter scenario 4's entry, which has the same action, would satisfy this at once.
 - Make sure no step can leave the publisher scaled down or the ConfigMap patched after a failure:
   restore in `@After`, which Cucumber runs on failure too.
 - Acceptance: all 5 `@eventing` scenarios green twice in a row on one cluster (proves the cleanup);
