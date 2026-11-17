@@ -312,6 +312,16 @@ registration:
       scope: ""
 ```
 
+The registration Job only creates issuers: for a DID the TIL already holds it gets a `409` and changes
+nothing, so the snippet only works on a first registration. Two cases need more:
+
+- **The DID is already in `registration.issuer`** (as in `k3s/provider.yaml`): add
+  `OperatorCredential` to that entry instead of adding a second one, which would only get the `409`.
+- **The DID is already registered in the TIL** (for example by an earlier install): changed
+  `credentialTypes` or `scope` values never reach it. Add the type through the TIL API with
+  `PUT <til>/issuer/<did>`. It replaces the issuer's unscoped credentials, so send the full list,
+  including the ones it already has; credentials granted under a scope are left untouched.
+
 ### 4. Create the ODRL policy
 
 [`allowDataSpaceEvents.json`](../../it/src/test/resources/policies/allowDataSpaceEvents.json) is an
