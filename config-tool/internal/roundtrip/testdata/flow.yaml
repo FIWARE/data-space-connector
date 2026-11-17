@@ -1,0 +1,14 @@
+# Head comment: flow collections.
+empty: {} # line comment
+emptyList: []
+inline: [a, b, "c d"]
+nested: {a: [1, 2], b: {c: d}}
+multiLine: [
+  one, # comment inside a flow sequence
+  two
+]
+mapMulti: {
+  x: 1,
+  y: 2
+}
+# Foot comment.

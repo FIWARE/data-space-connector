@@ -1,0 +1,172 @@
+package roundtrip
+
+import (
+	"bytes"
+	"fmt"
+	"unicode/utf8"
+
+	"gopkg.in/yaml.v3"
+)
+
+// Lookup returns the node at p. A duplicated key resolves to its last occurrence. It gives
+// ErrNotFound for a missing key or index and ErrAliasPath when p runs through an alias.
+func (d *Document) Lookup(p Path) (*yaml.Node, error) {
+	loc, err := d.locateIn(d.root, p)
+	return loc.node, err
+}
+
+// located is a node found by locate, with the context its value text is scanned in.
+type located struct {
+	node *yaml.Node
+	// key is the key node of p's last segment; nil for an index or the root.
+	key *yaml.Node
+	ctx leafCtx
+	// merge is set when the path runs through a `<<` key.
+	merge bool
+}
+
+// locateIn resolves p in the document node root like Lookup, and tracks the owning column and flow
+// context on the way. Positions are only meaningful in the source tree.
+func (d *Document) locateIn(root *yaml.Node, p Path) (located, error) {
+	if len(root.Content) == 0 {
+		return located{}, fmt.Errorf("%w: %s: empty document", ErrNotFound, p)
+	}
+	loc := located{node: root.Content[0], ctx: leafCtx{owner: noOwner}}
+	for i, seg := range p {
+		n := loc.node
+		if n.Kind == yaml.AliasNode {
+			return located{}, fmt.Errorf("%w: %s passes through alias *%s at %s", ErrAliasPath, p, n.Value, p[:i])
+		}
+		key, next := child(n, seg)
+		if next == nil {
+			return located{}, fmt.Errorf("%w: %s", ErrNotFound, p[:i+1])
+		}
+		switch {
+		case n.Style&yaml.FlowStyle != 0:
+			loc.ctx.flow = true
+		case loc.ctx.flow:
+		case key != nil:
+			loc.ctx.owner = key.Column - 1
+		default:
+			loc.ctx.owner = d.dashColumn(n)
+		}
+		loc.merge = loc.merge || (key != nil && key.Tag == mergeTag)
+		loc.node, loc.key = next, key
+	}
+	return loc, nil
+}
+
+// dashColumn returns the 0-based column of block sequence n's first `-`, which every item
+// shares. yaml.v3 places an anchored or tagged sequence at its `&` or `!`, not at the dash.
+func (d *Document) dashColumn(n *yaml.Node) int {
+	off, ok := d.offset(n.Line, n.Column)
+	for ok && off < len(d.body) {
+		switch ch := d.body[off]; {
+		case ch == sequenceDash:
+			ls := bytes.LastIndexByte(d.body[:off], '\n') + 1
+			return utf8.RuneCount(d.body[ls:off])
+		case ch == anchorIndicator || ch == tagIndicator:
+			off = d.tokenEnd(off, leafCtx{})
+		case ch == commentStart:
+			off = lineAfter(d.body, off)
+		case isSpace(ch):
+			off++
+		default:
+			ok = false
+		}
+	}
+	return n.Column - 1
+}
+
+// child returns the key and value seg selects below n, or nil values; key is nil for an index.
+// Merge keys are not resolved.
+func child(n *yaml.Node, seg Segment) (key, value *yaml.Node) {
+	if i, ok := seg.Index(); ok {
+		if n.Kind != yaml.SequenceNode || i >= len(n.Content) {
+			return nil, nil
+		}
+		return nil, n.Content[i]
+	}
+	if n.Kind != yaml.MappingNode {
+		return nil, nil
+	}
+	k, _ := seg.Key()
+	for i := len(n.Content) - 2; i >= 0; i -= 2 {
+		if key := n.Content[i]; key.Kind == yaml.ScalarNode && key.Value == k {
+			return key, n.Content[i+1]
+		}
+	}
+	return nil, nil
+}
+
+// livePairs reports, per key/value pair of mapping m, whether it is live: no later key of the
+// same kind and value shadows it. This is yaml.v3's duplicate rule, resolved last-wins as Helm does.
+func livePairs(m *yaml.Node) []bool {
+	type keyID struct {
+		kind  yaml.Kind
+		value string
+	}
+	live := make([]bool, len(m.Content)/2)
+	seen := make(map[keyID]bool, len(live))
+	for i := len(live) - 1; i >= 0; i-- {
+		key := m.Content[2*i]
+		id := keyID{key.Kind, key.Value}
+		live[i] = !seen[id]
+		seen[id] = true
+	}
+	return live
+}
+
+// decodeValue decodes n into Go values as Helm sees them: shadowed duplicate keys are dropped
+// first, so yaml.v3's duplicate-key error cannot occur. n itself is left unchanged.
+func decodeValue(n *yaml.Node) (any, error) {
+	var v any
+	if err := withoutShadowed(n, map[*yaml.Node]*yaml.Node{}).Decode(&v); err != nil {
+		return nil, fmt.Errorf("roundtrip: %w", err)
+	}
+	return v, nil
+}
+
+// cloneTree deep-copies n; copies maps each node to its copy, so aliases point into the copy.
+func cloneTree(n *yaml.Node, copies map[*yaml.Node]*yaml.Node) *yaml.Node {
+	if c, ok := copies[n]; ok {
+		return c
+	}
+	c := *n
+	copies[n] = &c
+	if n.Alias != nil {
+		c.Alias = cloneTree(n.Alias, copies)
+	}
+	if n.Content != nil {
+		c.Content = make([]*yaml.Node, len(n.Content))
+		for i, sub := range n.Content {
+			c.Content[i] = cloneTree(sub, copies)
+		}
+	}
+	return &c
+}
+
+// withoutShadowed deep-copies n without shadowed pairs. Alias targets are copied too, even
+// when they sit in a shadowed pair, so every alias still resolves; copies memoizes shared nodes.
+func withoutShadowed(n *yaml.Node, copies map[*yaml.Node]*yaml.Node) *yaml.Node {
+	if c, ok := copies[n]; ok {
+		return c
+	}
+	c := *n
+	copies[n] = &c
+	c.Content = nil
+	if n.Alias != nil {
+		c.Alias = withoutShadowed(n.Alias, copies)
+	}
+	var live []bool
+	if n.Kind == yaml.MappingNode {
+		live = livePairs(n)
+	}
+	for i, sub := range n.Content {
+		if live != nil && !live[i/2] {
+			continue
+		}
+		c.Content = append(c.Content, withoutShadowed(sub, copies))
+	}
+	return &c
+}

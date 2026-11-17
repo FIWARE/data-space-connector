@@ -1,0 +1,10 @@
+# Head comment: explicit tags.
+explicitString: !!str 8080 # line comment
+explicitInt: !!int "42"
+binary: !!binary aGVsbG8=
+custom: !custom
+  key: value # line comment
+set: !!set {a, b}
+anchoredTagged: &t !!str yes
+reused: *t
+# Foot comment.

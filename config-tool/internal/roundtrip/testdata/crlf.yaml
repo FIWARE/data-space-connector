@@ -1,0 +1,9 @@
+# Head comment: CRLF line endings.
+key: value # line comment
+nested:
+  child: true
+  # foot comment of nested
+
+list:
+  - one
+# Foot comment.

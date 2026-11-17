@@ -1,0 +1,19 @@
+# Head comment of the document: anchors, aliases and merge keys.
+
+# Shared defaults, reused below.
+defaults: &defaults # line comment on the anchored mapping
+  image: &img quay.io/fiware/app:1.0 # anchored scalar
+  replicas: 1
+  # foot comment of defaults
+
+provider:
+  <<: *defaults # merge key
+  replicas: 2
+  sidecar: *img
+  items:
+    - &item {name: a, port: 80}
+    - *item
+# foot comment of provider
+
+consumer: *defaults
+# Foot comment of the document.

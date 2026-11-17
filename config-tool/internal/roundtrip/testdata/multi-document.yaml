@@ -1,0 +1,5 @@
+# Head comment of the first document.
+a: 1 # line comment
+# foot comment of the first document
+---
+b: 2

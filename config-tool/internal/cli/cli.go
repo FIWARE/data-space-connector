@@ -86,7 +86,8 @@ func writeOutput(stdout io.Writer, path string, data []byte) error {
 		_, err := stdout.Write(data)
 		return err
 	}
-	// TODO(CT-2): the round-trip ticket decides whether and how an existing file may be replaced.
+	// TODO(CT-4): replace an existing file via roundtrip (Parse, Merge, Write), written atomically:
+	// a temp file in the same directory renamed over it, keeping its mode (ADR 0013).
 	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, outputFileMode)
 	if err != nil {
 		return err

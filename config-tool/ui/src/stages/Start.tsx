@@ -11,7 +11,7 @@ interface ComingCard {
 }
 
 const COMING: readonly ComingCard[] = [
-  { icon: '📂', title: 'Open values.yaml', text: 'Read an existing file, change it, keep everything it already contains.', comingIn: 'CT-2/CT-3' },
+  { icon: '📂', title: 'Open values.yaml', text: 'Read an existing file, change it, keep everything it already contains.', comingIn: 'CT-3' },
   { icon: '⟲', title: 'Open profile', text: 'Continue a configuration saved earlier.', comingIn: 'CT-4' },
   { icon: '⚡', title: 'Try it locally', text: 'A whole data space on this machine: trust anchor, provider and consumer.', comingIn: 'CT-5' },
 ]

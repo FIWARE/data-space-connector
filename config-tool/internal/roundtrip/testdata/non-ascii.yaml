@@ -1,0 +1,5 @@
+# Head comment: non-ASCII keys and flow items.
+ä: x # line comment
+flow:
+  ö: [é, x]
+# Foot comment.
