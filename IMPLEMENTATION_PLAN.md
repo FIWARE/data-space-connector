@@ -143,7 +143,11 @@ decentralized-iam 2.3.0 / TIL 0.10.3).
   `contract-management.127.0.0.1.nip.io`: a `/*` route ~625, a discovery `/*`+`vars` route ~445 and
   verifier service `contract-management` ~320.
 - **Consumer CM.** It is off in `consumer.yaml` and on in `consumer-tmf.yaml`, with the OID4VP holder
-  `did:web:fancy-marketplace.biz`.
+  `did:web:fancy-marketplace.biz`. Its `credential-repo` projection (`oid4vp.credentialsFolder`,
+  `consumer-tmf.yaml` ~163–175) holds only `vc-marketplace-credential` and
+  `vc-legal-person-credential`. The consumer's MembershipCredential is in secret
+  `vc-fdsc-edc-credential` (`consumer-auth.yaml` ~398–414, self-issued, `holderBinding.enabled:
+  false`) and is not projected.
 - **Consumer `registration.issuer`** (`k3s/consumer-auth.yaml` :8–11) holds only `did:web:mp-operations.org`
   (MembershipCredential). `did:web:dataspace-authority.org` is not in the consumer TIL, so as it
   stands the consumer's gateway would refuse every delivery from the publisher.
@@ -390,7 +394,7 @@ decentralized-iam 2.3.0 / TIL 0.10.3).
   | `decentralizedIam.odrlAuthorization.apisix.routes` | ~417 | `consumer-auth.yaml` ~262 |
   | APISIX `ingress.hosts` and `ingress.tls[].hosts` | untouched: the sink host is already listed (~381) | `consumer-auth.yaml` ~232/~251, plus the new sink host |
   | `contract-management.additionalEnvVars` | ~844 | `consumer-tmf.yaml` ~75 |
-  | `contract-management.deployment.additionalVolumes` / `additionalVolumeMounts` | only if the oid4vp mounts need them (the base sets none) | `consumer-tmf.yaml` ~152/~184 (already mount the holder key and credentials) |
+  | `contract-management.deployment.additionalVolumes` / `additionalVolumeMounts` | only if the oid4vp mounts need them (the base sets none) | `consumer-tmf.yaml` ~152/~184: `additionalVolumes` is set, a full copy with a `vc-fdsc-edc-credential` → `membership-credential.jwt` source appended to the `credential-repo` projection. `additionalVolumeMounts` is not set (`/credential-repo` is already mounted) |
   | `registration.issuer` | ~1685 | `consumer-auth.yaml` :8 |
 
   A key not in this table is a list the overlay must not set. A naive partial list fails far from
@@ -454,6 +458,13 @@ decentralized-iam 2.3.0 / TIL 0.10.3).
     `contract-management.fullnameOverride` is `contract-management`, ns `consumer`) and
     `verifier:3000`, as on the provider. The consumer CM reaches the publisher through Squid, which
     its `MICRONAUT_HTTP_CLIENT_PROXY_*` env vars already configure.
+  - **The consumer subscriber presents its MembershipCredential** (secret `vc-fdsc-edc-credential`,
+    issuer `did:web:fancy-marketplace.biz`), the only credential type the publisher's
+    `dataspace-subscriptions` service admits. The base `credential-repo` projection does not hold it
+    (see the repo facts), so the overlay appends it to a full copy of
+    `contract-management.deployment.additionalVolumes` (table above). Without it the consumer's
+    `POST /subscriptions` never gets a token and the `Background` probe never reaches
+    `subscriptions == 2`.
   - Consumer `keep: [did:web:dataspace-authority.org, did:web:fancy-marketplace.biz]`, and the same
     `subscriber.retry` values and `ENDPOINTS_HEALTH_DETAILS_VISIBLE=ANONYMOUS` entry as the provider.
   - `registration.issuer`: a full copy of the `consumer-auth.yaml` list (Helm replaces lists) plus
@@ -483,7 +494,11 @@ decentralized-iam 2.3.0 / TIL 0.10.3).
     ingress host, verifier service, `registration.issuer` entry, CM env entry, volume and volume
     mount is still present. The only differences are the eventing config, the three
     `dataspace-events*` routes, the `dataspace-events` verifier service, the added issuer, the
-    added env entries, the policy Job and, at the consumer, the new sink host;
+    added env entries, the policy Job and, at the consumer, the new sink host and the
+    MembershipCredential source in the `credential-repo` projection;
+  - the subscription token the publisher's `dataspace-subscriptions` service issues to the consumer
+    carries `participantId: did:web:fancy-marketplace.biz` (verifier log or decoded token), as the
+    provider's carries `did:web:mp-operations.org` (Step 1);
   - `publish` of an unknown DID (e.g. `did:web:probe-<timestamp>.org`, fresh per run) returns
     `subscriptions: 2`, **and** within ~30 s both the provider report and the consumer report list
     that DID with `trigger: event` and a `lastSeen` after the publish. `subscriptions: 2` only counts
