@@ -146,6 +146,26 @@ func (d *Document) SetHeader(h Header) {
 	d.headerSet = true
 }
 
+// Generated reports whether Parse stripped a generated header, even one whose fields do not parse.
+// SetHeader does not change it.
+func (d *Document) Generated() bool {
+	return d.hasHeader()
+}
+
+// FileLine maps a body line (yaml.Node.Line, Leaf.Line) to the line an editor shows for it.
+func (d *Document) FileLine(bodyLine int) int {
+	if d.hasHeader() {
+		return bodyLine + headerLineCount
+	}
+	return bodyLine
+}
+
+// hasHeader is the one test for "the parsed file carries the header"; Header().IsZero() is not,
+// since unparseable fields stay empty and SetHeader replaces the value.
+func (d *Document) hasHeader() bool {
+	return d.headerRaw != nil
+}
+
 // detectEOL returns the line ending of the first line break in src, LF when there is none.
 func detectEOL(src []byte) string {
 	i := bytes.IndexByte(src, '\n')
