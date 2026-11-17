@@ -2519,8 +2519,8 @@
               "description": "Python auto-instrumentation agent settings.",
               "properties": {
                 "image": {
-                  "default": "ghcr.io/open-telemetry/opentelemetry-operator/autoinstrumentation-python:0.54b0",
-                  "description": "container image for the Python auto-instrumentation agent init\ncontainer injected by the Operator.",
+                  "default": "ghcr.io/open-telemetry/opentelemetry-operator/autoinstrumentation-python:0.62b1",
+                  "description": "container image for the Python auto-instrumentation agent init\ncontainer injected by the Operator. The agent runs in the application's own Python, so\nit has to support its version: 0.62b1 is the last one for Python 3.9 (0.63b0 and later\nrequire 3.10). The marketplace charging backend runs Python 3.9 from 11.8.3 on, and\nPython 3.8 before, for which no agent is published any more.",
                   "title": "image",
                   "type": "string"
                 }

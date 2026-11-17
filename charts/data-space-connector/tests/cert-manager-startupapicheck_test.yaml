@@ -1,0 +1,43 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/helm-unittest/helm-unittest/main/schema/helm-testsuite.json
+#
+# cert-manager's startupapicheck job runs on install and on every upgrade (it waits for the webhook
+# before the chart's issuers are created). Its service account and RBAC are hooks deleted once they
+# succeed, so they have to run in the same phases as the job: otherwise an upgrade creates the job
+# without a service account, its pod is never created, and the upgrade waits until it times out.
+suite: cert-manager startupapicheck hooks
+templates:
+  - charts/cert-manager/templates/startupapicheck-job.yaml
+  - charts/cert-manager/templates/startupapicheck-serviceaccount.yaml
+  - charts/cert-manager/templates/startupapicheck-rbac.yaml
+set:
+  cert-manager.enabled: true
+tests:
+  - it: runs the job on install and upgrade
+    template: charts/cert-manager/templates/startupapicheck-job.yaml
+    asserts:
+      - equal:
+          path: metadata.annotations["helm.sh/hook"]
+          value: post-install,post-upgrade
+      - equal:
+          path: metadata.annotations["helm.sh/hook-weight"]
+          value: "0"
+
+  - it: creates the service account again on every upgrade, before the job
+    template: charts/cert-manager/templates/startupapicheck-serviceaccount.yaml
+    asserts:
+      - equal:
+          path: metadata.annotations["helm.sh/hook"]
+          value: post-install,post-upgrade
+      - equal:
+          path: metadata.annotations["helm.sh/hook-weight"]
+          value: "-5"
+
+  - it: creates the Role and RoleBinding again on every upgrade, before the job
+    template: charts/cert-manager/templates/startupapicheck-rbac.yaml
+    asserts:
+      - equal:
+          path: metadata.annotations["helm.sh/hook"]
+          value: post-install,post-upgrade
+      - equal:
+          path: metadata.annotations["helm.sh/hook-weight"]
+          value: "-5"

@@ -175,7 +175,7 @@ tests:
     asserts:
       - equal:
           path: spec.python.image
-          value: "ghcr.io/open-telemetry/opentelemetry-operator/autoinstrumentation-python:0.54b0"
+          value: "ghcr.io/open-telemetry/opentelemetry-operator/autoinstrumentation-python:0.62b1"
 
   - it: should use default Node.js agent image
     set:

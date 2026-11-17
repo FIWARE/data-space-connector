@@ -35,7 +35,9 @@ spec:
           args:
             - |
               export ROOT_CA=$(sed '/-----BEGIN CERTIFICATE-----/d;/-----END CERTIFICATE-----/d' /ca/ca.crt | tr -d '\n')
-              /entrypoint.sh
+              # through sh: the script has no shebang, and busybox does not run it directly
+              # ("entrypoint.sh: applet not found")
+              sh /entrypoint.sh
           volumeMounts:
             - name: trust-anchor
               mountPath: /out
