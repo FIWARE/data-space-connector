@@ -25,16 +25,16 @@ In order to interact with the system, the following tools are also helpful:
 - [jq](https://stedolan.github.io/jq/download/)
 - [yq](https://mikefarah.gitbook.io/yq/)
 
-To check if the tools are installed, can run and are able to spin up a kubernetes cluster without further FIWARE components, you should execute the prepared [script](checkRequirements.sh).
+To check tool versions and Docker engine access, execute the prepared [script](checkRequirements.sh) (`./doc/deployment-integration/local-deployment/checkRequirements.sh` from the repository root). It supports Bash 3.2 or later on macOS and Linux.
 
-Issues revealed by the script are most likely due to incompatibility of your system or faulty installation of the required tools.
+Missing, outdated or unusable required tools (Docker, kubectl, Maven, java and javac), or an unreachable Docker engine, produce exit status 1. The interaction tools (curl, jq and yq) are optional and produce warnings. The script does not create a Kubernetes cluster or verify deployment readiness.
 
 
 ## Quick Start
 
 > :warning: The local deployment uses [k3s](https://k3s.io/) in a docker container and is currently only tested on linux and MacOS.
 
-> :warning: In current Linux installations, ```br_netfilter``` is disabled by default. That leads to networking issues inside the k3s cluster and will prevent the connector to start up properly. Make sure that its enabled via ```modprobe br_netfilter```. See [Stackoverflow](https://stackoverflow.com/questions/48148838/kube-dns-error-reply-from-unexpected-source/48151279#48151279) for more.
+> :warning: k3s networking may require ```br_netfilter``` in the Docker engine's Linux kernel. The checker's host-kernel check is advisory because Docker may use a remote engine. If needed, enable it on the Linux engine host using ```sudo modprobe br_netfilter```; this host command does not apply on macOS, where Docker uses a Linux VM. See [Stackoverflow](https://stackoverflow.com/questions/48148838/kube-dns-error-reply-from-unexpected-source/48151279#48151279) for more.
 
 To start the Data Space, just use:
 
