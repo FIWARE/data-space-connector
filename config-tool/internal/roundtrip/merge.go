@@ -49,7 +49,7 @@ func (d *Document) merge(p Path, overrides map[string]any) error {
 	return nil
 }
 
-// mergeAlias merges over over the resolved value of the alias n at p, as Helm sees it.
+// mergeAlias merges over the resolved value of the alias n at p, as Helm sees it.
 func (d *Document) mergeAlias(p Path, n *yaml.Node, over map[string]any) error {
 	cur, err := decodeValue(n)
 	if err != nil {

@@ -37,6 +37,7 @@ var (
 const (
 	utf8BOM        = "\xef\xbb\xbf"
 	lineFeed       = "\n"
+	tab            = "\t"
 	crlf           = "\r\n"
 	docStartMarker = "---"
 	docEndMarker   = "..."

@@ -146,7 +146,9 @@ func literalBlock(s, indent string) (header string, content []string, ok bool) {
 	body := strings.TrimRight(s, lineFeed)
 	enc := marshalScalar(s)
 	first, _, _ := strings.Cut(enc, lineFeed)
-	if body == "" || !strings.Contains(s, lineFeed) || first[0] != literalHeader || strings.ContainsAny(first, "123456789") {
+	// A tab cannot start the first content line: it would be read as indentation.
+	if body == "" || !strings.Contains(s, lineFeed) || first[0] != literalHeader || strings.ContainsAny(first, "123456789") ||
+		strings.HasPrefix(body, tab) {
 		return "", nil, false
 	}
 	trailing := len(s) - len(body)
@@ -178,7 +180,7 @@ func inlineScalar(v any) string {
 	case map[string]any, map[any]any:
 		return "{}"
 	case string:
-		if enc := marshalScalar(v); !strings.Contains(enc, lineFeed) {
+		if enc := marshalScalar(v); !isBlockEncoding(enc) {
 			return enc
 		}
 		return strconv.Quote(v)
@@ -213,7 +215,7 @@ func flowKey(k any) string {
 		return marshalScalar(k)
 	}
 	enc := marshalScalar(s)
-	if strings.Contains(enc, lineFeed) || (enc == s && strings.ContainsAny(s, flowSpecials)) {
+	if isBlockEncoding(enc) || (enc == s && strings.ContainsAny(s, flowSpecials)) {
 		return strconv.Quote(s)
 	}
 	return enc
@@ -226,10 +228,17 @@ func blockKey(k any) string {
 		return marshalScalar(k)
 	}
 	enc := marshalScalar(s)
-	if strings.Contains(enc, lineFeed) || enc == mergeKey {
+	if isBlockEncoding(enc) || enc == mergeKey {
 		return strconv.Quote(s)
 	}
 	return enc
+}
+
+// isBlockEncoding reports whether yaml.v3 wrote a block scalar. A block with no content is only its
+// header, e.g. `|4+` for "\n", so the indicator decides, not a line break.
+func isBlockEncoding(enc string) bool {
+	return strings.Contains(enc, lineFeed) || strings.HasPrefix(enc, string(literalHeader)) ||
+		strings.HasPrefix(enc, string(foldedHeader))
 }
 
 // jsonText writes v as indented JSON, valid flow YAML: inner lines one indent unit deeper than
