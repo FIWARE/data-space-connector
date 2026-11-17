@@ -768,7 +768,10 @@ decentralized-iam 2.3.0 / TIL 0.10.3).
     (link `participant-setup.md`);
   - that `participantId` is the MembershipCredential's issuer, not its subject (Step 1), what that
     requires of a data space whose memberships a third party issues, and the replay risk of
-    credentials minted without holder binding;
+    credentials minted without holder binding. `specification.md` §5.2 says normatively that the
+    identity compared with `subscriberId` is the `credentialSubject.id`; reconcile it (e.g. let a
+    publisher bind the identity to the TIR-checked issuer and say so there). In k3s both are the
+    participant's own DID, so the IT cannot tell them apart;
   - the TIR-watcher safeguards and timing (§8: first snapshot silent, `confirmations`,
     `max-removals-per-cycle`), and the production defaults vs. the k3s values;
   - the CM pitfalls: `NOTIFICATION_ENABLED`, `services.trusted-issuers-registry`, a single replica
