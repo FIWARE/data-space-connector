@@ -324,7 +324,7 @@
     </build>
 
     <profiles>
-        <!-- The local deploy profiles of the parent (`local`, `consent`) deploy from the root
+        <!-- The local deploy profiles of the parent (`local`, `consent`, `eventing`) deploy from the root
              module. This module must not deploy a second time on top of it. -->
         <profile>
             <id>local</id>
@@ -334,6 +334,12 @@
         </profile>
         <profile>
             <id>consent</id>
+            <properties>
+                <deploy.skip>true</deploy.skip>
+            </properties>
+        </profile>
+        <profile>
+            <id>eventing</id>
             <properties>
                 <deploy.skip>true</deploy.skip>
             </properties>

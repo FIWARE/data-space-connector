@@ -512,8 +512,9 @@ decentralized-iam 2.3.0 / TIL 0.10.3).
   - `restore` puts it back.
 
 ### Step 3: Integration test scaffolding and scenarios 1–3
-- `it/pom.xml`: a profile `eventing` that skips deploy, as `consent` does, and an `eventing-test`
-  profile with `cucumber.filter.tags=@eventing`.
+- `it/pom.xml`: an `eventing-test` profile with `cucumber.filter.tags=@eventing`. (The `eventing`
+  profile that skips the module's deploy, as `consent` does, came with Step 1: `mvn clean deploy
+  -Peventing` would otherwise deploy twice.)
 - `.github/workflows/test.yaml`: add the matrix entry `eventing` (`test,eventing,eventing-test`). It
   runs in both deployments per ADR 0007, which adds 2 CI jobs; say so in the PR.
 - `StandardStepDefinitions`: split `setup()` (:111) in two hooks.

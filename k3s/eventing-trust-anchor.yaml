@@ -1,0 +1,503 @@
+# ---------------------------------------------------------------------------
+# Data space eventing overlay for the `consent-authority` release (trust-anchor
+# namespace), layered on k3s/consent-trust-anchor.yaml:
+#   -f k3s/consent-trust-anchor.yaml -f k3s/eventing-trust-anchor.yaml
+#
+# Turns the release's contract-management into the trust anchor's event publisher:
+# it watches the TIR and announces removed participants to their subscriptions. It
+# reuses the authority's identity (did:web:dataspace-authority.org, its key and its
+# OperatorCredential), verifier and APISIX; see doc/adr/0014.
+#
+# This file only ADDS to the consent authority. Helm replaces lists, so the lists it
+# extends (verifier services, APISIX routes, ingress hosts/tls) are full copies of
+# the ones in consent-trust-anchor.yaml plus the eventing entries: keep them in sync.
+#
+# The timings below are demo/test values, sized for the integration test; see
+# doc/eventing/trust-anchor-setup.md for production values.
+# ---------------------------------------------------------------------------
+
+# Publisher-only contract-management: no TM Forum, no PAP, no TIL, no marketplace.
+contract-management:
+  enabled: true
+  did: did:web:dataspace-authority.org
+  enableTmForum: false
+  enableRainbow: false
+  enableOdrlPap: false
+  enableTrustedIssuersList: false
+  enableCentralMarketplace: false
+  # CM keeps subscriptions, the TIR snapshot and pending removals in memory: a second
+  # replica would announce every removal twice and know half of the subscriptions.
+  deployment:
+    replicaCount: 1
+    initContainers:
+      # the OID4VP client reads a PKCS#8 key
+      - name: convert-signing-key
+        image: alpine/openssl:3.5.5
+        command: ["sh", "-c", "openssl pkcs8 -topk8 -nocrypt -in /signing-key-raw/tls.key -out /signing-key/tls.key && chmod 644 /signing-key/tls.key"]
+        volumeMounts:
+          - name: signing-key-raw
+            mountPath: /signing-key-raw
+          - name: signing-key
+            mountPath: /signing-key
+      # load the dsc-ca into the java truststore, for the verifiers of the participants
+      - name: load-certs
+        image: "quay.io/seamware/fdsc-edc-controlplane-oid4vc:0.1.1"
+        command: ["/bin/sh", "-c", "/bin/import-ca.sh /certs-folder /root-ca/cacert.pem /opt/java/openjdk/lib/security/cacerts"]
+        volumeMounts:
+          - name: ca-certs-script
+            mountPath: /bin/import-ca.sh
+            subPath: import-ca.sh
+          - name: cacerts
+            mountPath: /certs-folder/
+          - name: root-ca
+            mountPath: /root-ca/cacert.pem
+            subPath: ca.crt
+    additionalVolumes:
+      - name: signing-key
+        emptyDir: {}
+      - name: signing-key-raw
+        secret:
+          secretName: dataspace-authority.org-tls
+          defaultMode: 0755
+      - name: ca-certs-script
+        configMap:
+          name: ca-certs-script
+          defaultMode: 0755
+      # the OperatorCredential vc-operator keeps for this identity; the participants'
+      # `/events` policy (allowDataSpaceEvents.json) admits exactly this credential
+      - name: credential-repo
+        projected:
+          sources:
+            - secret:
+                name: vc-operator-credential
+                items:
+                  - key: credential
+                    path: operator-credential.jwt
+      - name: root-ca
+        secret:
+          secretName: dataspace-authority.org-tls
+          items:
+            - key: ca.crt
+              path: ca.crt
+      - name: cacerts
+        emptyDir: {}
+    additionalVolumeMounts:
+      - name: credential-repo
+        mountPath: /credential-repo
+      - name: signing-key
+        mountPath: /signing-key
+      - name: root-ca
+        mountPath: /etc/ssl/cacert.pem
+        subPath: ca.crt
+      - name: cacerts
+        mountPath: /opt/java/openjdk/lib/security/cacerts
+        subPath: cacerts
+      # Red Hat JDK uses a different truststore path
+      - name: cacerts
+        mountPath: /etc/pki/ca-trust/extracted/java/cacerts
+        subPath: cacerts
+  # Helm replaces lists: the OTEL entries are a copy of the chart's default list.
+  additionalEnvVars:
+    - name: OTEL_SDK_DISABLED
+      value: "true"
+    - name: OTEL_SERVICE_NAME
+      value: "contract-management"
+    - name: OTEL_EXPORTER_OTLP_ENDPOINT
+      value: ""
+    - name: OTEL_EXPORTER_OTLP_PROTOCOL
+      value: "grpc"
+    - name: OTEL_TRACES_SAMPLER
+      value: "parentbased_traceidratio"
+    - name: OTEL_TRACES_SAMPLER_ARG
+      value: "1.0"
+    - name: OTEL_PROPAGATORS
+      value: "tracecontext,baggage"
+    - name: OTEL_METRICS_EXPORTER
+      value: "none"
+    - name: OTEL_LOGS_EXPORTER
+      value: "none"
+    # `notification.enabled: false` only omits the block and CM defaults to true; with no
+    # TM Forum to subscribe to, the health check would then go DOWN.
+    - name: NOTIFICATION_ENABLED
+      value: "false"
+    # show the `dataspace-tir-watcher` details on the cluster-internal port 9090; the
+    # integration test waits for its `lastSuccessfulCycle`
+    - name: ENDPOINTS_HEALTH_DETAILS_VISIBLE
+      value: "ANONYMOUS"
+  # Helm merges maps: this adds the TIR the watcher reads `GET /v4/issuers` from.
+  services:
+    trusted-issuers-registry:
+      path: "/"
+      url: http://tir.trust-anchor.svc.cluster.local:8080
+  # Delivery to a participant's `/events` answers 401 first; the publisher then gets a
+  # token from the participant's verifier by presenting its OperatorCredential.
+  oid4vp:
+    enabled: true
+    credentialsFolder: /credential-repo
+    trustAnchors:
+      - /etc/ssl/cacert.pem
+    holder:
+      holderId: did:web:dataspace-authority.org
+      keyType: EC
+      keyPath: /signing-key/tls.key
+      signatureAlgorithm: ECDH-ES
+    # the participants' verifiers (verifier.mp-operations.org, ...) resolve through squid
+    proxyConfig:
+      enabled: true
+      proxyHost: squid-proxy.infra.svc.cluster.local
+      proxyPort: 8888
+  dataspace:
+    events:
+      publisher:
+        enabled: true
+        # the host of the `/subscriptions` routes below, sent as WebHook-Request-Origin;
+        # each participant's `publishers[].origin` must equal it
+        origin: dataspace-events.127.0.0.1.nip.io
+        # Subscriptions live in memory, so a publisher restart drops them all and only
+        # the subscribers' next renewal brings them back. A short lease makes them renew
+        # about every minute (CM default PT24H, renewal at half of it).
+        lease-ttl: PT2M
+      tir-watcher:
+        enabled: true
+        # a removal is announced after about confirmations x interval, ~30 s here
+        # (CM defaults PT30S, PT1M, 2)
+        initial-delay: PT10S
+        interval: PT10S
+        confirmations: 2
+        max-removals-per-cycle: 5
+
+decentralizedIam:
+  vcAuthentication:
+    vcverifier:
+      # tirCacheExpiry (consent-trust-anchor.yaml) is 1 s, so a participant put back at the
+      # TIR can subscribe again right away.
+      registration:
+        services:
+          # One service, one audience: subjects and participants authenticate to the SAME
+          # relying party (this consent-manager), they just present different credentials.
+          # The credential policy is therefore selected by SCOPE, not by a second service -
+          # the pattern k3s/provider.yaml already uses for `data-service` (default/legal/
+          # operator). Every token this service issues carries `aud: consent-manager`, which
+          # is what the consent-manager's externalIdp.audience expects.
+          #   openid      - the data SUBJECT's UserCredential
+          #   participant - a PARTICIPANT's MembershipCredential (issued by its own keycloak,
+          #                 trusted because its issuer DID is registered in the trust-anchor
+          #                 TIR). The consent-manager resolves it to a Participant by `did`.
+          # See doc/CONSENT_MANAGEMENT.md.
+          #
+          # :warning: The provider mints that MembershipCredential with
+          # `holderBinding.enabled: false` (k3s/provider.yaml), so it carries no confirmation
+          # claim and is replayable by anyone holding the JWT. Enabling holder binding is the
+          # hardening step once this path works.
+          - id: consent-manager
+            defaultOidcScope: "openid"
+            authorizationType: "DEEPLINK"
+            oidcScopes:
+              "participant":
+                credentials:
+                  - type: MembershipCredential
+                    trustedParticipantsLists:
+                      - https://tir.127.0.0.1.nip.io
+                    trustedIssuersLists:
+                      - "*"
+                    jwtInclusion:
+                      enabled: true
+                      fullInclusion: true
+                dcql:
+                  credentials:
+                    - id: participant-query
+                      format: "jwt_vc_json"
+                      multiple: true
+                      meta:
+                        type_values:
+                          - ["MembershipCredential"]
+              "openid":
+                credentials:
+                  - type: UserCredential
+                    trustedParticipantsLists:
+                      - https://tir.127.0.0.1.nip.io
+                    trustedIssuersLists:
+                      - "*"
+                    jwtInclusion:
+                      enabled: true
+                      fullInclusion: true
+                dcql:
+                  credentials:
+                    - id: user-query
+                      format: "jwt_vc_json"
+                      multiple: true
+                      meta:
+                        type_values:
+                          - ["UserCredential"]
+          # Who may subscribe at the publisher: a participant with a MembershipCredential
+          # whose ISSUER is listed at the TIR (`trustedIssuersLists: ["*"]` defers to the TIR
+          # check). The subscriber is identified by that issuer, not by credentialSubject.id:
+          # the subject is whatever the issuer writes, so with a subject mapping any listed
+          # participant could subscribe or unsubscribe as another one. In k3s every
+          # participant mints its own MembershipCredential, so the issuer is its own DID.
+          #
+          # :warning: Those credentials are minted with `holderBinding.enabled: false` and
+          # are replayable by anyone holding the JWT, see the warning above.
+          - id: dataspace-subscriptions
+            defaultOidcScope: "default"
+            authorizationType: "DEEPLINK"
+            oidcScopes:
+              "default":
+                # put the mapped claims at the top level of the token
+                flatClaims: true
+                credentials:
+                  - type: MembershipCredential
+                    trustedParticipantsLists:
+                      - https://tir.127.0.0.1.nip.io
+                    trustedIssuersLists:
+                      - "*"
+                    jwtInclusion:
+                      enabled: true
+                      # fullInclusion would make the verifier ignore claimsToInclude
+                      fullInclusion: false
+                      claimsToInclude:
+                        - originalKey: issuer
+                          newKey: participantId
+                dcql:
+                  credentials:
+                    - id: membership-query
+                      format: "jwt_vc_json"
+                      multiple: true
+                      meta:
+                        type_values:
+                          - ["MembershipCredential"]
+  odrlAuthorization:
+    apisix:
+      # the publisher's host next to the consent-manager's
+      ingress:
+        annotations:
+          cert-manager.io/alt-names: "consent-manager.dataspace-authority.org,dataspace-events.127.0.0.1.nip.io"
+        hosts:
+          - host: consent-manager.dataspace-authority.org
+            paths: ["/"]
+          - host: dataspace-events.127.0.0.1.nip.io
+            paths: ["/"]
+        tls:
+          - secretName: consent-manager-tls
+            hosts:
+              - consent-manager.dataspace-authority.org
+              - dataspace-events.127.0.0.1.nip.io
+      routes:
+        # NB there is deliberately NO /participants/login route. Participants
+        # authenticate over OID4VP (see the /consent-manager/* route below), so nothing
+        # issues consent-manager-signed participant tokens any more - and the login
+        # endpoint was an unauthenticated, published, unthrottled credential exchange.
+        # See doc/CONSENT_MANAGEMENT.md.
+        # ---------------------------------------------------------------------------------------
+        # Subject-authenticated path: the data subject presents its OWN OID4VP access token, which the
+        # consent-manager verifies itself via external JWKS (its externalIdp values) and maps to its
+        # local User. Deliberately NO participant authentication and NO consent-key injection. The
+        # participant `/consent-manager/*` route would not do: its `openid-connect` would accept this
+        # token (same verifier), but the consent-manager's participant middleware behind it resolves
+        # the caller to a Participant and would never find the subject - and that route injects the
+        # consent key, which a subject must not act with. This lets the subject reach its
+        # user-authenticated endpoints through the public ingress without a port-forward.
+        #
+        # :warning: Because these routes apply NO gateway authentication, each one is an ALLOW-LIST of
+        # (uris x methods) whose handlers are `verifyUserJWT`-gated in the consent-manager itself, i.e.
+        # they authenticate the SUBJECT's OID4VP token. Never widen this to `/consent-user/*`: this
+        # gateway is published (ingress `consent-authority-apisix`, host
+        # consent-manager.dataspace-authority.org), so a wildcard exposes the WHOLE consent-manager API
+        # unauthenticated - including endpoints gated only by the shared consent key (`POST /v1/consents`,
+        # `GET /v1/consents/{userId}/{providerId}/{consumerId}`, which this route does not inject and so
+        # cannot satisfy), and endpoints with NO gate at all
+        # (`GET /v1/consents/emailverification`, `GET /v1/users/{userId}` - the latter returns the
+        # subject's name, DID and its `identifiers`, i.e. the `x-user-key` that authenticates AS that
+        # subject). Anything added here must be checked against src/routes/*.ts for its middleware first.
+        #
+        # Methods are pinned per route so a path wildcard cannot pull in a differently-gated handler on
+        # the same path (e.g. `DELETE /v1/consents/{id}` is the subject's revoke, while `POST /v1/consents`
+        # is the consent-key-gated provider-on-behalf grant).
+        # ---------------------------------------------------------------------------------------
+        # subject reads: its own consent list/detail, available exchanges and its own account
+        - uris:
+            - /consent-user/v1/consents/me
+            - /consent-user/v1/consents/me/*
+            - /consent-user/v1/consents/exchanges/user
+            - /consent-user/v1/users/me
+          methods: ["GET"]
+          priority: 5
+          host: consent-manager.dataspace-authority.org
+          upstream:
+            nodes:
+              consent-manager:3000: 1
+            type: roundrobin
+          plugins:
+            proxy-rewrite:
+              regex_uri: ["^/consent-user/(.*)", "/$1"]
+        # subject grants consent for itself (POST /v1/consents/user, `verifyUserJWT`)
+        - uris:
+            - /consent-user/v1/consents/user
+          methods: ["POST"]
+          priority: 5
+          host: consent-manager.dataspace-authority.org
+          upstream:
+            nodes:
+              consent-manager:3000: 1
+            type: roundrobin
+          plugins:
+            proxy-rewrite:
+              regex_uri: ["^/consent-user/(.*)", "/$1"]
+        # subject withdraws a consent (DELETE /v1/consents/{id}, `verifyUserJWT`). The wildcard is safe
+        # because `/:id` is the ONLY delete on the consents router.
+        - uris:
+            - /consent-user/v1/consents/*
+          methods: ["DELETE"]
+          priority: 5
+          host: consent-manager.dataspace-authority.org
+          upstream:
+            nodes:
+              consent-manager:3000: 1
+            type: roundrobin
+          plugins:
+            proxy-rewrite:
+              regex_uri: ["^/consent-user/(.*)", "/$1"]
+        # subject self-service PDI signup. Unauthenticated BY DESIGN upstream (src/routes/users.ts has no
+        # middleware on /signup) - it is the only endpoint here that is not `verifyUserJWT`-gated, and it
+        # is exposed as a single exact uri+method rather than via a wildcard. It creates an account keyed
+        # on the holder DID; a deployment that onboards subjects out-of-band should drop this route.
+        - uris:
+            - /consent-user/v1/users/signup
+          methods: ["POST"]
+          priority: 5
+          host: consent-manager.dataspace-authority.org
+          upstream:
+            nodes:
+              consent-manager:3000: 1
+            type: roundrobin
+          plugins:
+            proxy-rewrite:
+              regex_uri: ["^/consent-user/(.*)", "/$1"]
+        # Participant path. Authentication is OID4VP: the caller presents an access token
+        # issued by this authority's verifier for the `consent-manager` service, which the
+        # gateway validates against the verifier's JWKS (bearer_only - the gateway never
+        # runs a browser flow). The consent-manager then resolves the token subject to a
+        # Participant by its `did`.
+        #
+        # This replaces the former `jwt-auth`, which validated a consent-manager-signed
+        # HS256 token against APISIX consumers that had to be provisioned by hand and all
+        # shared the consent-manager's jwtSecret - so any holder could mint a token as any
+        # participant. Nothing here holds a participant credential any more.
+        #
+        # The consent key is still injected server-side, unchanged: callers never hold it.
+        - uri: /consent-manager/*
+          priority: 0
+          host: consent-manager.dataspace-authority.org
+          upstream:
+            nodes:
+              consent-manager:3000: 1
+            type: roundrobin
+          plugins:
+            openid-connect:
+              bearer_only: true
+              use_jwks: true
+              client_id: consent-manager
+              # The token's `aud` is the verifier service id; check it explicitly rather
+              # than trusting the signature alone, or a token minted for another service
+              # of the same verifier would be accepted here. It has to be expressed as
+              # `claim_validator.audience` - openid-connect reads the audience only from
+              # there (a top-level `audience` key is silently ignored), and
+              # `match_with_client_id` compares it against `client_id` above.
+              claim_validator:
+                audience:
+                  claim: aud
+                  required: true
+                  match_with_client_id: true
+              client_secret: unused-bearer-only
+              discovery: https://verifier.dataspace-authority.org/services/consent-manager/.well-known/openid-configuration
+              # The verifier is addressed by its PUBLIC ingress host, because that host is the token's
+              # `iss` and the discovery document's `issuer`/`jwks_uri`. In the local cluster that name
+              # resolves to 127.0.0.1 and CoreDNS only rewrites *.nip.io, so both the discovery fetch
+              # and the JWKS fetch go through the squid forward proxy - the same mechanism the
+              # consent-manager (externalIdp.proxy) and the facades already use. Without this the
+              # gateway 401s every request with "failed to query the DNS server: name error".
+              proxy_opts:
+                http_proxy: http://squid-proxy.infra.svc.cluster.local:8888
+                https_proxy: http://squid-proxy.infra.svc.cluster.local:8888
+              # the verifier's ingress cert is signed by the cluster CA (selfsigned-ca), which this
+              # gateway has no trust bundle for; the hop is in-cluster via squid
+              ssl_verify: false
+            proxy-rewrite:
+              regex_uri: ["^/consent-manager/(.*)", "/$1"]
+              headers:
+                set:
+                  x-visionstrust-consent-key: "$env://CONSENT_KEY"
+        - uri: /.well-known/openid-configuration
+          host: consent-manager.dataspace-authority.org
+          upstream:
+            nodes:
+              verifier:3000: 1
+            type: roundrobin
+          plugins:
+            proxy-rewrite:
+              uri: /services/consent-manager/.well-known/openid-configuration
+        # ---------------------------------------------------------------------------------------
+        # Data space eventing: the publisher's subscription API. contract-management verifies no
+        # token itself and takes the subscriber from X-Userinfo.participantId, so the gateway
+        # authenticates (verifier service `dataspace-subscriptions`), strips any X-Userinfo the
+        # caller sent and sets it from the token. No `opa`: the authority runs no PDP
+        # (odrl-pap is off), the verifier service is the authorization.
+        # The names are NOT `dataspace-events*`: the umbrella validates those against the rules
+        # for a participant's `/events` routes.
+        # ---------------------------------------------------------------------------------------
+        - name: dataspace-subscriptions
+          uri: /subscriptions
+          methods: ["POST"]
+          host: dataspace-events.127.0.0.1.nip.io
+          upstream:
+            nodes:
+              contract-management:8080: 1
+            type: roundrobin
+          plugins: &subscriptionPlugins
+            # remove a caller-supplied X-Userinfo BEFORE openid-connect (priority 2599) sets it;
+            # at its default priority (1008) proxy-rewrite would remove the real one
+            proxy-rewrite:
+              _meta:
+                priority: 3000
+              headers:
+                remove: ["X-Userinfo"]
+            openid-connect:
+              bearer_only: true
+              use_jwks: true
+              set_userinfo_header: true
+              client_id: dataspace-subscriptions
+              # only tokens minted for this service, see the /consent-manager/* route
+              claim_validator:
+                audience:
+                  claim: aud
+                  required: true
+                  match_with_client_id: true
+              client_secret: unused-bearer-only
+              discovery: https://verifier.dataspace-authority.org/services/dataspace-subscriptions/.well-known/openid-configuration
+              # the verifier's public host only resolves through squid, see /consent-manager/*
+              proxy_opts:
+                http_proxy: http://squid-proxy.infra.svc.cluster.local:8888
+                https_proxy: http://squid-proxy.infra.svc.cluster.local:8888
+              ssl_verify: false
+        - name: dataspace-subscriptions-delete
+          uri: /subscriptions/*
+          methods: ["DELETE"]
+          host: dataspace-events.127.0.0.1.nip.io
+          upstream:
+            nodes:
+              contract-management:8080: 1
+            type: roundrobin
+          plugins: *subscriptionPlugins
+        # On a 401 the subscriber looks up where to get a token at
+        # <scheme>://<host>/.well-known/openid-configuration.
+        - name: dataspace-subscriptions-discovery
+          uri: /.well-known/openid-configuration
+          methods: ["GET"]
+          host: dataspace-events.127.0.0.1.nip.io
+          upstream:
+            nodes:
+              verifier:3000: 1
+            type: roundrobin
+          plugins:
+            proxy-rewrite:
+              uri: /services/dataspace-subscriptions/.well-known/openid-configuration
