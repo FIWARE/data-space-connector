@@ -154,10 +154,14 @@ decentralized-iam 2.3.0 / TIL 0.10.3).
 - **Provider `registration.issuer`** (~1685–1706) holds mp-operations, fancy-marketplace
   (LegalPerson, User, Membership) and dataspace-authority (OperatorCredential). Helm replaces lists, so
   an overlay must copy the whole list.
-- **In-cluster DNS.** `*.127.0.0.1.nip.io` resolves to Traefik in-cluster (`k3s/infra/coredns`), so a
-  sink such as `https://contract-management.127.0.0.1.nip.io/events` is reachable from the trust
-  anchor's pods. `*.dataspace-authority.org` / `*.mp-operations.org` hosts go through Squid
-  (`squid-proxy.infra.svc.cluster.local:8888`).
+- **In-cluster DNS.** `*.127.0.0.1.nip.io` is a CNAME for `traefik-loadbalancer.infra` in-cluster
+  (`k3s/infra/coredns`). That Service listens on **8080/8443 only**, so a direct `https://<host>/…`
+  (port 443) from a pod is refused (verified in Step 1). A pod reaches such a host either through Squid
+  (`squid-proxy.infra.svc.cluster.local:8888`, port 443 works) or directly at `https://<host>:8443`.
+  Step 2 must therefore give every in-cluster URL to a nip.io host (the subscribers'
+  `publishers[].url`, the sinks they register) a `:8443` port or a Squid proxy, and check that the
+  publisher's delivery client reaches the sink. `*.dataspace-authority.org` / `*.mp-operations.org`
+  hosts always go through Squid.
 - **IT harness** (`it/src/test/java/org/fiware/dataspace/it/components/`):
   - `RunCucumberTest` is the runner. Features are selected by `cucumber.filter.tags` per `*-test`
     profile in `it/pom.xml`.
@@ -361,21 +365,14 @@ decentralized-iam 2.3.0 / TIL 0.10.3).
 
   `k3s/deploy.sh` needs no new release: it already installs `consent-authority` whenever
   `CONSENT_AUTHORITY_VALUES` is set, and its `*_VALUES` variables take comma-separated files.
-- Acceptance (local `mvn clean deploy -Peventing`, results in the PR description):
-  - the publisher pod is Ready;
-  - the authority APISIX pod is Ready;
-  - `GET :9090/health` shows `dataspace-tir-watcher` with a `lastSuccessfulCycle` and a
-    `snapshotSize` > 0;
-  - `POST :9090/events`, through `kubectl port-forward deploy/<publisher> <local>:9090`, returns
-    `subscriptions: 0`;
-  - `POST /subscriptions` through the new host returns `401` without a token, and the discovery
-    route serves the service's metadata;
-  - a token the `dataspace-subscriptions` service issues for the provider's MembershipCredential
-    carries `participantId: did:web:mp-operations.org` (the credential's issuer); check it in the
-    verifier log or by decoding the token the subscriber obtains in Step 2;
+- Acceptance (render checks, results in the PR description). The cluster checks of the publisher
+  (pods Ready, watcher health, `401` on `/subscriptions`, discovery route, the provider token's
+  `participantId`) are not run in Step 1: they are items **S1-a** to **S1-e** of Step 2's acceptance,
+  whose deploy is the first with a subscriber that can obtain a subscription token. The old
+  `POST :9090/events` → `subscriptions: 0` check is replaced there by `subscriptions: 2`.
   - the consent scenario is unchanged. `mvn package -Pconsent` renders
     `target/rendered/participants/consent-authority` byte-identical before and after the `pom.xml`
-    change;
+    change, apart from the randomly generated secrets and the checksums derived from them;
   - the overlay only adds. Diff `helm template consent-authority` with
     `consent-trust-anchor.yaml` against `consent-trust-anchor.yaml,eventing-trust-anchor.yaml`: the
     only differences are the CM objects, the three `dataspace-subscriptions*` routes in the APISIX
@@ -477,6 +474,11 @@ decentralized-iam 2.3.0 / TIL 0.10.3).
     provider's fancy-marketplace grant. It is not on the consumer's `keep`, but no scenario removes
     mp-operations. The provider gives its own DID `scope: ""` only because a participant's own entry
     is never attributed to the data space.
+- **The publisher's delivery client.** The Step 1 publisher (`k3s/eventing-trust-anchor.yaml`) sets
+  no `MICRONAUT_HTTP_CLIENT_PROXY_*`, so it would deliver to the `*.127.0.0.1.nip.io` sinks directly
+  on 443, which is refused in-cluster (see the repo facts). Either register the sinks with `:8443`
+  or add the Squid proxy env vars to the publisher's `additionalEnvVars` copy. The reports of the
+  `publish` acceptance check below prove which one works.
 - Update the `eventing` profile and `k3s/deploy.sh` with both overlays.
 - New `doc/scripts/dataspace-eventing-demo.sh` (shellcheck-clean, `set -euo pipefail`, named
   constants for hosts and DIDs, proxy `127.0.0.1:8888` as the other scripts use):
@@ -489,6 +491,18 @@ decentralized-iam 2.3.0 / TIL 0.10.3).
   - `publish <did>`: a manual `POST :9090/events` at the publisher, the immediate path of §8.
 - Acceptance (local deploy, results in the PR description):
   - `helm template` of all overlays passes the umbrella's validation;
+  - the publisher checks deferred from Step 1, run on this deploy:
+    - **S1-a** the publisher pod and the authority APISIX pod are Ready;
+    - **S1-b** `GET :9090/health` at the publisher shows `dataspace-tir-watcher` with a
+      `lastSuccessfulCycle` and a `snapshotSize` > 0;
+    - **S1-c** `POST /subscriptions` through `dataspace-events.127.0.0.1.nip.io` returns `401`
+      without a token;
+    - **S1-d** the discovery route `/.well-known/openid-configuration` on that host serves the
+      `dataspace-subscriptions` service's metadata;
+    - **S1-e** the subscription token the publisher's `dataspace-subscriptions` service issues to the
+      provider carries `participantId: did:web:mp-operations.org` (the credential's issuer, not its
+      subject); verifier log or decoded token. This is the safeguard against one participant
+      subscribing or unsubscribing as another, so the PR must show the token claim;
   - the overlays only add. Diff `helm template` of the base value files against base +
     `eventing-{provider,consumer}.yaml`, for each participant: every pre-existing APISIX route,
     ingress host, verifier service, `registration.issuer` entry, CM env entry, volume and volume
@@ -498,7 +512,7 @@ decentralized-iam 2.3.0 / TIL 0.10.3).
     MembershipCredential source in the `credential-repo` projection;
   - the subscription token the publisher's `dataspace-subscriptions` service issues to the consumer
     carries `participantId: did:web:fancy-marketplace.biz` (verifier log or decoded token), as the
-    provider's carries `did:web:mp-operations.org` (Step 1);
+    provider's carries `did:web:mp-operations.org` (S1-e above);
   - `publish` of an unknown DID (e.g. `did:web:probe-<timestamp>.org`, fresh per run) returns
     `subscriptions: 2`, **and** within ~30 s both the provider report and the consumer report list
     that DID with `trigger: event` and a `lastSeen` after the publish. `subscriptions: 2` only counts
@@ -512,8 +526,14 @@ decentralized-iam 2.3.0 / TIL 0.10.3).
   - `restore` puts it back.
 
 ### Step 3: Integration test scaffolding and scenarios 1–3
-- `it/pom.xml`: a profile `eventing` that skips deploy, as `consent` does, and an `eventing-test`
-  profile with `cucumber.filter.tags=@eventing`.
+- `it/pom.xml`: an `eventing-test` profile that mirrors `consent-test` (~415–432): it sets
+  `cucumber.filter.tags=@eventing` **and** re-enables `maven-compiler-plugin` and
+  `maven-failsafe-plugin` (`<skip>false</skip>`), with a comment saying why. The root `eventing`
+  profile skips both so that `mvn clean deploy -Peventing` only deploys, and the `it` module inherits
+  that; a profile that only sets the tag filter yields a CI job that compiles and runs nothing and
+  still goes green. Check the job log for the `@eventing` scenario count. (The `it` `eventing`
+  profile that skips the module's deploy, as `consent` does, came with Step 1: `mvn clean deploy
+  -Peventing` would otherwise deploy twice.)
 - `.github/workflows/test.yaml`: add the matrix entry `eventing` (`test,eventing,eventing-test`). It
   runs in both deployments per ADR 0007, which adds 2 CI jobs; say so in the PR.
 - `StandardStepDefinitions`: split `setup()` (:111) in two hooks.
@@ -767,7 +787,10 @@ decentralized-iam 2.3.0 / TIL 0.10.3).
     (link `participant-setup.md`);
   - that `participantId` is the MembershipCredential's issuer, not its subject (Step 1), what that
     requires of a data space whose memberships a third party issues, and the replay risk of
-    credentials minted without holder binding;
+    credentials minted without holder binding. `specification.md` §5.2 says normatively that the
+    identity compared with `subscriberId` is the `credentialSubject.id`; reconcile it (e.g. let a
+    publisher bind the identity to the TIR-checked issuer and say so there). In k3s both are the
+    participant's own DID, so the IT cannot tell them apart;
   - the TIR-watcher safeguards and timing (§8: first snapshot silent, `confirmations`,
     `max-removals-per-cycle`), and the production defaults vs. the k3s values;
   - the CM pitfalls: `NOTIFICATION_ENABLED`, `services.trusted-issuers-registry`, a single replica
