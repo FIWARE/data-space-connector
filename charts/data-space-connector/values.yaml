@@ -1931,10 +1931,11 @@ contract-management:
   # owned by this umbrella chart, tracing is wired through the subchart's
   # `additionalEnvVars` extension point. The SDK disable flag
   # (`OTEL_SDK_DISABLED`) is set to `true` by default so tracing has no
-  # runtime effect until explicitly enabled. To activate tracing, override
-  # the env vars below (or pass
-  # `--set contract-management.additionalEnvVars[0].value=false`)
-  # together with `--set tracing.enabled=true`.
+  # runtime effect until explicitly enabled. To activate tracing, copy the
+  # full default `additionalEnvVars` list below into a values file, set
+  # `OTEL_SDK_DISABLED` to "false" there, and set `tracing.enabled=true`.
+  # Helm replaces lists: a `--set additionalEnvVars[0].value=...` keeps only
+  # that one entry and drops every other `OTEL_*` variable.
   tracing:
     # -- toggle OpenTelemetry tracing on the contract-management workload.
     # Leave unset (default) to inherit `tracing.enabled` from the global
@@ -2131,9 +2132,10 @@ registration:
   # space publisher. For any other grant (e.g. an eIDAS `UserCredential` issuer, which a
   # `participant.removed` for that DID would revoke) set `scope` explicitly or `scope: ""`.
   # Needs a trusted-issuers-list >= 0.10.1, an older one silently drops the scope, and a
-  # contract-management >= 3.5.3 to act on it. An issuer that is already registered answers 409 and
-  # keeps its unscoped grant; contract-management's `on-participant-removed.adopt-unattributed`
-  # covers those.
+  # contract-management >= 3.5.3 to act on it; contract-management's removal handling needs
+  # trusted-issuers-list >= 0.10.2 (>= 0.10.3 with `adopt-unattributed`). An issuer that is
+  # already registered answers 409 and keeps its unscoped grant; contract-management's
+  # `on-participant-removed.adopt-unattributed` covers those.
   # issuer:
   # - did: ${DID}
   #   credentialTypes:
