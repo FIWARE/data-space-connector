@@ -564,7 +564,9 @@ decentralizedIam:
       enabled: false
   odrlAuthorization:
     apisix:
+      # traditional mode reads the routes from etcd, which the chart does not deploy by default
       etcd:
+        enabled: true
         replicaCount: 1
         persistence:
           enabled: false

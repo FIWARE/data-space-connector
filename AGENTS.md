@@ -212,6 +212,14 @@ post-26.4 OID4VCI model. Hard-won gotchas (full detail in `doc/release-notes/10-
   (`POST`/`OPTIONS /events`, `POST /subscriptions`,
   `DELETE /subscriptions/{subscriptionId}`), code in `org.fiware.iam.dataspace.*`.
   Where it and architecture.md differ (status codes, defaults), the API wins.
+- Interop spec: `doc/eventing/specification.md`.
+- Participant side in this chart (ticket-102): CM config lives at `contract-management.dataspace.events`
+  (Micronaut tree, kebab-case, verbatim). The CM subchart renders it into its own refreshable ConfigMap
+  (no `subPath`); the umbrella never templates it. Feature needs CM ≥ 3.5.3.
+- TIL `POST /issuer?scope=&scopeType=` -- `scopeType` enum is `dataspace-membership`.
+- APISIX routes are a subchart list (`decentralizedIam.odrlAuthorization.apisix.routes`): the
+  umbrella cannot inject a gated route, so the events route is a documented snippet.
+- CI runs `helm unittest` without `helm dependency build`: suites can only target `templates/`.
 
 ## Important Files
 - `charts/data-space-connector/Chart.yaml` -- dependency graph (current
