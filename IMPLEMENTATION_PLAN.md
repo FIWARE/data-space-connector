@@ -35,6 +35,11 @@ decentralized-iam 2.3.0 / TIL 0.10.3).
   max-removals-per-cycle}` and has **no URL key**. It reads `GET /v4/issuers` from the Micronaut HTTP
   service `trusted-issuers-registry`, so the URL goes in the CM chart's `services:` map. The first
   complete cycle only takes a snapshot. A removal is announced after `confirmations × interval`.
+  A DID only counts as removed if it was in an earlier snapshot. A DID that is added and removed
+  between two cycles is never announced. The next cycle is scheduled `interval` after the previous
+  one ends. The `dataspace-tir-watcher` health indicator reports `state`, `lastSuccessfulCycle`
+  (the end time of the last successful cycle), `firstCycleDue`, `snapshotSize`, `pendingSize` and
+  `undeliveredSize` (`TirWatcherHealthIndicator`).
 - **Reconciliation.** It is configured under `participant-removed.reconcile.{initial-delay, interval}`,
   not per publisher. It runs once after `initial-delay`, then every `interval`. There is **no trigger
   endpoint**.
@@ -42,8 +47,13 @@ decentralized-iam 2.3.0 / TIL 0.10.3).
   - `POST /events` `{type, subject}`, which publishes manually and returns `202 {"id","subscriptions":n}`;
   - `GET /participants-removed`, the report: a list of `{publisher, mode, …, participants:[{id,
     trigger, mode, action, applied, attributable, held:[{scope, scopeType, credentialCount}],
-    unattributedCount}]}`;
-  - `POST /refresh`.
+    unattributedCount}]}`. `action` is a `RemovalAction` (`REPORTED`, `KEPT`,
+    `REVOKED_MEMBERSHIP`, …) and `trigger` is a `RemovalTrigger` (`EVENT`, `RECONCILIATION`), both
+    as lower-case tags. The report does **not** show `keep`;
+  - `POST /refresh`;
+  - `GET /health`. It shows indicator details only if `endpoints.health.details-visible` is
+    `ANONYMOUS` (the default is `AUTHENTICATED`). Set that with the env var
+    `ENDPOINTS_HEALTH_DETAILS_VISIBLE=ANONYMOUS`.
 
   The CM Service exposes 8080 only.
 - **CM verifies no tokens.** `/events` and `/subscriptions` only read `X-Userinfo.participantId`, so
@@ -71,8 +81,13 @@ decentralized-iam 2.3.0 / TIL 0.10.3).
 - **TIL API.**
   - `POST /issuer?scope=&scopeType=dataspace-membership` creates an issuer with a scoped grant.
   - `GET /issuer?scope=&scopeType=` lists issuers by scope.
-  - `GET /issuer/{did}/scopes` returns an issuer's grants.
-  - `PUT /issuer/{did}/credential?scope=&scopeType=` adds a scoped grant.
+  - `GET /issuer/{did}/scopes` returns an issuer's grants as `{scope, scopeType, credentialCount}`,
+    without the credentials.
+  - `GET /issuer/{did}` returns `{did, credentials[]}`. Each entry is a `{credentialsType, validFor,
+    claims}` with no scope, so the list merges every grant and the unscoped credentials.
+  - `PUT /issuer/{did}/credential?scope=&scopeType=` (`replaceCredentialsByScope`) **sets** the scope's
+    credentials to exactly the body and leaves other grants alone. It creates the issuer if it does
+    not exist, so it is the only write the IT needs. `POST /issuer?scope=` 409s on an existing issuer.
   - `DELETE /issuer/{did}` removes the issuer.
 
   The trust anchor removes a participant with `DELETE /issuer/{did}` on its TIL
@@ -86,7 +101,22 @@ decentralized-iam 2.3.0 / TIL 0.10.3).
   - an OperatorCredential, kept by vc-operator in secret `vc-operator-credential` (key `credential`,
     Keycloak client `contract-management`);
   - verifier `verifier.dataspace-authority.org`, and APISIX in traditional mode + etcd;
-  - `contract-management.enabled: false` (line 283).
+  - `contract-management.enabled: false` (line 283);
+  - its APISIX reads the `consent-manager` secret through `extraEnvVars` (~608–613). That secret is
+    created by the consent-manager chart in the `trust-anchor` release, through
+    `k3s/consent-trust-anchor-components.yaml` (header lines 13–15). Without it the APISIX pod stays
+    in `CreateContainerConfigError`;
+  - its lists, which an overlay replaces as a whole:
+    - the APISIX `routes` (~614–769: the consent-manager routes and `/consent-manager/*`);
+    - the authority verifier's `registration.services` (`decentralizedIam.vcAuthentication.vcverifier`,
+      ~498–562, holding `consent-manager` at ~523).
+- **Maven profiles.** The `template-consent-authority` execution is declared inside the `consent`
+  profile's `<build>` (`pom.xml` ~531–546). Another profile cannot reference it. When several
+  profiles are active, Maven merges them in POM declaration order: for a property both set, the
+  profile declared later wins, and executions with the same id are merged.
+  `deploy.gaiaxInfra.skip` (~58, ~628) is the existing pattern for an execution in the main build that
+  a profile switches on: a skip property that defaults to `true`, set by the profile to
+  `${deploy.template.skip}`.
 
   `allowDataSpaceEvents.json` already admits exactly that credential (OperatorCredential,
   `vc:currentParty` = `did:web:dataspace-authority.org`).
@@ -179,6 +209,25 @@ decentralized-iam 2.3.0 / TIL 0.10.3).
   `interval: PT10S`, `confirmations: 2`. A removal therefore propagates in ~30 s; the IT polls with a
   3 min timeout. The lease and retry values of D3 (`lease-ttl: PT2M`, `retry.initial-backoff: PT5S`,
   `retry.max-backoff: PT20S`) size `SUBSCRIPTION_RECOVERY_TIMEOUT` (3 min).
+- **D6: the watcher must have seen a DID before the IT removes it.** The watcher only announces a DID
+  that an earlier snapshot holds. A removal that comes before the first cycle after a
+  (re-)registration therefore publishes nothing, and a "nothing happened" assertion would pass
+  vacuously. That applies to `did:web:kept-member.org` and to the consumer after an `@After` restore.
+  So the IT's removal step does three things:
+  1. it checks that the DID is listed at the TIR and takes `t0` = now;
+  2. it waits, through the publisher's `dataspace-tir-watcher` health on 9090, until
+     `lastSuccessfulCycle` has taken `WATCHER_CYCLES_TO_SEE` (= 2) distinct values after `t0`.
+     The first such cycle may have read the registry before `t0`, but the second one started after
+     the first ended, so it read it after `t0`;
+  3. only then it deletes the DID.
+
+  The bound is `WATCHER_SEEN_TIMEOUT`: two cycles plus margin, ~1 min with the D5 values. The wait
+  lives in the removal step, not in a scenario, so no scenario can skip it. The only exception is
+  scenario 6, which removes the consumer while the publisher is scaled to 0 and tests the sweep,
+  not the watcher (Step 5). The publisher overlay
+  sets `ENDPOINTS_HEALTH_DETAILS_VISIBLE=ANONYMOUS`, so the cluster-internal port shows the details.
+  A fixed sleep of `interval × (confirmations + 1)` was rejected: it is still a guess when a cycle
+  is slow, and the health value is exact.
 
 ## Deviations from the ticket (need human sign-off)
 1. **The demo command is `mvn clean deploy -Peventing`, not `-Plocal`.** It is a scenario profile, as
@@ -199,8 +248,9 @@ decentralized-iam 2.3.0 / TIL 0.10.3).
 - New `k3s/eventing-trust-anchor.yaml`, layered on `k3s/consent-trust-anchor.yaml` for the
   `consent-authority` release:
   - `contract-management.enabled: true`, single replica, `did: did:web:dataspace-authority.org`, all
-    `enable*` integrations `false`, and `NOTIFICATION_ENABLED=false` appended to a **copy** of the
-    default OTEL `additionalEnvVars` list. Add `services.trusted-issuers-registry.url:
+    `enable*` integrations `false`. Append `NOTIFICATION_ENABLED=false` and
+    `ENDPOINTS_HEALTH_DETAILS_VISIBLE=ANONYMOUS` (D6) to a **copy** of the default OTEL
+    `additionalEnvVars` list. Add `services.trusted-issuers-registry.url:
     http://tir.trust-anchor.svc.cluster.local:8080` (check the TIR Service name/port).
   - `dataspace.events.publisher`: `enabled`, `origin` (the publisher host).
   - `dataspace.events.tir-watcher`: `enabled`, with the timing of D5; `max-removals-per-cycle` stays 5.
@@ -221,30 +271,61 @@ decentralized-iam 2.3.0 / TIL 0.10.3).
       `/.well-known/openid-configuration` → verifier `/services/<id>/...`;
     - mirror the three participant routes of `doc/eventing/examples/events-routes.yaml`, but use
       **different names** (e.g. `dataspace-subscriptions*`): the umbrella validates the three
-      `dataspace-events*` names against participant rules.
-  - **A verifier service** (e.g. `dataspace-subscriptions`) under the authority verifier's
-    `registration.services`:
+      `dataspace-events*` names against participant rules;
+    - the overlay sets the authority APISIX `routes` to a **full copy** of the list in
+      `consent-trust-anchor.yaml` (~614–769) with the three subscription routes appended. Helm
+      replaces lists, so setting only the new routes would drop every consent route. `extraEnvVars`
+      and `catchAllRoute` are not touched.
+  - **A verifier service** (e.g. `dataspace-subscriptions`), appended to a **full copy** of the
+    authority verifier's `registration.services` (which holds `consent-manager`):
     - it admits a participant's MembershipCredential with `trustedParticipantsLists` = the TIR, so a
       removed participant can no longer subscribe;
     - `jwtInclusion` maps the subscriber's DID to the top-level claim `participantId` (as in
       `participant-setup.md` §3). Check which credential field holds the organisation DID in the
       provider's and the consumer's MembershipCredential.
-- Root `pom.xml`: a new `eventing` profile modelled on `consent`. It deploys:
-  - the `trust-anchor` release from `trust-anchor.yaml` only, with no consent components; if the
-    authority release needs them, add `consent-trust-anchor-components.yaml` and say why;
-  - `consent-authority` from `consent-trust-anchor.yaml,eventing-trust-anchor.yaml`, reusing the
-    `template-consent-authority` execution;
-  - provider and consumer: leave their values at the `local` set for now; Step 2 adds the overlays.
+- **Decision: the trust anchor keeps the consent components.** The authority APISIX needs the
+  `consent-manager` secret, so the `eventing` profile deploys the `trust-anchor` release exactly as
+  `consent` does: `trust-anchor.yaml,consent-trust-anchor-components.yaml` with `--wait=false`
+  (the components and the authority release need each other's secrets; `deploy.sh` waits for every
+  release at the end). The authority release then differs from the consent scenario only by the
+  overlay's additions. The other option was to clear `extraEnvVars` and the consent routes in
+  `eventing-trust-anchor.yaml`. It was rejected because the authority would then run a gateway
+  configuration that no other scenario tests, and the overlay would have to undo consent wiring
+  instead of only adding to it. The cost is the consent-manager stack (consent-manager, its MongoDB,
+  the facade) in the eventing deployment. `trust-anchor-setup.md` says that a production publisher
+  does not need it.
+- Root `pom.xml`:
+  - move the `template-consent-authority` execution from the `consent` profile into the main build.
+    It skips on a new `deploy.consentAuthority.template.skip`, which defaults to `true`; `consent` and
+    `eventing` set it to `${deploy.template.skip}`, as `gaia-x` does with `deploy.gaiaxInfra.skip`.
+    Its `-f ${deploy.consentAuthority.values}` already takes a comma-separated list;
+  - a new `eventing` profile, declared after `consent`, with:
+    - `deploy.trustAnchor.values` = `trust-anchor.yaml,consent-trust-anchor-components.yaml` and
+      `deploy.trustAnchor.args` = `--wait=false` (see the decision above);
+    - `deploy.consentAuthority.values` = `consent-trust-anchor.yaml,eventing-trust-anchor.yaml`;
+    - provider and consumer values left at the `local` set for now; Step 2 adds the overlays.
+  - `-Pconsent,eventing` is **not** supported. Both profiles set `deploy.provider.values`, and
+    `eventing` is declared later, so its values win and `consent-provider.yaml` would be silently
+    dropped. Say so in the `eventing` profile's comment and in `LOCAL.MD`.
 
-  Make `k3s/deploy.sh` (helm-install path) deploy the same.
+  `k3s/deploy.sh` needs no new release: it already installs `consent-authority` whenever
+  `CONSENT_AUTHORITY_VALUES` is set, and its `*_VALUES` variables take comma-separated files.
 - Acceptance (local `mvn clean deploy -Peventing`, results in the PR description):
   - the publisher pod is Ready;
-  - the `dataspace-tir-watcher` health shows completed cycles;
+  - the authority APISIX pod is Ready;
+  - `GET :9090/health` shows `dataspace-tir-watcher` with a `lastSuccessfulCycle` and a
+    `snapshotSize` > 0;
   - a port-forwarded `POST :9090/events` returns `subscriptions: 0`;
   - `POST /subscriptions` through the new host returns `401` without a token, and the discovery
     route serves the service's metadata;
-  - the `consent` profile still renders unchanged (diff `helm template` of the authority release with
-    and without the profile).
+  - the consent scenario is unchanged. `mvn package -Pconsent` renders
+    `target/rendered/participants/consent-authority` byte-identical before and after the `pom.xml`
+    change;
+  - the overlay only adds. Diff `helm template consent-authority` with
+    `consent-trust-anchor.yaml` against `consent-trust-anchor.yaml,eventing-trust-anchor.yaml`: the
+    only differences are the CM objects, the three `dataspace-subscriptions*` routes in the APISIX
+    route config and the `dataspace-subscriptions` service in the verifier config. Every consent
+    route, the `consent-manager` service and the `CONSENT_KEY` env var are still present.
 
 ### Step 2: Listener, subscriber, routes and policy at provider and consumer
 - New `k3s/eventing-provider.yaml`, added to the `eventing` profile after `provider.yaml`:
@@ -260,6 +341,9 @@ decentralized-iam 2.3.0 / TIL 0.10.3).
       - `keep: [did:web:dataspace-authority.org, did:web:mp-operations.org]`;
     - `participant-removed.reconcile`: `initial-delay: PT20S`, `interval: PT6H` (D3);
     - `subscriber.retry`: `initial-backoff: PT5S`, `max-backoff: PT20S` (D3).
+  - `ENDPOINTS_HEALTH_DETAILS_VISIBLE=ANONYMOUS` appended to a copy of the provider CM's
+    `additionalEnvVars`, so that Step 5 can report each subscriber's per-publisher `state` and
+    `expiresAt` from `:9090/health`.
   - Provider CM `oid4vp` for the subscriber: present `vc-fdsc-edc-credential` as
     `did:web:mp-operations.org`, following `consent-provider.yaml`.
   - The three routes of `doc/eventing/examples/events-routes.yaml`, appended to a **copy** of the
@@ -281,7 +365,7 @@ decentralized-iam 2.3.0 / TIL 0.10.3).
     profile uses: CM, gateway, verifier and TIL. Use the smallest set that gives the consumer all
     four, and document it.
   - Consumer `keep: [did:web:dataspace-authority.org, did:web:fancy-marketplace.biz]`, and the same
-    `subscriber.retry` values as the provider.
+    `subscriber.retry` values and `ENDPOINTS_HEALTH_DETAILS_VISIBLE=ANONYMOUS` entry as the provider.
 - Update the `eventing` profile and `k3s/deploy.sh` with both overlays.
 - New `doc/scripts/dataspace-eventing-demo.sh` (shellcheck-clean, `set -euo pipefail`, named
   constants for hosts and DIDs, proxy `127.0.0.1:8888` as the other scripts use):
@@ -323,12 +407,21 @@ decentralized-iam 2.3.0 / TIL 0.10.3).
     ConfigMap, Deployment and registration Job names, and the timeouts of D5 and D3
     (`REMOVAL_TIMEOUT`, `MODE_SWITCH_TIMEOUT`, `SUBSCRIPTION_RECOVERY_TIMEOUT`);
   - `ContractManagementManagementClient`: a port-forward to 9090 through `KubernetesHelper`, with
-    `report()`, `publish(type, subject)`, `awaitMode(publisher, mode)` and
-    `awaitSubscriptions(n, timeout)`;
-  - `TrustAnchorClient`: `removeParticipant` / `restoreParticipant` against the trust anchor's TIL;
-  - `ProviderTilClient`: `scopes(did)`, `addGrant(did, scope, scopeType, credentials)` (`PUT
-    /issuer/{did}/credential`, or `POST /issuer?scope=` when the issuer is gone) and
-    `removeGrant(did, scope)`.
+    `report()`, `publish(type, subject)`, `awaitMode(publisher, mode)`,
+    `awaitSubscriptions(n, timeout)` and, for the publisher, `awaitWatcherSaw(since)` (D6: wait for
+    `WATCHER_CYCLES_TO_SEE` distinct `lastSuccessfulCycle` values after `since`, within
+    `WATCHER_SEEN_TIMEOUT`);
+  - `TrustAnchorClient`: `removeParticipant` / `restoreParticipant` against the trust anchor's TIL.
+    `removeParticipant` checks the TIR listing and calls `awaitWatcherSaw` before the `DELETE` (D6).
+    `removeParticipantWhilePublisherDown` (scenario 6 only) asserts the publisher has no pod and
+    skips that wait;
+  - `ProviderTilClient`:
+    - `scopes(did)` (`GET /issuer/{did}/scopes`) and `credentials(did)` (the `credentials` field of
+      `GET /issuer/{did}`);
+    - `putGrant(did, scope, scopeType, credentials)`, which is `PUT
+      /issuer/{did}/credential?scope=&scopeType=` only. It creates a missing issuer and replaces the
+      scope's credentials, so the callers pass the complete list;
+    - `removeGrant(did, scope, scopeType)` (`DELETE /issuer/{did}/credential?scope=&scopeType=`).
 
   Each gets a one-line Javadoc; parse JSON into small records, not maps.
 - New `DataSpaceEventingStepDefinitions`:
@@ -338,7 +431,12 @@ decentralized-iam 2.3.0 / TIL 0.10.3).
       If it is missing, the hook **fails** with "registration Job grant missing"; it does not add
       it. The first `@eventing` `@Before` of the JVM also asserts that the registration Job
       succeeded, stores the grant (scope, scopeType, credentials) in a static `jobGrant` and sets the
-      static `jobGrantVerified`. At that point no fixture of this run has written trust yet;
+      static `jobGrantVerified`. At that point no fixture of this run has written trust yet. Scope
+      and scopeType come from `scopes(did)`. The credentials come from the `credentials` field of
+      `GET /issuer/{did}`, which does not tell grants apart. They are taken as the Job's grant only
+      if `scopes(did)` lists exactly that one grant and its `credentialCount` equals
+      `credentials.length`, i.e. the issuer holds nothing else. Otherwise the hook fails with
+      "cannot isolate the registration Job grant";
     - mode is `report`.
 
     The subscription check is the `Background`'s first step, `The data space publisher has two
@@ -402,17 +500,26 @@ decentralized-iam 2.3.0 / TIL 0.10.3).
 ### Step 4: Scenarios 4 and 5 — `dataspace` mode and `keep`
 - Step definitions for D2: patch `contract-management-dataspace-events` (key `dataspace-events.yaml`)
   through the Kubernetes client, changing only `publishers[0].on-participant-removed.{mode, keep}`.
-  Wait with `awaitMode`. Keep the YAML editing in a helper that changes one key and leaves the rest
-  byte-equal.
+  Keep the YAML editing in a helper that sets the given keys and leaves the rest byte-equal.
+  - `mode` and `keep` are always set in **one** ConfigMap write, by a single step `the provider
+    removes participants in <mode> mode, keeping <dids>.` (an empty list keeps the overlay's
+    default `keep`). CM reloads the file as a whole, and the report does not show `keep`, so a
+    separate `keep` write could not be observed. With one write, `awaitMode` seeing the new mode
+    also proves that `keep` was reloaded.
+  - A scenario writes the ConfigMap at most once. A second write that only changed `keep` would
+    leave `mode` unchanged and `awaitMode` would return at once; the helper fails if the requested
+    mode equals the current one, so this cannot happen by accident.
 - `Scenario: In dataspace mode only the membership grant is removed` (ticket item 4). Switch to
   `dataspace`, place an order, then remove the consumer. Then:
   - the provider TIL has no `dataspace-membership` grant for the consumer, and the order-scoped grant
     remains;
   - the report shows `applied: true`.
-- `Scenario: An identifier on keep is untouched` (ticket item 5). In `dataspace` mode, add a
-  simulated participant (e.g. `did:web:kept-member.org`): register it at the TIR and give it a
-  membership grant at the provider. Put it on `keep`, then remove it. Its grant stays, and the
-  report says it was kept (check the CM value).
+- `Scenario: An identifier on keep is untouched` (ticket item 5). Add a simulated participant
+  `did:web:kept-member.org`: register it at the TIR and give it a membership grant at the provider.
+  Then switch to `dataspace` mode with `did:web:kept-member.org` appended to the default `keep`, in
+  one write. Then remove it; the removal step waits for the watcher first (D6), so the event is
+  really published. Its grant stays, and the report lists it with `action: kept`. Without the D6
+  wait this assertion could pass with no event at all.
 - Acceptance: as Step 3, all `@eventing` scenarios green; scenario order does not matter
   (`@After` restores state).
 
@@ -422,7 +529,9 @@ decentralized-iam 2.3.0 / TIL 0.10.3).
   - switch to `dataspace` mode;
   - scale the publisher Deployment (`consent-authority` release, ns `trust-anchor`) to 0 and wait
     until no pod is left;
-  - remove the consumer;
+  - remove the consumer with `removeParticipantWhilePublisherDown`. It is the one removal that skips
+    the D6 wait: the publisher is down, so its health cannot be read, and the sweep compares the
+    local grants with the TIR directly, without any watcher snapshot;
   - `kubectl rollout restart` the provider CM and wait for Ready;
   - within `initial-delay` + margin, the provider TIL matches scenario 4, and the report's `trigger`
     names the sweep;
