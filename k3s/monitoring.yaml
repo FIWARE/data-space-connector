@@ -237,22 +237,15 @@ decentralizedIam:
               max_export_batch_size: 16
 
 marketplace:
-  bizEcosystemChargingBackend:
-    deployment:
-      additionalAnnotations:
-        instrumentation.opentelemetry.io/inject-python: "true"
-    # the lists below replace those of provider.yaml, so they repeat provider.yaml's variables
-    extraEnvVars:
-      - name: BAE_CB_CUSTOMER_BILL
-        value: "http://tm-forum-api-svc:8080/tmf-api/customerBillManagement/v4"
-      - name: OTEL_SDK_DISABLED
-        value: "false"
-      - name: OTEL_SERVICE_NAME
-        value: "marketplace-charging-backend"
+  # The charging backend is not instrumented: the marketplace chart deploys 11.7.0, which runs
+  # Python 3.8, and no Python agent for 3.8 is published any more. From 11.8.3 on (Python 3.9) it
+  # can be, with `instrumentation.opentelemetry.io/inject-python: "true"` in
+  # bizEcosystemChargingBackend.deployment.additionalAnnotations.
   bizEcosystemLogicProxy:
     statefulset:
       additionalAnnotations:
         instrumentation.opentelemetry.io/inject-nodejs: "true"
+    # a list replaces the one of provider.yaml, so it repeats provider.yaml's variables
     additionalEnvVars:
       - name: BAE_LP_SIOP_IS_REDIRECTION
         value: "true"
