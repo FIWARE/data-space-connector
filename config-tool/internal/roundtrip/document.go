@@ -22,6 +22,16 @@ var (
 	ErrNotFound = errors.New("roundtrip: path not found")
 	// ErrAliasPath refuses a path that runs through an alias, since editing it would change the anchor.
 	ErrAliasPath = errors.New("roundtrip: path runs through an alias")
+	// ErrNotScalar refuses a Set on a path that holds a collection.
+	ErrNotScalar = errors.New("roundtrip: path does not hold a scalar")
+	// ErrUnsupportedValue refuses a Set with a Go value of a type the engine does not write.
+	ErrUnsupportedValue = errors.New("roundtrip: unsupported value type")
+	// ErrUnsupportedScalar refuses an edit whose source text the scanner cannot place exactly.
+	ErrUnsupportedScalar = errors.New("roundtrip: scalar text cannot be edited in place")
+	// ErrPatchVerification refuses a write whose re-parsed output differs from the edited tree.
+	ErrPatchVerification = errors.New("roundtrip: patched output does not match the edits")
+	// ErrPatchConflict refuses pending patches whose byte spans overlap.
+	ErrPatchConflict = errors.New("roundtrip: overlapping patches")
 )
 
 const (
@@ -46,6 +56,8 @@ type Document struct {
 	lineStarts   []int
 	eol          string
 	finalNewline bool
+	// patches holds the pending edits by path string; Write applies them to body.
+	patches map[string]*patch
 }
 
 // Parse reads src into a Document. It refuses more than one YAML document with
@@ -77,9 +89,17 @@ func Parse(src []byte) (*Document, error) {
 	return d, nil
 }
 
-// Write returns the document's bytes: BOM, header, body and tail.
-// It gives ErrInvalidHeader, and no bytes, when a field passed to SetHeader has a line break.
+// Write returns the document's bytes: BOM, header, body with the pending edits applied, and tail.
+// Output with edits is re-parsed and checked against them first. On ErrInvalidHeader,
+// ErrPatchConflict or ErrPatchVerification it returns no bytes.
 func (d *Document) Write() ([]byte, error) {
+	body := d.body
+	if len(d.patches) > 0 {
+		var err error
+		if body, err = applyPatches(d.body, d.sortedPatches()); err != nil {
+			return nil, err
+		}
+	}
 	header := d.headerRaw
 	if d.headerSet {
 		if !d.header.valid() {
@@ -95,8 +115,13 @@ func (d *Document) Write() ([]byte, error) {
 		out.WriteString(utf8BOM)
 	}
 	out.Write(header)
-	out.Write(d.body)
+	out.Write(body)
 	out.Write(d.tail)
+	if len(d.patches) > 0 {
+		if err := d.verify(out.Bytes()); err != nil {
+			return nil, err
+		}
+	}
 	return out.Bytes(), nil
 }
 

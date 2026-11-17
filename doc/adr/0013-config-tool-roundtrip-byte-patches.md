@@ -39,6 +39,9 @@ The library choice of ADR 0009 is unchanged; this record only fixes how the libr
   or a tag). The write self-check catches a wrong span before anything is written.
 - Inserted keys follow the file's own indentation, line ending and dash style, so the patch
   code must detect them.
+- A string is written plain only when yaml.v3 would also write it plain. yaml.v3 quotes YAML 1.1
+  bools such as `yes`, `on` or `y`, which Helm's YAML parser still reads as bools, so the tool
+  never turns such a string into a bool for Helm.
 
 ## Alternatives
 

@@ -9,41 +9,68 @@ import (
 // Lookup returns the node at p. A duplicated key resolves to its last occurrence. It gives
 // ErrNotFound for a missing key or index and ErrAliasPath when p runs through an alias.
 func (d *Document) Lookup(p Path) (*yaml.Node, error) {
-	if len(d.root.Content) == 0 {
-		return nil, fmt.Errorf("%w: %s: empty document", ErrNotFound, p)
-	}
-	n := d.root.Content[0]
-	for i, seg := range p {
-		if n.Kind == yaml.AliasNode {
-			return nil, fmt.Errorf("%w: %s passes through alias *%s at %s", ErrAliasPath, p, n.Value, p[:i])
-		}
-		next := child(n, seg)
-		if next == nil {
-			return nil, fmt.Errorf("%w: %s", ErrNotFound, p[:i+1])
-		}
-		n = next
-	}
-	return n, nil
+	loc, err := d.locate(p)
+	return loc.node, err
 }
 
-// child returns the node seg selects below n, or nil. Merge keys are not resolved.
-func child(n *yaml.Node, seg Segment) *yaml.Node {
+// located is a node found by locate, with the context its value text is scanned in.
+type located struct {
+	node *yaml.Node
+	ctx  leafCtx
+	// merge is set when the path runs through a `<<` key.
+	merge bool
+}
+
+// locate resolves p like Lookup and tracks the owning column and flow context on the way.
+func (d *Document) locate(p Path) (located, error) {
+	if len(d.root.Content) == 0 {
+		return located{}, fmt.Errorf("%w: %s: empty document", ErrNotFound, p)
+	}
+	loc := located{node: d.root.Content[0], ctx: leafCtx{owner: noOwner}}
+	for i, seg := range p {
+		n := loc.node
+		if n.Kind == yaml.AliasNode {
+			return located{}, fmt.Errorf("%w: %s passes through alias *%s at %s", ErrAliasPath, p, n.Value, p[:i])
+		}
+		key, next := child(n, seg)
+		if next == nil {
+			return located{}, fmt.Errorf("%w: %s", ErrNotFound, p[:i+1])
+		}
+		switch {
+		case n.Style&yaml.FlowStyle != 0:
+			loc.ctx.flow = true
+		case loc.ctx.flow:
+		case key != nil:
+			loc.ctx.owner = key.Column - 1
+		default:
+			// Every `-` of a block sequence sits at the sequence's own column.
+			loc.ctx.owner = n.Column - 1
+		}
+		loc.merge = loc.merge || (key != nil && key.Tag == mergeTag)
+		loc.node = next
+	}
+	return loc, nil
+}
+
+// child returns the key and value seg selects below n, or nil values; key is nil for an index.
+// Merge keys are not resolved.
+func child(n *yaml.Node, seg Segment) (key, value *yaml.Node) {
 	if i, ok := seg.Index(); ok {
 		if n.Kind != yaml.SequenceNode || i >= len(n.Content) {
-			return nil
+			return nil, nil
 		}
-		return n.Content[i]
+		return nil, n.Content[i]
 	}
 	if n.Kind != yaml.MappingNode {
-		return nil
+		return nil, nil
 	}
 	k, _ := seg.Key()
 	for i := len(n.Content) - 2; i >= 0; i -= 2 {
 		if key := n.Content[i]; key.Kind == yaml.ScalarNode && key.Value == k {
-			return n.Content[i+1]
+			return key, n.Content[i+1]
 		}
 	}
-	return nil
+	return nil, nil
 }
 
 // livePairs reports, per key/value pair of mapping m, whether it is live: no later key of the
