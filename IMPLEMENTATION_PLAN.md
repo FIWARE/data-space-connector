@@ -222,6 +222,8 @@ New core package `config-tool/internal/load`. It imports no `net/http`; check th
   - `source`;
   - `chart` and `chartVersion` (the bundle used);
   - `chartVersionFrom`: `header` or `latest`;
+  - `chartVersionNote`: why the latest bundle was used (no header, no chart version in it, or no
+    bundle for it); omitted when the header chose the bundle (decision 5);
   - `generated`: `Doc.Generated()`, i.e. `Parse` stripped a header;
   - `counts {owned, recognized, unknown, skipped, total}`. `total` is the sum of the four:
     the leaves of `Classify` plus the skipped pairs;
