@@ -139,7 +139,7 @@ keycloak:
           - <your-keycloak-domain>
 ```
 
-Replace the hostname and the realm with your own. In production, use a real cluster issuer (i.e. `prod`) instead of `selfsigned-issuer`.
+Replace the hostname and the realm with your own. In production, use a real cluster issuer (for example `prod-issuer`, created by `certManagerResources` with `type: "prod"`) instead of `selfsigned-issuer`.
 
 The example publishes only the realm that issues credentials. The admin console (`/admin`) and the `master` realm are left out: reach them with `kubectl port-forward`, or publish them on a separate host restricted to administrators. Publishing `/` exposes both on the same host as the issuer.
 
