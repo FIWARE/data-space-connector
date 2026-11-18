@@ -278,6 +278,10 @@ scorpio:
   db:
     # -- host of the db
     dbhost: postgres
+    # -- port of the db; leave empty for Scorpio's default (5432)
+    port: ""
+    # -- name of the db; leave empty for Scorpio's default (ngb)
+    name: ""
     # -- username to be used
     user: postgres
     existingSecret:
