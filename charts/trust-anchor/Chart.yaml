@@ -21,5 +21,5 @@ dependencies:
   - name: dsc-consent-manager
     alias: consent-manager
     condition: consent-manager.enabled
-    version: 0.1.0
+    version: 0.1.1
     repository: oci://quay.io/fiware/helm-charts
