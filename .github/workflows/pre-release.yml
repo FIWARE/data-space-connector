@@ -27,8 +27,11 @@ jobs:
     with:
       tag-prefix: ""
 
+  # toc, git-release and oci-release push commits, tags or charts. A pull request from a fork gets a
+  # read-only token and no secrets, so they only run for branches of this repository.
   toc:
     needs: ["generate-version"]
+    if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
 
     steps:
@@ -43,6 +46,7 @@ jobs:
 
   git-release:
     needs: ["generate-version"]
+    if: github.event.pull_request.head.repo.full_name == github.repository
     uses: FIWARE/github-workflows/.github/workflows/github-release.yml@v1
     permissions:
       contents: write
@@ -52,6 +56,7 @@ jobs:
 
   oci-release:
     name: Publish OCI snapshot (${{ matrix.chart }})
+    if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
 
     strategy:
