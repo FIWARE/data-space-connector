@@ -92,15 +92,80 @@ for i in "${!tools[@]}"; do
     fi
 done
 
+docker_reachable=false
 if command -v docker >/dev/null 2>&1; then
     if docker info >/dev/null 2>&1; then
+        docker_reachable=true
         echo "OK: Docker engine is reachable in the current context"
     else
         problem required "docker info failed. Start the configured Docker engine or check your Docker context and access permissions."
     fi
 fi
 
-case "$(uname -s)" in
+# Memory and CPUs of the Docker engine, which runs the whole cluster. On macOS they are the ones of
+# Docker's Linux VM, not of the host. The figures are the ones in LOCAL.MD (in GB, as written there).
+if [ "$docker_reachable" = true ]; then
+    resources=$(docker info --format '{{.MemTotal}} {{.NCPU}}' 2>/dev/null)
+    memory=${resources%% *}
+    cpus=${resources##* }
+    case "$memory$cpus" in
+        ''|*[!0-9]*)
+            echo "NOTE: could not read the memory and CPUs of the Docker engine."
+            ;;
+        *)
+            memory_gb=$(LC_ALL=C awk -v bytes="$memory" 'BEGIN { printf "%.1f", bytes / 1e9 }')
+            if [ "$memory" -lt 16000000000 ]; then
+                problem optional "the Docker engine has $memory_gb GB of memory, below the 16 GB the local deployment needs. Raise the memory of the Docker engine (on macOS, of its VM)."
+            elif [ "$memory" -lt 24000000000 ]; then
+                problem optional "the Docker engine has $memory_gb GB of memory; 24 GB or more are recommended for the local deployment."
+            else
+                echo "OK: Docker engine memory $memory_gb GB (recommended 24)"
+            fi
+            if [ "$cpus" -lt 2 ]; then
+                problem optional "the Docker engine has $cpus CPU; with fewer than 2, the Java components take long to start and may fail their probes."
+            else
+                echo "OK: Docker engine CPUs $cpus"
+            fi
+            ;;
+    esac
+fi
+
+# Host ports the k3s container publishes (see the k3s-maven-plugin configuration in pom.xml; the kube
+# API port can be changed with -Dk3s.kubeApi.port). Connecting finds a listener of any user.
+for port in 8080 8443 8888 6443; do
+    if ! (exec 3<>"/dev/tcp/127.0.0.1/$port") 2>/dev/null; then
+        echo "OK: port $port is free"
+    elif [ "$docker_reachable" = true ] &&
+        [ -n "$(docker ps -q --filter 'name=^k3s-maven-plugin$' --filter "publish=$port" 2>/dev/null)" ]; then
+        echo "OK: port $port is in use by the running local cluster"
+    else
+        problem optional "port $port is already in use. The local cluster publishes it on the host and cannot start while another process holds it."
+    fi
+done
+
+# Endpoints such as https://keycloak-consumer.127.0.0.1.nip.io:8443 are opened from the host. Some
+# resolvers drop answers that point to local addresses (DNS rebinding protection).
+dns_name=tir.127.0.0.1.nip.io
+resolved=
+dns_checked=true
+os=$(uname -s)
+if [ "$os" = Darwin ] && command -v dscacheutil >/dev/null 2>&1; then
+    resolved=$(dscacheutil -q host -a name "$dns_name" 2>/dev/null | awk '/^ip_address:/ { print $2; exit }')
+elif command -v getent >/dev/null 2>&1; then
+    resolved=$(getent hosts "$dns_name" 2>/dev/null | awk '{ print $1; exit }')
+else
+    dns_checked=false
+    echo "NOTE: no resolver tool (getent or dscacheutil) found; $dns_name was not checked."
+fi
+if [ "$dns_checked" = true ]; then
+    if [ "$resolved" = 127.0.0.1 ]; then
+        echo "OK: $dns_name resolves to 127.0.0.1"
+    else
+        problem optional "$dns_name does not resolve to 127.0.0.1 on this host. Your DNS resolver may block answers that point to local addresses. The examples that go through the proxy (curl -x localhost:8888) still work; to open the endpoints from the host or a browser, allow nip.io in your resolver or use another DNS server."
+    fi
+fi
+
+case "$os" in
     Linux)
         if [ -d /sys/module/br_netfilter ]; then
             echo "OK: br_netfilter is available in the host kernel"

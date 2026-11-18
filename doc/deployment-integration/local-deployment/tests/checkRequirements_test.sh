@@ -24,8 +24,23 @@ case "${0##*/}" in
         case "$*" in
             --version) echo 'Docker version 27.0.0, build fixture' ;;
             info) [ "$mode" != daemon-down ] ;;
+            'info --format'*)
+                case "$mode" in
+                    small-engine) echo '8000000000 1' ;;
+                    medium-engine) echo '20000000000 8' ;;
+                    *) echo '32000000000 8' ;;
+                esac
+                ;;
             *) exit 42 ;;
         esac
+        ;;
+    getent)
+        [ "$mode" = dns-blocked ] && exit 2
+        echo '127.0.0.1       tir.127.0.0.1.nip.io'
+        ;;
+    dscacheutil)
+        [ "$mode" = dns-blocked ] && exit 0
+        printf 'name: tir.127.0.0.1.nip.io\nip_address: 127.0.0.1\n\n'
         ;;
     kubectl)
         [ "$*" = 'version --client' ] || exit 42
@@ -63,7 +78,7 @@ case "${0##*/}" in
 esac
 TOOL
 chmod +x "$TEST_DIR/tool"
-for tool in docker kubectl mvn java javac curl jq yq; do
+for tool in docker kubectl mvn java javac curl jq yq getent dscacheutil; do
     ln -s "$TEST_DIR/tool" "$BIN/$tool"
 done
 
@@ -97,6 +112,17 @@ case "$(uname -s)" in
         ;;
     Linux) grep -Fq br_netfilter "$TEST_DIR/healthy.log" ;;
 esac
+grep -Fq 'OK: Docker engine memory 32.0 GB' "$TEST_DIR/healthy.log"
+grep -Fq 'OK: Docker engine CPUs 8' "$TEST_DIR/healthy.log"
+grep -Fq 'OK: tir.127.0.0.1.nip.io resolves to 127.0.0.1' "$TEST_DIR/healthy.log"
+# The ports depend on the machine running the test: only check that all four are reported.
+for port in 8080 8443 8888 6443; do
+    grep -Eq "(OK|WARNING): port $port " "$TEST_DIR/healthy.log"
+done
+run_case small-engine small-engine 0 'WARNING: the Docker engine has 8.0 GB of memory, below the 16 GB'
+grep -Fq 'WARNING: the Docker engine has 1 CPU' "$TEST_DIR/small-engine.log"
+run_case medium-engine medium-engine 0 'WARNING: the Docker engine has 20.0 GB of memory; 24 GB or more'
+run_case dns-blocked dns-blocked 0 'WARNING: tir.127.0.0.1.nip.io does not resolve to 127.0.0.1'
 run_case old-kubectl old-kubectl 1 'kubectl version 1.9.0 is installed but 1.31.0'
 run_case old-java old-java 1 'java version 1.8.0 is installed but 17'
 run_case daemon-down daemon-down 1 'ERROR: docker info failed.'

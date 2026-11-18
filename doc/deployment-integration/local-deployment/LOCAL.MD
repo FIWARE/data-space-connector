@@ -25,16 +25,23 @@ In order to interact with the system, the following tools are also helpful:
 - [jq](https://stedolan.github.io/jq/download/)
 - [yq](https://mikefarah.gitbook.io/yq/)
 
-To check tool versions and Docker engine access, execute the prepared [script](checkRequirements.sh) (`./doc/deployment-integration/local-deployment/checkRequirements.sh` from the repository root). It supports Bash 3.2 or later on macOS and Linux.
+To check your machine before the first deployment, execute the prepared [script](checkRequirements.sh) (`./doc/deployment-integration/local-deployment/checkRequirements.sh` from the repository root). It supports Bash 3.2 or later on macOS and Linux.
 
-Missing, outdated or unusable required tools (Docker, kubectl, Maven, java and javac), or an unreachable Docker engine, produce exit status 1. The interaction tools (curl, jq and yq) are optional and produce warnings. The script does not create a Kubernetes cluster or verify deployment readiness.
+Missing, outdated or unusable required tools (Docker, kubectl, Maven, java and javac), or an unreachable Docker engine, produce exit status 1. The script also warns, without failing, when:
+
+- an interaction tool (curl, jq or yq) is missing or outdated;
+- the Docker engine has less than 24 GB of memory or a single CPU (on macOS, Docker's VM);
+- a port the cluster publishes on the host (8080, 8443, 8888 or 6443) is already in use;
+- `*.127.0.0.1.nip.io` does not resolve to `127.0.0.1`, as with resolvers that block answers pointing to local addresses.
+
+The script does not create a Kubernetes cluster or verify deployment readiness.
 
 
 ## Quick Start
 
 > :warning: The local deployment uses [k3s](https://k3s.io/) in a docker container and is currently only tested on linux and MacOS.
 
-> :warning: k3s networking may require ```br_netfilter``` in the Docker engine's Linux kernel. The checker's host-kernel check is advisory because Docker may use a remote engine. If needed, enable it on the Linux engine host using ```sudo modprobe br_netfilter```; this host command does not apply on macOS, where Docker uses a Linux VM. See [Stackoverflow](https://stackoverflow.com/questions/48148838/kube-dns-error-reply-from-unexpected-source/48151279#48151279) for more.
+> :warning: On Linux hosts, k3s networking needs the ```br_netfilter``` kernel module, which current distributions do not load by default. Without it, the connector does not start up properly. Enable it with ```sudo modprobe br_netfilter```. It is not needed on macOS, where Docker runs in its own Linux VM. See [Stackoverflow](https://stackoverflow.com/questions/48148838/kube-dns-error-reply-from-unexpected-source/48151279#48151279) for more.
 
 To start the Data Space, just use:
 
