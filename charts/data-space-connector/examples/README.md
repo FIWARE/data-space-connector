@@ -1,13 +1,8 @@
 # Reference profiles
 
-Values files to start a real deployment of a data space from: a trust anchor, providers and
-consumers. Each one is minimal - only what its role needs - but safe to run outside a test
-environment: every component uses its own database user, no password is written in the values,
-the internal APIs are not published, and every public endpoint is served over TLS.
-
-They are tested on every change: the integration tests deploy them, with the placeholders filled
-in for a local cluster ([`k3s/reference`](../../../k3s/reference)), and check that a consumer's
-employee reads a provider's data with a Verifiable Credential.
+Example values files to deploy each role of a data space in your own cluster: a trust anchor,
+providers and consumers. Pick the file of your role, replace its placeholders, create the Secrets
+it expects and install it, as described below.
 
 | Profile | Role | Chart |
 |---|---|---|
@@ -35,8 +30,6 @@ In the cluster, installed once and shared by every release (see [Prerequisites](
   private CA, every component that calls another one has to trust it (see "Trusting a private CA"
   in the [provider guide](../../../doc/deployment-integration/roles/provider/README.md#trusting-a-private-ca)
   and in [LOCAL_MARKETPLACE.md](../../../doc/deployment-integration/roles/provider/LOCAL_MARKETPLACE.md#trusting-a-private-ca)).
-  The integration tests run the profiles this way: [`k3s/reference`](../../../k3s/reference) holds
-  what they add for it.
 - **The Postgres operator** (Zalando): the profiles do not install it, see
   [Installing the operators once](../../../doc/deployment-integration/roles/PREREQUISITES.md#installing-the-operators-once).
 - **The MongoDB operator**, for the marketplace only: see [MongoDB](../../../doc/deployment-integration/roles/provider/LOCAL_MARKETPLACE.md#mongodb).
