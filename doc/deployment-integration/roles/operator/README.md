@@ -337,7 +337,7 @@ helm repo add fiware-dsc https://fiware.github.io/data-space-connector
 helm install trust-anchor fiware-dsc/trust-anchor --version <version> -n trust-anchor --create-namespace -f values.yaml
 ```
 
-See the [quickstart values](../../quick-start/values/trust-anchor.yaml) for a minimal example.
+Start from the reference profile [`examples/trust-anchor.yaml`](../../../../charts/trust-anchor/examples/trust-anchor.yaml): it publishes the registry, keeps the list API inside the cluster and uses the Postgres operator installed once in the cluster. Its [README](../../../../charts/data-space-connector/examples/README.md) explains the prerequisites, the installation and how to register the participants.
 
 ## Production deployment
 

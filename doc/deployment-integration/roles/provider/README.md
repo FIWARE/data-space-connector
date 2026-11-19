@@ -283,6 +283,8 @@ Enable the Eclipse Dataspace Components connector for DSP compliance. See [DSP I
 
 ### Using the FIWARE DSC Helm chart and values
 
+> **Start from the reference profile:** [`examples/provider.yaml`](../../../../charts/data-space-connector/examples/provider.yaml), and [`examples/provider-marketplace.yaml`](../../../../charts/data-space-connector/examples/provider-marketplace.yaml) for a local marketplace, are complete values files for a provider, tested on every change. Their [README](../../../../charts/data-space-connector/examples/README.md) lists the prerequisites, the placeholders, the Secrets to create and the installation steps. The settings below explain each part.
+
 The provider uses the `fiware/data-space-connector` chart with authentication and authorization components enabled.
 
 1. Create a helm `values.yaml` file with the key settings for a provider deployment:
@@ -534,7 +536,7 @@ helm repo add fiware-dsc https://fiware.github.io/data-space-connector
 helm install provider fiware-dsc/data-space-connector --version <version> -n provider --create-namespace -f provider-values.yaml
 ```
 
-See [quick-start/values/provider.yaml](../../quick-start/values/provider.yaml) for a complete minimal example.
+See the reference profile [`examples/provider.yaml`](../../../../charts/data-space-connector/examples/provider.yaml) for a complete example.
 
 #### Other deployment options
 

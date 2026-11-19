@@ -19,6 +19,7 @@ specific flows and its deployment and integration with other frameworks.
   - [Consent Management](#consent-management)
 - [Deployment / Integration](#deployment--integration)
   - [Quick Start Guide](#quick-start-guide)
+  - [Reference profiles](#reference-profiles)
   - [Deployment by Role](#deployment-by-role)
   - [Verifying a deployment](#verifying-a-deployment)
   - [Local Deployment (Maven)](#local-deployment-maven)
@@ -78,7 +79,13 @@ An automated minimal deployment of a complete data space (trust anchor + provide
 
 * [Quick Start Guide](./deployment-integration/local-deployment/LOCAL.MD)
 
-> **Note:** The Quick Start Guide is not intended for production deployments. For deploying in a real environment, see the role-based guides below.
+> **Note:** The Quick Start Guide is not intended for production deployments. For deploying in a real environment, start from the reference profiles below.
+
+### Reference profiles
+
+Minimal, safe values files to start a real deployment from - a provider (with or without a local marketplace), a consumer and a trust anchor - tested by the integration tests on every change. Their README lists the prerequisites, the placeholders, the Secrets to create and the installation steps.
+
+* [Reference profiles](../charts/data-space-connector/examples/README.md)
 
 ### Deployment by Role
 
