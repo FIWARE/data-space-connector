@@ -229,7 +229,8 @@ ADR 0013 said the CLI wires replacing an existing file in CT-4. CT-4 adds the pl
 `values.yaml = render(profile) ⊕ overrides` with overrides winning, and ADR 0014's "do not touch
 what the tool did not write", need the render output and its owned markers, which do not exist
 yet. Until the render epic decides that precedence, `generate` keeps refusing an existing output
-file. This amends ADR 0013.
+file. CT-4's save likewise writes only `source` into the profile (rule 2), never the overrides layer
+back into a values file. This amends ADR 0013 and ADR 0014 (§1, §6).
 
 ## Consequences
 
