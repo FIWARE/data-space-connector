@@ -32,7 +32,7 @@ Out of scope, as the ticket says: `NEXT_STEPS.md` and the export bundle (US-7.3)
    - **`source.file` is untrusted.** Profiles are shared through git. `Validate` requires a plain base name (`filepath.Base(f) == f`, no `/` or `\`, not `.` or `..`, not absolute), so open can only read a file in the profile's own directory.
 3. **The server picks the path.** `PUT /api/profile` writes to a path the user gives, and `POST /api/profile/open` reads one. The browser has no file paths, and ADR 0009 keeps native dialogs to the optional Wails window. The UI uses a path text field (the precedent is the kubeconfig field), with a default `<dir>/<releaseName|connector>.dscprofile.yaml`. Both endpoints refuse any path that is not absolute or does not end in `.dscprofile.yaml`. The API therefore cannot write arbitrary files, and nothing resolves against the process working directory, which is `/` or the binary's folder when the GUI is started from a launcher. An existing file is replaced only with `overwrite: true`, through an atomic temp-file-and-rename that keeps the file mode. Profiles are written with mode 0644 (they hold no secrets).
 4. **The recent list** lives at `os.UserConfigDir()/dsc-config/recent.yaml` (dir 0700, file 0600). It holds absolute paths and metadata only: name, chart version, saved-at. It is newest first, deduplicated by path, capped at `MaxRecent = 10`, and drops entries whose file no longer exists when it is listed. It does not use browser localStorage: the origin's port changes on every run, so localStorage would be empty each time. A failing recent list never fails a save; it comes back as a note. `DSC_CONFIG_HOME` overrides the directory, so tests of the real binary use a temp dir.
-5. **Marker vs. unanswered.** A field is an *open question* when it is unanswered **or** marked open, and it is counted once (set union), so nothing is counted twice. Marking keeps any value as provisional; unmarking keeps the value. A marked empty field is open, not an error, and format errors still count as errors. Field ids are `<section>.<key>` (`target.namespace`, ...); the section maps to the stage.
+5. **Marker vs. unanswered.** A field is an *open question* when it is unanswered **or** marked open, and it is counted once (set union), so nothing is counted twice. Marking keeps any value as provisional; unmarking keeps the value. A marked empty field is open, not an error, and format errors still count as errors. Format errors are stage errors, not save errors: a half-finished configuration is saved and reopened as typed (a namespace `Prod_NS`, a 60-character release name), and the stage shows the error again after reopen. Save and open refuse only structural errors (422): `format`, `model`, unknown enum values of `target.type`/`target.environment`, open ids, `source`, `answers` and `secrets`. Field ids are `<section>.<key>` (`target.namespace`, ...); the section maps to the stage.
 6. **Model bundle version** = `(chart, version, revision)`. `bundle.yaml` gains `revision: 1`. Opening a profile whose bundle `chart@version` is not shipped, or whose revision is newer than the shipped one, is refused with a pointer to US-9.3. An older revision opens with a note.
 
 ## Steps
@@ -48,7 +48,7 @@ Docs-only step, so the design is reviewed before any code.
   - the fallback of `defaultDir`: newest recent entry, else the home directory, else the working directory (Step 4);
   - that replacing an existing `generate` output with rendered values waits for the render epic, which decides the precedence; this amends ADR 0013's "the CLI wires that in CT-4" (Step 5).
 - Update `doc/config-tool/TECH_STACK.md` (API box: `GET/PUT /api/profile` → the three routes above). Add a row to the `doc/adr/README.md` table and extend its "0009–0014 belong to config-tool" sentence to 0015.
-- Acceptance: the ADR names every field of the format with an example, the three endpoints with their request and response bodies, and status codes (400 bad body, 404 missing file, 409 exists without overwrite, 422 invalid profile, non-absolute path, path suffix or bundle).
+- Acceptance: the ADR names every field of the format with an example, the three endpoints with their request and response bodies, and status codes (400 bad body, 404 missing file, 409 exists without overwrite, 422 structurally invalid profile, model/target mismatch, non-absolute path, path suffix or bundle), and that per-field format errors in `target` never refuse a save or an open (decision 5).
 
 ### Step 2: Core profile format and atomic file writes
 Files: `config-tool/internal/profile/` (new `format.go`, `file.go`, tests, `testdata/`), new core package `config-tool/internal/atomicfile/`, `config-tool/internal/model/model.go`, `config-tool/model/10.16.0/bundle.yaml`.
@@ -58,8 +58,9 @@ Files: `config-tool/internal/profile/` (new `format.go`, `file.go`, tests, `test
   - Named constants: `FormatVersion = 1`, `FileSuffix = ".dscprofile.yaml"`, the header comment, and the field-id prefix `target.`.
 - `Marshal(Profile) ([]byte, error)` writes header + yaml.v3 encoding with indent 2 and `open` sorted. `Unmarshal([]byte) (Profile, error)` decodes strictly: unknown keys, a wrong `format` and trailing documents are errors.
 - `(Profile) Validate(bundles []model.Bundle) []FieldError`:
-  - runs `Target.Validate`, without the "is required" errors, because a saved profile may be half finished;
+  - runs `Target.Validate` and keeps only the structural errors (decision 5): unknown enum values of `type` and `environment`. It drops the "is required" errors and the per-field format errors (DNS label, length) of `namespace` and `releaseName`, because a saved profile may be half finished; those values are kept as typed;
   - checks `Model` and `Target.Chart`/`ChartVersion` against the bundles, which resolves the TODO in `Target.Validate`;
+  - requires the model to agree with the target: `model.chart` equals `target.chart`, and `model.version` equals `target.chartVersion` when that is set, so decision 6's revision gate judges the bundle the profile is rendered with. With `target.chartVersion` empty, `model` is the latest bundle (the same rule the save uses);
   - refuses newer revisions and duplicate or unknown open field ids (known today: the `target.*` field names);
   - requires `source.file`, when `source` is set, to be a plain base name (decision 2) and `source.sha256` to be 64 lowercase hex digits;
   - refuses unknown `answers` keys, the same rule as unknown `open` ids. No answer id exists yet, so today every key is refused, and no value can be stored under `answers`;
@@ -69,7 +70,7 @@ Files: `config-tool/internal/profile/` (new `format.go`, `file.go`, tests, `test
 - Tests, table-driven where possible:
   - save → load → save gives identical bytes, for a full fixture (`testdata/full.dscprofile.yaml`, golden) and an empty one;
   - strict-decode failures;
-  - `Validate` cases, including `source.file` values `../../etc/passwd`, `/abs/values.yaml`, `sub/values.yaml`, `sub\values.yaml`, `.`, `..` (refused) and `values.yaml` (accepted);
+  - `Validate` cases: `model.version: 10.16.0` with `target.chartVersion: 10.17.0` (refused), `model.chart` differing from `target.chart` (refused); `namespace: Prod_NS` and a 60-character `releaseName` (accepted, no error), `environment: staging` (refused); `source.file` values `../../etc/passwd`, `/abs/values.yaml`, `sub/values.yaml`, `sub\values.yaml`, `.`, `..` (refused) and `values.yaml` (accepted);
   - **no secret value**: a reflection walk asserts `SecretRef` has exactly the fields Mode/Keys/Fingerprints. `Validate` refuses `answers: {keycloak.adminPassword: s3cr3t}`, `answers: {target.namespace: x}` (not an answer id) and a non-empty `secrets` (one entry with a plain value as fingerprint);
   - atomicfile: mode kept, `ErrExists`, symlink refused, no temp file left behind on error.
 - `internal/layering_test.go` keeps passing: no `net/http` in the core.
@@ -95,18 +96,21 @@ Files: `config-tool/internal/server/api.go`, `server.go`, new `profile_test.go`,
   - then it validates, writes and adds the profile to the recent list;
   - with a `source`, it reads `<dir of path>/<source.file>` and adds the "not next to the profile" or "differs from the loaded one" note when the file is missing or its hash differs;
   - response `{path, profile, notes}`;
-  - errors: 409 when the file exists without overwrite, 422 for a bad suffix, a non-absolute path, an invalid profile, or a `sourceSha256` that does not match `s.loaded` (or nothing is loaded).
+  - per-field format errors in `target` do not refuse the save (decision 5);
+  - errors: 409 when the file exists without overwrite, 422 for a bad suffix, a non-absolute path, a structurally invalid profile, or a `sourceSha256` that does not match `s.loaded` (or nothing is loaded).
 - `POST /api/profile/open` with body `{path}`:
   - reads and validates the profile, adds it to the recent list;
   - resolves `source` next to the profile and re-runs `load.Load` with the recorded root. On success it replaces `s.loaded`; otherwise it clears `s.loaded`;
   - response `{path, profile, report?, notes[]}`. A note comes for a source that is changed, missing or unreadable, an older bundle revision, or a failing recent list;
   - when the source cannot be restored, the note also says that saving again drops the reference, because the UI then holds no report and sends no `sourceSha256`;
-  - errors: 404 missing file, 422 for a bad suffix, a non-absolute path or an invalid profile.
+  - per-field format errors in `target` do not refuse the open; the values come back as saved and the Target stage shows the errors;
+  - errors: 404 missing file, 422 for a bad suffix, a non-absolute path or a structurally invalid profile.
 - `GET /api/profile/recent` returns `{entries, defaultDir}`. `defaultDir` is the directory of the newest entry, else `os.UserHomeDir()`, and the process working directory only when that fails. A GUI started by double-click or a desktop launcher has `/` or the binary's folder as its working directory, where the first save would fail.
 - Remove the `GET`/`PUT /api/profile` `notImplemented` stubs and the now-unused `ticketProfile` constant.
 - Tests (httptest, table-driven):
   - save, then open, then save gives identical bytes on disk;
   - 409/422/404 paths, table-driven over both endpoints: a relative path such as `my.dscprofile.yaml` gives 422 on save **and** on open, and open reads nothing;
+  - half-finished save: a profile with `namespace: Prod_NS` and no `releaseName` saves (200), reopens with the same values, and saves again to identical bytes; `environment: staging` gives 422;
   - the source is restored after a load, and the changed/missing notes appear;
   - stale slot: load a file, then save without `sourceSha256` (what the UI sends after *New configuration*), and assert the written profile has no `source`; save with a hash that is not the loaded one gives 422;
   - neighbour check, table-driven: values file next to the profile with the same bytes (no note), missing (note), different bytes (note); the save succeeds in all three;
@@ -118,7 +122,7 @@ Files: `config-tool/internal/server/api.go`, `server.go`, new `profile_test.go`,
 ### Step 5: CLI — `generate` reads the profile; replace plumbing for existing output
 Files: `config-tool/internal/cli/cli.go`, `cli_test.go`.
 - `generate --profile`:
-  - reads the file with `profile.ReadFile` and validates it against the embedded bundles before calling `render.Render`;
+  - reads the file with `profile.ReadFile` and validates it against the embedded bundles before calling `render.Render`. Rendering needs a complete target, so `generate` also refuses the per-field format and "is required" errors that save and open let through (decision 5);
   - errors name the file and the field. The `// Loading the profile file arrives with CT-4` stub goes away.
 - `writeOutput` gets the replace plumbing of ADR 0013, but not the merge precedence:
   - new helper `replaceOutput(path, edit func(*roundtrip.Document) error)`: `roundtrip.Parse` the existing file, apply `edit`, `Write`, then `atomicfile.Write` with overwrite, keeping the mode. A symlink is refused;
@@ -154,6 +158,7 @@ Files: new `config-tool/ui/src/api/profile.ts` + test, `state/reducer.ts`, `stag
 - Save:
   - Rail `⌘S Save profile` is enabled once a configuration is entered, and there is a "Save profile" button on Review (MOCKUPS S7) as well. Wire the ⌘S/Ctrl+S shortcut.
   - With a known `profilePath` it saves in place (overwrite). Otherwise `SaveDialog` asks for a path, prefilled with `defaultDir/<releaseName || 'connector'>.dscprofile.yaml`. When a values file is loaded, it shows the hint "save next to <source> so reopening finds its overrides". A 409 asks to confirm a replace.
+  - Errors from save are shown in `SaveDialog`, above its buttons, with the server message (field errors as `<field>: <message>`); the dialog stays open with the path kept. An in-place save (known `profilePath`) that fails opens `SaveDialog` prefilled with that path and the error, so a failure is never silent. Per-field format errors do not block save (decision 5), so Save stays enabled while a stage shows errors.
   - The save response's `notes` (the neighbour check of Step 4) are shown at once: in the dialog when it is open, else as `profileNotes` on Review, so a profile that will reopen without its overrides is flagged the moment it is saved.
 - S0: the *Open profile* card replaces the "coming in CT-4" card and opens a path field (with the same suffix hint and "absolute path"), prefilled with `defaultDir/`. Below the cards comes the *Recent* list from `fetchRecent`: `name · chart <version> · <relative time>`, with the role once Epic 2 provides it. A click opens that profile. Failures stay on S0 with a message, as the Open values.yaml card does. Remove `'Open profile'` from `COMING` and update `Start.test.tsx`.
 - Review shows `profileNotes` (source changed, missing, older revision). The title bar shows the profile name.
@@ -161,9 +166,9 @@ Files: new `config-tool/ui/src/api/profile.ts` + test, `state/reducer.ts`, `stag
   - reducer: `profileOpened` restores answers and markers exactly and lands on Review;
   - reducer, parameterized: `newConfiguration` and `fileLoaded` after `profileOpened` (and after `profileSaved`) leave `profilePath` and `profileNotes` undefined, so the next save goes through `SaveDialog`;
   - Start: recent list rendering and click-to-open, open failure;
-  - SaveDialog: default path, 409 confirm, a save note is shown;
+  - SaveDialog: default path, 409 confirm, a save note is shown; a 422 is shown in the dialog with the path kept, and a failing in-place save opens the dialog with the error;
   - api/profile: `sourceSha256` is sent from the held report and omitted after `newConfiguration`;
-  - Rail Save enabled state;
+  - Rail Save enabled state, including while the Target stage has a format error (`namespace: Prod_NS`);
   - one Playwright smoke path (`ui/e2e`): new configuration → mark a field open → save to a temp path → back to S0 → the recent entry → Review shows the open question.
   - e2e isolation: `ui/e2e/global-setup.ts` creates a temp dir with `mkdtemp`, starts the binary with `DSC_CONFIG_HOME` set to it (next to `KUBECONFIG`) and removes it in the teardown; the profile is saved into another temp dir, exported to the spec through `env.ts`. The developer's real `recent.yaml` is never touched.
 
