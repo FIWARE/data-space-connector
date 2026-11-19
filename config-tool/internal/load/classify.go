@@ -29,6 +29,8 @@ const (
 // the rest in pass 2 (classify), each in document order, so the first value wins.
 type classifier struct {
 	markers []roundtrip.OwnedMarker
+	// root is where the chart's values sit; rule paths are relative to it.
+	root    roundtrip.Path
 	rules   map[string]model.CompiledRule
 	answers map[string]*Answer
 	order   []string
@@ -37,9 +39,10 @@ type classifier struct {
 	notes      map[string]string
 }
 
-func newClassifier(markers []roundtrip.OwnedMarker, rules []model.CompiledRule) *classifier {
+func newClassifier(markers []roundtrip.OwnedMarker, rules []model.CompiledRule, root roundtrip.Path) *classifier {
 	c := &classifier{
 		markers:    markers,
+		root:       root,
 		rules:      make(map[string]model.CompiledRule, len(rules)),
 		answers:    map[string]*Answer{},
 		leafAnswer: map[string]string{},
@@ -79,11 +82,15 @@ func (c *classifier) classify(p roundtrip.Path, n *yaml.Node) roundtrip.Class {
 // derive applies p's rule to n, setting the answer when it is still unset. It reports whether n
 // agrees with the answer; a leaf under a rule that does not gets a note.
 func (c *classifier) derive(p roundtrip.Path, n *yaml.Node, from Origin) bool {
-	key := p.String()
-	rule, ok := c.rules[key]
+	rel, ok := under(p, c.root)
 	if !ok {
 		return false
 	}
+	rule, ok := c.rules[rel.String()]
+	if !ok {
+		return false
+	}
+	key := p.String()
 	v, note := readValue(rule, n)
 	if note != "" {
 		c.notes[key] = note

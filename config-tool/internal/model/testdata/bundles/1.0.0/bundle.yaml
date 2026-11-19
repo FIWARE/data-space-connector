@@ -1,6 +1,7 @@
 # Fixture bundle for recognition: toggles, a cross-cutting pattern rule and a plain value rule.
 chart: data-space-connector
 version: 1.0.0
+topLevelKeys: [did, scorpio, rainbow, keycloak, registration, tracing, tempo, grafana]
 recognize:
   - {path: did.enabled, answer: identity.did.enabled, stage: features, kind: toggle}
   - {path: scorpio.enabled, answer: data.scorpio.enabled, stage: features, kind: toggle}

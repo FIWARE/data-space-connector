@@ -3,9 +3,12 @@ package model
 import (
 	"os"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"testing/fstest"
+
+	"gopkg.in/yaml.v3"
 
 	"github.com/FIWARE/data-space-connector/config-tool/internal/roundtrip"
 	"github.com/FIWARE/data-space-connector/config-tool/model"
@@ -255,5 +258,53 @@ func TestEmbeddedRulesResolve(t *testing.T) {
 				t.Errorf("%s %s: toggle rule on a %s node, want !!bool", b.Version, r.Path, n.Tag)
 			}
 		}
+	}
+}
+
+func TestTopLevelKeysValidation(t *testing.T) {
+	const head = "chart: " + chart + "\nversion: 1.0.0\n"
+	tests := []struct {
+		name    string
+		body    string
+		wantErr string
+	}{
+		{"empty key", "topLevelKeys: [did, '']\n", "topLevelKeys[1] is empty"},
+		{"repeated key", "topLevelKeys: [did, vault, did]\n", `topLevelKeys[2]: "did" is already listed at topLevelKeys[0]`},
+		{"rule outside the keys", "topLevelKeys: [vault]\nrecognize:\n  - {path: did.enabled, answer: a, stage: features, kind: toggle}\n", `recognize[0]: "did" is not in topLevelKeys`},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := Versions(fstest.MapFS{fixtureFile: {Data: []byte(head + tc.body)}})
+			if err == nil || !strings.Contains(err.Error(), fixtureFile) || !strings.Contains(err.Error(), tc.wantErr) {
+				t.Errorf("err = %v, want it to name %s and contain %q", err, fixtureFile, tc.wantErr)
+			}
+		})
+	}
+}
+
+// TestEmbeddedTopLevelKeys keeps the latest bundle's topLevelKeys equal to the chart's, so a load
+// still finds wrapped chart values after the chart gains or renames a section.
+func TestEmbeddedTopLevelKeys(t *testing.T) {
+	src, err := os.ReadFile(chartValues)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var root yaml.Node
+	if err := yaml.Unmarshal(src, &root); err != nil {
+		t.Fatal(err)
+	}
+	var want []string
+	values := root.Content[0].Content
+	for i := 0; i < len(values); i += 2 {
+		want = append(want, values[i].Value)
+	}
+	got, err := Versions(bundles.FS)
+	if err != nil {
+		t.Fatal(err)
+	}
+	keys := slices.Sorted(slices.Values(got[0].TopLevelKeys))
+	slices.Sort(want)
+	if !slices.Equal(keys, want) {
+		t.Errorf("latest bundle topLevelKeys = %v, want the chart's %v", keys, want)
 	}
 }

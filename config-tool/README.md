@@ -128,6 +128,13 @@ text, to `POST /api/load?name=<basename>`. The body is capped at 8 MiB (413 abov
 - **unknown**: everything else, including a matching leaf whose value differs from the answer
   (`differs from <answer> = <value>`): it was pinned by hand and is never overwritten.
 
+The chart's values may sit under a wrapper key, e.g. `dsc:` when Argo CD or an umbrella chart
+packages this chart as a dependency. Rule paths are relative to that *root*: the load picks the
+mapping, at most three keys deep, whose keys are most often the chart's top-level keys
+(`topLevelKeys` in the bundle), and `?root=<path>` overrides it (`?root=` is the whole file).
+Review names the root and re-reads the file under another candidate; keys outside the root are
+unknown.
+
 Owned leaves back-derive answers too, and before the others, so an owned value always wins.
 Pairs `roundtrip` cannot address (a shadowed duplicate key, an alias or complex key) are listed
 once each as *skipped*. The bundle is the one for the header's chart version, otherwise the
@@ -155,3 +162,6 @@ for a `!!bool`, `value` for any scalar) and, on `value` rules only, an optional 
 one capture group. Rules that share an answer must agree on its `stage` and `kind`. A bundle with
 an unknown key, an invalid rule or a duplicate path fails to load, and a test checks every
 shipped rule path against the chart's `values.yaml`.
+`topLevelKeys` lists the chart's top-level values keys, by which a load finds values wrapped
+under another chart's key. When it is set, every rule must start with one of them, and a test
+keeps the latest bundle's list equal to the chart's `values.yaml`.

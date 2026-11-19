@@ -6,6 +6,7 @@ import { initialState, reducer, type AppState } from './reducer'
 import { StageId } from './stageIds'
 
 const KUBECONFIG = '/home/me/.kube/config'
+const FILE = new File(['did:\n  enabled: true\n'], 'provider.yaml')
 
 /** A session in the middle of a configuration: several stages seen, a context picked, answers given. */
 const BUSY: AppState = {
@@ -25,8 +26,8 @@ describe('reducer', () => {
   })
 
   it('starts over on Review when a file is loaded', () => {
-    const next = reducer(BUSY, { type: 'fileLoaded', report: REPORT })
-    expect(next).toMatchObject({ entered: true, stage: StageId.Review, visited: [StageId.Review], expert: false, loaded: REPORT })
+    const next = reducer(BUSY, { type: 'fileLoaded', report: REPORT, file: FILE })
+    expect(next).toMatchObject({ entered: true, stage: StageId.Review, visited: [StageId.Review], expert: false, loaded: REPORT, loadedFile: FILE })
     expect(next.session).toEqual({ kubeconfig: KUBECONFIG, chosenContext: undefined })
     expect(next.answers).toEqual({ target: { ...emptyAnswers().target, chartVersion: REPORT.chartVersion } })
   })
@@ -36,12 +37,12 @@ describe('reducer', () => {
     [VersionSource.Latest, ''],
   ])('takes the chart version only from a header (%s)', (chartVersionFrom, expected) => {
     const report = { ...REPORT, chartVersionFrom }
-    expect(reducer(initialState, { type: 'fileLoaded', report }).answers.target.chartVersion).toBe(expected)
+    expect(reducer(initialState, { type: 'fileLoaded', report, file: FILE }).answers.target.chartVersion).toBe(expected)
   })
 
   it('forgets the loaded file on a new configuration', () => {
-    const loaded = reducer(BUSY, { type: 'fileLoaded', report: REPORT })
-    expect(reducer(loaded, { type: 'newConfiguration' }).loaded).toBeUndefined()
+    const loaded = reducer(BUSY, { type: 'fileLoaded', report: REPORT, file: FILE })
+    expect(reducer(loaded, { type: 'newConfiguration' })).toMatchObject({ loaded: undefined, loadedFile: undefined })
   })
 
   it('closes the Expert view on any stage jump', () => {

@@ -47,7 +47,7 @@ func TestCorpus(t *testing.T) {
 	for _, path := range corpusFiles(t) {
 		t.Run(filepath.Base(filepath.Dir(path))+"/"+filepath.Base(path), func(t *testing.T) {
 			src := readFile(t, path)
-			res, err := Load(src, filepath.Base(path), embedded)
+			res, err := Load(src, filepath.Base(path), embedded, Options{})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -56,6 +56,10 @@ func TestCorpus(t *testing.T) {
 			r := res.Report
 			if r.Counts.Total == 0 {
 				t.Errorf("no leaves reported")
+			}
+			// None of these files wraps the chart's values, so detection must not find a wrapper.
+			if r.Root != "" || r.RootFrom != RootDetected {
+				t.Errorf("root = %q from %s, want the document root, detected", r.Root, r.RootFrom)
 			}
 			if path == filepath.Join(k3sDir, duplicateKeysFile) && len(r.Skipped) == 0 {
 				t.Errorf("%s reports no skipped pairs", duplicateKeysFile)

@@ -36,6 +36,17 @@ describe('loadValues', () => {
     expect(new URL(url, 'http://localhost').searchParams.get('name')).toBe(name)
   })
 
+  it.each([
+    [undefined, null],
+    ['', ''],
+    ['dsc', 'dsc'],
+    ['apps."my app"', 'apps."my app"'],
+  ])('sends the root %j only when one is asked for', async (root, expected) => {
+    const fetchMock = respond(200, REPORT)
+    await loadValues(new File([''], 'values.yaml'), { root })
+    expect(new URL(sent(fetchMock).url, 'http://localhost').searchParams.get('root')).toBe(expected)
+  })
+
   it('rejects a refused upload with its status', async () => {
     respond(HTTP_UNPROCESSABLE, { error: 'not one YAML document' })
     await expect(loadValues(new File([''], 'x.yaml'))).rejects.toMatchObject({ name: 'ApiError', status: HTTP_UNPROCESSABLE, message: 'not one YAML document' })

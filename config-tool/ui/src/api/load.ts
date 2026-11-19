@@ -5,10 +5,16 @@ import { api } from './client'
 export const CONTENT_TYPE_YAML = 'application/yaml'
 /** Query parameter carrying the file's name. */
 export const QUERY_NAME = 'name'
+/** Query parameter naming where the chart's values sit; absent lets the server detect it. */
+export const QUERY_ROOT = 'root'
 
 /** Where the report's chart version comes from. */
 export const VersionSource = { Header: 'header', Latest: 'latest' } as const
 export type VersionSource = (typeof VersionSource)[keyof typeof VersionSource]
+
+/** How the report's root was chosen. */
+export const RootSource = { Detected: 'detected', Requested: 'requested' } as const
+export type RootSource = (typeof RootSource)[keyof typeof RootSource]
 
 /** Which class of leaf set an answer; an owned leaf always wins. */
 export type Origin = 'owned' | 'recognized'
@@ -55,6 +61,11 @@ export interface LoadReport {
   chartVersion: string
   chartVersionFrom: VersionSource
   chartVersionNote?: string
+  /** Where the chart's values sit, e.g. `dsc` when another chart wraps them; '' is the whole file. */
+  root: string
+  rootFrom: RootSource
+  /** Mappings that hold chart keys, best first. */
+  rootCandidates: string[]
   generated: boolean
   counts: LoadCounts
   owned: LoadEntry[]
@@ -65,10 +76,17 @@ export interface LoadReport {
   markers: OwnedMarker[]
 }
 
+/** Options of one upload; without `root` the server detects where the chart's values sit. */
+export interface LoadOptions {
+  signal?: AbortSignal
+  root?: string
+}
+
 /** Uploads `file` as is, never decoded, so a BOM or invalid UTF-8 reaches the server untouched.
- *  413 (too large) and 422 (not one YAML document) arrive as ApiError. */
-export function loadValues(file: File, signal?: AbortSignal): Promise<LoadReport> {
-  return api<LoadReport>(`/load?${QUERY_NAME}=${encodeURIComponent(file.name)}`, {
+ *  413 (too large) and 422 (not one YAML document, or a root that is not a mapping) arrive as ApiError. */
+export function loadValues(file: File, { signal, root }: LoadOptions = {}): Promise<LoadReport> {
+  const rootParam = root === undefined ? '' : `&${QUERY_ROOT}=${encodeURIComponent(root)}`
+  return api<LoadReport>(`/load?${QUERY_NAME}=${encodeURIComponent(file.name)}${rootParam}`, {
     method: 'POST',
     headers: { 'Content-Type': CONTENT_TYPE_YAML },
     body: file,

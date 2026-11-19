@@ -36,6 +36,9 @@ export const REPORT: LoadReport = {
   chart: 'data-space-connector',
   chartVersion: '10.16.0',
   chartVersionFrom: 'header',
+  root: '',
+  rootFrom: 'detected',
+  rootCandidates: [''],
   generated: true,
   counts: { owned: 1, recognized: 1, unknown: 2, skipped: 1, total: 5 },
   owned: [{ path: 'did.enabled', line: 5, value: 'true', answer: 'identity.did.enabled' }],
@@ -60,11 +63,12 @@ export function refusedUpload(name: string, status: number): string {
   return `cannot load ${name}: refused with ${status}`
 }
 
-/** Answers GET /api/model with `model`, GET /api/cluster/contexts with `contexts(path)` and POST /api/load with `load(name)`. */
+/** Answers GET /api/model with `model`, GET /api/cluster/contexts with `contexts(path)` and POST /api/load with
+ *  `load(name, root)`; `root` is null when the upload lets the server detect it. */
 export function mockApi(
   contexts: (path: string) => ContextsAnswer = () => ({ paths: [], contexts: [], current: '' }),
   model: ModelInfo = MODEL,
-  load: (name: string) => LoadAnswer | Promise<LoadAnswer> = () => REPORT,
+  load: (name: string, root: string | null) => LoadAnswer | Promise<LoadAnswer> = () => REPORT,
 ) {
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(String(input), 'http://localhost')
@@ -76,7 +80,7 @@ export function mockApi(
     }
     if (url.pathname === '/api/load' && init?.method === 'POST') {
       const name = url.searchParams.get('name') ?? ''
-      const answer = await load(name)
+      const answer = await load(name, url.searchParams.get('root'))
       return typeof answer === 'number' ? json({ error: refusedUpload(name, answer) }, answer) : json(answer)
     }
     return json({ error: 'not found' }, HTTP_NOT_FOUND)

@@ -1,17 +1,23 @@
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
-import { VersionSource, type LoadReport } from '../api/load'
+import { RootSource, VersionSource, type LoadReport } from '../api/load'
 import { Chrome } from '../chrome/Chrome'
 import { STAGES } from '../stages'
 import { initialState } from '../state/reducer'
 import { StageId } from '../state/stageIds'
 import { StoreProvider } from '../state/store'
-import { REPORT } from '../test/api'
+import { mockApi, REPORT, refusedUpload } from '../test/api'
+import { ROOT_LABEL, WHOLE_FILE } from './Review'
 
-function renderReview(loaded?: LoadReport) {
+const HTTP_UNPROCESSABLE = 422
+const FILE = new File(['dsc:\n  did:\n    enabled: true\n'], 'wrapped.yaml')
+/** A report of values another chart wraps under `dsc:`. */
+const WRAPPED: LoadReport = { ...REPORT, source: FILE.name, root: 'dsc', rootCandidates: ['dsc', ''] }
+
+function renderReview(loaded?: LoadReport, loadedFile?: File) {
   return render(
-    <StoreProvider initial={{ ...initialState, entered: true, stage: StageId.Review, visited: [StageId.Review], loaded }}>
+    <StoreProvider initial={{ ...initialState, entered: true, stage: StageId.Review, visited: [StageId.Review], loaded, loadedFile }}>
       <Chrome stages={STAGES} />
     </StoreProvider>,
   )
@@ -63,5 +69,31 @@ describe('Review', () => {
     await userEvent.click(within(screen.getByRole('heading', { level: 4, name: /Foundations/ })).getByRole('button', { name: /go/ }))
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Foundations — not available yet')
     expect(screen.getByText('domain.base')).toBeInTheDocument()
+  })
+
+  it('says the values were read from the whole file, with nothing to pick', () => {
+    renderReview(REPORT, FILE)
+    expect(screen.getByText(/Read from/)).toHaveTextContent(`Read from ${WHOLE_FILE} (detected)`)
+    expect(screen.queryByLabelText(ROOT_LABEL)).not.toBeInTheDocument()
+  })
+
+  it('re-reads the same file under another root', async () => {
+    const fetchMock = mockApi(undefined, undefined, (name, root) => ({ ...WRAPPED, source: name, root: root ?? 'dsc', rootFrom: RootSource.Requested }))
+    renderReview(WRAPPED, FILE)
+    const picker = screen.getByLabelText(ROOT_LABEL)
+    expect(picker).toHaveValue('dsc')
+    expect(screen.getByText(/Read from/)).toHaveTextContent('Read from dsc (detected)')
+    await userEvent.selectOptions(picker, WHOLE_FILE)
+    expect(await screen.findByText(/Read from/)).toHaveTextContent(`Read from ${WHOLE_FILE} (as chosen)`)
+    const [, init] = fetchMock.mock.calls.at(-1) ?? []
+    expect(init?.body).toBe(FILE)
+  })
+
+  it('keeps the report and shows why a re-read was refused', async () => {
+    mockApi(undefined, undefined, () => HTTP_UNPROCESSABLE)
+    renderReview(WRAPPED, FILE)
+    await userEvent.selectOptions(screen.getByLabelText(ROOT_LABEL), WHOLE_FILE)
+    expect(await screen.findByRole('alert')).toHaveTextContent(refusedUpload(FILE.name, HTTP_UNPROCESSABLE))
+    expect(screen.getByLabelText(ROOT_LABEL)).toHaveValue('dsc')
   })
 })

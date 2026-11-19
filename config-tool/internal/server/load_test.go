@@ -146,3 +146,44 @@ func TestLoadKeepsUploadedBytes(t *testing.T) {
 		t.Errorf("Write() = %q, want the uploaded %q", got, src)
 	}
 }
+
+func TestLoadRoot(t *testing.T) {
+	const wrapped = "grafana:\n  enabled: true\ndsc:\n  did:\n    enabled: true\n  tracing:\n    enabled: true\n"
+	tests := []struct {
+		name     string
+		query    url.Values
+		want     int
+		wantRoot string
+		wantFrom load.RootSource
+	}{
+		{name: "detected", query: url.Values{}, want: http.StatusOK, wantRoot: "dsc", wantFrom: load.RootDetected},
+		{name: "requested document root", query: url.Values{queryRoot: {""}}, want: http.StatusOK, wantRoot: "", wantFrom: load.RootRequested},
+		{name: "requested wrapper", query: url.Values{queryRoot: {"dsc"}}, want: http.StatusOK, wantRoot: "dsc", wantFrom: load.RootRequested},
+		{name: "malformed root", query: url.Values{queryRoot: {"a..b"}}, want: http.StatusUnprocessableEntity},
+		{name: "root not a mapping", query: url.Values{queryRoot: {"grafana.enabled"}}, want: http.StatusUnprocessableEntity},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := newServer(t, builtUI)
+			serve(t, srv)
+			cookie := login(t, srv)
+			resp, raw := do(t, srv, request{method: http.MethodPost, path: "/api/load?" + tc.query.Encode(), origin: ownOrigin(srv), cookie: cookie, body: wrapped})
+			if resp.StatusCode != tc.want {
+				t.Fatalf("status = %d, want %d: %s", resp.StatusCode, tc.want, raw)
+			}
+			if tc.want != http.StatusOK {
+				return
+			}
+			var report load.Report
+			if err := json.Unmarshal([]byte(raw), &report); err != nil {
+				t.Fatal(err)
+			}
+			if report.Root != tc.wantRoot || report.RootFrom != tc.wantFrom {
+				t.Errorf("root = %q from %s, want %q from %s", report.Root, report.RootFrom, tc.wantRoot, tc.wantFrom)
+			}
+			if got := loadedSlot(srv); got == nil || got.Root.String() != tc.wantRoot {
+				t.Errorf("slot root = %v, want %q", got, tc.wantRoot)
+			}
+		})
+	}
+}
