@@ -188,6 +188,11 @@ pom.xml                       # drives local-deploy + integration tests
   leaf owned > recognized > unknown, back-derive answers, build the report). Recognition rules are
   data in `model/<version>/bundle.yaml` under `recognize:`. `POST /api/load` takes the uploaded
   bytes. `profile.Profile` stays untouched because CT-4 extends it in parallel.
+- CT-4 (#119, planned, ADR 0015, see `IMPLEMENTATION_PLAN.md`): `.dscprofile.yaml` is struct-encoded
+  (yaml.v3, strict decode, deterministic) and is not a round-trip file. It references the loaded values file
+  via `source` (name, root, sha256) and never copies overrides or secret values. The server reads and writes
+  profiles by path (suffix enforced, atomic writes via `internal/atomicfile`). The recent list sits in
+  `os.UserConfigDir()/dsc-config`. The open-question count is the union of unanswered and marked fields.
 
 ## Documentation
 
