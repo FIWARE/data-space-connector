@@ -20,6 +20,7 @@ import (
 	"github.com/coder/websocket"
 	"github.com/coder/websocket/wsjson"
 
+	"github.com/FIWARE/data-space-connector/config-tool/internal/recent"
 	"github.com/FIWARE/data-space-connector/config-tool/internal/version"
 )
 
@@ -46,12 +47,14 @@ var client = &http.Client{
 }
 
 // newServer creates a server that is closed at the end of the test but not yet serving.
+// Its recent list sits in a temp dir, so tests never touch the user's.
 func newServer(t *testing.T, ui fs.FS) *Server {
 	t.Helper()
 	srv, err := New(ui)
 	if err != nil {
 		t.Fatal(err)
 	}
+	srv.recent = &recent.Store{Dir: t.TempDir()}
 	t.Cleanup(func() { _ = srv.Close() })
 	return srv
 }
@@ -211,8 +214,9 @@ func TestRequiresCredentials(t *testing.T) {
 		{path: "/some/route"},
 		{path: "/api/model"},
 		{path: "/api/cluster/contexts"},
-		{path: "/api/profile"},
+		{path: "/api/profile/recent"},
 		{method: http.MethodPut, path: "/api/profile"},
+		{method: http.MethodPost, path: "/api/profile/open"},
 		{method: http.MethodPost, path: "/api/render"},
 		{method: http.MethodPost, path: "/api/validate"},
 		{method: http.MethodPost, path: "/api/load"},
@@ -320,8 +324,7 @@ func TestEndpoints(t *testing.T) {
 		want       int
 		wantTicket string
 	}{
-		{request{path: "/api/profile"}, http.StatusNotImplemented, ticketProfile},
-		{request{method: http.MethodPut, path: "/api/profile", origin: origin}, http.StatusNotImplemented, ticketProfile},
+		{request{path: "/api/profile"}, http.StatusNotFound, ""},
 		{request{method: http.MethodPost, path: "/api/render", origin: origin}, http.StatusNotImplemented, ticketRender},
 		{request{method: http.MethodPost, path: "/api/render", origin: origin, body: `{"target":{"namespace":"x"}}`}, http.StatusNotImplemented, ticketRender},
 		{request{method: http.MethodPost, path: "/api/render", origin: origin, body: "{"}, http.StatusBadRequest, ""},

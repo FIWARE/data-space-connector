@@ -351,6 +351,8 @@ func TestChooseBundle(t *testing.T) {
 		wantFrom    VersionSource
 		wantNote    string
 		wantClass   string
+		// requested is the version passed as Options.Bundle; empty passes none.
+		requested string
 	}{
 		{name: "header version with a bundle", src: headerFor(" for chart "+olderVersion) + body,
 			wantVersion: olderVersion, wantFrom: FromHeader, wantClass: "recognized"},
@@ -360,10 +362,19 @@ func TestChooseBundle(t *testing.T) {
 			wantVersion: latestVersion, wantFrom: FromLatest, wantNote: noteHeaderNoChart, wantClass: "unknown"},
 		{name: "header version without a bundle", src: headerFor(" for chart "+missing) + body,
 			wantVersion: latestVersion, wantFrom: FromLatest, wantNote: fmt.Sprintf(noteNoBundle, missing), wantClass: "unknown"},
+		{name: "requested bundle without a header", src: body, requested: olderVersion,
+			wantVersion: olderVersion, wantFrom: FromRequested, wantClass: "recognized"},
+		{name: "requested bundle beats the header", src: headerFor(" for chart "+olderVersion) + body, requested: latestVersion,
+			wantVersion: latestVersion, wantFrom: FromRequested, wantClass: "unknown"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			res, err := Load([]byte(tt.src), "values.yaml", bundles, Options{})
+			var opts Options
+			if tt.requested != "" {
+				i := slices.IndexFunc(bundles, func(b model.Bundle) bool { return b.Version == tt.requested })
+				opts.Bundle = &bundles[i]
+			}
+			res, err := Load([]byte(tt.src), "values.yaml", bundles, opts)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -376,6 +387,21 @@ func TestChooseBundle(t *testing.T) {
 				t.Errorf("old.enabled is %s, want %s", got, tt.wantClass)
 			}
 		})
+	}
+}
+
+func TestLoadDigest(t *testing.T) {
+	const (
+		src = "a: 1\n"
+		// wantDigest is `printf 'a: 1\n' | sha256sum`.
+		wantDigest = "37b128c59f1f5097f73f82691cb519f1f568667faab5ced1b4ab979d36837eae"
+	)
+	res, err := Load([]byte(src), "values.yaml", fixtureBundleList(t), Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Report.SHA256 != wantDigest {
+		t.Errorf("SHA256 = %s, want %s", res.Report.SHA256, wantDigest)
 	}
 }
 

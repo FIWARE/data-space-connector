@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/FIWARE/data-space-connector/config-tool/internal/load"
+	"github.com/FIWARE/data-space-connector/config-tool/internal/recent"
 	"github.com/FIWARE/data-space-connector/config-tool/model"
 )
 
@@ -42,7 +43,9 @@ type Server struct {
 	hosts      map[string]bool
 	ui         fs.FS
 	// models holds the question-model bundles; tests swap it before serving.
-	models   fs.FS
+	models fs.FS
+	// recent is the recent-profiles list; nil when there is no config directory. Tests swap it.
+	recent   *recent.Store
 	progress *Progress
 	http     *http.Server
 	// shutdown is cancelled when the server shuts down, which ends open WebSockets.
@@ -50,7 +53,7 @@ type Server struct {
 	cancel   context.CancelFunc
 	now      func() time.Time
 
-	// loaded is the most recent POST /api/load, the overrides layer CT-4 saves; a new load replaces it.
+	// loaded is the overrides layer: the latest POST /api/load or the source an opened profile restored.
 	loaded *load.Result
 	loadMu sync.Mutex
 
@@ -85,6 +88,9 @@ func New(ui fs.FS) (*Server, error) {
 		now:         time.Now,
 		sessions:    map[string]struct{}{},
 		launchCodes: map[string]time.Time{},
+	}
+	if dir, err := recent.DefaultDir(); err == nil {
+		s.recent = &recent.Store{Dir: dir}
 	}
 	s.shutdown, s.cancel = context.WithCancel(context.Background())
 	s.http = &http.Server{Handler: s.Handler(), ReadHeaderTimeout: readHeaderTimeout}
