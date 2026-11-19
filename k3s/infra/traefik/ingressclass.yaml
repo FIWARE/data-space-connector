@@ -1,0 +1,8 @@
+# The class of this Traefik, for Ingresses that name one (ingressClassName: traefik), such as the
+# reference profiles. Ingresses without a class are served as well.
+apiVersion: networking.k8s.io/v1
+kind: IngressClass
+metadata:
+  name: traefik
+spec:
+  controller: traefik.io/ingress-controller
