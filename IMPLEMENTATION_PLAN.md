@@ -181,4 +181,8 @@ Files: `config-tool/README.md`, `doc/config-tool/USER_JOURNEY.md` (Stage 0 *Open
   - the endpoints;
   - `recent` lives in the user config dir;
   - the open count is the union of unanswered and marked.
+
+  Deferred: step agents must not edit `AGENTS.md`, so a plan-mode agent makes this change. The
+  CT-4 bullet already in `AGENTS.md` covers the listed points. What is left: drop "planned" from
+  the CT-3 and CT-4 bullets, and drop the "`profile.Profile` stays untouched" clause.
 - Run `.github/scripts/check-links.sh` for the touched docs, then `make test` and `make lint` from `config-tool/`.
