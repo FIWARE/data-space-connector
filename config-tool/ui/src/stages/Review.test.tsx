@@ -36,7 +36,6 @@ function renderReview(loaded?: LoadReport, loadedFile?: File, more: Partial<AppS
 }
 
 const openList = () => within(screen.getByRole('heading', { level: 3, name: /^Open questions/ }).closest('.panel') as HTMLElement)
-const question = (label: string) => openList().getByText(label).closest('li') as HTMLElement
 
 describe('Review', () => {
   it.each<[string, LoadReport | undefined]>([
@@ -60,7 +59,7 @@ describe('Review', () => {
     ['an unanswered radio group', { environment: '' }, [], 'Environment', 'Development'],
   ])('lands on Target with %s focused', async (_name, change, open, label, input) => {
     renderReview(undefined, undefined, { answers: { target: { ...ANSWERED, ...change } }, open })
-    await userEvent.click(within(question(label)).getByRole('button', { name: 'go ↗' }))
+    await userEvent.click(screen.getByRole('button', { name: `Go to ${label}` }))
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Where is this going?')
     expect(screen.getByLabelText(new RegExp(`^${input}`))).toHaveFocus()
   })

@@ -96,7 +96,7 @@ function OpenQuestions() {
               <span>{q.label}</span>
               <span className="stage">{STAGE_LABELS[q.stage]}</span>
               {q.marked && <span className="badge">marked</span>}
-              <button type="button" className="link" onClick={() => dispatch({ type: 'focusField', field: q.field })}>
+              <button type="button" className="link" aria-label={`Go to ${q.label}`} onClick={() => dispatch({ type: 'focusField', field: q.field })}>
                 go ↗
               </button>
             </li>

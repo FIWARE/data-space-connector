@@ -71,6 +71,7 @@ function AskLater({ field }: { field: FieldId }) {
       type="button"
       className="ask"
       aria-pressed={state.open.includes(field)}
+      aria-label={`Ask ${FIELD_LABELS[field]} later`}
       title={`Keep ${FIELD_LABELS[field]} as an open question`}
       onClick={() => dispatch({ type: 'toggleOpen', field })}
     >

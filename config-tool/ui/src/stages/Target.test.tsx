@@ -220,7 +220,7 @@ describe('Target', () => {
     ['a select', 'Chart version', { chartVersion: '10.15.0' }],
   ])('marks %s open without touching its value', async (_name, label, value) => {
     renderTarget({ type: TargetType.File, namespace: 'provider', releaseName: 'provider', environment: Environment.Production, chartVersion: '10.15.0', ...value })
-    const ask = screen.getByTitle(`Keep ${label} as an open question`)
+    const ask = screen.getByRole('button', { name: `Ask ${label} later` })
     expect(ask).toHaveAttribute('aria-pressed', 'false')
     await userEvent.click(ask)
     expect(ask).toHaveAttribute('aria-pressed', 'true')
@@ -231,7 +231,7 @@ describe('Target', () => {
     expect(within(railEntry(0)).getByLabelText('has open questions')).toHaveTextContent('○')
 
     await userEvent.click(railEntry(0))
-    await userEvent.click(screen.getByTitle(`Keep ${label} as an open question`))
+    await userEvent.click(screen.getByRole('button', { name: `Ask ${label} later` }))
     expect(probe.state.open).toEqual([])
     expect(probe.state.answers.target).toMatchObject(value)
     expect(screen.getByLabelText('Validation')).toHaveTextContent('○ 0 open questions')
@@ -239,7 +239,7 @@ describe('Target', () => {
 
   it('counts a marked empty field once, as open and not as an error', async () => {
     renderTarget({ type: TargetType.File, releaseName: 'provider', environment: Environment.Production })
-    await userEvent.click(screen.getByTitle('Keep Namespace as an open question'))
+    await userEvent.click(screen.getByRole('button', { name: 'Ask Namespace later' }))
     await waitFor(() => expect(screen.getByLabelText('Validation')).toHaveTextContent('✖ 0 errors○ 1 open questions'))
   })
 })
