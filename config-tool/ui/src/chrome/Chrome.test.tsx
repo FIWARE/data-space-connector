@@ -43,13 +43,13 @@ describe('App', () => {
 })
 
 describe('Chrome', () => {
-  it('lists the 8 stages in order, then the disabled expert and save entries', () => {
+  it('lists the 8 stages in order, then the disabled expert and the enabled save entry', () => {
     renderChrome()
     const buttons = railButtons()
     expect(buttons.slice(0, LABELS.length).map((b) => b.textContent)).toEqual(LABELS.map((label, i) => expect.stringContaining(`${i + 1} ${label}`)))
     expect(buttons.slice(LABELS.length).map((b) => [b.textContent, (b as HTMLButtonElement).disabled])).toEqual([
       ['⌘E Expert: YAML', true],
-      ['⌘S Save profile', true],
+      ['⌘S Save profile', false],
     ])
   })
 

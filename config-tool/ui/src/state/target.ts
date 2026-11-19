@@ -1,18 +1,17 @@
 /** Target validation, mirroring `profile.Target.Validate` in Go: same fields, limits and messages. */
 import { Environment, TargetType, type Target } from './answers'
-import type { Issues } from './issues'
-import type { AppState } from './reducer'
 
 /** DNS-1123 label limit Kubernetes enforces on namespaces. */
 export const MAX_NAMESPACE_LENGTH = 63
 /** Helm's release name limit, shorter than a label so derived names still fit. */
 export const MAX_RELEASE_NAME_LENGTH = 53
 
-/** Field names, matching the JSON keys of Target. */
+/** Field names, matching the JSON keys of Target, in screen order. */
 export const TargetField = {
   Type: 'type',
   Context: 'context',
   Namespace: 'namespace',
+  CreateNamespace: 'createNamespace',
   ReleaseName: 'releaseName',
   Chart: 'chart',
   ChartVersion: 'chartVersion',
@@ -62,11 +61,4 @@ export function validateTarget(target: Target): FieldError[] {
   if (target.chartVersion === '') add(TargetField.ChartVersion, MSG_REQUIRED)
   add(TargetField.Environment, checkChoice(target.environment, Environment))
   return errors
-}
-
-/** The Target stage's footer and rail counters. */
-export function targetIssues(state: AppState): Issues {
-  const errors = validateTarget(state.answers.target)
-  const open = errors.filter((e) => e.message === MSG_REQUIRED).length
-  return { warnings: 0, errors: errors.length - open, open }
 }

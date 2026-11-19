@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { VersionSource } from '../api/load'
+import type { Profile } from '../api/profile'
 import { REPORT } from '../test/api'
 import { emptyAnswers, Environment, TargetType } from './answers'
-import { initialState, reducer, type AppState } from './reducer'
+import { initialState, reducer, type Action, type AppState } from './reducer'
 import { StageId } from './stageIds'
 
 const KUBECONFIG = '/home/me/.kube/config'
@@ -72,5 +73,72 @@ describe('reducer', () => {
     const expert = reducer({ ...initialState, entered: true, loaded: REPORT }, { type: 'openExpert' })
     expect(expert.expert).toBe(true)
     expect(reducer(expert, { type: 'goTo', stage: StageId.Role }).expert).toBe(false)
+  })
+
+  it.each<[string, AppState['open'], AppState['open']]>([
+    ['marks a field, keeping the ids sorted', ['target.type'], ['target.namespace', 'target.type']],
+    ['unmarks a marked field', ['target.namespace', 'target.type'], ['target.type']],
+  ])('%s and keeps its value', (_name, open, want) => {
+    const next = reducer({ ...BUSY, open }, { type: 'toggleOpen', field: 'target.namespace' })
+    expect(next.open).toEqual(want)
+    expect(next.answers).toBe(BUSY.answers)
+  })
+
+  it('jumps to the stage of a focused field, closing the Expert view, until the stage is done with it', () => {
+    const focused = reducer(BUSY, { type: 'focusField', field: 'target.namespace' })
+    expect(focused).toMatchObject({ stage: StageId.Target, expert: false, focus: 'target.namespace' })
+    expect(focused.visited).toEqual(BUSY.visited)
+    expect(reducer(focused, { type: 'focusDone' }).focus).toBeUndefined()
+  })
+
+  it.each([
+    ['a new configuration', { type: 'newConfiguration' } as const],
+    ['a loaded file', { type: 'fileLoaded', report: REPORT, file: FILE } as const],
+  ])('drops markers and focus on %s', (_name, action) => {
+    const next = reducer({ ...BUSY, open: ['target.namespace'], focus: 'target.namespace' }, action)
+    expect(next.open).toEqual([])
+    expect(next.focus).toBeUndefined()
+  })
+})
+
+const PROFILE_PATH = '/home/me/dsc/provider.dscprofile.yaml'
+const SAVED_PROFILE: Profile = {
+  format: 1,
+  model: { chart: 'data-space-connector', version: '10.15.0', revision: 1 },
+  target: BUSY.answers.target,
+  answers: {},
+  open: [{ field: 'target.namespace' }, { field: 'target.context' }],
+  source: { file: REPORT.source, root: '', sha256: REPORT.sha256 },
+  secrets: {},
+}
+const NOTES = ['provider.yaml changed since the profile was saved']
+
+describe('reducer: profiles', () => {
+  it('restores answers and markers exactly and lands on Review when a profile is opened', () => {
+    const next = reducer(BUSY, { type: 'profileOpened', path: PROFILE_PATH, profile: SAVED_PROFILE, report: REPORT, notes: NOTES })
+    expect(next).toMatchObject({ entered: true, stage: StageId.Review, visited: [StageId.Review], expert: false, loaded: REPORT, loadedFile: undefined })
+    expect(next.answers).toEqual(BUSY.answers)
+    expect(next.open).toEqual(['target.context', 'target.namespace'])
+    expect(next).toMatchObject({ profilePath: PROFILE_PATH, profileModel: SAVED_PROFILE.model, profileNotes: NOTES })
+    expect(next.session.chosenContext).toBeUndefined()
+  })
+
+  it('keeps the answers but records path and notes when a profile is saved', () => {
+    const next = reducer(BUSY, { type: 'profileSaved', path: PROFILE_PATH, profile: SAVED_PROFILE, notes: NOTES })
+    expect(next).toEqual({ ...BUSY, profilePath: PROFILE_PATH, profileModel: SAVED_PROFILE.model, profileNotes: NOTES })
+  })
+
+  const opened = reducer(BUSY, { type: 'profileOpened', path: PROFILE_PATH, profile: SAVED_PROFILE, notes: NOTES })
+  const saved = reducer(BUSY, { type: 'profileSaved', path: PROFILE_PATH, profile: SAVED_PROFILE, notes: NOTES })
+  it.each<[string, AppState, Action]>([
+    ['opened', opened, { type: 'newConfiguration' }],
+    ['opened', opened, { type: 'fileLoaded', report: REPORT, file: FILE }],
+    ['saved', saved, { type: 'newConfiguration' }],
+    ['saved', saved, { type: 'fileLoaded', report: REPORT, file: FILE }],
+  ])('forgets the %s profile on %o, so the next save asks for a path', (_, state, action) => {
+    const next = reducer(state, action)
+    expect(next.profilePath).toBeUndefined()
+    expect(next.profileModel).toBeUndefined()
+    expect(next.profileNotes).toBeUndefined()
   })
 })

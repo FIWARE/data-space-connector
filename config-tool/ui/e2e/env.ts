@@ -5,6 +5,8 @@ import { join } from 'node:path'
 export const TOKEN_URL_ENV = 'DSC_E2E_TOKEN_URL'
 /** A page on another site whose only link is the token URL. */
 export const CROSS_SITE_URL_ENV = 'DSC_E2E_CROSS_SITE_URL'
+/** A temp dir the profile smoke test saves into; the binary's recent list lives in another one. */
+export const PROFILE_DIR_ENV = 'DSC_E2E_PROFILE_DIR'
 /** Overrides the binary under test; the default is the one `make build` writes. */
 export const BINARY_ENV = 'DSC_CONFIG_BIN'
 

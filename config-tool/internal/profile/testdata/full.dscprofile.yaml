@@ -1,0 +1,24 @@
+# dsc-config profile: the answer set values.yaml is rendered from. It never holds a secret value.
+format: 1
+model:
+  chart: data-space-connector
+  version: 10.16.0
+  revision: 1
+target:
+  type: cluster
+  context: kind-dsc
+  namespace: provider
+  createNamespace: true
+  releaseName: provider
+  chart: data-space-connector
+  chartVersion: 10.16.0
+  environment: production
+answers: {}
+open:
+  - field: target.context
+  - field: target.namespace
+source:
+  file: values.yaml
+  root: dsc
+  sha256: 9f2c1a0b3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8
+secrets: {}

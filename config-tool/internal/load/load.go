@@ -3,6 +3,8 @@
 package load
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"strings"
@@ -40,8 +42,9 @@ type VersionSource string
 
 // The sources of the chart version.
 const (
-	FromHeader VersionSource = "header"
-	FromLatest VersionSource = "latest"
+	FromHeader    VersionSource = "header"
+	FromLatest    VersionSource = "latest"
+	FromRequested VersionSource = "requested"
 )
 
 // Origin says which class of leaf set an answer.
@@ -57,6 +60,8 @@ const (
 type Options struct {
 	// Root is where the chart's values sit; nil detects it, an empty Path is the whole file.
 	Root *roundtrip.Path
+	// Bundle classifies against this bundle instead of the header's or the latest; a reopened profile sets it.
+	Bundle *model.Bundle
 }
 
 // Result is a loaded file. Doc is the untouched source and serves as the overrides layer; Root
@@ -69,7 +74,9 @@ type Result struct {
 
 // Report is what the UI shows after a load. Lines are file lines, header included.
 type Report struct {
-	Source           string        `json:"source"`
+	Source string `json:"source"`
+	// SHA256 is the hex digest of the loaded bytes; a profile save names the load it references by it.
+	SHA256           string        `json:"sha256"`
 	Chart            string        `json:"chart"`
 	ChartVersion     string        `json:"chartVersion"`
 	ChartVersionFrom VersionSource `json:"chartVersionFrom"`
@@ -133,8 +140,10 @@ func Load(src []byte, name string, bundles []model.Bundle, opts Options) (*Resul
 	if err != nil {
 		return nil, fmt.Errorf("load %s: %w", name, err)
 	}
-	bundle, from, note, err := chooseBundle(doc, bundles)
-	if err != nil {
+	bundle, from, note := model.Bundle{}, FromRequested, ""
+	if opts.Bundle != nil {
+		bundle = *opts.Bundle
+	} else if bundle, from, note, err = chooseBundle(doc, bundles); err != nil {
 		return nil, err
 	}
 	candidates := rootCandidates(roundtrip.Classify(doc, nil), chartKeys(bundle))
@@ -154,7 +163,7 @@ func Load(src []byte, name string, bundles []model.Bundle, opts Options) (*Resul
 	leaves := roundtrip.Classify(doc, c.classify)
 
 	r := Report{
-		Source: name, Chart: bundle.Chart, ChartVersion: bundle.Version,
+		Source: name, SHA256: digest(src), Chart: bundle.Chart, ChartVersion: bundle.Version,
 		ChartVersionFrom: from, ChartVersionNote: note, Generated: doc.Generated(),
 		Root: root.String(), RootFrom: rootFrom, RootCandidates: make([]string, 0, len(candidates)),
 		Owned: []Entry{}, Recognized: []Entry{}, Unknown: []Entry{}, Skipped: []Entry{},
@@ -183,6 +192,11 @@ func Load(src []byte, name string, bundles []model.Bundle, opts Options) (*Resul
 		Skipped: len(r.Skipped)}
 	r.Counts.Total = r.Counts.Owned + r.Counts.Recognized + r.Counts.Unknown + r.Counts.Skipped
 	return &Result{Doc: doc, Root: root, Report: r}, nil
+}
+
+func digest(src []byte) string {
+	sum := sha256.Sum256(src)
+	return hex.EncodeToString(sum[:])
 }
 
 // chooseBundle picks the bundle of the header's chart version, else the latest DefaultChart

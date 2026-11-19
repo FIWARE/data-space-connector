@@ -24,6 +24,8 @@ const bundlePattern = "*/bundle.yaml"
 type Bundle struct {
 	Chart   string `yaml:"chart"`
 	Version string `yaml:"version"`
+	// Revision counts changes to the bundle within one chart version; a profile records it (ADR 0015 §6).
+	Revision int `yaml:"revision"`
 	// TopLevelKeys are the chart's top-level values keys; a load finds the chart's values by them
 	// when another chart wraps them under a key of its own.
 	TopLevelKeys []string `yaml:"topLevelKeys"`
@@ -245,6 +247,9 @@ func readBundle(fsys fs.FS, file string) (versioned, error) {
 	v, err := semver.StrictNewVersion(b.Version)
 	if err != nil {
 		return versioned{}, fmt.Errorf("%s: version %q is not semver: %w", file, b.Version, err)
+	}
+	if b.Revision < 1 {
+		return versioned{}, fmt.Errorf("%s: revision is missing or not positive", file)
 	}
 	if dir := path.Dir(file); b.Version != dir {
 		return versioned{}, fmt.Errorf("%s: version %q does not match its directory %q", file, b.Version, dir)

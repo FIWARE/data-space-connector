@@ -12,8 +12,8 @@ opens an existing `values.yaml`, the tool derives what answers it can, carries e
 along, and lands on Review with a load report. FEATURE_MODEL *Round-trip and provenance* sets the
 rule: **anything the tool did not write, it does not touch.** The round-trip engine of
 [ADR 0013](0013-config-tool-roundtrip-byte-patches.md) keeps the source bytes as the truth; this
-record fixes how a loaded file is read on top of it. CT-3 renders and saves nothing; CT-4 wires
-saving.
+record fixes how a loaded file is read on top of it. CT-3 renders and saves nothing; CT-4 saves
+the profile ([ADR 0015](0015-config-tool-profile.md)).
 
 ## Decision
 
@@ -22,8 +22,9 @@ saving.
    `POST /api/load?name=<basename>` (name through `encodeURIComponent`) with
    `Content-Type: application/yaml` and the `File` itself as the body, never decoded text:
    `Blob.text()` strips a UTF-8 BOM and replaces invalid UTF-8, and these bytes become the
-   overrides layer CT-4 writes back. The existing 8 MiB body cap applies (413 above it). The
-   server reads no new paths.
+   overrides layer. CT-4 saves only a reference to them and writing them back waits for the
+   render epic ([ADR 0015](0015-config-tool-profile.md)). The existing 8 MiB body cap applies
+   (413 above it). The server reads no new paths.
 2. **The owned marker** is a comment line `# dsc-config:owned <id>[,<id>...]` in the head comment
    of a mapping key. It owns that key's subtree and every following sibling of the same mapping,
    until the first blank source line between siblings, the next sibling with a head comment of
@@ -59,8 +60,8 @@ saving.
    is back-derived into `target.chartVersion`. Otherwise the latest `data-space-connector` bundle
    is used, `target.chartVersion` stays unanswered, and the report says why.
 6. **State.** `profile.Profile` is not changed (CT-4 extends it in parallel). The server keeps the
-   latest load result, the `*roundtrip.Document` and the report, as the overrides layer for
-   CT-4's save; each load replaces it. The UI keeps the report in `AppState.loaded`, outside
+   latest load result, the `*roundtrip.Document` and the report, as the overrides layer; each
+   load replaces it. CT-4's save records only its `source` (ADR 0015). The UI keeps the report in `AppState.loaded`, outside
    `answers`, and shows back-derived answers read-only; only `target.chartVersion` moves into
    `answers` today.
 7. **The chart's values may sit under a wrapper key.** When Argo CD or an umbrella chart packages

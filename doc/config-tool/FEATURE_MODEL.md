@@ -31,6 +31,10 @@ Profile (the answer set, the tool's whole state)
 values.yaml  =  render(profile)  ⊕  overrides        (⊕ = deep merge, overrides win)
 ```
 
+`overrides` is referenced, not copied: the `.dscprofile.yaml` records only the values file's name,
+root and SHA-256 under `source`, because unowned keys may hold plaintext secrets. Reopening reads the
+file next to the profile again ([ADR 0015](../adr/0015-config-tool-profile.md)).
+
 A **feature** is a capability a user wants, not a component. One feature may enable several
 subcharts (`market.local` turns on the BAE, MongoDB and the TMForum API); one subchart may
 serve several features (`keycloak` serves issuance, and the wallet preset, and eIDAS). The

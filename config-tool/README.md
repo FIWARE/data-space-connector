@@ -55,6 +55,12 @@ dev mode. The proxy authenticates nothing itself: any local process can send it 
 default browser. Ctrl+C stops it. If no browser opens, or the wrong one does, open the
 printed URL yourself. `dsc-config --no-browser` only prints the URL.
 
+`dsc-config generate -p <name>.dscprofile.yaml [-o values.yaml]` renders a saved
+[profile](#profiles) without the GUI (stdout by default). It refuses a profile with an unanswered or malformed Target field, naming the file and the field,
+because rendering needs a complete target. An existing output file is refused until the render
+epic decides how rendered keys merge with overrides (ADR 0015). Rendering itself is not
+implemented yet.
+
 ## Security model
 
 - The server listens on `127.0.0.1` with a random port and answers only for the hosts
@@ -84,7 +90,8 @@ internal/cli        front end: cobra commands
 internal/launcher   front end: browser tab, or the window under the wails tag
 internal/version    core: build identity stamped through -ldflags
 internal/model      core: question-model bundles per chart version
-internal/profile    core: the answer set
+internal/profile    core: the answer set and its .dscprofile.yaml format (ADR 0015)
+internal/atomicfile core: temp-file-and-rename writes that keep the file mode
 internal/cluster    core: kube context names from kubeconfig files, read-only
 internal/render     core: profile to values tree
 internal/roundtrip  core: parse / classify / merge / write of a values.yaml, byte-preserving
@@ -147,7 +154,87 @@ a question appends its rule to `model/<version>/bundle.yaml`, without code.
 The UI lands on Review with the report: counts, derived answers, and each entry with its file
 line. Back-derived answers show read-only on their stage's placeholder; only `target.chartVersion`
 becomes an answer. Expert / Overrides lists the unknown and skipped entries. The server keeps the
-latest load in memory as the overrides layer for CT-4; nothing is written to disk.
+latest load in memory as the overrides layer, and a saved [profile](#profiles) references it; the
+load itself writes nothing to disk.
+
+## Profiles
+
+A `.dscprofile.yaml` is the tool's whole state: the answers, the open questions and a reference to
+the values file the overrides came from ([ADR 0015](../doc/adr/0015-config-tool-profile.md)).
+`internal/profile` encodes it from Go structs, unlike a `values.yaml`, which goes through
+`internal/roundtrip`. The output is deterministic: fixed key order, `open` sorted, 2-space indent,
+no timestamp and no tool version, so saving twice without a change gives the same bytes. Comments
+added by hand are not kept. Decoding is strict: an unknown key, a second document or a `format`
+other than 1 is refused.
+
+```yaml
+# dsc-config profile: the answer set values.yaml is rendered from. It never holds a secret value.
+format: 1
+model:              # the question-model bundle it was built with
+  chart: data-space-connector
+  version: 10.16.0
+  revision: 1
+target:
+  type: cluster
+  context: kind-dsc
+  namespace: provider
+  createNamespace: true
+  releaseName: provider
+  chart: data-space-connector
+  chartVersion: 10.16.0
+  environment: production
+answers: {}         # no answer id exists yet, so any key is refused
+open:               # fields left open on purpose
+  - field: target.context
+source:             # the loaded values file: metadata only, never its content
+  file: values.yaml
+  root: dsc
+  sha256: <hex>
+secrets: {}         # Epic 8; any entry is refused until then
+```
+
+The profile never copies the overrides, because a loaded `values.yaml` may hold plaintext passwords
+in keys the tool does not own ([SECRETS.md](../doc/config-tool/SECRETS.md) rule 1). It records only
+`source`: the file's base name, the root it was read under, and its SHA-256. **Keep the profile next
+to its values file.** Opening a profile reads `<profile dir>/<source.file>` under the recorded
+root and restores the overrides layer. A changed file is restored with a note. A missing or
+unreadable one is reported on Review, and saving again drops the reference to it. `source.file`
+must be a plain base name, so a shared profile cannot make the tool read outside its own directory.
+
+**Save** (rail button, *Save profile* on Review, ⌘S / Ctrl+S) replaces the configuration's own
+profile in place, without a prompt, once it has one (opened or saved before). Otherwise it asks for a
+path, by default `<dir>/<releaseName or connector>.dscprofile.yaml` in the directory of the latest
+recent profile, else the home directory. `PUT /api/profile` takes `path`, `overwrite`, `profile`
+and the `sourceSha256` of the load report the UI holds:
+
+- Only an absolute path ending in `.dscprofile.yaml` is accepted. Without `overwrite` an existing
+  file gives 409, and the dialog asks to confirm *Replace*. The write is atomic (temp file and
+  rename, file mode kept; new files are 0644).
+- `source` is attached only when `sourceSha256` equals the server's current load. *New
+  configuration* drops it, and a hash of another load gives 422.
+- The save compares the file next to the target path with the loaded one, and a note says
+  when reopening will not find it. The save still goes through, so the file can be copied later.
+- A half-finished configuration saves as typed: format errors stay stage errors. Only structural
+  errors give 422: `format`, `model`, unknown `target.type` / `target.environment` values,
+  unknown `open` ids, `source`, `answers` and `secrets`.
+
+**Open** is the *Open profile* card on S0, a path field, or a click in the *Recent* list. Both use
+`POST /api/profile/open` with the same path rule (404 when the file is missing) and land on Review
+with the profile's notes. A bundle whose `chart@version` is not shipped, or whose `revision` is
+newer than the shipped one, is refused (migration is [US-9.3](../doc/config-tool/USER_STORIES.md#epic-9--changing-a-configuration-later)).
+An older revision opens with a note.
+
+**Recent** (`GET /api/profile/recent`) lives in `os.UserConfigDir()/dsc-config/recent.yaml`
+(directory 0700, file 0600), or under `$DSC_CONFIG_HOME` when that is set. It holds absolute
+paths with name, chart version and save time, newest first, deduplicated by path, at most 10, and
+drops entries whose file is gone. Browser storage is not used, because the port, and with it the
+origin, changes on every run. A failing list never fails a save or an open: it comes back as a
+note, and S0 shows it below the list.
+
+**Open questions.** *Ask later* next to a Target field marks it open; the value stays as
+provisional, and unmarking keeps it too. A field is open when it is unanswered or marked, and
+it is counted once. The stage rail marks each stage that has one, the footer shows the total, and
+Review lists every open question with a link to its field. A marked empty field is open, not an error.
 
 ## Chart versions
 
@@ -168,3 +255,5 @@ shipped rule path against the chart's `values.yaml`.
 `topLevelKeys` lists the chart's top-level values keys, by which a load finds values wrapped
 under another chart's key. When it is set, every rule must start with one of them, and a test
 keeps the latest bundle's list equal to the chart's `values.yaml`.
+`revision` (a positive integer, required) counts changes to a bundle within one chart version.
+A profile records `chart`, `version` and `revision` of the bundle it was built with (ADR 0015 §6).

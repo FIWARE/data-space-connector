@@ -1,9 +1,12 @@
-import { render, screen, within } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { StrictMode } from 'react'
 import { describe, expect, it } from 'vitest'
 import { App } from '../App'
-import { lateLoad, mockApi, REPORT, refusedUpload } from '../test/api'
-import { OPEN_INPUT_LABEL } from './Start'
+import type { Profile, RecentEntry, RecentProfiles } from '../api/profile'
+import { emptyAnswers, TargetType } from '../state/answers'
+import { DEFAULT_DIR, HTTP_NOT_FOUND, lateLoad, mockApi, REPORT, refusedProfile, refusedUpload } from '../test/api'
+import { OPEN_INPUT_LABEL, PROFILE_PATH_LABEL } from './Start'
 
 const CARDS = ['New configuration', 'Open values.yaml', 'Open profile', 'Try it locally']
 const HTTP_PAYLOAD_TOO_LARGE = 413
@@ -18,16 +21,13 @@ function cards() {
 }
 
 describe('Start', () => {
-  it('shows four entries with New configuration and Open values.yaml enabled', () => {
+  it('shows four entries with everything but Try it locally enabled', () => {
     render(<App />)
     const enabled = cards().filter((card) => card.getAttribute('aria-disabled') !== 'true')
-    expect(enabled.map((card) => within(card).getByRole('heading').textContent)).toEqual(['＋ New configuration', '📂 Open values.yaml'])
+    expect(enabled.map((card) => within(card).getByRole('heading').textContent)).toEqual(['＋ New configuration', '📂 Open values.yaml', '⟲ Open profile'])
   })
 
-  it.each([
-    ['Open profile', 'CT-4'],
-    ['Try it locally', 'CT-5'],
-  ])('names the ticket that enables %s', (title, ticket) => {
+  it.each([['Try it locally', 'CT-5']])('names the ticket that enables %s', (title, ticket) => {
     render(<App />)
     expect(screen.getByRole('button', { name: new RegExp(title) })).toHaveTextContent(`Coming in ${ticket}`)
   })
@@ -95,5 +95,122 @@ describe('Start', () => {
     const init = fetchMock.mock.calls.find(([input]) => String(input).includes('/api/load'))?.[1]
     unmount()
     expect(init?.signal?.aborted).toBe(true)
+  })
+})
+
+const RECENT: RecentEntry[] = [
+  { path: `${DEFAULT_DIR}/provider.dscprofile.yaml`, name: 'provider', chartVersion: '10.16.0', savedAt: new Date().toISOString() },
+  { path: `${DEFAULT_DIR}/consumer.dscprofile.yaml`, name: 'consumer', chartVersion: '10.15.0', savedAt: '2020-01-01T00:00:00Z' },
+]
+const OPENED: Profile = {
+  format: 1,
+  model: { chart: 'data-space-connector', version: '10.16.0', revision: 1 },
+  target: { ...emptyAnswers().target, type: TargetType.Cluster, namespace: 'provider' },
+  answers: {},
+  open: [{ field: 'target.context' }],
+  secrets: {},
+}
+
+function mockProfiles(open: (path: string) => Profile | number = () => OPENED) {
+  return mockApi(undefined, undefined, undefined, {
+    recent: () => ({ entries: RECENT, defaultDir: DEFAULT_DIR, notes: [] }),
+    open: (path) => {
+      const answer = open(path)
+      return typeof answer === 'number' ? answer : { path, profile: answer, notes: [] }
+    },
+  })
+}
+
+describe('Start: profiles', () => {
+  it('lists the recent profiles newest first with chart version and age', async () => {
+    mockProfiles()
+    render(<App />)
+    const recent = await screen.findByRole('region', { name: 'Recent' })
+    expect(within(recent).getAllByRole('button').map((entry) => entry.textContent)).toEqual([
+      'provider · chart 10.16.0 · this minute',
+      expect.stringMatching(/^consumer · chart 10\.15\.0 · \d+ years ago$/),
+    ])
+  })
+
+  // main.tsx renders under StrictMode, whose dev mode runs every effect cleanup once on mount.
+  it.each([
+    ['plainly', <App key="plain" />],
+    [
+      'under StrictMode',
+      <StrictMode key="strict">
+        <App />
+      </StrictMode>,
+    ],
+  ])('opens a recent profile on Review with its open question when rendered %s', async (_, app) => {
+    mockProfiles()
+    render(app)
+    await userEvent.click(await screen.findByRole('button', { name: /^provider/ }))
+    expect(await screen.findByRole('button', { name: /7 Review/ })).toHaveAttribute('aria-current', 'step')
+    expect(screen.getByRole('heading', { name: /Open questions/ }).parentElement).toHaveTextContent(/Kube context.*marked/)
+  })
+
+  it('opens a typed path from the Open profile card, prefilled with the default directory', async () => {
+    const fetchMock = mockProfiles()
+    render(<App />)
+    await screen.findByRole('region', { name: 'Recent' })
+    await userEvent.click(screen.getByRole('button', { name: /Open profile/ }))
+    const field = screen.getByLabelText(PROFILE_PATH_LABEL)
+    expect(field).toHaveValue(`${DEFAULT_DIR}/`)
+    await userEvent.type(field, 'other.dscprofile.yaml{Enter}')
+    expect(await screen.findByRole('navigation', { name: 'Stages' })).toBeInTheDocument()
+    const init = fetchMock.mock.calls.find(([input]) => String(input).endsWith('/api/profile/open'))?.[1]
+    expect(JSON.parse(String(init?.body))).toEqual({ path: `${DEFAULT_DIR}/other.dscprofile.yaml` })
+  })
+
+  it('stays on S0 and shows why when a profile cannot be opened', async () => {
+    mockProfiles(() => HTTP_NOT_FOUND)
+    render(<App />)
+    const { path } = RECENT[1] as RecentEntry
+    await userEvent.click(await screen.findByRole('button', { name: /^consumer/ }))
+    expect(await screen.findByRole('alert')).toHaveTextContent(`Cannot open ${path}: ${refusedProfile(path, HTTP_NOT_FOUND)}`)
+    expect(screen.queryByRole('navigation', { name: 'Stages' })).toBeNull()
+  })
+
+  it.each([
+    ['a corrupt store', 'the recent list cannot be read: yaml: line 1: did not find expected key'],
+    ['no config directory', 'the recent list is not available: no user config directory (set DSC_CONFIG_HOME)'],
+  ])('shows why the Recent list is missing with %s', async (_, note) => {
+    mockApi(undefined, undefined, undefined, { recent: () => ({ entries: [], defaultDir: DEFAULT_DIR, notes: [note] }) })
+    render(<App />)
+    expect(await screen.findByText(note)).toHaveClass('hint')
+    expect(screen.queryByRole('region', { name: 'Recent' })).toBeNull()
+  })
+
+  it('prefills the path field with a default directory that arrives after the card was opened', async () => {
+    let resolve: (list: RecentProfiles) => void = () => {}
+    const pending = new Promise<RecentProfiles>((done) => (resolve = done))
+    mockApi(undefined, undefined, undefined, { recent: () => pending })
+    render(<App />)
+    await userEvent.click(screen.getByRole('button', { name: /Open profile/ }))
+    const field = screen.getByLabelText(PROFILE_PATH_LABEL)
+    expect(field).toHaveValue('')
+    resolve({ entries: [], defaultDir: DEFAULT_DIR, notes: [] })
+    await waitFor(() => expect(field).toHaveValue(`${DEFAULT_DIR}/`))
+  })
+
+  it('keeps a typed path when the default directory arrives late', async () => {
+    let resolve: (list: RecentProfiles) => void = () => {}
+    const pending = new Promise<RecentProfiles>((done) => (resolve = done))
+    mockApi(undefined, undefined, undefined, { recent: () => pending })
+    render(<App />)
+    await userEvent.click(screen.getByRole('button', { name: /Open profile/ }))
+    const field = screen.getByLabelText(PROFILE_PATH_LABEL)
+    await userEvent.type(field, '/srv/x.dscprofile.yaml')
+    resolve({ entries: RECENT, defaultDir: DEFAULT_DIR, notes: [] })
+    await screen.findByRole('region', { name: 'Recent' })
+    expect(field).toHaveValue('/srv/x.dscprofile.yaml')
+  })
+
+  it('shows no Recent list when the list cannot be read', async () => {
+    mockApi(undefined, undefined, undefined, { recent: () => HTTP_NOT_FOUND })
+    render(<App />)
+    await userEvent.click(screen.getByRole('button', { name: /Open profile/ }))
+    expect(screen.getByLabelText(PROFILE_PATH_LABEL)).toHaveValue('')
+    expect(screen.queryByRole('region', { name: 'Recent' })).toBeNull()
   })
 })
