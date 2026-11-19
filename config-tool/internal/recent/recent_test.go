@@ -1,6 +1,7 @@
 package recent
 
 import (
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -175,18 +176,13 @@ func TestCorruptStore(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			s, dir := newStore(t)
-			if err := os.MkdirAll(s.Dir, dirMode); err != nil {
-				t.Fatal(err)
-			}
-			if err := os.WriteFile(filepath.Join(s.Dir, FileName), []byte(tc.content), fileMode); err != nil {
-				t.Fatal(err)
-			}
-			if _, err := s.List(); err == nil {
-				t.Fatal("List err = nil, want an error")
+			writeStore(t, s, tc.content, fileMode)
+			if _, err := s.List(); !errors.Is(err, ErrCorrupt) {
+				t.Fatalf("List err = %v, want ErrCorrupt", err)
 			}
 			// Add resets the store, so one corrupt file does not disable the list for good.
-			if err := s.Add(Entry{Path: touch(t, dir, "a")}); err != nil {
-				t.Fatal(err)
+			if err := s.Add(Entry{Path: touch(t, dir, "a")}); !errors.Is(err, ErrReset) {
+				t.Fatalf("Add err = %v, want ErrReset", err)
 			}
 			got, err := s.List()
 			if err != nil || !slices.Equal(names(got), []string{"a"}) {
@@ -194,6 +190,48 @@ func TestCorruptStore(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestUnreadableStore(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows has no POSIX permission bits")
+	}
+	if os.Geteuid() == 0 {
+		t.Skip("root reads a 000 file")
+	}
+	const unreadable fs.FileMode = 0o000
+	s, dir := newStore(t)
+	other := touch(t, dir, "kept")
+	content := fmt.Sprintf("entries:\n  - path: %s\n    name: kept\n", other)
+	path := writeStore(t, s, content, unreadable)
+	t.Cleanup(func() { _ = os.Chmod(path, fileMode) })
+
+	if _, err := s.List(); err == nil || errors.Is(err, ErrCorrupt) {
+		t.Fatalf("List err = %v, want a read error that is not ErrCorrupt", err)
+	}
+	if err := s.Add(Entry{Path: touch(t, dir, "a")}); err == nil || errors.Is(err, ErrReset) {
+		t.Fatalf("Add err = %v, want a read error that is not ErrReset", err)
+	}
+	if err := os.Chmod(path, fileMode); err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.List()
+	if err != nil || !slices.Equal(names(got), []string{"kept"}) {
+		t.Errorf("List after failed Add = %v, %v; want [kept], nil", names(got), err)
+	}
+}
+
+// writeStore writes content as the store file with mode and returns its path.
+func writeStore(t *testing.T, s *Store, content string, mode fs.FileMode) string {
+	t.Helper()
+	if err := os.MkdirAll(s.Dir, dirMode); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(s.Dir, FileName)
+	if err := os.WriteFile(path, []byte(content), mode); err != nil {
+		t.Fatal(err)
+	}
+	return path
 }
 
 func TestPermissions(t *testing.T) {

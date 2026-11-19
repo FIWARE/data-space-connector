@@ -37,6 +37,12 @@ const (
 	fileMode fs.FileMode = 0o600
 )
 
+// ErrCorrupt marks a store file that is readable but does not parse.
+var ErrCorrupt = errors.New("recent list is corrupt")
+
+// ErrReset is wrapped by Add's error when it replaced a corrupt store; the new entry is still written.
+var ErrReset = errors.New("recent list was corrupt and has been reset")
+
 // Entry is one recent profile. It holds a path and metadata only, never profile content.
 type Entry struct {
 	Path string `json:"path" yaml:"path"`
@@ -76,7 +82,7 @@ func DefaultDir() (string, error) {
 }
 
 // List returns the entries newest first, without those whose file is gone.
-// A missing store is empty; an unreadable one is an error.
+// A missing store is empty; an unreadable one is an error, wrapping ErrCorrupt when it does not parse.
 func (s *Store) List() ([]Entry, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -84,7 +90,8 @@ func (s *Store) List() ([]Entry, error) {
 }
 
 // Add puts e first, made absolute, replacing an entry of the same path, and fills Name and SavedAt.
-// It also drops entries whose file is gone, and replaces an unreadable store rather than failing on it.
+// It also drops entries whose file is gone. A corrupt store is replaced and reported through ErrReset;
+// any other read error fails Add and leaves the store untouched.
 func (s *Store) Add(e Entry) error {
 	abs, err := filepath.Abs(e.Path)
 	if err != nil {
@@ -96,16 +103,23 @@ func (s *Store) Add(e Entry) error {
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	entries, err := s.list()
-	if err != nil {
-		entries = nil
+	entries, listErr := s.list()
+	reset := errors.Is(listErr, ErrCorrupt)
+	if listErr != nil && !reset {
+		return listErr
 	}
 	entries = slices.DeleteFunc(entries, func(old Entry) bool { return samePath(old.Path, abs) })
 	entries = append([]Entry{e}, entries...)
 	if len(entries) > MaxRecent {
 		entries = entries[:MaxRecent]
 	}
-	return s.write(entries)
+	if err := s.write(entries); err != nil {
+		return err
+	}
+	if reset {
+		return fmt.Errorf("%w: %w", ErrReset, listErr)
+	}
+	return nil
 }
 
 func (s *Store) path() string { return filepath.Join(s.Dir, FileName) }
@@ -127,7 +141,7 @@ func (s *Store) list() ([]Entry, error) {
 	}
 	var f file
 	if err := yaml.Unmarshal(data, &f); err != nil {
-		return nil, fmt.Errorf("%s: %w", s.path(), err)
+		return nil, fmt.Errorf("%s: %w: %w", s.path(), ErrCorrupt, err)
 	}
 	return slices.DeleteFunc(f.Entries, func(e Entry) bool {
 		if e.Path == "" {
