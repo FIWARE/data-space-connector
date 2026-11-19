@@ -1,6 +1,6 @@
-/** Smoke test of the built binary: authentication, S0, S1 and the placeholder stages. */
+/** Smoke test of the built binary: authentication, S0, S1, the placeholder stages and opening a values.yaml. */
 import { expect, test, type Page } from '@playwright/test'
-import { CROSS_SITE_URL_ENV, FIXTURE_CURRENT_CONTEXT, FIXTURE_OTHER_CONTEXT, KUBECONFIG_FIXTURE, TOKEN_URL_ENV, required } from './env.ts'
+import { CROSS_SITE_URL_ENV, FIXTURE_CURRENT_CONTEXT, FIXTURE_OTHER_CONTEXT, KUBECONFIG_FIXTURE, PROVIDER_VALUES, TOKEN_URL_ENV, required } from './env.ts'
 
 const HTTP_UNAUTHORIZED = 401
 const START_HEADING = 'FIWARE Data Space Connector — Configurator'
@@ -8,6 +8,10 @@ const TARGET_HEADING = 'Where is this going?'
 const PLACEHOLDER_STAGE = 'Role'
 const NAMESPACE = 'provider'
 const RELEASE_NAME = 'dsc-provider'
+const OPEN_INPUT_LABEL = 'values.yaml to open'
+// Exact counts follow the bundle's recognition rules; the smoke test only pins that both sides are filled.
+const LOADED_HEADING = /^Opened provider\.yaml: understood [1-9]\d*, carried over untouched [1-9]\d*$/
+const CLASS_COUNT = 4
 
 const tokenUrl = () => required(TOKEN_URL_ENV)
 const origin = () => new URL(tokenUrl()).origin
@@ -85,4 +89,13 @@ test('Target keeps every value across a jump to a placeholder stage', async ({ p
     await expect(version).toHaveValue(chosenVersion)
     await expect(production).toBeChecked()
   })
+})
+
+test('opening k3s/provider.yaml lands on Review with the load report', async ({ page }) => {
+  await page.goto(tokenUrl())
+  await expectStart(page)
+  await page.getByLabel(OPEN_INPUT_LABEL).setInputFiles(PROVIDER_VALUES)
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText(LOADED_HEADING)
+  await expect(page.getByLabel('Counts').getByRole('definition')).toHaveCount(CLASS_COUNT)
+  await expect(page.getByRole('navigation', { name: 'Stages' }).getByRole('button', { name: /Expert/ })).toBeEnabled()
 })

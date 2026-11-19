@@ -1,5 +1,6 @@
 /** The window chrome every stage after S0 hangs in. */
 import type { StageDef } from '../stages'
+import { Expert } from '../stages/Expert'
 import { Placeholder } from '../stages/Placeholder'
 import { useStore } from '../state/context'
 import { Footer } from './Footer'
@@ -17,7 +18,7 @@ export function Chrome({ stages }: { stages: readonly StageDef[] }) {
       <div className="body">
         <Rail stages={stages} />
         <main className="content">
-          {Stage ? <Stage /> : <Placeholder label={current?.label ?? state.stage} comingIn={current?.comingIn} />}
+          {state.expert ? <Expert /> : Stage ? <Stage /> : <Placeholder label={current?.label ?? state.stage} comingIn={current?.comingIn} stageId={state.stage} />}
         </main>
       </div>
       <Footer stages={stages} />
