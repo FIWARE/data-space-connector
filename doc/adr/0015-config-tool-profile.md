@@ -123,7 +123,9 @@ e2e run of the real binary never touch the developer's list. Each entry holds th
 the name (base name without the suffix), the chart version and `savedAt` (RFC 3339, UTC); a
 `role` slot stays empty until Epic 2. The list is newest first, deduplicated by cleaned path,
 capped at 10, and drops entries whose file is gone when it is listed. A missing store is an empty
-list. A failing or corrupt store never fails a save or an open; it becomes a note.
+list. A failing or corrupt store never fails a save, an open or `GET /api/profile/recent`; it
+becomes a note. The recent route then answers 200 with `entries: []`, the note, and a
+`defaultDir` from the home-directory fallback (3).
 
 ### 5. An open question is unanswered or marked, counted once
 
@@ -144,9 +146,11 @@ ids, `source`, `answers` and `secrets`. `model` must agree with `target`: `model
   profile saved with `model.version: 10.16.0` and no chart version still opens once 10.17.0
   ships.
 - **Save** takes the bundle of `target.chartVersion` when that is set. Otherwise it keeps the
-  `model` of the PUT body when that bundle is shipped; the UI holds it from the open and drops it
-  on *New configuration*. Only a profile that has never named a bundle gets the latest one, the
-  same rule as the load. The revision written is the shipped one, which rule 6 announces with a
+  `model` of the PUT body when that bundle is shipped **and its chart is `target.chart`**; the UI
+  holds it from the open and drops it on *New configuration*. Otherwise, as for a profile that has
+  never named a bundle, it takes the latest bundle of `target.chart`, the same rule as the load. A
+  chart switch in the Target stage clears the chart version, so this keeps save from refusing its
+  own result under the agreement rule above. The revision written is the shipped one, which rule 6 announces with a
   note on open.
 
 So `model.version` changes only when the user sets the chart version. A bundle migration is
@@ -193,7 +197,8 @@ ADR 0014 load report when the source was restored. Notes cover a changed, missin
 source, an older bundle revision, and a failing recent list.
 
 **`GET /api/profile/recent`** returns
-`{"entries": [{"path", "name", "chartVersion", "savedAt"}], "defaultDir": "/home/pia/dsc"}`.
+`{"entries": [{"path", "name", "chartVersion", "savedAt"}], "defaultDir": "/home/pia/dsc", "notes": []}`.
+It never fails on the store: an unreadable or corrupt store gives `entries: []` and a note (4).
 
 | Status | When |
 |---|---|
