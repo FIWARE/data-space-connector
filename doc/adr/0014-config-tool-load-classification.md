@@ -63,6 +63,19 @@ saving.
    CT-4's save; each load replaces it. The UI keeps the report in `AppState.loaded`, outside
    `answers`, and shows back-derived answers read-only; only `target.chartVersion` moves into
    `answers` today.
+7. **The chart's values may sit under a wrapper key.** When Argo CD or an umbrella chart packages
+   this chart as a dependency, its values sit under that chart's alias, e.g. `dsc:`. Rule paths
+   are relative to a *root* mapping. Without `?root=` the load detects it: every mapping at most
+   `maxRootDepth` (3) keys deep that holds a key of the bundle's `topLevelKeys` is a candidate,
+   none below a chart key, and the best is the one whose chart keys outnumber its other keys
+   (Helm's `global` aside) by the widest margin, then the one with more chart keys, then the
+   shallower. A margin rather than a share, because a values file of an older chart version keeps
+   removed sections; one of them holding a single chart-named key would have a share of 1 and
+   outrank the document root. `topLevelKeys` lists
+   the chart's top-level `values.yaml` keys; a test keeps it equal to the chart's. The report
+   carries `root`, `rootFrom` (`detected` or `requested`) and `rootCandidates`, and Review offers
+   the candidates to re-read the same uploaded file under another root. Leaves outside the root
+   are unknown; markers and line numbers stay file-wide.
 
 ## Consequences
 
@@ -80,5 +93,8 @@ saving.
   and an API that reads arbitrary paths widens the local attack surface for no gain.
 - **Store unknown keys in a profile `overrides` map.** Loses comments, ordering and formatting,
   which breaks the byte-faithful round-trip of ADR 0013.
+- **A fixed list of wrapper names** (`dsc`, `data-space-connector`, ...). The alias is the
+  wrapping chart's choice, so any list misses some; scoring by chart keys finds any name, and
+  `?root=` covers what scoring gets wrong.
 - **Wildcard rule paths.** Not needed by any rule yet, and they make precedence between
   overlapping rules ambiguous; they can be added later without changing this format.

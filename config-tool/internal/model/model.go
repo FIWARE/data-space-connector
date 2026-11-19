@@ -24,6 +24,9 @@ const bundlePattern = "*/bundle.yaml"
 type Bundle struct {
 	Chart   string `yaml:"chart"`
 	Version string `yaml:"version"`
+	// TopLevelKeys are the chart's top-level values keys; a load finds the chart's values by them
+	// when another chart wraps them under a key of its own.
+	TopLevelKeys []string `yaml:"topLevelKeys"`
 	// Recognize maps chart keys back to answers when an existing values file is loaded.
 	Recognize []Rule `yaml:"recognize"`
 	// Latest marks the default version; Versions sets it, bundle files never do.
@@ -246,8 +249,40 @@ func readBundle(fsys fs.FS, file string) (versioned, error) {
 	if dir := path.Dir(file); b.Version != dir {
 		return versioned{}, fmt.Errorf("%s: version %q does not match its directory %q", file, b.Version, dir)
 	}
+	if err := checkTopLevelKeys(b.TopLevelKeys); err != nil {
+		return versioned{}, fmt.Errorf("%s: %w", file, err)
+	}
 	if b.rules, err = compileRules(b.Recognize); err != nil {
 		return versioned{}, fmt.Errorf("%s: %w", file, err)
 	}
+	if err := checkRuleRoots(b.rules, b.TopLevelKeys); err != nil {
+		return versioned{}, fmt.Errorf("%s: %w", file, err)
+	}
 	return versioned{bundle: b, version: v}, nil
+}
+
+// checkTopLevelKeys refuses an empty or repeated key.
+func checkTopLevelKeys(keys []string) error {
+	for i, k := range keys {
+		if k == "" {
+			return fmt.Errorf("topLevelKeys[%d] is empty", i)
+		}
+		if j := slices.Index(keys, k); j < i {
+			return fmt.Errorf("topLevelKeys[%d]: %q is already listed at topLevelKeys[%d]", i, k, j)
+		}
+	}
+	return nil
+}
+
+// checkRuleRoots refuses a rule whose first key is not a top-level key, unless none are listed.
+func checkRuleRoots(rules []CompiledRule, keys []string) error {
+	if len(keys) == 0 {
+		return nil
+	}
+	for i, r := range rules {
+		if k, _ := r.Path[0].Key(); !slices.Contains(keys, k) {
+			return fmt.Errorf("recognize[%d]: %q is not in topLevelKeys", i, k)
+		}
+	}
+	return nil
 }

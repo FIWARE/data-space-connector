@@ -6,6 +6,7 @@ import { initialState, reducer, type AppState } from './reducer'
 import { StageId } from './stageIds'
 
 const KUBECONFIG = '/home/me/.kube/config'
+const FILE = new File(['did:\n  enabled: true\n'], 'provider.yaml')
 
 /** A session in the middle of a configuration: several stages seen, a context picked, answers given. */
 const BUSY: AppState = {
@@ -25,8 +26,8 @@ describe('reducer', () => {
   })
 
   it('starts over on Review when a file is loaded', () => {
-    const next = reducer(BUSY, { type: 'fileLoaded', report: REPORT })
-    expect(next).toMatchObject({ entered: true, stage: StageId.Review, visited: [StageId.Review], expert: false, loaded: REPORT })
+    const next = reducer(BUSY, { type: 'fileLoaded', report: REPORT, file: FILE })
+    expect(next).toMatchObject({ entered: true, stage: StageId.Review, visited: [StageId.Review], expert: false, loaded: REPORT, loadedFile: FILE })
     expect(next.session).toEqual({ kubeconfig: KUBECONFIG, chosenContext: undefined })
     expect(next.answers).toEqual({ target: { ...emptyAnswers().target, chartVersion: REPORT.chartVersion } })
   })
@@ -36,12 +37,35 @@ describe('reducer', () => {
     [VersionSource.Latest, ''],
   ])('takes the chart version only from a header (%s)', (chartVersionFrom, expected) => {
     const report = { ...REPORT, chartVersionFrom }
-    expect(reducer(initialState, { type: 'fileLoaded', report }).answers.target.chartVersion).toBe(expected)
+    expect(reducer(initialState, { type: 'fileLoaded', report, file: FILE }).answers.target.chartVersion).toBe(expected)
   })
 
   it('forgets the loaded file on a new configuration', () => {
-    const loaded = reducer(BUSY, { type: 'fileLoaded', report: REPORT })
-    expect(reducer(loaded, { type: 'newConfiguration' }).loaded).toBeUndefined()
+    const loaded = reducer(BUSY, { type: 'fileLoaded', report: REPORT, file: FILE })
+    expect(reducer(loaded, { type: 'newConfiguration' })).toMatchObject({ loaded: undefined, loadedFile: undefined })
+  })
+
+  it('swaps only the report when the same file is re-read under another root', () => {
+    const loaded = { ...BUSY, stage: StageId.Review, loaded: REPORT, loadedFile: FILE }
+    const rerooted = { ...REPORT, root: 'dsc' }
+    expect(reducer(loaded, { type: 'rootChanged', report: rerooted, file: FILE })).toEqual({ ...loaded, loaded: rerooted })
+  })
+
+  it.each([
+    ['another file was opened since', new File(['did: {}\n'], FILE.name)],
+    ['the configuration was started over', undefined],
+  ])('drops a re-read of a file that is no longer loaded (%s)', (_, loadedFile) => {
+    const state = { ...BUSY, loaded: REPORT, loadedFile, rereading: true }
+    expect(reducer(state, { type: 'rootChanged', report: { ...REPORT, root: 'dsc' }, file: FILE })).toEqual({ ...state, rereading: false })
+  })
+
+  it.each([
+    ['a re-read answers', { type: 'rootChanged', report: REPORT, file: FILE } as const],
+    ['a re-read fails', { type: 'rootRereadFailed' } as const],
+  ])('marks a re-read in flight until %s', (_, end) => {
+    const started = reducer({ ...BUSY, loaded: REPORT, loadedFile: FILE }, { type: 'rootRereadStarted' })
+    expect(started.rereading).toBe(true)
+    expect(reducer(started, end).rereading).toBe(false)
   })
 
   it('closes the Expert view on any stage jump', () => {

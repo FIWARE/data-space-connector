@@ -1,9 +1,8 @@
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
-import type { LoadReport } from '../api/load'
 import { App } from '../App'
-import { mockApi, REPORT, refusedUpload } from '../test/api'
+import { lateLoad, mockApi, REPORT, refusedUpload } from '../test/api'
 import { OPEN_INPUT_LABEL } from './Start'
 
 const CARDS = ['New configuration', 'Open values.yaml', 'Open profile', 'Try it locally']
@@ -12,13 +11,6 @@ const HTTP_UNPROCESSABLE = 422
 
 function pick(name = 'provider.yaml') {
   return userEvent.upload(screen.getByLabelText(OPEN_INPUT_LABEL), new File(['a: 1\n'], name, { type: 'application/yaml' }))
-}
-
-/** A load that answers only when `resolve` is called. */
-function lateLoad() {
-  let resolve: (report: LoadReport) => void = () => {}
-  const pending = new Promise<LoadReport>((done) => (resolve = done))
-  return { load: () => pending, resolve }
 }
 
 function cards() {

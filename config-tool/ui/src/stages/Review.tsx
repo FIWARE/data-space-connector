@@ -1,5 +1,6 @@
 /** S7 Review: the load report of an opened values.yaml; the validation and generate panes come with Epic 6. */
-import { VersionSource, type DerivedAnswer, type LoadReport } from '../api/load'
+import { useState } from 'react'
+import { loadValues, RootSource, VersionSource, type DerivedAnswer, type LoadReport } from '../api/load'
 import { useStore } from '../state/context'
 import { carriedOverCount, understoodCount, underivedAnswers } from '../state/report'
 import { STAGE_LABELS, StageId } from '../state/stageIds'
@@ -18,6 +19,64 @@ function byStage(answers: readonly DerivedAnswer[]): [string, DerivedAnswer[]][]
   const groups = new Map<string, DerivedAnswer[]>()
   for (const answer of answers) groups.set(answer.stage, [...(groups.get(answer.stage) ?? []), answer])
   return [...groups]
+}
+
+/** Label of the root picker. */
+export const ROOT_LABEL = 'Read the chart’s values from'
+/** How the picker names the document root. */
+export const WHOLE_FILE = 'the whole file'
+
+function rootName(root: string): string {
+  return root === '' ? WHOLE_FILE : root
+}
+
+/** Where the chart's values were read from; another candidate re-reads the same file under that root.
+ *  A re-read is never aborted: the server swaps its slot anyway, so the UI must follow it (see `rootChanged`).
+ *  The in-flight flag lives in the store, so only one re-read runs and server and UI apply them in one order. */
+function RootPicker({ report, file }: { report: LoadReport; file?: File }) {
+  const { state, dispatch } = useStore()
+  const busy = state.rereading
+  const [error, setError] = useState<string>()
+  const roots = [...new Set([report.root, ...report.rootCandidates, ''])]
+  const how = report.rootFrom === RootSource.Detected ? 'detected' : 'as chosen'
+
+  async function reread(root: string) {
+    if (!file || busy) return
+    dispatch({ type: 'rootRereadStarted' })
+    setError(undefined)
+    try {
+      dispatch({ type: 'rootChanged', report: await loadValues(file, { root }), file })
+    } catch (failure) {
+      dispatch({ type: 'rootRereadFailed' })
+      setError(failure instanceof Error ? failure.message : String(failure))
+    }
+  }
+
+  return (
+    <div className="panel">
+      <h3>Chart values</h3>
+      <p>
+        Read from {report.root === '' ? WHOLE_FILE : <code>{report.root}</code>} ({how}). Keys outside it are carried over untouched.
+      </p>
+      {file && roots.length > 1 && (
+        <label>
+          {ROOT_LABEL}{' '}
+          <select value={report.root} disabled={busy} aria-busy={busy} onChange={(event) => void reread(event.target.value)}>
+            {roots.map((root) => (
+              <option key={root} value={root}>
+                {rootName(root)}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
+      {error && (
+        <p className="field-error" role="alert">
+          {error}
+        </p>
+      )}
+    </div>
+  )
 }
 
 function Counts({ report }: { report: LoadReport }) {
@@ -66,7 +125,7 @@ function Answers({ report }: { report: LoadReport }) {
   )
 }
 
-function Report({ report }: { report: LoadReport }) {
+function Report({ report, file }: { report: LoadReport; file?: File }) {
   const version =
     report.chartVersionFrom === VersionSource.Header ? 'from the file’s dsc-config header' : `latest bundle, because ${report.chartVersionNote ?? 'the header names none'}`
   return (
@@ -77,6 +136,7 @@ function Report({ report }: { report: LoadReport }) {
       <p className="lede">
         Chart {report.chart} {report.chartVersion} ({version}).
       </p>
+      <RootPicker report={report} file={file} />
       <div className="panel">
         <h3>Classification of {report.counts.total} keys</h3>
         <Counts report={report} />
@@ -104,5 +164,5 @@ function Report({ report }: { report: LoadReport }) {
 /** Review stage: the load report when a file was opened, otherwise the Epic 6 placeholder. */
 export function Review() {
   const { state } = useStore()
-  return state.loaded ? <Report report={state.loaded} /> : <Placeholder label={STAGE_LABELS[StageId.Review]} comingIn={REVIEW_COMING_IN} />
+  return state.loaded ? <Report report={state.loaded} file={state.loadedFile} /> : <Placeholder label={STAGE_LABELS[StageId.Review]} comingIn={REVIEW_COMING_IN} />
 }

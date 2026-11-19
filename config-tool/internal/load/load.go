@@ -53,9 +53,17 @@ const (
 	FromRecognized Origin = "recognized"
 )
 
-// Result is a loaded file. Doc is the untouched source and serves as the overrides layer.
+// Options tune a load; the zero value detects the root.
+type Options struct {
+	// Root is where the chart's values sit; nil detects it, an empty Path is the whole file.
+	Root *roundtrip.Path
+}
+
+// Result is a loaded file. Doc is the untouched source and serves as the overrides layer; Root
+// is where the chart's values sit in it.
 type Result struct {
 	Doc    *roundtrip.Document
+	Root   roundtrip.Path
 	Report Report
 }
 
@@ -66,15 +74,20 @@ type Report struct {
 	ChartVersion     string        `json:"chartVersion"`
 	ChartVersionFrom VersionSource `json:"chartVersionFrom"`
 	// ChartVersionNote says why the latest bundle was used; empty when the header chose it.
-	ChartVersionNote string   `json:"chartVersionNote,omitempty"`
-	Generated        bool     `json:"generated"`
-	Counts           Counts   `json:"counts"`
-	Owned            []Entry  `json:"owned"`
-	Recognized       []Entry  `json:"recognized"`
-	Unknown          []Entry  `json:"unknown"`
-	Skipped          []Entry  `json:"skipped"`
-	Answers          []Answer `json:"answers"`
-	Markers          []Marker `json:"markers"`
+	ChartVersionNote string `json:"chartVersionNote,omitempty"`
+	// Root is where the chart's values sit, in path syntax; "" is the whole file.
+	Root     string     `json:"root"`
+	RootFrom RootSource `json:"rootFrom"`
+	// RootCandidates are the mappings that hold chart keys, best first; a detected Root is the first.
+	RootCandidates []string `json:"rootCandidates"`
+	Generated      bool     `json:"generated"`
+	Counts         Counts   `json:"counts"`
+	Owned          []Entry  `json:"owned"`
+	Recognized     []Entry  `json:"recognized"`
+	Unknown        []Entry  `json:"unknown"`
+	Skipped        []Entry  `json:"skipped"`
+	Answers        []Answer `json:"answers"`
+	Markers        []Marker `json:"markers"`
 }
 
 // Counts are the list lengths; Total is their sum.
@@ -113,8 +126,9 @@ type Marker struct {
 }
 
 // Load parses src and classifies it against the matching bundle. Parse errors are wrapped, so
-// roundtrip.ErrMultiDocument stays matchable; ErrNoBundle when no fallback bundle exists.
-func Load(src []byte, name string, bundles []model.Bundle) (*Result, error) {
+// roundtrip.ErrMultiDocument stays matchable; ErrNoBundle when no fallback bundle exists, ErrRoot
+// when opts.Root is not a mapping.
+func Load(src []byte, name string, bundles []model.Bundle, opts Options) (*Result, error) {
 	doc, err := roundtrip.Parse(src)
 	if err != nil {
 		return nil, fmt.Errorf("load %s: %w", name, err)
@@ -123,14 +137,26 @@ func Load(src []byte, name string, bundles []model.Bundle) (*Result, error) {
 	if err != nil {
 		return nil, err
 	}
+	candidates := rootCandidates(roundtrip.Classify(doc, nil), chartKeys(bundle))
+	root, rootFrom := roundtrip.Path(nil), RootDetected
+	switch {
+	case opts.Root != nil:
+		if err := checkRoot(doc, *opts.Root); err != nil {
+			return nil, fmt.Errorf("load %s: %w", name, err)
+		}
+		root, rootFrom = *opts.Root, RootRequested
+	case len(candidates) > 0:
+		root = candidates[0].path
+	}
 	markers := doc.OwnedMarkers()
-	c := newClassifier(markers, bundle.Rules())
+	c := newClassifier(markers, bundle.Rules(), root)
 	roundtrip.Classify(doc, c.ownedPass)
 	leaves := roundtrip.Classify(doc, c.classify)
 
 	r := Report{
 		Source: name, Chart: bundle.Chart, ChartVersion: bundle.Version,
 		ChartVersionFrom: from, ChartVersionNote: note, Generated: doc.Generated(),
+		Root: root.String(), RootFrom: rootFrom, RootCandidates: make([]string, 0, len(candidates)),
 		Owned: []Entry{}, Recognized: []Entry{}, Unknown: []Entry{}, Skipped: []Entry{},
 		Answers: c.answerList(), Markers: c.markerList(),
 	}
@@ -147,13 +173,16 @@ func Load(src []byte, name string, bundles []model.Bundle) (*Result, error) {
 			r.Unknown = append(r.Unknown, e)
 		}
 	}
+	for _, cand := range candidates {
+		r.RootCandidates = append(r.RootCandidates, cand.path.String())
+	}
 	for _, s := range roundtrip.Skipped(doc) {
 		r.Skipped = append(r.Skipped, skippedEntry(doc, s))
 	}
 	r.Counts = Counts{Owned: len(r.Owned), Recognized: len(r.Recognized), Unknown: len(r.Unknown),
 		Skipped: len(r.Skipped)}
 	r.Counts.Total = r.Counts.Owned + r.Counts.Recognized + r.Counts.Unknown + r.Counts.Skipped
-	return &Result{Doc: doc, Report: r}, nil
+	return &Result{Doc: doc, Root: root, Report: r}, nil
 }
 
 // chooseBundle picks the bundle of the header's chart version, else the latest DefaultChart

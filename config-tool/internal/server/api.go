@@ -17,6 +17,7 @@ import (
 	"github.com/FIWARE/data-space-connector/config-tool/internal/model"
 	"github.com/FIWARE/data-space-connector/config-tool/internal/profile"
 	"github.com/FIWARE/data-space-connector/config-tool/internal/render"
+	"github.com/FIWARE/data-space-connector/config-tool/internal/roundtrip"
 	"github.com/FIWARE/data-space-connector/config-tool/internal/validate"
 	"github.com/FIWARE/data-space-connector/config-tool/internal/version"
 )
@@ -31,6 +32,8 @@ const (
 	queryKubeconfig = "kubeconfig"
 	// queryName is the uploaded file's name; only its base name is kept, for the report.
 	queryName = "name"
+	// queryRoot is where the chart's values sit in the file, in path syntax; absent means detect.
+	queryRoot = "root"
 	// defaultLoadName stands in for a load without a usable name.
 	defaultLoadName = "values.yaml"
 	// pathSeparators covers browser-supplied names from both POSIX and Windows.
@@ -156,6 +159,15 @@ func handleValidate(w http.ResponseWriter, r *http.Request) {
 
 // handleLoad classifies the uploaded values.yaml, keeps it as the loaded slot and returns its report.
 func (s *Server) handleLoad(w http.ResponseWriter, r *http.Request) {
+	var opts load.Options
+	if q := r.URL.Query(); q.Has(queryRoot) {
+		root, err := roundtrip.ParsePath(q.Get(queryRoot))
+		if err != nil {
+			writeError(w, http.StatusUnprocessableEntity, err.Error(), "")
+			return
+		}
+		opts.Root = &root
+	}
 	src, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxBodyBytes))
 	if err != nil {
 		writeError(w, bodyErrorStatus(err), err.Error(), "")
@@ -166,7 +178,7 @@ func (s *Server) handleLoad(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err.Error(), "")
 		return
 	}
-	res, err := load.Load(src, baseName(r.URL.Query().Get(queryName)), bundles)
+	res, err := load.Load(src, baseName(r.URL.Query().Get(queryName)), bundles, opts)
 	switch {
 	case errors.Is(err, load.ErrNoBundle):
 		writeError(w, http.StatusInternalServerError, err.Error(), "")

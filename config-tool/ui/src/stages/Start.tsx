@@ -50,8 +50,8 @@ function OpenValuesCard({ busy, setBusy, setError }: { busy: boolean; setBusy: (
     setBusy(true)
     setError(undefined)
     try {
-      const report = await loadValues(file, controller.signal)
-      if (!controller.signal.aborted) dispatch({ type: 'fileLoaded', report })
+      const report = await loadValues(file, { signal: controller.signal })
+      if (!controller.signal.aborted) dispatch({ type: 'fileLoaded', report, file })
     } catch (failure) {
       if (controller.signal.aborted) return
       setError(loadFailure(file.name, failure))

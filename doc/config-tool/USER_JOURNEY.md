@@ -64,7 +64,7 @@ Four entries, one screen ([mockup](MOCKUPS.md#s0--start)):
 | Entry | What happens |
 |---|---|
 | **New configuration** | Stage 1 with an empty answer set |
-| **Open an existing `values.yaml`** | The file is parsed, every key classified (see [Round-trip](FEATURE_MODEL.md#round-trip-and-provenance)), recognized answers pre-filled, unknown keys kept as overrides. Lands on Stage 7 with a summary of what was understood — the user is editing, not re-configuring |
+| **Open an existing `values.yaml`** | The file is parsed, every key classified (see [Round-trip](FEATURE_MODEL.md#round-trip-and-provenance)), recognized answers pre-filled, unknown keys kept as overrides. Lands on Stage 7 with a summary of what was understood — the user is editing, not re-configuring. Shipped behaviour: [Loading a values.yaml](../../config-tool/README.md#loading-a-valuesyaml) |
 | **Open a profile** (`.dscprofile.yaml`) | The tool's own answer set, saved from an earlier session. Lands on Stage 7 |
 | **Try it locally** | A one-screen path: pick "local trial", get the equivalent of the [Quick Start](../deployment-integration/local-deployment/LOCAL.MD) — trust anchor + provider + consumer profiles for a k3s on this machine. Skips stages 1–6 |
 

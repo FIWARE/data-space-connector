@@ -268,7 +268,7 @@ func TestLoad(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			src := []byte(tt.src)
-			res, err := Load(src, "values.yaml", bundles)
+			res, err := Load(src, "values.yaml", bundles, Options{})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -363,7 +363,7 @@ func TestChooseBundle(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			res, err := Load([]byte(tt.src), "values.yaml", bundles)
+			res, err := Load([]byte(tt.src), "values.yaml", bundles, Options{})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -384,7 +384,7 @@ func TestLoadMarkers(t *testing.T) {
 		"top: 1\n" +
 		"# dsc-config:owned domain.base,dsp.rainbow.enabled\n" +
 		"keycloak:\n  ingress:\n    hostname: keycloak.example.org\n"
-	res, err := Load([]byte(src), "values.yaml", fixtureBundleList(t))
+	res, err := Load([]byte(src), "values.yaml", fixtureBundleList(t), Options{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -410,7 +410,7 @@ func TestLoadErrors(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := Load([]byte(tt.src), "values.yaml", tt.bundles)
+			_, err := Load([]byte(tt.src), "values.yaml", tt.bundles, Options{})
 			if err == nil || (tt.want != nil && !errors.Is(err, tt.want)) {
 				t.Errorf("Load error = %v, want %v", err, tt.want)
 			}
@@ -432,7 +432,7 @@ func TestPreview(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			res, err := Load([]byte(tt.src), "v.yaml", fixtureBundleList(t))
+			res, err := Load([]byte(tt.src), "v.yaml", fixtureBundleList(t), Options{})
 			if err != nil {
 				t.Fatal(err)
 			}
