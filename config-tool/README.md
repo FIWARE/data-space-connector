@@ -84,7 +84,8 @@ internal/cli        front end: cobra commands
 internal/launcher   front end: browser tab, or the window under the wails tag
 internal/version    core: build identity stamped through -ldflags
 internal/model      core: question-model bundles per chart version
-internal/profile    core: the answer set
+internal/profile    core: the answer set and its .dscprofile.yaml format (ADR 0015)
+internal/atomicfile core: temp-file-and-rename writes that keep the file mode
 internal/cluster    core: kube context names from kubeconfig files, read-only
 internal/render     core: profile to values tree
 internal/roundtrip  core: parse / classify / merge / write of a values.yaml, byte-preserving
@@ -168,3 +169,5 @@ shipped rule path against the chart's `values.yaml`.
 `topLevelKeys` lists the chart's top-level values keys, by which a load finds values wrapped
 under another chart's key. When it is set, every rule must start with one of them, and a test
 keeps the latest bundle's list equal to the chart's `values.yaml`.
+`revision` (a positive integer, required) counts changes to a bundle within one chart version.
+A profile records `chart`, `version` and `revision` of the bundle it was built with (ADR 0015 §6).
