@@ -58,7 +58,8 @@ describe('Chrome', () => {
     await userEvent.click(railButton(index))
     expect(railButton(index)).toHaveAttribute('aria-current', 'step')
     const heading = screen.getByRole('heading', { level: 1 })
-    if (stage.component) {
+    // Review has a component, but without a loaded file it still shows its placeholder.
+    if (!stage.comingIn) {
       expect(heading).not.toHaveTextContent('not available yet')
     } else {
       expect(heading).toHaveTextContent(`${label} — not available yet`)

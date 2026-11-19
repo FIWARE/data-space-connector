@@ -12,6 +12,8 @@ export const BINARY_ENV = 'DSC_CONFIG_BIN'
 const EXE_SUFFIX = process.platform === 'win32' ? '.exe' : ''
 export const DEFAULT_BINARY = join(import.meta.dirname, '..', '..', 'bin', `dsc-config${EXE_SUFFIX}`)
 export const KUBECONFIG_FIXTURE = join(import.meta.dirname, 'fixtures', 'kubeconfig.yaml')
+/** A real hand-written values.yaml from the repository, opened through S0. */
+export const PROVIDER_VALUES = join(import.meta.dirname, '..', '..', '..', 'k3s', 'provider.yaml')
 /** The fixture's current-context, and the other context it holds. */
 export const FIXTURE_CURRENT_CONTEXT = 'prod-eu-central'
 export const FIXTURE_OTHER_CONTEXT = 'staging'
