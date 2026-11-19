@@ -48,7 +48,15 @@ describe('reducer', () => {
   it('swaps only the report when the same file is re-read under another root', () => {
     const loaded = { ...BUSY, stage: StageId.Review, loaded: REPORT, loadedFile: FILE }
     const rerooted = { ...REPORT, root: 'dsc' }
-    expect(reducer(loaded, { type: 'rootChanged', report: rerooted })).toEqual({ ...loaded, loaded: rerooted })
+    expect(reducer(loaded, { type: 'rootChanged', report: rerooted, file: FILE })).toEqual({ ...loaded, loaded: rerooted })
+  })
+
+  it.each([
+    ['another file was opened since', new File(['did: {}\n'], FILE.name)],
+    ['the configuration was started over', undefined],
+  ])('drops a re-read of a file that is no longer loaded (%s)', (_, loadedFile) => {
+    const state = { ...BUSY, loaded: REPORT, loadedFile }
+    expect(reducer(state, { type: 'rootChanged', report: { ...REPORT, root: 'dsc' }, file: FILE })).toBe(state)
   })
 
   it('closes the Expert view on any stage jump', () => {

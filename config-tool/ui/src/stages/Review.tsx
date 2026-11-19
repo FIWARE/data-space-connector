@@ -1,5 +1,5 @@
 /** S7 Review: the load report of an opened values.yaml; the validation and generate panes come with Epic 6. */
-import { useEffect, useRef, useState } from 'react'
+import { useState } from 'react'
 import { loadValues, RootSource, VersionSource, type DerivedAnswer, type LoadReport } from '../api/load'
 import { useStore } from '../state/context'
 import { carriedOverCount, understoodCount, underivedAnswers } from '../state/report'
@@ -31,30 +31,24 @@ function rootName(root: string): string {
 }
 
 /** Where the chart's values were read from; another candidate re-reads the same file under that root.
- *  Leaving Review aborts the re-read, so a late report never pulls the user back or replaces a newer load. */
+ *  A re-read is never aborted: the server swaps its slot anyway, so the UI must follow it (see `rootChanged`). */
 function RootPicker({ report, file }: { report: LoadReport; file?: File }) {
   const { dispatch } = useStore()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string>()
-  const upload = useRef<AbortController>()
   const roots = [...new Set([report.root, ...report.rootCandidates, ''])]
   const how = report.rootFrom === RootSource.Detected ? 'detected' : 'as chosen'
 
-  useEffect(() => () => upload.current?.abort(), [])
-
   async function reread(root: string) {
     if (!file) return
-    const controller = new AbortController()
-    upload.current = controller
     setBusy(true)
     setError(undefined)
     try {
-      const next = await loadValues(file, { root, signal: controller.signal })
-      if (!controller.signal.aborted) dispatch({ type: 'rootChanged', report: next })
+      dispatch({ type: 'rootChanged', report: await loadValues(file, { root }), file })
     } catch (failure) {
-      if (!controller.signal.aborted) setError(failure instanceof Error ? failure.message : String(failure))
+      setError(failure instanceof Error ? failure.message : String(failure))
     } finally {
-      if (!controller.signal.aborted) setBusy(false)
+      setBusy(false)
     }
   }
 

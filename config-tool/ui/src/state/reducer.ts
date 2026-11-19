@@ -25,7 +25,7 @@ export type Action =
   | { type: 'setTarget'; target: Partial<Target> }
   | { type: 'setSession'; session: Partial<Session> }
   | { type: 'fileLoaded'; report: LoadReport; file: File }
-  | { type: 'rootChanged'; report: LoadReport }
+  | { type: 'rootChanged'; report: LoadReport; file: File }
   | { type: 'openExpert' }
 
 /** The state before anything was chosen on S0. */
@@ -64,7 +64,8 @@ export function reducer(state: AppState, action: Action): AppState {
       return startOver(state, StageId.Review, loadedAnswers(action.report), action.report, action.file)
     case 'rootChanged':
       // The same file under another root: not a new configuration, so stage, visits, answers and session stay.
-      return { ...state, loaded: action.report }
+      // A late answer for a file that has since been replaced or dropped is stale.
+      return state.loadedFile === action.file ? { ...state, loaded: action.report } : state
     case 'goTo':
       return { ...state, stage: action.stage, visited: visit(state.visited, action.stage), expert: false }
     case 'openExpert':

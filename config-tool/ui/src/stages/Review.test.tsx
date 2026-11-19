@@ -89,17 +89,20 @@ describe('Review', () => {
     expect(init?.body).toBe(FILE)
   })
 
-  it('drops a re-read that answers after the user left Review', async () => {
+  it('applies a re-read that answers after the user left Review, without pulling them back', async () => {
     const late = lateLoad()
     const fetchMock = mockApi(undefined, undefined, late.load)
     renderReview(WRAPPED, FILE)
     await userEvent.selectOptions(screen.getByLabelText(ROOT_LABEL), WHOLE_FILE)
-    await userEvent.click(within(screen.getByRole('navigation', { name: 'Stages' })).getByRole('button', { name: /Foundations/ }))
+    const nav = within(screen.getByRole('navigation', { name: 'Stages' }))
+    await userEvent.click(nav.getByRole('button', { name: /Foundations/ }))
     const init = fetchMock.mock.calls.find(([input]) => String(input).includes('/api/load'))?.[1]
-    expect(init?.signal?.aborted).toBe(true)
+    expect(init?.signal?.aborted).toBeFalsy()
     late.resolve({ ...WRAPPED, root: '', rootFrom: RootSource.Requested })
     await act(() => Promise.resolve())
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Foundations — not available yet')
+    await userEvent.click(nav.getByRole('button', { name: /Review/ }))
+    expect(screen.getByText(/Read from/)).toHaveTextContent(`Read from ${WHOLE_FILE} (as chosen)`)
   })
 
   it('keeps the report and shows why a re-read was refused', async () => {
