@@ -22,7 +22,7 @@ const (
 
 func TestModel(t *testing.T) {
 	bundle := func(chart, version string) *fstest.MapFile {
-		return &fstest.MapFile{Data: []byte("chart: " + chart + "\nversion: " + version + "\n")}
+		return &fstest.MapFile{Data: []byte("chart: " + chart + "\nversion: " + version + "\nrevision: 1\n")}
 	}
 	tests := []struct {
 		name     string

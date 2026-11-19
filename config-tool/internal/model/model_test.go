@@ -20,7 +20,7 @@ const (
 )
 
 func bundleFile(chart, version string) *fstest.MapFile {
-	return &fstest.MapFile{Data: []byte("chart: " + chart + "\nversion: " + version + "\n")}
+	return &fstest.MapFile{Data: []byte("chart: " + chart + "\nversion: " + version + "\nrevision: 1\n")}
 }
 
 func TestVersions(t *testing.T) {
@@ -34,7 +34,7 @@ func TestVersions(t *testing.T) {
 		{
 			name: "single bundle is latest",
 			fs:   fstest.MapFS{"10.16.0/bundle.yaml": bundleFile(chart, "10.16.0")},
-			want: []Bundle{{Chart: chart, Version: "10.16.0", Latest: true}},
+			want: []Bundle{{Chart: chart, Version: "10.16.0", Revision: 1, Latest: true}},
 		},
 		{
 			name: "semver order, not lexical",
@@ -47,10 +47,10 @@ func TestVersions(t *testing.T) {
 				"no-bundle-here/notes.yaml": {Data: []byte("ignored")},
 			},
 			want: []Bundle{
-				{Chart: chart, Version: "10.16.0", Latest: true},
-				{Chart: chart, Version: "10.16.0-rc.1"},
-				{Chart: chart, Version: "10.9.1"},
-				{Chart: chart, Version: "9.2.0"},
+				{Chart: chart, Version: "10.16.0", Revision: 1, Latest: true},
+				{Chart: chart, Version: "10.16.0-rc.1", Revision: 1},
+				{Chart: chart, Version: "10.9.1", Revision: 1},
+				{Chart: chart, Version: "9.2.0", Revision: 1},
 			},
 		},
 		{
@@ -60,8 +60,8 @@ func TestVersions(t *testing.T) {
 				"10.17.0-rc.1/bundle.yaml": bundleFile(chart, "10.17.0-rc.1"),
 			},
 			want: []Bundle{
-				{Chart: chart, Version: "10.17.0-rc.1"},
-				{Chart: chart, Version: "10.16.0", Latest: true},
+				{Chart: chart, Version: "10.17.0-rc.1", Revision: 1},
+				{Chart: chart, Version: "10.16.0", Revision: 1, Latest: true},
 			},
 		},
 		{
@@ -71,8 +71,8 @@ func TestVersions(t *testing.T) {
 				"10.17.0-rc.2/bundle.yaml": bundleFile(chart, "10.17.0-rc.2"),
 			},
 			want: []Bundle{
-				{Chart: chart, Version: "10.17.0-rc.2", Latest: true},
-				{Chart: chart, Version: "10.17.0-rc.1"},
+				{Chart: chart, Version: "10.17.0-rc.2", Revision: 1, Latest: true},
+				{Chart: chart, Version: "10.17.0-rc.1", Revision: 1},
 			},
 		},
 		{
@@ -84,10 +84,10 @@ func TestVersions(t *testing.T) {
 				"0.3.0-rc.1/bundle.yaml": bundleFile(trustAnchor, "0.3.0-rc.1"),
 			},
 			want: []Bundle{
-				{Chart: chart, Version: "10.16.0", Latest: true},
-				{Chart: chart, Version: "10.15.0"},
-				{Chart: trustAnchor, Version: "0.3.0-rc.1"},
-				{Chart: trustAnchor, Version: "0.2.0", Latest: true},
+				{Chart: chart, Version: "10.16.0", Revision: 1, Latest: true},
+				{Chart: chart, Version: "10.15.0", Revision: 1},
+				{Chart: trustAnchor, Version: "0.3.0-rc.1", Revision: 1},
+				{Chart: trustAnchor, Version: "0.2.0", Revision: 1, Latest: true},
 			},
 		},
 		{name: "version is not semver", fs: fstest.MapFS{"latest/bundle.yaml": bundleFile(chart, "latest")}, wantErr: "not semver"},
@@ -96,6 +96,8 @@ func TestVersions(t *testing.T) {
 		{name: "v prefix", fs: fstest.MapFS{"v10.16.0/bundle.yaml": bundleFile(chart, "v10.16.0")}, wantErr: "not semver"},
 		{name: "version differs from directory", fs: fstest.MapFS{"10.16.0/bundle.yaml": bundleFile(chart, "10.15.0")}, wantErr: "does not match"},
 		{name: "chart missing", fs: fstest.MapFS{"10.16.0/bundle.yaml": bundleFile("", "10.16.0")}, wantErr: "chart is missing"},
+		{name: "revision missing", fs: fstest.MapFS{"10.16.0/bundle.yaml": {Data: []byte("chart: " + chart + "\nversion: 10.16.0\n")}}, wantErr: "revision is missing"},
+		{name: "revision zero", fs: fstest.MapFS{"10.16.0/bundle.yaml": {Data: []byte("chart: " + chart + "\nversion: 10.16.0\nrevision: 0\n")}}, wantErr: "revision is missing"},
 		{name: "not YAML", fs: fstest.MapFS{"10.16.0/bundle.yaml": {Data: []byte("chart: [")}}, wantErr: "10.16.0/bundle.yaml"},
 	}
 	for _, tc := range tests {
@@ -118,8 +120,8 @@ func TestVersions(t *testing.T) {
 }
 
 func TestCharts(t *testing.T) {
-	dsc10, dsc9 := Bundle{Chart: chart, Version: "10.16.0", Latest: true}, Bundle{Chart: chart, Version: "9.2.0"}
-	ta := Bundle{Chart: trustAnchor, Version: "0.2.0", Latest: true}
+	dsc10, dsc9 := Bundle{Chart: chart, Version: "10.16.0", Revision: 1, Latest: true}, Bundle{Chart: chart, Version: "9.2.0", Revision: 1}
+	ta := Bundle{Chart: trustAnchor, Version: "0.2.0", Revision: 1, Latest: true}
 	tests := []struct {
 		name    string
 		bundles []Bundle
@@ -161,7 +163,7 @@ const (
 )
 
 func rulesBundle(rules string) fstest.MapFS {
-	return fstest.MapFS{fixtureFile: {Data: []byte("chart: " + chart + "\nversion: 1.0.0\nrecognize:\n" + rules)}}
+	return fstest.MapFS{fixtureFile: {Data: []byte("chart: " + chart + "\nversion: 1.0.0\nrevision: 1\nrecognize:\n" + rules)}}
 }
 
 func TestRuleValidation(t *testing.T) {
@@ -262,7 +264,7 @@ func TestEmbeddedRulesResolve(t *testing.T) {
 }
 
 func TestTopLevelKeysValidation(t *testing.T) {
-	const head = "chart: " + chart + "\nversion: 1.0.0\n"
+	const head = "chart: " + chart + "\nversion: 1.0.0\nrevision: 1\n"
 	tests := []struct {
 		name    string
 		body    string
