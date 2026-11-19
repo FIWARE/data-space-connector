@@ -1,9 +1,9 @@
-import { render, screen, within } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { StrictMode } from 'react'
 import { describe, expect, it } from 'vitest'
 import { App } from '../App'
-import type { Profile, RecentEntry } from '../api/profile'
+import type { Profile, RecentEntry, RecentProfiles } from '../api/profile'
 import { emptyAnswers, TargetType } from '../state/answers'
 import { DEFAULT_DIR, HTTP_NOT_FOUND, lateLoad, mockApi, REPORT, refusedProfile, refusedUpload } from '../test/api'
 import { OPEN_INPUT_LABEL, PROFILE_PATH_LABEL } from './Start'
@@ -169,6 +169,41 @@ describe('Start: profiles', () => {
     await userEvent.click(await screen.findByRole('button', { name: /^consumer/ }))
     expect(await screen.findByRole('alert')).toHaveTextContent(`Cannot open ${path}: ${refusedProfile(path, HTTP_NOT_FOUND)}`)
     expect(screen.queryByRole('navigation', { name: 'Stages' })).toBeNull()
+  })
+
+  it.each([
+    ['a corrupt store', 'the recent list cannot be read: yaml: line 1: did not find expected key'],
+    ['no config directory', 'the recent list is not available: no user config directory (set DSC_CONFIG_HOME)'],
+  ])('shows why the Recent list is missing with %s', async (_, note) => {
+    mockApi(undefined, undefined, undefined, { recent: () => ({ entries: [], defaultDir: DEFAULT_DIR, notes: [note] }) })
+    render(<App />)
+    expect(await screen.findByText(note)).toHaveClass('hint')
+    expect(screen.queryByRole('region', { name: 'Recent' })).toBeNull()
+  })
+
+  it('prefills the path field with a default directory that arrives after the card was opened', async () => {
+    let resolve: (list: RecentProfiles) => void = () => {}
+    const pending = new Promise<RecentProfiles>((done) => (resolve = done))
+    mockApi(undefined, undefined, undefined, { recent: () => pending })
+    render(<App />)
+    await userEvent.click(screen.getByRole('button', { name: /Open profile/ }))
+    const field = screen.getByLabelText(PROFILE_PATH_LABEL)
+    expect(field).toHaveValue('')
+    resolve({ entries: [], defaultDir: DEFAULT_DIR, notes: [] })
+    await waitFor(() => expect(field).toHaveValue(`${DEFAULT_DIR}/`))
+  })
+
+  it('keeps a typed path when the default directory arrives late', async () => {
+    let resolve: (list: RecentProfiles) => void = () => {}
+    const pending = new Promise<RecentProfiles>((done) => (resolve = done))
+    mockApi(undefined, undefined, undefined, { recent: () => pending })
+    render(<App />)
+    await userEvent.click(screen.getByRole('button', { name: /Open profile/ }))
+    const field = screen.getByLabelText(PROFILE_PATH_LABEL)
+    await userEvent.type(field, '/srv/x.dscprofile.yaml')
+    resolve({ entries: RECENT, defaultDir: DEFAULT_DIR, notes: [] })
+    await screen.findByRole('region', { name: 'Recent' })
+    expect(field).toHaveValue('/srv/x.dscprofile.yaml')
   })
 
   it('shows no Recent list when the list cannot be read', async () => {

@@ -106,9 +106,11 @@ function OpenProfileCard({ busy, onClick }: { busy: boolean; onClick: () => void
   )
 }
 
-/** The path field the Open profile card shows, prefilled with the default directory. */
+/** The path field the Open profile card shows, prefilled with the default directory.
+ *  The prefill follows `initial` until the user types, so a directory that arrives late still lands. */
 function OpenProfilePath({ initial, busy, onOpen }: { initial: string; busy: boolean; onOpen: (path: string) => void }) {
-  const [path, setPath] = useState(initial)
+  const [typed, setPath] = useState<string>()
+  const path = typed ?? initial
   return (
     <form
       className="panel open-path"
@@ -158,6 +160,7 @@ export function Start() {
   const [loading, setLoading] = useState(false)
   const [recent, setRecent] = useState<RecentEntry[]>([])
   const [defaultDir, setDefaultDir] = useState('')
+  const [recentNotes, setRecentNotes] = useState<readonly string[]>([])
   const [pathOpen, setPathOpen] = useState(false)
   const open = useOpenProfile(setLoading, setLoadError)
 
@@ -167,6 +170,7 @@ export function Start() {
       .then((list) => {
         setRecent(list.entries)
         setDefaultDir(list.defaultDir)
+        setRecentNotes(list.notes)
       })
       // The list is a shortcut; without it the Open profile path field still works.
       .catch(() => undefined)
@@ -200,6 +204,11 @@ export function Start() {
         </p>
       )}
       <Recent entries={recent} busy={loading} onOpen={(path) => void open(path)} />
+      {recentNotes.map((note) => (
+        <p key={note} className="hint">
+          {note}
+        </p>
+      ))}
       <p className="links">
         <a href={DOCUMENTATION_URL} target="_blank" rel="noreferrer">
           Documentation ↗

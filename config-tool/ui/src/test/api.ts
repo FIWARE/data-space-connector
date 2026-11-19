@@ -88,7 +88,7 @@ export type ProfileAnswer<T> = T | number
 
 /** The profile routes' fakes; by default the list is empty, save echoes and open finds nothing. */
 export interface ProfileFakes {
-  recent?: () => ProfileAnswer<RecentProfiles>
+  recent?: () => ProfileAnswer<RecentProfiles> | Promise<ProfileAnswer<RecentProfiles>>
   save?: (body: SaveBody) => ProfileAnswer<ProfileResponse>
   open?: (path: string) => ProfileAnswer<ProfileResponse> | Promise<ProfileAnswer<ProfileResponse>>
 }
@@ -127,7 +127,7 @@ export function mockApi(
       return typeof answer === 'number' ? json({ error: refusedUpload(name, answer) }, answer) : json(answer)
     }
     const answer = <T,>(path: string, value: ProfileAnswer<T>) => (typeof value === 'number' ? json({ error: refusedProfile(path, value) }, value) : json(value))
-    if (url.pathname === '/api/profile/recent') return answer('recent', fakes.recent())
+    if (url.pathname === '/api/profile/recent') return answer('recent', await fakes.recent())
     if (url.pathname === '/api/profile' && init?.method === 'PUT') {
       const body = JSON.parse(String(init.body)) as SaveBody
       return answer(body.path, fakes.save(body))
