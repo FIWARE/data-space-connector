@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { emptyAnswers, Environment, TargetType, type Target } from './answers'
-import { initialState } from './reducer'
-import { MAX_NAMESPACE_LENGTH, MAX_RELEASE_NAME_LENGTH, MSG_REQUIRED, TargetField, targetIssues, validateTarget } from './target'
+import { MAX_NAMESPACE_LENGTH, MAX_RELEASE_NAME_LENGTH, MSG_REQUIRED, TargetField, validateTarget } from './target'
 
 const VALID: Target = {
   ...emptyAnswers().target,
@@ -31,16 +30,5 @@ describe('validateTarget', () => {
     ['a release name with a leading digit', { releaseName: '1provider' }, [[TargetField.ReleaseName, expect.stringContaining('start with a letter')]]],
   ])('%s', (_name, change, want) => {
     expect(validateTarget({ ...VALID, ...change }).map((e) => [e.field, e.message])).toEqual(want)
-  })
-})
-
-describe('targetIssues', () => {
-  it.each<[string, Partial<Target>, number, number]>([
-    ['complete', {}, 0, 0],
-    ['empty', emptyAnswers().target, 0, 5],
-    ['invalid', { namespace: 'Bad_NS', releaseName: '1abc' }, 2, 0],
-  ])('counts %s inputs', (_name, change, errors, open) => {
-    const state = { ...initialState, answers: { target: { ...VALID, ...change } } }
-    expect(targetIssues(state)).toEqual({ warnings: 0, errors, open })
   })
 })

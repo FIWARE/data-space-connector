@@ -73,4 +73,29 @@ describe('reducer', () => {
     expect(expert.expert).toBe(true)
     expect(reducer(expert, { type: 'goTo', stage: StageId.Role }).expert).toBe(false)
   })
+
+  it.each<[string, AppState['open'], AppState['open']]>([
+    ['marks a field, keeping the ids sorted', ['target.type'], ['target.namespace', 'target.type']],
+    ['unmarks a marked field', ['target.namespace', 'target.type'], ['target.type']],
+  ])('%s and keeps its value', (_name, open, want) => {
+    const next = reducer({ ...BUSY, open }, { type: 'toggleOpen', field: 'target.namespace' })
+    expect(next.open).toEqual(want)
+    expect(next.answers).toBe(BUSY.answers)
+  })
+
+  it('jumps to the stage of a focused field, closing the Expert view, until the stage is done with it', () => {
+    const focused = reducer(BUSY, { type: 'focusField', field: 'target.namespace' })
+    expect(focused).toMatchObject({ stage: StageId.Target, expert: false, focus: 'target.namespace' })
+    expect(focused.visited).toEqual(BUSY.visited)
+    expect(reducer(focused, { type: 'focusDone' }).focus).toBeUndefined()
+  })
+
+  it.each([
+    ['a new configuration', { type: 'newConfiguration' } as const],
+    ['a loaded file', { type: 'fileLoaded', report: REPORT, file: FILE } as const],
+  ])('drops markers and focus on %s', (_name, action) => {
+    const next = reducer({ ...BUSY, open: ['target.namespace'], focus: 'target.namespace' }, action)
+    expect(next.open).toEqual([])
+    expect(next.focus).toBeUndefined()
+  })
 })
