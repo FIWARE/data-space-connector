@@ -7,14 +7,17 @@ import (
 	"net"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/coder/websocket"
 	"github.com/coder/websocket/wsjson"
 
 	"github.com/FIWARE/data-space-connector/config-tool/internal/cluster"
+	"github.com/FIWARE/data-space-connector/config-tool/internal/load"
 	"github.com/FIWARE/data-space-connector/config-tool/internal/model"
 	"github.com/FIWARE/data-space-connector/config-tool/internal/profile"
 	"github.com/FIWARE/data-space-connector/config-tool/internal/render"
+	"github.com/FIWARE/data-space-connector/config-tool/internal/roundtrip"
 	"github.com/FIWARE/data-space-connector/config-tool/internal/validate"
 	"github.com/FIWARE/data-space-connector/config-tool/internal/version"
 )
@@ -27,10 +30,17 @@ const (
 	eventReady      = "ready"
 	// queryKubeconfig names the explicit kubeconfig path; empty means clientcmd's default rules.
 	queryKubeconfig = "kubeconfig"
+	// queryName is the uploaded file's name; only its base name is kept, for the report.
+	queryName = "name"
+	// queryRoot is where the chart's values sit in the file, in path syntax; absent means detect.
+	queryRoot = "root"
+	// defaultLoadName stands in for a load without a usable name.
+	defaultLoadName = "values.yaml"
+	// pathSeparators covers browser-supplied names from both POSIX and Windows.
+	pathSeparators = `/\`
 
 	// The tickets that replace a stub, reported with its 501.
 	ticketRender  = "Epic 3/5"
-	ticketLoad    = "CT-3"
 	ticketProfile = "CT-4"
 )
 
@@ -48,7 +58,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/cluster/contexts", handleContexts)
 	mux.Handle("GET /api/profile", notImplemented("profiles are not available yet", ticketProfile))
 	mux.Handle("PUT /api/profile", notImplemented("profiles are not available yet", ticketProfile))
-	mux.Handle("POST /api/load", notImplemented("loading a values.yaml is not available yet", ticketLoad))
+	mux.HandleFunc("POST /api/load", s.handleLoad)
 	mux.HandleFunc("POST /api/render", handleRender)
 	mux.HandleFunc("POST /api/validate", handleValidate)
 	mux.HandleFunc("GET "+pathWS, s.handleWebSocket)
@@ -145,6 +155,50 @@ func handleValidate(w http.ResponseWriter, r *http.Request) {
 	default:
 		w.WriteHeader(http.StatusNoContent)
 	}
+}
+
+// handleLoad classifies the uploaded values.yaml, keeps it as the loaded slot and returns its report.
+func (s *Server) handleLoad(w http.ResponseWriter, r *http.Request) {
+	var opts load.Options
+	if q := r.URL.Query(); q.Has(queryRoot) {
+		root, err := roundtrip.ParsePath(q.Get(queryRoot))
+		if err != nil {
+			writeError(w, http.StatusUnprocessableEntity, err.Error(), "")
+			return
+		}
+		opts.Root = &root
+	}
+	src, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxBodyBytes))
+	if err != nil {
+		writeError(w, bodyErrorStatus(err), err.Error(), "")
+		return
+	}
+	bundles, err := model.Versions(s.models)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error(), "")
+		return
+	}
+	res, err := load.Load(src, baseName(r.URL.Query().Get(queryName)), bundles, opts)
+	switch {
+	case errors.Is(err, load.ErrNoBundle):
+		writeError(w, http.StatusInternalServerError, err.Error(), "")
+	case err != nil:
+		writeError(w, http.StatusUnprocessableEntity, err.Error(), "")
+	default:
+		s.loadMu.Lock()
+		s.loaded = res
+		s.loadMu.Unlock()
+		writeJSON(w, res.Report)
+	}
+}
+
+// baseName drops any directory part of a browser-supplied file name.
+func baseName(name string) string {
+	name = name[strings.LastIndexAny(name, pathSeparators)+1:]
+	if name == "" || name == "." || name == ".." {
+		return defaultLoadName
+	}
+	return name
 }
 
 // decodeJSON reads exactly one JSON value from the capped body into v; an empty body leaves v

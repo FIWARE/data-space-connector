@@ -15,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/FIWARE/data-space-connector/config-tool/internal/load"
 	"github.com/FIWARE/data-space-connector/config-tool/model"
 )
 
@@ -48,6 +49,10 @@ type Server struct {
 	shutdown context.Context
 	cancel   context.CancelFunc
 	now      func() time.Time
+
+	// loaded is the most recent POST /api/load, the overrides layer CT-4 saves; a new load replaces it.
+	loaded *load.Result
+	loadMu sync.Mutex
 
 	mu          sync.Mutex
 	sessions    map[string]struct{}

@@ -1,3 +1,19 @@
-# Question-model bundle of chart 10.16.0; later epics add the questions.
+# Question-model bundle of chart 10.16.0; value rules come with Epic 3's questions.
 chart: data-space-connector
 version: 10.16.0
+topLevelKeys: [
+  nameOverride, fullnameOverride, imagePullSecrets, issuance, decentralizedIam, scorpio, elsi,
+  keycloak, tm-forum-api, statusListServer, rainbow, contract-management, did, registration,
+  dataSpaceConfig, mongo-operator, managedMongo, marketplace, fdsc-edc, vcCredentials, vc-operator,
+  identityhub, vault, cert-manager, certManagerResources, extraManifests, fdsc-dashboard,
+  prometheus, grafana, tracing, opentelemetry-operator, opentelemetry-collector, tempo,
+  consentManagement, consent-facade, consent-owner-resolver]
+recognize:
+  - {path: did.enabled, answer: identity.did.enabled, stage: features, kind: toggle}
+  - {path: statusListServer.enabled, answer: identity.statuslist.enabled, stage: features, kind: toggle}
+  - {path: keycloak.realm.wallets.enabled, answer: identity.wallets.enabled, stage: features, kind: toggle}
+  - {path: scorpio.enabled, answer: data.scorpio.enabled, stage: features, kind: toggle}
+  - {path: tm-forum-api.enabled, answer: contract.tmforum.enabled, stage: features, kind: toggle}
+  - {path: marketplace.enabled, answer: market.local.enabled, stage: features, kind: toggle}
+  - {path: rainbow.enabled, answer: dsp.rainbow.enabled, stage: features, kind: toggle}
+  - {path: dataSpaceConfig.enabled, answer: dsp.config.enabled, stage: features, kind: toggle}

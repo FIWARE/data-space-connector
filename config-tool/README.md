@@ -88,6 +88,7 @@ internal/profile    core: the answer set
 internal/cluster    core: kube context names from kubeconfig files, read-only
 internal/render     core: profile to values tree
 internal/roundtrip  core: parse / classify / merge / write of a values.yaml, byte-preserving
+internal/load       core: owned / recognized / unknown classification and the load report
 internal/validate   core: values against the chart's schema
 model/<version>/    question-model bundles, embedded
 ui/                 React/TypeScript SPA, built into ui/dist and embedded
@@ -111,6 +112,43 @@ whose text span cannot be determined safely (`ErrUnsupportedScalar`). A duplicat
 to its last occurrence, as in Helm; the earlier ones stay untouched. The corpus test round-trips
 every `k3s/*.yaml` and both charts' `values.yaml`, and edits each of their scalar leaves on its own.
 
+## Loading a values.yaml
+
+*Open an existing values.yaml* on S0 uploads the chosen file's bytes, never a path or decoded
+text, to `POST /api/load?name=<basename>`. The body is capped at 8 MiB (413 above it), and a file
+`roundtrip` refuses gives 422. `internal/load` classifies every leaf in this order
+([ADR 0014](../doc/adr/0014-config-tool-load-classification.md)):
+
+- **owned**: under a `# dsc-config:owned <id>[,<id>...]` marker. The marker sits in the head
+  comment of a mapping key and owns that key's subtree and the following siblings, until a blank
+  line between siblings, the next sibling with its own head comment, or the end of the mapping.
+  Markers count only in a file that carries the generated header.
+- **recognized**: a scalar whose path matches a `recognize:` rule of the bundle (see
+  [Chart versions](#chart-versions)) and whose derived value is the answer's value.
+- **unknown**: everything else, including a matching leaf whose value differs from the answer
+  (`differs from <answer> = <value>`): it was pinned by hand and is never overwritten.
+
+The chart's values may sit under a wrapper key, e.g. `dsc:` when Argo CD or an umbrella chart
+packages this chart as a dependency. Rule paths are relative to that *root*: the load picks the
+mapping, at most three keys deep, whose chart top-level keys (`topLevelKeys` in the bundle)
+outnumber its other keys by the widest margin, and `?root=<path>` overrides it (`?root=` is the whole file).
+Review names the root and re-reads the file under another candidate; keys outside the root are
+unknown. A re-read only swaps the report (stage, answers and the chosen context stay). It is applied
+even when the user has left Review meanwhile, as the server's slot follows it too; it is dropped
+only when another file was opened or the configuration started over. One re-read runs at a time:
+the picker stays disabled until it answers, even across leaving and returning to Review.
+
+Owned leaves back-derive answers too, and before the others, so an owned value always wins.
+Pairs `roundtrip` cannot address (a shadowed duplicate key, an alias or complex key) are listed
+once each as *skipped*. The bundle is the one for the header's chart version, otherwise the
+latest one, and the report says why. Recognizing a new key is a bundle change: the epic that adds
+a question appends its rule to `model/<version>/bundle.yaml`, without code.
+
+The UI lands on Review with the report: counts, derived answers, and each entry with its file
+line. Back-derived answers show read-only on their stage's placeholder; only `target.chartVersion`
+becomes an answer. Expert / Overrides lists the unknown and skipped entries. The server keeps the
+latest load in memory as the overrides layer for CT-4; nothing is written to disk.
+
 ## Chart versions
 
 Each supported chart version has a question-model bundle in `model/<version>/bundle.yaml`,
@@ -120,3 +158,13 @@ groups the versions by the bundle's `chart`, and the Target stage offers only th
 Per chart, the highest release is the default; a pre-release becomes the default only when that
 chart has no release bundled. The layout holds one bundle per version, so two charts cannot share
 a version number yet.
+
+A bundle's `recognize:` list maps chart keys back to answers when an existing `values.yaml` is
+opened (ADR 0014). Each rule has an exact `path`, an `answer` id, a `stage`, a `kind` (`toggle`
+for a `!!bool`, `value` for any scalar) and, on `value` rules only, an optional `pattern` with
+one capture group. Rules that share an answer must agree on its `stage` and `kind`. A bundle with
+an unknown key, an invalid rule or a duplicate path fails to load, and a test checks every
+shipped rule path against the chart's `values.yaml`.
+`topLevelKeys` lists the chart's top-level values keys, by which a load finds values wrapped
+under another chart's key. When it is set, every rule must start with one of them, and a test
+keeps the latest bundle's list equal to the chart's `values.yaml`.

@@ -351,3 +351,61 @@ func TestClassifyMergeKeyIsOneLeaf(t *testing.T) {
 		t.Errorf("Classify = %v, want %v", got, want)
 	}
 }
+
+// skipSummary is a SkippedPair with its parent as a string and its key as source text.
+type skipSummary struct {
+	parent     string
+	key        string
+	line       int
+	shadowedBy int
+	reason     SkipReason
+}
+
+func TestSkipped(t *testing.T) {
+	tests := []struct {
+		name string
+		src  []byte
+		want []skipSummary
+	}{
+		{name: duplicateKeysFixture, src: readFile(t, filepath.Join(testdataDir, duplicateKeysFixture)), want: []skipSummary{
+			{"", "a", 2, 3, SkipShadowed},
+			{"", "c", 5, 7, SkipShadowed},
+		}},
+		{name: "non-scalar-keys.yaml", src: readFile(t, filepath.Join(testdataDir, "non-scalar-keys.yaml")), want: []skipSummary{
+			{"", "k", 3, 0, SkipNonScalarKey},
+			{"", "", 5, 0, SkipNonScalarKey},
+			{"", "", 7, 0, SkipNonScalarKey},
+		}},
+		{name: "distinct complex keys", src: []byte("? {a: 1}\n: x\n? {b: 2}\n: y\n? [c]\n: z\n? [d]\n: w\n"), want: []skipSummary{
+			{"", "", 1, 0, SkipNonScalarKey},
+			{"", "", 3, 0, SkipNonScalarKey},
+			{"", "", 5, 0, SkipNonScalarKey},
+			{"", "", 7, 0, SkipNonScalarKey},
+		}},
+		{name: "duplicate inside a shadowed subtree", src: []byte("a:\n  x: 1\n  x: 2\na: 3\n"), want: []skipSummary{
+			{"", "a", 1, 4, SkipShadowed},
+		}},
+		{name: "duplicate inside a live subtree", src: []byte("b:\n  - y: 1\n    y: 2\n"), want: []skipSummary{
+			{"b[0]", "y", 2, 3, SkipShadowed},
+		}},
+		{name: "none", src: []byte("a: 1\n")},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var got []skipSummary
+			for _, s := range Skipped(mustParse(t, tt.src)) {
+				got = append(got, skipSummary{s.Parent.String(), s.Key.Value, s.Line, s.ShadowedBy, s.Reason})
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("Skipped =\n%v\nwant\n%v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestSkippedCorpus(t *testing.T) {
+	d := mustParse(t, readFile(t, filepath.Join(k3sDir, "consumer.yaml")))
+	if len(Skipped(d)) == 0 {
+		t.Error("Skipped found no pair in k3s/consumer.yaml, which has duplicate keys")
+	}
+}

@@ -15,7 +15,7 @@ export function Rail({ stages }: { stages: readonly StageDef[] }) {
             <li key={stage.id}>
               <button
                 type="button"
-                aria-current={stage.id === state.stage ? 'step' : undefined}
+                aria-current={stage.id === state.stage && !state.expert ? 'step' : undefined}
                 onClick={() => dispatch({ type: 'goTo', stage: stage.id })}
               >
                 <span className={`st ${status}`} title={STATUS_LEGEND[status]} aria-label={STATUS_LEGEND[status]}>
@@ -30,7 +30,13 @@ export function Rail({ stages }: { stages: readonly StageDef[] }) {
         })}
       </ol>
       <hr />
-      <button type="button" disabled title="Not available yet (Epic 5)">
+      <button
+        type="button"
+        disabled={!state.loaded}
+        aria-current={state.expert ? 'page' : undefined}
+        title={state.loaded ? 'Overrides carried over from the opened file' : 'Not available yet (Epic 5)'}
+        onClick={() => dispatch({ type: 'openExpert' })}
+      >
         <kbd>⌘E</kbd> Expert: YAML
       </button>
       <button type="button" disabled title="Not available yet (CT-4)">

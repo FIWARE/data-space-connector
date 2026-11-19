@@ -1,0 +1,11 @@
+# Fixture bundle for recognition: toggles, a cross-cutting pattern rule and a plain value rule.
+chart: data-space-connector
+version: 1.0.0
+topLevelKeys: [did, scorpio, rainbow, keycloak, registration, tracing, tempo, grafana]
+recognize:
+  - {path: did.enabled, answer: identity.did.enabled, stage: features, kind: toggle}
+  - {path: scorpio.enabled, answer: data.scorpio.enabled, stage: features, kind: toggle}
+  - {path: rainbow.enabled, answer: dsp.rainbow.enabled, stage: features, kind: toggle}
+  - {path: keycloak.ingress.hostname, answer: domain.base, stage: foundations, kind: value, pattern: '^[^.]+\.(.+)$'}
+  - {path: rainbow.ingress.host, answer: domain.base, stage: foundations, kind: value, pattern: '^[^.]+\.(.+)$'}
+  - {path: registration.til, answer: registration.til, stage: configuration, kind: value}

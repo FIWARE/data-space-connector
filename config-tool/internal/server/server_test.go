@@ -331,7 +331,6 @@ func TestEndpoints(t *testing.T) {
 		{request{method: http.MethodPost, path: "/api/render", origin: origin, body: oversized}, http.StatusRequestEntityTooLarge, ""},
 		{request{method: http.MethodPost, path: "/api/validate", origin: origin, body: "a: 1\n"}, http.StatusNotImplemented, ""},
 		{request{method: http.MethodPost, path: "/api/validate", origin: origin, body: oversized}, http.StatusRequestEntityTooLarge, ""},
-		{request{method: http.MethodPost, path: "/api/load", origin: origin}, http.StatusNotImplemented, ticketLoad},
 		{request{path: "/api/unknown"}, http.StatusNotFound, ""},
 	}
 	for _, tc := range tests {
