@@ -18,7 +18,7 @@ decentralized-iam 2.3.0 / TIL 0.10.3).
 `origin/ticket-106/step-2` carries two unmerged commits: `30ec74f` (IT scaffolding + report-mode
 scenario, to be reused by Step 3) and `dfc0e16` (the `@typed-scopes` plan change, superseded by
 this revision). The CM fix for the typed-scope blocker is released: CM chart **3.6.7** ships CM
-**3.5.4**. Step 3 bumps to it; Steps 3–7 then run as planned, with all 7 scenarios.
+**3.5.4**. Step 3 bumps to it; Steps 3–7 then run as planned, covering all 7 ticket items (5 Cucumber scenarios).
 
 **Sources** (read-only, clone under `/tmp`):
 - `doc/eventing/architecture.md` §8–§12 and `doc/eventing/specification.md`.
@@ -566,8 +566,15 @@ k3s before any scenario relies on it. There is **no** `@typed-scopes` tag and no
 - **Reuse the scaffolding.** Cherry-pick `30ec74f` from `origin/ticket-106/step-2` (not `dfc0e16`),
   then remove what the blocker added: the `@typed-scopes` tag and scenario split in
   `dataspace_eventing.feature`, and the `and not @typed-scopes` exclusion in the `it/pom.xml`
-  `eventing-test` profile. Scenario 1 below is one scenario again, with `held` and `attributable`
-  asserted. Review the cherry-picked code against the rest of this step and fill the gaps.
+  `eventing-test` profile. Also drop the two comments that point at the old "Known blocker"
+  heading: the `@typed-scopes` lines in the header of `dataspace_eventing.feature`, and the
+  `@typed-scopes` sentence ("… are excluded until it ships") in the `eventing-test` profile comment
+  in `it/pom.xml`. Scenario 1 below is one scenario again, with `held` and `attributable`
+  asserted: **move** the `@typed-scopes` scenario's step `And the report lists the membership and
+  the order grant Fancy Marketplace still holds.` into scenario 1, after the report step and before
+  the TIL check, rather than deleting it, since that step is where `held` is asserted. Then delete
+  the rest of the `@typed-scopes` scenario. Review the cherry-picked code against the rest of this
+  step and fill the gaps.
 - `it/pom.xml`: an `eventing-test` profile that mirrors `consent-test` (~415–432): it sets
   `cucumber.filter.tags=@eventing` **and** re-enables `maven-compiler-plugin` and
   `maven-failsafe-plugin` (`<skip>false</skip>`), with a comment saying why. The root `eventing`
