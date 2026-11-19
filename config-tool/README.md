@@ -88,6 +88,7 @@ internal/profile    core: the answer set
 internal/cluster    core: kube context names from kubeconfig files, read-only
 internal/render     core: profile to values tree
 internal/roundtrip  core: parse / classify / merge / write of a values.yaml, byte-preserving
+internal/load       core: owned / recognized / unknown classification and the load report
 internal/validate   core: values against the chart's schema
 model/<version>/    question-model bundles, embedded
 ui/                 React/TypeScript SPA, built into ui/dist and embedded
@@ -110,6 +111,33 @@ writes an explicit key holding the merged map. Refused: a stream with more than 
 whose text span cannot be determined safely (`ErrUnsupportedScalar`). A duplicated key resolves
 to its last occurrence, as in Helm; the earlier ones stay untouched. The corpus test round-trips
 every `k3s/*.yaml` and both charts' `values.yaml`, and edits each of their scalar leaves on its own.
+
+## Loading a values.yaml
+
+*Open an existing values.yaml* on S0 uploads the chosen file's bytes, never a path or decoded
+text, to `POST /api/load?name=<basename>`. The body is capped at 8 MiB (413 above it), and a file
+`roundtrip` refuses gives 422. `internal/load` classifies every leaf in this order
+([ADR 0014](../doc/adr/0014-config-tool-load-classification.md)):
+
+- **owned**: under a `# dsc-config:owned <id>[,<id>...]` marker. The marker sits in the head
+  comment of a mapping key and owns that key's subtree and the following siblings, until a blank
+  line between siblings, the next sibling with its own head comment, or the end of the mapping.
+  Markers count only in a file that carries the generated header.
+- **recognized**: a scalar whose path matches a `recognize:` rule of the bundle (see
+  [Chart versions](#chart-versions)) and whose derived value is the answer's value.
+- **unknown**: everything else, including a matching leaf whose value differs from the answer
+  (`differs from <answer> = <value>`): it was pinned by hand and is never overwritten.
+
+Owned leaves back-derive answers too, and before the others, so an owned value always wins.
+Pairs `roundtrip` cannot address (a shadowed duplicate key, an alias or complex key) are listed
+once each as *skipped*. The bundle is the one for the header's chart version, otherwise the
+latest one, and the report says why. Recognizing a new key is a bundle change: the epic that adds
+a question appends its rule to `model/<version>/bundle.yaml`, without code.
+
+The UI lands on Review with the report: counts, derived answers, and each entry with its file
+line. Back-derived answers show read-only on their stage's placeholder; only `target.chartVersion`
+becomes an answer. Expert / Overrides lists the unknown and skipped entries. The server keeps the
+latest load in memory as the overrides layer for CT-4; nothing is written to disk.
 
 ## Chart versions
 

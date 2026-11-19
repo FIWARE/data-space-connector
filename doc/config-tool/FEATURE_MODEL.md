@@ -215,6 +215,8 @@ install command and offers to run it (iteration 2) — it never silently install
 
 Loading an arbitrary `values.yaml` and writing it back without damage is the single property
 the tool is trusted or distrusted for.
+[ADR 0014](../adr/0014-config-tool-load-classification.md) fixes the marker's scope and the
+precedence *owned* > *recognized* > *unknown* that loading applies.
 
 1. **Parse** into a comment-preserving YAML document.
 2. **Classify** every leaf: *owned* (a key some enabled feature's render function produces),
