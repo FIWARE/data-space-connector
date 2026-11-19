@@ -64,9 +64,9 @@ export function refusedUpload(name: string, status: number): string {
 export function mockApi(
   contexts: (path: string) => ContextsAnswer = () => ({ paths: [], contexts: [], current: '' }),
   model: ModelInfo = MODEL,
-  load: (name: string) => LoadAnswer = () => REPORT,
+  load: (name: string) => LoadAnswer | Promise<LoadAnswer> = () => REPORT,
 ) {
-  const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+  const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(String(input), 'http://localhost')
     const json = (body: unknown, status = 200) => Promise.resolve(new Response(JSON.stringify(body), { status }))
     if (url.pathname === '/api/model') return json(model)
@@ -76,7 +76,7 @@ export function mockApi(
     }
     if (url.pathname === '/api/load' && init?.method === 'POST') {
       const name = url.searchParams.get('name') ?? ''
-      const answer = load(name)
+      const answer = await load(name)
       return typeof answer === 'number' ? json({ error: refusedUpload(name, answer) }, answer) : json(answer)
     }
     return json({ error: 'not found' }, HTTP_NOT_FOUND)

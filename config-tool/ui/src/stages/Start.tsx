@@ -1,5 +1,5 @@
 /** S0 Start: the entry point shown before the chrome. */
-import { useRef, useState, type ChangeEvent } from 'react'
+import { useEffect, useRef, useState, type ChangeEvent } from 'react'
 import { ApiError } from '../api/client'
 import { loadValues } from '../api/load'
 import { DOCUMENTATION_URL, RELEASE_NOTES_URL } from '../links'
@@ -31,22 +31,29 @@ function loadFailure(name: string, error: unknown): string {
   return `Cannot open ${name}: ${error instanceof Error ? error.message : String(error)}`
 }
 
-/** The Open values.yaml card: uploads the picked file and enters Review with its report; a failure stays on S0. */
-function OpenValuesCard({ setError }: { setError: (error?: string) => void }) {
+/** The Open values.yaml card: uploads the picked file and enters Review with its report; a failure stays on S0.
+ *  Unmounting aborts the upload, so a late report never replaces a session started meanwhile. */
+function OpenValuesCard({ busy, setBusy, setError }: { busy: boolean; setBusy: (busy: boolean) => void; setError: (error?: string) => void }) {
   const { dispatch } = useStore()
   const input = useRef<HTMLInputElement>(null)
-  const [busy, setBusy] = useState(false)
+  const upload = useRef<AbortController>()
+
+  useEffect(() => () => upload.current?.abort(), [])
 
   async function open(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0]
     // Cleared so picking the same file again after a failure fires change again.
     event.target.value = ''
     if (!file) return
+    const controller = new AbortController()
+    upload.current = controller
     setBusy(true)
     setError(undefined)
     try {
-      dispatch({ type: 'fileLoaded', report: await loadValues(file) })
+      const report = await loadValues(file, controller.signal)
+      if (!controller.signal.aborted) dispatch({ type: 'fileLoaded', report })
     } catch (failure) {
+      if (controller.signal.aborted) return
       setError(loadFailure(file.name, failure))
       setBusy(false)
     }
@@ -68,16 +75,18 @@ function OpenValuesCard({ setError }: { setError: (error?: string) => void }) {
 export function Start() {
   const { dispatch } = useStore()
   const [loadError, setLoadError] = useState<string>()
+  // A running upload would override a new configuration when it lands, so New waits for it.
+  const [loading, setLoading] = useState(false)
   return (
     <main className="start">
       <h1>FIWARE Data Space Connector — Configurator</h1>
       <p className="lede">Configure and install a connector for your organization.</p>
       <div className="cards">
-        <button type="button" className="card" onClick={() => dispatch({ type: 'newConfiguration' })}>
+        <button type="button" className="card" aria-disabled={loading} onClick={() => !loading && dispatch({ type: 'newConfiguration' })}>
           <h3>＋ New configuration</h3>
           <p>Start from a role and go through the wizard.</p>
         </button>
-        <OpenValuesCard setError={setLoadError} />
+        <OpenValuesCard busy={loading} setBusy={setLoading} setError={setLoadError} />
         {COMING.map((card) => (
           <button key={card.title} type="button" className="card" aria-disabled="true">
             <h3>

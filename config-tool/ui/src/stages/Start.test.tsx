@@ -1,6 +1,7 @@
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
+import type { LoadReport } from '../api/load'
 import { App } from '../App'
 import { mockApi, REPORT, refusedUpload } from '../test/api'
 import { OPEN_INPUT_LABEL } from './Start'
@@ -11,6 +12,13 @@ const HTTP_UNPROCESSABLE = 422
 
 function pick(name = 'provider.yaml') {
   return userEvent.upload(screen.getByLabelText(OPEN_INPUT_LABEL), new File(['a: 1\n'], name, { type: 'application/yaml' }))
+}
+
+/** A load that answers only when `resolve` is called. */
+function lateLoad() {
+  let resolve: (report: LoadReport) => void = () => {}
+  const pending = new Promise<LoadReport>((done) => (resolve = done))
+  return { load: () => pending, resolve }
 }
 
 function cards() {
@@ -72,5 +80,28 @@ describe('Start', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(message)
     expect(screen.queryByRole('navigation', { name: 'Stages' })).toBeNull()
     expect(screen.getByRole('button', { name: /Open values.yaml/ })).not.toHaveAttribute('aria-busy', 'true')
+  })
+
+  it('keeps New configuration disabled while an upload runs, so a late report cannot replace it', async () => {
+    const late = lateLoad()
+    mockApi(undefined, undefined, late.load)
+    render(<App />)
+    await pick()
+    const fresh = screen.getByRole('button', { name: /New configuration/ })
+    expect(fresh).toHaveAttribute('aria-disabled', 'true')
+    await userEvent.click(fresh)
+    expect(screen.queryByRole('navigation', { name: 'Stages' })).toBeNull()
+    late.resolve(REPORT)
+    expect(await screen.findByRole('heading', { level: 1, name: new RegExp(`Opened ${REPORT.source}`) })).toBeInTheDocument()
+  })
+
+  it('aborts a running upload when S0 goes away', async () => {
+    const late = lateLoad()
+    const fetchMock = mockApi(undefined, undefined, late.load)
+    const { unmount } = render(<App />)
+    await pick()
+    const init = fetchMock.mock.calls.find(([input]) => String(input).includes('/api/load'))?.[1]
+    unmount()
+    expect(init?.signal?.aborted).toBe(true)
   })
 })
