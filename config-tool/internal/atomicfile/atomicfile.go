@@ -28,7 +28,8 @@ var (
 )
 
 // Write writes data to path through a synced temp file in the same directory, published by a
-// rename, or without overwrite by a hard link, which fails on a file created since the check.
+// rename, or without overwrite by a hard link, which fails on a file created since the check
+// (an exclusive placeholder plus rename where the filesystem has no hard links).
 // A new file gets mode; a replaced one keeps its own. The directory must exist; no temp file
 // is left behind on error.
 func Write(path string, data []byte, mode fs.FileMode, overwrite bool) (err error) {
@@ -73,13 +74,35 @@ func Write(path string, data []byte, mode fs.FileMode, overwrite bool) (err erro
 	if overwrite {
 		return rename(tmp.Name(), path)
 	}
-	if err = link(tmp.Name(), path); err != nil {
-		if errors.Is(err, fs.ErrExist) {
-			err = fmt.Errorf("%s: %w", path, ErrExists)
-		}
+	err = link(tmp.Name(), path)
+	switch {
+	case err == nil:
+		// path is published; a temp name that fails to go away is only clutter.
+		_ = os.Remove(tmp.Name())
+		return nil
+	case errors.Is(err, fs.ErrExist):
+		return fmt.Errorf("%s: %w", path, ErrExists)
+	default:
+		// No hard links here (FAT, exFAT, some network and FUSE mounts).
+		return claimAndRename(tmp.Name(), path, mode)
+	}
+}
+
+// claimAndRename creates path exclusively as an empty placeholder, then renames tmp over it.
+// A racing writer still gets ErrExists; a reader may briefly see the empty placeholder.
+func claimAndRename(tmp, path string, mode fs.FileMode) error {
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, mode)
+	if errors.Is(err, fs.ErrExist) {
+		return fmt.Errorf("%s: %w", path, ErrExists)
+	}
+	if err != nil {
 		return err
 	}
-	// path is published; a temp name that fails to go away is only clutter.
-	_ = os.Remove(tmp.Name())
-	return nil
+	if err = f.Close(); err == nil {
+		err = rename(tmp, path)
+	}
+	if err != nil {
+		_ = os.Remove(path)
+	}
+	return err
 }

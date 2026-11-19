@@ -154,25 +154,79 @@ func TestWriteRemovesTempOnLateError(t *testing.T) {
 	}
 }
 
-// TestWriteRaceWithoutOverwrite creates path after the existence check, before publishing.
-func TestWriteRaceWithoutOverwrite(t *testing.T) {
-	t.Cleanup(func() { link = os.Link })
-	link = func(oldname, newname string) error {
+// TestWriteWithoutOverwritePublish covers a file created after the existence check, before
+// publishing, and the placeholder fallback on filesystems without hard links.
+func TestWriteWithoutOverwritePublish(t *testing.T) {
+	race := func(newname string) {
 		if err := os.WriteFile(newname, oldData, newMode); err != nil {
 			t.Fatal(err)
 		}
-		return os.Link(oldname, newname)
 	}
+	tests := []struct {
+		name     string
+		link     func(oldname, newname string) error
+		wantErr  error
+		wantData []byte
+	}{
+		{
+			name: "race before link",
+			link: func(oldname, newname string) error {
+				race(newname)
+				return os.Link(oldname, newname)
+			},
+			wantErr:  ErrExists,
+			wantData: oldData,
+		},
+		{
+			name:     "no hard links",
+			link:     func(string, string) error { return errors.ErrUnsupported },
+			wantData: newData,
+		},
+		{
+			name: "no hard links, race before placeholder",
+			link: func(_, newname string) error {
+				race(newname)
+				return errors.ErrUnsupported
+			},
+			wantErr:  ErrExists,
+			wantData: oldData,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Cleanup(func() { link = os.Link })
+			link = tt.link
+
+			dir := t.TempDir()
+			path := filepath.Join(dir, fileName)
+			if err := Write(path, newData, newMode, false); !errors.Is(err, tt.wantErr) {
+				t.Fatalf("Write err = %v, want %v", err, tt.wantErr)
+			}
+			assertEntries(t, dir, fileName)
+			if got, _ := os.ReadFile(path); string(got) != string(tt.wantData) {
+				t.Errorf("content = %q, want %q", got, tt.wantData)
+			}
+			if info, err := os.Stat(path); err != nil {
+				t.Fatal(err)
+			} else if runtime.GOOS != "windows" && info.Mode().Perm() != newMode {
+				t.Errorf("mode = %v, want %v", info.Mode().Perm(), newMode)
+			}
+		})
+	}
+}
+
+// TestWritePlaceholderRemovedOnRenameError leaves neither placeholder nor temp file behind.
+func TestWritePlaceholderRemovedOnRenameError(t *testing.T) {
+	errRename := errors.New("rename failed")
+	t.Cleanup(func() { link, rename = os.Link, os.Rename })
+	link = func(string, string) error { return errors.ErrUnsupported }
+	rename = func(string, string) error { return errRename }
 
 	dir := t.TempDir()
-	path := filepath.Join(dir, fileName)
-	if err := Write(path, newData, newMode, false); !errors.Is(err, ErrExists) {
-		t.Fatalf("Write err = %v, want %v", err, ErrExists)
+	if err := Write(filepath.Join(dir, fileName), newData, newMode, false); !errors.Is(err, errRename) {
+		t.Fatalf("Write err = %v, want %v", err, errRename)
 	}
-	assertEntries(t, dir, fileName)
-	if got, _ := os.ReadFile(path); string(got) != string(oldData) {
-		t.Errorf("content = %q, want the racing writer's %q", got, oldData)
-	}
+	assertEntries(t, dir)
 }
 
 // entries lists the names in each dir, or nil for a missing one, for before/after comparison.
