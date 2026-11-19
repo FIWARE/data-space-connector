@@ -30,6 +30,9 @@ Record the decision and add the embedded data. There is no Go logic beyond embed
   - A multi-release *trial descriptor* is not a profile, so profile format 1 is unchanged.
   - The production warnings are a hard-coded list until Epic 6 validation, each backed by evidence in the values.
   - Outputs never overwrite an existing file.
+  - Only the `data-space-connector` outputs (provider, consumer) can be reopened in the tool. The trust-anchor output
+    is not meant to be, because there is no trust-anchor model bundle and CT-3 reads every file against
+    `data-space-connector`. Its header therefore carries no chart version, and the banner names the chart.
 
   Add it to `doc/adr/README.md`.
 - New directory `config-tool/trial/` (sibling of `config-tool/model/`):
@@ -68,11 +71,14 @@ New core package `config-tool/internal/trial`, with no `net/http` import.
     `profile.Profile.Validate`, because the `trust-anchor` chart has no model bundle.
   - Require `environment: development` for every release.
 - `Render(t Trial, fsys fs.FS, toolVersion string) ([]Output, error)`. Each output is three parts:
-  1. `roundtrip.Header{ToolVersion, ChartVersion: release chartVersion, Profile: TrialProfileName}.Render()`, where
-     the constant `TrialProfileName` is `"local-trial"`.
+  1. `roundtrip.Header{ToolVersion, ChartVersion, Profile: TrialProfileName}.Render()`, where the constant
+     `TrialProfileName` is `"local-trial"`. `Header` has no chart name, and `load.chooseBundle` reads `ChartVersion`
+     as a `load.DefaultChart` (`data-space-connector`) version. So `ChartVersion` is the release's `chartVersion` only
+     when `Target.Chart == load.DefaultChart`, and empty otherwise (the trust-anchor release). The banner names the
+     chart and its version for every release.
   2. A fixed development banner of 2–3 comment lines, held in a constant. It says the file is a development
-     configuration from the local trial, equivalent to the source `k3s/` file, with self-signed certificates and
-     chart-deployed databases, and not for production.
+     configuration from the local trial for chart `<chart>@<chartVersion>`, equivalent to the source `k3s/` file,
+     with self-signed certificates and chart-deployed databases, and not for production.
   3. The bundled bytes, unchanged.
 
   Output order follows the descriptor.
@@ -96,7 +102,11 @@ New core package `config-tool/internal/trial`, with no `net/http` import.
   - `Render`:
     - Each output starts with the generated header and the banner.
     - The remainder equals the bundled bytes.
-    - `roundtrip.Parse` on the output recognises the header, so a trial file can be opened back in the tool.
+    - `roundtrip.Parse` on each output recognises the header, with `Profile` `local-trial`.
+    - Provider and consumer can be opened back in the tool: `load.Load` on them picks the bundle of their
+      `chartVersion` with `ChartVersionFrom == load.FromHeader` and no `ChartVersionNote`.
+    - Trust-anchor has an empty header `ChartVersion`, and its banner names `trust-anchor@<chartVersion>`. It is not
+      meant to be reopened (ADR 0016), because no trust-anchor model bundle exists; the test does not load it.
   - Warnings:
     - Every warning's `Evidence` occurs in each release it names.
     - Every named release exists.
@@ -148,16 +158,20 @@ Prove the acceptance criterion "renders with `helm template` without errors, for
     `helm template <releaseName> <repo>/charts/<chart> --namespace <namespace> -f <file>`, with `exec.CommandContext`
     and a named timeout constant.
   - Fail with helm's stderr.
-  - Skip, with the reason in the message, when `helm` is not on `PATH` or the chart's dependencies are not built (no
+  - Skip, with the reason in the message, when `helm` is not on `PATH` or the chart's dependencies are not fetched (no
     `charts/<chart>/charts/` directory). If the env var `DSC_CONFIG_REQUIRE_HELM=1` is set (a named constant), the skip
     becomes a failure.
 - `.github/workflows/config-tool.yaml`: new job `trial-render`.
-  - Install Helm with the same action and pinned version as `.github/workflows/test.yaml` / `check.yaml`.
-  - Add the repos and run `helm dependency build` for `charts/data-space-connector` and `charts/trust-anchor`. Copy the
-    exact commands the existing chart workflows use.
+  - Install Helm with `azure/setup-helm@v4` and the pinned `HELM_VERSION` from `.github/workflows/test.yaml` (Helm
+    4.x); `check.yaml` installs no Helm.
+  - Add the repos with the `helm repo add` list of `.github/workflows/pre-release.yml` (step "Add Helm
+    repositories"), then run `helm dependency update` for `charts/data-space-connector` and `charts/trust-anchor`, as
+    `pre-release.yml` does. Use `update`, not `build`: no `Chart.lock` is committed, so `build` would fall back to
+    `update` anyway. The `oci://` dependencies need no repo add.
   - Then run `DSC_CONFIG_REQUIRE_HELM=1 go test ./internal/trial -run TestRenderedValuesTemplate`.
   - Add one short "why" comment above the job.
-- Run it locally first: install helm if missing (`sudo` is available), build the dependencies and run the test.
+- Run it locally first: install helm if missing (`sudo` is available), run `helm dependency update` for both charts
+  and run the test.
   - If helm refuses a bundled file, for example over duplicate keys (`roundtrip` notes them in `k3s/consumer.yaml`),
     do not edit the copy, because equivalence must hold.
   - Check how `k3s/deploy.sh` passes the same file. If the problem is real, fix it in `k3s/` in this step and re-sync,
@@ -262,8 +276,8 @@ Acceptance: `npm test` and `npm run e2e` (after `make build`) pass, and so does 
   - A "Try it locally" section covering the S0 card and the prerequisite screen, the three releases and their file
     names, the `generate --trial --output-dir` CLI, the never-overwrite rule, the development banner and the
     hard-coded warnings.
-  - `make trial-sync` and the `helm template` test, with how to run it: helm plus `helm dependency build`, and
-    `DSC_CONFIG_REQUIRE_HELM`.
+  - `make trial-sync` and the `helm template` test, with how to run it: helm plus `helm dependency update`
+    (repos as in `pre-release.yml`), and `DSC_CONFIG_REQUIRE_HELM`.
   - Link to the Quick Start instead of copying it.
 - `doc/config-tool/USER_JOURNEY.md` Stage 0, the *Try it locally* row: note the prerequisite screen and that Review
   lists the three releases. Note that values are bundled until the renderer exists (ADR 0016).
