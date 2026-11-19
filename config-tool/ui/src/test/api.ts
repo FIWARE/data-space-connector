@@ -1,6 +1,7 @@
 /** Fakes the dsc-config API for component tests by stubbing the global fetch. */
 import { vi } from 'vitest'
 import type { LoadReport } from '../api/load'
+import type { Profile, ProfileResponse, RecentProfiles } from '../api/profile'
 import type { Kubeconfig, ModelInfo } from '../api/target'
 
 /** The model the real 10.16.0 bundle produces. */
@@ -40,6 +41,7 @@ export const REPORT: LoadReport = {
   rootFrom: 'detected',
   rootCandidates: [''],
   generated: true,
+  sha256: 'a'.repeat(64),
   counts: { owned: 1, recognized: 1, unknown: 2, skipped: 1, total: 5 },
   owned: [{ path: 'did.enabled', line: 5, value: 'true', answer: 'identity.did.enabled' }],
   recognized: [{ path: 'scorpio.enabled', line: 9, value: 'false', answer: 'data.scorpio.enabled' }],
@@ -70,13 +72,47 @@ export function lateLoad() {
   return { load: () => pending, resolve }
 }
 
+/** Where the fake recent list puts a new profile. */
+export const DEFAULT_DIR = '/home/user/dsc'
+
+/** The body PUT /api/profile receives. */
+export interface SaveBody {
+  path: string
+  overwrite: boolean
+  profile: Profile
+  sourceSha256?: string
+}
+
+/** An answer of a profile route, or a status code it fails with. */
+export type ProfileAnswer<T> = T | number
+
+/** The profile routes' fakes; by default the list is empty, save echoes and open finds nothing. */
+export interface ProfileFakes {
+  recent?: () => ProfileAnswer<RecentProfiles> | Promise<ProfileAnswer<RecentProfiles>>
+  save?: (body: SaveBody) => ProfileAnswer<ProfileResponse>
+  open?: (path: string) => ProfileAnswer<ProfileResponse> | Promise<ProfileAnswer<ProfileResponse>>
+}
+
+/** The server's message for a refused profile request. */
+export function refusedProfile(path: string, status: number): string {
+  return `${path}: refused with ${status}`
+}
+
+const PROFILE_DEFAULTS: Required<ProfileFakes> = {
+  recent: () => ({ entries: [], defaultDir: DEFAULT_DIR, notes: [] }),
+  save: (body) => ({ path: body.path, profile: body.profile, notes: [] }),
+  open: () => HTTP_NOT_FOUND,
+}
+
 /** Answers GET /api/model with `model`, GET /api/cluster/contexts with `contexts(path)` and POST /api/load with
- *  `load(name, root)`; `root` is null when the upload lets the server detect it. */
+ *  `load(name, root)`; `root` is null when the upload lets the server detect it. The profile routes use `profiles`. */
 export function mockApi(
   contexts: (path: string) => ContextsAnswer = () => ({ paths: [], contexts: [], current: '' }),
   model: ModelInfo = MODEL,
   load: (name: string, root: string | null) => LoadAnswer | Promise<LoadAnswer> = () => REPORT,
+  profiles: ProfileFakes = {},
 ) {
+  const fakes = { ...PROFILE_DEFAULTS, ...profiles }
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(String(input), 'http://localhost')
     const json = (body: unknown, status = 200) => Promise.resolve(new Response(JSON.stringify(body), { status }))
@@ -89,6 +125,16 @@ export function mockApi(
       const name = url.searchParams.get('name') ?? ''
       const answer = await load(name, url.searchParams.get('root'))
       return typeof answer === 'number' ? json({ error: refusedUpload(name, answer) }, answer) : json(answer)
+    }
+    const answer = <T,>(path: string, value: ProfileAnswer<T>) => (typeof value === 'number' ? json({ error: refusedProfile(path, value) }, value) : json(value))
+    if (url.pathname === '/api/profile/recent') return answer('recent', await fakes.recent())
+    if (url.pathname === '/api/profile' && init?.method === 'PUT') {
+      const body = JSON.parse(String(init.body)) as SaveBody
+      return answer(body.path, fakes.save(body))
+    }
+    if (url.pathname === '/api/profile/open' && init?.method === 'POST') {
+      const { path } = JSON.parse(String(init.body)) as { path: string }
+      return answer(path, await fakes.open(path))
     }
     return json({ error: 'not found' }, HTTP_NOT_FOUND)
   })

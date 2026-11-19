@@ -2,10 +2,12 @@
 import type { StageDef } from '../stages'
 import { STATUS_GLYPH, STATUS_LEGEND, stageStatus } from '../state/issues'
 import { useStore } from '../state/context'
+import { useSave } from './saveContext'
 
 /** Left rail of the chrome. */
 export function Rail({ stages }: { stages: readonly StageDef[] }) {
   const { state, dispatch } = useStore()
+  const { save, busy, saved } = useSave()
   return (
     <nav className="rail" aria-label="Stages">
       <ol>
@@ -39,9 +41,14 @@ export function Rail({ stages }: { stages: readonly StageDef[] }) {
       >
         <kbd>⌘E</kbd> Expert: YAML
       </button>
-      <button type="button" disabled title="Not available yet (CT-4)">
+      <button type="button" disabled={busy} aria-busy={busy} title="Save the answers as a .dscprofile.yaml" onClick={save}>
         <kbd>⌘S</kbd> Save profile
       </button>
+      {saved && (
+        <p className="hint" role="status">
+          Saved {saved}
+        </p>
+      )}
     </nav>
   )
 }
