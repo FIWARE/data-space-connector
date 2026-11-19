@@ -67,6 +67,8 @@ export interface LoadReport {
   /** Mappings that hold chart keys, best first. */
   rootCandidates: string[]
   generated: boolean
+  /** SHA-256 of the uploaded bytes; a profile save names the load it references by it. */
+  sha256: string
   counts: LoadCounts
   owned: LoadEntry[]
   recognized: LoadEntry[]

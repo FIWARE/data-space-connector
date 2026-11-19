@@ -1,0 +1,21 @@
+/** The save action the rail, Review and ⌘S share, apart from SaveProvider so fast refresh keeps working. */
+import { createContext, useContext } from 'react'
+
+/** What useSave hands out; `saved` names the last profile written without a note. */
+export interface SaveValue {
+  save: () => void
+  busy: boolean
+  saved?: string
+}
+
+/** Context SaveProvider fills; null outside the chrome. */
+export const SaveContext = createContext<SaveValue | null>(null)
+
+/** The shared save action; throws outside a SaveProvider. */
+export function useSave(): SaveValue {
+  const value = useContext(SaveContext)
+  if (!value) {
+    throw new Error('useSave must be used inside a SaveProvider')
+  }
+  return value
+}

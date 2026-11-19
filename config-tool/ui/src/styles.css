@@ -97,3 +97,12 @@ summary { cursor: pointer; }
 table.entries { width: 100%; border-collapse: collapse; margin: 6px 0; font-size: 12.5px; }
 table.entries th, table.entries td { text-align: left; padding: 3px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
 table.entries code { word-break: break-all; }
+.notes { margin: 0; padding-left: 18px; }
+.actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 14px; }
+.overlay { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: rgb(0 0 0 / 35%); }
+.dialog { width: min(640px, 92vw); margin: 0; }
+.recent { margin-top: 28px; }
+.recent h2 { margin: 0 0 6px; font-size: 14px; }
+.recent ul { margin: 0; padding: 0; list-style: none; }
+.recent li button.link { font-size: 13.5px; }
+.open-path { margin-top: 14px; }

@@ -1,5 +1,6 @@
 /** S7 Review: open questions and the load report of an opened values.yaml; the validation and generate panes come with Epic 6. */
 import { useState } from 'react'
+import { useSave } from '../chrome/saveContext'
 import { loadValues, RootSource, VersionSource, type DerivedAnswer, type LoadReport } from '../api/load'
 import { useStore } from '../state/context'
 import { openQuestions } from '../state/openQuestions'
@@ -107,6 +108,35 @@ function OpenQuestions() {
   )
 }
 
+/** Notes of the last open or save: a source that changed or is missing, an older bundle revision. */
+function ProfileNotes() {
+  const { state } = useStore()
+  const notes = state.profileNotes ?? []
+  if (notes.length === 0) return null
+  return (
+    <div className="panel" role="status">
+      <h3>Profile</h3>
+      <ul className="notes">
+        {notes.map((note) => (
+          <li key={note}>{note}</li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
+/** The actions under Review; export and install come with Epic 6/7. */
+function Actions() {
+  const { save, busy } = useSave()
+  return (
+    <div className="actions">
+      <button type="button" className="sec" disabled={busy} onClick={save}>
+        Save profile
+      </button>
+    </div>
+  )
+}
+
 function Counts({ report }: { report: LoadReport }) {
   const rows: [string, number][] = [
     ['Owned by dsc-config', report.counts.owned],
@@ -164,6 +194,7 @@ function Report({ report, file }: { report: LoadReport; file?: File }) {
       <p className="lede">
         Chart {report.chart} {report.chartVersion} ({version}).
       </p>
+      <ProfileNotes />
       <OpenQuestions />
       <RootPicker report={report} file={file} />
       <div className="panel">
@@ -186,18 +217,21 @@ function Report({ report, file }: { report: LoadReport; file?: File }) {
         <h3>Carried over untouched</h3>
         <Overrides report={report} />
       </div>
+      <Actions />
     </section>
   )
 }
 
-/** Review stage: open questions above the load report when a file was opened, otherwise above the Epic 6 placeholder. */
+/** Review stage: profile notes and open questions above the load report when a file was opened, otherwise above the Epic 6 placeholder. */
 export function Review() {
   const { state } = useStore()
   return state.loaded ? (
     <Report report={state.loaded} file={state.loadedFile} />
   ) : (
     <Placeholder label={STAGE_LABELS[StageId.Review]} comingIn={REVIEW_COMING_IN}>
+      <ProfileNotes />
       <OpenQuestions />
+      <Actions />
     </Placeholder>
   )
 }

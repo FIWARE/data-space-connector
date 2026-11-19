@@ -1,5 +1,6 @@
 /** The store's state and its pure transition function. */
 import { VersionSource, type LoadReport } from '../api/load'
+import { fromProfile, type ModelRef, type Profile } from '../api/profile'
 import { emptyAnswers, type Answers, type Session, type Target } from './answers'
 import { fieldStage, type FieldId } from './openQuestions'
 import { FIRST_STAGE, StageId } from './stageIds'
@@ -23,6 +24,12 @@ export interface AppState {
   open: readonly FieldId[]
   /** A field its stage should focus once shown; the stage clears it with `focusDone`. */
   focus?: FieldId
+  /** Where this configuration was last saved or opened from; ⌘S saves there in place. */
+  profilePath?: string
+  /** The bundle the profile was built with; the server keeps it while no chart version is answered. */
+  profileModel?: ModelRef
+  /** Notes of the last open or save (source changed or missing, older revision); Review shows them. */
+  profileNotes?: readonly string[]
 }
 
 /** Every change the UI can make to the store. */
@@ -39,6 +46,8 @@ export type Action =
   | { type: 'toggleOpen'; field: FieldId }
   | { type: 'focusField'; field: FieldId }
   | { type: 'focusDone' }
+  | { type: 'profileOpened'; path: string; profile: Profile; report?: LoadReport; notes: readonly string[] }
+  | { type: 'profileSaved'; path: string; profile: Profile; notes: readonly string[] }
 
 /** The state before anything was chosen on S0. */
 export const initialState: AppState = {
@@ -65,8 +74,36 @@ function toggle(open: readonly FieldId[], field: FieldId): readonly FieldId[] {
 }
 
 // A new or opened configuration starts over; the kubeconfig path is kept, the old context pick is not.
+// The profile is dropped too, so ⌘S never overwrites the previous profile with an unrelated configuration.
 function startOver(state: AppState, stage: StageId, answers: Answers, loaded?: LoadReport, loadedFile?: File): AppState {
-  return { ...state, entered: true, stage, visited: [stage], answers, session: { ...state.session, chosenContext: undefined }, loaded, loadedFile, expert: false, open: [], focus: undefined }
+  return {
+    ...state,
+    entered: true,
+    stage,
+    visited: [stage],
+    answers,
+    session: { ...state.session, chosenContext: undefined },
+    loaded,
+    loadedFile,
+    expert: false,
+    open: [],
+    focus: undefined,
+    profilePath: undefined,
+    profileModel: undefined,
+    profileNotes: undefined,
+  }
+}
+
+// The recorded root is used for an opened profile's source, so there is no file to re-read under another one.
+function profileOpened(state: AppState, action: Extract<Action, { type: 'profileOpened' }>): AppState {
+  const { answers, open } = fromProfile(action.profile)
+  return {
+    ...startOver(state, StageId.Review, answers, action.report),
+    open,
+    profilePath: action.path,
+    profileModel: action.profile.model,
+    profileNotes: action.notes,
+  }
 }
 
 function loadedAnswers(report: LoadReport): Answers {
@@ -84,6 +121,10 @@ export function reducer(state: AppState, action: Action): AppState {
       return startOver(state, FIRST_STAGE, emptyAnswers())
     case 'fileLoaded':
       return startOver(state, StageId.Review, loadedAnswers(action.report), action.report, action.file)
+    case 'profileOpened':
+      return profileOpened(state, action)
+    case 'profileSaved':
+      return { ...state, profilePath: action.path, profileModel: action.profile.model, profileNotes: action.notes }
     case 'rootRereadStarted':
       return { ...state, rereading: true }
     case 'rootChanged':
