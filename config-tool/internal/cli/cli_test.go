@@ -10,9 +10,38 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/FIWARE/data-space-connector/config-tool/internal/atomicfile"
+	"github.com/FIWARE/data-space-connector/config-tool/internal/profile"
 	"github.com/FIWARE/data-space-connector/config-tool/internal/render"
+	"github.com/FIWARE/data-space-connector/config-tool/internal/roundtrip"
 	"github.com/FIWARE/data-space-connector/config-tool/internal/version"
 )
+
+// validProfile is a complete profile against the shipped 10.16.0 bundle.
+const validProfile = `format: 1
+model: {chart: data-space-connector, version: 10.16.0, revision: 1}
+target:
+  type: file
+  namespace: provider
+  createNamespace: true
+  releaseName: provider
+  chart: data-space-connector
+  chartVersion: 10.16.0
+  environment: production
+answers: {}
+open: []
+secrets: {}
+`
+
+// writeProfile writes content to a profile file in a temp dir and returns its path.
+func writeProfile(t *testing.T, content string) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "provider.dscprofile.yaml")
+	if err := os.WriteFile(path, []byte(content), outputFileMode); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
 
 var errFakeGUI = errors.New("fake GUI")
 
@@ -50,7 +79,7 @@ func TestCommands(t *testing.T) {
 		},
 		{
 			name:    "generate is not implemented yet",
-			args:    []string{"generate", "-p", "profile.yaml", "-o", "values.yaml"},
+			args:    []string{"generate", "-p", writeProfile(t, validProfile), "-o", filepath.Join(t.TempDir(), "values.yaml")},
 			wantErr: render.ErrNotImplemented,
 		},
 		{
@@ -67,6 +96,67 @@ func TestCommands(t *testing.T) {
 			for _, want := range tc.wantOutput {
 				if !strings.Contains(out, want) {
 					t.Errorf("output does not contain %q:\n%s", want, out)
+				}
+			}
+		})
+	}
+}
+
+func TestGenerateRefusesProfile(t *testing.T) {
+	tests := []struct {
+		name string
+		// content is written to a temp profile; "" leaves the path missing.
+		content string
+		path    string
+		wantErr error
+		want    []string
+	}{
+		{name: "missing profile", wantErr: fs.ErrNotExist},
+		{name: "wrong suffix", path: "values.yaml", wantErr: profile.ErrSuffix},
+		{name: "not a profile", content: "global: {}\n", want: []string{"field global not found"}},
+		{
+			name:    "unknown bundle",
+			content: strings.ReplaceAll(validProfile, "10.16.0", "0.0.1"),
+			want:    []string{"invalid profile", "model: bundle data-space-connector@0.0.1 is not shipped", "target.chartVersion"},
+		},
+		{
+			name:    "malformed target",
+			content: strings.Replace(validProfile, "namespace: provider", "namespace: Prod_NS", 1),
+			want:    []string{"invalid profile", "target.namespace: must consist of lowercase"},
+		},
+		{
+			name:    "unanswered target",
+			content: strings.Replace(validProfile, "  type: file\n", "", 1),
+			want:    []string{"target.type: is required"},
+		},
+		{
+			name:    "structural error",
+			content: strings.Replace(validProfile, "answers: {}", "answers: {db.password: x}", 1),
+			want:    []string{"answers.db.password: is not a known answer id"},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "absent.dscprofile.yaml")
+			switch {
+			case tc.path != "":
+				path = tc.path
+			case tc.content != "":
+				path = writeProfile(t, tc.content)
+			}
+			_, err := execute(t, fakeGUI, "generate", "-p", path)
+			if err == nil {
+				t.Fatal("generate succeeded, want an error")
+			}
+			if errors.Is(err, render.ErrNotImplemented) {
+				t.Fatalf("error = %v, want the profile refused before rendering", err)
+			}
+			if tc.wantErr != nil && !errors.Is(err, tc.wantErr) {
+				t.Errorf("error = %v, want %v", err, tc.wantErr)
+			}
+			for _, want := range append(tc.want, path) {
+				if !strings.Contains(err.Error(), want) {
+					t.Errorf("error %q does not contain %q", err, want)
 				}
 			}
 		})
@@ -139,7 +229,7 @@ func TestRunGUIPrintsLoopbackURL(t *testing.T) {
 
 func TestRunReportsErrors(t *testing.T) {
 	var stderr bytes.Buffer
-	code := run(context.Background(), NewRootCommand(fakeGUI), []string{"generate", "-p", "profile.yaml"}, &stderr)
+	code := run(context.Background(), NewRootCommand(fakeGUI), []string{"generate", "-p", writeProfile(t, validProfile)}, &stderr)
 	if code == 0 {
 		t.Fatal("exit code = 0, want non-zero")
 	}
@@ -219,5 +309,78 @@ func TestWriteOutputStdout(t *testing.T) {
 	}
 	if out.String() != "a: 1\n" {
 		t.Errorf("stdout = %q", out.String())
+	}
+}
+
+func TestReplaceOutput(t *testing.T) {
+	const (
+		original = "# kept header comment\nglobal:\n  # kept comment\n  domain: old.example # kept line comment\nother: [1, 2]\n"
+		edited   = "# kept header comment\nglobal:\n  # kept comment\n  domain: new.example # kept line comment\nother: [1, 2]\n"
+		mode     = 0o600
+	)
+	errEdit := errors.New("edit failed")
+	setDomain := func(doc *roundtrip.Document) error {
+		return doc.Set(roundtrip.Path{roundtrip.Key("global"), roundtrip.Key("domain")}, "new.example")
+	}
+	failEdit := func(*roundtrip.Document) error { return errEdit }
+	writeFile := func(t *testing.T, path string) {
+		if err := os.WriteFile(path, []byte(original), mode); err != nil {
+			t.Fatal(err)
+		}
+	}
+	symlink := func(t *testing.T, path string) {
+		target := filepath.Join(filepath.Dir(path), "target.yaml")
+		writeFile(t, target)
+		if err := os.Symlink(target, path); err != nil {
+			t.Skipf("symlinks unavailable: %v", err)
+		}
+	}
+	tests := []struct {
+		name     string
+		setup    func(t *testing.T, path string)
+		edit     func(*roundtrip.Document) error
+		wantErr  error
+		wantFile string
+	}{
+		{"edit keeps untouched bytes", writeFile, setDomain, nil, edited},
+		{"failing edit leaves the file", writeFile, failEdit, errEdit, original},
+		{"symlink is refused", symlink, setDomain, atomicfile.ErrSymlink, original},
+		{"missing file", func(*testing.T, string) {}, setDomain, fs.ErrNotExist, ""},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			path := filepath.Join(dir, "values.yaml")
+			tc.setup(t, path)
+			err := replaceOutput(path, tc.edit)
+			if (tc.wantErr == nil) != (err == nil) || !errors.Is(err, tc.wantErr) {
+				t.Fatalf("error = %v, want %v", err, tc.wantErr)
+			}
+			if tc.wantFile != "" {
+				got, err := os.ReadFile(path)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if string(got) != tc.wantFile {
+					t.Errorf("file = %q, want %q", got, tc.wantFile)
+				}
+				info, err := os.Stat(path)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if info.Mode().Perm() != mode {
+					t.Errorf("mode = %v, want %v", info.Mode().Perm(), os.FileMode(mode))
+				}
+			}
+			entries, err := os.ReadDir(dir)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, e := range entries {
+				if strings.HasPrefix(e.Name(), ".") {
+					t.Errorf("temp file %q left behind", e.Name())
+				}
+			}
+		})
 	}
 }

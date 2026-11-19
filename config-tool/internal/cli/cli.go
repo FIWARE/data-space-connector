@@ -3,15 +3,23 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
+	"slices"
+	"strings"
 
 	"github.com/spf13/cobra"
 
+	"github.com/FIWARE/data-space-connector/config-tool/internal/atomicfile"
+	"github.com/FIWARE/data-space-connector/config-tool/internal/model"
 	"github.com/FIWARE/data-space-connector/config-tool/internal/profile"
 	"github.com/FIWARE/data-space-connector/config-tool/internal/render"
+	"github.com/FIWARE/data-space-connector/config-tool/internal/roundtrip"
 	"github.com/FIWARE/data-space-connector/config-tool/internal/version"
+	bundles "github.com/FIWARE/data-space-connector/config-tool/model"
 )
 
 const (
@@ -65,8 +73,11 @@ func newGenerateCommand() *cobra.Command {
 		Short: "Render a values.yaml from a profile, without the GUI",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			// Loading the profile file arrives with CT-4; rendering fails before it matters.
-			values, err := render.Render(cmd.Context(), profile.Profile{})
+			p, err := loadProfile(profilePath, bundles.FS)
+			if err != nil {
+				return fmt.Errorf("generate: %w", err)
+			}
+			values, err := render.Render(cmd.Context(), p)
 			if err != nil {
 				return fmt.Errorf("generate: %w", err)
 			}
@@ -79,6 +90,54 @@ func newGenerateCommand() *cobra.Command {
 	return cmd
 }
 
+// loadProfile reads the profile at path and refuses it unless it is complete enough to render:
+// beyond the structural checks of save and open, every Target field must be answered and well-formed.
+func loadProfile(path string, models fs.FS) (profile.Profile, error) {
+	p, err := profile.ReadFile(path)
+	if err != nil {
+		return profile.Profile{}, err
+	}
+	shipped, err := model.Versions(models)
+	if err != nil {
+		return profile.Profile{}, err
+	}
+	errs := p.Validate(shipped)
+	for _, e := range p.Target.Validate() {
+		e.Field = profile.TargetFieldPrefix + e.Field
+		if !slices.Contains(errs, e) {
+			errs = append(errs, e)
+		}
+	}
+	if len(errs) == 0 {
+		return p, nil
+	}
+	msgs := make([]string, len(errs))
+	for i, e := range errs {
+		msgs[i] = e.Error()
+	}
+	return profile.Profile{}, fmt.Errorf("%s: %w", path, &invalidProfileError{msgs})
+}
+
+// invalidProfileError lists every field error of a profile generate refuses.
+type invalidProfileError struct {
+	msgs []string
+}
+
+func (e *invalidProfileError) Error() string {
+	return "invalid profile: " + strings.Join(e.msgs, "; ")
+}
+
+// outputExistsError refuses an existing output file; it matches fs.ErrExist.
+type outputExistsError struct {
+	path string
+}
+
+func (e *outputExistsError) Error() string {
+	return e.path + " exists; merging into an existing values file arrives with the render epic"
+}
+
+func (e *outputExistsError) Unwrap() error { return fs.ErrExist }
+
 // writeOutput writes data to stdout or to a new file at path; an existing path, symlinks
 // included, is refused and left untouched, and a failed write removes the file it created.
 func writeOutput(stdout io.Writer, path string, data []byte) error {
@@ -86,9 +145,14 @@ func writeOutput(stdout io.Writer, path string, data []byte) error {
 		_, err := stdout.Write(data)
 		return err
 	}
-	// TODO(CT-4): replace an existing file via roundtrip (Parse, Merge, Write), written atomically:
-	// a temp file in the same directory renamed over it, keeping its mode (ADR 0013).
+	// TODO(render): replace an existing file through replaceOutput once the render epic decides
+	// (a) the precedence: overrides win, only owned or absent keys are written (FEATURE_MODEL,
+	// ADR 0014), so a blind roundtrip.Merge is wrong; and (b) how the rendered output reaches
+	// Merge: Render returns a map[string]any, or its bytes are decoded with yaml.v3 into one.
 	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, outputFileMode)
+	if errors.Is(err, fs.ErrExist) {
+		return &outputExistsError{path}
+	}
 	if err != nil {
 		return err
 	}
@@ -100,6 +164,34 @@ func writeOutput(stdout io.Writer, path string, data []byte) error {
 		os.Remove(path)
 	}
 	return err
+}
+
+// replaceOutput applies edit to the existing values file at path and replaces it atomically,
+// keeping its mode and every byte edit does not touch (ADR 0013). A symlink is refused.
+func replaceOutput(path string, edit func(*roundtrip.Document) error) error {
+	info, err := os.Lstat(path)
+	if err != nil {
+		return err
+	}
+	if info.Mode()&fs.ModeSymlink != 0 {
+		return fmt.Errorf("%s: %w", path, atomicfile.ErrSymlink)
+	}
+	src, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	doc, err := roundtrip.Parse(src)
+	if err != nil {
+		return fmt.Errorf("%s: %w", path, err)
+	}
+	if err := edit(doc); err != nil {
+		return fmt.Errorf("%s: %w", path, err)
+	}
+	out, err := doc.Write()
+	if err != nil {
+		return fmt.Errorf("%s: %w", path, err)
+	}
+	return atomicfile.Write(path, out, outputFileMode, true)
 }
 
 // Execute runs dsc-config with the process arguments and returns the exit code.
