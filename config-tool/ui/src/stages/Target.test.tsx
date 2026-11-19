@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { useEffect } from 'react'
 import { describe, expect, it } from 'vitest'
@@ -212,5 +212,34 @@ describe('Target', () => {
   ])('counts open questions and errors for %s inputs', async (_name, target, errors, open) => {
     renderTarget(target)
     await waitFor(() => expect(screen.getByLabelText('Validation')).toHaveTextContent(`✖ ${errors} errors○ ${open} open questions`))
+  })
+
+  it.each<[string, string, Partial<Target>]>([
+    ['a typed field', 'Namespace', { namespace: 'provider' }],
+    ['a radio group', 'Environment', { environment: Environment.Production }],
+    ['a select', 'Chart version', { chartVersion: '10.15.0' }],
+  ])('marks %s open without touching its value', async (_name, label, value) => {
+    renderTarget({ type: TargetType.File, namespace: 'provider', releaseName: 'provider', environment: Environment.Production, chartVersion: '10.15.0', ...value })
+    const ask = screen.getByTitle(`Keep ${label} as an open question`)
+    expect(ask).toHaveAttribute('aria-pressed', 'false')
+    await userEvent.click(ask)
+    expect(ask).toHaveAttribute('aria-pressed', 'true')
+    expect(probe.state.answers.target).toMatchObject(value)
+    expect(screen.getByLabelText('Validation')).toHaveTextContent('✖ 0 errors○ 1 open questions')
+
+    await userEvent.click(railEntry(1))
+    expect(within(railEntry(0)).getByLabelText('has open questions')).toHaveTextContent('○')
+
+    await userEvent.click(railEntry(0))
+    await userEvent.click(screen.getByTitle(`Keep ${label} as an open question`))
+    expect(probe.state.open).toEqual([])
+    expect(probe.state.answers.target).toMatchObject(value)
+    expect(screen.getByLabelText('Validation')).toHaveTextContent('○ 0 open questions')
+  })
+
+  it('counts a marked empty field once, as open and not as an error', async () => {
+    renderTarget({ type: TargetType.File, releaseName: 'provider', environment: Environment.Production })
+    await userEvent.click(screen.getByTitle('Keep Namespace as an open question'))
+    await waitFor(() => expect(screen.getByLabelText('Validation')).toHaveTextContent('✖ 0 errors○ 1 open questions'))
   })
 })

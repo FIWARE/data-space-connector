@@ -1,7 +1,8 @@
-/** S7 Review: the load report of an opened values.yaml; the validation and generate panes come with Epic 6. */
+/** S7 Review: open questions and the load report of an opened values.yaml; the validation and generate panes come with Epic 6. */
 import { useState } from 'react'
 import { loadValues, RootSource, VersionSource, type DerivedAnswer, type LoadReport } from '../api/load'
 import { useStore } from '../state/context'
+import { openQuestions } from '../state/openQuestions'
 import { carriedOverCount, understoodCount, underivedAnswers } from '../state/report'
 import { STAGE_LABELS, StageId } from '../state/stageIds'
 import { AnswerList } from './DerivedAnswers'
@@ -79,6 +80,33 @@ function RootPicker({ report, file }: { report: LoadReport; file?: File }) {
   )
 }
 
+/** Every open question with its stage and a link that focuses its field. */
+function OpenQuestions() {
+  const { state, dispatch } = useStore()
+  const questions = openQuestions(state)
+  return (
+    <div className="panel">
+      <h3>Open questions ({questions.length})</h3>
+      {questions.length === 0 ? (
+        <p className="hint">None: every question is answered.</p>
+      ) : (
+        <ul className="open-questions">
+          {questions.map((q) => (
+            <li key={q.field}>
+              <span>{q.label}</span>
+              <span className="stage">{STAGE_LABELS[q.stage]}</span>
+              {q.marked && <span className="badge">marked</span>}
+              <button type="button" className="link" onClick={() => dispatch({ type: 'focusField', field: q.field })}>
+                go ↗
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
+
 function Counts({ report }: { report: LoadReport }) {
   const rows: [string, number][] = [
     ['Owned by dsc-config', report.counts.owned],
@@ -136,6 +164,7 @@ function Report({ report, file }: { report: LoadReport; file?: File }) {
       <p className="lede">
         Chart {report.chart} {report.chartVersion} ({version}).
       </p>
+      <OpenQuestions />
       <RootPicker report={report} file={file} />
       <div className="panel">
         <h3>Classification of {report.counts.total} keys</h3>
@@ -161,8 +190,14 @@ function Report({ report, file }: { report: LoadReport; file?: File }) {
   )
 }
 
-/** Review stage: the load report when a file was opened, otherwise the Epic 6 placeholder. */
+/** Review stage: open questions above the load report when a file was opened, otherwise above the Epic 6 placeholder. */
 export function Review() {
   const { state } = useStore()
-  return state.loaded ? <Report report={state.loaded} file={state.loadedFile} /> : <Placeholder label={STAGE_LABELS[StageId.Review]} comingIn={REVIEW_COMING_IN} />
+  return state.loaded ? (
+    <Report report={state.loaded} file={state.loadedFile} />
+  ) : (
+    <Placeholder label={STAGE_LABELS[StageId.Review]} comingIn={REVIEW_COMING_IN}>
+      <OpenQuestions />
+    </Placeholder>
+  )
 }

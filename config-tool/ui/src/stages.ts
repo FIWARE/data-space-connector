@@ -2,7 +2,7 @@
 import type { ComponentType } from 'react'
 import type { IssueSelector } from './state/issues'
 import { STAGE_LABELS, StageId } from './state/stageIds'
-import { targetIssues } from './state/target'
+import { targetIssues } from './state/openQuestions'
 import { REVIEW_COMING_IN, Review } from './stages/Review'
 import { Target } from './stages/Target'
 

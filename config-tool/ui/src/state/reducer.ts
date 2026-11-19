@@ -1,6 +1,7 @@
 /** The store's state and its pure transition function. */
 import { VersionSource, type LoadReport } from '../api/load'
 import { emptyAnswers, type Answers, type Session, type Target } from './answers'
+import { fieldStage, type FieldId } from './openQuestions'
 import { FIRST_STAGE, StageId } from './stageIds'
 
 /** Store contents; `entered` is false while S0 (Start) is shown. */
@@ -18,6 +19,10 @@ export interface AppState {
   expert: boolean
   /** A root re-read is in flight; kept here so the picker stays disabled when Review remounts. */
   rereading: boolean
+  /** Fields marked "ask later", sorted by id as the profile's `open`. */
+  open: readonly FieldId[]
+  /** A field its stage should focus once shown; the stage clears it with `focusDone`. */
+  focus?: FieldId
 }
 
 /** Every change the UI can make to the store. */
@@ -31,6 +36,9 @@ export type Action =
   | { type: 'rootChanged'; report: LoadReport; file: File }
   | { type: 'rootRereadFailed' }
   | { type: 'openExpert' }
+  | { type: 'toggleOpen'; field: FieldId }
+  | { type: 'focusField'; field: FieldId }
+  | { type: 'focusDone' }
 
 /** The state before anything was chosen on S0. */
 export const initialState: AppState = {
@@ -41,15 +49,24 @@ export const initialState: AppState = {
   session: {},
   expert: false,
   rereading: false,
+  open: [],
 }
 
 function visit(visited: readonly StageId[], stage: StageId): readonly StageId[] {
   return visited.includes(stage) ? visited : [...visited, stage]
 }
 
+function goTo(state: AppState, stage: StageId): AppState {
+  return { ...state, stage, visited: visit(state.visited, stage), expert: false }
+}
+
+function toggle(open: readonly FieldId[], field: FieldId): readonly FieldId[] {
+  return open.includes(field) ? open.filter((f) => f !== field) : [...open, field].sort()
+}
+
 // A new or opened configuration starts over; the kubeconfig path is kept, the old context pick is not.
 function startOver(state: AppState, stage: StageId, answers: Answers, loaded?: LoadReport, loadedFile?: File): AppState {
-  return { ...state, entered: true, stage, visited: [stage], answers, session: { ...state.session, chosenContext: undefined }, loaded, loadedFile, expert: false }
+  return { ...state, entered: true, stage, visited: [stage], answers, session: { ...state.session, chosenContext: undefined }, loaded, loadedFile, expert: false, open: [], focus: undefined }
 }
 
 function loadedAnswers(report: LoadReport): Answers {
@@ -76,7 +93,14 @@ export function reducer(state: AppState, action: Action): AppState {
     case 'rootRereadFailed':
       return { ...state, rereading: false }
     case 'goTo':
-      return { ...state, stage: action.stage, visited: visit(state.visited, action.stage), expert: false }
+      return goTo(state, action.stage)
+    case 'focusField':
+      return { ...goTo(state, fieldStage(action.field)), focus: action.field }
+    case 'focusDone':
+      return { ...state, focus: undefined }
+    case 'toggleOpen':
+      // The value stays either way: marking makes it provisional, unmarking keeps it.
+      return { ...state, open: toggle(state.open, action.field) }
     case 'openExpert':
       return { ...state, expert: true }
     case 'setTarget':

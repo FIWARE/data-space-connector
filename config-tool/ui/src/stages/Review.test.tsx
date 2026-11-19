@@ -4,7 +4,9 @@ import { describe, expect, it } from 'vitest'
 import { RootSource, VersionSource, type LoadReport } from '../api/load'
 import { Chrome } from '../chrome/Chrome'
 import { STAGES } from '../stages'
-import { initialState } from '../state/reducer'
+import { Environment, TargetType, type Target } from '../state/answers'
+import type { FieldId } from '../state/openQuestions'
+import { initialState, type AppState } from '../state/reducer'
 import { StageId } from '../state/stageIds'
 import { StoreProvider } from '../state/store'
 import { lateLoad, mockApi, REPORT, refusedUpload } from '../test/api'
@@ -15,15 +17,54 @@ const FILE = new File(['dsc:\n  did:\n    enabled: true\n'], 'wrapped.yaml')
 /** A report of values another chart wraps under `dsc:`. */
 const WRAPPED: LoadReport = { ...REPORT, source: FILE.name, root: 'dsc', rootCandidates: ['dsc', ''] }
 
-function renderReview(loaded?: LoadReport, loadedFile?: File) {
+/** A Target with every question answered. */
+const ANSWERED: Target = {
+  ...initialState.answers.target,
+  type: TargetType.File,
+  namespace: 'provider',
+  releaseName: 'provider',
+  chartVersion: '10.16.0',
+  environment: Environment.Production,
+}
+
+function renderReview(loaded?: LoadReport, loadedFile?: File, more: Partial<AppState> = {}) {
   return render(
-    <StoreProvider initial={{ ...initialState, entered: true, stage: StageId.Review, visited: [StageId.Review], loaded, loadedFile }}>
+    <StoreProvider initial={{ ...initialState, entered: true, stage: StageId.Review, visited: [StageId.Review], loaded, loadedFile, ...more }}>
       <Chrome stages={STAGES} />
     </StoreProvider>,
   )
 }
 
+const openList = () => within(screen.getByRole('heading', { level: 3, name: /^Open questions/ }).closest('.panel') as HTMLElement)
+const question = (label: string) => openList().getByText(label).closest('li') as HTMLElement
+
 describe('Review', () => {
+  it.each<[string, LoadReport | undefined]>([
+    ['the placeholder', undefined],
+    ['the load report', REPORT],
+  ])('lists the open questions above %s, marking the marked ones', (_name, loaded) => {
+    renderReview(loaded, undefined, { answers: { target: { ...ANSWERED, namespace: '' } }, open: ['target.environment', 'target.namespace'] })
+    expect(screen.getByRole('heading', { level: 3, name: 'Open questions (2)' })).toBeInTheDocument()
+    expect(openList().getAllByRole('listitem').map((li) => li.textContent)).toEqual(['NamespaceTargetmarkedgo ↗', 'EnvironmentTargetmarkedgo ↗'])
+  })
+
+  it('says when no question is open', () => {
+    renderReview(undefined, undefined, { answers: { target: ANSWERED } })
+    expect(screen.getByRole('heading', { level: 3, name: 'Open questions (0)' })).toBeInTheDocument()
+    expect(openList().getByText('None: every question is answered.')).toBeInTheDocument()
+  })
+
+  it.each<[string, Partial<Target>, FieldId[], string, string]>([
+    ['an unanswered text field', { namespace: '' }, [], 'Namespace', 'Namespace'],
+    ['a marked select', {}, ['target.chartVersion'], 'Chart version', 'Version'],
+    ['an unanswered radio group', { environment: '' }, [], 'Environment', 'Development'],
+  ])('lands on Target with %s focused', async (_name, change, open, label, input) => {
+    renderReview(undefined, undefined, { answers: { target: { ...ANSWERED, ...change } }, open })
+    await userEvent.click(within(question(label)).getByRole('button', { name: 'go ↗' }))
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Where is this going?')
+    expect(screen.getByLabelText(new RegExp(`^${input}`))).toHaveFocus()
+  })
+
   it('keeps the Epic 6 placeholder without a loaded file', () => {
     renderReview()
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Review — not available yet')
