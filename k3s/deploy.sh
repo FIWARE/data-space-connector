@@ -38,6 +38,8 @@
 #   PROVIDER_VALUES
 #   CONSUMER_VALUES
 #   PROMETHEUS_VALUES
+#   PROVIDER_MANIFESTS         manifests applied in the provider namespace before the releases,
+#                              default k3s/provider
 #   GAIA_X_INFRA               `true` to also apply k3s/gaia-x-infra
 #
 # Requires kubectl on the PATH.
@@ -134,7 +136,7 @@ if [ "${GAIA_X_INFRA:-false}" = "true" ]; then
 fi
 
 log "Additional resources of the participants"
-kubectl apply -f k3s/trust-anchor -f k3s/provider -f k3s/consumer
+kubectl apply -f k3s/trust-anchor -f "${PROVIDER_MANIFESTS:-k3s/provider}" -f k3s/consumer
 
 if [ -n "${PROMETHEUS_VALUES:-}" ]; then
     log "Monitoring"
