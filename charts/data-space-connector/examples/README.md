@@ -7,9 +7,11 @@ it expects and install it, as described below.
 | Profile | Role | Chart |
 |---|---|---|
 | [`provider.yaml`](provider.yaml) | Offers a data service, protected with Verifiable Credentials and ODRL policies, and its offers through the TM Forum API | `data-space-connector` |
-| [`provider-marketplace.yaml`](provider-marketplace.yaml) | Adds a local marketplace portal to `provider.yaml`, where the provider publishes its offers and consumers order them | `data-space-connector` |
+| [`provider-marketplace.yaml`](provider-marketplace.yaml) | Adds the provider's own local marketplace to `provider.yaml`: a portal, run by the provider, where it publishes its offers and consumers order them | `data-space-connector` |
 | [`consumer.yaml`](consumer.yaml) | Issues Verifiable Credentials to its users, to access the providers' services | `data-space-connector` |
 | [`trust-anchor.yaml`](../../trust-anchor/examples/trust-anchor.yaml) | Keeps the registry of the data space's participants | `trust-anchor` |
+
+`provider-marketplace.yaml` is the local marketplace of one provider's connector, not the Central Marketplace that a data space may run for all its participants. The Central Marketplace is set up by the operator of the data space: see [Central Marketplace](../../../doc/deployment-integration/roles/operator/README.md#central-marketplace).
 
 An organization that both offers and consumes services uses `provider.yaml`: its Keycloak issues
 credentials to its users as well. See [Consumer & Provider](../../../doc/deployment-integration/roles/consumer-provider/README.md).

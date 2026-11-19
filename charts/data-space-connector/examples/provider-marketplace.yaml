@@ -1,8 +1,10 @@
 # Reference profile: the local marketplace of a provider, on top of provider.yaml.
 #
-# Adds the marketplace portal (the Business API Ecosystem, BAE) where the provider publishes its
-# offers and consumers order them, with the MongoDB it needs. Users log in to the portal by
-# presenting a Verifiable Credential to the provider's verifier.
+# Adds the provider's own marketplace portal (the Business API Ecosystem, BAE), run in its
+# connector, where the provider publishes its offers and consumers order them, with the MongoDB it
+# needs. Users log in to the portal by presenting a Verifiable Credential to the provider's
+# verifier. It is not the Central Marketplace a data space may run for all its participants, which
+# its operator sets up: see doc/deployment-integration/roles/operator/README.md.
 #
 # Install it together with provider.yaml, which it extends:
 #
