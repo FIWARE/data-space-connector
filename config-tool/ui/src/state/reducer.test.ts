@@ -45,6 +45,12 @@ describe('reducer', () => {
     expect(reducer(loaded, { type: 'newConfiguration' })).toMatchObject({ loaded: undefined, loadedFile: undefined })
   })
 
+  it('swaps only the report when the same file is re-read under another root', () => {
+    const loaded = { ...BUSY, stage: StageId.Review, loaded: REPORT, loadedFile: FILE }
+    const rerooted = { ...REPORT, root: 'dsc' }
+    expect(reducer(loaded, { type: 'rootChanged', report: rerooted })).toEqual({ ...loaded, loaded: rerooted })
+  })
+
   it('closes the Expert view on any stage jump', () => {
     const expert = reducer({ ...initialState, entered: true, loaded: REPORT }, { type: 'openExpert' })
     expect(expert.expert).toBe(true)

@@ -63,6 +63,13 @@ export function refusedUpload(name: string, status: number): string {
   return `cannot load ${name}: refused with ${status}`
 }
 
+/** A load that answers only when `resolve` is called. */
+export function lateLoad() {
+  let resolve: (report: LoadReport) => void = () => {}
+  const pending = new Promise<LoadReport>((done) => (resolve = done))
+  return { load: () => pending, resolve }
+}
+
 /** Answers GET /api/model with `model`, GET /api/cluster/contexts with `contexts(path)` and POST /api/load with
  *  `load(name, root)`; `root` is null when the upload lets the server detect it. */
 export function mockApi(

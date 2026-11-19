@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react'
+import { act, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
 import { RootSource, VersionSource, type LoadReport } from '../api/load'
@@ -7,7 +7,7 @@ import { STAGES } from '../stages'
 import { initialState } from '../state/reducer'
 import { StageId } from '../state/stageIds'
 import { StoreProvider } from '../state/store'
-import { mockApi, REPORT, refusedUpload } from '../test/api'
+import { lateLoad, mockApi, REPORT, refusedUpload } from '../test/api'
 import { ROOT_LABEL, WHOLE_FILE } from './Review'
 
 const HTTP_UNPROCESSABLE = 422
@@ -87,6 +87,19 @@ describe('Review', () => {
     expect(await screen.findByText(/Read from/)).toHaveTextContent(`Read from ${WHOLE_FILE} (as chosen)`)
     const [, init] = fetchMock.mock.calls.at(-1) ?? []
     expect(init?.body).toBe(FILE)
+  })
+
+  it('drops a re-read that answers after the user left Review', async () => {
+    const late = lateLoad()
+    const fetchMock = mockApi(undefined, undefined, late.load)
+    renderReview(WRAPPED, FILE)
+    await userEvent.selectOptions(screen.getByLabelText(ROOT_LABEL), WHOLE_FILE)
+    await userEvent.click(within(screen.getByRole('navigation', { name: 'Stages' })).getByRole('button', { name: /Foundations/ }))
+    const init = fetchMock.mock.calls.find(([input]) => String(input).includes('/api/load'))?.[1]
+    expect(init?.signal?.aborted).toBe(true)
+    late.resolve({ ...WRAPPED, root: '', rootFrom: RootSource.Requested })
+    await act(() => Promise.resolve())
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Foundations — not available yet')
   })
 
   it('keeps the report and shows why a re-read was refused', async () => {
