@@ -201,14 +201,15 @@ root and restores the overrides layer. A changed file is restored with a note. A
 unreadable one is reported on Review, and saving again drops the reference to it. `source.file`
 must be a plain base name, so a shared profile cannot make the tool read outside its own directory.
 
-**Save** (rail button, ⌘S / Ctrl+S) asks for a path, by default
-`<dir>/<releaseName or connector>.dscprofile.yaml` in the directory of the latest recent profile,
-else the home directory. `PUT /api/profile` takes `path`, `overwrite`, `profile` and the
-`sourceSha256` of the load report the UI holds:
+**Save** (rail button, *Save profile* on Review, ⌘S / Ctrl+S) replaces the configuration's own
+profile in place, without a prompt, once it has one (opened or saved before). Otherwise it asks for a
+path, by default `<dir>/<releaseName or connector>.dscprofile.yaml` in the directory of the latest
+recent profile, else the home directory. `PUT /api/profile` takes `path`, `overwrite`, `profile`
+and the `sourceSha256` of the load report the UI holds:
 
-- Only an absolute path ending in `.dscprofile.yaml` is accepted. An existing file gives 409
-  until the user confirms *Replace*, and the write is atomic (temp file and rename, file mode kept;
-  new files are 0644).
+- Only an absolute path ending in `.dscprofile.yaml` is accepted. Without `overwrite` an existing
+  file gives 409, and the dialog asks to confirm *Replace*. The write is atomic (temp file and
+  rename, file mode kept; new files are 0644).
 - `source` is attached only when `sourceSha256` equals the server's current load. *New
   configuration* drops it, and a hash of another load gives 422.
 - The save compares the file next to the target path with the loaded one, and a note says
