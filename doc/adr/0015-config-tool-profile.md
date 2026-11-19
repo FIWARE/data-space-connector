@@ -65,7 +65,7 @@ secrets: {}
 | `target` | `profile.Target` unchanged: `type` (`file`, `cluster`), `context` (the kube context *name* only), `namespace`, `createNamespace`, `releaseName`, `chart`, `chartVersion`, `environment` (`development`, `production`). |
 | `answers` | Answer id → scalar. A slot only: CT-4 has no answer ids, so it is always `{}`. |
 | `open` | Fields deliberately left open, one mapping `{field}` per entry so a note can be added later. Field ids are `<section>.<key>`, e.g. `target.namespace`; the section names the stage. |
-| `source` | The values file the overrides layer lives in: base name, root mapping (ADR 0014), SHA-256 of its bytes. Metadata only; omitted when nothing was loaded. |
+| `source` | The values file the overrides layer lives in: base name, root mapping (ADR 0014; always written, `""` is the whole file), SHA-256 of its bytes. Metadata only; omitted when nothing was loaded. |
 | `secrets` | Epic 8: secret name → `{mode, keys, fingerprints}`, never a value. Always `{}` in CT-4. |
 
 `answers` and `secrets` exist so the format does not change when they get producers. Until then
@@ -100,6 +100,17 @@ server keeps since ADR 0014. A profile is meant to sit next to its values file (
 
 On open, a changed hash restores the layer with a note, and a missing or unreadable file clears
 it with a note saying that saving again drops the reference (the UI then holds no report).
+
+The re-load on open restores the overrides layer only; the profile stays the state:
+
+- **Bundle.** The file is classified against the profile's `model` bundle, passed to
+  `load.Load` as an explicit option, not chosen from the file's header or as the latest one
+  (ADR 0014 §5). Review then shows the classification of the bundle the profile renders with.
+- **Answers.** `target`, `answers` and `open` come from the profile only. Nothing the re-load
+  back-derives moves into them, so an empty `target.chartVersion` (an open question) stays empty
+  whatever the file's header says (ADR 0014 §5, §6).
+- **Root.** `source.root` is always written, never `omitempty`, and is passed as an explicit
+  `Options.Root`. `""` means the whole file (ADR 0014 §7), never "detect".
 
 ### 3. The server reads and writes by absolute path
 
@@ -201,7 +212,8 @@ Response 200:
 
 **`POST /api/profile/open`** reads, validates, restores `source` and adds the entry to the recent
 list. Body `{"path": "…"}`. Response 200 `{path, profile, report?, notes}`: `report` is the
-ADR 0014 load report when the source was restored. Notes cover a changed, missing or unreadable
+ADR 0014 load report when the source was restored, classified against the profile's `model`
+with its recorded root (2). Notes cover a changed, missing or unreadable
 source, an older bundle revision, and a failing recent list.
 
 **`GET /api/profile/recent`** returns
