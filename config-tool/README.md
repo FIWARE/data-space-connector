@@ -55,6 +55,12 @@ dev mode. The proxy authenticates nothing itself: any local process can send it 
 default browser. Ctrl+C stops it. If no browser opens, or the wrong one does, open the
 printed URL yourself. `dsc-config --no-browser` only prints the URL.
 
+`dsc-config generate -p <name>.dscprofile.yaml [-o values.yaml]` renders without the GUI (stdout
+by default). It refuses a profile with an unanswered or malformed Target field, naming the file and the field,
+because rendering needs a complete target. An existing output file is refused until the render
+epic decides how rendered keys merge with overrides (ADR 0015). Rendering itself is not
+implemented yet.
+
 ## Security model
 
 - The server listens on `127.0.0.1` with a random port and answers only for the hosts
