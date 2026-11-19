@@ -100,8 +100,8 @@ export function saveProfile(state: AppState, path: string, overwrite: boolean): 
 }
 
 /** POST /api/profile/open; 404 for a missing file, 422 for a bad path or an invalid profile. */
-export function openProfile(path: string): Promise<ProfileResponse> {
-  return api<ProfileResponse>('/profile/open', { method: 'POST', body: JSON.stringify({ path }) })
+export function openProfile(path: string, signal?: AbortSignal): Promise<ProfileResponse> {
+  return api<ProfileResponse>('/profile/open', { method: 'POST', body: JSON.stringify({ path }), signal })
 }
 
 /** GET /api/profile/recent. */

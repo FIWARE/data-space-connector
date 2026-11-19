@@ -1,7 +1,7 @@
 /** The save action the rail, Review and ⌘S share, apart from SaveProvider so fast refresh keeps working. */
 import { createContext, useContext } from 'react'
 
-/** What useSave hands out; `saved` names the last profile written without a note. */
+/** What useSave hands out; `saved` names the profile last written, until answers, markers or the load change. */
 export interface SaveValue {
   save: () => void
   busy: boolean

@@ -3,6 +3,7 @@ import { useEffect, useState, type FormEvent, type KeyboardEvent, type ReactNode
 import { ApiError } from '../api/client'
 import { defaultProfilePath, fetchRecent, HTTP_CONFLICT, PATH_HINT, profileName, saveProfile } from '../api/profile'
 import { useStore } from '../state/context'
+import type { AppState } from '../state/reducer'
 import { SaveContext } from './saveContext'
 
 /** Accessible name of the dialog's path field. */
@@ -98,20 +99,29 @@ function SaveDialog({ dialog, busy, source, onPath, onSubmit, onClose }: DialogP
   )
 }
 
+/** The profile last written and the state it was written from; an edit since then makes it stale. */
+interface Written {
+  name: string
+  answers: AppState['answers']
+  open: AppState['open']
+  loaded: AppState['loaded']
+}
+
 /** Provides the save action to the chrome, binds ⌘S / Ctrl+S and shows the dialog.
  *  Format errors do not block a save: a half-finished configuration is saved as typed (ADR 0015 §5). */
 export function SaveProvider({ children }: { children: ReactNode }) {
   const { state, dispatch } = useStore()
   const [dialog, setDialog] = useState<DialogState>()
   const [busy, setBusy] = useState(false)
-  const [saved, setSaved] = useState<string>()
+  const [written, setWritten] = useState<Written>()
+  const saved = written && written.answers === state.answers && written.open === state.open && written.loaded === state.loaded ? written.name : undefined
 
   // Returns what the dialog shows next; undefined closes it. Notes of an in-place save go to Review only.
   async function write(path: string, overwrite: boolean, inDialog: boolean): Promise<DialogState | undefined> {
     try {
       const response = await saveProfile(state, path, overwrite)
       dispatch({ type: 'profileSaved', path: response.path, profile: response.profile, notes: response.notes })
-      setSaved(profileName(response.path))
+      setWritten({ name: profileName(response.path), answers: state.answers, open: state.open, loaded: state.loaded })
       return inDialog && response.notes.length > 0 ? { path: response.path, notes: response.notes } : undefined
     } catch (failure) {
       if (failure instanceof ApiError && failure.status === HTTP_CONFLICT && !overwrite) return { path, confirmReplace: true }
@@ -121,7 +131,7 @@ export function SaveProvider({ children }: { children: ReactNode }) {
 
   async function run(path: string, overwrite: boolean, inDialog: boolean) {
     setBusy(true)
-    setSaved(undefined)
+    setWritten(undefined)
     setDialog(await write(path, overwrite, inDialog))
     setBusy(false)
   }

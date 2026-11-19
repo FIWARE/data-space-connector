@@ -61,6 +61,15 @@ describe('SaveDialog', () => {
     expect(screen.getByRole('banner')).toHaveTextContent('connector')
   })
 
+  it('reports the save in the rail until an answer changes', async () => {
+    renderChrome(echo(), { ...ENTERED, profilePath: KNOWN_PATH })
+    await userEvent.click(railSave())
+    const rail = screen.getByRole('navigation', { name: 'Stages' })
+    expect(await within(rail).findByRole('status')).toHaveTextContent('Saved provider')
+    await userEvent.type(screen.getByLabelText('Namespace'), 'x')
+    expect(within(rail).queryByRole('status')).toBeNull()
+  })
+
   it('asks before replacing an existing file and replaces it on confirm', async () => {
     const saves = renderChrome((body) => (body.overwrite ? echo()(body) : HTTP_CONFLICT))
     await userEvent.click(railSave())

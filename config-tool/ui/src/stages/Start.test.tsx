@@ -1,5 +1,6 @@
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { StrictMode } from 'react'
 import { describe, expect, it } from 'vitest'
 import { App } from '../App'
 import type { Profile, RecentEntry } from '../api/profile'
@@ -131,9 +132,18 @@ describe('Start: profiles', () => {
     ])
   })
 
-  it('opens a recent profile on Review with its open question', async () => {
+  // main.tsx renders under StrictMode, whose dev mode runs every effect cleanup once on mount.
+  it.each([
+    ['plainly', <App key="plain" />],
+    [
+      'under StrictMode',
+      <StrictMode key="strict">
+        <App />
+      </StrictMode>,
+    ],
+  ])('opens a recent profile on Review with its open question when rendered %s', async (_, app) => {
     mockProfiles()
-    render(<App />)
+    render(app)
     await userEvent.click(await screen.findByRole('button', { name: /^provider/ }))
     expect(await screen.findByRole('button', { name: /7 Review/ })).toHaveAttribute('aria-current', 'step')
     expect(screen.getByRole('heading', { name: /Open questions/ }).parentElement).toHaveTextContent(/Kube context.*marked/)

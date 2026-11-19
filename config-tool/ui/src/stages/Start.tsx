@@ -73,24 +73,23 @@ function OpenValuesCard({ busy, setBusy, setError }: { busy: boolean; setBusy: (
   )
 }
 
-/** Opens a profile by path and enters Review; a failure stays on S0. Unmounting drops a late answer. */
+/** Opens a profile by path and enters Review; a failure stays on S0.
+ *  Unmounting aborts the request, so a late answer never replaces a session started meanwhile. */
 function useOpenProfile(setBusy: (busy: boolean) => void, setError: (error?: string) => void) {
   const { dispatch } = useStore()
-  const mounted = useRef(true)
-  useEffect(
-    () => () => {
-      mounted.current = false
-    },
-    [],
-  )
+  const request = useRef<AbortController>()
+  useEffect(() => () => request.current?.abort(), [])
   return async (path: string) => {
+    request.current?.abort()
+    const controller = new AbortController()
+    request.current = controller
     setBusy(true)
     setError(undefined)
     try {
-      const response = await openProfile(path)
-      if (mounted.current) dispatch({ type: 'profileOpened', path: response.path, profile: response.profile, report: response.report, notes: response.notes })
+      const response = await openProfile(path, controller.signal)
+      if (!controller.signal.aborted) dispatch({ type: 'profileOpened', path: response.path, profile: response.profile, report: response.report, notes: response.notes })
     } catch (failure) {
-      if (!mounted.current) return
+      if (controller.signal.aborted) return
       setError(`Cannot open ${path}: ${failure instanceof Error ? failure.message : String(failure)}`)
       setBusy(false)
     }
