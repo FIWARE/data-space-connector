@@ -559,13 +559,22 @@ k3s before any scenario relies on it. There is **no** `@typed-scopes` tag and no
   - `AGENTS.md` eventing section: "Feature needs CM ≥ 3.5.4 (chart 3.6.7)", and the "CM 3.5.3
     publisher gotchas" line re-checked against 3.5.4 (keep what still holds).
   - The k3s overlays pin no CM image, so they need no change.
-  - **Prove the fix on k3s** (`mvn clean deploy -Peventing`, results in the PR): run the Step 2
-    probe first (`remove did:web:fancy-marketplace.biz` with the demo script). It must yield a
-    provider report entry whose `held` lists the `dataspace-membership` grant. Then, on both
-    participant CMs, the `dataspace-participant-removed` health indicator is `UP` with
-    `details.til.typed-scopes: supported` (not `too_old`). The value is the lower-cased
-    `TilCapability.State` and reads `not_probed` until the first event or sweep, which is why it
-    is read after the probe. If either check fails, stop and report `blocked`.
+  - **Prove the fix on k3s** (`mvn clean deploy -Peventing`, results in the PR), in this order:
+    1. `remove did:web:fancy-marketplace.biz` with the demo script. It must yield a provider report
+       entry whose `held` lists the `dataspace-membership` grant. The consumer does not exercise
+       typed scopes here: the DID is on its `keep`, and `ParticipantRemoval.apply` returns `kept`
+       before it calls `requireSupported()`;
+    2. `publish did:web:probe-<timestamp>.org` with the demo script. The DID is on neither `keep`,
+       so both participant CMs call `requireSupported()`;
+    3. on both participant CMs, the `dataspace-participant-removed` health indicator is `UP` with
+       `details.til.typed-scopes: supported` (not `too_old`). The value is the lower-cased
+       `TilCapability.State`. `ParticipantRemovedStartupGuard` probes at start-up, so on a reachable
+       TIL it is already set then; the check comes after 1–2 because an `unverified` state (TIL
+       unreachable at start-up) is only re-probed by `requireSupported()` on an event or sweep;
+    4. `restore did:web:fancy-marketplace.biz`, so the IT run of the Step 3 acceptance finds the
+       consumer at the TIR.
+
+    If check 1 or 3 fails, stop and report `blocked`.
 - **Reuse the scaffolding.** Cherry-pick `30ec74f` from `origin/ticket-106/step-2` (not `dfc0e16`),
   then remove what the blocker added: the `@typed-scopes` tag and scenario split in
   `dataspace_eventing.feature`, and the `and not @typed-scopes` exclusion in the `it/pom.xml`
