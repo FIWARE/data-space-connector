@@ -96,7 +96,9 @@ Why this and not something else:
 ┌───────────────────────────────▼──────────────────────────────────────────────────┐
 │  API — net/http on 127.0.0.1, one-time token                                     │
 │    GET  /api/model          the question model for the selected chart version    │
-│    GET/PUT /api/profile     the answer set                                       │
+│    PUT  /api/profile        save the answer set to a path                        │
+│    POST /api/profile/open   read a profile, restore its source                   │
+│    GET  /api/profile/recent recently used profiles                               │
 │    POST /api/render         profile → values.yaml (+ diff)                       │
 │    POST /api/validate       L1 schema · L2 rules · L3 helm template              │
 │    POST /api/load           values.yaml → profile + overrides + conflicts        │

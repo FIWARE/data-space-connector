@@ -32,7 +32,8 @@ A map override over a key that a mapping only inherits through a merge key (`<<:
 writes an explicit key holding the inherited map merged with the override, so the inherited
 sibling keys stay. Replacing an existing file on disk goes through this package (`Parse` the
 existing file, `Merge`, `Write`) and is written atomically: a temporary file in the same
-directory, renamed over the target, keeping its mode. The CLI wires that in CT-4.
+directory, renamed over the target, keeping its mode. CT-4 adds that plumbing; wiring it into `generate`
+waits for the render epic ([ADR 0015](0015-config-tool-profile.md)).
 
 The library choice of ADR 0009 is unchanged; this record only fixes how the library is used.
 
