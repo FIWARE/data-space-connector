@@ -259,6 +259,22 @@ decentralized-iam 2.3.0 / TIL 0.10.3).
   A fixed sleep of `interval × (confirmations + 1)` was rejected: it is still a guess when a cycle
   is slow, and the health value is exact.
 
+## Known blocker (found in Step 2): CM 3.5.3 cannot use the TIL's typed scopes
+CM 3.5.3 sends the scope type by its Java enum name. The TIL 0.10.3 rejects that:
+`GET /issuer?scopeType=DATASPACE_MEMBERSHIP` returns `400 Unknown scope type`. CM's typed-scopes probe
+therefore reads `too_old`, and on the k3s deploy of Step 2 both participant CMs report health
+`DEGRADED` (`typed-scopes: too_old`). The consequences:
+- `report` mode reports removals with `held: null`;
+- the reconciler skips every sweep (`til_too_old`);
+- the writing modes (`dataspace`, `granted`, `full`) cannot work: CM fails to start in them, and a
+  ConfigMap switch to them has no TIL to write through.
+
+Step 2 (push path, `report` mode) is unaffected. Steps 3–5 assert `held`, the writing modes and the
+sweep, so they need a CM release that sends `scopeType=dataspace-membership`, and a CM chart that
+ships it. Until then, Step 3 can only implement scenario 1 and the scaffolding. Raise the bug with
+FIWARE/contract-management (`TrustedIssuersListAdapter.DATASPACE_MEMBERSHIP_SCOPE_TYPE` serialisation
+in the generated TIL client).
+
 ## Deviations from the ticket (need human sign-off)
 1. **The demo command is `mvn clean deploy -Peventing`, not `-Plocal`.** It is a scenario profile, as
    `-Pconsent` is. Putting eventing into `local` would add the authority's Keycloak/verifier/APISIX to

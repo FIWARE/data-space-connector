@@ -488,10 +488,16 @@ decentralizedIam:
               contract-management:8080: 1
             type: roundrobin
           plugins: *subscriptionPlugins
-        # On a 401 the subscriber looks up where to get a token at
-        # <scheme>://<host>/.well-known/openid-configuration.
+        # On a 401 the subscriber looks up where to get a token at <request path> +
+        # /.well-known/openid-configuration: /subscriptions/... for a subscription,
+        # /subscriptions/<id>/... for a cancellation. The host root serves it as well.
         - name: dataspace-subscriptions-discovery
-          uri: /.well-known/openid-configuration
+          uris:
+            - /.well-known/openid-configuration
+            - /subscriptions/.well-known/openid-configuration
+            - /subscriptions/*
+          vars:
+            - ["uri", "~~", "/\\.well-known/openid-configuration$"]
           methods: ["GET"]
           host: dataspace-events.127.0.0.1.nip.io
           upstream:

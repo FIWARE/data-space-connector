@@ -1,0 +1,758 @@
+# ---------------------------------------------------------------------------
+# Data space eventing overlay for the provider (M&P Operations), layered on
+# k3s/provider.yaml:
+#   -f k3s/provider.yaml -f k3s/eventing-provider.yaml
+#
+# Turns the provider's contract-management into a listener + subscriber of the trust
+# anchor's event publisher (k3s/eventing-trust-anchor.yaml) and exposes its `/events`
+# sink at the gateway. Setup guide: doc/eventing/participant-setup.md.
+#
+# This file only ADDS to the provider. Helm replaces lists, so the lists it extends
+# (verifier services, APISIX routes, contract-management env vars, registration
+# issuers) are full copies of the ones in provider.yaml plus the eventing entries:
+# keep them in sync.
+#
+# In-cluster, *.127.0.0.1.nip.io resolves to the Traefik Service, which listens on
+# 8443 only (not 443). Every in-cluster URL to such a host therefore carries `:8443`.
+#
+# The timings below are demo/test values, sized for the integration test.
+# ---------------------------------------------------------------------------
+
+contract-management:
+  dataspace:
+    events:
+      # receive the publisher's events
+      listener:
+        enabled: true
+      subscriber:
+        enabled: true
+        # the `/events` routes below; the publisher delivers here from inside the cluster
+        sink: https://contract-management.127.0.0.1.nip.io:8443/events
+        # the verifier service `dataspace-events` below; the publisher requests its token there
+        protocol-settings:
+          client-id: dataspace-events
+          scopes: ["default"]
+        # a registration that failed while the publisher was down is retried within 20 s
+        # (CM defaults PT5S, PT5M)
+        retry:
+          initial-backoff: PT5S
+          max-backoff: PT20S
+      publishers:
+        - id: did:web:dataspace-authority.org
+          # publisher.origin of the trust anchor
+          origin: dataspace-events.127.0.0.1.nip.io
+          types: ["org.fiware.dataspace.participant.removed"]
+          subscriptions-url: https://dataspace-events.127.0.0.1.nip.io:8443/subscriptions
+          # the publisher's verifier service; the token carries this participant's DID
+          client-id: dataspace-subscriptions
+          scopes: ["default"]
+          on-participant-removed:
+            mode: report
+            # the TIR this publisher watches: an event for a DID still listed there is stale
+            registry-url: http://tir.trust-anchor.svc.cluster.local:8080
+            keep:
+              - did:web:dataspace-authority.org
+              - did:web:mp-operations.org
+      # the sweep runs once ~20 s after start-up and then only every 6 h, so that it never
+      # races the event path in the integration test (CM defaults PT1M, PT15M)
+      participant-removed:
+        reconcile:
+          initial-delay: PT20S
+          interval: PT6H
+  # Present the provider's MembershipCredential (issued by its own keycloak, so the
+  # publisher identifies it as did:web:mp-operations.org) to the publisher's verifier.
+  oid4vp:
+    enabled: true
+    credentialsFolder: /credential-repo
+    trustAnchors:
+      - /etc/ssl/cacert.pem
+    holder:
+      holderId: did:web:mp-operations.org
+      keyType: EC
+      keyPath: /signing-key/tls.key
+      signatureAlgorithm: ECDH-ES
+    # verifier.dataspace-authority.org only resolves through squid
+    proxyConfig:
+      enabled: true
+      proxyHost: squid-proxy.infra.svc.cluster.local
+      proxyPort: 8888
+  deployment:
+    initContainers:
+      # the OID4VP client reads a PKCS#8 key
+      - name: convert-signing-key
+        image: alpine/openssl:3.5.5
+        command: ["sh", "-c", "openssl pkcs8 -topk8 -nocrypt -in /signing-key-raw/tls.key -out /signing-key/tls.key && chmod 644 /signing-key/tls.key"]
+        volumeMounts:
+          - name: signing-key-raw
+            mountPath: /signing-key-raw
+          - name: signing-key
+            mountPath: /signing-key
+      # load the dsc-ca into the java truststore, for the publisher's gateway and verifier
+      - name: load-certs
+        image: "quay.io/seamware/fdsc-edc-controlplane-oid4vc:0.1.1"
+        command: ["/bin/sh", "-c", "/bin/import-ca.sh /certs-folder /root-ca/cacert.pem /opt/java/openjdk/lib/security/cacerts"]
+        volumeMounts:
+          - name: ca-certs-script
+            mountPath: /bin/import-ca.sh
+            subPath: import-ca.sh
+          - name: cacerts
+            mountPath: /certs-folder/
+          - name: root-ca
+            mountPath: /root-ca/cacert.pem
+            subPath: ca.crt
+    additionalVolumes:
+      - name: signing-key
+        emptyDir: {}
+      - name: signing-key-raw
+        secret:
+          secretName: mp-operations.org-tls
+          defaultMode: 0755
+      - name: ca-certs-script
+        configMap:
+          name: ca-certs-script
+          defaultMode: 0755
+      # the MembershipCredential the provider's vc-operator keeps fresh
+      - name: credential-repo
+        projected:
+          sources:
+            - secret:
+                name: vc-fdsc-edc-credential
+                items:
+                  - key: credential
+                    path: membership-credential.jwt
+      - name: root-ca
+        secret:
+          secretName: mp-operations.org-tls
+          items:
+            - key: ca.crt
+              path: ca.crt
+      - name: cacerts
+        emptyDir: {}
+    additionalVolumeMounts:
+      - name: credential-repo
+        mountPath: /credential-repo
+      - name: signing-key
+        mountPath: /signing-key
+      - name: root-ca
+        mountPath: /etc/ssl/cacert.pem
+        subPath: ca.crt
+      - name: cacerts
+        mountPath: /opt/java/openjdk/lib/security/cacerts
+        subPath: cacerts
+      # Red Hat JDK uses a different truststore path
+      - name: cacerts
+        mountPath: /etc/pki/ca-trust/extracted/java/cacerts
+        subPath: cacerts
+  # copy of provider.yaml's list, plus the eventing entry
+  additionalEnvVars:
+    - name: LOGGER_LEVELS_ROOT
+      value: DEBUG
+    # Enrich the agreements written from completed product orders for the consent integration:
+    # provider-id/consumer-id (the participants' self-description URLs), signing-date and policy.
+    # Without it the consent-facade projects no privacy notice from a purchased offering.
+    - name: CONSENT_ENABLED
+      value: "true"
+    # MUST equal the consent-facade's own selfUrl - the consent-manager matches participants on
+    # this exact string, so a value that merely resolves is not enough.
+    - name: CONSENT_SELF_DESCRIPTION_BASE_URL
+      value: https://consent-facade.dataspace-authority.org
+    # show each subscription's state and expiresAt on the cluster-internal port 9090
+    - name: ENDPOINTS_HEALTH_DETAILS_VISIBLE
+      value: "ANONYMOUS"
+
+decentralizedIam:
+  vcAuthentication:
+    vcverifier:
+      registration:
+        # copy of provider.yaml's list, plus `dataspace-events`
+        services:
+          # tmf-api: the OID4VP-protected TM Forum api behind the mp-tmf-api ingress.
+          # The consent-facade (at the authority) authenticates here with an
+          # OperatorCredential issued to did:web:dataspace-authority.org. Registering
+          # it makes the verifier's authorization endpoint recognise client_id=tmf-api
+          # (without this the endpoint 302s / "service not found").
+          - id: tmf-api
+            defaultOidcScope: "default"
+            authorizationType: "DEEPLINK"
+            oidcScopes:
+              "default":
+                credentials:
+                  - type: OperatorCredential
+                    trustedParticipantsLists:
+                      - https://tir.127.0.0.1.nip.io
+                    trustedIssuersLists:
+                      - http://trusted-issuers-list:8080
+                    jwtInclusion:
+                      enabled: true
+                      fullInclusion: true
+                dcql:
+                  credentials:
+                    - id: operator-query
+                      format: "jwt_vc_json"
+                      multiple: true
+                      meta:
+                        type_values:
+                          - [OperatorCredential]
+          - id: tpp-service
+            defaultOidcScope: "operator"
+            authorizationType: "DEEPLINK"
+            oidcScopes:
+              "operator":
+                credentials:
+                  - type: OperatorCredential
+                    trustedParticipantsLists:
+                      - https://tir.127.0.0.1.nip.io
+                    trustedIssuersLists:
+                      - http://trusted-issuers-list:8080
+                    jwtInclusion:
+                      enabled: true
+                      fullInclusion: true
+          - id: bae
+            defaultOidcScope: "openid learcredential"
+            authorizationType: "FRONTEND_V2"
+            oidcScopes:
+              "openid learcredential":
+                credentials:
+                  - type: LegalPersonCredential
+                    trustedParticipantsLists:
+                      - https://tir.127.0.0.1.nip.io
+                    trustedIssuersLists:
+                      - http://trusted-issuers-list:8080
+                    jwtInclusion:
+                      enabled: true
+                      fullInclusion: true
+                dcql:
+                  credentials:
+                    - id: legal-person-query
+                      format: "dc+sd-jwt"
+                      multiple: false
+                      claims:
+                        - id: name-claim
+                          path:
+                            - firstName
+                        - id: roles-claim
+                          path:
+                            - roles
+                      meta:
+                        vct_values:
+                          - LegalPersonCredential
+          - id: data-service
+            defaultOidcScope: "default"
+            authorizationType: "DEEPLINK"
+            oidcScopes:
+              "default":
+                credentials:
+                  - type: UserCredential
+                    trustedParticipantsLists:
+                      - https://tir.127.0.0.1.nip.io
+                    trustedIssuersLists:
+                      - http://trusted-issuers-list:8080
+                    jwtInclusion:
+                      enabled: true
+                      fullInclusion: true
+                dcql:
+                  credentials:
+                    - id: user-query
+                      format: "jwt_vc_json"
+                      multiple: true
+                      meta:
+                        type_values:
+                          - [UserCredential]
+              "legal":
+                credentials:
+                  - type: LegalPersonCredential
+                    trustedParticipantsLists:
+                      - https://tir.127.0.0.1.nip.io
+                    trustedIssuersLists:
+                      - http://trusted-issuers-list:8080
+                    jwtInclusion:
+                      enabled: true
+                      fullInclusion: true
+                dcql:
+                  credentials:
+                    - id: legal-person-query
+                      format: "dc+sd-jwt"
+                      multiple: false
+                      claims:
+                        - id: name-claim
+                          path:
+                            - firstName
+                        - id: roles-claim
+                          path:
+                            - roles
+                      meta:
+                        vct_values:
+                          - LegalPersonCredential
+              "operator":
+                credentials:
+                  - type: OperatorCredential
+                    trustedParticipantsLists:
+                      - https://tir.127.0.0.1.nip.io
+                    trustedIssuersLists:
+                      - http://trusted-issuers-list:8080
+                    jwtInclusion:
+                      enabled: true
+                      fullInclusion: true
+                dcql:
+                  credentials:
+                    - id: operator-query
+                      format: "jwt_vc_json"
+                      multiple: true
+                      meta:
+                        type_values:
+                          - [OperatorCredential]
+          - id: dsp
+            defaultOidcScope: "openid"
+            authorizationType: "DEEPLINK"
+            oidcScopes:
+              "openid":
+                credentials:
+                  - type: MembershipCredential
+                    trustedParticipantsLists:
+                      - https://tir.127.0.0.1.nip.io
+                    trustedIssuersLists:
+                      - "*"
+                    jwtInclusion:
+                      enabled: true
+                      fullInclusion: true
+                dcql:
+                  credentials:
+                    - id: mc-query
+                      format: "jwt_vc_json"
+                      multiple: true
+                      meta:
+                        type_values:
+                          - [MembershipCredential]
+          - id: contract-management
+            defaultOidcScope: "external-marketplace"
+            authorizationType: "DEEPLINK"
+            oidcScopes:
+              "external-marketplace":
+                credentials:
+                  - type: MarketplaceCredential
+                    trustedParticipantsLists:
+                      - https://tir.127.0.0.1.nip.io
+                    trustedIssuersLists:
+                      - "*"
+                    jwtInclusion:
+                      enabled: true
+                      fullInclusion: true
+                dcql:
+                  credentials:
+                    - id: mc-query
+                      format: "jwt_vc_json"
+                      multiple: true
+                      meta:
+                        type_values:
+                          - ["MarketplaceCredential"]
+          # Who may deliver events: the publisher's OperatorCredential, issued by
+          # did:web:dataspace-authority.org. Only that issuer is listed for the type in this
+          # participant's TIL, so that issuer is the publisher and is mapped to participantId.
+          # The ODRL policy (allowDataSpaceEvents) reads verifiableCredential.{type,issuer};
+          # contract-management compares participantId with the event's sender.
+          - id: dataspace-events
+            defaultOidcScope: "default"
+            authorizationType: "DEEPLINK"
+            oidcScopes:
+              "default":
+                # put the mapped claims at the top level of the token
+                flatClaims: true
+                credentials:
+                  - type: OperatorCredential
+                    trustedParticipantsLists:
+                      - https://tir.127.0.0.1.nip.io
+                    trustedIssuersLists:
+                      - http://trusted-issuers-list:8080
+                    jwtInclusion:
+                      enabled: true
+                      # fullInclusion would make the verifier ignore claimsToInclude
+                      fullInclusion: false
+                      # a "." in newKey creates a nested claim
+                      claimsToInclude:
+                        # the authority's OperatorCredential has no credentialSubject.id
+                        - originalKey: issuer
+                          newKey: participantId
+                        - originalKey: type
+                          newKey: verifiableCredential.type
+                        - originalKey: issuer
+                          newKey: verifiableCredential.issuer
+                dcql:
+                  credentials:
+                    - id: operator-query
+                      format: "jwt_vc_json"
+                      multiple: true
+                      meta:
+                        type_values:
+                          - [OperatorCredential]
+  odrlAuthorization:
+    apisix:
+      # copy of provider.yaml's list, plus the three routes of
+      # doc/eventing/examples/events-routes.yaml. The host is already in the ingress.
+      routes:
+        - uri: /.well-known/openid-configuration
+          host: tpp-service.127.0.0.1.nip.io
+          upstream:
+            nodes:
+              verifier:3000: 1
+            type: roundrobin
+          plugins:
+            proxy-rewrite:
+              uri: /services/tpp-service/.well-known/openid-configuration
+        - uri: /.well-known/openid-configuration
+          host: mp-data-service.127.0.0.1.nip.io
+          upstream:
+            nodes:
+              verifier:3000: 1
+            type: roundrobin
+          plugins:
+            proxy-rewrite:
+              uri: /services/data-service/.well-known/openid-configuration
+        - uri: /.well-known/openid-configuration
+          host: contract-management.127.0.0.1.nip.io
+          upstream:
+            nodes:
+              verifier:3000: 1
+            type: roundrobin
+          plugins:
+            proxy-rewrite:
+              uri: /services/contract-management/.well-known/openid-configuration
+        - uri: /*
+          host: contract-management.127.0.0.1.nip.io
+          priority: 100
+          vars:
+            - ["uri", "~~", "/\\.well-known/openid-configuration$"]
+          upstream:
+            nodes:
+              verifier:3000: 1
+            type: roundrobin
+          plugins:
+            proxy-rewrite:
+              uri: /services/contract-management/.well-known/openid-configuration
+        - uri: /.well-known/data-space-configuration
+          upstream:
+            nodes:
+              dsconfig:3002: 1
+            type: roundrobin
+          plugins:
+            proxy-rewrite:
+              uri: /.well-known/data-space-configuration/data-space-configuration.json
+            response-rewrite:
+              headers:
+                set:
+                  content-type: application/json
+        - uri: /*
+          host: tpp-data-service.127.0.0.1.nip.io
+          upstream:
+            nodes:
+              data-service-scorpio:9090: 1
+            type: roundrobin
+          plugins:
+            openid-connect:
+              proxy_opts:
+                https_proxy: http://squid-proxy.infra.svc.cluster.local:8888
+              bearer_only: true
+              use_jwks: true
+              client_id: contract-management
+              client_secret: unused
+              ssl_verify: false
+              discovery: https://verifier.mp-operations.org/services/tmf-api/.well-known/openid-configuration
+            opa:
+              host: http://localhost:8181
+              policy: tpp
+        - uri: /*
+          host: mp-data-service.127.0.0.1.nip.io
+          upstream:
+            nodes:
+              data-service-scorpio:9090: 1
+            type: roundrobin
+          plugins:
+            openid-connect:
+              proxy_opts:
+                https_proxy: http://squid-proxy.infra.svc.cluster.local:8888
+              bearer_only: true
+              use_jwks: true
+              client_id: data-service
+              client_secret: unused
+              ssl_verify: false
+              discovery: https://verifier.mp-operations.org/services/data-service/.well-known/openid-configuration
+            opa:
+              host: http://localhost:8181
+              policy: policy/main
+              with_body: true
+        # same backend + auth/authz as mp-data-service, plus the consent-plugin.
+        # pre-req captures the request context (the JWT `sub`); post-resp runs the
+        # two-call consent check against the consent-manager (identifier/search +
+        # consents/participants) and denies unless a granted consent exists.
+        # The plugin holds NO participant credential. It asks the provider-local
+        # consent-facade (token_service_url) for a short-lived OID4VP access token,
+        # which that facade obtains by presenting this participant's credential as
+        # did:web:mp-operations.org; the token is then accepted by the authority
+        # gateway's openid-connect check and resolved to a Participant by `did`. The
+        # provider self-description is still derived from /participants/me, so no
+        # per-seed token/SD wiring is needed. No `consent_key` either: the authority's
+        # facade injects it server-side. See doc/CONSENT_MANAGEMENT.md.
+        # `audit_enabled` emits one access-decision event per request to the OTLP
+        # collector (`audit_otlp_endpoint`) as a log record marked
+        # service.name=consent-access-audit; off by default (turn on once the
+        # opentelemetry-collector subchart + a logs/audit pipeline are deployed).
+        - uri: /*
+          host: mp-data-service-consent.127.0.0.1.nip.io
+          upstream:
+            nodes:
+              data-service-scorpio:9090: 1
+            type: roundrobin
+          plugins:
+            openid-connect:
+              proxy_opts:
+                https_proxy: http://squid-proxy.infra.svc.cluster.local:8888
+              bearer_only: true
+              use_jwks: true
+              client_id: data-service
+              client_secret: unused
+              ssl_verify: false
+              discovery: https://verifier.mp-operations.org/services/data-service/.well-known/openid-configuration
+            opa:
+              host: http://localhost:8181
+              policy: policy/main
+              with_body: true
+            # The plugin must be wired on BOTH phases with the identical conf:
+            # ext-plugin-pre-req runs RequestFilter (captures method/path, keyed by
+            # $request_id); ext-plugin-post-resp runs ResponseFilter (resolves the
+            # data owner and checks consent). Without the pre-req phase there is no
+            # stored context and the plugin fails closed on every request.
+            ext-plugin-pre-req:
+              conf:
+                - name: consent-filter
+                  value: '{"consent_api_url":"http://consent-authority-apisix-gateway.trust-anchor.svc.cluster.local/consent-manager","consent_api_host":"consent-manager.dataspace-authority.org","consent_api_prefix":"/v1","owner_resolver_url":"http://owner-resolver.provider.svc.cluster.local:8080/resolve","service":"mp-data-service","token_service_url":"http://consent-facade.provider.svc.cluster.local:8080/internal/tokens","token_audience":"consent-manager","fail_open":false,"audit_enabled":false,"audit_otlp_endpoint":"http://provider-opentelemetry-collector:4318"}'
+            ext-plugin-post-resp:
+              conf:
+                - name: consent-filter
+                  value: '{"consent_api_url":"http://consent-authority-apisix-gateway.trust-anchor.svc.cluster.local/consent-manager","consent_api_host":"consent-manager.dataspace-authority.org","consent_api_prefix":"/v1","owner_resolver_url":"http://owner-resolver.provider.svc.cluster.local:8080/resolve","service":"mp-data-service","token_service_url":"http://consent-facade.provider.svc.cluster.local:8080/internal/tokens","token_audience":"consent-manager","fail_open":false,"audit_enabled":false,"audit_otlp_endpoint":"http://provider-opentelemetry-collector:4318"}'
+        - uri: /.well-known/openid-configuration
+          host: mp-tmf-api.127.0.0.1.nip.io
+          upstream:
+            nodes:
+              verifier:3000: 1
+            type: roundrobin
+          plugins:
+            proxy-rewrite:
+              uri: /services/tmf-api/.well-known/openid-configuration
+        - uri: /.well-known/openid-configuration
+          host: dsp-mp-operations.127.0.0.1.nip.io
+          upstream:
+            nodes:
+              verifier:3000: 1
+            type: roundrobin
+          plugins:
+            proxy-rewrite:
+              uri: /services/dsp/.well-known/openid-configuration
+        - uri: /*
+          host: dsp-mp-operations.127.0.0.1.nip.io
+          upstream:
+            nodes:
+              provider-fdsc-edc-oid4vc:8080: 1
+          plugins:
+            openid-connect:
+              proxy_opts:
+                https_proxy: http://squid-proxy.infra.svc.cluster.local:8888
+              bearer_only: true
+              use_jwks: true
+              client_id: dsp
+              client_secret: unused
+              ssl_verify: false
+              discovery: https://verifier.mp-operations.org/services/dsp/.well-known/openid-configuration
+        - uri: /api/identity/*
+          host: identityhub-management-mp-operations.127.0.0.1.nip.io
+          upstream:
+            nodes:
+              identityhub-service:8082: 1
+        - uri: /api/credentials/*
+          host: identityhub-mp-operations.127.0.0.1.nip.io
+          upstream:
+            nodes:
+              identityhub-service:8083: 1
+        - uri: /*
+          host: dcp-mp-operations.127.0.0.1.nip.io
+          upstream:
+            nodes:
+              provider-fdsc-edc-dcp:8080: 1
+        - uri: /*
+          host: mp-tmf-api.127.0.0.1.nip.io
+          upstream:
+            nodes:
+              tm-forum-api-svc:8080: 1
+            type: roundrobin
+          plugins:
+            openid-connect:
+              proxy_opts:
+                https_proxy: http://squid-proxy.infra.svc.cluster.local:8888
+              bearer_only: true
+              use_jwks: true
+              client_id: contract-management
+              client_secret: unused
+              ssl_verify: false
+              discovery: https://verifier.mp-operations.org/services/tmf-api/.well-known/openid-configuration
+            opa:
+              host: http://localhost:8181
+              policy: policy/main
+              with_body: true
+        - uri: /*
+          host: contract-management.127.0.0.1.nip.io
+          upstream:
+            nodes:
+              contract-management:8080: 1
+            type: roundrobin
+          plugins:
+            openid-connect:
+              proxy_opts:
+                https_proxy: http://squid-proxy.infra.svc.cluster.local:8888
+              bearer_only: true
+              use_jwks: true
+              client_id: contract-management
+              client_secret: unused
+              ssl_verify: false
+              discovery: https://verifier.mp-operations.org/services/contract-management/.well-known/openid-configuration
+            opa:
+              host: http://localhost:8181
+              policy: policy/main
+              with_body: true
+        - uri: /*
+          host: provider-oid4vc-management.127.0.0.1.nip.io
+          upstream:
+            nodes:
+              provider-fdsc-edc-oid4vc:8085: 1
+            type: roundrobin
+        - uri: /*
+          host: provider-dcp-management.127.0.0.1.nip.io
+          upstream:
+            nodes:
+              provider-fdsc-edc-dcp:8085: 1
+            type: roundrobin
+        - uri: /*
+          host: vault-mp-operations.127.0.0.1.nip.io
+          upstream:
+            nodes:
+              provider-vault:8200: 1
+        # Data space eventing: the publisher's deliveries. contract-management verifies no
+        # token itself and takes the sender from X-Userinfo.participantId; the umbrella
+        # checks these three routes by name (templates/eventing-validation.yaml).
+        - name: dataspace-events
+          uri: /events
+          methods: ["POST"]
+          host: contract-management.127.0.0.1.nip.io
+          upstream:
+            nodes:
+              contract-management:8080: 1
+            type: roundrobin
+          plugins:
+            # remove a caller-supplied X-Userinfo BEFORE openid-connect (priority 2599) sets it
+            proxy-rewrite:
+              _meta:
+                priority: 2600
+              headers:
+                remove: ["X-Userinfo"]
+            openid-connect:
+              bearer_only: true
+              use_jwks: true
+              set_userinfo_header: true
+              client_id: dataspace-events
+              # only tokens minted for this service
+              claim_validator:
+                audience:
+                  claim: aud
+                  required: true
+                  match_with_client_id: true
+              client_secret: unused
+              discovery: https://verifier.mp-operations.org/services/dataspace-events/.well-known/openid-configuration
+              proxy_opts:
+                https_proxy: http://squid-proxy.infra.svc.cluster.local:8888
+              ssl_verify: false
+            opa:
+              host: http://localhost:8181
+              policy: policy/main
+              with_body: true
+        # the publisher's handshake (OPTIONS) carries no token
+        - name: dataspace-events-handshake
+          uri: /events
+          methods: ["OPTIONS"]
+          host: contract-management.127.0.0.1.nip.io
+          upstream:
+            nodes:
+              contract-management:8080: 1
+            type: roundrobin
+        # on a 401 the publisher fetches <sink>/.well-known/openid-configuration
+        - name: dataspace-events-discovery
+          uri: /events/.well-known/openid-configuration
+          methods: ["GET"]
+          host: contract-management.127.0.0.1.nip.io
+          upstream:
+            nodes:
+              verifier:3000: 1
+            type: roundrobin
+          plugins:
+            proxy-rewrite:
+              uri: /services/dataspace-events/.well-known/openid-configuration
+
+# copy of provider.yaml's list (Helm replaces lists). With a participant.removed publisher
+# configured, an entry without `scope` is registered as a data space membership grant
+# (scope = the publisher's id, scopeType dataspace-membership): fancy-marketplace's is the
+# grant a removal is about. The provider's own entry and the authority's trust do not come
+# from the membership, so they get `scope: ""`.
+registration:
+  issuer:
+    - did: did:web:mp-operations.org
+      credentialTypes:
+        - LegalPersonCredential
+      scope: ""
+    - did: did:web:fancy-marketplace.biz
+      credentialTypes:
+        - LegalPersonCredential
+        - UserCredential
+        - MembershipCredential
+    # the dataspace authority: the consent-facade's OperatorCredential (see provider.yaml),
+    # which is also the credential the publisher delivers events with
+    - did: did:web:dataspace-authority.org
+      credentialTypes:
+        - OperatorCredential
+        - VerifiableCredential
+      scope: ""
+
+# The ODRL policy that admits the publisher's deliveries: the content of
+# it/src/test/resources/policies/allowDataSpaceEvents.json, an OperatorCredential issued by
+# did:web:dataspace-authority.org. Loaded by a Job, so the demo works without the IT.
+extraManifests:
+  - |
+    apiVersion: batch/v1
+    kind: Job
+    metadata:
+      name: {{ .Release.Name }}-allow-dataspace-events
+      namespace: {{ .Release.Namespace }}
+    spec:
+      ttlSecondsAfterFinished: 86400
+      backoffLimit: 10
+      template:
+        spec:
+          restartPolicy: OnFailure
+          securityContext:
+            runAsNonRoot: true
+            # curlimages/curl's curl_user; a numeric uid lets the kubelet check runAsNonRoot
+            runAsUser: 100
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: register-policy
+              image: curlimages/curl:8.18.0
+              securityContext:
+                readOnlyRootFilesystem: true
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop: ["ALL"]
+              command: ["/bin/sh", "-ec"]
+              args:
+                - |
+                  echo "waiting for odrl-pap..."
+                  until curl -sf http://odrl-pap:8080/policy > /dev/null; do sleep 5; done
+                  code=$(curl -s -o /dev/stderr -w '%{http_code}' -X POST http://odrl-pap:8080/policy -H 'Content-Type: application/json' --data '{"@context":{"dc":"http://purl.org/dc/elements/1.1/","dct":"http://purl.org/dc/terms/","owl":"http://www.w3.org/2002/07/owl#","odrl":"http://www.w3.org/ns/odrl/2/","rdfs":"http://www.w3.org/2000/01/rdf-schema#","skos":"http://www.w3.org/2004/02/skos/core#"},"@id":"https://mp-operation.org/policy/common/dataSpaceEvents","odrl:uid":"https://mp-operation.org/policy/common/dataSpaceEvents","@type":"odrl:Policy","odrl:permission":{"odrl:assigner":{"@id":"https://www.mp-operation.org/"},"odrl:target":{"@type":"odrl:AssetCollection","odrl:source":"urn:asset","odrl:refinement":[{"@type":"odrl:Constraint","odrl:leftOperand":"http:path","odrl:operator":{"@id":"http:isInPath"},"odrl:rightOperand":"/events"}]},"odrl:assignee":{"@type":"odrl:PartyCollection","odrl:source":"urn:user","odrl:refinement":{"@type":"odrl:LogicalConstraint","odrl:and":[{"@type":"odrl:Constraint","odrl:leftOperand":{"@id":"vc:type"},"odrl:operator":{"@id":"odrl:hasPart"},"odrl:rightOperand":{"@value":"OperatorCredential","@type":"xsd:string"}},{"@type":"odrl:Constraint","odrl:leftOperand":{"@id":"vc:currentParty"},"odrl:operator":{"@id":"odrl:eq"},"odrl:rightOperand":"did:web:dataspace-authority.org"}]}},"odrl:action":{"@id":"tmf:create"}}}')
+                  echo "odrl-pap POST /policy -> HTTP $code"
+                  # 2xx = created; a conflict on re-run is fine (policy already present)
+                  case "$code" in 2*) exit 0;; 409) echo "already registered"; exit 0;; *) exit 1;; esac

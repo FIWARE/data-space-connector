@@ -149,6 +149,9 @@ ODRL policy.
 ### Requirements
 
 - contract-management ≥ 3.5.3: the chart ships it (CM chart 3.6.6) since 10.16.0.
+  **Known issue in 3.5.3:** it sends the scope type by its Java enum name
+  (`scopeType=DATASPACE_MEMBERSHIP`), so the TIL answers `400`. contract-management then treats the
+  TIL as lacking typed scopes: a removal is only reported, without `held`, and no reconciliation runs.
 - TIL ≥ 0.10.3: the chart ships 0.10.3 (decentralizedIam 2.3.0) since 10.16.0. A TIL outside the
   release (`registration.til`) must be upgraded by its operator. Each part of the feature needs:
   - 0.10.1 for the membership marking; an older TIL silently drops it;
@@ -244,8 +247,11 @@ one the publishers request (`protocol-settings.scopes`).
 
 The token it issues must carry:
 
-- the claim `participantId` = the credential's `credentialSubject.id`: contract-management compares
-  it with the event's sender;
+- the claim `participantId` = the publisher's DID: contract-management compares it with the event's
+  sender. Take it from the credential's `credentialSubject.id`. If the publisher's credential has no
+  subject id, map `issuer` instead. The k3s demo does this: its trust anchor issues its own
+  OperatorCredential, without a subject id. This is only safe while your TIL lists the publisher as
+  the sole issuer of that credential type;
 - the credential's `type` and `issuer` under `verifiableCredential`: the ODRL policy of
   [step 4](#4-create-the-odrl-policy) reads them there.
 
