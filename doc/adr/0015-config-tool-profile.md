@@ -157,6 +157,14 @@ So `model.version` changes only when the user sets the chart version. A bundle m
 never implicit (US-9.3). The save does not fill in `target.chartVersion` itself: that would answer
 an open question for the user.
 
+The UI follows the same rule. Today the Target stage fills an empty `chartVersion` with the
+latest shipped version as soon as it renders. From CT-4 on it does so only while the state holds
+no `model` whose chart is `target.chart`, which means a new configuration or a chart switch.
+After *Open profile* the state holds the opened `model`, so an empty chart version stays empty and
+counts as unanswered (an open question) until the user picks one. Following a Review link to
+Target therefore cannot move the bundle. *New configuration* drops the held `model`, and the
+auto-fill applies again.
+
 `generate --profile` renders and so needs a complete target; it also refuses the format and "is
 required" errors.
 
