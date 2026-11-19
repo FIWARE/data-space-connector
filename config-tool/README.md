@@ -130,8 +130,8 @@ text, to `POST /api/load?name=<basename>`. The body is capped at 8 MiB (413 abov
 
 The chart's values may sit under a wrapper key, e.g. `dsc:` when Argo CD or an umbrella chart
 packages this chart as a dependency. Rule paths are relative to that *root*: the load picks the
-mapping, at most three keys deep, whose keys are most often the chart's top-level keys
-(`topLevelKeys` in the bundle), and `?root=<path>` overrides it (`?root=` is the whole file).
+mapping, at most three keys deep, whose chart top-level keys (`topLevelKeys` in the bundle)
+outnumber its other keys by the widest margin, and `?root=<path>` overrides it (`?root=` is the whole file).
 Review names the root and re-reads the file under another candidate; keys outside the root are
 unknown. A re-read only swaps the report (stage, answers and the chosen context stay). It is applied
 even when the user has left Review meanwhile, as the server's slot follows it too; it is dropped

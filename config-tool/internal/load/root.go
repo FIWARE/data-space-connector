@@ -38,6 +38,9 @@ type candidate struct {
 	keys  int
 }
 
+// margin is how many more of the candidate's keys are chart keys than are not.
+func (c candidate) margin() int { return 2*c.score - c.keys }
+
 // chartKeys are the keys that mark the chart's values: the bundle's top-level keys and the
 // first key of every rule.
 func chartKeys(b model.Bundle) map[string]bool {
@@ -54,9 +57,10 @@ func chartKeys(b model.Bundle) map[string]bool {
 }
 
 // rootCandidates ranks the mappings at most maxRootDepth keys deep that hold a chart key. The
-// chart's schema refuses unknown keys, so the best is the one with the largest share of chart
-// keys; ties go to more chart keys, then the shallower one, then document order. No candidate
-// lies below a chart key: that subtree belongs to the chart.
+// best has the largest margin of chart keys over other keys, so a stray section of an older
+// chart version does not outrank the document root; ties go to more chart keys, then the
+// shallower one, then document order. No candidate lies below a chart key: that subtree belongs
+// to the chart.
 func rootCandidates(leaves []roundtrip.Leaf, chart map[string]bool) []candidate {
 	var list []candidate
 	index := map[string]int{}
@@ -91,8 +95,8 @@ func rootCandidates(leaves []roundtrip.Leaf, chart map[string]bool) []candidate 
 	}
 	list = slices.DeleteFunc(list, func(c candidate) bool { return c.score == 0 })
 	slices.SortStableFunc(list, func(a, b candidate) int {
-		if share := b.score*a.keys - a.score*b.keys; share != 0 {
-			return share
+		if m := b.margin() - a.margin(); m != 0 {
+			return m
 		}
 		if a.score != b.score {
 			return b.score - a.score

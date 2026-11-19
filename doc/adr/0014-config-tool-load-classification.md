@@ -67,8 +67,11 @@ saving.
    this chart as a dependency, its values sit under that chart's alias, e.g. `dsc:`. Rule paths
    are relative to a *root* mapping. Without `?root=` the load detects it: every mapping at most
    `maxRootDepth` (3) keys deep that holds a key of the bundle's `topLevelKeys` is a candidate,
-   none below a chart key, and the best is the one whose keys (Helm's `global` aside) are most
-   often chart keys, then the one with more chart keys, then the shallower. `topLevelKeys` lists
+   none below a chart key, and the best is the one whose chart keys outnumber its other keys
+   (Helm's `global` aside) by the widest margin, then the one with more chart keys, then the
+   shallower. A margin rather than a share, because a values file of an older chart version keeps
+   removed sections; one of them holding a single chart-named key would have a share of 1 and
+   outrank the document root. `topLevelKeys` lists
    the chart's top-level `values.yaml` keys; a test keeps it equal to the chart's. The report
    carries `root`, `rootFrom` (`detected` or `requested`) and `rootCandidates`, and Review offers
    the candidates to re-read the same uploaded file under another root. Leaves outside the root

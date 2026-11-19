@@ -76,6 +76,24 @@ func TestLoadRoot(t *testing.T) {
 			leaves:         map[string]string{"did.enabled": "unknown", "connector.did.enabled": "recognized"},
 		},
 		{
+			name:           "a stray section of an older chart does not outrank the document root",
+			src:            "did:\n  enabled: true\nscorpio:\n  enabled: true\nrainbow:\n  ingress:\n    host: rainbow.example.org\nlegacy:\n  tracing:\n    enabled: true\n",
+			wantRoot:       "",
+			wantFrom:       RootDetected,
+			wantCandidates: []string{"", "legacy"},
+			leaves: map[string]string{
+				"did.enabled":            "recognized",
+				"scorpio.enabled":        "recognized",
+				"rainbow.ingress.host":   "recognized",
+				"legacy.tracing.enabled": "unknown",
+			},
+			answers: map[string]answerWant{
+				"identity.did.enabled": {true, FromRecognized, []string{"did.enabled"}},
+				"data.scorpio.enabled": {true, FromRecognized, []string{"scorpio.enabled"}},
+				"domain.base":          {"example.org", FromRecognized, []string{"rainbow.ingress.host"}},
+			},
+		},
+		{
 			name:           "global is shared by every chart",
 			src:            "global:\n  domain: example.org\ndsc:\n  did:\n    enabled: true\n",
 			wantRoot:       "dsc",
