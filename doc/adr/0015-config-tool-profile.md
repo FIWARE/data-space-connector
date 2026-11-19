@@ -8,7 +8,7 @@
 ## Context
 
 CT-4 (#119) makes the answer set, `.dscprofile.yaml`, the state the user saves and resumes
-(US-1.3 and US-7.2 of [`USER_STORIES.md`](../config-tool/USER_STORIES.md)): human-readable,
+(US-1.4 and US-7.2 of [`USER_STORIES.md`](../config-tool/USER_STORIES.md)): human-readable,
 git-friendly, no secrets, and it records the chart version and model bundle it was built with.
 The same ticket adds a per-field *open question* marker. Three constraints shape the design:
 
@@ -137,9 +137,24 @@ namespace `Prod_NS` or a 60-character release name, is saved and reopened as typ
 Target stage shows the error again. Save and open refuse only **structural** errors: `format`,
 `model`, unknown values of `target.type` and `target.environment`, unknown or duplicate `open`
 ids, `source`, `answers` and `secrets`. `model` must agree with `target`: `model.chart` equals
-`target.chart`, and `model.version` equals `target.chartVersion` when that is set. When it is
-empty, the save uses the latest bundle, the same rule as the load. `generate --profile` renders
-and so needs a complete target; it also refuses the format and "is required" errors.
+`target.chart`, and `model.version` equals `target.chartVersion` when that is set. An empty
+`target.chartVersion` never moves `model`:
+
+- **Open** checks `model` only against the shipped bundles (rule 6), never against "latest". A
+  profile saved with `model.version: 10.16.0` and no chart version still opens once 10.17.0
+  ships.
+- **Save** takes the bundle of `target.chartVersion` when that is set. Otherwise it keeps the
+  `model` of the PUT body when that bundle is shipped; the UI holds it from the open and drops it
+  on *New configuration*. Only a profile that has never named a bundle gets the latest one, the
+  same rule as the load. The revision written is the shipped one, which rule 6 announces with a
+  note on open.
+
+So `model.version` changes only when the user sets the chart version. A bundle migration is
+never implicit (US-9.3). The save does not fill in `target.chartVersion` itself: that would answer
+an open question for the user.
+
+`generate --profile` renders and so needs a complete target; it also refuses the format and "is
+required" errors.
 
 ### 6. Model bundle version
 
@@ -159,12 +174,12 @@ it is a `POST`.
 
 ```json
 {"path": "/home/pia/dsc/provider.dscprofile.yaml", "overwrite": false,
- "profile": {"target": {…}, "open": [{"field": "target.context"}]},
+ "profile": {"model": {…as opened…}, "target": {…}, "open": [{"field": "target.context"}]},
  "sourceSha256": "9f2c…"}
 ```
 
-The server fills in `format`, `model` (the bundle of `target.chartVersion`, else the latest),
-`source` (rule 2) and an empty `secrets`, validates, writes and adds the entry to the recent list.
+`profile.model` is optional and only read while `target.chartVersion` is empty (5). The server
+fills in `format`, `model` (rule 5), `source` (rule 2) and an empty `secrets`, validates, writes and adds the entry to the recent list.
 Response 200:
 
 ```json
@@ -186,9 +201,13 @@ source, an older bundle revision, and a failing recent list.
 | 404 | Open: the file does not exist. |
 | 409 | Save: the file exists and `overwrite` is not set. |
 | 413 | Body above the 8 MiB cap. |
-| 422 | Path not absolute or without the `.dscprofile.yaml` suffix; file not a valid profile (strict decode); structurally invalid profile (5), including `model` not agreeing with `target`; bundle not shipped or revision newer (6); save with a `sourceSha256` that does not match the current load. |
+| 422 | Path not absolute or without the `.dscprofile.yaml` suffix; file not a valid profile (strict decode); structurally invalid profile (5), including `model` not agreeing with `target`; bundle not shipped or revision newer (6); save with a `sourceSha256` that does not match the current load; save into a directory that does not exist; save onto a symlink (3). |
+| 500 | Any other I/O error, such as permission denied, disk full, or an unreadable file on open. The body carries the OS error. |
 
-Per-field format errors in `target` never give a 422, on save or on open.
+Per-field format errors in `target` never give a 422, on save or on open. Save never creates a
+missing parent directory: a mistyped path should fail visibly instead of creating a tree.
+(The recent store does create its own directory.) The UI shows every error status in the same
+place, whatever the code.
 
 ### `generate` and existing output files
 
