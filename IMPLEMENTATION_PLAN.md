@@ -42,7 +42,9 @@ Docs-only step, so the design is reviewed before any code.
   - rejected alternatives: embedding overrides (secret leak), browser download and upload (no path, so no recent list and no source resolution), localStorage (the port changes per run), a separate open-question counter (double counting);
   - the API: `PUT /api/profile` and `POST /api/profile/open`, which replaces server state and so is not a `GET`, plus `GET /api/profile/recent`. The `GET /api/profile` stub is dropped;
   - the three `source` rules of decision 2: `sourceSha256` in the `PUT` body, the save-time neighbour check with its notes, and the base-name rule for `source.file`;
-  - the `DSC_CONFIG_HOME` override of the recent-list directory (decision 4, Step 3).
+  - the `DSC_CONFIG_HOME` override of the recent-list directory (decision 4, Step 3);
+  - the fallback of `defaultDir`: newest recent entry, else the home directory, else the working directory (Step 4);
+  - that replacing an existing `generate` output with rendered values waits for the render epic, which decides the precedence; this amends ADR 0013's "the CLI wires that in CT-4" (Step 5).
 - Update `doc/config-tool/TECH_STACK.md` (API box: `GET/PUT /api/profile` → the three routes above). Add a row to the `doc/adr/README.md` table and extend its "0009–0014 belong to config-tool" sentence to 0015.
 - Acceptance: the ADR names every field of the format with an example, the three endpoints with their request and response bodies, and status codes (400 bad body, 404 missing file, 409 exists without overwrite, 422 invalid profile, path suffix or bundle).
 
@@ -97,7 +99,7 @@ Files: `config-tool/internal/server/api.go`, `server.go`, new `profile_test.go`,
   - response `{path, profile, report?, notes[]}`. A note comes for a source that is changed, missing or unreadable, an older bundle revision, or a failing recent list;
   - when the source cannot be restored, the note also says that saving again drops the reference, because the UI then holds no report and sends no `sourceSha256`;
   - errors: 404 missing file, 422 invalid profile.
-- `GET /api/profile/recent` returns `{entries, defaultDir}`. `defaultDir` is the directory of the newest entry, else the process working directory.
+- `GET /api/profile/recent` returns `{entries, defaultDir}`. `defaultDir` is the directory of the newest entry, else `os.UserHomeDir()`, and the process working directory only when that fails. A GUI started by double-click or a desktop launcher has `/` or the binary's folder as its working directory, where the first save would fail.
 - Remove the `GET`/`PUT /api/profile` `notImplemented` stubs and the now-unused `ticketProfile` constant.
 - Tests (httptest, table-driven):
   - save, then open, then save gives identical bytes on disk;
@@ -107,22 +109,25 @@ Files: `config-tool/internal/server/api.go`, `server.go`, new `profile_test.go`,
   - neighbour check, table-driven: values file next to the profile with the same bytes (no note), missing (note), different bytes (note); the save succeeds in all three;
   - open refuses a profile whose `source.file` is `../x.yaml` with 422 and reads nothing;
   - the recent list gets the entry;
+  - `defaultDir`, table-driven: the newest entry's directory; the home directory with an empty list (`t.Setenv("HOME", ...)`, `USERPROFILE` on Windows); the working directory when the home directory is unset;
   - **end-to-end no-secret test**: POST a values file holding `keycloak.adminPassword: s3cr3t-<random>` (and a password under an unknown key), save the profile, and assert the file bytes contain neither value.
 
-### Step 5: CLI — `generate` reads the profile, replaces existing output safely
+### Step 5: CLI — `generate` reads the profile; replace plumbing for existing output
 Files: `config-tool/internal/cli/cli.go`, `cli_test.go`.
 - `generate --profile`:
   - reads the file with `profile.ReadFile` and validates it against the embedded bundles before calling `render.Render`;
   - errors name the file and the field. The `// Loading the profile file arrives with CT-4` stub goes away.
-- `writeOutput` resolves the `TODO(CT-4)` (ADR 0013):
-  - an existing output file goes through `roundtrip.Parse` → `Merge` → `Write` and is replaced via `atomicfile.Write` (overwrite, keeping the mode);
-  - a symlink is still refused;
-  - a new file is created exclusively as today.
+- `writeOutput` gets the replace plumbing of ADR 0013, but not the merge precedence:
+  - new helper `replaceOutput(path, edit func(*roundtrip.Document) error)`: `roundtrip.Parse` the existing file, apply `edit`, `Write`, then `atomicfile.Write` with overwrite, keeping the mode. A symlink is refused;
+  - which keys the rendered values may overwrite is not decided here. FEATURE_MODEL defines `values.yaml = render(profile) ⊕ overrides` with overrides winning, and ADR 0014 says the tool does not touch what it did not write, so a blind `Merge(doc, rendered)` would be wrong. Render is still `ErrNotImplemented` and defines neither its output shape nor the owned markers;
+  - so `writeOutput` keeps refusing an existing output file, with the error "<path> exists; merging into an existing values file arrives with the render epic". The `TODO(CT-4)` becomes a `TODO(render)` that names the open decisions: the precedence (overrides win, only owned or absent keys are written) and how the rendered output reaches `Merge` (Render returns `map[string]any`, or its `[]byte` is decoded with yaml.v3 into one). The render epic then passes its edit to `replaceOutput`;
+  - a new file is created exclusively as today, stdout as today;
+  - ADR 0015 (Step 1) records that this moves "the CLI wires that in CT-4" of ADR 0013 to the render epic.
 - Parameterized tests:
   - missing profile, invalid profile, unknown bundle;
-  - existing output merged byte-faithfully: comments are kept and the mode is kept;
-  - new output, and stdout.
-  - Render is still `ErrNotImplemented`, so test `writeOutput` directly with fixed data.
+  - `replaceOutput` with a fixed edit (one `Set`): untouched bytes and comments are kept, the mode is kept, a symlink is refused, no temp file is left after a failing edit;
+  - `writeOutput`: an existing file is refused and left unchanged, a new file, stdout.
+  - Render is still `ErrNotImplemented`, so these call `writeOutput` and `replaceOutput` directly with fixed data.
 
 ### Step 6: UI — open-question markers, rail count, Review list with links
 Files: `config-tool/ui/src/state/` (`answers.ts`, `reducer.ts`, new `openQuestions.ts` + test, `target.ts`, `issues.ts`), `stages/Target.tsx`, `stages/Review.tsx`, tests next to each.
@@ -142,6 +147,7 @@ Files: `config-tool/ui/src/state/` (`answers.ts`, `reducer.ts`, new `openQuestio
 Files: new `config-tool/ui/src/api/profile.ts` + test, `state/reducer.ts`, `stages/Start.tsx`, new `chrome/SaveDialog.tsx`, `chrome/Rail.tsx`, `stages/Review.tsx`, `state/title.ts`, `ui/e2e/smoke.spec.ts`, tests.
 - `api/profile.ts`: typed `saveProfile`, `openProfile` and `fetchRecent` over the Step 4 bodies. `saveProfile` sends `sourceSha256 = state.loaded?.sha256`, so after `newConfiguration` (which already clears `loaded`) no source is referenced. It also holds the `Profile` TS type mirroring Go and `toProfile(state)` / `fromProfile(profile)` (answers.target + open). The `ApiError` 409 is surfaced as "replace?".
 - `AppState` gains `profilePath?`, `profileNotes?`. New action `profileOpened {path, profile, report?, notes}`: `startOver` on Review with `answers`, `open`, `loaded = report` and `loadedFile = undefined`, so the root picker is disabled because the recorded root is used. New action `profileSaved {path, notes}`.
+  - `startOver` resets `profilePath` and `profileNotes` to `undefined`; `profileOpened` sets them after it. It spreads `...state`, so without the reset *New configuration* or *Open values.yaml* after an open would keep the old path, and ⌘S would overwrite that profile with an unrelated configuration and no 409 prompt.
 - Save:
   - Rail `⌘S Save profile` is enabled once a configuration is entered, and there is a "Save profile" button on Review (MOCKUPS S7) as well. Wire the ⌘S/Ctrl+S shortcut.
   - With a known `profilePath` it saves in place (overwrite). Otherwise `SaveDialog` asks for a path, prefilled with `defaultDir/<releaseName || 'connector'>.dscprofile.yaml`. When a values file is loaded, it shows the hint "save next to <source> so reopening finds its overrides". A 409 asks to confirm a replace.
@@ -150,6 +156,7 @@ Files: new `config-tool/ui/src/api/profile.ts` + test, `state/reducer.ts`, `stag
 - Review shows `profileNotes` (source changed, missing, older revision). The title bar shows the profile name.
 - Tests:
   - reducer: `profileOpened` restores answers and markers exactly and lands on Review;
+  - reducer, parameterized: `newConfiguration` and `fileLoaded` after `profileOpened` (and after `profileSaved`) leave `profilePath` and `profileNotes` undefined, so the next save goes through `SaveDialog`;
   - Start: recent list rendering and click-to-open, open failure;
   - SaveDialog: default path, 409 confirm, a save note is shown;
   - api/profile: `sourceSha256` is sent from the held report and omitted after `newConfiguration`;
@@ -159,7 +166,7 @@ Files: new `config-tool/ui/src/api/profile.ts` + test, `state/reducer.ts`, `stag
 
 ### Step 8: Documentation and context
 Files: `config-tool/README.md`, `doc/config-tool/USER_JOURNEY.md` (Stage 0 *Open a profile* row: path field + recent list, lands on Review), `doc/config-tool/FEATURE_MODEL.md` (*Concepts*: `overrides` is referenced via `source`, not copied, linking ADR 0015), `AGENTS.md`.
-- README: the profile format with an example, where profiles and the recent list live, the save and open flow, the "keep the profile next to its values file" rule, and the open-question marker. Also the `generate --profile` behaviour and the replacement of existing output.
+- README: the profile format with an example, where profiles and the recent list live, the save and open flow, the "keep the profile next to its values file" rule, and the open-question marker. Also the `generate --profile` behaviour, and that an existing output file is refused until the render epic decides the merge precedence.
 - AGENTS.md: replace the "CT-3 ... `profile.Profile` stays untouched" note with a short CT-4 bullet covering:
   - the format is struct-encoded and strict, unlike values.yaml;
   - no values are written under `secrets` and overrides are not copied;
