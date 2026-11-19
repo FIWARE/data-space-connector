@@ -292,7 +292,8 @@ New core package `config-tool/internal/load`. It imports no `net/http`; check th
   - a BOM-prefixed body: `s.loaded.Doc.Write()` equals the uploaded bytes exactly.
   - the existing `/api/load` row in the 501 stub table of `server_test.go` (with `ticketLoad`) is
     removed; the cases above replace it.
-- **`config-tool/ui/src/test/api.ts`:** if it mocks endpoints, add the load route there for Step 5.
+- **`config-tool/ui/src/test/api.ts`:** the load route is added in Step 5, together with the
+  `LoadReport` type it answers with.
 - **Acceptance:** `go test ./...` passes, and `curl` with the token against a running binary returns a
   report for `k3s/provider.yaml`.
 
@@ -324,7 +325,8 @@ Under `config-tool/ui/src/`, TypeScript with one-line JSDoc on components:
     accept=".yaml,.yml">` is triggered by the card.
   - While loading, the card shows a busy state. A failure (`ApiError`: 413, 422) is shown inline on
     S0, and the state is not entered.
-  - Add a test in `Start.test.tsx` with a mocked API.
+  - Add a test in `Start.test.tsx` with a mocked API. `mockApi` in `test/api.ts` gains the
+    `POST /api/load` route, answering with a `LoadReport` or a status code.
 - **`stages/Review.tsx`** (new), registered in `stages.ts` as Review's component:
   - When `loaded` is set, it shows the load report: source name, chart version and where it came
     from, the counts per class, and lists per class. Unknown entries are grouped by top-level key in
