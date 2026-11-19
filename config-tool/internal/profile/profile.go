@@ -6,11 +6,6 @@ import (
 	"regexp"
 )
 
-// Profile is the answer set stored in a .dscprofile.yaml.
-type Profile struct {
-	Target Target `json:"target" yaml:"target"`
-}
-
 // TargetType says where the generated values go.
 type TargetType string
 
@@ -39,13 +34,14 @@ const (
 
 // Field names reported in FieldError, matching the JSON keys of Target.
 const (
-	FieldType         = "type"
-	FieldContext      = "context"
-	FieldNamespace    = "namespace"
-	FieldReleaseName  = "releaseName"
-	FieldChart        = "chart"
-	FieldChartVersion = "chartVersion"
-	FieldEnvironment  = "environment"
+	FieldType            = "type"
+	FieldContext         = "context"
+	FieldNamespace       = "namespace"
+	FieldCreateNamespace = "createNamespace"
+	FieldReleaseName     = "releaseName"
+	FieldChart           = "chart"
+	FieldChartVersion    = "chartVersion"
+	FieldEnvironment     = "environment"
 )
 
 // msgRequired marks an unanswered field, which the UI counts as an open question rather than an error.
@@ -76,7 +72,7 @@ type Target struct {
 	Environment     Environment `json:"environment" yaml:"environment"`
 }
 
-// FieldError is a validation failure of a single Target field.
+// FieldError is a validation failure of a single profile field.
 type FieldError struct {
 	Field   string `json:"field"`
 	Message string `json:"message"`
@@ -107,8 +103,7 @@ func (t Target) Validate() []FieldError {
 	if msg := checkLabel(t.ReleaseName, MaxReleaseNameLength, dns1035Label, msgDNS1035); msg != "" {
 		errs = append(errs, FieldError{FieldReleaseName, msg})
 	}
-	// The UI only offers bundled charts and versions; checking them against the bundles comes with
-	// loading profiles in CT-4 (#119). Presence is enough here.
+	// Profile.Validate checks chart and version against the shipped bundles; presence is enough here.
 	if t.Chart == "" {
 		errs = append(errs, FieldError{FieldChart, msgRequired})
 	}

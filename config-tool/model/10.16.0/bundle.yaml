@@ -1,6 +1,7 @@
 # Question-model bundle of chart 10.16.0; value rules come with Epic 3's questions.
 chart: data-space-connector
 version: 10.16.0
+revision: 1
 topLevelKeys: [
   nameOverride, fullnameOverride, imagePullSecrets, issuance, decentralizedIam, scorpio, elsi,
   keycloak, tm-forum-api, statusListServer, rainbow, contract-management, did, registration,

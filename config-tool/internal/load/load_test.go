@@ -330,9 +330,9 @@ func TestChooseBundle(t *testing.T) {
 		latestVersion = "2.0.0"
 		missing       = "9.9.9"
 		body          = "old:\n  enabled: true\n"
-		olderBundle   = "chart: " + DefaultChart + "\nversion: " + olderVersion + "\nrecognize:\n" +
+		olderBundle   = "chart: " + DefaultChart + "\nversion: " + olderVersion + "\nrevision: 1\nrecognize:\n" +
 			"  - {path: old.enabled, answer: old.enabled, stage: features, kind: toggle}\n"
-		latestBundle = "chart: " + DefaultChart + "\nversion: " + latestVersion + "\n"
+		latestBundle = "chart: " + DefaultChart + "\nversion: " + latestVersion + "\nrevision: 1\n"
 	)
 	bundles, err := model.Versions(fstest.MapFS{
 		olderVersion + "/bundle.yaml":  {Data: []byte(olderBundle)},
