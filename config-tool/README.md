@@ -135,7 +135,8 @@ mapping, at most three keys deep, whose keys are most often the chart's top-leve
 Review names the root and re-reads the file under another candidate; keys outside the root are
 unknown. A re-read only swaps the report (stage, answers and the chosen context stay). It is applied
 even when the user has left Review meanwhile, as the server's slot follows it too; it is dropped
-only when another file was opened or the configuration started over.
+only when another file was opened or the configuration started over. One re-read runs at a time:
+the picker stays disabled until it answers, even across leaving and returning to Review.
 
 Owned leaves back-derive answers too, and before the others, so an owned value always wins.
 Pairs `roundtrip` cannot address (a shadowed duplicate key, an alias or complex key) are listed

@@ -105,6 +105,20 @@ describe('Review', () => {
     expect(screen.getByText(/Read from/)).toHaveTextContent(`Read from ${WHOLE_FILE} (as chosen)`)
   })
 
+  it('keeps the picker disabled while a re-read started before leaving Review is in flight', async () => {
+    const late = lateLoad()
+    mockApi(undefined, undefined, late.load)
+    renderReview(WRAPPED, FILE)
+    await userEvent.selectOptions(screen.getByLabelText(ROOT_LABEL), WHOLE_FILE)
+    const nav = within(screen.getByRole('navigation', { name: 'Stages' }))
+    await userEvent.click(nav.getByRole('button', { name: /Foundations/ }))
+    await userEvent.click(nav.getByRole('button', { name: /Review/ }))
+    expect(screen.getByLabelText(ROOT_LABEL)).toBeDisabled()
+    late.resolve({ ...WRAPPED, root: '', rootFrom: RootSource.Requested })
+    await act(() => Promise.resolve())
+    expect(screen.getByLabelText(ROOT_LABEL)).toBeEnabled()
+  })
+
   it('keeps the report and shows why a re-read was refused', async () => {
     mockApi(undefined, undefined, () => HTTP_UNPROCESSABLE)
     renderReview(WRAPPED, FILE)

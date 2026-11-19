@@ -31,24 +31,24 @@ function rootName(root: string): string {
 }
 
 /** Where the chart's values were read from; another candidate re-reads the same file under that root.
- *  A re-read is never aborted: the server swaps its slot anyway, so the UI must follow it (see `rootChanged`). */
+ *  A re-read is never aborted: the server swaps its slot anyway, so the UI must follow it (see `rootChanged`).
+ *  The in-flight flag lives in the store, so only one re-read runs and server and UI apply them in one order. */
 function RootPicker({ report, file }: { report: LoadReport; file?: File }) {
-  const { dispatch } = useStore()
-  const [busy, setBusy] = useState(false)
+  const { state, dispatch } = useStore()
+  const busy = state.rereading
   const [error, setError] = useState<string>()
   const roots = [...new Set([report.root, ...report.rootCandidates, ''])]
   const how = report.rootFrom === RootSource.Detected ? 'detected' : 'as chosen'
 
   async function reread(root: string) {
-    if (!file) return
-    setBusy(true)
+    if (!file || busy) return
+    dispatch({ type: 'rootRereadStarted' })
     setError(undefined)
     try {
       dispatch({ type: 'rootChanged', report: await loadValues(file, { root }), file })
     } catch (failure) {
+      dispatch({ type: 'rootRereadFailed' })
       setError(failure instanceof Error ? failure.message : String(failure))
-    } finally {
-      setBusy(false)
     }
   }
 

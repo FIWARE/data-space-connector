@@ -55,8 +55,17 @@ describe('reducer', () => {
     ['another file was opened since', new File(['did: {}\n'], FILE.name)],
     ['the configuration was started over', undefined],
   ])('drops a re-read of a file that is no longer loaded (%s)', (_, loadedFile) => {
-    const state = { ...BUSY, loaded: REPORT, loadedFile }
-    expect(reducer(state, { type: 'rootChanged', report: { ...REPORT, root: 'dsc' }, file: FILE })).toBe(state)
+    const state = { ...BUSY, loaded: REPORT, loadedFile, rereading: true }
+    expect(reducer(state, { type: 'rootChanged', report: { ...REPORT, root: 'dsc' }, file: FILE })).toEqual({ ...state, rereading: false })
+  })
+
+  it.each([
+    ['a re-read answers', { type: 'rootChanged', report: REPORT, file: FILE } as const],
+    ['a re-read fails', { type: 'rootRereadFailed' } as const],
+  ])('marks a re-read in flight until %s', (_, end) => {
+    const started = reducer({ ...BUSY, loaded: REPORT, loadedFile: FILE }, { type: 'rootRereadStarted' })
+    expect(started.rereading).toBe(true)
+    expect(reducer(started, end).rereading).toBe(false)
   })
 
   it('closes the Expert view on any stage jump', () => {

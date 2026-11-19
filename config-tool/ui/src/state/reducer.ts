@@ -16,6 +16,8 @@ export interface AppState {
   loadedFile?: File
   /** The Expert view covers the current stage; any stage jump closes it. */
   expert: boolean
+  /** A root re-read is in flight; kept here so the picker stays disabled when Review remounts. */
+  rereading: boolean
 }
 
 /** Every change the UI can make to the store. */
@@ -25,7 +27,9 @@ export type Action =
   | { type: 'setTarget'; target: Partial<Target> }
   | { type: 'setSession'; session: Partial<Session> }
   | { type: 'fileLoaded'; report: LoadReport; file: File }
+  | { type: 'rootRereadStarted' }
   | { type: 'rootChanged'; report: LoadReport; file: File }
+  | { type: 'rootRereadFailed' }
   | { type: 'openExpert' }
 
 /** The state before anything was chosen on S0. */
@@ -36,6 +40,7 @@ export const initialState: AppState = {
   answers: emptyAnswers(),
   session: {},
   expert: false,
+  rereading: false,
 }
 
 function visit(visited: readonly StageId[], stage: StageId): readonly StageId[] {
@@ -62,10 +67,14 @@ export function reducer(state: AppState, action: Action): AppState {
       return startOver(state, FIRST_STAGE, emptyAnswers())
     case 'fileLoaded':
       return startOver(state, StageId.Review, loadedAnswers(action.report), action.report, action.file)
+    case 'rootRereadStarted':
+      return { ...state, rereading: true }
     case 'rootChanged':
       // The same file under another root: not a new configuration, so stage, visits, answers and session stay.
       // A late answer for a file that has since been replaced or dropped is stale.
-      return state.loadedFile === action.file ? { ...state, loaded: action.report } : state
+      return { ...state, rereading: false, loaded: state.loadedFile === action.file ? action.report : state.loaded }
+    case 'rootRereadFailed':
+      return { ...state, rereading: false }
     case 'goTo':
       return { ...state, stage: action.stage, visited: visit(state.visited, action.stage), expert: false }
     case 'openExpert':
