@@ -72,7 +72,7 @@ type Target struct {
 	Environment     Environment `json:"environment" yaml:"environment"`
 }
 
-// FieldError is a validation failure of a single Target field.
+// FieldError is a validation failure of a single profile field.
 type FieldError struct {
 	Field   string `json:"field"`
 	Message string `json:"message"`

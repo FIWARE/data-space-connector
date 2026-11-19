@@ -21,10 +21,14 @@ var (
 	ErrNotRegular = errors.New("path is not a regular file")
 )
 
-// rename is os.Rename; tests replace it to fail after the temp file exists.
-var rename = os.Rename
+// rename and link are os.Rename and os.Link; tests replace them to act after the temp file exists.
+var (
+	rename = os.Rename
+	link   = os.Link
+)
 
-// Write writes data to path through a synced temp file in the same directory and a rename.
+// Write writes data to path through a synced temp file in the same directory, published by a
+// rename, or without overwrite by a hard link, which fails on a file created since the check.
 // A new file gets mode; a replaced one keeps its own. The directory must exist; no temp file
 // is left behind on error.
 func Write(path string, data []byte, mode fs.FileMode, overwrite bool) (err error) {
@@ -66,5 +70,16 @@ func Write(path string, data []byte, mode fs.FileMode, overwrite bool) (err erro
 	if err = tmp.Close(); err != nil {
 		return err
 	}
-	return rename(tmp.Name(), path)
+	if overwrite {
+		return rename(tmp.Name(), path)
+	}
+	if err = link(tmp.Name(), path); err != nil {
+		if errors.Is(err, fs.ErrExist) {
+			err = fmt.Errorf("%s: %w", path, ErrExists)
+		}
+		return err
+	}
+	// path is published; a temp name that fails to go away is only clutter.
+	_ = os.Remove(tmp.Name())
+	return nil
 }

@@ -154,6 +154,27 @@ func TestWriteRemovesTempOnLateError(t *testing.T) {
 	}
 }
 
+// TestWriteRaceWithoutOverwrite creates path after the existence check, before publishing.
+func TestWriteRaceWithoutOverwrite(t *testing.T) {
+	t.Cleanup(func() { link = os.Link })
+	link = func(oldname, newname string) error {
+		if err := os.WriteFile(newname, oldData, newMode); err != nil {
+			t.Fatal(err)
+		}
+		return os.Link(oldname, newname)
+	}
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, fileName)
+	if err := Write(path, newData, newMode, false); !errors.Is(err, ErrExists) {
+		t.Fatalf("Write err = %v, want %v", err, ErrExists)
+	}
+	assertEntries(t, dir, fileName)
+	if got, _ := os.ReadFile(path); string(got) != string(oldData) {
+		t.Errorf("content = %q, want the racing writer's %q", got, oldData)
+	}
+}
+
 // entries lists the names in each dir, or nil for a missing one, for before/after comparison.
 func entries(t *testing.T, dirs ...string) []string {
 	t.Helper()
