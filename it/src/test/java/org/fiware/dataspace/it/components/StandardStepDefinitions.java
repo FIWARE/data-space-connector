@@ -3,6 +3,7 @@ package org.fiware.dataspace.it.components;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.cucumber.java.After;
 import io.cucumber.java.Before;
 import io.cucumber.java.en.Given;
 import io.cucumber.java.en.Then;
@@ -108,12 +109,21 @@ public class StandardStepDefinitions extends StepDefintions {
      * reads (without it no privacy notice can be projected) and the trusted issuers the facade and the
      * consent-filter plugin authenticate with. Those scenarios clean up their own fixtures instead.
      */
-    @Before("not @consent and not @eidas")
-    public void setup() throws Exception {
+    @Before(value = "not @consent and not @eidas", order = 0)
+    public void initWallet() throws Exception {
         CryptoIntegration.init(this.getClass().getClassLoader());
         Security.addProvider(new BouncyCastleProvider());
         fancyMarketplaceEmployeeWallet = new Wallet();
+        // the mapper is JVM-global and shared with the consent/eidas glue, hence the same tag filter
         OBJECT_MAPPER.setSerializationInclusion(JsonInclude.Include.NON_EMPTY);
+    }
+
+    /**
+     * Wipes and re-seeds the provider; {@code @eventing} is excluded because its deployment's trust
+     * (registration Job grants) and the {@code allowDataSpaceEvents} policy are what it tests.
+     */
+    @Before("not @consent and not @eidas and not @eventing")
+    public void setup() throws Exception {
         clean();
         prepareTil();
         // allow the verifier to fetch the new config
@@ -235,6 +245,33 @@ public class StandardStepDefinitions extends StepDefintions {
         cleanUpTMForumResourceList(TMF_DIRECT_ADDRESS,
                 "/tmf-api/party/v4/organization", "Standard organizations");
 
+    }
+
+    /**
+     * Removes the fixtures an {@code @eventing} scenario created: its own policies and the TM Forum
+     * resources. Everything else on the provider belongs to the deployment and stays.
+     */
+    @After("@eventing")
+    public void cleanUpEventingFixtures() throws Exception {
+        for (String policyLocation : createdPolicies) {
+            Request deleteRequest = new Request.Builder()
+                    .delete()
+                    .url(policyUrl(policyLocation))
+                    .build();
+            try (Response deleteResponse = HTTP_CLIENT.newCall(deleteRequest).execute()) {
+                log.debug("Deleted policy {}: status={}", policyLocation, deleteResponse.code());
+            }
+        }
+        createdPolicies.clear();
+        cleanUpTMForum();
+    }
+
+    /** Resolves a PAP {@code Location} header, which may be absolute, a path or a bare policy id. */
+    private static String policyUrl(String location) {
+        if (location.startsWith("http")) {
+            return location;
+        }
+        return PROVIDER_PAP_ADDRESS + (location.startsWith("/") ? location : "/policy/" + location);
     }
 
     private void cleanUpPolicies() throws Exception {

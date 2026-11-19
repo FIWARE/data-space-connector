@@ -4,11 +4,14 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
+import java.net.ServerSocket;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -81,6 +84,30 @@ public class KubernetesHelper {
 
         throw new IllegalStateException(
                 String.format("k3s kubeconfig not found at '%s' or via KUBECONFIG env var.", kubeconfigPath));
+    }
+
+    /** Runs kubectl against the test cluster and returns its trimmed stdout; fails on a non-zero exit or timeout. */
+    public static String kubectl(String... args) throws IOException, InterruptedException {
+        List<String> command = new ArrayList<>(List.of("kubectl", "--kubeconfig", resolveKubeconfig()));
+        command.addAll(List.of(args));
+        // stderr goes to a file, not the result: kubectl prints warnings there that would corrupt jsonpath output,
+        // and a second pipe read after stdout could deadlock once its buffer fills
+        Path errorFile = Files.createTempFile("kubectl", ".err");
+        try {
+            Process process = new ProcessBuilder(command).redirectError(errorFile.toFile()).start();
+            String output = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8).trim();
+            if (!process.waitFor(KUBECTL_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
+                process.destroyForcibly();
+                throw new IllegalStateException(String.format("kubectl %s timed out.", String.join(" ", args)));
+            }
+            if (process.exitValue() != 0) {
+                throw new IllegalStateException(String.format("kubectl %s failed with exit code %d: %s",
+                        String.join(" ", args), process.exitValue(), Files.readString(errorFile).trim()));
+            }
+            return output;
+        } finally {
+            Files.deleteIfExists(errorFile);
+        }
     }
 
     /**
@@ -169,12 +196,33 @@ public class KubernetesHelper {
      */
     public static PortForward portForward(String namespace, String service, int localPort, int remotePort)
             throws IOException, InterruptedException {
+        return startPortForward(namespace, "svc/" + service, localPort, remotePort);
+    }
+
+    /**
+     * Forwards a free local port to a container port of a Deployment's pod, for ports its Service
+     * does not expose (e.g. contract-management's management port 9090).
+     * The forward is bound to one pod and dies with it; open a fresh one per request.
+     */
+    public static PortForward portForwardToDeployment(String namespace, String deployment, int remotePort)
+            throws IOException, InterruptedException {
+        return startPortForward(namespace, "deploy/" + deployment, freeLocalPort(), remotePort);
+    }
+
+    private static int freeLocalPort() throws IOException {
+        try (ServerSocket socket = new ServerSocket(0)) {
+            return socket.getLocalPort();
+        }
+    }
+
+    private static PortForward startPortForward(String namespace, String resource, int localPort, int remotePort)
+            throws IOException, InterruptedException {
         String kubeconfig = resolveKubeconfig();
-        String target = namespace + "/svc/" + service + ":" + remotePort;
+        String target = namespace + "/" + resource + ":" + remotePort;
         ProcessBuilder processBuilder = new ProcessBuilder(
                 "kubectl", "--kubeconfig", kubeconfig,
                 "-n", namespace,
-                "port-forward", "svc/" + service, localPort + ":" + remotePort
+                "port-forward", resource, localPort + ":" + remotePort
         );
         processBuilder.redirectErrorStream(true);
         processBuilder.redirectOutput(ProcessBuilder.Redirect.DISCARD);

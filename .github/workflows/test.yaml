@@ -58,6 +58,8 @@ jobs:
             profiles: "test,consent,consent-test"
           - name: eidas
             profiles: "test,eidas,eidas-test"
+          - name: eventing
+            profiles: "test,eventing,eventing-test"
         # every scenario is deployed both ways: rendered with `helm template` and applied
         # with kubectl, as a GitOps tool does (the default), and installed as Helm releases
         # (`helm-install`), as `helm install` does
