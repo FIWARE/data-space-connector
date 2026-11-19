@@ -39,9 +39,8 @@ const (
 	// pathSeparators covers browser-supplied names from both POSIX and Windows.
 	pathSeparators = `/\`
 
-	// The tickets that replace a stub, reported with its 501.
-	ticketRender  = "Epic 3/5"
-	ticketProfile = "CT-4"
+	// ticketRender replaces the render stub and is reported with its 501.
+	ticketRender = "Epic 3/5"
 )
 
 var errTrailingData = errors.New("unexpected data after the JSON value")
@@ -49,6 +48,8 @@ var errTrailingData = errors.New("unexpected data after the JSON value")
 type errorBody struct {
 	Error  string `json:"error"`
 	Ticket string `json:"ticket,omitempty"`
+	// Fields lists the structural errors of a refused profile.
+	Fields []profile.FieldError `json:"fields,omitempty"`
 }
 
 // Handler is the full HTTP handler: guards, API routes and the UI.
@@ -56,8 +57,9 @@ func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/model", s.handleModel)
 	mux.HandleFunc("GET /api/cluster/contexts", handleContexts)
-	mux.Handle("GET /api/profile", notImplemented("profiles are not available yet", ticketProfile))
-	mux.Handle("PUT /api/profile", notImplemented("profiles are not available yet", ticketProfile))
+	mux.HandleFunc("PUT /api/profile", s.handleSaveProfile)
+	mux.HandleFunc("POST /api/profile/open", s.handleOpenProfile)
+	mux.HandleFunc("GET /api/profile/recent", s.handleRecentProfiles)
 	mux.HandleFunc("POST /api/load", s.handleLoad)
 	mux.HandleFunc("POST /api/render", handleRender)
 	mux.HandleFunc("POST /api/validate", handleValidate)
@@ -67,12 +69,6 @@ func (s *Server) Handler() http.Handler {
 	})
 	mux.Handle(pathRoot, staticHandler(s.ui))
 	return s.guard(mux)
-}
-
-func notImplemented(msg, ticket string) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		writeError(w, http.StatusNotImplemented, msg, ticket)
-	})
 }
 
 // modelBody is the chart and version choice of the Target stage; the questions arrive with later epics.
@@ -270,4 +266,15 @@ func writeError(w http.ResponseWriter, status int, msg, ticket string) {
 	w.Header().Set(headerContentType, contentTypeJSON)
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(errorBody{Error: msg, Ticket: ticket})
+}
+
+// writeFieldErrors refuses a structurally invalid profile with 422 and its field errors.
+func writeFieldErrors(w http.ResponseWriter, errs []profile.FieldError) {
+	msgs := make([]string, 0, len(errs))
+	for _, e := range errs {
+		msgs = append(msgs, e.Error())
+	}
+	w.Header().Set(headerContentType, contentTypeJSON)
+	w.WriteHeader(http.StatusUnprocessableEntity)
+	_ = json.NewEncoder(w).Encode(errorBody{Error: "invalid profile: " + strings.Join(msgs, "; "), Fields: errs})
 }
