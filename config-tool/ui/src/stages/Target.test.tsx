@@ -6,7 +6,9 @@ import { Chrome } from '../chrome/Chrome'
 import { STAGES } from '../stages'
 import { Environment, TargetType, type Session, type Target } from '../state/answers'
 import { useStore } from '../state/context'
-import { initialState, type AppState } from '../state/reducer'
+import type { Profile } from '../api/profile'
+import type { ChartSwitch } from '../api/roles'
+import { initialState, reducer, type AppState } from '../state/reducer'
 import { StageId } from '../state/stageIds'
 import { StoreProvider } from '../state/store'
 import { HTTP_NOT_FOUND, MODEL, mockApi, refusedKubeconfig, type ContextsAnswer } from '../test/api'
@@ -26,14 +28,18 @@ function Probe() {
   return null
 }
 
+// A picked role keeps the footer about Target; the role cases below start from their own state.
 function renderTarget(target: Partial<Target> = {}, session: Session = {}) {
-  const initial: AppState = {
+  return renderState({
     ...initialState,
     entered: true,
     visited: [StageId.Target],
-    answers: { target: { ...initialState.answers.target, ...target } },
+    answers: { role: 'provider', features: {}, target: { ...initialState.answers.target, ...target } },
     session,
-  }
+  })
+}
+
+function renderState(initial: AppState) {
   return render(
     <StoreProvider initial={initial}>
       <Chrome stages={STAGES} />
@@ -47,6 +53,42 @@ function railEntry(index: number) {
   if (!stage) throw new Error(`no stage ${index}`)
   return screen.getByRole('button', { name: new RegExp(`${index + 1} ${stage.label}`) })
 }
+
+const DSC = 'data-space-connector'
+const TRUST_ANCHOR = 'trust-anchor'
+const TWO_CHARTS = { charts: [...MODEL.charts, { name: TRUST_ANCHOR, versions: [{ version: '1.3.6', latest: true }] }] }
+const COMPLETE: Target = {
+  ...initialState.answers.target,
+  type: TargetType.File,
+  namespace: 'provider',
+  releaseName: 'provider',
+  environment: Environment.Production,
+  chartVersion: '10.16.0',
+}
+const DSC_MODEL = { chart: DSC, version: '10.16.0', revision: 2 }
+const TA_MODEL = { chart: TRUST_ANCHOR, version: '1.3.6', revision: 1 }
+
+/** The state after the server answered POST /api/preset for `role` deploying `chart`. */
+function applied(state: AppState, role: string, chart: string, chartSwitch: ChartSwitch | null): AppState {
+  const operator = chart === TRUST_ANCHOR
+  const profile: Profile = {
+    format: 1,
+    model: operator ? TA_MODEL : DSC_MODEL,
+    catalogue: operator ? DSC_MODEL : undefined,
+    target: { ...state.answers.target, chart, chartVersion: chartSwitch ? '' : state.answers.target.chartVersion },
+    role,
+    features: operator ? { 'ta.registry': { enabled: true, source: 'preset' } } : { 'data.scorpio': { enabled: true, source: 'preset' } },
+    answers: {},
+    open: [],
+    secrets: {},
+  }
+  return reducer(state, { type: 'roleApplied', profile, chartSwitch })
+}
+
+const PINNED: AppState = { ...initialState, entered: true, visited: [StageId.Target, StageId.Role], answers: { features: {}, target: COMPLETE } }
+const OPERATOR = applied(PINNED, 'operator', TRUST_ANCHOR, { fromChart: DSC, fromVersion: '10.16.0', toChart: TRUST_ANCHOR })
+const SWITCHED_BACK = applied(OPERATOR, 'custom', DSC, { fromChart: TRUST_ANCHOR, fromVersion: '', toChart: DSC })
+const PROVIDER = applied(PINNED, 'provider', DSC, null)
 
 const kubeconfigField = () => screen.getByLabelText('Kubeconfig')
 const contextSelect = () => screen.getByLabelText('Context')
@@ -241,5 +283,38 @@ describe('Target', () => {
     renderTarget({ type: TargetType.File, releaseName: 'provider', environment: Environment.Production })
     await userEvent.click(screen.getByRole('button', { name: 'Ask Namespace later' }))
     await waitFor(() => expect(screen.getByLabelText('Validation')).toHaveTextContent('✖ 0 errors○ 1 open questions'))
+  })
+
+  it.each<[string, AppState, string, string[]]>([
+    ['an applied Operator preset', OPERATOR, TRUST_ANCHOR, ['1.3.6 (latest)']],
+    ['the switch back from Operator to a pinned connector version', SWITCHED_BACK, DSC, ['10.16.0 (latest)', '10.15.0']],
+  ])('asks for the version again after %s', async (_name, state, chart, versions) => {
+    mockApi(undefined, TWO_CHARTS)
+    renderState(state)
+    const version = screen.getByLabelText('Version')
+    await within(version).findByRole('option', { name: versions[0] })
+    expect(screen.getByLabelText('Chart')).toHaveValue(chart)
+    expect(within(version).getAllByRole('option').map((o) => o.textContent)).toEqual(['— choose a version —', ...versions])
+    expect(version).toHaveValue('')
+    expect(probe.state.answers.target.chartVersion).toBe('')
+    expect(screen.getByLabelText('Validation')).toHaveTextContent('✖ 0 errors○ 1 open questions')
+    await userEvent.click(railEntry(1))
+    expect(within(railEntry(0)).getByLabelText('has open questions')).toHaveTextContent('○')
+  })
+
+  it.each<[string, AppState, string, string, string]>([
+    ['an Operator preset', OPERATOR, DSC, '10.16.0', 'Role operator was cleared because it deploys trust-anchor — pick a role on step 2.'],
+    ['a Provider preset', PROVIDER, TRUST_ANCHOR, '1.3.6', 'Role provider was cleared because it deploys data-space-connector — pick a role on step 2.'],
+  ])('clears %s when the chart changes, preselecting the new chart latest version', async (_name, state, chart, latest, notice) => {
+    mockApi(undefined, TWO_CHARTS)
+    renderState(state)
+    await screen.findByRole('option', { name: /\(latest\)/ })
+    await userEvent.selectOptions(screen.getByLabelText('Chart'), chart)
+    await waitFor(() => expect(screen.getByLabelText('Version')).toHaveValue(latest))
+    expect(screen.getByRole('status')).toHaveTextContent(notice)
+    expect(probe.state.answers).toMatchObject({ role: undefined, features: {} })
+    expect(probe.state.profileCatalogue).toBeUndefined()
+    expect(screen.getByLabelText('Validation')).toHaveTextContent('✖ 0 errors○ 1 open questions')
+    expect(within(railEntry(1)).getByLabelText('has open questions')).toHaveTextContent('○')
   })
 })

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { emptyAnswers, Environment, TargetType, type Target } from './answers'
-import { FIELD_IDS, fieldStage, openQuestions, targetIssues, type FieldId } from './openQuestions'
+import { FIELD_IDS, fieldStage, openQuestions, roleIssues, targetIssues, type FieldId } from './openQuestions'
 import { initialState, type AppState } from './reducer'
 import { StageId } from './stageIds'
 
@@ -14,7 +14,7 @@ const VALID: Target = {
 }
 
 function stateOf(change: Partial<Target>, open: readonly FieldId[] = []): AppState {
-  return { ...initialState, answers: { target: { ...VALID, ...change } }, open }
+  return { ...initialState, answers: { features: {}, target: { ...VALID, ...change } }, open }
 }
 
 describe('openQuestions', () => {
@@ -57,5 +57,15 @@ describe('targetIssues', () => {
     ['marked with a format error, both', { namespace: 'Prod_NS' }, ['target.namespace'], 1, 1],
   ])('counts %s inputs', (_name, change, open, errors, openCount) => {
     expect(targetIssues(stateOf(change, open))).toEqual({ warnings: 0, errors, open: openCount })
+  })
+})
+
+describe('roleIssues', () => {
+  it.each<[string, string | undefined, number]>([
+    ['no role', undefined, 1],
+    ['a picked role', 'provider', 0],
+  ])('counts %s as %i open questions', (_name, role, open) => {
+    const state = stateOf({})
+    expect(roleIssues({ ...state, answers: { ...state.answers, role } })).toEqual({ warnings: 0, errors: 0, open })
   })
 })

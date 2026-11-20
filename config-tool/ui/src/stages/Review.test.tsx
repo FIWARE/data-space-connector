@@ -42,13 +42,13 @@ describe('Review', () => {
     ['the placeholder', undefined],
     ['the load report', REPORT],
   ])('lists the open questions above %s, marking the marked ones', (_name, loaded) => {
-    renderReview(loaded, undefined, { answers: { target: { ...ANSWERED, namespace: '' } }, open: ['target.environment', 'target.namespace'] })
+    renderReview(loaded, undefined, { answers: { features: {}, target: { ...ANSWERED, namespace: '' } }, open: ['target.environment', 'target.namespace'] })
     expect(screen.getByRole('heading', { level: 3, name: 'Open questions (2)' })).toBeInTheDocument()
     expect(openList().getAllByRole('listitem').map((li) => li.textContent)).toEqual(['NamespaceTargetmarkedgo ↗', 'EnvironmentTargetmarkedgo ↗'])
   })
 
   it('says when no question is open', () => {
-    renderReview(undefined, undefined, { answers: { target: ANSWERED } })
+    renderReview(undefined, undefined, { answers: { features: {}, target: ANSWERED } })
     expect(screen.getByRole('heading', { level: 3, name: 'Open questions (0)' })).toBeInTheDocument()
     expect(openList().getByText('None: every question is answered.')).toBeInTheDocument()
   })
@@ -58,7 +58,7 @@ describe('Review', () => {
     ['a marked select', {}, ['target.chartVersion'], 'Chart version', 'Version'],
     ['an unanswered radio group', { environment: '' }, [], 'Environment', 'Development'],
   ])('lands on Target with %s focused', async (_name, change, open, label, input) => {
-    renderReview(undefined, undefined, { answers: { target: { ...ANSWERED, ...change } }, open })
+    renderReview(undefined, undefined, { answers: { features: {}, target: { ...ANSWERED, ...change } }, open })
     await userEvent.click(screen.getByRole('button', { name: `Go to ${label}` }))
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Where is this going?')
     expect(screen.getByLabelText(new RegExp(`^${input}`))).toHaveFocus()

@@ -228,10 +228,11 @@ export function Target() {
 
   const chartVersions = model?.charts.find((c) => c.name === target.chart)?.versions
 
+  // A role that switched the chart cleared the version on purpose; guessing latest would undo that.
   useEffect(() => {
     const latest = chartVersions?.find((v) => v.latest)
-    if (latest && target.chartVersion === '') dispatch({ type: 'setTarget', target: { chartVersion: latest.version } })
-  }, [chartVersions, target.chartVersion, dispatch])
+    if (latest && target.chartVersion === '' && !state.versionOpen) dispatch({ type: 'setTarget', target: { chartVersion: latest.version } })
+  }, [chartVersions, target.chartVersion, state.versionOpen, dispatch])
 
   const errors = validateTarget(target)
   const errorOf = (field: TargetField) => errors.find((e) => e.field === field && e.message !== MSG_REQUIRED)?.message
@@ -297,6 +298,15 @@ export function Target() {
           </select>
           <AskLater field={targetFieldId(TargetField.Chart)} />
         </Row>
+        {state.roleCleared && (
+          <p className="hint" role="status">
+            Role {state.roleCleared.role} was cleared because it deploys {state.roleCleared.fromChart} — pick a role on{' '}
+            <button type="button" className="link" onClick={() => dispatch({ type: 'goTo', stage: StageId.Role })}>
+              step 2
+            </button>
+            .
+          </p>
+        )}
         <Row id={CHART_VERSION_ID} label="Version">
           <select id={CHART_VERSION_ID} value={target.chartVersion} onChange={(e) => set({ chartVersion: e.target.value })}>
             {target.chartVersion === '' && <option value="">— choose a version —</option>}

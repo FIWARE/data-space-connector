@@ -80,3 +80,8 @@ export function targetIssues(state: AppState): Issues {
   const open = openQuestions(state).filter((q) => q.stage === StageId.Target).length
   return { warnings: 0, errors, open }
 }
+
+/** The Role stage's counters: no role picked yet is one open question. */
+export function roleIssues(state: AppState): Issues {
+  return { warnings: 0, errors: 0, open: state.answers.role === undefined ? 1 : 0 }
+}

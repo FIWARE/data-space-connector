@@ -27,9 +27,20 @@ export interface Target {
   environment: Environment | Unanswered
 }
 
-/** Everything answered so far; later stages add their sections. */
+/** Who decided a feature's state; a re-applied preset only touches `preset` (ADR 0015 §7). */
+export type FeatureSource = 'preset' | 'loaded' | 'user'
+
+/** The recorded state of one catalogue feature, mirroring `profile.FeatureState`. */
+export interface FeatureState {
+  enabled: boolean
+  source: FeatureSource
+}
+
+/** Everything answered so far; later stages add their sections. `features` is empty while no role is picked. */
 export interface Answers {
   target: Target
+  role?: string
+  features: Record<string, FeatureState>
 }
 
 /** A fresh answer set, as "New configuration" starts it. */
@@ -44,6 +55,7 @@ export function emptyAnswers(): Answers {
       chartVersion: '',
       environment: UNANSWERED,
     },
+    features: {},
   }
 }
 
