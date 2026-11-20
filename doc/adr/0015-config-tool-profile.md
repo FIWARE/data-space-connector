@@ -213,8 +213,9 @@ now". `catalogue` follows the rules of 6 (not shipped or newer revision: 422, ol
 note) and must declare roles. The server owns it on save, as it owns `model`: without a role, or
 when `model` declares the roles, it is dropped; else a held catalogue that is shipped, declares
 roles and is of the fallback's chart is kept with the shipped revision, and otherwise the fallback
-is written. `ApplyPreset` reads its presets by the same rule (`profile.CatalogueBundle`), so a
-preset is always validated against the bundle it was built from.
+is written. `ApplyPreset` and `Validate` use the same rule (`profile.CatalogueBundle`), so a
+preset is always validated against the bundle it was built from. On open, a `catalogue` the rule
+would not keep (one next to a `model` that declares roles, or of another chart) is a 422.
 
 `profile.ApplyPreset` is pure. It writes `{enabled: true, source: preset}` for a recommended
 feature and `{enabled: false, source: preset}` for an available one, and omits the rest. Toggles

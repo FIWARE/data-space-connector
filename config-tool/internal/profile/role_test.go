@@ -385,3 +385,41 @@ func TestApplyPresetIgnoresHeldCatalogueOfRoleModel(t *testing.T) {
 		t.Errorf("Validate: %v", errs)
 	}
 }
+
+// TestValidateCatalogueAgreesWithCatalogueBundle opens only a catalogue that a save would also record.
+func TestValidateCatalogueAgreesWithCatalogueBundle(t *testing.T) {
+	b := twoRoleBundles()
+	dscLatest := ModelRef{Chart: dscChart, Version: latest, Revision: shippedRev}
+	dscOlder := ModelRef{Chart: dscChart, Version: older, Revision: 1}
+	ta := ModelRef{Chart: taChart, Version: taVersion, Revision: 1}
+	provider := Profile{Format: FormatVersion, Model: dscLatest, Target: validTarget(), Role: model.RoleProvider,
+		Features: map[string]FeatureState{dscFeature: {Enabled: true, Source: SourcePreset}}}
+	operator := Profile{Format: FormatVersion, Model: ta, Target: Target{Chart: taChart}, Role: model.RoleOperator,
+		Features: map[string]FeatureState{taFeature: {Enabled: true, Source: SourcePreset}}}
+	tests := []struct {
+		name      string
+		p         Profile
+		catalogue *ModelRef
+		want      []string
+	}{
+		{"role model, no catalogue", provider, nil, nil},
+		{"role model, older catalogue recorded", provider, &dscOlder, []string{FieldCatalogue}},
+		{"role model, own bundle recorded", provider, &dscLatest, []string{FieldCatalogue}},
+		{"fallback, latest catalogue", operator, &dscLatest, nil},
+		{"fallback, older catalogue kept", operator, &dscOlder, nil},
+		{"fallback, no catalogue", operator, nil, []string{FieldRole}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			p := tc.p
+			p.Catalogue = tc.catalogue
+			var got []string
+			for _, e := range p.Validate(b) {
+				got = append(got, e.Field)
+			}
+			if !slices.Equal(got, tc.want) {
+				t.Errorf("Validate fields = %v, want %v (%v)", got, tc.want, p.Validate(b))
+			}
+		})
+	}
+}

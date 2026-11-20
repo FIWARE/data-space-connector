@@ -118,7 +118,7 @@ func (p Profile) ApplyPreset(bundles []model.Bundle, role string, loaded map[str
 
 // CatalogueBundle is the bundle a profile reads roles from (ADR 0015 §7): the model's bundle when it
 // declares roles, else a held catalogue that is shipped, declares roles and is of the fallback's chart,
-// else the model.RoleCatalogue fallback. ApplyPreset and the server's save path share it.
+// else the model.RoleCatalogue fallback. ApplyPreset, Validate and the server's save path share it.
 func CatalogueBundle(bundles []model.Bundle, m ModelRef, held *ModelRef) (model.Bundle, error) {
 	c, err := model.RoleCatalogue(bundles, m.Chart, m.Version)
 	if err != nil || c.Chart == m.Chart && c.Version == m.Version || held == nil {
@@ -171,19 +171,22 @@ func (p Profile) validateRole(bundles []model.Bundle) []FieldError {
 	if len(errs) > 0 {
 		return errs
 	}
-	ref := p.Model
-	if p.Catalogue != nil {
-		ref = *p.Catalogue
-	}
-	cat := findBundle(bundles, ref.Chart, ref.Version)
-	if cat == nil {
+	if findBundle(bundles, p.Model.Chart, p.Model.Version) == nil {
 		// validateModel already reports the unshipped model.
 		return errs
 	}
-	if len(cat.Roles) == 0 {
-		return append(errs, FieldError{FieldRole, fmt.Sprintf("bundle %s@%s declares no roles and no catalogue is recorded", cat.Chart, cat.Version)})
+	// The same rule as ApplyPreset and save, so a profile that opens cleanly also saves cleanly.
+	cat, err := CatalogueBundle(bundles, p.Model, p.Catalogue)
+	ownRoles := err == nil && cat.Chart == p.Model.Chart && cat.Version == p.Model.Version
+	switch {
+	case ownRoles && p.Catalogue != nil:
+		return append(errs, FieldError{FieldCatalogue, fmt.Sprintf("is omitted because bundle %s@%s declares roles itself", cat.Chart, cat.Version)})
+	case !ownRoles && p.Catalogue == nil:
+		return append(errs, FieldError{FieldRole, fmt.Sprintf("bundle %s@%s declares no roles and no catalogue is recorded", p.Model.Chart, p.Model.Version)})
+	case !ownRoles && (cat.Chart != p.Catalogue.Chart || cat.Version != p.Catalogue.Version):
+		return append(errs, FieldError{FieldCatalogue, fmt.Sprintf("must be a bundle of chart %q, where the role catalogue comes from", cat.Chart)})
 	}
-	r := findRole(*cat, p.Role)
+	r := findRole(cat, p.Role)
 	if r == nil {
 		return append(errs, FieldError{FieldRole, fmt.Sprintf("%q is not a role of bundle %s@%s", p.Role, cat.Chart, cat.Version)})
 	}
