@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { QUICK_START_URL, RELEASE_NOTES_URL, releaseNotesUrl, SIZING_URL } from './links'
+import { QUICK_START_URL, RELEASE_NOTES_URL, releaseNotesUrl, repositoryDocUrl, SIZING_URL } from './links'
 import { DEFAULT_CHART } from './state/answers'
 
 describe('releaseNotesUrl', () => {
@@ -20,5 +20,14 @@ describe('trial links', () => {
   ])('%s points at the repository document', (_, url, path) => {
     expect(url).toMatch(/^https:\/\/github\.com\/FIWARE\/data-space-connector\//)
     expect(url).toMatch(path)
+  })
+})
+
+describe('repositoryDocUrl', () => {
+  it.each([
+    ['doc/deployment-integration/roles/consumer/README.md', 'https://github.com/FIWARE/data-space-connector/blob/main/doc/deployment-integration/roles/consumer/README.md'],
+    ['doc/deployment-integration/roles/README.md#component-matrix', 'https://github.com/FIWARE/data-space-connector/blob/main/doc/deployment-integration/roles/README.md#component-matrix'],
+  ])('%s', (path, want) => {
+    expect(repositoryDocUrl(path)).toBe(want)
   })
 })

@@ -1,5 +1,5 @@
 /** Save, open and list `.dscprofile.yaml` profiles through the loopback API (ADR 0015). */
-import { emptyAnswers, type Answers, type Target } from '../state/answers'
+import { emptyAnswers, type Answers, type FeatureState, type Target } from '../state/answers'
 import { FIELD_IDS, type FieldId } from '../state/openQuestions'
 import type { AppState } from '../state/reducer'
 import { api } from './client'
@@ -30,14 +30,7 @@ export interface ProfileSource {
   sha256: string
 }
 
-/** Who decided a feature's state; a re-applied preset only touches `preset` (ADR 0015 §7). */
-export type FeatureSource = 'preset' | 'loaded' | 'user'
-
-/** The recorded state of one catalogue feature, mirroring `profile.FeatureState`. */
-export interface FeatureState {
-  enabled: boolean
-  source: FeatureSource
-}
+export type { FeatureSource, FeatureState } from '../state/answers'
 
 /** The `.dscprofile.yaml` content, mirroring `profile.Profile` in Go. `answers` and `secrets` stay empty in CT-4.
  *  `catalogue` names the bundle the roles came from when that is not `model`; the server owns it. */
@@ -78,13 +71,16 @@ export interface RecentProfiles {
   notes: string[]
 }
 
-/** The profile the UI's state stands for; the server fills in format, model and secrets. */
+/** The profile the UI's state stands for; the server fills in format, model and secrets and owns `catalogue`. */
 export function toProfile(state: AppState): Profile {
-  const target = state.answers.target
+  const { target, role, features } = state.answers
   return {
     format: PROFILE_FORMAT,
     model: state.profileModel ?? { chart: target.chart, version: '', revision: 0 },
+    catalogue: state.profileCatalogue,
     target,
+    role,
+    features,
     answers: {},
     open: state.open.map((field) => ({ field })),
     secrets: {},
@@ -99,6 +95,8 @@ function isFieldId(id: string): id is FieldId {
 export function fromProfile(profile: Profile): { answers: Answers; open: FieldId[] } {
   const answers = emptyAnswers()
   answers.target = { ...answers.target, ...profile.target }
+  answers.role = profile.role
+  answers.features = profile.features ?? {}
   const open = (profile.open ?? []).map((q) => q.field).filter(isFieldId)
   return { answers, open: [...new Set(open)].sort() }
 }

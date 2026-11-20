@@ -1,10 +1,12 @@
 /** S1 Target: where the configuration goes, which release and chart, and which defaults. */
 import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { fetchRoles } from '../api/roles'
 import { fetchContexts, fetchModel, type Kubeconfig, type ModelInfo } from '../api/target'
 import { releaseNotesUrl } from '../links'
 import { CLEARED_CONTEXT, Environment, TargetType, type Session, type Target as TargetAnswers } from '../state/answers'
 import { useStore } from '../state/context'
 import { FIELD_LABELS, fieldElementId, fieldStage, targetFieldId, type FieldId } from '../state/openQuestions'
+import type { RoleCleared } from '../state/reducer'
 import { StageId } from '../state/stageIds'
 import { MSG_REQUIRED, TargetField, validateTarget } from '../state/target'
 
@@ -218,6 +220,38 @@ function ClusterFields({ target, session }: { target: TargetAnswers; session: Se
   )
 }
 
+
+/** The cleared role's title from its chart's catalogue; undefined until it arrives, the id if it cannot. */
+function useRoleTitle(chart: string, id: string): string | undefined {
+  // Keyed by the role, so a notice for another role never shows the previous title.
+  const [resolved, setResolved] = useState<{ key: string; title: string }>()
+  const key = `${chart}/${id}`
+  useEffect(() => {
+    const controller = new AbortController()
+    fetchRoles(chart, '', controller.signal).then(
+      (catalogue) => setResolved({ key, title: catalogue.roles.find((r) => r.id === id)?.title ?? id }),
+      () => controller.signal.aborted || setResolved({ key, title: id }),
+    )
+    return () => controller.abort()
+  }, [chart, id, key])
+  return resolved?.key === key ? resolved.title : undefined
+}
+
+/** Notice of a role a chart change on this stage cleared, with a way back to step 2. */
+function RoleClearedNotice({ cleared }: { cleared: RoleCleared }) {
+  const { dispatch } = useStore()
+  const title = useRoleTitle(cleared.fromChart, cleared.role)
+  if (title === undefined) return null
+  return (
+    <p className="hint" role="status">
+      Role {title} was cleared because it deploys {cleared.fromChart} — pick a role on{' '}
+      <button type="button" className="link" onClick={() => dispatch({ type: 'goTo', stage: StageId.Role })}>
+        step 2
+      </button>
+      .
+    </p>
+  )
+}
 /** S1 Target screen. */
 export function Target() {
   const { state, dispatch } = useStore()
@@ -228,10 +262,11 @@ export function Target() {
 
   const chartVersions = model?.charts.find((c) => c.name === target.chart)?.versions
 
+  // A role that switched the chart cleared the version on purpose; guessing latest would undo that.
   useEffect(() => {
     const latest = chartVersions?.find((v) => v.latest)
-    if (latest && target.chartVersion === '') dispatch({ type: 'setTarget', target: { chartVersion: latest.version } })
-  }, [chartVersions, target.chartVersion, dispatch])
+    if (latest && target.chartVersion === '' && !state.versionOpen) dispatch({ type: 'setTarget', target: { chartVersion: latest.version } })
+  }, [chartVersions, target.chartVersion, state.versionOpen, dispatch])
 
   const errors = validateTarget(target)
   const errorOf = (field: TargetField) => errors.find((e) => e.field === field && e.message !== MSG_REQUIRED)?.message
@@ -297,6 +332,7 @@ export function Target() {
           </select>
           <AskLater field={targetFieldId(TargetField.Chart)} />
         </Row>
+        {state.roleCleared && <RoleClearedNotice cleared={state.roleCleared} />}
         <Row id={CHART_VERSION_ID} label="Version">
           <select id={CHART_VERSION_ID} value={target.chartVersion} onChange={(e) => set({ chartVersion: e.target.value })}>
             {target.chartVersion === '' && <option value="">— choose a version —</option>}

@@ -1,4 +1,4 @@
-/** External documentation links shown on S0, S1 and Review. */
+/** External documentation links shown on S0, S1, S2 and Review. */
 import { DEFAULT_CHART } from './state/answers'
 
 const REPOSITORY = 'https://github.com/FIWARE/data-space-connector'
@@ -16,4 +16,9 @@ export const RELEASE_NOTES_URL = `${REPOSITORY}/tree/main/doc/release-notes`
 export function releaseNotesUrl(chart: string, version: string): string {
   const major = version.split('.')[0]
   return chart === DEFAULT_CHART && major ? `${REPOSITORY}/blob/main/doc/release-notes/${major}-x.md` : RELEASE_NOTES_URL
+}
+
+/** A repository document named by its repo-relative path, as the model bundle's `docs` fields give it. */
+export function repositoryDocUrl(path: string): string {
+  return `${REPOSITORY}/blob/main/${path}`
 }

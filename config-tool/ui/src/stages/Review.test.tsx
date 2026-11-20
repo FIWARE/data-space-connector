@@ -1,4 +1,4 @@
-import { act, render, screen, within } from '@testing-library/react'
+import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
 import { RootSource, VersionSource, type LoadReport } from '../api/load'
@@ -13,6 +13,8 @@ import { lateLoad, mockApi, REPORT, refusedUpload } from '../test/api'
 import { ROOT_LABEL, WHOLE_FILE } from './Review'
 
 const HTTP_UNPROCESSABLE = 422
+/** A picked role, so only the Target questions are open. */
+const PICKED = 'provider'
 const FILE = new File(['dsc:\n  did:\n    enabled: true\n'], 'wrapped.yaml')
 /** A report of values another chart wraps under `dsc:`. */
 const WRAPPED: LoadReport = { ...REPORT, source: FILE.name, root: 'dsc', rootCandidates: ['dsc', ''] }
@@ -42,15 +44,31 @@ describe('Review', () => {
     ['the placeholder', undefined],
     ['the load report', REPORT],
   ])('lists the open questions above %s, marking the marked ones', (_name, loaded) => {
-    renderReview(loaded, undefined, { answers: { target: { ...ANSWERED, namespace: '' } }, open: ['target.environment', 'target.namespace'] })
+    renderReview(loaded, undefined, { answers: { role: PICKED, features: {}, target: { ...ANSWERED, namespace: '' } }, open: ['target.environment', 'target.namespace'] })
     expect(screen.getByRole('heading', { level: 3, name: 'Open questions (2)' })).toBeInTheDocument()
     expect(openList().getAllByRole('listitem').map((li) => li.textContent)).toEqual(['NamespaceTargetmarkedgo ↗', 'EnvironmentTargetmarkedgo ↗'])
   })
 
   it('says when no question is open', () => {
-    renderReview(undefined, undefined, { answers: { target: ANSWERED } })
+    renderReview(undefined, undefined, { answers: { role: PICKED, features: {}, target: ANSWERED } })
     expect(screen.getByRole('heading', { level: 3, name: 'Open questions (0)' })).toBeInTheDocument()
     expect(openList().getByText('None: every question is answered.')).toBeInTheDocument()
+    expect(screen.getByLabelText('Validation')).toHaveTextContent('○ 0 open questions')
+  })
+
+  it('lists an unpicked role with the count the footer shows', () => {
+    renderReview(undefined, undefined, { answers: { features: {}, target: ANSWERED } })
+    expect(screen.getByRole('heading', { level: 3, name: 'Open questions (1)' })).toBeInTheDocument()
+    expect(openList().getAllByRole('listitem').map((li) => li.textContent)).toEqual(['RoleRolego ↗'])
+    expect(screen.getByLabelText('Validation')).toHaveTextContent('○ 1 open questions')
+  })
+
+  it('lands on Role with the role group focused', async () => {
+    mockApi()
+    renderReview(undefined, undefined, { answers: { features: {}, target: ANSWERED } })
+    await userEvent.click(screen.getByRole('button', { name: 'Go to Role' }))
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('What does this organization do in the data space?')
+    await waitFor(() => expect(screen.getAllByRole('radio')[0]).toHaveFocus())
   })
 
   it.each<[string, Partial<Target>, FieldId[], string, string]>([
@@ -58,7 +76,7 @@ describe('Review', () => {
     ['a marked select', {}, ['target.chartVersion'], 'Chart version', 'Version'],
     ['an unanswered radio group', { environment: '' }, [], 'Environment', 'Development'],
   ])('lands on Target with %s focused', async (_name, change, open, label, input) => {
-    renderReview(undefined, undefined, { answers: { target: { ...ANSWERED, ...change } }, open })
+    renderReview(undefined, undefined, { answers: { role: PICKED, features: {}, target: { ...ANSWERED, ...change } }, open })
     await userEvent.click(screen.getByRole('button', { name: `Go to ${label}` }))
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Where is this going?')
     expect(screen.getByLabelText(new RegExp(`^${input}`))).toHaveFocus()
