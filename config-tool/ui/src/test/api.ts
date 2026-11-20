@@ -105,23 +105,31 @@ const PROFILE_DEFAULTS: Required<ProfileFakes> = {
   open: () => HTTP_NOT_FOUND,
 }
 
-/** A trial shaped like the embedded one: three releases in install order, one warning with a link. */
+const TRUST_ANCHOR = 'trust-anchor'
+const DSC_CHART = 'data-space-connector'
+const TRUST_ANCHOR_VERSION = '1.3.6'
+const DSC_VERSION = '10.16.0'
+
+/** A trial matching config-tool/trial/trial.yaml: three releases in install order, one warning with a link. */
 export const TRIAL: Trial = {
   profile: 'local-trial',
   environment: 'development',
-  releases: ['trust-anchor', 'provider', 'consumer'].map((role) => ({
-    role,
-    releaseName: role === 'trust-anchor' ? 'trust-anchor' : `${role}-dsc`,
-    namespace: role,
-    chart: role === 'trust-anchor' ? 'trust-anchor' : 'data-space-connector',
-    chartVersion: '10.16.0',
-    source: `k3s/${role}.yaml`,
-    file: `${role}.values.yaml`,
-    values: `# ${role}\n`,
-  })),
+  releases: [TRUST_ANCHOR, 'provider', 'consumer'].map((role) => {
+    const trustAnchor = role === TRUST_ANCHOR
+    return {
+      role,
+      releaseName: role,
+      namespace: role,
+      chart: trustAnchor ? TRUST_ANCHOR : DSC_CHART,
+      chartVersion: trustAnchor ? TRUST_ANCHOR_VERSION : DSC_VERSION,
+      source: `k3s/${role}.yaml`,
+      file: `${role}.yaml`,
+      values: `# ${role}\n`,
+    }
+  }),
   warnings: [
-    { id: 'self-signed', releases: ['provider-dsc', 'consumer-dsc'], message: 'Certificates are self-signed.' },
-    { id: 'memory', releases: ['trust-anchor', 'provider-dsc', 'consumer-dsc'], message: 'Sized for a laptop.', link: 'https://example.org/sizing' },
+    { id: 'self-signed', releases: ['provider', 'consumer'], message: 'Certificates are self-signed.' },
+    { id: 'memory', releases: [TRUST_ANCHOR, 'provider', 'consumer'], message: 'Sized for a laptop.', link: 'https://example.org/sizing' },
   ],
 }
 
