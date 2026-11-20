@@ -69,9 +69,14 @@ public class ProviderTilClient {
         execute(new Request.Builder().put(body).url(grantUrl(did, scope, scopeType)).build(), HttpStatus.SC_OK);
     }
 
-    /** Deletes one grant; the issuer stays. */
+    /** Deletes one grant; the issuer stays. A grant already gone (e.g. revoked by CM with its order) is fine. */
     public void removeGrant(String did, String scope, String scopeType) throws IOException {
-        execute(new Request.Builder().delete().url(grantUrl(did, scope, scopeType)).build(), HttpStatus.SC_NO_CONTENT);
+        Request request = new Request.Builder().delete().url(grantUrl(did, scope, scopeType)).build();
+        try (Response response = HTTP_CLIENT.newCall(request).execute()) {
+            if (response.code() != HttpStatus.SC_NOT_FOUND) {
+                successBody(response, HttpStatus.SC_NO_CONTENT);
+            }
+        }
     }
 
     private HttpUrl.Builder issuerUrl(String did) {

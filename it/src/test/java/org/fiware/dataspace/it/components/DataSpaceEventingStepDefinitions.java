@@ -166,7 +166,7 @@ public class DataSpaceEventingStepDefinitions extends StepDefintions {
      * Restores everything a scenario may have changed; every restore runs even if an earlier one fails, and the hook
      * fails at the end with all errors.
      */
-    @After("@eventing")
+    @After(value = "@eventing", order = RESTORE_HOOK_ORDER)
     public void restore() {
         List<String> errors = new ArrayList<>();
         attempt(errors, "restore the consumer at the trust anchor", () -> trustAnchor.restoreParticipant(CONSUMER_DID));

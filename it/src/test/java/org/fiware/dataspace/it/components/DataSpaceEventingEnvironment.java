@@ -54,6 +54,13 @@ public abstract class DataSpaceEventingEnvironment {
     public static final int PARTICIPANT_SUBSCRIPTIONS = 2;
     public static final String PROBE_DID_TEMPLATE = "did:web:probe-%s.example";
 
+    /**
+     * {@code @After} orders (Cucumber runs higher first): the TMF/PAP cleanup deletes the order, so CM's own
+     * revocation of the order grant starts before the restore reads the TIL.
+     */
+    public static final int FIXTURE_CLEANUP_HOOK_ORDER = 20000;
+    public static final int RESTORE_HOOK_ORDER = 10000;
+
     private DataSpaceEventingEnvironment() {
         // constants only
     }

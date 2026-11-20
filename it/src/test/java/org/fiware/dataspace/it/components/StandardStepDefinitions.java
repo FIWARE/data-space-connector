@@ -251,7 +251,7 @@ public class StandardStepDefinitions extends StepDefintions {
      * Removes the fixtures an {@code @eventing} scenario created: its own policies and the TM Forum
      * resources. Everything else on the provider belongs to the deployment and stays.
      */
-    @After("@eventing")
+    @After(value = "@eventing", order = DataSpaceEventingEnvironment.FIXTURE_CLEANUP_HOOK_ORDER)
     public void cleanUpEventingFixtures() throws Exception {
         for (String policyLocation : createdPolicies) {
             Request deleteRequest = new Request.Builder()
