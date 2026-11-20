@@ -1,4 +1,4 @@
-# 0008 - Ship the data space events routes as a validated operator snippet, not as chart routes
+# 0009 - Ship the data space events routes as a validated operator snippet, not as chart routes
 
 **Status:** Accepted
 **Date:** 2026-11-16

@@ -508,9 +508,6 @@
             <mxPoint x="-20" y="-9" as="offset" />
           </mxGeometry>
         </mxCell>
-        <mxCell id="mybaD-pin01bmBUHazqO-6" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="Apisix" vertex="1">
-          <mxGeometry height="60" width="120" x="-210" y="270" as="geometry" />
-        </mxCell>
         <mxCell id="mybaD-pin01bmBUHazqO-8" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="VCVerifier" vertex="1">
           <mxGeometry height="42" width="120" x="-210" y="430" as="geometry" />
         </mxCell>
@@ -547,7 +544,7 @@
             <mxPoint as="offset" />
           </mxGeometry>
         </mxCell>
-        <mxCell id="mybaD-pin01bmBUHazqO-15" edge="1" parent="1" source="kfzchHDQySiM6unAITj7-1" style="endArrow=classic;html=1;rounded=0;exitX=0;exitY=0.5;exitDx=0;exitDy=0;" target="mybaD-pin01bmBUHazqO-6" value="">
+        <mxCell id="mybaD-pin01bmBUHazqO-15" edge="1" parent="1" source="kfzchHDQySiM6unAITj7-1" style="endArrow=classic;html=1;rounded=0;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=1;entryY=0.5;entryDx=0;entryDy=0;" target="mybaD-pin01bmBUHazqO-17" value="">
           <mxGeometry height="50" relative="1" width="50" as="geometry">
             <mxPoint x="-50" y="160" as="sourcePoint" />
             <mxPoint y="110" as="targetPoint" />
@@ -559,14 +556,11 @@
           </mxGeometry>
         </mxCell>
         <mxCell id="mybaD-pin01bmBUHazqO-17" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="Consent-Manager" vertex="1">
-          <mxGeometry height="42" width="120" x="-210" y="380" as="geometry" />
+          <mxGeometry height="42" width="120" x="-210" y="279" as="geometry" />
         </mxCell>
-        <mxCell id="mybaD-pin01bmBUHazqO-18" edge="1" parent="1" source="mybaD-pin01bmBUHazqO-8" style="endArrow=none;dashed=1;html=1;rounded=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;exitX=0;exitY=0.5;exitDx=0;exitDy=0;startArrow=classic;startFill=1;" target="mybaD-pin01bmBUHazqO-6" value="">
+        <mxCell id="mybaD-pin01bmBUHazqO-18" edge="1" parent="1" source="mybaD-pin01bmBUHazqO-8" style="endArrow=none;dashed=1;html=1;rounded=0;entryX=0.5;entryY=1;entryDx=0;entryDy=0;exitX=0.5;exitY=0;exitDx=0;exitDy=0;startArrow=classic;startFill=1;" target="mybaD-pin01bmBUHazqO-17" value="">
           <mxGeometry height="50" relative="1" width="50" as="geometry">
-            <Array as="points">
-              <mxPoint x="-240" y="450" />
-              <mxPoint x="-240" y="300" />
-            </Array>
+            
             <mxPoint x="-400" y="340" as="sourcePoint" />
             <mxPoint x="-410" y="300" as="targetPoint" />
           </mxGeometry>
@@ -574,17 +568,6 @@
         <mxCell id="mybaD-pin01bmBUHazqO-19" connectable="0" parent="mybaD-pin01bmBUHazqO-18" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" value="Get JWKS" vertex="1">
           <mxGeometry relative="1" x="0.1493" as="geometry">
             <mxPoint y="-18" as="offset" />
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="mybaD-pin01bmBUHazqO-20" edge="1" parent="1" source="mybaD-pin01bmBUHazqO-6" style="endArrow=classic;html=1;rounded=0;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" target="mybaD-pin01bmBUHazqO-17" value="">
-          <mxGeometry height="50" relative="1" width="50" as="geometry">
-            <mxPoint x="-150" y="240" as="sourcePoint" />
-            <mxPoint x="-100" y="190" as="targetPoint" />
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="mybaD-pin01bmBUHazqO-21" connectable="0" parent="mybaD-pin01bmBUHazqO-20" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" value="&lt;div&gt;6. Forward with&amp;nbsp;&lt;/div&gt;&lt;div&gt;consent key&lt;/div&gt;" vertex="1">
-          <mxGeometry relative="1" x="-0.2722" y="-1" as="geometry">
-            <mxPoint x="1" y="7" as="offset" />
           </mxGeometry>
         </mxCell>
       </root>

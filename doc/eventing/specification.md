@@ -26,7 +26,7 @@ This document is the interoperability contract for data space events: what a sec
 implementation needs in order to publish events to, or subscribe at, a FIWARE participant. It is
 normative and short; the reasons behind each rule are in the [mechanism description](architecture.md). Why
 events are CloudEvents authenticated over OID4VP is recorded in
-[ADR 0009](../adr/0009-cloudevents-over-oid4vp.md).
+[ADR 0010](../adr/0010-cloudevents-over-oid4vp.md).
 
 It is not a submission to a governance body. DSBA, Gaia-X and IDSA are unaffected by it. If one of
 them, or any other party, asks for the eventing contract, this is the document to hand over.
@@ -235,7 +235,7 @@ Consequences a publisher must expect:
   MAY be answered `202`.
 
 The publisher × type check (4) is what keeps one data space member from announcing events about
-another ([ADR 0011](../adr/0011-authorize-events-per-publisher-and-type.md)). An ODRL policy at the PEP can
+another ([ADR 0012](../adr/0012-authorize-events-per-publisher-and-type.md)). An ODRL policy at the PEP can
 also constrain the credential **issuer** (ODRL-PAP's `vc:currentParty` left operand). That only adds
 defence in depth: it pins who issued the credential, not which publisher holds it, so it does not
 replace check 4 and is not a dependency of this specification.
@@ -306,7 +306,7 @@ Check order: `401` → missing `subscriberId` `400` → `subscriberId` mismatch 
 invalid fields `400` → `503` → handshake (`400` on failure) → `201`, or `503` if a cap was reached
 during the handshake. A `503` therefore does not prove that no handshake ran.
 
-Leases ([ADR 0015](../adr/0015-best-effort-stateless-event-delivery.md)):
+Leases ([ADR 0016](../adr/0016-best-effort-stateless-event-delivery.md)):
 
 - A request by the same subscriber for the same sink renews the existing subscription in place: same
   `id`, new `expiresAt`. The `types` and `protocolsettings` of the request replace the previous ones,
@@ -339,7 +339,7 @@ Leases ([ADR 0015](../adr/0015-best-effort-stateless-event-delivery.md)):
 
 Profile of §4 of the pinned webhook document ([§2](#2-normative-references)); the origin is
 configured together with the publisher's identifier and never derived from it
-([ADR 0013](../adr/0013-cloudevents-webhook-handshake.md)).
+([ADR 0014](../adr/0014-cloudevents-webhook-handshake.md)).
 
 Publisher:
 
@@ -371,9 +371,9 @@ Receiver (sink):
 - How a receiver configures its publisher list, and the Helm chart values.
 - How a subscriber learns a publisher's base URL for `/subscriptions`, and the client id, scope and
   credential type of the publisher's verifier: out-of-band configuration, like the publisher list.
-- Payload signatures ([ADR 0016](../adr/0016-no-event-payload-signature.md)); a future `signature`
+- Payload signatures ([ADR 0017](../adr/0017-no-event-payload-signature.md)); a future `signature`
   extension attribute would be additive.
-- A catch-up feed and brokers ([ADR 0015](../adr/0015-best-effort-stateless-event-delivery.md)).
+- A catch-up feed and brokers ([ADR 0016](../adr/0016-best-effort-stateless-event-delivery.md)).
 
 ## 11. Conformance checklist
 

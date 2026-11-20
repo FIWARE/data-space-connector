@@ -1,6 +1,6 @@
 # 0004 - Map OID4VP tokens to participants by DID
 
-**Status:** Accepted (implemented)
+**Status:** Superseded by [0008](0008-dsc-consent-manager.md) (was: Accepted (implemented))
 **Date:** 2026-08-26
 **Applies to:** `FIWARE/data-space-connector`, [Prometheus-X/consent-manager](https://github.com/Prometheus-X-association/consent-manager)
 **Context doc:** [`../CONSENT_MANAGEMENT.md`](../CONSENT_MANAGEMENT.md)

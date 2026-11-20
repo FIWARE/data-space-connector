@@ -212,19 +212,19 @@ can run repeatedly on one cluster. To test against a data space that is already 
 - [Participant setup](eventing/participant-setup.md): receiving events, the removal modes and the
   gateway routes.
 - ADRs:
-  - [0008](adr/0008-events-routes-as-validated-operator-snippet.md): the events routes are a
+  - [0009](adr/0009-events-routes-as-validated-operator-snippet.md): the events routes are a
     validated operator snippet;
-  - [0009](adr/0009-cloudevents-over-oid4vp.md): CloudEvents authenticated over OID4VP;
-  - [0010](adr/0010-detect-removal-by-diffing-the-registry.md): removals are detected by diffing
+  - [0010](adr/0010-cloudevents-over-oid4vp.md): CloudEvents authenticated over OID4VP;
+  - [0011](adr/0011-detect-removal-by-diffing-the-registry.md): removals are detected by diffing
     the registry;
-  - [0011](adr/0011-authorize-events-per-publisher-and-type.md): events are authorized per
+  - [0012](adr/0012-authorize-events-per-publisher-and-type.md): events are authorized per
     publisher and type;
-  - [0012](adr/0012-attribute-local-trust-to-the-dataspace.md): local trust is attributed to the
+  - [0013](adr/0013-attribute-local-trust-to-the-dataspace.md): local trust is attributed to the
     data space that caused it;
-  - [0013](adr/0013-cloudevents-webhook-handshake.md): callbacks are confirmed with the webhook
+  - [0014](adr/0014-cloudevents-webhook-handshake.md): callbacks are confirmed with the webhook
     handshake;
-  - [0014](adr/0014-publisher-in-the-authority-release.md): the publisher runs in the authority's
+  - [0015](adr/0015-publisher-in-the-authority-release.md): the publisher runs in the authority's
     release;
-  - [0015](adr/0015-best-effort-stateless-event-delivery.md): delivery is best-effort and the
+  - [0016](adr/0016-best-effort-stateless-event-delivery.md): delivery is best-effort and the
     publishers stay stateless;
-  - [0016](adr/0016-no-event-payload-signature.md): the event payload is not signed.
+  - [0017](adr/0017-no-event-payload-signature.md): the event payload is not signed.

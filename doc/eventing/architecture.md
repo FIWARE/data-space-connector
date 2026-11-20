@@ -73,7 +73,7 @@ a new participant, a revocation notice — would otherwise grow its own bespoke 
 > location from an identifier. That rules out two otherwise attractive shortcuts — discovering a
 > participant's event endpoint from its DID document, and validating a callback URL against the
 > participant's domain ([§4](#4-trust-and-authorization),
-> [ADR 0013](../adr/0013-cloudevents-webhook-handshake.md)).
+> [ADR 0014](../adr/0014-cloudevents-webhook-handshake.md)).
 
 ## 2. Overview
 
@@ -121,7 +121,7 @@ flowchart LR
 
 Both ends are the same component — contract-management — in two modes, because it already receives
 authenticated events, already sends them over OID4VP, and already registers callbacks at start-up
-with retry and a health indicator ([ADR 0009](../adr/0009-cloudevents-over-oid4vp.md)).
+with retry and a health indicator ([ADR 0010](../adr/0010-cloudevents-over-oid4vp.md)).
 
 ## 3. Events
 
@@ -166,7 +166,7 @@ and normatively described in [specification §7](specification.md#7-receiving-en
   (`sink`, `types`, `protocol`, `protocolsettings`) without claiming conformance to it.
 
 Deliberately absent: a catch-up feed (`GET /events?since=`), a broker and a queue
-([ADR 0015](../adr/0015-best-effort-stateless-event-delivery.md)).
+([ADR 0016](../adr/0016-best-effort-stateless-event-delivery.md)).
 
 ## 4. Trust and authorization
 
@@ -193,7 +193,7 @@ At the receiver, three checks apply, in this order:
    organization holding the credential needed to reach the endpoint — in a typical configuration,
    every participant — could announce the removal of any other participant and have its competitors'
    trust entries deleted. A policy on the credential *type* alone cannot express "only this
-   publisher" ([ADR 0011](../adr/0011-authorize-events-per-publisher-and-type.md)).
+   publisher" ([ADR 0012](../adr/0012-authorize-events-per-publisher-and-type.md)).
 3. **Self-events are ignored.** An event whose subject is this participant's own identifier is
    recorded and reported but never acted on; it would otherwise be a remote self-destruct.
 
@@ -203,7 +203,7 @@ subscription only if the sink answers with a matching `WebHook-Allowed-Origin`; 
 repeats the header. An endpoint that did not agree to receive from this publisher does not answer
 the handshake, so the subscription API cannot be turned into an amplifier that makes the trust
 anchor POST authenticated traffic at an arbitrary host
-([ADR 0013](../adr/0013-cloudevents-webhook-handshake.md)).
+([ADR 0014](../adr/0014-cloudevents-webhook-handshake.md)).
 
 **The publisher list is runtime configuration, not start-up configuration.** A data space may gain a
 second trust anchor, or a participant may join another data space, without a restart being an
@@ -217,7 +217,7 @@ reaches the comparison with `source` is the credential subject by default, or th
 documented issuer binding ([specification §5.2](specification.md#52-caller-identity)).
 
 The event payload itself is **not signed** — authentication is the transport's job
-([ADR 0016](../adr/0016-no-event-payload-signature.md)).
+([ADR 0017](../adr/0017-no-event-payload-signature.md)).
 
 ## 5. Delivery
 
@@ -234,7 +234,7 @@ This is a deliberate trade. No party needs auditable proof that a removal notice
 a durable outbox would mean a database for contract-management, which today is completely stateless.
 For `participant.removed` the cheaper and *more* reliable answer is that the authoritative state —
 the TIR — is public and can be re-read at any time, so a lost event costs latency, not correctness
-([ADR 0015](../adr/0015-best-effort-stateless-event-delivery.md)).
+([ADR 0016](../adr/0016-best-effort-stateless-event-delivery.md)).
 
 An event type that cannot be reconciled from authoritative state — the reserved
 `service.configuration.provided`, where the event *is* the state — must not be carried this way. Its
@@ -267,7 +267,7 @@ used ([operator guide](../deployment-integration/roles/operator/README.md)). A w
 FIWARE implementation would only ever work for deployments that use it. Diffing works against any
 registry that can be enumerated, and it also catches removals made directly in the database or by a
 migration, which no application-level hook would see
-([ADR 0010](../adr/0010-detect-removal-by-diffing-the-registry.md)).
+([ADR 0011](../adr/0011-detect-removal-by-diffing-the-registry.md)).
 
 **The safeguards are not optional.** A diffing watcher turns *any* failure that makes the registry
 look empty — a truncated page, a database that comes up without its data, a misconfigured base URL —
@@ -313,7 +313,7 @@ row stays valid, and a scoped call that passes no `scopeType` addresses the **un
 — which is exactly what every caller writing order scopes does today, so none of them can reach a
 membership grant by accident, and none of them has to change. The scope stays **internal to the
 trusted-issuers-list and its management API**; it is never exposed through a TIR projection
-([ADR 0012](../adr/0012-attribute-local-trust-to-the-dataspace.md)).
+([ADR 0013](../adr/0013-attribute-local-trust-to-the-dataspace.md)).
 
 ## 8. Reacting to a removal
 
@@ -403,15 +403,15 @@ The sweep is configured once for all publishers; the
 
 | ADR | Decision |
 |---|---|
-| [0008](../adr/0008-events-routes-as-validated-operator-snippet.md) | The events routes are a validated operator snippet, not chart routes |
-| [0009](../adr/0009-cloudevents-over-oid4vp.md) | Events are CloudEvents authenticated over OID4VP, in contract-management, configured under `dataspace.events` |
-| [0010](../adr/0010-detect-removal-by-diffing-the-registry.md) | Removals are detected by diffing the registry, not by instrumenting it |
-| [0011](../adr/0011-authorize-events-per-publisher-and-type.md) | Events are authorized per publisher and type |
-| [0012](../adr/0012-attribute-local-trust-to-the-dataspace.md) | Local trust is attributed to the data space that caused it |
-| [0013](../adr/0013-cloudevents-webhook-handshake.md) | Callbacks are confirmed with the CloudEvents webhook handshake |
-| [0014](../adr/0014-publisher-in-the-authority-release.md) | The publisher runs in the authority's release, reusing its identity |
-| [0015](../adr/0015-best-effort-stateless-event-delivery.md) | Delivery is best-effort from stateless publishers; reconciliation is the guarantee |
-| [0016](../adr/0016-no-event-payload-signature.md) | The event payload is not signed; authentication is the transport's job |
+| [0009](../adr/0009-events-routes-as-validated-operator-snippet.md) | The events routes are a validated operator snippet, not chart routes |
+| [0010](../adr/0010-cloudevents-over-oid4vp.md) | Events are CloudEvents authenticated over OID4VP, in contract-management, configured under `dataspace.events` |
+| [0011](../adr/0011-detect-removal-by-diffing-the-registry.md) | Removals are detected by diffing the registry, not by instrumenting it |
+| [0012](../adr/0012-authorize-events-per-publisher-and-type.md) | Events are authorized per publisher and type |
+| [0013](../adr/0013-attribute-local-trust-to-the-dataspace.md) | Local trust is attributed to the data space that caused it |
+| [0014](../adr/0014-cloudevents-webhook-handshake.md) | Callbacks are confirmed with the CloudEvents webhook handshake |
+| [0015](../adr/0015-publisher-in-the-authority-release.md) | The publisher runs in the authority's release, reusing its identity |
+| [0016](../adr/0016-best-effort-stateless-event-delivery.md) | Delivery is best-effort from stateless publishers; reconciliation is the guarantee |
+| [0017](../adr/0017-no-event-payload-signature.md) | The event payload is not signed; authentication is the transport's job |
 
 ## 12. What this opens up
 

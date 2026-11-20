@@ -3,84 +3,90 @@
 #
 # Layered onto k3s/trust-anchor.yaml in the `consent` maven profile
 # (`-f k3s/trust-anchor.yaml -f k3s/consent-trust-anchor-components.yaml`), it
-# adds the consent-manager + consent-facade + their managed MongoDB to the
-# trust-anchor release. It is purely additive - the trust-anchor release keeps
-# deploying the TIR/TIL as usual.
+# adds the consent-manager + consent-facade to the trust-anchor release. It is
+# purely additive - the trust-anchor release keeps deploying the TIR/TIL as usual.
+# The consent-manager stores its data in the release's managed Postgres (database
+# `consent_manager`, provisioned by the chart's setup Job).
 #
-# The IAM that backs consent (keycloak issuer, did:web helper providing the
-# `dataspace-authority.org-tls` secret, the APISIX facade route, and the
-# vc-operator minting `vc-operator-credential`) is deployed SEPARATELY as the
-# `consent-authority` release of the umbrella chart, via k3s/consent-trust-anchor.yaml
-# in the same namespace. The facade reads those secrets by name; the APISIX route reads
-# the consentKey from the `consent-manager` secret (created by the consent-manager chart)
-# by name. See doc/CONSENT_MANAGEMENT.md for the full topology.
-#
-# The MongoDB community operator is NOT a dependency of the trust-anchor chart;
-# it is installed cluster-wide (k3s/operators.yaml, watchNamespace "*") and
-# reconciles the MongoDBCommunity resource declared here.
+# The IAM that backs consent (keycloak issuer, verifier, did:web helper providing
+# the `dataspace-authority.org-tls` secret, the APISIX gateway publishing
+# consent-manager.dataspace-authority.org, and the vc-operator minting
+# `vc-operator-credential`) is deployed SEPARATELY as the `consent-authority`
+# release of the umbrella chart, via k3s/consent-trust-anchor.yaml in the same
+# namespace. The facade reads those secrets by name. See doc/CONSENT_MANAGEMENT.md
+# for the full topology.
 # ---------------------------------------------------------------------------
-
-# --- managed MongoDB replica set for the consent-manager --------------------
-managedMongo:
-  enabled: true
 
 # --- the consent-manager + the consent-facade (both at the authority) --------
 consentManagement:
   enabled: true
+  networkPolicy:
+    # the provider APISIX, whose consent-filter plugin calls
+    # consent-manager.trust-anchor.svc.cluster.local:8080 from the provider namespace
+    consentManagerClients:
+      - namespace: provider
+        podLabels:
+          app.kubernetes.io/name: apisix
 
-# The consent-manager, from its own published chart (see the `consent-manager` dependency
-# in charts/trust-anchor/Chart.yaml).
+# The consent-manager, from the published dsc-consent-manager chart (see the
+# `consent-manager` dependency in charts/trust-anchor/Chart.yaml). Its database and
+# Secrets come from the chart's setup Job and the trust-anchor's managed Postgres.
 consent-manager:
   enabled: true
-  # The application's own base url. It is written into the ISO 27560 receipts and the
-  # e-mail-verification links, so it has to be the address a data subject can actually
-  # reach - the same reasoning as the facade's public `selfUrl` below. Left empty the chart
-  # falls back to the in-cluster service, which no subject can resolve.
-  appEndpoint: "https://consent-manager.dataspace-authority.org"
-  ## the consent-facade runs in this (authority) namespace
-  contractService:
-    url: "http://consent-facade.trust-anchor.svc.cluster.local:8080"
-  secret:
-    # The shared consent key. The consent-manager validates it and the authority's APISIX
-    # facade route injects the same value ($env://CONSENT_KEY), reading it from the secret
-    # this chart creates (`consent-manager`) by name - see k3s/consent-trust-anchor.yaml.
-    consentKey: "changeme-consent-key"
-  ## trust the subject verifier's OID4VP access tokens: the consent-manager verifies them via
-  ## OIDC discovery + JWKS and maps the token `sub` (the holder DID) to a local
-  ## User/UserIdentifier. This lets a data subject authenticate DIRECTLY (no facade, no
-  ## x-user-key).
-  externalIdp:
-    enabled: true
-    # The authority's own verifier (deployed by k3s/consent-trust-anchor.yaml,
-    # decentralizedIam.vcAuthentication.vcverifier). The verifier stamps its bare
-    # `server.host` (https://verifier.dataspace-authority.org) as the token `iss`, so that
-    # exact host is the trusted issuer. It serves OIDC discovery only under the per-service
-    # path, so discovery is pointed at
-    # `/services/consent-manager/.well-known/openid-configuration` while `issuers` stays the
-    # bare host that matches the token `iss`.
-    issuers:
-      - https://verifier.dataspace-authority.org
-    discoveryPath: /services/consent-manager/.well-known/openid-configuration
-    # Must equal the `aud` the verifier puts in the issued token (the verifier service id) -
-    # decode a real access token (cut -d. -f2 | base64 -d) to confirm, and adjust if
-    # verification fails. One value for both kinds of caller: the data SUBJECT and a
-    # PARTICIPANT authenticate to the same relying party and are separated by verifier
-    # SCOPE, not by service - see the `consent-manager` verifier service in
-    # k3s/consent-trust-anchor.yaml (scopes `openid` for the subject's UserCredential,
-    # `participant` for a participant's MembershipCredential). Both tokens therefore carry
-    # aud=consent-manager.
-    audience: consent-manager
-    # the verifier ingress resolves to 127.0.0.1 in the local cluster, so route the
-    # discovery + JWKS fetches through the squid proxy
-    proxy: http://squid-proxy.infra.svc.cluster.local:8888
-    # Trust the cluster CA (selfsigned-ca) that signs the verifier's ingress cert. It is
-    # mounted from the did-helper's dataspace-authority.org-tls secret rather than the
-    # verifier ingress cert itself: it holds the same CA root and is created early (the
-    # consent-facade already mounts it), so the consent-manager's start does not depend on
-    # the late verifier ingress cert.
-    caSecret:
-      name: dataspace-authority.org-tls
-      key: ca.crt
+  config:
+    # The application's own base url. It is written into the ISO 27560 receipts and the
+    # e-mail-verification links, so it has to be the address a data subject can actually
+    # reach - the same reasoning as the facade's public `selfUrl` below.
+    consentManagerUrl: "https://consent-manager.dataspace-authority.org"
+    # the consent-facade runs in this (authority) namespace
+    contractServiceUrl: "http://consent-facade.trust-anchor.svc.cluster.local:8080"
+    # k3s only. verifier.dataspace-authority.org resolves to 127.0.0.1 inside pods and its
+    # ingress cert is signed by the cluster CA, which the chart cannot mount. So the
+    # discovery and JWKS fetches go through the squid proxy, as for every other component,
+    # and skip the in-cluster TLS peer check (tokens are still verified against the JWKS).
+    # The contract-service client stays DIRECT: the consent-facade NetworkPolicy admits
+    # only consent-manager pods, not squid. That exemption needs consent-manager 0.0.2 or
+    # newer - before that, the client inherited the global proxy address alongside the
+    # DIRECT type and failed every request. A verifier with a publicly trusted cert needs
+    # none of these.
+    extraEnv:
+      MICRONAUT_HTTP_CLIENT_PROXY_TYPE: HTTP
+      MICRONAUT_HTTP_CLIENT_PROXY_ADDRESS: squid-proxy.infra.svc.cluster.local:8888
+      MICRONAUT_HTTP_SERVICES_CONTRACT_SERVICE_PROXY_TYPE: DIRECT
+      MICRONAUT_HTTP_CLIENT_SSL_INSECURE_TRUST_ALL_CERTIFICATES: "true"
+  ## Every caller - data subject or participant - presents an access token of the
+  ## authority's verifier (k3s/consent-trust-anchor.yaml, service `consent-manager`).
+  identityProviders:
+    primary:
+      # The verifier stamps its bare `server.host` as the token `iss`; the app compares it
+      # byte-for-byte with the discovery document's `issuer`.
+      issuer: https://verifier.dataspace-authority.org
+      # the verifier serves OIDC discovery only under the per-service path
+      discoveryUrl: https://verifier.dataspace-authority.org/services/consent-manager/.well-known/openid-configuration
+      # the verifier service id, which the verifier puts into `aud`
+      audience: consent-manager
+      # The claim contract of the verifier's `consent-manager` service (flat, top-level
+      # claims; see k3s/consent-trust-anchor.yaml): `roles` is the credential's `type`
+      # array, `participant_id` the MembershipCredential's issuer DID.
+      claims:
+        userIdentifier: [sub]
+        participantIdentifier: [participant_id]
+        roles: [roles]
+      # The credential type is the role; the verifier already pins the type per scope.
+      # `catalog` keeps the chart default, spelled out here: no credential carries it.
+      roleMapping:
+        user: UserCredential
+        participant: MembershipCredential
+        catalog: consent-catalog
+  deployment:
+    replicaCount: 1
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
 
 # The consent-facade, from its own published chart (see the `consent-facade` dependency
 # in charts/trust-anchor/Chart.yaml). It fronts multiple providers and authenticates its

@@ -534,10 +534,12 @@
             <properties>
                 <deploy.skip>false</deploy.skip>
                 <deploy.trustAnchor.values>${main.basedir}/k3s/trust-anchor.yaml,${main.basedir}/k3s/consent-trust-anchor-components.yaml</deploy.trustAnchor.values>
-                <!-- the consent components of the trust anchor mount secrets that the
-                     consent-authority release creates, and consent-authority needs the TIR
-                     and the consent-manager secret of the trust anchor. Do not wait for the
-                     trust anchor here; deploy.sh waits for every release at the end. -->
+                <!-- the consent-facade of the trust anchor mounts secrets that the
+                     consent-authority release creates, and the consent-manager only gets
+                     Ready once that release's verifier serves discovery and JWKS, while
+                     consent-authority needs the TIR of the trust anchor. Do not wait for the
+                     trust anchor here; deploy.sh waits for every release at the end. The
+                     consent-manager's setup Job waits for the trust anchor's own Postgres. -->
                 <deploy.trustAnchor.args>--wait=false</deploy.trustAnchor.args>
                 <deploy.consentAuthority.values>${main.basedir}/k3s/consent-trust-anchor.yaml</deploy.consentAuthority.values>
                 <deploy.consentAuthority.template.skip>${deploy.template.skip}</deploy.consentAuthority.template.skip>
@@ -649,32 +651,6 @@
                      it itself on the helm-install path -->
                 <deploy.gaiaxInfra.skip>${deploy.template.skip}</deploy.gaiaxInfra.skip>
             </properties>
-            <build>
-                <plugins>
-                    <plugin>
-                        <groupId>org.apache.maven.plugins</groupId>
-                        <artifactId>maven-antrun-plugin</artifactId>
-                        <version>1.8</version>
-                        <executions>
-                            <execution>
-                                <id>prepare-gaia-x</id>
-                                <phase>generate-test-sources</phase>
-                                <goals>
-                                    <goal>run</goal>
-                                </goals>
-                                <configuration>
-                                    <tasks>
-                                        <exec executable="/bin/bash">
-                                            <arg value="${main.basedir}/helpers/certs/generate-certs.sh" />
-                                            <arg value="${main.basedir}/k3s" />
-                                        </exec>
-                                    </tasks>
-                                </configuration>
-                            </execution>
-                        </executions>
-                    </plugin>
-                </plugins>
-            </build>
         </profile>
     </profiles>
 

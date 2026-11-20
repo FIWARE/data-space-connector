@@ -1,0 +1,71 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/helm-unittest/helm-unittest/main/schema/helm-testsuite.json
+#
+# The order of the hooks that bootstrap auto-instrumentation in a single release. The operator
+# subchart installs the Instrumentation CRD as a template and validates Instrumentations with its
+# webhook, so on a first install the Instrumentation can only be created as a hook, once the
+# webhook answers, and the annotated pods restarted after it:
+#   0 service account and RBAC, 1 webhook wait, 3 Instrumentation, 5 restart.
+suite: OpenTelemetry auto-instrumentation hooks
+templates:
+  - templates/otel-instrumentation.yaml
+  - templates/otel-restart-job.yaml
+set:
+  tracing.autoInstrumentation.enabled: true
+tests:
+  - it: installs the Instrumentation as a hook after the webhook wait
+    template: templates/otel-instrumentation.yaml
+    asserts:
+      - equal:
+          path: metadata.annotations["helm.sh/hook"]
+          value: post-install,post-upgrade
+      - equal:
+          path: metadata.annotations["helm.sh/hook-weight"]
+          value: "3"
+
+  - it: keeps the Instrumentation once its hook succeeds
+    template: templates/otel-instrumentation.yaml
+    asserts:
+      - equal:
+          path: metadata.annotations["helm.sh/hook-delete-policy"]
+          value: before-hook-creation
+
+  - it: waits for the webhook before the Instrumentation
+    template: templates/otel-restart-job.yaml
+    documentSelector:
+      path: metadata.name
+      value: RELEASE-NAME-otel-webhook-wait
+    asserts:
+      - isKind:
+          of: Job
+      - equal:
+          path: metadata.annotations["helm.sh/hook-weight"]
+          value: "1"
+      - equal:
+          path: spec.template.spec.serviceAccountName
+          value: RELEASE-NAME-otel-restart
+      - matchRegex:
+          path: spec.template.spec.containers[0].args[0]
+          pattern: kubectl get endpoints "\$WEBHOOK_SVC"
+
+  - it: restarts the annotated pods after the Instrumentation
+    template: templates/otel-restart-job.yaml
+    documentSelector:
+      path: spec.template.spec.containers[0].name
+      value: restart
+    asserts:
+      - equal:
+          path: metadata.annotations["helm.sh/hook-weight"]
+          value: "5"
+      - notMatchRegex:
+          path: spec.template.spec.containers[0].args[0]
+          pattern: kubectl get endpoints
+
+  - it: creates the jobs' service account and RBAC first
+    template: templates/otel-restart-job.yaml
+    documentSelector:
+      path: kind
+      value: ServiceAccount
+    asserts:
+      - equal:
+          path: metadata.annotations["helm.sh/hook-weight"]
+          value: "0"

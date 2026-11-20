@@ -1,4 +1,4 @@
-# 0009 - Carry data space events as CloudEvents authenticated over OID4VP
+# 0010 - Carry data space events as CloudEvents authenticated over OID4VP
 
 **Status:** Accepted
 **Date:** 2026-11-20
@@ -22,7 +22,7 @@ without FIWARE code.
   their own, so the publisher's `source` is what tells data spaces apart.
 - **Use the specified protocols.** Events are sent in the structured mode of the CloudEvents
   HTTP Protocol Binding 1.0.2. Callbacks are confirmed with the CloudEvents webhook handshake
-  ([ADR 0013](0013-cloudevents-webhook-handshake.md)). The subscription request borrows the shape of
+  ([ADR 0014](0014-cloudevents-webhook-handshake.md)). The subscription request borrows the shape of
   the CloudEvents Subscriptions API without claiming conformance to it. The webhook document is
   `1.0.3-wip`, so the specification pins it to a commit.
 - **Authentication.** The sender presents a credential it holds over OID4VP at the **receiver's**
@@ -45,7 +45,7 @@ without FIWARE code.
   one day. The `dataspace.events` namespace keeps that cheap: the deployed configuration does not
   change with the component's name.
 - Delivery is best-effort with leased in-memory subscriptions, so contract-management stays without
-  a database ([ADR 0015](0015-best-effort-stateless-event-delivery.md)).
+  a database ([ADR 0016](0016-best-effort-stateless-event-delivery.md)).
 
 ## Alternatives
 
@@ -55,6 +55,6 @@ without FIWARE code.
 - **A dedicated `dataspace-events` service.** It would duplicate what contract-management already
   does (OID4VP client, authenticated callbacks, registration with retry).
 - **Extending the trusted-issuers-list.** It is only one TIR implementation among several
-  ([ADR 0010](0010-detect-removal-by-diffing-the-registry.md)).
+  ([ADR 0011](0011-detect-removal-by-diffing-the-registry.md)).
 - **`contract-management.events.*`** as configuration namespace, or renaming the component along
   with the feature.

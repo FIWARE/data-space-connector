@@ -64,14 +64,14 @@ The authority release brings everything the publisher needs:
 
 A dedicated release would need a verifier and a gateway of its own; a dependency in the
 `trust-anchor` chart would mix the publisher's identity into the registry's chart
-([ADR 0014](../adr/0014-publisher-in-the-authority-release.md)).
+([ADR 0015](../adr/0015-publisher-in-the-authority-release.md)).
 
 In k3s the authority release also runs the consent-manager stack, because the eventing demo builds on
 the consent deployment. A production publisher does not need it.
 
 ## Requirements
 
-- contract-management ≥ 3.5.4 (chart 10.16.0 ships it).
+- contract-management ≥ 3.5.4 (chart 10.21.0 ships it).
 - A TIR that CM can enumerate with `GET /v4/issuers`, the EBSI-compatible read API of the FIWARE
   trusted-issuers-list.
 - An identity for the authority: a DID, its key and a credential the participants admit on their
@@ -267,7 +267,7 @@ participant at `/subscriptions`. Enable holder binding in production.
 
 The watcher diffs the TIR, so the registry needs no hook
 ([how it works §6](architecture.md#6-detecting-the-removal-at-the-trust-anchor),
-[ADR 0010](../adr/0010-detect-removal-by-diffing-the-registry.md)). A diff turns any
+[ADR 0011](../adr/0011-detect-removal-by-diffing-the-registry.md)). A diff turns any
 failure that makes the registry look empty into a mass removal, so CM applies these safeguards:
 
 - **The first cycle after a start only takes a snapshot.** A fresh publisher announces nothing, and

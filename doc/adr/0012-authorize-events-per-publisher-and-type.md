@@ -1,4 +1,4 @@
-# 0011 - Authorize events per publisher and type
+# 0012 - Authorize events per publisher and type
 
 **Status:** Accepted
 **Date:** 2026-11-20
@@ -23,7 +23,7 @@ configured `publishers[]`:
 - an event about the receiver itself is recorded and never acted on.
 
 A publisher is configured with its **identifier**, which authorizes the event, and its **origin**, a
-DNS name used by the webhook handshake ([ADR 0013](0013-cloudevents-webhook-handshake.md)). The two
+DNS name used by the webhook handshake ([ADR 0014](0014-cloudevents-webhook-handshake.md)). The two
 are configured together and never derived from each other. The list is runtime configuration: it is
 reloaded from the mounted ConfigMap without a restart.
 

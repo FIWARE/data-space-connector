@@ -203,8 +203,9 @@ decentralizedIam:
     # authorized access to tmforum
     apisix:
       enabled: true
-      # traditional mode reads the routes from etcd, which the chart does not deploy by default
       etcd:
+        # APISIX runs in traditional mode, which reads its routes from etcd: odrl-authorization only
+        # deploys it when asked to
         enabled: true
         replicaCount: 1
         persistence:

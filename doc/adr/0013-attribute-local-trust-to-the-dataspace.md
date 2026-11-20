@@ -1,4 +1,4 @@
-# 0012 - Attribute local trust to the data space that caused it
+# 0013 - Attribute local trust to the data space that caused it
 
 **Status:** Accepted
 **Date:** 2026-11-20

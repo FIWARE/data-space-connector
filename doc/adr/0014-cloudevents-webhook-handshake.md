@@ -1,4 +1,4 @@
-# 0013 - Confirm event callbacks with the CloudEvents webhook handshake
+# 0014 - Confirm event callbacks with the CloudEvents webhook handshake
 
 **Status:** Accepted
 **Date:** 2026-11-20
@@ -31,13 +31,13 @@ subscriber's identifier:
   origin of a publisher it is configured to receive from.
 
 A publisher's origin is configured at the receiver together with its identifier and is not derived
-from it ([ADR 0011](0011-authorize-events-per-publisher-and-type.md)).
+from it ([ADR 0012](0012-authorize-events-per-publisher-and-type.md)).
 
 ## Consequences
 
 - A sink that does not consent is never activated, for any DID method.
 - The receiver's gateway needs an unauthenticated `OPTIONS` route next to the authenticated `POST`
-  ([ADR 0008](0008-events-routes-as-validated-operator-snippet.md)).
+  ([ADR 0009](0009-events-routes-as-validated-operator-snippet.md)).
 - Each receiver configures every publisher's origin, a second value next to its identifier.
 - A per-subscriber cap and the lease expiry still limit what a consenting sink can be sent.
 

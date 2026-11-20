@@ -1,4 +1,4 @@
-# 0015 - Deliver events best-effort from stateless publishers, and reconcile instead
+# 0016 - Deliver events best-effort from stateless publishers, and reconcile instead
 
 **Status:** Accepted
 **Date:** 2026-11-20
@@ -35,7 +35,7 @@ The guarantee that makes this safe is **reconciliation**, not delivery: every re
 compares the trust it holds for each publisher against that publisher's registry and applies the
 same reaction to whatever is no longer listed
 ([architecture §9](../eventing/architecture.md#9-reconciliation-the-backstop),
-[ADR 0010](0010-detect-removal-by-diffing-the-registry.md)).
+[ADR 0011](0011-detect-removal-by-diffing-the-registry.md)).
 
 An event type whose content **is** the state, and which therefore cannot be reconciled from an
 authoritative source — the reserved `service.configuration.provided` is the example — must not be

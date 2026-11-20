@@ -1,4 +1,4 @@
-# 0016 - Do not sign the event payload; authenticate events at the transport
+# 0017 - Do not sign the event payload; authenticate events at the transport
 
 **Status:** Accepted
 **Date:** 2026-11-20
@@ -9,7 +9,7 @@
 An event is authenticated by the way it arrives: the publisher presents a verifiable credential at
 the receiver's verifier over OID4VP and uses the returned access token as a bearer; the receiver
 checks that token and requires the event's `source` to equal the authenticated identity
-([ADR 0009](0009-cloudevents-over-oid4vp.md), [ADR 0011](0011-authorize-events-per-publisher-and-type.md)).
+([ADR 0010](0010-cloudevents-over-oid4vp.md), [ADR 0012](0012-authorize-events-per-publisher-and-type.md)).
 
 That binds the event to its publisher for the duration of the hop and no longer. A signature over
 the envelope — a JWS by the publisher, carried as a CloudEvents extension attribute — would make an
@@ -33,7 +33,7 @@ backwards compatible and needs no flag day.
   origin.
 - That is acceptable because no receiver acts on an event alone in a way it could not undo: the
   default reaction is `report`, and the reconciliation sweep re-derives the same conclusion from the
-  registry ([ADR 0015](0015-best-effort-stateless-event-delivery.md)).
+  registry ([ADR 0016](0016-best-effort-stateless-event-delivery.md)).
 
 ## Alternatives
 

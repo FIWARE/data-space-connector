@@ -1,6 +1,6 @@
 # 0002 - Reuse the consent-facade's OID4VP client instead of implementing or importing OID4VP in Go
 
-**Status:** Accepted
+**Status:** Superseded by [0008](0008-dsc-consent-manager.md) (was: Accepted)
 **Date:** 2026-08-26
 **Applies to:** `FIWARE/data-space-connector`, `[consent-facade](https://github.com/SEAMWARE/consent-plugin)`, `[consent-facade](https://github.com/SEAMWARE/consent-facade)`
 **Context doc:** [`../CONSENT_MANAGEMENT.md`](../CONSENT_MANAGEMENT.md)

@@ -40,10 +40,9 @@ decentralizedIam:
           version: "16"
         volume:
           size: 1Gi
+        # one user and database per component (`ih` is the IdentityHub's); the operator creates its
+        # `postgres` superuser itself
         users:
-          admin: # maintainer
-            - superuser
-            - createdb
           til:
             - createdb
           ccs:
@@ -54,15 +53,12 @@ decentralizedIam:
             - createdb
           ih:
             - createdb
-          issuer:
-            - createdb
         databases:
           tildb: til
           ccsdb: ccs
           papdb: pap
           keycloakdb: keycloak
           ih: ih
-          issuer: issuer
 
     # -- configuration for the trusted-issuers-list to be deployed as part of the connector, see https://github.com/FIWARE/helm-charts/tree/main/charts/trusted-issuers-list for all options
     trusted-issuers-list:
@@ -197,23 +193,16 @@ decentralizedIam:
         prometheus.io/scrape: "true"
         prometheus.io/path: /apisix/prometheus/metrics
         prometheus.io/port: "9091"
-      service:
-        # -- type of the gateway service. Pinned to the pre-10.16 type: odrl-authorization >= 2.5.0
-        # defaults to `ClusterIP`, which would close the node port on upgrade. Set `ClusterIP` when
-        # the gateway is only reached through an Ingress.
-        type: NodePort
-        # -- traffic policy of the gateway service, for NodePort and LoadBalancer. Empty: the
-        # Kubernetes default (`Cluster`). Set it to `Local` to keep the client source IP.
-        externalTrafficPolicy: ""
-      # The etcd is only read in the etcd-backed APISIX modes; the default standalone mode reads the
-      # routes from a ConfigMap.
-      etcd:
-        # -- deploy the APISIX etcd. Set explicitly because Helm does not apply odrl-authorization's
-        # own `false` default to this nested condition. Set `true` for `traditional` + etcd mode.
-        enabled: false
       apisix:
         prometheus:
           enabled: true
+      etcd:
+        # -- deploy an etcd for APISIX. Only needed when APISIX reads its configuration from etcd,
+        # e.g. in traditional mode with `config_provider: etcd`; the default standalone mode reads
+        # the routes from a ConfigMap. odrl-authorization defaults to false as well, but this chart
+        # has to repeat it: three charts down, Helm decides whether to deploy the etcd chart
+        # without odrl-authorization's default.
+        enabled: false
 
     # -- configuration for the odrl-pap to be deployed as part of the connector, see https://github.com/FIWARE/helm-charts/tree/main/charts/odrl-pap for all options
     odrl-pap:
@@ -260,27 +249,6 @@ decentralizedIam:
           enabled: true
           name: postgres.postgres.credentials.postgresql.acid.zalan.do
           key: password
-    # -- configuration for the open-policy-agent to be deployed as part of the connector fulfilling the role of the PDP, as a sidecar to apisix
-    opa:
-      # -- should an opa sidecar be deployed to apisix
-      enabled: true
-      # -- address of the pap to get the policies from
-      resourceUrl: http://odrl-pap:8080/bundles/service/v1
-      # -- port to make opa available at
-      port: 8181
-      # -- pull delays for the policies bundle
-      policies:
-        minDelay: 2
-        maxDelay: 4
-      # -- pull delays for the methods bundle
-      methods:
-        minDelay: 1
-        maxDelay: 3
-      # -- pull delays for the data bundle
-      data:
-        minDelay: 1
-        maxDelay: 15
-
     # -- integration of checks for the transfer process protocol
     tpp:
       # -- should checking for a running transfer process be enabled
@@ -311,6 +279,10 @@ scorpio:
   db:
     # -- host of the db
     dbhost: postgres
+    # -- port of the db; leave empty for Scorpio's default (5432)
+    port: ""
+    # -- name of the db; leave empty for Scorpio's default (ngb)
+    name: ""
     # -- username to be used
     user: postgres
     existingSecret:
@@ -361,6 +333,7 @@ scorpio:
   #     value: "grpc"
   #   - name: QUARKUS_OTEL_SERVICE_NAME
   #     value: "scorpio"
+  # The Flyway vars after them keep the migrations in the `public` schema, see below.
   additionalEnvVars:
     # -- Quarkus OTEL runtime gate. Set to "true" to enable tracing.
     - name: QUARKUS_OTEL_ENABLED
@@ -376,6 +349,14 @@ scorpio:
     # `scorpio.tracing.serviceName`.
     - name: QUARKUS_OTEL_SERVICE_NAME
       value: "scorpio"
+    # -- schema of Scorpio's migrations. They name `public.` explicitly, and Flyway reads a search
+    # path such as `"$user", data` (the one the operator gives the users of a prepared database) as a
+    # single schema name, so it is set: needed when Scorpio connects with its own user of a prepared
+    # database (`ngb_owner_user`), the same as the default for the `postgres` superuser.
+    - name: QUARKUS_FLYWAY_SCHEMAS
+      value: public
+    - name: QUARKUS_FLYWAY_DEFAULT_SCHEMA
+      value: public
 
 # -- configuration to issue credentials, using a did:elsi
 elsi:
@@ -558,7 +539,11 @@ keycloak:
     frontendURL: http://localhost:8080
     # -- custom displayNameHtml for the realm. If empty, defaults to "<div class="kc-logo-text"><span>{realm.name}</span></div>"
     displayNameHtml: ""
-    sslRequired: none
+    # -- when the realm requires HTTPS: `external` (except for requests from private addresses,
+    # such as the components calling Keycloak inside the cluster), `all` or `none`. Keycloak takes
+    # the client address from the ingress (`keycloak.keycloak.proxyHeaders`) and the scheme from
+    # `frontendURL`: with an https frontendURL, refusing plain HTTP is the ingress's job.
+    sslRequired: external
     # -- realm attributes. Support string (old style) or key-value
     attributes:
     defaultClientScopes:
@@ -988,33 +973,23 @@ keycloak:
           clientRole: true
           attributes: {}
 
-    # -- client roles to be imported - be aware the env vars can be used and will be replaced. Support string (old style) or key-value
+    # -- client roles to be imported, as a map of clientId to its roles; a string (old style) is
+    # taken as the JSON fields of that map. Env vars are replaced. None by default: the roles a
+    # deployment's credentials carry are its own decision.
     clientRoles:
-      ${DID}:
-        - name: ADMIN
-          description: Is allowed to do everything
-          clientRole: true
 
     defaultUsers: []
-    # -- users to be imported - be aware the env vars can be used and will be replaced. Support string (old style) or array
-    users:
-      - username: admin-user
-        enabled: true
-        email: admin@provider.org
-        firstName: Test
-        lastName: Admin
-        credentials:
-          - type: password
-            value: test
-        clientRoles:
-          ${DID}:
-            - ADMIN
-          account:
-            - view-profile
-            - manage-account
-        groups: []
+    # -- users to be imported, as a list; a string (old style) is taken as its JSON elements. Env
+    # vars are replaced. None by default: a user shipped with the chart has a password everyone
+    # knows.
+    users: []
 
-    # -- clients to be imported - be aware the env vars can be used and will be replaced. Support string (old style) or array
+    # -- the standard Keycloak clients, keyed by clientId. Values given for a client are merged into
+    # its defaults; set a client to null to leave it out of the realm. Env vars are replaced.
+    # `account-console` and `admin-cli` are public clients and come without the password grant
+    # (`directAccessGrantsEnabled`), which would let anyone who knows a password get a token
+    # without the login page, and so without its second factor. Machines get their credentials
+    # with a confidential client (client credentials, see `vcCredentials`), people with a wallet.
     defaultClients:
       account:
         name: ${client_account}
@@ -1071,7 +1046,8 @@ keycloak:
         consentRequired: false
         standardFlowEnabled: true
         implicitFlowEnabled: false
-        directAccessGrantsEnabled: true
+        # the password grant is off: see `keycloak.realm.defaultClients`
+        directAccessGrantsEnabled: false
         serviceAccountsEnabled: false
         publicClient: true
         frontchannelLogout: false
@@ -1120,7 +1096,8 @@ keycloak:
         consentRequired: false
         standardFlowEnabled: false
         implicitFlowEnabled: false
-        directAccessGrantsEnabled: true
+        # the password grant is off: see `keycloak.realm.defaultClients`
+        directAccessGrantsEnabled: false
         serviceAccountsEnabled: false
         publicClient: true
         frontchannelLogout: false
@@ -2206,6 +2183,14 @@ mongo-operator:
 managedMongo:
   # -- should it be enabled?
   enabled: false
+  # -- service account of the MongoDB pods. Without one of its own, they run as the operator's
+  # `mongodb-database`, which the operator's chart creates in a single namespace only
+  serviceAccount:
+    # -- create a service account, with its Role and RoleBinding, for the MongoDB pods. With false,
+    # they run as `name` if given, or as the operator's `mongodb-database`
+    create: true
+    # -- name of the service account; empty for `<release>-mongodb`
+    name: ""
   # -- spec as defined in https://github.com/mongodb/helm-charts/tree/main/charts/community-operator-crds
   # @schema
   # type: object
@@ -3764,6 +3749,18 @@ cert-manager:
       "helm.sh/hook": post-install,post-upgrade
       "helm.sh/hook-weight": "0"
       "helm.sh/hook-delete-policy": hook-succeeded,before-hook-creation
+    # -- The job's service account and RBAC are hooks too, deleted once they succeed: they have to
+    # be created again on every upgrade, or the job finds no service account and never starts.
+    serviceAccount:
+      annotations:
+        "helm.sh/hook": post-install,post-upgrade
+        "helm.sh/hook-weight": "-5"
+        "helm.sh/hook-delete-policy": hook-succeeded,before-hook-creation
+    rbac:
+      annotations:
+        "helm.sh/hook": post-install,post-upgrade
+        "helm.sh/hook-weight": "-5"
+        "helm.sh/hook-delete-policy": hook-succeeded,before-hook-creation
 
 # -- configuration for additional resources to be deployed for cert-manager, like ClusterIssuers
 certManagerResources:
@@ -3883,8 +3880,11 @@ tracing:
     # -- Python auto-instrumentation agent settings.
     python:
       # -- container image for the Python auto-instrumentation agent init
-      # container injected by the Operator.
-      image: "ghcr.io/open-telemetry/opentelemetry-operator/autoinstrumentation-python:0.54b0"
+      # container injected by the Operator. The agent runs in the application's own Python, so
+      # it has to support its version: 0.62b1 is the last one for Python 3.9 (0.63b0 and later
+      # require 3.10). The marketplace charging backend runs Python 3.9 from 11.8.3 on, and
+      # Python 3.8 before, for which no agent is published any more.
+      image: "ghcr.io/open-telemetry/opentelemetry-operator/autoinstrumentation-python:0.62b1"
     # -- Node.js auto-instrumentation agent settings.
     nodejs:
       # -- container image for the Node.js auto-instrumentation agent init
@@ -4187,23 +4187,17 @@ tempo:
       cpu: 100m
       memory: 256Mi
 
-# -- Consent Management -- provider-side wiring only. The consent-manager and its
-# managed MongoDB live in the trust-anchor chart (charts/trust-anchor). This umbrella 
-# chart provides the IAM that backs consent (keycloak issuer, did:web helper, APISIX facade route,
-# vc-operator), the provider APISIX consent-plugin wiring below, and - through the
-# `consent-facade` / `consent-owner-resolver` dependencies - the provider-side
-# consent services. See doc/CONSENT_MANAGEMENT.md.
-consentManagement:
-  # -- enable the provider-side consent-plugin wiring (the Go consent-plugin that
-  # runs on the provider APISIX and calls the authority's consent-manager). The
-  # consent-manager itself is deployed from the trust-anchor chart; the facade and
-  # the owner-resolver come from their own charts (see the keys at the end of this
-  # file).
-  enabled: false
+## Consent Management -- provider-side only. The consent-manager (dsc-consent-manager on
+## PostgreSQL) lives in the trust-anchor chart (charts/trust-anchor); the provider APISIX
+## consent-plugin calls its `/v1` API directly, with a VCVerifier JWT from the provider-local
+## `consent-facade`. This chart has no `consentManagement` key: the provider side is the two
+## subcharts below plus the consent-plugin wiring on the provider's APISIX
+## (`decentralizedIam.odrlAuthorization.apisix`). See doc/CONSENT_MANAGEMENT.md.
 
 ## The consent-facade, deployed from its own published FIWARE chart
 ## (oci://quay.io/fiware/helm-charts/consent-facade). A provider runs one locally when the
-## owner-resolver resolves the governing contract
+## owner-resolver resolves the governing contract, and as the token service of the
+## consent-plugin (`POST /internal/tokens`, a VCVerifier JWT for the consent-manager).
 ## See https://github.com/FIWARE/helm-charts/tree/main/charts/consent-facade
 # @schema
 # type: object

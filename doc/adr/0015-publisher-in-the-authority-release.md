@@ -1,4 +1,4 @@
-# 0014 - Run the data space publisher in the authority's release, reusing its identity
+# 0015 - Run the data space publisher in the authority's release, reusing its identity
 
 **Status:** Accepted
 **Date:** 2026-11-20
@@ -7,7 +7,7 @@
 ## Context
 
 The data space publisher is a contract-management (CM) instance in publisher and TIR-watcher mode
-([ADR 0009](0009-cloudevents-over-oid4vp.md), [ADR 0010](0010-detect-removal-by-diffing-the-registry.md)).
+([ADR 0010](0010-cloudevents-over-oid4vp.md), [ADR 0011](0011-detect-removal-by-diffing-the-registry.md)).
 It needs:
 
 - an identity the participants trust: a DID, its key and a credential it presents to every

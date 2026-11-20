@@ -11,7 +11,7 @@ what it does with them. The publisher at the trust anchor is covered by the
 [trust anchor setup](trust-anchor-setup.md), the local demo and the integration test by
 [EVENTING.md](../EVENTING.md). The mechanism itself is described in [how it works](architecture.md)
 and the [interoperability specification](specification.md); why the chart packages it the way it does
-is recorded in [ADR 0008](../adr/0008-events-routes-as-validated-operator-snippet.md).
+is recorded in [ADR 0009](../adr/0009-events-routes-as-validated-operator-snippet.md).
 
 The feature is off by default. An upgrade with default values creates no eventing ConfigMap, route,
 env entry or volume.
@@ -116,7 +116,7 @@ chart registers through `registration.issuer` are therefore marked as membership
 space publisher (`scope` = the publisher's id, `scopeType` = `dataspace-membership`), as soon as one
 configured publisher sends `participant.removed` events. Without such a publisher nothing changes.
 Why trust is attributed this way is recorded in
-[ADR 0012](../adr/0012-attribute-local-trust-to-the-dataspace.md).
+[ADR 0013](../adr/0013-attribute-local-trust-to-the-dataspace.md).
 
 - Set `scope` on an issuer entry, or `scope: ""` to leave it unmarked, when the default is wrong:
   - the grant does not come from the data space membership (for example an eIDAS `UserCredential`
@@ -143,7 +143,7 @@ make sure only the publisher gets through:
 3. **contract-management** compares the authenticated caller, passed on by the gateway, with the
    publisher id and the event's sender
    ([specification §6](specification.md#6-authorization-rule),
-   [ADR 0011](../adr/0011-authorize-events-per-publisher-and-type.md)).
+   [ADR 0012](../adr/0012-authorize-events-per-publisher-and-type.md)).
 
 Two requests on the sink are unauthenticated by design: the subscription handshake and the lookup of
 where to get a token. Because the gateway configuration carries part of the security, the chart
@@ -156,11 +156,11 @@ ODRL policy.
 
 ### Requirements
 
-- contract-management ≥ 3.5.4: the chart ships it (CM chart 3.6.7) since 10.16.0. 3.5.3 sends the
+- contract-management ≥ 3.5.4: the chart ships it (CM chart 3.6.7) since 10.21.0. 3.5.3 sends the
   scope type by its Java enum name (`scopeType=DATASPACE_MEMBERSHIP`), which the TIL refuses with
   `400`: it then reports removals without `held`, runs no reconciliation and cannot use the writing
   modes.
-- TIL ≥ 0.10.3: the chart ships 0.10.3 (decentralizedIam 2.3.0) since 10.16.0. A TIL outside the
+- TIL ≥ 0.10.3: the chart ships 0.10.3 (decentralizedIam 2.3.2) since 10.21.0. A TIL outside the
   release (`registration.til`) must be upgraded by its operator. Each part of the feature needs:
   - 0.10.1 for the membership marking; an older TIL silently drops it;
   - 0.10.2 for the `dataspace`, `granted` and `full` reactions and for a complete `report`. With an
@@ -256,7 +256,7 @@ The publisher reaches contract-management through your API gateway. Three routes
 | `dataspace-events-discovery` | `GET /events/.well-known/openid-configuration` | tells the publisher where to get a token | none |
 
 The chart does not add them for you, because the host and the verifier service depend on your
-deployment ([ADR 0008](../adr/0008-events-routes-as-validated-operator-snippet.md)). They are a ready
+deployment ([ADR 0009](../adr/0009-events-routes-as-validated-operator-snippet.md)). They are a ready
 example, [`examples/events-routes.yaml`](examples/events-routes.yaml):
 
 1. **Append** its three entries to your own `decentralizedIam.odrlAuthorization.apisix.routes` list.
@@ -571,5 +571,5 @@ contract-management's management port 9090 serves `POST /refresh` (re-reads the 
 `GET /participants-removed` (removal reports) without authentication. It must stay cluster-internal:
 no Service port, Ingress or route for it, and a NetworkPolicy where pod IPs are reachable.
 `/refresh` is open on every contract-management ≥ 3.5.3, eventing on or off; see the
-[10.16.0 release notes](../release-notes/10-x.md#10160--participant-side-of-data-space-eventing) for
+[10.21.0 release notes](../release-notes/10-x.md#10210--data-space-eventing) for
 the opt-out.

@@ -1,4 +1,4 @@
-# 0010 - Detect participant removal by diffing the registry, not by instrumenting it
+# 0011 - Detect participant removal by diffing the registry, not by instrumenting it
 
 **Status:** Accepted
 **Date:** 2026-11-20

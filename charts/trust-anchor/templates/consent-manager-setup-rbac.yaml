@@ -1,0 +1,71 @@
+{{- /* nil-safe: the subchart values are not always coalesced into this context */}}
+{{- $manager := (index .Values "consent-manager") | default dict }}
+{{- if $manager.enabled }}
+{{- /*
+  ServiceAccount, Role and RoleBinding of the setup Job (templates/consent-manager-setup-job.yaml).
+  They live in their own file so a deployment whose RBAC is managed outside the chart (a platform
+  team, an admission policy, a separate GitOps repository) can switch them off with
+  `consentManagement.setup.serviceAccount.create` and `consentManagement.setup.rbac.create` and
+  still get the Job. The Job always runs under
+  `consentManagement.setup.serviceAccount.name`, so a ServiceAccount provided from outside is used
+  by name rather than ignored.
+
+  The Role is deliberately narrow: `get` and `patch` on the two Secrets the Job owns, and `create`
+  without `resourceNames` - Kubernetes cannot scope `create` by name. Anyone setting
+  `rbac.create: false` has to grant exactly that, see doc/CONSENT_MANAGEMENT.md.
+*/}}
+{{- $setup := .Values.consentManagement.setup }}
+{{- $name := include "trust-anchor.consentManagerSetup.name" . }}
+{{- $serviceAccount := include "trust-anchor.consentManagerSetup.serviceAccountName" . }}
+{{- $envSecret := include "trust-anchor.consentManager.envSecretName" . }}
+{{- $keysSecret := include "trust-anchor.consentManager.signingKeysSecretName" . }}
+{{- if $setup.serviceAccount.create }}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ $serviceAccount }}
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    {{- include "trust-anchor.labels" . | nindent 4 }}
+  {{- with $setup.serviceAccount.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+{{- end }}
+{{- if $setup.rbac.create }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ $name }}
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    {{- include "trust-anchor.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    resourceNames: [{{ $envSecret | quote }}, {{ $keysSecret | quote }}]
+    verbs: ["get", "patch"]
+  {{- /* Kubernetes cannot scope `create` by name. */}}
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["create"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ $name }}
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    {{- include "trust-anchor.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ $name }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ $serviceAccount }}
+    namespace: {{ .Release.Namespace | quote }}
+{{- end }}
+{{- end }}

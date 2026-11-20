@@ -43,6 +43,19 @@ Create the name of the service account to use
 {{- end -}}
 
 {{/*
+Name of the service account of the MongoDB pods (managedMongo); empty when they keep the operator's
+default, `mongodb-database`.
+*/}}
+{{- define "dsc.mongodb.serviceAccountName" -}}
+{{- $sa := .Values.managedMongo.serviceAccount | default dict -}}
+{{- if $sa.name -}}
+{{- $sa.name -}}
+{{- else if $sa.create -}}
+{{- printf "%s-mongodb" .Release.Name | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
 Common labels
 */}}
 {{- define "dsc.labels" -}}

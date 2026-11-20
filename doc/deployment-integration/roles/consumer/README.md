@@ -79,6 +79,8 @@ The consumer could use the same `fiware/data-space-connector` chart as the provi
 
    The Ingresses in the example only carry the cert-manager annotations and use the cluster's default ingress class unless `className` is set. Add the class and the annotations your ingress controller needs; the [local deployment](../../local-deployment/LOCAL.MD) uses Traefik, for example.
 
+   With `certManagerResources.enabled: true` and `type: "prod"`, the chart creates the `prod-issuer` ClusterIssuer referenced below. Replace the `acmeEmail` and `ingressClass` placeholders with your own values. If your cluster already manages its own ClusterIssuer, disable `certManagerResources.enabled` and use that issuer's actual name in the annotations.
+
 ```yaml
 # Key settings for consumer-only deployment
 
@@ -91,6 +93,8 @@ cert-manager:
 certManagerResources:
   enabled: true
   type: "prod"
+  acmeEmail: <your-email>              # ACME account contact; the chart's default is a placeholder
+  ingressClass: <your-ingress-class>   # the class that serves the HTTP-01 challenge
 
 # Keycloak — see ../KEYCLOAK.md for detailed configuration
 keycloak:
@@ -126,7 +130,7 @@ did:
     enabled: true
     className: <your-ingress-class>   # add the annotations your ingress controller needs
     annotations:
-      cert-manager.io/cluster-issuer: "prod" # Use self-signed for testing
+      cert-manager.io/cluster-issuer: "prod-issuer" # Use selfsigned-issuer with the selfsigned setup for testing
       cert-manager.io/private-key-algorithm: "ECDSA"
       # the Secret also holds the DID's key: renewals must keep it (cert-manager >= 1.18
       # generates a new one by default)

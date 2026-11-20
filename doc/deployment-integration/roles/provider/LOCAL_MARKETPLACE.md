@@ -47,57 +47,16 @@ The marketplace stores its data in MongoDB. Use the one you already have, or let
 
 `managedMongo` needs an operator that handles `MongoDBCommunity` resources: the [MongoDB Community Operator](https://github.com/mongodb/mongodb-kubernetes-operator), whose chart the connector pins (`community-operator` in [Chart.yaml](../../../../charts/data-space-connector/Chart.yaml), 0.13.0 at the time of writing), or its successor [MongoDB Controllers for Kubernetes](https://github.com/mongodb/mongodb-kubernetes), which manages the same resource. The operator is cluster-wide: install it once, outside the connector, and leave `mongo-operator.enabled: false` (the default) in the connector's values. The [Cluster Prerequisites](../PREREQUISITES.md#installing-the-operators-once) explain why each operator can be installed only once per cluster.
 
-The MongoDB pods run as a `mongodb-database` service account (with its Role and RoleBinding) in their own namespace. The Community Operator chart creates it only in the namespace given in `database.namespace`, so where to point it decides whether you have to create it yourself:
+Install it with `watchNamespace: "*"`, which lets it manage databases outside its own namespace:
 
-- **`database.namespace` set to the connector's namespace** - the simplest setup with a single connector; nothing else to create:
+```shell
+helm repo add mongodb https://mongodb.github.io/helm-charts
+helm install mongo-operator mongodb/community-operator --version 0.13.0 \
+  -n mongo-operator --create-namespace \
+  --set operator.watchNamespace="*"
+```
 
-  ```shell
-  helm repo add mongodb https://mongodb.github.io/helm-charts
-  helm install mongo-operator mongodb/community-operator --version 0.13.0 \
-    -n mongo-operator --create-namespace \
-    --set operator.watchNamespace="*" \
-    --set database.namespace=<your_namespace>
-  ```
-
-  `watchNamespace: "*"` lets the operator manage databases outside its own namespace. The service account then belongs to the operator's release: if the connector's namespace is deleted, it goes with it, and the operator has to be upgraded to create it again before the database can start.
-
-- **The operator managing several namespaces**, with `database.namespace` left at its own namespace: create the service account in the connector's namespace before installing it:
-
-  ```yaml
-  apiVersion: v1
-  kind: ServiceAccount
-  metadata:
-    name: mongodb-database
-    namespace: <your_namespace>
-  ---
-  apiVersion: rbac.authorization.k8s.io/v1
-  kind: Role
-  metadata:
-    name: mongodb-database
-    namespace: <your_namespace>
-  rules:
-    - apiGroups: [""]
-      resources: [secrets]
-      verbs: [get]
-    - apiGroups: [""]
-      resources: [pods]
-      verbs: [get, patch, delete]
-  ---
-  apiVersion: rbac.authorization.k8s.io/v1
-  kind: RoleBinding
-  metadata:
-    name: mongodb-database
-    namespace: <your_namespace>
-  subjects:
-    - kind: ServiceAccount
-      name: mongodb-database
-  roleRef:
-    kind: Role
-    name: mongodb-database
-    apiGroup: rbac.authorization.k8s.io
-  ```
-
-  Without it the MongoDB pod never starts (`serviceaccounts "mongodb-database" not found`).
+The MongoDB pods run as a service account of the chart's own, `<release>-mongodb`, with its Role and RoleBinding (`managedMongo.serviceAccount`), so the operator's `database.namespace` does not matter: it only says where the operator's chart creates its own `mongodb-database`. To run them as a service account you manage yourself, set `managedMongo.serviceAccount.create: false` and its `name`; without a `name`, they run as the operator's `mongodb-database`, which then has to exist in the connector's namespace.
 
 #### Database passwords
 
@@ -247,7 +206,7 @@ marketplace:
       enabled: true
       className: <your-ingress-class>    # add the annotations your ingress controller needs
       annotations:
-        cert-manager.io/cluster-issuer: "prod"
+        cert-manager.io/cluster-issuer: "prod-issuer"
       hosts:
         - host: <your_marketplace_domain>
           paths: ["/"]
@@ -411,7 +370,7 @@ Do not set `NODE_TLS_REJECT_UNAUTHORIZED=0` instead: it disables certificate ver
 | `bizEcosystemApis.tmForum` in older examples | The legacy name of `tmForum`; both work, `tmForum` wins |
 | A change to the BAE's service at the verifier has no effect | The registration does not update a service that already exists; change it through the verifier's configuration API |
 | Orders are completed but nothing happens | Contract management without `organization.provider.role: seller` |
-| The chart's MongoDB pod does not start (`serviceaccounts "mongodb-database" not found`) | The operator did not create the service account in the provider's namespace, see [the operator](#the-operator-for-a-mongodb-deployed-by-the-chart) |
+| The chart's MongoDB pod does not start (`serviceaccounts "mongodb-database" not found`) | `managedMongo.serviceAccount.create: false` without a `name`, and the operator did not create its `mongodb-database` in the provider's namespace; see [the operator](#the-operator-for-a-mongodb-deployed-by-the-chart) |
 
 ## Security
 
@@ -421,7 +380,7 @@ Do not set `NODE_TLS_REJECT_UNAUTHORIZED=0` instead: it disables certificate ver
 
 ## Installing and checking it
 
-1. With the chart's MongoDB: install the MongoDB operator, once per cluster, and create the `mongodb-database` service account if the operator does not. With an existing MongoDB: create the marketplace's databases and users in it.
+1. With the chart's MongoDB: install the MongoDB operator, once per cluster. With an existing MongoDB: create the marketplace's databases and users in it.
 2. Create the password Secrets in the provider's namespace, unless `generatePasswords` is used.
 3. Install or upgrade the connector with `--wait` and a generous `--timeout`, e.g. `30m`. On a fresh install the charging backend and contract management restart a few times until the TMForum API and MongoDB are up; that is expected.
 4. Check that the logic proxy (`<release>-biz-ecosystem-logic-proxy-0`) and the charging backend are `Running`.
