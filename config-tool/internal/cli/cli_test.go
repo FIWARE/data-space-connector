@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -14,7 +15,9 @@ import (
 	"github.com/FIWARE/data-space-connector/config-tool/internal/profile"
 	"github.com/FIWARE/data-space-connector/config-tool/internal/render"
 	"github.com/FIWARE/data-space-connector/config-tool/internal/roundtrip"
+	"github.com/FIWARE/data-space-connector/config-tool/internal/trial"
 	"github.com/FIWARE/data-space-connector/config-tool/internal/version"
+	trialdata "github.com/FIWARE/data-space-connector/config-tool/trial"
 )
 
 // validProfile is a complete profile against the shipped 10.16.0 bundle.
@@ -37,7 +40,7 @@ secrets: {}
 func writeProfile(t *testing.T, content string) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "provider.dscprofile.yaml")
-	if err := os.WriteFile(path, []byte(content), outputFileMode); err != nil {
+	if err := os.WriteFile(path, []byte(content), roundtrip.ValuesFileMode); err != nil {
 		t.Fatal(err)
 	}
 	return path
@@ -75,7 +78,7 @@ func TestCommands(t *testing.T) {
 		{
 			name:       "generate help documents its flags",
 			args:       []string{"generate", "--help"},
-			wantOutput: []string{"-p, --profile", "-o, --output"},
+			wantOutput: []string{"-p, --profile", "-o, --output", "--" + flagTrial, "--" + flagOutputDir},
 		},
 		{
 			name:    "generate is not implemented yet",
@@ -170,6 +173,127 @@ func TestGenerateRequiresProfile(t *testing.T) {
 	}
 }
 
+// executeSplit runs the command tree like execute but keeps stdout and stderr apart.
+func executeSplit(t *testing.T, args ...string) (stdout, stderr string, err error) {
+	t.Helper()
+	root := NewRootCommand(fakeGUI)
+	var out, errOut bytes.Buffer
+	root.SetOut(&out)
+	root.SetErr(&errOut)
+	root.SetArgs(args)
+	err = root.ExecuteContext(context.Background())
+	return out.String(), errOut.String(), err
+}
+
+// trialOutputs renders the embedded trial as generate --trial does.
+func trialOutputs(t *testing.T) []trial.Output {
+	t.Helper()
+	tr, err := trial.Load(trialdata.FS)
+	if err != nil {
+		t.Fatal(err)
+	}
+	outs, err := trial.Render(tr, trialdata.FS, version.Version)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return outs
+}
+
+func TestGenerateTrial(t *testing.T) {
+	dir := t.TempDir()
+	stdout, stderr, err := executeSplit(t, "generate", "--"+flagTrial, "--"+flagOutputDir, dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, o := range trialOutputs(t) {
+		path := filepath.Join(dir, o.File)
+		got, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !bytes.Equal(got, o.Values) {
+			t.Errorf("%s differs from the rendered trial output", o.File)
+		}
+		if !strings.Contains(stdout, path+"\n") {
+			t.Errorf("stdout does not list %s:\n%s", path, stdout)
+		}
+	}
+	if entries, _ := os.ReadDir(dir); len(entries) != len(trialOutputs(t)) {
+		t.Errorf("dir holds %d entries, want %d", len(entries), len(trialOutputs(t)))
+	}
+	if !strings.Contains(stdout, quickStartURL) {
+		t.Errorf("stdout does not point to the Quick Start:\n%s", stdout)
+	}
+	for _, w := range trial.Warnings() {
+		if !strings.Contains(stderr, warningPrefix+w.Message) {
+			t.Errorf("stderr does not carry warning %s:\n%s", w.ID, stderr)
+		}
+	}
+}
+
+func TestGenerateTrialRefusesFlags(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+		want []string
+	}{
+		{"trial with profile", []string{"--" + flagTrial, "--" + flagProfile, "x.dscprofile.yaml"}, []string{flagTrial, flagProfile}},
+		{"trial with output", []string{"--" + flagTrial, "--" + flagOutput, "values.yaml"}, []string{flagTrial, flagOutput}},
+		{"profile with output dir", []string{"--" + flagProfile, "x.dscprofile.yaml", "--" + flagOutputDir, "."}, []string{flagProfile, flagOutputDir}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			t.Chdir(dir)
+			_, err := execute(t, fakeGUI, append([]string{"generate"}, tc.args...)...)
+			if err == nil {
+				t.Fatal("generate succeeded, want the flags refused")
+			}
+			for _, want := range tc.want {
+				if !strings.Contains(err.Error(), want) {
+					t.Errorf("error %q does not name %q", err, want)
+				}
+			}
+			if entries, _ := os.ReadDir(dir); len(entries) != 0 {
+				t.Errorf("generate wrote %d entries, want none", len(entries))
+			}
+		})
+	}
+}
+
+func TestGenerateTrialKeepsExistingFiles(t *testing.T) {
+	dir := t.TempDir()
+	args := []string{"generate", "--" + flagTrial, "--" + flagOutputDir, dir}
+	if _, _, err := executeSplit(t, args...); err != nil {
+		t.Fatal(err)
+	}
+	first := make(map[string][]byte)
+	for _, o := range trialOutputs(t) {
+		// Mark each file so a rewrite with the same bytes would still show.
+		path := filepath.Join(dir, o.File)
+		marked := append(slices.Clone(o.Values), "# edited\n"...)
+		if err := os.WriteFile(path, marked, roundtrip.ValuesFileMode); err != nil {
+			t.Fatal(err)
+		}
+		first[path] = marked
+	}
+	stdout, _, err := executeSplit(t, args...)
+	if !errors.Is(err, fs.ErrExist) {
+		t.Fatalf("error = %v, want %v", err, fs.ErrExist)
+	}
+	if stdout != "" {
+		t.Errorf("stdout = %q, want nothing written", stdout)
+	}
+	for path, want := range first {
+		if !strings.Contains(err.Error(), path) {
+			t.Errorf("error %q does not list %s", err, path)
+		}
+		if got, _ := os.ReadFile(path); !bytes.Equal(got, want) {
+			t.Errorf("%s changed", path)
+		}
+	}
+}
+
 func TestRootPassesContextToGUI(t *testing.T) {
 	type key struct{}
 	ctx := context.WithValue(context.Background(), key{}, true)
@@ -255,7 +379,7 @@ func TestWriteOutput(t *testing.T) {
 		return func(t *testing.T, path string) {
 			target := filepath.Join(filepath.Dir(path), "target.yaml")
 			if withTarget {
-				writeExisting(outputFileMode)(t, target)
+				writeExisting(roundtrip.ValuesFileMode)(t, target)
 			}
 			if err := os.Symlink(target, path); err != nil {
 				t.Skipf("symlinks unavailable: %v", err)
@@ -271,7 +395,7 @@ func TestWriteOutput(t *testing.T) {
 		wantFile string
 	}{
 		{"new file", func(*testing.T, string) {}, "", nil, content},
-		{"existing file is kept", writeExisting(outputFileMode), "", fs.ErrExist, existing},
+		{"existing file is kept", writeExisting(roundtrip.ValuesFileMode), "", fs.ErrExist, existing},
 		{"read-only file is kept", writeExisting(readOnly), "", fs.ErrExist, existing},
 		{"symlink is kept", symlink(true), "", fs.ErrExist, existing},
 		{"dangling symlink is kept", symlink(false), "", fs.ErrExist, ""},

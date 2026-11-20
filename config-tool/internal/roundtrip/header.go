@@ -2,9 +2,13 @@ package roundtrip
 
 import (
 	"bytes"
+	"io/fs"
 	"strings"
 	"unicode"
 )
+
+// ValuesFileMode is the mode of a new values file dsc-config writes, before the umask; it holds no secrets.
+const ValuesFileMode fs.FileMode = 0o644
 
 const (
 	// HeaderPrefix starts line 1 of the generated header; Parse recognizes the header by it.
