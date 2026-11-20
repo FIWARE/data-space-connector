@@ -2,6 +2,7 @@
 import { vi } from 'vitest'
 import type { LoadReport } from '../api/load'
 import type { Profile, ProfileResponse, RecentProfiles } from '../api/profile'
+import type { Offer, PresetResult, RoleCatalogue } from '../api/roles'
 import type { Kubeconfig, ModelInfo } from '../api/target'
 import type { Trial, TrialWritten } from '../api/trial'
 
@@ -152,18 +153,78 @@ const TRIAL_DEFAULTS: Required<TrialFakes> = {
   write: (dir) => ({ dir, files: TRIAL.releases.map((release) => `${dir}/${release.file}`) }),
 }
 
+/** Offers of one fake role for its recommended, its available and the remaining catalogue features. */
+function offers(recommended: string[], available: string[]): Record<string, Offer> {
+  return Object.fromEntries(
+    ROLE_FEATURES.map((id) => [id, recommended.includes(id) ? 'recommended' : available.includes(id) ? 'available' : 'not-offered']),
+  )
+}
+
+const ROLE_FEATURES = ['identity.issuer', 'data.scorpio', 'obs.tracing', 'ta.registry']
+const DSC_FEATURES = ROLE_FEATURES.filter((id) => id !== 'ta.registry')
+
+/** A role catalogue shaped like the real 10.16.0 one, cut down to four features. */
+export const ROLES: RoleCatalogue = {
+  roles: [
+    { id: 'consumer', title: 'Consumer', summary: 'Consumes data.', chart: DSC_CHART, docs: 'roles#consumer',
+      floor: { memory: '0.8Gi', cpu: '50m', measuredWith: '10.13.2' }, features: offers(['identity.issuer'], ['obs.tracing']) },
+    { id: 'provider', title: 'Provider', summary: 'Offers data.', chart: DSC_CHART, docs: 'roles#provider',
+      floor: { memory: '2.3Gi', cpu: '200m', measuredWith: '10.13.2' }, features: offers(['identity.issuer', 'data.scorpio'], ['obs.tracing']) },
+    { id: 'consumer-provider', title: 'Consumer + Provider', summary: 'Both.', chart: DSC_CHART, docs: 'roles#consumer-provider',
+      floor: { memory: '2.3Gi', cpu: '200m', measuredWith: '10.13.2' }, features: offers(['identity.issuer', 'data.scorpio'], ['obs.tracing']) },
+    { id: 'operator', title: 'Operator', summary: 'Runs the trust anchor.', chart: TRUST_ANCHOR, docs: 'roles#operator',
+      floor: { memory: '0.3Gi', cpu: '20m', measuredWith: '1.3.0' }, features: offers(['ta.registry'], []) },
+    { id: 'custom', title: 'Custom', summary: 'Pick every feature.', chart: DSC_CHART, docs: 'roles#custom', floor: null,
+      features: offers([], DSC_FEATURES) },
+  ],
+  features: [
+    { id: 'identity.issuer', title: 'Credential issuer', summary: 'Keycloak issues VCs.', group: 'identity' },
+    { id: 'data.scorpio', title: 'Context broker', summary: 'Scorpio NGSI-LD.', group: 'data' },
+    { id: 'obs.tracing', title: 'Tracing', summary: 'OTEL traces.', group: 'observability' },
+    { id: 'ta.registry', title: 'Trusted issuers registry', summary: 'The trust anchor.', group: 'operator' },
+  ],
+}
+
+/** The body POST /api/preset receives. */
+export interface PresetBody {
+  profile: Profile
+  role: string
+  sourceSha256?: string
+}
+
+/** An answer of a role route, or a status code it fails with. */
+export type RoleAnswer<T> = T | number
+
+/** The role routes' fakes; by default GET answers ROLES and preset applies the role without features or switch. */
+export interface RoleFakes {
+  roles?: (chart: string, version: string) => RoleAnswer<RoleCatalogue> | Promise<RoleAnswer<RoleCatalogue>>
+  preset?: (body: PresetBody) => RoleAnswer<PresetResult>
+}
+
+/** The server's message for a refused role request. */
+export function refusedRole(status: number): string {
+  return `role request refused with ${status}`
+}
+
+const ROLE_DEFAULTS: Required<RoleFakes> = {
+  roles: () => ROLES,
+  preset: (body) => ({ profile: { ...body.profile, role: body.role, features: {} }, chartSwitch: null }),
+}
+
 /** Answers GET /api/model with `model`, GET /api/cluster/contexts with `contexts(path)` and POST /api/load with
  *  `load(name, root)`; `root` is null when the upload lets the server detect it. The profile routes use `profiles`,
- *  the trial routes `trial`. */
+ *  the trial routes `trial`, the role routes `roles`. */
 export function mockApi(
   contexts: (path: string) => ContextsAnswer = () => ({ paths: [], contexts: [], current: '' }),
   model: ModelInfo = MODEL,
   load: (name: string, root: string | null) => LoadAnswer | Promise<LoadAnswer> = () => REPORT,
   profiles: ProfileFakes = {},
   trial: TrialFakes = {},
+  roles: RoleFakes = {},
 ) {
   const fakes = { ...PROFILE_DEFAULTS, ...profiles }
   const trialFakes = { ...TRIAL_DEFAULTS, ...trial }
+  const roleFakes = { ...ROLE_DEFAULTS, ...roles }
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(String(input), 'http://localhost')
     const json = (body: unknown, status = 200) => Promise.resolve(new Response(JSON.stringify(body), { status }))
@@ -192,6 +253,13 @@ export function mockApi(
     if (url.pathname === '/api/trial/write' && init?.method === 'POST') {
       const { dir } = JSON.parse(String(init.body)) as { dir: string }
       return trialAnswer(trialFakes.write(dir))
+    }
+    const roleAnswer = <T,>(value: RoleAnswer<T>) => (typeof value === 'number' ? json({ error: refusedRole(value) }, value) : json(value))
+    if (url.pathname === '/api/roles') {
+      return roleAnswer(await roleFakes.roles(url.searchParams.get('chart') ?? '', url.searchParams.get('version') ?? ''))
+    }
+    if (url.pathname === '/api/preset' && init?.method === 'POST') {
+      return roleAnswer(roleFakes.preset(JSON.parse(String(init.body)) as PresetBody))
     }
     return json({ error: 'not found' }, HTTP_NOT_FOUND)
   })
