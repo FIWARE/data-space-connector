@@ -1,7 +1,9 @@
-# Question-model bundle of chart 10.16.0; value rules come with Epic 3's questions.
+# Question-model bundle of chart 10.16.0: recognition rules, the feature catalogue and the role presets
+# (ADR 0017). The role guide's component matrix is authoritative; internal/model/rolematrix_test.go
+# keeps roles and roleMatrix in agreement with it. Value rules come with Epic 3's questions.
 chart: data-space-connector
 version: 10.16.0
-revision: 1
+revision: 2
 topLevelKeys: [
   nameOverride, fullnameOverride, imagePullSecrets, issuance, decentralizedIam, scorpio, elsi,
   keycloak, tm-forum-api, statusListServer, rainbow, contract-management, did, registration,
@@ -18,3 +20,226 @@ recognize:
   - {path: marketplace.enabled, answer: market.local.enabled, stage: features, kind: toggle}
   - {path: rainbow.enabled, answer: dsp.rainbow.enabled, stage: features, kind: toggle}
   - {path: dataSpaceConfig.enabled, answer: dsp.config.enabled, stage: features, kind: toggle}
+features:
+  - {id: identity.issuer, title: Credential issuance, group: identity, keys: [keycloak, vcCredentials],
+     summary: "Issue Verifiable Credentials to your users (Keycloak, OID4VCI)"}
+  - {id: identity.did, title: DID document, group: identity, keys: [did],
+     summary: "Publish the organization's DID document (did:web/did:key)"}
+  - {id: identity.statuslist, title: Credential revocation, group: identity, keys: [statusListServer],
+     summary: Revoke issued credentials (token status list)}
+  - {id: identity.vcoperator, title: Credentials as Kubernetes resources, group: identity, keys: [vc-operator, vcCredentials],
+     summary: Manage credential definitions as Kubernetes resources}
+  - {id: identity.wallets, title: Wallet clients, group: identity, requires: [identity.issuer],
+     keys: [keycloak.realm.wallets], summary: Preset clients for the Lissi and EUDI wallets}
+  - {id: identity.eidas, title: eIDAS identity, group: identity, requires: [identity.issuer],
+     keys: [elsi, decentralizedIam.vcAuthentication.vcverifier.deployment.eidas],
+     summary: eIDAS/ELSI certificate-based identity and validation}
+  - {id: access.verification, title: Credential verification, group: access, keys: [decentralizedIam.vcAuthentication],
+     summary: "Verify incoming credentials, hand out access tokens (VCVerifier + local Trusted Issuers List)"}
+  - {id: access.policies, title: Policy enforcement, group: access, keys: [decentralizedIam.odrlAuthorization],
+     summary: Enforce ODRL policies on every request (APISIX + OPA + ODRL-PAP)}
+  - {id: data.scorpio, title: NGSI-LD data service, group: data, keys: [scorpio],
+     summary: An NGSI-LD context broker as the data service}
+  - {id: data.external, title: Your own data services, group: data, requires: [access.policies],
+     keys: [decentralizedIam.odrlAuthorization.apisix.routes], summary: Protect data services you run yourself}
+  - {id: contract.tmforum, title: TMForum contract APIs, group: contracts, keys: [tm-forum-api],
+     summary: TMForum product/contract APIs}
+  - {id: contract.management, title: Contract management, group: contracts, requires: [contract.tmforum, access.policies],
+     keys: [contract-management], summary: Turn orders into access policies automatically}
+  - {id: market.local, title: Local marketplace, group: marketplace, requires: [contract.tmforum],
+     keys: [marketplace], summary: A marketplace of your own (BAE)}
+  - {id: market.central, title: Central marketplace, group: marketplace, requires: [contract.tmforum],
+     keys: [contract-management], summary: "Publish into the data space's central marketplace"}
+  - {id: dsp.edc, title: Dataspace Protocol (DSP), group: interop, keys: [fdsc-edc, identityhub, registration],
+     summary: "Dataspace Protocol via EDC, with DCP identity (IdentityHub)"}
+  - {id: dsp.rainbow, title: Rainbow DSP, group: interop, keys: [rainbow],
+     summary: The Rust DSP implementation (Rainbow)}
+  - {id: dsp.config, title: Data space configuration, group: interop, keys: [dataSpaceConfig],
+     summary: Serve /.well-known/data-space-configuration}
+  - {id: consent.provider, title: Consent enforcement, group: consent, requires: [access.policies],
+     keys: [consent-facade, consent-owner-resolver], summary: Enforce data-subject consent on provider APIs}
+  - {id: consent.authority, title: Consent authority, group: consent, chart: trust-anchor,
+     keys: [consentManagement, consent-manager, consent-facade], summary: "Run the data space's consent manager"}
+  - {id: ta.registry, title: Trusted Issuers Registry, group: operator, chart: trust-anchor, keys: [trusted-issuers-list],
+     summary: Trusted Issuers Registry + Trusted Issuers List API}
+  - {id: ta.onboarding, title: Participant onboarding, group: operator, chart: trust-anchor,
+     keys: [trusted-issuers-list.ingress.til], summary: Participant onboarding}
+  - {id: obs.tracing, title: Tracing, group: observability,
+     keys: [tracing, opentelemetry-collector, opentelemetry-operator], summary: Distributed traces from every component}
+  - {id: obs.traceStore, title: Trace store, group: observability, keys: [tempo, grafana],
+     summary: Store and browse traces (Tempo + Grafana)}
+  - {id: obs.metrics, title: Metrics, group: observability, keys: [prometheus, grafana, fdsc-dashboard],
+     summary: Metrics and dashboards}
+# Floors: measured footprint without load, doc/deployment-integration/roles/PREREQUISITES.md#sizing.
+# consumer-provider has no row there and takes the provider's.
+roles:
+  - id: consumer
+    title: Consumer
+    summary: Uses data and services offered by others.
+    chart: data-space-connector
+    floor: {memory: 0.8Gi, cpu: 50m, measuredWith: 10.13.2}
+    docs: doc/deployment-integration/roles/consumer/README.md
+    features:
+      identity.issuer: recommended
+      identity.did: recommended
+      identity.statuslist: available
+      identity.vcoperator: available
+      identity.wallets: available
+      identity.eidas: available
+      access.verification: not-offered
+      access.policies: not-offered
+      data.scorpio: not-offered
+      data.external: not-offered
+      contract.tmforum: not-offered
+      contract.management: not-offered
+      market.local: not-offered
+      market.central: not-offered
+      dsp.edc: available
+      dsp.rainbow: available
+      dsp.config: available
+      consent.provider: not-offered
+      consent.authority: not-offered
+      ta.registry: not-offered
+      ta.onboarding: not-offered
+      obs.tracing: available
+      obs.traceStore: available
+      obs.metrics: available
+  - id: provider
+    title: Provider
+    summary: Offers data and services to others.
+    chart: data-space-connector
+    floor: {memory: 2.3Gi, cpu: 200m, measuredWith: 10.13.2}
+    docs: doc/deployment-integration/roles/provider/README.md
+    features:
+      identity.issuer: recommended
+      identity.did: recommended
+      identity.statuslist: available
+      identity.vcoperator: available
+      identity.wallets: available
+      identity.eidas: available
+      access.verification: recommended
+      access.policies: recommended
+      data.scorpio: recommended
+      data.external: available
+      contract.tmforum: available
+      contract.management: available
+      market.local: available
+      market.central: available
+      dsp.edc: available
+      dsp.rainbow: available
+      dsp.config: available
+      consent.provider: available
+      consent.authority: not-offered
+      ta.registry: not-offered
+      ta.onboarding: not-offered
+      obs.tracing: available
+      obs.traceStore: available
+      obs.metrics: available
+  - id: consumer-provider
+    title: Consumer + Provider
+    summary: Both. The common case in a real data space.
+    chart: data-space-connector
+    floor: {memory: 2.3Gi, cpu: 200m, measuredWith: 10.13.2}
+    docs: doc/deployment-integration/roles/consumer-provider/README.md
+    features:
+      identity.issuer: recommended
+      identity.did: recommended
+      identity.statuslist: available
+      identity.vcoperator: available
+      identity.wallets: available
+      identity.eidas: available
+      access.verification: recommended
+      access.policies: recommended
+      data.scorpio: recommended
+      data.external: available
+      contract.tmforum: available
+      contract.management: available
+      market.local: available
+      market.central: available
+      dsp.edc: available
+      dsp.rainbow: available
+      dsp.config: available
+      consent.provider: available
+      consent.authority: not-offered
+      ta.registry: not-offered
+      ta.onboarding: not-offered
+      obs.tracing: available
+      obs.traceStore: available
+      obs.metrics: available
+  - id: operator
+    title: Operator
+    summary: Runs the trust infrastructure of the data space.
+    chart: trust-anchor
+    floor: {memory: 0.3Gi, cpu: 20m, measuredWith: 1.3.0}
+    docs: doc/deployment-integration/roles/operator/README.md
+    features:
+      identity.issuer: not-offered
+      identity.did: not-offered
+      identity.statuslist: not-offered
+      identity.vcoperator: not-offered
+      identity.wallets: not-offered
+      identity.eidas: not-offered
+      access.verification: not-offered
+      access.policies: not-offered
+      data.scorpio: not-offered
+      data.external: not-offered
+      contract.tmforum: not-offered
+      contract.management: not-offered
+      market.local: not-offered
+      market.central: not-offered
+      dsp.edc: not-offered
+      dsp.rainbow: not-offered
+      dsp.config: not-offered
+      consent.provider: not-offered
+      consent.authority: available
+      ta.registry: recommended
+      ta.onboarding: available
+      obs.tracing: not-offered
+      obs.traceStore: not-offered
+      obs.metrics: not-offered
+  - id: custom
+    title: Custom
+    summary: Nothing preselected. Pick from the whole catalogue yourself.
+    chart: data-space-connector
+    docs: doc/deployment-integration/roles/README.md#component-matrix
+    features:
+      identity.issuer: available
+      identity.did: available
+      identity.statuslist: available
+      identity.vcoperator: available
+      identity.wallets: available
+      identity.eidas: available
+      access.verification: available
+      access.policies: available
+      data.scorpio: available
+      data.external: available
+      contract.tmforum: available
+      contract.management: available
+      market.local: available
+      market.central: available
+      dsp.edc: available
+      dsp.rainbow: available
+      dsp.config: available
+      consent.provider: available
+      consent.authority: not-offered
+      ta.registry: not-offered
+      ta.onboarding: not-offered
+      obs.tracing: available
+      obs.traceStore: available
+      obs.metrics: available
+# Maps the component matrix of doc/deployment-integration/roles/README.md to feature ids.
+roleMatrix:
+  components:
+    VCVerifier: access.verification
+    credentials-config-service: access.verification
+    trusted-issuers-list: access.verification
+    APISIX: access.policies
+    OPA: access.policies
+    odrl-pap: access.policies
+    Keycloak: identity.issuer
+    DID: identity.did
+    tmforum-api: contract.tmforum
+    contract-management: contract.management
+    FDSC-EDC: dsp.edc
+    Trusted Issuers Registry: ta.registry
+  infrastructure: [PostgreSQL]

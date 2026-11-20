@@ -1,0 +1,6 @@
+# Question-model bundle of the trust-anchor chart 1.3.6. Its roles and features come from the
+# data-space-connector bundle (model.RoleCatalogue, ADR 0017).
+chart: trust-anchor
+version: 1.3.6
+revision: 1
+topLevelKeys: [postgres-operator, managedPostgres, trusted-issuers-list, managedMongo, consentManagement, consent-facade, consent-manager]

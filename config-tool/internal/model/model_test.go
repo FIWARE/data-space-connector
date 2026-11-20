@@ -286,29 +286,36 @@ func TestTopLevelKeysValidation(t *testing.T) {
 	}
 }
 
-// TestEmbeddedTopLevelKeys keeps the latest bundle's topLevelKeys equal to the chart's, so a load
-// still finds wrapped chart values after the chart gains or renames a section.
+// TestEmbeddedTopLevelKeys keeps each chart's latest bundle's topLevelKeys equal to the chart's, so a
+// load still finds wrapped chart values after the chart gains or renames a section.
 func TestEmbeddedTopLevelKeys(t *testing.T) {
-	src, err := os.ReadFile(chartValues)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var root yaml.Node
-	if err := yaml.Unmarshal(src, &root); err != nil {
-		t.Fatal(err)
-	}
-	var want []string
-	values := root.Content[0].Content
-	for i := 0; i < len(values); i += 2 {
-		want = append(want, values[i].Value)
-	}
 	got, err := Versions(bundles.FS)
 	if err != nil {
 		t.Fatal(err)
 	}
-	keys := slices.Sorted(slices.Values(got[0].TopLevelKeys))
-	slices.Sort(want)
-	if !slices.Equal(keys, want) {
-		t.Errorf("latest bundle topLevelKeys = %v, want the chart's %v", keys, want)
+	for _, b := range got {
+		if !b.Latest {
+			continue
+		}
+		t.Run(b.Chart, func(t *testing.T) {
+			src, err := os.ReadFile(repoRoot + "/charts/" + b.Chart + "/values.yaml")
+			if err != nil {
+				t.Fatal(err)
+			}
+			var root yaml.Node
+			if err := yaml.Unmarshal(src, &root); err != nil {
+				t.Fatal(err)
+			}
+			var want []string
+			values := root.Content[0].Content
+			for i := 0; i < len(values); i += 2 {
+				want = append(want, values[i].Value)
+			}
+			keys := slices.Sorted(slices.Values(b.TopLevelKeys))
+			slices.Sort(want)
+			if !slices.Equal(keys, want) {
+				t.Errorf("%s %s topLevelKeys = %v, want the chart's %v", b.Chart, b.Version, keys, want)
+			}
+		})
 	}
 }

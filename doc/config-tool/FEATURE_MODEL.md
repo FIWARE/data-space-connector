@@ -45,7 +45,7 @@ A feature declares:
 | Field | Meaning |
 |---|---|
 | `id`, `title`, `summary` | `dsp.edc`, "Dataspace Protocol (DSP)", one line of what it gives you |
-| `group` | Identity · Access · Data · Contracts · Marketplace · Interop · Consent · Observability |
+| `group` | Identity · Access · Data · Contracts · Marketplace · Interop · Consent · Observability · Operator (the trust-anchor features `ta.*`) |
 | `requires` / `suggests` / `conflicts` | Other features, resolved when toggling |
 | `needs` | Infrastructure dependencies (`postgres`, `mongo`, `certs`, `vault`) |
 | `keys` | The chart keys it owns, with the render function per key |
@@ -59,6 +59,10 @@ A feature declares:
 Toggle defaults differ from the **chart** defaults on purpose: the chart turns several
 components on by default for the local demo, the tool starts from the role.
 
+The bundle writes `x.*` as `x`, because a key names its whole subtree, and lists concrete paths instead of
+qualifiers such as "+ ingress". Features may share keys (`vcCredentials`, `grafana`, `contract-management`).
+A shared key is needed while any feature that lists it is enabled ([ADR 0017](../adr/0017-config-tool-role-presets.md)).
+
 ### Identity
 
 | Feature | Gives you | Chart keys | Needs |
@@ -68,7 +72,7 @@ components on by default for the local demo, the tool starts from the role.
 | `identity.statuslist` | Revoke issued credentials (token status list) | `statusListServer.*` | postgres |
 | `identity.vcoperator` | Manage credential definitions as Kubernetes resources | `vc-operator.*`, `vcCredentials.*` | — |
 | `identity.wallets` | Preset clients for the Lissi and EUDI wallets | `keycloak.realm.wallets.*` | `identity.issuer` |
-| `identity.eidas` | eIDAS/ELSI certificate-based identity and validation | `elsi.*`, `decentralizedIam.vcAuthentication.dss.*` | `identity.issuer` |
+| `identity.eidas` | eIDAS/ELSI certificate-based identity and validation | `elsi.*`, `decentralizedIam.vcAuthentication.vcverifier.deployment.eidas` | `identity.issuer` |
 
 ### Access
 
@@ -127,34 +131,41 @@ components on by default for the local demo, the tool starts from the role.
 
 `R` recommended on, `o` available off, `–` not offered.
 
-| Feature | Consumer | Provider | Consumer + Provider | Operator |
-|---|---|---|---|---|
-| `identity.issuer` | **R** | **R** | **R** | – |
-| `identity.did` | **R** | **R** | **R** | – |
-| `identity.statuslist` | o | o | o | – |
-| `identity.vcoperator` | o | o | o | – |
-| `identity.wallets` | o | o | o | – |
-| `identity.eidas` | o | o | o | – |
-| `access.verification` | – | **R** | **R** | – |
-| `access.policies` | – | **R** | **R** | – |
-| `data.scorpio` | – | **R** | **R** | – |
-| `data.external` | – | o | o | – |
-| `contract.tmforum` | – | **R** | **R** | – |
-| `contract.management` | – | **R** | **R** | – |
-| `market.local` | – | o | o | – |
-| `market.central` | – | o | o | – |
-| `dsp.edc` | o | o | o | – |
-| `dsp.rainbow` | o | o | o | – |
-| `dsp.config` | o | o | o | o |
-| `consent.provider` | – | o | o | – |
-| `consent.authority` | – | – | – | o |
-| `ta.registry` | – | – | – | **R** |
-| `ta.onboarding` | – | – | – | o |
-| `obs.*` | o | o | o | o |
+| Feature | Consumer | Provider | Consumer + Provider | Operator | Custom |
+|---|---|---|---|---|---|
+| `identity.issuer` | **R** | **R** | **R** | – | o |
+| `identity.did` | **R** | **R** | **R** | – | o |
+| `identity.statuslist` | o | o | o | – | o |
+| `identity.vcoperator` | o | o | o | – | o |
+| `identity.wallets` | o | o | o | – | o |
+| `identity.eidas` | o | o | o | – | o |
+| `access.verification` | – | **R** | **R** | – | o |
+| `access.policies` | – | **R** | **R** | – | o |
+| `data.scorpio` | – | **R** | **R** | – | o |
+| `data.external` | – | o | o | – | o |
+| `contract.tmforum` | – | o | o | – | o |
+| `contract.management` | – | o | o | – | o |
+| `market.local` | – | o | o | – | o |
+| `market.central` | – | o | o | – | o |
+| `dsp.edc` | o | o | o | – | o |
+| `dsp.rainbow` | o | o | o | – | o |
+| `dsp.config` | o | o | o | – | o |
+| `consent.provider` | – | o | o | – | o |
+| `consent.authority` | – | – | – | o | – |
+| `ta.registry` | – | – | – | **R** | – |
+| `ta.onboarding` | – | – | – | o | – |
+| `obs.tracing` | o | o | o | – | o |
+| `obs.traceStore` | o | o | o | – | o |
+| `obs.metrics` | o | o | o | – | o |
 
-The preset is derived from the component matrix in
-[roles/README.md](../deployment-integration/roles/README.md); that table and this one must be
-changed together, and a test in the tool's repository asserts they agree.
+The component matrix in [roles/README.md](../deployment-integration/roles/README.md#component-matrix) is
+authoritative: `Required` is **R**, `Optional` is o, `-` is –, and `Built into X` takes row X's value.
+`internal/model/rolematrix_test.go` fails when the bundle disagrees with it. Rows that no matrix component
+maps to (`data.scorpio`, `market.*`, `obs.*`, ...) follow this document.
+
+A role offers only features of the chart it deploys. Operator deploys `trust-anchor`, so it offers the three
+trust-anchor features and nothing else, `dsp.config` and `obs.*` included. Custom deploys `data-space-connector`:
+it offers all of that chart's features and recommends none ([ADR 0017](../adr/0017-config-tool-role-presets.md)).
 
 ## Cross-cutting values
 
