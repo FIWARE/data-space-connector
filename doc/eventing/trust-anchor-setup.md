@@ -63,7 +63,8 @@ The authority release brings everything the publisher needs:
 - an APISIX gateway, which checks that token in front of CM.
 
 A dedicated release would need a verifier and a gateway of its own; a dependency in the
-`trust-anchor` chart would mix the publisher's identity into the registry's chart.
+`trust-anchor` chart would mix the publisher's identity into the registry's chart
+([ADR 0014](../adr/0014-publisher-in-the-authority-release.md)).
 
 In k3s the authority release also runs the consent-manager stack, because the eventing demo builds on
 the consent deployment. A production publisher does not need it.
@@ -265,7 +266,8 @@ participant at `/subscriptions`. Enable holder binding in production.
 ## The TIR watcher
 
 The watcher diffs the TIR, so the registry needs no hook
-([architecture §8](architecture.md#8-detecting-the-removal-at-the-trust-anchor)). A diff turns any
+([architecture §8](architecture.md#8-detecting-the-removal-at-the-trust-anchor),
+[ADR 0010](../adr/0010-detect-removal-by-diffing-the-registry.md)). A diff turns any
 failure that makes the registry look empty into a mass removal, so CM applies these safeguards:
 
 - **The first cycle after a start only takes a snapshot.** A fresh publisher announces nothing, and

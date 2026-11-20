@@ -115,6 +115,8 @@ The connector only revokes what it can attribute to the data space. The trusted 
 chart registers through `registration.issuer` are therefore marked as membership grants of the data
 space publisher (`scope` = the publisher's id, `scopeType` = `dataspace-membership`), as soon as one
 configured publisher sends `participant.removed` events. Without such a publisher nothing changes.
+Why trust is attributed this way is recorded in
+[ADR 0012](../adr/0012-attribute-local-trust-to-the-dataspace.md).
 
 - Set `scope` on an issuer entry, or `scope: ""` to leave it unmarked, when the default is wrong:
   - the grant does not come from the data space membership (for example an eIDAS `UserCredential`
@@ -140,7 +142,8 @@ make sure only the publisher gets through:
    ([step 4](#4-create-the-odrl-policy));
 3. **contract-management** compares the authenticated caller, passed on by the gateway, with the
    publisher id and the event's sender
-   ([specification §6](specification.md#6-authorization-rule)).
+   ([specification §6](specification.md#6-authorization-rule),
+   [ADR 0011](../adr/0011-authorize-events-per-publisher-and-type.md)).
 
 Two requests on the sink are unauthenticated by design: the subscription handshake and the lookup of
 where to get a token. Because the gateway configuration carries part of the security, the chart
