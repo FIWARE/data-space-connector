@@ -147,7 +147,7 @@ doc/scripts/dataspace-eventing-demo.sh report provider
         "action": "reported",
         "applied": false,
         "held": [
-          { "scope": "did:web:dataspace-authority.org", "scopeType": "dataspace-membership", "credentialCount": 1 }
+          { "scope": "did:web:dataspace-authority.org", "scopeType": "dataspace-membership", "credentialCount": 3 }
         ],
         "unattributedCount": 0
       }
