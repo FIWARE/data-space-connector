@@ -58,6 +58,13 @@ Enable this when:
 
 See [DSP Integration](../../../DSP_INTEGRATION.md) for configuration details.
 
+### Data space eventing
+
+A consumer that runs Contract Management (e.g. for its own offerings) can subscribe to the data
+space's events and react when the authority removes a participant. It is off by default, and once
+enabled its default mode `report` only records which grants the removed participant holds. See the
+[participant setup](../../../eventing/participant-setup.md).
+
 ## Deployment
 
 The **consumer role does not require deploying a FIWARE DSC**, since it only needs a DID and a VC issuer (Keycloak), and that is not a FIWARE Data Space Connector.
