@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { VersionSource } from '../api/load'
 import type { Profile } from '../api/profile'
-import { REPORT } from '../test/api'
+import { REPORT, TRIAL } from '../test/api'
 import { emptyAnswers, Environment, TargetType } from './answers'
 import { initialState, reducer, type Action, type AppState } from './reducer'
 import { StageId } from './stageIds'
@@ -140,5 +140,28 @@ describe('reducer: profiles', () => {
     expect(next.profilePath).toBeUndefined()
     expect(next.profileModel).toBeUndefined()
     expect(next.profileNotes).toBeUndefined()
+  })
+})
+
+describe('reducer: trial', () => {
+  const loaded = reducer(BUSY, { type: 'fileLoaded', report: REPORT, file: FILE })
+
+  it('lands on Review with only Review visited, a development target and the trial held', () => {
+    const next = reducer({ ...loaded, profilePath: PROFILE_PATH }, { type: 'trialStarted', trial: TRIAL })
+    expect(next).toMatchObject({ entered: true, stage: StageId.Review, visited: [StageId.Review], expert: false, open: [], trial: TRIAL })
+    expect(next.answers).toEqual({ target: { ...emptyAnswers().target, environment: Environment.Development } })
+    expect(next.loaded).toBeUndefined()
+    expect(next.loadedFile).toBeUndefined()
+    expect(next.profilePath).toBeUndefined()
+    expect(next.session).toEqual({ kubeconfig: KUBECONFIG, chosenContext: undefined })
+  })
+
+  const trial = reducer(BUSY, { type: 'trialStarted', trial: TRIAL })
+  it.each<Action>([
+    { type: 'newConfiguration' },
+    { type: 'fileLoaded', report: REPORT, file: FILE },
+    { type: 'profileOpened', path: PROFILE_PATH, profile: SAVED_PROFILE, notes: [] },
+  ])('drops the trial on $type', (action) => {
+    expect(reducer(trial, action).trial).toBeUndefined()
   })
 })

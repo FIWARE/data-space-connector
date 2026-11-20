@@ -5,18 +5,7 @@ import { loadValues } from '../api/load'
 import { fetchRecent, joinPath, openProfile, PATH_HINT, sinceSaved, type RecentEntry } from '../api/profile'
 import { DOCUMENTATION_URL, RELEASE_NOTES_URL } from '../links'
 import { useStore } from '../state/context'
-
-/** A start card that a later ticket enables. */
-interface ComingCard {
-  icon: string
-  title: string
-  text: string
-  comingIn: string
-}
-
-const COMING: readonly ComingCard[] = [
-  { icon: '⚡', title: 'Try it locally', text: 'A whole data space on this machine: trust anchor, provider and consumer.', comingIn: 'CT-5' },
-]
+import { TrialPrerequisites } from './TrialPrerequisites'
 
 const HTTP_PAYLOAD_TOO_LARGE = 413
 /** The server's upload cap (`maxBodyBytes`), in MiB. */
@@ -152,6 +141,16 @@ function Recent({ entries, busy, onOpen }: { entries: readonly RecentEntry[]; bu
   )
 }
 
+/** The Try it locally card; a click shows the prerequisite screen, nothing is fetched yet. */
+function TrialCard({ busy, onClick }: { busy: boolean; onClick: () => void }) {
+  return (
+    <button type="button" className="card" aria-disabled={busy} onClick={() => !busy && onClick()}>
+      <h3>⚡ Try it locally</h3>
+      <p>A whole data space on this machine: trust anchor, provider and consumer.</p>
+    </button>
+  )
+}
+
 /** S0 Start screen. */
 export function Start() {
   const { dispatch } = useStore()
@@ -162,6 +161,7 @@ export function Start() {
   const [defaultDir, setDefaultDir] = useState('')
   const [recentNotes, setRecentNotes] = useState<readonly string[]>([])
   const [pathOpen, setPathOpen] = useState(false)
+  const [trialOpen, setTrialOpen] = useState(false)
   const open = useOpenProfile(setLoading, setLoadError)
 
   useEffect(() => {
@@ -176,6 +176,13 @@ export function Start() {
       .catch(() => undefined)
     return () => controller.abort()
   }, [])
+  if (trialOpen) {
+    return (
+      <main className="start">
+        <TrialPrerequisites onBack={() => setTrialOpen(false)} />
+      </main>
+    )
+  }
   return (
     <main className="start">
       <h1>FIWARE Data Space Connector — Configurator</h1>
@@ -187,15 +194,7 @@ export function Start() {
         </button>
         <OpenValuesCard busy={loading} setBusy={setLoading} setError={setLoadError} />
         <OpenProfileCard busy={loading} onClick={() => setPathOpen(true)} />
-        {COMING.map((card) => (
-          <button key={card.title} type="button" className="card" aria-disabled="true">
-            <h3>
-              {card.icon} {card.title}
-            </h3>
-            <p>{card.text}</p>
-            <p className="hint">Coming in {card.comingIn}</p>
-          </button>
-        ))}
+        <TrialCard busy={loading} onClick={() => setTrialOpen(true)} />
       </div>
       {pathOpen && <OpenProfilePath initial={joinPath(defaultDir, '')} busy={loading} onOpen={(path) => void open(path)} />}
       {loadError && (

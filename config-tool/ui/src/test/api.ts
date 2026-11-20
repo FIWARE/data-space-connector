@@ -3,6 +3,7 @@ import { vi } from 'vitest'
 import type { LoadReport } from '../api/load'
 import type { Profile, ProfileResponse, RecentProfiles } from '../api/profile'
 import type { Kubeconfig, ModelInfo } from '../api/target'
+import type { Trial, TrialWritten } from '../api/trial'
 
 /** The model the real 10.16.0 bundle produces. */
 export const MODEL: ModelInfo = {
@@ -104,15 +105,57 @@ const PROFILE_DEFAULTS: Required<ProfileFakes> = {
   open: () => HTTP_NOT_FOUND,
 }
 
+/** A trial shaped like the embedded one: three releases in install order, one warning with a link. */
+export const TRIAL: Trial = {
+  profile: 'local-trial',
+  environment: 'development',
+  releases: ['trust-anchor', 'provider', 'consumer'].map((role) => ({
+    role,
+    releaseName: role === 'trust-anchor' ? 'trust-anchor' : `${role}-dsc`,
+    namespace: role,
+    chart: role === 'trust-anchor' ? 'trust-anchor' : 'data-space-connector',
+    chartVersion: '10.16.0',
+    source: `k3s/${role}.yaml`,
+    file: `${role}.values.yaml`,
+    values: `# ${role}\n`,
+  })),
+  warnings: [
+    { id: 'self-signed', releases: ['provider-dsc', 'consumer-dsc'], message: 'Certificates are self-signed.' },
+    { id: 'memory', releases: ['trust-anchor', 'provider-dsc', 'consumer-dsc'], message: 'Sized for a laptop.', link: 'https://example.org/sizing' },
+  ],
+}
+
+/** An answer of a trial route, or a status code it fails with. */
+export type TrialAnswer<T> = T | number
+
+/** The trial routes' fakes; by default GET answers TRIAL and write puts the three files into `dir`. */
+export interface TrialFakes {
+  fetch?: () => TrialAnswer<Trial> | Promise<TrialAnswer<Trial>>
+  write?: (dir: string) => TrialAnswer<TrialWritten>
+}
+
+/** The server's message for a refused trial request. */
+export function refusedTrial(status: number): string {
+  return `trial refused with ${status}`
+}
+
+const TRIAL_DEFAULTS: Required<TrialFakes> = {
+  fetch: () => TRIAL,
+  write: (dir) => ({ dir, files: TRIAL.releases.map((release) => `${dir}/${release.file}`) }),
+}
+
 /** Answers GET /api/model with `model`, GET /api/cluster/contexts with `contexts(path)` and POST /api/load with
- *  `load(name, root)`; `root` is null when the upload lets the server detect it. The profile routes use `profiles`. */
+ *  `load(name, root)`; `root` is null when the upload lets the server detect it. The profile routes use `profiles`,
+ *  the trial routes `trial`. */
 export function mockApi(
   contexts: (path: string) => ContextsAnswer = () => ({ paths: [], contexts: [], current: '' }),
   model: ModelInfo = MODEL,
   load: (name: string, root: string | null) => LoadAnswer | Promise<LoadAnswer> = () => REPORT,
   profiles: ProfileFakes = {},
+  trial: TrialFakes = {},
 ) {
   const fakes = { ...PROFILE_DEFAULTS, ...profiles }
+  const trialFakes = { ...TRIAL_DEFAULTS, ...trial }
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(String(input), 'http://localhost')
     const json = (body: unknown, status = 200) => Promise.resolve(new Response(JSON.stringify(body), { status }))
@@ -135,6 +178,12 @@ export function mockApi(
     if (url.pathname === '/api/profile/open' && init?.method === 'POST') {
       const { path } = JSON.parse(String(init.body)) as { path: string }
       return answer(path, await fakes.open(path))
+    }
+    const trialAnswer = <T,>(value: TrialAnswer<T>) => (typeof value === 'number' ? json({ error: refusedTrial(value) }, value) : json(value))
+    if (url.pathname === '/api/trial') return trialAnswer(await trialFakes.fetch())
+    if (url.pathname === '/api/trial/write' && init?.method === 'POST') {
+      const { dir } = JSON.parse(String(init.body)) as { dir: string }
+      return trialAnswer(trialFakes.write(dir))
     }
     return json({ error: 'not found' }, HTTP_NOT_FOUND)
   })

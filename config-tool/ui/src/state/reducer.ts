@@ -1,7 +1,8 @@
 /** The store's state and its pure transition function. */
 import { VersionSource, type LoadReport } from '../api/load'
 import { fromProfile, type ModelRef, type Profile } from '../api/profile'
-import { emptyAnswers, type Answers, type Session, type Target } from './answers'
+import type { Trial } from '../api/trial'
+import { emptyAnswers, Environment, type Answers, type Session, type Target } from './answers'
 import { fieldStage, type FieldId } from './openQuestions'
 import { FIRST_STAGE, StageId } from './stageIds'
 
@@ -30,6 +31,8 @@ export interface AppState {
   profileModel?: ModelRef
   /** Notes of the last open or save (source changed or missing, older revision); Review shows them. */
   profileNotes?: readonly string[]
+  /** The bundled local trial; set only by `trialStarted`, any other start over drops it. */
+  trial?: Trial
 }
 
 /** Every change the UI can make to the store. */
@@ -48,6 +51,7 @@ export type Action =
   | { type: 'focusDone' }
   | { type: 'profileOpened'; path: string; profile: Profile; report?: LoadReport; notes: readonly string[] }
   | { type: 'profileSaved'; path: string; profile: Profile; notes: readonly string[] }
+  | { type: 'trialStarted'; trial: Trial }
 
 /** The state before anything was chosen on S0. */
 export const initialState: AppState = {
@@ -91,7 +95,15 @@ function startOver(state: AppState, stage: StageId, answers: Answers, loaded?: L
     profilePath: undefined,
     profileModel: undefined,
     profileNotes: undefined,
+    trial: undefined,
   }
+}
+
+// The trial is a fixed development configuration that lands on Review; stages 1–6 are skipped, so none is visited.
+function trialStarted(state: AppState, trial: Trial): AppState {
+  const answers = emptyAnswers()
+  answers.target.environment = Environment.Development
+  return { ...startOver(state, StageId.Review, answers), trial }
 }
 
 // The recorded root is used for an opened profile's source, so there is no file to re-read under another one.
@@ -123,6 +135,8 @@ export function reducer(state: AppState, action: Action): AppState {
       return startOver(state, StageId.Review, loadedAnswers(action.report), action.report, action.file)
     case 'profileOpened':
       return profileOpened(state, action)
+    case 'trialStarted':
+      return trialStarted(state, action.trial)
     case 'profileSaved':
       return { ...state, profilePath: action.path, profileModel: action.profile.model, profileNotes: action.notes }
     case 'rootRereadStarted':
