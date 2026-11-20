@@ -73,10 +73,26 @@ guide's component matrix to feature ids go into the model bundle as data. `inter
    no `recognize`, no `features` and no `roles`. Directory names are versions, and 1.3.6 does not collide with a DSC version.
 8. **Where presets are read from:** `model.RoleCatalogue(bundles, chart, version)` returns the target's bundle when it
    declares `roles:`. Otherwise it returns the latest bundle that declares them, which for trust-anchor is the latest DSC
-   bundle. This lets an Operator profile still show and validate its role. The rule is generic, with no chart name in Go code.
-9. **Applying a preset overwrites `features`.** Nothing can be `source: user` yet, because Stage 5 does not exist. US-2.3
+   bundle. This lets an Operator profile still show its roles. The rule is generic, with no chart name in Go code.
+   Because the fallback bundle is not the profile's `model`, the profile **records the bundle its catalogue came from**
+   (`catalogue: {chart, version, revision}`, set only when it differs from `model`). `Validate` reads roles and features
+   from that recorded bundle, never from "whatever is newest now", and applies the same rules as for `model`: not shipped
+   or a newer revision → 422 pointing at US-9.3, an older revision → an open/save note. A later DSC bundle that renames
+   a `ta.*` feature therefore cannot silently invalidate a saved Operator profile, and the profile says what it was
+   built against.
+9. **Chart switch (Operator ↔ the rest).**
+   - **Refused while a values file is loaded.** A `source` (and the UI's load report and derived answers) is classified
+     against the current chart's bundle. A role whose `chart` differs from `target.chart` is therefore refused by
+     `ApplyPreset` with `ErrChartSwitchLoaded` while `p.Source != nil` (422 from the API). The UI disables those cards
+     and explains why. Nothing is cleared silently. To configure the other chart, the user starts a new configuration.
+   - **The version is cleared, never guessed.** On a switch, `ApplyPreset` clears `target.chartVersion`, so Stage 1
+     asks for the new chart's version again. `model` is set to the new chart's latest bundle as a placeholder, which is
+     what the server already does while no version is answered. `ChartSwitch` carries the replaced chart and version,
+     so the notice can say what was dropped. Picking latest silently would overwrite a version the user chose, for
+     example a pinned older DSC release, when they switch back from Operator.
+10. **Applying a preset overwrites `features`.** Nothing can be `source: user` yet, because Stage 5 does not exist. US-2.3
    will add "re-apply to untouched features only" on top of the recorded `source`.
-10. **HTML parsing in the matrix test** uses `golang.org/x/net/html`, and only in `_test.go` files. `golang.org/x/net`
+11. **HTML parsing in the matrix test** uses `golang.org/x/net/html`, and only in `_test.go` files. `golang.org/x/net`
     is already in `go.mod` (indirect), so this adds no new module. It moves to the direct `require` block. Record this
     in ADR 0017.
 
@@ -118,7 +134,8 @@ any shipped bundle yet.
   - Table-driven: one fixture string per failure, each asserting its error substring.
   - A valid fixture under `testdata/bundles/`. Add a second chart fixture so the cross-chart rule is exercised; keep
     existing fixture tests green.
-  - `RoleCatalogue` cases: own bundle, fallback to the latest bundle with roles, and none.
+  - `RoleCatalogue` cases: own bundle, fallback to the latest bundle with roles, and none. An empty `version` means
+    the chart's latest bundle, because a chart switch leaves `target.chartVersion` empty (decision 9).
 - GoDoc in one line per exported identifier, matching the file's density.
 
 **Acceptance:** `go test ./internal/model/...` is green, the existing shipped bundle still loads unchanged, and `make lint` is clean.
@@ -143,26 +160,37 @@ any shipped bundle yet.
 - **Test `internal/model/rolematrix_test.go`.** `go test ./...` picks it up, and US-11.6 runs it in CI.
   - Read `../../../doc/deployment-integration/roles/README.md` and take the first `<table>` under `## Component matrix`.
   - Expand the `rowspan` cells into a grid, locate the columns by header text (`Component` and the role titles), and
-    use the text content of each cell.
+    use the text content of each cell. Header lookup compares the trimmed text **exactly**. The table also has
+    `Umbrella component`, `Sub-umbrella component` and `Role` (a description column, not a role), which a substring
+    match would confuse with `Component` or a role title.
   - Compare against the embedded shipped bundle (`bundles.FS`, the latest DSC bundle). The test fails when:
     - a matrix component is in neither `roleMatrix.components` nor `infrastructure`, or a mapped component is missing
       from the matrix;
     - a cell has unknown text;
     - two components of one feature disagree in a role column;
-    - the bundle's offer differs from the matrix. The message is
-      `role %q, feature %q: bundle says %s, matrix says %s (component %q)`.
+    - the bundle's offer differs from the matrix.
   - A role column must exist for every role except `custom`, which is checked as "all of its chart's features
     available, none recommended". Every role's `docs` path, without its `#fragment`, must exist in the repo.
   - Put the comparison in a function over parsed inputs. A parameterized sub-test then mutates the README text in memory
-    (flip one `Required`→`Optional`, drop a row, add an unmapped row) and asserts each mutation fails with the role and
-    feature named. This proves "changing the matrix without the bundle fails".
+    and asserts the exact message per mutation. This proves "changing the matrix without the bundle fails":
+
+    | Mutation | Expected message |
+    |---|---|
+    | flip `Keycloak`/`Provider` `Required`→`Optional` (a single-component feature) | `role "provider", feature "identity.issuer": bundle says recommended, matrix says available (component "Keycloak")` |
+    | flip `OPA`/`Provider` only (a feature with several components) | `role "provider", feature "access.policies": components "APISIX" and "OPA" disagree` |
+    | drop the `DID` row | `component "DID" is mapped in roleMatrix but missing from the matrix` |
+    | add a row `Foo` | `component "Foo" is in neither roleMatrix.components nor roleMatrix.infrastructure` |
+    | set a cell to `Maybe` | `role "consumer", component "Keycloak": unknown cell text "Maybe"` |
+
+    Only cell-level mismatches name a role and a feature. The row-level ones name the component, and the message text
+    is the one in this table.
   - Add `golang.org/x/net` to the direct requires (`go mod tidy`).
 - **Docs:**
   - `doc/config-tool/FEATURE_MODEL.md#role-presets`: make the table equal decision 5, expand `obs.*`, add a Custom column
     and the "matrix is authoritative" note.
   - `doc/config-tool/MOCKUPS.md#s2--role`: feature counts / floors become 2 · 5 · 5 · 1, and the "turns on" line lists
     the 5 provider features.
-  - New `doc/adr/0017-config-tool-role-presets.md` (decisions 1–4, 7, 8, 10) plus its row in `doc/adr/README.md`.
+  - New `doc/adr/0017-config-tool-role-presets.md` (decisions 1–4, 7, 8, 11) plus its row in `doc/adr/README.md`.
 
 **Acceptance:**
 - `go test ./...` is green, including the matrix test.
@@ -177,8 +205,8 @@ In `config-tool/internal/profile/`:
   - `Features map[string]FeatureState` (`json/yaml:"features,omitempty"`), where
     `FeatureState{Enabled bool; Source FeatureSource}` and the sources are `SourcePreset = "preset"` and `SourceUser = "user"`.
   - `Marshal` stays deterministic, because yaml.v3 sorts map keys. `FormatVersion` stays `1`, and decoding stays strict.
-- **`Validate` adds structural errors**, using `model.RoleCatalogue(bundles, target.chart, target.chartVersion)` and new
-  field ids `FieldRole = "role"` and prefix `features.`:
+- **`Validate` adds structural errors**, using the recorded catalogue bundle (see `Catalogue` below) and new field ids
+  `FieldRole = "role"`, `FieldCatalogue = "catalogue"` and prefix `features.`:
   - an unknown role id;
   - `features` without a role;
   - an unknown feature id;
@@ -195,15 +223,28 @@ In `config-tool/internal/profile/`:
   - Pure and deterministic, and it does not modify its input maps.
   - Writes `{enabled: true, source: preset}` for `recommended` and `{enabled: false, source: preset}` for `available`,
     and omits `not-offered`.
-  - When `role.Chart != p.Target.Chart`, it sets `Target.Chart` and sets `Target.ChartVersion` to that chart's `Latest`
-    bundle. It also updates `Model` (chart, version, revision) and returns `&ChartSwitch{From, To}`. The UI uses that to
-    say "switched to trust-anchor" or "switched back to data-space-connector".
+  - Sets `Catalogue` to the catalogue bundle's ref when it differs from the resulting `Model`; otherwise it is nil
+    (decision 8).
+  - When `role.Chart != p.Target.Chart` (decision 9):
+    - With `p.Source != nil` it returns `ErrChartSwitchLoaded` and leaves the profile unchanged.
+    - Otherwise it sets `Target.Chart`, clears `Target.ChartVersion` and sets `Model` to that chart's `Latest` bundle.
+      It returns `&ChartSwitch{FromChart, FromVersion, ToChart}`.
   - An unknown role returns an error.
+- **Profile field `Catalogue *ModelRef`** (`json/yaml:"catalogue,omitempty"`), validated like `Model`: shipped, revision
+  positive and not newer than shipped, and it declares `roles:`. It is an error without a role. `Validate` reads the
+  role catalogue from `Catalogue` when set and from the `Model` bundle otherwise, so an Operator profile is checked
+  against the bundle it was built with. An older catalogue revision gives the same open/save note as an older `model`.
 - **Tests** in `profile_test.go`:
   - One table-driven test with a case per role, asserting the exact `Features` map from decision 5 against the shipped
     bundles. All five roles.
-  - Operator sets the `trust-anchor` chart + `1.3.6`. Switching from operator back to provider returns to
-    `data-space-connector` + its latest, with a non-nil `ChartSwitch`. No switch → nil.
+  - Operator sets the `trust-anchor` chart, an empty `chartVersion`, `model` trust-anchor@1.3.6 and `catalogue` = the
+    DSC bundle, with `ChartSwitch{data-space-connector, 10.16.0, trust-anchor}`. Switching from operator back to
+    provider returns to `data-space-connector` with an empty `chartVersion` and a nil `catalogue`. No switch → nil
+    `ChartSwitch`, and `chartVersion` is kept.
+  - With `source` set, operator (from a DSC profile) returns `ErrChartSwitchLoaded` and an unchanged profile. Provider
+    and custom still apply.
+  - `Validate`: a `catalogue` that is not shipped, or newer than shipped, is an error. A `catalogue` without a role is an
+    error. An older `catalogue` revision gives a note.
   - The input is not mutated.
   - Round-trip: `ApplyPreset` → `Marshal` → `Unmarshal` gives the same role and features, and `Validate` is clean.
   - Add `testdata/role.dscprofile.yaml`, and add `Validate` failure cases to the existing table.
@@ -212,7 +253,8 @@ In `config-tool/internal/profile/`:
 - **`doc/adr/0015-config-tool-profile.md`:**
   - New section "§7 Role and features": `role` + `features` live in format 1 because the keys are optional and old
     profiles still decode; unknown role → 422; `source: preset|user` is kept for US-2.3; presets are read via
-    `RoleCatalogue`; the Operator chart switch.
+    `RoleCatalogue` and the fallback bundle is pinned in `catalogue`; the Operator chart switch is refused while a
+    `source` is set and clears `target.chartVersion`.
   - Update the format example.
 
 **Acceptance:** `go test ./internal/profile/... ./internal/server/...` is green, and `make lint` is clean.
@@ -222,10 +264,13 @@ In `config-tool/internal/server/`, wired in `api.go` the same way as the existin
 
 - **`GET /api/roles?chart=&version=`** returns `{roles: [{id, title, summary, chart, floor, docs, features}], features: [{id, title, summary, group}]}`
   from `model.RoleCatalogue`. It returns 404 for an unknown chart or version.
-- **`POST /api/preset`** takes `{profile, role}`. It calls `profile.ApplyPreset` and returns
-  `{profile, chartSwitch: {from, to} | null}`. An unknown role or an invalid profile gives 422.
+- **`POST /api/preset`** takes `{profile, role, sourceSha256}`. `sourceSha256` names the loaded slot exactly as in
+  `PUT /api/profile`, and the server resolves it with the existing `Server.source`. It calls `profile.ApplyPreset` and
+  returns `{profile, chartSwitch: {fromChart, fromVersion, toChart} | null}`. An unknown role, an invalid profile or
+  `ErrChartSwitchLoaded` gives 422, and a stale `sourceSha256` gives the same error as save.
 - No endpoint touches a cluster, and the core stays free of `net/http` (`internal/layering_test.go`).
-- **Tests:** `internal/server/role_test.go`, table-driven: happy paths, operator switch, unknown role 422, missing token 401.
+- **Tests:** `internal/server/role_test.go`, table-driven: happy paths, operator switch, operator with a loaded source
+  → 422, unknown role 422, missing token 401.
 - **UI API client:** `ui/src/api/roles.ts` (`fetchRoles`, `applyPreset`) with types mirroring the JSON, and
   `ui/src/api/roles.test.ts`. Extend `ui/src/test/api.ts` mocks.
 
@@ -237,8 +282,9 @@ In `config-tool/ui/src/`:
 - **State:**
   - `state/answers.ts`: add `role?: string` and `features: Record<string, {enabled: boolean, source: 'preset' | 'user'}>`
     to `Answers`. `toProfile` and `fromProfile` carry them, so a saved profile reopens with the same role and features.
-  - `state/reducer.ts`: new action `roleApplied {profile, chartSwitch}`. It takes `role`, `features`, `target.chart` and
-    `target.chartVersion` from the returned profile, and stores `chartSwitch` as a one-shot notice. Add tests in `reducer.test.ts`.
+  - `state/reducer.ts`: new action `roleApplied {profile, chartSwitch}`. It takes `role`, `features`, `target.chart`,
+    `target.chartVersion` and the model/catalogue refs from the returned profile, and stores `chartSwitch` as a one-shot
+    notice. Add tests in `reducer.test.ts`.
   - Rail selector `roleIssues` in `state/openQuestions.ts`: no role means one open question.
 - **`stages/Role.tsx`**, a one-line JSDoc per component:
   - Fetch `/api/roles` for the current target. Render one card per role as in `doc/config-tool/MOCKUPS.md#s2--role`:
@@ -248,17 +294,23 @@ In `config-tool/ui/src/`:
     and selectable with Space/Enter. The selected card is marked.
   - Below the cards, list the titles of the features the selected role turns on, plus "Everything else stays available
     on step 5 — nothing here is locked."
-  - Selecting a role calls `applyPreset` and dispatches `roleApplied`. A `chartSwitch` shows an inline notice naming
-    both charts, for example "Target chart switched to trust-anchor 1.3.6" and "switched back to data-space-connector 10.16.0".
+  - Selecting a role calls `applyPreset` (with `state.loaded?.sha256`) and dispatches `roleApplied`. A `chartSwitch`
+    shows an inline notice naming both charts and the dropped version, with a link to Stage 1. For example: "Target chart
+    switched from data-space-connector 10.16.0 to trust-anchor — pick its version on step 1", and "switched back to
+    data-space-connector — pick its version on step 1".
+  - While a values file is loaded (`state.loaded`), a card whose chart differs from `target.chart` is `aria-disabled`.
+    It says: "Operator deploys the trust-anchor chart; the opened values.yaml is a data-space-connector file. Start a
+    new configuration to set up a trust anchor."
 - **`stages.ts`:** the Role entry gets `component: Role` and `selector: roleIssues`, and `comingIn` is removed.
 - **Target stage:** with `target.chart = trust-anchor` it already lists only that chart's versions. Add a
-  `Target.test.tsx` case that starts from an applied Operator preset and asserts the chart select shows `trust-anchor`
-  and the version options are `1.3.6`.
+  `Target.test.tsx` case that starts from an applied Operator preset. It asserts that the chart select shows
+  `trust-anchor`, that the version options are `1.3.6` with none selected, and that the rail counts the version as open.
 - **Tests:** `stages/Role.test.tsx`
   - five cards rendered with floors;
   - keyboard selection;
   - each role dispatches and marks the card;
-  - the operator notice and the switch-back notice;
+  - the operator notice and the switch-back notice, both naming the dropped version;
+  - with a loaded values file, the Operator card is disabled with its explanation and `applyPreset` is not called;
   - feature list text.
 
   Add a save → reopen test, in the existing profile/Chrome test style, asserting that role and features survive.
@@ -273,8 +325,9 @@ In `config-tool/ui/src/`:
   - that they come from the matrix in `doc/deployment-integration/roles/README.md`, guarded by
     `internal/model/rolematrix_test.go`, so changing the matrix means changing the bundle and bumping `revision`;
   - the floors come from `PREREQUISITES.md#sizing`;
-  - Operator switches the target to `trust-anchor`;
-  - the profile keys `role` / `features`.
+  - Operator switches the target to `trust-anchor` and clears the chart version. This is refused while a values file is
+    loaded;
+  - the profile keys `role`, `features` and `catalogue`.
 
   Also update *Chart versions*: there is now a trust-anchor bundle, and the bundle fields list grows.
 - **`doc/config-tool/USER_JOURNEY.md#stage-2--role`:** reference the shipped behaviour (the chart switch notice) where it
