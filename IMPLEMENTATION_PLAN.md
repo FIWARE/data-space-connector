@@ -79,7 +79,12 @@ guide's component matrix to feature ids go into the model bundle as data. `inter
    from that recorded bundle, never from "whatever is newest now", and applies the same rules as for `model`: not shipped
    or a newer revision → 422 pointing at US-9.3, an older revision → an open/save note. A later DSC bundle that renames
    a `ta.*` feature therefore cannot silently invalidate a saved Operator profile, and the profile says what it was
-   built against.
+   built against. **The server owns `catalogue` on save**, the same way `saveModel` owns `model`: a new
+   `saveCatalogue(bundles, model, role, held)` runs in `handleSaveProfile` right after `saveModel`. It returns nil
+   without a role, and nil when `RoleCatalogue` for the saved `model` gives the `model` bundle itself. Otherwise it keeps
+   a `held` catalogue that is shipped, of the same chart as the fallback and declares roles (with the shipped
+   revision, as `saveModel` does), and else takes the `RoleCatalogue` result. A client that drops `catalogue` still
+   saves a valid Operator profile. The UI carries it anyway, as the held value next to `profileModel`.
 9. **Chart switch (Operator ↔ the rest).**
    - **Refused while a values file is loaded.** A `source` (and the UI's load report and derived answers) is classified
      against the current chart's bundle. A role whose `chart` differs from `target.chart` is therefore refused by
@@ -90,11 +95,27 @@ guide's component matrix to feature ids go into the model bundle as data. `inter
      what the server already does while no version is answered. `ChartSwitch` carries the replaced chart and version,
      so the notice can say what was dropped. Picking latest silently would overwrite a version the user chose, for
      example a pinned older DSC release, when they switch back from Operator.
+   - **A chart change on Stage 1 clears the role.** `Validate` keeps the invariant "the role's `chart` equals
+     `target.chart`", and every role belongs to exactly one chart. So any change of `target.chart` through Stage 1's
+     chart select clears `role`, `features` and the held `catalogue` in the reducer, and stores a one-shot notice
+     `roleCleared {role, fromChart, toChart}`. Stage 1 shows it ("Role Operator was cleared because it deploys
+     trust-anchor — pick a role on step 2"), and the rail counts the role as open again. Refusing the change instead
+     would leave a user who picked the wrong chart first with no way forward on Stage 1. The server's `Validate` stays
+     the backstop: a stale client that sends a mismatched role gets 422.
 10. **Applying a preset overwrites `features`.** Nothing can be `source: user` yet, because Stage 5 does not exist. US-2.3
    will add "re-apply to untouched features only" on top of the recorded `source`.
 11. **HTML parsing in the matrix test** uses `golang.org/x/net/html`, and only in `_test.go` files. `golang.org/x/net`
     is already in `go.mod` (indirect), so this adds no new module. It moves to the direct `require` block. Record this
     in ADR 0017.
+12. **Feature `keys` format.** A key is a `roundtrip` path, and a path names that node **and its whole subtree**.
+    FEATURE_MODEL's `keycloak.*` is therefore written `keycloak` in the bundle. No `*` notation exists: validation
+    refuses any key segment that contains `*`, so a copied `keycloak.*` fails instead of meaning a literal key named
+    `*`. Qualifiers such as "(central endpoints)" or "+ ingress" are not keys either; the bundle lists the concrete
+    paths. **Features may share keys**, and `keys` says what a feature touches, not exclusive ownership. Today
+    `vcCredentials` (identity.issuer / identity.vcoperator), `grafana` (obs.traceStore / obs.metrics) and
+    `contract-management` (contract.management / market.central) overlap. The meaning US-5.1 inherits is that a
+    shared key is needed while any feature that lists it is enabled. Within one feature, a key listed twice, or a key
+    under another key of the same feature, is an error. ADR 0017 records this.
 
 ## Steps
 
@@ -115,7 +136,8 @@ any shipped bundle yet.
   - Feature id: non-empty and unique. `title`, `summary` and `group` are required.
   - Group: one of the FEATURE_MODEL groups (named constants).
   - `requires`: must name catalogue ids, with no self-reference.
-  - `keys`: parse with `roundtrip.ParsePath`.
+  - `keys`: parse with `roundtrip.ParsePath`; refuse a segment containing `*`, a duplicate, and a key nested under
+    another key of the same feature (decision 12). Keys shared between features are valid.
   - `roles`: either absent, or exactly the five known ids in `KnownRoles` order.
   - Each role: `title`, `summary`, `chart` and `docs` are required.
   - Floor, when present: `memory` matches `^[0-9]+(\.[0-9]+)?(Mi|Gi)$`, `cpu` matches `^[0-9]+m$`, and `measuredWith`
@@ -144,8 +166,8 @@ any shipped bundle yet.
 - **`config-tool/model/10.16.0/bundle.yaml`:**
   - Bump `revision: 1` → `2`.
   - Append `features:` with the 24 catalogue entries. Take `title` and `summary` from the "Gives you" column, and
-    `group`, `requires` and `keys` from `doc/config-tool/FEATURE_MODEL.md`. Trust-anchor features get
-    `chart: trust-anchor` and trust-anchor keys.
+    `group`, `requires` and `keys` from `doc/config-tool/FEATURE_MODEL.md`, with keys written as bare subtree paths
+    (decision 12: `keycloak.*` → `keycloak`). Trust-anchor features get `chart: trust-anchor` and trust-anchor keys.
   - Add `roles:` per decisions 3, 5 and 6. Titles exactly as the matrix headers: `Consumer`, `Provider`,
     `Consumer + Provider`, `Operator`, `Custom`. Summaries from the mockup S2. `docs` paths:
     - `doc/deployment-integration/roles/{consumer,provider,consumer-provider,operator}/README.md`
@@ -187,10 +209,11 @@ any shipped bundle yet.
   - Add `golang.org/x/net` to the direct requires (`go mod tidy`).
 - **Docs:**
   - `doc/config-tool/FEATURE_MODEL.md#role-presets`: make the table equal decision 5, expand `obs.*`, add a Custom column
-    and the "matrix is authoritative" note.
+    and the "matrix is authoritative" note. Under the catalogue, add one line saying the bundle writes `x.*` as `x`
+    and that keys may be shared (decision 12).
   - `doc/config-tool/MOCKUPS.md#s2--role`: feature counts / floors become 2 · 5 · 5 · 1, and the "turns on" line lists
     the 5 provider features.
-  - New `doc/adr/0017-config-tool-role-presets.md` (decisions 1–4, 7, 8, 11) plus its row in `doc/adr/README.md`.
+  - New `doc/adr/0017-config-tool-role-presets.md` (decisions 1–4, 7, 8, 11, 12) plus its row in `doc/adr/README.md`.
 
 **Acceptance:**
 - `go test ./...` is green, including the matrix test.
@@ -215,6 +238,13 @@ In `config-tool/internal/profile/`:
   - a role whose `chart` differs from `target.chart`, when both are set.
 
   The server already maps these to 422 on save and open. Add a server test asserting 422 for an unknown role.
+- **Server save path** (`internal/server/profile.go`):
+  - `saveCatalogue` per decision 8, called in `handleSaveProfile` after `saveModel`.
+  - `addRecent` passes `Role: p.Role` to `recent.Entry`, which `Start.tsx` already renders.
+  - Tests in `internal/server/profile_test.go`: saving an Operator profile without `catalogue` returns 200 with
+    `catalogue` = the DSC bundle; a held `catalogue` of an older shipped version is kept; a Provider profile saves with
+    a nil `catalogue`; a mismatched role/chart gives 422; after a save of a Provider profile the recent entry's `role`
+    is `provider`.
 - **ApplyPreset:**
   ```go
   // ApplyPreset sets role and its preset features; switches target.chart when the role targets another chart.
@@ -253,8 +283,9 @@ In `config-tool/internal/profile/`:
 - **`doc/adr/0015-config-tool-profile.md`:**
   - New section "§7 Role and features": `role` + `features` live in format 1 because the keys are optional and old
     profiles still decode; unknown role → 422; `source: preset|user` is kept for US-2.3; presets are read via
-    `RoleCatalogue` and the fallback bundle is pinned in `catalogue`; the Operator chart switch is refused while a
-    `source` is set and clears `target.chartVersion`.
+    `RoleCatalogue` and the fallback bundle is pinned in `catalogue`, which the server recomputes on save; the Operator
+    chart switch is refused while a `source` is set and clears `target.chartVersion`; a chart change on Stage 1 clears
+    the role.
   - Update the format example.
 
 **Acceptance:** `go test ./internal/profile/... ./internal/server/...` is green, and `make lint` is clean.
@@ -281,10 +312,20 @@ In `config-tool/ui/src/`:
 
 - **State:**
   - `state/answers.ts`: add `role?: string` and `features: Record<string, {enabled: boolean, source: 'preset' | 'user'}>`
-    to `Answers`. `toProfile` and `fromProfile` carry them, so a saved profile reopens with the same role and features.
-  - `state/reducer.ts`: new action `roleApplied {profile, chartSwitch}`. It takes `role`, `features`, `target.chart`,
-    `target.chartVersion` and the model/catalogue refs from the returned profile, and stores `chartSwitch` as a one-shot
-    notice. Add tests in `reducer.test.ts`.
+    to `Answers`.
+  - `api/profile.ts` (where `toProfile` / `fromProfile` live): the TS `Profile` gains `role?`, `features?` and
+    `catalogue?: ModelRef`. `toProfile` sends `role`, `features` and `catalogue: state.profileCatalogue`; `fromProfile`
+    restores `role` and `features`. A saved profile reopens with the same role and features.
+  - `state/reducer.ts`: `AppState` gains `profileCatalogue?: ModelRef` next to `profileModel`. `profileOpened`,
+    `profileSaved` and the new `roleApplied` set it from the profile, and `newConfiguration` clears it. The server
+    recomputes it on save anyway (decision 8).
+  - New action `roleApplied {profile, chartSwitch}`. It takes `role`, `features`, `target.chart`, `target.chartVersion`
+    and the model/catalogue refs from the returned profile, and stores `chartSwitch` as a one-shot notice.
+  - `setTarget` with a `chart` different from the current one clears `role`, `features` and `profileCatalogue`, and
+    stores the `roleCleared` notice when a role was set (decision 9). A `setTarget` that leaves the chart alone keeps
+    the role.
+  - Tests in `reducer.test.ts`: `roleApplied` with and without a switch; a chart change clears role, features and
+    catalogue and sets the notice; a version-only change keeps them; `profileSaved` keeps the returned catalogue.
   - Rail selector `roleIssues` in `state/openQuestions.ts`: no role means one open question.
 - **`stages/Role.tsx`**, a one-line JSDoc per component:
   - Fetch `/api/roles` for the current target. Render one card per role as in `doc/config-tool/MOCKUPS.md#s2--role`:
@@ -305,6 +346,9 @@ In `config-tool/ui/src/`:
 - **Target stage:** with `target.chart = trust-anchor` it already lists only that chart's versions. Add a
   `Target.test.tsx` case that starts from an applied Operator preset. It asserts that the chart select shows
   `trust-anchor`, that the version options are `1.3.6` with none selected, and that the rail counts the version as open.
+  Add a second case: from an applied Operator preset, changing the chart select to `data-space-connector` shows the
+  `roleCleared` notice, and the rail counts the role as open. Add the reverse case for a Provider preset switched to
+  `trust-anchor`.
 - **Tests:** `stages/Role.test.tsx`
   - five cards rendered with floors;
   - keyboard selection;
@@ -313,7 +357,8 @@ In `config-tool/ui/src/`:
   - with a loaded values file, the Operator card is disabled with its explanation and `applyPreset` is not called;
   - feature list text.
 
-  Add a save → reopen test, in the existing profile/Chrome test style, asserting that role and features survive.
+  Add a save → reopen test, in the existing profile/Chrome test style, asserting that role and features survive. Add
+  an Operator save test asserting that the request body carries `role`, `features` and `catalogue`.
 - Follow `styles.css` conventions, with no new UI dependency.
 
 **Acceptance:** `make ui`, `npm test` and `make lint` are clean, and `go test ./...` is still green.
@@ -326,8 +371,8 @@ In `config-tool/ui/src/`:
     `internal/model/rolematrix_test.go`, so changing the matrix means changing the bundle and bumping `revision`;
   - the floors come from `PREREQUISITES.md#sizing`;
   - Operator switches the target to `trust-anchor` and clears the chart version. This is refused while a values file is
-    loaded;
-  - the profile keys `role`, `features` and `catalogue`.
+    loaded. Changing the chart on step 1 clears the role;
+  - the profile keys `role`, `features` and `catalogue` (set by the server on save), and the `keys` format (decision 12).
 
   Also update *Chart versions*: there is now a trust-anchor bundle, and the bundle fields list grows.
 - **`doc/config-tool/USER_JOURNEY.md#stage-2--role`:** reference the shipped behaviour (the chart switch notice) where it
