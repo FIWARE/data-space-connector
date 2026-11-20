@@ -5,12 +5,14 @@ import { describe, expect, it } from 'vitest'
 import { App } from '../App'
 import type { Profile, RecentEntry, RecentProfiles } from '../api/profile'
 import { emptyAnswers, TargetType } from '../state/answers'
-import { DEFAULT_DIR, HTTP_NOT_FOUND, lateLoad, mockApi, REPORT, refusedProfile, refusedUpload } from '../test/api'
+import { DEFAULT_DIR, HTTP_NOT_FOUND, lateLoad, mockApi, REPORT, refusedProfile, refusedTrial, refusedUpload, TRIAL } from '../test/api'
 import { OPEN_INPUT_LABEL, PROFILE_PATH_LABEL } from './Start'
+import { GENERATE_LABEL } from './TrialPrerequisites'
 
 const CARDS = ['New configuration', 'Open values.yaml', 'Open profile', 'Try it locally']
 const HTTP_PAYLOAD_TOO_LARGE = 413
 const HTTP_UNPROCESSABLE = 422
+const HTTP_INTERNAL = 500
 
 function pick(name = 'provider.yaml') {
   return userEvent.upload(screen.getByLabelText(OPEN_INPUT_LABEL), new File(['a: 1\n'], name, { type: 'application/yaml' }))
@@ -21,15 +23,10 @@ function cards() {
 }
 
 describe('Start', () => {
-  it('shows four entries with everything but Try it locally enabled', () => {
+  it('shows four enabled entries', () => {
     render(<App />)
-    const enabled = cards().filter((card) => card.getAttribute('aria-disabled') !== 'true')
-    expect(enabled.map((card) => within(card).getByRole('heading').textContent)).toEqual(['＋ New configuration', '📂 Open values.yaml', '⟲ Open profile'])
-  })
-
-  it.each([['Try it locally', 'CT-5']])('names the ticket that enables %s', (title, ticket) => {
-    render(<App />)
-    expect(screen.getByRole('button', { name: new RegExp(title) })).toHaveTextContent(`Coming in ${ticket}`)
+    expect(cards().filter((card) => card.getAttribute('aria-disabled') === 'true')).toEqual([])
+    expect(cards().map((card) => within(card).getByRole('heading').textContent)).toEqual(['＋ New configuration', '📂 Open values.yaml', '⟲ Open profile', '⚡ Try it locally'])
   })
 
   it.each(['Open values.yaml', 'Open profile', 'Try it locally'])('stays on S0 when %s is clicked', async (title) => {
@@ -212,5 +209,62 @@ describe('Start: profiles', () => {
     await userEvent.click(screen.getByRole('button', { name: /Open profile/ }))
     expect(screen.getByLabelText(PROFILE_PATH_LABEL)).toHaveValue('')
     expect(screen.queryByRole('region', { name: 'Recent' })).toBeNull()
+  })
+})
+
+function trialRequests(fetchMock: ReturnType<typeof mockApi>) {
+  return fetchMock.mock.calls.filter(([input]) => String(input).startsWith('/api/trial'))
+}
+
+function lateTrial() {
+  let resolve: (trial: typeof TRIAL) => void = () => {}
+  const pending = new Promise<typeof TRIAL>((done) => (resolve = done))
+  return { fetch: () => pending, resolve }
+}
+
+describe('Start: trial', () => {
+  it('opens the prerequisite screen without fetching anything, and Back returns to the cards', async () => {
+    const fetchMock = mockApi()
+    render(<App />)
+    await userEvent.click(screen.getByRole('button', { name: /Try it locally/ }))
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Try it locally')
+    expect(screen.getByRole('button', { name: GENERATE_LABEL })).toBeEnabled()
+    expect(trialRequests(fetchMock)).toEqual([])
+    await userEvent.click(screen.getByRole('button', { name: 'Back' }))
+    expect(cards()).toHaveLength(CARDS.length)
+    expect(trialRequests(fetchMock)).toEqual([])
+  })
+
+  it('fetches the trial on Generate and lands on Review', async () => {
+    const fetchMock = mockApi()
+    render(<App />)
+    await userEvent.click(screen.getByRole('button', { name: /Try it locally/ }))
+    await userEvent.click(screen.getByRole('button', { name: GENERATE_LABEL }))
+    expect(await screen.findByRole('button', { name: /7 Review/ })).toHaveAttribute('aria-current', 'step')
+    expect(trialRequests(fetchMock).map(([input]) => String(input))).toEqual(['/api/trial'])
+  })
+
+  it('shows an alert and stays on the prerequisite screen when the trial cannot be fetched', async () => {
+    mockApi(undefined, undefined, undefined, undefined, { fetch: () => HTTP_INTERNAL })
+    render(<App />)
+    await userEvent.click(screen.getByRole('button', { name: /Try it locally/ }))
+    await userEvent.click(screen.getByRole('button', { name: GENERATE_LABEL }))
+    expect(await screen.findByRole('alert')).toHaveTextContent(refusedTrial(HTTP_INTERNAL))
+    expect(screen.queryByRole('navigation', { name: 'Stages' })).toBeNull()
+    expect(screen.getByRole('button', { name: GENERATE_LABEL })).toBeEnabled()
+  })
+
+  it('aborts a running fetch on Back, so a late trial never enters Review', async () => {
+    const late = lateTrial()
+    const fetchMock = mockApi(undefined, undefined, undefined, undefined, { fetch: late.fetch })
+    render(<App />)
+    await userEvent.click(screen.getByRole('button', { name: /Try it locally/ }))
+    await userEvent.click(screen.getByRole('button', { name: GENERATE_LABEL }))
+    expect(screen.getByRole('button', { name: GENERATE_LABEL })).toBeDisabled()
+    await userEvent.click(screen.getByRole('button', { name: 'Back' }))
+    expect(trialRequests(fetchMock)[0]?.[1]?.signal?.aborted).toBe(true)
+    late.resolve(TRIAL)
+    await waitFor(() => expect(cards()).toHaveLength(CARDS.length))
+    expect(screen.queryByRole('navigation', { name: 'Stages' })).toBeNull()
   })
 })

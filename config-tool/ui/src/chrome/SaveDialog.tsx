@@ -9,6 +9,8 @@ import { SaveContext } from './saveContext'
 /** Accessible name of the dialog's path field. */
 export const SAVE_PATH_LABEL = 'Profile path'
 const SHORTCUT_KEY = 's'
+/** Why the local trial cannot be saved as a profile. */
+export const TRIAL_SAVE_DISABLED = 'The local trial is fixed and cannot be saved as a profile'
 
 /** What the open dialog shows. */
 interface DialogState {
@@ -136,8 +138,10 @@ export function SaveProvider({ children }: { children: ReactNode }) {
     setBusy(false)
   }
 
+  const disabledReason = state.trial ? TRIAL_SAVE_DISABLED : undefined
+
   async function save() {
-    if (busy || dialog) return
+    if (busy || dialog || disabledReason) return
     // A known path is this configuration's own profile, so it is replaced without asking.
     if (state.profilePath) return run(state.profilePath, true, false)
     setBusy(true)
@@ -163,7 +167,7 @@ export function SaveProvider({ children }: { children: ReactNode }) {
   })
 
   return (
-    <SaveContext.Provider value={{ save: () => void save(), busy, saved }}>
+    <SaveContext.Provider value={{ save: () => void save(), busy, saved, disabledReason }}>
       {children}
       {dialog && (
         <SaveDialog

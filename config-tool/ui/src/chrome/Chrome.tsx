@@ -2,7 +2,9 @@
 import type { StageDef } from '../stages'
 import { Expert } from '../stages/Expert'
 import { Placeholder } from '../stages/Placeholder'
+import { Skipped } from '../stages/Skipped'
 import { useStore } from '../state/context'
+import { isSkipped } from '../state/issues'
 import { Footer } from './Footer'
 import { Rail } from './Rail'
 import { SaveProvider } from './SaveDialog'
@@ -13,6 +15,7 @@ export function Chrome({ stages }: { stages: readonly StageDef[] }) {
   const { state } = useStore()
   const current = stages.find((stage) => stage.id === state.stage)
   const Stage = current?.component
+  const label = current?.label ?? state.stage
   return (
     <SaveProvider>
       <div className="app">
@@ -20,7 +23,15 @@ export function Chrome({ stages }: { stages: readonly StageDef[] }) {
         <div className="body">
           <Rail stages={stages} />
           <main className="content">
-            {state.expert ? <Expert /> : Stage ? <Stage /> : <Placeholder label={current?.label ?? state.stage} comingIn={current?.comingIn} stageId={state.stage} />}
+            {state.expert ? (
+              <Expert />
+            ) : isSkipped(state, state.stage) ? (
+              <Skipped label={label} />
+            ) : Stage ? (
+              <Stage />
+            ) : (
+              <Placeholder label={label} comingIn={current?.comingIn} stageId={state.stage} />
+            )}
           </main>
         </div>
         <Footer stages={stages} />

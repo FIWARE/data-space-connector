@@ -7,7 +7,7 @@ import { useSave } from './saveContext'
 /** Left rail of the chrome. */
 export function Rail({ stages }: { stages: readonly StageDef[] }) {
   const { state, dispatch } = useStore()
-  const { save, busy, saved } = useSave()
+  const { save, busy, saved, disabledReason } = useSave()
   return (
     <nav className="rail" aria-label="Stages">
       <ol>
@@ -41,7 +41,13 @@ export function Rail({ stages }: { stages: readonly StageDef[] }) {
       >
         <kbd>⌘E</kbd> Expert: YAML
       </button>
-      <button type="button" disabled={busy} aria-busy={busy} title="Save the answers as a .dscprofile.yaml" onClick={save}>
+      <button
+        type="button"
+        disabled={busy || disabledReason !== undefined}
+        aria-busy={busy}
+        title={disabledReason ?? 'Save the answers as a .dscprofile.yaml'}
+        onClick={save}
+      >
         <kbd>⌘S</kbd> Save profile
       </button>
       {saved && (

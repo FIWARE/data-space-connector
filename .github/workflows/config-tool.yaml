@@ -7,17 +7,15 @@ on:
     paths:
       - 'config-tool/**'
       - '.github/workflows/config-tool.yaml'
-      # The round-trip tests read these as their corpus.
+      # The round-trip corpus; the trial also reads Chart.yaml and renders both charts.
       - 'k3s/**'
-      - 'charts/data-space-connector/values.yaml'
-      - 'charts/trust-anchor/values.yaml'
+      - 'charts/**'
   pull_request:
     paths:
       - 'config-tool/**'
       - '.github/workflows/config-tool.yaml'
       - 'k3s/**'
-      - 'charts/data-space-connector/values.yaml'
-      - 'charts/trust-anchor/values.yaml'
+      - 'charts/**'
 
 permissions:
   contents: read
@@ -68,6 +66,43 @@ jobs:
         run: |
           make lint
           go test ./...
+
+  # The trial ships the k3s values verbatim; prove all three still render against the repo's charts.
+  # Helm pinned as in test.yaml, repositories as in pre-release.yml; `update` because no Chart.lock is committed.
+  trial-render:
+    runs-on: ubuntu-latest
+    env:
+      HELM_VERSION: "v4.2.2"
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: config-tool/go.mod
+          cache-dependency-path: config-tool/go.sum
+
+      - uses: azure/setup-helm@v4
+        with:
+          version: ${{ env.HELM_VERSION }}
+
+      - name: Chart dependencies
+        working-directory: .
+        run: |
+          helm repo add fiware https://fiware.github.io/helm-charts
+          helm repo add fiware-iam https://fiware.github.io/decentralized-iam
+          helm repo add mongodb https://mongodb.github.io/helm-charts
+          helm repo add hashicorp https://helm.releases.hashicorp.com
+          helm repo add jetstack https://charts.jetstack.io
+          helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+          helm repo add grafana-community https://grafana-community.github.io/helm-charts
+          helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm-charts
+          helm repo add grafana https://grafana.github.io/helm-charts
+          helm repo add postgres-operator https://opensource.zalando.com/postgres-operator/charts/postgres-operator
+          helm dependency update charts/data-space-connector
+          helm dependency update charts/trust-anchor
+
+      - name: helm template
+        run: DSC_CONFIG_REQUIRE_HELM=1 go test ./internal/trial -run TestRenderedValuesTemplate -v
 
   # One job for all five targets, so CI and `make cross` share the target list and ldflags (ADR 0011).
   build:

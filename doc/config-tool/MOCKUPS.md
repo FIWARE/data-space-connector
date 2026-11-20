@@ -7,6 +7,7 @@ is in [mockups/prototype.html](mockups/prototype.html); open it in any browser.
 <!-- ToC -->
 - [Window chrome](#window-chrome)
 - [S0 — Start](#s0--start)
+- [S0 — Try it locally: prerequisites](#s0--try-it-locally-prerequisites)
 - [S1 — Target](#s1--target)
 - [S2 — Role](#s2--role)
 - [S3 — Foundations](#s3--foundations)
@@ -15,6 +16,7 @@ is in [mockups/prototype.html](mockups/prototype.html); open it in any browser.
 - [S6a — Feature configuration: Dataspace Protocol](#s6a--feature-configuration-dataspace-protocol)
 - [S6b — Feature configuration: credential issuance](#s6b--feature-configuration-credential-issuance)
 - [S7 — Review and generate](#s7--review-and-generate)
+- [S7 — Review: local trial](#s7--review-local-trial)
 - [S7b — Secrets](#s7b--secrets)
 - [S8 — Install](#s8--install-iteration-2)
 - [S9 — Enabling a feature later](#s9--enabling-a-feature-later)
@@ -82,6 +84,39 @@ content pane, and a footer carrying validation state and navigation.
 │        dataspace-authority · operator · chart 10.16.0 · last week                               │
 │                                                                                                │
 │                                                       Documentation ↗   Release notes ↗        │
+└────────────────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+## S0 — Try it locally: prerequisites
+
+Shown by the *Try it locally* card before anything is fetched. It links the one source of sizing
+figures instead of stating one. *Generate* lands on the trial's Review; a failure stays here.
+
+```
+┌────────────────────────────────────────────────────────────────────────────────────────────────┐
+│                                                                                     ─  □  ✕    │
+│                                                                                                │
+│  ⚡ Try it locally                                                                             │
+│  A whole data space on this machine: the Quick Start's trust anchor, provider and consumer.    │
+│  The tool writes their values; you run the install.                                            │
+│                                                                                                │
+│  ┌──────────────────────────────────────────────────────────────────────────────────────────┐  │
+│  │ What you need                                                                            │  │
+│  │                                                                                          │  │
+│  │ · A local Kubernetes cluster, as in the Quick Start (k3s).                               │  │
+│  │ · kubectl and Helm, to install the three releases yourself.                              │  │
+│  │ · The namespaces, operators, CA and infrastructure the Quick Start applies               │  │
+│  │   before the releases.                                                     Quick Start ↗ │  │
+│  │ · Enough memory and disk for three roles.                                       Sizing ↗ │  │
+│  └──────────────────────────────────────────────────────────────────────────────────────────┘  │
+│  ┌──────────────────────────────────────────────────────────────────────────────────────────┐  │
+│  │ What you get                                                                             │  │
+│  │                                                                                          │  │
+│  │ A development configuration: self-signed certificates and chart-deployed databases.      │  │
+│  │ Review lists every production warning.                                                   │  │
+│  └──────────────────────────────────────────────────────────────────────────────────────────┘  │
+│                                                                                                │
+│                                           [ Back ]   [ Generate the three configurations ]     │
 └────────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -492,6 +527,57 @@ Keycloak's object model.
 │         [ Save profile ]   [ Export values.yaml ]   [ Export bundle ]   [ Install › ]          │
 │                                                                                                │
 │   Export bundle writes values.yaml + .dscprofile.yaml + NEXT_STEPS.md into one folder.         │
+```
+
+## S7 — Review: local trial
+
+Review while the local trial is set. Stages Target to Configuration show `–` in the rail (skipped in
+the local trial); choosing one offers *Start a new configuration*. The warnings have no dismiss
+control, and a 409 from *Write files* shows the existing files and "Nothing was written."
+
+```
+│  Local trial  [ Development ]                                                                  │
+│  Equivalent to the Quick Start; the tool emits values, you run the install.   Quick Start ↗    │
+│                                                                                                │
+│  ┌──────────────────────────────────────────────────────────────────────────────────────────┐  │
+│  │ Releases (3), in install order                                                           │  │
+│  │                                                                                          │  │
+│  │ trust-anchor                                                                             │  │
+│  │   Namespace trust-anchor   Chart trust-anchor@1.3.6   File trust-anchor.yaml             │  │
+│  │   Same values as k3s/trust-anchor.yaml                                                   │  │
+│  │   ▸ Values of trust-anchor                                                               │  │
+│  │                                                                                          │  │
+│  │ provider                                                                                 │  │
+│  │   Namespace provider   Chart data-space-connector@10.16.0   File provider.yaml           │  │
+│  │   Same values as k3s/provider.yaml                                                       │  │
+│  │   ▸ Values of provider                                                                   │  │
+│  │                                                                                          │  │
+│  │ consumer                                                                                 │  │
+│  │   Namespace consumer   Chart data-space-connector@10.16.0   File consumer.yaml           │  │
+│  │   Same values as k3s/consumer.yaml                                                       │  │
+│  │   ▸ Values of consumer                                                                   │  │
+│  └──────────────────────────────────────────────────────────────────────────────────────────┘  │
+│  ┌──────────────────────────────────────────────────────────────────────────────────────────┐  │
+│  │ Production warnings (8)                                                                  │  │
+│  │                                                                                          │  │
+│  │ ⚠ TLS certificates come from the selfsigned-issuer. … (trust-anchor, provider, consumer) │  │
+│  │ ⚠ PostgreSQL (and MongoDB) run in the cluster …       (trust-anchor, provider, consumer) │  │
+│  │ ⚠ Host names under 127.0.0.1.nip.io are local. …      (trust-anchor, provider, consumer) │  │
+│  │ ⚠ tlsTrustAll: true trusts every certificate. …                     (provider, consumer) │  │
+│  │ ⚠ The participants use example identities. …                        (provider, consumer) │  │
+│  │ ⚠ The keystore password has a published value. …                    (provider, consumer) │  │
+│  │ ⚠ Outbound traffic goes through the local squid proxy. …            (provider, consumer) │  │
+│  │ ⚠ Memory is sized for a laptop. …  more ↗             (trust-anchor, provider, consumer) │  │
+│  └──────────────────────────────────────────────────────────────────────────────────────────┘  │
+│  ┌──────────────────────────────────────────────────────────────────────────────────────────┐  │
+│  │ Write the values files                                                                   │  │
+│  │                                                                                          │  │
+│  │ Directory  [ /home/eva/dsc-trial                                  ]                      │  │
+│  │ An existing file is never overwritten: if one of the three exists, none is written.      │  │
+│  │                                                                          [ Write files ] │  │
+│  └──────────────────────────────────────────────────────────────────────────────────────────┘  │
+│                                                                                                │
+│         [ Save profile ]  disabled: the local trial is fixed and cannot be saved as a profile  │
 ```
 
 ## S7b — Secrets

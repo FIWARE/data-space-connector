@@ -18,8 +18,10 @@ import (
 	"github.com/FIWARE/data-space-connector/config-tool/internal/profile"
 	"github.com/FIWARE/data-space-connector/config-tool/internal/render"
 	"github.com/FIWARE/data-space-connector/config-tool/internal/roundtrip"
+	"github.com/FIWARE/data-space-connector/config-tool/internal/trial"
 	"github.com/FIWARE/data-space-connector/config-tool/internal/version"
 	bundles "github.com/FIWARE/data-space-connector/config-tool/model"
+	trialdata "github.com/FIWARE/data-space-connector/config-tool/trial"
 )
 
 const (
@@ -29,8 +31,11 @@ const (
 	flagProfile   = "profile"
 	flagOutput    = "output"
 	flagNoBrowser = "no-browser"
-	// outputFileMode is the mode of a new values file before the umask; it holds no secrets.
-	outputFileMode = 0o644
+	flagTrial     = "trial"
+	flagOutputDir = "output-dir"
+	// quickStartURL is the Quick Start guide that installs the trial releases.
+	quickStartURL = "https://github.com/FIWARE/data-space-connector/blob/main/doc/deployment-integration/local-deployment/LOCAL.MD"
+	warningPrefix = "warning: "
 )
 
 // GUIOptions are the root command's settings for the GUI.
@@ -67,12 +72,16 @@ func NewRootCommand(runGUI GUIRunner) *cobra.Command {
 }
 
 func newGenerateCommand() *cobra.Command {
-	var profilePath, outputPath string
+	var profilePath, outputPath, outputDir string
+	var withTrial bool
 	cmd := &cobra.Command{
 		Use:   "generate",
-		Short: "Render a values.yaml from a profile, without the GUI",
+		Short: "Render a values.yaml from a profile, or the local trial's three, without the GUI",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			if withTrial {
+				return generateTrial(cmd.OutOrStdout(), cmd.ErrOrStderr(), outputDir)
+			}
 			p, err := loadProfile(profilePath, bundles.FS)
 			if err != nil {
 				return fmt.Errorf("generate: %w", err)
@@ -86,8 +95,42 @@ func newGenerateCommand() *cobra.Command {
 	}
 	cmd.Flags().StringVarP(&profilePath, flagProfile, "p", "", "profile (.dscprofile.yaml) holding the answers")
 	cmd.Flags().StringVarP(&outputPath, flagOutput, "o", stdoutPath, "file to write the values.yaml to, "+stdoutPath+" for stdout")
-	_ = cmd.MarkFlagRequired(flagProfile)
+	cmd.Flags().BoolVar(&withTrial, flagTrial, false, "write the local trial's trust-anchor, provider and consumer values files")
+	cmd.Flags().StringVar(&outputDir, flagOutputDir, ".", "directory to write the --"+flagTrial+" values files to")
+	cmd.MarkFlagsOneRequired(flagProfile, flagTrial)
+	cmd.MarkFlagsMutuallyExclusive(flagTrial, flagProfile)
+	cmd.MarkFlagsMutuallyExclusive(flagTrial, flagOutput)
+	cmd.MarkFlagsMutuallyExclusive(flagProfile, flagOutputDir)
 	return cmd
+}
+
+// generateTrial writes the local trial's values files to dir, never overwriting. Every production
+// warning goes to stderr first, so a refused or failed write still shows them.
+func generateTrial(stdout, stderr io.Writer, dir string) error {
+	for _, w := range trial.Warnings() {
+		msg := warningPrefix + w.Message
+		if w.Link != "" {
+			msg += " See " + w.Link
+		}
+		fmt.Fprintln(stderr, msg)
+	}
+	t, err := trial.Load(trialdata.FS)
+	if err != nil {
+		return fmt.Errorf("generate: %w", err)
+	}
+	outs, err := trial.Render(t, trialdata.FS, version.Version)
+	if err != nil {
+		return fmt.Errorf("generate: %w", err)
+	}
+	paths, err := trial.WriteAll(dir, outs)
+	if err != nil {
+		return fmt.Errorf("generate: %w", err)
+	}
+	for _, p := range paths {
+		fmt.Fprintln(stdout, p)
+	}
+	fmt.Fprintln(stdout, "Install them as the Quick Start does: "+quickStartURL)
+	return nil
 }
 
 // loadProfile reads the profile at path and refuses it unless it is complete enough to render:
@@ -149,7 +192,7 @@ func writeOutput(stdout io.Writer, path string, data []byte) error {
 	// (a) the precedence: overrides win, only owned or absent keys are written (FEATURE_MODEL,
 	// ADR 0014), so a blind roundtrip.Merge is wrong; and (b) how the rendered output reaches
 	// Merge: Render returns a map[string]any, or its bytes are decoded with yaml.v3 into one.
-	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, outputFileMode)
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, roundtrip.ValuesFileMode)
 	if errors.Is(err, fs.ErrExist) {
 		return &outputExistsError{path}
 	}
@@ -191,7 +234,7 @@ func replaceOutput(path string, edit func(*roundtrip.Document) error) error {
 	if err != nil {
 		return fmt.Errorf("%s: %w", path, err)
 	}
-	return atomicfile.Write(path, out, outputFileMode, true)
+	return atomicfile.Write(path, out, roundtrip.ValuesFileMode, true)
 }
 
 // Execute runs dsc-config with the process arguments and returns the exit code.

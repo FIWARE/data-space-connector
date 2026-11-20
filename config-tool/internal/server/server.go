@@ -17,7 +17,9 @@ import (
 
 	"github.com/FIWARE/data-space-connector/config-tool/internal/load"
 	"github.com/FIWARE/data-space-connector/config-tool/internal/recent"
+	"github.com/FIWARE/data-space-connector/config-tool/internal/trial"
 	"github.com/FIWARE/data-space-connector/config-tool/model"
+	trialdata "github.com/FIWARE/data-space-connector/config-tool/trial"
 )
 
 const (
@@ -57,6 +59,12 @@ type Server struct {
 	loaded *load.Result
 	loadMu sync.Mutex
 
+	// trial holds the local trial descriptor and values; tests swap it before the first trial request.
+	trial     fs.FS
+	trialOnce sync.Once
+	trialOuts []trial.Output
+	trialErr  error
+
 	mu          sync.Mutex
 	sessions    map[string]struct{}
 	launchCodes map[string]time.Time
@@ -84,6 +92,7 @@ func New(ui fs.FS) (*Server, error) {
 		hosts:       map[string]bool{hostPort(loopbackHost): true, hostPort(localhost): true},
 		ui:          ui,
 		models:      bundles.FS,
+		trial:       trialdata.FS,
 		progress:    NewProgress(),
 		now:         time.Now,
 		sessions:    map[string]struct{}{},
