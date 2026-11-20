@@ -105,6 +105,17 @@ outside the preset can be turned on. Changing the role later re-applies the pres
 features the user has never touched — a feature the user switched by hand keeps its state and
 is listed in the change summary ([US-2.3](USER_STORIES.md#epic-2--role-presets)).
 
+The shipped stage differs from this design in three points
+([ADR 0017](../adr/0017-config-tool-role-presets.md), [Roles](../../config-tool/README.md#roles)):
+
+- **Custom deploys `data-space-connector`**, not a chart of the user's choice. Operator already offers every
+  trust-anchor feature.
+- **Switching charts is explicit.** Picking Operator, or leaving it, switches the chart and clears the chart version.
+  A notice says what was dropped, and Stage 1 asks for the version again. A switch is refused while a values file is
+  loaded. Changing the chart on Stage 1 clears the role, with a notice.
+- **A loaded values file wins.** A feature the file switches keeps the file's value, and a role that does not offer a
+  feature the file enables cannot be picked.
+
 ## Stage 3 — Foundations
 
 The cross-cutting values, asked **once**, before anything that consumes them. This is the
