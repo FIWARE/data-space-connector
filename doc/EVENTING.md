@@ -210,5 +210,17 @@ can run repeatedly on one cluster. To test against a data space that is already 
 - [Trust anchor setup](eventing/trust-anchor-setup.md): running the publisher.
 - [Participant setup](eventing/participant-setup.md): receiving events, the removal modes and the
   gateway routes.
-- [ADR 0008](adr/0008-events-routes-as-validated-operator-snippet.md): why the events routes are a
-  validated operator snippet.
+- ADRs:
+  - [0008](adr/0008-events-routes-as-validated-operator-snippet.md): the events routes are a
+    validated operator snippet;
+  - [0009](adr/0009-cloudevents-over-oid4vp.md): CloudEvents authenticated over OID4VP;
+  - [0010](adr/0010-detect-removal-by-diffing-the-registry.md): removals are detected by diffing
+    the registry;
+  - [0011](adr/0011-authorize-events-per-publisher-and-type.md): events are authorized per
+    publisher and type;
+  - [0012](adr/0012-attribute-local-trust-to-the-dataspace.md): local trust is attributed to the
+    data space that caused it;
+  - [0013](adr/0013-cloudevents-webhook-handshake.md): callbacks are confirmed with the webhook
+    handshake;
+  - [0014](adr/0014-publisher-in-the-authority-release.md): the publisher runs in the authority's
+    release.

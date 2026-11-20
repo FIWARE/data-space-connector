@@ -586,7 +586,17 @@ feature on an existing deployment changes no trust configuration until someone a
 
 ## 12. Decision register
 
-Accepted in the review of 2026-10-28 unless noted; each is a candidate ADR (`doc/adr/`).
+Accepted in the review of 2026-10-28 unless noted. The decisions are recorded as ADRs:
+
+| ADR | Decisions |
+|---|---|
+| [0009](../adr/0009-cloudevents-over-oid4vp.md) CloudEvents authenticated over OID4VP | D-1, D-2, D-9, D-12 |
+| [0010](../adr/0010-detect-removal-by-diffing-the-registry.md) Detect removal by diffing the registry | D-3 |
+| [0011](../adr/0011-authorize-events-per-publisher-and-type.md) Authorize events per publisher and type | D-5 |
+| [0012](../adr/0012-attribute-local-trust-to-the-dataspace.md) Attribute local trust to the data space | D-6, D-10, D-11 |
+| [0013](../adr/0013-cloudevents-webhook-handshake.md) Confirm callbacks with the webhook handshake | D-8 |
+
+D-4 and D-7 are recorded in this register only.
 
 | # | Decision | Rationale | Alternative rejected |
 |---|---|---|---|
@@ -604,7 +614,8 @@ Accepted in the review of 2026-10-28 unless noted; each is a candidate ADR (`doc
 | **D-10** | **Multi-data-space membership is supported**: every reaction and every sweep is per publisher and touches only entries attributable to that data space | A participant can be a member of several data spaces and trust issuers from none of them; without attribution no removal can be answered safely | Treating the TIL as belonging to one data space; a `keep` list as the only guard (the first draft) |
 
 How the Data Space Connector chart packages the events routes is a chart decision, recorded in
-[ADR 0008](../adr/0008-events-routes-as-validated-operator-snippet.md).
+[ADR 0008](../adr/0008-events-routes-as-validated-operator-snippet.md). Where the chart runs the
+publisher is recorded in [ADR 0014](../adr/0014-publisher-in-the-authority-release.md).
 
 ## 13. Failure modes and security considerations
 

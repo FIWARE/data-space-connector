@@ -24,7 +24,9 @@ at commit `c7da3c4`
 
 This document is the interoperability contract for data space events: what a second, non-FIWARE
 implementation needs in order to publish events to, or subscribe at, a FIWARE participant. It is
-normative and short; the reasons behind each rule are in the [architecture](architecture.md).
+normative and short; the reasons behind each rule are in the [architecture](architecture.md). Why
+events are CloudEvents authenticated over OID4VP is recorded in
+[ADR 0009](../adr/0009-cloudevents-over-oid4vp.md).
 
 It is not a submission to a governance body. DSBA, Gaia-X and IDSA are unaffected by it. If one of
 them, or any other party, asks for the eventing contract, this is the document to hand over.
@@ -337,7 +339,8 @@ Leases ([architecture D-4](architecture.md#12-decision-register)):
 
 Profile of §4 of the pinned webhook document ([§2](#2-normative-references)); the origin is
 configured together with the publisher's identifier and never derived from it
-([architecture D-8](architecture.md#12-decision-register)).
+([architecture D-8](architecture.md#12-decision-register),
+[ADR 0013](../adr/0013-cloudevents-webhook-handshake.md)).
 
 Publisher:
 
