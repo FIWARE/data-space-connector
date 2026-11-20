@@ -103,8 +103,9 @@ guide's component matrix to feature ids go into the model bundle as data. `inter
    - **Stage 1 does not fill the cleared version in.** Today `Target.tsx` (the `useEffect` at lines 231-234) dispatches
      the latest version whenever `chartVersion` is `''`, which would undo the rule above as soon as Stage 1 mounts. The
      reducer gets a flag `versionOpen: boolean`: `roleApplied` with a `chartSwitch` sets it, and so does `profileOpened`
-     when the profile's `chartVersion` is empty (a saved Operator profile without a version is not guessed on reopen
-     either). The effect skips while it is set. A `setTarget` that sets a version, a `setTarget` that changes the chart
+     when the profile has a `role` and an empty `chartVersion` (a saved Operator profile without a version is not
+     guessed on reopen either). A role-less profile without a version keeps today's behaviour: Stage 1 preselects
+     latest. The flag is about role-driven chart switches only. The effect skips while it is set. A `setTarget` that sets a version, a `setTarget` that changes the chart
      (the Stage 1 chart select, where the preselected latest version is visible next to it, as today), `fileLoaded`,
      `trialStarted` and `newConfiguration` reset it. A fresh configuration therefore keeps the existing auto-default.
    - **A chart change on Stage 1 clears the role.** `Validate` keeps the invariant "the role's `chart` equals
@@ -287,6 +288,8 @@ In `config-tool/internal/profile/`:
   func (p Profile) ApplyPreset(bundles []model.Bundle, role string, loaded map[string]bool) (Profile, *ChartSwitch, error)
   ```
   - Pure and deterministic, and it does not modify its input maps.
+  - Expects a normalised `Model` (what `saveModel` returns); the caller provides it, see Step 4. A placeholder model
+    (`version: ''`, `revision: 0`) would make the `Catalogue` comparison below wrong.
   - Writes `{enabled: true, source: preset}` for `recommended` and `{enabled: false, source: preset}` for `available`,
     and omits `not-offered`.
   - Then applies `loaded` per decision 10: an offered feature takes `{enabled: <value>, source: loaded}`, a loaded
@@ -345,13 +348,21 @@ In `config-tool/internal/server/`, wired in `api.go` the same way as the existin
   `PUT /api/profile`. `toProfile` never sends `source`, so the decoded profile always has `Source == nil`. Before
   calling `ApplyPreset`, the handler therefore sets `p.Source, err = s.source(req.SourceSHA256)`, the same way
   `handleSaveProfile` does (`internal/server/profile.go:92`). Without that, the `ErrChartSwitchLoaded` check could
-  never fire. It reads the loaded toggles from
+  never fire. It also mirrors the rest of the save sequence before `ApplyPreset`: `p.Format = profile.FormatVersion`,
+  `p.Model = saveModel(bundles, p.Target, p.Model)` (profile.go:90) and `normalize(&p)`. A never-saved configuration
+  sends the placeholder `model: {chart, version: '', revision: 0}` (`toProfile`, `ui/src/api/profile.ts`), which
+  `validateModel` refuses as not shipped and which would make `ApplyPreset` set a `catalogue` for a plain Provider
+  pick. Only then does it validate the incoming profile (422 with field errors, as save). Factor the shared part into
+  one helper used by both handlers, so they cannot drift again. It reads the loaded toggles from
   that slot's `Report.Answers` (decision 10; none without a loaded slot), calls `profile.ApplyPreset` and returns
   `{profile, chartSwitch: {fromChart, fromVersion, toChart} | null}`. An unknown role, an invalid profile,
   `ErrChartSwitchLoaded` or `ErrPresetConflictsLoaded` gives 422, and a stale `sourceSha256` gives the same error as save.
 - No endpoint touches a cluster, and the core stays free of `net/http` (`internal/layering_test.go`).
 - **Tests:** `internal/server/role_test.go`, table-driven: happy paths, operator switch, operator with a loaded source
-  → 422 (the request's profile carries no `source`, only `sourceSha256`, so the test proves the handler sets it), unknown role 422, missing token 401. Loaded-slot cases: load a provider values file with
+  → 422 (the request's profile carries no `source`, only `sourceSha256`, so the test proves the handler sets it), unknown role 422, missing token 401.
+  A fresh-configuration case sends the body `toProfile` builds before any save (`model: {chart: data-space-connector,
+  version: '', revision: 0}`, empty `chartVersion`), picks Provider and gets 200 with `model` = 10.16.0@2 and a nil
+  `catalogue`. The same body with Operator gets 200 with `model` = trust-anchor@1.3.6 and `catalogue` = 10.16.0@2. Loaded-slot cases: load a provider values file with
   `scorpio.enabled: false`, pick Provider → `data.scorpio` is `{enabled: false, source: loaded}`; load one with
   `scorpio.enabled: true`, pick Consumer → 422 naming `data.scorpio`.
 - **UI API client:** `ui/src/api/roles.ts` (`fetchRoles`, `applyPreset`) with types mirroring the JSON, and
@@ -378,13 +389,14 @@ In `config-tool/ui/src/`:
     stores the `roleCleared` notice when a role was set (decision 9). A `setTarget` that leaves the chart alone keeps
     the role.
   - `AppState` gains `versionOpen: boolean` (decision 9). `roleApplied` with a `chartSwitch` sets it, and
-    `profileOpened` sets it when the profile's `chartVersion` is empty. A `setTarget` that sets a non-empty
+    `profileOpened` sets it when the profile has a `role` and an empty `chartVersion`. A `setTarget` that sets a non-empty
     `chartVersion` or changes the chart, `fileLoaded`, `trialStarted` and `newConfiguration` reset it. The latest-version `useEffect` in
     `stages/Target.tsx` returns early while `state.versionOpen` is set.
   - Tests in `reducer.test.ts`: `roleApplied` with and without a switch; a chart change clears role, features and
     catalogue and sets the notice; a version-only change keeps them; `profileSaved` keeps the returned catalogue;
-    `versionOpen` is set by a switching `roleApplied` and by opening a profile without a version, and is not set by
-    a non-switching `roleApplied`; each reset path clears it.
+    `versionOpen` is set by a switching `roleApplied` and by opening a profile with a role and without a version, and
+    is not set by a non-switching `roleApplied` or by opening a role-less profile without a version (Stage 1 still
+    preselects latest there, as today); each reset path clears it.
   - Rail selector `roleIssues` in `state/openQuestions.ts`: no role means one open question.
 - **`stages/Role.tsx`**, a one-line JSDoc per component:
   - Fetch `/api/roles` for the current target. Render one card per role as in `doc/config-tool/MOCKUPS.md#s2--role`:
