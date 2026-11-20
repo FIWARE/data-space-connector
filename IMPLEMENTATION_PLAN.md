@@ -162,7 +162,8 @@ any shipped bundle yet.
   - Add the new fields to `Bundle` with yaml tags. `KnownFields(true)` already makes unknown keys fail.
 - **`readBundle` validation**, where every error names the offending index or id:
   - Feature id: non-empty and unique. `title`, `summary` and `group` are required.
-  - Group: one of the FEATURE_MODEL groups (named constants).
+  - Group: one of the FEATURE_MODEL groups (named constants), lower-case, plus `operator` for the `ta.*` features,
+    which FEATURE_MODEL lists under "Operator role" but not in its group list (Step 2 adds it there).
   - `requires`: must name catalogue ids, with no self-reference.
   - `keys`: parse with `roundtrip.ParsePath`; refuse a segment containing `*`, a duplicate, and a key nested under
     another key of the same feature (decision 12). Keys shared between features are valid.
@@ -180,7 +181,8 @@ any shipped bundle yet.
     `<catalogue id>.enabled` and `kind: toggle` (decision 10).
 - **Cross-bundle checks in `Versions`**, after all bundles are read:
   - A role's `chart` must have a shipped bundle.
-  - A feature's `keys` must start with a `topLevelKeys` entry of the latest bundle of the feature's chart (when that list is set).
+  - A feature's `keys` must start with a `topLevelKeys` entry of its own bundle when the feature is of the bundle's chart,
+    else of the latest bundle of the feature's chart (when that list is set). A feature's chart must have a shipped bundle.
 - **`RoleCatalogue(bundles, chart, version) (Bundle, error)`** per decision 8: the fallback prefers a `Latest` bundle
   with roles and takes the highest semver only when none is `Latest`. It returns an error when no bundle declares roles.
 - **Tests** in `internal/model/model_test.go`:

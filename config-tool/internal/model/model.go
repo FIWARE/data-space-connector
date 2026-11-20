@@ -17,8 +17,12 @@ import (
 	"github.com/FIWARE/data-space-connector/config-tool/internal/roundtrip"
 )
 
-// bundlePattern matches the bundle file of every version directory.
-const bundlePattern = "*/bundle.yaml"
+const (
+	// bundleName is the bundle's file name inside its version directory.
+	bundleName = "bundle.yaml"
+	// bundlePattern matches the bundle file of every version directory.
+	bundlePattern = "*/" + bundleName
+)
 
 // Bundle is the question model of one chart version.
 type Bundle struct {
@@ -31,6 +35,12 @@ type Bundle struct {
 	TopLevelKeys []string `yaml:"topLevelKeys"`
 	// Recognize maps chart keys back to answers when an existing values file is loaded.
 	Recognize []Rule `yaml:"recognize"`
+	// Features is the feature catalogue; Roles requires it.
+	Features []Feature `yaml:"features"`
+	// Roles are the role presets, absent or exactly KnownRoles in order.
+	Roles []Role `yaml:"roles"`
+	// RoleMatrix maps the role guide's component matrix to Features; nil when not declared.
+	RoleMatrix *RoleMatrix `yaml:"roleMatrix"`
 	// Latest marks the default version; Versions sets it, bundle files never do.
 	Latest bool `yaml:"-"`
 	// rules is Recognize compiled; readBundle sets it after validating every rule.
@@ -202,6 +212,9 @@ func Versions(fsys fs.FS) ([]Bundle, error) {
 	for _, i := range latest {
 		bundles[i].Latest = true
 	}
+	if err := checkCharts(bundles); err != nil {
+		return nil, err
+	}
 	return bundles, nil
 }
 
@@ -261,6 +274,9 @@ func readBundle(fsys fs.FS, file string) (versioned, error) {
 		return versioned{}, fmt.Errorf("%s: %w", file, err)
 	}
 	if err := checkRuleRoots(b.rules, b.TopLevelKeys); err != nil {
+		return versioned{}, fmt.Errorf("%s: %w", file, err)
+	}
+	if err := checkCatalogue(&b); err != nil {
 		return versioned{}, fmt.Errorf("%s: %w", file, err)
 	}
 	return versioned{bundle: b, version: v}, nil

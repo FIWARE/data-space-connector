@@ -1,0 +1,5 @@
+# Fixture bundle of a second chart, so features and roles of another chart are checked against it.
+chart: trust-anchor
+version: 0.1.0
+revision: 1
+topLevelKeys: [trusted-issuers-list, consentManagement]
