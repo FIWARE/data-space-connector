@@ -284,6 +284,7 @@ Acceptance: `npm test` and `npm run e2e` (after `make build`) pass, and so does 
 - `doc/config-tool/MOCKUPS.md`: add a short "S0 — Try it locally: prerequisites" box and the Review trial listing, in
   the existing ASCII style.
 - `AGENTS.md`, "Config tool" section: replace the CT-5 "planned" bullet with the final package and endpoint names.
+  Step agents may not edit `AGENTS.md`, so this is handed to the plan agent (see the step 8 Taiga comment).
 - Run `.github/scripts/check-links.sh` on the touched docs, if docker is available.
 
 Acceptance: links resolve, and the docs describe exactly what Steps 1–7 shipped.
