@@ -430,6 +430,22 @@
                 </plugins>
             </build>
         </profile>
+        <profile>
+            <id>eventing-test</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-failsafe-plugin</artifactId>
+                        <configuration>
+                            <systemPropertyVariables>
+                                <cucumber.filter.tags>@eventing</cucumber.filter.tags>
+                            </systemPropertyVariables>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
         <!-- Deploys the data space before the tests run: the deploy of the parent build,
              moved from `deploy` to `pre-integration-test`. Combine with a profile that selects
              the scenario and one that filters the tests, e.g. `-Ptest,dsp,dsp-test`.

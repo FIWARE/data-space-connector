@@ -1,0 +1,1093 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/helm-unittest/helm-unittest/main/schema/helm-testsuite.json
+#
+# ---------------------------------------------------------------------------
+# Helm-unittest suite for the validation of the data space events routes.
+#
+# The routes are operator-owned entries of
+# decentralizedIam.odrlAuthorization.apisix.routes, found by name. The template
+# only fails on settings that weaken access control. Fixtures: E = the three
+# entries of doc/eventing/examples/events-routes.yaml next to an unrelated route,
+# F = E without opa (fails the policy check only), I = E with the ingress
+# controller on (fails the ingress-controller check only). CI builds no
+# dependencies, so a subchart key the umbrella does not declare stays absent.
+# ---------------------------------------------------------------------------
+suite: data space eventing - events routes validation
+templates:
+  - templates/eventing-validation.yaml
+tests:
+  # (c) passing variants; P1 defines the fixture anchors used below.
+  - it: P1 passes the example routes with a singular host
+    set:
+      decentralizedIam:
+        odrlAuthorization:
+          apisix:
+            routes:
+              - &unrelated
+                name: tmf
+                uri: /tmf-api/*
+                host: tmf.example.org
+                upstream:
+                  nodes:
+                    tm-forum-api:8080: 1
+                  type: roundrobin
+              - &events
+                name: dataspace-events
+                uri: /events
+                methods: [POST]
+                host: events.example.org
+                upstream: &cm
+                  nodes:
+                    contract-management:8080: 1
+                  type: roundrobin
+                plugins:
+                  proxy-rewrite: &strip
+                    _meta:
+                      priority: 2600
+                    headers:
+                      remove: [X-Userinfo]
+                  openid-connect: &oidc
+                    bearer_only: true
+                    use_jwks: true
+                    set_userinfo_header: true
+                    client_id: events
+                    client_secret: unused
+                    discovery: https://verifier.example.org/services/events/.well-known/openid-configuration
+                  opa: &opa
+                    host: http://localhost:8181
+                    policy: policy/main
+                    with_body: true
+              - &handshake
+                name: dataspace-events-handshake
+                uri: /events
+                methods: [OPTIONS]
+                host: events.example.org
+                upstream: *cm
+              - &discovery
+                name: dataspace-events-discovery
+                uri: /events/.well-known/openid-configuration
+                methods: [GET]
+                host: events.example.org
+                upstream:
+                  nodes:
+                    verifier:3000: 1
+                  type: roundrobin
+                plugins:
+                  proxy-rewrite:
+                    uri: /services/events/.well-known/openid-configuration
+    asserts: &passes
+      - hasDocuments:
+          count: 0
+
+  - it: P2 passes dataspace-events with a one-entry hosts list
+    set:
+      decentralizedIam:
+        odrlAuthorization:
+          apisix:
+            routes:
+              - *unrelated
+              - &eventsHostsOne
+                name: dataspace-events
+                uri: /events
+                methods: [POST]
+                hosts: [events.example.org]
+                upstream: *cm
+                plugins: &eventsPlugins
+                  proxy-rewrite: *strip
+                  openid-connect: *oidc
+                  opa: *opa
+              - *handshake
+              - *discovery
+    asserts: *passes
+
+  - it: P2 passes dataspace-events with a two-entry hosts list
+    set:
+      decentralizedIam:
+        odrlAuthorization:
+          apisix:
+            routes:
+              - *unrelated
+              - <<: *eventsHostsOne
+                hosts: [events.example.org, events.example.net]
+              - *handshake
+              - *discovery
+    asserts: *passes
+
+  - it: P3 compares the stripped header name case-insensitively
+    set:
+      decentralizedIam:
+        odrlAuthorization:
+          apisix:
+            routes:
+              - *unrelated
+              - <<: *events
+                plugins:
+                  proxy-rewrite:
+                    _meta:
+                      priority: 2600
+                    headers:
+                      remove: [x-userinfo]
+                  openid-connect: *oidc
+                  opa: *opa
+              - *handshake
+              - *discovery
+    asserts: *passes
+
+  - it: P4 passes a strip above a raised openid-connect priority
+    set:
+      decentralizedIam:
+        odrlAuthorization:
+          apisix:
+            routes:
+              - *unrelated
+              - <<: *events
+                plugins:
+                  proxy-rewrite:
+                    _meta:
+                      priority: 3001
+                    headers:
+                      remove: [X-Userinfo]
+                  openid-connect:
+                    <<: *oidc
+                    _meta:
+                      priority: 3000
+                  opa: *opa
+              - *handshake
+              - *discovery
+    asserts: *passes
+
+  # P5 pins that consistency between the three entries is not checked (a guide checklist).
+  - it: P5 passes dataspace-events without handshake and discovery entries
+    set:
+      decentralizedIam:
+        odrlAuthorization:
+          apisix:
+            routes:
+              - *unrelated
+              - *events
+    asserts: *passes
+
+  - it: P5 passes a handshake uri other than the events uri
+    set:
+      decentralizedIam:
+        odrlAuthorization:
+          apisix:
+            routes:
+              - *unrelated
+              - *events
+              - <<: *handshake
+                uri: /other-events
+              - *discovery
+    asserts: *passes
+
+  - it: P5 passes hosts that differ between the entries
+    set:
+      decentralizedIam:
+        odrlAuthorization:
+          apisix:
+            routes:
+              - *unrelated
+              - *events
+              - <<: *handshake
+                host: handshake.example.org
+              - <<: *discovery
+                host: discovery.example.org
+    asserts: *passes
+
+  - it: P5 passes a discovery rewrite without the verifier service path
+    set:
+      decentralizedIam:
+        odrlAuthorization:
+          apisix:
+            routes:
+              - *unrelated
+              - *events
+              - *handshake
+              - <<: *discovery
+                plugins:
+                  proxy-rewrite:
+                    uri: /.well-known/openid-configuration
+    asserts: *passes
+
+  - it: P5 passes dataspace-events without methods
+    set:
+      decentralizedIam:
+        odrlAuthorization:
+          apisix:
+            routes:
+              - *unrelated
+              - name: dataspace-events
+                uri: /events
+                host: events.example.org
+                upstream: *cm
+                plugins: *eventsPlugins
+              - *handshake
+              - *discovery
+    asserts: *passes
+
+  - it: P5 passes the routes with the listener off
+    set:
+      contract-management:
+        dataspace:
+          events:
+            listener:
+              enabled: false
+      decentralizedIam:
+        odrlAuthorization:
+          apisix:
+            routes:
+              - *unrelated
+              - *events
+              - *handshake
+              - *discovery
+    asserts: *passes
+
+  # P6 pins that unnamed routes are not checked (no guard, Deviation 3 of the plan).
+  - it: P6 passes an unnamed route at /events without methods
+    set:
+      decentralizedIam:
+        odrlAuthorization:
+          apisix:
+            routes:
+              - *unrelated
+              - uri: /events
+                host: events.example.org
+                upstream: *cm
+    asserts: *passes
+
+  # (a) gate and opt-out
+  - it: G1 renders nothing with the chart defaults
+    asserts: *passes
+
+  - it: G2 skips F with the opt-out
+    set:
+      eventingRouteValidation:
+        enabled: false
+      decentralizedIam:
+        odrlAuthorization:
+          apisix:
+            routes: &routesF
+              - *unrelated
+              - &eventsNoOpa
+                <<: *events
+                plugins:
+                  proxy-rewrite: *strip
+                  openid-connect: *oidc
+              - *handshake
+              - *discovery
+    asserts: *passes
+
+  - it: G2 skips I with the opt-out
+    set:
+      eventingRouteValidation:
+        enabled: false
+      decentralizedIam:
+        odrlAuthorization:
+          apisix:
+            ingress-controller: &ingressOn
+              enabled: true
+            routes: &routesE
+              - *unrelated
+              - *events
+              - *handshake
+              - *discovery
+    asserts: *passes
+
+  - it: G3 skips F without decentralizedIam
+    set:
+      decentralizedIam:
+        enabled: false
+        odrlAuthorization:
+          apisix:
+            routes: *routesF
+    asserts: *passes
+
+  - it: G3 skips I without decentralizedIam
+    set:
+      decentralizedIam:
+        enabled: false
+        odrlAuthorization:
+          apisix:
+            ingress-controller: *ingressOn
+            routes: *routesE
+    asserts: *passes
+
+  - it: G4 skips F without odrlAuthorization
+    set:
+      decentralizedIam:
+        odrlAuthorization:
+          enabled: false
+          apisix:
+            routes: *routesF
+    asserts: *passes
+
+  - it: G4 skips I without odrlAuthorization
+    set:
+      decentralizedIam:
+        odrlAuthorization:
+          enabled: false
+          apisix:
+            ingress-controller: *ingressOn
+            routes: *routesE
+    asserts: *passes
+
+  - it: G5 skips F without the bundled APISIX
+    set:
+      decentralizedIam:
+        odrlAuthorization:
+          apisix:
+            enabled: false
+            routes: *routesF
+    asserts: *passes
+
+  # odrl-authorization renders ApisixRoute CRs that an external controller may serve.
+  - it: G6 refuses I even without the bundled APISIX
+    set:
+      decentralizedIam:
+        odrlAuthorization:
+          apisix:
+            enabled: false
+            ingress-controller: *ingressOn
+            routes: *routesE
+    asserts: &failsIngress
+      - failedTemplate:
+          errorPattern: 'ingress-controller'
+
+  - it: G7 refuses F when the subchart switches are absent
+    set:
+      decentralizedIam:
+        odrlAuthorization:
+          apisix:
+            routes: *routesF
+    asserts: &failsOpa
+      - failedTemplate:
+          errorPattern: 'route "dataspace-events": the opa plugin is required'
+
+  # Helm ignores a non-bool dependency condition and deploys the subchart.
+  - it: G8 refuses F when decentralizedIam.enabled is the string "false"
+    set:
+      decentralizedIam:
+        enabled: "false"
+        odrlAuthorization:
+          apisix:
+            routes: *routesF
+    asserts: *failsOpa
+
+  - it: G8 refuses F when odrlAuthorization.enabled is the string "false"
+    set:
+      decentralizedIam:
+        odrlAuthorization:
+          enabled: "false"
+          apisix:
+            routes: *routesF
+    asserts: *failsOpa
+
+  - it: G8 refuses F when apisix.enabled is the string "false"
+    set:
+      decentralizedIam:
+        odrlAuthorization:
+          apisix:
+            enabled: "false"
+            routes: *routesF
+    asserts: *failsOpa
+
+  - it: G9 refuses E when ingress-controller.enabled is the truthy string "false"
+    set:
+      decentralizedIam:
+        odrlAuthorization:
+          apisix:
+            ingress-controller:
+              enabled: "false"
+            routes: *routesE
+    asserts: *failsIngress
+
+  - it: G10 ignores routes without the events names, even with the ingress controller
+    set:
+      decentralizedIam:
+        odrlAuthorization:
+          apisix:
+            ingress-controller: *ingressOn
+            routes:
+              - *unrelated
+              - <<: *events
+                name: my-events
+                plugins: {}
+    asserts: *passes
+
+  # (b) one test per failing case
+  - it: check 1 refuses the ingress-controller mode
+    set:
+      decentralizedIam:
+        odrlAuthorization:
+          apisix:
+            ingress-controller: *ingressOn
+            routes: *routesE
+    asserts: *failsIngress
+
+  - it: check 2 refuses a handshake without methods
+    set:
+      decentralizedIam:
+        odrlAuthorization:
+          apisix:
+            routes:
+              - *unrelated
+              - *events
+              - &handshakeNoMethods
+                name: dataspace-events-handshake
+                uri: /events
+                host: events.example.org
+                upstream: *cm
+              - *discovery
+    asserts: &failsHandshake
+      - failedTemplate:
+          errorPattern: 'route "dataspace-events-handshake": methods must be exactly \[OPTIONS\]'
+
+  - it: check 2 refuses a handshake that also takes POST
+    set:
+      decentralizedIam:
+        odrlAuthorization:
+          apisix:
+            routes:
+              - *unrelated
+              - *events
+              - <<: *handshake
+                methods: [OPTIONS, POST]
+              - *discovery
+    asserts: *failsHandshake
+
+  - it: check 2 refuses a handshake on GET
+    set:
+      decentralizedIam:
+        odrlAuthorization:
+          apisix:
+            routes:
+              - *unrelated
+              - *events
+              - <<: *handshake
+                methods: [GET]
+              - *discovery
+    asserts: *failsHandshake
+
+  - it: check 2 refuses a second handshake entry without methods
+    set:
+      decentralizedIam:
+        odrlAuthorization:
+          apisix:
+            routes:
+              - *unrelated
+              - *events
+              - *handshake
+              - *discovery
+              - *handshakeNoMethods
+    asserts: *failsHandshake
+
+  - it: check 3 refuses discovery without methods
+    set:
+      decentralizedIam:
+        odrlAuthorization:
+          apisix:
+            routes:
+              - *unrelated
+              - *events
+              - *handshake
+              - name: dataspace-events-discovery
+                uri: /events/.well-known/openid-configuration
+                host: events.example.org
+                upstream: *cm
+    asserts: &failsDiscovery
+      - failedTemplate:
+          errorPattern: 'route "dataspace-events-discovery": methods must be exactly \[GET\]'
+
+  - it: check 3 refuses discovery that also takes POST
+    set:
+      decentralizedIam:
+        odrlAuthorization:
+          apisix:
+            routes:
+              - *unrelated
+              - *events
+              - *handshake
+              - <<: *discovery
+                methods: [GET, POST]
+    asserts: *failsDiscovery
+
+  - it: check 3 refuses discovery on POST
+    set:
+      decentralizedIam:
+        odrlAuthorization:
+          apisix:
+            routes:
+              - *unrelated
+              - *events
+              - *handshake
+              - <<: *discovery
+                methods: [POST]
+    asserts: *failsDiscovery
+
+  - it: check 4 refuses dataspace-events without host or hosts
+    set:
+      decentralizedIam:
+        odrlAuthorization:
+          apisix:
+            routes:
+              - *unrelated
+              - name: dataspace-events
+                uri: /events
+                methods: [POST]
+                upstream: *cm
+                plugins: *eventsPlugins
+              - *handshake
+              - *discovery
+    asserts: &failsHost
+      - failedTemplate:
+          errorPattern: 'route "dataspace-events": set host or hosts'
+
+  - it: check 4 refuses dataspace-events with an empty host
+    set:
+      decentralizedIam:
+        odrlAuthorization:
+          apisix:
+            routes:
+              - *unrelated
+              - <<: *events
+                host: ""
+              - *handshake
+              - *discovery
+    asserts: *failsHost
+
+  - it: check 4 refuses dataspace-events with an empty hosts list
+    set:
+      decentralizedIam:
+        odrlAuthorization:
+          apisix:
+            routes:
+              - *unrelated
+              - <<: *eventsHostsOne
+                hosts: []
+              - *handshake
+              - *discovery
+    asserts: *failsHost
+
+  - it: check 5 refuses openid-connect without set_userinfo_header
+    set:
+      decentralizedIam:
+        odrlAuthorization:
+          apisix:
+            routes:
+              - *unrelated
+              - <<: *events
+                plugins:
+                  proxy-rewrite: *strip
+                  openid-connect:
+                    bearer_only: true
+                    use_jwks: true
+                    discovery: https://verifier.example.org/services/events/.well-known/openid-configuration
+                  opa: *opa
+              - *handshake
+              - *discovery
+    asserts: &failsUserinfo
+      - failedTemplate:
+          errorPattern: 'route "dataspace-events": openid-connect.set_userinfo_header must be true'
+
+  - it: check 5 refuses set_userinfo_header false
+    set:
+      decentralizedIam:
+        odrlAuthorization:
+          apisix:
+            routes:
+              - *unrelated
+              - <<: *events
+                plugins:
+                  proxy-rewrite: *strip
+                  openid-connect:
+                    <<: *oidc
+                    set_userinfo_header: false
+                  opa: *opa
+              - *handshake
+              - *discovery
+    asserts: *failsUserinfo
+
+  - it: check 5 refuses set_userinfo_header as the string "true"
+    set:
+      decentralizedIam:
+        odrlAuthorization:
+          apisix:
+            routes:
+              - *unrelated
+              - <<: *events
+                plugins:
+                  proxy-rewrite: *strip
+                  openid-connect:
+                    <<: *oidc
+                    set_userinfo_header: "true"
+                  opa: *opa
+              - *handshake
+              - *discovery
+    asserts: *failsUserinfo
+
+  - it: check 6 refuses dataspace-events without opa
+    set:
+      decentralizedIam:
+        odrlAuthorization:
+          apisix:
+            routes: *routesF
+    asserts: *failsOpa
+
+  - it: check 7 refuses dataspace-events without proxy-rewrite
+    set:
+      decentralizedIam:
+        odrlAuthorization:
+          apisix:
+            routes:
+              - *unrelated
+              - <<: *events
+                plugins:
+                  openid-connect: *oidc
+                  opa: *opa
+              - *handshake
+              - *discovery
+    asserts: &failsStrip
+      - failedTemplate:
+          errorPattern: 'route "dataspace-events": proxy-rewrite.headers.remove must contain X-Userinfo'
+
+  - it: check 7 refuses a proxy-rewrite without headers.remove
+    set:
+      decentralizedIam:
+        odrlAuthorization:
+          apisix:
+            routes:
+              - *unrelated
+              - <<: *events
+                plugins:
+                  proxy-rewrite:
+                    _meta:
+                      priority: 2600
+                  openid-connect: *oidc
+                  opa: *opa
+              - *handshake
+              - *discovery
+    asserts: *failsStrip
+
+  - it: check 7 refuses headers.remove without X-Userinfo
+    set:
+      decentralizedIam:
+        odrlAuthorization:
+          apisix:
+            routes:
+              - *unrelated
+              - <<: *events
+                plugins:
+                  proxy-rewrite:
+                    _meta:
+                      priority: 2600
+                    headers:
+                      remove: [X-Other]
+                  openid-connect: *oidc
+                  opa: *opa
+              - *handshake
+              - *discovery
+    asserts: *failsStrip
+
+  - it: check 7 refuses a strip without a priority
+    set:
+      decentralizedIam:
+        odrlAuthorization:
+          apisix:
+            routes:
+              - *unrelated
+              - <<: *events
+                plugins:
+                  proxy-rewrite:
+                    headers:
+                      remove: [X-Userinfo]
+                  openid-connect: *oidc
+                  opa: *opa
+              - *handshake
+              - *discovery
+    asserts: &failsPriority
+      - failedTemplate:
+          errorPattern: 'route "dataspace-events": proxy-rewrite._meta.priority must be above the openid-connect priority'
+
+  - it: check 7 refuses a strip at the proxy-rewrite default priority 1008
+    set:
+      decentralizedIam:
+        odrlAuthorization:
+          apisix:
+            routes:
+              - *unrelated
+              - <<: *events
+                plugins:
+                  proxy-rewrite:
+                    _meta:
+                      priority: 1008
+                    headers:
+                      remove: [X-Userinfo]
+                  openid-connect: *oidc
+                  opa: *opa
+              - *handshake
+              - *discovery
+    asserts: *failsPriority
+
+  - it: check 7 refuses a strip at the openid-connect priority 2599
+    set:
+      decentralizedIam:
+        odrlAuthorization:
+          apisix:
+            routes:
+              - *unrelated
+              - <<: *events
+                plugins:
+                  proxy-rewrite:
+                    _meta:
+                      priority: 2599
+                    headers:
+                      remove: [X-Userinfo]
+                  openid-connect: *oidc
+                  opa: *opa
+              - *handshake
+              - *discovery
+    asserts: *failsPriority
+
+  - it: check 7 refuses a strip below a raised openid-connect priority
+    set:
+      decentralizedIam:
+        odrlAuthorization:
+          apisix:
+            routes:
+              - *unrelated
+              - <<: *events
+                plugins:
+                  proxy-rewrite: *strip
+                  openid-connect:
+                    <<: *oidc
+                    _meta:
+                      priority: 3000
+                  opa: *opa
+              - *handshake
+              - *discovery
+    asserts: *failsPriority
+
+  - it: check 8 refuses a disabled openid-connect
+    set:
+      decentralizedIam:
+        odrlAuthorization:
+          apisix:
+            routes:
+              - *unrelated
+              - <<: *events
+                plugins:
+                  proxy-rewrite: *strip
+                  openid-connect:
+                    <<: *oidc
+                    _meta:
+                      disable: true
+                  opa: *opa
+              - *handshake
+              - *discovery
+    asserts:
+      - failedTemplate:
+          errorPattern: 'route "dataspace-events": openid-connect._meta.disable must not be set'
+
+  - it: check 8 refuses a disabled opa
+    set:
+      decentralizedIam:
+        odrlAuthorization:
+          apisix:
+            routes:
+              - *unrelated
+              - <<: *events
+                plugins:
+                  proxy-rewrite: *strip
+                  openid-connect: *oidc
+                  opa:
+                    <<: *opa
+                    _meta:
+                      disable: true
+              - *handshake
+              - *discovery
+    asserts:
+      - failedTemplate:
+          errorPattern: 'route "dataspace-events": opa._meta.disable must not be set'
+
+  - it: check 8 refuses a disabled proxy-rewrite
+    set:
+      decentralizedIam:
+        odrlAuthorization:
+          apisix:
+            routes:
+              - *unrelated
+              - <<: *events
+                plugins:
+                  proxy-rewrite:
+                    <<: *strip
+                    _meta:
+                      priority: 2600
+                      disable: true
+                  openid-connect: *oidc
+                  opa: *opa
+              - *handshake
+              - *discovery
+    asserts:
+      - failedTemplate:
+          errorPattern: 'route "dataspace-events": proxy-rewrite._meta.disable must not be set'
+
+  - it: check 8 passes _meta.disable false
+    set:
+      decentralizedIam:
+        odrlAuthorization:
+          apisix:
+            routes:
+              - *unrelated
+              - <<: *events
+                plugins:
+                  proxy-rewrite: *strip
+                  openid-connect:
+                    <<: *oidc
+                    _meta:
+                      disable: false
+                  opa: *opa
+              - *handshake
+              - *discovery
+    asserts: *passes
+
+  - it: check 8 refuses a filtered openid-connect
+    set:
+      decentralizedIam:
+        odrlAuthorization:
+          apisix:
+            routes:
+              - *unrelated
+              - <<: *events
+                plugins:
+                  proxy-rewrite: *strip
+                  openid-connect:
+                    <<: *oidc
+                    _meta:
+                      filter: [["http_x_internal", "==", "1"]]
+                  opa: *opa
+              - *handshake
+              - *discovery
+    asserts:
+      - failedTemplate:
+          errorPattern: 'route "dataspace-events": openid-connect._meta.filter must not be set'
+
+  - it: check 8 refuses a filtered opa
+    set:
+      decentralizedIam:
+        odrlAuthorization:
+          apisix:
+            routes:
+              - *unrelated
+              - <<: *events
+                plugins:
+                  proxy-rewrite: *strip
+                  openid-connect: *oidc
+                  opa:
+                    <<: *opa
+                    _meta:
+                      filter: [["http_x_internal", "==", "1"]]
+              - *handshake
+              - *discovery
+    asserts:
+      - failedTemplate:
+          errorPattern: 'route "dataspace-events": opa._meta.filter must not be set'
+
+  - it: check 8 refuses a filtered proxy-rewrite
+    set:
+      decentralizedIam:
+        odrlAuthorization:
+          apisix:
+            routes:
+              - *unrelated
+              - <<: *events
+                plugins:
+                  proxy-rewrite:
+                    <<: *strip
+                    _meta:
+                      priority: 2600
+                      filter: []
+                  openid-connect: *oidc
+                  opa: *opa
+              - *handshake
+              - *discovery
+    asserts:
+      - failedTemplate:
+          errorPattern: 'route "dataspace-events": proxy-rewrite._meta.filter must not be set'
+
+  - it: check 5 refuses openid-connect without bearer_only
+    set:
+      decentralizedIam:
+        odrlAuthorization:
+          apisix:
+            routes:
+              - *unrelated
+              - <<: *events
+                plugins:
+                  proxy-rewrite: *strip
+                  openid-connect:
+                    use_jwks: true
+                    set_userinfo_header: true
+                    discovery: https://verifier.example.org/services/events/.well-known/openid-configuration
+                  opa: *opa
+              - *handshake
+              - *discovery
+    asserts: &failsBearerOnly
+      - failedTemplate:
+          errorPattern: 'route "dataspace-events": openid-connect.bearer_only must be true'
+
+  - it: check 5 refuses bearer_only false
+    set:
+      decentralizedIam:
+        odrlAuthorization:
+          apisix:
+            routes:
+              - *unrelated
+              - <<: *events
+                plugins:
+                  proxy-rewrite: *strip
+                  openid-connect:
+                    <<: *oidc
+                    bearer_only: false
+                  opa: *opa
+              - *handshake
+              - *discovery
+    asserts: *failsBearerOnly
+
+  - it: check 5 refuses bearer_only as the string "true"
+    set:
+      decentralizedIam:
+        odrlAuthorization:
+          apisix:
+            routes:
+              - *unrelated
+              - <<: *events
+                plugins:
+                  proxy-rewrite: *strip
+                  openid-connect:
+                    <<: *oidc
+                    bearer_only: "true"
+                  opa: *opa
+              - *handshake
+              - *discovery
+    asserts: *failsBearerOnly
+
+  - it: check 9 refuses a script on dataspace-events
+    set:
+      decentralizedIam:
+        odrlAuthorization:
+          apisix:
+            routes:
+              - *unrelated
+              - <<: *events
+                script: "local _M = {} return _M"
+              - *handshake
+              - *discovery
+    asserts:
+      - failedTemplate:
+          errorPattern: 'route "dataspace-events": script must not be set'
+
+  - it: check 9 refuses a filter_func on dataspace-events
+    set:
+      decentralizedIam:
+        odrlAuthorization:
+          apisix:
+            routes:
+              - *unrelated
+              - <<: *events
+                filter_func: "function(vars) return false end"
+              - *handshake
+              - *discovery
+    asserts:
+      - failedTemplate:
+          errorPattern: 'route "dataspace-events": filter_func must not be set'
+
+  - it: check 9 refuses vars on dataspace-events
+    set:
+      decentralizedIam:
+        odrlAuthorization:
+          apisix:
+            routes:
+              - *unrelated
+              - <<: *events
+                vars:
+                  - [http_x_skip, "==", "1"]
+              - *handshake
+              - *discovery
+    asserts:
+      - failedTemplate:
+          errorPattern: 'route "dataspace-events": vars must not be set'
+
+  - it: check 9 refuses remote_addrs on dataspace-events
+    set:
+      decentralizedIam:
+        odrlAuthorization:
+          apisix:
+            routes:
+              - *unrelated
+              - <<: *events
+                remote_addrs:
+                  - 10.0.0.0/8
+              - *handshake
+              - *discovery
+    asserts:
+      - failedTemplate:
+          errorPattern: 'route "dataspace-events": remote_addrs must not be set'
+
+  - it: check 9 refuses remote_addr on dataspace-events
+    set:
+      decentralizedIam:
+        odrlAuthorization:
+          apisix:
+            routes:
+              - *unrelated
+              - <<: *events
+                remote_addr: 10.0.0.1
+              - *handshake
+              - *discovery
+    asserts:
+      - failedTemplate:
+          errorPattern: 'route "dataspace-events": remote_addr must not be set'
+
+  - it: check 9 refuses a service_id on dataspace-events
+    set:
+      decentralizedIam:
+        odrlAuthorization:
+          apisix:
+            routes:
+              - *unrelated
+              - <<: *events
+                service_id: events-service
+              - *handshake
+              - *discovery
+    asserts:
+      - failedTemplate:
+          errorPattern: 'route "dataspace-events": service_id must not be set'
+
+  - it: check 9 refuses status 0 on dataspace-events
+    set:
+      decentralizedIam:
+        odrlAuthorization:
+          apisix:
+            routes:
+              - *unrelated
+              - <<: *events
+                status: 0
+              - *handshake
+              - *discovery
+    asserts:
+      - failedTemplate:
+          errorPattern: 'route "dataspace-events": status must be 1 or unset'
+
+  - it: check 9 passes status 1 and empty vars and remote_addrs lists
+    set:
+      decentralizedIam:
+        odrlAuthorization:
+          apisix:
+            routes:
+              - *unrelated
+              - <<: *events
+                status: 1
+                vars: []
+                remote_addrs: []
+              - *handshake
+              - *discovery
+    asserts: *passes
