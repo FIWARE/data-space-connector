@@ -14,11 +14,11 @@ not touched.
 `it/src/test/resources/policies/allowDataSpaceEvents.json`, CM chart 3.6.6 / CM 3.5.3,
 decentralized-iam 2.3.0 / TIL 0.10.3).
 
-**Status (2026-11-20):** Steps 1 (PR #29), 2 (PR #34) and 3 (PR #38, branch `ticket-106/step-2`)
-are merged; `ticket-106/work` @ `fbe1963`, with CM chart **3.6.7** (CM **3.5.4**), which fixes the
-typed-scope blocker. Step 4 is on branch `ticket-106/step-3`, because the branch numbers ran one
-behind the plan's steps from PR #38 on. Steps 5–7 follow as planned, covering all 7 ticket items
-(5 Cucumber scenarios).
+**Status (2026-11-20):** Steps 1 (PR #29), 2 (PR #34), 3 (PR #38, branch `ticket-106/step-2`) and
+4 (PR #39, branch `ticket-106/step-3`) are merged; `ticket-106/work` @ `7239d49`, with CM chart
+**3.6.7** (CM **3.5.4**), which fixes the typed-scope blocker. The branch numbers run one behind the
+plan's steps from PR #38 on: Step 5 is on branch `ticket-106/step-4`. Steps 6–7 follow as planned,
+covering all 7 ticket items (5 Cucumber scenarios).
 
 **Sources** (read-only, clone under `/tmp`):
 - `doc/eventing/architecture.md` §8–§12 and `doc/eventing/specification.md`.

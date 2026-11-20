@@ -78,6 +78,19 @@ public class TrustAnchorClient {
         return since;
     }
 
+    /**
+     * Removal no event can announce: the publisher must have no pod, so there is no watcher to wait for. Returns the
+     * instant right before the {@code DELETE}, as {@link #removeParticipant} does.
+     */
+    public Instant removeParticipantWhilePublisherDown(String did) throws Exception {
+        assertTrue(isListed(did), String.format("%s must be listed at the TIR before it can be removed.", did));
+        List<String> pods = publisher.pods();
+        assertTrue(pods.isEmpty(), "The publisher should have no pod: " + pods);
+        Instant since = Instant.now();
+        delete(did, false);
+        return since;
+    }
+
     /** Cleanup form of the removal: no watcher wait, an absent DID is fine. */
     public void removeIfPresent(String did) throws IOException {
         delete(did, true);

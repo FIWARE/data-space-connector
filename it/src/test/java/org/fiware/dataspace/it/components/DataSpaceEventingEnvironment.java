@@ -14,6 +14,8 @@ public abstract class DataSpaceEventingEnvironment {
     public static final String CONSUMER_DID = FancyMarketplaceEnvironment.CONSUMER_DID;
     /** A simulated participant the provider's keep list protects (scenario 5); written and removed by the IT. */
     public static final String KEPT_MEMBER_DID = "did:web:kept-member.org";
+    /** A second data space's publisher (scenario 7); only simulated by a grant the IT writes at the provider. */
+    public static final String OTHER_DATASPACE_ID = "did:web:other-dataspace.org";
 
     public static final String PARTICIPANT_REMOVED_TYPE = "org.fiware.dataspace.participant.removed";
 
@@ -36,6 +38,7 @@ public abstract class DataSpaceEventingEnvironment {
     /** A participant entry's mode for a DID on keep, whatever the publisher's mode (CM RemovalMode.KEEP_TAG_VALUE). */
     public static final String MODE_KEEP = "keep";
     public static final String TRIGGER_EVENT = "event";
+    public static final String TRIGGER_RECONCILIATION = "reconciliation";
     public static final String ACTION_REPORTED = "reported";
     public static final String ACTION_REVOKED_MEMBERSHIP = "revoked_membership";
     public static final String ACTION_KEPT = "kept";
@@ -55,6 +58,14 @@ public abstract class DataSpaceEventingEnvironment {
     /** One lease renewal (≤ 60 s) plus one retry backoff (≤ 20 s) plus a publisher start-up. */
     public static final Duration SUBSCRIPTION_RECOVERY_TIMEOUT = Duration.ofMinutes(3);
     public static final Duration DELIVERY_TIMEOUT = Duration.ofSeconds(30);
+    /** The pod's termination grace period plus margin. */
+    public static final Duration PUBLISHER_STOP_TIMEOUT = Duration.ofMinutes(2);
+    /** A new CM pod passes its readiness probe after 31 s at the earliest. */
+    public static final Duration CM_RESTART_TIMEOUT = Duration.ofMinutes(5);
+    /** {@code kubectl rollout status} gives up after this and is retried, as kubectl calls time out after 30 s. */
+    public static final String ROLLOUT_STATUS_TIMEOUT = "--timeout=20s";
+    /** The start-up sweep runs reconcile.initial-delay (PT20S) after start-up; counted from Ready, so a margin only. */
+    public static final Duration RECONCILIATION_TIMEOUT = Duration.ofMinutes(2);
     /** CM writes the order grant to the TIL asynchronously, after the order call has returned. */
     public static final Duration ORDER_GRANT_TIMEOUT = Duration.ofSeconds(30);
     /** The TIR reads the trust anchor's TIL; a fresh registration is listed almost at once. */

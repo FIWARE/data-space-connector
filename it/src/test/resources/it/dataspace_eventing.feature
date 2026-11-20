@@ -35,3 +35,27 @@ Feature: Data space eventing as described in doc/EVENTING.md.
     When the provider removes participants in dataspace mode, keeping the defaults and did:web:kept-member.org.
     And the operator removes Kept Member from the trust anchor.
     Then the provider keeps Kept Member and its membership grant.
+
+  # The order comes before the publisher goes down: without it the membership grant would be the consumer's only
+  # grant, and the sweep would delete the whole issuer instead of reaching scenario 4's state.
+  Scenario: With the push path blocked the reconciliation sweep reaches the same state
+    When the provider removes participants in dataspace mode, keeping the defaults.
+    And Fancy Marketplace buys access to M&P's k8s services.
+    Then the provider's TIL holds an order-scoped grant for Fancy Marketplace.
+    When the publisher is scaled down.
+    And the operator removes Fancy Marketplace from the trust anchor while the publisher is down.
+    And the provider's contract-management restarts.
+    Then the provider's reconciliation sweep revokes the membership of Fancy Marketplace.
+    And the report lists the order grant, but no membership grant, as still held by Fancy Marketplace.
+    And the provider's TIL no longer holds the membership grant of Fancy Marketplace, but still its order grant.
+
+  # The second data space is simulated by its grant alone; no second publisher is deployed.
+  Scenario: An entry attributed to another data space survives
+    When the provider removes participants in dataspace mode, keeping the defaults.
+    And Fancy Marketplace buys access to M&P's k8s services.
+    Then the provider's TIL holds an order-scoped grant for Fancy Marketplace.
+    When Fancy Marketplace also holds a membership grant of another data space at the provider.
+    And the operator removes Fancy Marketplace from the trust anchor.
+    Then the provider revokes the membership of Fancy Marketplace.
+    And the report lists the order grant and the other data space's grant, but no membership grant, as still held by Fancy Marketplace.
+    And the provider's TIL no longer holds the membership grant of Fancy Marketplace, but still its order grant and the other data space's grant.
