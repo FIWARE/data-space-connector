@@ -44,7 +44,7 @@ tests:
           path: data["init.sh"]
           pattern: 'scope'
 
-  # Only valid with an external contract-management: its 3.6.6 subchart fails on a null `dataspace`.
+  # Only valid with an external contract-management: its 3.6.7 subchart fails on a null `dataspace`.
   - it: registers unscoped when the dataspace key is null
     set:
       registration: *registration

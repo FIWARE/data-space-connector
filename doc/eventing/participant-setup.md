@@ -148,10 +148,10 @@ ODRL policy.
 
 ### Requirements
 
-- contract-management ≥ 3.5.3: the chart ships it (CM chart 3.6.6) since 10.16.0.
-  **Known issue in 3.5.3:** it sends the scope type by its Java enum name
-  (`scopeType=DATASPACE_MEMBERSHIP`), so the TIL answers `400`. contract-management then treats the
-  TIL as lacking typed scopes: a removal is only reported, without `held`, and no reconciliation runs.
+- contract-management ≥ 3.5.4: the chart ships it (CM chart 3.6.7) since 10.16.0. 3.5.3 sends the
+  scope type by its Java enum name (`scopeType=DATASPACE_MEMBERSHIP`), which the TIL refuses with
+  `400`: it then reports removals without `held`, runs no reconciliation and cannot use the writing
+  modes.
 - TIL ≥ 0.10.3: the chart ships 0.10.3 (decentralizedIam 2.3.0) since 10.16.0. A TIL outside the
   release (`registration.til`) must be upgraded by its operator. Each part of the feature needs:
   - 0.10.1 for the membership marking; an older TIL silently drops it;
