@@ -224,6 +224,12 @@ func TestGenerateTrial(t *testing.T) {
 	if !strings.Contains(stdout, quickStartURL) {
 		t.Errorf("stdout does not point to the Quick Start:\n%s", stdout)
 	}
+	assertTrialWarnings(t, stderr)
+}
+
+// assertTrialWarnings fails t unless stderr carries every production warning.
+func assertTrialWarnings(t *testing.T, stderr string) {
+	t.Helper()
 	for _, w := range trial.Warnings() {
 		if !strings.Contains(stderr, warningPrefix+w.Message) {
 			t.Errorf("stderr does not carry warning %s:\n%s", w.ID, stderr)
@@ -277,13 +283,14 @@ func TestGenerateTrialKeepsExistingFiles(t *testing.T) {
 		}
 		first[path] = marked
 	}
-	stdout, _, err := executeSplit(t, args...)
+	stdout, stderr, err := executeSplit(t, args...)
 	if !errors.Is(err, fs.ErrExist) {
 		t.Fatalf("error = %v, want %v", err, fs.ErrExist)
 	}
 	if stdout != "" {
 		t.Errorf("stdout = %q, want nothing written", stdout)
 	}
+	assertTrialWarnings(t, stderr)
 	for path, want := range first {
 		if !strings.Contains(err.Error(), path) {
 			t.Errorf("error %q does not list %s", err, path)

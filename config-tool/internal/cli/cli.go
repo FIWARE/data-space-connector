@@ -104,9 +104,16 @@ func newGenerateCommand() *cobra.Command {
 	return cmd
 }
 
-// generateTrial writes the local trial's values files to dir, never overwriting, and prints every
-// production warning to stderr.
+// generateTrial writes the local trial's values files to dir, never overwriting. Every production
+// warning goes to stderr first, so a refused or failed write still shows them.
 func generateTrial(stdout, stderr io.Writer, dir string) error {
+	for _, w := range trial.Warnings() {
+		msg := warningPrefix + w.Message
+		if w.Link != "" {
+			msg += " See " + w.Link
+		}
+		fmt.Fprintln(stderr, msg)
+	}
 	t, err := trial.Load(trialdata.FS)
 	if err != nil {
 		return fmt.Errorf("generate: %w", err)
@@ -121,13 +128,6 @@ func generateTrial(stdout, stderr io.Writer, dir string) error {
 	}
 	for _, p := range paths {
 		fmt.Fprintln(stdout, p)
-	}
-	for _, w := range trial.Warnings() {
-		msg := warningPrefix + w.Message
-		if w.Link != "" {
-			msg += " See " + w.Link
-		}
-		fmt.Fprintln(stderr, msg)
 	}
 	fmt.Fprintln(stdout, "Install them as the Quick Start does: "+quickStartURL)
 	return nil
