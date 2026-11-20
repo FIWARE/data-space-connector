@@ -4,7 +4,7 @@ import { fromProfile, type ModelRef, type Profile } from '../api/profile'
 import type { ChartSwitch } from '../api/roles'
 import type { Trial } from '../api/trial'
 import { emptyAnswers, Environment, type Answers, type Session, type Target } from './answers'
-import { fieldStage, type FieldId } from './openQuestions'
+import { fieldStage, type FieldId, type QuestionId } from './openQuestions'
 import { FIRST_STAGE, StageId } from './stageIds'
 
 /** Store contents; `entered` is false while S0 (Start) is shown. */
@@ -25,7 +25,7 @@ export interface AppState {
   /** Fields marked "ask later", sorted by id as the profile's `open`. */
   open: readonly FieldId[]
   /** A field its stage should focus once shown; the stage clears it with `focusDone`. */
-  focus?: FieldId
+  focus?: QuestionId
   /** Where this configuration was last saved or opened from; ⌘S saves there in place. */
   profilePath?: string
   /** The bundle the profile was built with; the server keeps it while no chart version is answered. */
@@ -63,7 +63,7 @@ export type Action =
   | { type: 'rootRereadFailed' }
   | { type: 'openExpert' }
   | { type: 'toggleOpen'; field: FieldId }
-  | { type: 'focusField'; field: FieldId }
+  | { type: 'focusField'; field: QuestionId }
   | { type: 'focusDone' }
   | { type: 'profileOpened'; path: string; profile: Profile; report?: LoadReport; notes: readonly string[] }
   | { type: 'profileSaved'; path: string; profile: Profile; notes: readonly string[] }

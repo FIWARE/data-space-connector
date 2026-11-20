@@ -303,15 +303,15 @@ describe('Target', () => {
   })
 
   it.each<[string, AppState, string, string, string]>([
-    ['an Operator preset', OPERATOR, DSC, '10.16.0', 'Role operator was cleared because it deploys trust-anchor — pick a role on step 2.'],
-    ['a Provider preset', PROVIDER, TRUST_ANCHOR, '1.3.6', 'Role provider was cleared because it deploys data-space-connector — pick a role on step 2.'],
+    ['an Operator preset', OPERATOR, DSC, '10.16.0', 'Role Operator was cleared because it deploys trust-anchor — pick a role on step 2.'],
+    ['a Provider preset', PROVIDER, TRUST_ANCHOR, '1.3.6', 'Role Provider was cleared because it deploys data-space-connector — pick a role on step 2.'],
   ])('clears %s when the chart changes, preselecting the new chart latest version', async (_name, state, chart, latest, notice) => {
     mockApi(undefined, TWO_CHARTS)
     renderState(state)
     await screen.findByRole('option', { name: /\(latest\)/ })
     await userEvent.selectOptions(screen.getByLabelText('Chart'), chart)
     await waitFor(() => expect(screen.getByLabelText('Version')).toHaveValue(latest))
-    expect(screen.getByRole('status')).toHaveTextContent(notice)
+    expect(await screen.findByRole('status')).toHaveTextContent(notice)
     expect(probe.state.answers).toMatchObject({ role: undefined, features: {} })
     expect(probe.state.profileCatalogue).toBeUndefined()
     expect(screen.getByLabelText('Validation')).toHaveTextContent('✖ 0 errors○ 1 open questions')

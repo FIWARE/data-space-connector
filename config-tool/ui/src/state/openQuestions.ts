@@ -32,13 +32,19 @@ export const FIELD_LABELS: Record<FieldId, string> = {
   'target.environment': 'Environment',
 }
 
-/** The stage that asks the field. */
-export function fieldStage(id: FieldId): StageId {
-  return SECTION_STAGES[id.split('.')[0] as Section]
+/** The Role stage's question; it has no "ask later" marker, so it is not a `FieldId`. */
+export const ROLE_QUESTION = 'role'
+
+/** Anything Review can list as open: a markable field or the role. */
+export type QuestionId = FieldId | typeof ROLE_QUESTION
+
+/** The stage that asks the question. */
+export function fieldStage(id: QuestionId): StageId {
+  return id === ROLE_QUESTION ? StageId.Role : SECTION_STAGES[id.split('.')[0] as Section]
 }
 
 /** DOM id of the field's input, so a Review link can focus it. */
-export function fieldElementId(id: FieldId): string {
+export function fieldElementId(id: QuestionId): string {
   return `field-${id}`
 }
 
@@ -51,14 +57,16 @@ function applies(id: FieldId, target: Target): boolean {
 
 /** One open question as the rail counts it and Review lists it. */
 export interface OpenQuestion {
-  field: FieldId
+  field: QuestionId
   stage: StageId
   label: string
   /** Deliberately marked "ask later", as opposed to merely unanswered. */
   marked: boolean
 }
 
-/** The union of unanswered and marked fields, in screen order. */
+const ROLE_OPEN: OpenQuestion = { field: ROLE_QUESTION, stage: StageId.Role, label: 'Role', marked: false }
+
+/** The union of unanswered and marked fields, then an unpicked role, in screen order. */
 export function openQuestions(state: AppState): OpenQuestion[] {
   const target = state.answers.target
   const unanswered = new Set(
@@ -66,22 +74,26 @@ export function openQuestions(state: AppState): OpenQuestion[] {
       .filter((e) => e.message === MSG_REQUIRED)
       .map((e) => targetFieldId(e.field)),
   )
-  return FIELD_IDS.filter((id) => unanswered.has(id) || (state.open.includes(id) && applies(id, target))).map((id) => ({
+  const fields = FIELD_IDS.filter((id) => unanswered.has(id) || (state.open.includes(id) && applies(id, target))).map((id) => ({
     field: id,
     stage: fieldStage(id),
     label: FIELD_LABELS[id],
     marked: state.open.includes(id),
   }))
+  return state.answers.role === undefined ? [...fields, ROLE_OPEN] : fields
 }
 
 /** The Target stage's footer and rail counters; a marked field with a format error counts as open and as an error. */
 export function targetIssues(state: AppState): Issues {
   const errors = validateTarget(state.answers.target).filter((e) => e.message !== MSG_REQUIRED).length
-  const open = openQuestions(state).filter((q) => q.stage === StageId.Target).length
-  return { warnings: 0, errors, open }
+  return { warnings: 0, errors, open: openCount(state, StageId.Target) }
 }
 
 /** The Role stage's counters: no role picked yet is one open question. */
 export function roleIssues(state: AppState): Issues {
-  return { warnings: 0, errors: 0, open: state.answers.role === undefined ? 1 : 0 }
+  return { warnings: 0, errors: 0, open: openCount(state, StageId.Role) }
+}
+
+function openCount(state: AppState, stage: StageId): number {
+  return openQuestions(state).filter((q) => q.stage === stage).length
 }

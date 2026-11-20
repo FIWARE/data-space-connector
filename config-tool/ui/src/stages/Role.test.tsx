@@ -134,6 +134,20 @@ describe('Role', () => {
     expect(card('Provider')).toHaveAttribute('aria-checked', 'false')
   })
 
+  it.each<[string, () => Promise<void>, string]>([
+    ['a mouse pick', () => userEvent.click(card('Provider')), 'Provider'],
+    ['leaving the group', () => userEvent.tab(), 'Consumer'],
+  ])('puts the tab stop back on the checked card after arrowing away and %s', async (_name, act, checked) => {
+    renderRole({ ...ON_ROLE, answers: { ...ON_ROLE.answers, role: 'consumer' } }, { preset: serverPreset().preset })
+    await findCards()
+    card('Consumer').focus()
+    await userEvent.keyboard('{ArrowLeft}')
+    expect(card('Custom')).toHaveFocus()
+    await act()
+    await waitFor(() => expect(card(checked)).toHaveAttribute('aria-checked', 'true'))
+    expect(radios().filter((radio) => radio.tabIndex === 0)).toEqual([card(checked)])
+  })
+
   it.each(ROLES.roles.map((role) => [role.title, role.id]))('picks %s, sending the role and marking its card', async (title, id) => {
     const { bodies, preset } = serverPreset()
     renderRole(ON_ROLE, { preset })

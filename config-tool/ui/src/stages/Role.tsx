@@ -5,6 +5,7 @@ import { applyPreset, fetchRoles, type ChartSwitch, type Role as RoleDef, type R
 import { repositoryDocUrl, SIZING_URL } from '../links'
 import { DEFAULT_CHART } from '../state/answers'
 import { useStore } from '../state/context'
+import { ROLE_QUESTION } from '../state/openQuestions'
 import { StageId } from '../state/stageIds'
 
 /** Text under the feature list: a preset never locks anything. */
@@ -147,7 +148,14 @@ export function Role() {
   const selected = roles.find((r) => r.id === state.answers.role)
   // Classification of the loaded file belongs to its chart, so a role deploying another chart is out of reach.
   const lockedReason = (role: RoleDef) => (state.loaded && role.chart !== chart ? chartLockedReason(role, state.loaded.chart) : undefined)
-  const tabStop = focused ?? Math.max(0, roles.indexOf(selected as RoleDef))
+  // The tab stop is the checked card unless the arrow keys moved focus inside the group.
+  const tabStop = focused ?? (selected ? roles.indexOf(selected) : 0)
+
+  useEffect(() => {
+    if (state.focus !== ROLE_QUESTION || (roles.length === 0 && !fetchError)) return
+    cards.current[tabStop]?.focus()
+    dispatch({ type: 'focusDone' })
+  }, [state.focus, roles.length, fetchError, tabStop, dispatch])
 
   const select = async (role: RoleDef) => {
     if (pending || lockedReason(role) || role.id === state.answers.role) return
@@ -156,7 +164,10 @@ export function Role() {
     try {
       const result = await applyPreset(toProfile(state), role.id, state.loaded?.sha256)
       // A pick that answers after the stage was left must not change a configuration started since.
-      if (mounted.current) dispatch({ type: 'roleApplied', profile: result.profile, chartSwitch: result.chartSwitch })
+      if (mounted.current) {
+        dispatch({ type: 'roleApplied', profile: result.profile, chartSwitch: result.chartSwitch })
+        setFocused(undefined)
+      }
     } catch (err) {
       if (mounted.current) setRefused({ title: role.title, message: (err as Error).message })
     } finally {
@@ -187,7 +198,13 @@ export function Role() {
           .
         </p>
       )}
-      <div className="cards" role="radiogroup" aria-label="Role" aria-busy={pending !== undefined}>
+      <div
+        className="cards"
+        role="radiogroup"
+        aria-label="Role"
+        aria-busy={pending !== undefined}
+        onBlur={(e) => e.currentTarget.contains(e.relatedTarget) || setFocused(undefined)}
+      >
         {roles.map((role, index) => (
           <RoleCard
             key={role.id}
