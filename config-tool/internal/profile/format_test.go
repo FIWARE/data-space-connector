@@ -28,9 +28,20 @@ const (
 	profileName = "provider" + FileSuffix
 )
 
+// Features and roles of testBundles: one feature per chart, one role per chart.
+const (
+	dscFeature = "f.dsc"
+	taFeature  = "f.ta"
+)
+
 // testBundles stand in for the shipped ones, so revision and version cases do not depend on them.
 var testBundles = []model.Bundle{
-	{Chart: dscChart, Version: latest, Revision: shippedRev, Latest: true},
+	{Chart: dscChart, Version: latest, Revision: shippedRev, Latest: true,
+		Features: []model.Feature{{ID: dscFeature, Chart: dscChart}, {ID: taFeature, Chart: taChart}},
+		Roles: []model.Role{
+			{ID: model.RoleProvider, Chart: dscChart, Features: map[string]model.Offer{dscFeature: model.OfferAvailable, taFeature: model.OfferNotOffered}},
+			{ID: model.RoleOperator, Chart: taChart, Features: map[string]model.Offer{dscFeature: model.OfferNotOffered, taFeature: model.OfferAvailable}},
+		}},
 	{Chart: dscChart, Version: older, Revision: 1},
 	{Chart: taChart, Version: taVersion, Revision: 1, Latest: true},
 }
@@ -80,7 +91,11 @@ func TestSaveLoadSave(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	tests := map[string][]byte{"full": readGolden(t), "empty": empty}
+	role, err := os.ReadFile(roleGoldenFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tests := map[string][]byte{"full": readGolden(t), "role": role, "empty": empty}
 	for name, first := range tests {
 		t.Run(name, func(t *testing.T) {
 			p, err := Unmarshal(first)
@@ -128,6 +143,18 @@ func TestUnmarshalRefuses(t *testing.T) {
 
 func TestValidate(t *testing.T) {
 	targetField := func(name string) string { return TargetFieldPrefix + name }
+	feature := func(id string) string { return featuresFieldPrefix + id }
+	provider := func(p *Profile) {
+		p.Role = model.RoleProvider
+		p.Features = map[string]FeatureState{dscFeature: {Enabled: true, Source: SourcePreset}}
+	}
+	operator := func(p *Profile) {
+		p.Target.Chart, p.Target.ChartVersion = taChart, ""
+		p.Model = ModelRef{Chart: taChart, Version: taVersion, Revision: 1}
+		p.Catalogue = &ModelRef{Chart: dscChart, Version: latest, Revision: shippedRev}
+		p.Role = model.RoleOperator
+		p.Features = map[string]FeatureState{taFeature: {Enabled: true, Source: SourcePreset}}
+	}
 	tests := []struct {
 		name   string
 		mutate func(p *Profile)
@@ -213,6 +240,27 @@ func TestValidate(t *testing.T) {
 			},
 			want: []string{"secrets.keycloak-admin"},
 		},
+		{name: "provider role", mutate: provider},
+		{name: "loaded and user sources", mutate: func(p *Profile) {
+			provider(p)
+			p.Features[dscFeature] = FeatureState{Enabled: false, Source: SourceLoaded}
+			p.Features[taFeature] = FeatureState{Enabled: false, Source: SourceUser}
+		}},
+		{name: "role without features", mutate: func(p *Profile) { p.Role = model.RoleProvider }},
+		{name: "unknown role", mutate: func(p *Profile) { provider(p); p.Role = "admin" }, want: []string{FieldRole}},
+		{name: "features without a role", mutate: func(p *Profile) { provider(p); p.Role = "" }, want: []string{FieldRole}},
+		{name: "unknown feature", mutate: func(p *Profile) { provider(p); p.Features["f.x"] = FeatureState{Source: SourcePreset} }, want: []string{feature("f.x")}},
+		{name: "unknown source", mutate: func(p *Profile) { provider(p); p.Features[dscFeature] = FeatureState{Source: "guess"} }, want: []string{feature(dscFeature)}},
+		{name: "enabled not-offered feature", mutate: func(p *Profile) { provider(p); p.Features[taFeature] = FeatureState{Enabled: true, Source: SourceUser} }, want: []string{feature(taFeature)}},
+		{name: "role of another chart", mutate: func(p *Profile) { p.Role = model.RoleOperator }, want: []string{FieldRole}},
+		{name: "operator with its catalogue", mutate: operator},
+		{name: "operator without catalogue", mutate: func(p *Profile) { operator(p); p.Catalogue = nil }, want: []string{FieldRole}},
+		{name: "older catalogue revision opens", mutate: func(p *Profile) { operator(p); p.Catalogue.Revision = 1 }},
+		{name: "catalogue newer than shipped", mutate: func(p *Profile) { operator(p); p.Catalogue.Revision = shippedRev + 1 }, want: []string{FieldCatalogue}},
+		{name: "catalogue revision missing", mutate: func(p *Profile) { operator(p); p.Catalogue.Revision = 0 }, want: []string{FieldCatalogue}},
+		{name: "catalogue not shipped", mutate: func(p *Profile) { operator(p); p.Catalogue.Version = unshipped }, want: []string{FieldCatalogue}},
+		{name: "catalogue without roles", mutate: func(p *Profile) { operator(p); p.Catalogue.Version = older; p.Catalogue.Revision = 1 }, want: []string{FieldCatalogue}},
+		{name: "catalogue without a role", mutate: func(p *Profile) { operator(p); p.Role, p.Features = "", nil }, want: []string{FieldCatalogue}},
 	}
 	for _, f := range []string{"values.yaml", "my values.yaml", "..values.yaml"} {
 		tests = append(tests, struct {
@@ -261,12 +309,16 @@ func TestGoldenValidatesAgainstShippedBundles(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	p, err := Unmarshal(readGolden(t))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if errs := p.Validate(shipped); len(errs) != 0 {
-		t.Errorf("Validate = %v, want no errors", errs)
+	for _, file := range []string{goldenFile, roleGoldenFile} {
+		t.Run(file, func(t *testing.T) {
+			p, err := ReadFile(file)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if errs := p.Validate(shipped); len(errs) != 0 {
+				t.Errorf("Validate = %v, want no errors", errs)
+			}
+		})
 	}
 }
 

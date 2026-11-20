@@ -54,7 +54,12 @@ var targetFields = []string{
 type Profile struct {
 	Format int      `json:"format" yaml:"format"`
 	Model  ModelRef `json:"model" yaml:"model"`
-	Target Target   `json:"target" yaml:"target"`
+	// Catalogue is the bundle the role presets came from; nil when that is Model (ADR 0015 §7).
+	Catalogue *ModelRef `json:"catalogue,omitempty" yaml:"catalogue,omitempty"`
+	Target    Target    `json:"target" yaml:"target"`
+	Role      string    `json:"role,omitempty" yaml:"role,omitempty"`
+	// Features maps catalogue feature ids to their state; a not-offered feature is never enabled.
+	Features map[string]FeatureState `json:"features,omitempty" yaml:"features,omitempty"`
 	// Answers maps answer ids to scalars; no answer id exists yet, so Validate refuses every key.
 	Answers map[string]any `json:"answers" yaml:"answers"`
 	Open    []OpenQuestion `json:"open" yaml:"open"`
@@ -151,6 +156,7 @@ func (p Profile) Validate(bundles []model.Bundle) []FieldError {
 		}
 	}
 	errs = append(errs, p.validateModel(bundles)...)
+	errs = append(errs, p.validateRole(bundles)...)
 	errs = append(errs, p.validateOpen()...)
 	errs = append(errs, p.Source.validate()...)
 	for _, k := range sortedKeys(p.Answers) {
@@ -174,14 +180,7 @@ func (p Profile) validateModel(bundles []model.Bundle) []FieldError {
 	}
 
 	m := p.Model
-	switch b := findBundle(bundles, m.Chart, m.Version); {
-	case b == nil:
-		errs = append(errs, FieldError{FieldModel, fmt.Sprintf("bundle %s@%s is not shipped; migrating between bundles comes with US-9.3", m.Chart, m.Version)})
-	case m.Revision < 1:
-		errs = append(errs, FieldError{FieldModel, "revision must be positive"})
-	case m.Revision > b.Revision:
-		errs = append(errs, FieldError{FieldModel, fmt.Sprintf("revision %d of bundle %s@%s is newer than the shipped revision %d; migrating between bundles comes with US-9.3", m.Revision, m.Chart, m.Version, b.Revision)})
-	}
+	errs = append(errs, checkRef(FieldModel, m, bundles)...)
 	if m.Chart != p.Target.Chart {
 		errs = append(errs, FieldError{FieldModel, fmt.Sprintf("chart %q does not match target.chart %q", m.Chart, p.Target.Chart)})
 	}
@@ -189,6 +188,22 @@ func (p Profile) validateModel(bundles []model.Bundle) []FieldError {
 		errs = append(errs, FieldError{FieldModel, fmt.Sprintf("version %q does not match target.chartVersion %q", m.Version, v)})
 	}
 	return errs
+}
+
+// checkRef refuses a bundle reference that is not shipped or whose revision this build cannot read;
+// a catalogue must also declare roles.
+func checkRef(field string, m ModelRef, bundles []model.Bundle) []FieldError {
+	switch b := findBundle(bundles, m.Chart, m.Version); {
+	case b == nil:
+		return []FieldError{{field, fmt.Sprintf("bundle %s@%s is not shipped; migrating between bundles comes with US-9.3", m.Chart, m.Version)}}
+	case m.Revision < 1:
+		return []FieldError{{field, "revision must be positive"}}
+	case m.Revision > b.Revision:
+		return []FieldError{{field, fmt.Sprintf("revision %d of bundle %s@%s is newer than the shipped revision %d; migrating between bundles comes with US-9.3", m.Revision, m.Chart, m.Version, b.Revision)}}
+	case field == FieldCatalogue && len(b.Roles) == 0:
+		return []FieldError{{field, fmt.Sprintf("bundle %s@%s declares no roles", m.Chart, m.Version)}}
+	}
+	return nil
 }
 
 // validateOpen refuses unknown and repeated field ids.

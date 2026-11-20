@@ -626,3 +626,94 @@ func setHome(t *testing.T, dir string) {
 	t.Setenv("HOME", dir)
 	t.Setenv("USERPROFILE", dir)
 }
+
+func TestSaveCatalogue(t *testing.T) {
+	roles := []model.Role{{ID: model.RoleOperator, Chart: trustAnchorChart}}
+	const taVersion = "1.0.0"
+	bundles := []model.Bundle{
+		{Chart: dscChart, Version: newerVersion, Revision: newerRevision, Latest: true, Roles: roles},
+		{Chart: dscChart, Version: olderVersion, Revision: 1, Roles: roles},
+		{Chart: dscChart, Version: "0.9.0", Revision: 1},
+		{Chart: trustAnchorChart, Version: taVersion, Revision: 1, Latest: true},
+	}
+	ta := profile.ModelRef{Chart: trustAnchorChart, Version: taVersion, Revision: 1}
+	newer := &profile.ModelRef{Chart: dscChart, Version: newerVersion, Revision: newerRevision}
+	older := &profile.ModelRef{Chart: dscChart, Version: olderVersion, Revision: 1}
+	tests := []struct {
+		name  string
+		model profile.ModelRef
+		role  string
+		held  *profile.ModelRef
+		want  *profile.ModelRef
+	}{
+		{name: "no role", model: ta, held: newer},
+		{name: "model declares the roles", model: *newer, role: model.RoleProvider, held: older},
+		{name: "fallback when nothing is held", model: ta, role: model.RoleOperator, want: newer},
+		{name: "older held catalogue is kept, with the shipped revision", model: ta, role: model.RoleOperator,
+			held: &profile.ModelRef{Chart: dscChart, Version: olderVersion, Revision: 5}, want: older},
+		{name: "held catalogue not shipped", model: ta, role: model.RoleOperator, held: &profile.ModelRef{Chart: dscChart, Version: "9.9.9"}, want: newer},
+		{name: "held catalogue without roles", model: ta, role: model.RoleOperator, held: &profile.ModelRef{Chart: dscChart, Version: "0.9.0"}, want: newer},
+		{name: "held catalogue of another chart", model: ta, role: model.RoleOperator, held: &ta, want: newer},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := saveCatalogue(bundles, tc.model, tc.role, tc.held)
+			if (got == nil) != (tc.want == nil) || got != nil && *got != *tc.want {
+				t.Errorf("saveCatalogue = %+v, want %+v", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestSaveRole(t *testing.T) {
+	operatorTarget := completeTarget()
+	operatorTarget.Chart, operatorTarget.ChartVersion = trustAnchorChart, ""
+	enabled := map[string]profile.FeatureState{"ta.registry": {Enabled: true, Source: profile.SourcePreset}}
+	dscCatalogue := &profile.ModelRef{Chart: dscChart, Version: latestChart, Revision: 2}
+	tests := []struct {
+		name          string
+		profile       profile.Profile
+		want          int
+		wantCatalogue *profile.ModelRef
+	}{
+		{name: "operator without catalogue gets the DSC bundle", want: http.StatusOK, wantCatalogue: dscCatalogue,
+			profile: profile.Profile{Target: operatorTarget, Role: model.RoleOperator, Features: enabled}},
+		{name: "provider has no catalogue", want: http.StatusOK,
+			profile: profile.Profile{Target: completeTarget(), Role: model.RoleProvider, Catalogue: dscCatalogue,
+				Features: map[string]profile.FeatureState{"data.scorpio": {Enabled: true, Source: profile.SourcePreset}}}},
+		{name: "unknown role", want: http.StatusUnprocessableEntity,
+			profile: profile.Profile{Target: completeTarget(), Role: "admin"}},
+		{name: "role of another chart", want: http.StatusUnprocessableEntity,
+			profile: profile.Profile{Target: completeTarget(), Role: model.RoleOperator}},
+		{name: "enabled feature the role does not offer", want: http.StatusUnprocessableEntity,
+			profile: profile.Profile{Target: completeTarget(), Role: model.RoleProvider, Features: enabled}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			ps := newProfileSession(t)
+			status, raw, got := ps.save(saveRequest{Path: filepath.Join(t.TempDir(), profileName), Profile: tc.profile})
+			if status != tc.want {
+				t.Fatalf("status = %d, want %d: %s", status, tc.want, raw)
+			}
+			if status != http.StatusOK {
+				return
+			}
+			if c := got.Profile.Catalogue; (c == nil) != (tc.wantCatalogue == nil) || c != nil && *c != *tc.wantCatalogue {
+				t.Errorf("catalogue = %+v, want %+v", c, tc.wantCatalogue)
+			}
+		})
+	}
+}
+
+func TestSaveRecordsRoleInRecentList(t *testing.T) {
+	ps := newProfileSession(t)
+	path := filepath.Join(t.TempDir(), profileName)
+	ps.mustSave(saveRequest{Path: path, Profile: profile.Profile{Target: completeTarget(), Role: model.RoleProvider}})
+	entries, err := ps.srv.recent.List()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 || entries[0].Path != path || entries[0].Role != model.RoleProvider {
+		t.Errorf("entries = %+v, want %s with role %s", entries, path, model.RoleProvider)
+	}
+}
