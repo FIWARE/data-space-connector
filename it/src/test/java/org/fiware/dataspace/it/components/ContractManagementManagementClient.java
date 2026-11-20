@@ -41,6 +41,7 @@ public class ContractManagementManagementClient implements AutoCloseable {
     private static final String EVENTS_PATH = "/events";
     private static final String HEALTH_PATH = "/health";
     private static final String TIR_WATCHER_INDICATOR = "dataspace-tir-watcher";
+    private static final String SUBSCRIPTIONS_INDICATOR = "dataspace-subscriptions";
     private static final String LAST_SUCCESSFUL_CYCLE = "lastSuccessfulCycle";
 
     private final String namespace;
@@ -155,11 +156,29 @@ public class ContractManagementManagementClient implements AutoCloseable {
                 });
     }
 
+    /** The Deployment's pods, terminating ones included. */
+    public List<String> pods() throws Exception {
+        return KubernetesHelper.deploymentPods(namespace, deployment);
+    }
+
+    /** The subscriber's registration state per publisher, for failure messages; never throws. */
+    public String subscriptionHealth() {
+        try {
+            return namespace + "/" + deployment + " " + healthIndicator(SUBSCRIPTIONS_INDICATOR).path("details");
+        } catch (Exception e) {
+            return namespace + "/" + deployment + " health unreadable: " + e.getMessage();
+        }
+    }
+
     private Optional<Instant> lastSuccessfulCycle() throws Exception {
-        // a DEGRADED or DOWN health answers 503 with the same body
-        JsonNode health = OBJECT_MAPPER.readTree(send(new Request.Builder().get(), HEALTH_PATH, false));
-        JsonNode cycle = health.path("details").path(TIR_WATCHER_INDICATOR).path("details").path(LAST_SUCCESSFUL_CYCLE);
+        JsonNode cycle = healthIndicator(TIR_WATCHER_INDICATOR).path("details").path(LAST_SUCCESSFUL_CYCLE);
         return cycle.isTextual() ? Optional.of(Instant.parse(cycle.asText())) : Optional.empty();
+    }
+
+    private JsonNode healthIndicator(String indicator) throws Exception {
+        // a DOWN health answers 503 with the same body
+        JsonNode health = OBJECT_MAPPER.readTree(send(new Request.Builder().get(), HEALTH_PATH, false));
+        return health.path("details").path(indicator);
     }
 
     private String send(Request.Builder request, String path, boolean requireSuccess) throws Exception {

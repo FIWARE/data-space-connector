@@ -12,7 +12,9 @@ import okhttp3.Request;
 import okhttp3.Response;
 import org.apache.http.HttpStatus;
 import org.awaitility.Awaitility;
+import org.awaitility.core.ConditionTimeoutException;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -43,6 +45,7 @@ public class DataSpaceEventingStepDefinitions extends StepDefintions {
     private static final String ORDERS_PATH = "/tmf-api/productOrderingManagement/v4/productOrder";
     private static final String JOB_SUCCEEDED = "1";
     private static final String PUBLISHER_REPLICAS = "--replicas=1";
+    private static final String PUBLISHER_STOPPED = "--replicas=0";
 
     /** The registration Job's membership grant of the consumer, read before any fixture of this run wrote trust. */
     private static ProviderTilClient.Grant jobGrant;
@@ -206,7 +209,16 @@ public class DataSpaceEventingStepDefinitions extends StepDefintions {
 
     @Then("the provider revokes the membership of Fancy Marketplace.")
     public void providerRevokesMembership() {
-        outcome = providerCm.awaitOutcome(PUBLISHER_ID, CONSUMER_DID, TRIGGER_EVENT, removedSince, REMOVAL_TIMEOUT);
+        assertMembershipRevoked(TRIGGER_EVENT, REMOVAL_TIMEOUT);
+    }
+
+    @Then("the provider's reconciliation sweep revokes the membership of Fancy Marketplace.")
+    public void providerSweepRevokesMembership() {
+        assertMembershipRevoked(TRIGGER_RECONCILIATION, RECONCILIATION_TIMEOUT);
+    }
+
+    private void assertMembershipRevoked(String trigger, Duration timeout) {
+        outcome = providerCm.awaitOutcome(PUBLISHER_ID, CONSUMER_DID, trigger, removedSince, timeout);
         assertEquals(MODE_DATASPACE, outcome.mode(), "The removal should be handled in dataspace mode.");
         assertEquals(ACTION_REVOKED_MEMBERSHIP, outcome.action(), "Dataspace mode revokes the membership grant.");
         assertTrue(outcome.applied(), "The revocation should have been written to the TIL.");
@@ -219,6 +231,82 @@ public class DataSpaceEventingStepDefinitions extends StepDefintions {
         String orderId = singleOrderId();
         assertTrue(grants.stream().anyMatch(g -> orderId.equals(g.scope()) && g.scopeType() == null),
                 "The untyped order grant should remain: " + grants);
+    }
+
+    @Then("the provider's TIL no longer holds the membership grant of Fancy Marketplace, but still its order grant "
+            + "and the other data space's grant.")
+    public void providerHoldsOrderAndOtherDataSpaceGrant() throws Exception {
+        providerHoldsOnlyOrderGrant();
+        List<ProviderTilClient.Grant> grants = providerTil.scopes(CONSUMER_DID);
+        assertTrue(otherDataSpaceGrant(grants).isPresent(), "The other data space's grant should remain: " + grants);
+    }
+
+    @Then("the report lists the order grant, but no membership grant, as still held by Fancy Marketplace.")
+    public void reportListsOrderGrantOnly() throws Exception {
+        assertHeldAfterRevocation();
+    }
+
+    @Then("the report lists the order grant and the other data space's grant, but no membership grant, "
+            + "as still held by Fancy Marketplace.")
+    public void reportListsOrderAndOtherDataSpaceGrant() throws Exception {
+        List<ContractManagementManagementClient.HeldGrant> held = assertHeldAfterRevocation();
+        assertTrue(held.stream().anyMatch(g -> OTHER_DATASPACE_ID.equals(g.scope())
+                        && SCOPE_TYPE_MEMBERSHIP.equals(g.scopeType())),
+                "The other data space's grant should be held: " + held);
+    }
+
+    // held is what the TIL holds after the revocation
+    private List<ContractManagementManagementClient.HeldGrant> assertHeldAfterRevocation() throws Exception {
+        assertNotNull(outcome, "The revocation should have been reported first.");
+        List<ContractManagementManagementClient.HeldGrant> held = outcome.held();
+        assertNotNull(held, "The report should have read what the participant holds.");
+        assertTrue(held.stream().noneMatch(g -> PUBLISHER_ID.equals(g.scope())
+                        && SCOPE_TYPE_MEMBERSHIP.equals(g.scopeType())),
+                "The membership grant should no longer be held: " + held);
+        String orderId = singleOrderId();
+        assertTrue(held.stream().anyMatch(g -> orderId.equals(g.scope()) && g.scopeType() == null),
+                "The order grant should be held: " + held);
+        return held;
+    }
+
+    @When("Fancy Marketplace also holds a membership grant of another data space at the provider.")
+    public void consumerHoldsOtherDataSpaceGrant() throws Exception {
+        providerTil.putGrant(CONSUMER_DID, OTHER_DATASPACE_ID, SCOPE_TYPE_MEMBERSHIP,
+                List.of(new ProviderTilClient.Credential(MEMBERSHIP_CREDENTIAL_TYPE, null, null)));
+        assertTrue(otherDataSpaceGrant(providerTil.scopes(CONSUMER_DID)).isPresent(),
+                "Fancy Marketplace should hold the other data space's grant at the provider.");
+    }
+
+    /** Waits until no publisher pod is left, terminating ones included: any of them could still announce a removal. */
+    @When("the publisher is scaled down.")
+    public void scalePublisherDown() throws Exception {
+        KubernetesHelper.kubectl("scale", "deploy/" + CM_DEPLOYMENT, "-n", PUBLISHER_NAMESPACE, PUBLISHER_STOPPED);
+        Awaitility.await("The publisher should have no pod left.")
+                .atMost(PUBLISHER_STOP_TIMEOUT)
+                .pollInterval(POLL_INTERVAL)
+                .ignoreExceptions()
+                .until(() -> publisher.pods().isEmpty());
+    }
+
+    @When("the operator removes Fancy Marketplace from the trust anchor while the publisher is down.")
+    public void removeConsumerWhilePublisherDown() throws Exception {
+        removedSince = trustAnchor.removeParticipantWhilePublisherDown(CONSUMER_DID);
+    }
+
+    /** The restart runs the start-up sweep and empties the report, so no earlier scenario's entry can match. */
+    @When("the provider's contract-management restarts.")
+    public void restartProviderCm() throws Exception {
+        KubernetesHelper.kubectl("rollout", "restart", "deploy/" + CM_DEPLOYMENT, "-n", PROVIDER_NAMESPACE);
+        // rollout status also waits for the old pod to go, so every later port-forward reaches the new one
+        Awaitility.await("The provider's contract-management should be rolled out.")
+                .atMost(CM_RESTART_TIMEOUT)
+                .pollInterval(POLL_INTERVAL)
+                .ignoreExceptions()
+                .until(() -> {
+                    KubernetesHelper.kubectl("rollout", "status", "deploy/" + CM_DEPLOYMENT, "-n", PROVIDER_NAMESPACE,
+                            ROLLOUT_STATUS_TIMEOUT);
+                    return true;
+                });
     }
 
     @Then("the provider keeps Kept Member and its membership grant.")
@@ -252,13 +340,22 @@ public class DataSpaceEventingStepDefinitions extends StepDefintions {
         attempt(errors, "remove Kept Member at the provider", () -> providerTil.removeIssuer(KEPT_MEMBER_DID));
         // left behind by a scenario that failed before its removal, it would stay at the TIR for every later run
         attempt(errors, "remove Kept Member at the trust anchor", () -> trustAnchor.removeIfPresent(KEPT_MEMBER_DID));
-        attempt(errors, "wait for both subscriptions", () -> publisher.awaitSubscriptions(
-                String.format(PROBE_DID_TEMPLATE, UUID.randomUUID()), PARTICIPANT_SUBSCRIPTIONS,
-                SUBSCRIPTION_RECOVERY_TIMEOUT));
+        attempt(errors, "wait for both subscriptions", this::awaitBothSubscriptions);
         publisher.close();
         providerCm.close();
         consumerCm.close();
         assertTrue(errors.isEmpty(), "Restoring the eventing deployment failed: " + errors);
+    }
+
+    // relies on the short lease and retry backoff of the k3s values; a timeout names each subscriber's state
+    private void awaitBothSubscriptions() {
+        try {
+            publisher.awaitSubscriptions(String.format(PROBE_DID_TEMPLATE, UUID.randomUUID()),
+                    PARTICIPANT_SUBSCRIPTIONS, SUBSCRIPTION_RECOVERY_TIMEOUT);
+        } catch (ConditionTimeoutException e) {
+            throw new IllegalStateException(String.format("%s Subscriber states: %s; %s", e.getMessage(),
+                    providerCm.subscriptionHealth(), consumerCm.subscriptionHealth()), e);
+        }
     }
 
     // a no-op unless a scenario scaled it down; the subscription wait below covers its start-up
@@ -296,6 +393,12 @@ public class DataSpaceEventingStepDefinitions extends StepDefintions {
 
     private static Optional<ProviderTilClient.Grant> membershipGrant(List<ProviderTilClient.Grant> grants) {
         return grants.stream().filter(DataSpaceEventingStepDefinitions::isJobGrant).findFirst();
+    }
+
+    private static Optional<ProviderTilClient.Grant> otherDataSpaceGrant(List<ProviderTilClient.Grant> grants) {
+        return grants.stream()
+                .filter(g -> OTHER_DATASPACE_ID.equals(g.scope()) && SCOPE_TYPE_MEMBERSHIP.equals(g.scopeType()))
+                .findFirst();
     }
 
     // the @After of every scenario deletes the TMF orders, so the one order is this scenario's

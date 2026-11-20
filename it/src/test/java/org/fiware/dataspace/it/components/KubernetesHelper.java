@@ -1,5 +1,6 @@
 package org.fiware.dataspace.it.components;
 
+import com.fasterxml.jackson.core.type.TypeReference;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.IOException;
@@ -12,7 +13,9 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 /**
  * Helper class for interacting with Kubernetes resources during integration tests.
@@ -211,6 +214,20 @@ public class KubernetesHelper {
     public static PortForward portForwardToDeployment(String namespace, String deployment, int remotePort)
             throws IOException, InterruptedException {
         return startPortForward(namespace, "deploy/" + deployment, freeLocalPort(), remotePort);
+    }
+
+    /** Names of every pod a Deployment's selector matches, terminating ones included. */
+    public static List<String> deploymentPods(String namespace, String deployment)
+            throws IOException, InterruptedException {
+        Map<String, String> matchLabels = TestUtils.OBJECT_MAPPER.readValue(kubectl("get", "deploy", deployment,
+                "-n", namespace, "-o", "jsonpath={.spec.selector.matchLabels}"), new TypeReference<>() {
+        });
+        String selector = matchLabels.entrySet().stream()
+                .map(label -> label.getKey() + "=" + label.getValue())
+                .collect(Collectors.joining(","));
+        String pods = kubectl("get", "pods", "-n", namespace, "-l", selector,
+                "-o", "jsonpath={.items[*].metadata.name}");
+        return pods.isEmpty() ? List.of() : List.of(pods.split("\\s+"));
     }
 
     private static int freeLocalPort() throws IOException {
