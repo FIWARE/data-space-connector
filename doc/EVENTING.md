@@ -74,7 +74,10 @@ sequenceDiagram
 | Consumer: the same, with the consumer's CM | `consumer` / `consumer`, sink `contract-management-fancy-marketplace.127.0.0.1.nip.io` | [`k3s/eventing-consumer.yaml`](../k3s/eventing-consumer.yaml) |
 
 The publisher reuses the authority's identity `did:web:dataspace-authority.org`, its key and its
-OperatorCredential; the participants already trust it as that credential's issuer. Both participants
+OperatorCredential. No new key or credential is created, but each participant's TIL must list the
+authority as issuer of `OperatorCredential` with `scope: ""`. `k3s/eventing-consumer.yaml` adds that
+entry; `k3s/provider.yaml` already lists the authority and `k3s/eventing-provider.yaml` sets its scope
+([participant setup](eventing/participant-setup.md#3-register-the-verifier-service)). Both participants
 run in `report` mode, so the demo changes no grant unless you switch the mode.
 
 The k3s values shorten CM's clocks so a removal arrives in about 30 s; the

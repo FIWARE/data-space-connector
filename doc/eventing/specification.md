@@ -380,8 +380,9 @@ A **publisher**:
 - sends structured-mode CloudEvents with `specversion` `"1.0"`, `id` unique per `source`, `source`
   equal to its own identifier, and a `type` of [§4](#4-event-types);
 - authenticates at the receiver's verifier with the token flow of
-  [§5.1](#51-token-flow-fiware-m2m-profile-of-oid4vp) and a credential whose `credentialSubject.id`
-  equals `source`, using the subscription's `protocolsettings`;
+  [§5.1](#51-token-flow-fiware-m2m-profile-of-oid4vp) and a credential that binds `source` as its
+  identity of [§5.2](#52-caller-identity) (the `credentialSubject.id` by default, the issuer under a
+  documented issuer binding), using the subscription's `protocolsettings`;
 - protects `/subscriptions` and `/subscriptions/{subscriptionId}` with a verifier that implements
   the verifier side of [§5.1](#51-token-flow-fiware-m2m-profile-of-oid4vp);
 - for `participant.removed`, sends `subject` and `data.participantId` with the same value;
@@ -393,8 +394,9 @@ A **publisher**:
 
 A **receiver**:
 
-- admits only tokens from its own verifier, and configures that verifier so that the presented
-  credential's `credentialSubject.id` is the identity compared with `source`;
+- admits only tokens from its own verifier, and configures that verifier so that the identity of
+  [§5.2](#52-caller-identity) (the `credentialSubject.id` by default, the issuer under a documented
+  issuer binding) is the value compared with `source`;
 - runs that verifier with the verifier side of [§5.1](#51-token-flow-fiware-m2m-profile-of-oid4vp);
 - ignores events about itself, judged by the resolved identifier ([§4.1](#41-orgfiwaredataspaceparticipantremoved));
 - applies the checks of [§6](#6-authorization-rule) in that order, with the listed answers;

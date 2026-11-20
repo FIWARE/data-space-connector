@@ -56,8 +56,9 @@ The authority release brings everything the publisher needs:
 
 - the identity `did:web:dataspace-authority.org`, its key (secret `dataspace-authority.org-tls`) and
   its OperatorCredential (secret `vc-operator-credential`, kept by vc-operator). The publisher
-  presents this credential to the participants. Nothing new is registered: the participants already
-  trust the authority as the issuer of that credential;
+  presents this credential to the participants. No new key or credential is created at the trust
+  anchor, but each participant's TIL must list the authority as issuer of `OperatorCredential` with
+  `scope: ""` ([participant setup](participant-setup.md#3-register-the-verifier-service));
 - a verifier, at which subscribers get their token for `/subscriptions`;
 - an APISIX gateway, which checks that token in front of CM.
 
@@ -119,8 +120,10 @@ contract-management:
   only that origin, so use the same value in both places; in production it is your own gateway host.
 - `tir-watcher` and `publisher.lease-ttl` keep CM's defaults in production; see
   [Timing](#timing-production-defaults-and-the-k3s-values).
-- `publisher.enabled` and `tir-watcher.enabled` are read at start-up; the other keys are reloaded at
-  runtime ([participant setup](participant-setup.md#when-configuration-changes-take-effect)).
+- Under `dataspace.events`, the `enabled` flags and `publisher.sink-*-timeout` are read at start-up;
+  the rest reloads at runtime. The keys outside `dataspace.events` (`did`, `enable*`, `services`,
+  `additionalEnvVars`) take effect only on a new rollout
+  ([participant setup](participant-setup.md#when-configuration-changes-take-effect)).
 
 ### 2. Present the authority's credential
 
