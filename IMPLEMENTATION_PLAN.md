@@ -14,16 +14,23 @@ not touched.
 `it/src/test/resources/policies/allowDataSpaceEvents.json`, CM chart 3.6.6 / CM 3.5.3,
 decentralized-iam 2.3.0 / TIL 0.10.3).
 
+**Status (2026-11-19):** Steps 1 (PR #29) and 2 (PR #34) are merged; `ticket-106/work` @ `019ab82`.
+`origin/ticket-106/step-2` carries two unmerged commits: `30ec74f` (IT scaffolding + report-mode
+scenario, to be reused by Step 3) and `dfc0e16` (the `@typed-scopes` plan change, superseded by
+this revision). The CM fix for the typed-scope blocker is released: CM chart **3.6.7** ships CM
+**3.5.4**. Step 3 bumps to it; Steps 3–7 then run as planned, covering all 7 ticket items (5 Cucumber scenarios).
+
 **Sources** (read-only, clone under `/tmp`):
 - `doc/eventing/architecture.md` §8–§12 and `doc/eventing/specification.md`.
 - `git clone https://github.com/FIWARE/contract-management /tmp/cm` (tag 3.5.3 @ `c7da3c4`), especially:
   - `README.md`: 120–330 for the listener, publisher and subscriber; 375–527 for full configs; 550–700 for modes and the report;
   - `DataSpaceEventsProperties.java`;
   - `RemovedParticipantsEndpoint.java`.
-- `https://github.com/FIWARE/helm-charts` `charts/contract-management` 3.6.6.
+- `https://github.com/FIWARE/helm-charts` `charts/contract-management` 3.6.6 (3.6.7 from Step 3).
 - `https://github.com/FIWARE/trusted-issuers-list` `api/trusted-issuers-list.yaml`.
 
-**CM facts the plan relies on** (verified at 3.5.3; property names are kebab-case under
+**CM facts the plan relies on** (verified at 3.5.3; Step 3 moves to 3.5.4, which fixes the typed
+scope type only; property names are kebab-case under
 `dataspace.events`):
 - **Startup-only keys.** These are the `enabled` flags of `listener`, `publisher`, `subscriber` and
   `tir-watcher`, plus `publisher.sink-*-timeout`. Everything else, including `publishers[]` and its
@@ -259,24 +266,14 @@ decentralized-iam 2.3.0 / TIL 0.10.3).
   A fixed sleep of `interval × (confirmations + 1)` was rejected: it is still a guess when a cycle
   is slow, and the health value is exact.
 
-## Known blocker (found in Step 2): CM 3.5.3 cannot use the TIL's typed scopes
-CM 3.5.3 sends the scope type by its Java enum name. The TIL 0.10.3 rejects that:
-`GET /issuer?scopeType=DATASPACE_MEMBERSHIP` returns `400 Unknown scope type`. CM's typed-scopes probe
-therefore reads `too_old`, and on the k3s deploy of Step 2 both participant CMs report health
-`DEGRADED` (`typed-scopes: too_old`). The consequences:
-- `report` mode reports removals with `held: null`;
-- the reconciler skips every sweep (`til_too_old`);
-- the writing modes (`dataspace`, `granted`, `full`) cannot work: CM fails to start in them, and a
-  ConfigMap switch to them has no TIL to write through.
-
-Step 2 (push path, `report` mode) is unaffected. Steps 3–5 assert `held`, the writing modes and the
-sweep, so they need a CM release that sends `scopeType=dataspace-membership`, and a CM chart that
-ships it. Until then, Step 3 can only implement scenario 1 and the scaffolding. Raise the bug with
-FIWARE/contract-management (`TrustedIssuersListAdapter.DATASPACE_MEMBERSHIP_SCOPE_TYPE` serialisation
-in the generated TIL client).
-
-**Resolved in Step 3:** CM 3.5.4 (chart 3.6.7) sends `scopeType=dataspace-membership`; the chart
-now ships it, so Steps 3–5 assert `held`, the writing modes and the sweep without a tag split.
+## Resolved blocker: CM 3.5.3 could not use the TIL's typed scopes
+Found in Step 2: CM 3.5.3 sent the scope type by its Java enum name (`scopeType=DATASPACE_MEMBERSHIP`)
+and the TIL 0.10.3 answered `400 Unknown scope type`. CM's typed-scopes probe read `too_old`, health
+was `DEGRADED`, `report` mode showed `held: null`, the reconciler skipped every sweep and the writing
+modes could not start. CM **3.5.4** (chart `oci://quay.io/fiware/helm-charts/contract-management`
+**3.6.7**) sends `scopeType=dataspace-membership`. Step 3 bumps the dependency and proves the fix on
+k3s before any scenario relies on it. There is **no** `@typed-scopes` tag and no exclusion in
+`eventing-test`: every `@eventing` scenario runs.
 
 ## Deviations from the ticket (need human sign-off)
 1. **The demo command is `mvn clean deploy -Peventing`, not `-Plocal`.** It is a scenario profile, as
@@ -544,7 +541,52 @@ now ships it, so Steps 3–5 assert `held`, the writing modes and the sweep with
     the same DID does not count;
   - `restore` puts it back.
 
-### Step 3: Integration test scaffolding and scenarios 1–3
+### Step 3: CM 3.6.7 bump, integration test scaffolding and scenarios 1–3
+- **Bump contract-management first** (own commit, before the IT work):
+  - `charts/data-space-connector/Chart.yaml`: `contract-management` `3.6.6` → `3.6.7`; run
+    `helm dependency update charts/data-space-connector`, then `helm lint`, `helm unittest` and
+    `.github/scripts/values-schema.sh --check`. The chart `version` stays `10.16.0`: it is not yet
+    released (`origin/main` is at 10.15.11), so the bump joins the 10.16.0 notes.
+  - Check whether chart 3.6.7 still fails the render on `contract-management.dataspace: null`. Update
+    the version in the comments that name 3.6.6 (`values.yaml` ~2040, `tests/eventing_test.yaml`
+    ~47) to match what 3.6.7 does; if it renders, say so instead of keeping a stale warning.
+  - `doc/release-notes/10-x.md` 10.16.0 component table: `contract-management` `3.6.3 → 3.6.7`, image
+    `3.4.2 → 3.5.4`.
+  - `doc/eventing/participant-setup.md` ~151–155: require CM ≥ 3.5.4 (chart 3.6.7) and replace the
+    "Known issue in 3.5.3" paragraph with one line: 3.5.3 sends the enum name, the TIL answers `400`,
+    so typed scopes, `held`, the writing modes and reconciliation need 3.5.4. Same for the `≥ 3.5.3`
+    mentions in `values.yaml` (~2034, ~2135) where they concern typed scopes; `/refresh` notes stay.
+  - `AGENTS.md` eventing section: "Feature needs CM ≥ 3.5.4 (chart 3.6.7)", and the "CM 3.5.3
+    publisher gotchas" line re-checked against 3.5.4 (keep what still holds).
+  - The k3s overlays pin no CM image, so they need no change.
+  - **Prove the fix on k3s** (`mvn clean deploy -Peventing`, results in the PR), in this order:
+    1. `remove did:web:fancy-marketplace.biz` with the demo script. It must yield a provider report
+       entry whose `held` lists the `dataspace-membership` grant. The consumer does not exercise
+       typed scopes here: the DID is on its `keep`, and `ParticipantRemoval.apply` returns `kept`
+       before it calls `requireSupported()`;
+    2. `publish did:web:probe-<timestamp>.org` with the demo script. The DID is on neither `keep`,
+       so both participant CMs call `requireSupported()`;
+    3. on both participant CMs, the `dataspace-participant-removed` health indicator is `UP` with
+       `details.til.typed-scopes: supported` (not `too_old`). The value is the lower-cased
+       `TilCapability.State`. `ParticipantRemovedStartupGuard` probes at start-up, so on a reachable
+       TIL it is already set then; the check comes after 1–2 because an `unverified` state (TIL
+       unreachable at start-up) is only re-probed by `requireSupported()` on an event or sweep;
+    4. `restore did:web:fancy-marketplace.biz`, so the IT run of the Step 3 acceptance finds the
+       consumer at the TIR.
+
+    If check 1 or 3 fails, stop and report `blocked`.
+- **Reuse the scaffolding.** Cherry-pick `30ec74f` from `origin/ticket-106/step-2` (not `dfc0e16`),
+  then remove what the blocker added: the `@typed-scopes` tag and scenario split in
+  `dataspace_eventing.feature`, and the `and not @typed-scopes` exclusion in the `it/pom.xml`
+  `eventing-test` profile. Also drop the two comments that point at the old "Known blocker"
+  heading: the `@typed-scopes` lines in the header of `dataspace_eventing.feature`, and the
+  `@typed-scopes` sentence ("… are excluded until it ships") in the `eventing-test` profile comment
+  in `it/pom.xml`. Scenario 1 below is one scenario again, with `held` and `attributable`
+  asserted: **move** the `@typed-scopes` scenario's step `And the report lists the membership and
+  the order grant Fancy Marketplace still holds.` into scenario 1, after the report step and before
+  the TIL check, rather than deleting it, since that step is where `held` is asserted. Then delete
+  the rest of the `@typed-scopes` scenario. Review the cherry-picked code against the rest of this
+  step and fill the gaps.
 - `it/pom.xml`: an `eventing-test` profile that mirrors `consent-test` (~415–432): it sets
   `cucumber.filter.tags=@eventing` **and** re-enables `maven-compiler-plugin` and
   `maven-failsafe-plugin` (`<skip>false</skip>`), with a comment saying why. The root `eventing`
