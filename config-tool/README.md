@@ -61,10 +61,8 @@ because rendering needs a complete target. An existing output file is refused un
 epic decides how rendered keys merge with overrides (ADR 0015). Rendering itself is not
 implemented yet.
 
-`dsc-config generate --trial [--output-dir <dir>]` writes the local trial's `trust-anchor.yaml`,
-`provider.yaml` and `consumer.yaml` (the Quick Start's `k3s/` values plus a header) into an existing
-directory, `.` by default (ADR 0016). If any of the three exists it writes none. It prints the
-production warnings to stderr every time, before writing, so a refused run shows them too.
+`dsc-config generate --trial [--output-dir <dir>]` writes the three files of the
+[local trial](#try-it-locally).
 
 ## Security model
 
@@ -102,6 +100,7 @@ internal/render     core: profile to values tree
 internal/roundtrip  core: parse / classify / merge / write of a values.yaml, byte-preserving
 internal/load       core: owned / recognized / unknown classification and the load report
 internal/validate   core: values against the chart's schema
+internal/trial      core: local trial descriptor, rendered outputs, production warnings, all-or-nothing write
 model/<version>/    question-model bundles, embedded
 trial/              local trial descriptor and k3s/ values copies, embedded (ADR 0016)
 ui/                 React/TypeScript SPA, built into ui/dist and embedded
@@ -241,6 +240,62 @@ note, and S0 shows it below the list.
 provisional, and unmarking keeps it too. A field is open when it is unanswered or marked, and
 it is counted once. The stage rail marks each stage that has one, the footer shows the total, and
 Review lists every open question with a link to its field. A marked empty field is open, not an error.
+
+## Try it locally
+
+The fourth S0 card produces the values of the [Quick Start](../doc/deployment-integration/local-deployment/LOCAL.MD#quick-start):
+three releases, in the order `k3s/deploy.sh` installs them. The tool only writes the values files; the namespaces,
+operators, CA and infrastructure the Quick Start applies first, and the install itself, stay with the Quick Start.
+
+| Release | Namespace | Chart | File | Same values as |
+|---|---|---|---|---|
+| `trust-anchor` | `trust-anchor` | `trust-anchor` | `trust-anchor.yaml` | [`k3s/trust-anchor.yaml`](../k3s/trust-anchor.yaml) |
+| `provider` | `provider` | `data-space-connector` | `provider.yaml` | [`k3s/provider.yaml`](../k3s/provider.yaml) |
+| `consumer` | `consumer` | `data-space-connector` | `consumer.yaml` | [`k3s/consumer.yaml`](../k3s/consumer.yaml) |
+
+The card opens a prerequisite screen: what the trial needs (a local cluster, kubectl and Helm, the Quick Start's
+setup, and memory, with a link to [Sizing](../doc/deployment-integration/roles/PREREQUISITES.md#sizing) rather than a
+figure) and what it gives. *Generate the three configurations* lands on Review, which shows "Local trial" with a
+**Development** badge and lists each release with namespace, `chart@version`, file, source and its values (collapsed).
+Stages Target to Configuration are marked skipped (–); choosing one offers *Start a new configuration*. The trial is
+fixed, so Save (rail button, Review action and ⌘S) is disabled. *Write files* takes an absolute, existing directory,
+by default the one of the latest recent profile.
+
+`dsc-config generate --trial [--output-dir <dir>]` does the same without the GUI (`.` by default); `--trial` excludes
+`--profile` and `--output`. It prints one line per written file and the Quick Start link.
+
+**The values are bundled, not rendered** ([ADR 0016](../doc/adr/0016-config-tool-local-trial.md)): the renderer that
+turns answers into values does not exist yet. `trial/` holds the descriptor `trial.yaml` and byte-identical copies of
+the three `k3s/` files, because `go:embed` cannot reach above the module. A test fails when they drift, or when a
+release's `chartVersion` differs from its `charts/*/Chart.yaml`; `make trial-sync` copies the `k3s/` files over them. Each output is the bundled file behind the generated header (profile
+`local-trial`) and a two-line development banner naming chart, version and source file. Only the provider and
+consumer files can be reopened with *Open values.yaml*: the trust-anchor header carries no chart version, as no
+trust-anchor model bundle exists.
+
+**Nothing is overwritten.** If any of the three files exists, symlinks included, none is written: the CLI fails and
+`POST /api/trial/write` answers 409, both naming every existing file. A failure halfway removes the files the run
+created.
+
+**Production warnings** are a fixed list in `internal/trial/warnings.go` until Epic 6 validates values: self-signed
+certificates, chart-deployed databases, `127.0.0.1.nip.io` host names, `tlsTrustAll`, the example identities, the
+published keystore password, the local squid proxy and laptop memory limits. Review lists them as "Production
+warnings (N)" with the releases each applies to, and the CLI prints them to stderr as `warning:` lines on every run,
+before writing, so a refused run shows them too. Neither can hide them. Each warning carries evidence, a text in the
+bundled values or a chart default, and a test fails when a release no longer contains it.
+
+`GET /api/trial` returns the releases with their rendered values and the warnings; `POST /api/trial/write` takes
+`{"dir": "<absolute path>"}` and answers 201 with the written files, or 422 for a relative or missing directory.
+
+`TestRenderedValuesTemplate` runs `helm template` on each output against the repo's chart. It skips without `helm` on
+`PATH` or without the charts' dependencies; `DSC_CONFIG_REQUIRE_HELM=1` turns the skip into a failure, as in the CI
+job `trial-render`. To run it locally, add the Helm repositories listed in the *Add Helm repositories* step of
+[`pre-release.yml`](../.github/workflows/pre-release.yml), then, from the repository root:
+
+```shell
+helm dependency update charts/data-space-connector
+helm dependency update charts/trust-anchor
+cd config-tool && DSC_CONFIG_REQUIRE_HELM=1 go test ./internal/trial -run TestRenderedValuesTemplate
+```
 
 ## Chart versions
 
