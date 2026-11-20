@@ -441,9 +441,7 @@
             <build>
                 <plugins>
                     <!-- As consent-test: the `eventing` deploy profile skips compiler and failsafe, so
-                         without this the job would compile and run nothing and still go green.
-                         `@typed-scopes` scenarios need a CM that sends `scopeType=dataspace-membership`
-                         (see IMPLEMENTATION_PLAN.md, Known blocker) and are excluded until it ships. -->
+                         without this the job would compile and run nothing and still go green. -->
                     <plugin>
                         <groupId>org.apache.maven.plugins</groupId>
                         <artifactId>maven-compiler-plugin</artifactId>
@@ -457,7 +455,7 @@
                         <configuration>
                             <skip>false</skip>
                             <systemPropertyVariables>
-                                <cucumber.filter.tags>@eventing and not @typed-scopes</cucumber.filter.tags>
+                                <cucumber.filter.tags>@eventing</cucumber.filter.tags>
                             </systemPropertyVariables>
                         </configuration>
                     </plugin>

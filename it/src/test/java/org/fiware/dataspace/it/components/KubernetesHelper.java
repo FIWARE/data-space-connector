@@ -90,12 +90,15 @@ public class KubernetesHelper {
     public static String kubectl(String... args) throws IOException, InterruptedException {
         List<String> command = new ArrayList<>(List.of("kubectl", "--kubeconfig", resolveKubeconfig()));
         command.addAll(List.of(args));
-        // stderr goes to a file, not the result: kubectl prints warnings there that would corrupt jsonpath output,
-        // and a second pipe read after stdout could deadlock once its buffer fills
+        // Both streams go to files, so waitFor's timeout holds even for a hung kubectl (a pipe read would block
+        // until it exits); stderr stays out of the result, as kubectl's warnings would corrupt jsonpath output
+        Path outputFile = Files.createTempFile("kubectl", ".out");
         Path errorFile = Files.createTempFile("kubectl", ".err");
         try {
-            Process process = new ProcessBuilder(command).redirectError(errorFile.toFile()).start();
-            String output = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8).trim();
+            Process process = new ProcessBuilder(command)
+                    .redirectOutput(outputFile.toFile())
+                    .redirectError(errorFile.toFile())
+                    .start();
             if (!process.waitFor(KUBECTL_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
                 process.destroyForcibly();
                 throw new IllegalStateException(String.format("kubectl %s timed out.", String.join(" ", args)));
@@ -104,8 +107,9 @@ public class KubernetesHelper {
                 throw new IllegalStateException(String.format("kubectl %s failed with exit code %d: %s",
                         String.join(" ", args), process.exitValue(), Files.readString(errorFile).trim()));
             }
-            return output;
+            return Files.readString(outputFile, StandardCharsets.UTF_8).trim();
         } finally {
+            Files.deleteIfExists(outputFile);
             Files.deleteIfExists(errorFile);
         }
     }

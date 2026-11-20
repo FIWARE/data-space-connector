@@ -275,11 +275,8 @@ ships it. Until then, Step 3 can only implement scenario 1 and the scaffolding. 
 FIWARE/contract-management (`TrustedIssuersListAdapter.DATASPACE_MEMBERSHIP_SCOPE_TYPE` serialisation
 in the generated TIL client).
 
-Step 3 splits scenario 1 accordingly: `With the default report mode a removal changes nothing` asserts
-mode, `action: reported`, `applied: false` and an unchanged provider TIL; the `held`/`attributable`
-assertions sit in a second scenario tagged `@typed-scopes`. The `eventing-test` profile runs
-`@eventing and not @typed-scopes`; drop the exclusion once a CM with the fix ships. Steps 4–5 tag
-their scenarios `@typed-scopes` the same way.
+**Resolved in Step 3:** CM 3.5.4 (chart 3.6.7) sends `scopeType=dataspace-membership`; the chart
+now ships it, so Steps 3–5 assert `held`, the writing modes and the sweep without a tag split.
 
 ## Deviations from the ticket (need human sign-off)
 1. **The demo command is `mvn clean deploy -Peventing`, not `-Plocal`.** It is a scenario profile, as

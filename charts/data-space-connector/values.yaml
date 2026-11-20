@@ -2031,13 +2031,13 @@ contract-management:
     # -- disable logs exporter (traces-only configuration).
     - name: OTEL_LOGS_EXPORTER
       value: "none"
-  # Data space eventing, participant side (needs contract-management >= 3.5.3). The namespace is
+  # Data space eventing, participant side (needs contract-management >= 3.5.4). The namespace is
   # `dataspace.events`, not `events` (D-12 of doc/eventing/architecture.md). The tree is passed verbatim
   # as the Micronaut property tree, so keys are kebab-case. With listener or subscriber enabled the
   # subchart renders it into the ConfigMap `contract-management-dataspace-events`, mounted as a directory
   # and watched, so a change to `publishers` reaches the running pod. Only the participant side is
   # configured here; the publisher and tir-watcher belong to the trust anchor.
-  # Never leave `dataspace:` empty (null): contract-management 3.6.6 then fails the render with
+  # Never leave `dataspace:` empty (null): contract-management 3.6.7 then fails the render with
   # `nil pointer evaluating interface {}.events`. Remove the key instead; an empty `events:` is fine.
   dataspace:
     events:
@@ -2132,7 +2132,7 @@ registration:
   # space publisher. For any other grant (e.g. an eIDAS `UserCredential` issuer, which a
   # `participant.removed` for that DID would revoke) set `scope` explicitly or `scope: ""`.
   # Needs a trusted-issuers-list >= 0.10.1, an older one silently drops the scope, and a
-  # contract-management >= 3.5.3 to act on it; contract-management's removal handling needs
+  # contract-management >= 3.5.4 to act on it; contract-management's removal handling needs
   # trusted-issuers-list >= 0.10.2 (>= 0.10.3 with `adopt-unattributed`). An issuer that is
   # already registered answers 409 and keeps its unscoped grant; contract-management's
   # `on-participant-removed.adopt-unattributed` covers those.

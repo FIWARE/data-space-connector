@@ -11,6 +11,7 @@ import lombok.extern.slf4j.Slf4j;
 import okhttp3.Request;
 import okhttp3.Response;
 import org.apache.http.HttpStatus;
+import org.awaitility.Awaitility;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -119,10 +120,13 @@ public class DataSpaceEventingStepDefinitions extends StepDefintions {
     @Then("the provider's TIL holds an order-scoped grant for Fancy Marketplace.")
     public void providerHoldsOrderGrant() throws Exception {
         String orderId = singleOrderId();
-        // CM writes order grants untyped, so the order's grant has no scopeType
-        assertTrue(providerTil.scopes(CONSUMER_DID).stream()
-                        .anyMatch(g -> orderId.equals(g.scope()) && g.scopeType() == null),
-                String.format("The provider should hold an untyped grant scoped to order %s.", orderId));
+        // CM writes order grants untyped, and only after the order call has returned
+        Awaitility.await(String.format("The provider should hold an untyped grant scoped to order %s.", orderId))
+                .atMost(ORDER_GRANT_TIMEOUT)
+                .pollInterval(POLL_INTERVAL)
+                .ignoreExceptions()
+                .until(() -> providerTil.scopes(CONSUMER_DID).stream()
+                        .anyMatch(g -> orderId.equals(g.scope()) && g.scopeType() == null));
     }
 
     @When("the operator removes Fancy Marketplace from the trust anchor.")

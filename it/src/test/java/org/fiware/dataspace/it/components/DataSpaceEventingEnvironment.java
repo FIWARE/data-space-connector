@@ -47,6 +47,8 @@ public abstract class DataSpaceEventingEnvironment {
     /** One lease renewal (≤ 60 s) plus one retry backoff (≤ 20 s) plus a publisher start-up. */
     public static final Duration SUBSCRIPTION_RECOVERY_TIMEOUT = Duration.ofMinutes(3);
     public static final Duration DELIVERY_TIMEOUT = Duration.ofSeconds(30);
+    /** CM writes the order grant to the TIL asynchronously, after the order call has returned. */
+    public static final Duration ORDER_GRANT_TIMEOUT = Duration.ofSeconds(30);
     public static final Duration POLL_INTERVAL = Duration.ofSeconds(2);
     /** Both participants subscribe to the publisher. */
     public static final int PARTICIPANT_SUBSCRIPTIONS = 2;
