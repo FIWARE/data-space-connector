@@ -7,9 +7,11 @@ eventing** closes that gap: the data space sends events to its participants, and
 Connector reacts to them.
 
 This guide covers the participant side: how your connector receives the data space's events and
-what it does with them. The protocol itself is described in the [architecture](architecture.md) and
-the [interoperability specification](specification.md); why the chart packages it the way it does is
-recorded in [ADR 0008](../adr/0008-events-routes-as-validated-operator-snippet.md).
+what it does with them. The publisher at the trust anchor is covered by the
+[trust anchor setup](trust-anchor-setup.md), the local demo and the integration test by
+[EVENTING.md](../EVENTING.md). The protocol itself is described in the [architecture](architecture.md)
+and the [interoperability specification](specification.md); why the chart packages it the way it does
+is recorded in [ADR 0008](../adr/0008-events-routes-as-validated-operator-snippet.md).
 
 The feature is off by default. An upgrade with default values creates no eventing ConfigMap, route,
 env entry or volume.
@@ -25,12 +27,15 @@ env entry or volume.
 - [Enabling](#enabling)
   - [Requirements](#requirements)
   - [1. Configure contract-management](#1-configure-contract-management)
+    - [The subscriber's credential](#the-subscribers-credential)
   - [2. Expose the events endpoint at the gateway](#2-expose-the-events-endpoint-at-the-gateway)
   - [3. Register the verifier service](#3-register-the-verifier-service)
   - [4. Create the ODRL policy](#4-create-the-odrl-policy)
   - [5. Test the setup](#5-test-the-setup)
 - [Configuration and architecture details](#configuration-and-architecture-details)
   - [When configuration changes take effect](#when-configuration-changes-take-effect)
+  - [Reconciliation](#reconciliation)
+  - [Subscriptions and publisher restarts](#subscriptions-and-publisher-restarts)
   - [What the chart checks on the routes](#what-the-chart-checks-on-the-routes)
   - [Own gateway, and switching the checks off](#own-gateway-and-switching-the-checks-off)
   - [Why the routes look like this](#why-the-routes-look-like-this)
@@ -203,6 +208,40 @@ Read `GET :9090/participants-removed` for a while before switching to a mode tha
 Do not leave `dataspace:` empty (null): the contract-management chart then fails the render; remove
 the key instead.
 
+`subscriber.protocol-settings.client-id` is required: contract-management does not start without it
+when the subscriber is on. `registry-url` is required for every mode but `report`; the
+[reconciliation](#reconciliation) sweep compares with it as well.
+
+#### The subscriber's credential
+
+To subscribe, contract-management gets a token from the publisher's verifier (the publisher's
+`client-id` and `scopes`) by presenting a credential over OID4VP. The k3s publisher admits a
+MembershipCredential whose issuer is a member at the TIR, and identifies the subscriber by that
+issuer ([trust anchor setup](trust-anchor-setup.md#who-a-subscriber-is)). Configure CM's OID4VP
+holder with your DID and key, and mount the credential into `credentialsFolder`:
+
+```yaml
+contract-management:
+  oid4vp:
+    enabled: true
+    credentialsFolder: /credential-repo
+    trustAnchors:
+      - /etc/ssl/cacert.pem
+    holder:
+      holderId: "did:web:mp-operations.org"
+      keyType: EC
+      # a PKCS#8 key
+      keyPath: /signing-key/tls.key
+      signatureAlgorithm: ECDH-ES
+```
+
+The chart has no value for the key or the credential; mount them with
+`contract-management.deployment.additionalVolumes` and `additionalVolumeMounts`.
+[`k3s/eventing-provider.yaml`](../../k3s/eventing-provider.yaml) shows the full setup, including
+the init containers that convert the key and import the cluster CA.
+[`k3s/eventing-consumer.yaml`](../../k3s/eventing-consumer.yaml) adds the MembershipCredential to a
+`credentialsFolder` that already holds other credentials.
+
 ### 2. Expose the events endpoint at the gateway
 
 The publisher reaches contract-management through your API gateway. Three routes are needed:
@@ -299,7 +338,8 @@ decentralizedIam:
                           - [OperatorCredential]
 ```
 
-This mapping is not yet covered by an integration test.
+The k3s demo's mapping (`issuer` → `participantId`) is covered by the integration test
+([EVENTING.md](../EVENTING.md#integration-tests)).
 
 The verifier checks the credential's issuer against `trustedIssuersLists`, here this participant's
 own TIL. That TIL must therefore list the issuer of the publisher's credential
@@ -397,6 +437,45 @@ contract-management watches.
 |---|---|
 | `listener.enabled`, `subscriber.enabled`, `publisher.enabled`, `tir-watcher.enabled`, `listener.watch.*`, `publisher.sink-connect-timeout`, `publisher.sink-read-timeout` | at startup. Changing one restarts contract-management. |
 | everything else, `publishers` included | at runtime, within about a minute, without a restart. |
+
+### Reconciliation
+
+Events can be missed: the publisher was down, the subscription had lapsed, the delivery failed. The
+reconciliation sweep is the backstop: it compares the grants this participant holds for each
+publisher with the publisher's registry (`on-participant-removed.registry-url`) and applies the
+configured mode to every DID that is no longer listed. Its outcome appears in
+`GET :9090/participants-removed` with `trigger: reconciliation`; an event's outcome has
+`trigger: event`.
+
+The sweep is configured once for all publishers, not per publisher:
+
+```yaml
+contract-management:
+  dataspace:
+    events:
+      participant-removed:
+        reconcile:
+          # first sweep after start-up, then every interval
+          initial-delay: PT1M
+          interval: PT15M
+```
+
+The values shown are CM's defaults. There is no endpoint that triggers a sweep; a restart runs one
+after `initial-delay`. The k3s files set `interval: PT6H`, so the integration test sees the sweep
+only right after a restart.
+
+### Subscriptions and publisher restarts
+
+A subscription lives for the publisher's lease (CM default `PT24H`). The subscriber renews it after
+`subscriber.renewal-fraction` (default 0.5) of the remaining lease, and retries a failed
+registration from `subscriber.retry.initial-backoff` (`PT5S`), doubling up to `retry.max-backoff`
+(`PT5M`), without limit.
+
+A CM publisher keeps its subscriptions in memory, so its restart drops them, and the subscriber only
+re-subscribes at its next renewal. Until then no event reaches it; the [reconciliation](#reconciliation)
+sweep closes that gap. The `dataspace-subscriptions` health indicator on port 9090 shows each
+publisher's subscription `state` and `expiresAt` (to anonymous callers only with
+`ENDPOINTS_HEALTH_DETAILS_VISIBLE=ANONYMOUS` in `additionalEnvVars`, as k3s sets).
 
 ### What the chart checks on the routes
 

@@ -170,15 +170,31 @@ implements only OID4VP 1.0 does not interoperate with it. It is the behaviour of
 ### 5.2 Caller identity
 
 The value the callee compares with the event's `source` (or with
-`subscriberId`) is the `credentialSubject.id` of the presented credential, i.e. the holder's
-identifier.
+`subscriberId`) is the identity its trust check binds. By default that is the
+`credentialSubject.id` of the presented credential, i.e. the holder's identifier; a callee MAY
+document an issuer binding instead (below).
 
-- A caller MUST present a credential whose `credentialSubject.id` equals the `source` (or the
-  `subscriberId`) it sends.
-- A callee MUST configure its verifier so that exactly this value reaches the comparison.
+- Unless the callee documents an issuer binding, a caller MUST present a credential whose
+  `credentialSubject.id` equals the `source` (or the `subscriberId`) it sends.
+- A callee MUST configure its verifier so that exactly the bound value reaches the comparison.
+- **Issuer binding.** A callee MAY bind the identity to the credential's **issuer** instead, when its
+  trust check binds the issuer and not the subject (e.g. a MembershipCredential checked against the
+  TIR, or a credential without a subject id). It MUST then document that choice to its callers, and
+  a caller MUST send the DID that issued its credential as the `source` (or the `subscriberId`).
+  Whichever value the callee picks, it MUST be the one its trust check binds: a subject that no
+  check binds can be written freely by any trusted issuer.
+
+*Informative:* the k3s demo uses the issuer binding on both sides. Its publisher binds
+`subscriberId` to the issuer of the subscriber's MembershipCredential, which each participant issues
+itself ([trust anchor setup](trust-anchor-setup.md#who-a-subscriber-is)). Both participants bind the
+events' `source` to the issuer of the publisher's OperatorCredential, which has no
+`credentialSubject.id`
+([`k3s/eventing-provider.yaml`](../../k3s/eventing-provider.yaml),
+[participant setup](participant-setup.md#3-register-the-verifier-service)).
 
 *Informative:* in a FIWARE receiver the verifier's `jwtInclusion` (`claimsToInclude` with
-`flatClaims`, credentials-config-service) maps `credentialSubject.id` to the top-level token claim
+`flatClaims`, credentials-config-service) maps `credentialSubject.id` (or, with an issuer binding,
+`issuer`) to the top-level token claim
 `participantId`. The API gateway verifies the token and passes its claims in a header (`X-Userinfo`),
 and contract-management reads the claim named by `dataspace.events.listener.identity.participant-claim`.
 
@@ -364,8 +380,9 @@ A **publisher**:
 - sends structured-mode CloudEvents with `specversion` `"1.0"`, `id` unique per `source`, `source`
   equal to its own identifier, and a `type` of [§4](#4-event-types);
 - authenticates at the receiver's verifier with the token flow of
-  [§5.1](#51-token-flow-fiware-m2m-profile-of-oid4vp) and a credential whose `credentialSubject.id`
-  equals `source`, using the subscription's `protocolsettings`;
+  [§5.1](#51-token-flow-fiware-m2m-profile-of-oid4vp) and a credential that binds `source` as its
+  identity of [§5.2](#52-caller-identity) (the `credentialSubject.id` by default, the issuer under a
+  documented issuer binding), using the subscription's `protocolsettings`;
 - protects `/subscriptions` and `/subscriptions/{subscriptionId}` with a verifier that implements
   the verifier side of [§5.1](#51-token-flow-fiware-m2m-profile-of-oid4vp);
 - for `participant.removed`, sends `subject` and `data.participantId` with the same value;
@@ -377,8 +394,9 @@ A **publisher**:
 
 A **receiver**:
 
-- admits only tokens from its own verifier, and configures that verifier so that the presented
-  credential's `credentialSubject.id` is the identity compared with `source`;
+- admits only tokens from its own verifier, and configures that verifier so that the identity of
+  [§5.2](#52-caller-identity) (the `credentialSubject.id` by default, the issuer under a documented
+  issuer binding) is the value compared with `source`;
 - runs that verifier with the verifier side of [§5.1](#51-token-flow-fiware-m2m-profile-of-oid4vp);
 - ignores events about itself, judged by the resolved identifier ([§4.1](#41-orgfiwaredataspaceparticipantremoved));
 - applies the checks of [§6](#6-authorization-rule) in that order, with the listed answers;

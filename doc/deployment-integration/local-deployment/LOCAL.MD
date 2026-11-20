@@ -1428,7 +1428,7 @@ The cluster survives `mvn clean`, and a new build reuses it. To switch between t
 **Data space eventing (`eventing` profile).** `mvn clean deploy -Peventing` deploys the trust anchor as the consent
 scenario does, and adds the event publisher to its `consent-authority` release
 ([k3s/eventing-trust-anchor.yaml](../../../k3s/eventing-trust-anchor.yaml)). The publisher watches the TIR and announces
-removed participants; see [the participant setup](../../eventing/participant-setup.md). `-Plocal,eventing` deploys the
+removed participants; see [EVENTING.md](../../EVENTING.md) for the demo and the integration test. `-Plocal,eventing` deploys the
 same. `-Pconsent,eventing` is not supported: `eventing` overrides the values files that `consent` sets, so the consent
 scenario would not be deployed as tested.
 

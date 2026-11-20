@@ -69,12 +69,16 @@ Optional consent management (ISO/IEC TS 27560) - its architecture, trust model a
 
 Participants publish events to, and subscribe at, other participants of the data space. The design and the
 wire contract are documented here:
+* [Overview and demo](./EVENTING.md) - the removal flow, the components in the local deployment, the demo and
+  the integration test
 * [Architecture](./eventing/architecture.md) - event model, APIs, trust and authorization, delivery, and the
   design decisions behind them
 * [Interoperability specification](./eventing/specification.md) - normative contract a non-FIWARE
   implementation must follow to publish events to, or subscribe at, a FIWARE participant
 * [Participant setup](./eventing/participant-setup.md) - what the connector does with the data space's
   events, and how to enable it: contract-management, the gateway routes, the verifier service and the ODRL policy
+* [Trust anchor setup](./eventing/trust-anchor-setup.md) - running the publisher that watches the TIR and
+  announces removed participants
 
 
 
