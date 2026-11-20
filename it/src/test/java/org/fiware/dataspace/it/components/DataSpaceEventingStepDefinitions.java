@@ -15,6 +15,7 @@ import org.awaitility.Awaitility;
 
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
@@ -27,6 +28,7 @@ import static org.fiware.dataspace.it.components.DataSpaceEventingEnvironment.*;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
@@ -56,10 +58,14 @@ public class DataSpaceEventingStepDefinitions extends StepDefintions {
     private final ProviderTilClient providerTil = new ProviderTilClient(PROVIDER_TIL_ADDRESS);
     private final TrustAnchorClient trustAnchor =
             new TrustAnchorClient(TRUST_ANCHOR_TIL_ADDRESS, TrustAnchorEnvironment.TIR_ADDRESS, publisher);
+    private final DataSpaceEventsConfigMap providerEventsConfig =
+            new DataSpaceEventsConfigMap(PROVIDER_NAMESPACE, EVENTS_CONFIG_MAP);
 
     private List<ProviderTilClient.Grant> grantsBeforeRemoval;
     private Instant removedSince;
     private ContractManagementManagementClient.ParticipantReport outcome;
+    /** The provider's events configuration before this scenario patched it; null if it never did. */
+    private String originalEventsConfig;
 
     /** Checks the deployment's starting state; it fails instead of repairing, so a broken deploy is not masked. */
     @Before("@eventing")
@@ -135,6 +141,37 @@ public class DataSpaceEventingStepDefinitions extends StepDefintions {
                         .anyMatch(g -> orderId.equals(g.scope()) && g.scopeType() == null));
     }
 
+    /**
+     * Sets mode and keep in one ConfigMap write, so the reload of the new mode also proves the reload of keep, which the
+     * report does not show.
+     */
+    @When("^the provider removes participants in (\\w+) mode, keeping the defaults(?: and (.+))?\\.$")
+    public void switchRemovalPolicy(String mode, String additionalKeep) throws Exception {
+        assertNull(originalEventsConfig, "A scenario writes the events ConfigMap at most once.");
+        List<String> keep = additionalKeep == null ? List.of()
+                : Arrays.stream(additionalKeep.split(",")).map(String::trim).toList();
+        String original = providerEventsConfig.read();
+        String patched = DataSpaceEventsConfigMap.withRemovalPolicy(original, mode, keep);
+        // set before the write, so the @After restores a write that failed half-way too
+        originalEventsConfig = original;
+        providerEventsConfig.write(patched);
+        providerCm.awaitMode(PUBLISHER_ID, mode, MODE_SWITCH_TIMEOUT);
+    }
+
+    @Given("Kept Member is a participant with a membership grant at the provider.")
+    public void keptMemberIsParticipant() throws Exception {
+        trustAnchor.registerParticipant(KEPT_MEMBER_DID);
+        Awaitility.await("Kept Member should be listed at the TIR.")
+                .atMost(REGISTRATION_TIMEOUT)
+                .pollInterval(POLL_INTERVAL)
+                .ignoreExceptions()
+                .until(() -> trustAnchor.isListed(KEPT_MEMBER_DID));
+        providerTil.putGrant(KEPT_MEMBER_DID, PUBLISHER_ID, SCOPE_TYPE_MEMBERSHIP,
+                List.of(new ProviderTilClient.Credential(MEMBERSHIP_CREDENTIAL_TYPE, null, null)));
+        assertTrue(membershipGrant(providerTil.scopes(KEPT_MEMBER_DID)).isPresent(),
+                "Kept Member should hold a membership grant at the provider.");
+    }
+
     @When("the operator removes Fancy Marketplace from the trust anchor.")
     public void removeConsumer() throws Exception {
         grantsBeforeRemoval = providerTil.scopes(CONSUMER_DID);
@@ -162,6 +199,38 @@ public class DataSpaceEventingStepDefinitions extends StepDefintions {
                 "The order grant should be held: " + outcome.held());
     }
 
+    @When("the operator removes Kept Member from the trust anchor.")
+    public void removeKeptMember() throws Exception {
+        removedSince = trustAnchor.removeParticipant(KEPT_MEMBER_DID);
+    }
+
+    @Then("the provider revokes the membership of Fancy Marketplace.")
+    public void providerRevokesMembership() {
+        outcome = providerCm.awaitOutcome(PUBLISHER_ID, CONSUMER_DID, TRIGGER_EVENT, removedSince, REMOVAL_TIMEOUT);
+        assertEquals(MODE_DATASPACE, outcome.mode(), "The removal should be handled in dataspace mode.");
+        assertEquals(ACTION_REVOKED_MEMBERSHIP, outcome.action(), "Dataspace mode revokes the membership grant.");
+        assertTrue(outcome.applied(), "The revocation should have been written to the TIL.");
+    }
+
+    @Then("the provider's TIL no longer holds the membership grant of Fancy Marketplace, but still its order grant.")
+    public void providerHoldsOnlyOrderGrant() throws Exception {
+        List<ProviderTilClient.Grant> grants = providerTil.scopes(CONSUMER_DID);
+        assertTrue(membershipGrant(grants).isEmpty(), "The membership grant should be revoked: " + grants);
+        String orderId = singleOrderId();
+        assertTrue(grants.stream().anyMatch(g -> orderId.equals(g.scope()) && g.scopeType() == null),
+                "The untyped order grant should remain: " + grants);
+    }
+
+    @Then("the provider keeps Kept Member and its membership grant.")
+    public void providerKeepsKeptMember() throws Exception {
+        outcome = providerCm.awaitOutcome(PUBLISHER_ID, KEPT_MEMBER_DID, TRIGGER_EVENT, removedSince, REMOVAL_TIMEOUT);
+        assertEquals(MODE_KEEP, outcome.mode(), "No removal mode applies to a DID on keep.");
+        assertEquals(ACTION_KEPT, outcome.action(), "A DID on keep should be kept.");
+        assertFalse(outcome.applied(), "Nothing should be written for a kept DID.");
+        assertTrue(membershipGrant(providerTil.scopes(KEPT_MEMBER_DID)).isPresent(),
+                "Kept Member's membership grant should remain.");
+    }
+
     @Then("the provider's TIL still holds the same grants for Fancy Marketplace.")
     public void providerTilUnchanged() throws Exception {
         assertEquals(new HashSet<>(grantsBeforeRemoval), new HashSet<>(providerTil.scopes(CONSUMER_DID)),
@@ -177,8 +246,12 @@ public class DataSpaceEventingStepDefinitions extends StepDefintions {
         List<String> errors = new ArrayList<>();
         attempt(errors, "restore the consumer at the trust anchor", () -> trustAnchor.restoreParticipant(CONSUMER_DID));
         attempt(errors, "scale the publisher back up", this::ensurePublisherRunning);
+        attempt(errors, "restore the provider's events configuration", this::restoreEventsConfig);
         attempt(errors, "restore the membership grant", this::restoreMembershipGrant);
         attempt(errors, "remove test grants of the consumer", this::removeTestGrants);
+        attempt(errors, "remove Kept Member at the provider", () -> providerTil.removeIssuer(KEPT_MEMBER_DID));
+        // left behind by a scenario that failed before its removal, it would stay at the TIR for every later run
+        attempt(errors, "remove Kept Member at the trust anchor", () -> trustAnchor.removeIfPresent(KEPT_MEMBER_DID));
         attempt(errors, "wait for both subscriptions", () -> publisher.awaitSubscriptions(
                 String.format(PROBE_DID_TEMPLATE, UUID.randomUUID()), PARTICIPANT_SUBSCRIPTIONS,
                 SUBSCRIPTION_RECOVERY_TIMEOUT));
@@ -191,6 +264,14 @@ public class DataSpaceEventingStepDefinitions extends StepDefintions {
     // a no-op unless a scenario scaled it down; the subscription wait below covers its start-up
     private void ensurePublisherRunning() throws Exception {
         KubernetesHelper.kubectl("scale", "deploy/" + CM_DEPLOYMENT, "-n", PUBLISHER_NAMESPACE, PUBLISHER_REPLICAS);
+    }
+
+    // the next @Before asserts report mode without waiting, and the grant restore below must not race dataspace mode
+    private void restoreEventsConfig() throws Exception {
+        if (originalEventsConfig != null) {
+            providerEventsConfig.write(originalEventsConfig);
+            providerCm.awaitMode(PUBLISHER_ID, MODE_REPORT, MODE_SWITCH_TIMEOUT);
+        }
     }
 
     // the only place that writes the Job's grant; dataspace mode may have removed it or the whole issuer

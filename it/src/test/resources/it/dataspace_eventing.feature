@@ -21,3 +21,17 @@ Feature: Data space eventing as described in doc/EVENTING.md.
     Then the provider reports the removal of Fancy Marketplace in report mode without changes.
     And the report lists the membership and the order grant Fancy Marketplace still holds.
     And the provider's TIL still holds the same grants for Fancy Marketplace.
+
+  Scenario: In dataspace mode only the membership grant is removed
+    When the provider removes participants in dataspace mode, keeping the defaults.
+    And Fancy Marketplace buys access to M&P's k8s services.
+    Then the provider's TIL holds an order-scoped grant for Fancy Marketplace.
+    When the operator removes Fancy Marketplace from the trust anchor.
+    Then the provider revokes the membership of Fancy Marketplace.
+    And the provider's TIL no longer holds the membership grant of Fancy Marketplace, but still its order grant.
+
+  Scenario: An identifier on keep is untouched
+    Given Kept Member is a participant with a membership grant at the provider.
+    When the provider removes participants in dataspace mode, keeping the defaults and did:web:kept-member.org.
+    And the operator removes Kept Member from the trust anchor.
+    Then the provider keeps Kept Member and its membership grant.

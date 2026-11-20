@@ -14,11 +14,11 @@ not touched.
 `it/src/test/resources/policies/allowDataSpaceEvents.json`, CM chart 3.6.6 / CM 3.5.3,
 decentralized-iam 2.3.0 / TIL 0.10.3).
 
-**Status (2026-11-19):** Steps 1 (PR #29) and 2 (PR #34) are merged; `ticket-106/work` @ `019ab82`.
-`origin/ticket-106/step-2` carries two unmerged commits: `30ec74f` (IT scaffolding + report-mode
-scenario, to be reused by Step 3) and `dfc0e16` (the `@typed-scopes` plan change, superseded by
-this revision). The CM fix for the typed-scope blocker is released: CM chart **3.6.7** ships CM
-**3.5.4**. Step 3 bumps to it; Steps 3–7 then run as planned, covering all 7 ticket items (5 Cucumber scenarios).
+**Status (2026-11-20):** Steps 1 (PR #29), 2 (PR #34) and 3 (PR #38, branch `ticket-106/step-2`)
+are merged; `ticket-106/work` @ `fbe1963`, with CM chart **3.6.7** (CM **3.5.4**), which fixes the
+typed-scope blocker. Step 4 is on branch `ticket-106/step-3`, because the branch numbers ran one
+behind the plan's steps from PR #38 on. Steps 5–7 follow as planned, covering all 7 ticket items
+(5 Cucumber scenarios).
 
 **Sources** (read-only, clone under `/tmp`):
 - `doc/eventing/architecture.md` §8–§12 and `doc/eventing/specification.md`.
@@ -57,7 +57,8 @@ scope type only; property names are kebab-case under
     credentialCount}], unattributedCount}]}`. `action` is a `RemovalAction` and `trigger` a
     `RemovalTrigger` (`event`, `reconciliation`), both as lower-case tags. The actions the IT asserts
     are `reported` (nothing written: report mode), `kept` (on a keep list), `revoked_membership` and
-    `not_held`. The report does **not** show `keep`.
+    `not_held`. The report does **not** show `keep`; a kept DID's entry has `mode: keep`
+    (`RemovalMode.KEEP_TAG_VALUE`), not the publisher's mode.
 
     The report keeps **only the latest outcome per (publisher, DID)**, in memory until the pod
     restarts: `RemovedParticipantsReport.record` replaces the old entry. `lastSeen` is when that

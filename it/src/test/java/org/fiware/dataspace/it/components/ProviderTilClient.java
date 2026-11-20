@@ -79,6 +79,16 @@ public class ProviderTilClient {
         }
     }
 
+    /** Deletes the issuer with all its grants; an absent issuer is fine. */
+    public void removeIssuer(String did) throws IOException {
+        try (Response response = HTTP_CLIENT.newCall(new Request.Builder().delete().url(issuerUrl(did).build()).build())
+                .execute()) {
+            if (response.code() != HttpStatus.SC_NOT_FOUND) {
+                successBody(response, HttpStatus.SC_NO_CONTENT);
+            }
+        }
+    }
+
     private HttpUrl.Builder issuerUrl(String did) {
         return HttpUrl.get(tilAddress).newBuilder().addPathSegment("issuer").addPathSegment(did);
     }

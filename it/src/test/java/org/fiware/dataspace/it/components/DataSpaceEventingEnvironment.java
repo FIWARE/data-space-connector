@@ -12,6 +12,8 @@ public abstract class DataSpaceEventingEnvironment {
     /** The publisher: the contract-management of the authority release. */
     public static final String PUBLISHER_ID = "did:web:dataspace-authority.org";
     public static final String CONSUMER_DID = FancyMarketplaceEnvironment.CONSUMER_DID;
+    /** A simulated participant the provider's keep list protects (scenario 5); written and removed by the IT. */
+    public static final String KEPT_MEMBER_DID = "did:web:kept-member.org";
 
     public static final String PARTICIPANT_REMOVED_TYPE = "org.fiware.dataspace.participant.removed";
 
@@ -30,8 +32,14 @@ public abstract class DataSpaceEventingEnvironment {
     public static final String PROVIDER_REGISTRATION_JOB = "provider-til-registration-job";
 
     public static final String MODE_REPORT = "report";
+    public static final String MODE_DATASPACE = "dataspace";
+    /** A participant entry's mode for a DID on keep, whatever the publisher's mode (CM RemovalMode.KEEP_TAG_VALUE). */
+    public static final String MODE_KEEP = "keep";
     public static final String TRIGGER_EVENT = "event";
     public static final String ACTION_REPORTED = "reported";
+    public static final String ACTION_REVOKED_MEMBERSHIP = "revoked_membership";
+    public static final String ACTION_KEPT = "kept";
+    public static final String MEMBERSHIP_CREDENTIAL_TYPE = "MembershipCredential";
     public static final String SCOPE_TYPE_MEMBERSHIP = "dataspace-membership";
     /** Credential types of the consumer's entry in the provider's registration.issuer. */
     public static final Set<String> CONSUMER_MEMBERSHIP_CREDENTIAL_TYPES =
@@ -49,6 +57,8 @@ public abstract class DataSpaceEventingEnvironment {
     public static final Duration DELIVERY_TIMEOUT = Duration.ofSeconds(30);
     /** CM writes the order grant to the TIL asynchronously, after the order call has returned. */
     public static final Duration ORDER_GRANT_TIMEOUT = Duration.ofSeconds(30);
+    /** The TIR reads the trust anchor's TIL; a fresh registration is listed almost at once. */
+    public static final Duration REGISTRATION_TIMEOUT = Duration.ofSeconds(30);
     public static final Duration POLL_INTERVAL = Duration.ofSeconds(2);
     /** Both participants subscribe to the publisher. */
     public static final int PARTICIPANT_SUBSCRIPTIONS = 2;
