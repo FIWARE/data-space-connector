@@ -2,18 +2,25 @@ import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
 import { App } from '../App'
+import { START_NEW_LABEL } from '../stages/Skipped'
 import { STAGES, type StageDef } from '../stages'
-import type { Issues } from '../state/issues'
+import { STATUS_GLYPH, STATUS_LEGEND, StageStatus, type Issues } from '../state/issues'
 import { initialState } from '../state/reducer'
+import { StageId } from '../state/stageIds'
 import { StoreProvider } from '../state/store'
+import { TRIAL } from '../test/api'
 import { Chrome } from './Chrome'
+import { TRIAL_SAVE_DISABLED } from './SaveDialog'
 
 const LABELS = ['Target', 'Role', 'Foundations', 'Infrastructure', 'Features', 'Configuration', 'Review', 'Install']
 const ENTERED = { ...initialState, entered: true, visited: [initialState.stage] }
+const IN_TRIAL = { ...initialState, entered: true, stage: StageId.Review, visited: [StageId.Review], trial: TRIAL }
+const SKIPPED_COUNT = 6
+const TARGET_HEADING = 'Where is this going?'
 
-function renderChrome(stages: readonly StageDef[] = STAGES) {
+function renderChrome(stages: readonly StageDef[] = STAGES, initial = ENTERED) {
   return render(
-    <StoreProvider initial={ENTERED}>
+    <StoreProvider initial={initial}>
       <Chrome stages={stages} />
     </StoreProvider>,
   )
@@ -101,5 +108,38 @@ describe('Chrome', () => {
       expect(screen.getByRole('button', { name: new RegExp(`\\d ${label}`) })).toHaveAttribute('aria-current', 'step')
     }
     expect(back).toBeDisabled()
+  })
+
+  it('marks stages 1–6 as skipped in the local trial, and its issues do not count', () => {
+    const stages = STAGES.map((stage) => (stage.id === StageId.Target ? { ...stage, selector: () => ({ warnings: 1, errors: 1, open: 1 }) } : stage))
+    renderChrome(stages, IN_TRIAL)
+    for (let index = 0; index < SKIPPED_COUNT; index++) {
+      expect(within(railButton(index)).getByLabelText(STATUS_LEGEND[StageStatus.Skipped])).toHaveTextContent(STATUS_GLYPH[StageStatus.Skipped])
+    }
+    expect(within(railButton(SKIPPED_COUNT)).getByLabelText(STATUS_LEGEND[StageStatus.Current])).toBeInTheDocument()
+    expect(screen.getByLabelText('Validation')).toHaveTextContent('⚠ 0 warnings✖ 0 errors○ 0 open questions')
+  })
+
+  it('disables saving in the local trial, naming the reason', () => {
+    renderChrome(STAGES, IN_TRIAL)
+    const save = railButtons().find((button) => button.textContent === '⌘S Save profile')
+    expect(save).toBeDisabled()
+    expect(save).toHaveAttribute('title', TRIAL_SAVE_DISABLED)
+  })
+
+  it('shows a skipped stage as skipped, and Start a new configuration leaves the trial for Target', async () => {
+    renderChrome(STAGES, IN_TRIAL)
+    await userEvent.click(railButton(1))
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Role — skipped in the local trial')
+    await userEvent.click(screen.getByRole('button', { name: START_NEW_LABEL }))
+    expect(screen.getByRole('heading', { name: TARGET_HEADING })).toBeInTheDocument()
+    expect(within(railButton(1)).queryByLabelText(STATUS_LEGEND[StageStatus.Skipped])).toBeNull()
+    expect(railButtons().find((button) => button.textContent === '⌘S Save profile')).toBeEnabled()
+  })
+
+  it('keeps the Install placeholder in the local trial', async () => {
+    renderChrome(STAGES, IN_TRIAL)
+    await userEvent.click(railButton(STAGES.length - 1))
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Install — not available yet')
   })
 })
