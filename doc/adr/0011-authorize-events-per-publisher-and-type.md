@@ -38,8 +38,9 @@ reloaded from the mounted ConfigMap without a restart.
 - The publisher × type check needs the identity the trust check binds to reach the application
   unchanged. The verifier's token mapping is therefore part of the security boundary
   ([trust anchor setup](../eventing/trust-anchor-setup.md#who-a-subscriber-is)).
-- An unknown event type is accepted and ignored (`202`) before this check, so a data space can
-  introduce a type without a flag day.
+- The check is skipped for an event type the receiver does not know: a complete event of an
+  unknown type is accepted and ignored (`202`), so a data space can introduce a type without a
+  flag day.
 
 ## Alternatives
 

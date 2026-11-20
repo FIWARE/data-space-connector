@@ -55,8 +55,9 @@ Decided in the design review of 2026-10-28 as D-6, D-10 and D-11
   organization.
 - Existing deployments carry unattributed entries the mechanism cannot act on. They appear in the
   report; `adopt-unattributed` is the migration path for single-membership deployments.
-- The marking and the writing modes need a TIL that understands typed scopes (≥ 0.10.2, 0.10.3 for
-  `adopt-unattributed`) and contract-management ≥ 3.5.4, which sends the type as the TIL expects
+- The marking and the writing modes need a TIL that understands typed scopes (0.10.1 for the
+  marking, 0.10.2 for the writing modes and a complete report, 0.10.3 for `adopt-unattributed`)
+  and contract-management ≥ 3.5.4, which sends the type as the TIL expects
   ([participant setup](../eventing/participant-setup.md#requirements)).
 - ODRL policies, Rainbow/EDC agreements, running access tokens and credentials already issued to
   the organization's users are not touched by any mode. The review found reporting them enough:
