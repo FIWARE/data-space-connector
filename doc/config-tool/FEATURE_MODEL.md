@@ -45,7 +45,7 @@ A feature declares:
 | Field | Meaning |
 |---|---|
 | `id`, `title`, `summary` | `dsp.edc`, "Dataspace Protocol (DSP)", one line of what it gives you |
-| `group` | Identity · Access · Data · Contracts · Marketplace · Interop · Consent · Observability |
+| `group` | Identity · Access · Data · Contracts · Marketplace · Interop · Consent · Observability · Operator (the trust-anchor features `ta.*`) |
 | `requires` / `suggests` / `conflicts` | Other features, resolved when toggling |
 | `needs` | Infrastructure dependencies (`postgres`, `mongo`, `certs`, `vault`) |
 | `keys` | The chart keys it owns, with the render function per key |

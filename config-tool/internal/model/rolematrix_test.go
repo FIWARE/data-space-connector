@@ -302,10 +302,6 @@ var (
 	tagPattern  = regexp.MustCompile(`<[^>]+>`)
 )
 
-// roleCellsFromEnd counts a role column from the end of a <tr>: the role cells are always its last ones,
-// whatever rowspans the cells on its left have.
-var roleCellsFromEnd = map[string]int{"Consumer": 4, "Provider": 3}
-
 // editRow rewrites the <tr> of the guide whose Component cell is component; it fails when there is none.
 func editRow(t *testing.T, src, component string, edit func(row string) string) string {
 	t.Helper()
@@ -321,11 +317,25 @@ func editRow(t *testing.T, src, component string, edit func(row string) string) 
 	return ""
 }
 
-// setCell sets the cell of component in a role column.
+// setCell sets the cell of component in a role column. Role cells are always the last ones of a <tr>,
+// whatever rowspans the cells on their left have, so the column is counted from the end of the header.
 func setCell(t *testing.T, src, component, role, text string) string {
+	t.Helper()
+	m, err := parseMatrix(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	col := slices.Index(m.header, role)
+	if col < 0 {
+		t.Fatalf("the role guide has no column %q", role)
+	}
+	fromEnd := len(m.header) - col
 	return editRow(t, src, component, func(row string) string {
 		cells := cellPattern.FindAllStringIndex(row, -1)
-		c := cells[len(cells)-roleCellsFromEnd[role]]
+		if len(cells) < fromEnd {
+			t.Fatalf("row %q has %d cells, fewer than the %d role columns from %q", component, len(cells), fromEnd, role)
+		}
+		c := cells[len(cells)-fromEnd]
 		return row[:c[0]] + "<td>" + text + "</td>" + row[c[1]:]
 	})
 }
