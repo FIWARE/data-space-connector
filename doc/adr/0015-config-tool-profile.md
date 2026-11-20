@@ -74,7 +74,7 @@ secrets: {}
 | `catalogue` | The bundle the role presets came from, same shape as `model`. Omitted when that is `model` itself (see 7). |
 | `target` | `profile.Target` unchanged: `type` (`file`, `cluster`), `context` (the kube context *name* only), `namespace`, `createNamespace`, `releaseName`, `chart`, `chartVersion`, `environment` (`development`, `production`). |
 | `role` | Role preset id (`consumer`, `provider`, `consumer-provider`, `operator`, `custom`); omitted until Stage 2 is answered (see 7). |
-| `features` | Feature id → `{enabled, source}`, `source` one of `preset`, `loaded`, `user`. Features the role does not offer are absent (see 7). |
+| `features` | Feature id → `{enabled, source}`, `source` one of `preset`, `loaded`, `user`. A feature the role does not offer is never enabled; `ApplyPreset` omits it (see 7). |
 | `answers` | Answer id → scalar. A slot only: CT-4 has no answer ids, so it is always `{}`. |
 | `open` | Fields deliberately left open, one mapping `{field}` per entry so a note can be added later. Field ids are `<section>.<key>`, e.g. `target.namespace`; the section names the stage. |
 | `source` | The values file the overrides layer lives in: base name, root mapping (ADR 0014; always written, `""` is the whole file), SHA-256 of its bytes. Metadata only; omitted when nothing was loaded. |
@@ -213,7 +213,8 @@ now". `catalogue` follows the rules of 6 (not shipped or newer revision: 422, ol
 note) and must declare roles. The server owns it on save, as it owns `model`: without a role, or
 when `model` declares the roles, it is dropped; else a held catalogue that is shipped, declares
 roles and is of the fallback's chart is kept with the shipped revision, and otherwise the fallback
-is written.
+is written. `ApplyPreset` reads its presets by the same rule (`profile.CatalogueBundle`), so a
+preset is always validated against the bundle it was built from.
 
 `profile.ApplyPreset` is pure. It writes `{enabled: true, source: preset}` for a recommended
 feature and `{enabled: false, source: preset}` for an available one, and omits the rest. Toggles

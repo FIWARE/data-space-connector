@@ -54,7 +54,7 @@ const msgOlderRevision = "the profile was saved with revision %d of bundle %s@%s
 // ApplyPreset sets role and its preset features; toggles from the loaded values file win (ADR 0015 §7).
 // It expects a normalised Model, never modifies p's maps and returns p unchanged with any error.
 func (p Profile) ApplyPreset(bundles []model.Bundle, role string, loaded map[string]bool) (Profile, *ChartSwitch, error) {
-	cat, err := p.presetCatalogue(bundles)
+	cat, err := CatalogueBundle(bundles, p.Model, p.Catalogue)
 	if err != nil {
 		return p, nil, err
 	}
@@ -76,7 +76,7 @@ func (p Profile) ApplyPreset(bundles []model.Bundle, role string, loaded map[str
 		sw = &ChartSwitch{FromChart: p.Target.Chart, FromVersion: p.Target.ChartVersion, ToChart: r.Chart}
 		out.Target.Chart, out.Target.ChartVersion = r.Chart, ""
 		out.Model = ModelRef{Chart: r.Chart, Version: bundles[i].Version, Revision: bundles[i].Revision}
-		if cat, err = model.RoleCatalogue(bundles, out.Model.Chart, out.Model.Version); err != nil {
+		if cat, err = CatalogueBundle(bundles, out.Model, p.Catalogue); err != nil {
 			return p, nil, err
 		}
 		if r = findRole(cat, role); r == nil {
@@ -116,14 +116,18 @@ func (p Profile) ApplyPreset(bundles []model.Bundle, role string, loaded map[str
 	return out, sw, nil
 }
 
-// presetCatalogue is the bundle ApplyPreset reads roles from: a usable held catalogue, else RoleCatalogue of the model.
-func (p Profile) presetCatalogue(bundles []model.Bundle) (model.Bundle, error) {
-	if c := p.Catalogue; c != nil {
-		if b := findBundle(bundles, c.Chart, c.Version); b != nil && len(b.Roles) > 0 {
-			return *b, nil
-		}
+// CatalogueBundle is the bundle a profile reads roles from (ADR 0015 §7): the model's bundle when it
+// declares roles, else a held catalogue that is shipped, declares roles and is of the fallback's chart,
+// else the model.RoleCatalogue fallback. ApplyPreset and the server's save path share it.
+func CatalogueBundle(bundles []model.Bundle, m ModelRef, held *ModelRef) (model.Bundle, error) {
+	c, err := model.RoleCatalogue(bundles, m.Chart, m.Version)
+	if err != nil || c.Chart == m.Chart && c.Version == m.Version || held == nil {
+		return c, err
 	}
-	return model.RoleCatalogue(bundles, p.Model.Chart, p.Model.Version)
+	if b := findBundle(bundles, held.Chart, held.Version); b != nil && b.Chart == c.Chart && len(b.Roles) > 0 {
+		return *b, nil
+	}
+	return c, nil
 }
 
 func findRole(b model.Bundle, id string) *model.Role {

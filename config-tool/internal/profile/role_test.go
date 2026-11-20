@@ -6,6 +6,7 @@ import (
 	"maps"
 	"os"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -321,5 +322,66 @@ func TestRevisionNotes(t *testing.T) {
 				t.Errorf("RevisionNotes = %q, want %q", got, tc.want)
 			}
 		})
+	}
+}
+
+// twoRoleBundles is testBundles with the older DSC bundle also declaring roles, under a different provider preset.
+func twoRoleBundles() []model.Bundle {
+	b := slices.Clone(testBundles)
+	b[1].Features = b[0].Features
+	b[1].Roles = []model.Role{
+		{ID: model.RoleProvider, Chart: dscChart, Features: map[string]model.Offer{dscFeature: model.OfferRecommended, taFeature: model.OfferNotOffered}},
+		{ID: model.RoleOperator, Chart: taChart, Features: map[string]model.Offer{dscFeature: model.OfferNotOffered, taFeature: model.OfferAvailable}},
+	}
+	return b
+}
+
+func TestCatalogueBundle(t *testing.T) {
+	b := twoRoleBundles()
+	dscLatest := ModelRef{Chart: dscChart, Version: latest, Revision: shippedRev}
+	dscOlder := ModelRef{Chart: dscChart, Version: older, Revision: 1}
+	ta := ModelRef{Chart: taChart, Version: taVersion, Revision: 1}
+	tests := []struct {
+		name  string
+		model ModelRef
+		held  *ModelRef
+		want  string
+	}{
+		{"model declares roles, nothing held", dscLatest, nil, latest},
+		{"model declares roles, another catalogue held", dscLatest, &dscOlder, latest},
+		{"fallback, nothing held", ta, nil, latest},
+		{"fallback, older catalogue held", ta, &dscOlder, older},
+		{"fallback, held bundle of another chart", ta, &ta, latest},
+		{"fallback, held bundle not shipped", ta, &ModelRef{Chart: dscChart, Version: "9.9.9", Revision: 1}, latest},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := CatalogueBundle(b, tc.model, tc.held)
+			if err != nil || got.Chart != dscChart || got.Version != tc.want {
+				t.Errorf("CatalogueBundle = %s@%s, %v; want %s@%s", got.Chart, got.Version, err, dscChart, tc.want)
+			}
+		})
+	}
+}
+
+// TestApplyPresetIgnoresHeldCatalogueOfRoleModel reads presets from the model's own bundle, as a save records them.
+func TestApplyPresetIgnoresHeldCatalogueOfRoleModel(t *testing.T) {
+	b := twoRoleBundles()
+	p := Profile{
+		Format:    FormatVersion,
+		Model:     ModelRef{Chart: dscChart, Version: latest, Revision: shippedRev},
+		Target:    validTarget(),
+		Catalogue: &ModelRef{Chart: dscChart, Version: older, Revision: 1},
+	}
+	got, sw, err := p.ApplyPreset(b, model.RoleProvider, nil)
+	if err != nil || sw != nil {
+		t.Fatalf("ApplyPreset: %+v, %v", sw, err)
+	}
+	want := map[string]FeatureState{dscFeature: {Enabled: false, Source: SourcePreset}}
+	if got.Catalogue != nil || !maps.Equal(got.Features, want) {
+		t.Errorf("catalogue %+v, features %v; want nil and %v", got.Catalogue, got.Features, want)
+	}
+	if errs := got.Validate(b); len(errs) > 0 {
+		t.Errorf("Validate: %v", errs)
 	}
 }

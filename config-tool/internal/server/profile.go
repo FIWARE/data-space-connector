@@ -224,22 +224,15 @@ func saveModel(bundles []model.Bundle, t profile.Target, held profile.ModelRef) 
 	return profile.ModelRef{Chart: t.Chart}
 }
 
-// saveCatalogue picks the role catalogue a save records (ADR 0015 §7): nil without a role or when the
-// model's own bundle declares the roles, else the held catalogue if it is shipped, declares roles and
-// is of the fallback's chart, else the fallback. The revision is the shipped one.
+// saveCatalogue picks the role catalogue a save records: nil without a role or when profile.CatalogueBundle
+// is the model's own bundle, else that bundle with the shipped revision.
 func saveCatalogue(bundles []model.Bundle, m profile.ModelRef, role string, held *profile.ModelRef) *profile.ModelRef {
 	if role == "" {
 		return nil
 	}
-	c, err := model.RoleCatalogue(bundles, m.Chart, m.Version)
+	c, err := profile.CatalogueBundle(bundles, m, held)
 	if err != nil || c.Chart == m.Chart && c.Version == m.Version {
 		return nil
-	}
-	if held != nil {
-		if b := findBundle(bundles, held.Chart, held.Version); b != nil && b.Chart == c.Chart && len(b.Roles) > 0 {
-			ref := modelRef(*b)
-			return &ref
-		}
 	}
 	ref := modelRef(c)
 	return &ref

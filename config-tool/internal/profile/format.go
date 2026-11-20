@@ -58,7 +58,7 @@ type Profile struct {
 	Catalogue *ModelRef `json:"catalogue,omitempty" yaml:"catalogue,omitempty"`
 	Target    Target    `json:"target" yaml:"target"`
 	Role      string    `json:"role,omitempty" yaml:"role,omitempty"`
-	// Features maps catalogue feature ids to their state; not-offered features are absent.
+	// Features maps catalogue feature ids to their state; a not-offered feature is never enabled.
 	Features map[string]FeatureState `json:"features,omitempty" yaml:"features,omitempty"`
 	// Answers maps answer ids to scalars; no answer id exists yet, so Validate refuses every key.
 	Answers map[string]any `json:"answers" yaml:"answers"`
