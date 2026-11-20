@@ -85,17 +85,7 @@ func (s *Server) handleSaveProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	p := req.Profile
-	p.Format = profile.FormatVersion
-	p.Model = saveModel(bundles, p.Target, p.Model)
-	p.Catalogue = saveCatalogue(bundles, p.Model, p.Role, p.Catalogue)
-	p.Secrets = map[string]profile.SecretRef{}
-	if p.Source, err = s.source(req.SourceSHA256); err != nil {
-		writeError(w, http.StatusUnprocessableEntity, err.Error(), "")
-		return
-	}
-	normalize(&p)
-	if errs := p.Validate(bundles); len(errs) > 0 {
-		writeFieldErrors(w, errs)
+	if _, ok := s.prepareProfile(w, bundles, &p, req.SourceSHA256); !ok {
 		return
 	}
 	err = profile.WriteFile(path, p, req.Overwrite)
@@ -250,8 +240,32 @@ func findBundle(bundles []model.Bundle, chart, version string) *model.Bundle {
 	return &bundles[i]
 }
 
-// source references the loaded slot when sha names it; empty sha means no source (ADR 0015 §2).
-func (s *Server) source(sha string) (*profile.Source, error) {
+// prepareProfile sets the fields a save owns (ADR 0015 §5) and validates p, as save and preset share it.
+// It returns the loaded slot sha names, or writes the refusal and returns false.
+func (s *Server) prepareProfile(w http.ResponseWriter, bundles []model.Bundle, p *profile.Profile, sha string) (*load.Result, bool) {
+	p.Format = profile.FormatVersion
+	p.Model = saveModel(bundles, p.Target, p.Model)
+	p.Catalogue = saveCatalogue(bundles, p.Model, p.Role, p.Catalogue)
+	p.Secrets = map[string]profile.SecretRef{}
+	res, err := s.slot(sha)
+	if err != nil {
+		writeError(w, http.StatusUnprocessableEntity, err.Error(), "")
+		return nil, false
+	}
+	p.Source = nil
+	if res != nil {
+		p.Source = &profile.Source{File: res.Report.Source, Root: res.Root.String(), SHA256: sha}
+	}
+	normalize(p)
+	if errs := p.Validate(bundles); len(errs) > 0 {
+		writeFieldErrors(w, errs)
+		return nil, false
+	}
+	return res, true
+}
+
+// slot returns the loaded slot when sha names it; empty sha means none (ADR 0015 §2).
+func (s *Server) slot(sha string) (*load.Result, error) {
 	if sha == "" {
 		return nil, nil
 	}
@@ -260,7 +274,7 @@ func (s *Server) source(sha string) (*profile.Source, error) {
 	if s.loaded == nil || s.loaded.Report.SHA256 != sha {
 		return nil, errSourceMismatch
 	}
-	return &profile.Source{File: s.loaded.Report.Source, Root: s.loaded.Root.String(), SHA256: sha}, nil
+	return s.loaded, nil
 }
 
 // normalize gives p the shape Marshal writes, so a response shows the profile as stored.

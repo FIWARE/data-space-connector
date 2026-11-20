@@ -30,11 +30,24 @@ export interface ProfileSource {
   sha256: string
 }
 
-/** The `.dscprofile.yaml` content, mirroring `profile.Profile` in Go. `answers` and `secrets` stay empty in CT-4. */
+/** Who decided a feature's state; a re-applied preset only touches `preset` (ADR 0015 §7). */
+export type FeatureSource = 'preset' | 'loaded' | 'user'
+
+/** The recorded state of one catalogue feature, mirroring `profile.FeatureState`. */
+export interface FeatureState {
+  enabled: boolean
+  source: FeatureSource
+}
+
+/** The `.dscprofile.yaml` content, mirroring `profile.Profile` in Go. `answers` and `secrets` stay empty in CT-4.
+ *  `catalogue` names the bundle the roles came from when that is not `model`; the server owns it. */
 export interface Profile {
   format: number
   model: ModelRef
+  catalogue?: ModelRef
   target: Target
+  role?: string
+  features?: Record<string, FeatureState>
   answers: Record<string, unknown> | null
   open: { field: string }[] | null
   source?: ProfileSource

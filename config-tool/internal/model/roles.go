@@ -102,8 +102,8 @@ type RoleMatrix struct {
 // keyWildcard is refused in feature keys: a key already names its whole subtree.
 const keyWildcard = "*"
 
-// toggleSuffix ends the answer id of every recognize rule at stage features.
-const toggleSuffix = ".enabled"
+// ToggleSuffix ends the answer id of every recognize rule at stage features: <feature id>.enabled.
+const ToggleSuffix = ".enabled"
 
 var (
 	floorMemory = regexp.MustCompile(`^[0-9]+(\.[0-9]+)?(Mi|Gi)$`)
@@ -359,9 +359,9 @@ func checkFeatureRules(rules []CompiledRule, features []Feature) error {
 		if r.Stage != StageFeatures {
 			continue
 		}
-		id, ok := strings.CutSuffix(r.Answer, toggleSuffix)
+		id, ok := strings.CutSuffix(r.Answer, ToggleSuffix)
 		if !ok || !slices.ContainsFunc(features, func(f Feature) bool { return f.ID == id }) {
-			return fmt.Errorf("recognize[%d]: answer %q is not <catalogue id>%s", i, r.Answer, toggleSuffix)
+			return fmt.Errorf("recognize[%d]: answer %q is not <catalogue id>%s", i, r.Answer, ToggleSuffix)
 		}
 		if r.Kind != KindToggle {
 			return fmt.Errorf("recognize[%d]: kind %s at stage %s, want %s", i, r.Kind, StageFeatures, KindToggle)
