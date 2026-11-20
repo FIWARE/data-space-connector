@@ -1,0 +1,202 @@
+package profile
+
+import (
+	"errors"
+	"fmt"
+	"slices"
+	"strings"
+
+	"github.com/FIWARE/data-space-connector/config-tool/internal/model"
+)
+
+// Field ids reported by Profile.Validate for the Role stage.
+const (
+	FieldRole           = "role"
+	FieldCatalogue      = "catalogue"
+	featuresFieldPrefix = "features."
+)
+
+// FeatureSource says who decided a feature's state (ADR 0015 §7).
+type FeatureSource string
+
+// Feature sources; US-2.3 re-applies a preset only to features of SourcePreset.
+const (
+	SourcePreset FeatureSource = "preset"
+	SourceLoaded FeatureSource = "loaded"
+	SourceUser   FeatureSource = "user"
+)
+
+var knownSources = []FeatureSource{SourcePreset, SourceLoaded, SourceUser}
+
+// FeatureState is the recorded state of one catalogue feature.
+type FeatureState struct {
+	Enabled bool          `json:"enabled" yaml:"enabled"`
+	Source  FeatureSource `json:"source" yaml:"source"`
+}
+
+// ChartSwitch reports the target chart and version ApplyPreset replaced.
+type ChartSwitch struct {
+	FromChart   string `json:"fromChart"`
+	FromVersion string `json:"fromVersion"`
+	ToChart     string `json:"toChart"`
+}
+
+// Errors of ApplyPreset; the API maps them to 422.
+var (
+	ErrUnknownRole           = errors.New("unknown role")
+	ErrChartSwitchLoaded     = errors.New("the role deploys another chart than the loaded values file; start a new configuration to switch charts")
+	ErrPresetConflictsLoaded = errors.New("the loaded values file enables features the role does not offer")
+)
+
+// msgOlderRevision is the open note for a model or catalogue saved with an older bundle revision.
+const msgOlderRevision = "the profile was saved with revision %d of bundle %s@%s; this build ships revision %d"
+
+// ApplyPreset sets role and its preset features; toggles from the loaded values file win (ADR 0015 §7).
+// It expects a normalised Model, never modifies p's maps and returns p unchanged with any error.
+func (p Profile) ApplyPreset(bundles []model.Bundle, role string, loaded map[string]bool) (Profile, *ChartSwitch, error) {
+	cat, err := p.presetCatalogue(bundles)
+	if err != nil {
+		return p, nil, err
+	}
+	r := findRole(cat, role)
+	if r == nil {
+		return p, nil, fmt.Errorf("%w %q", ErrUnknownRole, role)
+	}
+
+	out := p
+	var sw *ChartSwitch
+	if r.Chart != p.Target.Chart {
+		if p.Source != nil {
+			return p, nil, ErrChartSwitchLoaded
+		}
+		i := slices.IndexFunc(bundles, func(b model.Bundle) bool { return b.Chart == r.Chart && b.Latest })
+		if i < 0 {
+			return p, nil, fmt.Errorf("chart %q of role %s is not shipped", r.Chart, role)
+		}
+		sw = &ChartSwitch{FromChart: p.Target.Chart, FromVersion: p.Target.ChartVersion, ToChart: r.Chart}
+		out.Target.Chart, out.Target.ChartVersion = r.Chart, ""
+		out.Model = ModelRef{Chart: r.Chart, Version: bundles[i].Version, Revision: bundles[i].Revision}
+		if cat, err = model.RoleCatalogue(bundles, out.Model.Chart, out.Model.Version); err != nil {
+			return p, nil, err
+		}
+		if r = findRole(cat, role); r == nil {
+			return p, nil, fmt.Errorf("%w %q in bundle %s@%s", ErrUnknownRole, role, cat.Chart, cat.Version)
+		}
+	}
+
+	features := map[string]FeatureState{}
+	for id, o := range r.Features {
+		switch o {
+		case model.OfferRecommended:
+			features[id] = FeatureState{Enabled: true, Source: SourcePreset}
+		case model.OfferAvailable:
+			features[id] = FeatureState{Enabled: false, Source: SourcePreset}
+		}
+	}
+	var conflicts []string
+	for _, id := range sortedKeys(loaded) {
+		o, ok := r.Features[id]
+		switch {
+		case !ok:
+			return p, nil, fmt.Errorf("loaded toggle %q is not a feature of bundle %s@%s", id, cat.Chart, cat.Version)
+		case o != model.OfferNotOffered:
+			features[id] = FeatureState{Enabled: loaded[id], Source: SourceLoaded}
+		case loaded[id]:
+			conflicts = append(conflicts, id)
+		}
+	}
+	if len(conflicts) > 0 {
+		return p, nil, fmt.Errorf("%w: %s", ErrPresetConflictsLoaded, strings.Join(conflicts, ", "))
+	}
+
+	out.Role, out.Features, out.Catalogue = role, features, nil
+	if cat.Chart != out.Model.Chart || cat.Version != out.Model.Version {
+		out.Catalogue = &ModelRef{Chart: cat.Chart, Version: cat.Version, Revision: cat.Revision}
+	}
+	return out, sw, nil
+}
+
+// presetCatalogue is the bundle ApplyPreset reads roles from: a usable held catalogue, else RoleCatalogue of the model.
+func (p Profile) presetCatalogue(bundles []model.Bundle) (model.Bundle, error) {
+	if c := p.Catalogue; c != nil {
+		if b := findBundle(bundles, c.Chart, c.Version); b != nil && len(b.Roles) > 0 {
+			return *b, nil
+		}
+	}
+	return model.RoleCatalogue(bundles, p.Model.Chart, p.Model.Version)
+}
+
+func findRole(b model.Bundle, id string) *model.Role {
+	i := slices.IndexFunc(b.Roles, func(r model.Role) bool { return r.ID == id })
+	if i < 0 {
+		return nil
+	}
+	return &b.Roles[i]
+}
+
+// RevisionNotes says which recorded bundle (model, catalogue) is an older revision than the shipped one.
+// It expects a profile Validate accepted.
+func (p Profile) RevisionNotes(bundles []model.Bundle) []string {
+	var notes []string
+	for _, ref := range []*ModelRef{&p.Model, p.Catalogue} {
+		if ref == nil {
+			continue
+		}
+		if b := findBundle(bundles, ref.Chart, ref.Version); b != nil && ref.Revision < b.Revision {
+			notes = append(notes, fmt.Sprintf(msgOlderRevision, ref.Revision, ref.Chart, ref.Version, b.Revision))
+		}
+	}
+	return notes
+}
+
+// validateRole checks catalogue, role and features against the recorded role catalogue.
+func (p Profile) validateRole(bundles []model.Bundle) []FieldError {
+	var errs []FieldError
+	if p.Catalogue != nil {
+		if p.Role == "" {
+			errs = append(errs, FieldError{FieldCatalogue, "is only recorded with a role"})
+		}
+		errs = append(errs, checkRef(FieldCatalogue, *p.Catalogue, bundles)...)
+	}
+	if p.Role == "" {
+		if len(p.Features) > 0 {
+			errs = append(errs, FieldError{FieldRole, "is required while features are recorded"})
+		}
+		return errs
+	}
+	if len(errs) > 0 {
+		return errs
+	}
+	ref := p.Model
+	if p.Catalogue != nil {
+		ref = *p.Catalogue
+	}
+	cat := findBundle(bundles, ref.Chart, ref.Version)
+	if cat == nil {
+		// validateModel already reports the unshipped model.
+		return errs
+	}
+	if len(cat.Roles) == 0 {
+		return append(errs, FieldError{FieldRole, fmt.Sprintf("bundle %s@%s declares no roles and no catalogue is recorded", cat.Chart, cat.Version)})
+	}
+	r := findRole(*cat, p.Role)
+	if r == nil {
+		return append(errs, FieldError{FieldRole, fmt.Sprintf("%q is not a role of bundle %s@%s", p.Role, cat.Chart, cat.Version)})
+	}
+	if p.Target.Chart != "" && r.Chart != p.Target.Chart {
+		errs = append(errs, FieldError{FieldRole, fmt.Sprintf("role %s deploys chart %q, not target.chart %q", r.ID, r.Chart, p.Target.Chart)})
+	}
+	for _, id := range sortedKeys(p.Features) {
+		f := p.Features[id]
+		o, known := r.Features[id]
+		switch {
+		case !known:
+			errs = append(errs, FieldError{featuresFieldPrefix + id, "is not a known feature"})
+		case !slices.Contains(knownSources, f.Source):
+			errs = append(errs, FieldError{featuresFieldPrefix + id, fmt.Sprintf("source %q is unknown", f.Source)})
+		case f.Enabled && o == model.OfferNotOffered:
+			errs = append(errs, FieldError{featuresFieldPrefix + id, fmt.Sprintf("is not offered by role %s", r.ID)})
+		}
+	}
+	return errs
+}

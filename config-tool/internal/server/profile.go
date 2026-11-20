@@ -29,7 +29,6 @@ const (
 	noteSourceMissing  = "overrides not restored: %s is not next to the profile; saving again drops the reference to it"
 	noteSourceBroken   = "overrides not restored: %s cannot be loaded (%v); saving again drops the reference to it"
 	noteSourceChanged  = "overrides restored from %s, which has changed since the profile was saved"
-	noteOlderRevision  = "the profile was saved with revision %d of bundle %s@%s; this build ships revision %d"
 	noteRecentReset    = "the recent list was corrupt and has been reset"
 	noteRecentFailed   = "the recent list was not updated: %v"
 	noteRecentRead     = "the recent list cannot be read: %v"
@@ -88,6 +87,7 @@ func (s *Server) handleSaveProfile(w http.ResponseWriter, r *http.Request) {
 	p := req.Profile
 	p.Format = profile.FormatVersion
 	p.Model = saveModel(bundles, p.Target, p.Model)
+	p.Catalogue = saveCatalogue(bundles, p.Model, p.Role, p.Catalogue)
 	p.Secrets = map[string]profile.SecretRef{}
 	if p.Source, err = s.source(req.SourceSHA256); err != nil {
 		writeError(w, http.StatusUnprocessableEntity, err.Error(), "")
@@ -159,12 +159,9 @@ func (s *Server) handleOpenProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	normalize(&p)
-	notes := []string{}
+	notes := append([]string{}, p.RevisionNotes(bundles)...)
 	// Validate guarantees the bundle is shipped and not newer than this build's revision.
 	bundle := findBundle(bundles, p.Model.Chart, p.Model.Version)
-	if p.Model.Revision < bundle.Revision {
-		notes = append(notes, fmt.Sprintf(noteOlderRevision, p.Model.Revision, p.Model.Chart, p.Model.Version, bundle.Revision))
-	}
 	res, note := restoreSource(filepath.Dir(path), p.Source, bundles, bundle)
 	if note != "" {
 		notes = append(notes, note)
@@ -225,6 +222,27 @@ func saveModel(bundles []model.Bundle, t profile.Target, held profile.ModelRef) 
 		return modelRef(bundles[i])
 	}
 	return profile.ModelRef{Chart: t.Chart}
+}
+
+// saveCatalogue picks the role catalogue a save records (ADR 0015 §7): nil without a role or when the
+// model's own bundle declares the roles, else the held catalogue if it is shipped, declares roles and
+// is of the fallback's chart, else the fallback. The revision is the shipped one.
+func saveCatalogue(bundles []model.Bundle, m profile.ModelRef, role string, held *profile.ModelRef) *profile.ModelRef {
+	if role == "" {
+		return nil
+	}
+	c, err := model.RoleCatalogue(bundles, m.Chart, m.Version)
+	if err != nil || c.Chart == m.Chart && c.Version == m.Version {
+		return nil
+	}
+	if held != nil {
+		if b := findBundle(bundles, held.Chart, held.Version); b != nil && b.Chart == c.Chart && len(b.Roles) > 0 {
+			ref := modelRef(*b)
+			return &ref
+		}
+	}
+	ref := modelRef(c)
+	return &ref
 }
 
 func modelRef(b model.Bundle) profile.ModelRef {
@@ -309,7 +327,7 @@ func (s *Server) addRecent(path string, p profile.Profile) []string {
 	if s.recent == nil {
 		return []string{noteNoRecent}
 	}
-	err := s.recent.Add(recent.Entry{Path: path, ChartVersion: p.Model.Version})
+	err := s.recent.Add(recent.Entry{Path: path, ChartVersion: p.Model.Version, Role: p.Role})
 	switch {
 	case err == nil:
 		return nil

@@ -48,6 +48,15 @@ target:
   chart: data-space-connector
   chartVersion: 10.16.0
   environment: development
+role: provider
+features:
+  access.policies:
+    enabled: true
+    source: preset
+  data.scorpio:
+    enabled: false
+    source: loaded
+  # … one entry per offered feature
 answers: {}
 open:
   - field: target.context
@@ -62,7 +71,10 @@ secrets: {}
 |---|---|
 | `format` | Schema version of the file, `1`. Any other number is refused. |
 | `model` | The bundle the profile was built with: `chart`, `version` and `revision` (see 6). |
+| `catalogue` | The bundle the role presets came from, same shape as `model`. Omitted when that is `model` itself (see 7). |
 | `target` | `profile.Target` unchanged: `type` (`file`, `cluster`), `context` (the kube context *name* only), `namespace`, `createNamespace`, `releaseName`, `chart`, `chartVersion`, `environment` (`development`, `production`). |
+| `role` | Role preset id (`consumer`, `provider`, `consumer-provider`, `operator`, `custom`); omitted until Stage 2 is answered (see 7). |
+| `features` | Feature id → `{enabled, source}`, `source` one of `preset`, `loaded`, `user`. Features the role does not offer are absent (see 7). |
 | `answers` | Answer id → scalar. A slot only: CT-4 has no answer ids, so it is always `{}`. |
 | `open` | Fields deliberately left open, one mapping `{field}` per entry so a note can be added later. Field ids are `<section>.<key>`, e.g. `target.namespace`; the section names the stage. |
 | `source` | The values file the overrides layer lives in: base name, root mapping (ADR 0014; always written, `""` is the whole file), SHA-256 of its bytes. Metadata only; omitted when nothing was loaded. |
@@ -186,6 +198,39 @@ a bundle without one fails to load. Opening a profile whose `chart@version` is n
 whose revision is newer than the shipped one, is refused with a pointer to US-9.3. An older
 revision opens with a note.
 
+### 7. Role and features
+
+`role`, `features` and `catalogue` are optional keys, so they stay in format `1`: profiles written
+before Epic 2 still decode. `Validate` refuses an unknown role, `features` without a role, an
+unknown feature id or source, an enabled feature the role marks `not-offered`, and a role whose
+chart differs from `target.chart`; save and open answer those with 422.
+
+Presets are read through `model.RoleCatalogue` (ADR 0017): the `model` bundle when it declares
+roles, else a fallback bundle. A trust-anchor profile has no roles of its own, so its presets come
+from the latest DSC bundle. Because that bundle is not `model`, the profile pins it in `catalogue`,
+and `Validate` reads roles and features from the pinned bundle, never from "whatever is newest
+now". `catalogue` follows the rules of 6 (not shipped or newer revision: 422, older revision: a
+note) and must declare roles. The server owns it on save, as it owns `model`: without a role, or
+when `model` declares the roles, it is dropped; else a held catalogue that is shipped, declares
+roles and is of the fallback's chart is kept with the shipped revision, and otherwise the fallback
+is written.
+
+`profile.ApplyPreset` is pure. It writes `{enabled: true, source: preset}` for a recommended
+feature and `{enabled: false, source: preset}` for an available one, and omits the rest. Toggles
+back-derived from the loaded values file (ADR 0014, `<featureId>.enabled` at stage `features`) win
+over the preset, as `source: loaded`, so the profile never contradicts the `source` it references.
+A loaded `false` on a not-offered feature is omitted. A loaded `true` on a not-offered feature
+refuses the role and names the features. US-2.3 re-applies a preset only to `source: preset`
+features; it treats `loaded` like `user`.
+
+A role of another chart (Operator deploys `trust-anchor`) switches the target chart. The switch is
+refused while a `source` is set, because the load report and its answers are classified against
+the current chart's bundle. Otherwise it sets `target.chart`, clears `target.chartVersion` and
+sets `model` to the new chart's latest bundle as a placeholder. Stage 1 then leaves the version
+empty instead of preselecting latest, so a version the user chose is never replaced by a guess.
+The reverse holds too: a chart change on Stage 1 clears `role`, `features` and `catalogue` and
+tells the user why, since every role belongs to exactly one chart.
+
 ### API
 
 All three routes sit behind the per-run token and the 8 MiB body cap. Errors use the existing
@@ -202,7 +247,7 @@ it is a `POST`.
 ```
 
 `profile.model` is optional and only read while `target.chartVersion` is empty (5). The server
-fills in `format`, `model` (rule 5), `source` (rule 2) and an empty `secrets`, validates, writes and adds the entry to the recent list.
+fills in `format`, `model` (rule 5), `catalogue` (rule 7), `source` (rule 2) and an empty `secrets`, validates, writes and adds the entry to the recent list.
 Response 200:
 
 ```json
@@ -214,10 +259,10 @@ Response 200:
 list. Body `{"path": "…"}`. Response 200 `{path, profile, report?, notes}`: `report` is the
 ADR 0014 load report when the source was restored, classified against the profile's `model`
 with its recorded root (2). Notes cover a changed, missing or unreadable
-source, an older bundle revision, and a failing recent list.
+source, an older bundle revision of `model` or `catalogue`, and a failing recent list.
 
 **`GET /api/profile/recent`** returns
-`{"entries": [{"path", "name", "chartVersion", "savedAt"}], "defaultDir": "/home/pia/dsc", "notes": []}`.
+`{"entries": [{"path", "name", "chartVersion", "role", "savedAt"}], "defaultDir": "/home/pia/dsc", "notes": []}`.
 It never fails on the store: an unreadable or corrupt store gives `entries: []` and a note (4).
 
 | Status | When |
@@ -226,7 +271,7 @@ It never fails on the store: an unreadable or corrupt store gives `entries: []` 
 | 404 | Open: the file does not exist. |
 | 409 | Save: the file exists and `overwrite` is not set. |
 | 413 | Body above the 8 MiB cap. |
-| 422 | Path not absolute or without the `.dscprofile.yaml` suffix; file not a valid profile (strict decode); structurally invalid profile (5), including `model` not agreeing with `target`; bundle not shipped or revision newer (6); save with a `sourceSha256` that does not match the current load; save into a directory that does not exist; save onto a symlink (3). |
+| 422 | Path not absolute or without the `.dscprofile.yaml` suffix; file not a valid profile (strict decode); structurally invalid profile (5, 7), including `model` not agreeing with `target` and an unknown role; bundle not shipped or revision newer (6); save with a `sourceSha256` that does not match the current load; save into a directory that does not exist; save onto a symlink (3). |
 | 500 | Any other I/O error, such as permission denied, disk full, or an unreadable file on open. The body carries the OS error. |
 
 Per-field format errors in `target` never give a 422, on save or on open. Save never creates a
