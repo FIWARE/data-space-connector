@@ -61,6 +61,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/profile/open", s.handleOpenProfile)
 	mux.HandleFunc("GET /api/profile/recent", s.handleRecentProfiles)
 	mux.HandleFunc("POST /api/load", s.handleLoad)
+	mux.HandleFunc("GET /api/trial", s.handleTrial)
+	mux.HandleFunc("POST /api/trial/write", s.handleTrialWrite)
 	mux.HandleFunc("POST /api/render", handleRender)
 	mux.HandleFunc("POST /api/validate", handleValidate)
 	mux.HandleFunc("GET "+pathWS, s.handleWebSocket)
