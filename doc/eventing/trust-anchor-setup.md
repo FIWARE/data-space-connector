@@ -110,13 +110,13 @@ contract-management:
       publisher:
         enabled: true
         # the gateway host of step 4; sent as WebHook-Request-Origin in the handshake
-        origin: events.dataspace-authority.org
+        origin: dataspace-events.127.0.0.1.nip.io
       tir-watcher:
         enabled: true
 ```
 
 - `origin` is the host the participants configure as `publishers[].origin`. Their handshake answers
-  only that origin.
+  only that origin, so use the same value in both places; in production it is your own gateway host.
 - `tir-watcher` and `publisher.lease-ttl` keep CM's defaults in production; see
   [Timing](#timing-production-defaults-and-the-k3s-values).
 - `publisher.enabled` and `tir-watcher.enabled` are read at start-up; the other keys are reloaded at

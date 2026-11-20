@@ -170,24 +170,31 @@ implements only OID4VP 1.0 does not interoperate with it. It is the behaviour of
 ### 5.2 Caller identity
 
 The value the callee compares with the event's `source` (or with
-`subscriberId`) is the `credentialSubject.id` of the presented credential, i.e. the holder's
-identifier.
+`subscriberId`) is the identity its trust check binds. By default that is the
+`credentialSubject.id` of the presented credential, i.e. the holder's identifier; a callee MAY
+document an issuer binding instead (below).
 
-- A caller MUST present a credential whose `credentialSubject.id` equals the `source` (or the
-  `subscriberId`) it sends.
-- A callee MUST configure its verifier so that exactly this value reaches the comparison.
-- A callee MAY instead bind the identity to the credential's **issuer**, when its trust check binds
-  the issuer and not the subject (e.g. a MembershipCredential checked against the TIR). It MUST then
-  document that choice to its callers, and a caller MUST send the DID that issued its credential.
+- Unless the callee documents an issuer binding, a caller MUST present a credential whose
+  `credentialSubject.id` equals the `source` (or the `subscriberId`) it sends.
+- A callee MUST configure its verifier so that exactly the bound value reaches the comparison.
+- **Issuer binding.** A callee MAY bind the identity to the credential's **issuer** instead, when its
+  trust check binds the issuer and not the subject (e.g. a MembershipCredential checked against the
+  TIR, or a credential without a subject id). It MUST then document that choice to its callers, and
+  a caller MUST send the DID that issued its credential as the `source` (or the `subscriberId`).
   Whichever value the callee picks, it MUST be the one its trust check binds: a subject that no
   check binds can be written freely by any trusted issuer.
 
-*Informative:* the k3s demo's publisher binds `subscriberId` to the issuer of the subscriber's
-MembershipCredential, which each participant issues itself
-([trust anchor setup](trust-anchor-setup.md#who-a-subscriber-is)).
+*Informative:* the k3s demo uses the issuer binding on both sides. Its publisher binds
+`subscriberId` to the issuer of the subscriber's MembershipCredential, which each participant issues
+itself ([trust anchor setup](trust-anchor-setup.md#who-a-subscriber-is)). Both participants bind the
+events' `source` to the issuer of the publisher's OperatorCredential, which has no
+`credentialSubject.id`
+([`k3s/eventing-provider.yaml`](../../k3s/eventing-provider.yaml),
+[participant setup](participant-setup.md#3-register-the-verifier-service)).
 
 *Informative:* in a FIWARE receiver the verifier's `jwtInclusion` (`claimsToInclude` with
-`flatClaims`, credentials-config-service) maps `credentialSubject.id` to the top-level token claim
+`flatClaims`, credentials-config-service) maps `credentialSubject.id` (or, with an issuer binding,
+`issuer`) to the top-level token claim
 `participantId`. The API gateway verifies the token and passes its claims in a header (`X-Userinfo`),
 and contract-management reads the claim named by `dataspace.events.listener.identity.participant-claim`.
 
