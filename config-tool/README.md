@@ -98,6 +98,7 @@ internal/roundtrip  core: parse / classify / merge / write of a values.yaml, byt
 internal/load       core: owned / recognized / unknown classification and the load report
 internal/validate   core: values against the chart's schema
 model/<version>/    question-model bundles, embedded
+trial/              local trial descriptor and k3s/ values copies, embedded (ADR 0016)
 ui/                 React/TypeScript SPA, built into ui/dist and embedded
 ```
 

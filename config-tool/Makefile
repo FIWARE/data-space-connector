@@ -27,8 +27,10 @@ ifeq ($(HOST_GOOS),windows)
 WINDOW_CGO   := 0
 endif
 EXE          := $(if $(filter windows,$(HOST_GOOS)),.exe,)
+# go:embed cannot reach above the module, so the trial carries copies of these (ADR 0016).
+TRIAL_RELEASES := trust-anchor provider consumer
 
-.PHONY: ui build build-window cross test lint
+.PHONY: ui build build-window cross test lint trial-sync
 
 $(UI_DEPS): $(UI_DIR)/package-lock.json
 	cd $(UI_DIR) && npm ci
@@ -59,3 +61,6 @@ lint:
 	$(if $(GO_FILES),,@echo "warning: git listed no Go files; gofmt check skipped" >&2)
 	@unformatted="$$($(if $(GO_FILES),gofmt -l $(GO_FILES)))"; \
 	if [ -n "$$unformatted" ]; then echo "gofmt needed:"; echo "$$unformatted"; exit 1; fi
+
+trial-sync:
+	@for release in $(TRIAL_RELEASES); do cp ../k3s/$$release.yaml trial/values/$$release.yaml; done
