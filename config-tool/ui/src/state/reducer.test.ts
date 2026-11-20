@@ -15,7 +15,7 @@ const BUSY: AppState = {
   entered: true,
   stage: StageId.Features,
   visited: [StageId.Target, StageId.Role, StageId.Features],
-  answers: { target: { ...emptyAnswers().target, type: TargetType.Cluster, namespace: 'provider', chartVersion: '10.15.0', environment: Environment.Production } },
+  answers: { features: {}, target: { ...emptyAnswers().target, type: TargetType.Cluster, namespace: 'provider', chartVersion: '10.15.0', environment: Environment.Production } },
   session: { kubeconfig: KUBECONFIG, chosenContext: 'prod' },
   expert: true,
 }
@@ -30,7 +30,7 @@ describe('reducer', () => {
     const next = reducer(BUSY, { type: 'fileLoaded', report: REPORT, file: FILE })
     expect(next).toMatchObject({ entered: true, stage: StageId.Review, visited: [StageId.Review], expert: false, loaded: REPORT, loadedFile: FILE })
     expect(next.session).toEqual({ kubeconfig: KUBECONFIG, chosenContext: undefined })
-    expect(next.answers).toEqual({ target: { ...emptyAnswers().target, chartVersion: REPORT.chartVersion } })
+    expect(next.answers).toEqual({ features: {}, target: { ...emptyAnswers().target, chartVersion: REPORT.chartVersion } })
   })
 
   it.each([
@@ -149,7 +149,7 @@ describe('reducer: trial', () => {
   it('lands on Review with only Review visited, a development target and the trial held', () => {
     const next = reducer({ ...loaded, profilePath: PROFILE_PATH }, { type: 'trialStarted', trial: TRIAL })
     expect(next).toMatchObject({ entered: true, stage: StageId.Review, visited: [StageId.Review], expert: false, open: [], trial: TRIAL })
-    expect(next.answers).toEqual({ target: { ...emptyAnswers().target, environment: Environment.Development } })
+    expect(next.answers).toEqual({ features: {}, target: { ...emptyAnswers().target, environment: Environment.Development } })
     expect(next.loaded).toBeUndefined()
     expect(next.loadedFile).toBeUndefined()
     expect(next.profilePath).toBeUndefined()
@@ -163,5 +163,105 @@ describe('reducer: trial', () => {
     { type: 'profileOpened', path: PROFILE_PATH, profile: SAVED_PROFILE, notes: [] },
   ])('drops the trial on $type', (action) => {
     expect(reducer(trial, action).trial).toBeUndefined()
+  })
+})
+
+describe('reducer: roles', () => {
+  const DSC = 'data-space-connector'
+  const TRUST_ANCHOR = 'trust-anchor'
+  const DSC_MODEL = { chart: DSC, version: '10.16.0', revision: 2 }
+  const TA_MODEL = { chart: TRUST_ANCHOR, version: '1.3.6', revision: 1 }
+  const FEATURES = { 'data.scorpio': { enabled: false, source: 'loaded' }, 'identity.issuer': { enabled: true, source: 'preset' } } as const
+  const SWITCH = { fromChart: DSC, fromVersion: '10.15.0', toChart: TRUST_ANCHOR }
+  const PROVIDER: Profile = { ...SAVED_PROFILE, model: DSC_MODEL, role: 'provider', features: FEATURES }
+  const OPERATOR: Profile = {
+    ...SAVED_PROFILE,
+    model: TA_MODEL,
+    catalogue: DSC_MODEL,
+    target: { ...BUSY.answers.target, chart: TRUST_ANCHOR, chartVersion: '' },
+    role: 'operator',
+    features: { 'ta.registry': { enabled: true, source: 'preset' } },
+  }
+  const provider = reducer(BUSY, { type: 'roleApplied', profile: PROVIDER, chartSwitch: null })
+  const operator = reducer(BUSY, { type: 'roleApplied', profile: OPERATOR, chartSwitch: SWITCH })
+
+  it('takes role, features and model from a preset that keeps the chart, without a notice', () => {
+    expect(provider.answers).toEqual({ ...BUSY.answers, role: 'provider', features: FEATURES })
+    expect(provider).toMatchObject({ profileModel: DSC_MODEL, profileCatalogue: undefined, versionOpen: false, chartSwitch: undefined })
+  })
+
+  it('takes the switched chart, the cleared version and the catalogue from a preset that switches the chart', () => {
+    expect(operator.answers.target).toEqual({ ...BUSY.answers.target, chart: TRUST_ANCHOR, chartVersion: '' })
+    expect(operator.answers).toMatchObject({ role: 'operator', features: OPERATOR.features })
+    expect(operator).toMatchObject({ profileModel: TA_MODEL, profileCatalogue: DSC_MODEL, versionOpen: true, chartSwitch: SWITCH })
+  })
+
+  it('drops the notices on a stage jump', () => {
+    const cleared = reducer(provider, { type: 'setTarget', target: { chart: TRUST_ANCHOR, chartVersion: '' } })
+    expect(cleared.roleCleared).toBeDefined()
+    expect(reducer(operator, { type: 'goTo', stage: StageId.Target }).chartSwitch).toBeUndefined()
+    expect(reducer(cleared, { type: 'goTo', stage: StageId.Role }).roleCleared).toBeUndefined()
+  })
+
+  it.each<[string, AppState, string]>([
+    ['provider', provider, DSC],
+    ['operator', operator, TRUST_ANCHOR],
+  ])('clears the %s role, its features and catalogue when the chart changes, naming them in a notice', (role, state, fromChart) => {
+    const toChart = fromChart === DSC ? TRUST_ANCHOR : DSC
+    const next = reducer(state, { type: 'setTarget', target: { chart: toChart, chartVersion: '' } })
+    expect(next.answers).toMatchObject({ role: undefined, features: {} })
+    expect(next.profileCatalogue).toBeUndefined()
+    expect(next.roleCleared).toEqual({ role, fromChart, toChart })
+  })
+
+  it('names no cleared role when none was picked', () => {
+    expect(reducer(BUSY, { type: 'setTarget', target: { chart: TRUST_ANCHOR } }).roleCleared).toBeUndefined()
+  })
+
+  it.each<[string, Partial<AppState['answers']['target']>]>([
+    ['the version', { chartVersion: '10.16.0' }],
+    ['the same chart', { chart: TRUST_ANCHOR }],
+    ['the namespace', { namespace: 'other' }],
+  ])('keeps role, features and catalogue when %s is set', (_name, change) => {
+    const next = reducer(operator, { type: 'setTarget', target: change })
+    expect(next.answers).toMatchObject({ role: 'operator', features: OPERATOR.features })
+    expect(next.profileCatalogue).toEqual(DSC_MODEL)
+    expect(next.roleCleared).toBeUndefined()
+  })
+
+  it('keeps the catalogue the server returns on save', () => {
+    expect(reducer(BUSY, { type: 'profileSaved', path: PROFILE_PATH, profile: OPERATOR, notes: [] }).profileCatalogue).toEqual(DSC_MODEL)
+  })
+
+  it('restores role, features and catalogue when a profile is opened, and forgets the catalogue on a new configuration', () => {
+    const opened = reducer(BUSY, { type: 'profileOpened', path: PROFILE_PATH, profile: OPERATOR, notes: [] })
+    expect(opened.answers).toMatchObject({ role: 'operator', features: OPERATOR.features })
+    expect(opened.profileCatalogue).toEqual(DSC_MODEL)
+    expect(reducer(opened, { type: 'newConfiguration' })).toMatchObject({ profileCatalogue: undefined, answers: emptyAnswers() })
+  })
+
+  it.each<[string, Profile, boolean]>([
+    ['a role without a version', OPERATOR, true],
+    ['a role with a version', PROVIDER, false],
+    ['no role and no version', { ...SAVED_PROFILE, target: { ...BUSY.answers.target, chartVersion: '' } }, false],
+  ])('opening a profile with %s leaves the version open: %s', (_name, profile, open) => {
+    expect(reducer(BUSY, { type: 'profileOpened', path: PROFILE_PATH, profile, notes: [] }).versionOpen).toBe(open)
+  })
+
+  it.each<[string, Action]>([
+    ['a chosen version', { type: 'setTarget', target: { chartVersion: '1.3.6' } }],
+    ['a chart change', { type: 'setTarget', target: { chart: DSC, chartVersion: '' } }],
+    ['a loaded file', { type: 'fileLoaded', report: REPORT, file: FILE }],
+    ['the trial', { type: 'trialStarted', trial: TRIAL }],
+    ['a new configuration', { type: 'newConfiguration' }],
+  ])('stops leaving the version open on %s', (_name, action) => {
+    expect(reducer(operator, action).versionOpen).toBe(false)
+  })
+
+  it.each<[string, Action]>([
+    ['an unrelated answer', { type: 'setTarget', target: { namespace: 'other' } }],
+    ['a preset that keeps the chart', { type: 'roleApplied', profile: OPERATOR, chartSwitch: null }],
+  ])('keeps the version open on %s', (_name, action) => {
+    expect(reducer(operator, action).versionOpen).toBe(true)
   })
 })

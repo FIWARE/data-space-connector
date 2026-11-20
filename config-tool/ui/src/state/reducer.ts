@@ -1,9 +1,10 @@
 /** The store's state and its pure transition function. */
 import { VersionSource, type LoadReport } from '../api/load'
 import { fromProfile, type ModelRef, type Profile } from '../api/profile'
+import type { ChartSwitch } from '../api/roles'
 import type { Trial } from '../api/trial'
 import { emptyAnswers, Environment, type Answers, type Session, type Target } from './answers'
-import { fieldStage, type FieldId } from './openQuestions'
+import { fieldStage, type FieldId, type QuestionId } from './openQuestions'
 import { FIRST_STAGE, StageId } from './stageIds'
 
 /** Store contents; `entered` is false while S0 (Start) is shown. */
@@ -24,15 +25,30 @@ export interface AppState {
   /** Fields marked "ask later", sorted by id as the profile's `open`. */
   open: readonly FieldId[]
   /** A field its stage should focus once shown; the stage clears it with `focusDone`. */
-  focus?: FieldId
+  focus?: QuestionId
   /** Where this configuration was last saved or opened from; ⌘S saves there in place. */
   profilePath?: string
   /** The bundle the profile was built with; the server keeps it while no chart version is answered. */
   profileModel?: ModelRef
+  /** The bundle the role catalogue came from when that is not `profileModel`; the server recomputes it on save. */
+  profileCatalogue?: ModelRef
   /** Notes of the last open or save (source changed or missing, older revision); Review shows them. */
   profileNotes?: readonly string[]
   /** The bundled local trial; set only by `trialStarted`, any other start over drops it. */
   trial?: Trial
+  /** A role switched the chart and cleared its version; Stage 1 asks for it instead of preselecting latest. */
+  versionOpen: boolean
+  /** One-shot notice of the last role pick that switched the chart; any stage jump drops it. */
+  chartSwitch?: ChartSwitch
+  /** One-shot notice of a role cleared by a chart change on Stage 1; any stage jump drops it. */
+  roleCleared?: RoleCleared
+}
+
+/** A role that no longer fits the target chart, cleared by a chart change. */
+export interface RoleCleared {
+  role: string
+  fromChart: string
+  toChart: string
 }
 
 /** Every change the UI can make to the store. */
@@ -47,11 +63,12 @@ export type Action =
   | { type: 'rootRereadFailed' }
   | { type: 'openExpert' }
   | { type: 'toggleOpen'; field: FieldId }
-  | { type: 'focusField'; field: FieldId }
+  | { type: 'focusField'; field: QuestionId }
   | { type: 'focusDone' }
   | { type: 'profileOpened'; path: string; profile: Profile; report?: LoadReport; notes: readonly string[] }
   | { type: 'profileSaved'; path: string; profile: Profile; notes: readonly string[] }
   | { type: 'trialStarted'; trial: Trial }
+  | { type: 'roleApplied'; profile: Profile; chartSwitch: ChartSwitch | null }
 
 /** The state before anything was chosen on S0. */
 export const initialState: AppState = {
@@ -63,6 +80,7 @@ export const initialState: AppState = {
   expert: false,
   rereading: false,
   open: [],
+  versionOpen: false,
 }
 
 function visit(visited: readonly StageId[], stage: StageId): readonly StageId[] {
@@ -70,7 +88,7 @@ function visit(visited: readonly StageId[], stage: StageId): readonly StageId[] 
 }
 
 function goTo(state: AppState, stage: StageId): AppState {
-  return { ...state, stage, visited: visit(state.visited, stage), expert: false }
+  return { ...state, stage, visited: visit(state.visited, stage), expert: false, chartSwitch: undefined, roleCleared: undefined }
 }
 
 function toggle(open: readonly FieldId[], field: FieldId): readonly FieldId[] {
@@ -94,8 +112,12 @@ function startOver(state: AppState, stage: StageId, answers: Answers, loaded?: L
     focus: undefined,
     profilePath: undefined,
     profileModel: undefined,
+    profileCatalogue: undefined,
     profileNotes: undefined,
     trial: undefined,
+    versionOpen: false,
+    chartSwitch: undefined,
+    roleCleared: undefined,
   }
 }
 
@@ -107,6 +129,7 @@ function trialStarted(state: AppState, trial: Trial): AppState {
 }
 
 // The recorded root is used for an opened profile's source, so there is no file to re-read under another one.
+// A saved role without a chart version came from a chart switch, so its version is asked, not guessed.
 function profileOpened(state: AppState, action: Extract<Action, { type: 'profileOpened' }>): AppState {
   const { answers, open } = fromProfile(action.profile)
   return {
@@ -114,7 +137,40 @@ function profileOpened(state: AppState, action: Extract<Action, { type: 'profile
     open,
     profilePath: action.path,
     profileModel: action.profile.model,
+    profileCatalogue: action.profile.catalogue,
     profileNotes: action.notes,
+    versionOpen: answers.role !== undefined && answers.target.chartVersion === '',
+  }
+}
+
+function roleApplied(state: AppState, { profile, chartSwitch }: Extract<Action, { type: 'roleApplied' }>): AppState {
+  const target = { ...state.answers.target, chart: profile.target.chart, chartVersion: profile.target.chartVersion }
+  return {
+    ...state,
+    answers: { ...state.answers, target, role: profile.role, features: profile.features ?? {} },
+    profileModel: profile.model,
+    profileCatalogue: profile.catalogue,
+    versionOpen: chartSwitch !== null || state.versionOpen,
+    chartSwitch: chartSwitch ?? undefined,
+    roleCleared: undefined,
+  }
+}
+
+// Every role deploys exactly one chart, so a chart change drops the role rather than leave one the server refuses.
+function setTarget(state: AppState, change: Partial<Target>): AppState {
+  const before = state.answers.target
+  const target = { ...before, ...change }
+  const chartChanged = target.chart !== before.chart
+  const versionOpen = state.versionOpen && !chartChanged && !change.chartVersion
+  if (!chartChanged) return { ...state, answers: { ...state.answers, target }, versionOpen }
+  const role = state.answers.role
+  return {
+    ...state,
+    answers: { ...state.answers, target, role: undefined, features: {} },
+    profileCatalogue: undefined,
+    versionOpen,
+    chartSwitch: undefined,
+    roleCleared: role === undefined ? undefined : { role, fromChart: before.chart, toChart: target.chart },
   }
 }
 
@@ -138,7 +194,15 @@ export function reducer(state: AppState, action: Action): AppState {
     case 'trialStarted':
       return trialStarted(state, action.trial)
     case 'profileSaved':
-      return { ...state, profilePath: action.path, profileModel: action.profile.model, profileNotes: action.notes }
+      return {
+        ...state,
+        profilePath: action.path,
+        profileModel: action.profile.model,
+        profileCatalogue: action.profile.catalogue,
+        profileNotes: action.notes,
+      }
+    case 'roleApplied':
+      return roleApplied(state, action)
     case 'rootRereadStarted':
       return { ...state, rereading: true }
     case 'rootChanged':
@@ -159,7 +223,7 @@ export function reducer(state: AppState, action: Action): AppState {
     case 'openExpert':
       return { ...state, expert: true }
     case 'setTarget':
-      return { ...state, answers: { ...state.answers, target: { ...state.answers.target, ...action.target } } }
+      return setTarget(state, action.target)
     case 'setSession':
       return { ...state, session: { ...state.session, ...action.session } }
   }

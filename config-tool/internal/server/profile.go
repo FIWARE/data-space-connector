@@ -29,7 +29,6 @@ const (
 	noteSourceMissing  = "overrides not restored: %s is not next to the profile; saving again drops the reference to it"
 	noteSourceBroken   = "overrides not restored: %s cannot be loaded (%v); saving again drops the reference to it"
 	noteSourceChanged  = "overrides restored from %s, which has changed since the profile was saved"
-	noteOlderRevision  = "the profile was saved with revision %d of bundle %s@%s; this build ships revision %d"
 	noteRecentReset    = "the recent list was corrupt and has been reset"
 	noteRecentFailed   = "the recent list was not updated: %v"
 	noteRecentRead     = "the recent list cannot be read: %v"
@@ -86,16 +85,7 @@ func (s *Server) handleSaveProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	p := req.Profile
-	p.Format = profile.FormatVersion
-	p.Model = saveModel(bundles, p.Target, p.Model)
-	p.Secrets = map[string]profile.SecretRef{}
-	if p.Source, err = s.source(req.SourceSHA256); err != nil {
-		writeError(w, http.StatusUnprocessableEntity, err.Error(), "")
-		return
-	}
-	normalize(&p)
-	if errs := p.Validate(bundles); len(errs) > 0 {
-		writeFieldErrors(w, errs)
+	if _, ok := s.prepareProfile(w, bundles, &p, req.SourceSHA256); !ok {
 		return
 	}
 	err = profile.WriteFile(path, p, req.Overwrite)
@@ -159,12 +149,9 @@ func (s *Server) handleOpenProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	normalize(&p)
-	notes := []string{}
+	notes := append([]string{}, p.RevisionNotes(bundles)...)
 	// Validate guarantees the bundle is shipped and not newer than this build's revision.
 	bundle := findBundle(bundles, p.Model.Chart, p.Model.Version)
-	if p.Model.Revision < bundle.Revision {
-		notes = append(notes, fmt.Sprintf(noteOlderRevision, p.Model.Revision, p.Model.Chart, p.Model.Version, bundle.Revision))
-	}
 	res, note := restoreSource(filepath.Dir(path), p.Source, bundles, bundle)
 	if note != "" {
 		notes = append(notes, note)
@@ -227,6 +214,20 @@ func saveModel(bundles []model.Bundle, t profile.Target, held profile.ModelRef) 
 	return profile.ModelRef{Chart: t.Chart}
 }
 
+// saveCatalogue picks the role catalogue a save records: nil without a role or when profile.CatalogueBundle
+// is the model's own bundle, else that bundle with the shipped revision.
+func saveCatalogue(bundles []model.Bundle, m profile.ModelRef, role string, held *profile.ModelRef) *profile.ModelRef {
+	if role == "" {
+		return nil
+	}
+	c, err := profile.CatalogueBundle(bundles, m, held)
+	if err != nil || c.Chart == m.Chart && c.Version == m.Version {
+		return nil
+	}
+	ref := modelRef(c)
+	return &ref
+}
+
 func modelRef(b model.Bundle) profile.ModelRef {
 	return profile.ModelRef{Chart: b.Chart, Version: b.Version, Revision: b.Revision}
 }
@@ -239,8 +240,32 @@ func findBundle(bundles []model.Bundle, chart, version string) *model.Bundle {
 	return &bundles[i]
 }
 
-// source references the loaded slot when sha names it; empty sha means no source (ADR 0015 §2).
-func (s *Server) source(sha string) (*profile.Source, error) {
+// prepareProfile sets the fields a save owns (ADR 0015 §5) and validates p, as save and preset share it.
+// It returns the loaded slot sha names, or writes the refusal and returns false.
+func (s *Server) prepareProfile(w http.ResponseWriter, bundles []model.Bundle, p *profile.Profile, sha string) (*load.Result, bool) {
+	p.Format = profile.FormatVersion
+	p.Model = saveModel(bundles, p.Target, p.Model)
+	p.Catalogue = saveCatalogue(bundles, p.Model, p.Role, p.Catalogue)
+	p.Secrets = map[string]profile.SecretRef{}
+	res, err := s.slot(sha)
+	if err != nil {
+		writeError(w, http.StatusUnprocessableEntity, err.Error(), "")
+		return nil, false
+	}
+	p.Source = nil
+	if res != nil {
+		p.Source = &profile.Source{File: res.Report.Source, Root: res.Root.String(), SHA256: sha}
+	}
+	normalize(p)
+	if errs := p.Validate(bundles); len(errs) > 0 {
+		writeFieldErrors(w, errs)
+		return nil, false
+	}
+	return res, true
+}
+
+// slot returns the loaded slot when sha names it; empty sha means none (ADR 0015 §2).
+func (s *Server) slot(sha string) (*load.Result, error) {
 	if sha == "" {
 		return nil, nil
 	}
@@ -249,7 +274,7 @@ func (s *Server) source(sha string) (*profile.Source, error) {
 	if s.loaded == nil || s.loaded.Report.SHA256 != sha {
 		return nil, errSourceMismatch
 	}
-	return &profile.Source{File: s.loaded.Report.Source, Root: s.loaded.Root.String(), SHA256: sha}, nil
+	return s.loaded, nil
 }
 
 // normalize gives p the shape Marshal writes, so a response shows the profile as stored.
@@ -309,7 +334,7 @@ func (s *Server) addRecent(path string, p profile.Profile) []string {
 	if s.recent == nil {
 		return []string{noteNoRecent}
 	}
-	err := s.recent.Add(recent.Entry{Path: path, ChartVersion: p.Model.Version})
+	err := s.recent.Add(recent.Entry{Path: path, ChartVersion: p.Model.Version, Role: p.Role})
 	switch {
 	case err == nil:
 		return nil

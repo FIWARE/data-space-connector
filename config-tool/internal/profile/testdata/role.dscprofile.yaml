@@ -1,0 +1,33 @@
+# dsc-config profile: the answer set values.yaml is rendered from. It never holds a secret value.
+format: 1
+model:
+  chart: trust-anchor
+  version: 1.3.6
+  revision: 1
+catalogue:
+  chart: data-space-connector
+  version: 10.16.0
+  revision: 2
+target:
+  type: cluster
+  context: kind-provider
+  namespace: provider
+  createNamespace: false
+  releaseName: dsc
+  chart: trust-anchor
+  chartVersion: ""
+  environment: development
+role: operator
+features:
+  consent.authority:
+    enabled: false
+    source: preset
+  ta.onboarding:
+    enabled: false
+    source: preset
+  ta.registry:
+    enabled: true
+    source: preset
+answers: {}
+open: []
+secrets: {}

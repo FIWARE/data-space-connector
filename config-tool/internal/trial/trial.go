@@ -103,7 +103,7 @@ func checkRelease(fsys fs.FS, r Release) error {
 	if r.Role == "" {
 		return errors.New("role is required")
 	}
-	// Target.Validate only checks the chart is named: the trust-anchor chart has no model bundle.
+	// Target.Validate only checks that chart and version are named; it does not consult the shipped bundles.
 	if errs := r.Target.Validate(); len(errs) > 0 {
 		return fmt.Errorf("target: %w", errs[0])
 	}

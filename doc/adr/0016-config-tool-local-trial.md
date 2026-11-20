@@ -69,6 +69,9 @@ version and open in the tool like any other values file. The trust-anchor output
 be reopened: there is no trust-anchor model bundle. Its header carries no chart version, and the
 banner names the chart and its version instead.
 
+*Update (#122):* a trust-anchor bundle (`model/1.3.6/`) now exists, so the remaining reason is the
+header: loading still reads its chart version as a `data-space-connector` one.
+
 ## Consequences
 
 - The trial works before the renderer exists and yields exactly what the Quick Start deploys.

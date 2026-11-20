@@ -161,7 +161,7 @@ figures instead of stating one. *Generate* lands on the trial's Review; a failur
 │  │  services offered by  │ │  services to others.  │ │  case in a real data  │                 │
 │  │  others.              │ │                       │ │  space.               │                 │
 │  │                       │ │                       │ │                       │                 │
-│  │  2 features · ~0.8GiB │ │  7 features · ~2.3GiB │ │  7 features · ~2.3GiB │                 │
+│  │  2 features · ~0.8GiB │ │  5 features · ~2.3GiB │ │  5 features · ~2.3GiB │                 │
 │  └───────────────────────┘ └───────────────────────┘ └───────────────────────┘                 │
 │  ┌───────────────────────┐ ┌───────────────────────┐                                           │
 │  │  Operator             │ │  Custom               │                                           │
@@ -170,12 +170,12 @@ figures instead of stating one. *Generate* lands on the trial's Review; a failur
 │  │  infrastructure of    │ │  Pick from the whole  │                                           │
 │  │  the data space.      │ │  catalogue yourself.  │                                           │
 │  │  chart: trust-anchor  │ │                       │                                           │
-│  │  1 feature · ~0.3GiB  │ │                       │                                           │
+│  │  1 feature · ~0.3GiB  │ │  depends on selection │                                           │
 │  └───────────────────────┘ └───────────────────────┘                                           │
 │                                                                                                │
 │  Consumer + Provider turns on                                   ▾ what this means              │
 │    Credential issuance · DID document · Credential verification · Policy enforcement ·         │
-│    NGSI-LD data service · TMForum contract APIs · Contract management                          │
+│    NGSI-LD data service                                                                        │
 │    Everything else stays available on step 5 — nothing here is locked.                         │
 │                                                                                                │
 │    Memory and CPU figures are the measured floor per role, without load. Sizing ↗              │

@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -82,6 +83,9 @@ func TestModelServesTheEmbeddedBundles(t *testing.T) {
 	}
 	if len(got.Charts) == 0 || got.Charts[0].Name != dscChart || len(got.Charts[0].Versions) == 0 || !got.Charts[0].Versions[0].Latest {
 		t.Errorf("body = %+v, want the embedded %s versions with the first marked latest", got, dscChart)
+	}
+	if !slices.ContainsFunc(got.Charts, func(c modelChart) bool { return c.Name == trustAnchorChart }) {
+		t.Errorf("body = %+v, want the embedded %s bundle too", got, trustAnchorChart)
 	}
 }
 

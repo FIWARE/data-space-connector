@@ -178,7 +178,8 @@ format: 1
 model:              # the question-model bundle it was built with
   chart: data-space-connector
   version: 10.16.0
-  revision: 1
+  revision: 2
+catalogue:          # the bundle the roles came from; set by the server, only when it is not `model`
 target:
   type: cluster
   context: kind-dsc
@@ -188,6 +189,11 @@ target:
   chart: data-space-connector
   chartVersion: 10.16.0
   environment: production
+role: provider      # see Roles
+features:           # excerpt: a real profile lists every offered feature; source is preset, loaded or user
+  data.scorpio:
+    enabled: true
+    source: preset
 answers: {}         # no answer id exists yet, so any key is refused
 open:               # fields left open on purpose
   - field: target.context
@@ -221,7 +227,7 @@ and the `sourceSha256` of the load report the UI holds:
   when reopening will not find it. The save still goes through, so the file can be copied later.
 - A half-finished configuration saves as typed: format errors stay stage errors. Only structural
   errors give 422: `format`, `model`, unknown `target.type` / `target.environment` values,
-  unknown `open` ids, `source`, `answers` and `secrets`.
+  unknown `open` ids, `source`, `role`, `features`, `catalogue`, `answers` and `secrets`.
 
 **Open** is the *Open profile* card on S0, a path field, or a click in the *Recent* list. Both use
 `POST /api/profile/open` with the same path rule (404 when the file is missing) and land on Review
@@ -240,6 +246,40 @@ note, and S0 shows it below the list.
 provisional, and unmarking keeps it too. A field is open when it is unanswered or marked, and
 it is counted once. The stage rail marks each stage that has one, the footer shows the total, and
 Review lists every open question with a link to its field. A marked empty field is open, not an error.
+A configuration without a role has one open question on Role.
+
+## Roles
+
+Stage 2 offers five presets ([ADR 0017](../doc/adr/0017-config-tool-role-presets.md)): **Consumer**,
+**Provider** and **Consumer + Provider** deploy `data-space-connector`, **Operator** deploys `trust-anchor`, and
+**Custom** deploys `data-space-connector` with nothing recommended. A role rates each catalogue feature:
+`recommended` (on), `available` (off, can be turned on) or `not-offered` (cannot be enabled, left out of the
+profile). A role offers only features of its own chart, so Custom does not offer the three trust-anchor features.
+Each card shows a floor of memory and CPU from [Sizing](../doc/deployment-integration/roles/PREREQUISITES.md#sizing),
+and the chart version it was measured with. Custom has none, because its footprint depends on the selection.
+
+The presets are data in `model/<version>/bundle.yaml`: `features:` is the catalogue, `roles:` the presets and
+`roleMatrix:` maps the components of the matrix in [Deployment by Role](../doc/deployment-integration/roles/README.md)
+to feature ids. That matrix is authoritative, and `internal/model/rolematrix_test.go` fails when the bundle disagrees
+with it. Changing the matrix therefore means changing the bundle and bumping its `revision`. A feature's `keys` are
+`roundtrip` paths, and each names its node with the whole subtree (`keycloak`, not `keycloak.*`). A segment with `*`
+is refused. Features may share a key. The trust-anchor bundle declares no roles, so its catalogue comes from the
+latest `data-space-connector` release bundle that declares them.
+
+`GET /api/roles?chart=&version=` lists the roles and features for a target. `POST /api/preset` takes `profile`,
+`role` and `sourceSha256`, and returns the profile with the preset applied:
+
+- **Operator switches the chart** to `trust-anchor` and clears `chartVersion`. A notice names the chart and version
+  that were dropped, and Target asks for the version again instead of preselecting the latest. Picking another role
+  switches back the same way. A switch is refused (422) while a values file is loaded, because the load was classified
+  against the current chart. Start a new configuration instead. Changing the chart on Target clears the role.
+- **Toggles from a loaded values file win.** A feature the file switches keeps the file's value as
+  `source: loaded`, whatever the preset says. A role that does not offer a feature the file enables is refused (422),
+  naming the features. The server reads the toggles from its own load, never from the request.
+
+The profile records `role`, `features` (each offered feature with `enabled` and `source`) and, when the roles came
+from another bundle than `model`, `catalogue`. The server sets `catalogue` on save, as it does `model`, and opening
+applies the same revision rules to it.
 
 ## Try it locally
 
@@ -269,8 +309,8 @@ turns answers into values does not exist yet. `trial/` holds the descriptor `tri
 the three `k3s/` files, because `go:embed` cannot reach above the module. A test fails when they drift, or when a
 release's `chartVersion` differs from its `charts/*/Chart.yaml`; `make trial-sync` copies the `k3s/` files over them. Each output is the bundled file behind the generated header (profile
 `local-trial`) and a two-line development banner naming chart, version and source file. Only the provider and
-consumer files can be reopened with *Open values.yaml*: the trust-anchor header carries no chart version, as no
-trust-anchor model bundle exists.
+consumer files can be reopened with *Open values.yaml*: the trust-anchor header carries no chart version, because
+loading reads that version as a `data-space-connector` one (ADR 0016 §6).
 
 **Nothing is overwritten.** If any of the three files exists, symlinks included, none is written: the CLI fails and
 `POST /api/trial/write` answers 409, both naming every existing file. A failure halfway removes the files the run
@@ -318,3 +358,7 @@ under another chart's key. When it is set, every rule must start with one of the
 keeps the latest bundle's list equal to the chart's `values.yaml`.
 `revision` (a positive integer, required) counts changes to a bundle within one chart version.
 A profile records `chart`, `version` and `revision` of the bundle it was built with (ADR 0015 §6).
+`features:`, `roles:` and `roleMatrix:` hold the [role presets](#roles).
+`roles:` rate the features of `features:`, and `roleMatrix:` needs `roles:`.
+Two charts are shipped: `data-space-connector` (`model/10.16.0/`) and `trust-anchor` (`model/1.3.6/`, only
+`topLevelKeys`, no rules and no roles). Their version numbers differ, so they fit the one-bundle-per-version layout.

@@ -1,4 +1,5 @@
-# Fixture bundle for recognition: toggles, a cross-cutting pattern rule and a plain value rule.
+# Fixture bundle for recognition (toggles, a cross-cutting pattern rule and a plain value rule) and
+# for the catalogue: features of two charts, the five roles and a role matrix.
 chart: data-space-connector
 version: 1.0.0
 revision: 1
@@ -10,3 +11,49 @@ recognize:
   - {path: keycloak.ingress.hostname, answer: domain.base, stage: foundations, kind: value, pattern: '^[^.]+\.(.+)$'}
   - {path: rainbow.ingress.host, answer: domain.base, stage: foundations, kind: value, pattern: '^[^.]+\.(.+)$'}
   - {path: registration.til, answer: registration.til, stage: configuration, kind: value}
+features:
+  - {id: identity.issuer, title: Issuer, summary: Issue credentials, group: identity, keys: [keycloak]}
+  - {id: identity.did, title: DID, summary: Publish a DID, group: identity, keys: [did]}
+  - {id: data.scorpio, title: Scorpio, summary: A context broker, group: data, requires: [identity.did], keys: [scorpio]}
+  - {id: dsp.rainbow, title: Rainbow, summary: The Rust DSP, group: interop, keys: [rainbow, registration.rainbow]}
+  - {id: obs.tracing, title: Tracing, summary: Traces, group: observability, keys: [tracing, grafana]}
+  - {id: obs.metrics, title: Metrics, summary: Dashboards, group: observability, keys: [grafana]}
+  - {id: ta.registry, title: Registry, summary: Trusted issuers, group: operator, chart: trust-anchor, keys: [trusted-issuers-list]}
+roles:
+  - id: consumer
+    title: Consumer
+    summary: Consume data
+    chart: data-space-connector
+    floor: {memory: 0.8Gi, cpu: 50m, measuredWith: 10.13.2}
+    docs: roles/consumer/README.md
+    features: {identity.issuer: recommended, identity.did: recommended, data.scorpio: not-offered, dsp.rainbow: available, obs.tracing: available, obs.metrics: available, ta.registry: not-offered}
+  - id: provider
+    title: Provider
+    summary: Offer data
+    chart: data-space-connector
+    floor: {memory: 2.3Gi, cpu: 200m, measuredWith: 10.13.2}
+    docs: roles/provider/README.md
+    features: {identity.issuer: recommended, identity.did: recommended, data.scorpio: recommended, dsp.rainbow: available, obs.tracing: available, obs.metrics: available, ta.registry: not-offered}
+  - id: consumer-provider
+    title: Consumer + Provider
+    summary: Both
+    chart: data-space-connector
+    floor: {memory: 2.3Gi, cpu: 200m, measuredWith: 10.13.2}
+    docs: roles/consumer-provider/README.md
+    features: {identity.issuer: recommended, identity.did: recommended, data.scorpio: available, dsp.rainbow: available, obs.tracing: available, obs.metrics: available, ta.registry: not-offered}
+  - id: operator
+    title: Operator
+    summary: Run the trust anchor
+    chart: trust-anchor
+    floor: {memory: 0.3Gi, cpu: 20m, measuredWith: 0.1.0}
+    docs: roles/operator/README.md
+    features: {identity.issuer: not-offered, identity.did: not-offered, data.scorpio: not-offered, dsp.rainbow: not-offered, obs.tracing: not-offered, obs.metrics: not-offered, ta.registry: recommended}
+  - id: custom
+    title: Custom
+    summary: Pick every feature yourself
+    chart: data-space-connector
+    docs: roles/README.md#component-matrix
+    features: {identity.issuer: available, identity.did: available, data.scorpio: available, dsp.rainbow: available, obs.tracing: available, obs.metrics: available, ta.registry: not-offered}
+roleMatrix:
+  components: {Keycloak: identity.issuer, DID: identity.did, Trusted Issuers Registry: ta.registry}
+  infrastructure: [PostgreSQL]

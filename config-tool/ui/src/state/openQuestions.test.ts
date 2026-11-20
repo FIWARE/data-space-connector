@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { emptyAnswers, Environment, TargetType, type Target } from './answers'
-import { FIELD_IDS, fieldStage, openQuestions, targetIssues, type FieldId } from './openQuestions'
+import { FIELD_IDS, fieldStage, openQuestions, ROLE_QUESTION, roleIssues, targetIssues, type FieldId, type QuestionId } from './openQuestions'
 import { initialState, type AppState } from './reducer'
 import { StageId } from './stageIds'
 
@@ -13,12 +13,18 @@ const VALID: Target = {
   environment: Environment.Development,
 }
 
+const PICKED = 'provider'
+
 function stateOf(change: Partial<Target>, open: readonly FieldId[] = []): AppState {
-  return { ...initialState, answers: { target: { ...VALID, ...change } }, open }
+  return { ...initialState, answers: { role: PICKED, features: {}, target: { ...VALID, ...change } }, open }
+}
+
+function withRole(state: AppState, role: string | undefined): AppState {
+  return { ...state, answers: { ...state.answers, role } }
 }
 
 describe('openQuestions', () => {
-  it.each<[string, Partial<Target>, FieldId[], [FieldId, boolean][]]>([
+  it.each<[string, Partial<Target>, FieldId[], [QuestionId, boolean][]]>([
     ['nothing open', {}, [], []],
     ['unanswered only', { namespace: '' }, [], [['target.namespace', false]]],
     ['marked only', {}, ['target.namespace'], [['target.namespace', true]]],
@@ -40,7 +46,14 @@ describe('openQuestions', () => {
   })
 
   it('names the stage and label of each question', () => {
-    expect(openQuestions(stateOf({ chartVersion: '' }))).toEqual([{ field: 'target.chartVersion', stage: StageId.Target, label: 'Chart version', marked: false }])
+    expect(openQuestions(withRole(stateOf({ chartVersion: '' }), undefined))).toEqual([
+      { field: 'target.chartVersion', stage: StageId.Target, label: 'Chart version', marked: false },
+      { field: ROLE_QUESTION, stage: StageId.Role, label: 'Role', marked: false },
+    ])
+  })
+
+  it('asks the role on the Role stage', () => {
+    expect(fieldStage(ROLE_QUESTION)).toBe(StageId.Role)
   })
 
   it.each(FIELD_IDS)('asks %s on the Target stage', (id) => {
@@ -57,5 +70,14 @@ describe('targetIssues', () => {
     ['marked with a format error, both', { namespace: 'Prod_NS' }, ['target.namespace'], 1, 1],
   ])('counts %s inputs', (_name, change, open, errors, openCount) => {
     expect(targetIssues(stateOf(change, open))).toEqual({ warnings: 0, errors, open: openCount })
+  })
+})
+
+describe('roleIssues', () => {
+  it.each<[string, string | undefined, number]>([
+    ['no role', undefined, 1],
+    ['a picked role', PICKED, 0],
+  ])('counts %s as %i open questions', (_name, role, open) => {
+    expect(roleIssues(withRole(stateOf({}), role))).toEqual({ warnings: 0, errors: 0, open })
   })
 })
