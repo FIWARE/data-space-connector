@@ -193,11 +193,13 @@ pom.xml                       # drives local-deploy + integration tests
   via `source` (name, root, sha256) and never copies overrides or secret values. The server reads and writes
   profiles by path (suffix enforced, atomic writes via `internal/atomicfile`). The recent list sits in
   `os.UserConfigDir()/dsc-config`. The open-question count is the union of unanswered and marked fields.
-- CT-5 (#120, planned, ADR 0016, see `IMPLEMENTATION_PLAN.md`): the local trial ships values byte-identical to
-  `k3s/{trust-anchor,provider,consumer}.yaml` in `config-tool/trial/` (embedded, `make trial-sync`), not rendered answers.
-  Core `internal/trial` loads the descriptor, renders three outputs (header + development banner + bytes) and writes them
-  all-or-nothing, never overwriting. The production warnings are a hard-coded list, each backed by evidence in the values.
-  The trial descriptor is not a profile: profile format 1 stays single-target.
+- CT-5 (#120, ADR 0016): the local trial ships values byte-identical to `k3s/{trust-anchor,provider,consumer}.yaml` in
+  `config-tool/trial/` (embedded, `make trial-sync`). Core `internal/trial` renders and writes them all-or-nothing.
+- E2 roles (#122, planned, see `IMPLEMENTATION_PLAN.md`): the feature catalogue (`features:`), the presets (`roles:`) and
+  the component-to-feature map of the role guide's matrix (`roleMatrix:`) are data in `model/10.16.0/bundle.yaml`. The
+  trust-anchor chart gets its own minimal bundle (`model/1.3.6/`, no roles). The HTML matrix in
+  `doc/deployment-integration/roles/README.md` is authoritative, and a Go test in `internal/model` checks it against the bundle.
+  Profile gains `role` + `features {enabled, source}` (still `format: 1`).
 
 ## Documentation
 
