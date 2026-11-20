@@ -61,6 +61,11 @@ because rendering needs a complete target. An existing output file is refused un
 epic decides how rendered keys merge with overrides (ADR 0015). Rendering itself is not
 implemented yet.
 
+`dsc-config generate --trial [--output-dir <dir>]` writes the local trial's `trust-anchor.yaml`,
+`provider.yaml` and `consumer.yaml` (the Quick Start's `k3s/` values plus a header) into an existing
+directory, `.` by default (ADR 0016). If any of the three exists it writes none. It prints the
+production warnings to stderr every time, before writing, so a refused run shows them too.
+
 ## Security model
 
 - The server listens on `127.0.0.1` with a random port and answers only for the hosts
