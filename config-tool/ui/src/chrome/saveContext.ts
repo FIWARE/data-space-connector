@@ -6,6 +6,8 @@ export interface SaveValue {
   save: () => void
   busy: boolean
   saved?: string
+  /** Why saving is off, e.g. in the local trial; `save` is then a no-op. */
+  disabledReason?: string
 }
 
 /** Context SaveProvider fills; null outside the chrome. */

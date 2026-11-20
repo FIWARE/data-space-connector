@@ -98,6 +98,10 @@ table.entries { width: 100%; border-collapse: collapse; margin: 6px 0; font-size
 table.entries th, table.entries td { text-align: left; padding: 3px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
 table.entries code { word-break: break-all; }
 .notes { margin: 0; padding-left: 18px; }
+.trial-releases { margin: 0; padding-left: 18px; }
+.trial-release h4 { margin: 8px 0 4px; }
+.trial-release dd { font-size: 13px; font-weight: 400; }
+.trial-release pre { max-height: 320px; overflow: auto; font: 12px var(--mono); }
 .actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 14px; }
 .overlay { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: rgb(0 0 0 / 35%); }
 .dialog { width: min(640px, 92vw); margin: 0; }

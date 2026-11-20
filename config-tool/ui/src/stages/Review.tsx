@@ -9,6 +9,7 @@ import { STAGE_LABELS, StageId } from '../state/stageIds'
 import { AnswerList } from './DerivedAnswers'
 import { EntryTable, Overrides } from './Overrides'
 import { Placeholder } from './Placeholder'
+import { TrialReview } from './TrialReview'
 
 /** What Review shows without a loaded file. */
 export const REVIEW_COMING_IN = 'Epic 6 — Validation and review'
@@ -127,10 +128,10 @@ function ProfileNotes() {
 
 /** The actions under Review; export and install come with Epic 6/7. */
 function Actions() {
-  const { save, busy } = useSave()
+  const { save, busy, disabledReason } = useSave()
   return (
     <div className="actions">
-      <button type="button" className="sec" disabled={busy} onClick={save}>
+      <button type="button" className="sec" disabled={busy || disabledReason !== undefined} title={disabledReason} onClick={save}>
         Save profile
       </button>
     </div>
@@ -222,9 +223,17 @@ function Report({ report, file }: { report: LoadReport; file?: File }) {
   )
 }
 
-/** Review stage: profile notes and open questions above the load report when a file was opened, otherwise above the Epic 6 placeholder. */
+/** Review stage: the trial's releases in the local trial; else profile notes and open questions above the load report
+ *  when a file was opened, otherwise above the Epic 6 placeholder. */
 export function Review() {
   const { state } = useStore()
+  if (state.trial) {
+    return (
+      <TrialReview trial={state.trial}>
+        <Actions />
+      </TrialReview>
+    )
+  }
   return state.loaded ? (
     <Report report={state.loaded} file={state.loadedFile} />
   ) : (
