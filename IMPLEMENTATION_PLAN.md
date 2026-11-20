@@ -100,6 +100,13 @@ guide's component matrix to feature ids go into the model bundle as data. `inter
      what the server already does while no version is answered. `ChartSwitch` carries the replaced chart and version,
      so the notice can say what was dropped. Picking latest silently would overwrite a version the user chose, for
      example a pinned older DSC release, when they switch back from Operator.
+   - **Stage 1 does not fill the cleared version in.** Today `Target.tsx` (the `useEffect` at lines 231-234) dispatches
+     the latest version whenever `chartVersion` is `''`, which would undo the rule above as soon as Stage 1 mounts. The
+     reducer gets a flag `versionOpen: boolean`: `roleApplied` with a `chartSwitch` sets it, and so does `profileOpened`
+     when the profile's `chartVersion` is empty (a saved Operator profile without a version is not guessed on reopen
+     either). The effect skips while it is set. A `setTarget` that sets a version, a `setTarget` that changes the chart
+     (the Stage 1 chart select, where the preselected latest version is visible next to it, as today), `fileLoaded`,
+     `trialStarted` and `newConfiguration` reset it. A fresh configuration therefore keeps the existing auto-default.
    - **A chart change on Stage 1 clears the role.** `Validate` keeps the invariant "the role's `chart` equals
      `target.chart`", and every role belongs to exactly one chart. So any change of `target.chart` through Stage 1's
      chart select clears `role`, `features` and the held `catalogue` in the reducer, and stores a one-shot notice
@@ -323,8 +330,8 @@ In `config-tool/internal/profile/`:
     like `user`; toggles back-derived from the loaded values file win over the preset, and a loaded `true` on a
     not-offered feature refuses the role (decision 10); presets are read via
     `RoleCatalogue` and the fallback bundle is pinned in `catalogue`, which the server recomputes on save; the Operator
-    chart switch is refused while a `source` is set and clears `target.chartVersion`; a chart change on Stage 1 clears
-    the role.
+    chart switch is refused while a `source` is set and clears `target.chartVersion`, which Stage 1 then leaves empty
+    instead of preselecting latest; a chart change on Stage 1 clears the role.
   - Update the format example.
 
 **Acceptance:** `go test ./internal/profile/... ./internal/server/...` is green, and `make lint` is clean.
@@ -335,13 +342,16 @@ In `config-tool/internal/server/`, wired in `api.go` the same way as the existin
 - **`GET /api/roles?chart=&version=`** returns `{roles: [{id, title, summary, chart, floor, docs, features}], features: [{id, title, summary, group}]}`
   from `model.RoleCatalogue`. It returns 404 for an unknown chart or version.
 - **`POST /api/preset`** takes `{profile, role, sourceSha256}`. `sourceSha256` names the loaded slot exactly as in
-  `PUT /api/profile`, and the server resolves it with the existing `Server.source`. It reads the loaded toggles from
+  `PUT /api/profile`. `toProfile` never sends `source`, so the decoded profile always has `Source == nil`. Before
+  calling `ApplyPreset`, the handler therefore sets `p.Source, err = s.source(req.SourceSHA256)`, the same way
+  `handleSaveProfile` does (`internal/server/profile.go:92`). Without that, the `ErrChartSwitchLoaded` check could
+  never fire. It reads the loaded toggles from
   that slot's `Report.Answers` (decision 10; none without a loaded slot), calls `profile.ApplyPreset` and returns
   `{profile, chartSwitch: {fromChart, fromVersion, toChart} | null}`. An unknown role, an invalid profile,
   `ErrChartSwitchLoaded` or `ErrPresetConflictsLoaded` gives 422, and a stale `sourceSha256` gives the same error as save.
 - No endpoint touches a cluster, and the core stays free of `net/http` (`internal/layering_test.go`).
 - **Tests:** `internal/server/role_test.go`, table-driven: happy paths, operator switch, operator with a loaded source
-  → 422, unknown role 422, missing token 401. Loaded-slot cases: load a provider values file with
+  → 422 (the request's profile carries no `source`, only `sourceSha256`, so the test proves the handler sets it), unknown role 422, missing token 401. Loaded-slot cases: load a provider values file with
   `scorpio.enabled: false`, pick Provider → `data.scorpio` is `{enabled: false, source: loaded}`; load one with
   `scorpio.enabled: true`, pick Consumer → 422 naming `data.scorpio`.
 - **UI API client:** `ui/src/api/roles.ts` (`fetchRoles`, `applyPreset`) with types mirroring the JSON, and
@@ -367,8 +377,14 @@ In `config-tool/ui/src/`:
   - `setTarget` with a `chart` different from the current one clears `role`, `features` and `profileCatalogue`, and
     stores the `roleCleared` notice when a role was set (decision 9). A `setTarget` that leaves the chart alone keeps
     the role.
+  - `AppState` gains `versionOpen: boolean` (decision 9). `roleApplied` with a `chartSwitch` sets it, and
+    `profileOpened` sets it when the profile's `chartVersion` is empty. A `setTarget` that sets a non-empty
+    `chartVersion` or changes the chart, `fileLoaded`, `trialStarted` and `newConfiguration` reset it. The latest-version `useEffect` in
+    `stages/Target.tsx` returns early while `state.versionOpen` is set.
   - Tests in `reducer.test.ts`: `roleApplied` with and without a switch; a chart change clears role, features and
-    catalogue and sets the notice; a version-only change keeps them; `profileSaved` keeps the returned catalogue.
+    catalogue and sets the notice; a version-only change keeps them; `profileSaved` keeps the returned catalogue;
+    `versionOpen` is set by a switching `roleApplied` and by opening a profile without a version, and is not set by
+    a non-switching `roleApplied`; each reset path clears it.
   - Rail selector `roleIssues` in `state/openQuestions.ts`: no role means one open question.
 - **`stages/Role.tsx`**, a one-line JSDoc per component:
   - Fetch `/api/roles` for the current target. Render one card per role as in `doc/config-tool/MOCKUPS.md#s2--role`:
@@ -391,6 +407,10 @@ In `config-tool/ui/src/`:
 - **Target stage:** with `target.chart = trust-anchor` it already lists only that chart's versions. Add a
   `Target.test.tsx` case that starts from an applied Operator preset. It asserts that the chart select shows
   `trust-anchor`, that the version options are `1.3.6` with none selected, and that the rail counts the version as open.
+  Mounting Stage 1 must not dispatch a `setTarget` with a version (decision 9, `versionOpen`). The same holds for the
+  switch back to `data-space-connector` from a pinned `10.16.0`: the select stays on "— choose a version —". Keep the
+  existing fresh-configuration test that preselects the latest version, and add one where the user changes the chart
+  on Stage 1 and the new chart's latest version is preselected.
   Add a second case: from an applied Operator preset, changing the chart select to `data-space-connector` shows the
   `roleCleared` notice, and the rail counts the role as open. Add the reverse case for a Provider preset switched to
   `trust-anchor`.
@@ -417,8 +437,8 @@ In `config-tool/ui/src/`:
   - that they come from the matrix in `doc/deployment-integration/roles/README.md`, guarded by
     `internal/model/rolematrix_test.go`, so changing the matrix means changing the bundle and bumping `revision`;
   - the floors come from `PREREQUISITES.md#sizing`;
-  - Operator switches the target to `trust-anchor` and clears the chart version. This is refused while a values file is
-    loaded. Changing the chart on step 1 clears the role;
+  - Operator switches the target to `trust-anchor` and clears the chart version, which step 1 then asks for instead of
+    preselecting latest. This is refused while a values file is loaded. Changing the chart on step 1 clears the role;
   - toggles from a loaded values file win over the preset (`source: loaded`), and a role that does not offer a
     feature the file enables is refused;
   - the profile keys `role`, `features` and `catalogue` (set by the server on save), and the `keys` format (decision 12).
