@@ -63,4 +63,4 @@ lint:
 	if [ -n "$$unformatted" ]; then echo "gofmt needed:"; echo "$$unformatted"; exit 1; fi
 
 trial-sync:
-	@for release in $(TRIAL_RELEASES); do cp ../k3s/$$release.yaml trial/values/$$release.yaml; done
+	@for release in $(TRIAL_RELEASES); do cp ../k3s/$$release.yaml trial/values/$$release.yaml || exit 1; done
