@@ -220,6 +220,8 @@ func TestRequiresCredentials(t *testing.T) {
 		{method: http.MethodPost, path: "/api/render"},
 		{method: http.MethodPost, path: "/api/validate"},
 		{method: http.MethodPost, path: "/api/load"},
+		{path: "/api/trial"},
+		{method: http.MethodPost, path: "/api/trial/write"},
 		{path: pathWS},
 		{path: "/?token=wrong"},
 		{path: "/?token="},
