@@ -178,7 +178,7 @@ format: 1
 model:              # the question-model bundle it was built with
   chart: data-space-connector
   version: 10.16.0
-  revision: 1
+  revision: 2
 catalogue:          # the bundle the roles came from; set by the server, only when it is not `model`
 target:
   type: cluster
@@ -190,7 +190,7 @@ target:
   chartVersion: 10.16.0
   environment: production
 role: provider      # see Roles
-features:           # offered features only; source is preset, loaded or user
+features:           # excerpt: a real profile lists every offered feature; source is preset, loaded or user
   data.scorpio:
     enabled: true
     source: preset
