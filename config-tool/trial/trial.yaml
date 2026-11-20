@@ -1,0 +1,35 @@
+# dsc-config local trial: the Quick Start releases of k3s/deploy.sh, in install order (ADR 0016).
+releases:
+  - role: trust-anchor
+    source: k3s/trust-anchor.yaml
+    values: values/trust-anchor.yaml
+    target:
+      type: file
+      namespace: trust-anchor
+      createNamespace: true
+      releaseName: trust-anchor
+      chart: trust-anchor
+      chartVersion: 1.3.6
+      environment: development
+  - role: provider
+    source: k3s/provider.yaml
+    values: values/provider.yaml
+    target:
+      type: file
+      namespace: provider
+      createNamespace: true
+      releaseName: provider
+      chart: data-space-connector
+      chartVersion: 10.16.0
+      environment: development
+  - role: consumer
+    source: k3s/consumer.yaml
+    values: values/consumer.yaml
+    target:
+      type: file
+      namespace: consumer
+      createNamespace: true
+      releaseName: consumer
+      chart: data-space-connector
+      chartVersion: 10.16.0
+      environment: development

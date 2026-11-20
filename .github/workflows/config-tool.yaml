@@ -7,17 +7,15 @@ on:
     paths:
       - 'config-tool/**'
       - '.github/workflows/config-tool.yaml'
-      # The round-trip tests read these as their corpus.
+      # The round-trip corpus; the trial also reads Chart.yaml and renders both charts.
       - 'k3s/**'
-      - 'charts/data-space-connector/values.yaml'
-      - 'charts/trust-anchor/values.yaml'
+      - 'charts/**'
   pull_request:
     paths:
       - 'config-tool/**'
       - '.github/workflows/config-tool.yaml'
       - 'k3s/**'
-      - 'charts/data-space-connector/values.yaml'
-      - 'charts/trust-anchor/values.yaml'
+      - 'charts/**'
 
 permissions:
   contents: read

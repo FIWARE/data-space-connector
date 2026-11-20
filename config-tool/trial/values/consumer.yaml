@@ -1,0 +1,1039 @@
+cert-manager:
+  enabled: false
+
+keycloak:
+  resources:
+    requests:
+      cpu: "100m"
+    limits:
+      cpu: "500m"
+  ingress:
+    enabled: true
+    annotations:
+      traefik.ingress.kubernetes.io/router.tls: "true"
+      cert-manager.io/cluster-issuer: "selfsigned-issuer"
+      cert-manager.io/private-key-algorithm: "ECDSA"
+      cert-manager.io/alt-names: "keycloak-consumer.127.0.0.1.nip.io"
+      cert-manager.io/common-name: "keycloak-consumer.127.0.0.1.nip.io"
+    hosts:
+      - host: keycloak-consumer.127.0.0.1.nip.io
+        paths:
+          - path: /
+            pathType: Prefix
+    tls:
+      - secretName: keycloak-consumer.127.0.0.1.nip.io-tls
+        hosts:
+          - keycloak-consumer.127.0.0.1.nip.io
+  extraInitContainers:
+    - name: prepare-keystore
+      image: alpine/openssl:3.5.5
+      command: ["/bin/sh", "-c"]
+      args:
+        - |
+          openssl pkcs12 -export \
+            -in /certs-did/tls.crt \
+            -inkey /certs-did/tls.key \
+            -certfile /certs-did/ca.crt \
+            -out /did-material/cert.pfx \
+            -name "didPrivateKey" \
+            -passout env:STORE_PASS
+          chmod 644 /did-material/cert.pfx
+      env:
+      - name: "STORE_PASS"
+        valueFrom:
+          secretKeyRef:
+            name: keystore-password
+            key: password
+      volumeMounts:
+        - name: did-material
+          mountPath: /did-material
+        - name: did-priv-key
+          mountPath: /certs-did
+    - name: register-at-tir
+      image: curlimages/curl:8.18.0
+      command:
+        - /bin/sh
+      args:
+        - -ec
+        - |
+          #!/bin/sh
+          curl -X 'POST' 'http://tir.trust-anchor.svc.cluster.local:8080/issuer' -H 'Content-Type: application/json' -d "{\"did\": \"did:web:fancy-marketplace.biz\", \"credentials\": []}"
+    # download the token-status-list plugin JAR from Maven Central into the providers volume
+    - name: download-token-status-plugin
+      image: curlimages/curl:8.18.0
+      imagePullPolicy: IfNotPresent
+      command:
+        - /bin/sh
+      args:
+        - -ec
+        - |
+          PLUGIN_URL="https://github.com/wistefan/token-status-link/releases/download/v0.3.7/keycloak-token-status-plugin-0.3.7.jar"
+          echo "Downloading token-status-list plugin from ${PLUGIN_URL}"
+          curl -sSL -o /providers/keycloak-token-status-plugin-0.3.7.jar "${PLUGIN_URL}"
+          echo "Plugin downloaded successfully"
+      volumeMounts:
+        - name: providers
+          mountPath: /providers
+  extraVolumeMounts:
+    # Since KC 26.6.4 the java-keystore realm key provider only reads keystores from
+    # ${kc.home.dir}/data/<realm-name>, so the directory name must match `realm.name`.
+    - mountPath: /opt/keycloak/data/test-realm
+      name: did-material
+    - mountPath: /opt/keycloak/data/import
+      name: realms
+    - name: providers
+      mountPath: /opt/keycloak/providers
+  extraVolumes:
+    - emptyDir: {}
+      name: did-material
+    - configMap:
+        name: test-realm-realm
+      name: realms
+    - name: did-priv-key
+      secret:
+        secretName: fancy-marketplace.biz-tls
+    - name: providers
+      emptyDir: {}
+  issuerDid: did:web:fancy-marketplace.biz
+  signingKey:
+    storePath: /opt/keycloak/data/test-realm/cert.pfx
+    storePassword: "${STORE_PASS}"
+    keyAlias: didPrivateKey
+    keyPassword: "${STORE_PASS}"
+    did: did:web:fancy-marketplace.biz
+    keyAlgorithm: ES256
+  # token-status-list plugin configuration for credential revocation
+  tokenStatusList:
+    enabled: true
+    # in-cluster URL of the status-list-server
+    serverUrl: "https://consumer-status-list.127.0.0.1.nip.io"
+    # trust self-signed certificates from cert-manager's selfsigned-issuer
+    tlsTrustAll: true
+    # credential types that should be revocable via the token status list
+    credentialTypes:
+      - LegalPersonCredential
+      - OperatorCredential
+      - UserCredential
+      - MembershipCredential
+      - MarketplaceCredential
+      - VerifiableCredential
+  proxy:
+    enabled: true
+    httpsProxy: "http://squid-proxy.infra.svc.cluster.local:8888"
+    noProxy: "localhost,*.cluster.local,*.svc"
+    spiProxyMappings: ".*\\.127\\.0\\.0\\.1\\.nip\\.io;http://squid-proxy.infra.svc.cluster.local:8888"
+  # extraEnvVars replaces the umbrella list, so KC_HEAP_SIZE has to be repeated here.
+  # STORE_PASS is consumed by the realm.json key-provider config (see signingKey above).
+  extraEnvVars:
+    - name: KC_HEAP_SIZE
+      value: "1024m"
+    - name: "STORE_PASS"
+      valueFrom:
+        secretKeyRef:
+          name: keystore-password
+          key: password
+  realm:
+    # local and test environments only: the integration tests and doc/scripts/get_credential.sh
+    # log in with the password grant, which the chart leaves off
+    defaultClients:
+      account-console:
+        directAccessGrantsEnabled: true
+    frontendUrl: https://keycloak-consumer.127.0.0.1.nip.io
+    import: true
+    name: test-realm
+    # -- KC 26.7.0 ties /create-credential-offer
+    # to a per-user `verifiableCredentials` list — without it the endpoint answers
+    # 400 invalid_credential_offer_request "User 'X' does not have verifiable credential 'Y'".
+    # `issueCredentialsToUsers` auto-populates every user with the full set of VCs
+    # declared in `realm.verifiableCredentials` below.
+    wallets:
+      issueCredentialsToUsers: true
+    attributes:
+      issuerDid: "did:web:fancy-marketplace.biz"
+    # -- VCs migrated to the post-KC 26.4 OID4VC model: each entry renders one
+    # ClientScope with protocol "oid4vc". Attributes are attached to the scope
+    # itself (auto-prefixed with `vc.`); protocolMappers belong to the scope
+    # (no more legacy `supportedCredentialTypes` filtering — every mapper
+    # listed under a VC applies only to that VC's scope).
+    verifiableCredentials:
+      user-sd:
+        attributes:
+          format: "dc+sd-jwt"
+          verifiable_credential_type: "LegalPersonCredential"
+          credential_signing_alg: "ES256"
+          credential_build_config.token_jws_type: "dc+sd-jwt"
+          # KC 26.7.0 SD-JWT red list (iss, iat, nbf, exp, cnf, vct, status) MUST
+          # stay disclosed; including them avoids `UndisclosedClaims contains red
+          # listed claim names`. roles/email are the domain-specific visible claims.
+          credential_build_config.sd_jwt.visible_claims: "iss,iat,nbf,exp,cnf,vct,status,roles,email"
+          # Must be >0 to prevent SdJwt.Builder.build() from regenerating the
+          # payload with default decoys, which wipes the cnf claim added by
+          # addKeyBinding() after initial credential body construction.
+          sd_jwt.number_of_decoys: "5"
+          binding_required: "false"
+          binding_required_proof_types: "jwt"
+          cryptographic_binding_methods_supported: "jwk"
+        protocolMappers:
+          - name: context-mapper-usd
+            protocol: oid4vc
+            protocolMapper: oid4vc-context-mapper
+            config:
+              context: https://www.w3.org/2018/credentials/v1
+          - name: email-mapper-usd
+            protocol: oid4vc
+            protocolMapper: oid4vc-user-attribute-mapper
+            config:
+              claim.name: email
+              userAttribute: email
+          - name: firstName-mapper-usd
+            protocol: oid4vc
+            protocolMapper: oid4vc-user-attribute-mapper
+            config:
+              claim.name: firstName
+              userAttribute: firstName
+          - name: lastName-mapper-usd
+            protocol: oid4vc
+            protocolMapper: oid4vc-user-attribute-mapper
+            config:
+              claim.name: lastName
+              userAttribute: lastName
+          # Single target-role-mapper per VC (KC 26.4+ does not allow two mappers
+          # with the same claim.name in the same scope). user-sd is presented to
+          # the consumer-local marketplace (organization_did=fancy-marketplace.biz),
+          # so the role array carries that target.
+          - name: role-mapper-marketplace-usd
+            protocol: oid4vc
+            protocolMapper: oid4vc-target-role-mapper
+            config:
+              claim.name: roles
+              clientId: did:web:fancy-marketplace.biz
+          - name: usd-list-claim-mapper
+            protocol: oid4vc
+            protocolMapper: oid4vc-status-list-claim-mapper
+          - name: usd-id-claim-mapper
+            protocol: oid4vc
+            protocolMapper: oid4vc-subject-id-mapper
+            config:
+              userAttribute: email
+              claim.name: id
+      user-credential:
+        attributes:
+          format: "jwt_vc_json"
+          verifiable_credential_type: "UserCredential"
+          credential_signing_alg: "ES256"
+          credential_build_config.token_jws_type: "JWT"
+        protocolMappers:
+          - name: context-mapper-uc
+            protocol: oid4vc
+            protocolMapper: oid4vc-context-mapper
+            config:
+              context: https://www.w3.org/2018/credentials/v1
+          - name: email-mapper-uc
+            protocol: oid4vc
+            protocolMapper: oid4vc-user-attribute-mapper
+            config:
+              claim.name: email
+              userAttribute: email
+          - name: firstName-mapper-uc
+            protocol: oid4vc
+            protocolMapper: oid4vc-user-attribute-mapper
+            config:
+              claim.name: firstName
+              userAttribute: firstName
+          - name: lastName-mapper-uc
+            protocol: oid4vc
+            protocolMapper: oid4vc-user-attribute-mapper
+            config:
+              claim.name: lastName
+              userAttribute: lastName
+          - name: role-mapper-marketplace-mp
+            protocol: oid4vc
+            protocolMapper: oid4vc-target-role-mapper
+            config:
+              claim.name: roles
+              clientId: did:web:mp-operations.org
+          - name: mp-list-claim-mapper
+            protocol: oid4vc
+            protocolMapper: oid4vc-status-list-claim-mapper
+            config:
+              metadata.claim.paths: firstName, lastName
+          - name: mp-id-claim-mapper
+            protocol: oid4vc
+            protocolMapper: oid4vc-subject-id-mapper
+            config:
+              userAttribute: email
+              claim.name: id
+      legal-person-credential:
+        attributes:
+          format: "jwt_vc_json"
+          verifiable_credential_type: "LegalPersonCredential"
+          credential_signing_alg: "ES256"
+          credential_build_config.token_jws_type: "JWT"
+        protocolMappers:
+          - name: context-mapper-lpc
+            protocol: oid4vc
+            protocolMapper: oid4vc-context-mapper
+            config:
+              context: https://www.w3.org/2018/credentials/v1
+          - name: email-mapper-lpc
+            protocol: oid4vc
+            protocolMapper: oid4vc-user-attribute-mapper
+            config:
+              claim.name: email
+              userAttribute: email
+          - name: firstName-mapper-lpc
+            protocol: oid4vc
+            protocolMapper: oid4vc-user-attribute-mapper
+            config:
+              claim.name: firstName
+              userAttribute: firstName
+          - name: lastName-mapper-lpc
+            protocol: oid4vc
+            protocolMapper: oid4vc-user-attribute-mapper
+            config:
+              claim.name: lastName
+              userAttribute: lastName
+          - name: subject-mapper-lpc
+            protocol: oid4vc
+            protocolMapper: oid4vc-static-claim-mapper
+            config:
+              claim.name: subject
+              staticValue: did:key:zDnaeiVpxCT7ARwqLndbWiCeGG2YZXvLfWFs1cGPgKUe8GPLe
+          - name: street-mapper-lpc
+            protocol: oid4vc
+            protocolMapper: oid4vc-static-claim-mapper
+            config:
+              claim.name: street
+              staticValue: Main Street
+          - name: streetNumber-mapper-lpc
+            protocol: oid4vc
+            protocolMapper: oid4vc-static-claim-mapper
+            config:
+              claim.name: streetNumber
+              staticValue: "10"
+          - name: city-mapper-lpc
+            protocol: oid4vc
+            protocolMapper: oid4vc-static-claim-mapper
+            config:
+              claim.name: city
+              staticValue: Berlin
+          - name: region-mapper-lpc
+            protocol: oid4vc
+            protocolMapper: oid4vc-static-claim-mapper
+            config:
+              claim.name: region
+              staticValue: Berlin
+          - name: country-mapper-lpc
+            protocol: oid4vc
+            protocolMapper: oid4vc-static-claim-mapper
+            config:
+              claim.name: country
+              staticValue: DE
+          - name: zipcode-mapper-lpc
+            protocol: oid4vc
+            protocolMapper: oid4vc-static-claim-mapper
+            config:
+              claim.name: zipcode
+              staticValue: "10115"
+          - name: role-mapper-marketplace-lpc
+            protocol: oid4vc
+            protocolMapper: oid4vc-target-role-mapper
+            config:
+              claim.name: roles
+              clientId: did:web:mp-operations.org
+          - name: lpc-list-claim-mapper
+            protocol: oid4vc
+            protocolMapper: oid4vc-status-list-claim-mapper
+      membership-credential:
+        attributes:
+          format: "jwt_vc_json"
+          verifiable_credential_type: "MembershipCredential"
+          credential_signing_alg: "ES256"
+          credential_build_config.token_jws_type: "JWT"
+        protocolMappers:
+          - name: context-mapper-mc
+            protocol: oid4vc
+            protocolMapper: oid4vc-context-mapper
+            config:
+              context: https://www.w3.org/2018/credentials/v1
+          - name: id-mapper-mc
+            protocol: oid4vc
+            protocolMapper: oid4vc-static-claim-mapper
+            config:
+              claim.name: id
+              staticValue: did:web:fancy-marketplace.biz
+          - name: membership-type-mapper-mc
+            protocol: oid4vc
+            protocolMapper: oid4vc-static-claim-mapper
+            config:
+              claim.name: membershipType
+              staticValue: FullMember
+          - name: mc-list-claim-mapper
+            protocol: oid4vc
+            protocolMapper: oid4vc-status-list-claim-mapper
+      marketplace-credential:
+        attributes:
+          format: "jwt_vc_json"
+          verifiable_credential_type: "MarketplaceCredential"
+          credential_signing_alg: "ES256"
+          credential_build_config.token_jws_type: "JWT"
+        protocolMappers:
+          - name: context-mapper-mpc
+            protocol: oid4vc
+            protocolMapper: oid4vc-context-mapper
+            config:
+              context: https://www.w3.org/2018/credentials/v1
+          - name: email-mapper-mpc
+            protocol: oid4vc
+            protocolMapper: oid4vc-user-attribute-mapper
+            config:
+              claim.name: email
+              userAttribute: email
+          - name: firstName-mapper-mpc
+            protocol: oid4vc
+            protocolMapper: oid4vc-user-attribute-mapper
+            config:
+              claim.name: firstName
+              userAttribute: firstName
+          - name: lastName-mapper-mpc
+            protocol: oid4vc
+            protocolMapper: oid4vc-user-attribute-mapper
+            config:
+              claim.name: lastName
+              userAttribute: lastName
+          - name: role-mapper-marketplace-mpc
+            protocol: oid4vc
+            protocolMapper: oid4vc-target-role-mapper
+            config:
+              claim.name: roles
+              clientId: did:web:fancy-marketplace.biz
+          - name: mpc-list-claim-mapper
+            protocol: oid4vc
+            protocolMapper: oid4vc-status-list-claim-mapper
+      verifiable-credential:
+        attributes:
+          format: "dc+sd-jwt"
+          verifiable_credential_type: "VerifiableCredential"
+        protocolMappers:
+          - name: context-mapper-vc
+            protocol: oid4vc
+            protocolMapper: oid4vc-context-mapper
+            config:
+              context: https://www.w3.org/2018/credentials/v1
+          - name: email-mapper-vc
+            protocol: oid4vc
+            protocolMapper: oid4vc-user-attribute-mapper
+            config:
+              claim.name: email
+              userAttribute: email
+          - name: firstName-mapper-vc
+            protocol: oid4vc
+            protocolMapper: oid4vc-user-attribute-mapper
+            config:
+              claim.name: firstName
+              userAttribute: firstName
+          - name: role-mapper-marketplace-vc
+            protocol: oid4vc
+            protocolMapper: oid4vc-target-role-mapper
+            config:
+              claim.name: roles
+              clientId: did:web:fancy-marketplace.biz
+          - name: vc-list-claim-mapper
+            protocol: oid4vc
+            protocolMapper: oid4vc-status-list-claim-mapper
+      operator-credential:
+        attributes:
+          format: "jwt_vc_json"
+          verifiable_credential_type: "OperatorCredential"
+          credential_signing_alg: "ES256"
+          credential_build_config.token_jws_type: "JWT"
+        protocolMappers:
+          - name: context-mapper-oc
+            protocol: oid4vc
+            protocolMapper: oid4vc-context-mapper
+            config:
+              context: https://www.w3.org/2018/credentials/v1
+          - name: email-mapper-oc
+            protocol: oid4vc
+            protocolMapper: oid4vc-user-attribute-mapper
+            config:
+              claim.name: email
+              userAttribute: email
+          - name: firstName-mapper-oc
+            protocol: oid4vc
+            protocolMapper: oid4vc-user-attribute-mapper
+            config:
+              claim.name: firstName
+              userAttribute: firstName
+          - name: lastName-mapper-oc
+            protocol: oid4vc
+            protocolMapper: oid4vc-user-attribute-mapper
+            config:
+              claim.name: lastName
+              userAttribute: lastName
+          # operator-credential is presented to the provider's data service
+          # (organization_did=mp-operations.org), so the role array carries that target.
+          - name: role-mapper-oc
+            protocol: oid4vc
+            protocolMapper: oid4vc-target-role-mapper
+            config:
+              claim.name: roles
+              clientId: did:web:mp-operations.org
+          - name: oc-list-claim-mapper
+            protocol: oid4vc
+            protocolMapper: oid4vc-status-list-claim-mapper
+    clientRoles: |
+      "did:web:mp-operations.org": [
+        {
+          "name": "customer",
+          "description": "Is allowed to see offers etc.",
+          "clientRole": true
+        },
+        {
+          "name": "READER",
+          "description": "Is allowed to see offers etc.",
+          "clientRole": true
+        },
+        {
+          "name": "OPERATOR",
+          "description": "Is allowed to operate clusters.",
+          "clientRole": true
+        },
+        {
+          "name": "REPRESENTATIVE",
+          "description": "Is allowed to register.",
+          "clientRole": true
+        }],
+      "did:web:fancy-marketplace.biz": [
+        {
+          "name": "REPRESENTATIVE",
+          "description": "Is allowed to register.",
+          "clientRole": true
+        }],
+      "account": [
+        {
+          "name": "delete-account",
+          "description": "${role_delete-account}",
+          "composite": false,
+          "clientRole": true,
+          "attributes": {}
+        },
+        {
+          "name": "view-consent",
+          "description": "${role_view-consent}",
+          "composite": false,
+          "clientRole": true,
+          "attributes": {}
+        },
+        {
+          "name": "view-groups",
+          "description": "${role_view-groups}",
+          "composite": false,
+          "clientRole": true,
+          "attributes": {}
+        },
+        {
+          "name": "manage-account",
+          "description": "${role_manage-account}",
+          "composite": true,
+          "composites": {
+            "client": {
+              "account": [
+                "manage-account-links"
+              ]
+            }
+          },
+          "clientRole": true,
+          "attributes": {}
+        },
+        {
+          "name": "view-profile",
+          "description": "${role_view-profile}",
+          "composite": false,
+          "clientRole": true,
+          "attributes": {}
+        },
+        {
+          "name": "view-applications",
+          "description": "${role_view-applications}",
+          "composite": false,
+          "clientRole": true,
+          "attributes": {}
+        },
+        {
+          "name": "manage-consent",
+          "description": "${role_manage-consent}",
+          "composite": true,
+          "composites": {
+            "client": {
+              "account": [
+                "view-consent"
+              ]
+            }
+          },
+          "clientRole": true,
+          "attributes": {}
+        },
+        {
+          "name": "manage-account-links",
+          "description": "${role_manage-account-links}",
+          "composite": false,
+          "clientRole": true,
+          "attributes": {}
+        }
+      ]
+    users: |
+      {
+        "username": "employee",
+        "enabled": true,
+        "email": "employee@consumer.org",
+        "firstName": "Test",
+        "lastName": "User",
+        "credentials": [
+          {
+            "type": "password",
+            "value": "test"
+          }
+        ],
+        "clientRoles": {
+          "did:web:mp-operations.org": [
+            "customer",
+            "REPRESENTATIVE",
+            "READER"
+          ],
+          "did:web:fancy-marketplace.biz": [
+            "REPRESENTATIVE"
+          ],
+          "account": [
+            "view-profile",
+            "manage-account"
+          ]
+        },
+        "groups": [
+            "/consumer"
+        ]
+      },
+      {
+        "username": "operator",
+        "enabled": true,
+        "email": "operator@consumer.org",
+        "firstName": "Test",
+        "lastName": "Operator",
+        "credentials": [
+          {
+            "type": "password",
+            "value": "test"
+          }
+        ],
+        "clientRoles": {
+          "did:web:mp-operations.org": [
+            "OPERATOR"
+          ],
+          "account": [
+            "view-profile",
+            "manage-account"
+          ]
+        },
+        "groups": [
+            "/consumer"
+        ]
+      },
+      {
+        "username": "representative",
+        "enabled": true,
+        "email": "test@user.org",
+        "firstName": "Test",
+        "lastName": "Representative",
+        "credentials": [
+          {
+            "type": "password",
+            "value": "test"
+          }
+        ],
+        "clientRoles": {
+          "did:web:mp-operations.org": [
+            "REPRESENTATIVE"
+          ],
+          "account": [
+            "view-profile",
+            "manage-account"
+          ]
+        },
+        "groups": [
+            "/consumer"
+        ]
+      },
+      {
+        "username": "service-account-contract-management",
+        "enabled": true,
+        "serviceAccountClientId": "contract-management",
+        "clientRoles": {
+          "did:web:mp-operations.org": [
+            "REPRESENTATIVE"
+          ],
+          "did:web:fancy-marketplace.biz": [
+            "REPRESENTATIVE"
+          ]
+        },
+        "verifiableCredentials": [
+          {"credentialScopeName": "marketplace-credential"},
+          {"credentialScopeName": "legal-person-credential"}
+        ]
+      },
+      {
+        "username": "service-account-fdsc-edc",
+        "enabled": true,
+        "serviceAccountClientId": "fdsc-edc",
+        "verifiableCredentials": [
+          {"credentialScopeName": "membership-credential"}
+        ]
+      },
+      {
+        "username": "admin",
+        "enabled": true,
+        "email": "admin@consumer.org",
+        "firstName": "Test",
+        "lastName": "Admin",
+        "credentials": [
+          {
+            "type": "password",
+            "value": "test"
+          }
+        ],
+        "realmRoles": [
+          "realm-admin"
+        ],
+        "clientRoles": {
+          "did:web:fancy-marketplace.biz": [
+            "admin"
+          ],
+          "account": [
+            "view-profile",
+            "manage-account"
+          ],
+          "realm-management": [
+            "realm-admin"
+          ]
+        },
+        "groups": []
+      }
+    clients:
+      - clientId: did:web:mp-operations.org
+        enabled: true
+        description: Client to connect mp-operations.org
+        surrogateAuthRequired: false
+        alwaysDisplayInConsole: false
+        clientAuthenticatorType: client-secret
+        defaultRoles: []
+        redirectUris: []
+        webOrigins: []
+        notBefore: 0
+        bearerOnly: false
+        consentRequired: false
+        standardFlowEnabled: true
+        implicitFlowEnabled: false
+        directAccessGrantsEnabled: false
+        serviceAccountsEnabled: true
+        publicClient: false
+        frontchannelLogout: false
+        secret: kpWxZn7LgcWT84AzS3aS5X5URmL0FC0Q
+        protocol: openid-connect
+        attributes:
+          client.secret.creation.time: "1675260539"
+        protocolMappers: []
+        authenticationFlowBindingOverrides: {}
+        fullScopeAllowed: true
+        nodeReRegistrationTimeout: -1
+        defaultClientScopes: []
+        optionalClientScopes: []
+      - clientId: did:web:fancy-marketplace.biz
+        enabled: true
+        description: Client to connect itself
+        surrogateAuthRequired: false
+        alwaysDisplayInConsole: false
+        clientAuthenticatorType: client-secret
+        defaultRoles: []
+        redirectUris:
+          ["https://dashboard-consumer.127.0.0.1.nip.io/callback/keycloak"]
+        webOrigins: ["https://dashboard-consumer.127.0.0.1.nip.io"]
+        notBefore: 0
+        bearerOnly: false
+        consentRequired: false
+        standardFlowEnabled: true
+        implicitFlowEnabled: false
+        directAccessGrantsEnabled: false
+        serviceAccountsEnabled: true
+        publicClient: true
+        frontchannelLogout: false
+        protocol: openid-connect
+        attributes:
+          client.secret.creation.time: "1675260539"
+          oid4vci.enabled: "true"
+        protocolMappers:
+        - name: "client-roles-id-token"
+          protocol: openid-connect
+          protocolMapper: oidc-usermodel-client-role-mapper
+          consentRequired: false
+          config:
+            multivalued: "true"
+            usermodel.clientRoleMapping.clientId: "did:web:fancy-marketplace.biz"
+            id.token.claim: "true"
+            access.token.claim: "false"
+            claim.name: "client_roles"
+            jsonType.label: "String"
+        authenticationFlowBindingOverrides: {}
+        fullScopeAllowed: true
+        nodeReRegistrationTimeout: -1
+        defaultClientScopes: ["openid", "profile", "roles"]
+        optionalClientScopes:  ["user-credential", "legal-person-credential"]
+      - clientId: contract-management
+        enabled: true
+        description: Client representing the contract-management
+        surrogateAuthRequired: false
+        alwaysDisplayInConsole: false
+        clientAuthenticatorType: client-secret
+        secret: contract-management-client-secret
+        defaultRoles: []
+        redirectUris: []
+        webOrigins: []
+        notBefore: 0
+        bearerOnly: false
+        consentRequired: false
+        standardFlowEnabled: false
+        implicitFlowEnabled: false
+        directAccessGrantsEnabled: false
+        serviceAccountsEnabled: true
+        publicClient: false
+        frontchannelLogout: false
+        protocol: openid-connect
+        attributes:
+          client.secret.creation.time: "1675260539"
+          oid4vci.enabled: "true"
+        authenticationFlowBindingOverrides: {}
+        fullScopeAllowed: true
+        nodeReRegistrationTimeout: -1
+        defaultClientScopes: []
+        optionalClientScopes: []
+        optionalClientScopes: ["marketplace-credential", "legal-person-credential"]
+      - clientId: fdsc-edc
+        enabled: true
+        description: Client representing the fdsc-edc
+        surrogateAuthRequired: false
+        alwaysDisplayInConsole: false
+        clientAuthenticatorType: client-secret
+        secret: fdsc-edc-client-secret
+        defaultRoles: []
+        redirectUris: []
+        webOrigins: []
+        notBefore: 0
+        bearerOnly: false
+        consentRequired: false
+        standardFlowEnabled: false
+        implicitFlowEnabled: false
+        directAccessGrantsEnabled: false
+        serviceAccountsEnabled: true
+        publicClient: false
+        frontchannelLogout: false
+        protocol: openid-connect
+        attributes:
+          client.secret.creation.time: "1675260539"
+          oid4vci.enabled: "true"
+        authenticationFlowBindingOverrides: {}
+        fullScopeAllowed: true
+        nodeReRegistrationTimeout: -1
+        defaultClientScopes: []
+        optionalClientScopes: []
+        optionalClientScopes: ["membership-credential"]
+
+did:
+  enabled: true
+  # with certPath did-helper writes nothing, so it runs on a read-only root filesystem
+  securityContext:
+    readOnlyRootFilesystem: true
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop: ["ALL"]
+  config:
+    server:
+      hostUrl: "http://fancy-marketplace.biz"
+      certPath: "/certs/tls.crt"
+  volumes:
+    - name: certs
+      secret:
+        secretName: fancy-marketplace.biz-tls
+        items:
+          - key: tls.crt
+            path: tls.crt
+  volumeMounts:
+    - name: certs
+      mountPath: /certs
+  ingress:
+    enabled: true
+    className: ""
+    annotations:
+      traefik.ingress.kubernetes.io/service.passhostheader: "true"
+      traefik.ingress.kubernetes.io/router.tls: "true"
+      cert-manager.io/cluster-issuer: "selfsigned-issuer"
+      cert-manager.io/private-key-algorithm: "ECDSA"
+      cert-manager.io/common-name: "fancy-marketplace.biz"
+      cert-manager.io/alt-names: "fancy-marketplace.biz"
+    hosts:
+      - host: fancy-marketplace.biz
+        paths:
+          - path: /
+            pathType: ImplementationSpecific
+    tls:
+      - secretName: fancy-marketplace.biz-tls
+        hosts:
+          - fancy-marketplace.biz
+
+tm-forum-api:
+  enabled: false
+
+decentralizedIam:
+  enabled: true
+  vcAuthentication:
+    # the cluster-wide operator is installed once, as the operators release (k3s/operators.yaml)
+    postgres-operator:
+      enabled: false
+    vcverifier:
+      enabled: false
+    credentials-config-service:
+      enabled: false
+    trusted-issuers-list:
+      enabled: false
+    managedPostgres:
+      enabled: true
+      config:
+        volume:
+          storageClass: "local-path"
+        users:
+          ngb:
+            - createdb
+          statuslist:
+            - createdb
+        databases:
+          ngb: ngb
+          statuslistdb: statuslist
+        preparedDatabases:
+          ngb:
+            extensions:
+              postgis: public
+  odrlAuthorization:
+    odrl-pap:
+      enabled: false
+    apisix:
+      enabled: false
+
+
+contract-management:
+  enabled: false
+
+fdsc-edc:
+  enabled: false
+
+identityhub:
+  enabled: false
+
+vault:
+  enabled: false
+
+# status-list-server for credential revocation (Token Status List specification)
+statusListServer:
+  enabled: true
+  signing:
+    enabled: true
+    secretName: "signing-key"
+    issuer:
+      dnsNames: ["fancy-marketplace.biz"]
+      name: selfsigned-issuer
+  env:
+    serverDomain: "consumer-status-list.127.0.0.1.nip.io"
+  ingress:
+    enabled: true
+    annotations:
+      cert-manager.io/cluster-issuer: "selfsigned-issuer"
+      cert-manager.io/private-key-algorithm: "ECDSA"
+      cert-manager.io/common-name: "consumer-status-list.127.0.0.1.nip.io"
+      cert-manager.io/alt-names: "consumer-status-list.127.0.0.1.nip.io"
+      traefik.ingress.kubernetes.io/router.tls: "true"
+    hosts:
+      - host: consumer-status-list.127.0.0.1.nip.io
+        paths:
+          - "/"
+    tls:
+      - secretName: consumer-status-list.127.0.0.1.nip.io-tls
+        hosts:
+          - consumer-status-list.127.0.0.1.nip.io
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    limits:
+      cpu: "250m"
+      memory: "256Mi"
+  postgresql:
+    host: "postgres"
+    port: "5432"
+    database: "statuslistdb"
+    auth:
+      username: "statuslist"
+      # use the Zalando Postgres Operator auto-generated credentials secret
+      existingSecret: "statuslist.postgres.credentials.postgresql.acid.zalan.do"
+      existingSecretPasswordKey: "password"
+  redis:
+    enabled: true
+    resources:
+      requests:
+        cpu: "50m"
+        memory: "64Mi"
+      limits:
+        cpu: "100m"
+        memory: "128Mi"
+
+scorpio:
+  enabled: false
+
+fdsc-dashboard:
+  enabled: true
+  ingress:
+    enabled: true
+    annotations:
+      cert-manager.io/cluster-issuer: "selfsigned-issuer"
+      cert-manager.io/private-key-algorithm: "ECDSA"
+      cert-manager.io/common-name: "dashboard-consumer.127.0.0.1.nip.io"
+      cert-manager.io/alt-names: "dashboard-consumer.127.0.0.1.nip.io"
+      traefik.ingress.kubernetes.io/router.tls: "true"
+
+    hosts:
+      - host: dashboard-consumer.127.0.0.1.nip.io
+        paths:
+          - "/"
+    tls:
+      - secretName: dashboard-consumer.127.0.0.1.nip.io-tls
+        hosts:
+          - dashboard-consumer.127.0.0.1.nip.io
+  grafana:
+    enabled: false
+
+  apisix:
+    enabled: false
+
+  apiUrls:
+    til: http://trusted-issuers-list:8080
+    ccs: http://verifier:8090
+    odrl: http://odrl-pap:8080
+  auth:
+    config:
+      providers:
+        - id: keycloak
+          displayName: Keycloak
+          issuer: https://keycloak-consumer.127.0.0.1.nip.io/realms/test-realm
+          clientId: did:web:fancy-marketplace.biz
+          scopes: ["openid", "profile", "roles"]
+          rolesClaimPath: "client_roles"
+          roleMapping:
+            admin: "admin"
+          silentRenew: true
+  keycloak:
+    url: http://consumer-keycloak:8080
