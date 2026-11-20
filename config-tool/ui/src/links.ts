@@ -1,10 +1,14 @@
-/** External documentation links shown on S0 and S1. */
+/** External documentation links shown on S0, S1 and Review. */
 import { DEFAULT_CHART } from './state/answers'
 
 const REPOSITORY = 'https://github.com/FIWARE/data-space-connector'
 
 /** The connector's documentation. */
 export const DOCUMENTATION_URL = `${REPOSITORY}#readme`
+/** The Quick Start the local trial is equivalent to; it applies everything the trial leaves out. */
+export const QUICK_START_URL = `${REPOSITORY}/blob/main/doc/deployment-integration/local-deployment/LOCAL.MD#quick-start`
+/** Memory and disk each role needs; the UI links it and never restates a figure. */
+export const SIZING_URL = `${REPOSITORY}/blob/main/doc/deployment-integration/roles/PREREQUISITES.md#sizing`
 /** The index of all release notes. */
 export const RELEASE_NOTES_URL = `${REPOSITORY}/tree/main/doc/release-notes`
 
