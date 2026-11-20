@@ -31,7 +31,7 @@ Consumer + Provider, so the presets make them `available`, not `recommended`.
 ### 2. Cell translation
 
 `Required` → `recommended`, `Optional` → `available`, `-` → `not-offered`. `Built into <X>` takes the
-value of row `<X>` in the same column. Any other cell text fails the test of section 9.
+value of row `<X>` in the same column. Any other cell text fails the test of section 8.
 
 ### 3. A feature belongs to one chart, and so does a role
 

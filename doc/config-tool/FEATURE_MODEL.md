@@ -72,7 +72,7 @@ A shared key is needed while any feature that lists it is enabled ([ADR 0017](..
 | `identity.statuslist` | Revoke issued credentials (token status list) | `statusListServer.*` | postgres |
 | `identity.vcoperator` | Manage credential definitions as Kubernetes resources | `vc-operator.*`, `vcCredentials.*` | — |
 | `identity.wallets` | Preset clients for the Lissi and EUDI wallets | `keycloak.realm.wallets.*` | `identity.issuer` |
-| `identity.eidas` | eIDAS/ELSI certificate-based identity and validation | `elsi.*`, `decentralizedIam.vcAuthentication.dss.*` | `identity.issuer` |
+| `identity.eidas` | eIDAS/ELSI certificate-based identity and validation | `elsi.*`, `decentralizedIam.vcAuthentication.vcverifier.deployment.eidas` | `identity.issuer` |
 
 ### Access
 

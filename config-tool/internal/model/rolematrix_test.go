@@ -26,6 +26,9 @@ const (
 	cellBuiltIntoPre = "Built into "
 )
 
+// descriptiveHeaders are the matrix columns that are not role columns.
+var descriptiveHeaders = []string{"Umbrella component", "Sub-umbrella component", componentHeader, "Role"}
+
 // matrix is the role guide's component matrix with rowspans expanded: every row has a cell per header.
 type matrix struct {
 	header []string
@@ -182,6 +185,11 @@ func compareMatrix(m matrix, b Bundle) []string {
 	for _, comp := range slices.Sorted(maps.Keys(b.RoleMatrix.Components)) {
 		if m.rowOf(compCol, comp) == nil {
 			errs = append(errs, fmt.Sprintf("component %q is mapped in roleMatrix but missing from the matrix", comp))
+		}
+	}
+	for _, h := range m.header {
+		if !slices.Contains(descriptiveHeaders, h) && !slices.ContainsFunc(b.Roles, func(r Role) bool { return r.Title == h }) {
+			errs = append(errs, fmt.Sprintf("the matrix has role column %q that no bundle role has", h))
 		}
 	}
 	for _, role := range b.Roles {
@@ -345,6 +353,13 @@ func TestRoleMatrixMutations(t *testing.T) {
 		{"unknown cell text", func(t *testing.T, src string) string {
 			return setCell(t, src, "Keycloak", "Consumer", "Maybe")
 		}, `role "consumer", component "Keycloak": unknown cell text "Maybe"`},
+		{"role column added", func(t *testing.T, src string) string {
+			const operatorHeader = "<th>Operator</th>"
+			if !strings.Contains(src, operatorHeader) {
+				t.Fatalf("the role guide has no header %q", operatorHeader)
+			}
+			return strings.Replace(src, operatorHeader, operatorHeader+"<th>Data Intermediary</th>", 1)
+		}, `the matrix has role column "Data Intermediary" that no bundle role has`},
 	}
 	b := latestRolesBundle(t)
 	src := readRoleGuide(t)
