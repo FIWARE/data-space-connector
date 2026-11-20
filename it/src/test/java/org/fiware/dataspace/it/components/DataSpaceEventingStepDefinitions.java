@@ -79,9 +79,15 @@ public class DataSpaceEventingStepDefinitions extends StepDefintions {
     // the Job's grant is only isolable while the issuer holds nothing else, i.e. before any order of this run
     private static void recordJobGrant(List<ProviderTilClient.Grant> grants, ProviderTilClient.Grant membership)
             throws Exception {
-        assertEquals(JOB_SUCCEEDED, KubernetesHelper.kubectl("get", "job", "-n", PROVIDER_NAMESPACE,
-                PROVIDER_REGISTRATION_JOB, "-o", "jsonpath={.status.succeeded}"),
-                "The provider's registration Job should have succeeded.");
+        // under helm-install the Job is a hook-succeeded hook: Helm deletes it on success and keeps it on failure,
+        // so absent means succeeded. Presence is read by name, as .status.succeeded is empty on a failed Job too.
+        boolean jobPresent = !KubernetesHelper.kubectl("get", "job", "-n", PROVIDER_NAMESPACE,
+                PROVIDER_REGISTRATION_JOB, "--ignore-not-found", "-o", "name").isEmpty();
+        if (jobPresent) {
+            assertEquals(JOB_SUCCEEDED, KubernetesHelper.kubectl("get", "job", "-n", PROVIDER_NAMESPACE,
+                    PROVIDER_REGISTRATION_JOB, "-o", "jsonpath={.status.succeeded}"),
+                    "The provider's registration Job should have succeeded.");
+        }
         List<ProviderTilClient.Credential> credentials =
                 new ProviderTilClient(PROVIDER_TIL_ADDRESS).credentials(CONSUMER_DID);
         if (grants.size() != 1 || membership.credentialCount() != credentials.size()) {

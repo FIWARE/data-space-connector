@@ -99,28 +99,19 @@ public class StandardStepDefinitions extends StepDefintions {
     private List<String> createdPolicies = new ArrayList<>();
     private List<String> createdEntities = new ArrayList<>();
 
-    /**
-     * Prepares the standard deployment: a clean provider (policies, entities, TM Forum, TIL) plus the
-     * trusted issuers the flows presented credentials with.
-     *
-     * <p>Untagged, so it also prepares the {@code @central} and {@code @dsp} scenarios, which exercise
-     * the same provider state. The consent scenarios are excluded: their deployment relies on state
-     * this would remove - the odrl-pap policy that authorizes the consent-facade's cross-org TM Forum
-     * reads (without it no privacy notice can be projected) and the trusted issuers the facade and the
-     * consent-filter plugin authenticate with. Those scenarios clean up their own fixtures instead.
-     */
+    /** Per-scenario crypto, wallet and mapper init; excludes consent/eidas because the mapper is JVM-global. */
     @Before(value = "not @consent and not @eidas", order = 0)
     public void initWallet() throws Exception {
         CryptoIntegration.init(this.getClass().getClassLoader());
         Security.addProvider(new BouncyCastleProvider());
         fancyMarketplaceEmployeeWallet = new Wallet();
-        // the mapper is JVM-global and shared with the consent/eidas glue, hence the same tag filter
         OBJECT_MAPPER.setSerializationInclusion(JsonInclude.Include.NON_EMPTY);
     }
 
     /**
-     * Wipes and re-seeds the provider; {@code @eventing} is excluded because its deployment's trust
-     * (registration Job grants) and the {@code allowDataSpaceEvents} policy are what it tests.
+     * Wipes and re-seeds the provider (policies, entities, TM Forum, TIL). Consent and eidas rely on state this
+     * removes (the facade's PAP policy and trusted issuers); eventing tests the registration Job's grants and the
+     * {@code allowDataSpaceEvents} policy. Those scenarios clean up their own fixtures.
      */
     @Before("not @consent and not @eidas and not @eventing")
     public void setup() throws Exception {
