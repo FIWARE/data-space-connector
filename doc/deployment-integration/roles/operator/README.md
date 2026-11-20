@@ -326,6 +326,15 @@ helm install central-marketplace oci://quay.io/fiware/helm-charts/data-space-con
 - Architecture and end-to-end demo flow: [CENTRAL_MARKETPLACE.md](../../../CENTRAL_MARKETPLACE.md)
 - Local demo deployment: `mvn clean deploy -Plocal,central`
 
+### Data space eventing
+
+When the operator removes a participant from the TIR, the other participants keep trusting it until
+they learn about the removal. A data space publisher, a contract-management in publisher and
+TIR-watcher mode, announces every removal to the participants that subscribed. It runs in the
+authority's own Data Space Connector release and reuses its identity, verifier and gateway; the
+TIR and TIL deployment is not changed. See the [trust anchor setup](../../../eventing/trust-anchor-setup.md)
+and, for the local demo (`mvn clean deploy -Plocal,eventing`), [EVENTING.md](../../../EVENTING.md).
+
 ## Helm chart
 
 The Trust Anchor uses a dedicated Helm chart, separate from the participant chart, published next to it:

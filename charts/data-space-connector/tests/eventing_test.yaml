@@ -1,0 +1,285 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/helm-unittest/helm-unittest/main/schema/helm-testsuite.json
+#
+# ---------------------------------------------------------------------------
+# Helm-unittest suite for the participant side of data space eventing.
+#
+# contract-management revokes the TIL grants scoped to the publisher of a
+# participant.removed, so the registration Job scopes its grants to that
+# publisher by default. Without such a publisher the script must stay exactly
+# as before, so that upgrading a release changes nothing.
+# ---------------------------------------------------------------------------
+suite: data space eventing - participant side
+templates:
+  - templates/participant-registration.yaml
+tests:
+  - it: registers unscoped when no publisher may send participant.removed
+    set:
+      registration: &registration
+        enabled: true
+        til: http://til:8080
+        issuer:
+          - did: did:web:example.org
+            credentialTypes:
+              - LegalPersonCredential
+    asserts:
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: "'http://til:8080/issuer' \\\\"
+      - notMatchRegex:
+          path: data["init.sh"]
+          pattern: 'scope'
+
+  # An `events:` with its children commented out is null; dig would panic on it.
+  - it: registers unscoped when the events key is null
+    set:
+      registration: *registration
+      contract-management:
+        dataspace:
+          events: null
+    asserts: &unscoped
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: "'http://til:8080/issuer' \\\\"
+      - notMatchRegex:
+          path: data["init.sh"]
+          pattern: 'scope'
+
+  # Only valid with an external contract-management: its 3.6.7 subchart fails on a null `dataspace`.
+  - it: registers unscoped when the dataspace key is null
+    set:
+      registration: *registration
+      contract-management:
+        enabled: false
+        dataspace: null
+    asserts: *unscoped
+
+  - it: ignores publishers that may not send participant.removed
+    set:
+      registration: *registration
+      contract-management:
+        dataspace:
+          events:
+            publishers:
+              - id: did:web:other.org
+                types: [org.fiware.dataspace.example]
+              - types: [org.fiware.dataspace.participant.removed]
+              # CM skips blank ids with isBlank, which includes whitespace-only ones
+              - id: "   "
+                types: [org.fiware.dataspace.participant.removed]
+              # CM's removalPublishers() treats missing or empty types as "may publish nothing"
+              - id: did:web:untyped.org
+              - id: did:web:empty.org
+                types: []
+    asserts:
+      - notMatchRegex:
+          path: data["init.sh"]
+          pattern: 'scope'
+
+  - it: scopes the grant to the one participant.removed publisher
+    set:
+      registration: *registration
+      contract-management:
+        dataspace:
+          events:
+            publishers:
+              # CM deduplicates publishers by id, so a repeated id is still one publisher
+              - id: did:web:operator.org
+                types: [org.fiware.dataspace.participant.removed]
+              - id: did:web:operator.org
+                types: [org.fiware.dataspace.participant.removed]
+              - id: did:web:other.org
+                types: [org.fiware.dataspace.example]
+    asserts:
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: "'http://til:8080/issuer\\?scope=did%3Aweb%3Aoperator.org&scopeType=dataspace-membership' \\\\"
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: 'echo "POST http://til:8080/issuer\?scope=did%3Aweb%3Aoperator.org&scopeType=dataspace-membership \(did:web:example.org\)'
+
+  - it: falls back to the publisher scope when scope is null, unlike an empty scope
+    set:
+      registration:
+        enabled: true
+        til: http://til:8080
+        issuer:
+          - did: did:web:example.org
+            credentialTypes:
+              - LegalPersonCredential
+            scope: null
+      contract-management:
+        dataspace:
+          events:
+            publishers:
+              - id: did:web:operator.org
+                types: [org.fiware.dataspace.participant.removed]
+    asserts:
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: "'http://til:8080/issuer\\?scope=did%3Aweb%3Aoperator.org&scopeType=dataspace-membership' \\\\"
+
+  - it: lets an explicit scope and scopeType win, even with several publishers
+    set:
+      registration:
+        enabled: true
+        til: http://til:8080
+        issuer:
+          - did: did:web:example.org
+            credentialTypes:
+              - LegalPersonCredential
+            scope: did:web:own.org
+            scopeType: custom-type
+      contract-management: &twoPublishers
+        dataspace:
+          events:
+            publishers:
+              - id: did:web:operator.org
+                types: [org.fiware.dataspace.participant.removed]
+              - id: did:web:second.org
+                types: [org.fiware.dataspace.participant.removed]
+    asserts:
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: 'issuer\?scope=did%3Aweb%3Aown.org&scopeType=custom-type'
+
+  - it: defaults scopeType for an explicit scope
+    set:
+      registration:
+        enabled: true
+        til: http://til:8080
+        issuer:
+          - did: did:web:example.org
+            credentialTypes:
+              - LegalPersonCredential
+            scope: did:web:own.org
+    asserts:
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: 'issuer\?scope=did%3Aweb%3Aown.org&scopeType=dataspace-membership'
+
+  - it: combines the publisher scope with an explicit scopeType
+    set:
+      registration:
+        enabled: true
+        til: http://til:8080
+        issuer:
+          - did: did:web:example.org
+            credentialTypes:
+              - LegalPersonCredential
+            scopeType: custom-type
+      contract-management:
+        dataspace:
+          events:
+            publishers:
+              - id: did:web:operator.org
+                types: [org.fiware.dataspace.participant.removed]
+    asserts:
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: 'issuer\?scope=did%3Aweb%3Aoperator.org&scopeType=custom-type'
+
+  - it: registers unscoped when the issuer opts out with an empty scope
+    set:
+      registration:
+        enabled: true
+        til: http://til:8080
+        issuer:
+          - did: did:web:example.org
+            credentialTypes:
+              - LegalPersonCredential
+            scope: ""
+            scopeType: ignored-without-scope
+      contract-management: *twoPublishers
+    asserts:
+      - notMatchRegex:
+          path: data["init.sh"]
+          pattern: 'scope'
+
+  - it: fails when several publishers may send participant.removed and no scope is set
+    set:
+      registration: *registration
+      contract-management: *twoPublishers
+    asserts:
+      - failedTemplate:
+          errorPattern: 'registration.issuer did:web:example.org sets no scope, but several contract-management.dataspace.events.publishers may publish org.fiware.dataspace.participant.removed \(did:web:operator.org, did:web:second.org\): set registration.issuer\[\].scope per issuer'
+
+  # Micronaut binds a comma-separated string to CM's List<String> types, so the chart accepts it too.
+  - it: reads a single-type string as a list
+    set:
+      registration: *registration
+      contract-management:
+        dataspace:
+          events:
+            publishers:
+              - id: did:web:operator.org
+                types: org.fiware.dataspace.participant.removed
+    asserts:
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: 'issuer\?scope=did%3Aweb%3Aoperator.org&scopeType=dataspace-membership'
+
+  - it: reads a comma-separated types string as a list
+    set:
+      registration: *registration
+      contract-management:
+        dataspace:
+          events:
+            publishers:
+              - id: did:web:operator.org
+                types: "org.fiware.dataspace.example, org.fiware.dataspace.participant.removed"
+    asserts:
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: 'issuer\?scope=did%3Aweb%3Aoperator.org&scopeType=dataspace-membership'
+
+  - it: fails with the values path when types is neither a list nor a string
+    set:
+      registration: *registration
+      contract-management:
+        dataspace:
+          events:
+            publishers:
+              - id: did:web:operator.org
+                types:
+                  removed: org.fiware.dataspace.participant.removed
+    asserts:
+      - failedTemplate:
+          errorPattern: 'contract-management.dataspace.events.publishers\[\].types of publisher did:web:operator.org must be a list or a comma-separated string, got map'
+
+  # The participant block as documented under contract-management.dataspace.events in values.yaml.
+  - it: derives the scope from the full participant block of values.yaml
+    set:
+      registration: *registration
+      contract-management:
+        dataspace:
+          events:
+            own-participant-id: did:web:provider.org
+            listener:
+              enabled: true
+            subscriber:
+              enabled: true
+              sink: https://cm.provider.org/events
+            publishers:
+              - id: did:web:trust-anchor.org
+                origin: cm.trust-anchor.org
+                types: [org.fiware.dataspace.participant.removed]
+                subscriptions-url: https://cm.trust-anchor.org/subscriptions
+                client-id: contract-management
+                scopes: [default]
+                on-participant-removed:
+                  mode: report
+                  registry-url: https://tir.trust-anchor.org
+    asserts:
+      - matchRegex:
+          path: data["init.sh"]
+          pattern: "'http://til:8080/issuer\\?scope=did%3Aweb%3Atrust-anchor.org&scopeType=dataspace-membership' \\\\"
+
+  - it: registers unscoped with the listener on and the declared empty publishers
+    set:
+      registration: *registration
+      contract-management:
+        dataspace:
+          events:
+            listener:
+              enabled: true
+    asserts: *unscoped

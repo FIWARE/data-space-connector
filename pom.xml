@@ -52,6 +52,8 @@
              when it mounts something a later release creates -->
         <deploy.trustAnchor.args></deploy.trustAnchor.args>
         <deploy.consentAuthority.values></deploy.consentAuthority.values>
+        <!-- the same switch for the template path, which only takes a skip flag -->
+        <deploy.consentAuthority.template.skip>true</deploy.consentAuthority.template.skip>
         <deploy.provider.values>${main.basedir}/k3s/provider.yaml</deploy.provider.values>
         <deploy.consumer.values>${main.basedir}/k3s/consumer.yaml</deploy.consumer.values>
         <deploy.prometheus.values></deploy.prometheus.values>
@@ -242,6 +244,21 @@
                             <templateGenerateName>true</templateGenerateName>
                             <templateOutputDir>${project.build.directory}/rendered/participants/consumer</templateOutputDir>
                             <additionalArguments>--name-template=consumer --namespace=consumer --include-crds -f ${deploy.consumer.values} --skip-tests</additionalArguments>
+                        </configuration>
+                    </execution>
+                    <!-- the consent authority, a second connector release in the trust-anchor
+                         namespace; switched on by the `consent` and `eventing` profiles -->
+                    <execution>
+                        <id>template-consent-authority</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>template</goal>
+                        </goals>
+                        <configuration>
+                            <skip>${deploy.consentAuthority.template.skip}</skip>
+                            <templateGenerateName>true</templateGenerateName>
+                            <templateOutputDir>${project.build.directory}/rendered/participants/consent-authority</templateOutputDir>
+                            <additionalArguments>--name-template=consent-authority --namespace=trust-anchor --include-crds -f ${deploy.consentAuthority.values} --skip-tests</additionalArguments>
                         </configuration>
                     </execution>
                 </executions>
@@ -525,30 +542,11 @@
                      consent-manager's setup Job waits for the trust anchor's own Postgres. -->
                 <deploy.trustAnchor.args>--wait=false</deploy.trustAnchor.args>
                 <deploy.consentAuthority.values>${main.basedir}/k3s/consent-trust-anchor.yaml</deploy.consentAuthority.values>
+                <deploy.consentAuthority.template.skip>${deploy.template.skip}</deploy.consentAuthority.template.skip>
                 <deploy.provider.values>${main.basedir}/k3s/provider.yaml,${main.basedir}/k3s/consent-provider.yaml</deploy.provider.values>
             </properties>
             <build>
                 <plugins>
-                    <plugin>
-                        <groupId>io.kokuwa.maven</groupId>
-                        <artifactId>helm-maven-plugin</artifactId>
-                        <executions>
-                            <!-- template path: the consent authority, applied with the participants -->
-                            <execution>
-                                <id>template-consent-authority</id>
-                                <phase>package</phase>
-                                <goals>
-                                    <goal>template</goal>
-                                </goals>
-                                <configuration>
-                                    <skip>${deploy.template.skip}</skip>
-                                    <templateGenerateName>true</templateGenerateName>
-                                    <templateOutputDir>${project.build.directory}/rendered/participants/consent-authority</templateOutputDir>
-                                    <additionalArguments>--name-template=consent-authority --namespace=trust-anchor --include-crds -f ${deploy.consentAuthority.values} --skip-tests</additionalArguments>
-                                </configuration>
-                            </execution>
-                        </executions>
-                    </plugin>
                     <plugin>
                         <groupId>org.apache.maven.plugins</groupId>
                         <artifactId>maven-compiler-plugin</artifactId>
@@ -566,6 +564,30 @@
                     </plugin>
                 </plugins>
             </build>
+        </profile>
+        <profile>
+            <!-- Local deploy of the data space eventing scenario: the consent deployment of the
+                 trust anchor plus the event publisher, the contract-management of the
+                 consent-authority release (k3s/eventing-trust-anchor.yaml), which announces the
+                 participants removed from the TIR. See doc/eventing/. Like the other scenario
+                 profiles it only selects values files and is combined with `local`:
+                 `mvn clean deploy -Plocal,eventing`.
+                 Not combinable with `consent`: this profile is declared later and overrides the
+                 values files that `consent` sets, without notice. -->
+            <id>eventing</id>
+            <properties>
+                <!-- the authority APISIX reads the consent-manager secret of the trust anchor's
+                     consent components, so the trust anchor is deployed as in `consent`,
+                     without waiting for it (see there) -->
+                <deploy.trustAnchor.values>${main.basedir}/k3s/trust-anchor.yaml,${main.basedir}/k3s/consent-trust-anchor-components.yaml</deploy.trustAnchor.values>
+                <deploy.trustAnchor.args>--wait=false</deploy.trustAnchor.args>
+                <deploy.consentAuthority.values>${main.basedir}/k3s/consent-trust-anchor.yaml,${main.basedir}/k3s/eventing-trust-anchor.yaml</deploy.consentAuthority.values>
+                <deploy.consentAuthority.template.skip>${deploy.template.skip}</deploy.consentAuthority.template.skip>
+                <!-- listener + subscriber at both participants. The consumer needs the set with
+                     contract-management, gateway, verifier and TIL, as in `central`. -->
+                <deploy.provider.values>${main.basedir}/k3s/provider.yaml,${main.basedir}/k3s/eventing-provider.yaml</deploy.provider.values>
+                <deploy.consumer.values>${main.basedir}/k3s/consumer.yaml,${main.basedir}/k3s/consumer-auth.yaml,${main.basedir}/k3s/consumer-tmf.yaml,${main.basedir}/k3s/eventing-consumer.yaml</deploy.consumer.values>
+            </properties>
         </profile>
         <profile>
             <id>eidas</id>
