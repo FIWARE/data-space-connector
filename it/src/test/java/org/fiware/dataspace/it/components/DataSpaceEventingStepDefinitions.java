@@ -224,7 +224,7 @@ public class DataSpaceEventingStepDefinitions extends StepDefintions {
     @Then("the provider keeps Kept Member and its membership grant.")
     public void providerKeepsKeptMember() throws Exception {
         outcome = providerCm.awaitOutcome(PUBLISHER_ID, KEPT_MEMBER_DID, TRIGGER_EVENT, removedSince, REMOVAL_TIMEOUT);
-        assertEquals(MODE_DATASPACE, outcome.mode(), "The removal should be handled in dataspace mode.");
+        assertEquals(MODE_KEEP, outcome.mode(), "No removal mode applies to a DID on keep.");
         assertEquals(ACTION_KEPT, outcome.action(), "A DID on keep should be kept.");
         assertFalse(outcome.applied(), "Nothing should be written for a kept DID.");
         assertTrue(membershipGrant(providerTil.scopes(KEPT_MEMBER_DID)).isPresent(),

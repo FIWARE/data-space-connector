@@ -57,7 +57,8 @@ scope type only; property names are kebab-case under
     credentialCount}], unattributedCount}]}`. `action` is a `RemovalAction` and `trigger` a
     `RemovalTrigger` (`event`, `reconciliation`), both as lower-case tags. The actions the IT asserts
     are `reported` (nothing written: report mode), `kept` (on a keep list), `revoked_membership` and
-    `not_held`. The report does **not** show `keep`.
+    `not_held`. The report does **not** show `keep`; a kept DID's entry has `mode: keep`
+    (`RemovalMode.KEEP_TAG_VALUE`), not the publisher's mode.
 
     The report keeps **only the latest outcome per (publisher, DID)**, in memory until the pod
     restarts: `RemovedParticipantsReport.record` replaces the old entry. `lastSeen` is when that

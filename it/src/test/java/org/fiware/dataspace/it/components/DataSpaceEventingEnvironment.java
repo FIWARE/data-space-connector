@@ -33,6 +33,8 @@ public abstract class DataSpaceEventingEnvironment {
 
     public static final String MODE_REPORT = "report";
     public static final String MODE_DATASPACE = "dataspace";
+    /** A participant entry's mode for a DID on keep, whatever the publisher's mode (CM RemovalMode.KEEP_TAG_VALUE). */
+    public static final String MODE_KEEP = "keep";
     public static final String TRIGGER_EVENT = "event";
     public static final String ACTION_REPORTED = "reported";
     public static final String ACTION_REVOKED_MEMBERSHIP = "revoked_membership";
