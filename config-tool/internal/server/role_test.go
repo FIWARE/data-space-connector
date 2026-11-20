@@ -13,14 +13,9 @@ import (
 )
 
 const (
-	trustAnchorVersion = "1.3.6"
-	// latestRevision is the shipped revision of latestChart.
-	latestRevision = 2
-	// catalogueFeatures is the size of the shipped feature catalogue (decision 5).
-	catalogueFeatures = 24
-	scorpioOff        = "scorpio:\n  enabled: false\n"
-	scorpioOn         = "scorpio:\n  enabled: true\n"
-	featureScorpio    = "data.scorpio"
+	scorpioOff     = "scorpio:\n  enabled: false\n"
+	scorpioOn      = "scorpio:\n  enabled: true\n"
+	featureScorpio = "data.scorpio"
 )
 
 func rolesPath(chart, version string) string {
@@ -35,6 +30,9 @@ func rolesPath(chart, version string) string {
 }
 
 func TestRolesEndpoint(t *testing.T) {
+	bundles := mustBundles(t, newProfileSession(t).srv)
+	taVersion := latestBundle(t, bundles, trustAnchorChart).Version
+	catalogueFeatures := len(latestBundle(t, bundles, dscChart).Features)
 	tests := []struct {
 		name    string
 		chart   string
@@ -44,7 +42,7 @@ func TestRolesEndpoint(t *testing.T) {
 	}{
 		{name: "latest DSC", chart: dscChart, want: http.StatusOK},
 		{name: "DSC version", chart: dscChart, version: latestChart, want: http.StatusOK},
-		{name: "trust-anchor falls back to the DSC catalogue", chart: trustAnchorChart, version: trustAnchorVersion, want: http.StatusOK},
+		{name: "trust-anchor falls back to the DSC catalogue", chart: trustAnchorChart, version: taVersion, want: http.StatusOK},
 		{name: "unknown chart", chart: "other", want: http.StatusNotFound},
 		{name: "unknown version", chart: dscChart, version: "0.0.1", want: http.StatusNotFound},
 		{name: "no chart", want: http.StatusNotFound},
@@ -92,8 +90,9 @@ func TestPresetEndpoint(t *testing.T) {
 	fresh := profile.Profile{Target: profile.Target{Chart: dscChart}, Model: profile.ModelRef{Chart: dscChart}}
 	operator := profile.Profile{Target: profile.Target{Chart: trustAnchorChart}, Role: model.RoleOperator,
 		Features: map[string]profile.FeatureState{"ta.registry": {Enabled: true, Source: profile.SourcePreset}}}
-	dscLatest := profile.ModelRef{Chart: dscChart, Version: latestChart, Revision: latestRevision}
-	taLatest := profile.ModelRef{Chart: trustAnchorChart, Version: trustAnchorVersion, Revision: 1}
+	bundles := mustBundles(t, newProfileSession(t).srv)
+	dscLatest := modelRef(*latestBundle(t, bundles, dscChart))
+	taLatest := modelRef(*latestBundle(t, bundles, trustAnchorChart))
 	tests := []struct {
 		name    string
 		load    string
@@ -198,4 +197,14 @@ func mustBundles(t *testing.T, srv *Server) []model.Bundle {
 		t.Fatal(err)
 	}
 	return bundles
+}
+
+// latestBundle returns the shipped Latest bundle of chart, so tests survive revision bumps and catalogue growth.
+func latestBundle(t *testing.T, bundles []model.Bundle, chart string) *model.Bundle {
+	t.Helper()
+	i := slices.IndexFunc(bundles, func(b model.Bundle) bool { return b.Chart == chart && b.Latest })
+	if i < 0 {
+		t.Fatalf("no latest bundle for chart %s", chart)
+	}
+	return &bundles[i]
 }
