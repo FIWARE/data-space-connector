@@ -71,7 +71,7 @@ the consent deployment. A production publisher does not need it.
 
 ## Requirements
 
-- contract-management ≥ 3.5.4 (chart 10.21.0 ships it).
+- contract-management ≥ 3.5.4 (chart 11.1.0 ships it).
 - A TIR that CM can enumerate with `GET /v4/issuers`, the EBSI-compatible read API of the FIWARE
   trusted-issuers-list.
 - An identity for the authority: a DID, its key and a credential the participants admit on their

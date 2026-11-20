@@ -156,11 +156,11 @@ ODRL policy.
 
 ### Requirements
 
-- contract-management ≥ 3.5.4: the chart ships it (CM chart 3.6.7) since 10.21.0. 3.5.3 sends the
+- contract-management ≥ 3.5.4: the chart ships it (CM chart 3.6.7) since 11.1.0. 3.5.3 sends the
   scope type by its Java enum name (`scopeType=DATASPACE_MEMBERSHIP`), which the TIL refuses with
   `400`: it then reports removals without `held`, runs no reconciliation and cannot use the writing
   modes.
-- TIL ≥ 0.10.3: the chart ships 0.10.3 (decentralizedIam 2.3.2) since 10.21.0. A TIL outside the
+- TIL ≥ 0.10.3: the chart ships 0.10.3 (decentralizedIam 2.3.2) since 11.1.0. A TIL outside the
   release (`registration.til`) must be upgraded by its operator. Each part of the feature needs:
   - 0.10.1 for the membership marking; an older TIL silently drops it;
   - 0.10.2 for the `dataspace`, `granted` and `full` reactions and for a complete `report`. With an
@@ -571,5 +571,5 @@ contract-management's management port 9090 serves `POST /refresh` (re-reads the 
 `GET /participants-removed` (removal reports) without authentication. It must stay cluster-internal:
 no Service port, Ingress or route for it, and a NetworkPolicy where pod IPs are reachable.
 `/refresh` is open on every contract-management ≥ 3.5.3, eventing on or off; see the
-[10.21.0 release notes](../release-notes/10-x.md#10210--data-space-eventing) for
+[11.1.0 release notes](../release-notes/11-x.md#1110--data-space-eventing) for
 the opt-out.
