@@ -195,11 +195,14 @@ pom.xml                       # drives local-deploy + integration tests
   `os.UserConfigDir()/dsc-config`. The open-question count is the union of unanswered and marked fields.
 - CT-5 (#120, ADR 0016): the local trial ships values byte-identical to `k3s/{trust-anchor,provider,consumer}.yaml` in
   `config-tool/trial/` (embedded, `make trial-sync`). Core `internal/trial` renders and writes them all-or-nothing.
-- E2 roles (#122, planned, see `IMPLEMENTATION_PLAN.md`): the feature catalogue (`features:`), the presets (`roles:`) and
+- E2 roles (#122, shipped, ADR 0017): the feature catalogue (`features:`), the presets (`roles:`) and
   the component-to-feature map of the role guide's matrix (`roleMatrix:`) are data in `model/10.16.0/bundle.yaml`. The
   trust-anchor chart gets its own minimal bundle (`model/1.3.6/`, no roles). The HTML matrix in
   `doc/deployment-integration/roles/README.md` is authoritative, and a Go test in `internal/model` checks it against the bundle.
   Profile gains `role` + `features {enabled, source}` (still `format: 1`).
+- US-2.2 (#123, planned, see `IMPLEMENTATION_PLAN.md`, ADR 0018): a user toggle sets a sticky `source: user`; not-offered
+  features may be enabled by `user`/`loaded`. The core (`SetFeature`, `FeatureChoices`) returns values only, and every
+  shown text is UI copy or bundle data (`summary`, `consequence`). Stage 5 is a minimal toggle list; `ui/src/chrome/ConfirmDialog.tsx` traps focus.
 
 ## Documentation
 
