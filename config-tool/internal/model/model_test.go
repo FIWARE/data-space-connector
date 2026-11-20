@@ -204,15 +204,17 @@ func TestRules(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(got) != 1 {
-		t.Fatalf("fixture bundles = %+v, want one", got)
+	i := slices.IndexFunc(got, func(b Bundle) bool { return b.Chart == chart })
+	if i < 0 {
+		t.Fatalf("fixture bundles = %+v, want one of %s", got, chart)
 	}
-	rules := got[0].Rules()
-	if len(rules) != len(got[0].Recognize) {
-		t.Fatalf("Rules() has %d entries, want %d", len(rules), len(got[0].Recognize))
+	b := got[i]
+	rules := b.Rules()
+	if len(rules) != len(b.Recognize) {
+		t.Fatalf("Rules() has %d entries, want %d", len(rules), len(b.Recognize))
 	}
 	for i, r := range rules {
-		src := got[0].Recognize[i]
+		src := b.Recognize[i]
 		if r.Path.String() != src.Path || r.Answer != src.Answer || r.Stage != src.Stage || r.Kind != src.Kind {
 			t.Errorf("Rules()[%d] = %+v, want it compiled from %+v", i, r, src)
 		}
