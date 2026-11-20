@@ -324,7 +324,7 @@
     </build>
 
     <profiles>
-        <!-- The local deploy profiles of the parent (`local`, `consent`, `eventing`) deploy from the root
+        <!-- The local deploy profiles of the parent (`local`, `consent`) deploy from the root
              module. This module must not deploy a second time on top of it. -->
         <profile>
             <id>local</id>
@@ -334,12 +334,6 @@
         </profile>
         <profile>
             <id>consent</id>
-            <properties>
-                <deploy.skip>true</deploy.skip>
-            </properties>
-        </profile>
-        <profile>
-            <id>eventing</id>
             <properties>
                 <deploy.skip>true</deploy.skip>
             </properties>
@@ -440,20 +434,10 @@
             <id>eventing-test</id>
             <build>
                 <plugins>
-                    <!-- As consent-test: the `eventing` deploy profile skips compiler and failsafe, so
-                         without this the job would compile and run nothing and still go green. -->
-                    <plugin>
-                        <groupId>org.apache.maven.plugins</groupId>
-                        <artifactId>maven-compiler-plugin</artifactId>
-                        <configuration>
-                            <skip>false</skip>
-                        </configuration>
-                    </plugin>
                     <plugin>
                         <groupId>org.apache.maven.plugins</groupId>
                         <artifactId>maven-failsafe-plugin</artifactId>
                         <configuration>
-                            <skip>false</skip>
                             <systemPropertyVariables>
                                 <cucumber.filter.tags>@eventing</cucumber.filter.tags>
                             </systemPropertyVariables>

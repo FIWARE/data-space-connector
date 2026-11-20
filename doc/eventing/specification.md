@@ -18,13 +18,13 @@ at commit `c7da3c4`
 - [9. Webhook validation handshake](#9-webhook-validation-handshake)
 - [10. Not specified](#10-not-specified)
 - [11. Conformance checklist](#11-conformance-checklist)
-- [Relation to the architecture](#relation-to-the-architecture)
+- [Source of truth](#source-of-truth)
 
 ## 1. Status and scope
 
 This document is the interoperability contract for data space events: what a second, non-FIWARE
 implementation needs in order to publish events to, or subscribe at, a FIWARE participant. It is
-normative and short; the reasons behind each rule are in the [architecture](architecture.md). Why
+normative and short; the reasons behind each rule are in the [mechanism description](architecture.md). Why
 events are CloudEvents authenticated over OID4VP is recorded in
 [ADR 0009](../adr/0009-cloudevents-over-oid4vp.md).
 
@@ -96,7 +96,7 @@ A participant was removed from the data space's trusted issuers registry.
   The self-event rule of [§6](#6-authorization-rule) (check 8) applies to this resolved identifier.
 - A publisher MAY send further `data` members. A receiver MUST ignore unknown `data` members and MUST
   NOT depend on them.
-- There is deliberately no `reason` ([architecture §4](architecture.md#4-the-event-model)).
+- There is deliberately no `reason` ([how it works §3](architecture.md#3-events)).
 
 ```json
 {
@@ -203,7 +203,7 @@ and contract-management reads the claim named by `dataspace.events.listener.iden
 ## 6. Authorization rule
 
 A receiver admits only tokens issued by its own verifier
-([architecture §6](architecture.md#6-trust-and-authorization)). It then applies the checks below **in
+([how it works §4](architecture.md#4-trust-and-authorization)). It then applies the checks below **in
 this order**; the first that matches decides the answer. The order is normative: it decides which
 status a publisher gets when several checks fail.
 
@@ -235,7 +235,7 @@ Consequences a publisher must expect:
   MAY be answered `202`.
 
 The publisher × type check (4) is what keeps one data space member from announcing events about
-another ([architecture D-5](architecture.md#12-decision-register)). An ODRL policy at the PEP can
+another ([ADR 0011](../adr/0011-authorize-events-per-publisher-and-type.md)). An ODRL policy at the PEP can
 also constrain the credential **issuer** (ODRL-PAP's `vc:currentParty` left operand). That only adds
 defence in depth: it pins who issued the credential, not which publisher holds it, so it does not
 replace check 4 and is not a dependency of this specification.
@@ -262,7 +262,7 @@ replace check 4 and is not a dependency of this specification.
 | `502` | A downstream service failed while the event was handled. The publisher should retry. |
 | `503` | An event with the same `source` and `id` is still being processed. `Retry-After` (seconds) says when to retry. |
 
-Delivery semantics ([architecture §7](architecture.md#7-delivery-semantics)):
+Delivery semantics ([how it works §5](architecture.md#5-delivery)):
 
 - Delivery is at-least-once and best-effort. There is no ordering guarantee. A receiver MUST be
   idempotent on (`source`, `id`).
@@ -306,7 +306,7 @@ Check order: `401` → missing `subscriberId` `400` → `subscriberId` mismatch 
 invalid fields `400` → `503` → handshake (`400` on failure) → `201`, or `503` if a cap was reached
 during the handshake. A `503` therefore does not prove that no handshake ran.
 
-Leases ([architecture D-4](architecture.md#12-decision-register)):
+Leases ([ADR 0015](../adr/0015-best-effort-stateless-event-delivery.md)):
 
 - A request by the same subscriber for the same sink renews the existing subscription in place: same
   `id`, new `expiresAt`. The `types` and `protocolsettings` of the request replace the previous ones,
@@ -339,8 +339,7 @@ Leases ([architecture D-4](architecture.md#12-decision-register)):
 
 Profile of §4 of the pinned webhook document ([§2](#2-normative-references)); the origin is
 configured together with the publisher's identifier and never derived from it
-([architecture D-8](architecture.md#12-decision-register),
-[ADR 0013](../adr/0013-cloudevents-webhook-handshake.md)).
+([ADR 0013](../adr/0013-cloudevents-webhook-handshake.md)).
 
 Publisher:
 
@@ -366,15 +365,15 @@ Receiver (sink):
 
 ## 10. Not specified
 
-- The receiver's reaction to an event: local policy ([architecture §9](architecture.md#9-attributing-local-trust-and-reacting-to-a-removal)).
-- How a publisher detects a removal ([architecture §8](architecture.md#8-detecting-the-removal-at-the-trust-anchor)).
-- Reconciliation ([architecture §10](architecture.md#10-reconciliation-the-backstop)).
+- The receiver's reaction to an event: local policy ([how it works §8](architecture.md#8-reacting-to-a-removal)).
+- How a publisher detects a removal ([how it works §6](architecture.md#6-detecting-the-removal-at-the-trust-anchor)).
+- Reconciliation ([how it works §9](architecture.md#9-reconciliation-the-backstop)).
 - How a receiver configures its publisher list, and the Helm chart values.
 - How a subscriber learns a publisher's base URL for `/subscriptions`, and the client id, scope and
   credential type of the publisher's verifier: out-of-band configuration, like the publisher list.
-- Payload signatures ([architecture D-7](architecture.md#12-decision-register)); a future `signature`
+- Payload signatures ([ADR 0016](../adr/0016-no-event-payload-signature.md)); a future `signature`
   extension attribute would be additive.
-- A catch-up feed and brokers ([architecture §5.3](architecture.md#53-what-is-deliberately-not-added)).
+- A catch-up feed and brokers ([ADR 0015](../adr/0015-best-effort-stateless-event-delivery.md)).
 
 ## 11. Conformance checklist
 
@@ -413,22 +412,12 @@ A **receiver**:
   authenticated identity, renews before
   `expiresAt` and re-subscribes after a publisher restart.
 
-## Relation to the architecture
+## Source of truth
 
 This specification follows `dataspace-events.yaml` and the contract-management code at `c7da3c4`.
-Where the [architecture](architecture.md) differs, this document wins:
+[How it works](architecture.md) explains the same mechanism informally and is not normative: where
+the two differ, this document wins.
 
-- **Status codes** ([architecture §5.1](architecture.md#51-receiving--post-events)): there is no
-  `422`; an invalid payload of a known type is `400`. `415`, `500` and `503` + `Retry-After` are added.
-- **`participant.removed` payload** ([architecture §4](architecture.md#4-the-event-model)): the
-  architecture lists `observedAt` and `registry`. The reference publisher sends only `participantId`,
-  so the two are not specified; a publisher MAY send them, and a receiver ignores them. Generally, a
-  field the reference publisher does not emit is never REQUIRED.
-- **`dataspaceid`** ([architecture §4](architecture.md#4-the-event-model)): the architecture says no
-  receiver behaviour depends on it. A receiver with a configured data space id rejects a different
-  one with `403` ([§6](#6-authorization-rule), check 3).
-- **Subscription response** ([architecture §5.2](architecture.md#52-subscribing--post-subscriptions)):
-  the `201` body is the full `Subscription`, not only `id` and `expiresAt`.
-- **Defaults**: the deduplication window, lease length and caps in the architecture (24h, 15 min,
-  5 per subscriber) differ from the reference implementation (1h, 24h, 10 per subscriber). Neither is
-  normative.
+Deduplication windows, lease lengths and caps are implementation choices. The values the reference
+implementation uses are listed in the [participant setup](participant-setup.md) and the
+[trust anchor setup](trust-anchor-setup.md); none of them is normative here.

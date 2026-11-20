@@ -7,7 +7,7 @@ watches the TIR and sends a `org.fiware.dataspace.participant.removed` event to 
 that subscribed.
 
 This guide covers the publisher. The participant side is described in the
-[participant setup](participant-setup.md); the protocol in the [architecture](architecture.md) and the
+[participant setup](participant-setup.md); the mechanism in [how it works](architecture.md) and the
 [interoperability specification](specification.md); the local demo in [EVENTING.md](../EVENTING.md).
 
 <!-- START doctoc generated TOC please keep comment here to allow auto update -->
@@ -266,7 +266,7 @@ participant at `/subscriptions`. Enable holder binding in production.
 ## The TIR watcher
 
 The watcher diffs the TIR, so the registry needs no hook
-([architecture §8](architecture.md#8-detecting-the-removal-at-the-trust-anchor),
+([how it works §6](architecture.md#6-detecting-the-removal-at-the-trust-anchor),
 [ADR 0010](../adr/0010-detect-removal-by-diffing-the-registry.md)). A diff turns any
 failure that makes the registry look empty into a mass removal, so CM applies these safeguards:
 

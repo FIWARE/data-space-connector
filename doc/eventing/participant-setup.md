@@ -9,7 +9,7 @@ Connector reacts to them.
 This guide covers the participant side: how your connector receives the data space's events and
 what it does with them. The publisher at the trust anchor is covered by the
 [trust anchor setup](trust-anchor-setup.md), the local demo and the integration test by
-[EVENTING.md](../EVENTING.md). The protocol itself is described in the [architecture](architecture.md)
+[EVENTING.md](../EVENTING.md). The mechanism itself is described in [how it works](architecture.md)
 and the [interoperability specification](specification.md); why the chart packages it the way it does
 is recorded in [ADR 0008](../adr/0008-events-routes-as-validated-operator-snippet.md).
 
@@ -32,7 +32,7 @@ env entry or volume.
   - [3. Register the verifier service](#3-register-the-verifier-service)
   - [4. Create the ODRL policy](#4-create-the-odrl-policy)
   - [5. Test the setup](#5-test-the-setup)
-- [Configuration and architecture details](#configuration-and-architecture-details)
+- [Configuration details](#configuration-details)
   - [When configuration changes take effect](#when-configuration-changes-take-effect)
   - [Reconciliation](#reconciliation)
   - [Subscriptions and publisher restarts](#subscriptions-and-publisher-restarts)
@@ -429,7 +429,7 @@ and let the publisher deliver one event. A wrong item shows up at once: the subs
 inactive (handshake), the publisher logs that it cannot get a token (discovery), or the delivery is
 answered `401`/`403` (token or policy).
 
-## Configuration and architecture details
+## Configuration details
 
 ### When configuration changes take effect
 

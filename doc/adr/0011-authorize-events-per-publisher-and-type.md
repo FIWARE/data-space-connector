@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-11-20
-**Context doc:** [`../eventing/architecture.md` §6](../eventing/architecture.md#6-trust-and-authorization)
+**Context doc:** [`../eventing/architecture.md` §4](../eventing/architecture.md#4-trust-and-authorization)
 
 ## Context
 
@@ -10,9 +10,6 @@ A receiver's PEP admits the events path to holders of an agreed credential type,
 policy. In a normal data space many organizations hold that credential type; in a typical
 configuration every participant does. A `participant.removed` event deletes trust configuration at
 the receiver, so whoever may send one can have a competitor's trust entries deleted.
-
-Decided in the design review of 2026-10-28 as D-5
-([architecture §12](../eventing/architecture.md#12-decision-register)).
 
 ## Decision
 

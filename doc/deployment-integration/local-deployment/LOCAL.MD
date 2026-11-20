@@ -1425,12 +1425,13 @@ The cluster survives `mvn clean`, and a new build reuses it. To switch between t
 (`docker rm -f k3s-maven-plugin`): Helm refuses to adopt objects that `kubectl apply` created
 (`invalid ownership metadata`).
 
-**Data space eventing (`eventing` profile).** `mvn clean deploy -Peventing` deploys the trust anchor as the consent
+**Data space eventing (`eventing` profile).** `mvn clean deploy -Plocal,eventing` deploys the trust anchor as the consent
 scenario does, and adds the event publisher to its `consent-authority` release
 ([k3s/eventing-trust-anchor.yaml](../../../k3s/eventing-trust-anchor.yaml)). The publisher watches the TIR and announces
-removed participants; see [EVENTING.md](../../EVENTING.md) for the demo and the integration test. `-Plocal,eventing` deploys the
-same. `-Pconsent,eventing` is not supported: `eventing` overrides the values files that `consent` sets, so the consent
-scenario would not be deployed as tested.
+removed participants; see [EVENTING.md](../../EVENTING.md) for the demo and the integration test. Like every other
+scenario profile, `eventing` only selects values files and is combined with `local`. `-Pconsent,eventing` is not
+supported: `eventing` overrides the values files that `consent` sets, so the consent scenario would not be deployed as
+tested.
 
 # Trust local certificate
 kubectl get secret ca-secret -n operators -o jsonpath='{.data.tls\.crt}' | base64 -d > local-ca.crt 

@@ -19,6 +19,8 @@ Short records of decisions that are expensive to reverse or easy to re-litigate.
 | [0012](0012-attribute-local-trust-to-the-dataspace.md) | Attribute local trust to the data space that caused it | Accepted | |
 | [0013](0013-cloudevents-webhook-handshake.md) | Confirm event callbacks with the CloudEvents webhook handshake | Accepted | |
 | [0014](0014-publisher-in-the-authority-release.md) | Run the data space publisher in the authority's release, reusing its identity | Accepted | |
+| [0015](0015-best-effort-stateless-event-delivery.md) | Deliver events best-effort from stateless publishers, and reconcile instead | Accepted | |
+| [0016](0016-no-event-payload-signature.md) | Do not sign the event payload; authenticate events at the transport | Accepted | |
 
 ADRs 0002 and 0003 constrain the consent-facade's own API, so they are **mirrored** in
 [consent-facade](https://github.com/SEAMWARE/consent-facade) under `doc/adr/` with the same numbers. This repository holds the
@@ -29,7 +31,7 @@ Design document ADRs 0001-0005 belong to:
 [`../deployment-integration/eidas/README.md`](../deployment-integration/eidas/README.md). ADR 0007 belongs to
 [`../deployment-integration/local-deployment/LOCAL.MD`](../deployment-integration/local-deployment/LOCAL.MD). ADR 0008 belongs to
 [`../eventing/participant-setup.md`](../eventing/participant-setup.md). ADRs 0009 and 0013 belong to
-[`../eventing/specification.md`](../eventing/specification.md), ADRs 0010 and 0011 to
-[`../eventing/architecture.md`](../eventing/architecture.md), ADR 0012 to
+[`../eventing/specification.md`](../eventing/specification.md), ADRs 0010, 0015 and 0016 to
+[`../eventing/architecture.md`](../eventing/architecture.md), ADRs 0011 and 0012 to
 [`../eventing/participant-setup.md`](../eventing/participant-setup.md) and ADR 0014 to
 [`../eventing/trust-anchor-setup.md`](../eventing/trust-anchor-setup.md).

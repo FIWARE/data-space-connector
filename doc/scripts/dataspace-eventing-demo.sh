@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Drives the data space eventing demo of the local deployment (`mvn clean deploy -Peventing`).
+# Drives the data space eventing demo of the local deployment (`mvn clean deploy -Plocal,eventing`).
 #
 #   remove  <did>                         remove a participant from the trust anchor's TIL
 #   restore <did>                         register it again, without credentials

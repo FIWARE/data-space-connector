@@ -273,7 +273,7 @@ they learn about the removal. A data space publisher, a contract-management in p
 TIR-watcher mode, announces every removal to the participants that subscribed. It runs in the
 authority's own Data Space Connector release and reuses its identity, verifier and gateway; the
 TIR and TIL deployment is not changed. See the [trust anchor setup](../../../eventing/trust-anchor-setup.md)
-and, for the local demo (`mvn clean deploy -Peventing`), [EVENTING.md](../../../EVENTING.md).
+and, for the local demo (`mvn clean deploy -Plocal,eventing`), [EVENTING.md](../../../EVENTING.md).
 
 ## Helm chart
 

@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-11-20
-**Context doc:** [`../eventing/architecture.md` §8](../eventing/architecture.md#8-detecting-the-removal-at-the-trust-anchor)
+**Context doc:** [`../eventing/architecture.md` §6](../eventing/architecture.md#6-detecting-the-removal-at-the-trust-anchor)
 
 ## Context
 
@@ -12,9 +12,6 @@ trusted-issuers-list is *one* TIR implementation and that any EBSI-compatible re
 blockchain-backed ones, may be used
 ([operator guide](../deployment-integration/roles/operator/README.md)). Members can also disappear
 without any application call: through a direct database change or a migration.
-
-Decided in the design review of 2026-10-28 as D-3
-([architecture §12](../eventing/architecture.md#12-decision-register)).
 
 ## Decision
 
@@ -36,12 +33,12 @@ An operator can still announce a removal at once through the publisher's cluster
 ## Consequences
 
 - Detection works for every registry that can be enumerated, and it sees out-of-band changes.
-- **Latency** is `interval × confirmations`, about two minutes with the defaults. The review
-  accepted that for a governance action that is itself manual.
+- **Latency** is `interval × confirmations`, about two minutes with the defaults, which is
+  appropriate for a governance action that is itself manual.
 - A DID that is added and removed between two cycles is never announced, and nothing is announced
   for a removal that happens before the first snapshot. The manual publish covers both; the
   participants' reconciliation sweep is the backstop for any missed event
-  ([architecture §10](../eventing/architecture.md#10-reconciliation-the-backstop)).
+  ([how it works §9](../eventing/architecture.md#9-reconciliation-the-backstop)).
 - The publisher reads the TIR once per `interval` (default 60 s); it needs no write access to the
   registry.
 - A legitimate removal of more than `max-removals-per-cycle` members at once needs an operator.

@@ -205,13 +205,14 @@ post-26.4 OID4VCI model. Hard-won gotchas (full detail in `doc/release-notes/10-
   `wallets.issueCredentialsToUsers: true` auto-assigns realm VCs to declared users.
 
 ## Data Space Eventing (ticket-97 epic)
-- Design: `doc/eventing/architecture.md` (§4 event model, §5 APIs, §6 trust,
-  §7 delivery, §12 decisions D-1..D-12), `ticket.md`, `questions.md`. They come
-  from the `step-1-eventing-design` branch of local-claude/data-space-connector.
+- Docs: `doc/eventing/architecture.md` is the non-normative "how it works"
+  (§3 events, §4 trust, §5 delivery, §6 detection, §7-§9 attribution, reaction,
+  reconciliation); the decisions are ADRs 0008-0016, not a register in it. The
+  design-phase `ticket.md`/`questions.md` were removed in ticket-106.
 - Wire contract of record: FIWARE/contract-management `api/dataspace-events.yaml`
   (`POST`/`OPTIONS /events`, `POST /subscriptions`,
   `DELETE /subscriptions/{subscriptionId}`), code in `org.fiware.iam.dataspace.*`.
-  Where it and architecture.md differ (status codes, defaults), the API wins.
+  It wins over `specification.md`, which wins over `architecture.md`.
 - Interop spec: `doc/eventing/specification.md`.
 - Participant side in this chart (ticket-102): CM config lives at `contract-management.dataspace.events`
   (Micronaut tree, kebab-case, verbatim). The CM subchart renders it into its own refreshable ConfigMap

@@ -567,13 +567,13 @@
             <!-- Local deploy of the data space eventing scenario: the consent deployment of the
                  trust anchor plus the event publisher, the contract-management of the
                  consent-authority release (k3s/eventing-trust-anchor.yaml), which announces the
-                 participants removed from the TIR. See doc/eventing/. Run standalone:
-                 `mvn clean deploy -Peventing`.
+                 participants removed from the TIR. See doc/eventing/. Like the other scenario
+                 profiles it only selects values files and is combined with `local`:
+                 `mvn clean deploy -Plocal,eventing`.
                  Not combinable with `consent`: this profile is declared later and overrides the
                  values files that `consent` sets, without notice. -->
             <id>eventing</id>
             <properties>
-                <deploy.skip>false</deploy.skip>
                 <!-- the authority APISIX reads the consent-manager secret of the trust anchor's
                      consent components, so the trust anchor is deployed as in `consent`,
                      without waiting for it (see there) -->
@@ -586,25 +586,6 @@
                 <deploy.provider.values>${main.basedir}/k3s/provider.yaml,${main.basedir}/k3s/eventing-provider.yaml</deploy.provider.values>
                 <deploy.consumer.values>${main.basedir}/k3s/consumer.yaml,${main.basedir}/k3s/consumer-auth.yaml,${main.basedir}/k3s/consumer-tmf.yaml,${main.basedir}/k3s/eventing-consumer.yaml</deploy.consumer.values>
             </properties>
-            <build>
-                <plugins>
-                    <plugin>
-                        <groupId>org.apache.maven.plugins</groupId>
-                        <artifactId>maven-compiler-plugin</artifactId>
-                        <configuration>
-                            <skip>true</skip>
-                        </configuration>
-                    </plugin>
-                    <plugin>
-                        <groupId>org.apache.maven.plugins</groupId>
-                        <artifactId>maven-failsafe-plugin</artifactId>
-                        <version>${version.org.apache.maven.plugins.maven-failsafe}</version>
-                        <configuration>
-                            <skip>true</skip>
-                        </configuration>
-                    </plugin>
-                </plugins>
-            </build>
         </profile>
         <profile>
             <id>eidas</id>

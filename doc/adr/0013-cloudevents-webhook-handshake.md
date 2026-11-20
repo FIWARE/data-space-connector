@@ -11,12 +11,9 @@ publisher then POSTs authenticated events to that URL. If the publisher accepted
 subscription API would be an amplifier: a subscriber could make the trust anchor send authenticated
 traffic to a host that never asked for it.
 
-The first draft matched the callback host against the subscriber's `did:web` domain. Participant
+Matching the callback host against the subscriber's `did:web` domain suggests itself. Participant
 identifiers are not necessarily `did:web`, though, and the connector does not mandate a DID method,
 so no host can be derived from them.
-
-Decided in the design review of 2026-10-28 as D-8
-([architecture §12](../eventing/architecture.md#12-decision-register)).
 
 ## Decision
 
@@ -46,6 +43,6 @@ from it ([ADR 0011](0011-authorize-events-per-publisher-and-type.md)).
 
 ## Alternatives
 
-- **Matching the callback host against a `did:web` domain** (first draft). It assumes a DID method
+- **Matching the callback host against a `did:web` domain.** It assumes a DID method
   the connector does not mandate.
 - **Accepting an arbitrary callback URL.** It turns the subscription API into an amplifier.

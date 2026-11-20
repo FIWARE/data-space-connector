@@ -8,7 +8,7 @@ contract is bought. When the data space authority removes a member from the Trus
 an `org.fiware.dataspace.participant.removed` event to every participant that subscribed; each
 participant reports or revokes the removed member's trust, as its operator configured.
 
-The protocol is described in the [architecture](eventing/architecture.md) and the
+The mechanism is described in [how it works](eventing/architecture.md) and the
 [interoperability specification](eventing/specification.md). The operator guides are the
 [trust anchor setup](eventing/trust-anchor-setup.md) and the
 [participant setup](eventing/participant-setup.md). The decisions are recorded as
@@ -89,11 +89,12 @@ lists them next to the production defaults.
 Deploy the data space with the publisher:
 
 ```shell
-mvn clean deploy -Peventing
+mvn clean deploy -Plocal,eventing
 export KUBECONFIG=$(pwd)/target/k3s.yaml
 ```
 
-`-Plocal,eventing` deploys the same; `-Pconsent,eventing` is not supported
+Like every other scenario, `eventing` only selects the values files and is combined with `local`;
+`-Pconsent,eventing` is not supported
 ([local deployment](deployment-integration/local-deployment/LOCAL.MD)).
 [`doc/scripts/dataspace-eventing-demo.sh`](scripts/dataspace-eventing-demo.sh) drives the demo. It
 needs `curl`, `jq`, `kubectl` and `python3`, and reaches the management port 9090 of each CM through
@@ -199,12 +200,12 @@ mvn clean integration-test -Ptest,eventing,eventing-test
 the provider's removal mode by patching its `contract-management-dataspace-events` ConfigMap and
 restore it, the consumer's TIR entry and the publisher's replica count in an `@After` hook, so they
 can run repeatedly on one cluster. To test against a data space that is already deployed, run
-`mvn verify -pl it -Peventing,eventing-test`.
+`mvn verify -pl it -Peventing-test`.
 
 ## Further reading
 
-- [Architecture](eventing/architecture.md): event model, APIs, trust, delivery and the decision
-  register.
+- [How it works](eventing/architecture.md): the problem, the event model, trust, delivery,
+  detection, attribution and reconciliation.
 - [Interoperability specification](eventing/specification.md): the contract a non-FIWARE publisher
   or subscriber follows.
 - [Trust anchor setup](eventing/trust-anchor-setup.md): running the publisher.
@@ -223,4 +224,7 @@ can run repeatedly on one cluster. To test against a data space that is already 
   - [0013](adr/0013-cloudevents-webhook-handshake.md): callbacks are confirmed with the webhook
     handshake;
   - [0014](adr/0014-publisher-in-the-authority-release.md): the publisher runs in the authority's
-    release.
+    release;
+  - [0015](adr/0015-best-effort-stateless-event-delivery.md): delivery is best-effort and the
+    publishers stay stateless;
+  - [0016](adr/0016-no-event-payload-signature.md): the event payload is not signed.
