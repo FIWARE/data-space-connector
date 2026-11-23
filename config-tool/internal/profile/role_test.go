@@ -18,7 +18,7 @@ const (
 	roleGoldenFile = "testdata/role.dscprofile.yaml"
 	// shippedTAVersion and shippedDSCRevision are the shipped trust-anchor bundle and DSC bundle revision.
 	shippedTAVersion   = "1.3.6"
-	shippedDSCRevision = 2
+	shippedDSCRevision = 3
 )
 
 // Feature ids of the shipped catalogue, grouped as in the preset table of IMPLEMENTATION_PLAN.md decision 5.

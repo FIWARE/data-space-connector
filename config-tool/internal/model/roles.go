@@ -46,6 +46,8 @@ type Feature struct {
 	Requires []string `yaml:"requires"`
 	// Keys are roundtrip paths, each naming its whole subtree; features may share keys.
 	Keys []string `yaml:"keys"`
+	// Consequence is shown when the user turns off a feature the role recommends; optional, Summary stands in.
+	Consequence string `yaml:"consequence"`
 }
 
 // Offer says how a role preset offers a feature.
@@ -199,6 +201,8 @@ func checkFeature(f Feature) error {
 		return errors.New("title is missing")
 	case f.Summary == "":
 		return errors.New("summary is missing")
+	case f.Consequence != "" && strings.TrimSpace(f.Consequence) == "":
+		return errors.New("consequence is blank")
 	case f.Group == "":
 		return errors.New("group is missing")
 	case !slices.Contains(knownGroups, f.Group):

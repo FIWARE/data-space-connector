@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 	"testing/fstest"
+
+	"github.com/FIWARE/data-space-connector/config-tool/model"
 )
 
 // trustAnchorFixture is the second chart's fixture bundle; the catalogue fixture's roles and features refer to it.
@@ -141,6 +143,59 @@ func TestCatalogueValidation(t *testing.T) {
 				t.Fatalf("err = %v, want it to name %s and mention %q", err, fixtureFile, tc.wantErr)
 			}
 		})
+	}
+}
+
+func TestFeatureConsequence(t *testing.T) {
+	const old = "summary: Publish a DID, "
+	tests := []struct {
+		name, consequence string
+		want, wantErr     string
+	}{
+		{"decoded", "consequence: No DID document, ", "No DID document", ""},
+		{"empty is accepted", "", "", ""},
+		{"blank is refused", "consequence: ' ', ", "", "features[1] (identity.did): consequence is blank"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := Versions(catalogueFS(t, old, old+tc.consequence))
+			if tc.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+					t.Fatalf("err = %v, want it to mention %q", err, tc.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			b := got[slices.IndexFunc(got, func(b Bundle) bool { return b.Chart == chart })]
+			if c := b.Features[1].Consequence; c != tc.want {
+				t.Errorf("consequence = %q, want %q", c, tc.want)
+			}
+		})
+	}
+}
+
+// TestShippedRecommendedHaveConsequence keeps a consequence on every feature a shipped role recommends.
+func TestShippedRecommendedHaveConsequence(t *testing.T) {
+	got, err := Versions(bundles.FS)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, b := range got {
+		recommended := map[string]bool{}
+		for _, r := range b.Roles {
+			for id, offer := range r.Features {
+				if offer == OfferRecommended {
+					recommended[id] = true
+				}
+			}
+		}
+		for _, f := range b.Features {
+			if recommended[f.ID] && strings.TrimSpace(f.Consequence) == "" {
+				t.Errorf("%s %s: feature %s is recommended but has no consequence", b.Chart, b.Version, f.ID)
+			}
+		}
 	}
 }
 
