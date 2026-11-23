@@ -65,7 +65,7 @@ const COMPLETE: Target = {
   environment: Environment.Production,
   chartVersion: '10.16.0',
 }
-const DSC_MODEL = { chart: DSC, version: '10.16.0', revision: 2 }
+const DSC_MODEL = { chart: DSC, version: '10.16.0', revision: 3 }
 const TA_MODEL = { chart: TRUST_ANCHOR, version: '1.3.6', revision: 1 }
 
 /** The state after the server answered POST /api/preset for `role` deploying `chart`. */
