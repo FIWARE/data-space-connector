@@ -175,7 +175,41 @@ tests:
     asserts:
       - equal:
           path: spec.python.image
-          value: "ghcr.io/open-telemetry/opentelemetry-operator/autoinstrumentation-python:0.62b1"
+          value: "ghcr.io/open-telemetry/opentelemetry-operator/autoinstrumentation-python:0.61b0"
+
+  - it: should export the Python agent's spans over OTLP/HTTP to the bundled collector
+    release:
+      name: provider
+    set:
+      tracing.autoInstrumentation.enabled: true
+    asserts:
+      - contains:
+          path: spec.python.env
+          content:
+            name: OTEL_EXPORTER_OTLP_PROTOCOL
+            value: "http/protobuf"
+      - contains:
+          path: spec.python.env
+          content:
+            name: OTEL_EXPORTER_OTLP_ENDPOINT
+            value: "http://provider-opentelemetry-collector:4318"
+      # the other agents keep the common gRPC settings
+      - contains:
+          path: spec.env
+          content:
+            name: OTEL_EXPORTER_OTLP_PROTOCOL
+            value: "grpc"
+
+  - it: should export the Python agent's spans to the configured OTLP/HTTP endpoint
+    set:
+      tracing.autoInstrumentation.enabled: true
+      tracing.autoInstrumentation.python.endpoint: "http://collector.observability:4318"
+    asserts:
+      - contains:
+          path: spec.python.env
+          content:
+            name: OTEL_EXPORTER_OTLP_ENDPOINT
+            value: "http://collector.observability:4318"
 
   - it: should use default Node.js agent image
     set:
