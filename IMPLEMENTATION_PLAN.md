@@ -100,7 +100,9 @@ Files: new `config-tool/internal/profile/rolechange.go`, new `config-tool/intern
     (so the hand toggle that survives a chart switch, see decision 3, is listed too);
   - `Enabled` / `Disabled` = the remaining ids whose effective state changed.
 - Invariants to test: `Enabled`, `Disabled` and the ids of `Kept` are pairwise disjoint; a kept feature's state is
-  equal before and after; on a chart switch every id of `ChartSwitch.DroppedChoices` is absent from `Kept`.
+  equal before and after; on a chart switch every id of `ChartSwitch.DroppedChoices` is absent from `Kept`, a dropped
+  toggle that was on before is in `Disabled`, and one that was off is in none of the three lists. `Disabled` stays a
+  plain effective-state diff; the UI removes the overlap (Step 4).
 - Table-driven tests: Consumer -> Consumer + Provider (Enabled = matrix delta, Disabled empty); Consumer + Provider
   -> Consumer (Disabled = delta); the same two with a hand toggle in each direction (the feature appears only in
   `Kept`, with its source); a loaded toggle listed as kept with `source: loaded`; **an unrecorded feature the old
@@ -142,9 +144,10 @@ if the API mock needs the new field.
   constants. Each empty section is omitted, and an all-empty change says that no feature changes. With a chart
   switch it leads with one sentence that the whole configuration moves from chart X to chart Y, then *Carried
   over* (namespace, release name, target type, kube context, environment, the open-question marks, plus
-  `carriedAnswers`) and *Dropped* (chart version, the feature choices of the old chart, `droppedChoices`,
-  `droppedAnswers`); a carried hand toggle shows under *Kept as they are*. It is
-  presentational only, so Step 5 reuses it.
+  `carriedAnswers`) and *Dropped* (chart version, the feature choices of the old chart, the ids of `droppedChoices`
+  that are not in `change.disabled`, `droppedAnswers`); a carried hand toggle shows under *Kept as they are*. Rule:
+  each feature id appears in exactly one section, so a dropped toggle that was on is listed only under *Turns off*
+  and one that was off only under *Dropped*. It is presentational only, so Step 5 reuses it.
 - `Role.tsx`: when a role is already set, `select` calls `applyPreset` and keeps the result in local state
   instead of dispatching. A `ConfirmDialog` shows `RoleChangeSummary`. Labels are named constants: cancel *Keep
   <old role title>*, confirm *Change to <new role title>*, and for a chart switch *Move to <chart>*. Confirm
@@ -153,7 +156,9 @@ if the API mock needs the new field.
   card clicks are ignored; a result that arrives after unmount is dropped (keep the existing `mounted` guard).
 - Tests (Vitest + Testing Library, table-driven where possible): Consumer -> Consumer + Provider shows exactly the
   enabled titles; a hand-toggled feature is listed as kept in both directions; Operator shows the chart-switch
-  statement, carried and dropped lists, and the *Move to trust-anchor* label; **Cancel leaves the profile
+  statement, carried and dropped lists, and the *Move to trust-anchor* label; a switch to Operator with a hand
+  toggle that was on (e.g. `obs.tracing`) and one that was off lists the first only under *Turns off* and the second
+  only under *Dropped*, each title exactly once; **Cancel leaves the profile
   untouched**: serialise `toProfile(state)` (or capture the body of a save via the API mock) before the pick and
   after Cancel and assert the strings are equal; Escape behaves like Cancel; Confirm applies.
 
