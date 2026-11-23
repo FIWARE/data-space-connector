@@ -5,12 +5,14 @@ import { initialState } from '../state/reducer'
 import { StageId } from '../state/stageIds'
 import { StoreProvider } from '../state/store'
 import { REPORT } from '../test/api'
-import { DerivedAnswers } from './DerivedAnswers'
+import { DerivedAnswers, READ_ONLY_HINT } from './DerivedAnswers'
 
-function renderFor(stage: StageId, loaded?: LoadReport) {
+const CUSTOM_HINT = 'Pick a role first.'
+
+function renderFor(stage: StageId, loaded?: LoadReport, hint?: string) {
   return render(
     <StoreProvider initial={{ ...initialState, entered: true, loaded }}>
-      <DerivedAnswers stage={stage} />
+      <DerivedAnswers stage={stage} hint={hint} />
     </StoreProvider>,
   )
 }
@@ -24,6 +26,14 @@ describe('DerivedAnswers', () => {
     const items = screen.getAllByRole('listitem')
     expect(items).toHaveLength(1)
     expect(items[0]).toHaveTextContent(`${id} = ${value}`)
+  })
+
+  it.each([
+    ['the default hint', undefined, READ_ONLY_HINT],
+    ['a given hint', CUSTOM_HINT, CUSTOM_HINT],
+  ])('shows %s under the answers', (_name, hint, shown) => {
+    renderFor(StageId.Features, REPORT, hint)
+    expect(screen.getByText(shown)).toBeInTheDocument()
   })
 
   it.each([

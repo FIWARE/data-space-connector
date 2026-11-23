@@ -11,8 +11,9 @@ import { useStore } from '../state/context'
 import { initialState, type AppState } from '../state/reducer'
 import { StageId } from '../state/stageIds'
 import { StoreProvider } from '../state/store'
-import { MODEL, mockApi, recordToggle, refusedRole, ROLES, type FeaturesBody, type RoleFakes } from '../test/api'
-import { AVAILABLE_SECTION, Features, KEEP_ON, NO_ROLE_LINK, NOT_RECOMMENDED_SECTION, TURN_OFF } from './Features'
+import { MODEL, mockApi, recordToggle, refusedRole, REPORT, ROLES, type FeaturesBody, type RoleFakes } from '../test/api'
+import { READ_ONLY_HINT } from './DerivedAnswers'
+import { AVAILABLE_SECTION, Features, KEEP_ON, NO_ROLE_ANSWERS_HINT, NO_ROLE_LINK, NOT_RECOMMENDED_SECTION, TURN_OFF } from './Features'
 
 const HTTP_UNPROCESSABLE = 422
 const DSC_MODEL = { chart: 'data-space-connector', version: '10.16.0', revision: 3 }
@@ -130,6 +131,17 @@ describe('Features', () => {
     expect(probe.state.stage).toBe(StageId.Role)
     expect(screen.queryByRole('checkbox')).not.toBeInTheDocument()
     expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['without a role, read-only', undefined, true],
+    ['with a role, as toggles instead', 'consumer', false],
+  ])('shows the loaded file answers %s', async (_name, role, listed) => {
+    renderFeatures({ ...onFeatures(role), loaded: REPORT })
+    if (role) await findBox(ISSUER.title)
+    expect(screen.queryByText(NO_ROLE_ANSWERS_HINT) !== null).toBe(listed)
+    expect(screen.queryByText(/identity\.did\.enabled/) !== null).toBe(listed)
+    expect(screen.queryByText(READ_ONLY_HINT)).not.toBeInTheDocument()
   })
 
   it.each<[string, string, Record<string, FeatureState>, string, string | undefined]>([

@@ -17,6 +17,8 @@ export const FEATURES_HEADING = 'Which features should this connector run?'
 export const FEATURES_LEDE = 'Your role decides where each feature starts. Every toggle stays yours to change.'
 /** Hint shown before a role is picked, followed by a link to step 2. */
 export const NO_ROLE_HINT = 'Features start from a role preset. Pick a role on'
+/** Hint under the loaded file's answers while no role is picked; with a role the toggles show them instead. */
+export const NO_ROLE_ANSWERS_HINT = 'Shown read-only until a role is picked. The choices of your values file then show up in the toggles.'
 /** Text of the link to step 2 in the hint. */
 export const NO_ROLE_LINK = 'step 2'
 /** Heading of the section of features the role does not preselect but offers. */
@@ -230,15 +232,17 @@ export function Features() {
       {roleId ? (
         <FeatureList roleId={roleId} />
       ) : (
-        <p className="hint">
-          {NO_ROLE_HINT}{' '}
-          <button type="button" className="link" onClick={() => dispatch({ type: 'goTo', stage: StageId.Role })}>
-            {NO_ROLE_LINK}
-          </button>
-          .
-        </p>
+        <>
+          <p className="hint">
+            {NO_ROLE_HINT}{' '}
+            <button type="button" className="link" onClick={() => dispatch({ type: 'goTo', stage: StageId.Role })}>
+              {NO_ROLE_LINK}
+            </button>
+            .
+          </p>
+          <DerivedAnswers stage={StageId.Features} hint={NO_ROLE_ANSWERS_HINT} />
+        </>
       )}
-      <DerivedAnswers stage={StageId.Features} />
     </section>
   )
 }
