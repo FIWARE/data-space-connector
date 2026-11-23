@@ -54,16 +54,22 @@ func (p Profile) FeatureChoices(bundles []model.Bundle) ([]FeatureChoice, error)
 			continue
 		}
 		preset := o == model.OfferRecommended
-		s, ok := p.Features[f.ID]
-		if !ok {
-			s = FeatureState{Enabled: preset, Source: SourcePreset}
-		}
+		s := effectiveState(r, f.ID, p.Features)
 		choices = append(choices, FeatureChoice{
 			ID: f.ID, Offer: o, Preset: preset, Enabled: s.Enabled, Source: s.Source,
 			Deliberate: s.Enabled != preset && s.Source != SourcePreset,
 		})
 	}
 	return choices, nil
+}
+
+// effectiveState is feature id's recorded state, else role r's preset value (off when r does not list id).
+// FeatureChoices and RoleChangeTo share it, so Stage 5 and the role-change summary agree (ADR 0019).
+func effectiveState(r *model.Role, id string, recorded map[string]FeatureState) FeatureState {
+	if s, ok := recorded[id]; ok {
+		return s
+	}
+	return FeatureState{Enabled: r.Features[id] == model.OfferRecommended, Source: SourcePreset}
 }
 
 // roleCatalogue resolves the profile's role catalogue and role.
