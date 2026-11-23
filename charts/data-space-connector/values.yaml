@@ -3817,8 +3817,7 @@ tracing:
       # -- container image for the Python auto-instrumentation agent init
       # container injected by the Operator. The agent runs in the application's own Python, so
       # it has to support its version: 0.62b1 is the last one for Python 3.9 (0.63b0 and later
-      # require 3.10). The marketplace charging backend runs Python 3.9 from 11.8.3 on, and
-      # Python 3.8 before, for which no agent is published any more.
+      # require 3.10). The marketplace charging backend runs Python 3.9.
       image: "ghcr.io/open-telemetry/opentelemetry-operator/autoinstrumentation-python:0.62b1"
     # -- Node.js auto-instrumentation agent settings.
     nodejs:

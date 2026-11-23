@@ -672,7 +672,7 @@ an OpenTelemetry SDK or agent:
 | **Scorpio** | Quarkus (Java) | Image does not include the `quarkus-opentelemetry` extension; `QUARKUS_OTEL_ENABLED=true` is silently ignored. |
 | **tm-forum-api** | Micronaut (Java) | No OTEL SDK or Java agent present; `OTEL_SDK_DISABLED=false` has no effect. |
 | **contract-management** | Micronaut (Java) | Same as tm-forum-api. |
-| **marketplace** (charging backend) | Python | No OTEL SDK bundled. Needs charging backend 11.8.3 or later (Python 3.9) for the agent; the marketplace chart 1.2.0 deploys 11.7.0 (Python 3.8), for which no agent is published any more. |
+| **marketplace** (charging backend) | Python | No OTEL SDK bundled. The charging backend runs Python 3.9, supported by the default agent `0.62b1`. Annotate `marketplace.bizEcosystemChargingBackend.deployment.additionalAnnotations`. |
 | **marketplace** (logic proxy) | Node.js | No OTEL SDK bundled. |
 
 The OpenTelemetry Operator solves this by injecting the appropriate
@@ -804,7 +804,7 @@ an OpenTelemetry SDK or agent:
 | **Scorpio** | Quarkus (Java) | Image does not include the `quarkus-opentelemetry` extension; `QUARKUS_OTEL_ENABLED=true` is silently ignored. |
 | **tm-forum-api** | Micronaut (Java) | No OTEL SDK or Java agent present; `OTEL_SDK_DISABLED=false` has no effect. |
 | **contract-management** | Micronaut (Java) | Same as tm-forum-api. |
-| **marketplace** (charging backend) | Python | No OTEL SDK bundled. Needs charging backend 11.8.3 or later (Python 3.9) for the agent; the marketplace chart 1.2.0 deploys 11.7.0 (Python 3.8), for which no agent is published any more. |
+| **marketplace** (charging backend) | Python | No OTEL SDK bundled. The charging backend runs Python 3.9, supported by the default agent `0.62b1`. Annotate `marketplace.bizEcosystemChargingBackend.deployment.additionalAnnotations`. |
 | **marketplace** (logic proxy) | Node.js | No OTEL SDK bundled. |
 
 The OpenTelemetry Operator solves this by injecting the appropriate
