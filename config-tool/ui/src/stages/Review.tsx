@@ -1,4 +1,4 @@
-/** S7 Review: open questions and the load report of an opened values.yaml; the validation and generate panes come with Epic 6. */
+/** S7 Review: open questions, deliberate feature choices and the load report of an opened values.yaml; the validation and generate panes come with Epic 6. */
 import { useState } from 'react'
 import { useSave } from '../chrome/saveContext'
 import { loadValues, RootSource, VersionSource, type DerivedAnswer, type LoadReport } from '../api/load'
@@ -6,6 +6,7 @@ import { useStore } from '../state/context'
 import { openQuestions } from '../state/openQuestions'
 import { carriedOverCount, understoodCount, underivedAnswers } from '../state/report'
 import { STAGE_LABELS, StageId } from '../state/stageIds'
+import { DeliberateChoices } from './DeliberateChoices'
 import { AnswerList } from './DerivedAnswers'
 import { EntryTable, Overrides } from './Overrides'
 import { Placeholder } from './Placeholder'
@@ -197,6 +198,7 @@ function Report({ report, file }: { report: LoadReport; file?: File }) {
       </p>
       <ProfileNotes />
       <OpenQuestions />
+      <DeliberateChoices />
       <RootPicker report={report} file={file} />
       <div className="panel">
         <h3>Classification of {report.counts.total} keys</h3>
@@ -240,6 +242,7 @@ export function Review() {
     <Placeholder label={STAGE_LABELS[StageId.Review]} comingIn={REVIEW_COMING_IN}>
       <ProfileNotes />
       <OpenQuestions />
+      <DeliberateChoices />
       <Actions />
     </Placeholder>
   )

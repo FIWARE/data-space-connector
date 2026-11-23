@@ -2,7 +2,8 @@
 import { vi } from 'vitest'
 import type { LoadReport } from '../api/load'
 import type { Profile, ProfileResponse, RecentProfiles } from '../api/profile'
-import type { Offer, PresetResult, RoleCatalogue } from '../api/roles'
+import type { FeatureChoice, FeaturesResult, FeatureToggle } from '../api/features'
+import type { Feature, Offer, PresetResult, RoleCatalogue } from '../api/roles'
 import type { Kubeconfig, ModelInfo } from '../api/target'
 import type { Trial, TrialWritten } from '../api/trial'
 
@@ -178,11 +179,19 @@ export const ROLES: RoleCatalogue = {
       features: offers([], DSC_FEATURES) },
   ],
   features: [
-    { id: 'identity.issuer', title: 'Credential issuer', summary: 'Keycloak issues VCs.', group: 'identity' },
-    { id: 'data.scorpio', title: 'Context broker', summary: 'Scorpio NGSI-LD.', group: 'data' },
-    { id: 'obs.tracing', title: 'Tracing', summary: 'OTEL traces.', group: 'observability' },
-    { id: 'ta.registry', title: 'Trusted issuers registry', summary: 'The trust anchor.', group: 'operator' },
+    { id: 'identity.issuer', title: 'Credential issuer', summary: 'Keycloak issues VCs.', group: 'identity',
+      consequence: 'Participants cannot get credentials from you.' },
+    { id: 'data.scorpio', title: 'Context broker', summary: 'Scorpio NGSI-LD.', group: 'data', consequence: '' },
+    { id: 'obs.tracing', title: 'Tracing', summary: 'OTEL traces.', group: 'observability', consequence: '' },
+    { id: 'ta.registry', title: 'Trusted issuers registry', summary: 'The trust anchor.', group: 'operator', consequence: '' },
   ],
+}
+
+/** The ROLES catalogue feature with `id`; throws for an unknown one. */
+export function catalogueFeature(id: string): Feature {
+  const found = ROLES.features.find((f) => f.id === id)
+  if (!found) throw new Error(`no feature ${id}`)
+  return found
 }
 
 /** The body POST /api/preset receives. */
@@ -192,13 +201,45 @@ export interface PresetBody {
   sourceSha256?: string
 }
 
+/** The body POST /api/features receives. */
+export interface FeaturesBody {
+  profile: Profile
+  sourceSha256?: string
+  toggle: FeatureToggle | null
+}
+
 /** An answer of a role route, or a status code it fails with. */
 export type RoleAnswer<T> = T | number
 
-/** The role routes' fakes; by default GET answers ROLES and preset applies the role without features or switch. */
+/** The role routes' fakes; by default GET answers ROLES, preset applies the role without features or switch and
+ *  features answers `featureChoices` after recording the toggle as source user. */
 export interface RoleFakes {
   roles?: (chart: string, version: string) => RoleAnswer<RoleCatalogue> | Promise<RoleAnswer<RoleCatalogue>>
   preset?: (body: PresetBody) => RoleAnswer<PresetResult>
+  features?: (body: FeaturesBody) => RoleAnswer<FeaturesResult> | Promise<RoleAnswer<FeaturesResult>>
+}
+
+/** The choices the server derives from a profile with a ROLES role: every feature of the role's chart, in bundle order. */
+export function featureChoices(profile: Profile): FeatureChoice[] {
+  const role = ROLES.roles.find((r) => r.id === profile.role)
+  if (!role) return []
+  const inChart = (id: string) => (id === 'ta.registry') === (role.chart === TRUST_ANCHOR)
+  return ROLES.features
+    .filter((f) => inChart(f.id))
+    .map((f) => {
+      const offer = role.features[f.id] ?? 'not-offered'
+      const preset = offer === 'recommended'
+      const state = profile.features?.[f.id] ?? { enabled: false, source: 'preset' as const }
+      return { id: f.id, offer, preset, ...state, deliberate: state.enabled !== preset && state.source !== 'preset' }
+    })
+}
+
+/** POST /api/features as the server answers it: the toggle recorded as source user, then the choices. */
+export function recordToggle(body: FeaturesBody): FeaturesResult {
+  const { profile, toggle } = body
+  const features = toggle ? { ...profile.features, [toggle.feature]: { enabled: toggle.enabled, source: 'user' as const } } : profile.features
+  const next = { ...profile, features }
+  return { profile: next, choices: featureChoices(next) }
 }
 
 /** The server's message for a refused role request. */
@@ -209,6 +250,7 @@ export function refusedRole(status: number): string {
 const ROLE_DEFAULTS: Required<RoleFakes> = {
   roles: () => ROLES,
   preset: (body) => ({ profile: { ...body.profile, role: body.role, features: {} }, chartSwitch: null }),
+  features: recordToggle,
 }
 
 /** Answers GET /api/model with `model`, GET /api/cluster/contexts with `contexts(path)` and POST /api/load with
@@ -260,6 +302,9 @@ export function mockApi(
     }
     if (url.pathname === '/api/preset' && init?.method === 'POST') {
       return roleAnswer(roleFakes.preset(JSON.parse(String(init.body)) as PresetBody))
+    }
+    if (url.pathname === '/api/features' && init?.method === 'POST') {
+      return roleAnswer(await roleFakes.features(JSON.parse(String(init.body)) as FeaturesBody))
     }
     return json({ error: 'not found' }, HTTP_NOT_FOUND)
   })

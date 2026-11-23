@@ -5,11 +5,14 @@ import { RootSource, VersionSource, type LoadReport } from '../api/load'
 import { Chrome } from '../chrome/Chrome'
 import { STAGES } from '../stages'
 import { Environment, TargetType, type Target } from '../state/answers'
+import type { FeatureState } from '../api/profile'
 import type { FieldId } from '../state/openQuestions'
 import { initialState, type AppState } from '../state/reducer'
 import { StageId } from '../state/stageIds'
 import { StoreProvider } from '../state/store'
-import { lateLoad, mockApi, REPORT, refusedUpload } from '../test/api'
+import { catalogueFeature, lateLoad, mockApi, recordToggle, refusedRole, REPORT, refusedUpload } from '../test/api'
+import { DELIBERATE_HEADING } from './DeliberateChoices'
+import { FEATURES_HEADING } from './Features'
 import { ROOT_LABEL, WHOLE_FILE } from './Review'
 
 const HTTP_UNPROCESSABLE = 422
@@ -36,6 +39,23 @@ function renderReview(loaded?: LoadReport, loadedFile?: File, more: Partial<AppS
     </StoreProvider>,
   )
 }
+
+const ISSUER = catalogueFeature('identity.issuer')
+const BROKER = catalogueFeature('data.scorpio')
+const TRACING = catalogueFeature('obs.tracing')
+/** Consumer with its recommended issuer turned off and the not-offered broker turned on. */
+const OVERRULED: Record<string, FeatureState> = {
+  [ISSUER.id]: { enabled: false, source: 'user' },
+  [BROKER.id]: { enabled: true, source: 'loaded' },
+  [TRACING.id]: { enabled: false, source: 'user' },
+}
+const deliberateList = () => within(screen.getByRole('heading', { level: 3, name: /^Deliberate choices/ }).closest('.panel') as HTMLElement)
+const deliberatePanelAlert = async () => {
+  await screen.findByRole('heading', { level: 3, name: DELIBERATE_HEADING })
+  return deliberateList().getByRole('alert')
+}
+const featureRequests = (fetchMock: ReturnType<typeof mockApi>) =>
+  fetchMock.mock.calls.filter(([input]) => new URL(String(input), 'http://x').pathname === '/api/features')
 
 const openList = () => within(screen.getByRole('heading', { level: 3, name: /^Open questions/ }).closest('.panel') as HTMLElement)
 
@@ -183,5 +203,56 @@ describe('Review', () => {
     await userEvent.selectOptions(screen.getByLabelText(ROOT_LABEL), WHOLE_FILE)
     expect(await screen.findByRole('alert')).toHaveTextContent(refusedUpload(FILE.name, HTTP_UNPROCESSABLE))
     expect(screen.getByLabelText(ROOT_LABEL)).toHaveValue('dsc')
+  })
+
+  it.each<[string, LoadReport | undefined]>([
+    ['the placeholder', undefined],
+    ['the load report', REPORT],
+  ])('lists the deliberate choices with the Stage 5 marker above %s', async (_name, loaded) => {
+    renderReview(loaded, undefined, { answers: { role: 'consumer', features: OVERRULED, target: ANSWERED } })
+    expect(await screen.findByRole('heading', { level: 3, name: `${DELIBERATE_HEADING} (2)` })).toBeInTheDocument()
+    expect(deliberateList().getAllByRole('listitem').map((li) => li.textContent)).toEqual([
+      `${ISSUER.title}recommended on for Consumer — you turned it offgo ↗`,
+      `${BROKER.title}not recommended for Consumer — your values file turns it ongo ↗`,
+    ])
+  })
+
+  it('jumps to Features from a deliberate choice', async () => {
+    renderReview(undefined, undefined, { answers: { role: 'consumer', features: OVERRULED, target: ANSWERED } })
+    await userEvent.click(await screen.findByRole('button', { name: `Go to ${ISSUER.title}` }))
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(FEATURES_HEADING)
+  })
+
+  it.each<[string, Record<string, FeatureState>]>([
+    ['the preset', {}],
+    ['a user choice equal to the preset', { [ISSUER.id]: { enabled: true, source: 'user' } }],
+  ])('leaves the section out with %s only', async (_name, features) => {
+    const fetchMock = mockApi()
+    renderReview(undefined, undefined, { answers: { role: 'consumer', features, target: ANSWERED } })
+    await waitFor(() => expect(featureRequests(fetchMock)).toHaveLength(1))
+    await act(async () => {})
+    expect(screen.queryByRole('heading', { name: new RegExp(DELIBERATE_HEADING) })).not.toBeInTheDocument()
+  })
+
+  it('shows a refused features request and lists the choices once a re-read answers', async () => {
+    let refuse = true
+    const reread: LoadReport = { ...WRAPPED, root: '', rootFrom: RootSource.Requested, sha256: 'b'.repeat(64) }
+    mockApi(undefined, undefined, () => reread, undefined, undefined, {
+      features: (body) => (refuse ? HTTP_UNPROCESSABLE : recordToggle(body)),
+    })
+    renderReview(WRAPPED, FILE, { answers: { role: 'consumer', features: OVERRULED, target: ANSWERED } })
+    expect(await deliberatePanelAlert()).toHaveTextContent(refusedRole(HTTP_UNPROCESSABLE))
+    refuse = false
+    await userEvent.selectOptions(screen.getByLabelText(ROOT_LABEL), WHOLE_FILE)
+    expect(await screen.findByRole('heading', { level: 3, name: `${DELIBERATE_HEADING} (2)` })).toBeInTheDocument()
+    expect(deliberateList().queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('asks nothing about features while no role is picked', async () => {
+    const fetchMock = mockApi()
+    renderReview(undefined, undefined, { answers: { features: OVERRULED, target: ANSWERED } })
+    await act(async () => {})
+    expect(featureRequests(fetchMock)).toHaveLength(0)
+    expect(screen.queryByRole('heading', { name: new RegExp(DELIBERATE_HEADING) })).not.toBeInTheDocument()
   })
 })

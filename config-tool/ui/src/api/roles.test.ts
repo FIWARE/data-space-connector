@@ -42,7 +42,7 @@ describe('api/roles', () => {
   })
 
   it('returns the chart switch the server reports', async () => {
-    const chartSwitch = { fromChart: DSC_CHART, fromVersion: '10.16.0', toChart: 'trust-anchor' }
+    const chartSwitch = { fromChart: DSC_CHART, fromVersion: '10.16.0', toChart: 'trust-anchor', droppedChoices: [] }
     mockApi(undefined, undefined, undefined, undefined, undefined, { preset: (body) => ({ profile: body.profile, chartSwitch }) })
     await expect(applyPreset(PROFILE, 'operator')).resolves.toMatchObject({ chartSwitch })
   })

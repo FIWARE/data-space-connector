@@ -3,7 +3,7 @@
 # keeps roles and roleMatrix in agreement with it. Value rules come with Epic 3's questions.
 chart: data-space-connector
 version: 10.16.0
-revision: 2
+revision: 3
 topLevelKeys: [
   nameOverride, fullnameOverride, imagePullSecrets, issuance, decentralizedIam, scorpio, elsi,
   keycloak, tm-forum-api, statusListServer, rainbow, contract-management, did, registration,
@@ -22,9 +22,11 @@ recognize:
   - {path: dataSpaceConfig.enabled, answer: dsp.config.enabled, stage: features, kind: toggle}
 features:
   - {id: identity.issuer, title: Credential issuance, group: identity, keys: [keycloak, vcCredentials],
-     summary: "Issue Verifiable Credentials to your users (Keycloak, OID4VCI)"}
+     summary: "Issue Verifiable Credentials to your users (Keycloak, OID4VCI)",
+     consequence: "Without credential issuance your users cannot get Verifiable Credentials to prove who they are."}
   - {id: identity.did, title: DID document, group: identity, keys: [did],
-     summary: "Publish the organization's DID document (did:web/did:key)"}
+     summary: "Publish the organization's DID document (did:web/did:key)",
+     consequence: "Without a DID document other participants cannot resolve your identity or verify what you sign."}
   - {id: identity.statuslist, title: Credential revocation, group: identity, keys: [statusListServer],
      summary: Revoke issued credentials (token status list)}
   - {id: identity.vcoperator, title: Credentials as Kubernetes resources, group: identity, keys: [vc-operator, vcCredentials],
@@ -35,11 +37,14 @@ features:
      keys: [elsi, decentralizedIam.vcAuthentication.vcverifier.deployment.eidas],
      summary: eIDAS/ELSI certificate-based identity and validation}
   - {id: access.verification, title: Credential verification, group: access, keys: [decentralizedIam.vcAuthentication],
-     summary: "Verify incoming credentials, hand out access tokens (VCVerifier + local Trusted Issuers List)"}
+     summary: "Verify incoming credentials, hand out access tokens (VCVerifier + local Trusted Issuers List)",
+     consequence: "Without credential verification this connector cannot accept a participant's access token."}
   - {id: access.policies, title: Policy enforcement, group: access, keys: [decentralizedIam.odrlAuthorization],
-     summary: Enforce ODRL policies on every request (APISIX + OPA + ODRL-PAP)}
+     summary: Enforce ODRL policies on every request (APISIX + OPA + ODRL-PAP),
+     consequence: "Without policy enforcement nothing checks who may access your data services."}
   - {id: data.scorpio, title: NGSI-LD data service, group: data, keys: [scorpio],
-     summary: An NGSI-LD context broker as the data service}
+     summary: An NGSI-LD context broker as the data service,
+     consequence: "Without the NGSI-LD data service you offer no data unless you protect a data service of your own."}
   - {id: data.external, title: Your own data services, group: data, requires: [access.policies],
      keys: [decentralizedIam.odrlAuthorization.apisix.routes], summary: Protect data services you run yourself}
   - {id: contract.tmforum, title: TMForum contract APIs, group: contracts, keys: [tm-forum-api],
@@ -61,7 +66,8 @@ features:
   - {id: consent.authority, title: Consent authority, group: consent, chart: trust-anchor,
      keys: [consentManagement, consent-manager, consent-facade], summary: "Run the data space's consent manager"}
   - {id: ta.registry, title: Trusted Issuers Registry, group: operator, chart: trust-anchor, keys: [trusted-issuers-list],
-     summary: Trusted Issuers Registry + Trusted Issuers List API}
+     summary: Trusted Issuers Registry + Trusted Issuers List API,
+     consequence: "Without the Trusted Issuers Registry participants cannot check which issuers the data space trusts."}
   - {id: ta.onboarding, title: Participant onboarding, group: operator, chart: trust-anchor,
      keys: [trusted-issuers-list.ingress.til], summary: Participant onboarding}
   - {id: obs.tracing, title: Tracing, group: observability,

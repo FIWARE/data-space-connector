@@ -20,7 +20,7 @@ const HTTP_UNPROCESSABLE = 422
 const DSC = 'data-space-connector'
 const TRUST_ANCHOR = 'trust-anchor'
 const TWO_CHARTS = { charts: [...MODEL.charts, { name: TRUST_ANCHOR, versions: [{ version: '1.3.6', latest: true }] }] }
-const DSC_MODEL = { chart: DSC, version: '10.16.0', revision: 2 }
+const DSC_MODEL = { chart: DSC, version: '10.16.0', revision: 3 }
 const TA_MODEL = { chart: TRUST_ANCHOR, version: '1.3.6', revision: 1 }
 const TITLES = ['Consumer', 'Provider', 'Consumer + Provider', 'Operator', 'Custom']
 const PINNED: Target = {
@@ -51,7 +51,7 @@ function Probe() {
 }
 
 /** POST /api/preset as the server answers it: recommended features on, a switch for a role of another chart. */
-function serverPreset(loaded: Record<string, boolean> = {}) {
+function serverPreset(loaded: Record<string, boolean> = {}, droppedChoices: string[] = []) {
   const bodies: PresetBody[] = []
   const preset = (body: PresetBody): PresetResult => {
     bodies.push(body)
@@ -74,7 +74,7 @@ function serverPreset(loaded: Record<string, boolean> = {}) {
       role: role.id,
       features,
     }
-    return { profile, chartSwitch: switched ? { fromChart: from.chart, fromVersion: from.chartVersion, toChart: role.chart } : null }
+    return { profile, chartSwitch: switched ? { fromChart: from.chart, fromVersion: from.chartVersion, toChart: role.chart, droppedChoices } : null }
   }
   return { bodies, preset }
 }
@@ -187,6 +187,17 @@ describe('Role', () => {
     await userEvent.click(card('Custom'))
     await waitFor(() => expect(notice()).toHaveTextContent('Target chart switched from trust-anchor 1.3.6 to data-space-connector — pick its version on step 1.'))
     expect(probe.state.answers.target).toMatchObject({ chart: DSC, chartVersion: '' })
+  })
+
+  it('names the choices a chart switch dropped by catalogue title, falling back to the id', async () => {
+    renderRole(ON_ROLE, { preset: serverPreset({}, ['identity.issuer', 'obs.tracing', 'gone.feature']).preset })
+    await findCards()
+    await userEvent.click(card('Operator'))
+    await waitFor(() =>
+      expect(notice()).toHaveTextContent(
+        'pick its version on step 1. Your choices for Credential issuer, Tracing, gone.feature do not apply to the trust-anchor chart and were dropped.',
+      ),
+    )
   })
 
   it('disables a role of another chart while a values file is loaded, without asking the server', async () => {

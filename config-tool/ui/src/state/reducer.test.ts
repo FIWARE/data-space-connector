@@ -169,10 +169,10 @@ describe('reducer: trial', () => {
 describe('reducer: roles', () => {
   const DSC = 'data-space-connector'
   const TRUST_ANCHOR = 'trust-anchor'
-  const DSC_MODEL = { chart: DSC, version: '10.16.0', revision: 2 }
+  const DSC_MODEL = { chart: DSC, version: '10.16.0', revision: 3 }
   const TA_MODEL = { chart: TRUST_ANCHOR, version: '1.3.6', revision: 1 }
   const FEATURES = { 'data.scorpio': { enabled: false, source: 'loaded' }, 'identity.issuer': { enabled: true, source: 'preset' } } as const
-  const SWITCH = { fromChart: DSC, fromVersion: '10.15.0', toChart: TRUST_ANCHOR }
+  const SWITCH = { fromChart: DSC, fromVersion: '10.15.0', toChart: TRUST_ANCHOR, droppedChoices: [] }
   const PROVIDER: Profile = { ...SAVED_PROFILE, model: DSC_MODEL, role: 'provider', features: FEATURES }
   const OPERATOR: Profile = {
     ...SAVED_PROFILE,
@@ -263,5 +263,13 @@ describe('reducer: roles', () => {
     ['a preset that keeps the chart', { type: 'roleApplied', profile: OPERATOR, chartSwitch: null }],
   ])('keeps the version open on %s', (_name, action) => {
     expect(reducer(operator, action).versionOpen).toBe(true)
+  })
+
+  it('replaces the features on a toggle and keeps role, target and model, which makes the saved profile stale', () => {
+    const toggled = { ...FEATURES, 'identity.issuer': { enabled: false, source: 'user' } } as const
+    const next = reducer(provider, { type: 'featuresChanged', features: toggled })
+    expect(next.answers).toEqual({ ...provider.answers, features: toggled })
+    expect(next.answers).not.toBe(provider.answers)
+    expect(next).toMatchObject({ stage: provider.stage, profileModel: DSC_MODEL, chartSwitch: undefined })
   })
 })

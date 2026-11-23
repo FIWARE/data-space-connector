@@ -65,7 +65,7 @@ const COMPLETE: Target = {
   environment: Environment.Production,
   chartVersion: '10.16.0',
 }
-const DSC_MODEL = { chart: DSC, version: '10.16.0', revision: 2 }
+const DSC_MODEL = { chart: DSC, version: '10.16.0', revision: 3 }
 const TA_MODEL = { chart: TRUST_ANCHOR, version: '1.3.6', revision: 1 }
 
 /** The state after the server answered POST /api/preset for `role` deploying `chart`. */
@@ -86,8 +86,8 @@ function applied(state: AppState, role: string, chart: string, chartSwitch: Char
 }
 
 const PINNED: AppState = { ...initialState, entered: true, visited: [StageId.Target, StageId.Role], answers: { features: {}, target: COMPLETE } }
-const OPERATOR = applied(PINNED, 'operator', TRUST_ANCHOR, { fromChart: DSC, fromVersion: '10.16.0', toChart: TRUST_ANCHOR })
-const SWITCHED_BACK = applied(OPERATOR, 'custom', DSC, { fromChart: TRUST_ANCHOR, fromVersion: '', toChart: DSC })
+const OPERATOR = applied(PINNED, 'operator', TRUST_ANCHOR, { fromChart: DSC, fromVersion: '10.16.0', toChart: TRUST_ANCHOR, droppedChoices: [] })
+const SWITCHED_BACK = applied(OPERATOR, 'custom', DSC, { fromChart: TRUST_ANCHOR, fromVersion: '', toChart: DSC, droppedChoices: [] })
 const PROVIDER = applied(PINNED, 'provider', DSC, null)
 
 const kubeconfigField = () => screen.getByLabelText('Kubeconfig')

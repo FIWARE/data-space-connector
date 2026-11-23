@@ -45,6 +45,8 @@ type featureBody struct {
 	Title   string      `json:"title"`
 	Summary string      `json:"summary"`
 	Group   model.Group `json:"group"`
+	// Consequence is empty when the bundle names none; the UI then shows Summary.
+	Consequence string `json:"consequence"`
 }
 
 // presetRequest is the body of POST /api/preset; SourceSHA256 names the loaded slot as on save.
@@ -58,6 +60,24 @@ type presetRequest struct {
 type presetResponse struct {
 	Profile     profile.Profile      `json:"profile"`
 	ChartSwitch *profile.ChartSwitch `json:"chartSwitch"`
+}
+
+// featuresRequest is the body of POST /api/features; Toggle is null to only read the choices.
+type featuresRequest struct {
+	Profile      profile.Profile `json:"profile"`
+	SourceSHA256 string          `json:"sourceSha256"`
+	Toggle       *featureToggle  `json:"toggle"`
+}
+
+type featureToggle struct {
+	Feature string `json:"feature"`
+	Enabled bool   `json:"enabled"`
+}
+
+// featuresResponse carries the profile after the toggle and every feature of the role's chart.
+type featuresResponse struct {
+	Profile profile.Profile         `json:"profile"`
+	Choices []profile.FeatureChoice `json:"choices"`
 }
 
 // handleRoles lists the roles and features offered for chart@version; an empty version means the latest.
@@ -96,7 +116,7 @@ func catalogueBody(b model.Bundle) rolesResponse {
 		body.Roles = append(body.Roles, rb)
 	}
 	for _, f := range b.Features {
-		body.Features = append(body.Features, featureBody{ID: f.ID, Title: f.Title, Summary: f.Summary, Group: f.Group})
+		body.Features = append(body.Features, featureBody{ID: f.ID, Title: f.Title, Summary: f.Summary, Group: f.Group, Consequence: f.Consequence})
 	}
 	return body
 }
@@ -121,12 +141,46 @@ func (s *Server) handlePreset(w http.ResponseWriter, r *http.Request) {
 	out, sw, err := p.ApplyPreset(bundles, req.Role, loadedToggles(res))
 	switch {
 	case errors.Is(err, profile.ErrUnknownRole), errors.Is(err, profile.ErrChartSwitchLoaded),
-		errors.Is(err, profile.ErrPresetConflictsLoaded):
+		errors.Is(err, profile.ErrFeatureOfOtherChart):
 		writeError(w, http.StatusUnprocessableEntity, err.Error(), "")
 	case err != nil:
 		writeError(w, http.StatusInternalServerError, err.Error(), "")
 	default:
 		writeJSON(w, presetResponse{Profile: out, ChartSwitch: sw})
+	}
+}
+
+// handleFeatures records an optional user toggle and lists the feature choices of the profile's role (ADR 0018).
+func (s *Server) handleFeatures(w http.ResponseWriter, r *http.Request) {
+	var req featuresRequest
+	if err := decodeJSON(w, r, &req); err != nil {
+		writeError(w, bodyErrorStatus(err), "invalid request: "+err.Error(), "")
+		return
+	}
+	bundles, err := model.Versions(s.models)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error(), "")
+		return
+	}
+	p := req.Profile
+	if _, ok := s.prepareProfile(w, bundles, &p, req.SourceSHA256); !ok {
+		return
+	}
+	if req.Toggle != nil {
+		p, err = p.SetFeature(bundles, req.Toggle.Feature, req.Toggle.Enabled)
+	}
+	var choices []profile.FeatureChoice
+	if err == nil {
+		choices, err = p.FeatureChoices(bundles)
+	}
+	switch {
+	case errors.Is(err, profile.ErrNoRole), errors.Is(err, profile.ErrUnknownFeature),
+		errors.Is(err, profile.ErrFeatureOfOtherChart):
+		writeError(w, http.StatusUnprocessableEntity, err.Error(), "")
+	case err != nil:
+		writeError(w, http.StatusInternalServerError, err.Error(), "")
+	default:
+		writeJSON(w, featuresResponse{Profile: p, Choices: choices})
 	}
 }
 
