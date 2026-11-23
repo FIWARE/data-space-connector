@@ -3,7 +3,7 @@ import { VersionSource, type LoadReport } from '../api/load'
 import { fromProfile, type ModelRef, type Profile } from '../api/profile'
 import type { ChartSwitch } from '../api/roles'
 import type { Trial } from '../api/trial'
-import { emptyAnswers, Environment, type Answers, type Session, type Target } from './answers'
+import { emptyAnswers, Environment, type Answers, type FeatureState, type Session, type Target } from './answers'
 import { fieldStage, type FieldId, type QuestionId } from './openQuestions'
 import { FIRST_STAGE, StageId } from './stageIds'
 
@@ -69,6 +69,7 @@ export type Action =
   | { type: 'profileSaved'; path: string; profile: Profile; notes: readonly string[] }
   | { type: 'trialStarted'; trial: Trial }
   | { type: 'roleApplied'; profile: Profile; chartSwitch: ChartSwitch | null }
+  | { type: 'featuresChanged'; features: Record<string, FeatureState> }
 
 /** The state before anything was chosen on S0. */
 export const initialState: AppState = {
@@ -203,6 +204,9 @@ export function reducer(state: AppState, action: Action): AppState {
       }
     case 'roleApplied':
       return roleApplied(state, action)
+    case 'featuresChanged':
+      // A new answers object is what makes the saved profile stale, as with every other edit.
+      return { ...state, answers: { ...state.answers, features: action.features } }
     case 'rootRereadStarted':
       return { ...state, rereading: true }
     case 'rootChanged':

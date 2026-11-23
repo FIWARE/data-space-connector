@@ -86,8 +86,8 @@ function applied(state: AppState, role: string, chart: string, chartSwitch: Char
 }
 
 const PINNED: AppState = { ...initialState, entered: true, visited: [StageId.Target, StageId.Role], answers: { features: {}, target: COMPLETE } }
-const OPERATOR = applied(PINNED, 'operator', TRUST_ANCHOR, { fromChart: DSC, fromVersion: '10.16.0', toChart: TRUST_ANCHOR })
-const SWITCHED_BACK = applied(OPERATOR, 'custom', DSC, { fromChart: TRUST_ANCHOR, fromVersion: '', toChart: DSC })
+const OPERATOR = applied(PINNED, 'operator', TRUST_ANCHOR, { fromChart: DSC, fromVersion: '10.16.0', toChart: TRUST_ANCHOR, droppedChoices: [] })
+const SWITCHED_BACK = applied(OPERATOR, 'custom', DSC, { fromChart: TRUST_ANCHOR, fromVersion: '', toChart: DSC, droppedChoices: [] })
 const PROVIDER = applied(PINNED, 'provider', DSC, null)
 
 const kubeconfigField = () => screen.getByLabelText('Kubeconfig')

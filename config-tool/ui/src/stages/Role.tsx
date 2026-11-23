@@ -45,6 +45,13 @@ function switchNotice(sw: ChartSwitch): string {
   return `Target chart switched from ${from} to ${sw.toChart} — pick its version on`
 }
 
+/** The sentence naming the user toggles a chart switch dropped, by catalogue title; empty when none were. */
+function droppedNotice(sw: ChartSwitch, catalogue?: RoleCatalogue): string {
+  if (sw.droppedChoices.length === 0) return ''
+  const titles = sw.droppedChoices.map((id) => catalogue?.features.find((f) => f.id === id)?.title ?? id)
+  return `Your choices for ${titles.join(', ')} do not apply to the ${sw.toChart} chart and were dropped.`
+}
+
 /** Why a role that deploys another chart cannot be picked while a values file is loaded. */
 function chartLockedReason(role: RoleDef, fileChart: string): string {
   return `${role.title} deploys the ${role.chart} chart; the opened values.yaml is a ${fileChart} file. Start a new configuration to set it up.`
@@ -195,7 +202,7 @@ export function Role() {
           <button type="button" className="link" onClick={() => dispatch({ type: 'goTo', stage: StageId.Target })}>
             step 1
           </button>
-          .
+          . {droppedNotice(state.chartSwitch, catalogue)}
         </p>
       )}
       <div
