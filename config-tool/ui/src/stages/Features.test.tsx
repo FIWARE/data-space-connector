@@ -4,28 +4,22 @@ import { useEffect, useState } from 'react'
 import { describe, expect, it } from 'vitest'
 import type { FeaturesResult } from '../api/features'
 import type { FeatureState } from '../api/profile'
-import type { Feature } from '../api/roles'
 import { repositoryDocUrl } from '../links'
 import { Environment, TargetType, type Target } from '../state/answers'
 import { useStore } from '../state/context'
 import { initialState, type AppState } from '../state/reducer'
 import { StageId } from '../state/stageIds'
 import { StoreProvider } from '../state/store'
-import { MODEL, mockApi, recordToggle, refusedRole, REPORT, ROLES, type FeaturesBody, type RoleFakes } from '../test/api'
+import { catalogueFeature, MODEL, mockApi, recordToggle, refusedRole, REPORT, type FeaturesBody, type RoleFakes } from '../test/api'
 import { READ_ONLY_HINT } from './DerivedAnswers'
 import { AVAILABLE_SECTION, Features, KEEP_ON, NO_ROLE_ANSWERS_HINT, NO_ROLE_LINK, NOT_RECOMMENDED_SECTION, TURN_OFF } from './Features'
 
 const HTTP_UNPROCESSABLE = 422
 const DSC_MODEL = { chart: 'data-space-connector', version: '10.16.0', revision: 3 }
-function feature(id: string): Feature {
-  const found = ROLES.features.find((f) => f.id === id)
-  if (!found) throw new Error(`no feature ${id}`)
-  return found
-}
-const ISSUER = feature('identity.issuer')
-const BROKER = feature('data.scorpio')
-const TRACING = feature('obs.tracing')
-const REGISTRY = feature('ta.registry')
+const ISSUER = catalogueFeature('identity.issuer')
+const BROKER = catalogueFeature('data.scorpio')
+const TRACING = catalogueFeature('obs.tracing')
+const REGISTRY = catalogueFeature('ta.registry')
 const PRESET_ON: FeatureState = { enabled: true, source: 'preset' }
 const PINNED: Target = {
   ...initialState.answers.target,

@@ -94,6 +94,7 @@ button.ask[aria-pressed="true"] { background: var(--accent-weak); border-color: 
 .open-questions { margin: 0; padding-left: 18px; }
 .open-questions li { display: flex; gap: 10px; align-items: baseline; }
 .open-questions .stage { color: var(--fg-dim); font-size: 12.5px; }
+.open-questions .deliberate { color: var(--accent); font-size: 12.5px; }
 details { margin: 6px 0; }
 summary { cursor: pointer; }
 table.entries { width: 100%; border-collapse: collapse; margin: 6px 0; font-size: 12.5px; }
