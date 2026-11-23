@@ -6,6 +6,7 @@ import type { Feature, Offer, Role as RoleDef } from '../api/roles'
 import { ConfirmDialog } from '../chrome/ConfirmDialog'
 import { repositoryDocUrl } from '../links'
 import { useStore } from '../state/context'
+import { deliberateLabel } from '../state/deliberate'
 import type { AppState } from '../state/reducer'
 import { StageId } from '../state/stageIds'
 import { DerivedAnswers } from './DerivedAnswers'
@@ -35,19 +36,6 @@ const SECTIONS: readonly { offer: Offer; title: (role: RoleDef) => string }[] = 
   { offer: 'available', title: () => AVAILABLE_SECTION },
   { offer: 'not-offered', title: () => NOT_RECOMMENDED_SECTION },
 ]
-
-const PRESET_WORDS: Record<Offer, string> = {
-  recommended: 'recommended on for',
-  available: 'off by default for',
-  'not-offered': 'not recommended for',
-}
-
-/** Why a feature differs from the preset: what the role wants, then who decided otherwise. */
-function deliberateMarker(choice: FeatureChoice, role: RoleDef): string {
-  const state = choice.enabled ? 'on' : 'off'
-  const who = choice.source === 'loaded' ? `your values file turns it ${state}` : `you turned it ${state}`
-  return `${PRESET_WORDS[choice.offer]} ${role.title} — ${who}`
-}
 
 function withoutKey(errors: Record<string, string>, key: string): Record<string, string> {
   return Object.fromEntries(Object.entries(errors).filter(([id]) => id !== key))
@@ -83,7 +71,7 @@ function FeatureRow({
           <span id={`${id}-summary`}>{feature.summary}</span>
           {choice.deliberate && (
             <span className="deliberate" id={`${id}-marker`}>
-              {deliberateMarker(choice, role)}
+              {deliberateLabel(choice, role.title)}
             </span>
           )}
         </span>

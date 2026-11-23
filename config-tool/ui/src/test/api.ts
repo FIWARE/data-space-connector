@@ -3,7 +3,7 @@ import { vi } from 'vitest'
 import type { LoadReport } from '../api/load'
 import type { Profile, ProfileResponse, RecentProfiles } from '../api/profile'
 import type { FeatureChoice, FeaturesResult, FeatureToggle } from '../api/features'
-import type { Offer, PresetResult, RoleCatalogue } from '../api/roles'
+import type { Feature, Offer, PresetResult, RoleCatalogue } from '../api/roles'
 import type { Kubeconfig, ModelInfo } from '../api/target'
 import type { Trial, TrialWritten } from '../api/trial'
 
@@ -185,6 +185,13 @@ export const ROLES: RoleCatalogue = {
     { id: 'obs.tracing', title: 'Tracing', summary: 'OTEL traces.', group: 'observability', consequence: '' },
     { id: 'ta.registry', title: 'Trusted issuers registry', summary: 'The trust anchor.', group: 'operator', consequence: '' },
   ],
+}
+
+/** The ROLES catalogue feature with `id`; throws for an unknown one. */
+export function catalogueFeature(id: string): Feature {
+  const found = ROLES.features.find((f) => f.id === id)
+  if (!found) throw new Error(`no feature ${id}`)
+  return found
 }
 
 /** The body POST /api/preset receives. */
