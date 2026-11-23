@@ -1,0 +1,227 @@
+# Reference profile: the local marketplace of a provider, on top of provider.yaml.
+#
+# Adds the provider's own marketplace portal (the Business API Ecosystem, BAE), run in its
+# connector, where the provider publishes its offers and consumers order them, with the MongoDB it
+# needs. Users log in to the portal by presenting a Verifiable Credential to the provider's
+# verifier. It is not the Central Marketplace a data space may run for all its participants, which
+# its operator sets up: see doc/deployment-integration/roles/operator/README.md.
+#
+# Install it together with provider.yaml, which it extends:
+#
+#   helm install provider oci://quay.io/fiware/helm-charts/data-space-connector \
+#     --version <chart-version> --namespace provider --create-namespace \
+#     -f provider.yaml -f provider-marketplace.yaml
+#
+# Helm replaces lists instead of merging them: the lists below (the verifier's services, the
+# registered issuers) repeat those of provider.yaml with the marketplace's entries added. Keep
+# both files in step when you change one of them. More detail in
+# doc/deployment-integration/roles/provider/LOCAL_MARKETPLACE.md.
+
+keycloak:
+  realm:
+    # The credential users log in to the portal with: their e-mail, names and their marketplace
+    # roles (seller, customer, admin) at this provider. Added to the UserCredential of provider.yaml.
+    verifiableCredentials:
+      legal-person-credential:
+        attributes:
+          format: dc+sd-jwt
+          verifiable_credential_type: LegalPersonCredential
+          credential_signing_alg: ES256
+          credential_build_config.token_jws_type: dc+sd-jwt
+          credential_build_config.sd_jwt.visible_claims: iss,iat,nbf,exp,cnf,vct,status,roles,email
+        protocolMappers:
+          - name: lpc-email-mapper
+            protocol: oid4vc
+            protocolMapper: oid4vc-user-attribute-mapper
+            config:
+              claim.name: email
+              userAttribute: email
+          - name: lpc-firstName-mapper
+            protocol: oid4vc
+            protocolMapper: oid4vc-user-attribute-mapper
+            config:
+              claim.name: firstName
+              userAttribute: firstName
+          - name: lpc-familyName-mapper
+            protocol: oid4vc
+            protocolMapper: oid4vc-user-attribute-mapper
+            config:
+              claim.name: familyName
+              userAttribute: lastName
+          - name: lpc-roles-mapper
+            protocol: oid4vc
+            protocolMapper: oid4vc-target-role-mapper
+            config:
+              claim.name: roles
+              clientId: <did>
+    # the roles of provider.yaml, plus the marketplace's: seller publishes offers, customer
+    # orders them
+    clientRoles: |
+      "<did>": [
+        {
+          "name": "REPRESENTATIVE",
+          "description": "Acts on behalf of the provider",
+          "clientRole": true
+        },
+        {
+          "name": "seller",
+          "description": "Publishes offers in the marketplace",
+          "clientRole": true
+        },
+        {
+          "name": "customer",
+          "description": "Orders offers in the marketplace",
+          "clientRole": true
+        },
+        {
+          "name": "admin",
+          "description": "Administers the marketplace",
+          "clientRole": true
+        }
+      ]
+
+decentralizedIam:
+  vcAuthentication:
+    vcverifier:
+      registration:
+        services:
+          # the two services of provider.yaml ...
+          - id: data-service
+            defaultOidcScope: default
+            authorizationType: DEEPLINK
+            oidcScopes:
+              default:
+                credentials:
+                  - type: UserCredential
+                    trustedParticipantsLists:
+                      - <tir-url>
+                    trustedIssuersLists:
+                      - http://trusted-issuers-list:8080
+          - id: tmf-api
+            defaultOidcScope: default
+            authorizationType: DEEPLINK
+            oidcScopes:
+              default:
+                credentials:
+                  - type: UserCredential
+                    trustedParticipantsLists:
+                      - <tir-url>
+                    trustedIssuersLists:
+                      - http://trusted-issuers-list:8080
+          # ... and the marketplace's login: the portal is an OpenID Connect client of the verifier,
+          # with the provider's DID as client id
+          - id: <did>
+            defaultOidcScope: openid learcredential
+            authorizationType: FRONTEND_V2
+            oidcScopes:
+              openid learcredential:
+                credentials:
+                  - type: LegalPersonCredential
+                    trustedParticipantsLists:
+                      - <tir-url>
+                    trustedIssuersLists:
+                      - http://trusted-issuers-list:8080
+                    # the portal builds the user's profile from the credential
+                    jwtInclusion:
+                      enabled: true
+                      fullInclusion: true
+                dcql:
+                  credentials:
+                    - id: legal-person-query
+                      format: dc+sd-jwt
+                      multiple: false
+                      claims:
+                        - id: roles-claim
+                          path: [roles]
+                      meta:
+                        vct_values: [LegalPersonCredential]
+
+# the issuers of provider.yaml, plus the provider itself and the consumer for the marketplace
+# login credential
+registration:
+  issuer:
+    - did: <consumer-did>
+      credentialTypes:
+        - UserCredential
+        - LegalPersonCredential
+    - did: <did>
+      credentialTypes:
+        - LegalPersonCredential
+
+contract-management:
+  organization:
+    provider:
+      # the portal records the provider of an offer with the role "seller"
+      role: seller
+
+# MongoDB for the portal, run by the MongoDB community operator (installed once per cluster).
+# The passwords of its users come from Secrets created beforehand, see README.md.
+managedMongo:
+  enabled: true
+  spec:
+    version: "8.0.12"
+    # storage: the chart's defaults, on the cluster's default StorageClass. To choose the class
+    # or the sizes, see LOCAL_MARKETPLACE.md.
+
+marketplace:
+  enabled: true
+  # the MongoDB passwords are in Secrets created beforehand, not generated by the chart
+  generatePasswords: false
+  externalUrl: https://<marketplace-domain>
+  # login through the verifier's OpenID Connect discovery, not SIOP
+  siop:
+    enabled: false
+  oauth:
+    provider: oidc-discover
+    oidc: true
+    server: https://<verifier-domain>
+    callbackPath: /auth/oidc-discover/callback
+  # the TM Forum APIs, all served by tm-forum-api-svc
+  tmForum:
+    catalog: {host: tm-forum-api-svc, port: 8080, path: /tmf-api/productCatalogManagement/v4}
+    inventory: {host: tm-forum-api-svc, port: 8080, path: /tmf-api/productInventory/v4}
+    ordering: {host: tm-forum-api-svc, port: 8080, path: /tmf-api/productOrderingManagement/v4}
+    billing: {host: tm-forum-api-svc, port: 8080, path: /tmf-api/accountManagement/v4}
+    usage: {host: tm-forum-api-svc, port: 8080, path: /tmf-api/usageManagement/v4}
+    party: {host: tm-forum-api-svc, port: 8080, path: /tmf-api/party/v4}
+    customer: {host: tm-forum-api-svc, port: 8080, path: /tmf-api/customerManagement/v4}
+    resources: {host: tm-forum-api-svc, port: 8080, path: /tmf-api/resourceCatalog/v4}
+    services: {host: tm-forum-api-svc, port: 8080, path: /tmf-api/serviceCatalogManagement/v4}
+    resourceInventory: {host: tm-forum-api-svc, port: 8080, path: /tmf-api/resourceInventoryManagement/v4}
+    customerBill: {host: tm-forum-api-svc, port: 8080, path: /tmf-api/customerBillManagement/v4}
+  bizEcosystemChargingBackend:
+    loglevel: info
+  bizEcosystemLogicProxy:
+    statefulset:
+      image:
+        # 11.22.0 or later: earlier versions do not build the user's profile from the credential
+        tag: 11.24.0
+    purchaseEnabled: true
+    dataSpaceEnabled: true
+    # replaces the chart's list, which only turns tracing off
+    additionalEnvVars:
+      - name: OTEL_SDK_DISABLED
+        value: "true"
+      - name: BAE_LP_OAUTH2_CLIENT_ID
+        value: <did>
+      # the verifier does not check it
+      - name: BAE_LP_OAUTH2_CLIENT_SECRET
+        value: unused
+      - name: BAE_LP_OIDC_DISCOVERY_URI
+        value: https://<verifier-domain>/services/<did>/.well-known/openid-configuration
+      - name: BAE_LP_OIDC_SCOPES
+        value: openid learcredential
+      - name: BAE_LP_OAUTH2_NONCE
+        value: "true"
+    ingress:
+      enabled: true
+      className: <ingress-class>
+      annotations:
+        cert-manager.io/cluster-issuer: <cluster-issuer>
+      hosts:
+        - host: <marketplace-domain>
+          paths: ["/"]
+      tls:
+        - secretName: marketplace-tls
+          hosts:
+            - <marketplace-domain>

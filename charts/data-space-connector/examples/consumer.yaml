@@ -1,0 +1,265 @@
+# Reference profile: a consumer of the data space.
+#
+# A consumer only issues Verifiable Credentials to its users: a did:web identity (did-helper)
+# and Keycloak as the credential issuer, with its database. It offers no services, so the
+# verifier, the trusted issuers list, the policy components, the gateway and the data
+# components are all off.
+#
+# Before installing, read README.md in this directory: the prerequisites, the Secrets to create
+# and the placeholders to replace.
+#
+#   helm install consumer oci://quay.io/fiware/helm-charts/data-space-connector \
+#     --version <chart-version> --namespace consumer --create-namespace -f consumer.yaml
+
+# --- Identity: did:web, served by did-helper -------------------------------------------------
+
+did:
+  enabled: true
+  config:
+    server:
+      # did-helper also publishes <hostUrl>/.well-known/tls.crt, the certificate of the key
+      hostUrl: https://<did-domain>
+      certPath: /certs/tls.crt
+  volumes:
+    - name: certs
+      secret:
+        # the DID's key: the certificate cert-manager issues for the ingress below
+        secretName: did-tls
+        items:
+          - key: tls.crt
+            path: tls.crt
+  volumeMounts:
+    - name: certs
+      mountPath: /certs
+  # with certPath did-helper writes nothing, so it runs on a read-only root filesystem
+  securityContext:
+    readOnlyRootFilesystem: true
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop: ["ALL"]
+  ingress:
+    enabled: true
+    className: <ingress-class>
+    annotations:
+      cert-manager.io/cluster-issuer: <cluster-issuer>
+      cert-manager.io/private-key-algorithm: ECDSA
+      # the Secret also holds the DID's key: a renewal must keep it, or the DID changes and every
+      # credential issued with the old key stops verifying
+      cert-manager.io/private-key-rotation-policy: Never
+    hosts:
+      - host: <did-domain>
+        paths:
+          - path: /
+            pathType: ImplementationSpecific
+    tls:
+      - secretName: did-tls
+        hosts:
+          - <did-domain>
+
+# --- Credential issuer: Keycloak ---------------------------------------------------------------
+
+keycloak:
+  enabled: true
+  keycloak:
+    # the public URL, so that Keycloak does not derive it from each request
+    hostname: https://<keycloak-domain>
+    hostnameStrict: true
+  # its own database user, created by the Postgres operator (see managedPostgres below)
+  database:
+    username: keycloak
+    existingSecret: keycloak.postgres.credentials.postgresql.acid.zalan.do
+  ingress:
+    enabled: true
+    className: <ingress-class>
+    annotations:
+      cert-manager.io/cluster-issuer: <cluster-issuer>
+      cert-manager.io/private-key-algorithm: ECDSA
+    hosts:
+      - host: <keycloak-domain>
+        paths:
+          # only what wallets need: the realm's endpoints and the static resources. The admin
+          # console and the master realm stay inside the cluster (kubectl port-forward).
+          - path: /realms/<realm>
+            pathType: Prefix
+          - path: /resources
+            pathType: Prefix
+    tls:
+      - secretName: keycloak-tls
+        hosts:
+          - <keycloak-domain>
+  # Keycloak signs the credentials with the DID's key: this init container turns the key and
+  # certificate of the DID's Secret into the PKCS12 keystore the realm reads
+  extraInitContainers:
+    - name: prepare-keystore
+      image: alpine/openssl:3.5.5
+      command: ["/bin/sh", "-c"]
+      args:
+        - |
+          # the CA of the certificate goes into the keystore too, when the Secret has it (a
+          # private CA); a public one, such as Let's Encrypt, leaves ca.crt out or empty
+          ca=""
+          if [ -s /certs-did/ca.crt ]; then ca="-certfile /certs-did/ca.crt"; fi
+          openssl pkcs12 -export \
+            -in /certs-did/tls.crt \
+            -inkey /certs-did/tls.key \
+            $ca \
+            -out /did-material/cert.pfx \
+            -name "didPrivateKey" \
+            -passout env:STORE_PASS
+          chmod 644 /did-material/cert.pfx
+      env:
+        - name: STORE_PASS
+          valueFrom:
+            secretKeyRef:
+              name: keystore-password
+              key: password
+      volumeMounts:
+        - name: did-material
+          mountPath: /did-material
+        - name: did-key
+          mountPath: /certs-did
+          readOnly: true
+  extraVolumeMounts:
+    # Keycloak only reads realm keystores from /opt/keycloak/data/<realm name>
+    - name: did-material
+      mountPath: /opt/keycloak/data/<realm>
+    - name: realms
+      mountPath: /opt/keycloak/data/import
+  extraVolumes:
+    - name: did-material
+      emptyDir: {}
+    # the realm the chart renders, in the ConfigMap <realm name>-realm
+    - name: realms
+      configMap:
+        name: <realm>-realm
+    - name: did-key
+      secret:
+        secretName: did-tls
+  # replaces the chart's list: keep KC_HEAP_SIZE
+  extraEnvVars:
+    - name: KC_HEAP_SIZE
+      value: "1024m"
+    - name: STORE_PASS
+      valueFrom:
+        secretKeyRef:
+          name: keystore-password
+          key: password
+  issuerDid: <did>
+  signingKey:
+    storePath: /opt/keycloak/data/<realm>/cert.pfx
+    storePassword: "${STORE_PASS}"
+    keyAlias: didPrivateKey
+    keyPassword: "${STORE_PASS}"
+    did: <did>
+    keyAlgorithm: ES256
+  realm:
+    name: <realm>
+    frontendUrl: https://<keycloak-domain>
+    import: true
+    # One credential type: UserCredential, carrying the user's name, e-mail and the roles the
+    # user holds at the provider below. Add one entry per credential type your data space uses.
+    verifiableCredentials:
+      user-credential:
+        attributes:
+          format: jwt_vc_json
+          verifiable_credential_type: UserCredential
+          credential_signing_alg: ES256
+          credential_build_config.token_jws_type: JWT
+        protocolMappers:
+          - name: context-mapper
+            protocol: oid4vc
+            protocolMapper: oid4vc-context-mapper
+            config:
+              context: https://www.w3.org/2018/credentials/v1
+          - name: email-mapper
+            protocol: oid4vc
+            protocolMapper: oid4vc-user-attribute-mapper
+            config:
+              claim.name: email
+              userAttribute: email
+          - name: firstName-mapper
+            protocol: oid4vc
+            protocolMapper: oid4vc-user-attribute-mapper
+            config:
+              claim.name: firstName
+              userAttribute: firstName
+          - name: lastName-mapper
+            protocol: oid4vc
+            protocolMapper: oid4vc-user-attribute-mapper
+            config:
+              claim.name: lastName
+              userAttribute: lastName
+          # the roles of the user at the provider, read from the client named after its DID
+          - name: provider-roles-mapper
+            protocol: oid4vc
+            protocolMapper: oid4vc-target-role-mapper
+            config:
+              claim.name: roles
+              clientId: <provider-did>
+          - name: subject-id-mapper
+            protocol: oid4vc
+            protocolMapper: oid4vc-subject-id-mapper
+            config:
+              userAttribute: email
+              claim.name: id
+    # Roles a user can hold at the provider. Their names have to match the provider's access
+    # policies. Users are not part of the values: create them in the realm, or federate it.
+    clientRoles: |
+      "<provider-did>": [
+        {
+          "name": "READER",
+          "description": "Is allowed to read the provider's data",
+          "clientRole": true
+        }
+      ]
+    # the client the roles above belong to, named after the DID. It only holds roles: no login
+    # flow is enabled on it.
+    clients: |
+      {
+        "clientId": "<provider-did>",
+        "description": "Roles of the users at the provider",
+        "enabled": true,
+        "protocol": "openid-connect",
+        "publicClient": false,
+        "standardFlowEnabled": false,
+        "implicitFlowEnabled": false,
+        "directAccessGrantsEnabled": false,
+        "serviceAccountsEnabled": false
+      }
+
+# --- Database --------------------------------------------------------------------------------
+
+decentralizedIam:
+  enabled: true
+  vcAuthentication:
+    # the Postgres operator is installed once per cluster, not by each release
+    postgres-operator:
+      enabled: false
+    # Keycloak's database. The operator creates its user and the Secret with the password. (The
+    # chart also creates the databases of the components a consumer does not run; they stay empty.)
+    managedPostgres:
+      enabled: true
+      config:
+        volume:
+          size: 5Gi
+          # storageClass: <storage-class>
+    vcverifier:
+      enabled: false
+    credentials-config-service:
+      enabled: false
+    trusted-issuers-list:
+      enabled: false
+  odrlAuthorization:
+    odrl-pap:
+      enabled: false
+    apisix:
+      enabled: false
+
+# --- Not used by a consumer ------------------------------------------------------------------
+
+scorpio:
+  enabled: false
+tm-forum-api:
+  enabled: false
+contract-management:
+  enabled: false
