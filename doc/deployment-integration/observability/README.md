@@ -672,7 +672,7 @@ an OpenTelemetry SDK or agent:
 | **Scorpio** | Quarkus (Java) | Image does not include the `quarkus-opentelemetry` extension; `QUARKUS_OTEL_ENABLED=true` is silently ignored. |
 | **tm-forum-api** | Micronaut (Java) | No OTEL SDK or Java agent present; `OTEL_SDK_DISABLED=false` has no effect. |
 | **contract-management** | Micronaut (Java) | Same as tm-forum-api. |
-| **marketplace** (charging backend) | Python | No OTEL SDK bundled. The charging backend runs Python 3.9, supported by the default agent `0.62b1`. Annotate `marketplace.bizEcosystemChargingBackend.deployment.additionalAnnotations`. |
+| **marketplace** (charging backend) | Python | No OTEL SDK bundled. Runs Python 3.9, supported by the default agent `0.61b0`. Annotate `marketplace.bizEcosystemChargingBackend.deployment.additionalAnnotations`, and set `DJANGO_SETTINGS_MODULE=settings` and `PYTHONPATH=/opt/business-ecosystem-charging-backend/src` in its `extraEnvVars`: the agent's Django instrumentation loads the settings before the application does. |
 | **marketplace** (logic proxy) | Node.js | No OTEL SDK bundled. |
 
 The OpenTelemetry Operator solves this by injecting the appropriate
@@ -779,7 +779,8 @@ contract-management). See `k3s/monitoring.yaml` for a working example.
 |---|---|---|
 | `tracing.autoInstrumentation.enabled` | `false` | Master gate for the `Instrumentation` CR. |
 | `tracing.autoInstrumentation.java.image` | `ghcr.io/.../autoinstrumentation-java:2.11.0` | Java agent image injected by the operator. |
-| `tracing.autoInstrumentation.python.image` | `ghcr.io/.../autoinstrumentation-python:0.62b1` | Python agent image injected by the operator. It runs in the application's Python and has to support its version: 0.62b1 is the last one for Python 3.9. |
+| `tracing.autoInstrumentation.python.image` | `ghcr.io/.../autoinstrumentation-python:0.61b0` | Python agent image injected by the operator. It runs in the application's Python and its bundled libraries have to load on it: 0.61b0 is the last one that works on Python 3.9. |
+| `tracing.autoInstrumentation.python.endpoint` | `http://<release>-opentelemetry-collector:4318` | OTLP/HTTP endpoint of the Python agent, which ships no gRPC exporter. Set it when the workloads export to another collector. |
 | `tracing.autoInstrumentation.nodejs.image` | `ghcr.io/.../autoinstrumentation-nodejs:0.57.0` | Node.js agent image injected by the operator. |
 | `opentelemetry-operator.enabled` | `false` | Deploy the OTel Operator subchart. |
 | `opentelemetry-operator.manager.resources` | 100m/128Mi req, 200m/256Mi lim | Operator manager pod resources. |
@@ -804,7 +805,7 @@ an OpenTelemetry SDK or agent:
 | **Scorpio** | Quarkus (Java) | Image does not include the `quarkus-opentelemetry` extension; `QUARKUS_OTEL_ENABLED=true` is silently ignored. |
 | **tm-forum-api** | Micronaut (Java) | No OTEL SDK or Java agent present; `OTEL_SDK_DISABLED=false` has no effect. |
 | **contract-management** | Micronaut (Java) | Same as tm-forum-api. |
-| **marketplace** (charging backend) | Python | No OTEL SDK bundled. The charging backend runs Python 3.9, supported by the default agent `0.62b1`. Annotate `marketplace.bizEcosystemChargingBackend.deployment.additionalAnnotations`. |
+| **marketplace** (charging backend) | Python | No OTEL SDK bundled. Runs Python 3.9, supported by the default agent `0.61b0`. Annotate `marketplace.bizEcosystemChargingBackend.deployment.additionalAnnotations`, and set `DJANGO_SETTINGS_MODULE=settings` and `PYTHONPATH=/opt/business-ecosystem-charging-backend/src` in its `extraEnvVars`: the agent's Django instrumentation loads the settings before the application does. |
 | **marketplace** (logic proxy) | Node.js | No OTEL SDK bundled. |
 
 The OpenTelemetry Operator solves this by injecting the appropriate
@@ -911,7 +912,8 @@ contract-management). See `k3s/monitoring.yaml` for a working example.
 |---|---|---|
 | `tracing.autoInstrumentation.enabled` | `false` | Master gate for the `Instrumentation` CR. |
 | `tracing.autoInstrumentation.java.image` | `ghcr.io/.../autoinstrumentation-java:2.11.0` | Java agent image injected by the operator. |
-| `tracing.autoInstrumentation.python.image` | `ghcr.io/.../autoinstrumentation-python:0.62b1` | Python agent image injected by the operator. It runs in the application's Python and has to support its version: 0.62b1 is the last one for Python 3.9. |
+| `tracing.autoInstrumentation.python.image` | `ghcr.io/.../autoinstrumentation-python:0.61b0` | Python agent image injected by the operator. It runs in the application's Python and its bundled libraries have to load on it: 0.61b0 is the last one that works on Python 3.9. |
+| `tracing.autoInstrumentation.python.endpoint` | `http://<release>-opentelemetry-collector:4318` | OTLP/HTTP endpoint of the Python agent, which ships no gRPC exporter. Set it when the workloads export to another collector. |
 | `tracing.autoInstrumentation.nodejs.image` | `ghcr.io/.../autoinstrumentation-nodejs:0.57.0` | Node.js agent image injected by the operator. |
 | `opentelemetry-operator.enabled` | `false` | Deploy the OTel Operator subchart. |
 | `opentelemetry-operator.manager.resources` | 100m/128Mi req, 200m/256Mi lim | Operator manager pod resources. |

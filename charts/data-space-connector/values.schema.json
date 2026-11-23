@@ -2518,9 +2518,15 @@
               "additionalProperties": false,
               "description": "Python auto-instrumentation agent settings.",
               "properties": {
+                "endpoint": {
+                  "default": "",
+                  "description": "OTLP/HTTP endpoint the Python agent exports to. The Operator's Python agent ships no\ngRPC exporter, so it always uses `http/protobuf`; the default targets port 4318 of the\nbundled collector (`http://\u003crelease\u003e-opentelemetry-collector:4318`). Set it when\n`tracing.exporter.otlp.endpoint` points to another collector.",
+                  "title": "endpoint",
+                  "type": "string"
+                },
                 "image": {
-                  "default": "ghcr.io/open-telemetry/opentelemetry-operator/autoinstrumentation-python:0.62b1",
-                  "description": "container image for the Python auto-instrumentation agent init\ncontainer injected by the Operator. The agent runs in the application's own Python, so\nit has to support its version: 0.62b1 is the last one for Python 3.9 (0.63b0 and later\nrequire 3.10). The marketplace charging backend runs Python 3.9.",
+                  "default": "ghcr.io/open-telemetry/opentelemetry-operator/autoinstrumentation-python:0.61b0",
+                  "description": "container image for the Python auto-instrumentation agent init\ncontainer injected by the Operator. The agent runs in the application's own Python, so\nit has to work with its version: the marketplace charging backend runs Python 3.9, and\n0.61b0 is the last image whose bundled libraries still load on it (0.62b1 ships a\nurllib3 that needs Python 3.10).",
                   "title": "image",
                   "type": "string"
                 }

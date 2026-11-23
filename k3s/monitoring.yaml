@@ -249,6 +249,16 @@ marketplace:
     deployment:
       additionalAnnotations:
         instrumentation.opentelemetry.io/inject-python: "true"
+    # The agent's Django instrumentation loads the settings before the application does, so it
+    # needs their module and where to find it. A list replaces the one of provider.yaml, so it
+    # repeats provider.yaml's variables.
+    extraEnvVars:
+      - name: BAE_CB_CUSTOMER_BILL
+        value: "http://tm-forum-api-svc:8080/tmf-api/customerBillManagement/v4"
+      - name: DJANGO_SETTINGS_MODULE
+        value: settings
+      - name: PYTHONPATH
+        value: /opt/business-ecosystem-charging-backend/src
   bizEcosystemLogicProxy:
     statefulset:
       additionalAnnotations:
