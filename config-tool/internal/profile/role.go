@@ -3,6 +3,7 @@ package profile
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 
@@ -19,7 +20,7 @@ const (
 // FeatureSource says who decided a feature's state (ADR 0015 §7).
 type FeatureSource string
 
-// Feature sources; US-2.3 re-applies a preset only to features of SourcePreset.
+// Feature sources; a role change re-applies the preset only to features of SourcePreset (US-2.3).
 const (
 	SourcePreset FeatureSource = "preset"
 	SourceLoaded FeatureSource = "loaded"
@@ -41,7 +42,14 @@ type ChartSwitch struct {
 	ToChart     string `json:"toChart"`
 	// DroppedChoices are user toggles of the old chart, which the new chart cannot carry; never nil.
 	DroppedChoices []string `json:"droppedChoices"`
+	// CarriedAnswers are the answer ids kept because they belong to a carriedStages stage; sorted, never nil.
+	CarriedAnswers []string `json:"carriedAnswers"`
+	// DroppedAnswers are the other answer ids, including those no rule of the old bundle places; sorted, never nil.
+	DroppedAnswers []string `json:"droppedAnswers"`
 }
+
+// carriedStages are the stages whose answers survive a chart switch: they hold no chart-specific values.
+var carriedStages = []model.Stage{model.StageTarget, model.StageFoundations}
 
 // Errors of ApplyPreset and SetFeature; the API maps them to 422.
 var (
@@ -60,6 +68,7 @@ const msgOlderRevision = "the profile was saved with revision %d of bundle %s@%s
 
 // ApplyPreset sets role and its preset features; toggles from the loaded values file win over the preset,
 // and user toggles win over both (ADR 0018). It expects a normalised Model, never modifies p's maps and returns p unchanged with any error.
+// Answers are kept within a chart; a chart switch keeps only those of carriedStages (ADR 0019).
 func (p Profile) ApplyPreset(bundles []model.Bundle, role string, loaded map[string]bool) (Profile, *ChartSwitch, error) {
 	cat, err := CatalogueBundle(bundles, p.Model, p.Catalogue)
 	if err != nil {
@@ -71,6 +80,7 @@ func (p Profile) ApplyPreset(bundles []model.Bundle, role string, loaded map[str
 	}
 
 	out := p
+	out.Answers = maps.Clone(p.Answers)
 	var sw *ChartSwitch
 	if r.Chart != p.Target.Chart {
 		if p.Source != nil {
@@ -81,6 +91,8 @@ func (p Profile) ApplyPreset(bundles []model.Bundle, role string, loaded map[str
 			return p, nil, fmt.Errorf("chart %q of role %s is not shipped", r.Chart, role)
 		}
 		sw = &ChartSwitch{FromChart: p.Target.Chart, FromVersion: p.Target.ChartVersion, ToChart: r.Chart, DroppedChoices: []string{}}
+		sw.CarriedAnswers, sw.DroppedAnswers = splitAnswers(bundles, p.Model, p.Answers)
+		maps.DeleteFunc(out.Answers, func(id string, _ any) bool { return slices.Contains(sw.DroppedAnswers, id) })
 		out.Target.Chart, out.Target.ChartVersion = r.Chart, ""
 		out.Model = ModelRef{Chart: r.Chart, Version: bundles[i].Version, Revision: bundles[i].Revision}
 		if cat, err = CatalogueBundle(bundles, out.Model, p.Catalogue); err != nil {
@@ -131,6 +143,25 @@ func (p Profile) ApplyPreset(bundles []model.Bundle, role string, loaded map[str
 		out.Catalogue = &ModelRef{Chart: cat.Chart, Version: cat.Version, Revision: cat.Revision}
 	}
 	return out, sw, nil
+}
+
+// splitAnswers sorts answer ids into those a recognize rule of model m places in carriedStages and the rest.
+func splitAnswers(bundles []model.Bundle, m ModelRef, answers map[string]any) (carried, dropped []string) {
+	stages := map[string]model.Stage{}
+	if b := findBundle(bundles, m.Chart, m.Version); b != nil {
+		for _, r := range b.Rules() {
+			stages[r.Answer] = r.Stage
+		}
+	}
+	carried, dropped = []string{}, []string{}
+	for _, id := range sortedKeys(answers) {
+		if s, ok := stages[id]; ok && slices.Contains(carriedStages, s) {
+			carried = append(carried, id)
+		} else {
+			dropped = append(dropped, id)
+		}
+	}
+	return carried, dropped
 }
 
 // CatalogueBundle is the bundle a profile reads roles from (ADR 0015 §7): the model's bundle when it

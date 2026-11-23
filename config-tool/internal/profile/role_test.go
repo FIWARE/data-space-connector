@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"testing/fstest"
 
 	"github.com/FIWARE/data-space-connector/config-tool/internal/model"
 	bundles "github.com/FIWARE/data-space-connector/config-tool/model"
@@ -112,7 +113,7 @@ func TestApplyPresetChartSwitch(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := (ChartSwitch{FromChart: dscChart, FromVersion: latest, ToChart: taChart, DroppedChoices: []string{}}); sw == nil || !reflect.DeepEqual(*sw, want) {
+	if want := (ChartSwitch{FromChart: dscChart, FromVersion: latest, ToChart: taChart, DroppedChoices: []string{}, CarriedAnswers: []string{}, DroppedAnswers: []string{}}); sw == nil || !reflect.DeepEqual(*sw, want) {
 		t.Errorf("switch = %+v, want %+v", sw, want)
 	}
 	if op.Target.Chart != taChart || op.Target.ChartVersion != "" {
@@ -129,7 +130,7 @@ func TestApplyPresetChartSwitch(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := (ChartSwitch{FromChart: taChart, ToChart: dscChart, DroppedChoices: []string{}}); sw == nil || !reflect.DeepEqual(*sw, want) {
+	if want := (ChartSwitch{FromChart: taChart, ToChart: dscChart, DroppedChoices: []string{}, CarriedAnswers: []string{}, DroppedAnswers: []string{}}); sw == nil || !reflect.DeepEqual(*sw, want) {
 		t.Errorf("switch back = %+v, want %+v", sw, want)
 	}
 	if back.Target.Chart != dscChart || back.Target.ChartVersion != "" || back.Catalogue != nil {
@@ -260,17 +261,25 @@ func TestApplyPresetDoesNotMutateInput(t *testing.T) {
 	p := dscProfile()
 	p.Features = map[string]FeatureState{"dsp.edc": {Enabled: true, Source: SourceUser}}
 	p.Catalogue = &ModelRef{Chart: dscChart, Version: latest, Revision: shippedDSCRevision}
+	p.Answers = map[string]any{answerConfig: true}
 	loaded := map[string]bool{"dsp.rainbow": true}
-	wantFeatures, wantLoaded, wantCatalogue := maps.Clone(p.Features), maps.Clone(loaded), *p.Catalogue
+	wantFeatures, wantLoaded, wantCatalogue, wantAnswers := maps.Clone(p.Features), maps.Clone(loaded), *p.Catalogue, maps.Clone(p.Answers)
 
 	if _, _, err := p.ApplyPreset(shipped, model.RoleOperator, loaded); err == nil {
 		t.Fatal("operator with a dsp toggle loaded: want an error")
 	}
+	for _, role := range []string{model.RoleProvider, model.RoleOperator} {
+		got, _, err := p.ApplyPreset(shipped, role, map[string]bool{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		got.Answers["written.after"] = 1
+	}
 	if _, _, err := p.ApplyPreset(shipped, model.RoleProvider, loaded); err != nil {
 		t.Fatal(err)
 	}
-	if !maps.Equal(p.Features, wantFeatures) || !maps.Equal(loaded, wantLoaded) || *p.Catalogue != wantCatalogue {
-		t.Errorf("input changed: features %v, loaded %v, catalogue %+v", p.Features, loaded, *p.Catalogue)
+	if !maps.Equal(p.Features, wantFeatures) || !maps.Equal(loaded, wantLoaded) || *p.Catalogue != wantCatalogue || !maps.Equal(p.Answers, wantAnswers) {
+		t.Errorf("input changed: features %v, loaded %v, catalogue %+v, answers %v", p.Features, loaded, *p.Catalogue, p.Answers)
 	}
 }
 
@@ -424,5 +433,196 @@ func TestValidateCatalogueAgreesWithCatalogueBundle(t *testing.T) {
 				t.Errorf("Validate fields = %v, want %v (%v)", got, tc.want, p.Validate(b))
 			}
 		})
+	}
+}
+
+// Answer ids of the fixture rules answerBundles adds; answerUnknown has no rule in any bundle.
+const (
+	answerTarget      = "target.releaseLabel"
+	answerFoundations = "foundations.organization"
+	answerConfig      = "config.elsi"
+	answerUnknown     = "no.rule"
+)
+
+// Recognize rules answerBundles adds, because the shipped bundles have none of stage target or foundations.
+const (
+	dscAnswerRules = `  - {path: fullnameOverride, answer: target.releaseLabel, stage: target, kind: value}
+  - {path: nameOverride, answer: foundations.organization, stage: foundations, kind: value}
+  - {path: elsi.enabled, answer: config.elsi, stage: configuration, kind: toggle}
+`
+	taAnswerRules = `  - {path: managedPostgres.teamId, answer: foundations.organization, stage: foundations, kind: value}
+`
+	recognizeKey = "recognize:\n"
+)
+
+// answerBundles are the shipped bundles with recognize rules for answers of several stages added.
+func answerBundles(t *testing.T) []model.Bundle {
+	t.Helper()
+	read := func(name string) string {
+		b, err := bundles.FS.ReadFile(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(b)
+	}
+	dsc, ta := read(latest+"/bundle.yaml"), read(shippedTAVersion+"/bundle.yaml")
+	if !strings.Contains(dsc, recognizeKey) || strings.Contains(ta, recognizeKey) {
+		t.Fatal("shipped bundles changed shape: want recognize rules in the DSC bundle only")
+	}
+	fsys := fstest.MapFS{
+		latest + "/bundle.yaml":           {Data: []byte(strings.Replace(dsc, recognizeKey, recognizeKey+dscAnswerRules, 1))},
+		shippedTAVersion + "/bundle.yaml": {Data: []byte(ta + recognizeKey + taAnswerRules)},
+	}
+	b, err := model.Versions(fsys)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return b
+}
+
+// recommended are the ids role recommends in the latest bundle of chart.
+func recommended(t *testing.T, shipped []model.Bundle, chart, role string) map[string]bool {
+	t.Helper()
+	i := slices.IndexFunc(shipped, func(b model.Bundle) bool { return b.Chart == chart && b.Latest })
+	r := findRole(shipped[i], role)
+	if r == nil {
+		t.Fatalf("role %s is not in bundle %s", role, chart)
+	}
+	ids := map[string]bool{}
+	for id, o := range r.Features {
+		if o == model.OfferRecommended {
+			ids[id] = true
+		}
+	}
+	return ids
+}
+
+func enabledIDs(p Profile) map[string]bool {
+	ids := map[string]bool{}
+	for id, f := range p.Features {
+		if f.Enabled {
+			ids[id] = true
+		}
+	}
+	return ids
+}
+
+func TestApplyPresetConsumerToConsumerProviderGains(t *testing.T) {
+	shipped := shippedBundles(t)
+	consumer := preset(t, shipped, model.RoleConsumer, nil, nil)
+	both, _, err := consumer.ApplyPreset(shipped, model.RoleConsumerProvider, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := recommended(t, shipped, dscChart, model.RoleConsumerProvider)
+	maps.DeleteFunc(want, func(id string, _ bool) bool { return recommended(t, shipped, dscChart, model.RoleConsumer)[id] })
+	if len(want) == 0 {
+		t.Fatal("consumer-provider recommends nothing beyond consumer; the test proves nothing")
+	}
+	got := enabledIDs(both)
+	maps.DeleteFunc(got, func(id string, _ bool) bool { return enabledIDs(consumer)[id] })
+	if !maps.Equal(got, want) {
+		t.Errorf("gained %v, want %v", slices.Sorted(maps.Keys(got)), slices.Sorted(maps.Keys(want)))
+	}
+}
+
+func TestApplyPresetKeepsAnswersWithinChart(t *testing.T) {
+	shipped := shippedBundles(t)
+	answers := map[string]any{"data.scorpio.endpoint": "http://scorpio:9090", "access.policies.count": 3, "market.local.enabled": true}
+	tests := []struct {
+		name, from, to string
+		// wentOff is a feature on before and off after, proving answers outlive it; "" when none must.
+		wentOff string
+	}{
+		{name: "features stay on", from: model.RoleProvider, to: model.RoleConsumerProvider},
+		{name: "features go off", from: model.RoleProvider, to: model.RoleConsumer, wentOff: featScorpio},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			p := preset(t, shipped, tc.from, nil, nil)
+			p.Answers = maps.Clone(answers)
+			want, err := Marshal(Profile{Answers: p.Answers})
+			if err != nil {
+				t.Fatal(err)
+			}
+			got, sw, err := p.ApplyPreset(shipped, tc.to, nil)
+			if err != nil || sw != nil {
+				t.Fatalf("ApplyPreset = %+v, %v; want no switch and no error", sw, err)
+			}
+			if tc.wentOff != "" && (!p.Features[tc.wentOff].Enabled || got.Features[tc.wentOff].Enabled) {
+				t.Errorf("%s before %+v, after %+v; want on, then off", tc.wentOff, p.Features[tc.wentOff], got.Features[tc.wentOff])
+			}
+			after, err := Marshal(Profile{Answers: got.Answers})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !bytes.Equal(after, want) {
+				t.Errorf("answers =\n%s\nwant\n%s", after, want)
+			}
+		})
+	}
+}
+
+func TestApplyPresetKeepsHandTogglesBothWays(t *testing.T) {
+	shipped := shippedBundles(t)
+	if recommended(t, shipped, dscChart, model.RoleConsumerProvider)[featRainbow] || !recommended(t, shipped, dscChart, model.RoleConsumerProvider)[featIssuer] {
+		t.Fatalf("want %s not recommended and %s recommended by %s", featRainbow, featIssuer, model.RoleConsumerProvider)
+	}
+	want := map[string]FeatureState{featRainbow: userState(true), featIssuer: userState(false)}
+	p := preset(t, shipped, model.RoleConsumer, nil, map[string]bool{featRainbow: true, featIssuer: false})
+	for _, role := range []string{model.RoleConsumerProvider, model.RoleConsumer} {
+		var err error
+		if p, _, err = p.ApplyPreset(shipped, role, nil); err != nil {
+			t.Fatal(err)
+		}
+		for id, w := range want {
+			if f := p.Features[id]; f != w {
+				t.Errorf("after %s: %s = %+v, want %+v", role, id, f, w)
+			}
+		}
+	}
+}
+
+func TestApplyPresetChartSwitchAnswers(t *testing.T) {
+	b := answerBundles(t)
+	open := []OpenQuestion{{Field: TargetFieldPrefix + FieldChart}, {Field: TargetFieldPrefix + FieldChartVersion}, {Field: answerFoundations}}
+	p := preset(t, b, model.RoleConsumer, nil, nil)
+	p.Open = slices.Clone(open)
+	p.Answers = map[string]any{answerTarget: "dsc-a", answerFoundations: "Acme", answerConfig: true, answerUnknown: 1}
+
+	tests := []struct {
+		role, wantChart string
+		wantCarried     []string
+		wantDropped     []string
+	}{
+		{model.RoleOperator, taChart, []string{answerFoundations, answerTarget}, []string{answerConfig, answerUnknown}},
+		// The trust-anchor bundle places only answerFoundations, so answerTarget has no rule on the way back.
+		{model.RoleConsumer, dscChart, []string{answerFoundations}, []string{answerTarget}},
+	}
+	for _, tc := range tests {
+		before := p
+		got, sw, err := p.ApplyPreset(b, tc.role, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if sw == nil || !slices.Equal(sw.CarriedAnswers, tc.wantCarried) || !slices.Equal(sw.DroppedAnswers, tc.wantDropped) {
+			t.Fatalf("%s: switch = %+v, want carried %v, dropped %v", tc.role, sw, tc.wantCarried, tc.wantDropped)
+		}
+		wantAnswers := map[string]any{}
+		for _, id := range tc.wantCarried {
+			wantAnswers[id] = before.Answers[id]
+		}
+		if !maps.Equal(got.Answers, wantAnswers) {
+			t.Errorf("%s: answers = %v, want %v", tc.role, got.Answers, wantAnswers)
+		}
+		wantTarget := before.Target
+		wantTarget.Chart, wantTarget.ChartVersion = tc.wantChart, ""
+		if got.Target != wantTarget {
+			t.Errorf("%s: target = %+v, want %+v", tc.role, got.Target, wantTarget)
+		}
+		if !slices.Equal(got.Open, open) {
+			t.Errorf("%s: open = %v, want %v unchanged", tc.role, got.Open, open)
+		}
+		p = got
 	}
 }
