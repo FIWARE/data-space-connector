@@ -81,6 +81,10 @@ profile. The server owns `catalogue` on save, as it owns `model`.
 
 ### 7. Toggles from a loaded file win over the preset
 
+> Partly superseded by [ADR 0018](0018-config-tool-deliberate-choices.md): a loaded `true` on a
+> not-offered feature of the role's chart is kept as `source: loaded`, and `ErrPresetConflictsLoaded` is gone.
+> A loaded `true` on a feature of another chart is refused. User toggles beat loaded ones.
+
 `ApplyPreset` takes the toggles that the loaded file back-derived (`<featureId>.enabled` at stage
 `features`). The server reads them from the loaded report, so the client cannot send different ones.
 

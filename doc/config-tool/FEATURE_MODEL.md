@@ -129,7 +129,8 @@ A shared key is needed while any feature that lists it is enabled ([ADR 0017](..
 
 ## Role presets
 
-`R` recommended on, `o` available off, `–` not offered.
+`R` recommended on, `o` available off, `–` not offered (off, but the user may turn it on when the feature belongs to
+the role's chart, [ADR 0018](../adr/0018-config-tool-deliberate-choices.md)).
 
 | Feature | Consumer | Provider | Consumer + Provider | Operator | Custom |
 |---|---|---|---|---|---|

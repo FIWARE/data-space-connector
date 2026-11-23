@@ -190,7 +190,7 @@ target:
   chartVersion: 10.16.0
   environment: production
 role: provider      # see Roles
-features:           # excerpt: a real profile lists every offered feature; source is preset, loaded or user
+features:           # excerpt: every offered or turned-on feature; source is preset, loaded or user
   data.scorpio:
     enabled: true
     source: preset
@@ -253,8 +253,9 @@ A configuration without a role has one open question on Role.
 Stage 2 offers five presets ([ADR 0017](../doc/adr/0017-config-tool-role-presets.md)): **Consumer**,
 **Provider** and **Consumer + Provider** deploy `data-space-connector`, **Operator** deploys `trust-anchor`, and
 **Custom** deploys `data-space-connector` with nothing recommended. A role rates each catalogue feature:
-`recommended` (on), `available` (off, can be turned on) or `not-offered` (cannot be enabled, left out of the
-profile). A role offers only features of its own chart, so Custom does not offer the three trust-anchor features.
+`recommended` (on), `available` (off) or `not-offered` (off, left out of the profile unless the user or a loaded
+file turns it on, see [Features](#features-stage-5)). A role offers only features of its own chart, so Custom does
+not offer the three trust-anchor features.
 Each card shows a floor of memory and CPU from [Sizing](../doc/deployment-integration/roles/PREREQUISITES.md#sizing),
 and the chart version it was measured with. Custom has none, because its footprint depends on the selection.
 
@@ -273,13 +274,37 @@ latest `data-space-connector` release bundle that declares them.
   that were dropped, and Target asks for the version again instead of preselecting the latest. Picking another role
   switches back the same way. A switch is refused (422) while a values file is loaded, because the load was classified
   against the current chart. Start a new configuration instead. Changing the chart on Target clears the role.
-- **Toggles from a loaded values file win.** A feature the file switches keeps the file's value as
-  `source: loaded`, whatever the preset says. A role that does not offer a feature the file enables is refused (422),
-  naming the features. The server reads the toggles from its own load, never from the request.
+- **Toggles from a loaded values file win over the preset.** A feature the file switches keeps the file's value as
+  `source: loaded`, whatever the preset says, also when the role does not offer it. A file that enables a feature of
+  another chart is refused (422), naming the features. The server reads the toggles from its own load, never from the
+  request.
+- **User toggles win over both** and survive a role switch within the chart. A chart switch drops them, and the
+  notice names them (`chartSwitch.droppedChoices`).
 
-The profile records `role`, `features` (each offered feature with `enabled` and `source`) and, when the roles came
+The profile records `role`, `features` (each offered or turned-on feature with `enabled` and `source`) and, when the roles came
 from another bundle than `model`, `catalogue`. The server sets `catalogue` on save, as it does `model`, and opening
 applies the same revision rules to it.
+
+## Features (Stage 5)
+
+Stage 5 lists every feature of the chart the role deploys, and only those
+([ADR 0018](../doc/adr/0018-config-tool-deliberate-choices.md)). Features of the other chart never appear, because
+their keys do not exist in the target chart. The list has three sections: *Recommended for <role>*, *Available* and
+*Not recommended for this role*. Each feature has a checkbox, and none is disabled.
+
+- A toggle is recorded as `source: user` and stays so, also on a role switch within the chart.
+- A feature whose state differs from the preset and did not come from it is a *deliberate choice*. It carries a
+  marker such as *recommended on for Provider — you turned it off*, and Review lists it under *Deliberate choices*.
+- Turning off a recommended feature asks first. The dialog names the feature's `consequence` (or its `summary`) and
+  links the role guide. Focus starts on *Keep it on*, Tab stays inside the dialog, and Escape keeps the feature on.
+  Every other toggle, including turning on a not-offered feature, applies at once.
+- Toggles are sent one at a time, each on top of the previous answer, so a quick second click is never lost.
+
+`POST /api/features` takes `profile`, `sourceSha256` and an optional `toggle: {feature, enabled}`, and returns the
+profile and `choices`: per feature `offer`, `preset`, `enabled`, `source` and `deliberate`. Without `toggle` it only
+reads the choices. No role, an unknown feature or a feature of another chart is 422. The core returns values only,
+and every sentence shown is UI copy or bundle data. A catalogue feature may set `consequence:` in the bundle, and
+`go test` requires it on every feature a shipped role recommends.
 
 ## Try it locally
 
