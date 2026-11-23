@@ -30,6 +30,10 @@ data:
         address: ":8090"
       websecure:
         address: ":443"
+        # TLS for every router of this entrypoint, so that an Ingress with a `tls` section is
+        # served over HTTPS without Traefik's router.tls annotation, as other controllers do
+        http:
+          tls: {}
       http:
         address: ":8080"
         http:
