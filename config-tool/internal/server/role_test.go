@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/url"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -112,12 +113,12 @@ func TestPresetEndpoint(t *testing.T) {
 			wantModel: dscLatest, wantScorpio: &profile.FeatureState{Enabled: true, Source: profile.SourcePreset}},
 		{name: "fresh configuration picks operator", profile: fresh, role: model.RoleOperator, want: http.StatusOK,
 			wantModel: taLatest, wantCatalogue: &dscLatest,
-			wantSwitch: &profile.ChartSwitch{FromChart: dscChart, ToChart: trustAnchorChart}},
+			wantSwitch: &profile.ChartSwitch{FromChart: dscChart, ToChart: trustAnchorChart, DroppedChoices: []string{}}},
 		{name: "operator drops the chosen version", profile: profile.Profile{Target: completeTarget()}, role: model.RoleOperator,
 			want: http.StatusOK, wantModel: taLatest, wantCatalogue: &dscLatest,
-			wantSwitch: &profile.ChartSwitch{FromChart: dscChart, FromVersion: latestChart, ToChart: trustAnchorChart}},
+			wantSwitch: &profile.ChartSwitch{FromChart: dscChart, FromVersion: latestChart, ToChart: trustAnchorChart, DroppedChoices: []string{}}},
 		{name: "operator back to provider", profile: operator, role: model.RoleProvider, want: http.StatusOK,
-			wantModel: dscLatest, wantSwitch: &profile.ChartSwitch{FromChart: trustAnchorChart, ToChart: dscChart},
+			wantModel: dscLatest, wantSwitch: &profile.ChartSwitch{FromChart: trustAnchorChart, ToChart: dscChart, DroppedChoices: []string{}},
 			wantScorpio: &profile.FeatureState{Enabled: true, Source: profile.SourcePreset}},
 		{name: "consumer does not offer scorpio", profile: profile.Profile{Target: completeTarget()}, role: model.RoleConsumer,
 			want: http.StatusOK, wantModel: dscLatest},
@@ -129,8 +130,9 @@ func TestPresetEndpoint(t *testing.T) {
 		{name: "loaded toggle wins over the preset", load: scorpioOff, profile: profile.Profile{Target: completeTarget()},
 			role: model.RoleProvider, want: http.StatusOK, wantModel: dscLatest,
 			wantScorpio: &profile.FeatureState{Enabled: false, Source: profile.SourceLoaded}},
-		{name: "loaded toggle the role does not offer", load: scorpioOn, profile: profile.Profile{Target: completeTarget()},
-			role: model.RoleConsumer, want: http.StatusUnprocessableEntity, wantErr: featureScorpio},
+		{name: "loaded toggle the role does not offer is kept", load: scorpioOn, profile: profile.Profile{Target: completeTarget()},
+			role: model.RoleConsumer, want: http.StatusOK, wantModel: dscLatest,
+			wantScorpio: &profile.FeatureState{Enabled: true, Source: profile.SourceLoaded}},
 		{name: "operator with a loaded source", load: scorpioOff, profile: profile.Profile{Target: completeTarget()},
 			role: model.RoleOperator, want: http.StatusUnprocessableEntity, wantErr: profile.ErrChartSwitchLoaded.Error()},
 		{name: "missing token", profile: fresh, role: model.RoleProvider, unauth: true, want: http.StatusUnauthorized},
@@ -171,7 +173,7 @@ func TestPresetEndpoint(t *testing.T) {
 			if c := p.Catalogue; (c == nil) != (tc.wantCatalogue == nil) || c != nil && *c != *tc.wantCatalogue {
 				t.Errorf("catalogue = %+v, want %+v", c, tc.wantCatalogue)
 			}
-			if sw := got.ChartSwitch; (sw == nil) != (tc.wantSwitch == nil) || sw != nil && *sw != *tc.wantSwitch {
+			if sw := got.ChartSwitch; (sw == nil) != (tc.wantSwitch == nil) || sw != nil && !reflect.DeepEqual(*sw, *tc.wantSwitch) {
 				t.Errorf("chartSwitch = %+v, want %+v", sw, tc.wantSwitch)
 			}
 			if tc.wantSwitch != nil && p.Target.ChartVersion != "" {

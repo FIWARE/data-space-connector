@@ -39,20 +39,27 @@ type ChartSwitch struct {
 	FromChart   string `json:"fromChart"`
 	FromVersion string `json:"fromVersion"`
 	ToChart     string `json:"toChart"`
+	// DroppedChoices are user toggles of the old chart, which the new chart cannot carry; never nil.
+	DroppedChoices []string `json:"droppedChoices"`
 }
 
-// Errors of ApplyPreset; the API maps them to 422.
+// Errors of ApplyPreset and SetFeature; the API maps them to 422.
 var (
-	ErrUnknownRole           = errors.New("unknown role")
-	ErrChartSwitchLoaded     = errors.New("the role deploys another chart than the loaded values file; start a new configuration to switch charts")
-	ErrPresetConflictsLoaded = errors.New("the loaded values file enables features the role does not offer")
+	ErrUnknownRole       = errors.New("unknown role")
+	ErrChartSwitchLoaded = errors.New("the role deploys another chart than the loaded values file; start a new configuration to switch charts")
+	// ErrNoRole means the profile has no role yet.
+	ErrNoRole = errors.New("no role is chosen yet")
+	// ErrUnknownFeature means the id is not a feature of the role catalogue.
+	ErrUnknownFeature = errors.New("unknown feature")
+	// ErrFeatureOfOtherChart means the feature sets values of another chart than the role deploys.
+	ErrFeatureOfOtherChart = errors.New("the feature sets values of another chart than the role deploys")
 )
 
 // msgOlderRevision is the open note for a model or catalogue saved with an older bundle revision.
 const msgOlderRevision = "the profile was saved with revision %d of bundle %s@%s; this build ships revision %d"
 
-// ApplyPreset sets role and its preset features; toggles from the loaded values file win (ADR 0015 §7).
-// It expects a normalised Model, never modifies p's maps and returns p unchanged with any error.
+// ApplyPreset sets role and its preset features; toggles from the loaded values file win over the preset,
+// and user toggles win over both (ADR 0018). It expects a normalised Model, never modifies p's maps and returns p unchanged with any error.
 func (p Profile) ApplyPreset(bundles []model.Bundle, role string, loaded map[string]bool) (Profile, *ChartSwitch, error) {
 	cat, err := CatalogueBundle(bundles, p.Model, p.Catalogue)
 	if err != nil {
@@ -73,7 +80,7 @@ func (p Profile) ApplyPreset(bundles []model.Bundle, role string, loaded map[str
 		if i < 0 {
 			return p, nil, fmt.Errorf("chart %q of role %s is not shipped", r.Chart, role)
 		}
-		sw = &ChartSwitch{FromChart: p.Target.Chart, FromVersion: p.Target.ChartVersion, ToChart: r.Chart}
+		sw = &ChartSwitch{FromChart: p.Target.Chart, FromVersion: p.Target.ChartVersion, ToChart: r.Chart, DroppedChoices: []string{}}
 		out.Target.Chart, out.Target.ChartVersion = r.Chart, ""
 		out.Model = ModelRef{Chart: r.Chart, Version: bundles[i].Version, Revision: bundles[i].Revision}
 		if cat, err = CatalogueBundle(bundles, out.Model, p.Catalogue); err != nil {
@@ -93,20 +100,30 @@ func (p Profile) ApplyPreset(bundles []model.Bundle, role string, loaded map[str
 			features[id] = FeatureState{Enabled: false, Source: SourcePreset}
 		}
 	}
-	var conflicts []string
+	var foreign []string
 	for _, id := range sortedKeys(loaded) {
 		o, ok := r.Features[id]
 		switch {
 		case !ok:
 			return p, nil, fmt.Errorf("loaded toggle %q is not a feature of bundle %s@%s", id, cat.Chart, cat.Version)
-		case o != model.OfferNotOffered:
+		case loaded[id] && !inScope(cat, r, id):
+			foreign = append(foreign, id)
+		case o != model.OfferNotOffered || loaded[id]:
 			features[id] = FeatureState{Enabled: loaded[id], Source: SourceLoaded}
-		case loaded[id]:
-			conflicts = append(conflicts, id)
 		}
 	}
-	if len(conflicts) > 0 {
-		return p, nil, fmt.Errorf("%w: %s", ErrPresetConflictsLoaded, strings.Join(conflicts, ", "))
+	if len(foreign) > 0 {
+		return p, nil, fmt.Errorf("%w: %s", ErrFeatureOfOtherChart, strings.Join(foreign, ", "))
+	}
+	for _, id := range sortedKeys(p.Features) {
+		f := p.Features[id]
+		switch {
+		case f.Source != SourceUser:
+		case inScope(cat, r, id):
+			features[id] = f
+		case sw != nil:
+			sw.DroppedChoices = append(sw.DroppedChoices, id)
+		}
 	}
 
 	out.Role, out.Features, out.Catalogue = role, features, nil
@@ -128,6 +145,11 @@ func CatalogueBundle(bundles []model.Bundle, m ModelRef, held *ModelRef) (model.
 		return *b, nil
 	}
 	return c, nil
+}
+
+// inScope reports whether catalogue feature id sets values of the chart role r deploys (ADR 0018).
+func inScope(cat model.Bundle, r *model.Role, id string) bool {
+	return featureChart(cat, id) == r.Chart
 }
 
 func findRole(b model.Bundle, id string) *model.Role {
@@ -201,9 +223,20 @@ func (p Profile) validateRole(bundles []model.Bundle) []FieldError {
 			errs = append(errs, FieldError{featuresFieldPrefix + id, "is not a known feature"})
 		case !slices.Contains(knownSources, f.Source):
 			errs = append(errs, FieldError{featuresFieldPrefix + id, fmt.Sprintf("source %q is unknown", f.Source)})
-		case f.Enabled && o == model.OfferNotOffered:
-			errs = append(errs, FieldError{featuresFieldPrefix + id, fmt.Sprintf("is not offered by role %s", r.ID)})
+		case f.Enabled && !inScope(cat, r, id):
+			errs = append(errs, FieldError{featuresFieldPrefix + id, fmt.Sprintf("sets values of chart %s, not of chart %s that role %s deploys", featureChart(cat, id), r.Chart, r.ID)})
+		case f.Enabled && o == model.OfferNotOffered && f.Source == SourcePreset:
+			errs = append(errs, FieldError{featuresFieldPrefix + id, fmt.Sprintf("is not offered by role %s, so it cannot come from the preset", r.ID)})
 		}
 	}
 	return errs
+}
+
+// featureChart is the chart catalogue feature id sets values of; "" when id is not in the catalogue.
+func featureChart(cat model.Bundle, id string) string {
+	i := slices.IndexFunc(cat.Features, func(f model.Feature) bool { return f.ID == id })
+	if i < 0 {
+		return ""
+	}
+	return cat.Features[i].Chart
 }
