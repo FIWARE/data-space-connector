@@ -184,6 +184,7 @@ decentralizedIam:
   # configuration for the odrl-authorization to be deployed as part of the connector, see https://github.com/FIWARE/odrl-authorization/tree/master
   odrlAuthorization:
     # -- configuration for the odrl-pap to be deployed as part of the connector, see https://apisix.apache.org/
+    # The data space events routes go into `routes`: see doc/eventing/examples/events-routes.yaml.
     apisix:
       ingress-controller:
         enabled: false
@@ -1907,10 +1908,11 @@ contract-management:
   # owned by this umbrella chart, tracing is wired through the subchart's
   # `additionalEnvVars` extension point. The SDK disable flag
   # (`OTEL_SDK_DISABLED`) is set to `true` by default so tracing has no
-  # runtime effect until explicitly enabled. To activate tracing, override
-  # the env vars below (or pass
-  # `--set contract-management.additionalEnvVars[0].value=false`)
-  # together with `--set tracing.enabled=true`.
+  # runtime effect until explicitly enabled. To activate tracing, copy the
+  # full default `additionalEnvVars` list below into a values file, set
+  # `OTEL_SDK_DISABLED` to "false" there, and set `tracing.enabled=true`.
+  # Helm replaces lists: a `--set additionalEnvVars[0].value=...` keeps only
+  # that one entry and drops every other `OTEL_*` variable.
   tracing:
     # -- toggle OpenTelemetry tracing on the contract-management workload.
     # Leave unset (default) to inherit `tracing.enabled` from the global
@@ -2006,6 +2008,45 @@ contract-management:
     # -- disable logs exporter (traces-only configuration).
     - name: OTEL_LOGS_EXPORTER
       value: "none"
+  # Data space eventing, participant side (needs contract-management >= 3.5.4). The namespace is
+  # `dataspace.events`, not `events` (D-12 of doc/eventing/architecture.md). The tree is passed verbatim
+  # as the Micronaut property tree, so keys are kebab-case. With listener or subscriber enabled the
+  # subchart renders it into the ConfigMap `contract-management-dataspace-events`, mounted as a directory
+  # and watched, so a change to `publishers` reaches the running pod. Only the participant side is
+  # configured here; the publisher and tir-watcher belong to the trust anchor.
+  # Never leave `dataspace:` empty (null): contract-management 3.6.7 then fails the render with
+  # `nil pointer evaluating interface {}.events`. Remove the key instead; an empty `events:` is fine.
+  dataspace:
+    events:
+      # Not declared here, so contract-management's own fallbacks apply:
+      # own-participant-id: falls back to `general.did`;
+      # dataspace-id: when set, events carrying another dataspaceid are rejected.
+      listener:
+        # -- receive events on `POST /events`. Startup-only: a change rolls the pod. Expose the path
+        # through a gateway that verifies the token and sets `X-Userinfo`; contract-management does not.
+        enabled: false
+      subscriber:
+        # -- register at the publishers' subscriptions APIs. Requires the listener and `subscriber.sink`,
+        # the public URL of the own `POST /events`. Startup-only: a change rolls the pod.
+        enabled: false
+        # sink: "https://cm.provider.org/events"
+      # -- publishers whose events are accepted. Reloaded at runtime. The id of the one publisher with
+      # `org.fiware.dataspace.participant.removed` in `types` is also the default `scope` of the
+      # `registration.issuer` grants.
+      publishers: []
+      # publishers:
+      #   - id: "did:web:trust-anchor.org"
+      #     origin: "cm.trust-anchor.org"
+      #     types: [ "org.fiware.dataspace.participant.removed" ]
+      #     # without it the publisher is listener-only and never subscribed to
+      #     subscriptions-url: "https://cm.trust-anchor.org/subscriptions"
+      #     # fall back to subscriber.client-id and subscriber.scopes
+      #     client-id: "contract-management"
+      #     scopes: [ "default" ]
+      #     on-participant-removed:
+      #       # report (writes nothing), dataspace, granted or full; writing modes require registry-url
+      #       mode: report
+      #       registry-url: "https://tir.trust-anchor.org"
 
 # -- configuration for the did-helper, see https://github.com/wistefan/did-helper
 # @schema
@@ -2015,6 +2056,13 @@ contract-management:
 # @schema
 did:
   enabled: false
+
+# -- checks of the data space events routes (templates/eventing-validation.yaml)
+eventingRouteValidation:
+  # -- refuse install/upgrade when a route named dataspace-events, dataspace-events-handshake or
+  # dataspace-events-discovery weakens access control. false skips every check and leaves the
+  # route security to the operator.
+  enabled: true
 
 # -- configuration for registering a participant at the til. Allows to preconfigure trust-relationships on deployment
 registration:
@@ -2050,11 +2098,28 @@ registration:
   extraEnvVars: []
   extraVolumes: []
   extraVolumeMounts: []
+  # -- issuers to register. `scope`/`scopeType` are sent as query parameters of `POST /issuer`, so
+  # contract-management's `on-participant-removed.mode: dataspace` can revoke the grant on a
+  # `participant.removed`. When `scope` is unset it defaults to the `id` of the one
+  # `contract-management.dataspace.events.publishers` entry whose `types` contain
+  # `org.fiware.dataspace.participant.removed` (several such publishers fail the render), and
+  # `scopeType` to `dataspace-membership`; `scope: ""` registers the issuer unscoped, as before.
+  # That default fits a membership grant only, in a TIL whose contract-management subscribes to the
+  # same publisher id: this release's own TIL, or another release's TIL subscribing to the same data
+  # space publisher. For any other grant (e.g. an eIDAS `UserCredential` issuer, which a
+  # `participant.removed` for that DID would revoke) set `scope` explicitly or `scope: ""`.
+  # Needs a trusted-issuers-list >= 0.10.1, an older one silently drops the scope, and a
+  # contract-management >= 3.5.4 to act on it; contract-management's removal handling needs
+  # trusted-issuers-list >= 0.10.2 (>= 0.10.3 with `adopt-unattributed`). An issuer that is
+  # already registered answers 409 and keeps its unscoped grant; contract-management's
+  # `on-participant-removed.adopt-unattributed` covers those.
   # issuer:
   # - did: ${DID}
   #   credentialTypes:
   #     - LegalPersonCredential
   #     - OperatorCredential
+  #   scope: did:web:dataspace-operator.org
+  #   scopeType: dataspace-membership
   issuer: []
   # -- priority class to be assigned to the pods
   # ref: https://kubernetes.io/docs/concepts/scheduling-eviction/pod-priority-preemption/

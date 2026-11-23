@@ -28,10 +28,14 @@ data:
     # configure squid as forward proxy to traefik
     cache_peer traefik-loadbalancer-in.infra.svc.cluster.local parent 80 0 no-query originserver name=traefik-http login=PASSTHRU
     cache_peer traefik-loadbalancer-in.infra.svc.cluster.local parent 443 0 no-query originserver ssl name=traefik-https login=PASSTHRU
+    # squid only tunnels a CONNECT to an originserver peer of the same port, so the
+    # https://<host>:8443 URLs that pods also call directly need a peer of their own
+    cache_peer traefik-loadbalancer.infra.svc.cluster.local parent 8443 0 no-query originserver ssl name=traefik-https-8443 login=PASSTHRU
 
     # Restrict cache_peer to CONNECT method for HTTPS requests
     acl CONNECT method CONNECT
     cache_peer_access traefik-https allow CONNECT
+    cache_peer_access traefik-https-8443 allow CONNECT
     cache_peer_access traefik-http allow all
 
     # Allow direct connections to cluster-internal services
