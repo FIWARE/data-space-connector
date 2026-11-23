@@ -245,10 +245,10 @@ decentralizedIam:
               max_export_batch_size: 16
 
 marketplace:
-  # The charging backend is not instrumented: the marketplace chart deploys 11.7.0, which runs
-  # Python 3.8, and no Python agent for 3.8 is published any more. From 11.8.3 on (Python 3.9) it
-  # can be, with `instrumentation.opentelemetry.io/inject-python: "true"` in
-  # bizEcosystemChargingBackend.deployment.additionalAnnotations.
+  bizEcosystemChargingBackend:
+    deployment:
+      additionalAnnotations:
+        instrumentation.opentelemetry.io/inject-python: "true"
   bizEcosystemLogicProxy:
     statefulset:
       additionalAnnotations:

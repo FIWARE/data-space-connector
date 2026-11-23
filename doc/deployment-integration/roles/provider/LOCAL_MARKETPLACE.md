@@ -311,9 +311,6 @@ marketplace:
     server: https://<your_verifier_domain>
     callbackPath: /auth/oidc-discover/callback
   bizEcosystemLogicProxy:
-    statefulset:
-      image:
-        tag: 11.24.0           # 11.22.0 or later: earlier versions do not build the profile from the credential
     additionalEnvVars:
       # this list replaces the chart's default one, which only disables tracing
       - name: OTEL_SDK_DISABLED
