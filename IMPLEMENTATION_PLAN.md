@@ -1,7 +1,7 @@
 # Implementation Plan: [E2 Roles] US-2.2 — Overrule the preset (deliberate choices and their consequences)
 
 ## Overview
-Make every catalogue feature toggleable regardless of the role. A toggle the user operates is recorded as
+Make every catalogue feature *of the chart being configured* toggleable regardless of the role. A toggle the user operates is recorded as
 `source: user` and stays that way. A feature whose state differs from the preset is shown as a *deliberate
 choice*, and turning off a `recommended` feature asks for confirmation and names the consequence, which comes
 from the bundle. US-5.1 is not shipped yet, so this ticket also builds the minimal Stage 5 toggle list it needs:
@@ -17,13 +17,26 @@ Decisions this plan makes (step 7 records them in ADR 0018):
 - **Preset value** of a feature = `offer == recommended`. *Deliberate* = `enabled != preset value` and
   `source != preset`. `source: user` survives a value that equals the preset again, but the feature then has no
   deliberate marker because it no longer differs.
-- **Not-offered is no longer a cage.** `Validate` refuses an enabled not-offered feature only when it has
-  `source: preset`, because no preset can produce that. `ApplyPreset` keeps a loaded `true` on a not-offered feature
-  as `{enabled: true, source: loaded}` instead of refusing the role. `ErrPresetConflictsLoaded` is removed: a values
-  file that enables such a feature is as legitimate as a user toggle.
+- **Chart scope.** "Not offered by the role" and "not part of this chart" are two different things. The bundle marks
+  every feature of the other chart `not-offered` (every DSC role lists `ta.registry`, `ta.onboarding`,
+  `consent.authority` of chart trust-anchor, and Operator lists every DSC feature), because `checkRole` skips the chart
+  check only for not-offered entries (`internal/model/roles.go:295-300`). Those keys do not exist in the target
+  chart's values, and its `values.schema.json` refuses unknown keys. So a feature is *in scope* when its `Chart`
+  (defaulted to the bundle chart by `readBundle`) equals the role's chart. Only in-scope features are toggleable, are
+  listed by `FeatureChoices` and Stage 5, and may be enabled. An enabled out-of-scope feature is refused from any
+  source. The ticket's "every feature can be toggled regardless of the role" reads as "every feature of the chart
+  being configured".
+- **Not-offered is no longer a cage** (within the chart). `Validate` refuses an enabled in-scope not-offered feature
+  only when it has `source: preset`, because no preset can produce that. `ApplyPreset` keeps a loaded `true` on an
+  in-scope not-offered feature as `{enabled: true, source: loaded}` instead of refusing the role.
+  `ErrPresetConflictsLoaded` is removed: a values file that enables such a feature is as legitimate as a user toggle.
+- **User toggles survive a role switch.** Picking a role rebuilds the preset entries, then lays loaded toggles over
+  them, then carries every `source: user` entry of the previous profile over unchanged when the feature is in scope of
+  the new role. A user choice is never lost silently: only a chart switch (Provider → Operator) can drop user toggles,
+  and `ChartSwitch` names them so the existing switch notice in `Role.tsx` lists them. The explicit re-apply flow
+  with a diff and the reset of untouched features stays with US-2.3.
 - The core returns values only (preset, enabled, source, offer, deliberate). Every sentence the UI shows is either
   UI copy or bundle data (`summary`, the new optional `consequence`). No warning text lives in Go.
-- Picking a role again still rebuilds `features` from scratch. Keeping `user`/`loaded` toggles on re-apply is US-2.3.
 
 ## Steps
 
@@ -47,31 +60,63 @@ Decisions this plan makes (step 7 records them in ADR 0018):
 
 ### Step 2: Core — `source` transitions, preset view, relaxed not-offered rule
 All work is in `config-tool/internal/profile/`, which stays free of `net/http`.
+- `role.go`: declare three **new** sentinels in the existing `var (...)` block next to `ErrUnknownRole`, each with a
+  one-line GoDoc. They do not exist yet, and `model.ErrNoRoles` (a bundle without roles) is a different thing, so do
+  not reuse it:
+  - `ErrNoRole`: the profile has no role yet.
+  - `ErrUnknownFeature`: the id is not a feature of the role catalogue.
+  - `ErrFeatureOfOtherChart`: the feature sets values of another chart than the role deploys.
+  Update the block's comment from "Errors of ApplyPreset" to "Errors of ApplyPreset and SetFeature; the API maps them
+  to 422".
+- An unexported helper `inScope(cat model.Bundle, r *model.Role, id string) bool` reports whether the catalogue
+  feature's `Chart` equals `r.Chart`. `SetFeature`, `FeatureChoices`, `ApplyPreset` and `validateRole` all use it,
+  so the chart rule lives in one place.
 - New `choices.go` (or extend `role.go`):
   - `func (p Profile) SetFeature(bundles []model.Bundle, id string, enabled bool) (Profile, error)` is pure. It
     resolves the catalogue via `CatalogueBundle(bundles, p.Model, p.Catalogue)`, copies `p.Features`, and writes
-    `{enabled, SourceUser}` whatever the previous source and value were. A feature absent from the map
+    `{enabled, SourceUser}` whatever the previous source and value were. An in-scope feature absent from the map
     (not-offered) is added. Errors: `ErrNoRole` when `p.Role == ""`, `ErrUnknownFeature` when the id is not in the
-    role's `Features`. On error it returns p unchanged.
+    role's `Features`, `ErrFeatureOfOtherChart` when it is not in scope. On error it returns p unchanged.
   - `type FeatureChoice struct { ID string; Offer model.Offer; Preset, Enabled, Deliberate bool; Source FeatureSource }`
     with JSON tags (`id, offer, preset, enabled, deliberate, source`). It has no text field.
   - `func (p Profile) FeatureChoices(bundles []model.Bundle) ([]FeatureChoice, error)` returns one entry per
-    catalogue feature, in bundle order. An absent feature reports `Enabled: Preset`, `Source: SourcePreset`.
-    `Deliberate = Enabled != Preset && Source != SourcePreset`. It returns `ErrNoRole` without a role.
-- `role.go` `validateRole`: narrow the case `f.Enabled && o == model.OfferNotOffered` to `f.Source == SourcePreset`,
-  with the message "is not offered by role %s, so it cannot come from the preset".
-- `role.go` `ApplyPreset`: a loaded `true` on a not-offered feature becomes `{true, SourceLoaded}`, and a loaded
-  `false` on one is still omitted. Delete `ErrPresetConflictsLoaded` and the `conflicts` slice.
+    **in-scope** catalogue feature, in bundle order. Features of the other chart are left out. An absent feature
+    reports `Enabled: Preset`, `Source: SourcePreset`. `Deliberate = Enabled != Preset && Source != SourcePreset`.
+    It returns `ErrNoRole` without a role.
+- `role.go` `validateRole`: an enabled feature that is not in scope is refused from any source ("sets values of
+  chart %s, not of chart %s that role %s deploys"). For an in-scope one, narrow the case
+  `f.Enabled && o == model.OfferNotOffered` to `f.Source == SourcePreset`, with the message "is not offered by role
+  %s, so it cannot come from the preset".
+- `role.go` `ApplyPreset`, in this order:
+  1. Preset entries as today.
+  2. Loaded toggles: a loaded `true` on an in-scope not-offered feature becomes `{true, SourceLoaded}`, and a loaded
+     `false` on one is still omitted. A loaded `true` on an out-of-scope feature returns `ErrFeatureOfOtherChart`
+     (wrapped with the ids). Delete `ErrPresetConflictsLoaded` and the `conflicts` slice.
+  3. User toggles: every `p.Features` entry with `SourceUser` is copied over unchanged when the feature is in scope
+     of the new role, overwriting preset and loaded entries, because the user operated it last. Entries out of scope
+     can occur only on a chart switch. Their ids go, sorted, into a new field
+     `ChartSwitch.DroppedChoices []string \`json:"droppedChoices"\`` (GoDoc: "user toggles of the old chart, which
+     the new chart cannot carry"), so the drop is never silent.
+  Update the `ApplyPreset` GoDoc: "toggles from the loaded values file win over the preset, and user toggles win over
+  both (ADR 0018)".
 - `format.go:61`: change the `Features` doc comment to "a not-offered feature is enabled only by user or loaded
-  choice".
+  choice, and only within the role's chart".
 - Tests (table-driven, in `role_test.go` / new `choices_test.go`):
   - `SetFeature` transitions: preset→user (on→off, off→on); loaded→user; user→user with the value back to the
-    preset's (stays `user`); absent not-offered→`{true,user}`; no role → `ErrNoRole`; unknown id →
-    `ErrUnknownFeature`; the input map is not mutated.
+    preset's (stays `user`); absent in-scope not-offered (Consumer + `market.local`)→`{true,user}`; no role →
+    `ErrNoRole`; unknown id → `ErrUnknownFeature`; Provider + `ta.registry` → `ErrFeatureOfOtherChart`; Operator +
+    `access.verification` → `ErrFeatureOfOtherChart`; the input map is not mutated.
   - `FeatureChoices`: deliberate flags for recommended-off/user, not-offered-on/user, available-on/loaded,
-    user-but-equal (not deliberate), and absent features.
-  - `Validate`: an enabled not-offered feature passes with `user`/`loaded` and fails with `preset`.
-  - `ApplyPreset`: replace the old conflict case with "loaded true on not-offered is kept as loaded".
+    user-but-equal (not deliberate), and absent features. Provider's choices contain no `ta.*` or
+    `consent.authority` entry, and Operator's contain only trust-anchor features.
+  - `Validate`: an enabled in-scope not-offered feature passes with `user`/`loaded` and fails with `preset`; an
+    enabled out-of-scope feature fails with each of `preset`, `loaded` and `user`.
+  - `ApplyPreset`: replace the old conflict case with "loaded true on in-scope not-offered is kept as loaded", add
+    "loaded true on an out-of-scope feature → `ErrFeatureOfOtherChart`", and add the role-switch cases: Provider with
+    `access.verification` `{false,user}` → Consumer-Provider keeps `{false,user}`; Provider with `market.local`
+    `{true,user}` → Consumer keeps it (now an in-scope not-offered, deliberate); a user toggle beats a loaded toggle
+    of the same feature; Provider with a user toggle → Operator reports it in `ChartSwitch.DroppedChoices`; with no
+    user toggles `DroppedChoices` is empty.
   - Format round trip: `Marshal` → `Unmarshal` → `Validate` keeps `{enabled: false, source: user}` on a
     recommended feature and `{enabled: true, source: user}` on a not-offered one.
 - Acceptance: `go test ./internal/...` and `golangci-lint` (via `make lint`) are green, and `internal/layering_test.go`
@@ -85,20 +130,28 @@ All work is in `config-tool/internal/server/`.
   - Request: `{profile, sourceSha256, toggle?: {feature, enabled}}`.
   - It runs `prepareProfile` exactly like `handlePreset`, then `SetFeature` when `toggle` is set, then `FeatureChoices`.
   - Response: `{profile, choices: []profile.FeatureChoice}`.
-  - Errors: `ErrNoRole`/`ErrUnknownFeature` → 422; anything else → 500.
-- Remove the `ErrPresetConflictsLoaded` mapping in `handlePreset`.
+  - Errors: `ErrNoRole`/`ErrUnknownFeature`/`ErrFeatureOfOtherChart` → 422; anything else → 500.
+- `handlePreset`: replace the `ErrPresetConflictsLoaded` mapping with `ErrFeatureOfOtherChart` → 422. The
+  `chartSwitch` body gains `droppedChoices` from `ChartSwitch`.
 - Tests (`role_test.go`, table-driven):
-  - Status codes: no role → 422, unknown feature → 422, bad token → 401, and choices without a toggle.
+  - Status codes: no role → 422, unknown feature → 422, a feature of the other chart (Provider + `ta.registry`) →
+    422, bad token → 401, and choices without a toggle.
   - `consequence` appears in `GET /api/roles`.
   - The **acceptance round trip**: apply the Provider preset, toggle `access.verification` off, save to a temp path,
     open it, and assert `{enabled: false, source: user}` and `deliberate: true` in a fresh `POST /api/features`.
-  - Toggling the not-offered `ta.registry` on for Provider succeeds and is deliberate.
+  - Toggling the in-chart not-offered `market.local` on for Consumer succeeds and is deliberate.
+  - Role switch through the API: Provider, toggle `access.verification` off, `POST /api/preset` Consumer-Provider →
+    the feature is still `{false, user}`; Provider with a user toggle → Operator → `chartSwitch.droppedChoices` names
+    it.
   - Change the existing preset test that expected a 422 for a loaded not-offered toggle to expect `source: loaded`.
 - Acceptance: `go test ./...` is green.
 
 ### Step 4: UI — API client, reducer action, accessible confirm dialog
-- `ui/src/api/roles.ts`: add `consequence: string` to `Feature`. Drop the "a loaded toggle the role does not offer"
-  note from the `applyPreset` doc comment.
+- `ui/src/api/roles.ts`: add `consequence: string` to `Feature` and `droppedChoices: string[]` to `ChartSwitch`.
+  Drop the "a loaded toggle the role does not offer" note from the `applyPreset` doc comment.
+- `ui/src/stages/Role.tsx` `switchNotice`: when `droppedChoices` is non-empty, append a sentence naming the dropped
+  features by catalogue title (UI copy, e.g. *Your choices for X, Y do not apply to this chart and were dropped.*).
+  Add a case to `Role.test.tsx`.
 - New `ui/src/api/features.ts`: `FeatureSource`, `FeatureChoice`, `FeaturesResult`, and
   `fetchFeatures(profile, sourceSha256?, toggle?)` for `POST /api/features`. Write a `features.test.ts` that mirrors
   `roles.test.ts`.
@@ -121,6 +174,8 @@ All work is in `config-tool/internal/server/`.
   - When no role is picked, it shows a short hint that links to Stage 2.
   - It loads the catalogue (`fetchRoles` for the profile's chart/version) and the choices (`fetchFeatures` without a
     toggle).
+  - It lists exactly the features in `choices`, so features of the other chart never appear (the core already
+    leaves them out).
   - Three sections, in catalogue order within each: *Recommended for <Role>*, *Available*, *Not recommended for this
     role*.
   - Each row has a checkbox (never `disabled`), the title, the summary, and a deliberate marker when
@@ -135,10 +190,20 @@ All work is in `config-tool/internal/server/`.
     - Cancel or Escape sends no request and leaves the checkbox checked.
     - Confirm calls `fetchFeatures` with the toggle and dispatches `featuresChanged`.
   - Every other toggle, including switching on a not-offered feature, calls the API directly without a dialog.
+  - Toggles are **serialised**, because each request carries the whole profile and its response replaces
+    `answers.features`. A queue in a ref (a promise chain) runs one `fetchFeatures` at a time, and each request is
+    built from the latest profile, i.e. the previous response, kept in a ref, not from the render's closure. A
+    second click while one request is pending is therefore applied on top of the first instead of overwriting it,
+    and no checkbox has to be disabled. The list carries `aria-busy` while the queue is not empty. Keep the
+    `mounted` ref of `Role.tsx`: a response that arrives after the stage was left is dropped and ends the queue.
+    A refused toggle (422) shows its message next to the row and leaves the state of the previous response.
   - Name the UI strings as constants at the top of the file. Do not hard-code feature ids or warning text.
 - `Features.test.tsx` (mocked API via `ui/src/test/api.ts`, parameterized with `it.each` where possible):
-  - Section grouping, and no checkbox is disabled.
-  - Not-offered on: no dialog, the request carries the toggle, and the marker is shown.
+  - Section grouping, no checkbox is disabled, and a feature missing from `choices` (another chart) is not listed.
+  - Not-offered on (Consumer + `market.local`): no dialog, the request carries the toggle, and the marker is shown.
+  - Two toggles in a row while the first request is still pending (deferred mock): the second request is sent only
+    after the first answers, its body carries the first toggle's result, and both features end up toggled.
+  - A response that arrives after unmount dispatches nothing.
   - Recommended off: the dialog shows the consequence text and the role-guide link, and focus is on *Keep it on*.
   - The cancel button and Escape each leave the checkbox checked and send no request.
   - Confirm: the checkbox is unchecked and the marker reads *recommended on for Provider — you turned it off*.
@@ -156,10 +221,14 @@ All work is in `config-tool/internal/server/`.
 
 ### Step 7: Docs — ADR 0018, README, AGENTS.md
 - New `doc/adr/0018-config-tool-deliberate-choices.md` (status Proposed). It covers:
-  - `source: user` is sticky, and only US-2.3 may reset untouched features.
+  - `source: user` is sticky: it survives a role switch within the chart (user beats loaded beats preset), a chart
+    switch names the user toggles it drops (`droppedChoices`), and only US-2.3 may reset untouched features or offer
+    a re-apply diff.
   - The definitions of preset value and *deliberate*.
-  - Not-offered features may be enabled by `user`/`loaded`, which supersedes the not-offered sentence in ADR 0015 §7
-    and the "loaded true refuses the role" bullet of ADR 0017 §7.
+  - Chart scope: "not offered by the role" differs from "not part of this chart". Only features whose chart equals the
+    role's chart are toggleable and listed, and an enabled out-of-scope feature is refused from any source.
+  - In-scope not-offered features may be enabled by `user`/`loaded`, which supersedes the not-offered sentence in
+    ADR 0015 §7 and the "loaded true refuses the role" bullet of ADR 0017 §7.
   - The optional `consequence:` catalogue field and the data test that requires it on recommended features.
   - The confirm dialog is a UI concern, and the core returns values only.
   - `POST /api/features`.
@@ -167,9 +236,11 @@ All work is in `config-tool/internal/server/`.
 - `config-tool/README.md`:
   - Fix line ~256 ("`not-offered` (cannot be enabled …)").
   - Replace the "loaded toggle refuses the role" bullet.
-  - Add a short *Features (Stage 5)* section: three sections, deliberate marker, confirm dialog, keyboard behaviour,
-    `POST /api/features`, and the `consequence:` field.
+  - Add a short *Features (Stage 5)* section: only the configured chart's features, three sections, deliberate
+    marker, confirm dialog, keyboard behaviour, user toggles kept on a role switch, `POST /api/features`, and the
+    `consequence:` field.
 - `AGENTS.md`: change the "E2 roles" note from planned to shipped and add one line for US-2.2: `SetFeature` /
-  `FeatureChoices` in `internal/profile`, `ConfirmDialog` in `ui/src/chrome`.
+  `FeatureChoices` in `internal/profile`, `ConfirmDialog` in `ui/src/chrome`. Its "not-offered features may be enabled"
+  wording must say "within the role's chart" (the planned note predates the chart-scope rule).
 - Run `.github/scripts/check-links.sh` if Docker is available.
 - Acceptance: links resolve, and `make test` and `make lint` are green.
