@@ -1,0 +1,75 @@
+# Test plumbing for the provider's reference profile in the local cluster: only what the test
+# environment needs and a real deployment does not. A fix to the profile itself belongs in
+# charts/data-space-connector/examples, not here.
+#
+# The cluster's certificates come from a self-signed CA, which the components that call each
+# other over HTTPS have to trust. Lists replace those of the profile, so they are repeated.
+
+decentralizedIam:
+  vcAuthentication:
+    vcverifier:
+      deployment:
+        # the verifier resolves the participants' did:web and reads the trust anchor's registry
+        initContainers:
+          - name: add-root-ca
+            image: alpine:3.21.3
+            command: ["sh", "-c", "cat /etc/ssl/cert.pem /tmp/ca.crt > /root-ca/cert.pem"]
+            volumeMounts:
+              - name: root-ca
+                mountPath: /root-ca
+              - name: client-key
+                mountPath: /tmp/ca.crt
+                subPath: ca.crt
+        additionalVolumes:
+          - name: client-key
+            secret:
+              secretName: verifier-tls
+          - name: root-ca
+            emptyDir: {}
+        additionalVolumeMounts:
+          - name: client-key
+            mountPath: /client-key
+            readOnly: true
+          - name: root-ca
+            mountPath: /etc/ssl/cert.pem
+            subPath: cert.pem
+  odrlAuthorization:
+    apisix:
+      # APISIX reads the verifier's discovery document, see "Trusting a private CA" in the
+      # provider guide
+      apisix:
+        ssl:
+          enabled: true
+          existingCASecret: verifier-tls
+          certCAFilename: ca.crt
+
+marketplace:
+  bizEcosystemLogicProxy:
+    # the portal reads the verifier's discovery document, see "Trusting a private CA" in
+    # LOCAL_MARKETPLACE.md
+    additionalEnvVars:
+      - name: OTEL_SDK_DISABLED
+        value: "true"
+      - name: BAE_LP_OAUTH2_CLIENT_ID
+        value: did:web:did-provider.127.0.0.1.nip.io
+      - name: BAE_LP_OAUTH2_CLIENT_SECRET
+        value: unused
+      - name: BAE_LP_OIDC_DISCOVERY_URI
+        value: https://verifier-provider.127.0.0.1.nip.io/services/did:web:did-provider.127.0.0.1.nip.io/.well-known/openid-configuration
+      - name: BAE_LP_OIDC_SCOPES
+        value: openid learcredential
+      - name: BAE_LP_OAUTH2_NONCE
+        value: "true"
+      - name: NODE_EXTRA_CA_CERTS
+        value: /private-ca/ca.crt
+    extraVolumeMounts:
+      - name: private-ca
+        mountPath: /private-ca
+        readOnly: true
+    extraContainerVolumes:
+      - name: private-ca
+        secret:
+          secretName: marketplace-tls
+          items:
+            - key: ca.crt
+              path: ca.crt

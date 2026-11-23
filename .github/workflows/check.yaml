@@ -44,6 +44,22 @@ jobs:
       - name: Check the values schema is up to date
         run: ./.github/scripts/values-schema.sh --check
 
+  # The reference profiles (charts/*/examples) still render with the charts: a key a profile sets
+  # that the chart no longer accepts fails here. The integration tests deploy them as well.
+  examples:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v4.2.2
+
+      - name: Render the reference profiles
+        run: ./.github/scripts/render-examples.sh
+
   # Requires a semver label and bumps the version of the charts the pull request changes, see
   # https://github.com/FIWARE/github-workflows
   chart-version:
