@@ -200,6 +200,9 @@ revision opens with a note.
 
 ### 7. Role and features
 
+> Partly superseded by [ADR 0018](0018-config-tool-deliberate-choices.md): an enabled not-offered feature
+> is refused only with `source: preset`, and an enabled feature of another chart from any source.
+
 `role`, `features` and `catalogue` are optional keys, so they stay in format `1`: profiles written
 before Epic 2 still decode. `Validate` refuses an unknown role, `features` without a role, an
 unknown feature id or source, an enabled feature the role marks `not-offered`, and a role whose

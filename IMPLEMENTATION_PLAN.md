@@ -244,5 +244,7 @@ All work is in `config-tool/internal/server/`.
 - `AGENTS.md`: change the "E2 roles" note from planned to shipped and add one line for US-2.2: `SetFeature` /
   `FeatureChoices` in `internal/profile`, `ConfirmDialog` in `ui/src/chrome`. Its "not-offered features may be enabled"
   wording must say "within the role's chart" (the planned note predates the chart-scope rule).
+  Step agents may not edit `AGENTS.md`, so step 7 leaves it alone and puts the wording in its Taiga comment for a
+  plan-mode agent to apply. `doc/config-tool/FEATURE_MODEL.md` gets a one-line note on the not-offered legend.
 - Run `.github/scripts/check-links.sh` if Docker is available.
 - Acceptance: links resolve, and `make test` and `make lint` are green.
