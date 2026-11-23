@@ -1,5 +1,5 @@
 /** A modal yes/no question; focus starts on the safe choice (cancel), stays inside and returns to the opener. */
-import { useEffect, useId, useRef, type KeyboardEvent, type ReactNode } from 'react'
+import { useEffect, useId, useRef, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react'
 
 const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
 
@@ -37,17 +37,26 @@ export function ConfirmDialog({ title, children, cancelLabel, confirmLabel, onCa
     const focusable = Array.from(dialog.current.querySelectorAll<HTMLElement>(FOCUSABLE))
     const first = focusable[0]
     const last = focusable[focusable.length - 1]
-    const wrapTo = event.shiftKey ? (document.activeElement === first ? last : undefined) : document.activeElement === last ? first : undefined
+    const active = document.activeElement
+    // Focus on the dialog itself (after a click on its text) is outside the cycle; Shift+Tab would leave it.
+    const outside = !focusable.some((el) => el === active)
+    const wrapTo = event.shiftKey ? (outside || active === first ? last : undefined) : outside || active === last ? first : undefined
     if (wrapTo) {
       event.preventDefault()
       wrapTo.focus()
     }
   }
 
+  // A click on the backdrop would move focus behind the modal, out of reach of the trap and of Escape.
+  function backdropMouseDown(event: MouseEvent) {
+    if (!dialog.current?.contains(event.target as Node)) event.preventDefault()
+  }
+
   return (
-    <div className="overlay">
+    <div className="overlay" onMouseDown={backdropMouseDown}>
       <div
         ref={dialog}
+        tabIndex={-1}
         role="dialog"
         aria-modal="true"
         aria-labelledby={`${id}-title`}

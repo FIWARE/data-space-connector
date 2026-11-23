@@ -57,6 +57,24 @@ describe('ConfirmDialog', () => {
     expect(confirm).toHaveFocus()
   })
 
+  it.each<[string, (dialog: HTMLElement) => Element]>([
+    ['the backdrop', (dialog) => dialog.parentElement ?? dialog],
+    ['the dialog text', () => screen.getByText(CONSEQUENCE)],
+  ])('keeps focus inside after a click on %s, so Tab, Shift+Tab and Escape still work', async (_, target) => {
+    const onCancel = vi.fn()
+    const dialog = await openDialog({ onCancel })
+    const buttons = screen.getAllByRole('button').filter((b) => dialog.contains(b))
+    for (const shift of [false, true]) {
+      await userEvent.click(target(dialog))
+      expect(dialog).toContainElement(document.activeElement as HTMLElement)
+      await userEvent.tab({ shift })
+      expect(buttons).toContain(document.activeElement)
+    }
+    await userEvent.click(target(dialog))
+    await userEvent.keyboard('{Escape}')
+    expect(onCancel).toHaveBeenCalledTimes(1)
+  })
+
   it.each<[string, () => Promise<unknown>, 'onCancel' | 'onConfirm']>([
     ['Escape', () => userEvent.keyboard('{Escape}'), 'onCancel'],
     ['the cancel button', () => userEvent.click(screen.getByRole('button', { name: CANCEL })), 'onCancel'],
