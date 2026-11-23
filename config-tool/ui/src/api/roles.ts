@@ -29,6 +29,8 @@ export interface Feature {
   title: string
   summary: string
   group: string
+  /** What turning the feature off costs; empty when the bundle names none. */
+  consequence: string
 }
 
 /** Body of GET /api/roles, mirroring `server.rolesResponse`; both lists are in bundle order. */
@@ -42,6 +44,8 @@ export interface ChartSwitch {
   fromChart: string
   fromVersion: string
   toChart: string
+  /** User toggles of the old chart that the new chart cannot carry. */
+  droppedChoices: string[]
 }
 
 /** Answer of POST /api/preset; `chartSwitch` is null when the role deploys the profile's chart. */
@@ -56,7 +60,7 @@ export function fetchRoles(chart: string, version: string, signal?: AbortSignal)
 }
 
 /** POST /api/preset. `sourceSha256` names the held load, as on save; 422 (unknown role, invalid profile, a chart
- *  switch while a file is loaded, a loaded toggle the role does not offer, stale load) arrives as ApiError. */
+ *  switch while a file is loaded, stale load) arrives as ApiError. */
 export function applyPreset(profile: Profile, role: string, sourceSha256?: string): Promise<PresetResult> {
   return api<PresetResult>('/preset', { method: 'POST', body: JSON.stringify({ profile, role, sourceSha256 }) })
 }
