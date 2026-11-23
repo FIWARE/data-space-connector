@@ -227,7 +227,8 @@ export function featureChoices(profile: Profile): FeatureChoice[] {
     })
 }
 
-function recordToggle(body: FeaturesBody): FeaturesResult {
+/** POST /api/features as the server answers it: the toggle recorded as source user, then the choices. */
+export function recordToggle(body: FeaturesBody): FeaturesResult {
   const { profile, toggle } = body
   const features = toggle ? { ...profile.features, [toggle.feature]: { enabled: toggle.enabled, source: 'user' as const } } : profile.features
   const next = { ...profile, features }
