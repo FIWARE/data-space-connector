@@ -69,8 +69,8 @@ export interface RoleChange {
   kept: KeptFeature[]
 }
 
-/** Answer of POST /api/preset; `chartSwitch` is null when the role deploys the profile's chart, `change` on the
- *  first pick (the profile had no role). */
+/** Answer of POST /api/preset; `chartSwitch` is null when the role deploys the profile's chart; `change` is null
+ *  on the first pick (the profile had no role). */
 export interface PresetResult {
   profile: Profile
   chartSwitch: ChartSwitch | null
