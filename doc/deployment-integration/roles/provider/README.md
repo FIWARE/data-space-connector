@@ -115,6 +115,13 @@ scorpio:
 
 Scorpio needs the PostGIS extension in its database; the examples in [`k3s/`](../../../../k3s) create it, as a database named `ngb`, through the operator's `preparedDatabases`. The Identity Hub and the status list server, when enabled, take their database settings under `identityhub.postgresql` and `statusListServer.postgresql`.
 
+The Trusted Issuers List and the Credentials Config Service apply their database migrations at startup - on the first start, and after an upgrade that brings new ones - holding a lock in the `databasechangeloglock` table of their database while they do. If the pod is killed in the middle of the migrations (out of memory, a failed node, a pod deleted during an upgrade), the lock stays set, and the next start logs `Waiting for changelog lock....` and never completes. Release the lock in that database: the waiting pod then takes it and applies the remaining migrations. Do it only while no other pod of the service is applying them. With the chart's PostgreSQL, whose databases are `tildb` and `ccsdb`:
+
+```shell
+kubectl exec -n <namespace> postgres-0 -- psql -U postgres -d tildb \
+  -c 'UPDATE databasechangeloglock SET locked = false, lockgranted = NULL, lockedby = NULL WHERE id = 1;'
+```
+
 ## Optional components
 
 All optional components listed below can be deployed using the `fiware/data-space-connector` Helm chart. Some of them - Scorpio, the TMForum API and Contract Management - are **enabled by default**; set them to `false` explicitly if you do not need them. The [values example](#using-the-fiware-dsc-helm-chart-and-values) below lists the default of each one.
