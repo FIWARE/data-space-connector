@@ -28,15 +28,24 @@ Review lists *role changed from X to Y* and reopens the same summary.
 2. **Answers are never cleared within a chart**, not for a feature that goes off either (US-5.2): `Answers` is
    carried over unchanged.
 3. **Chart switch** (to or from `trust-anchor`): carried over are the target fields except `chart` and
-   `chartVersion`, the open-question marks on them, and answers whose id a `recognize:` rule of the old model
-   bundle places in stage `target` or `foundations`. Every other answer, every feature state and every user
-   toggle is dropped and named. The switch keeps requiring the existing confirmation path (no values file loaded).
+   `chartVersion`, **every** open-question mark (`Open` is left as it is, as `ApplyPreset` does today; a mark on
+   `target.chartVersion` stays true because that field is reset to ""), and answers whose id a `recognize:` rule
+   of the old model bundle places in stage `target` or `foundations`. Every other answer and every feature state is
+   dropped and named. User toggles are normally dropped too (`DroppedChoices`); `ApplyPreset` keeps one only when it
+   is in scope for the new role, and such a toggle is listed as *kept* like any other. The summary never assumes
+   that none survives. The switch keeps requiring the existing confirmation path (no values file loaded).
 4. **Summary = core values, words = UI.** The core returns ids and booleans only; titles come from the catalogue
    (`GET /api/roles`), sentences are UI copy (ADR 0018 rule).
 5. **The summary is shown whenever a role is already set.** The very first pick applies at once, as today.
 6. **The Review record is session state**, not a profile field: `AppState.roleChanges` holds the summaries
    applied since the configuration was started or opened; *start over* (new/open/load/trial) drops it. The
-   profile format stays untouched, so older builds still open profiles written by this one.
+   profile format stays untouched, so older builds still open profiles written by this one. Consequence, stated
+   in the ADR: after save and reopen the record is gone; the summary stays reachable from Review for the rest of
+   the session in which the role was changed.
+7. **One effective-state rule.** A feature's effective state is its recorded state, else its role's preset value
+   (recommended = on, otherwise off), exactly what `FeatureChoices` shows on Stage 5. `RoleChangeTo` and
+   `FeatureChoices` share one helper, so the summary and Stage 5 cannot drift (e.g. a feature that a later bundle
+   revision added as recommended, unrecorded in an older profile, counts as on before the change).
 
 ## Steps
 
@@ -63,29 +72,44 @@ Files: `config-tool/internal/profile/role.go`, `config-tool/internal/profile/rol
   - Hand toggle in both directions: a `user` feature turned **on** that the new role does not recommend, and a
     `user` feature turned **off** that the new role recommends, both survive Consumer <-> Consumer + Provider.
   - Chart switch Consumer -> Operator and back: carried/dropped answer ids (use fixture bundles in
-  `testdata/` if the shipped bundles have no recognize rule of stage `foundations`), target fields kept.
+  `testdata/` if the shipped bundles have no recognize rule of stage `foundations`), target fields kept, and
+  `Open` unchanged, including marks on `target.chart` and `target.chartVersion`.
   - `p` and its maps are not mutated (extend `TestApplyPresetDoesNotMutateInput` to `Answers`).
 
 Acceptance: `go test ./internal/profile/...` green; `internal/layering_test.go` still green.
 
 ### Step 2: Core — the role-change summary
-Files: new `config-tool/internal/profile/rolechange.go`, new `config-tool/internal/profile/rolechange_test.go`.
+Files: new `config-tool/internal/profile/rolechange.go`, new `config-tool/internal/profile/rolechange_test.go`,
+`config-tool/internal/profile/choices.go` (shared helper).
 
+- Extract the effective-state rule of `FeatureChoices` into one unexported helper in `choices.go` (e.g.
+  `effectiveState(r *model.Role, id string, recorded map[string]FeatureState) FeatureState`: the recorded state,
+  else `{Enabled: r.Features[id] == model.OfferRecommended, Source: SourcePreset}`; a feature the role does not
+  list is off). `FeatureChoices` calls it instead of its inline fallback; its tests stay green unchanged.
 - Type `RoleChange` (JSON tags in camelCase): `FromRole`, `ToRole string`; `Enabled`, `Disabled []string`
-  (feature ids whose effective state went off -> on / on -> off; an unrecorded feature counts as off); `Kept
-  []KeptFeature` (`ID`, `Enabled`, `Source`: every `user` or `loaded` feature of the new role's chart, whether or
-  not the new preset agrees). All slices are never nil. Order: catalogue order of the new role's catalogue
-  (`CatalogueBundle`), ids not found there sorted after it.
+  (feature ids whose effective state went off -> on / on -> off); `Kept []KeptFeature` (`ID`, `Enabled`, `Source`).
+  All slices are never nil. Order: catalogue order of the new role's catalogue (`CatalogueBundle`), ids not found
+  there sorted after it.
 - Function `func (p Profile) RoleChangeTo(bundles []model.Bundle, after Profile) (RoleChange, error)`. It is pure,
-  compares `p` (before) with `after` (the `ApplyPreset` result) and returns `ErrNoRole` when `p` has no role. On a
-  chart switch, everything on before is `Disabled`, everything on after is `Enabled`, and `Kept` is empty because
-  the dropped toggles are already in `ChartSwitch.DroppedChoices`.
+  compares `p` (before) with `after` (the `ApplyPreset` result) and returns `ErrNoRole` when `p` has no role.
+  One rule for both a change within a chart and a chart switch, no special case:
+  - the before state of every id is `effectiveState` against the **old** role (its catalogue), the after state
+    `effectiveState` against the **new** role; ids range over the union of both roles' features and both
+    profiles' recorded features;
+  - `Kept` = every feature recorded in `after` with source `user` or `loaded` whose state equals its before state
+    (so the hand toggle that survives a chart switch, see decision 3, is listed too);
+  - `Enabled` / `Disabled` = the remaining ids whose effective state changed.
 - Invariants to test: `Enabled`, `Disabled` and the ids of `Kept` are pairwise disjoint; a kept feature's state is
-  equal before and after.
+  equal before and after; on a chart switch every id of `ChartSwitch.DroppedChoices` is absent from `Kept`.
 - Table-driven tests: Consumer -> Consumer + Provider (Enabled = matrix delta, Disabled empty); Consumer + Provider
   -> Consumer (Disabled = delta); the same two with a hand toggle in each direction (the feature appears only in
-  `Kept`, with its source); a loaded toggle listed as kept with `source: loaded`; Consumer -> Operator (switch);
-  same role re-applied (all lists empty); no role before (`ErrNoRole`).
+  `Kept`, with its source); a loaded toggle listed as kept with `source: loaded`; **an unrecorded feature the old
+  role recommends** (e.g. delete it from `p.Features`, as a profile from an older bundle revision would be) counts
+  as on before, so it is neither in `Enabled` nor, when the new role recommends it too, in `Disabled`; Consumer ->
+  Operator (switch, features of the old chart in `Disabled`); a switch with an **off, in-scope user toggle**
+  (e.g. `consent.authority: {enabled: false, source: user}` under Consumer, if the shipped bundles make it in scope
+  for Operator; otherwise a fixture bundle) lists it in `Kept` and not in `DroppedChoices`; same role re-applied
+  (all lists empty); no role before (`ErrNoRole`).
 
 Acceptance: `go test ./internal/profile/...` green; each exported identifier has a one-line GoDoc.
 
@@ -99,8 +123,9 @@ Files: `config-tool/internal/server/role.go`, `config-tool/internal/server/role_
   gets equal responses, and the load slot is unchanged).
 - Table-driven handler tests: first pick (`change: null`); Consumer -> Consumer + Provider (exact `enabled`, empty
   `disabled`, `answers` in the returned profile equal to the request's `{}`); hand-toggled features in both
-  directions listed in `kept`; Consumer -> Operator returns `chartSwitch` plus a `change` whose `kept` is empty;
-  a chart switch with a loaded file stays 422.
+  directions listed in `kept`; Consumer -> Operator returns `chartSwitch` plus a `change` whose `kept` holds
+  exactly the user toggles `ApplyPreset` carried (none for a profile without hand toggles); a chart switch with a
+  loaded file stays 422.
 
 Acceptance: `go test ./...` green.
 
@@ -112,11 +137,13 @@ if the API mock needs the new field.
 - Types: `RoleChange`, `KeptFeature` mirroring the Go JSON; `PresetResult.change: RoleChange | null`;
   `ChartSwitch` gains `carriedAnswers` / `droppedAnswers`.
 - `RoleChangeSummary` (one-line JSDoc): renders a `RoleChange` (+ optional `ChartSwitch`) with catalogue titles
-  (fallback to the id): sections *Turns on*, *Turns off*, *Kept because you set it* (with on/off and, for
-  `loaded`, "from your values.yaml"); each empty section is omitted, and an all-empty change says that no feature
-  changes. With a chart switch it leads with one sentence that the whole configuration moves from chart X to
-  chart Y, then *Carried over* (namespace, release name, target type, kube context, environment, plus
-  `carriedAnswers`) and *Dropped* (chart version, every feature choice, `droppedChoices`, `droppedAnswers`). It is
+  (fallback to the id): sections *Turns on*, *Turns off*, *Kept as they are* (each row with on/off and a reason by
+  source: *you set it* for `user`, *from your values.yaml* for `loaded`); headings and reasons are named
+  constants. Each empty section is omitted, and an all-empty change says that no feature changes. With a chart
+  switch it leads with one sentence that the whole configuration moves from chart X to chart Y, then *Carried
+  over* (namespace, release name, target type, kube context, environment, the open-question marks, plus
+  `carriedAnswers`) and *Dropped* (chart version, the feature choices of the old chart, `droppedChoices`,
+  `droppedAnswers`); a carried hand toggle shows under *Kept as they are*. It is
   presentational only, so Step 5 reuses it.
 - `Role.tsx`: when a role is already set, `select` calls `applyPreset` and keeps the result in local state
   instead of dispatching. A `ConfirmDialog` shows `RoleChangeSummary`. Labels are named constants: cancel *Keep
@@ -158,7 +185,7 @@ re-entry row *Change the role* and the paragraph under the role table: what ship
 `doc/config-tool/FEATURE_MODEL.md` (one sentence under *Role presets* on re-apply), `AGENTS.md` (mark US-2.3
 shipped with ADR 0019).
 
-- ADR 0019 records decisions 1–6 from the overview and the rejected options: a dry-run flag on the API
+- ADR 0019 records decisions 1–7 from the overview (decision 6 with its save-and-reopen consequence) and the rejected options: a dry-run flag on the API
   (unneeded, the handler has no side effects), persisting the record in the profile (format change for history
   only), clearing answers of features that go off (contradicts US-5.2).
 - Run from `config-tool/`: `make ui`, `make build`, `make test`, `make lint`; and
