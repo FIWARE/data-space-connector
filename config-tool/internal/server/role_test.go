@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/url"
+	"path/filepath"
 	"reflect"
 	"slices"
 	"strings"
@@ -82,6 +83,11 @@ func TestRolesEndpoint(t *testing.T) {
 			}
 			if len(got.Features) != catalogueFeatures || got.Features[0].Title == "" || got.Features[0].Group == "" {
 				t.Errorf("features = %+v, want %d with title and group", got.Features, catalogueFeatures)
+			}
+			for i, f := range latestBundle(t, bundles, dscChart).Features {
+				if i < len(got.Features) && got.Features[i].Consequence != f.Consequence {
+					t.Errorf("feature %s consequence = %q, want %q", f.ID, got.Features[i].Consequence, f.Consequence)
+				}
 			}
 		})
 	}
@@ -190,6 +196,186 @@ func TestPresetEndpoint(t *testing.T) {
 			}
 		})
 	}
+}
+
+const (
+	featureVerification = "access.verification"
+	featureMarket       = "market.local"
+	featureRegistry     = "ta.registry"
+)
+
+func TestFeaturesEndpoint(t *testing.T) {
+	provider := profile.Profile{Target: completeTarget(), Role: model.RoleProvider}
+	consumer := profile.Profile{Target: completeTarget(), Role: model.RoleConsumer}
+	tests := []struct {
+		name    string
+		profile profile.Profile
+		toggle  *featureToggle
+		unauth  bool
+		want    int
+		// wantErr is a substring of the refusal.
+		wantErr string
+		// wantChoice is the choice of toggle.Feature after the call.
+		wantChoice *profile.FeatureChoice
+	}{
+		{name: "choices without a toggle", profile: provider, want: http.StatusOK},
+		{name: "recommended feature turned off", profile: provider, toggle: &featureToggle{Feature: featureVerification},
+			want: http.StatusOK, wantChoice: &profile.FeatureChoice{ID: featureVerification, Offer: model.OfferRecommended,
+				Preset: true, Enabled: false, Deliberate: true, Source: profile.SourceUser}},
+		{name: "not-offered feature of the chart turned on", profile: consumer, toggle: &featureToggle{Feature: featureMarket, Enabled: true},
+			want: http.StatusOK, wantChoice: &profile.FeatureChoice{ID: featureMarket, Offer: model.OfferNotOffered,
+				Preset: false, Enabled: true, Deliberate: true, Source: profile.SourceUser}},
+		{name: "no role", profile: profile.Profile{Target: completeTarget()}, want: http.StatusUnprocessableEntity,
+			wantErr: profile.ErrNoRole.Error()},
+		{name: "unknown feature", profile: provider, toggle: &featureToggle{Feature: "no.such", Enabled: true},
+			want: http.StatusUnprocessableEntity, wantErr: profile.ErrUnknownFeature.Error()},
+		{name: "feature of the other chart", profile: provider, toggle: &featureToggle{Feature: featureRegistry, Enabled: true},
+			want: http.StatusUnprocessableEntity, wantErr: profile.ErrFeatureOfOtherChart.Error()},
+		{name: "missing token", profile: provider, unauth: true, want: http.StatusUnauthorized},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			ps := newProfileSession(t)
+			status, raw, got := ps.features(featuresRequest{Profile: tc.profile, Toggle: tc.toggle}, tc.unauth)
+			if status != tc.want {
+				t.Fatalf("status = %d, want %d: %s", status, tc.want, raw)
+			}
+			if status != http.StatusOK {
+				if !strings.Contains(raw, tc.wantErr) {
+					t.Errorf("body %s does not contain %q", raw, tc.wantErr)
+				}
+				return
+			}
+			bundles := mustBundles(t, ps.srv)
+			if want, err := got.Profile.FeatureChoices(bundles); err != nil || !reflect.DeepEqual(got.Choices, want) {
+				t.Errorf("choices = %+v, want the profile's %+v (err %v)", got.Choices, want, err)
+			}
+			if slices.ContainsFunc(got.Choices, func(c profile.FeatureChoice) bool { return c.ID == featureRegistry }) {
+				t.Errorf("choices list %s of the other chart", featureRegistry)
+			}
+			if tc.wantChoice != nil {
+				if c := choiceOf(got.Choices, tc.wantChoice.ID); c != *tc.wantChoice {
+					t.Errorf("choice = %+v, want %+v", c, *tc.wantChoice)
+				}
+			}
+			if errs := got.Profile.Validate(bundles); len(errs) > 0 {
+				t.Errorf("profile does not validate: %v", errs)
+			}
+		})
+	}
+}
+
+// TestDeliberateChoiceSurvivesSaveAndOpen is the acceptance round trip of US-2.2.
+func TestDeliberateChoiceSurvivesSaveAndOpen(t *testing.T) {
+	ps := newProfileSession(t)
+	p := ps.mustPreset(profile.Profile{Target: completeTarget()}, model.RoleProvider).Profile
+	p = ps.mustToggle(p, featureVerification, false).Profile
+	path := filepath.Join(t.TempDir(), profileName)
+	ps.mustSave(saveRequest{Path: path, Profile: p})
+	status, raw, opened := ps.open(path)
+	if status != http.StatusOK {
+		t.Fatalf("open status = %d: %s", status, raw)
+	}
+	want := profile.FeatureState{Enabled: false, Source: profile.SourceUser}
+	if f := opened.Profile.Features[featureVerification]; f != want {
+		t.Errorf("opened %s = %+v, want %+v", featureVerification, f, want)
+	}
+	status, raw, got := ps.features(featuresRequest{Profile: opened.Profile}, false)
+	if status != http.StatusOK {
+		t.Fatalf("features status = %d: %s", status, raw)
+	}
+	if c := choiceOf(got.Choices, featureVerification); !c.Deliberate || c.Enabled || c.Source != profile.SourceUser {
+		t.Errorf("choice after open = %+v, want a deliberate user choice that is off", c)
+	}
+}
+
+func TestRoleSwitchKeepsUserChoices(t *testing.T) {
+	tests := []struct {
+		name string
+		role string
+		// wantState is the toggled feature's state after the switch; nil when the switch drops it.
+		wantState   *profile.FeatureState
+		wantDropped []string
+	}{
+		{name: "same chart keeps the choice", role: model.RoleConsumerProvider,
+			wantState: &profile.FeatureState{Enabled: false, Source: profile.SourceUser}},
+		{name: "chart switch names the dropped choice", role: model.RoleOperator, wantDropped: []string{featureVerification}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			ps := newProfileSession(t)
+			p := ps.mustPreset(profile.Profile{Target: completeTarget()}, model.RoleProvider).Profile
+			p = ps.mustToggle(p, featureVerification, false).Profile
+			got := ps.mustPreset(p, tc.role)
+			if f, ok := got.Profile.Features[featureVerification]; ok != (tc.wantState != nil) || ok && f != *tc.wantState {
+				t.Errorf("%s = %+v (present %t), want %+v", featureVerification, f, ok, tc.wantState)
+			}
+			var dropped []string
+			if got.ChartSwitch != nil {
+				dropped = got.ChartSwitch.DroppedChoices
+			}
+			if !slices.Equal(dropped, tc.wantDropped) {
+				t.Errorf("droppedChoices = %v, want %v", dropped, tc.wantDropped)
+			}
+		})
+	}
+}
+
+// features posts req to /api/features, without the session cookie when unauth is set.
+func (ps *profileSession) features(req featuresRequest, unauth bool) (int, string, featuresResponse) {
+	ps.t.Helper()
+	data, err := json.Marshal(req)
+	if err != nil {
+		ps.t.Fatal(err)
+	}
+	r := request{method: http.MethodPost, path: "/api/features", origin: ownOrigin(ps.srv), cookie: ps.cookie, body: string(data)}
+	if unauth {
+		r.cookie = nil
+	}
+	resp, raw := do(ps.t, ps.srv, r)
+	var got featuresResponse
+	if resp.StatusCode == http.StatusOK {
+		if err := json.Unmarshal([]byte(raw), &got); err != nil {
+			ps.t.Fatalf("body %q is not a features response: %v", raw, err)
+		}
+	}
+	return resp.StatusCode, raw, got
+}
+
+// mustToggle sets feature id through the API and fails the test on any status but 200.
+func (ps *profileSession) mustToggle(p profile.Profile, id string, enabled bool) featuresResponse {
+	ps.t.Helper()
+	status, raw, got := ps.features(featuresRequest{Profile: p, Toggle: &featureToggle{Feature: id, Enabled: enabled}}, false)
+	if status != http.StatusOK {
+		ps.t.Fatalf("features status = %d: %s", status, raw)
+	}
+	return got
+}
+
+// mustPreset applies role through the API and fails the test on any status but 200.
+func (ps *profileSession) mustPreset(p profile.Profile, role string) presetResponse {
+	ps.t.Helper()
+	data, err := json.Marshal(presetRequest{Profile: p, Role: role})
+	if err != nil {
+		ps.t.Fatal(err)
+	}
+	resp, raw := do(ps.t, ps.srv, request{method: http.MethodPost, path: "/api/preset", origin: ownOrigin(ps.srv), cookie: ps.cookie, body: string(data)})
+	if resp.StatusCode != http.StatusOK {
+		ps.t.Fatalf("preset status = %d: %s", resp.StatusCode, raw)
+	}
+	var got presetResponse
+	if err := json.Unmarshal([]byte(raw), &got); err != nil {
+		ps.t.Fatalf("body %q is not a preset response: %v", raw, err)
+	}
+	return got
+}
+
+func choiceOf(choices []profile.FeatureChoice, id string) profile.FeatureChoice {
+	i := slices.IndexFunc(choices, func(c profile.FeatureChoice) bool { return c.ID == id })
+	if i < 0 {
+		return profile.FeatureChoice{}
+	}
+	return choices[i]
 }
 
 func mustBundles(t *testing.T, srv *Server) []model.Bundle {
