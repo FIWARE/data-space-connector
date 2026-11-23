@@ -1,6 +1,6 @@
 /** GET /api/roles and POST /api/preset: the role presets of the model bundle (ADR 0017). */
 import { api } from './client'
-import type { Profile } from './profile'
+import type { FeatureSource, Profile } from './profile'
 
 /** How a role preset offers a feature. */
 export type Offer = 'recommended' | 'available' | 'not-offered'
@@ -46,12 +46,35 @@ export interface ChartSwitch {
   toChart: string
   /** User toggles of the old chart that the new chart cannot carry. */
   droppedChoices: string[]
+  /** Answer ids of the target and foundations stages, which survive the switch; sorted. */
+  carriedAnswers: string[]
+  /** Every other answer id; sorted. */
+  droppedAnswers: string[]
 }
 
-/** Answer of POST /api/preset; `chartSwitch` is null when the role deploys the profile's chart. */
+/** A user or values-file toggle a role change keeps in its state. */
+export interface KeptFeature {
+  id: string
+  enabled: boolean
+  source: FeatureSource
+}
+
+/** The summary of a role change, mirroring `profile.RoleChange` (ADR 0019): ids only, in catalogue order. */
+export interface RoleChange {
+  fromRole: string
+  toRole: string
+  /** Features whose effective state goes off -> on, and on -> off. */
+  enabled: string[]
+  disabled: string[]
+  kept: KeptFeature[]
+}
+
+/** Answer of POST /api/preset; `chartSwitch` is null when the role deploys the profile's chart, `change` on the
+ *  first pick (the profile had no role). */
 export interface PresetResult {
   profile: Profile
   chartSwitch: ChartSwitch | null
+  change: RoleChange | null
 }
 
 /** GET /api/roles; an empty `version` means the chart's latest. 404 for a chart or version without a bundle. */

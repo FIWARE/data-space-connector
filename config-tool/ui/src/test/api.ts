@@ -1,9 +1,9 @@
 /** Fakes the dsc-config API for component tests by stubbing the global fetch. */
 import { vi } from 'vitest'
 import type { LoadReport } from '../api/load'
-import type { Profile, ProfileResponse, RecentProfiles } from '../api/profile'
+import type { FeatureState, Profile, ProfileResponse, RecentProfiles } from '../api/profile'
 import type { FeatureChoice, FeaturesResult, FeatureToggle } from '../api/features'
-import type { Feature, Offer, PresetResult, RoleCatalogue } from '../api/roles'
+import type { Feature, Offer, PresetResult, RoleCatalogue, RoleChange } from '../api/roles'
 import type { Kubeconfig, ModelInfo } from '../api/target'
 import type { Trial, TrialWritten } from '../api/trial'
 
@@ -242,6 +242,31 @@ export function recordToggle(body: FeaturesBody): FeaturesResult {
   return { profile: next, choices: featureChoices(next) }
 }
 
+/** A feature's state as the server reads it: recorded, else the preset of the profile's ROLES role. */
+function effectiveState(profile: Profile, id: string): FeatureState {
+  const role = ROLES.roles.find((r) => r.id === profile.role)
+  return profile.features?.[id] ?? { enabled: role?.features[id] === 'recommended', source: 'preset' }
+}
+
+/** The RoleChange the server reports for `before` -> `after`, both with a ROLES role; null when `before` has none. */
+export function roleChange(before: Profile, after: Profile): RoleChange | null {
+  if (!before.role) return null
+  const ids = new Set(
+    [before, after].flatMap((p) => [...Object.keys(ROLES.roles.find((r) => r.id === p.role)?.features ?? {}), ...Object.keys(p.features ?? {})]),
+  )
+  const known = ROLES.features.map((f) => f.id)
+  const ordered = [...known.filter((id) => ids.has(id)), ...[...ids].filter((id) => !known.includes(id)).sort()]
+  const change: RoleChange = { fromRole: before.role, toRole: after.role ?? '', enabled: [], disabled: [], kept: [] }
+  for (const id of ordered) {
+    const was = effectiveState(before, id)
+    const now = effectiveState(after, id)
+    if (now.source !== 'preset' && now.enabled === was.enabled) change.kept.push({ id, enabled: now.enabled, source: now.source })
+    else if (now.enabled && !was.enabled) change.enabled.push(id)
+    else if (!now.enabled && was.enabled) change.disabled.push(id)
+  }
+  return change
+}
+
 /** The server's message for a refused role request. */
 export function refusedRole(status: number): string {
   return `role request refused with ${status}`
@@ -249,7 +274,10 @@ export function refusedRole(status: number): string {
 
 const ROLE_DEFAULTS: Required<RoleFakes> = {
   roles: () => ROLES,
-  preset: (body) => ({ profile: { ...body.profile, role: body.role, features: {} }, chartSwitch: null }),
+  preset: (body) => {
+    const profile = { ...body.profile, role: body.role, features: {} }
+    return { profile, chartSwitch: null, change: roleChange(body.profile, profile) }
+  },
   features: recordToggle,
 }
 

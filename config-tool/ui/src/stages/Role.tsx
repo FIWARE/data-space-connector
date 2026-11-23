@@ -1,12 +1,15 @@
 /** S2 Role: a preset that decides which features step 5 starts from (ADR 0017). */
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { toProfile } from '../api/profile'
-import { applyPreset, type ChartSwitch, type Role as RoleDef, type RoleCatalogue } from '../api/roles'
+import { ConfirmDialog } from '../chrome/ConfirmDialog'
+import { applyPreset, type ChartSwitch, type PresetResult, type Role as RoleDef, type RoleCatalogue, type RoleChange } from '../api/roles'
 import { repositoryDocUrl, SIZING_URL } from '../links'
 import { DEFAULT_CHART } from '../state/answers'
 import { useStore } from '../state/context'
 import { ROLE_QUESTION } from '../state/openQuestions'
 import { StageId } from '../state/stageIds'
+import { RoleChangeSummary } from './RoleChangeSummary'
+import { changeLabel, changeTitle, keepLabel, moveLabel } from './roleChangeText'
 import { useRoles } from './useRoles'
 
 /** Text under the feature list: a preset never locks anything. */
@@ -130,6 +133,8 @@ export function Role() {
   const [pending, setPending] = useState<string>()
   const [refused, setRefused] = useState<{ title: string; message: string }>()
   const [focused, setFocused] = useState<number>()
+  // A previewed role change, applied only when the user confirms it.
+  const [proposal, setProposal] = useState<{ result: PresetResult; change: RoleChange }>()
   const cards = useRef<(HTMLButtonElement | null)[]>([])
   const mounted = useRef(true)
   useEffect(() => {
@@ -153,22 +158,29 @@ export function Role() {
   }, [state.focus, roles.length, fetchError, tabStop, dispatch])
 
   const select = async (role: RoleDef) => {
-    if (pending || lockedReason(role) || role.id === state.answers.role) return
+    if (pending || proposal || lockedReason(role) || role.id === state.answers.role) return
     setPending(role.id)
     setRefused(undefined)
     try {
       const result = await applyPreset(toProfile(state), role.id, state.loaded?.sha256)
       // A pick that answers after the stage was left must not change a configuration started since.
-      if (mounted.current) {
-        dispatch({ type: 'roleApplied', profile: result.profile, chartSwitch: result.chartSwitch })
-        setFocused(undefined)
-      }
+      if (!mounted.current) return
+      // POST /api/preset has no side effects, so a change of an existing role is only a preview until confirmed.
+      if (result.change) setProposal({ result, change: result.change })
+      else apply(result)
     } catch (err) {
       if (mounted.current) setRefused({ title: role.title, message: (err as Error).message })
     } finally {
       if (mounted.current) setPending(undefined)
     }
   }
+
+  const apply = (result: PresetResult) => {
+    dispatch({ type: 'roleApplied', profile: result.profile, chartSwitch: result.chartSwitch })
+    setFocused(undefined)
+  }
+
+  const roleTitle = (id: string) => roles.find((r) => r.id === id)?.title ?? id
 
   const onKeyDown = (index: number) => (event: KeyboardEvent<HTMLButtonElement>) => {
     const step = ARROW_STEP[event.key]
@@ -219,6 +231,20 @@ export function Role() {
         <p className="field-error" role="alert">
           {refused.title}: {refused.message}
         </p>
+      )}
+      {proposal && (
+        <ConfirmDialog
+          title={changeTitle(roleTitle(proposal.change.fromRole), roleTitle(proposal.change.toRole))}
+          cancelLabel={keepLabel(roleTitle(proposal.change.fromRole))}
+          confirmLabel={proposal.result.chartSwitch ? moveLabel(proposal.result.chartSwitch.toChart) : changeLabel(roleTitle(proposal.change.toRole))}
+          onCancel={() => setProposal(undefined)}
+          onConfirm={() => {
+            setProposal(undefined)
+            apply(proposal.result)
+          }}
+        >
+          <RoleChangeSummary change={proposal.change} chartSwitch={proposal.result.chartSwitch} catalogue={catalogue} />
+        </ConfirmDialog>
       )}
       {selected && catalogue && <Selection role={selected} catalogue={catalogue} />}
       <p className="hint">
