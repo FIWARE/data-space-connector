@@ -121,7 +121,7 @@ func (s *Server) handlePreset(w http.ResponseWriter, r *http.Request) {
 	out, sw, err := p.ApplyPreset(bundles, req.Role, loadedToggles(res))
 	switch {
 	case errors.Is(err, profile.ErrUnknownRole), errors.Is(err, profile.ErrChartSwitchLoaded),
-		errors.Is(err, profile.ErrPresetConflictsLoaded):
+		errors.Is(err, profile.ErrFeatureOfOtherChart):
 		writeError(w, http.StatusUnprocessableEntity, err.Error(), "")
 	case err != nil:
 		writeError(w, http.StatusInternalServerError, err.Error(), "")

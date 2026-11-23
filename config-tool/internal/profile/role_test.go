@@ -112,7 +112,7 @@ func TestApplyPresetChartSwitch(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := (ChartSwitch{FromChart: dscChart, FromVersion: latest, ToChart: taChart}); sw == nil || *sw != want {
+	if want := (ChartSwitch{FromChart: dscChart, FromVersion: latest, ToChart: taChart, DroppedChoices: []string{}}); sw == nil || !reflect.DeepEqual(*sw, want) {
 		t.Errorf("switch = %+v, want %+v", sw, want)
 	}
 	if op.Target.Chart != taChart || op.Target.ChartVersion != "" {
@@ -129,7 +129,7 @@ func TestApplyPresetChartSwitch(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := (ChartSwitch{FromChart: taChart, ToChart: dscChart}); sw == nil || *sw != want {
+	if want := (ChartSwitch{FromChart: taChart, ToChart: dscChart, DroppedChoices: []string{}}); sw == nil || !reflect.DeepEqual(*sw, want) {
 		t.Errorf("switch back = %+v, want %+v", sw, want)
 	}
 	if back.Target.Chart != dscChart || back.Target.ChartVersion != "" || back.Catalogue != nil {
@@ -189,6 +189,7 @@ func TestApplyPresetLoadedToggles(t *testing.T) {
 		}
 		return m
 	}
+	loadedOn := FeatureState{Enabled: true, Source: SourceLoaded}
 	tests := []struct {
 		name    string
 		role    string
@@ -199,19 +200,21 @@ func TestApplyPresetLoadedToggles(t *testing.T) {
 		{name: "loaded false beats a recommendation", role: model.RoleProvider, loaded: map[string]bool{"data.scorpio": false},
 			want: with(provider.Features, "data.scorpio", &FeatureState{Enabled: false, Source: SourceLoaded})},
 		{name: "loaded true on an available feature", role: model.RoleConsumer, loaded: map[string]bool{"dsp.rainbow": true},
-			want: with(consumer.Features, "dsp.rainbow", &FeatureState{Enabled: true, Source: SourceLoaded})},
+			want: with(consumer.Features, "dsp.rainbow", &loadedOn)},
 		{name: "loaded false on a not-offered feature is omitted", role: model.RoleConsumer, loaded: map[string]bool{"data.scorpio": false},
 			want: consumer.Features},
-		{name: "loaded true on a not-offered feature", role: model.RoleConsumer, loaded: map[string]bool{"data.scorpio": true, "access.policies": true},
-			wantErr: "access.policies, data.scorpio"},
+		{name: "loaded true on a not-offered feature is kept as loaded", role: model.RoleConsumer, loaded: map[string]bool{"data.scorpio": true, "access.policies": true},
+			want: with(with(consumer.Features, "data.scorpio", &loadedOn), "access.policies", &loadedOn)},
+		{name: "loaded true on a feature of the other chart", role: model.RoleProvider, loaded: map[string]bool{"ta.registry": true, "consent.authority": true},
+			wantErr: "consent.authority, ta.registry"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			p := dscProfile()
 			got, _, err := p.ApplyPreset(shipped, tc.role, tc.loaded)
 			if tc.wantErr != "" {
-				if !errors.Is(err, ErrPresetConflictsLoaded) || !strings.Contains(err.Error(), tc.wantErr) {
-					t.Fatalf("err = %v, want %v naming %s", err, ErrPresetConflictsLoaded, tc.wantErr)
+				if !errors.Is(err, ErrFeatureOfOtherChart) || !strings.Contains(err.Error(), tc.wantErr) {
+					t.Fatalf("err = %v, want %v naming %s", err, ErrFeatureOfOtherChart, tc.wantErr)
 				}
 				if !reflect.DeepEqual(got, p) {
 					t.Errorf("profile = %+v, want it unchanged", got)

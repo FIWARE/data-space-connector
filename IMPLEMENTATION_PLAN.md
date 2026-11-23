@@ -131,8 +131,9 @@ All work is in `config-tool/internal/server/`.
   - It runs `prepareProfile` exactly like `handlePreset`, then `SetFeature` when `toggle` is set, then `FeatureChoices`.
   - Response: `{profile, choices: []profile.FeatureChoice}`.
   - Errors: `ErrNoRole`/`ErrUnknownFeature`/`ErrFeatureOfOtherChart` → 422; anything else → 500.
-- `handlePreset`: replace the `ErrPresetConflictsLoaded` mapping with `ErrFeatureOfOtherChart` → 422. The
-  `chartSwitch` body gains `droppedChoices` from `ChartSwitch`.
+- `handlePreset`: done in step 2, which had to keep the build green after deleting `ErrPresetConflictsLoaded`: the
+  mapping is now `ErrFeatureOfOtherChart` → 422, and the `chartSwitch` body carries `droppedChoices` (never null)
+  because it serialises `profile.ChartSwitch`.
 - Tests (`role_test.go`, table-driven):
   - Status codes: no role → 422, unknown feature → 422, a feature of the other chart (Provider + `ta.registry`) →
     422, bad token → 401, and choices without a toggle.
@@ -143,7 +144,8 @@ All work is in `config-tool/internal/server/`.
   - Role switch through the API: Provider, toggle `access.verification` off, `POST /api/preset` Consumer-Provider →
     the feature is still `{false, user}`; Provider with a user toggle → Operator → `chartSwitch.droppedChoices` names
     it.
-  - Change the existing preset test that expected a 422 for a loaded not-offered toggle to expect `source: loaded`.
+  - The existing preset test that expected a 422 for a loaded not-offered toggle already expects `source: loaded`
+    (changed in step 2).
 - Acceptance: `go test ./...` is green.
 
 ### Step 4: UI — API client, reducer action, accessible confirm dialog
