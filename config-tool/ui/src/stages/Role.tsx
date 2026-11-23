@@ -1,12 +1,13 @@
 /** S2 Role: a preset that decides which features step 5 starts from (ADR 0017). */
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { toProfile } from '../api/profile'
-import { applyPreset, fetchRoles, type ChartSwitch, type Role as RoleDef, type RoleCatalogue } from '../api/roles'
+import { applyPreset, type ChartSwitch, type Role as RoleDef, type RoleCatalogue } from '../api/roles'
 import { repositoryDocUrl, SIZING_URL } from '../links'
 import { DEFAULT_CHART } from '../state/answers'
 import { useStore } from '../state/context'
 import { ROLE_QUESTION } from '../state/openQuestions'
 import { StageId } from '../state/stageIds'
+import { useRoles } from './useRoles'
 
 /** Text under the feature list: a preset never locks anything. */
 export const NOTHING_LOCKED = 'Everything else stays available on step 5 — nothing here is locked.'
@@ -14,19 +15,6 @@ export const NOTHING_LOCKED = 'Everything else stays available on step 5 — not
 export const DEPENDS_ON_SELECTION = 'depends on your selection'
 
 const ARROW_STEP: Record<string, number> = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }
-
-function useRoles(chart: string, version: string): { catalogue?: RoleCatalogue; error?: string } {
-  const [result, setResult] = useState<{ catalogue?: RoleCatalogue; error?: string }>({})
-  useEffect(() => {
-    const controller = new AbortController()
-    fetchRoles(chart, version, controller.signal).then(
-      (catalogue) => setResult({ catalogue }),
-      (err: Error) => controller.signal.aborted || setResult({ error: err.message }),
-    )
-    return () => controller.abort()
-  }, [chart, version])
-  return result
-}
 
 function recommendedCount(role: RoleDef): number {
   return Object.values(role.features).filter((offer) => offer === 'recommended').length
