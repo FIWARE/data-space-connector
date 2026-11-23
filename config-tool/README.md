@@ -280,6 +280,10 @@ latest `data-space-connector` release bundle that declares them.
   request.
 - **User toggles win over both** and survive a role switch within the chart. A chart switch drops them, and the
   notice names them (`chartSwitch.droppedChoices`).
+- **`change` summarises a role change** when the request profile already has a role (null on the first pick):
+  `enabled` and `disabled` list the features whose effective state flips, and `kept` lists the user and loaded
+  toggles that keep it, each with its `source`. It holds ids only, in catalogue order. The call writes no server
+  state, so the UI sends it again as the preview of a change (ADR 0019).
 
 The profile records `role`, `features` (each offered or turned-on feature with `enabled` and `source`) and, when the roles came
 from another bundle than `model`, `catalogue`. The server sets `catalogue` on save, as it does `model`, and opening
