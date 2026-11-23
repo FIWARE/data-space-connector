@@ -73,6 +73,8 @@ However, for easier deployment of these components, you can use the same `fiware
 
 ### Using the FIWARE DSC Helm chart and values
 
+> **Start from the reference profile:** [`examples/consumer.yaml`](../../../../charts/data-space-connector/examples/consumer.yaml) is a complete values file for a consumer, to adapt to your installation. Its [README](../../../../charts/data-space-connector/examples/README.md) lists the prerequisites, the placeholders, the Secrets to create and the installation steps. The settings below explain each part.
+
 The consumer could use the same `fiware/data-space-connector` chart as the provider, but with most components disabled (since it is not a real connector).
 
 1. Create a helm `values.yaml` file with the key settings to enable only the consumer-related components like this:

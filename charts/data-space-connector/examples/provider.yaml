@@ -1,0 +1,490 @@
+# Reference profile: a provider of the data space, without a marketplace.
+#
+# A provider offers a data service and protects it with Verifiable Credentials:
+#   - identity: a did:web (did-helper) and Keycloak, which issues credentials to its own users;
+#   - authentication: the verifier, which checks the credentials of each request against the
+#     trust anchor's registry (TIR) and the provider's own trusted issuers list (TIL);
+#   - authorization: APISIX as the gateway, with OPA deciding on the ODRL policies of the PAP;
+#   - offers and contracts: the TM Forum API (stored in Scorpio) and contract-management.
+# For a local marketplace on top of it, add provider-marketplace.yaml.
+#
+# Before installing, read README.md in this directory: the prerequisites, the Secrets to create
+# and the placeholders to replace.
+#
+#   helm install provider oci://quay.io/fiware/helm-charts/data-space-connector \
+#     --version <chart-version> --namespace provider --create-namespace -f provider.yaml
+
+# --- Identity: did:web, served by did-helper -------------------------------------------------
+
+did:
+  enabled: true
+  config:
+    server:
+      # did-helper also publishes <hostUrl>/.well-known/tls.crt, the certificate of the key
+      hostUrl: https://<did-domain>
+      certPath: /certs/tls.crt
+  volumes:
+    - name: certs
+      secret:
+        # the DID's key: the certificate cert-manager issues for the ingress below
+        secretName: did-tls
+        items:
+          - key: tls.crt
+            path: tls.crt
+  volumeMounts:
+    - name: certs
+      mountPath: /certs
+  # with certPath did-helper writes nothing, so it runs on a read-only root filesystem
+  securityContext:
+    readOnlyRootFilesystem: true
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop: ["ALL"]
+  ingress:
+    enabled: true
+    className: <ingress-class>
+    annotations:
+      cert-manager.io/cluster-issuer: <cluster-issuer>
+      cert-manager.io/private-key-algorithm: ECDSA
+      # the Secret also holds the DID's key: a renewal must keep it, or the DID changes and every
+      # credential issued with the old key stops verifying
+      cert-manager.io/private-key-rotation-policy: Never
+    hosts:
+      - host: <did-domain>
+        paths:
+          - path: /
+            pathType: ImplementationSpecific
+    tls:
+      - secretName: did-tls
+        hosts:
+          - <did-domain>
+
+# --- Credential issuer: Keycloak ---------------------------------------------------------------
+
+keycloak:
+  enabled: true
+  keycloak:
+    # the public URL, so that Keycloak does not derive it from each request
+    hostname: https://<keycloak-domain>
+    hostnameStrict: true
+  # its own database user, created by the Postgres operator (see managedPostgres below)
+  database:
+    username: keycloak
+    existingSecret: keycloak.postgres.credentials.postgresql.acid.zalan.do
+  ingress:
+    enabled: true
+    className: <ingress-class>
+    annotations:
+      cert-manager.io/cluster-issuer: <cluster-issuer>
+      cert-manager.io/private-key-algorithm: ECDSA
+    hosts:
+      - host: <keycloak-domain>
+        paths:
+          # only what wallets need: the realm's endpoints and the static resources. The admin
+          # console and the master realm stay inside the cluster (kubectl port-forward).
+          - path: /realms/<realm>
+            pathType: Prefix
+          - path: /resources
+            pathType: Prefix
+    tls:
+      - secretName: keycloak-tls
+        hosts:
+          - <keycloak-domain>
+  # Keycloak signs the credentials with the DID's key: this init container turns the key and
+  # certificate of the DID's Secret into the PKCS12 keystore the realm reads
+  extraInitContainers:
+    - name: prepare-keystore
+      image: alpine/openssl:3.5.5
+      command: ["/bin/sh", "-c"]
+      args:
+        - |
+          # the CA of the certificate goes into the keystore too, when the Secret has it (a
+          # private CA); a public one, such as Let's Encrypt, leaves ca.crt out or empty
+          ca=""
+          if [ -s /certs-did/ca.crt ]; then ca="-certfile /certs-did/ca.crt"; fi
+          openssl pkcs12 -export \
+            -in /certs-did/tls.crt \
+            -inkey /certs-did/tls.key \
+            $ca \
+            -out /did-material/cert.pfx \
+            -name "didPrivateKey" \
+            -passout env:STORE_PASS
+          chmod 644 /did-material/cert.pfx
+      env:
+        - name: STORE_PASS
+          valueFrom:
+            secretKeyRef:
+              name: keystore-password
+              key: password
+      volumeMounts:
+        - name: did-material
+          mountPath: /did-material
+        - name: did-key
+          mountPath: /certs-did
+          readOnly: true
+  extraVolumeMounts:
+    # Keycloak only reads realm keystores from /opt/keycloak/data/<realm name>
+    - name: did-material
+      mountPath: /opt/keycloak/data/<realm>
+    - name: realms
+      mountPath: /opt/keycloak/data/import
+  extraVolumes:
+    - name: did-material
+      emptyDir: {}
+    # the realm the chart renders, in the ConfigMap <realm name>-realm
+    - name: realms
+      configMap:
+        name: <realm>-realm
+    - name: did-key
+      secret:
+        secretName: did-tls
+  # replaces the chart's list: keep KC_HEAP_SIZE
+  extraEnvVars:
+    - name: KC_HEAP_SIZE
+      value: "1024m"
+    - name: STORE_PASS
+      valueFrom:
+        secretKeyRef:
+          name: keystore-password
+          key: password
+  issuerDid: <did>
+  signingKey:
+    storePath: /opt/keycloak/data/<realm>/cert.pfx
+    storePassword: "${STORE_PASS}"
+    keyAlias: didPrivateKey
+    keyPassword: "${STORE_PASS}"
+    did: <did>
+    keyAlgorithm: ES256
+  realm:
+    name: <realm>
+    frontendUrl: https://<keycloak-domain>
+    import: true
+    # The provider's own staff get credentials too, for example to manage the provider's offers.
+    # One credential type, UserCredential, with the roles the user holds at this provider.
+    verifiableCredentials:
+      user-credential:
+        attributes:
+          format: jwt_vc_json
+          verifiable_credential_type: UserCredential
+          credential_signing_alg: ES256
+          credential_build_config.token_jws_type: JWT
+        protocolMappers:
+          - name: context-mapper
+            protocol: oid4vc
+            protocolMapper: oid4vc-context-mapper
+            config:
+              context: https://www.w3.org/2018/credentials/v1
+          - name: email-mapper
+            protocol: oid4vc
+            protocolMapper: oid4vc-user-attribute-mapper
+            config:
+              claim.name: email
+              userAttribute: email
+          - name: roles-mapper
+            protocol: oid4vc
+            protocolMapper: oid4vc-target-role-mapper
+            config:
+              claim.name: roles
+              clientId: <did>
+          - name: subject-id-mapper
+            protocol: oid4vc
+            protocolMapper: oid4vc-subject-id-mapper
+            config:
+              userAttribute: email
+              claim.name: id
+    # Users are not part of the values: create them in the realm, or federate it.
+    clientRoles: |
+      "<did>": [
+        {
+          "name": "REPRESENTATIVE",
+          "description": "Acts on behalf of the provider",
+          "clientRole": true
+        }
+      ]
+    # the client the roles above belong to, named after the DID. It only holds roles: no login
+    # flow is enabled on it.
+    clients: |
+      {
+        "clientId": "<did>",
+        "description": "Roles of the users at this provider",
+        "enabled": true,
+        "protocol": "openid-connect",
+        "publicClient": false,
+        "standardFlowEnabled": false,
+        "implicitFlowEnabled": false,
+        "directAccessGrantsEnabled": false,
+        "serviceAccountsEnabled": false
+      }
+
+# --- Authentication and authorization ----------------------------------------------------------
+
+decentralizedIam:
+  enabled: true
+  vcAuthentication:
+    # the Postgres operator is installed once per cluster, not by each release
+    postgres-operator:
+      enabled: false
+    # One PostgreSQL cluster for the provider's components, each with its own user. The operator
+    # creates the users and a Secret with each password.
+    managedPostgres:
+      enabled: true
+      config:
+        volume:
+          size: 10Gi
+          # storageClass: <storage-class>
+        # Scorpio's database, with PostGIS. Scorpio connects as its owner, ngb_owner_user.
+        preparedDatabases:
+          ngb:
+            defaultUsers: true
+            schemas:
+              public: {}
+            extensions:
+              postgis: public
+
+    # The provider's trusted issuers list: which participants may issue which credentials to
+    # the users of this provider's services. Internal only: entries are added by the
+    # `registration` below or through its API inside the cluster.
+    trusted-issuers-list:
+      database:
+        username: til
+        existingSecret:
+          enabled: true
+          name: til.postgres.credentials.postgresql.acid.zalan.do
+          key: password
+
+    vcverifier:
+      ingress:
+        enabled: true
+        className: <ingress-class>
+        annotations:
+          cert-manager.io/cluster-issuer: <cluster-issuer>
+          cert-manager.io/private-key-algorithm: ECDSA
+        hosts:
+          - host: <verifier-domain>
+            paths:
+              - /
+        tls:
+          - secretName: verifier-tls
+            hosts:
+              - <verifier-domain>
+      deployment:
+        database:
+          existingSecret:
+            name: ccs.postgres.credentials.postgresql.acid.zalan.do
+        server:
+          host: https://<verifier-domain>
+        verifier:
+          did: <did>
+          # the trust anchor's registry of the data space's participants
+          tirAddress: <tir-url>
+          supportedModes: ["byValue", "byReference"]
+          # request objects are signed with the key of the verifier's own TLS certificate
+          clientIdentification:
+            id: x509_san_dns:<verifier-domain>
+            keyPath: /client-key/tls.key
+            certificatePath: /client-key/tls.crt
+            requestKeyAlgorithm: ES256
+          # the access tokens are signed with a persistent RSA key (verifier-token-key, at the end
+          # of this file), not with one generated on every start
+          generateKey: false
+          keyAlgorithm: RS256
+          keyPath: /token-key/tls.key
+        serverCertificates:
+          signingKey:
+            secretName: verifier-token-key
+            key: tls.key
+        additionalVolumes:
+          - name: client-key
+            secret:
+              secretName: verifier-tls
+        additionalVolumeMounts:
+          - name: client-key
+            mountPath: /client-key
+            readOnly: true
+      # The services the verifier issues tokens for, and the credentials each one accepts.
+      # Registered on install and upgrade; a service that already exists is left as it is.
+      registration:
+        enabled: true
+        services:
+          - id: data-service
+            defaultOidcScope: default
+            authorizationType: DEEPLINK
+            oidcScopes:
+              default:
+                credentials:
+                  - type: UserCredential
+                    trustedParticipantsLists:
+                      - <tir-url>
+                    trustedIssuersLists:
+                      - http://trusted-issuers-list:8080
+          - id: tmf-api
+            defaultOidcScope: default
+            authorizationType: DEEPLINK
+            oidcScopes:
+              default:
+                credentials:
+                  - type: UserCredential
+                    trustedParticipantsLists:
+                      - <tir-url>
+                    trustedIssuersLists:
+                      - http://trusted-issuers-list:8080
+
+  odrlAuthorization:
+    odrl-pap:
+      database:
+        username: pap
+        existingSecret:
+          enabled: true
+          name: pap.postgres.credentials.postgresql.acid.zalan.do
+          key: password
+      additionalEnvVars:
+        - name: GENERAL_ORGANIZATION_DID
+          value: <did>
+    apisix:
+      apisix:
+        # routes come from the values (standalone mode): the Admin API is not needed
+        admin:
+          enabled: false
+      ingress:
+        enabled: true
+        className: <ingress-class>
+        annotations:
+          cert-manager.io/cluster-issuer: <cluster-issuer>
+          cert-manager.io/private-key-algorithm: ECDSA
+        hosts:
+          - host: <data-service-domain>
+            paths: ["/"]
+          - host: <tmf-domain>
+            paths: ["/"]
+        tls:
+          - secretName: apisix-tls
+            hosts:
+              - <data-service-domain>
+              - <tmf-domain>
+      routes:
+        # the data service: OpenID discovery, served by the verifier ...
+        - uri: /.well-known/openid-configuration
+          host: <data-service-domain>
+          upstream:
+            nodes:
+              verifier:3000: 1
+            type: roundrobin
+          plugins:
+            proxy-rewrite:
+              uri: /services/data-service/.well-known/openid-configuration
+        # ... and every other request, with a token of the verifier and allowed by the policies
+        - uri: /*
+          host: <data-service-domain>
+          upstream:
+            nodes:
+              <data-service-upstream>: 1
+            type: roundrobin
+          plugins:
+            openid-connect:
+              bearer_only: true
+              use_jwks: true
+              client_id: data-service
+              client_secret: unused
+              ssl_verify: true
+              discovery: https://<verifier-domain>/services/data-service/.well-known/openid-configuration
+            opa:
+              host: http://localhost:8181
+              policy: policy/main
+              with_body: true
+        # the TM Forum API (offers, orders), protected the same way
+        - uri: /.well-known/openid-configuration
+          host: <tmf-domain>
+          upstream:
+            nodes:
+              verifier:3000: 1
+            type: roundrobin
+          plugins:
+            proxy-rewrite:
+              uri: /services/tmf-api/.well-known/openid-configuration
+        - uri: /*
+          host: <tmf-domain>
+          upstream:
+            nodes:
+              tm-forum-api-svc:8080: 1
+            type: roundrobin
+          plugins:
+            openid-connect:
+              bearer_only: true
+              use_jwks: true
+              client_id: tmf-api
+              client_secret: unused
+              ssl_verify: true
+              discovery: https://<verifier-domain>/services/tmf-api/.well-known/openid-configuration
+            opa:
+              host: http://localhost:8181
+              policy: policy/main
+              with_body: true
+
+# The participants whose credentials this provider accepts, registered in its trusted issuers
+# list on install and upgrade: here, a consumer issuing UserCredentials to its users.
+registration:
+  enabled: true
+  til: http://trusted-issuers-list:8080
+  issuer:
+    - did: <consumer-did>
+      credentialTypes:
+        - UserCredential
+
+# --- Offers and contracts ----------------------------------------------------------------------
+
+# Scorpio stores the TM Forum data. Keep it internal: it is not the public data service.
+scorpio:
+  db:
+    user: ngb_owner_user
+    existingSecret:
+      enabled: true
+      name: ngb-owner-user.postgres.credentials.postgresql.acid.zalan.do
+      key: password
+
+# All the TM Forum APIs in one deployment, served as tm-forum-api-svc. Internal: published only
+# through APISIX (above).
+tm-forum-api:
+  allInOne:
+    enabled: true
+  apiProxy:
+    enabled: false
+
+contract-management:
+  did: <did>
+  # turns completed orders into ODRL policies at the PAP
+  enableOdrlPap: true
+  services:
+    product-order:
+      url: http://tm-forum-api-svc:8080
+    party:
+      url: http://tm-forum-api-svc:8080
+    product-catalog:
+      url: http://tm-forum-api-svc:8080
+    service-catalog:
+      url: http://tm-forum-api-svc:8080
+    tmforum-agreement-api:
+      url: http://tm-forum-api-svc:8080
+    quote:
+      url: http://tm-forum-api-svc:8080
+
+# --- Extra resources -------------------------------------------------------------------------
+
+extraManifests:
+  # the verifier's token signing key: RSA, kept in a Secret so that tokens stay valid across
+  # restarts and replicas
+  - apiVersion: cert-manager.io/v1
+    kind: Certificate
+    metadata:
+      name: verifier-token-key
+      namespace: "{{ .Release.Namespace }}"
+    spec:
+      secretName: verifier-token-key
+      commonName: <verifier-domain>
+      dnsNames:
+        - <verifier-domain>
+      issuerRef:
+        name: <cluster-issuer>
+        kind: ClusterIssuer
+      privateKey:
+        algorithm: RSA
+        size: 2048

@@ -56,6 +56,8 @@
         <deploy.consentAuthority.template.skip>true</deploy.consentAuthority.template.skip>
         <deploy.provider.values>${main.basedir}/k3s/provider.yaml</deploy.provider.values>
         <deploy.consumer.values>${main.basedir}/k3s/consumer.yaml</deploy.consumer.values>
+        <!-- manifests applied in the provider namespace before its release (Secrets, volumes) -->
+        <deploy.provider.manifests>${main.basedir}/k3s/provider</deploy.provider.manifests>
         <deploy.prometheus.values></deploy.prometheus.values>
         <deploy.gaiaxInfra>false</deploy.gaiaxInfra>
         <!-- the same switch for the k3s-maven-plugin, which only takes a skip flag -->
@@ -375,7 +377,7 @@
                         </goals>
                         <configuration>
                             <skipApply>${deploy.template.skip}</skipApply>
-                            <manifests>${main.basedir}/k3s/provider</manifests>
+                            <manifests>${deploy.provider.manifests}</manifests>
                         </configuration>
                     </execution>
                     <execution>
@@ -471,6 +473,7 @@
                                     <env key="TRUST_ANCHOR_ARGS" value="${deploy.trustAnchor.args}" />
                                     <env key="CONSENT_AUTHORITY_VALUES" value="${deploy.consentAuthority.values}" />
                                     <env key="PROVIDER_VALUES" value="${deploy.provider.values}" />
+                                    <env key="PROVIDER_MANIFESTS" value="${deploy.provider.manifests}" />
                                     <env key="CONSUMER_VALUES" value="${deploy.consumer.values}" />
                                     <env key="PROMETHEUS_VALUES" value="${deploy.prometheus.values}" />
                                     <env key="GAIA_X_INFRA" value="${deploy.gaiaxInfra}" />
@@ -651,6 +654,65 @@
                      it itself on the helm-install path -->
                 <deploy.gaiaxInfra.skip>${deploy.template.skip}</deploy.gaiaxInfra.skip>
             </properties>
+        </profile>
+        <!-- The reference profiles (charts/*/examples), deployed as a user deploys them: their
+             placeholders filled in with the values of k3s/reference/*.env, plus the local test
+             plumbing of k3s/reference/*-local.yaml. The provider runs with the marketplace. -->
+        <profile>
+            <id>reference</id>
+            <properties>
+                <deploy.reference.dir>${main.basedir}/target/reference</deploy.reference.dir>
+                <deploy.trustAnchor.values>${deploy.reference.dir}/trust-anchor.yaml</deploy.trustAnchor.values>
+                <deploy.provider.values>${deploy.reference.dir}/provider.yaml,${deploy.reference.dir}/provider-marketplace.yaml,${main.basedir}/k3s/reference/provider-local.yaml</deploy.provider.values>
+                <deploy.consumer.values>${deploy.reference.dir}/consumer.yaml,${main.basedir}/k3s/reference/consumer-local.yaml</deploy.consumer.values>
+                <deploy.provider.manifests>${main.basedir}/k3s/reference/provider</deploy.provider.manifests>
+            </properties>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-antrun-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <id>fill-reference-profiles</id>
+                                <phase>generate-resources</phase>
+                                <goals>
+                                    <goal>run</goal>
+                                </goals>
+                                <configuration>
+                                    <skip>${deploy.skip}</skip>
+                                    <target>
+                                        <exec executable="/bin/bash" failonerror="true">
+                                            <arg value="${main.basedir}/k3s/reference/fill-placeholders.sh" />
+                                            <arg value="${main.basedir}/k3s/reference/trust-anchor.env" />
+                                            <arg value="${main.basedir}/charts/trust-anchor/examples/trust-anchor.yaml" />
+                                            <arg value="${deploy.reference.dir}/trust-anchor.yaml" />
+                                        </exec>
+                                        <exec executable="/bin/bash" failonerror="true">
+                                            <arg value="${main.basedir}/k3s/reference/fill-placeholders.sh" />
+                                            <arg value="${main.basedir}/k3s/reference/provider.env" />
+                                            <arg value="${main.basedir}/charts/data-space-connector/examples/provider.yaml" />
+                                            <arg value="${deploy.reference.dir}/provider.yaml" />
+                                        </exec>
+                                        <exec executable="/bin/bash" failonerror="true">
+                                            <arg value="${main.basedir}/k3s/reference/fill-placeholders.sh" />
+                                            <arg value="${main.basedir}/k3s/reference/provider.env" />
+                                            <arg value="${main.basedir}/charts/data-space-connector/examples/provider-marketplace.yaml" />
+                                            <arg value="${deploy.reference.dir}/provider-marketplace.yaml" />
+                                        </exec>
+                                        <exec executable="/bin/bash" failonerror="true">
+                                            <arg value="${main.basedir}/k3s/reference/fill-placeholders.sh" />
+                                            <arg value="${main.basedir}/k3s/reference/consumer.env" />
+                                            <arg value="${main.basedir}/charts/data-space-connector/examples/consumer.yaml" />
+                                            <arg value="${deploy.reference.dir}/consumer.yaml" />
+                                        </exec>
+                                    </target>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
         </profile>
     </profiles>
 

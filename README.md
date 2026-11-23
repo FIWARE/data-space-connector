@@ -55,6 +55,7 @@ recipes.
   - [Integration with the Gaia-X Trust Framework](#integration-with-the-gaia-x-trust-framework)
 - [Deployment](#deployment)
   - [Quick Start Guide](#quick-start-guide)
+  - [Reference profiles](#reference-profiles)
   - [Deployment by Role](#deployment-by-role)
   - [Helm chart](#helm-chart)
   - [Local Deployment (Maven)](#local-deployment-maven)
@@ -524,15 +525,21 @@ The Quick Start Guide helps you understand how a FIWARE DSC-based Data Space wor
 
 > **Note:** The Quick Start Guide is for **learning and development purposes only**. It deploys all the components of a data space together to show how they interact, not from the perspective of any specific role.
 
+### Reference profiles
+
+**To deploy the FIWARE DSC in a real environment, start from the reference profiles:** example values files for a [provider](./charts/data-space-connector/examples/provider.yaml) (with or without its own [local marketplace](./charts/data-space-connector/examples/provider-marketplace.yaml), not the data space's Central Marketplace), a [consumer](./charts/data-space-connector/examples/consumer.yaml) and a [trust anchor](./charts/trust-anchor/examples/trust-anchor.yaml), to adapt to your installation. Their [README](./charts/data-space-connector/examples/README.md) lists the prerequisites, the placeholders to replace, the Secrets to create and the installation steps.
+
+* [Reference profiles](./charts/data-space-connector/examples/README.md)
+
 ### Deployment by Role
 
-For deploying the FIWARE DSC in a real environment, refer to the documentation that matches your organization's role in the data space:
+The role guides explain what each role needs and every part of its configuration, for the organization's role in the data space:
 
 * [Deployment by Role](./doc/deployment-integration/roles/README.md) — Overview of all roles and their required components
   * [Consumer](./doc/deployment-integration/roles/consumer/README.md) — Retrieves data from other participants
   * [Provider](./doc/deployment-integration/roles/provider/README.md) — Offers data or services to other participants
   * [Consumer + Provider](./doc/deployment-integration/roles/consumer-provider/README.md) — Acts as both (most common scenario)
-  * [Admin](./doc/deployment-integration/roles/operator/README.md) — Operates the data space trust infrastructure
+  * [Operator](./doc/deployment-integration/roles/operator/README.md) — Operates the data space trust infrastructure
 
 ### Helm chart
 
