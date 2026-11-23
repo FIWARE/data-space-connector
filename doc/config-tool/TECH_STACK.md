@@ -101,6 +101,7 @@ Why this and not something else:
 │    GET  /api/profile/recent recently used profiles                               │
 │    GET  /api/roles          role presets and feature catalogue (stage 2)         │
 │    POST /api/preset         apply a role preset to a profile                     │
+│    POST /api/features       toggle a feature, list the choices vs. the preset    │
 │    POST /api/render         profile → values.yaml (+ diff)                       │
 │    POST /api/validate       L1 schema · L2 rules · L3 helm template              │
 │    POST /api/load           values.yaml → profile + overrides + conflicts        │
