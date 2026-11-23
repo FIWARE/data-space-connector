@@ -672,7 +672,7 @@ an OpenTelemetry SDK or agent:
 | **Scorpio** | Quarkus (Java) | Image does not include the `quarkus-opentelemetry` extension; `QUARKUS_OTEL_ENABLED=true` is silently ignored. |
 | **tm-forum-api** | Micronaut (Java) | No OTEL SDK or Java agent present; `OTEL_SDK_DISABLED=false` has no effect. |
 | **contract-management** | Micronaut (Java) | Same as tm-forum-api. |
-| **marketplace** (charging backend) | Python | No OTEL SDK bundled. Runs Python 3.9, supported by the default agent `0.61b0`. Annotate `marketplace.bizEcosystemChargingBackend.deployment.additionalAnnotations`, and set `DJANGO_SETTINGS_MODULE=settings` and `PYTHONPATH=/opt/business-ecosystem-charging-backend/src` in its `extraEnvVars`: the agent's Django instrumentation loads the settings before the application does. |
+| **marketplace** (charging backend) | Python | No OTEL SDK bundled. Runs Python 3.9, supported by the default agent `0.61b0`. Annotate `marketplace.bizEcosystemChargingBackend.deployment.additionalAnnotations`. |
 | **marketplace** (logic proxy) | Node.js | No OTEL SDK bundled. |
 
 The OpenTelemetry Operator solves this by injecting the appropriate
@@ -805,7 +805,7 @@ an OpenTelemetry SDK or agent:
 | **Scorpio** | Quarkus (Java) | Image does not include the `quarkus-opentelemetry` extension; `QUARKUS_OTEL_ENABLED=true` is silently ignored. |
 | **tm-forum-api** | Micronaut (Java) | No OTEL SDK or Java agent present; `OTEL_SDK_DISABLED=false` has no effect. |
 | **contract-management** | Micronaut (Java) | Same as tm-forum-api. |
-| **marketplace** (charging backend) | Python | No OTEL SDK bundled. Runs Python 3.9, supported by the default agent `0.61b0`. Annotate `marketplace.bizEcosystemChargingBackend.deployment.additionalAnnotations`, and set `DJANGO_SETTINGS_MODULE=settings` and `PYTHONPATH=/opt/business-ecosystem-charging-backend/src` in its `extraEnvVars`: the agent's Django instrumentation loads the settings before the application does. |
+| **marketplace** (charging backend) | Python | No OTEL SDK bundled. Runs Python 3.9, supported by the default agent `0.61b0`. Annotate `marketplace.bizEcosystemChargingBackend.deployment.additionalAnnotations`. |
 | **marketplace** (logic proxy) | Node.js | No OTEL SDK bundled. |
 
 The OpenTelemetry Operator solves this by injecting the appropriate
