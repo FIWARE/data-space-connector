@@ -10,7 +10,7 @@ import type { FieldId } from '../state/openQuestions'
 import { initialState, type AppState } from '../state/reducer'
 import { StageId } from '../state/stageIds'
 import { StoreProvider } from '../state/store'
-import { catalogueFeature, lateLoad, mockApi, REPORT, refusedUpload } from '../test/api'
+import { catalogueFeature, lateLoad, mockApi, recordToggle, refusedRole, REPORT, refusedUpload } from '../test/api'
 import { DELIBERATE_HEADING } from './DeliberateChoices'
 import { FEATURES_HEADING } from './Features'
 import { ROOT_LABEL, WHOLE_FILE } from './Review'
@@ -50,6 +50,10 @@ const OVERRULED: Record<string, FeatureState> = {
   [TRACING.id]: { enabled: false, source: 'user' },
 }
 const deliberateList = () => within(screen.getByRole('heading', { level: 3, name: /^Deliberate choices/ }).closest('.panel') as HTMLElement)
+const deliberatePanelAlert = async () => {
+  await screen.findByRole('heading', { level: 3, name: DELIBERATE_HEADING })
+  return deliberateList().getByRole('alert')
+}
 const featureRequests = (fetchMock: ReturnType<typeof mockApi>) =>
   fetchMock.mock.calls.filter(([input]) => new URL(String(input), 'http://x').pathname === '/api/features')
 
@@ -228,6 +232,20 @@ describe('Review', () => {
     await waitFor(() => expect(featureRequests(fetchMock)).toHaveLength(1))
     await act(async () => {})
     expect(screen.queryByRole('heading', { name: new RegExp(DELIBERATE_HEADING) })).not.toBeInTheDocument()
+  })
+
+  it('shows a refused features request and lists the choices once a re-read answers', async () => {
+    let refuse = true
+    const reread: LoadReport = { ...WRAPPED, root: '', rootFrom: RootSource.Requested, sha256: 'b'.repeat(64) }
+    mockApi(undefined, undefined, () => reread, undefined, undefined, {
+      features: (body) => (refuse ? HTTP_UNPROCESSABLE : recordToggle(body)),
+    })
+    renderReview(WRAPPED, FILE, { answers: { role: 'consumer', features: OVERRULED, target: ANSWERED } })
+    expect(await deliberatePanelAlert()).toHaveTextContent(refusedRole(HTTP_UNPROCESSABLE))
+    refuse = false
+    await userEvent.selectOptions(screen.getByLabelText(ROOT_LABEL), WHOLE_FILE)
+    expect(await screen.findByRole('heading', { level: 3, name: `${DELIBERATE_HEADING} (2)` })).toBeInTheDocument()
+    expect(deliberateList().queryByRole('alert')).not.toBeInTheDocument()
   })
 
   it('asks nothing about features while no role is picked', async () => {

@@ -15,8 +15,8 @@ export function DeliberateChoices() {
   const { state, dispatch } = useStore()
   const { role: roleId, features, target } = state.answers
   const { catalogue, error: rolesError } = useRoles(target.chart, target.chartVersion)
-  const [choices, setChoices] = useState<FeatureChoice[]>()
-  const [error, setError] = useState<string>()
+  // One state, so an answer replaces both the choices and the error of the previous request.
+  const [{ choices, error }, setResult] = useState<{ choices?: FeatureChoice[]; error?: string }>({})
   const sha256 = state.loaded?.sha256
   const latest = useRef(state)
 
@@ -29,8 +29,8 @@ export function DeliberateChoices() {
     if (!roleId) return
     let current = true
     fetchFeatures(toProfile(latest.current), sha256).then(
-      (result) => current && setChoices(result.choices),
-      (err: Error) => current && setError(err.message),
+      (result) => current && setResult({ choices: result.choices }),
+      (err: Error) => current && setResult({ error: err.message }),
     )
     return () => {
       current = false
