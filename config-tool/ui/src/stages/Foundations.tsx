@@ -1,17 +1,18 @@
 /** S3 Foundations: the answers asked once and used everywhere, their fan-out, and what an edit re-renders. */
-import { useEffect, useId, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { fetchFoundations, type Foundation } from '../api/foundations'
 import { toProfile } from '../api/profile'
 import { fetchRender, type Change, type ChangeGroup, type Finding } from '../api/render'
 import { AskLater } from '../chrome/AskLater'
-import { PUBLIC_NAMES_URL, repositoryDocUrl } from '../links'
+import { PUBLIC_NAMES_URL } from '../links'
 import { useStore } from '../state/context'
 import { answerErrors, defaultApplies, defaultValue, resolvedAnswer, textAnswer, validAnswers } from '../state/foundations'
 import { answerFieldId, fieldElementId, fieldStage } from '../state/openQuestions'
 import { StageId } from '../state/stageIds'
+import { AnswerField, DocLink, FieldNotes, UsedBy } from './AnswerField'
+import { DataSpacePanel } from './DataSpacePanel'
 import { DerivedAnswers } from './DerivedAnswers'
-import { FindingNote } from './Findings'
-import { usedByText } from './foundationText'
+import { describedBy } from './foundationText'
 
 /** Pause after the last keystroke before the answers are rendered again. */
 export const RENDER_DEBOUNCE_MS = 300
@@ -24,7 +25,6 @@ export const HOSTS_PENDING = 'Derived once the base domain is answered.'
 export const DERIVED_PENDING = 'Derived once the answers it comes from are given.'
 export const DERIVED_BADGE = 'derived'
 export const EDIT_LABEL = 'Edit'
-export const RESET_LABEL = 'Reset to derived'
 export const HOSTS_EDIT_HINT = 'Editing a single host comes with a later release.'
 export const RESOLVE_WARNING = '⚠ These names are called from inside the cluster as well as from outside. Check that they resolve to the ingress from a pod.'
 export const RESOLVE_LINK = 'Why, and how ↗'
@@ -36,106 +36,6 @@ const NOT_SET = '—'
 function shown(value: unknown): string {
   if (value === undefined) return NOT_SET
   return typeof value === 'string' ? value : JSON.stringify(value)
-}
-
-/** The "used by" button and, on demand, the paths it stands for. */
-function UsedBy({ foundation }: { foundation: Foundation }) {
-  const [expanded, setExpanded] = useState(false)
-  const listId = useId()
-  if (foundation.count === 0) return <span className="hint">{usedByText(foundation)}</span>
-  return (
-    <>
-      <button type="button" className="link" aria-expanded={expanded} aria-controls={listId} onClick={() => setExpanded(!expanded)}>
-        {usedByText(foundation)}
-      </button>
-      {expanded && (
-        <ul id={listId} className="targets" aria-label={`Where ${foundation.label} is used`}>
-          {foundation.targets.map((t) => (
-            <li key={t.path}>
-              <code>{t.path}</code>
-            </li>
-          ))}
-        </ul>
-      )}
-    </>
-  )
-}
-
-function DocLink({ foundation }: { foundation: Foundation }) {
-  if (!foundation.doc) return null
-  return (
-    <a href={repositoryDocUrl(foundation.doc)} target="_blank" rel="noreferrer">
-      About {foundation.label} ↗
-    </a>
-  )
-}
-
-/** The ids of a field's error, findings and help, for `aria-describedby`. */
-function describedBy(id: string, error: string | undefined, own: readonly Finding[]): string {
-  return [error && `${id}-error`, ...own.map((f) => `${id}-${f.rule}`), `${id}-help`].filter(Boolean).join(' ')
-}
-
-/** A field's error, its findings and its help line with the doc link and, when it has targets, the fan-out. */
-function FieldNotes({ foundation, id, error, own }: { foundation: Foundation; id: string; error?: string; own: readonly Finding[] }) {
-  return (
-    <>
-      {error && (
-        <p className="field-error" id={`${id}-error`}>
-          {error}
-        </p>
-      )}
-      {own.map((f) => (
-        <FindingNote key={f.rule} finding={f} id={`${id}-${f.rule}`} />
-      ))}
-      <p className="hint" id={`${id}-help`}>
-        {foundation.help} <DocLink foundation={foundation} /> {foundation.type !== 'choice' && <UsedBy foundation={foundation} />}
-      </p>
-    </>
-  )
-}
-
-/** One answer the user gives: input, error, findings, help, doc link, "ask later" and its fan-out; `reset` drops it in
- *  favour of its derived default. `value`/`onChange` replace the stored answer, for an edit not yet given. */
-function AnswerField({
-  foundation,
-  findings,
-  reset,
-  value,
-  onChange,
-}: {
-  foundation: Foundation
-  findings: readonly Finding[]
-  reset?: () => void
-  value?: string
-  onChange?: (value: string) => void
-}) {
-  const { state, dispatch } = useStore()
-  const field = answerFieldId(foundation.id)
-  const id = fieldElementId(field)
-  const error = answerErrors(state.answers.values, state.foundations)[foundation.id]
-  const own = findings.filter((f) => f.field === field)
-  return (
-    <div className="row">
-      <label htmlFor={id}>{foundation.label}</label>
-      <input
-        id={id}
-        value={value ?? textAnswer(state.answers.values[foundation.id]) ?? ''}
-        aria-invalid={error !== undefined}
-        aria-describedby={describedBy(id, error, own)}
-        onChange={(e) => {
-          if (onChange) onChange(e.target.value)
-          else dispatch({ type: 'setAnswer', id: foundation.id, value: e.target.value })
-        }}
-      />
-      {reset && (
-        <button type="button" className="link" onClick={reset}>
-          {RESET_LABEL}
-        </button>
-      )}
-      <AskLater field={field} />
-      <FieldNotes foundation={foundation} id={id} error={error} own={own} />
-    </div>
-  )
 }
 
 /** A choice as a radio group, each option with its note; the default option is checked while none is given. */
@@ -386,6 +286,7 @@ export function Foundations() {
 
   const foundations = state.foundations ?? []
   const organization = foundations.filter((f) => f.group === 'organization')
+  const dataspace = foundations.filter((f) => f.group === 'dataspace')
   const network = foundations.filter((f) => f.group === 'network' && f.default === '')
   const hosts = foundations.filter((f) => f.group === 'network' && f.default !== '')
 
@@ -401,6 +302,7 @@ export function Foundations() {
           ))}
         </div>
       )}
+      {dataspace.length > 0 && <DataSpacePanel foundations={dataspace} findings={diff.findings} />}
       {network.length + hosts.length > 0 && (
         <div className="panel" role="group" aria-labelledby="foundations-network">
           <h3 id="foundations-network">{NETWORK_PANEL}</h3>

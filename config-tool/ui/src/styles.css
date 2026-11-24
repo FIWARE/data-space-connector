@@ -84,6 +84,12 @@ p.finding { flex-basis: 100%; margin: 2px 0 0 120px; font-size: 12.5px; }
 .finding.error .severity, p.finding.error { color: var(--err); }
 .cluster { margin-top: 12px; }
 .hint { color: var(--fg-dim); font-size: 12.5px; margin: 6px 0 0; }
+.info { margin: 6px 0 0; padding: 6px 10px; border-left: 3px solid var(--accent); background: var(--accent-weak); font-size: 12.5px; }
+.reach.reachable { color: var(--ok); }
+.reach.unreachable { color: var(--err); }
+.reach.skipped { color: var(--fg-dim); }
+.import-preview { flex-basis: 100%; margin: 6px 0 0; }
+.import-preview .actions { display: flex; gap: 8px; margin-top: 8px; }
 
 .report-counts { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin: 0; }
 .report-counts dt { color: var(--fg-dim); font-size: 12.5px; }

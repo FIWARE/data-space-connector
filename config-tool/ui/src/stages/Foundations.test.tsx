@@ -13,6 +13,7 @@ import { StoreProvider } from '../state/store'
 import { DID_FOUNDATIONS, DID_METHOD, DID_VALUE, DOMAIN_WARNING, FOUNDATIONS, mockApi, renderWithFindings, type FoundationFakes, type RenderBody } from '../test/api'
 import { READ_MORE } from './findingsText'
 import { usedByText } from './foundationText'
+import { RESET_LABEL } from './AnswerField'
 import {
   DERIVED_PENDING,
   DIFF_HEADING,
@@ -21,7 +22,6 @@ import {
   HOSTS_PENDING,
   PINNED_LABEL,
   RENDER_DEBOUNCE_MS,
-  RESET_LABEL,
   RESOLVE_LINK,
 } from './Foundations'
 

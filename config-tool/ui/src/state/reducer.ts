@@ -4,6 +4,7 @@ import { answerValues, fromProfile, type ModelRef, type Profile } from '../api/p
 import type { Foundation } from '../api/foundations'
 import type { ChartSwitch, RoleChange } from '../api/roles'
 import type { Trial } from '../api/trial'
+import { TIR_ADDRESS_ID, type TirCheck } from './dataspace'
 import { dropMismatched } from './foundations'
 import { emptyAnswers, Environment, type Answers, type AnswerValue, type FeatureState, type Session, type Target } from './answers'
 import { answerFieldId, answerId, fieldStage, isAnswerFieldId, type FieldId, type QuestionId } from './openQuestions'
@@ -48,6 +49,8 @@ export interface AppState {
   roleChanges: readonly AppliedRoleChange[]
   /** The foundations of the target chart once fetched; Review names marked answers by their labels. */
   foundations?: readonly Foundation[]
+  /** The last TIR check of this session; read it through `tirCheckOf`, which tells a stale one apart. */
+  tirCheck?: TirCheck
 }
 
 /** A confirmed role change and the chart switch it made, if any. */
@@ -82,7 +85,8 @@ export type Action =
   | { type: 'trialStarted'; trial: Trial }
   | { type: 'roleApplied'; profile: Profile; chartSwitch: ChartSwitch | null; change: RoleChange | null }
   | { type: 'featuresChanged'; features: Record<string, FeatureState> }
-  | { type: 'setAnswer'; id: string; value: string }
+  | { type: 'setAnswer'; id: string; value: AnswerValue }
+  | { type: 'tirChecked'; check: TirCheck }
   | { type: 'foundationsLoaded'; foundations: readonly Foundation[] }
 
 /** The state before anything was chosen on S0. */
@@ -136,6 +140,7 @@ function startOver(state: AppState, stage: StageId, answers: Answers, loaded?: L
     roleCleared: undefined,
     roleChanges: [],
     foundations: undefined,
+    tirCheck: undefined,
   }
 }
 
@@ -203,9 +208,9 @@ function setTarget(state: AppState, change: Partial<Target>): AppState {
   }
 }
 
-// An empty value is no answer, so clearing a field leaves the chart default in place.
-function setAnswer(values: Record<string, AnswerValue>, id: string, value: string): Record<string, AnswerValue> {
-  if (value !== '') return { ...values, [id]: value }
+// An empty value or list is no answer, so clearing a field leaves the chart default in place.
+function setAnswer(values: Record<string, AnswerValue>, id: string, value: AnswerValue): Record<string, AnswerValue> {
+  if (value !== '' && !(Array.isArray(value) && value.length === 0)) return { ...values, [id]: value }
   return Object.fromEntries(Object.entries(values).filter(([key]) => key !== id))
 }
 
@@ -285,8 +290,12 @@ export function reducer(state: AppState, action: Action): AppState {
       return { ...state, answers: { ...state.answers, features: action.features } }
     case 'setAnswer': {
       const values = dropMismatched(setAnswer(state.answers.values, action.id, action.value), action.id, state.foundations)
-      return { ...state, answers: { ...state.answers, values } }
+      // A check ran for one address only; a changed address has not been checked.
+      const stale = action.id === TIR_ADDRESS_ID && state.tirCheck?.address !== action.value
+      return { ...state, answers: { ...state.answers, values }, tirCheck: stale ? undefined : state.tirCheck }
     }
+    case 'tirChecked':
+      return { ...state, tirCheck: action.check }
     case 'foundationsLoaded':
       return foundationsLoaded(state, action.foundations)
     case 'rootRereadStarted':

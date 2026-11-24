@@ -4,6 +4,7 @@ import { toProfile, type Profile } from '../api/profile'
 import type { RoleChange } from '../api/roles'
 import { FOUNDATIONS, REPORT, TRIAL } from '../test/api'
 import { emptyAnswers, Environment, TargetType } from './answers'
+import { tirCheckOf, TIR_ADDRESS_ID, type TirCheck } from './dataspace'
 import { initialState, reducer, type Action, type AppState } from './reducer'
 import { StageId } from './stageIds'
 
@@ -388,5 +389,50 @@ describe('reducer: foundation answers', () => {
 
   it.each<Action>([{ type: 'newConfiguration' }, { type: 'fileLoaded', report: REPORT, file: FILE }])('forgets the foundations on $type', (action) => {
     expect(reducer(ANSWERED, action).foundations).toBeUndefined()
+  })
+})
+
+describe('reducer: TIR check', () => {
+  const TIR = 'https://tir.example.org/'
+  const CHECKED: TirCheck = { address: TIR, outcome: 'reachable', detail: 'HTTP 200' }
+  const withAddress: AppState = { ...initialState, answers: { ...initialState.answers, values: { [TIR_ADDRESS_ID]: TIR } } }
+  const checked = reducer(withAddress, { type: 'tirChecked', check: CHECKED })
+
+  it('is skipped while an address is set and no check ran, and absent without an address', () => {
+    expect(tirCheckOf(initialState)).toBeUndefined()
+    expect(tirCheckOf(withAddress)).toEqual({ address: TIR, outcome: 'skipped' })
+  })
+
+  it('records a check for the current address', () => {
+    expect(tirCheckOf(checked)).toEqual(CHECKED)
+  })
+
+  it.each<[string, string]>([
+    ['a changed address', `${TIR}v2`],
+    ['a cleared address', ''],
+  ])('resets to skipped on %s', (_name, value) => {
+    const next = reducer(checked, { type: 'setAnswer', id: TIR_ADDRESS_ID, value })
+    expect(next.tirCheck).toBeUndefined()
+    expect(tirCheckOf(next)).toEqual(value === '' ? undefined : { address: value, outcome: 'skipped' })
+  })
+
+  it('keeps the check when another answer or the same address is set', () => {
+    expect(reducer(checked, { type: 'setAnswer', id: 'domain.base', value: 'example.org' }).tirCheck).toBe(CHECKED)
+    expect(reducer(checked, { type: 'setAnswer', id: TIR_ADDRESS_ID, value: TIR }).tirCheck).toBe(CHECKED)
+  })
+
+  it.each<[string, Action]>([
+    ['a new configuration', { type: 'newConfiguration' }],
+    ['an opened profile', { type: 'profileOpened', path: PROFILE_PATH, profile: SAVED_PROFILE, notes: [] }],
+    ['a loaded file', { type: 'fileLoaded', report: REPORT, file: FILE }],
+  ])('forgets the check on %s', (_name, action) => {
+    expect(reducer(checked, action).tirCheck).toBeUndefined()
+  })
+
+  it('stores a list answer and drops an empty one', () => {
+    const types = [{ type: 'MembershipCredential' }]
+    const set = reducer(initialState, { type: 'setAnswer', id: 'dataspace.credentialTypes', value: types })
+    expect(set.answers.values['dataspace.credentialTypes']).toEqual(types)
+    expect(reducer(set, { type: 'setAnswer', id: 'dataspace.credentialTypes', value: [] }).answers.values).toEqual({})
   })
 })
