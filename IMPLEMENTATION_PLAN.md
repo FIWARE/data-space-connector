@@ -7,13 +7,13 @@ re-derived hosts and the hosts that are *pinned, not updated*, Review shows the 
 two components that resolve to the same public host. `<component>.<base>` stays the only naming scheme, and there is
 no scheme selector.
 
-**Open decision, path-prefix scheme.** The ticket's Work section asks for a second scheme (one host with path
-prefixes) as a foundation value. The plan session read the ticket thread as dropping it, but no citable comment
-(author, date) is in the repository, and USER_JOURNEY.md only says US-3.1 did not offer it. wistefan confirms on
-PR #14 before Step 1 starts. If the scheme stays in scope, add a step after Step 3: a `host.scheme` choice foundation
-(`subdomain` | `path`) whose `defaultWhen` switches every `host.*` default between `<component>.<base>` and `<base>`,
-a `path.*` prefix per component routed through the ingresses, and a `distinct` rule over host+path, because under
-the single-host scheme every host is identical by design.
+**Decided, no path-prefix scheme.** The ticket's Work section asked for a second scheme (one host with path prefixes).
+wistefan decided against it in his review of PR #14 (2026-11-24): "do not use path-prefixes, use sub-domains to the
+base-domain instead". So every host is a sub-domain of `domain.base`, the `distinct` rule compares hosts only, and
+no `host.scheme` or `path.*` foundation is added. ADR 0023 cites that review.
+
+`AGENTS.md` (US-3.4 line) still says `feature:`. The `features:` list in this plan is authoritative, and Step 6
+rewrites that line.
 
 Already shipped and reused (do not rebuild):
 - Pinned state needs no new profile field. A pinned host is a given answer in `profile.Answers`, and a derived one has
@@ -40,25 +40,43 @@ on the reference base domain, so `provider_test.go` never searched for them.
 - `config-tool/model/10.16.0/bundle.yaml`:
   - Add `host.verifier` (default `verifier.{{ .domain.base }}`, label "Verifier host"). Its targets mirror
     `k3s/provider.yaml` lines ~60-110 under `decentralizedIam.vcAuthentication.vcverifier`:
-    - `ingress.annotations."cert-manager.io/common-name"` / `alt-names`, `ingress.hosts[0].host`,
-      `ingress.hosts[0].paths[0]` (const `/`), `ingress.tls[0].secretName` (`{{ .host.verifier }}-tls`) and
-      `ingress.tls[0].hosts[0]`;
-    - `deployment.server.host` (`https://{{ .host.verifier }}`).
+    - `ingress.hosts[0].host` and `ingress.hosts[0].paths[0]` (const `/`);
+    - `deployment.server.host` (`https://{{ .host.verifier }}`);
+    - `marketplace.siop.verifier.host` (`https://{{ .host.verifier }}`, provider.yaml ~937): the marketplace's SIOP
+      login goes to the verifier, so a host that moves without it breaks the login.
 
-    Check each path against the chart's `values.yaml` and the subchart defaults. Two leaves stay out, each as an
-    exclusion row in `provider_test.go` owned by US-8.11 (identity material: keys and certificates), which configures
-    the verifier's signing key:
-    - `deployment.verifier.clientIdentification.id` (`x509_san_dns:<host>`): it only works with `keyPath`,
-      `certificatePath` and the `signing-key` volume that mounts the ingress TLS secret (provider.yaml ~103-112). The
-      chart sets no `clientIdentification` by default, so a lone `id` would advertise x509_san_dns identification
-      without a key to sign with;
-    - `deployment.additionalVolumes[0].secret.secretName`: the list carries other content (`root-ca`).
+    Check each path against the chart's `values.yaml` and the subchart defaults. These leaves stay out, each as an
+    exclusion row in `provider_test.go`:
+    - owned by US-8.11 (identity material: keys and certificates), which configures the verifier's signing key:
+      - the TLS certificate as one unit: `ingress.tls` (the whole list, `secretName` and `hosts[0]`) and the
+        `cert-manager.io/common-name` / `alt-names` annotations. The secret `verifier.<base>-tls` is the verifier's
+        signing key, mounted by the `signing-key` volume (provider.yaml ~112). Deriving its name from the host would
+        make cert-manager issue it under a new name on a pin or a base change, while the excluded mount keeps the old
+        one, and the verifier pod could no longer start. ADR 0020 §4 owns a list whole, so `secretName` cannot leave
+        the list alone;
+      - `deployment.verifier.clientIdentification.id` (`x509_san_dns:<host>`): it only works with `keyPath`,
+        `certificatePath` and the `signing-key` volume that mounts the ingress TLS secret (provider.yaml ~103-112).
+        The chart sets no `clientIdentification` by default, so a lone `id` would advertise x509_san_dns
+        identification without a key to sign with;
+      - `deployment.additionalVolumes[0].secret.secretName`: the list carries other content (`root-ca`).
+    - owned by US-5.6, like the existing `apisix.routes[n].host` rows: the `openid-connect.discovery` URL of every
+      APISIX route (`https://<verifier>/services/<svc>/.well-known/openid-configuration`, provider.yaml ~482, 501,
+      537, 587, 618, 638). A route is a protected-service row whose list carries content no foundation owns.
   - Add `host.did` (default `{{ .domain.base }}`, label "DID document host"). It targets the `did:` subchart
-    (`k3s/provider.yaml` ~694-730): the ingress (`did.ingress.hosts[0].host`, its `paths[0].path`/`pathType` as
-    consts, the cert-manager annotations, `tls[0].secretName` `{{ .host.did }}-tls` and `tls[0].hosts[0]`) and
+    (`k3s/provider.yaml` ~694-730): `did.ingress.hosts[0].host` with its `paths[0].path`/`pathType` as consts, and
     `did.config.server.hostUrl` (`http://{{ .host.did }}`, as in the reference; the did-helper builds the document
-    from it). `did.volumes[0].secret.secretName` stays out as an exclusion row owned by US-8.11, because the list
-    entry carries `items` and pairs with `volumeMounts`.
+    from it). These leaves stay out as exclusion rows owned by US-8.11, for the same reason as the verifier's: the
+    secret `<base>-tls` holds the DID key, mounted by `did.volumes[0]` (~702), Keycloak's `did-priv-key` volume
+    (~1033, ~1115) and `extraVolumes` (~1759), and in `dsp-provider.yaml` and `consent-provider.yaml` as well:
+    - `did.ingress.tls` (whole list) and its cert-manager annotations;
+    - `did.volumes[0].secret.secretName` (the list entry carries `items` and pairs with `volumeMounts`), and the
+      Keycloak mounts above;
+    - `statusListServer.signing.issuer.dnsNames` (~1771), the status-list signing certificate.
+  - The cost of those exclusions, recorded in ADR 0023: pinning `host.verifier` or `host.did`, or re-deriving them on
+    a base change, moves the ingress rule and the URLs but not the certificate. A loaded file keeps its TLS block
+    (the overrides layer keeps non-owned leaves), so the pods keep their keys, but until US-8.11 the certificate
+    still names the old host. A fresh profile emits no TLS block for these two ingresses. The `help` of both
+    foundations says so ("The TLS certificate and its key are not changed here").
   - The DID document host and the DID have to agree: `did:web:<host>[:path]` resolves at `https://<host>/…`. So
     `did.value`'s default changes from `did:web:{{ .domain.base }}` to `did:web:{{ .host.did }}`. The derivation
     chain is base → `host.did` → `did.value` (the foundations' topological order already resolves it), and pinning
@@ -99,9 +117,17 @@ on the reference base domain, so `provider_test.go` never searched for them.
   `hosts[n].host`) sits under the keys of a feature in its list, and no feature whose keys cover that target is
   missing from the list. The upstream feature of an APISIX host is pinned by a table in the test, one row per host,
   so a new APISIX host without a row fails.
-- `internal/render/provider_test.go`: verifier and DID leaves resolve to the reference values. Extend the reference
-  handling, for example with a second needle for the DID domain, or with `chartOnlyTarget` rows. The test must keep
-  failing when a target disagrees with `k3s/provider.yaml`.
+- `internal/render/provider_test.go`: verifier and DID leaves resolve to the reference values. Add both hosts to
+  `referenceValues` (`host.verifier`: `verifier.mp-operations.org`, `host.did`: `mp-operations.org`), so every
+  leaf carrying the verifier host is either a target or an exclusion row, and none can drift unnoticed. The DID
+  domain needle `mp-operations.org` matches by substring every leaf that carries the verifier host or the DID too:
+  - the targets of `host.verifier` and `did.value` drop out through `otherTargets`, because their reference values
+    contain the needle;
+  - every other such leaf needs `host.did` in its row's `answers`: the existing `didOnly` rows (DIDs in lists and
+    JSON strings), the verifier rows above (`host.verifier` and `host.did`), and the TLS-secret and `dnsNames` rows.
+
+  The stale-row check then fails for any row that stops matching. The test must keep failing when a target disagrees
+  with `k3s/provider.yaml`.
 - `internal/server/render.go` `foundationBody`: expose `features` (empty list when ungated). Update
   `ui/src/api/foundations.ts` plus its test.
 - Acceptance: `go test ./...` is green, the new hosts render in `render_test.go`, and an unknown feature id is refused.
@@ -123,6 +149,11 @@ as re-derived. Reuse the default evaluation of `HandSet` (factor out a small hel
   re-derives both `host.did` and `did.value`; with `did.value` pinned, `did.value` is in `Pinned` and `host.did` in
   `Rederived` (the Step 3 `did-web-host` error then fires); with `host.did` pinned, `host.did` is in `Pinned` and
   `did.value` is in neither list, because it follows the pinned host.
+  Certificate rows, rendered with the loaded `k3s/provider.yaml`: pinning `host.verifier` or `host.did`, and
+  changing `domain.base` with both derived, leaves the tree with no leaf under `…vcverifier.ingress.tls`,
+  `did.ingress.tls` or their cert-manager annotations. So the loaded secret names `verifier.mp-operations.org-tls` and
+  `mp-operations.org-tls`, which the mounts reference, stay unchanged, while the ingress host and
+  `marketplace.siop.verifier.host` follow the new host.
 - `internal/profile`: add a round-trip test. Save a profile with two pinned hosts, open it, run `render.HandSet`, and
   check that both hosts still come back pinned with their derived values. This covers "pin states survive save and
   open" in the core. No format change, still `format: 1`.
@@ -212,9 +243,10 @@ The current rule language only knows `when` equality. Add two rule kinds that ar
   - the `distinct` rule kind and the `related` finding field;
   - the display-only `features` gate on foundations (render gating stays US-5.3);
   - `host.did` driving `did.value`, and the `did-web-host` rule kind;
-  - the two hosts added;
-  - the path-prefix scheme: dropped, citing wistefan's answer on PR #14 (see the Overview's open decision); if it
-    stays in scope, the ADR covers the scheme step instead.
+  - the two hosts added, and why their TLS certificate, secret name and mounts stay with US-8.11 (the cost stated in
+    Step 1);
+  - no path-prefix scheme: hosts are sub-domains of the base domain, citing wistefan's review of PR #14
+    (2026-11-24).
 
   Update the range in `doc/adr/README.md` (0009 to 0023).
 - `config-tool/README.md`: describe the Stage 3 hosts (editable, pinned, reset), the render response `derived`, the
