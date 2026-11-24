@@ -241,6 +241,34 @@ rules:
 	}
 }
 
+// TestGenerateTIRAddressForVerification pins the CLI side of ADR 0022: generate sees a loaded TIR address only once
+// it is saved in the profile, and names the field when it is not.
+func TestGenerateTIRAddressForVerification(t *testing.T) {
+	const tirField = "answers.dataspace.tirAddress"
+	tests := []struct {
+		name    string
+		path    string
+		wantErr error
+		// wantStderr is a fragment of stderr; "" wants it empty.
+		wantStderr string
+	}{
+		{name: "seeded answer", path: "testdata/tir-address-seeded.dscprofile.yaml", wantErr: errGeneratePending},
+		{name: "answer missing", path: "testdata/tir-address-missing.dscprofile.yaml", wantErr: errBlockingFindings,
+			wantStderr: "error: Stage 3 Foundations, " + tirField + ": The verifier cannot check issuers"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			_, stderr, err := executeSplit(t, "generate", "-p", tc.path)
+			if !errors.Is(err, tc.wantErr) {
+				t.Fatalf("error = %v, want %v", err, tc.wantErr)
+			}
+			if tc.wantStderr == "" && stderr != "" || !strings.Contains(stderr, tc.wantStderr) {
+				t.Errorf("stderr = %q, want it to contain %q", stderr, tc.wantStderr)
+			}
+		})
+	}
+}
+
 // trialOutputs renders the embedded trial as generate --trial does.
 func trialOutputs(t *testing.T) []trial.Output {
 	t.Helper()

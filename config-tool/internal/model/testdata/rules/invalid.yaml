@@ -1,5 +1,5 @@
-# Each case is a rules list Versions refuses over the foundations of ../foundations/did.yaml, with a
-# fragment of the error it must report.
+# Each case is a rules list Versions refuses over the foundations of ../foundations/did.yaml and the one-feature
+# catalogue of checkrules_test.go, with a fragment of the error it must report.
 - name: id missing
   err: "rules[0]: id is missing"
   rules:
@@ -73,3 +73,35 @@
   err: "field equal not found"
   rules:
     - {id: r, severity: warning, stage: foundations, field: answers.did.method, when: [{field: answers.did.method, equal: "did:key"}], message: M, doc: doc/a.md}
+- name: field is a feature
+  err: 'field: "features.access.verification" is neither'
+  rules:
+    - {id: r, severity: warning, stage: features, field: features.access.verification, when: [{field: answers.did.method, equals: "did:key"}], message: M, doc: doc/a.md}
+- name: when feature not in the catalogue
+  err: 'when[0]: "features.access.typo" names no feature of the catalogue'
+  rules:
+    - {id: r, severity: warning, stage: foundations, field: answers.did.method, when: [{field: features.access.typo, equals: "on"}], message: M, doc: doc/a.md}
+- name: when feature value not on or off
+  err: 'when[0]: "true" is not a value of features.access.verification (on, off)'
+  rules:
+    - {id: r, severity: warning, stage: foundations, field: answers.did.method, when: [{field: features.access.verification, equals: "true"}], message: M, doc: doc/a.md}
+- name: when has both equals and unset
+  err: "when[0]: answers.did.value has both equals and unset"
+  rules:
+    - {id: r, severity: warning, stage: foundations, field: answers.did.method, when: [{field: answers.did.value, equals: x, unset: true}], message: M, doc: doc/a.md}
+- name: when has neither equals nor unset
+  err: "when[0]: answers.did.value has neither equals nor unset"
+  rules:
+    - {id: r, severity: warning, stage: foundations, field: answers.did.method, when: [{field: answers.did.value}], message: M, doc: doc/a.md}
+- name: when unset is false
+  err: "when[0]: answers.did.value has neither equals nor unset"
+  rules:
+    - {id: r, severity: warning, stage: foundations, field: answers.did.method, when: [{field: answers.did.value, unset: false}], message: M, doc: doc/a.md}
+- name: when unset on a feature
+  err: "when[0]: unset applies to answers.<foundation id> only, not features.access.verification"
+  rules:
+    - {id: r, severity: warning, stage: foundations, field: answers.did.method, when: [{field: features.access.verification, unset: true}], message: M, doc: doc/a.md}
+- name: when unset on the environment
+  err: "when[0]: unset applies to answers.<foundation id> only, not target.environment"
+  rules:
+    - {id: r, severity: warning, stage: foundations, field: answers.did.method, when: [{field: target.environment, unset: true}], message: M, doc: doc/a.md}

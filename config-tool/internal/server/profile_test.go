@@ -669,7 +669,7 @@ func TestSaveRole(t *testing.T) {
 	operatorTarget := completeTarget()
 	operatorTarget.Chart, operatorTarget.ChartVersion = trustAnchorChart, ""
 	enabled := map[string]profile.FeatureState{"ta.registry": {Enabled: true, Source: profile.SourcePreset}}
-	dscCatalogue := &profile.ModelRef{Chart: dscChart, Version: latestChart, Revision: 8}
+	dscCatalogue := &profile.ModelRef{Chart: dscChart, Version: latestChart, Revision: 9}
 	tests := []struct {
 		name          string
 		profile       profile.Profile
@@ -753,5 +753,27 @@ func TestOpenSeedsLoadedAnswers(t *testing.T) {
 				t.Errorf("answers = %v, want %s = %s", got.Profile.Answers, answerID, tc.want)
 			}
 		})
+	}
+}
+
+// TestOpenedProfilePassesTIRRule renders an opened profile whose source sets the TIR address and whose answers do not:
+// the seeded answer keeps tir-address-for-verification from blocking it.
+func TestOpenedProfilePassesTIRRule(t *testing.T) {
+	ps := newProfileSession(t)
+	dir := t.TempDir()
+	writeBytes(t, filepath.Join(dir, valuesName), tirValues)
+	report := ps.load(valuesName, tirValues)
+	path := filepath.Join(dir, profileName)
+	ps.mustSave(saveRequest{Path: path, SourceSHA256: report.SHA256, Profile: verificationProfile(true)})
+
+	status, raw, got := ps.open(path)
+	if status != http.StatusOK {
+		t.Fatalf("status = %d: %s", status, raw)
+	}
+	if !got.Profile.Features["access.verification"].Enabled {
+		t.Fatalf("features = %v, want credential verification on", got.Profile.Features)
+	}
+	if rules := findingRules(ps.mustRender(got.Profile, report.SHA256).Findings); len(rules) != 0 {
+		t.Errorf("findings = %v, want none", rules)
 	}
 }

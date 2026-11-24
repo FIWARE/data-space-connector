@@ -3,6 +3,7 @@ package model
 import (
 	"os"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -15,13 +16,22 @@ import (
 const (
 	invalidRules = "testdata/rules/invalid.yaml"
 	ruleHead     = didFoundations
+	// ruleFeatures gives the rule fixtures a catalogue for features.<id> to address.
+	ruleFeatures = "features:\n  - {id: access.verification, title: T, summary: S, group: access}\n"
 )
 
-func TestCheckRulesValidation(t *testing.T) {
+// readRuleHead returns the foundations and the catalogue the rule fixtures are written against.
+func readRuleHead(t *testing.T) []byte {
+	t.Helper()
 	head, err := os.ReadFile(ruleHead)
 	if err != nil {
 		t.Fatal(err)
 	}
+	return append(head, ruleFeatures...)
+}
+
+func TestCheckRulesValidation(t *testing.T) {
+	head := readRuleHead(t)
 	data, err := os.ReadFile(invalidRules)
 	if err != nil {
 		t.Fatal(err)
@@ -49,30 +59,39 @@ func TestCheckRulesValidation(t *testing.T) {
 }
 
 func TestCheckRules(t *testing.T) {
-	head, err := os.ReadFile(ruleHead)
-	if err != nil {
-		t.Fatal(err)
+	head := readRuleHead(t)
+	tests := []struct {
+		name string
+		when string
+		want []RuleWhen
+	}{
+		{"target and choice answer", `[{field: target.environment, equals: production}, {field: answers.did.method, equals: "did:key"}]`,
+			[]RuleWhen{{Field: FieldTargetEnvironment, Equals: "production"}, {Field: "answers.did.method", Equals: "did:key"}}},
+		{"feature on", `[{field: features.access.verification, equals: "on"}]`,
+			[]RuleWhen{{Field: FeatureFieldPrefix + "access.verification", Equals: FeatureOn}}},
+		{"feature off", `[{field: features.access.verification, equals: "off"}]`,
+			[]RuleWhen{{Field: FeatureFieldPrefix + "access.verification", Equals: FeatureOff}}},
+		{"unset answer", `[{field: answers.domain.base, unset: true}]`,
+			[]RuleWhen{{Field: "answers.domain.base", Unset: true}}},
+		{"free-text answer equals", `[{field: answers.domain.base, equals: example.org}]`,
+			[]RuleWhen{{Field: "answers.domain.base", Equals: "example.org"}}},
 	}
-	const rules = `rules:
-  - id: r
-    severity: error
-    stage: foundations
-    field: answers.domain.base
-    when: [{field: target.environment, equals: production}, {field: answers.did.method, equals: "did:key"}]
-    message: M
-    doc: doc/a.md#b
-`
-	got, err := Versions(fstest.MapFS{fixtureFile: {Data: append(head, rules...)}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	want := []CheckRule{{
-		ID: "r", Severity: SeverityError, Stage: StageFoundations, Field: "answers.domain.base",
-		When:    []RuleWhen{{Field: FieldTargetEnvironment, Equals: "production"}, {Field: "answers.did.method", Equals: "did:key"}},
-		Message: "M", Doc: "doc/a.md#b",
-	}}
-	if rs := got[0].CheckRules(); !reflect.DeepEqual(rs, want) {
-		t.Errorf("CheckRules() = %+v, want %+v", rs, want)
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			rules := "rules:\n  - {id: r, severity: error, stage: foundations, field: answers.domain.base, when: " + tc.when +
+				", message: M, doc: doc/a.md#b}\n"
+			got, err := Versions(fstest.MapFS{fixtureFile: {Data: append(slices.Clone(head), rules...)}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			want := []CheckRule{{
+				ID: "r", Severity: SeverityError, Stage: StageFoundations, Field: "answers.domain.base",
+				When: tc.want, Message: "M", Doc: "doc/a.md#b",
+			}}
+			if rs := got[0].CheckRules(); !reflect.DeepEqual(rs, want) {
+				t.Errorf("CheckRules() = %+v, want %+v", rs, want)
+			}
+		})
 	}
 }
 
