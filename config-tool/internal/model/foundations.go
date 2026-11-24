@@ -75,9 +75,10 @@ const (
 	maxURLLength = 2048
 	// maxCredentialTypes caps a credentialTypes answer; a data space announces a handful.
 	maxCredentialTypes = 64
-	// Keys of one credentialTypes element.
-	credentialTypeKey        = "type"
-	credentialDescriptionKey = "description"
+	// CredentialTypeKey is the required key of one credentialTypes element.
+	CredentialTypeKey = "type"
+	// CredentialDescriptionKey is the optional key of one credentialTypes element.
+	CredentialDescriptionKey = "description"
 )
 
 // urlSchemes are the schemes a url answer may use.
@@ -315,24 +316,24 @@ func checkCredentialTypes(v any) error {
 	for i, e := range list {
 		m, ok := e.(map[string]any)
 		if !ok {
-			return fmt.Errorf("[%d] must be a mapping with %s and an optional %s", i, credentialTypeKey, credentialDescriptionKey)
+			return fmt.Errorf("[%d] must be a mapping with %s and an optional %s", i, CredentialTypeKey, CredentialDescriptionKey)
 		}
 		for k := range m {
-			if k != credentialTypeKey && k != credentialDescriptionKey {
-				return fmt.Errorf("[%d] has a key other than %s and %s", i, credentialTypeKey, credentialDescriptionKey)
+			if k != CredentialTypeKey && k != CredentialDescriptionKey {
+				return fmt.Errorf("[%d] has a key other than %s and %s", i, CredentialTypeKey, CredentialDescriptionKey)
 			}
 		}
-		typ, ok := m[credentialTypeKey].(string)
+		typ, ok := m[CredentialTypeKey].(string)
 		if !ok || !credentialType.MatchString(typ) {
-			return fmt.Errorf("[%d].%s must start with a letter, followed by letters, digits, '.', '_' and '-'", i, credentialTypeKey)
+			return fmt.Errorf("[%d].%s must start with a letter, followed by letters, digits, '.', '_' and '-'", i, CredentialTypeKey)
 		}
 		if seen[typ] {
-			return fmt.Errorf("[%d].%s repeats an earlier type", i, credentialTypeKey)
+			return fmt.Errorf("[%d].%s repeats an earlier type", i, CredentialTypeKey)
 		}
 		seen[typ] = true
-		if d, ok := m[credentialDescriptionKey]; ok {
+		if d, ok := m[CredentialDescriptionKey]; ok {
 			if err := TypeString.Check(d); err != nil {
-				return fmt.Errorf("[%d].%s %w", i, credentialDescriptionKey, err)
+				return fmt.Errorf("[%d].%s %w", i, CredentialDescriptionKey, err)
 			}
 		}
 	}
