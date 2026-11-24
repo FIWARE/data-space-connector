@@ -83,9 +83,11 @@ on the reference base domain, so `provider_test.go` never searched for them.
     `host.did` re-derives the DID. A pinned `did.value` whose host differs from `host.did` is the Step 3
     `did-web-host` error, so neither case is silent. Update `did.value`'s `help` ("Derived from the DID document
     host"). The rendered values are unchanged while `host.did` is derived, which `provider_test.go` pins.
-  - Add an optional `features: [<feature id>, …]` list to a foundation. It is display and check scope only: the
-    Stage 3 panel hides the host while any listed feature is off, and the Step 3 rules skip it. Render gating stays
-    US-5.3 (ADR 0020 consequences), so rendering is unchanged. The rule for the list:
+  - Add an optional `features: [<feature id>, …]` list to a foundation. It is display only: the Stage 3 panel hides
+    the host while any listed feature is off. Render gating stays US-5.3 (ADR 0020 consequences), so rendering is
+    unchanged, and so are the Step 3 rules: they check every host that renders, which today is every host. A feature
+    that is off in the profile does not turn its chart component off either. US-5.3 gates render and checks together.
+    The rule for the list:
     - the feature whose `keys:` cover the host's own ingress target (`….ingress.hosts[0].host` / `configIngress`);
     - for a host routed through APISIX (targets under `decentralizedIam.odrlAuthorization.apisix`), that is
       `access.policies`, plus the feature that deploys the route's upstream (its `nodes` in provider.yaml);
@@ -145,7 +147,10 @@ as re-derived. Reuse the default evaluation of `HandSet` (factor out a small hel
 - Tests in `internal/render/derived_test.go`, table-driven over **the whole `host.*` set** of the shipped bundle. For
   each host: pin it, change `domain.base`, and assert that this host is in `Pinned` with its kept value, that every
   other host is in `Rederived` with `<component>.<new base>`, and that the render tree keeps the pinned host's leaves.
-  Also cover reset-to-derived and an unchanged base (empty diff). DID rows: with a derived DID, a base change
+  Also cover reset-to-derived and an unchanged base (empty diff). A `prev` of another `Model` (chart or version)
+  is no baseline: `DerivedDiff` returns empty lists and no error, and never resolves `prev` against `b`, because
+  `resolve` refuses an answer the bundle does not declare. Test row: `prev` on data-space-connector with `host.*`
+  answers, `next` on trust-anchor. DID rows: with a derived DID, a base change
   re-derives both `host.did` and `did.value`; with `did.value` pinned, `did.value` is in `Pinned` and `host.did` in
   `Rederived` (the Step 3 `did-web-host` error then fires); with `host.did` pinned, `host.did` is in `Pinned` and
   `did.value` is in neither list, because it follows the pinned host.
@@ -167,15 +172,16 @@ The current rule language only knows `when` equality. Add two rule kinds that ar
   both new kinds because the finding names it. A distinct rule's `message` is a Go text/template that may use only
   `{{ .first }}`, `{{ .second }}` (foundation labels) and `{{ .host }}`. Validate it at load time the way foundation
   templates are validated, and name the allowed keys as constants. Extend `checkrules_test.go`.
-- `internal/check/check.go`: evaluate a distinct rule over the resolved answers (given or derived). Skip a foundation
-  with a feature of its `features` (Step 1) off in `p.Features`. Compare hosts case-insensitively, without a trailing
-  dot. Emit one finding per colliding pair, in foundation order. `Field` is `answers.<id>` of the pinned one when
+- `internal/check/check.go`: evaluate a distinct rule over the resolved answers (given or derived) of every
+  foundation the prefix matches. Do not read `features` or `p.Features`: rendering is ungated until US-5.3, so every
+  host lands in values.yaml whatever the role, and a profile with no role or a sparse `custom` set must still be
+  checked. Compare hosts case-insensitively, without a trailing dot. Emit one finding per colliding pair, in foundation order. `Field` is `answers.<id>` of the pinned one when
   exactly one is given, else of the later one. Add `Related string` (`json:"related,omitempty"`), the other field
   id, so the UI can link both. Sorting stays as is.
 - `did-web-host`: when the resolved DID starts with `did:web:`, take the method-specific id up to the first `:`
   (the rest is the document path), percent-decode it and drop a `:port`, and compare it case-insensitively with the
-  resolved `host.did`. Skip it while `host.did`'s features are off: the did-helper is not deployed, so the document
-  is served elsewhere. `Field` is `answers.did.value`, `Related` is `answers.host.did`; the message is fixed text
+  resolved `host.did`. Like `distinct`, it ignores features: `did.value` and the `did:` ingress both render while
+  `identity.did` is off. `Field` is `answers.did.value`, `Related` is `answers.host.did`; the message is fixed text
   (no template keys).
 - `model/10.16.0/bundle.yaml`: add rule `host-collision` (`severity: error`, `stage: foundations`,
   `distinct: {prefix: host.}`). Example message: "{{ .first }} and {{ .second }} both resolve to {{ .host }}. The
@@ -189,17 +195,24 @@ The current rule language only knows `when` equality. Add two rule kinds that ar
   - pin `host.marketplace` to the derived `host.keycloak` value, and expect one error that names both labels and the
     host, with `Field` = `answers.host.marketplace` and `Related` = `answers.host.keycloak`;
   - three-way collisions;
-  - a collision with a feature-gated host whose feature is off, which produces no finding;
+  - the same collision with the gated host's features off, with no role, and with a sparse `custom` feature set:
+    each still produces the finding;
   - the derived set alone, which produces no finding;
   - `did-web-host`: derived DID (none), pinned `did:web:other.org` (error), `did:web:<host.did>:users:alice` (none),
-    `did:web:<host.did>%3A8443` (none), `did:key` (none), `identity.did` off (none).
+    `did:web:<host.did>%3A8443` (none), `did:key` (none), pinned `did:web:other.org` with `identity.did` off (error).
 
-  In `internal/cli`, add a test that `generate` refuses a profile with the collision (`errBlockingFindings`).
+  In `internal/cli`, add a test that `generate` refuses a profile with the collision (`errBlockingFindings`), with
+  one row for a profile without a role and features.
 - Acceptance: the shipped bundle's derived hosts never collide (test), and `go test ./...` is green.
 
 ### Step 4: Server API — derived diff in the render response
-- `internal/server/server.go`: next to `lastRender`/`lastRenderSHA`, keep `lastAnswers` (the previous render's
-  profile answers). Reset it wherever `lastRender` is reset (load, profile open), under the same `loadMu`.
+- `internal/server/server.go`: next to `lastRender`/`lastRenderSHA`, keep `lastProfile` (the previous render's
+  profile, so its `Model` and `Answers`). Clear it inside `resetRender()`, so load, profile open and the
+  source-SHA mismatch path all drop it, under the same `loadMu`.
+- `internal/server/render.go`: a render whose `p.Model` differs from `lastProfile.Model` also calls `resetRender()`,
+  like a SHA mismatch. A chart or version switch in Stage 1 keeps the source SHA when no file is loaded, so without
+  this the next render would diff old answers against the new bundle. `DerivedDiff` also returns an empty diff for
+  a `prev` of another model (Step 2), so the server check and the core agree.
 - `internal/server/render.go`: `renderResponse` gains `Derived render.AnswerDiff` (`json:"derived"`), computed with
   `render.DerivedDiff` against the previous answers. The first render (no previous answers) returns empty lists, not
   null. `check.Finding.Related` passes through unchanged.
@@ -207,7 +220,9 @@ The current rule language only knows `when` equality. Add two rule kinds that ar
   `handSet[].derived` and in the UI's `defaultValue`. Do not add a preview endpoint.
 - Tests in `internal/server/render_test.go`, table-driven. Render a baseline, pin `host.keycloak`, then change
   `domain.base`: `derived.pinned` holds keycloak and `derived.rederived` holds the rest. A load or profile open
-  empties the baseline. A collision finding carries `related`.
+  empties the baseline. Render, switch the chart to trust-anchor (and, as a second row, the version, which needs a
+  second test bundle in the server's `models` FS because only 10.16.0 ships), render again:
+  200, an empty `derived` and a leaf diff against an empty tree. A collision finding carries `related`.
 - Update `ui/src/api/render.ts` (types `AnswerDiff`, `DerivedChange`, `PinnedAnswer`, `Finding.related`) and its test.
 - Acceptance: `go test ./...` and the UI api tests are green.
 
@@ -217,8 +232,9 @@ The current rule language only knows `when` equality. Add two rule kinds that ar
     it would take. Keep the doc link and "used by" per row, plus the resolve warning.
   - Remove `HOSTS_EDIT_HINT`, and change `HOSTS_HEADING` to say the hosts can be overridden.
   - Show a `pinned` badge on a given host.
-  - Hide a host with any of its `features` off in `state.answers.features`, unless it is pinned. A pinned host stays
-    visible, so it can still be reset.
+  - Hide a host with any of its `features` off in `state.answers.features`, unless it is pinned or a finding names
+    it in `field` or `related`. A pinned host stays visible, so it can still be reset, and a host with a finding
+    stays visible, so the "go ↗" link from Review lands on a field (the checks still cover hidden hosts, Step 3).
   - The per-field finding note already shows the collision error under the field it points at.
   - Field ids stay `answers.host.<x>`, so ask-later and Review focus work unchanged.
 - `RenderDiff` / `useRenderDiff`: above the leaf groups, show two lists from `r.derived`: "Re-derived"
@@ -230,7 +246,8 @@ The current rule language only knows `when` equality. Add two rule kinds that ar
 - `ui/src/stages/Findings.tsx`: when a finding has `related`, add a second "go ↗" link to that field.
 - Tests (vitest + Testing Library, table-driven where possible):
   - `Foundations.test.tsx`: edit a host, which pins it and sends the answer; reset it, which drops the answer and
-    shows the derived value; change the base, which shows both lists; hide a feature-gated host.
+    shows the derived value; change the base, which shows both lists; hide a feature-gated host; show it again while a
+    finding names it.
   - `Review.test.tsx`: the pinned label on a pinned host.
   - Findings: a collision shows two links.
   - `state/foundations.test.ts` where helpers change.
@@ -241,7 +258,8 @@ The current rule language only knows `when` equality. Add two rule kinds that ar
   - pinning is a given answer, not a profile field;
   - the answer-level derived diff next to the leaf diff of ADR 0020 §7;
   - the `distinct` rule kind and the `related` finding field;
-  - the display-only `features` gate on foundations (render gating stays US-5.3);
+  - the display-only `features` gate on foundations: render gating stays US-5.3, so the checks ignore it too;
+  - the answer baseline of the derived diff is dropped on load, profile open, a source change and a model change;
   - `host.did` driving `did.value`, and the `did-web-host` rule kind;
   - the two hosts added, and why their TLS certificate, secret name and mounts stay with US-8.11 (the cost stated in
     Step 1);
