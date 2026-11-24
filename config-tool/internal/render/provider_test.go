@@ -364,8 +364,8 @@ func TestProviderDIDChange(t *testing.T) {
 	b := providerBundle(t)
 	domainLeaves := answerLeaves(t, providerDoc(t), domainBase)
 	var didTargets []string
-	for _, l := range renderProvider(t, b, map[string]any{didValueID: referenceDID}).Leaves {
-		didTargets = append(didTargets, l.Path.String())
+	for _, r := range Targets(b, didValueID) {
+		didTargets = append(didTargets, r.Path.String())
 	}
 	tests := []struct {
 		name  string
