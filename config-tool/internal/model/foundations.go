@@ -290,7 +290,7 @@ func (t FoundationType) IsString() bool {
 func checkURL(s string) error {
 	const want = "must be an absolute http or https URL with a host, without user info, fragment, spaces, control characters, '\"', '\\', '<' or '>'"
 	if len(s) > maxURLLength {
-		return fmt.Errorf("must be a URL of at most %d characters", maxURLLength)
+		return fmt.Errorf("must be a URL of at most %d bytes", maxURLLength)
 	}
 	if !plainLine.MatchString(s) || strings.ContainsFunc(s, unicode.IsSpace) || strings.Contains(s, "#") {
 		return errors.New(want)

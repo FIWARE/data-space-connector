@@ -15,7 +15,7 @@ export const MSG_DOMAIN = 'must be a domain of at least two labels'
 export const MSG_STRING = 'must be a string'
 export const MSG_URL =
   `must be an absolute http or https URL with a host, without user info, fragment, spaces, control characters, '"', '\\', '<' or '>'`
-export const MSG_URL_LENGTH = `must be a URL of at most ${MAX_URL_LENGTH} characters`
+export const MSG_URL_LENGTH = `must be a URL of at most ${MAX_URL_LENGTH} bytes`
 export const MSG_BOOL = 'must be true or false'
 export const MSG_CREDENTIAL_TYPES = 'must be a non-empty list of credential types'
 export const MSG_CREDENTIAL_TYPES_LENGTH = `must list at most ${MAX_CREDENTIAL_TYPES} credential types`
@@ -45,6 +45,8 @@ const URL_PREFIX = /^https?:\/\//i
 const URL_HOST = /^[A-Za-z0-9\-._~!$&'()*+,;=[\]:%\u{80}-\u{10ffff}]*$/u
 // Go refuses a host's %XX escape of an ASCII byte other than %25, which WHATWG URL decodes.
 const URL_HOST_ASCII_ESCAPE = /%(?!25)[0-7]/
+// Go refuses a malformed % escape before the query, which WHATWG URL keeps as is.
+const URL_BAD_ESCAPE = /%(?![0-9A-Fa-f]{2})/
 const CREDENTIAL_TYPE = /^[A-Za-z][A-Za-z0-9._-]*$/
 const CREDENTIAL_TYPE_KEYS = ['type', 'description']
 
@@ -53,8 +55,10 @@ function checkURL(value: string): string | undefined {
   if (new TextEncoder().encode(value).length > MAX_URL_LENGTH) return MSG_URL_LENGTH
   if (!PLAIN_LINE.test(value) || /\s|#/u.test(value) || !URL_PREFIX.test(value)) return MSG_URL
   // Go refuses any userinfo, even an empty one, which WHATWG URL parsing would hide.
-  const authority = value.replace(URL_PREFIX, '').split(/[/?]/, 1)[0] ?? ''
+  const rest = value.replace(URL_PREFIX, '')
+  const authority = rest.split(/[/?]/, 1)[0] ?? ''
   if (authority.includes('@') || !URL_HOST.test(authority) || URL_HOST_ASCII_ESCAPE.test(authority)) return MSG_URL
+  if (URL_BAD_ESCAPE.test(rest.split('?', 1)[0] ?? '')) return MSG_URL
   try {
     return new URL(value).hostname === '' ? MSG_URL : undefined
   } catch {
