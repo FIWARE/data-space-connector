@@ -9,18 +9,26 @@ reachability check, descriptor import). Nothing goes on the network unless the u
 
 ## Decisions (recorded in ADR 0022, step 7; a reviewer can override them here)
 
-1. **Only the TIR address renders.** Its one target is
+1. **Only the TIR address renders** (confirmed by the maintainer on PR #36). Its one target is
    `decentralizedIam.vcAuthentication.vcverifier.deployment.verifier.tirAddress` (`k3s/provider.yaml` line 96:
    `https://tir.127.0.0.1.nip.io/`). The other TIR leaves in provider.yaml stay excluded:
-   - `registration.services[*]...trustedParticipantsLists[*]` belong to the verifier's service registration, which
-     is a list with content no foundation owns. Re-attribute these rows to **US-5.6**.
+   - `decentralizedIam.vcAuthentication.vcverifier.registration.services[*].oidcScopes.*.credentials[*]`
+     `.trustedParticipantsLists[*]` belong to the verifier's service registration, which is a list with content no
+     foundation owns. Re-attribute these rows to **US-5.6**, which pre-seeds that list from this story's answers.
    - the verifier `initContainers[*].args[*]` curl script is a k3s-local registration at the in-cluster TIR. The
      story stays **US-3.3**, with a new reason: no chart key, see ADR 0022.
    - `registration.issuer[*].did` is the participant's local TIL list, which names other participants. Re-attribute
      to **US-5.5** ("local TIL entries", FEATURE_MODEL).
-2. **`autoRegistration` and `credentialTypes` are answers only.** Chart 10.16.0 has no key for "register at the Trust
-   Anchor". The chart's `registration.*` registers issuers in the participant's *own* TIL, which is a different
-   thing. No chart keys are invented. The core exposes both answers (step 4) for US-5.5, US-5.6 and NEXT_STEPS.
+2. **`autoRegistration` and `credentialTypes` are answers only**, for two different reasons:
+   - `autoRegistration`: chart 10.16.0 has no key for "register at the Trust Anchor". The chart's `registration.*`
+     registers issuers in the participant's *own* TIL, which is a different thing. No chart key is invented.
+   - `credentialTypes`: the chart key exists, `...registration.services[*].oidcScopes.*.credentials[*].type`
+     (`k3s/provider.yaml` line 174), next to the `trustedParticipantsLists` of Decision 1. Those elements belong to
+     the service registration list, which US-5.6 owns. This story does not render them; it exposes the answer for
+     US-5.6 to pre-seed each element's `type` and `trustedParticipantsLists` from.
+
+   The core exposes both answers (step 4) for US-5.5, US-5.6 and NEXT_STEPS. ADR 0022 and the `AGENTS.md` line
+   give these reasons; neither says the chart lacks a key for credential types.
 3. **No `dataspace.id`/DID foundation.** No chart key reads the data space's identifier in 10.16.0, so the
    ticket's "where the registration job needs it" does not apply.
 4. **Descriptor shape.** The chart's `dsconfig-cm.yaml` publishes only `supported_models`, `supported_protocols` and
@@ -29,13 +37,25 @@ reachability check, descriptor import). Nothing goes on the network unless the u
    - `credential_types`: a list. Each element is either a string or `{type, description?}`.
    - `participant_registration`: `"automatic"` or `"manual"`.
 
-   Other keys are ignored and listed as "not used". A document with none of the three gives an empty preview and
-   a message. Publishing these keys from the chart's own `dataSpaceConfig` is a follow-up and out of scope here.
+   Other keys are ignored and listed as "not used". Publishing these keys from the chart's own `dataSpaceConfig` is
+   a follow-up and out of scope here.
+
+   **The import is forward-looking.** No publisher emits these keys yet, the chart's `dsconfig-cm.yaml` included, so
+   today every real data space yields an empty preview. ADR 0022 says so. The empty-preview message says so too, so
+   the user does not read it as a failure: "This data space does not publish a TIR address, credential types or a
+   registration mode yet. Enter them below." The unused keys are still listed, which shows the document was read.
 5. **The reachability record is session state**, like `AppState.roleChanges` (ADR 0019). It is not a profile field,
    because a reachability result is tied to one moment.
 6. **Rule grammar.** A `when` may address `features.<feature id>` with `equals: "on"` or `equals: "off"`, and may
    use `unset: true` instead of `equals`. `unset: true` holds when the resolved answer, given or derived, is absent.
    A given `when` has exactly one of `equals` and `unset`.
+7. **A loaded TIR address is back-derived.** `internal/load` derives answers only from `recognize:` rules, so
+   without one a loaded file that sets `verifier.tirAddress` leaves `dataspace.tirAddress` unanswered, and the
+   Decision 6 rule would block `generate` on a correct file. Step 2 adds a `recognize:` rule (`kind: value`, stage
+   `foundations`) on the target path, the first recognition rule for a foundation answer. The leaf then counts as
+   recognized: it derives the answer, re-renders to the same bytes, and is not pinned (ADR 0020 §7). A loaded value
+   that `TypeURL` refuses derives no answer and gets a load note, so the leaf stays pinned and the rule fires. That
+   is correct, because the verifier would get an unusable address.
 
 ## Steps
 
@@ -82,7 +102,17 @@ compile-time refusals) and in `internal/profile/format_test.go`, using fixtures 
   - `dataspace.credentialTypes` (`credentialTypes`) and `dataspace.autoRegistration` (`bool`) get no targets. Add a
     YAML comment above them that names their consumers (US-5.5, US-5.6) and ADR 0022.
   - Document the new types and the group in the header comment.
+  - Add `{path: 'decentralizedIam.vcAuthentication.vcverifier.deployment.verifier.tirAddress', answer:
+    dataspace.tirAddress, stage: foundations, kind: value}` to `recognize:` (Decision 7).
   - Bump `revision: 7` → `8`.
+- Recognition of a foundation answer (`internal/model`, `internal/load`):
+  - At compile time, a `recognize:` rule whose answer is a foundation id must have that foundation's stage, and
+    `kind: value` only for a scalar string-like type (`toggle` for `bool`). A list type cannot be recognized.
+  - `internal/load` runs the foundation's `Check` on a recognized value. A refused value derives nothing and gets a
+    note ("does not match the type of %s").
+  - Tests: `internal/load/load_test.go` rows for a loaded file with the TIR leaf set (answer derived, leaf
+    recognized), with an invalid URL (no answer, note, leaf unknown), and without it (no answer). Also a
+    `render_test.go` row: loading that file and rendering keeps the leaf unpinned and byte-identical.
 - In `internal/render/provider_test.go`:
   - Add a reference answer for `dataspace.tirAddress` (`https://tir.127.0.0.1.nip.io/`).
   - Make the domain-leaf search accept a leaf that a target of another foundation owns, when that foundation's
@@ -115,6 +145,9 @@ compile-time refusals) and in `internal/profile/format_test.go`, using fixtures 
   - `internal/check/check_test.go`: a dedicated table-driven test for this rule.
     - It fires as **error** with verification on and the TIR unset. That is the failure it was written for.
     - It does not fire with the TIR set, with verification off, or with the feature absent.
+    - It does not fire for a **loaded** file that sets `verifier.tirAddress` and has verification on: the answer is
+      back-derived through the Decision 7 `recognize:` rule, with no given answer in the profile. This row loads the
+      fixture through `internal/load` rather than hand-writing the answer.
     - `Blocking` is true when it fires.
   - Use profile fixtures in `internal/check/testdata/`.
 
@@ -134,7 +167,8 @@ API:
   - Returns per-foundation `{ID, Current, Imported}`, for values that differ only.
   - Returns `Problems` for an imported value that the foundation's `Check` refuses. That value is not offered.
   - Maps `participant_registration` to the bool answer.
-  - Returns an empty result plus a message when the document carries none of the three keys.
+  - Returns an empty result plus the forward-looking message of Decision 4 when the document carries none of the
+    three keys. It is a message, not an error.
 - `CredentialTypes(b model.Bundle, p profile.Profile) []CredentialType`: the ordered answer, nil when unanswered.
   This is the seam US-5.5 and US-5.6 pre-seed from. Also add `AutoRegistration(b, p) (bool, bool)`.
 
@@ -199,7 +233,8 @@ fixtures, so there is no live network.
   `mockups/prototype.html`). Extract it to `ui/src/stages/DataSpacePanel.tsx` if the file grows.
   - **Import from:** a URL field plus an *Import* button. The preview shows each value with current → imported,
     plus problems and unused keys, and offers *Apply* and *Discard*. Only *Apply* dispatches the existing
-    set-answer actions. Errors go to an `aria-live` region.
+    set-answer actions. Errors go to an `aria-live` region. An empty preview shows the core's Decision 4 message
+    as information, styled apart from errors, and keeps the unused keys visible.
   - **Trust Anchor (TIR):** a URL input plus a *Check* button, with the result shown as text and icon, never colour
     alone (US-11.5).
   - **Credential types:** an ordered table editor (type, description; add, remove, move up/down) bound to
@@ -227,7 +262,8 @@ fixtures, so there is no live network.
 **Acceptance:** `make ui`, `npm test` and `make lint` are green.
 
 ### Step 7: ADR 0022 and documentation
-- `doc/adr/0022-config-tool-data-space-parameters.md`: Decisions 1–6 above, the outbound-call policy (user-triggered
+- `doc/adr/0022-config-tool-data-space-parameters.md`: Decisions 1–7 above (including the statement that the import is
+  forward-looking until a publisher emits its keys), the outbound-call policy (user-triggered
   only, proxy from the environment, size cap, no scheme-changing redirect, server layer only) and its link to US-11.3
   (offline). Add it to the `doc/adr/README.md` index.
 - `config-tool/README.md`:
@@ -238,7 +274,9 @@ fixtures, so there is no live network.
 - `doc/config-tool/FEATURE_MODEL.md`: update the `dataspace.*` rows (1 key shipped, the rest answers-only, with
   their consumers) and mark the L2 rule as shipped.
 - `doc/config-tool/USER_JOURNEY.md` Stage 3: describe what shipped, including the descriptor keys.
-- `AGENTS.md`: flip the US-3.3 line to shipped.
+- `AGENTS.md`: flip the US-3.3 line to shipped and correct its reason: no chart key exists for auto-registration;
+  credential types do have one (`registration.services[*]...credentials[*].type`), owned by US-5.6's list. Mention
+  the `recognize:` rule for the loaded TIR address.
 - Run `.github/scripts/check-links.sh` if Docker is available.
 
 **Acceptance:** the docs match the code, the links resolve, and `make test` and `make lint` are green.
