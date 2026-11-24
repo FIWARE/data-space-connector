@@ -74,7 +74,7 @@ function AnswerField({ foundation }: { foundation: Foundation }) {
   const field = answerFieldId(foundation.id)
   const id = fieldElementId(field)
   const value = state.answers.values[foundation.id]
-  const error = value === undefined ? undefined : checkAnswer(foundation.type, value)
+  const error = value === undefined ? undefined : checkAnswer(foundation.type, value, foundation.options)
   return (
     <div className="row">
       <label htmlFor={id}>{foundation.label}</label>

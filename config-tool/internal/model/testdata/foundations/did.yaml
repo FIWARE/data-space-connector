@@ -1,0 +1,30 @@
+# A DID that derives from the domain only while its method is did:web; did.value is declared before the
+# answers its default, defaultWhen and prefix reference.
+chart: data-space-connector
+version: 1.0.0
+revision: 1
+topLevelKeys: [keycloak, scorpio]
+foundations:
+  - id: did.value
+    stage: foundations
+    type: did
+    default: "did:web:{{ .domain.base }}"
+    defaultWhen: {id: did.method, equals: "did:web"}
+    prefix: "{{ .did.method }}:"
+    label: DID
+    targets:
+      - {path: keycloak.issuerDid, fn: copy, args: ["{{ .did.value }}"]}
+  - id: did.method
+    stage: foundations
+    type: choice
+    default: did:web
+    label: DID method
+    options:
+      - {value: "did:web", label: Web}
+      - {value: "did:key", label: Key, note: Meant for local development.}
+  - id: domain.base
+    stage: foundations
+    type: domain
+    label: Base domain
+    targets:
+      - {path: scorpio.ingress.host, fn: tpl, args: ["scorpio.{{ .domain.base }}"]}

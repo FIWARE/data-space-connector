@@ -24,6 +24,11 @@ const (
 	TypeHostname FoundationType = "hostname"
 	// TypeDomain is a hostname of at least two labels, the base other hosts are derived from.
 	TypeDomain FoundationType = "domain"
+	// TypeChoice is one of the foundation's declared option values; CompiledFoundation.Check checks it.
+	TypeChoice FoundationType = "choice"
+	// TypeDID is a decentralized identifier, did:<method>:<id>, without characters a chart template would
+	// have to escape.
+	TypeDID FoundationType = "did"
 )
 
 // Fn is a target function: how a target's value is made from answers (ADR 0020).
@@ -45,12 +50,13 @@ const (
 const maxHostnameLength = 253
 
 var (
-	knownTypes = []FoundationType{TypeString, TypeHostname, TypeDomain}
+	knownTypes = []FoundationType{TypeString, TypeHostname, TypeDomain, TypeChoice, TypeDID}
 	knownFns   = []Fn{FnTpl, FnJoin, FnCopy, FnConst}
 	// idSegment keeps every segment of an answer id usable as a template field name.
 	idSegment = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 	plainLine = regexp.MustCompile(`^[^\s\x00-\x1f\x7f"\\<>]([^\x00-\x1f\x7f"\\<>]*[^\s\x00-\x1f\x7f"\\<>])?$`)
 	hostname  = regexp.MustCompile(`^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$`)
+	did       = regexp.MustCompile(`^did:[a-z0-9]+:[A-Za-z0-9._%:-]+$`)
 )
 
 // Foundation is a cross-cutting answer as declared in a bundle's foundations list.
@@ -60,12 +66,32 @@ type Foundation struct {
 	Stage Stage          `yaml:"stage"`
 	Type  FoundationType `yaml:"type"`
 	// Default is a template over other answers; a defaulted answer exists only when all of them do.
+	// Only a choice may have a constant default, which must be one of its options.
 	Default string `yaml:"default"`
-	Label   string `yaml:"label"`
-	Help    string `yaml:"help"`
+	// DefaultWhen gates Default on another answer; nil derives it whenever its refs are answered.
+	DefaultWhen *Condition `yaml:"defaultWhen"`
+	// Prefix is a template over other answers that the resolved value, given or derived, must start with.
+	Prefix string `yaml:"prefix"`
+	// Options are the values a choice offers; only a choice has them.
+	Options []Option `yaml:"options"`
+	Label   string   `yaml:"label"`
+	Help    string   `yaml:"help"`
 	// Doc is a repo-relative documentation path, optionally with an anchor.
 	Doc     string   `yaml:"doc"`
 	Targets []Target `yaml:"targets"`
+}
+
+// Condition holds while the resolved answer ID equals Equals.
+type Condition struct {
+	ID     string `yaml:"id"`
+	Equals string `yaml:"equals"`
+}
+
+// Option is one value of a choice; Note is optional text shown at the point of choice.
+type Option struct {
+	Value string `yaml:"value" json:"value"`
+	Label string `yaml:"label" json:"label"`
+	Note  string `yaml:"note" json:"note"`
 }
 
 // Target is one chart key a foundation writes.
@@ -83,15 +109,49 @@ type CompiledFoundation struct {
 	ID    string
 	Stage Stage
 	Type  FoundationType
-	// Refs are the answer ids Default references, sorted; nil without a default.
-	Refs    []string
-	Targets []CompiledTarget
-	deflt   *template.Template
+	// Refs are the answer ids Default, DefaultWhen and Prefix reference, sorted; nil without any.
+	Refs        []string
+	DefaultWhen *Condition
+	Options     []Option
+	Targets     []CompiledTarget
+	deflt       *template.Template
+	prefix      *template.Template
+	// defaultRefs and prefixRefs split Refs by source, so a bad reference is reported where it is.
+	defaultRefs, prefixRefs []string
 }
 
 // DefaultTemplate is the parsed Default; nil when the foundation has none.
 func (f CompiledFoundation) DefaultTemplate() *template.Template {
 	return f.deflt
+}
+
+// PrefixTemplate is the parsed Prefix; nil when the foundation has none.
+func (f CompiledFoundation) PrefixTemplate() *template.Template {
+	return f.prefix
+}
+
+// PrefixRefs are the answer ids Prefix references, sorted; nil without a prefix.
+func (f CompiledFoundation) PrefixRefs() []string {
+	return f.prefixRefs
+}
+
+// Check returns why v is not a valid answer of f, without echoing v; nil when it is valid.
+func (f CompiledFoundation) Check(v any) error {
+	if f.Type != TypeChoice {
+		return f.Type.Check(v)
+	}
+	if s, ok := v.(string); ok && slices.Contains(f.optionValues(), s) {
+		return nil
+	}
+	return fmt.Errorf("must be one of %s", strings.Join(f.optionValues(), ", "))
+}
+
+func (f CompiledFoundation) optionValues() []string {
+	vs := make([]string, len(f.Options))
+	for i, o := range f.Options {
+		vs[i] = o.Value
+	}
+	return vs
 }
 
 // CompiledTarget is a validated Target.
@@ -120,13 +180,14 @@ func (b Bundle) Foundation(id string) (CompiledFoundation, bool) {
 	return b.foundations[i], true
 }
 
-// FoundationOrder lists the foundation ids so that each comes after the answers its default
-// references; ties keep declaration order.
+// FoundationOrder lists the foundation ids so that each comes after the answers its Refs name; ties
+// keep declaration order.
 func (b Bundle) FoundationOrder() []string {
 	return slices.Clone(b.order)
 }
 
-// Check returns why v is not a valid answer of type t, without echoing v; nil when it is valid.
+// Check returns why v is not a valid answer of pattern type t, without echoing v; nil when it is valid.
+// A choice has no pattern and always fails here: CompiledFoundation.Check checks it against its options.
 func (t FoundationType) Check(v any) error {
 	s, ok := v.(string)
 	if !ok {
@@ -144,6 +205,12 @@ func (t FoundationType) Check(v any) error {
 		if t == TypeDomain && !strings.Contains(s, ".") {
 			return fmt.Errorf("must be a domain of at least two labels")
 		}
+	case TypeDID:
+		if !did.MatchString(s) {
+			return fmt.Errorf("must be a DID: did:<method>:<identifier>, the method of lowercase letters and digits, the identifier of letters, digits, '.', '_', '%%', ':' and '-'")
+		}
+	case TypeChoice:
+		return fmt.Errorf("a %s is checked against its foundation's options", t)
 	default:
 		return fmt.Errorf("type %q is unknown", t)
 	}
@@ -195,17 +262,51 @@ func compileFoundation(f Foundation, topLevelKeys []string) (CompiledFoundation,
 	if f.Label == "" {
 		return CompiledFoundation{}, fmt.Errorf("label is missing")
 	}
-	c := CompiledFoundation{ID: f.ID, Stage: f.Stage, Type: f.Type}
+	if err := checkOptions(f); err != nil {
+		return CompiledFoundation{}, err
+	}
+	c := CompiledFoundation{ID: f.ID, Stage: f.Stage, Type: f.Type, Options: f.Options}
 	if f.Default != "" {
 		t, refs, err := parseTemplate(f.ID, f.Default)
 		if err != nil {
 			return CompiledFoundation{}, fmt.Errorf("default: %w", err)
 		}
-		if len(refs) == 0 {
+		// A constant default would hide a typo in a derived one; only a choice's pick may be constant.
+		if len(refs) == 0 && f.Type != TypeChoice {
 			return CompiledFoundation{}, fmt.Errorf("default references no answer")
 		}
-		c.deflt, c.Refs = t, refs
+		if len(refs) == 0 && !slices.Contains(c.optionValues(), f.Default) {
+			return CompiledFoundation{}, fmt.Errorf("default %q is not one of the options", f.Default)
+		}
+		c.deflt, c.defaultRefs = t, refs
 	}
+	if w := f.DefaultWhen; w != nil {
+		if f.Default == "" {
+			return CompiledFoundation{}, fmt.Errorf("defaultWhen needs a default")
+		}
+		if w.ID == "" {
+			return CompiledFoundation{}, fmt.Errorf("defaultWhen: id is missing")
+		}
+		c.DefaultWhen = &Condition{ID: w.ID, Equals: w.Equals}
+	}
+	if f.Prefix != "" {
+		t, refs, err := parseTemplate(f.ID+":prefix", f.Prefix)
+		if err != nil {
+			return CompiledFoundation{}, fmt.Errorf("prefix: %w", err)
+		}
+		if len(refs) == 0 {
+			return CompiledFoundation{}, fmt.Errorf("prefix references no answer")
+		}
+		c.prefix, c.prefixRefs = t, refs
+	}
+	refs := map[string]bool{}
+	for _, r := range slices.Concat(c.defaultRefs, c.prefixRefs) {
+		refs[r] = true
+	}
+	if c.DefaultWhen != nil {
+		refs[c.DefaultWhen.ID] = true
+	}
+	c.Refs = sortedSet(refs)
 	for i, t := range f.Targets {
 		ct, err := compileTarget(f.ID, t, topLevelKeys)
 		if err != nil {
@@ -214,6 +315,32 @@ func compileFoundation(f Foundation, topLevelKeys []string) (CompiledFoundation,
 		c.Targets = append(c.Targets, ct)
 	}
 	return c, nil
+}
+
+// checkOptions requires options with distinct values and labels on a choice and refuses them elsewhere.
+func checkOptions(f Foundation) error {
+	if f.Type != TypeChoice {
+		if len(f.Options) > 0 {
+			return fmt.Errorf("options are only allowed on a %s", TypeChoice)
+		}
+		return nil
+	}
+	if len(f.Options) == 0 {
+		return fmt.Errorf("a %s needs options", TypeChoice)
+	}
+	seen := map[string]bool{}
+	for i, o := range f.Options {
+		switch {
+		case o.Value == "":
+			return fmt.Errorf("options[%d]: value is missing", i)
+		case o.Label == "":
+			return fmt.Errorf("options[%d]: label is missing", i)
+		case seen[o.Value]:
+			return fmt.Errorf("options[%d]: value %q is already declared", i, o.Value)
+		}
+		seen[o.Value] = true
+	}
+	return nil
 }
 
 func checkID(id string) error {
@@ -355,15 +482,35 @@ func checkIDNesting(fs []CompiledFoundation) error {
 	return nil
 }
 
-// checkRefs refuses a reference to an undeclared id; topoOrder refuses a default that references its own.
+// checkRefs refuses a reference to an undeclared id and a defaultWhen comparing a choice with a value
+// it does not offer; topoOrder refuses a foundation that depends on its own answer.
 func checkRefs(fs []CompiledFoundation) error {
-	declared := func(id string) bool {
-		return slices.ContainsFunc(fs, func(f CompiledFoundation) bool { return f.ID == id })
+	find := func(id string) (CompiledFoundation, bool) {
+		i := slices.IndexFunc(fs, func(f CompiledFoundation) bool { return f.ID == id })
+		if i < 0 {
+			return CompiledFoundation{}, false
+		}
+		return fs[i], true
 	}
+	declared := func(id string) bool { _, ok := find(id); return ok }
 	for i, f := range fs {
-		for _, r := range f.Refs {
+		for _, r := range f.defaultRefs {
 			if !declared(r) {
 				return fmt.Errorf("foundations[%d] (%s): default references unknown answer %q", i, f.ID, r)
+			}
+		}
+		for _, r := range f.prefixRefs {
+			if !declared(r) {
+				return fmt.Errorf("foundations[%d] (%s): prefix references unknown answer %q", i, f.ID, r)
+			}
+		}
+		if w := f.DefaultWhen; w != nil {
+			o, ok := find(w.ID)
+			if !ok {
+				return fmt.Errorf("foundations[%d] (%s): defaultWhen references unknown answer %q", i, f.ID, w.ID)
+			}
+			if o.Type == TypeChoice && !slices.Contains(o.optionValues(), w.Equals) {
+				return fmt.Errorf("foundations[%d] (%s): defaultWhen: %q is not an option of %s", i, f.ID, w.Equals, w.ID)
 			}
 		}
 		for j, t := range f.Targets {
@@ -425,7 +572,7 @@ func checkTargetPaths(fs []CompiledFoundation) error {
 	return nil
 }
 
-// topoOrder orders ids after the ids their default references, in declaration order otherwise.
+// topoOrder orders ids after the ids their Refs name, in declaration order otherwise.
 func topoOrder(fs []CompiledFoundation) ([]string, error) {
 	placed := map[string]bool{}
 	order := make([]string, 0, len(fs))
@@ -448,7 +595,7 @@ func topoOrder(fs []CompiledFoundation) ([]string, error) {
 					cycle = append(cycle, f.ID)
 				}
 			}
-			return nil, fmt.Errorf("foundations: the defaults of %s reference each other in a cycle", strings.Join(cycle, ", "))
+			return nil, fmt.Errorf("foundations: %s depend on each other in a cycle of default, defaultWhen or prefix references", strings.Join(cycle, ", "))
 		}
 	}
 	return order, nil

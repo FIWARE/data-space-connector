@@ -42,7 +42,7 @@
   foundations:
     - {id: a, stage: foundations, type: string, label: A, default: "{{ .nope }}"}
 - name: cycle among defaults
-  err: "the defaults of a, b reference each other in a cycle"
+  err: "a, b depend on each other in a cycle"
   foundations:
     - {id: a, stage: foundations, type: string, label: A, default: "{{ .b }}"}
     - {id: b, stage: foundations, type: string, label: B, default: "x-{{ .a }}"}
@@ -109,3 +109,66 @@
   err: "label is missing"
   foundations:
     - {id: a, stage: foundations, type: string}
+- name: cycle through defaultWhen
+  err: "a, b depend on each other in a cycle"
+  foundations:
+    - {id: a, stage: foundations, type: string, label: A, default: "x-{{ .c }}", defaultWhen: {id: b, equals: "y"}}
+    - {id: b, stage: foundations, type: string, label: B, default: "y-{{ .a }}"}
+    - {id: c, stage: foundations, type: string, label: C}
+- name: cycle through prefix
+  err: "a, b depend on each other in a cycle"
+  foundations:
+    - {id: a, stage: foundations, type: string, label: A, prefix: "{{ .b }}"}
+    - {id: b, stage: foundations, type: string, label: B, default: "x-{{ .a }}"}
+- name: prefix references its own answer
+  err: "a depend on each other in a cycle"
+  foundations:
+    - {id: a, stage: foundations, type: string, label: A, prefix: "{{ .a }}"}
+- name: choice without options
+  err: "a choice needs options"
+  foundations:
+    - {id: a, stage: foundations, type: choice, label: A}
+- name: options on a pattern type
+  err: "options are only allowed on a choice"
+  foundations:
+    - {id: a, stage: foundations, type: string, label: A, options: [{value: x, label: X}]}
+- name: option without a label
+  err: "options[0]: label is missing"
+  foundations:
+    - {id: a, stage: foundations, type: choice, label: A, options: [{value: x}]}
+- name: option declared twice
+  err: 'options[1]: value "x" is already declared'
+  foundations:
+    - {id: a, stage: foundations, type: choice, label: A, options: [{value: x, label: X}, {value: x, label: Y}]}
+- name: constant default on a pattern type
+  err: "default references no answer"
+  foundations:
+    - {id: a, stage: foundations, type: string, label: A, default: x}
+- name: choice default that is not an option
+  err: 'default "z" is not one of the options'
+  foundations:
+    - {id: a, stage: foundations, type: choice, label: A, default: z, options: [{value: x, label: X}]}
+- name: defaultWhen on an unknown answer
+  err: 'defaultWhen references unknown answer "nope"'
+  foundations:
+    - {id: a, stage: foundations, type: string, label: A, default: "x-{{ .b }}", defaultWhen: {id: nope, equals: x}}
+    - {id: b, stage: foundations, type: string, label: B}
+- name: defaultWhen without a default
+  err: "defaultWhen needs a default"
+  foundations:
+    - {id: a, stage: foundations, type: string, label: A, defaultWhen: {id: b, equals: x}}
+    - {id: b, stage: foundations, type: string, label: B}
+- name: defaultWhen compares a choice with a value it does not offer
+  err: 'defaultWhen: "z" is not an option of b'
+  foundations:
+    - {id: a, stage: foundations, type: string, label: A, default: "x-{{ .c }}", defaultWhen: {id: b, equals: z}}
+    - {id: b, stage: foundations, type: choice, label: B, options: [{value: x, label: X}]}
+    - {id: c, stage: foundations, type: string, label: C}
+- name: prefix on an unknown answer
+  err: 'prefix references unknown answer "nope"'
+  foundations:
+    - {id: a, stage: foundations, type: string, label: A, prefix: "{{ .nope }}:"}
+- name: prefix references no answer
+  err: "prefix references no answer"
+  foundations:
+    - {id: a, stage: foundations, type: string, label: A, prefix: "did:"}
