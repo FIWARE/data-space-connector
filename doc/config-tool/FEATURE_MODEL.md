@@ -168,6 +168,9 @@ A role offers only features of the chart it deploys. Operator deploys `trust-anc
 trust-anchor features and nothing else, `dsp.config` and `obs.*` included. Custom deploys `data-space-connector`:
 it offers all of that chart's features and recommends none ([ADR 0017](../adr/0017-config-tool-role-presets.md)).
 
+Changing the role re-applies the new preset only to features whose state came from the old preset: a toggle set by
+the user or by a loaded values file keeps its state, and answers stay ([ADR 0019](../adr/0019-config-tool-role-change.md)).
+
 ## Cross-cutting values
 
 Asked in [Stage 3](USER_JOURNEY.md#stage-3--foundations). The "fans out to" count is measured
