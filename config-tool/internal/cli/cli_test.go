@@ -13,7 +13,6 @@ import (
 
 	"github.com/FIWARE/data-space-connector/config-tool/internal/atomicfile"
 	"github.com/FIWARE/data-space-connector/config-tool/internal/profile"
-	"github.com/FIWARE/data-space-connector/config-tool/internal/render"
 	"github.com/FIWARE/data-space-connector/config-tool/internal/roundtrip"
 	"github.com/FIWARE/data-space-connector/config-tool/internal/trial"
 	"github.com/FIWARE/data-space-connector/config-tool/internal/version"
@@ -83,7 +82,7 @@ func TestCommands(t *testing.T) {
 		{
 			name:    "generate is not implemented yet",
 			args:    []string{"generate", "-p", writeProfile(t, validProfile), "-o", filepath.Join(t.TempDir(), "values.yaml")},
-			wantErr: render.ErrNotImplemented,
+			wantErr: errGeneratePending,
 		},
 		{
 			name:    "no subcommand starts the GUI",
@@ -151,7 +150,7 @@ func TestGenerateRefusesProfile(t *testing.T) {
 			if err == nil {
 				t.Fatal("generate succeeded, want an error")
 			}
-			if errors.Is(err, render.ErrNotImplemented) {
+			if errors.Is(err, errGeneratePending) {
 				t.Fatalf("error = %v, want the profile refused before rendering", err)
 			}
 			if tc.wantErr != nil && !errors.Is(err, tc.wantErr) {
@@ -364,7 +363,7 @@ func TestRunReportsErrors(t *testing.T) {
 	if code == 0 {
 		t.Fatal("exit code = 0, want non-zero")
 	}
-	if !strings.Contains(stderr.String(), render.ErrNotImplemented.Error()) {
+	if !strings.Contains(stderr.String(), errGeneratePending.Error()) {
 		t.Errorf("stderr = %q, want the render error", stderr.String())
 	}
 }

@@ -1,0 +1,60 @@
+# Render fixture: every target function, derived hosts, owned lists (one with a host that has no
+# default) and the domain recognize rules a loaded file is classified with.
+chart: data-space-connector
+version: 1.0.0
+revision: 1
+topLevelKeys: [keycloak, scorpio, rainbow, marketplace]
+recognize:
+  - {path: keycloak.ingress.hostname, answer: domain.base, stage: foundations, kind: value, pattern: '^[^.]+\.(.+)$'}
+  - {path: rainbow.ingress.host, answer: domain.base, stage: foundations, kind: value, pattern: '^[^.]+\.(.+)$'}
+foundations:
+  - id: org.displayName
+    stage: foundations
+    type: string
+    label: Display name
+    help: The organization's name.
+    targets:
+      - {path: marketplace.title, fn: copy, args: ["{{ .org.displayName }}"]}
+  - id: domain.base
+    stage: foundations
+    type: domain
+    label: Base domain
+    help: Every host is derived from it.
+    targets:
+      - {path: marketplace.url, fn: tpl, args: ["https://market.{{ .domain.base }}"]}
+  - id: host.keycloak
+    stage: foundations
+    type: hostname
+    default: "keycloak.{{ .domain.base }}"
+    label: Keycloak host
+    help: Derived from the base domain.
+    targets:
+      - {path: keycloak.ingress.hostname, fn: copy, args: ["{{ .host.keycloak }}"]}
+      - {path: "keycloak.ingress.tls[0].hosts[0]", fn: tpl, args: ["{{ .host.keycloak }}"]}
+      - {path: "keycloak.ingress.tls[0].secretName", fn: tpl, args: ["{{ .host.keycloak }}-tls"]}
+      - {path: 'keycloak.ingress.annotations."cert-manager.io/alt-names"', fn: join, sep: ",", args: ["{{ .host.keycloak }}", "{{ .host.rainbow }}"]}
+  - id: host.rainbow
+    stage: foundations
+    type: hostname
+    default: "rainbow.{{ .domain.base }}"
+    label: Rainbow host
+    help: Derived from the base domain.
+    targets:
+      - {path: rainbow.ingress.host, fn: copy, args: ["{{ .host.rainbow }}"]}
+  - id: host.scorpio
+    stage: foundations
+    type: hostname
+    default: "scorpio.{{ .domain.base }}"
+    label: Scorpio host
+    help: Derived from the base domain.
+    targets:
+      - {path: "scorpio.ingress.hosts[0].host", fn: copy, args: ["{{ .host.scorpio }}"]}
+      - {path: "scorpio.ingress.hosts[0].paths[0]", fn: const, args: ["/"]}
+  - id: host.scorpioAlt
+    stage: foundations
+    type: hostname
+    label: Second Scorpio host
+    help: Has no default, so the hosts list is complete only when it is answered.
+    targets:
+      - {path: "scorpio.ingress.hosts[1].host", fn: copy, args: ["{{ .host.scorpioAlt }}"]}
+      - {path: "scorpio.ingress.hosts[1].paths[0]", fn: const, args: ["/"]}
