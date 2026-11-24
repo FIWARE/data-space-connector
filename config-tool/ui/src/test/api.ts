@@ -4,7 +4,7 @@ import type { LoadReport } from '../api/load'
 import type { FeatureState, Profile, ProfileResponse, RecentProfiles } from '../api/profile'
 import type { FeatureChoice, FeaturesResult, FeatureToggle } from '../api/features'
 import type { FoundationList } from '../api/foundations'
-import type { Change, ChangeGroup, HandSetAnswer, Leaf, RenderResult } from '../api/render'
+import type { Change, ChangeGroup, Finding, HandSetAnswer, Leaf, RenderResult } from '../api/render'
 import type { Feature, Offer, PresetResult, RoleCatalogue, RoleChange } from '../api/roles'
 import type { Kubeconfig, ModelInfo } from '../api/target'
 import type { Trial, TrialWritten } from '../api/trial'
@@ -385,6 +385,26 @@ export function handSetOf(profile: Profile): HandSetAnswer[] {
     .map((f) => ({ id: f.id, value: answers[f.id], derived: typeof base === 'string' ? f.default.replace('{{ .domain.base }}', base) : '' }))
 }
 
+/** A warning on the base domain, which the FOUNDATIONS cut can show; the real rule points at `did.method`. */
+export const DOMAIN_WARNING: Finding = {
+  rule: 'domain-warning',
+  severity: 'warning',
+  stage: 'foundations',
+  field: 'answers.domain.base',
+  message: 'A domain other participants may not resolve.',
+  doc: 'doc/deployment-integration/roles/PREREQUISITES.md#public-names-have-to-resolve-inside-the-cluster',
+}
+
+/** A render fake that answers `findings` once the base domain is given, and no diff. */
+export function renderWithFindings(findings: Finding[]): (body: RenderBody) => RenderResult {
+  return (body) => ({
+    tree: { leaves: renderLeaves(body.profile) },
+    diff: { groups: [] },
+    handSet: handSetOf(body.profile),
+    findings: body.profile.answers?.['domain.base'] === undefined ? [] : findings,
+  })
+}
+
 /** `next` against `prev` as render.Diff groups it, without pinning: by foundation in FOUNDATIONS order. */
 export function diffLeaves(prev: readonly Leaf[], next: readonly Leaf[]): ChangeGroup[] {
   const before = new Map(prev.map((l) => [l.path, l]))
@@ -411,7 +431,7 @@ function foundationDefaults(): Required<FoundationFakes> {
       const leaves = renderLeaves(body.profile)
       const groups = diffLeaves(last, leaves)
       last = leaves
-      return { tree: { leaves }, diff: { groups }, handSet: handSetOf(body.profile) }
+      return { tree: { leaves }, diff: { groups }, handSet: handSetOf(body.profile), findings: [] }
     },
   }
 }

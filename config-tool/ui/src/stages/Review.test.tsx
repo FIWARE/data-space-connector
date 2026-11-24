@@ -10,7 +10,9 @@ import type { FieldId } from '../state/openQuestions'
 import { initialState, type AppliedRoleChange, type AppState } from '../state/reducer'
 import { StageId } from '../state/stageIds'
 import { StoreProvider } from '../state/store'
-import { catalogueFeature, FOUNDATIONS, lateLoad, mockApi, recordToggle, refusedRole, REPORT, refusedUpload } from '../test/api'
+import { catalogueFeature, DOMAIN_WARNING, FOUNDATIONS, lateLoad, mockApi, recordToggle, refusedRole, REPORT, refusedUpload, renderWithFindings } from '../test/api'
+import { repositoryDocUrl } from '../links'
+import { FINDINGS_HEADING, FINDINGS_HINT, READ_MORE, stageName } from './findingsText'
 import { DELIBERATE_HEADING } from './DeliberateChoices'
 import { FEATURES_HEADING } from './Features'
 import { FOUNDATIONS_HEADING } from './Foundations'
@@ -323,6 +325,45 @@ describe('Review', () => {
       mockApi(undefined, undefined, undefined, {}, {}, {}, { render: () => HTTP_UNPROCESSABLE })
       renderReview(undefined, undefined, withValues({ 'host.keycloak': HAND_HOST }))
       expect(await screen.findByRole('alert')).toHaveTextContent(String(HTTP_UNPROCESSABLE))
+    })
+  })
+
+  describe('findings', () => {
+    const findingsPanel = () => within(screen.getByRole('heading', { level: 3, name: FINDINGS_HEADING }).closest('.panel') as HTMLElement)
+    const withDomain: Partial<AppState> = {
+      answers: { values: { 'domain.base': 'acme.org' }, role: PICKED, features: {}, target: ANSWERED },
+      foundations: FOUNDATIONS.foundations,
+    }
+
+    it.each<[string, Partial<AppState> | undefined]>([
+      ['without a loaded file', undefined],
+      ['with a loaded file', { loaded: REPORT }],
+    ])('lists a finding with its stage, field and doc %s', async (_name, more) => {
+      mockApi(undefined, undefined, undefined, {}, {}, {}, { render: renderWithFindings([DOMAIN_WARNING]) })
+      renderReview(more?.loaded, undefined, withDomain)
+      await screen.findByRole('heading', { level: 3, name: FINDINGS_HEADING })
+      expect(findingsPanel().getByText(FINDINGS_HINT)).toBeInTheDocument()
+      expect(findingsPanel().getByRole('listitem')).toHaveTextContent(
+        `Warning${stageName(StageId.Foundations)}Base domain${DOMAIN_WARNING.message}${READ_MORE}go ↗`,
+      )
+      expect(findingsPanel().getByRole('link', { name: READ_MORE })).toHaveAttribute('href', repositoryDocUrl(DOMAIN_WARNING.doc))
+      expect(stageName(StageId.Foundations)).toBe('Stage 3 · Foundations')
+    })
+
+    it('links a finding to its field on Foundations', async () => {
+      mockApi(undefined, undefined, undefined, {}, {}, {}, { render: renderWithFindings([DOMAIN_WARNING]) })
+      renderReview(undefined, undefined, withDomain)
+      await screen.findByRole('heading', { level: 3, name: FINDINGS_HEADING })
+      await userEvent.click(findingsPanel().getByRole('button', { name: 'Go to Base domain' }))
+      expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(FOUNDATIONS_HEADING)
+    })
+
+    it('leaves the section out without a finding', async () => {
+      const fetchMock = mockApi()
+      renderReview(undefined, undefined, withDomain)
+      await waitFor(() => expect(fetchMock.mock.calls.some(([input]) => String(input).endsWith('/api/render'))).toBe(true))
+      await act(async () => {})
+      expect(screen.queryByRole('heading', { name: FINDINGS_HEADING })).not.toBeInTheDocument()
     })
   })
 })

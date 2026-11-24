@@ -1,5 +1,6 @@
 /** POST /api/render: the values tree the answers render to and its change since the last render (ADR 0020). */
 import { api } from './client'
+import type { StageId } from '../state/stageIds'
 import type { Profile } from './profile'
 
 /** Where a leaf came from, mirroring `render.Provenance`. */
@@ -49,11 +50,27 @@ export interface HandSetAnswer {
   derived: string
 }
 
-/** Answer of POST /api/render; the groups are in bundle order and the first render diffs against an empty tree. */
+/** How much an L2 finding weighs; only an error blocks generate (ADR 0021). */
+export type Severity = 'error' | 'warning'
+
+/** One bundle rule that holds for the profile, mirroring `check.Finding`; `field` is the open-field id it points at. */
+export interface Finding {
+  rule: string
+  severity: Severity
+  stage: StageId
+  field: string
+  message: string
+  /** A repository-relative doc path, optionally with an anchor. */
+  doc: string
+}
+
+/** Answer of POST /api/render; the groups are in bundle order and the first render diffs against an empty tree.
+ *  Findings come with every render, also an unchanged one, and never fail it. */
 export interface RenderResult {
   tree: { leaves: Leaf[] }
   diff: { groups: ChangeGroup[] }
   handSet: HandSetAnswer[]
+  findings: Finding[]
 }
 
 /** POST /api/render. `sourceSha256` names the held load as on save; without it nothing is pinned.
