@@ -10,10 +10,20 @@ import { initialState, type AppState } from '../state/reducer'
 import { StageId } from '../state/stageIds'
 import { MSG_DOMAIN, MSG_HOSTNAME, MSG_PLAIN_LINE } from '../state/foundations'
 import { StoreProvider } from '../state/store'
-import { DOMAIN_WARNING, FOUNDATIONS, mockApi, renderWithFindings, type FoundationFakes, type RenderBody } from '../test/api'
+import { DID_FOUNDATIONS, DID_METHOD, DID_VALUE, DOMAIN_WARNING, FOUNDATIONS, mockApi, renderWithFindings, type FoundationFakes, type RenderBody } from '../test/api'
 import { READ_MORE } from './findingsText'
 import { usedByText } from './foundationText'
-import { DIFF_HEADING, FOUNDATIONS_HEADING, HOSTS_PENDING, PINNED_LABEL, RENDER_DEBOUNCE_MS, RESOLVE_LINK } from './Foundations'
+import {
+  DERIVED_PENDING,
+  DIFF_HEADING,
+  EDIT_LABEL,
+  FOUNDATIONS_HEADING,
+  HOSTS_PENDING,
+  PINNED_LABEL,
+  RENDER_DEBOUNCE_MS,
+  RESET_LABEL,
+  RESOLVE_LINK,
+} from './Foundations'
 
 function foundation(id: string): Foundation {
   const found = FOUNDATIONS.foundations.find((f) => f.id === id)
@@ -203,6 +213,107 @@ describe('Foundations', () => {
       await screen.findByText(new RegExp(DOMAIN_WARNING.message))
       await userEvent.type(await domainInput(), '.eu')
       await waitFor(() => expect(screen.queryByText(new RegExp(DOMAIN_WARNING.message))).not.toBeInTheDocument())
+    })
+  })
+
+  describe('DID', () => {
+    const withDID: FoundationFakes = { foundations: () => DID_FOUNDATIONS }
+    const HAND_DID = 'did:web:hand.example.org'
+    const methodGroup = () => screen.findByRole('group', { name: DID_METHOD.label })
+    const didInput = () => screen.getByRole('textbox', { name: DID_VALUE.label })
+
+    it('asks the method and the DID in the Organization panel, not among the hosts', async () => {
+      renderFoundations(ON_FOUNDATIONS, withDID)
+      await methodGroup()
+      const organization = within(panel('Organization'))
+      expect(organization.getByRole('group', { name: DID_METHOD.label })).toBeInTheDocument()
+      expect(organization.getByLabelText(DID_VALUE.label)).toHaveTextContent(DERIVED_PENDING)
+      expect(within(screen.getByRole('group', { name: /Host names/ })).queryByText(DID_VALUE.label)).not.toBeInTheDocument()
+    })
+
+    it('shows each method with its note and checks the default while none is given', async () => {
+      renderFoundations(ON_FOUNDATIONS, withDID)
+      const group = within(await methodGroup())
+      for (const o of DID_METHOD.options) {
+        expect(group.getByRole('radio', { name: o.label })).toHaveAccessibleDescription(o.note)
+      }
+      expect(group.getByRole('radio', { name: 'did:web' })).toBeChecked()
+    })
+
+    it('derives the DID from the base domain with where it is used', async () => {
+      renderFoundations(ON_FOUNDATIONS, withDID)
+      await userEvent.type(await domainInput(), BASE)
+      const organization = within(panel('Organization'))
+      expect(organization.getByLabelText(DID_VALUE.label)).toHaveTextContent(`did:web:${BASE}`)
+      const used = organization.getByRole('button', { name: usedByText(DID_VALUE) })
+      expect(used).toHaveTextContent('used by 3 values in 3 components')
+      await userEvent.click(used)
+      const list = screen.getByRole('list', { name: `Where ${DID_VALUE.label} is used` })
+      expect(within(list).getAllByRole('listitem').map((li) => li.textContent)).toEqual(DID_VALUE.targets.map((t) => t.path))
+    })
+
+    it('edits the DID from its derived value and resets it to derived', async () => {
+      renderFoundations(ON_FOUNDATIONS, withDID)
+      await userEvent.type(await domainInput(), BASE)
+      await userEvent.click(screen.getByRole('button', { name: `${EDIT_LABEL} ${DID_VALUE.label}` }))
+      expect(didInput()).toHaveValue(`did:web:${BASE}`)
+      expect(didInput()).toHaveFocus()
+      await userEvent.clear(didInput())
+      await userEvent.type(didInput(), HAND_DID)
+      expect(didInput()).toHaveValue(HAND_DID)
+      await userEvent.click(screen.getByRole('button', { name: RESET_LABEL }))
+      expect(screen.queryByRole('textbox', { name: DID_VALUE.label })).not.toBeInTheDocument()
+      expect(within(panel('Organization')).getByLabelText(DID_VALUE.label)).toHaveTextContent(`did:web:${BASE}`)
+    })
+
+    it('keeps the DID derived when Edit changes nothing, so it follows the domain', async () => {
+      renderFoundations(ON_FOUNDATIONS, withDID)
+      await userEvent.type(await domainInput(), BASE)
+      await userEvent.click(screen.getByRole('button', { name: `${EDIT_LABEL} ${DID_VALUE.label}` }))
+      await userEvent.type(await domainInput(), '.eu')
+      expect(didInput()).toHaveValue(`did:web:${BASE}.eu`)
+    })
+
+    it('drops the answer again when the derived value is typed back', async () => {
+      renderFoundations(ON_FOUNDATIONS, withDID)
+      await userEvent.type(await domainInput(), BASE)
+      await userEvent.click(screen.getByRole('button', { name: `${EDIT_LABEL} ${DID_VALUE.label}` }))
+      await userEvent.type(didInput(), 'x')
+      await userEvent.type(didInput(), '{Backspace}')
+      await userEvent.type(await domainInput(), '.eu')
+      expect(didInput()).toHaveValue(`did:web:${BASE}.eu`)
+    })
+
+    it('drops a DID the new method does not match and asks for one under did:key', async () => {
+      const handSet: AppState = { ...ON_FOUNDATIONS, answers: { ...ON_FOUNDATIONS.answers, values: { 'domain.base': BASE, 'did.value': HAND_DID } } }
+      renderFoundations(handSet, withDID)
+      const group = within(await methodGroup())
+      expect(didInput()).toHaveValue(HAND_DID)
+      await userEvent.click(group.getByRole('radio', { name: 'did:key' }))
+      expect(didInput()).toHaveValue('')
+      expect(screen.queryByRole('button', { name: RESET_LABEL })).not.toBeInTheDocument()
+      await userEvent.click(group.getByRole('radio', { name: 'did:web' }))
+      expect(within(panel('Organization')).getByLabelText(DID_VALUE.label)).toHaveTextContent(`did:web:${BASE}`)
+    })
+
+    it('ends an edit when the method switches away, so switching back shows the derived DID', async () => {
+      renderFoundations(ON_FOUNDATIONS, withDID)
+      await userEvent.type(await domainInput(), BASE)
+      await userEvent.click(screen.getByRole('button', { name: `${EDIT_LABEL} ${DID_VALUE.label}` }))
+      const group = within(screen.getByRole('group', { name: DID_METHOD.label }))
+      await userEvent.click(group.getByRole('radio', { name: 'did:key' }))
+      await userEvent.click(group.getByRole('radio', { name: 'did:web' }))
+      expect(screen.queryByRole('textbox', { name: DID_VALUE.label })).not.toBeInTheDocument()
+      expect(within(panel('Organization')).getByLabelText(DID_VALUE.label)).toHaveTextContent(`did:web:${BASE}`)
+    })
+
+    it('shows a finding on the method under the method', async () => {
+      const keyInProduction = { ...DOMAIN_WARNING, rule: 'production-did-key', field: 'answers.did.method', message: 'did:key in production.' }
+      const answered: AppState = { ...ON_FOUNDATIONS, answers: { ...ON_FOUNDATIONS.answers, values: { 'domain.base': BASE } } }
+      renderFoundations(answered, { ...withDID, render: renderWithFindings([keyInProduction]) })
+      const group = within(await methodGroup())
+      expect(await group.findByText(new RegExp(keyInProduction.message))).toBeInTheDocument()
+      expect(screen.getByRole('group', { name: DID_METHOD.label })).toHaveAccessibleDescription(expect.stringContaining(keyInProduction.message))
     })
   })
 })

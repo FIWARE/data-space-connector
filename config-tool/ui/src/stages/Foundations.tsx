@@ -6,24 +6,25 @@ import { fetchRender, type Change, type ChangeGroup, type Finding } from '../api
 import { AskLater } from '../chrome/AskLater'
 import { PUBLIC_NAMES_URL, repositoryDocUrl } from '../links'
 import { useStore } from '../state/context'
-import { answerErrors, checkAnswer, validAnswers } from '../state/foundations'
+import { answerErrors, defaultApplies, defaultValue, resolvedAnswer, validAnswers } from '../state/foundations'
 import { answerFieldId, fieldElementId, fieldStage } from '../state/openQuestions'
 import { StageId } from '../state/stageIds'
 import { DerivedAnswers } from './DerivedAnswers'
 import { FindingNote } from './Findings'
-import { derivedValue, usedByText } from './foundationText'
+import { usedByText } from './foundationText'
 
 /** Pause after the last keystroke before the answers are rendered again. */
 export const RENDER_DEBOUNCE_MS = 300
-
-/** The id prefix of the Organization panel's answers; every other foundation belongs to Network. */
-const ORGANIZATION_PREFIX = 'org.'
 
 export const FOUNDATIONS_HEADING = 'Foundations — asked once, used everywhere'
 export const ORGANIZATION_PANEL = 'Organization'
 export const NETWORK_PANEL = 'Network'
 export const HOSTS_HEADING = 'Host names, derived from the base domain'
 export const HOSTS_PENDING = 'Derived once the base domain is answered.'
+export const DERIVED_PENDING = 'Derived once the answers it comes from are given.'
+export const DERIVED_BADGE = 'derived'
+export const EDIT_LABEL = 'Edit'
+export const RESET_LABEL = 'Reset to derived'
 export const HOSTS_EDIT_HINT = 'Editing a single host comes with a later release.'
 export const RESOLVE_WARNING = '⚠ These names are called from inside the cluster as well as from outside. Check that they resolve to the ingress from a pod.'
 export const RESOLVE_LINK = 'Why, and how ↗'
@@ -69,26 +70,15 @@ function DocLink({ foundation }: { foundation: Foundation }) {
   )
 }
 
-/** One answer the user gives: input, format error, findings, help, doc link, "ask later" and its fan-out. */
-function AnswerField({ foundation, findings }: { foundation: Foundation; findings: readonly Finding[] }) {
-  const { state, dispatch } = useStore()
-  const field = answerFieldId(foundation.id)
-  const id = fieldElementId(field)
-  const value = state.answers.values[foundation.id]
-  const error = value === undefined ? undefined : checkAnswer(foundation.type, value, foundation.options)
-  const own = findings.filter((f) => f.field === field)
-  const described = [error && `${id}-error`, ...own.map((f) => `${id}-${f.rule}`), `${id}-help`].filter(Boolean).join(' ')
+/** The ids of a field's error, findings and help, for `aria-describedby`. */
+function describedBy(id: string, error: string | undefined, own: readonly Finding[]): string {
+  return [error && `${id}-error`, ...own.map((f) => `${id}-${f.rule}`), `${id}-help`].filter(Boolean).join(' ')
+}
+
+/** A field's error, its findings and its help line with the doc link and, when it has targets, the fan-out. */
+function FieldNotes({ foundation, id, error, own }: { foundation: Foundation; id: string; error?: string; own: readonly Finding[] }) {
   return (
-    <div className="row">
-      <label htmlFor={id}>{foundation.label}</label>
-      <input
-        id={id}
-        value={value ?? ''}
-        aria-invalid={error !== undefined}
-        aria-describedby={described}
-        onChange={(e) => dispatch({ type: 'setAnswer', id: foundation.id, value: e.target.value })}
-      />
-      <AskLater field={field} />
+    <>
       {error && (
         <p className="field-error" id={`${id}-error`}>
           {error}
@@ -98,10 +88,163 @@ function AnswerField({ foundation, findings }: { foundation: Foundation; finding
         <FindingNote key={f.rule} finding={f} id={`${id}-${f.rule}`} />
       ))}
       <p className="hint" id={`${id}-help`}>
-        {foundation.help} <DocLink foundation={foundation} /> <UsedBy foundation={foundation} />
+        {foundation.help} <DocLink foundation={foundation} /> {foundation.type !== 'choice' && <UsedBy foundation={foundation} />}
       </p>
+    </>
+  )
+}
+
+/** One answer the user gives: input, error, findings, help, doc link, "ask later" and its fan-out; `reset` drops it in
+ *  favour of its derived default. `value`/`onChange` replace the stored answer, for an edit not yet given. */
+function AnswerField({
+  foundation,
+  findings,
+  reset,
+  value,
+  onChange,
+}: {
+  foundation: Foundation
+  findings: readonly Finding[]
+  reset?: () => void
+  value?: string
+  onChange?: (value: string) => void
+}) {
+  const { state, dispatch } = useStore()
+  const field = answerFieldId(foundation.id)
+  const id = fieldElementId(field)
+  const error = answerErrors(state.answers.values, state.foundations)[foundation.id]
+  const own = findings.filter((f) => f.field === field)
+  return (
+    <div className="row">
+      <label htmlFor={id}>{foundation.label}</label>
+      <input
+        id={id}
+        value={value ?? state.answers.values[foundation.id] ?? ''}
+        aria-invalid={error !== undefined}
+        aria-describedby={describedBy(id, error, own)}
+        onChange={(e) => {
+          if (onChange) onChange(e.target.value)
+          else dispatch({ type: 'setAnswer', id: foundation.id, value: e.target.value })
+        }}
+      />
+      {reset && (
+        <button type="button" className="link" onClick={reset}>
+          {RESET_LABEL}
+        </button>
+      )}
+      <AskLater field={field} />
+      <FieldNotes foundation={foundation} id={id} error={error} own={own} />
     </div>
   )
+}
+
+/** A choice as a radio group, each option with its note; the default option is checked while none is given. */
+function ChoiceField({ foundation, findings }: { foundation: Foundation; findings: readonly Finding[] }) {
+  const { state, dispatch } = useStore()
+  const field = answerFieldId(foundation.id)
+  const id = fieldElementId(field)
+  const chosen = resolvedAnswer(foundation.id, state.answers.values, state.foundations ?? [])
+  const own = findings.filter((f) => f.field === field)
+  return (
+    // tabIndex lets a Review link focus the group.
+    <fieldset className="row" id={id} tabIndex={-1} aria-describedby={describedBy(id, undefined, own)}>
+      <legend>{foundation.label}</legend>
+      {foundation.options.map((o, i) => (
+        <div key={o.value} className="choice">
+          <input
+            type="radio"
+            id={`${id}-option-${i}`}
+            name={id}
+            value={o.value}
+            checked={chosen === o.value}
+            aria-describedby={o.note ? `${id}-option-${i}-note` : undefined}
+            onChange={() => dispatch({ type: 'setAnswer', id: foundation.id, value: o.value })}
+          />
+          <label htmlFor={`${id}-option-${i}`}>{o.label}</label>
+          {o.note && (
+            <span className="hint" id={`${id}-option-${i}-note`}>
+              {o.note}
+            </span>
+          )}
+        </div>
+      ))}
+      <AskLater field={field} />
+      <FieldNotes foundation={foundation} id={id} own={own} />
+    </fieldset>
+  )
+}
+
+/** An answer with a default: the derived value with "Edit" while none is given, else the input with "Reset to derived".
+ *  Where the default does not apply (e.g. its condition fails) the input is asked for directly. */
+function DerivedField({ foundation, findings }: { foundation: Foundation; findings: readonly Finding[] }) {
+  const { state, dispatch } = useStore()
+  const [editing, setEditing] = useState(false)
+  // Text typed while editing that is not an answer (yet): empty. Undefined shows the derived value.
+  const [draft, setDraft] = useState<string | undefined>(undefined)
+  const field = answerFieldId(foundation.id)
+  const id = fieldElementId(field)
+  const foundations = state.foundations ?? []
+  const given = state.answers.values[foundation.id]
+  // Only what the render is sent, so an invalid answer it comes from shows it as pending rather than a value never written.
+  const values = validAnswers(state.answers.values, foundations)
+  const applies = defaultApplies(foundation, values, foundations)
+  const derived = defaultValue(foundation, values, foundations)
+
+  useEffect(() => {
+    if (editing) document.getElementById(id)?.focus()
+  }, [editing, id])
+  // A switch away from the default ends the edit, so switching back shows the derived value again.
+  const [appliedBefore, setAppliedBefore] = useState(applies)
+  if (applies !== appliedBefore) {
+    setAppliedBefore(applies)
+    if (!applies) {
+      setEditing(false)
+      setDraft(undefined)
+    }
+  }
+
+  if (!applies) return <AnswerField foundation={foundation} findings={findings} />
+  if (given !== undefined || editing) {
+    const reset = () => {
+      setEditing(false)
+      setDraft(undefined)
+      dispatch({ type: 'setAnswer', id: foundation.id, value: '' })
+    }
+    // Only text that differs from the derived value is an edit, so opening the input or typing the derived value back
+    // leaves the answer derived and it keeps following the answers it comes from.
+    const change = (value: string) => {
+      const same = value === derived
+      setEditing(true)
+      setDraft(same ? undefined : value)
+      dispatch({ type: 'setAnswer', id: foundation.id, value: same ? '' : value })
+    }
+    const text = given ?? draft ?? derived ?? ''
+    return <AnswerField foundation={foundation} findings={findings} reset={reset} value={text} onChange={change} />
+  }
+  const edit = () => setEditing(true)
+  const own = findings.filter((f) => f.field === field)
+  return (
+    <div className="row">
+      <label htmlFor={id}>{foundation.label}</label>
+      {/* tabIndex lets a Review link focus the value while it is derived. */}
+      <output id={id} tabIndex={-1} aria-describedby={describedBy(id, undefined, own)}>
+        {derived ?? <span className="hint">{DERIVED_PENDING}</span>}
+      </output>
+      {derived !== undefined && <span className="deliberate">{DERIVED_BADGE}</span>}
+      <button type="button" className="link" aria-label={`${EDIT_LABEL} ${foundation.label}`} onClick={edit}>
+        {EDIT_LABEL}
+      </button>
+      <AskLater field={field} />
+      <FieldNotes foundation={foundation} id={id} own={own} />
+    </div>
+  )
+}
+
+/** The field a foundation of the Organization panel is asked with. */
+function OrganizationField({ foundation, findings }: { foundation: Foundation; findings: readonly Finding[] }) {
+  if (foundation.type === 'choice') return <ChoiceField foundation={foundation} findings={findings} />
+  if (foundation.default !== '') return <DerivedField foundation={foundation} findings={findings} />
+  return <AnswerField foundation={foundation} findings={findings} />
 }
 
 /** The derived hosts, read-only with the value they render to. */
@@ -117,7 +260,7 @@ function Hosts({ hosts }: { hosts: readonly Foundation[] }) {
           {hosts.map((h) => (
             <tr key={h.id}>
               <th scope="row">{h.label}</th>
-              <td>{derivedValue(h, values) ?? <span className="hint">{HOSTS_PENDING}</span>}</td>
+              <td>{resolvedAnswer(h.id, values, state.foundations ?? []) ?? <span className="hint">{HOSTS_PENDING}</span>}</td>
               <td>
                 <DocLink foundation={h} /> <UsedBy foundation={h} />
               </td>
@@ -242,10 +385,9 @@ export function Foundations() {
   }, [state.focus, state.foundations, dispatch])
 
   const foundations = state.foundations ?? []
-  const given = foundations.filter((f) => f.default === '')
-  const organization = given.filter((f) => f.id.startsWith(ORGANIZATION_PREFIX))
-  const network = given.filter((f) => !f.id.startsWith(ORGANIZATION_PREFIX))
-  const hosts = foundations.filter((f) => f.default !== '')
+  const organization = foundations.filter((f) => f.group === 'organization')
+  const network = foundations.filter((f) => f.group === 'network' && f.default === '')
+  const hosts = foundations.filter((f) => f.group === 'network' && f.default !== '')
 
   return (
     <section>
@@ -255,7 +397,7 @@ export function Foundations() {
         <div className="panel" role="group" aria-labelledby="foundations-organization">
           <h3 id="foundations-organization">{ORGANIZATION_PANEL}</h3>
           {organization.map((f) => (
-            <AnswerField key={f.id} foundation={f} findings={diff.findings} />
+            <OrganizationField key={f.id} foundation={f} findings={diff.findings} />
           ))}
         </div>
       )}

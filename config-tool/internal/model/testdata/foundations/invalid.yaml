@@ -7,6 +7,10 @@
   err: 'stage "nowhere" is unknown'
   foundations:
     - {id: a, stage: nowhere, type: string, label: A}
+- name: group unknown
+  err: 'group "sidebar" is unknown'
+  foundations:
+    - {id: a, stage: foundations, type: string, group: sidebar, label: A}
 - name: type unknown
   err: 'type "number" is unknown'
   foundations:

@@ -37,8 +37,14 @@ type foundationBody struct {
 	ID    string               `json:"id"`
 	Stage model.Stage          `json:"stage"`
 	Type  model.FoundationType `json:"type"`
+	// Group is the Stage 3 panel, never empty.
+	Group model.FoundationGroup `json:"group"`
 	// Default is the template a derived answer comes from; empty when there is none.
 	Default string `json:"default"`
+	// DefaultWhen gates Default on another answer; null when Default always applies.
+	DefaultWhen *model.Condition `json:"defaultWhen"`
+	// Prefix is the template the answer must start with; empty when there is none.
+	Prefix string `json:"prefix"`
 	// Options are the values a choice offers; empty for every other type.
 	Options []model.Option     `json:"options"`
 	Label   string             `json:"label"`
@@ -140,8 +146,10 @@ func (s *Server) handleFoundations(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		slices.Sort(components)
+		// Declared foundations compile, so the compiled one exists.
+		c, _ := b.Foundation(f.ID)
 		body.Foundations = append(body.Foundations, foundationBody{
-			ID: f.ID, Stage: f.Stage, Type: f.Type, Default: f.Default, Options: append([]model.Option{}, f.Options...),
+			ID: f.ID, Stage: f.Stage, Type: f.Type, Group: c.Group, Default: f.Default, DefaultWhen: c.DefaultWhen, Prefix: f.Prefix, Options: append([]model.Option{}, f.Options...),
 			Label: f.Label, Help: f.Help, Doc: f.Doc,
 			Targets: targets, Count: len(targets), Components: components,
 		})

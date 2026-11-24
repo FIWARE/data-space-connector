@@ -5,6 +5,7 @@
 # The foundations list (ADR 0020) holds the cross-cutting answers of Stage 3 and the chart keys they reach:
 #   id       dotted answer id (domain.base): the key in the profile's answers, open field answers.<id>
 #   type     string | hostname | domain | did, each checked with one pattern; choice, one of its options
+#   group    organization | network (default): the Stage 3 panel that asks it
 #   options  a choice's {value, label, note}; note is optional text shown at the point of choice
 #   default  a template over other answers; the answer is derived only while all of them are answered.
 #            Only a choice may have a constant default, which must be one of its options
@@ -288,6 +289,7 @@ rules:
 foundations:
   - id: org.displayName
     stage: foundations
+    group: organization
     type: string
     label: Display name
     help: >-
@@ -326,6 +328,7 @@ foundations:
       - {path: 'decentralizedIam.odrlAuthorization.apisix.ingress.tls[0].secretName', fn: const, args: [apisix-provider-tls]}
   - id: did.method
     stage: foundations
+    group: organization
     type: choice
     default: did:web
     label: DID method
@@ -342,6 +345,7 @@ foundations:
           and production data spaces usually expect did:web.
   - id: did.value
     stage: foundations
+    group: organization
     type: did
     default: "did:web:{{ .domain.base }}"
     defaultWhen: {id: did.method, equals: "did:web"}
