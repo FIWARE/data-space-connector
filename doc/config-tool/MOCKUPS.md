@@ -184,6 +184,8 @@ figures instead of stating one. *Generate* lands on the trial's Review; a failur
 ## S3 — Foundations
 
 The panel that pays for the tool. Note the *used by* counters and the derived-host table.
+The counts are illustrative. What shipped, and where it differs, is in
+[USER_JOURNEY Stage 3](USER_JOURNEY.md#stage-3--foundations).
 
 ```
 │  Foundations — asked once, used everywhere                                                     │
