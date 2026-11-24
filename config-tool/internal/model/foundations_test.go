@@ -189,6 +189,10 @@ func TestFoundationTypeCheck(t *testing.T) {
 		{TypeDID, "did:web:example.org/path", false},
 		{TypeDID, `did:web:a"b`, false},
 		{TypeDID, "did:web:a b", false},
+		{TypeDID, "did:web:example.org:", false},
+		{TypeDID, "did:web::", false},
+		{TypeDID, "did:web:a%", false},
+		{TypeDID, "did:web:a%zz", false},
 		{TypeChoice, "did:web", false},
 		{FoundationType("number"), "1", false},
 	}

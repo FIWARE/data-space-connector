@@ -56,8 +56,12 @@ var (
 	idSegment = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 	plainLine = regexp.MustCompile(`^[^\s\x00-\x1f\x7f"\\<>]([^\x00-\x1f\x7f"\\<>]*[^\s\x00-\x1f\x7f"\\<>])?$`)
 	hostname  = regexp.MustCompile(`^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$`)
-	did       = regexp.MustCompile(`^did:[a-z0-9]+:[A-Za-z0-9._%:-]+$`)
+	// did follows DID Core's ABNF: method-specific-id = *( *idchar ":" ) 1*idchar.
+	did = regexp.MustCompile(`^did:[a-z0-9]+:(?:` + didIDChar + `*:)*` + didIDChar + `+$`)
 )
+
+// didIDChar is DID Core's idchar: ALPHA / DIGIT / "." / "-" / "_" / pct-encoded.
+const didIDChar = `(?:[A-Za-z0-9._-]|%[0-9A-Fa-f]{2})`
 
 // Foundation is a cross-cutting answer as declared in a bundle's foundations list.
 type Foundation struct {
@@ -216,7 +220,7 @@ func (t FoundationType) Check(v any) error {
 		}
 	case TypeDID:
 		if !did.MatchString(s) {
-			return fmt.Errorf("must be a DID: did:<method>:<identifier>, the method of lowercase letters and digits, the identifier of letters, digits, '.', '_', '%%', ':' and '-'")
+			return fmt.Errorf("must be a DID: did:<method>:<identifier>, the method of lowercase letters and digits, the identifier of letters, digits, '.', '_', '-', %%XX escapes and ':', not ending in ':'")
 		}
 	case TypeChoice:
 		return fmt.Errorf("a %s is checked against its foundation's options", t)

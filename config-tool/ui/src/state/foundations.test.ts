@@ -53,6 +53,10 @@ describe('checkAnswer', () => {
     ['did', 'did:web:example.org/path', MSG_DID],
     ['did', 'did:web:a"b', MSG_DID],
     ['did', 'did:web:a b', MSG_DID],
+    ['did', 'did:web:example.org:', MSG_DID],
+    ['did', 'did:web::', MSG_DID],
+    ['did', 'did:web:a%', MSG_DID],
+    ['did', 'did:web:a%zz', MSG_DID],
   ])('%s %j → %s', (type, value, message) => {
     expect(checkAnswer(type, value)).toBe(message)
   })
