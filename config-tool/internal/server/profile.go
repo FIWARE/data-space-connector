@@ -158,6 +158,7 @@ func (s *Server) handleOpenProfile(w http.ResponseWriter, r *http.Request) {
 	}
 	s.loadMu.Lock()
 	s.loaded = res
+	s.resetRender()
 	s.loadMu.Unlock()
 	resp := profileResponse{Path: path, Profile: p}
 	if res != nil {

@@ -218,6 +218,7 @@ func TestRequiresCredentials(t *testing.T) {
 		{method: http.MethodPut, path: "/api/profile"},
 		{method: http.MethodPost, path: "/api/profile/open"},
 		{method: http.MethodPost, path: "/api/render"},
+		{path: "/api/foundations"},
 		{method: http.MethodPost, path: "/api/validate"},
 		{method: http.MethodPost, path: "/api/load"},
 		{path: "/api/roles"},
@@ -324,21 +325,20 @@ func TestEndpoints(t *testing.T) {
 	cookie := login(t, srv)
 	origin := ownOrigin(srv)
 	tests := []struct {
-		req        request
-		want       int
-		wantTicket string
+		req  request
+		want int
 	}{
-		{request{path: "/api/profile"}, http.StatusNotFound, ""},
-		{request{method: http.MethodPost, path: "/api/render", origin: origin}, http.StatusNotImplemented, ticketRender},
-		{request{method: http.MethodPost, path: "/api/render", origin: origin, body: `{"target":{"namespace":"x"}}`}, http.StatusNotImplemented, ticketRender},
-		{request{method: http.MethodPost, path: "/api/render", origin: origin, body: "{"}, http.StatusBadRequest, ""},
-		{request{method: http.MethodPost, path: "/api/render", origin: origin, body: "{}xyz"}, http.StatusBadRequest, ""},
-		{request{method: http.MethodPost, path: "/api/render", origin: origin, body: "{} {}"}, http.StatusBadRequest, ""},
-		{request{method: http.MethodPost, path: "/api/render", origin: origin, body: "{}\n"}, http.StatusNotImplemented, ticketRender},
-		{request{method: http.MethodPost, path: "/api/render", origin: origin, body: oversized}, http.StatusRequestEntityTooLarge, ""},
-		{request{method: http.MethodPost, path: "/api/validate", origin: origin, body: "a: 1\n"}, http.StatusNotImplemented, ""},
-		{request{method: http.MethodPost, path: "/api/validate", origin: origin, body: oversized}, http.StatusRequestEntityTooLarge, ""},
-		{request{path: "/api/unknown"}, http.StatusNotFound, ""},
+		{request{path: "/api/profile"}, http.StatusNotFound},
+		{request{method: http.MethodPost, path: "/api/render", origin: origin}, http.StatusUnprocessableEntity},
+		{request{method: http.MethodPost, path: "/api/render", origin: origin, body: `{"target":{"namespace":"x"}}`}, http.StatusUnprocessableEntity},
+		{request{method: http.MethodPost, path: "/api/render", origin: origin, body: "{"}, http.StatusBadRequest},
+		{request{method: http.MethodPost, path: "/api/render", origin: origin, body: "{}xyz"}, http.StatusBadRequest},
+		{request{method: http.MethodPost, path: "/api/render", origin: origin, body: "{} {}"}, http.StatusBadRequest},
+		{request{method: http.MethodPost, path: "/api/render", origin: origin, body: "{}\n"}, http.StatusUnprocessableEntity},
+		{request{method: http.MethodPost, path: "/api/render", origin: origin, body: oversized}, http.StatusRequestEntityTooLarge},
+		{request{method: http.MethodPost, path: "/api/validate", origin: origin, body: "a: 1\n"}, http.StatusNotImplemented},
+		{request{method: http.MethodPost, path: "/api/validate", origin: origin, body: oversized}, http.StatusRequestEntityTooLarge},
+		{request{path: "/api/unknown"}, http.StatusNotFound},
 	}
 	for _, tc := range tests {
 		t.Run(fmt.Sprintf("%s %s %.*s", tc.req.method, tc.req.path, maxNameBody, tc.req.body), func(t *testing.T) {
@@ -351,8 +351,8 @@ func TestEndpoints(t *testing.T) {
 			if err := json.Unmarshal([]byte(body), &got); err != nil {
 				t.Fatalf("body %q is not a JSON error: %v", body, err)
 			}
-			if got.Error == "" || got.Ticket != tc.wantTicket {
-				t.Errorf("error body = %+v, want a message and ticket %q", got, tc.wantTicket)
+			if got.Error == "" {
+				t.Errorf("error body = %+v, want a message", got)
 			}
 		})
 	}
@@ -400,13 +400,13 @@ func TestOriginGuard(t *testing.T) {
 		bearer string
 		want   int
 	}{
-		{"own origin", "http://127.0.0.1:" + port, cookie, "", http.StatusNotImplemented},
-		{"own localhost origin", "http://localhost:" + port, cookie, "", http.StatusNotImplemented},
+		{"own origin", "http://127.0.0.1:" + port, cookie, "", http.StatusUnprocessableEntity},
+		{"own localhost origin", "http://localhost:" + port, cookie, "", http.StatusUnprocessableEntity},
 		{"foreign port", "http://127.0.0.1:" + otherPort(srv), cookie, "", http.StatusForbidden},
 		{"remote site", "https://evil.example", cookie, "", http.StatusForbidden},
 		{"opaque origin", "null", cookie, "", http.StatusForbidden},
 		{"no origin", "", cookie, "", http.StatusForbidden},
-		{"bearer without origin", "", nil, srv.token, http.StatusNotImplemented},
+		{"bearer without origin", "", nil, srv.token, http.StatusUnprocessableEntity},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

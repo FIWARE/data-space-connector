@@ -84,7 +84,7 @@ scalar leaves the leaf pinned without a kept value, and `Nested()` omits it so t
 
 ### 8. The diff is grouped and baselined per session
 
-`render.Diff(prev, next)` groups changes by foundation in bundle order as `added`, `changed`, `removed` or
+`render.Diff(b, prev, next)` groups changes by foundation in the order of bundle `b` as `added`, `changed`, `removed` or
 `pinned`. A pinned leaf is reported when its `rendered` value changed, with the kept value alongside. The server
 keeps the last tree per session and resets it on load and on profile open, so the first render diffs against an
 empty tree.

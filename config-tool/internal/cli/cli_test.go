@@ -80,8 +80,13 @@ func TestCommands(t *testing.T) {
 			wantOutput: []string{"-p, --profile", "-o, --output", "--" + flagTrial, "--" + flagOutputDir},
 		},
 		{
-			name:    "generate is not implemented yet",
+			name:    "generate renders, then stops before writing",
 			args:    []string{"generate", "-p", writeProfile(t, validProfile), "-o", filepath.Join(t.TempDir(), "values.yaml")},
+			wantErr: errGeneratePending,
+		},
+		{
+			name:    "generate renders foundation answers, then stops before writing",
+			args:    []string{"generate", "-p", writeProfile(t, strings.Replace(validProfile, "answers: {}", "answers: {domain.base: example.org}", 1))},
 			wantErr: errGeneratePending,
 		},
 		{
