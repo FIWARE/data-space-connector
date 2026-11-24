@@ -3,6 +3,8 @@ package load
 import (
 	"maps"
 	"testing"
+
+	"github.com/FIWARE/data-space-connector/config-tool/internal/model"
 )
 
 func TestSeedAnswers(t *testing.T) {
@@ -12,8 +14,8 @@ func TestSeedAnswers(t *testing.T) {
 		given    = "https://tir.given.org/"
 		toggleID = "dsp.rainbow.enabled"
 	)
-	foundation := Answer{ID: tir, Stage: stageFoundations, Value: derived}
-	toggle := Answer{ID: toggleID, Stage: "features", Value: true}
+	foundation := Answer{ID: tir, Stage: string(model.StageFoundations), Value: derived}
+	toggle := Answer{ID: toggleID, Stage: string(model.StageFeatures), Value: true}
 	tests := []struct {
 		name    string
 		derived []Answer
