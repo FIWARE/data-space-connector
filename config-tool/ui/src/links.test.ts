@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { QUICK_START_URL, RELEASE_NOTES_URL, releaseNotesUrl, repositoryDocUrl, SIZING_URL } from './links'
+import { PUBLIC_NAMES_URL, QUICK_START_URL, RELEASE_NOTES_URL, releaseNotesUrl, repositoryDocUrl, SIZING_URL } from './links'
 import { DEFAULT_CHART } from './state/answers'
 
 describe('releaseNotesUrl', () => {
@@ -17,6 +17,7 @@ describe('trial links', () => {
   it.each([
     ['QUICK_START_URL', QUICK_START_URL, /\/blob\/main\/doc\/deployment-integration\/local-deployment\/LOCAL\.MD#quick-start$/],
     ['SIZING_URL', SIZING_URL, /\/blob\/main\/doc\/deployment-integration\/roles\/PREREQUISITES\.md#sizing$/],
+    ['PUBLIC_NAMES_URL', PUBLIC_NAMES_URL, /\/PREREQUISITES\.md#public-names-have-to-resolve-inside-the-cluster$/],
   ])('%s points at the repository document', (_, url, path) => {
     expect(url).toMatch(/^https:\/\/github\.com\/FIWARE\/data-space-connector\//)
     expect(url).toMatch(path)

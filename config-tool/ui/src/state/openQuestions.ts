@@ -1,27 +1,58 @@
 /** Open questions: fields left unanswered or deliberately marked "ask later", each counted once. */
+import type { Foundation } from '../api/foundations'
 import { TargetType, type Target } from './answers'
+import { answerErrors } from './foundations'
 import type { Issues } from './issues'
 import type { AppState } from './reducer'
 import { StageId } from './stageIds'
 import { MSG_REQUIRED, TargetField, validateTarget } from './target'
 
+/** A Target field's id. */
+export type TargetFieldId = `target.${TargetField}`
+
+/** The open-question id of a foundation answer, `answers.<dotted id>` as the server names it. */
+export type AnswerFieldId = `answers.${string}`
+
 /** A field an open question can name, `<section>.<key>` as in the profile's `open`. */
-export type FieldId = `target.${TargetField}`
+export type FieldId = TargetFieldId | AnswerFieldId
 
 type Section = FieldId extends `${infer S}.${string}` ? S : never
 
-const SECTION_STAGES: Record<Section, StageId> = { target: StageId.Target }
+// Every foundation the shipped bundles declare is asked on Foundations (`stage: foundations`).
+const SECTION_STAGES: Record<Section, StageId> = { target: StageId.Target, answers: StageId.Foundations }
+
+const ANSWERS_PREFIX = 'answers.'
 
 /** The field id of a Target field. */
-export function targetFieldId(field: TargetField): FieldId {
+export function targetFieldId(field: TargetField): TargetFieldId {
   return `target.${field}`
 }
 
-/** Every field id, in screen order. */
-export const FIELD_IDS: readonly FieldId[] = Object.values(TargetField).map(targetFieldId)
+/** The field id of a foundation answer. */
+export function answerFieldId(id: string): AnswerFieldId {
+  return `${ANSWERS_PREFIX}${id}`
+}
 
-/** How Review names each field. */
-export const FIELD_LABELS: Record<FieldId, string> = {
+/** Whether `field` names a foundation answer. */
+export function isAnswerFieldId(field: QuestionId): field is AnswerFieldId {
+  return field.startsWith(ANSWERS_PREFIX)
+}
+
+/** The answer id an answer's field id names. */
+export function answerId(field: AnswerFieldId): string {
+  return field.slice(ANSWERS_PREFIX.length)
+}
+
+/** Whether `id` is a field id the UI knows: a Target field or any foundation answer (the server checks the id). */
+export function isFieldId(id: string): id is FieldId {
+  return id.startsWith(ANSWERS_PREFIX) ? id.length > ANSWERS_PREFIX.length : (FIELD_IDS as readonly string[]).includes(id)
+}
+
+/** Every Target field id, in screen order. */
+export const FIELD_IDS: readonly TargetFieldId[] = Object.values(TargetField).map(targetFieldId)
+
+/** How Review names each Target field. */
+export const FIELD_LABELS: Record<TargetFieldId, string> = {
   'target.type': 'Target',
   'target.context': 'Kube context',
   'target.namespace': 'Namespace',
@@ -43,15 +74,22 @@ export function fieldStage(id: QuestionId): StageId {
   return id === ROLE_QUESTION ? StageId.Role : SECTION_STAGES[id.split('.')[0] as Section]
 }
 
+/** How Review names a field; an answer takes its foundation's label, or its id until the foundations are loaded. */
+export function fieldLabel(id: FieldId, foundations: readonly Foundation[] = []): string {
+  if (!id.startsWith(ANSWERS_PREFIX)) return FIELD_LABELS[id as TargetFieldId]
+  const answer = id.slice(ANSWERS_PREFIX.length)
+  return foundations.find((f) => f.id === answer)?.label ?? answer
+}
+
 /** DOM id of the field's input, so a Review link can focus it. */
 export function fieldElementId(id: QuestionId): string {
   return `field-${id}`
 }
 
-const CLUSTER_ONLY: readonly FieldId[] = [targetFieldId(TargetField.Context), targetFieldId(TargetField.CreateNamespace)]
+const CLUSTER_ONLY: readonly TargetFieldId[] = [targetFieldId(TargetField.Context), targetFieldId(TargetField.CreateNamespace)]
 
 // A file target hides the cluster fields, so their markers do not count; they are kept for a switch back.
-function applies(id: FieldId, target: Target): boolean {
+function applies(id: TargetFieldId, target: Target): boolean {
   return target.type === TargetType.Cluster || !CLUSTER_ONLY.includes(id)
 }
 
@@ -66,7 +104,8 @@ export interface OpenQuestion {
 
 const ROLE_OPEN: OpenQuestion = { field: ROLE_QUESTION, stage: StageId.Role, label: 'Role', marked: false }
 
-/** The union of unanswered and marked fields, then an unpicked role, in screen order. */
+/** The union of unanswered and marked fields, an unpicked role, then marked answers: stage order. An answer is open
+ *  only when marked; unanswered, it renders nothing and the chart default stays. */
 export function openQuestions(state: AppState): OpenQuestion[] {
   const target = state.answers.target
   const unanswered = new Set(
@@ -74,13 +113,16 @@ export function openQuestions(state: AppState): OpenQuestion[] {
       .filter((e) => e.message === MSG_REQUIRED)
       .map((e) => targetFieldId(e.field)),
   )
-  const fields = FIELD_IDS.filter((id) => unanswered.has(id) || (state.open.includes(id) && applies(id, target))).map((id) => ({
+  const targetFields = FIELD_IDS.filter((id) => unanswered.has(id) || (state.open.includes(id) && applies(id, target)))
+  const question = (id: FieldId): OpenQuestion => ({
     field: id,
     stage: fieldStage(id),
-    label: FIELD_LABELS[id],
+    label: fieldLabel(id, state.foundations),
     marked: state.open.includes(id),
-  }))
-  return state.answers.role === undefined ? [...fields, ROLE_OPEN] : fields
+  })
+  const role = state.answers.role === undefined ? [ROLE_OPEN] : []
+  const answers = state.open.filter((id) => id.startsWith(ANSWERS_PREFIX))
+  return [...targetFields.map(question), ...role, ...answers.map(question)]
 }
 
 /** The Target stage's footer and rail counters; a marked field with a format error counts as open and as an error. */
@@ -92,6 +134,12 @@ export function targetIssues(state: AppState): Issues {
 /** The Role stage's counters: no role picked yet is one open question. */
 export function roleIssues(state: AppState): Issues {
   return { warnings: 0, errors: 0, open: openCount(state, StageId.Role) }
+}
+
+/** The Foundations stage's counters: its marked answers and the answers with a format error. */
+export function foundationIssues(state: AppState): Issues {
+  const errors = Object.keys(answerErrors(state.answers.values, state.foundations)).length
+  return { warnings: 0, errors, open: openCount(state, StageId.Foundations) }
 }
 
 function openCount(state: AppState, stage: StageId): number {

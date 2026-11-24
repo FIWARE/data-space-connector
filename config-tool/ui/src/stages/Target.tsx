@@ -5,7 +5,8 @@ import { fetchContexts, fetchModel, type Kubeconfig, type ModelInfo } from '../a
 import { releaseNotesUrl } from '../links'
 import { CLEARED_CONTEXT, Environment, TargetType, type Session, type Target as TargetAnswers } from '../state/answers'
 import { useStore } from '../state/context'
-import { FIELD_LABELS, fieldElementId, fieldStage, targetFieldId, type FieldId } from '../state/openQuestions'
+import { AskLater } from '../chrome/AskLater'
+import { fieldElementId, fieldStage, targetFieldId } from '../state/openQuestions'
 import type { RoleCleared } from '../state/reducer'
 import { StageId } from '../state/stageIds'
 import { MSG_REQUIRED, TargetField, validateTarget } from '../state/target'
@@ -63,23 +64,6 @@ function useContexts(path: string): ContextsResult | undefined {
     return () => controller.abort()
   }, [path])
   return result
-}
-
-/** Toggles the field's "ask later" marker; the value stays either way. */
-function AskLater({ field }: { field: FieldId }) {
-  const { state, dispatch } = useStore()
-  return (
-    <button
-      type="button"
-      className="ask"
-      aria-pressed={state.open.includes(field)}
-      aria-label={`Ask ${FIELD_LABELS[field]} later`}
-      title={`Keep ${FIELD_LABELS[field]} as an open question`}
-      onClick={() => dispatch({ type: 'toggleOpen', field })}
-    >
-      Ask later
-    </button>
-  )
 }
 
 function Choices<T extends string>({

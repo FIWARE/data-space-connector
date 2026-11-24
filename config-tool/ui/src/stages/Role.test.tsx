@@ -54,7 +54,7 @@ const ON_ROLE: AppState = {
   entered: true,
   stage: StageId.Role,
   visited: [StageId.Target, StageId.Role],
-  answers: { features: {}, target: PINNED },
+  answers: { values: {}, features: {}, target: PINNED },
   profileModel: DSC_MODEL,
 }
 

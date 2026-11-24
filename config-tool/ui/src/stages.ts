@@ -2,8 +2,9 @@
 import type { ComponentType } from 'react'
 import type { IssueSelector } from './state/issues'
 import { STAGE_LABELS, StageId } from './state/stageIds'
-import { roleIssues, targetIssues } from './state/openQuestions'
+import { foundationIssues, roleIssues, targetIssues } from './state/openQuestions'
 import { Features } from './stages/Features'
+import { Foundations } from './stages/Foundations'
 import { REVIEW_COMING_IN, Review } from './stages/Review'
 import { Role } from './stages/Role'
 import { Target } from './stages/Target'
@@ -21,7 +22,7 @@ export interface StageDef {
 export const STAGES: readonly StageDef[] = [
   { id: StageId.Target, label: STAGE_LABELS[StageId.Target], component: Target, selector: targetIssues },
   { id: StageId.Role, label: STAGE_LABELS[StageId.Role], component: Role, selector: roleIssues },
-  { id: StageId.Foundations, label: STAGE_LABELS[StageId.Foundations], comingIn: 'Epic 3 — Cross-cutting foundations' },
+  { id: StageId.Foundations, label: STAGE_LABELS[StageId.Foundations], component: Foundations, selector: foundationIssues },
   { id: StageId.Infrastructure, label: STAGE_LABELS[StageId.Infrastructure], comingIn: 'Epic 4 — Integrating with what is already there' },
   { id: StageId.Features, label: STAGE_LABELS[StageId.Features], component: Features },
   { id: StageId.Configuration, label: STAGE_LABELS[StageId.Configuration], comingIn: 'Epic 5 — Features and their configuration' },

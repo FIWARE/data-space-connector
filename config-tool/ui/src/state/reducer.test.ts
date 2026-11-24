@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { VersionSource } from '../api/load'
 import type { Profile } from '../api/profile'
 import type { RoleChange } from '../api/roles'
-import { REPORT, TRIAL } from '../test/api'
+import { FOUNDATIONS, REPORT, TRIAL } from '../test/api'
 import { emptyAnswers, Environment, TargetType } from './answers'
 import { initialState, reducer, type Action, type AppState } from './reducer'
 import { StageId } from './stageIds'
@@ -16,7 +16,7 @@ const BUSY: AppState = {
   entered: true,
   stage: StageId.Features,
   visited: [StageId.Target, StageId.Role, StageId.Features],
-  answers: { features: {}, target: { ...emptyAnswers().target, type: TargetType.Cluster, namespace: 'provider', chartVersion: '10.15.0', environment: Environment.Production } },
+  answers: { values: {}, features: {}, target: { ...emptyAnswers().target, type: TargetType.Cluster, namespace: 'provider', chartVersion: '10.15.0', environment: Environment.Production } },
   session: { kubeconfig: KUBECONFIG, chosenContext: 'prod' },
   expert: true,
 }
@@ -31,7 +31,7 @@ describe('reducer', () => {
     const next = reducer(BUSY, { type: 'fileLoaded', report: REPORT, file: FILE })
     expect(next).toMatchObject({ entered: true, stage: StageId.Review, visited: [StageId.Review], expert: false, loaded: REPORT, loadedFile: FILE })
     expect(next.session).toEqual({ kubeconfig: KUBECONFIG, chosenContext: undefined })
-    expect(next.answers).toEqual({ features: {}, target: { ...emptyAnswers().target, chartVersion: REPORT.chartVersion } })
+    expect(next.answers).toEqual({ values: {}, features: {}, target: { ...emptyAnswers().target, chartVersion: REPORT.chartVersion } })
   })
 
   it.each([
@@ -150,7 +150,7 @@ describe('reducer: trial', () => {
   it('lands on Review with only Review visited, a development target and the trial held', () => {
     const next = reducer({ ...loaded, profilePath: PROFILE_PATH }, { type: 'trialStarted', trial: TRIAL })
     expect(next).toMatchObject({ entered: true, stage: StageId.Review, visited: [StageId.Review], expert: false, open: [], trial: TRIAL })
-    expect(next.answers).toEqual({ features: {}, target: { ...emptyAnswers().target, environment: Environment.Development } })
+    expect(next.answers).toEqual({ values: {}, features: {}, target: { ...emptyAnswers().target, environment: Environment.Development } })
     expect(next.loaded).toBeUndefined()
     expect(next.loadedFile).toBeUndefined()
     expect(next.profilePath).toBeUndefined()
@@ -300,5 +300,70 @@ describe('reducer: roles', () => {
     expect(next.answers).toEqual({ ...provider.answers, features: toggled })
     expect(next.answers).not.toBe(provider.answers)
     expect(next).toMatchObject({ stage: provider.stage, profileModel: DSC_MODEL, chartSwitch: undefined })
+  })
+})
+
+describe('reducer: foundation answers', () => {
+  const ANSWERED: AppState = {
+    ...BUSY,
+    answers: { ...BUSY.answers, target: { ...BUSY.answers.target, chart: 'data-space-connector' }, values: { 'domain.base': 'example.org', 'host.verifier': 'v.example.org' } },
+    open: ['answers.host.verifier', 'target.namespace'],
+    foundations: FOUNDATIONS.foundations,
+  }
+
+  it('drops the answers, their markers and the foundations on a chart change, which the new chart may not declare', () => {
+    const next = reducer(ANSWERED, { type: 'setTarget', target: { chart: 'trust-anchor', chartVersion: '' } })
+    expect(next.answers.values).toEqual({})
+    expect(next.open).toEqual(['target.namespace'])
+    expect(next.foundations).toBeUndefined()
+  })
+
+  it('keeps answers, markers and foundations when the chart stays', () => {
+    const next = reducer(ANSWERED, { type: 'setTarget', target: { namespace: 'other' } })
+    expect(next.answers.values).toBe(ANSWERED.answers.values)
+    expect(next.open).toBe(ANSWERED.open)
+    expect(next.foundations).toBe(ANSWERED.foundations)
+  })
+
+  it('drops the answers and markers the loaded foundations do not declare', () => {
+    const next = reducer(ANSWERED, { type: 'foundationsLoaded', foundations: FOUNDATIONS.foundations })
+    expect(next.answers.values).toEqual({ 'domain.base': 'example.org' })
+    expect(next.open).toEqual(['target.namespace'])
+  })
+
+  it('keeps the answers object when the loaded foundations declare every answer, so the saved profile stays current', () => {
+    const declared = { ...ANSWERED, answers: { ...ANSWERED.answers, values: { 'domain.base': 'example.org' } }, open: ['answers.domain.base'] as AppState['open'] }
+    const next = reducer(declared, { type: 'foundationsLoaded', foundations: FOUNDATIONS.foundations })
+    expect(next.answers).toBe(declared.answers)
+    expect(next.open).toBe(declared.open)
+  })
+
+  it('takes the carried answers on a chart switch and drops the markers of the dropped ones', () => {
+    const carried: Profile = { ...SAVED_PROFILE, target: { ...SAVED_PROFILE.target, chart: 'trust-anchor' }, role: 'operator', answers: { 'domain.base': 'example.org' } }
+    const chartSwitch = {
+      fromChart: 'data-space-connector',
+      fromVersion: '10.16.0',
+      toChart: 'trust-anchor',
+      droppedChoices: [],
+      carriedAnswers: ['domain.base'],
+      droppedAnswers: ['host.verifier'],
+    }
+    const next = reducer(ANSWERED, { type: 'roleApplied', profile: carried, chartSwitch, change: null })
+    expect(next.answers.values).toEqual({ 'domain.base': 'example.org' })
+    expect(next.open).toEqual(['target.namespace'])
+    expect(next.foundations).toBeUndefined()
+  })
+
+  it('keeps an answer still being typed on a preset that keeps the chart, which the request left out', () => {
+    const typing = { ...ANSWERED, answers: { ...ANSWERED.answers, values: { 'domain.base': 'example' } } }
+    const preset: Profile = { ...SAVED_PROFILE, target: { ...SAVED_PROFILE.target, chart: 'data-space-connector' }, role: 'provider', answers: {} }
+    const next = reducer(typing, { type: 'roleApplied', profile: preset, chartSwitch: null, change: null })
+    expect(next.answers.values).toBe(typing.answers.values)
+    expect(next.open).toEqual(typing.open)
+    expect(next.foundations).toBe(typing.foundations)
+  })
+
+  it.each<Action>([{ type: 'newConfiguration' }, { type: 'fileLoaded', report: REPORT, file: FILE }])('forgets the foundations on $type', (action) => {
+    expect(reducer(ANSWERED, action).foundations).toBeUndefined()
   })
 })

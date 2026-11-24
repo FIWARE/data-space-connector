@@ -304,6 +304,16 @@ The profile records `role`, `features` (each offered or turned-on feature with `
 from another bundle than `model`, `catalogue`. The server sets `catalogue` on save, as it does `model`, and opening
 applies the same revision rules to it.
 
+## Foundations (Stage 3)
+
+Stage 3 asks the cross-cutting answers of the target's bundle once ([ADR 0020](../doc/adr/0020-config-tool-foundations-render.md)).
+The *Organization* panel holds the `org.*` answers, the *Network* panel `domain.base` and, read-only, the hosts derived
+from it (`<component>.<base>`, editing them is US-3.4) with a link to the resolve-inside-the-cluster prerequisite.
+Each field has its doc link, *Ask later* (an `answers.<id>` open question on Review) and a *used by N values in M
+components* button that lists its targets. Every answer change renders the profile through `POST /api/render`
+(debounced). The render on entering the stage is the baseline, and the screen shows the grouped diff of each later
+edit, with a hand-edited leaf of the loaded file flagged *pinned, not updated* next to its kept and would-be value.
+
 ## Features (Stage 5)
 
 Stage 5 lists every feature of the chart the role deploys, and only those

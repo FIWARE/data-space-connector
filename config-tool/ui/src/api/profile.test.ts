@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { emptyAnswers, TargetType } from '../state/answers'
 import { initialState, reducer, type AppState } from '../state/reducer'
-import { mockApi, REPORT, type SaveBody } from '../test/api'
+import { FOUNDATIONS, mockApi, REPORT, type SaveBody } from '../test/api'
 import { defaultProfilePath, fromProfile, profileName, saveProfile, sinceSaved, toProfile } from './profile'
 
 const PATH = '/home/me/provider.dscprofile.yaml'
@@ -9,7 +9,7 @@ const NOW = Date.parse('2026-11-19T12:00:00Z')
 
 const ENTERED: AppState = {
   ...reducer(initialState, { type: 'newConfiguration' }),
-  answers: { features: {}, target: { ...emptyAnswers().target, type: TargetType.Cluster, namespace: 'Prod_NS', releaseName: 'provider' } },
+  answers: { values: {}, features: {}, target: { ...emptyAnswers().target, type: TargetType.Cluster, namespace: 'Prod_NS', releaseName: 'provider' } },
   open: ['target.context', 'target.namespace'],
 }
 
@@ -29,7 +29,7 @@ describe('api/profile', () => {
 
   it('drops open ids the UI does not know and fills target keys the profile lacks', () => {
     const profile = { ...toProfile(ENTERED), target: { namespace: 'x' } as AppState['answers']['target'], open: [{ field: 'nope' }, { field: 'target.namespace' }] }
-    expect(fromProfile(profile)).toEqual({ answers: { features: {}, target: { ...emptyAnswers().target, namespace: 'x' } }, open: ['target.namespace'] })
+    expect(fromProfile(profile)).toEqual({ answers: { values: {}, features: {}, target: { ...emptyAnswers().target, namespace: 'x' } }, open: ['target.namespace'] })
   })
 
   it('sends the held report as the source to reference', async () => {
@@ -67,5 +67,12 @@ describe('api/profile', () => {
     ['not a time', 'not a time'],
   ])('says %s was saved %s', (savedAt, expected) => {
     expect(sinceSaved(savedAt, NOW)).toBe(expected)
+  })
+})
+
+describe('api/profile: foundation answers', () => {
+  it('leaves an answer with a format error out of the profile, so the server does not refuse it', () => {
+    const state: AppState = { ...ENTERED, answers: { ...ENTERED.answers, values: { 'domain.base': 'Example.org', 'org.displayName': 'Acme' } }, foundations: FOUNDATIONS.foundations }
+    expect(toProfile(state).answers).toEqual({ 'org.displayName': 'Acme' })
   })
 })
