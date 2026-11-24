@@ -41,6 +41,8 @@ export interface Answers {
   target: Target
   role?: string
   features: Record<string, FeatureState>
+  /** Foundation answers by dotted id (`domain.base`); an absent id is unanswered and renders nothing. */
+  values: Record<string, string>
 }
 
 /** A fresh answer set, as "New configuration" starts it. */
@@ -56,6 +58,7 @@ export function emptyAnswers(): Answers {
       environment: UNANSWERED,
     },
     features: {},
+    values: {},
   }
 }
 

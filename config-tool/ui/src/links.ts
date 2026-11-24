@@ -1,4 +1,4 @@
-/** External documentation links shown on S0, S1, S2 and Review. */
+/** External documentation links shown on S0, S1, S2, S3 and Review. */
 import { DEFAULT_CHART } from './state/answers'
 
 const REPOSITORY = 'https://github.com/FIWARE/data-space-connector'
@@ -9,6 +9,8 @@ export const DOCUMENTATION_URL = `${REPOSITORY}#readme`
 export const QUICK_START_URL = `${REPOSITORY}/blob/main/doc/deployment-integration/local-deployment/LOCAL.MD#quick-start`
 /** Memory and disk each role needs; the UI links it and never restates a figure. */
 export const SIZING_URL = `${REPOSITORY}/blob/main/doc/deployment-integration/roles/PREREQUISITES.md#sizing`
+/** Why public host names have to resolve inside the cluster too, and how to check it. */
+export const PUBLIC_NAMES_URL = `${REPOSITORY}/blob/main/doc/deployment-integration/roles/PREREQUISITES.md#public-names-have-to-resolve-inside-the-cluster`
 /** The index of all release notes. */
 export const RELEASE_NOTES_URL = `${REPOSITORY}/tree/main/doc/release-notes`
 

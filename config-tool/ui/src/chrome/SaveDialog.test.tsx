@@ -47,7 +47,7 @@ describe('SaveDialog', () => {
     ['', `${DEFAULT_DIR}/connector.dscprofile.yaml`],
     ['provider', `${DEFAULT_DIR}/provider.dscprofile.yaml`],
   ])('proposes a path in the default directory for release %j', async (releaseName, expected) => {
-    renderChrome(echo(), { ...ENTERED, answers: { features: {}, target: { ...emptyAnswers().target, releaseName } } })
+    renderChrome(echo(), { ...ENTERED, answers: { values: {}, features: {}, target: { ...emptyAnswers().target, releaseName } } })
     await userEvent.click(railSave())
     expect(within(await dialog()).getByLabelText(SAVE_PATH_LABEL)).toHaveValue(expected)
   })
@@ -122,7 +122,7 @@ describe('SaveDialog', () => {
   })
 
   it('keeps Save enabled while Target shows a format error', async () => {
-    const saves = renderChrome(echo(), { ...ENTERED, answers: { features: {}, target: { ...emptyAnswers().target, type: TargetType.Cluster, namespace: 'Prod_NS' } } })
+    const saves = renderChrome(echo(), { ...ENTERED, answers: { values: {}, features: {}, target: { ...emptyAnswers().target, type: TargetType.Cluster, namespace: 'Prod_NS' } } })
     expect(screen.getByText(/must consist of lowercase/)).toBeInTheDocument()
     expect(railSave()).toBeEnabled()
     await userEvent.click(railSave())

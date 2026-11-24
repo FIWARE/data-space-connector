@@ -1,10 +1,11 @@
 /** The store's state and its pure transition function. */
 import { VersionSource, type LoadReport } from '../api/load'
-import { fromProfile, type ModelRef, type Profile } from '../api/profile'
+import { answerValues, fromProfile, type ModelRef, type Profile } from '../api/profile'
+import type { Foundation } from '../api/foundations'
 import type { ChartSwitch, RoleChange } from '../api/roles'
 import type { Trial } from '../api/trial'
 import { emptyAnswers, Environment, type Answers, type FeatureState, type Session, type Target } from './answers'
-import { fieldStage, type FieldId, type QuestionId } from './openQuestions'
+import { answerFieldId, fieldStage, type FieldId, type QuestionId } from './openQuestions'
 import { FIRST_STAGE, StageId } from './stageIds'
 
 /** Store contents; `entered` is false while S0 (Start) is shown. */
@@ -44,6 +45,8 @@ export interface AppState {
   roleCleared?: RoleCleared
   /** Role changes applied since this configuration was started or opened; session history Review lists (ADR 0019). */
   roleChanges: readonly AppliedRoleChange[]
+  /** The foundations of the target chart once fetched; Review names marked answers by their labels. */
+  foundations?: readonly Foundation[]
 }
 
 /** A confirmed role change and the chart switch it made, if any. */
@@ -78,6 +81,8 @@ export type Action =
   | { type: 'trialStarted'; trial: Trial }
   | { type: 'roleApplied'; profile: Profile; chartSwitch: ChartSwitch | null; change: RoleChange | null }
   | { type: 'featuresChanged'; features: Record<string, FeatureState> }
+  | { type: 'setAnswer'; id: string; value: string }
+  | { type: 'foundationsLoaded'; foundations: readonly Foundation[] }
 
 /** The state before anything was chosen on S0. */
 export const initialState: AppState = {
@@ -154,12 +159,14 @@ function profileOpened(state: AppState, action: Extract<Action, { type: 'profile
   }
 }
 
-// The first pick has no change to record.
+// The first pick has no change to record. A chart switch drops the answers the new chart does not declare.
 function roleApplied(state: AppState, { profile, chartSwitch, change }: Extract<Action, { type: 'roleApplied' }>): AppState {
   const target = { ...state.answers.target, chart: profile.target.chart, chartVersion: profile.target.chartVersion }
+  const dropped = new Set<FieldId>((chartSwitch?.droppedAnswers ?? []).map(answerFieldId))
   return {
     ...state,
-    answers: { ...state.answers, target, role: profile.role, features: profile.features ?? {} },
+    answers: { ...state.answers, target, role: profile.role, features: profile.features ?? {}, values: answerValues(profile.answers) },
+    open: state.open.filter((field) => !dropped.has(field)),
     profileModel: profile.model,
     profileCatalogue: profile.catalogue,
     versionOpen: chartSwitch !== null || state.versionOpen,
@@ -185,6 +192,12 @@ function setTarget(state: AppState, change: Partial<Target>): AppState {
     chartSwitch: undefined,
     roleCleared: role === undefined ? undefined : { role, fromChart: before.chart, toChart: target.chart },
   }
+}
+
+// An empty value is no answer, so clearing a field leaves the chart default in place.
+function setAnswer(values: Record<string, string>, id: string, value: string): Record<string, string> {
+  if (value !== '') return { ...values, [id]: value }
+  return Object.fromEntries(Object.entries(values).filter(([key]) => key !== id))
 }
 
 function loadedAnswers(report: LoadReport): Answers {
@@ -219,6 +232,10 @@ export function reducer(state: AppState, action: Action): AppState {
     case 'featuresChanged':
       // A new answers object is what makes the saved profile stale, as with every other edit.
       return { ...state, answers: { ...state.answers, features: action.features } }
+    case 'setAnswer':
+      return { ...state, answers: { ...state.answers, values: setAnswer(state.answers.values, action.id, action.value) } }
+    case 'foundationsLoaded':
+      return { ...state, foundations: action.foundations }
     case 'rootRereadStarted':
       return { ...state, rereading: true }
     case 'rootChanged':
