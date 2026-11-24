@@ -105,9 +105,9 @@ outside the preset can be turned on. Changing the role later re-applies the pres
 features the user has never touched — a feature the user switched by hand keeps its state and
 is listed in the change summary ([US-2.3](USER_STORIES.md#epic-2--role-presets)).
 
-The shipped stage differs from this design in four points
+The shipped stage differs from this design in five points
 ([ADR 0017](../adr/0017-config-tool-role-presets.md), [ADR 0018](../adr/0018-config-tool-deliberate-choices.md),
-[Roles](../../config-tool/README.md#roles)):
+[ADR 0019](../adr/0019-config-tool-role-change.md), [Roles](../../config-tool/README.md#roles)):
 
 - **Custom deploys `data-space-connector`**, not a chart of the user's choice. Operator already offers every
   trust-anchor feature.
@@ -119,6 +119,11 @@ The shipped stage differs from this design in four points
   refused.
 - **User toggles win over both.** They survive a role switch within the chart. A chart switch drops them, and its
   notice names the ones it dropped.
+- **A role change is confirmed from its summary.** Picking another role shows *turns on*, *turns off* and *kept*
+  (user and loaded toggles, each with who set it) before anything is applied, and a chart switch adds what is
+  carried over and what is dropped. Answers survive within the chart, also for a feature that goes off. A chart
+  switch keeps only the Target and Foundations answers and the open-question marks. Review lists *role changed
+  from X to Y* with the same summary, but only for the current session: the record is not saved in the profile.
 
 ## Stage 3 — Foundations
 
@@ -265,7 +270,7 @@ The requirement that shapes the data model. Four ways back in:
 |---|---|---|
 | **Enable a feature later** | Open profile → stage 5 → toggle → configure → review | Renders only the new keys; review shows a diff of ~20 lines, not a new file |
 | **Change a cross-cutting value** (domain moved) | Open → stage 3 → edit domain | Re-renders every place the value fans out to, lists them, and flags the overrides that were pinned by hand so the user can decide per case |
-| **Change the role** | Open → stage 2 | Re-applies the preset to untouched features only, shows what changed |
+| **Change the role** | Open → stage 2 | Shows what changes and asks first, then re-applies the preset to untouched features only; answers stay ([ADR 0019](../adr/0019-config-tool-role-change.md)) |
 | **Upgrade the chart** | Open → stage 1 → chart version | Migrates the answer set to the new question model, reports renamed and removed keys, lists what the new version adds ([US-9.3](USER_STORIES.md#epic-9--changing-a-configuration-later)) |
 
 In all four, the answer set is the thing being edited and `values.yaml` is re-rendered. A
