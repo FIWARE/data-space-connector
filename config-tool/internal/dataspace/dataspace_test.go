@@ -61,9 +61,9 @@ func parse(t *testing.T, name string) Descriptor {
 }
 
 func cred(typ, desc string) map[string]any {
-	m := map[string]any{credentialTypeKey: typ}
+	m := map[string]any{model.CredentialTypeKey: typ}
 	if desc != "" {
-		m[credentialDescriptionKey] = desc
+		m[model.CredentialDescriptionKey] = desc
 	}
 	return m
 }
@@ -331,8 +331,22 @@ func FuzzParseDescriptor(f *testing.F) {
 		if err != nil {
 			return
 		}
+		// Answers keyed by answer id reach the compare-against-a-given-answer path; raw values cover a mismatch.
+		given := map[string]any{}
+		for _, i := range imports {
+			raw, ok := d.Imported[i.key]
+			if !ok {
+				continue
+			}
+			if v, err := answerOf(i.key, raw); err == nil {
+				given[i.id] = v
+			} else {
+				given[i.id] = raw
+			}
+		}
 		for _, b := range all {
-			Preview(b, profile.Profile{Answers: d.Imported}, d)
+			Preview(b, profile.Profile{}, d)
+			Preview(b, profile.Profile{Answers: given}, d)
 		}
 	})
 }

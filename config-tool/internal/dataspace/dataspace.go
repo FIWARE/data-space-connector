@@ -45,12 +45,6 @@ const (
 	registrationManual    = "manual"
 )
 
-// Keys of one credential_types element, which are also the keys of a credentialTypes answer element.
-const (
-	credentialTypeKey        = "type"
-	credentialDescriptionKey = "description"
-)
-
 // NothingToImport is the message of a preview whose descriptor carries none of the imported keys. Today every
 // publisher, the chart included, omits them, so it is information, not a failure.
 const NothingToImport = "This data space does not publish a TIR address, credential types or a registration mode yet. Enter them below."
@@ -194,8 +188,8 @@ func CredentialTypes(b model.Bundle, p profile.Profile) []CredentialType {
 	out := make([]CredentialType, len(list))
 	for i, e := range list {
 		m := e.(map[string]any)
-		desc, _ := m[credentialDescriptionKey].(string)
-		out[i] = CredentialType{Type: m[credentialTypeKey].(string), Description: desc}
+		desc, _ := m[model.CredentialDescriptionKey].(string)
+		out[i] = CredentialType{Type: m[model.CredentialTypeKey].(string), Description: desc}
 	}
 	return out
 }
@@ -250,11 +244,11 @@ func credentialTypesOf(raw any) (any, error) {
 	for i, e := range list {
 		switch e := e.(type) {
 		case string:
-			out[i] = map[string]any{credentialTypeKey: e}
+			out[i] = map[string]any{model.CredentialTypeKey: e}
 		case map[string]any:
 			out[i] = e
 		default:
-			return nil, fmt.Errorf("[%d] must be a type name or an object with %s and an optional %s", i, credentialTypeKey, credentialDescriptionKey)
+			return nil, fmt.Errorf("[%d] must be a type name or an object with %s and an optional %s", i, model.CredentialTypeKey, model.CredentialDescriptionKey)
 		}
 	}
 	return out, nil
