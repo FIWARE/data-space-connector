@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { rowError } from './dataSpaceText'
+import { previewValue, rowError } from './dataSpaceText'
 
 describe('rowError', () => {
   it.each([
@@ -10,5 +10,28 @@ describe('rowError', () => {
     ['must be a non-empty list of credential types', { text: 'must be a non-empty list of credential types' }],
   ])('locates %j', (error, want) => {
     expect(rowError(error)).toEqual(want)
+  })
+})
+
+describe('previewValue', () => {
+  it.each([
+    [undefined, '—'],
+    [null, '—'],
+    [true, 'yes'],
+    [false, 'no'],
+    ['https://tir.example.org/', 'https://tir.example.org/'],
+    [[{ type: 'MembershipCredential' }, { type: 'UserCredential' }], 'MembershipCredential, UserCredential'],
+    [
+      [{ type: 'MembershipCredential', description: 'issued to the organization' }, { type: 'UserCredential' }],
+      'MembershipCredential (issued to the organization), UserCredential',
+    ],
+  ])('shows %j as %j', (value, want) => {
+    expect(previewValue(value)).toBe(want)
+  })
+
+  it('tells a description-only change apart', () => {
+    expect(previewValue([{ type: 'MembershipCredential' }])).not.toBe(
+      previewValue([{ type: 'MembershipCredential', description: 'issued to the organization' }]),
+    )
   })
 })

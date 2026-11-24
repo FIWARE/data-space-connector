@@ -47,11 +47,12 @@ export function outcomeText(check: TirCheck): string {
   }
 }
 
-/** An answer as the preview shows it: types joined for a list, yes/no for a bool, a dash while unanswered. */
+/** An answer as the preview shows it: types (with any description) joined for a list, yes/no for a bool, a dash while unanswered. */
 export function previewValue(value: unknown): string {
   if (value === undefined || value === null) return NOT_SET
   if (typeof value === 'boolean') return value ? YES : NO
-  if (Array.isArray(value)) return (value as CredentialType[]).map((t) => t.type).join(', ')
+  // Descriptions are shown because the preview counts a description-only difference as a change.
+  if (Array.isArray(value)) return (value as CredentialType[]).map((t) => (t.description ? `${t.type} (${t.description})` : t.type)).join(', ')
   return typeof value === 'string' ? value : JSON.stringify(value)
 }
 
