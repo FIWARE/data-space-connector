@@ -1,6 +1,8 @@
 package render
 
 import (
+	"encoding/json"
+	"fmt"
 	"maps"
 	"os"
 	"reflect"
@@ -29,6 +31,10 @@ const (
 	orgName         = "MP Operations"
 	orgDisplayName  = "org.displayName"
 	domainBase      = "domain.base"
+	// realmJSON mirrors how _realm.tpl interpolates keycloak.realm.displayNameHtml: unescaped, in a JSON string.
+	realmJSON       = `{"displayNameHtml": "%s"}`
+	displayNameKey  = "keycloak.realm.displayNameHtml"
+	loginHeaderHTML = `<div class='kc-logo-text'><span>`
 )
 
 // exclusion is a domain-bearing provider.yaml leaf another story owns, so no foundation targets it.
@@ -49,6 +55,8 @@ var providerExclusions = []exclusion{
 		"US-5.5", "realm clients belong to the realm; the list carries content no foundation owns"},
 	{regexp.MustCompile(`^fdsc-dashboard\.auth\.config\.providers\[\d+\]\.issuer$`),
 		"US-5.3", "the dashboard's feature page; the list carries content no foundation owns"},
+	{regexp.MustCompile(`^decentralizedIam\.odrlAuthorization\.tpp\.transfers\.host$`),
+		"US-5.3", "the DSP feature page; TPP's in-cluster back-channel to Rainbow, which local k3s reaches through nip.io"},
 }
 
 func providerBundle(t *testing.T) model.Bundle {
@@ -249,5 +257,27 @@ func TestProviderWithoutDomain(t *testing.T) {
 		if l.Provenance.Foundation != orgDisplayName {
 			t.Errorf("%s emitted by %s with %s unanswered", l.Path, l.Provenance.Foundation, domainBase)
 		}
+	}
+}
+
+func TestProviderDisplayNameKeepsRealmJSONValid(t *testing.T) {
+	b := providerBundle(t)
+	for _, name := range []string{orgName, "R&D Labs", "O'Brien GmbH"} {
+		t.Run(name, func(t *testing.T) {
+			f, _ := b.Foundation(orgDisplayName)
+			if err := f.Type.Check(name); err != nil {
+				t.Fatalf("%q refused: %v", name, err)
+			}
+			v, ok := values(renderProvider(t, b, map[string]any{orgDisplayName: name}))[displayNameKey].(string)
+			if !ok {
+				t.Fatalf("%s not rendered as a string", displayNameKey)
+			}
+			if !strings.HasPrefix(v, loginHeaderHTML) || !strings.Contains(v, name) {
+				t.Errorf("%s = %q, want the chart's login-header wrapper around %q", displayNameKey, v, name)
+			}
+			if doc := fmt.Sprintf(realmJSON, v); !json.Valid([]byte(doc)) {
+				t.Errorf("realm JSON is invalid with %s = %q", displayNameKey, v)
+			}
+		})
 	}
 }

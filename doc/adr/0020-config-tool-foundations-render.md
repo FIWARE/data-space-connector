@@ -23,7 +23,9 @@ chart switch carried the answers a `recognize:` rule placed in stage `target` or
 A bundle declares `foundations:`, a list in declaration order of
 `{id, stage, type, default?, label, help, doc?, targets: [{path, fn, args?, sep?}]}`. Ids are dotted
 (`domain.base`, `host.verifier`): they key `profile.Answers`, and the open-question field is `answers.<id>`.
-`type` is `string`, `hostname` or `domain`, each checked by one pattern. `doc` is a repo-relative doc path. There
+`type` is `string`, `hostname` or `domain`, each checked by one pattern. A `string` is a single line
+without control characters, `"`, `\`, `<` or `>`, because chart templates interpolate it unescaped into JSON and
+HTML (`_realm.tpl` writes `keycloak.realm.displayNameHtml` that way). `doc` is a repo-relative doc path. There
 is never Go code per key: what reaches a chart key is a target in the bundle.
 
 ### 2. A closed function set
@@ -104,6 +106,13 @@ declare an id, so the switched profile always validates. The trust-anchor bundle
 - Adding a chart key is a bundle edit and a revision bump; adding a function is a code change and an ADR
   amendment.
 - An answer that only a `recognize:` rule places is dropped on a chart switch. No shipped rule is affected.
+- Targets are not gated by features yet: answering `domain.base` renders every derived host whatever the role
+  and `profile.Features`, so a Consumer gets the provider's APISIX `hosts`/`tls` list and its
+  `cert-manager.io/alt-names`. Values of a disabled component are inert, but an enabled APISIX ingress requests a
+  certificate for names nobody serves. Gating is US-5.3 ("a disabled feature contributes no keys"). For an owned
+  list it means compacting the indices of the enabled elements, because a gap would emit nothing (§4).
+- A leaf that carries the domain only because local k3s resolves it through nip.io is not a public host and is
+  not a target: `tpp.transfers.host` is TPP's in-cluster back-channel to Rainbow, left to the DSP feature page.
 
 ## Alternatives
 

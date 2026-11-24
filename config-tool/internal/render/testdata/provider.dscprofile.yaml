@@ -20,7 +20,6 @@ answers:
   host.til: til-provider.127.0.0.1.nip.io
   host.ccs: provider-ccs.127.0.0.1.nip.io
   host.pap: pap-provider.127.0.0.1.nip.io
-  host.rainbow: rainbow-provider.127.0.0.1.nip.io
   host.scorpio: scorpio-provider.127.0.0.1.nip.io
   host.tmForumApi: tm-forum-api.127.0.0.1.nip.io
   host.marketplace: marketplace.127.0.0.1.nip.io

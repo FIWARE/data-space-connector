@@ -268,11 +268,14 @@ foundations:
     stage: foundations
     type: string
     label: Display name
-    help: The organization's name as other participants see it.
+    help: >-
+      The organization's name as other participants see it, shown in the header of the Keycloak login page in the
+      chart's default styling.
     doc: doc/deployment-integration/roles/KEYCLOAK.md
     targets:
-      # _realm.tpl writes displayNameHtml into the realm JSON unescaped, so a '"' or '\' in the name breaks the import.
-      - {path: 'keycloak.realm.displayNameHtml', fn: tpl, args: ["{{ .org.displayName }}"]}
+      # _realm.tpl writes displayNameHtml into the realm JSON unescaped: type string refuses '"', '\', '<' and '>',
+      # and the chart's default wrapper is kept with single-quoted attributes.
+      - {path: 'keycloak.realm.displayNameHtml', fn: tpl, args: ["<div class='kc-logo-text'><span>{{ .org.displayName }}</span></div>"]}
   - id: domain.base
     stage: foundations
     type: domain
@@ -373,15 +376,6 @@ foundations:
       - {path: 'decentralizedIam.odrlAuthorization.odrl-pap.ingress.hosts[0].paths[0]', fn: const, args: [/]}
       - {path: 'decentralizedIam.odrlAuthorization.odrl-pap.ingress.tls[0].secretName', fn: tpl, args: ["{{ .host.pap }}-tls"]}
       - {path: 'decentralizedIam.odrlAuthorization.odrl-pap.ingress.tls[0].hosts[0]', fn: copy, args: ["{{ .host.pap }}"]}
-  - id: host.rainbow
-    stage: foundations
-    type: hostname
-    default: "rainbow.{{ .domain.base }}"
-    label: Rainbow host
-    help: Rainbow, the Dataspace Protocol connector the policy enforcement asks for running transfers.
-    doc: doc/DSP_INTEGRATION.md
-    targets:
-      - {path: 'decentralizedIam.odrlAuthorization.tpp.transfers.host', fn: tpl, args: ["http://{{ .host.rainbow }}:8080"]}
   - id: host.scorpio
     stage: foundations
     type: hostname
