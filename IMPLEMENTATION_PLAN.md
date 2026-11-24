@@ -54,25 +54,40 @@ Stage 3 Foundations screen.
 - **Unanswered emits nothing.** A target is skipped when any answer it references is absent, after
   defaults are resolved. A derived host whose source is unanswered is absent too.
 - **Tree.** `render.Tree` holds `[]Leaf{Path, Value, Provenance{Foundation string, Answers []string,
-  Fn string, Target int, Pinned bool, Rendered any}}`, sorted segment-wise by path (indices
+  Fn string, Target int, Pinned bool, Kept bool, Rendered any}}`, sorted segment-wise by path (indices
   numeric). `Rendered` is set only on a pinned leaf: it is the value the render would have written,
   while `Value` holds the kept loaded scalar.
   `Tree.Nested()` builds the map/slice form, and `json.Marshal` of the tree is byte-identical across
   runs.
 - **Pinned.** `render.Render(b model.Bundle, p profile.Profile, opts Options)`, where
   `Options.Overrides` is the loaded overrides layer (`*load.Result`, nil when nothing is loaded).
-  Pinning follows the load classification of ADR 0014 §4, read from `Result.Report`: a target path
-  that is an **unknown** or **skipped** leaf of the loaded document (a hand edit, including a
-  recognized-looking leaf whose value `differs from` the back-derived answer) keeps the loaded scalar
-  and its leaf is marked `Pinned`. **Owned** and **recognized** leaves are re-rendered, so a future
-  domain recognize rule does not pin a loaded file's whole fan-out.
+  Pinning follows the load classification of ADR 0014 §4: a target path that is an **unknown** or
+  **skipped** leaf of the loaded document (a hand edit, including a recognized-looking leaf whose
+  value `differs from` the back-derived answer) keeps the loaded value and its leaf is marked
+  `Pinned`. **Owned** and **recognized** leaves are re-rendered, so a future domain recognize rule
+  does not pin a loaded file's whole fan-out. Mechanics, because target paths are chart-relative
+  while the load result is not:
+  - The file path is `full := Result.Root` + the target path (`Root` is empty for a top-level chart,
+    non-empty when `rootCandidates` found the values nested). Classification is looked up with
+    `full.String()` in the `Path` of `Result.Report.Unknown`; for `Report.Skipped` the target is
+    pinned when an entry's `Path` equals `full` or is a prefix of it. In practice only shadowed
+    duplicate keys can match there, because an alias or complex key has no path. A target is pinned
+    too when an unknown leaf is a proper prefix of `full`, because then the file holds a scalar or an
+    empty collection where the target needs a mapping or list.
+  - The kept value is never `Entry.Value`, which is a display preview capped at `maxValuePreview`
+    (80 runes). It is `Result.Doc.Lookup(full)` (a duplicate resolves to its last occurrence),
+    decoded with `yaml.Node.Decode` so the YAML type (string, int, bool, null) is kept.
+  - When that node is not a scalar (an alias, a collection, or a path that runs through an alias or
+    stops at a prefix), the leaf is still `Pinned` with `Rendered` set, but it has no kept scalar:
+    `Value` is nil, `Provenance.Kept` is false and `Nested()` leaves the path out, so the loaded
+    subtree stays as the overrides layer has it. `Kept` is true on every other pinned leaf.
 - **Diff.** `render.Diff(prev, next Tree) Diff` groups the changes by foundation id (bundle order).
   Each entry is `{path, before, after, status}` with status `added | changed | removed | pinned`, and
   unchanged keys are omitted. `pinned` is computed from `Provenance.Rendered`, because a pinned
   leaf's `Value` is the same in both trees: a leaf pinned in `next` is reported `pinned` when its
   `Rendered` differs from `prev`'s (`prev`'s `Rendered` if it was pinned there, else its `Value`),
-  with `before`/`after` the two rendered values and the kept value alongside (`kept`). A pinned leaf
-  whose rendered value did not change is omitted like any unchanged key, so it is not reported on
+  with `before`/`after` the two rendered values and the kept value alongside (`kept`, absent when
+  `Provenance.Kept` is false). A pinned leaf whose rendered value did not change is omitted like any unchanged key, so it is not reported on
   every render. The server keeps the last tree per session (`Server.lastRender`, guarded
   like `loaded`) and resets it on load or profile open. The first render therefore diffs against an
   empty tree.
@@ -97,8 +112,14 @@ Stage 3 Foundations screen.
   thus accounted for exactly instead of asserting the design's approximate "41".
 - **Chart switches carry foundation answers.** `profile.splitAnswers` takes an answer's stage from
   the old bundle's `recognize:` rules **and** its `foundations:`. An answer is carried when that
-  stage is in `carriedStages` and the new bundle declares the id too; otherwise it is dropped and
-  listed in `DroppedAnswers` (so `host.verifier` is dropped on a switch to the trust anchor). The
+  stage is in `carriedStages` and the new bundle **declares** the id too; otherwise it is dropped
+  and listed in `DroppedAnswers` (so `host.verifier` is dropped on a switch to the trust anchor).
+  *Declares* means the id is in the new bundle's `foundations:` list. A `recognize:` rule does not
+  declare an id, because after Step 1 `Validate` accepts only `foundations:` ids, and a carried id the
+  new bundle refuses would leave an invalid profile. The check applies to every answer, so an id
+  placed only by a recognize rule is dropped on a chart switch. No shipped rule is affected (every
+  shipped `recognize:` rule is of stage `features`), but the fixture expectation of
+  `TestApplyPresetChartSwitchAnswers` changes (Step 1). The
   trust-anchor bundle (1.3.6) declares `org.displayName` and `domain.base` without targets, so both
   survive the switch ADR 0019 promises and validate there. Its `tir.`/`til.` targets
   (`k3s/trust-anchor.yaml` derives them from the same domain) are a follow-up outside US-3.1, whose
@@ -126,16 +147,28 @@ Stage 3 Foundations screen.
   check the value's type pattern, keep refusing unknown ids, and accept `answers.<id>` in `open` for
   declared ids. Update the `Answers` doc comment.
 - `internal/profile/role.go`: `splitAnswers` reads the stages of `foundations:` as well as of
-  `recognize:` and carries an answer only when the new bundle declares it (see *Chart switches*).
-  Update its doc comment and the `DroppedAnswers` doc.
+  `recognize:` and carries an answer only when the new bundle declares it in `foundations:` (see
+  *Chart switches*). It takes the new model ref as well. Update its doc comment and the
+  `CarriedAnswers`/`DroppedAnswers` docs.
+- `TestApplyPresetChartSwitchAnswers` (`role_test.go`) changes on purpose: `answerBundles` also adds
+  a `foundations:` entry for `foundations.organization` to both fixture bundles, so it stays carried
+  both ways. `answerTarget` (`target.releaseLabel`, recognize-placed and declared by neither bundle)
+  moves from carried to dropped in the Operator row. The Consumer row is unchanged.
+- `AGENTS.md`: rewrite the US-3.1 line, which is stale against this plan, to: "`foundations:` in the
+  bundle (id, type, default template, targets with fn `tpl`/`join`/`copy`/`const`); `internal/render`
+  turns answers into a sorted `Tree` with provenance and pins unknown/skipped loaded leaves (ADR 0014
+  classification). Lists are owned whole. Answer ids are dotted (`domain.base`), open field id
+  `answers.<id>`. `k3s/provider.yaml` is the acceptance measure, with an exclusion table for TIR
+  (US-3.3) and for the lists of objects owned by US-5.6/5.5/5.3, not the literal "41"." Keep it
+  marked planned; Step 6 marks it shipped.
 - Tests (table-driven): bundle validation errors (bad fn, unknown reference, cycle, index gap,
   duplicate path, root outside `topLevelKeys`, `const` outside a list, `const` with an answer
   reference) with fixtures in `internal/model/testdata/`. Profile validation of answers and open
   ids. A `role_test.go` case switching provider → trust anchor with `domain.base`,
   `org.displayName` and `host.verifier` answered: the first two carried, `host.verifier` dropped,
   and the result validates.
-- Acceptance: `go test ./...` and `make lint` green, and the existing profile/model tests are
-  unchanged apart from the answers doc.
+- Acceptance: `go test ./...` and `make lint` green. The existing profile/model tests are unchanged
+  except for the answers doc and the `TestApplyPresetChartSwitchAnswers` expectation listed above.
 
 ### Step 2: Render engine core in `internal/render`
 - Replace the stub. `render.go` has `Render(b, p, opts) (Tree, error)`: it resolves answers and
@@ -143,7 +176,7 @@ Stage 3 Foundations screen.
   with an absent reference, drops every leaf of an owned list that is not complete (all or
   nothing), applies `Options.Overrides` pinning by classification (setting `Rendered`) and sorts the
   leaves. `funcs.go` holds
-  `tpl`/`join`/`copy`, `tree.go` holds `Tree`, `Leaf`, `Provenance`, `Nested()` and stable JSON.
+  `tpl`/`join`/`copy`/`const`, `tree.go` holds `Tree`, `Leaf`, `Provenance`, `Nested()` and stable JSON.
 - Keep the package HTTP-free (`internal/layering_test.go`). Remove `ErrNotImplemented` from render
   and keep the "writing values.yaml is US-7.1" error where the callers need it (Step 4).
 - Temporary callers: make `internal/server/api.go` `handleRender` and `internal/cli/cli.go`
@@ -153,7 +186,9 @@ Stage 3 Foundations screen.
   without a domain, `join`/`copy`/`tpl`/`const` output, list-index paths building slices, an owned
   list with one host unanswered emitting nothing, provenance contents, pinned (unknown, `differs
   from`) vs re-rendered (owned, recognized) leaves using a `load.Load` result with `Rendered` set only
-  when pinned, and two renders giving `bytes.Equal` JSON.
+  when pinned, the same file nested under a key (non-empty `Result.Root`) pinning the same leaves, a
+  kept value longer than 80 runes kept whole, an int kept as an int, a non-scalar at a target path
+  (pinned, `Kept` false, absent from `Nested()`), and two renders giving `bytes.Equal` JSON.
 - Acceptance: all of the above green, plus `make lint`.
 
 ### Step 3: `domain.base` / `org.displayName` targets and the provider.yaml acceptance test
@@ -227,13 +262,14 @@ Stage 3 Foundations screen.
 - Acceptance: `npm test`, `make ui`, `make lint` green.
 
 ### Step 6: Documentation and full verification
-- `config-tool/README.md`: document the `foundations:` section (fields, types, the `tpl`/`join`/`copy`
+- `config-tool/README.md`: document the `foundations:` section (fields, types, the `tpl`/`join`/`copy`/`const`
   function set with examples, path rules), the render tree and provenance, `GET /api/foundations`,
   `POST /api/render` with the diff and pinned semantics, and Stage 3.
 - `doc/config-tool/FEATURE_MODEL.md#cross-cutting-values`: state the measured fan-out for
   `domain.base` (the leaf set Step 3's test measures) and link ADR 0020. Update `USER_JOURNEY.md` Stage 3 only
   if it contradicts what shipped.
-- Update the US-3.1 line in `AGENTS.md` from planned to shipped.
+- Update the US-3.1 line in `AGENTS.md` (as rewritten in Step 1) from planned to shipped, and check
+  it against what shipped.
 - Run `make ui`, `make build`, `make test`, `make lint` and `.github/scripts/check-links.sh` (the
   links in the new docs), and fix whatever fails.
 - Acceptance: every gate from the ticket is green, and README and ADR describe the shipped behaviour.
