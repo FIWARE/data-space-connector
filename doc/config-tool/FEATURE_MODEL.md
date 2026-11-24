@@ -177,11 +177,18 @@ Asked in [Stage 3](USER_JOURNEY.md#stage-3--foundations). The "fans out to" coun
 against [`k3s/provider.yaml`](../../k3s/provider.yaml), which is what a fully configured
 provider looks like today.
 
+The first three rows are shipped as `foundations:` in the bundle ([ADR 0020](../adr/0020-config-tool-foundations-render.md)),
+and `internal/render/provider_test.go` measures their counts. That test accounts for every leaf of provider.yaml that
+carries the domain: it is either a target or a row of an exclusion table naming the owning story. The excluded rows
+are the TIR address and trusted participant lists (9, US-3.3), the APISIX `routes[*].host` (18, US-5.6), the realm
+clients (2, US-5.5), the dashboard's provider issuer and TPP's in-cluster transfer host (1 each, US-5.3). The other
+rows are design.
+
 | Value | Example | Fans out to |
 |---|---|---|
-| `org.displayName` | `MP Operations` | Keycloak realm display name, BAE organization, chart labels |
-| `domain.base` | `mp-operations.org` | **41 lines** of the provider profile: every ingress host, every TLS secret name, every cert-manager annotation, the DID, the verifier's `host`, the APISIX routes' `discovery` URLs, the dsconfig document |
-| `host.<component>` | `verifier.mp-operations.org` | derived from `domain.base`, individually overridable; **15 keys** for the verifier alone |
+| `org.displayName` | `MP Operations` | **1 key** shipped: the Keycloak realm's `displayNameHtml` (provider.yaml sets none) |
+| `domain.base` | `mp-operations.org` | **76 keys in 7 components** of the provider profile, through the 22 derived hosts: every ingress host and its TLS `secretName` and host list, every `cert-manager.io/*` annotation, public URLs (Keycloak `frontendUrl`, the status list, the dashboard). The other 31 of the 107 leaves that carry the domain belong to later stories (see below) |
+| `host.<component>` | `keycloak.mp-operations.org` | derived from `domain.base` as `<component>.<base>`, overridable in the profile (UI: US-3.4); **6 keys** for Keycloak |
 | `did.method` / `did.value` | `did:web:mp-operations.org` | **15 lines**: verifier `did`, Keycloak `issuerDid`, the TIR registration job, fdsc-edc, IdentityHub, the dsconfig document, APISIX, contract-management |
 | `dataspace.tirAddress` | `https://tir.dataspace.org` | verifier `tirAddress`, registration job, trust framework checks |
 | `dataspace.credentialTypes` | `MembershipCredential`, `UserCredential` | Keycloak client scopes and protocol mappers, verifier service registration, local TIL entries, ODRL policies |
