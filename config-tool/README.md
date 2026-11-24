@@ -84,6 +84,12 @@ epic decides how rendered keys merge with overrides (ADR 0015).
   When no default file exists, S1 says so and asks for a path.
   A relative typed path is resolved against the directory `dsc-config` was started in, and S1
   shows the absolute file it read.
+- Only two requests ever leave the machine, and only when the user presses their button on the Stage 3 *Data space*
+  panel: *Check* (one GET to the TIR address) and *Import* (one GET of a data space's descriptor). Both live in
+  `internal/server`, take the proxy from `HTTPS_PROXY`/`HTTP_PROXY`/`NO_PROXY`, time out after 10 s and never put the
+  URL into an error. The import reads at most 64 KiB and follows up to 5 redirects, none that changes the scheme
+  ([ADR 0022](../doc/adr/0022-config-tool-data-space-parameters.md#8-outbound-calls)). With no button pressed the tool
+  works offline.
 
 ## Package layout
 
@@ -100,6 +106,8 @@ internal/cluster    core: kube context names from kubeconfig files, read-only
 internal/render     core: answers to a values tree with provenance, fan-out and diff (ADR 0020)
 internal/roundtrip  core: parse / classify / merge / write of a values.yaml, byte-preserving
 internal/load       core: owned / recognized / unknown classification and the load report
+internal/check      core: L2 rules of the bundle into warnings and blocking errors (ADR 0021)
+internal/dataspace  core: data space descriptor parse and import preview, credential types for later stories (ADR 0022)
 internal/validate   core: values against the chart's schema
 internal/trial      core: local trial descriptor, rendered outputs, production warnings, all-or-nothing write
 model/<version>/    question-model bundles, embedded
@@ -162,6 +170,13 @@ line. Back-derived answers show read-only on their stage's placeholder; only `ta
 becomes an answer. Expert / Overrides lists the unknown and skipped entries. The server keeps the
 latest load in memory as the overrides layer, and a saved [profile](#profiles) references it; the
 load itself writes nothing to disk.
+
+Derived answers of stage `foundations` (today the TIR address, recognized at the verifier's `tirAddress`) are
+seeded into the profile as given answers (`load.SeedAnswers`, ADR 0022 Decision 7): the UI copies them from the report
+on load, and `POST /api/profile/open` seeds the profile it returns. An answer the profile already holds always wins.
+The value then lives in the saved `.dscprofile.yaml`, so the CLI sees it too. A profile saved by an earlier build lacks
+it, and a CLI `generate` on it stops at the TIR rule (see [Rules and findings](#rules-and-findings)) until the profile
+is opened and saved once in the GUI.
 
 ## Profiles
 
@@ -308,8 +323,8 @@ applies the same revision rules to it.
 ## Foundations (Stage 3)
 
 Stage 3 asks the cross-cutting answers of the target's bundle once ([ADR 0020](../doc/adr/0020-config-tool-foundations-render.md)).
-A foundation's `group` picks its panel. *Organization* holds the display name and the DID, *Network* `domain.base`
-and, read-only, the hosts derived from it (`<component>.<base>`, editing them is US-3.4) with a link to the resolve-inside-the-cluster prerequisite.
+A foundation's `group` picks its panel. *Organization* holds the display name and the DID, *Data space* the data
+space's parameters (below), *Network* `domain.base` and, read-only, the hosts derived from it (`<component>.<base>`, editing them is US-3.4) with a link to the resolve-inside-the-cluster prerequisite.
 Each field has its doc link, *Ask later* (an `answers.<id>` open question on Review) and a *used by N values in M
 components* button that lists its targets. Every answer change renders the profile through `POST /api/render`
 (debounced). The render on entering the stage is the baseline, and the screen shows the grouped diff of each later
@@ -322,16 +337,47 @@ the method drops a hand-set DID of the other method. The DID reaches the verifie
 issuer and the `fdsc-edc.common` participant, issuer, STS client and holder ids; [FEATURE_MODEL.md](../doc/config-tool/FEATURE_MODEL.md#cross-cutting-values)
 lists the DID keys left to other stories.
 
+The *Data space* panel holds three answers ([ADR 0022](../doc/adr/0022-config-tool-data-space-parameters.md)):
+
+- `dataspace.tirAddress` (type `url`): the Trust Anchor's TIR. It is the only one that renders, to the verifier's
+  `decentralizedIam.vcAuthentication.vcverifier.deployment.verifier.tirAddress`. *Check* sends one GET to it and shows
+  *reachable (HTTP n)* or *unreachable: <why>*. The result is session state, shown on Review as information that never
+  blocks; it is not saved in the profile.
+- `dataspace.credentialTypes` (type `credentialTypes`): an ordered list of `{type, description?}` rows with unique
+  types, which can be added, moved and removed.
+- `dataspace.autoRegistration` (type `bool`): whether the data space registers participants at its Trust Anchor.
+
+Chart 10.16.0 has no key for auto-registration, and its credential-type key sits in the verifier's service
+registration list, which US-5.6 owns. So these two stay answers that write no key. Later stories read them through
+`dataspace.CredentialTypes` and `dataspace.AutoRegistration`.
+
+*Import from* takes a data space's address (or its `/.well-known/data-space-configuration` URL) and, on *Import*, has
+`POST /api/dataspace/import` fetch the descriptor and preview it against the profile. The preview lists each value
+that differs from the current answer, each value the answer's type refuses (*Not imported*), the chart's own published
+keys (`supported_models`, `supported_protocols`, `authentication_protocols`) and every other key as *Not used*.
+Nothing changes until *Apply*. The tool reads three optional top-level keys:
+
+| Descriptor key | Answer | Shape |
+|---|---|---|
+| `tir_address` | `dataspace.tirAddress` | a URL |
+| `credential_types` | `dataspace.credentialTypes` | a list whose elements are a string or `{type, description?}` |
+| `participant_registration` | `dataspace.autoRegistration` | `automatic` or `manual` |
+
+No publisher emits these keys yet, the chart's own `dsconfig-cm.yaml` included. A real data space therefore yields an
+empty preview today, which says so and asks for the values by hand. `POST /api/dataspace/check` takes `{url}` and
+returns `{status, httpStatus?, error?}`; the import takes `{url, profile}` and returns `{url, preview}`, with 502 when
+the fetch or the parse fails.
+
 ### The `foundations:` section
 
 A bundle's `foundations:` list declares the answers and every chart key they reach; there is no Go code per key.
-Each entry has a dotted `id` (the key in the profile's `answers`), `stage`, an optional `group` (`organization` or
-`network`, the default), `type` (`string`, `hostname`, `domain` or `did`, each checked by one pattern, or `choice`
-from its `options`), `label`, `help`, an optional repo-relative `doc` path, an optional `default`, `defaultWhen`
+Each entry has a dotted `id` (the key in the profile's `answers`), `stage`, an optional `group` (`organization`, `dataspace` or
+`network`, the default), `type` (`string`, `hostname`, `domain`, `did` or `url`, each checked by one pattern, `choice`
+from its `options`, `bool`, or `credentialTypes`, a list of `{type, description?}`), `label`, `help`, an optional repo-relative `doc` path, an optional `default`, `defaultWhen`
 (`{id, equals}`: the default applies only while that answer resolves to `equals`), `prefix` (a template the answer must
 start with) and `targets`. A `default` is a template over other answers, so `host.keycloak` (`"keycloak.{{ .domain.base }}"`)
 exists only while `domain.base` is answered. Templates hold only text and `{{ .id }}` actions. A target writes one
-scalar with one of four functions:
+value with one of four functions; only `copy` writes a `bool` or a list:
 
 ```yaml
 - {path: 'keycloak.realm.frontendUrl', fn: tpl, args: ["https://{{ .host.keycloak }}"]}   # render one template
@@ -375,9 +421,15 @@ A bundle's `rules:` are L2 checks across answers ([ADR 0021](../doc/adr/0021-con
 an `id`, a `severity` (`warning` or `error`), the `stage` and open `field` it points at, `when` conditions
 (`{field, equals}`, all must hold, read on the resolved answers so a derived default counts), a `message` and a `doc`
 path. Core package `internal/check` evaluates them into findings. Stage 3 shows a finding under its field, Review lists
-it with a link back, and `generate` prints it. A warning never blocks; only an error stops `generate`. The 10.16.0
-bundle has one rule: `did-key-in-production` warns when the environment is `production` and the DID method is
-`did:key`.
+it with a link back, and `generate` prints it. A warning never blocks; only an error stops `generate`.
+
+A `when` may also address a feature as `features.<feature id>` with `equals: "on"` or `"off"`, and may use
+`unset: true` instead of `equals`, which holds while the resolved answer, given or derived, is absent. Each condition
+has exactly one of `equals` and `unset` (ADR 0022 Decision 6). The 10.16.0 bundle has two rules:
+
+- `did-key-in-production` warns when the environment is `production` and the DID method is `did:key`;
+- `tir-address-for-verification` is an error on `answers.dataspace.tirAddress` while the feature
+  `access.verification` is on and no TIR address is set, because the verifier cannot check issuers without it.
 
 ## Features (Stage 5)
 
