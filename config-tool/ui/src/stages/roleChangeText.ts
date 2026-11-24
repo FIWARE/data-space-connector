@@ -42,3 +42,12 @@ export const keepLabel = (from: string) => `Keep ${from}`
 export const changeLabel = (to: string) => `Change to ${to}`
 /** Confirm label of a change that switches the chart. */
 export const moveLabel = (chart: string) => `Move to ${chart}`
+
+/** Heading of Review's record of the role changes of this session. */
+export const ROLE_CHANGES_HEADING = 'Role changes'
+/** One row of that record. */
+export const roleChanged = (from: string, to: string) => `Role changed from ${from} to ${to}`
+/** Visible text of the button that shows or hides a row's summary. */
+export const SUMMARY_TOGGLE = 'summary'
+/** Accessible name of that button, unique per row. */
+export const summaryToggleLabel = (from: string, to: string) => `Summary of the change from ${from} to ${to}`

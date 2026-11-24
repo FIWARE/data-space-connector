@@ -82,7 +82,7 @@ function applied(state: AppState, role: string, chart: string, chartSwitch: Char
     open: [],
     secrets: {},
   }
-  return reducer(state, { type: 'roleApplied', profile, chartSwitch })
+  return reducer(state, { type: 'roleApplied', profile, chartSwitch, change: null })
 }
 
 const PINNED: AppState = { ...initialState, entered: true, visited: [StageId.Target, StageId.Role], answers: { features: {}, target: COMPLETE } }
