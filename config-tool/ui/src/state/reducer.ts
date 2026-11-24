@@ -229,7 +229,34 @@ function loadedAnswers(report: LoadReport): Answers {
   if (report.chartVersionFrom === VersionSource.Header) {
     answers.target.chartVersion = report.chartVersion
   }
-  return answers
+  return { ...answers, values: seedAnswers(answers.values, report) }
+}
+
+/**
+ * Adds the foundation answers a report derives to values, as the server seeds an opened profile (ADR 0022).
+ * A given answer wins; values is returned unchanged when nothing is added, so the saved profile does not go stale.
+ */
+function seedAnswers(values: Answers['values'], report: LoadReport): Answers['values'] {
+  const seeded = { ...values }
+  let added = false
+  for (const a of report.answers) {
+    if (a.stage === StageId.Foundations && typeof a.value !== 'number' && !(a.id in seeded)) {
+      seeded[a.id] = a.value
+      added = true
+    }
+  }
+  return added ? seeded : values
+}
+
+/** Takes the report of the same file read under another root and seeds the foundation answers it now derives. */
+function rootChanged(state: AppState, report: LoadReport, file: File): AppState {
+  // A late answer for a file that has since been replaced or dropped is stale.
+  if (state.loadedFile !== file) {
+    return { ...state, rereading: false }
+  }
+  const values = seedAnswers(state.answers.values, report)
+  const answers = values === state.answers.values ? state.answers : { ...state.answers, values }
+  return { ...state, rereading: false, loaded: report, answers }
 }
 
 /** Pure transition function of the store. */
@@ -266,8 +293,7 @@ export function reducer(state: AppState, action: Action): AppState {
       return { ...state, rereading: true }
     case 'rootChanged':
       // The same file under another root: not a new configuration, so stage, visits, answers and session stay.
-      // A late answer for a file that has since been replaced or dropped is stale.
-      return { ...state, rereading: false, loaded: state.loadedFile === action.file ? action.report : state.loaded }
+      return rootChanged(state, action.report, action.file)
     case 'rootRereadFailed':
       return { ...state, rereading: false }
     case 'goTo':

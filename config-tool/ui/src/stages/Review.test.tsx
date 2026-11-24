@@ -168,7 +168,8 @@ describe('Review', () => {
     expect(screen.getByText(/Read from/)).toHaveTextContent('Read from dsc (detected)')
     await userEvent.selectOptions(picker, WHOLE_FILE)
     expect(await screen.findByText(/Read from/)).toHaveTextContent(`Read from ${WHOLE_FILE} (as chosen)`)
-    const [, init] = fetchMock.mock.calls.at(-1) ?? []
+    // The re-read seeds the derived answers, so a render may follow the load.
+    const init = fetchMock.mock.calls.filter(([input]) => String(input).includes('/api/load')).at(-1)?.[1]
     expect(init?.body).toBe(FILE)
   })
 

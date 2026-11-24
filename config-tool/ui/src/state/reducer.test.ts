@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { VersionSource } from '../api/load'
-import type { Profile } from '../api/profile'
+import { toProfile, type Profile } from '../api/profile'
 import type { RoleChange } from '../api/roles'
 import { FOUNDATIONS, REPORT, TRIAL } from '../test/api'
 import { emptyAnswers, Environment, TargetType } from './answers'
@@ -31,7 +31,14 @@ describe('reducer', () => {
     const next = reducer(BUSY, { type: 'fileLoaded', report: REPORT, file: FILE })
     expect(next).toMatchObject({ entered: true, stage: StageId.Review, visited: [StageId.Review], expert: false, loaded: REPORT, loadedFile: FILE })
     expect(next.session).toEqual({ kubeconfig: KUBECONFIG, chosenContext: undefined })
-    expect(next.answers).toEqual({ values: {}, features: {}, target: { ...emptyAnswers().target, chartVersion: REPORT.chartVersion } })
+    expect(next.answers).toEqual({ values: { 'domain.base': 'example.org' }, features: {}, target: { ...emptyAnswers().target, chartVersion: REPORT.chartVersion } })
+  })
+
+  it('seeds only the foundation answers a loaded file derives, and saving keeps them', () => {
+    const next = reducer(BUSY, { type: 'fileLoaded', report: REPORT, file: FILE })
+    expect(next.answers.values).toEqual({ 'domain.base': 'example.org' })
+    expect(next.answers.features).toEqual({})
+    expect(toProfile({ ...next, foundations: FOUNDATIONS.foundations }).answers).toEqual({ 'domain.base': 'example.org' })
   })
 
   it.each([
@@ -47,10 +54,26 @@ describe('reducer', () => {
     expect(reducer(loaded, { type: 'newConfiguration' })).toMatchObject({ loaded: undefined, loadedFile: undefined })
   })
 
-  it('swaps only the report when the same file is re-read under another root', () => {
+  it('swaps only the report when the same file is re-read under another root and derives nothing new', () => {
     const loaded = { ...BUSY, stage: StageId.Review, loaded: REPORT, loadedFile: FILE }
+    const rerooted = { ...REPORT, root: 'dsc', answers: REPORT.answers.filter((a) => a.stage !== StageId.Foundations) }
+    const next = reducer(loaded, { type: 'rootChanged', report: rerooted, file: FILE })
+    expect(next).toEqual({ ...loaded, loaded: rerooted })
+    expect(next.answers).toBe(loaded.answers)
+  })
+
+  it.each([
+    ['seeds a foundation answer the new root derives', {}, { 'domain.base': 'example.org' }],
+    ['keeps an answer already given', { 'domain.base': 'given.org' }, { 'domain.base': 'given.org' }],
+    ['adds it next to other answers', { 'did.value': 'did:key:z6Mk' }, { 'did.value': 'did:key:z6Mk', 'domain.base': 'example.org' }],
+  ])('on a re-read under another root %s', (_, values: Record<string, string>, expected) => {
+    const wrongRoot = { ...REPORT, answers: [] }
+    const loaded = { ...BUSY, stage: StageId.Review, loaded: wrongRoot, loadedFile: FILE, answers: { ...BUSY.answers, values } }
     const rerooted = { ...REPORT, root: 'dsc' }
-    expect(reducer(loaded, { type: 'rootChanged', report: rerooted, file: FILE })).toEqual({ ...loaded, loaded: rerooted })
+    const next = reducer(loaded, { type: 'rootChanged', report: rerooted, file: FILE })
+    expect(next.answers.values).toEqual(expected)
+    expect(next.answers.features).toBe(loaded.answers.features)
+    expect(next.loaded).toBe(rerooted)
   })
 
   it.each([

@@ -3,7 +3,7 @@ format: 1
 model:
   chart: data-space-connector
   version: 10.16.0
-  revision: 7
+  revision: 8
 target:
   type: cluster
   context: k3s
@@ -39,5 +39,6 @@ answers:
   host.oid4vcManagement: provider-oid4vc-management.127.0.0.1.nip.io
   host.dcpManagement: provider-dcp-management.127.0.0.1.nip.io
   host.consentDataService: mp-data-service-consent.127.0.0.1.nip.io
+  dataspace.tirAddress: https://tir.127.0.0.1.nip.io/
 open: []
 secrets: {}

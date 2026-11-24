@@ -334,3 +334,37 @@ func TestCheckNeverEchoesValues(t *testing.T) {
 		}
 	}
 }
+
+func TestRecognizedFoundationValidation(t *testing.T) {
+	data, err := os.ReadFile(dataspaceFoundations)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tests := []struct {
+		name    string
+		rule    string
+		wantErr string
+	}{
+		{"url read as a value", "{path: keycloak.tirAddress, answer: dataspace.tirAddress, stage: foundations, kind: value}", ""},
+		{"bool read as a toggle", "{path: keycloak.register, answer: dataspace.autoRegistration, stage: foundations, kind: toggle}", ""},
+		{"other stage", "{path: keycloak.tirAddress, answer: dataspace.tirAddress, stage: features, kind: value}",
+			`answer "dataspace.tirAddress" is a foundation of stage foundations, not features`},
+		{"url read as a toggle", "{path: keycloak.tirAddress, answer: dataspace.tirAddress, stage: foundations, kind: toggle}",
+			"only a value rule reads"},
+		{"bool read as a value", "{path: keycloak.register, answer: dataspace.autoRegistration, stage: foundations, kind: value}",
+			"only a toggle rule reads"},
+		{"list", "{path: keycloak.types, answer: dataspace.credentialTypes, stage: foundations, kind: value}",
+			"which a single leaf cannot answer"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := Versions(fstest.MapFS{fixtureFile: {Data: append(data, []byte("\nrecognize:\n  - "+tc.rule+"\n")...)}})
+			switch {
+			case tc.wantErr == "" && err != nil:
+				t.Fatalf("err = %v, want none", err)
+			case tc.wantErr != "" && (err == nil || !strings.Contains(err.Error(), tc.wantErr)):
+				t.Fatalf("err = %v, want it to contain %q", err, tc.wantErr)
+			}
+		})
+	}
+}

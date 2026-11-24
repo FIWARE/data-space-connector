@@ -289,6 +289,9 @@ func readBundle(fsys fs.FS, file string) (versioned, error) {
 	if b.foundations, b.order, err = compileFoundations(b.Foundations, b.TopLevelKeys); err != nil {
 		return versioned{}, fmt.Errorf("%s: %w", file, err)
 	}
+	if err := checkRecognizedFoundations(b.rules, b.foundations); err != nil {
+		return versioned{}, fmt.Errorf("%s: %w", file, err)
+	}
 	if err := checkCheckRules(b.Checks, b.foundations); err != nil {
 		return versioned{}, fmt.Errorf("%s: %w", file, err)
 	}
@@ -316,6 +319,32 @@ func checkRuleRoots(rules []CompiledRule, keys []string) error {
 	for i, r := range rules {
 		if k, _ := r.Path[0].Key(); !slices.Contains(keys, k) {
 			return fmt.Errorf("recognize[%d]: %q is not in topLevelKeys", i, k)
+		}
+	}
+	return nil
+}
+
+// checkRecognizedFoundations refuses a rule that answers a foundation with another stage, or with a kind that
+// cannot read its type: toggle for a bool, value for a string type, nothing for a list.
+func checkRecognizedFoundations(rules []CompiledRule, fs []CompiledFoundation) error {
+	for i, r := range rules {
+		j := slices.IndexFunc(fs, func(f CompiledFoundation) bool { return f.ID == r.Answer })
+		if j < 0 {
+			continue
+		}
+		f := fs[j]
+		if r.Stage != f.Stage {
+			return fmt.Errorf("recognize[%d]: answer %q is a foundation of stage %s, not %s", i, r.Answer, f.Stage, r.Stage)
+		}
+		want := KindValue
+		switch {
+		case f.Type == TypeBool:
+			want = KindToggle
+		case !f.Type.IsString():
+			return fmt.Errorf("recognize[%d]: answer %q is a %s, which a single leaf cannot answer", i, r.Answer, f.Type)
+		}
+		if r.Kind != want {
+			return fmt.Errorf("recognize[%d]: answer %q is a %s, which only a %s rule reads", i, r.Answer, f.Type, want)
 		}
 	}
 	return nil
