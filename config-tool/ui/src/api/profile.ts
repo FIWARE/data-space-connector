@@ -1,5 +1,6 @@
 /** Save, open and list `.dscprofile.yaml` profiles through the loopback API (ADR 0015). */
 import { emptyAnswers, type Answers, type FeatureState, type Target } from '../state/answers'
+import { validAnswers } from '../state/foundations'
 import { isFieldId, type FieldId } from '../state/openQuestions'
 import type { AppState } from '../state/reducer'
 import { api } from './client'
@@ -71,7 +72,8 @@ export interface RecentProfiles {
   notes: string[]
 }
 
-/** The profile the UI's state stands for; the server fills in format, model and secrets and owns `catalogue`. */
+/** The profile the UI's state stands for; the server fills in format, model and secrets and owns `catalogue`.
+ *  An answer with a format error is left out, so one bad field does not make every profile request a 422. */
 export function toProfile(state: AppState): Profile {
   const { target, role, features, values } = state.answers
   return {
@@ -81,7 +83,7 @@ export function toProfile(state: AppState): Profile {
     target,
     role,
     features,
-    answers: values,
+    answers: validAnswers(values, state.foundations),
     open: state.open.map((field) => ({ field })),
     secrets: {},
   }

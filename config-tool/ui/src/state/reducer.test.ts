@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { VersionSource } from '../api/load'
 import type { Profile } from '../api/profile'
 import type { RoleChange } from '../api/roles'
-import { REPORT, TRIAL } from '../test/api'
+import { FOUNDATIONS, REPORT, TRIAL } from '../test/api'
 import { emptyAnswers, Environment, TargetType } from './answers'
 import { initialState, reducer, type Action, type AppState } from './reducer'
 import { StageId } from './stageIds'
@@ -300,5 +300,45 @@ describe('reducer: roles', () => {
     expect(next.answers).toEqual({ ...provider.answers, features: toggled })
     expect(next.answers).not.toBe(provider.answers)
     expect(next).toMatchObject({ stage: provider.stage, profileModel: DSC_MODEL, chartSwitch: undefined })
+  })
+})
+
+describe('reducer: foundation answers', () => {
+  const ANSWERED: AppState = {
+    ...BUSY,
+    answers: { ...BUSY.answers, target: { ...BUSY.answers.target, chart: 'data-space-connector' }, values: { 'domain.base': 'example.org', 'host.verifier': 'v.example.org' } },
+    open: ['answers.host.verifier', 'target.namespace'],
+    foundations: FOUNDATIONS.foundations,
+  }
+
+  it('drops the answers, their markers and the foundations on a chart change, which the new chart may not declare', () => {
+    const next = reducer(ANSWERED, { type: 'setTarget', target: { chart: 'trust-anchor', chartVersion: '' } })
+    expect(next.answers.values).toEqual({})
+    expect(next.open).toEqual(['target.namespace'])
+    expect(next.foundations).toBeUndefined()
+  })
+
+  it('keeps answers, markers and foundations when the chart stays', () => {
+    const next = reducer(ANSWERED, { type: 'setTarget', target: { namespace: 'other' } })
+    expect(next.answers.values).toBe(ANSWERED.answers.values)
+    expect(next.open).toBe(ANSWERED.open)
+    expect(next.foundations).toBe(ANSWERED.foundations)
+  })
+
+  it('drops the answers and markers the loaded foundations do not declare', () => {
+    const next = reducer(ANSWERED, { type: 'foundationsLoaded', foundations: FOUNDATIONS.foundations })
+    expect(next.answers.values).toEqual({ 'domain.base': 'example.org' })
+    expect(next.open).toEqual(['target.namespace'])
+  })
+
+  it('keeps the answers object when the loaded foundations declare every answer, so the saved profile stays current', () => {
+    const declared = { ...ANSWERED, answers: { ...ANSWERED.answers, values: { 'domain.base': 'example.org' } }, open: ['answers.domain.base'] as AppState['open'] }
+    const next = reducer(declared, { type: 'foundationsLoaded', foundations: FOUNDATIONS.foundations })
+    expect(next.answers).toBe(declared.answers)
+    expect(next.open).toBe(declared.open)
+  })
+
+  it.each<Action>([{ type: 'newConfiguration' }, { type: 'fileLoaded', report: REPORT, file: FILE }])('forgets the foundations on $type', (action) => {
+    expect(reducer(ANSWERED, action).foundations).toBeUndefined()
   })
 })

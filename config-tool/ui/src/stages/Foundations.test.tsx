@@ -8,6 +8,7 @@ import { PUBLIC_NAMES_URL, repositoryDocUrl } from '../links'
 import { STAGES } from '../stages'
 import { initialState, type AppState } from '../state/reducer'
 import { StageId } from '../state/stageIds'
+import { MSG_DOMAIN, MSG_HOSTNAME, MSG_PLAIN_LINE } from '../state/foundations'
 import { StoreProvider } from '../state/store'
 import { FOUNDATIONS, mockApi, type FoundationFakes, type RenderBody } from '../test/api'
 import { usedByText } from './foundationText'
@@ -23,6 +24,7 @@ const DISPLAY_NAME = foundation('org.displayName')
 const BASE_DOMAIN = foundation('domain.base')
 const KEYCLOAK_HOST = foundation('host.keycloak')
 const BASE = 'example.org'
+const OLD_BASE = 'old.org'
 const FRONTEND_URL = 'keycloak.realm.frontendUrl'
 
 const ON_FOUNDATIONS: AppState = {
@@ -100,15 +102,39 @@ describe('Foundations', () => {
     await waitFor(() => expect(screen.getByLabelText(BASE_DOMAIN.label)).toHaveFocus())
   })
 
-  it('renders on entry without a diff and shows the grouped diff after a domain change', async () => {
-    const fetchMock = renderFoundations()
+  it('renders on entry as the baseline without a diff and shows the grouped diff after a domain change', async () => {
+    const answered = { ...ON_FOUNDATIONS, answers: { ...ON_FOUNDATIONS.answers, values: { 'domain.base': OLD_BASE } } }
+    const fetchMock = renderFoundations(answered)
+    const renders = () => fetchMock.mock.calls.filter(([url]) => url === '/api/render')
+    await waitFor(() => expect(renders()).toHaveLength(1))
+    // The entry render adds every leaf against the server's empty tree; that is not an edit, so it is not shown.
+    await screen.findByLabelText(BASE_DOMAIN.label)
+    expect(screen.queryByRole('group', { name: DIFF_HEADING })).not.toBeInTheDocument()
+    await userEvent.clear(await domainInput())
     await userEvent.type(await domainInput(), BASE)
     const diff = within(await screen.findByRole('group', { name: DIFF_HEADING }))
     const keycloak = within(diff.getByRole('group', { name: KEYCLOAK_HOST.label }))
-    expect(keycloak.getByText(FRONTEND_URL).closest('li')).toHaveTextContent(`— → https://keycloak.${BASE}`)
-    const renders = fetchMock.mock.calls.filter(([url]) => url === '/api/render')
-    const last = JSON.parse(String((renders.at(-1)?.[1] as RequestInit).body)) as RenderBody
+    expect(keycloak.getByText(FRONTEND_URL).closest('li')).toHaveTextContent(`https://keycloak.${OLD_BASE} → https://keycloak.${BASE}`)
+    const last = JSON.parse(String((renders().at(-1)?.[1] as RequestInit).body)) as RenderBody
     expect(last.profile.answers).toEqual({ 'domain.base': BASE })
+  })
+
+  it.each([
+    [BASE_DOMAIN.label, 'Example.org', MSG_HOSTNAME],
+    [BASE_DOMAIN.label, 'localhost', MSG_DOMAIN],
+    [DISPLAY_NAME.label, 'Acme ', MSG_PLAIN_LINE],
+  ])('shows a format error on %s %j, counts it and keeps it out of the profile', async (label, value, message) => {
+    const fetchMock = renderFoundations()
+    const input = await screen.findByLabelText(label)
+    await userEvent.type(input, value)
+    expect(input).toHaveAttribute('aria-invalid', 'true')
+    expect(input).toHaveAccessibleDescription(expect.stringContaining(message))
+    expect(screen.getByText(/✖ \d+ errors/)).toHaveTextContent('✖ 1 errors')
+    // Save, the role preset and the features toggle send the same profile, so none of them is refused for it.
+    await waitFor(() => expect(fetchMock.mock.calls.filter(([url]) => url === '/api/render').length).toBeGreaterThan(1))
+    const last = fetchMock.mock.calls.filter(([url]) => url === '/api/render').at(-1)
+    expect((JSON.parse(String((last?.[1] as RequestInit).body)) as RenderBody).profile.answers).toEqual({})
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 
   it('flags a pinned leaf with the kept value and the value it would have become', async () => {

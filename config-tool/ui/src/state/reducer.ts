@@ -5,7 +5,7 @@ import type { Foundation } from '../api/foundations'
 import type { ChartSwitch, RoleChange } from '../api/roles'
 import type { Trial } from '../api/trial'
 import { emptyAnswers, Environment, type Answers, type FeatureState, type Session, type Target } from './answers'
-import { answerFieldId, fieldStage, type FieldId, type QuestionId } from './openQuestions'
+import { answerFieldId, answerId, fieldStage, isAnswerFieldId, type FieldId, type QuestionId } from './openQuestions'
 import { FIRST_STAGE, StageId } from './stageIds'
 
 /** Store contents; `entered` is false while S0 (Start) is shown. */
@@ -134,6 +134,7 @@ function startOver(state: AppState, stage: StageId, answers: Answers, loaded?: L
     chartSwitch: undefined,
     roleCleared: undefined,
     roleChanges: [],
+    foundations: undefined,
   }
 }
 
@@ -177,6 +178,8 @@ function roleApplied(state: AppState, { profile, chartSwitch, change }: Extract<
 }
 
 // Every role deploys exactly one chart, so a chart change drops the role rather than leave one the server refuses.
+// The answers go too: which ids the new chart declares is only known once its foundations arrive, and an undeclared
+// one would make every profile request a 422. A role pick that switches charts carries them (ADR 0019).
 function setTarget(state: AppState, change: Partial<Target>): AppState {
   const before = state.answers.target
   const target = { ...before, ...change }
@@ -186,7 +189,9 @@ function setTarget(state: AppState, change: Partial<Target>): AppState {
   const role = state.answers.role
   return {
     ...state,
-    answers: { ...state.answers, target, role: undefined, features: {} },
+    answers: { ...state.answers, target, role: undefined, features: {}, values: {} },
+    open: state.open.filter((field) => !isAnswerFieldId(field)),
+    foundations: undefined,
     profileCatalogue: undefined,
     versionOpen,
     chartSwitch: undefined,
@@ -198,6 +203,21 @@ function setTarget(state: AppState, change: Partial<Target>): AppState {
 function setAnswer(values: Record<string, string>, id: string, value: string): Record<string, string> {
   if (value !== '') return { ...values, [id]: value }
   return Object.fromEntries(Object.entries(values).filter(([key]) => key !== id))
+}
+
+// A chart version that no longer declares an answer drops it and its marker; the server would refuse both.
+function foundationsLoaded(state: AppState, foundations: readonly Foundation[]): AppState {
+  const declared = new Set(foundations.map((f) => f.id))
+  const values = Object.fromEntries(Object.entries(state.answers.values).filter(([id]) => declared.has(id)))
+  const open = state.open.filter((field) => !isAnswerFieldId(field) || declared.has(answerId(field)))
+  const pruned = Object.keys(values).length !== Object.keys(state.answers.values).length
+  // Unchanged answers and markers keep their objects, so loading the foundations does not make the saved profile stale.
+  return {
+    ...state,
+    foundations,
+    answers: pruned ? { ...state.answers, values } : state.answers,
+    open: open.length === state.open.length ? state.open : open,
+  }
 }
 
 function loadedAnswers(report: LoadReport): Answers {
@@ -235,7 +255,7 @@ export function reducer(state: AppState, action: Action): AppState {
     case 'setAnswer':
       return { ...state, answers: { ...state.answers, values: setAnswer(state.answers.values, action.id, action.value) } }
     case 'foundationsLoaded':
-      return { ...state, foundations: action.foundations }
+      return foundationsLoaded(state, action.foundations)
     case 'rootRereadStarted':
       return { ...state, rereading: true }
     case 'rootChanged':

@@ -6,6 +6,7 @@ import { fetchRender, type Change, type ChangeGroup } from '../api/render'
 import { AskLater } from '../chrome/AskLater'
 import { PUBLIC_NAMES_URL, repositoryDocUrl } from '../links'
 import { useStore } from '../state/context'
+import { checkAnswer } from '../state/foundations'
 import { answerFieldId, fieldElementId, fieldStage } from '../state/openQuestions'
 import { StageId } from '../state/stageIds'
 import { DerivedAnswers } from './DerivedAnswers'
@@ -67,21 +68,29 @@ function DocLink({ foundation }: { foundation: Foundation }) {
   )
 }
 
-/** One answer the user gives: input, help, doc link, "ask later" and its fan-out. */
+/** One answer the user gives: input, format error, help, doc link, "ask later" and its fan-out. */
 function AnswerField({ foundation }: { foundation: Foundation }) {
   const { state, dispatch } = useStore()
   const field = answerFieldId(foundation.id)
   const id = fieldElementId(field)
+  const value = state.answers.values[foundation.id]
+  const error = value === undefined ? undefined : checkAnswer(foundation.type, value)
   return (
     <div className="row">
       <label htmlFor={id}>{foundation.label}</label>
       <input
         id={id}
-        value={state.answers.values[foundation.id] ?? ''}
-        aria-describedby={`${id}-help`}
+        value={value ?? ''}
+        aria-invalid={error !== undefined}
+        aria-describedby={error ? `${id}-error ${id}-help` : `${id}-help`}
         onChange={(e) => dispatch({ type: 'setAnswer', id: foundation.id, value: e.target.value })}
       />
       <AskLater field={field} />
+      {error && (
+        <p className="field-error" id={`${id}-error`}>
+          {error}
+        </p>
+      )}
       <p className="hint" id={`${id}-help`}>
         {foundation.help} <DocLink foundation={foundation} /> <UsedBy foundation={foundation} />
       </p>

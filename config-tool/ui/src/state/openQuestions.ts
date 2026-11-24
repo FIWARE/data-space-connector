@@ -1,6 +1,7 @@
 /** Open questions: fields left unanswered or deliberately marked "ask later", each counted once. */
 import type { Foundation } from '../api/foundations'
 import { TargetType, type Target } from './answers'
+import { answerErrors } from './foundations'
 import type { Issues } from './issues'
 import type { AppState } from './reducer'
 import { StageId } from './stageIds'
@@ -30,6 +31,16 @@ export function targetFieldId(field: TargetField): TargetFieldId {
 /** The field id of a foundation answer. */
 export function answerFieldId(id: string): AnswerFieldId {
   return `${ANSWERS_PREFIX}${id}`
+}
+
+/** Whether `field` names a foundation answer. */
+export function isAnswerFieldId(field: QuestionId): field is AnswerFieldId {
+  return field.startsWith(ANSWERS_PREFIX)
+}
+
+/** The answer id an answer's field id names. */
+export function answerId(field: AnswerFieldId): string {
+  return field.slice(ANSWERS_PREFIX.length)
 }
 
 /** Whether `id` is a field id the UI knows: a Target field or any foundation answer (the server checks the id). */
@@ -125,9 +136,10 @@ export function roleIssues(state: AppState): Issues {
   return { warnings: 0, errors: 0, open: openCount(state, StageId.Role) }
 }
 
-/** The Foundations stage's counters: its marked answers. */
+/** The Foundations stage's counters: its marked answers and the answers with a format error. */
 export function foundationIssues(state: AppState): Issues {
-  return { warnings: 0, errors: 0, open: openCount(state, StageId.Foundations) }
+  const errors = Object.keys(answerErrors(state.answers.values, state.foundations)).length
+  return { warnings: 0, errors, open: openCount(state, StageId.Foundations) }
 }
 
 function openCount(state: AppState, stage: StageId): number {

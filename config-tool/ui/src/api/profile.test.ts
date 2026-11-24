@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { emptyAnswers, TargetType } from '../state/answers'
 import { initialState, reducer, type AppState } from '../state/reducer'
-import { mockApi, REPORT, type SaveBody } from '../test/api'
+import { FOUNDATIONS, mockApi, REPORT, type SaveBody } from '../test/api'
 import { defaultProfilePath, fromProfile, profileName, saveProfile, sinceSaved, toProfile } from './profile'
 
 const PATH = '/home/me/provider.dscprofile.yaml'
@@ -67,5 +67,12 @@ describe('api/profile', () => {
     ['not a time', 'not a time'],
   ])('says %s was saved %s', (savedAt, expected) => {
     expect(sinceSaved(savedAt, NOW)).toBe(expected)
+  })
+})
+
+describe('api/profile: foundation answers', () => {
+  it('leaves an answer with a format error out of the profile, so the server does not refuse it', () => {
+    const state: AppState = { ...ENTERED, answers: { ...ENTERED.answers, values: { 'domain.base': 'Example.org', 'org.displayName': 'Acme' } }, foundations: FOUNDATIONS.foundations }
+    expect(toProfile(state).answers).toEqual({ 'org.displayName': 'Acme' })
   })
 })
