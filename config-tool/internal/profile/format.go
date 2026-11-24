@@ -215,7 +215,7 @@ func (p Profile) validateAnswers(b *model.Bundle) []FieldError {
 			errs = append(errs, FieldError{answersFieldPrefix + k, "is not a known answer id"})
 			continue
 		}
-		if err := f.Type.Check(p.Answers[k]); err != nil {
+		if err := f.Check(p.Answers[k]); err != nil {
 			errs = append(errs, FieldError{answersFieldPrefix + k, err.Error()})
 		}
 	}

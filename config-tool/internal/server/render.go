@@ -34,7 +34,9 @@ type foundationBody struct {
 	Stage model.Stage          `json:"stage"`
 	Type  model.FoundationType `json:"type"`
 	// Default is the template a derived answer comes from; empty when there is none.
-	Default string             `json:"default"`
+	Default string `json:"default"`
+	// Options are the values a choice offers; empty for every other type.
+	Options []model.Option     `json:"options"`
 	Label   string             `json:"label"`
 	Help    string             `json:"help"`
 	Doc     string             `json:"doc"`
@@ -125,7 +127,8 @@ func (s *Server) handleFoundations(w http.ResponseWriter, r *http.Request) {
 		}
 		slices.Sort(components)
 		body.Foundations = append(body.Foundations, foundationBody{
-			ID: f.ID, Stage: f.Stage, Type: f.Type, Default: f.Default, Label: f.Label, Help: f.Help, Doc: f.Doc,
+			ID: f.ID, Stage: f.Stage, Type: f.Type, Default: f.Default, Options: append([]model.Option{}, f.Options...),
+			Label: f.Label, Help: f.Help, Doc: f.Doc,
 			Targets: targets, Count: len(targets), Components: components,
 		})
 	}

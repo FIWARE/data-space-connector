@@ -33,7 +33,7 @@ func Targets(b model.Bundle, answerID string) []TargetRef {
 	// FoundationOrder puts every default after the answers it references, so one pass closes the set.
 	for _, id := range b.FoundationOrder() {
 		f, _ := b.Foundation(id)
-		if f.DefaultTemplate() != nil && slices.ContainsFunc(f.Refs, func(r string) bool { return reach[r] }) {
+		if f.DefaultTemplate() != nil && slices.ContainsFunc(f.DefaultRefs(), func(r string) bool { return reach[r] }) {
 			reach[id] = true
 		}
 	}

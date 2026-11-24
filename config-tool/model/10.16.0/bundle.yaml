@@ -4,8 +4,12 @@
 #
 # The foundations list (ADR 0020) holds the cross-cutting answers of Stage 3 and the chart keys they reach:
 #   id       dotted answer id (domain.base): the key in the profile's answers, open field answers.<id>
-#   type     string | hostname | domain, each checked with one pattern
-#   default  a template over other answers; the answer is derived only while all of them are answered
+#   type     string | hostname | domain | did, each checked with one pattern; choice, one of its options
+#   options  a choice's {value, label, note}; note is optional text shown at the point of choice
+#   default  a template over other answers; the answer is derived only while all of them are answered.
+#            Only a choice may have a constant default, which must be one of its options
+#   defaultWhen {id, equals}: the default applies only while the resolved answer id equals equals
+#   prefix   a template over other answers that the answer, given or derived, must start with
 #   targets  {path, fn, args, sep}; a target referencing an unanswered id writes nothing
 # Templates are Go text/template holding only text and {{ .id }} actions. The functions:
 #   tpl    renders its one template arg

@@ -16,12 +16,14 @@ const (
 
 // foundationJSON is a decoded foundation, target paths kept as strings.
 type foundationJSON struct {
-	ID         string   `json:"id"`
-	Stage      string   `json:"stage"`
-	Default    string   `json:"default"`
-	Label      string   `json:"label"`
-	Count      int      `json:"count"`
-	Components []string `json:"components"`
+	ID      string `json:"id"`
+	Stage   string `json:"stage"`
+	Default string `json:"default"`
+	// Options is nil only when the response holds null.
+	Options    []json.RawMessage `json:"options"`
+	Label      string            `json:"label"`
+	Count      int               `json:"count"`
+	Components []string          `json:"components"`
 	Targets    []struct {
 		Path      string `json:"path"`
 		Component string `json:"component"`
@@ -86,8 +88,8 @@ func TestFoundationsEndpoint(t *testing.T) {
 			var ids []string
 			for _, f := range foundations {
 				ids = append(ids, f.ID)
-				if f.Count != len(f.Targets) || f.Label == "" || f.Stage == "" {
-					t.Errorf("foundation %s = %+v, want a label, a stage and count = len(targets)", f.ID, f)
+				if f.Count != len(f.Targets) || f.Label == "" || f.Stage == "" || f.Options == nil {
+					t.Errorf("foundation %s = %+v, want a label, a stage, an options list and count = len(targets)", f.ID, f)
 				}
 			}
 			var listed []string

@@ -1,0 +1,23 @@
+# A default whose prefix names an answer its template does not: only tag.code gates the default, while
+# tag.scheme only checks the value once it is answered.
+chart: data-space-connector
+version: 1.0.0
+revision: 1
+topLevelKeys: [keycloak, scorpio]
+foundations:
+  - id: tag.code
+    stage: foundations
+    type: string
+    label: Code
+  - id: tag.scheme
+    stage: foundations
+    type: string
+    label: Scheme
+  - id: tag.value
+    stage: foundations
+    type: string
+    default: "x-{{ .tag.code }}"
+    prefix: "{{ .tag.scheme }}"
+    label: Tag
+    targets:
+      - {path: keycloak.issuerDid, fn: copy, args: ["{{ .tag.value }}"]}

@@ -1,7 +1,22 @@
 import { describe, expect, it } from 'vitest'
-import type { FoundationType } from '../api/foundations'
+import type { Foundation, FoundationOption, FoundationType } from '../api/foundations'
 import { FOUNDATIONS } from '../test/api'
-import { answerErrors, checkAnswer, MAX_HOSTNAME_LENGTH, MSG_DOMAIN, MSG_HOSTNAME, MSG_PLAIN_LINE, validAnswers } from './foundations'
+import {
+  answerErrors,
+  checkAnswer,
+  MAX_HOSTNAME_LENGTH,
+  MSG_DID,
+  MSG_DOMAIN,
+  MSG_HOSTNAME,
+  MSG_PLAIN_LINE,
+  msgChoice,
+  validAnswers,
+} from './foundations'
+
+const METHODS: FoundationOption[] = [
+  { value: 'did:web', label: 'Web', note: '' },
+  { value: 'did:key', label: 'Key', note: 'Meant for local development.' },
+]
 
 describe('checkAnswer', () => {
   // Mirrors TestFoundationTypeCheck in Go, so both sides refuse the same answers.
@@ -28,8 +43,35 @@ describe('checkAnswer', () => {
     ['domain', 'localhost', MSG_DOMAIN],
     ['domain', 'Example.org', MSG_HOSTNAME],
     ['domain', 'https://example.org', MSG_HOSTNAME],
+    ['did', 'did:web:example.org', undefined],
+    ['did', 'did:web:example.org%3A8443:user:alice', undefined],
+    ['did', 'did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK', undefined],
+    ['did', 'did:web:', MSG_DID],
+    ['did', 'did:web', MSG_DID],
+    ['did', 'DID:web:example.org', MSG_DID],
+    ['did', 'did:Web:example.org', MSG_DID],
+    ['did', 'did:web:example.org/path', MSG_DID],
+    ['did', 'did:web:a"b', MSG_DID],
+    ['did', 'did:web:a b', MSG_DID],
+    ['did', 'did:web:example.org:', MSG_DID],
+    ['did', 'did:web::', MSG_DID],
+    ['did', 'did:web:a%', MSG_DID],
+    ['did', 'did:web:a%zz', MSG_DID],
   ])('%s %j → %s', (type, value, message) => {
     expect(checkAnswer(type, value)).toBe(message)
+  })
+
+  // Mirrors TestCompiledFoundationCheck in Go.
+  it.each<[string, string | undefined]>([
+    ['did:web', undefined],
+    ['did:key', undefined],
+    ['did:ebsi', 'must be one of did:web, did:key'],
+  ])('choice %j → %s', (value, message) => {
+    expect(checkAnswer('choice', value, METHODS)).toBe(message)
+  })
+
+  it('refuses every choice when no options are known', () => {
+    expect(checkAnswer('choice', 'did:web')).toBe(msgChoice([]))
   })
 })
 
@@ -38,6 +80,24 @@ describe('answer validity', () => {
 
   it('reports the format errors of declared answers only', () => {
     expect(answerErrors(values, FOUNDATIONS.foundations)).toEqual({ 'org.displayName': MSG_PLAIN_LINE })
+  })
+
+  it('checks a choice against its options', () => {
+    const method: Foundation = {
+      stage: 'foundations',
+      id: 'did.method',
+      type: 'choice',
+      default: 'did:web',
+      options: METHODS,
+      label: 'DID method',
+      help: '',
+      doc: '',
+      targets: [],
+      count: 0,
+      components: [],
+    }
+    expect(answerErrors({ 'did.method': 'did:ebsi' }, [method])).toEqual({ 'did.method': msgChoice(METHODS) })
+    expect(answerErrors({ 'did.method': 'did:key' }, [method])).toEqual({})
   })
 
   it.each([
