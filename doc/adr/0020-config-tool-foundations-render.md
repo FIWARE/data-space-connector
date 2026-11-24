@@ -86,8 +86,10 @@ scalar leaves the leaf pinned without a kept value, and `Nested()` omits it so t
 
 `render.Diff(b, prev, next)` groups changes by foundation in the order of bundle `b` as `added`, `changed`, `removed` or
 `pinned`. A pinned leaf is reported when its `rendered` value changed, with the kept value alongside. The server
-keeps the last tree per session and resets it on load and on profile open, so the first render diffs against an
-empty tree.
+keeps the last tree per session and resets it on load, on profile open and when a render names another source than
+the previous one, so the first render of a configuration diffs against an empty tree. The overrides layer is the load
+the request's `sourceSha256` names, resolved as on save (ADR 0015 §2): no sha renders without overrides, so a new
+configuration started after a load does not pin the abandoned file's hand edits.
 
 ### 9. A chart switch carries declared foundation answers
 

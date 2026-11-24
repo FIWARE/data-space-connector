@@ -11,6 +11,13 @@ import (
 	"github.com/FIWARE/data-space-connector/config-tool/internal/render"
 )
 
+// renderRequest is the body of POST /api/render; SourceSHA256 names the loaded slot as on save, and
+// empty renders without overrides whatever the server holds.
+type renderRequest struct {
+	Profile      profile.Profile `json:"profile"`
+	SourceSHA256 string          `json:"sourceSha256"`
+}
+
 // renderResponse is the tree of POST /api/render and its change against the previous render.
 type renderResponse struct {
 	Tree render.Tree     `json:"tree"`
@@ -37,12 +44,12 @@ type foundationBody struct {
 	Components []string `json:"components"`
 }
 
-// handleRender renders the profile's answers against the bundle it names, pinning the loaded file's
-// hand edits, and diffs the tree against the previous render, which it then replaces.
+// handleRender renders the profile's answers against the bundle it names, pinning the hand edits of the
+// load sourceSha256 names, and diffs the tree against the previous render of that same source.
 func (s *Server) handleRender(w http.ResponseWriter, r *http.Request) {
-	var p profile.Profile
-	if err := decodeJSON(w, r, &p); err != nil {
-		writeError(w, bodyErrorStatus(err), "invalid profile: "+err.Error(), "")
+	var req renderRequest
+	if err := decodeJSON(w, r, &req); err != nil {
+		writeError(w, bodyErrorStatus(err), "invalid render request: "+err.Error(), "")
 		return
 	}
 	bundles, err := model.Versions(s.models)
@@ -50,7 +57,9 @@ func (s *Server) handleRender(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err.Error(), "")
 		return
 	}
-	if _, ok := s.prepareProfile(w, bundles, &p, ""); !ok {
+	p := req.Profile
+	res, ok := s.prepareProfile(w, bundles, &p, req.SourceSHA256)
+	if !ok {
 		return
 	}
 	// prepareProfile validated p, so its bundle is shipped.
@@ -58,13 +67,21 @@ func (s *Server) handleRender(w http.ResponseWriter, r *http.Request) {
 	// Held across the render, so a concurrent load cannot reset lastRender to a tree it did not pin.
 	s.loadMu.Lock()
 	defer s.loadMu.Unlock()
-	tree, err := render.Render(*b, p, render.Options{Overrides: overridesFor(s.loaded, b.Chart)})
+	if res != nil && res != s.loaded {
+		writeError(w, http.StatusUnprocessableEntity, errSourceMismatch.Error(), "")
+		return
+	}
+	tree, err := render.Render(*b, p, render.Options{Overrides: overridesFor(res, b.Chart)})
 	if err != nil {
 		writeError(w, http.StatusUnprocessableEntity, err.Error(), "")
 		return
 	}
+	// A render of another source (e.g. a new configuration after a load) starts a new baseline.
+	if s.lastRenderSHA != req.SourceSHA256 {
+		s.resetRender()
+	}
 	diff := render.Diff(*b, s.lastRender, tree)
-	s.lastRender = tree
+	s.lastRender, s.lastRenderSHA = tree, req.SourceSHA256
 	writeJSON(w, renderResponse{Tree: tree, Diff: diff})
 }
 

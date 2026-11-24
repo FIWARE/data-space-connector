@@ -410,10 +410,11 @@ they fan out to (ADR 0020). Each has a dotted `id`, a `type` (`string`, `hostnam
 cycle among defaults, a path outside `topLevelKeys`, a list index gap or two targets on one path fails to load.
 A profile's `answers` accepts exactly the declared ids, and `open` accepts `answers.<id>` for them.
 `GET /api/foundations?chart=&version=` lists them with label, help, doc, type, default, stage and their fan-out
-(`targets`, `count`, sorted `components`), transitive through derived hosts. `POST /api/render` takes a profile
-(422 with field errors when it does not validate), renders it with the loaded file as the overrides layer and returns
-`{tree, diff}`. The diff is against the previous render of the session; a load or a profile open resets it, and a
-hand-edited leaf of the loaded file is kept and reported `pinned` only when its rendered value changes (ADR 0020 §7-8).
+(`targets`, `count`, sorted `components`), transitive through derived hosts. `POST /api/render` takes `{profile, sourceSha256}`
+(422 with field errors when the profile does not validate, or when the sha is not the loaded file's), renders it with
+the load the sha names as the overrides layer (none when it is empty, as on save) and returns `{tree, diff}`. The diff
+is against the previous render of the same source; a load, a profile open or a render of another source resets it,
+and a hand-edited leaf of the loaded file is kept and reported `pinned` only when its rendered value changes (ADR 0020 §7-8).
 `roles:` rate the features of `features:`, and `roleMatrix:` needs `roles:`.
 Two charts are shipped: `data-space-connector` (`model/10.16.0/`) and `trust-anchor` (`model/1.3.6/`, only
 `topLevelKeys` and two foundations without targets, no rules and no roles). Their version numbers differ, so they fit the one-bundle-per-version layout.

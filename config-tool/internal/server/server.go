@@ -60,7 +60,9 @@ type Server struct {
 	loaded *load.Result
 	// lastRender is the previous POST /api/render tree; a load or profile open empties it.
 	lastRender render.Tree
-	// loadMu guards loaded and lastRender.
+	// lastRenderSHA is the sourceSha256 lastRender was rendered with; a render of another one diffs against empty.
+	lastRenderSHA string
+	// loadMu guards loaded, lastRender and lastRenderSHA.
 	loadMu sync.Mutex
 
 	// trial holds the local trial descriptor and values; tests swap it before the first trial request.
