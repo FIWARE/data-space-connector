@@ -157,14 +157,24 @@ guide that explains it.
 > [hairpin DNS](../deployment-integration/roles/PREREQUISITES.md#public-names-have-to-resolve-inside-the-cluster)
 > is warned about, because the generated configuration depends on it.
 
-The shipped stage differs from this design in two points, and from the [S3 mockup](MOCKUPS.md#s3--foundations) in a third
+The shipped stage differs from this design in the points below, and from the [S3 mockup](MOCKUPS.md#s3--foundations) in the last
 ([ADR 0020](../adr/0020-config-tool-foundations-render.md), [Foundations](../../config-tool/README.md#foundations-stage-3)):
 
-- **US-3.1 and US-3.2 have shipped.** *Organization* holds the display name, the DID method (`did:web` or `did:key`,
+- **US-3.1, US-3.2 and US-3.3 have shipped.** *Organization* holds the display name, the DID method (`did:web` or `did:key`,
   each with its note) and the DID, derived as `did:web:<base domain>` with *Edit* and *Reset to derived*, or asked for
   under `did:key`. *Network* holds the base domain and the derived hosts. A `did:key` in production gets a warning under
-  the method and on Review, which never blocks. The data space panel (US-3.3) and the rest of the Network and Platform
-  panels come with their own stories.
+  the method and on Review, which never blocks. The rest of the Network and Platform panels come with their own stories.
+- ***Data space*** ([ADR 0022](../adr/0022-config-tool-data-space-parameters.md)) holds the TIR address with a
+  *Check* button, an ordered list of credential types (type and optional description), and whether participant
+  registration is automatic. Only the TIR address writes a chart key, the verifier's `tirAddress`. The other two are
+  answers that later stories read: chart 10.16.0 has no key for automatic registration, and the credential types seed
+  the verifier's service registration, which US-5.6 owns. With credential verification on, a missing TIR address is
+  an error that blocks generating. The reachability result shows on Review as information only and is not saved.
+- **The import reads three optional descriptor keys**: `tir_address`, `credential_types` (strings or
+  `{type, description}`) and `participant_registration` (`automatic` or `manual`). It previews the changes and applies
+  them only on *Apply*. No data space publishes these keys yet, the chart's own descriptor included, so today the
+  preview says so and the values are typed in. Check and import are the tool's only requests to the network, and each
+  runs only on its button.
 - **Derived hosts are read-only** and always use `<component>.<base>`. Editing one is US-3.4, and the path-prefix
   scheme is not offered. The counts are measured (76 values in 7 components for the base domain), so the mockup's
   41 is illustrative.
