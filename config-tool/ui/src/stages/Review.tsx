@@ -1,4 +1,4 @@
-/** S7 Review: open questions, deliberate feature choices and the load report of an opened values.yaml; the validation and generate panes come with Epic 6. */
+/** S7 Review: open questions, hand-set answers, deliberate feature choices and the load report of an opened values.yaml; the validation and generate panes come with Epic 6. */
 import { useState } from 'react'
 import { useSave } from '../chrome/saveContext'
 import { loadValues, RootSource, VersionSource, type DerivedAnswer, type LoadReport } from '../api/load'
@@ -9,6 +9,7 @@ import { STAGE_LABELS, StageId } from '../state/stageIds'
 import { DeliberateChoices } from './DeliberateChoices'
 import { AnswerList } from './DerivedAnswers'
 import { EntryTable, Overrides } from './Overrides'
+import { HandSet } from './HandSet'
 import { Placeholder } from './Placeholder'
 import { RoleChanges } from './RoleChanges'
 import { TrialReview } from './TrialReview'
@@ -199,6 +200,7 @@ function Report({ report, file }: { report: LoadReport; file?: File }) {
       </p>
       <ProfileNotes />
       <OpenQuestions />
+      <HandSet />
       <DeliberateChoices />
       <RoleChanges />
       <RootPicker report={report} file={file} />
@@ -227,7 +229,7 @@ function Report({ report, file }: { report: LoadReport; file?: File }) {
   )
 }
 
-/** Review stage: the trial's releases in the local trial; else profile notes and open questions above the load report
+/** Review stage: the trial's releases in the local trial; else profile notes, open questions and hand-set answers above the load report
  *  when a file was opened, otherwise above the Epic 6 placeholder. */
 export function Review() {
   const { state } = useStore()
@@ -244,6 +246,7 @@ export function Review() {
     <Placeholder label={STAGE_LABELS[StageId.Review]} comingIn={REVIEW_COMING_IN}>
       <ProfileNotes />
       <OpenQuestions />
+      <HandSet />
       <DeliberateChoices />
       <RoleChanges />
       <Actions />

@@ -172,8 +172,9 @@ describe('Foundations', () => {
           },
         ],
       },
+      handSet: [],
     }
-    renderFoundations(ON_FOUNDATIONS, { render: (body) => (body.profile.answers?.['domain.base'] ? pinned : { tree: { leaves: [] }, diff: { groups: [] } }) })
+    renderFoundations(ON_FOUNDATIONS, { render: (body) => (body.profile.answers?.['domain.base'] ? pinned : { tree: { leaves: [] }, diff: { groups: [] }, handSet: [] }) })
     await userEvent.type(await domainInput(), BASE)
     const item = (await screen.findByText(PINNED_LABEL)).closest('li')
     expect(item).toHaveTextContent(FRONTEND_URL)

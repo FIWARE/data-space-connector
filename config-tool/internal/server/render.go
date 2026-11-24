@@ -18,10 +18,12 @@ type renderRequest struct {
 	SourceSHA256 string          `json:"sourceSha256"`
 }
 
-// renderResponse is the tree of POST /api/render and its change against the previous render.
+// renderResponse is the tree of POST /api/render, its change against the previous render and the
+// answers given in place of their derived default.
 type renderResponse struct {
-	Tree render.Tree     `json:"tree"`
-	Diff render.TreeDiff `json:"diff"`
+	Tree    render.Tree            `json:"tree"`
+	Diff    render.TreeDiff        `json:"diff"`
+	HandSet []render.HandSetAnswer `json:"handSet"`
 }
 
 // foundationsResponse lists a bundle's foundations in declaration order with their fan-out.
@@ -78,13 +80,18 @@ func (s *Server) handleRender(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnprocessableEntity, err.Error(), "")
 		return
 	}
+	handSet, err := render.HandSet(*b, p)
+	if err != nil {
+		writeError(w, http.StatusUnprocessableEntity, err.Error(), "")
+		return
+	}
 	// A render of another source (e.g. a new configuration after a load) starts a new baseline.
 	if s.lastRenderSHA != req.SourceSHA256 {
 		s.resetRender()
 	}
 	diff := render.Diff(*b, s.lastRender, tree)
 	s.lastRender, s.lastRenderSHA = tree, req.SourceSHA256
-	writeJSON(w, renderResponse{Tree: tree, Diff: diff})
+	writeJSON(w, renderResponse{Tree: tree, Diff: diff, HandSet: handSet})
 }
 
 // overridesFor is the loaded slot when it holds values of chart; paths of another chart would pin nonsense.
