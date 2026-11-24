@@ -117,13 +117,14 @@ The shipped stage differs from this design in five points
 - **A loaded values file wins over the preset.** A feature the file switches keeps the file's value as
   `source: loaded`, also when the role does not offer it. Only a file that enables a feature of another chart is
   refused.
-- **User toggles win over both.** They survive a role switch within the chart. A chart switch drops them, and its
-  notice names the ones it dropped.
+- **User toggles win over both.** They survive a role switch within the chart. A chart switch drops those
+  of the old chart, and its notice names the ones it dropped.
 - **A role change is confirmed from its summary.** Picking another role shows *turns on*, *turns off* and *kept*
   (user and loaded toggles, each with who set it) before anything is applied, and a chart switch adds what is
   carried over and what is dropped. Answers survive within the chart, also for a feature that goes off. A chart
-  switch keeps only the Target and Foundations answers and the open-question marks. Review lists *role changed
-  from X to Y* with the same summary, but only for the current session: the record is not saved in the profile.
+  switch keeps the target fields except chart and version, the Target and Foundations answers, the open-question
+  marks and the user toggles of features in the new chart, and drops the rest. Review lists *role changed from X
+  to Y* with the same summary, but only for the current session: the record is not saved in the profile.
 
 ## Stage 3 — Foundations
 
