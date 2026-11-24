@@ -27,7 +27,7 @@ method choice.
   | `decentralizedIam.vcAuthentication.vcverifier.deployment.verifier.did` | **target** |
   | `contract-management.did` | **target** |
   | `keycloak.issuerDid` | **target** |
-  | `keycloak.signingKey.did` | **target** |
+  | `keycloak.signingKey.did` | exclusion, US-5.5 (the keystore block): the chart default is `signingKey: {}` and `_realm.tpl` tests only `if .Values.keycloak.signingKey`, so emitting `did` alone yields a `java-keystore` provider with null store, password, alias and algorithm. It is also a key id (`<did>#key-1` in `dsp-provider.yaml`); unset, `_realm.tpl` falls back to `${DID}` |
   | `decentralizedIam.vcAuthentication.vcverifier.deployment.initContainers[0].args[0]` (curl TIR registration script) | exclusion, US-3.3: a k3s-local script, and the list has content no foundation owns |
   | `decentralizedIam.odrlAuthorization.odrl-pap.additionalEnvVars[i].value` (`GENERAL_ORGANIZATION_DID`) | exclusion, US-5.6: an env list with other content |
   | `marketplace.bizEcosystemLogicProxy.additionalEnvVars[i].value` (`BAE_LP_SIOP_CLIENT_ID`) | exclusion, US-5.3: an env list with other content (also holds the proxy) |
@@ -40,13 +40,38 @@ method choice.
   Chart keys that name the DID but are absent from `provider.yaml`, because those components are off
   there:
   - `identityhub.bootstrap.did` (values.yaml ~3087: "DID of this participant ... must match").
-  - `fdsc-edc.*`, taken from `k3s/dsp-provider.yaml`: `fdsc-edc.common.config.edc.participant.id`,
-    `fdsc-edc.common.config.issuerId`, `fdsc-edc.deployment.oid4vc.config.oid4vp.holder.id`, and possibly
-    `.holder.kid` (`<did>#<key>`, a `tpl`). Check each value in `dsp-provider.yaml` before adding it.
+  - `fdsc-edc.*`, verified in `k3s/dsp-provider.yaml` (lines 41-42, 161-171):
+    `fdsc-edc.common.config.edc.participant.id`, `fdsc-edc.common.config.issuerId`,
+    `fdsc-edc.common.config.oauth.clientId` (the STS client; it must equal the participant id or STS
+    token requests fail), `fdsc-edc.deployment.oid4vc.config.oid4vp.holder.id` and `.holder.kid` (the
+    bare DID there, not `<did>#<key>`) are `copy` targets. `fdsc-edc.common.config.oauth.secretAlias`
+    (`<did>-sts-client-secret`) is a `tpl` target, so the alias keeps naming the secret the IdentityHub
+    bootstrap writes for this DID.
+
+  These chart-only targets are not feature-gated (gating is US-5.3), so every render emits them, even
+  with `identityhub`/`fdsc-edc` disabled. That is accepted until US-5.3: the keys are inert while the
+  component is off, and leaving them out would split the DID in a loaded file that has the components
+  on (a loaded non-owned key is pinned and keeps the old DID). Step 2 pins this with a test, and US-5.3
+  replaces that test with a gated one.
+
+  `keycloak.signingKey.*` stays unowned: a render without keystore answers emits no leaf under it.
 
   `dataSpaceConfig` and APISIX carry **no** DID key in chart 10.16.0 (verified in `values.yaml` and
-  provider.yaml). `FEATURE_MODEL.md`'s list is aspirational. Record this in the bundle comment and the
-  ADR, and do not invent keys.
+  provider.yaml). `FEATURE_MODEL.md`'s list is aspirational. Do not invent keys.
+
+## Deviations from the ticket
+The story says the DID is used by the verifier, the IdentityHub, the issuer, the registration job,
+`dataSpaceConfig` and APISIX. This plan narrows that list. Each item below is recorded in the bundle
+comment above the `did.value` targets, in ADR 0021 (Step 4) and in the corrected `FEATURE_MODEL.md` row
+(Step 6), so the narrowing can be accepted or rejected at PR time.
+
+| AC consumer | What this ticket does | Reason | Owning story |
+|---|---|---|---|
+| Registration job: TIL `registration.issuer[0].did` | not a target | Targets may only index into a list the bundle owns whole, and the issuer list also names other participants | US-3.3 |
+| Registration: the verifier's TIR curl script (`vcverifier.deployment.initContainers[0].args[0]`) | not a target | A k3s-local shell script inside a list with content no foundation owns | US-3.3 |
+| `dataSpaceConfig` | nothing | Chart 10.16.0 has no DID key there | none until the chart adds one |
+| APISIX | nothing | Chart 10.16.0 has no DID key there | none until the chart adds one |
+| Keycloak signing key `keycloak.signingKey.did` | not a target | Emitting it alone breaks the realm key provider (see the table above); it belongs with the keystore block | US-5.5 |
 
 ## Steps
 
@@ -90,11 +115,13 @@ In `config-tool/model/10.16.0/bundle.yaml` (bump `revision` 5 → 6), after `dom
     default: "did:web:{{ .domain.base }}"
     defaultWhen: {id: did.method, equals: "did:web"}
     prefix: "{{ .did.method }}:"
-    targets: [copy of {{ .did.value }} to every key marked "target" above + identityhub/fdsc-edc keys]
+    targets: [copy of {{ .did.value }} to the 3 provider.yaml keys marked "target" above,
+              identityhub.bootstrap.did and the 5 fdsc-edc copy keys;
+              tpl "{{ .did.value }}-sts-client-secret" to fdsc-edc.common.config.oauth.secretAlias]
 ```
 Label, help and `doc` (`doc/deployment-integration/roles/README.md` or the IdentityHub/DID section that
-fits best) are bundle data. Add a comment above the targets that states why `dataSpaceConfig`/APISIX
-have none.
+fits best) are bundle data. Add a comment above the targets that lists the deviations from the ticket
+(see that section) with their owning stories.
 
 `did.method` has no targets, so it never emits a key. An unanswered `did.value` with `did:key` emits
 nothing.
@@ -109,7 +136,13 @@ Tests in `config-tool/internal/render/provider_test.go`, modelled on the domain 
 - `TestProviderValues`: rendered leaves absent from provider.yaml are allowed only if they are in a
   `chartOnlyTargets` table (path → reference file, e.g. `k3s/dsp-provider.yaml` for `fdsc-edc.*`,
   `charts/data-space-connector/values.yaml` for `identityhub.bootstrap.did`). The same test asserts their
-  values against that file. This replaces the `orgDisplayName` special case.
+  values against that file: all six `fdsc-edc.*` targets, `oauth.clientId`, `oauth.secretAlias` and
+  `holder.kid` included, against `dsp-provider.yaml`. This replaces the `orgDisplayName` special case.
+- `TestChartOnlyTargetsUngated`: a provider render with `identityhub`/`fdsc-edc` off still emits
+  `identityhub.bootstrap.did` and the `fdsc-edc.*` DID targets. It pins the accepted ungated state, and
+  its comment says US-5.3 replaces it.
+- No `keycloak.signingKey.*` leaf: a render without keystore answers emits nothing under
+  `keycloak.signingKey`, so the chart's `signingKey: {}` default and the `${DID}` fallback stay intact.
 - `TestProviderDIDChange`: changing `domain.base` changes exactly the domain leaves plus the DID
   targets while `did.value` is derived, and no DID target once `did.value` is given.
 - `did:key` with no `did.value` emits no DID key.
@@ -168,7 +201,9 @@ says so." `resolve` already keeps a given answer. What is missing is saying so.
 - ADR `doc/adr/0021-config-tool-l2-rules.md` (Context / Decision / Consequences, like 0020). It covers
   rules as bundle data, the conjunctive `equals` conditions (extend with new operators when a rule
   needs one), warning vs error, findings addressed by open-field id, and why this lives in
-  `internal/check` and not `internal/validate` (L1 schema). Add it to `doc/adr/README.md`. In
+  `internal/check` and not `internal/validate` (L1 schema). It also carries the "Deviations from the
+  ticket" table of this plan, because the DID target list is the first foundation that narrows an AC.
+  Add it to `doc/adr/README.md`. In
   `FEATURE_MODEL.md` §L2, note that the rules are in `bundle.yaml` `rules:` instead of a separate
   `rules.yaml`.
 - Accept when `go test ./...` and `make lint` are green.
@@ -206,8 +241,11 @@ says so." `resolve` already keeps a given answer. What is missing is saying so.
   the used-by text. Add a Go test for `group` compile and default.
 - Docs: `config-tool/README.md` (Stage 3 DID, the rules/findings, `generate` warnings),
   `doc/config-tool/USER_JOURNEY.md#stage-3--foundations` if the panel wording changed, and in
-  `doc/config-tool/FEATURE_MODEL.md` correct the `did.method / did.value` row to the real target list.
-  In `AGENTS.md`, mark US-3.2 shipped with one line.
+  `doc/config-tool/FEATURE_MODEL.md` correct the `did.method / did.value` row to the real target list
+  and add the deviations (registration job and TIR script → US-3.3, `dataSpaceConfig`/APISIX have no
+  key, `keycloak.signingKey.did` → US-5.5).
+  In `AGENTS.md`, mark US-3.2 shipped with one line. Its planned-entry wording "only 4 are owned
+  scalars" becomes 3, since `keycloak.signingKey.did` is excluded.
 - Accept when `make ui`, `make build`, `make test` and `make lint` are green. Check the UI by hand with
   `make build && ./dsc-config`: set the domain, see the derived DID and its count, switch to `did:key`
   with production selected, see the warning in Stage 3 and Review, and confirm generation still
