@@ -26,6 +26,14 @@ const (
 	FieldTargetEnvironment = "target.environment"
 	// AnswerFieldPrefix starts the field id of a foundation answer: answers.<foundation id>.
 	AnswerFieldPrefix = "answers."
+	// FeatureFieldPrefix starts the field id of a catalogue feature, features.<feature id>; only a when addresses it.
+	FeatureFieldPrefix = "features."
+)
+
+// Values a features.<id> field resolves to; a feature the profile does not record is off.
+const (
+	FeatureOn  = "on"
+	FeatureOff = "off"
 )
 
 // docAnchor separates a doc path from its anchor.
@@ -65,10 +73,12 @@ type CheckRule struct {
 	Doc string `yaml:"doc"`
 }
 
-// RuleWhen holds while the resolved Field equals Equals; an unanswered field never matches.
+// RuleWhen holds while the resolved Field equals Equals, or with Unset while the answer Field is absent.
+// It has exactly one of the two; an absent field never equals anything.
 type RuleWhen struct {
 	Field  string `yaml:"field"`
 	Equals string `yaml:"equals"`
+	Unset  bool   `yaml:"unset"`
 }
 
 // CheckRules returns the validated check rules in bundle order.
@@ -86,22 +96,22 @@ func TargetFieldValues(id string) []string {
 	return slices.Clone(targetFields[id].values)
 }
 
-// checkCheckRules validates rules against the compiled foundations fs.
-func checkCheckRules(rules []CheckRule, fs []CompiledFoundation) error {
+// checkCheckRules validates rules against the compiled foundations fs and the feature catalogue.
+func checkCheckRules(rules []CheckRule, fs []CompiledFoundation, features []Feature) error {
 	seen := map[string]int{}
 	for i, r := range rules {
 		if j, dup := seen[r.ID]; dup {
 			return fmt.Errorf("rules[%d]: id %q is already used by rules[%d]", i, r.ID, j)
 		}
 		seen[r.ID] = i
-		if err := checkCheckRule(r, fs); err != nil {
+		if err := checkCheckRule(r, fs, features); err != nil {
 			return fmt.Errorf("rules[%d]: %w", i, err)
 		}
 	}
 	return nil
 }
 
-func checkCheckRule(r CheckRule, fs []CompiledFoundation) error {
+func checkCheckRule(r CheckRule, fs []CompiledFoundation, features []Feature) error {
 	switch {
 	case r.ID == "":
 		return errors.New("id is missing")
@@ -123,15 +133,39 @@ func checkCheckRule(r CheckRule, fs []CompiledFoundation) error {
 		return fmt.Errorf("stage %s is not %s, the stage of field %s", r.Stage, stage, r.Field)
 	}
 	for i, w := range r.When {
-		_, values, err := addressable(w.Field, fs)
-		if err != nil {
+		if err := checkWhen(w, fs, features); err != nil {
 			return fmt.Errorf("when[%d]: %w", i, err)
-		}
-		if values != nil && !slices.Contains(values, w.Equals) {
-			return fmt.Errorf("when[%d]: %q is not a value of %s (%s)", i, w.Equals, w.Field, strings.Join(values, ", "))
 		}
 	}
 	return checkDoc(r.Doc)
+}
+
+func checkWhen(w RuleWhen, fs []CompiledFoundation, features []Feature) error {
+	var values []string
+	if id, ok := strings.CutPrefix(w.Field, FeatureFieldPrefix); ok {
+		if !slices.ContainsFunc(features, func(f Feature) bool { return f.ID == id }) {
+			return fmt.Errorf("%q names no feature of the catalogue", w.Field)
+		}
+		values = []string{FeatureOn, FeatureOff}
+	} else {
+		var err error
+		if _, values, err = addressable(w.Field, fs); err != nil {
+			return err
+		}
+	}
+	switch {
+	case w.Unset && w.Equals != "":
+		return fmt.Errorf("%s has both equals and unset", w.Field)
+	case w.Unset && !strings.HasPrefix(w.Field, AnswerFieldPrefix):
+		return fmt.Errorf("unset applies to %s<foundation id> only, not %s", AnswerFieldPrefix, w.Field)
+	case w.Unset:
+		return nil
+	case w.Equals == "":
+		return fmt.Errorf("%s has neither equals nor unset", w.Field)
+	case values != nil && !slices.Contains(values, w.Equals):
+		return fmt.Errorf("%q is not a value of %s (%s)", w.Equals, w.Field, strings.Join(values, ", "))
+	}
+	return nil
 }
 
 // addressable returns the stage of field and, when it takes a fixed set of values, those values.

@@ -21,7 +21,30 @@ const (
 	handEditedURL     = "https://login.hand.example"
 	// handEditedValues sets a target of host.keycloak by hand, so a render must keep it.
 	handEditedValues = "keycloak:\n  realm:\n    frontendUrl: " + handEditedURL + "\n"
+	tirRule          = "tir-address-for-verification"
+	tirAnswer        = "dataspace.tirAddress"
+	loadedTIR        = "https://tir.example.org/"
+	// tirValues sets the verifier's TIR address, which a load derives dataspace.tirAddress from.
+	tirValues = "decentralizedIam:\n  vcAuthentication:\n    vcverifier:\n      deployment:\n        verifier:\n" +
+		"          tirAddress: " + loadedTIR + "\n"
 )
+
+// verificationProfile is domainProfile with credential verification switched as given.
+func verificationProfile(on bool) profile.Profile {
+	p := domainProfile(renderDomain)
+	p.Role = model.RoleProvider
+	p.Features = map[string]profile.FeatureState{"access.verification": {Enabled: on, Source: profile.SourceUser}}
+	return p
+}
+
+// findingRules lists the rule ids of findings.
+func findingRules(findings []check.Finding) []string {
+	rules := []string{}
+	for _, f := range findings {
+		rules = append(rules, f.Rule)
+	}
+	return rules
+}
 
 // renderLeaf is a decoded tree leaf.
 type renderLeaf struct {
@@ -211,6 +234,43 @@ func TestRenderReportsFindings(t *testing.T) {
 				if !slices.Equal(rules, append([]string{}, tc.want...)) {
 					t.Errorf("findings = %v, want %v", rules, tc.want)
 				}
+			}
+		})
+	}
+}
+
+// TestRenderTIRAddressFinding builds the profile the way the UI does after a load: the report's foundations-stage
+// answers go into answers, so a loaded TIR address satisfies tir-address-for-verification.
+func TestRenderTIRAddressFinding(t *testing.T) {
+	tests := []struct {
+		name         string
+		verification bool
+		load         bool
+		want         []string
+	}{
+		{name: "verification on, TIR loaded", verification: true, load: true, want: []string{}},
+		{name: "verification on, nothing loaded", verification: true, want: []string{tirRule}},
+		{name: "verification off, nothing loaded", want: []string{}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			ps := newProfileSession(t)
+			p, sha := verificationProfile(tc.verification), ""
+			if tc.load {
+				report := ps.load(valuesName, tirValues)
+				sha = report.SHA256
+				for _, a := range report.Answers {
+					if a.Stage == string(model.StageFoundations) {
+						p.Answers[a.ID] = a.Value
+					}
+				}
+				if p.Answers[tirAnswer] != loadedTIR {
+					t.Fatalf("answers = %v, want the loaded %s = %s", p.Answers, tirAnswer, loadedTIR)
+				}
+			}
+			got := ps.mustRender(p, sha)
+			if rules := findingRules(got.Findings); !slices.Equal(rules, tc.want) {
+				t.Errorf("findings = %v, want %v", rules, tc.want)
 			}
 		})
 	}

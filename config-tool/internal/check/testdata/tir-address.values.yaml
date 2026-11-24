@@ -1,0 +1,7 @@
+# A values file that sets the verifier's TIR address, which load recognizes as dataspace.tirAddress.
+decentralizedIam:
+  vcAuthentication:
+    vcverifier:
+      deployment:
+        verifier:
+          tirAddress: https://tir.example.org/

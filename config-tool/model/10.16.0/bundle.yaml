@@ -26,10 +26,11 @@
 #   severity  warning (shown, never blocks) | error (blocks generate)
 #   stage     the stage that shows field; it labels and links the finding
 #   field     target.environment or answers.<foundation id>, the open field the finding points at
-#   when      [{field, equals}]: all must hold over the resolved answers, so a derived default counts
+#   when      [{field, equals | unset: true}]: all must hold over the resolved answers, so a derived default counts;
+#             field may also be features.<feature id> (equals on|off, absent is off); unset takes answers.<id> only
 chart: data-space-connector
 version: 10.16.0
-revision: 8
+revision: 9
 topLevelKeys: [
   nameOverride, fullnameOverride, imagePullSecrets, issuance, decentralizedIam, scorpio, elsi,
   keycloak, tm-forum-api, statusListServer, rainbow, contract-management, did, registration,
@@ -290,6 +291,17 @@ rules:
       A did:key in production: other participants cannot resolve it over the web, and its key cannot be rotated
       without a new identity. Production data spaces usually expect did:web.
     doc: doc/deployment-integration/roles/provider/README.md#did-and-key-management
+  - id: tir-address-for-verification
+    severity: error
+    stage: foundations
+    field: answers.dataspace.tirAddress
+    when:
+      - {field: features.access.verification, equals: "on"}
+      - {field: answers.dataspace.tirAddress, unset: true}
+    message: >-
+      The verifier cannot check issuers without the data space's Trust Anchor: credential verification is on, but
+      the TIR address is not set. Enter it, import it from the data space's descriptor, or turn verification off.
+    doc: doc/deployment-integration/roles/provider/README.md#vcverifier
 foundations:
   - id: org.displayName
     stage: foundations
