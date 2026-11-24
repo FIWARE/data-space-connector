@@ -58,16 +58,29 @@ method choice.
   - `fdsc-edc.deployment.oid4vc.config.oid4vp.holder.kid`: exclusion, US-8.11. It is a key id, like
     `keycloak.signingKey.did`, not the bare DID.
 
-  Consequence, accepted until US-8.11: in a loaded file these two keys are pinned, so a `domain.base`
-  change leaves them on the old DID while `holder.id` and `participant.id` follow. The pair stays
-  consistent with itself, so the chart check still passes. A fresh render emits neither, so the chart
-  defaults (`bootstrap.did: ""`, no kid) apply.
+  How a loaded file behaves follows US-3.1's loader. `load` marks a leaf as owned only inside an owned
+  marker block (`classifier.owned` → `roundtrip.OwnedBy`). No `recognize:` rule matches a DID key, so
+  every DID leaf outside that block is `Unknown`, and `render.pin` keeps every rendered leaf that
+  overlaps an `Unknown` path at its loaded value. Two cases follow:
+  - A hand-written file (such as `dsp-provider.yaml`): every DID leaf, targets included, is pinned. A
+    `domain.base` change moves none of them, and nothing splits.
+  - A file the tool generated, with the DID targets in its owned block, to which the user has
+    hand-added `identityhub.bootstrap.did` and `holder.kid` outside the block. A `domain.base` change
+    moves the owned targets (`participant.id`, `holder.id`, ...) to the new DID and keeps the
+    hand-added pair on the old one. The pair stays consistent with itself, so `assertHolderKid` still
+    passes. But `bootstrap.did` no longer equals `fdsc-edc.common.config.edc.participant.id`, which
+    `values.yaml` (~3085) requires. That drift is accepted until US-8.11 owns the pair, and Step 2 pins
+    it with a test that US-8.11 flips.
+
+  A fresh render emits neither key, so the chart defaults (`bootstrap.did: ""`, no kid) apply.
 
   The five `fdsc-edc.*` targets are not feature-gated (gating is US-5.3), so every render emits them,
   even with `fdsc-edc` disabled. That is accepted until US-5.3: the keys are inert while the component
-  is off, and leaving them out would split the DID in a loaded file that has the component on (a loaded
-  non-owned key is pinned and keeps the old DID). Step 2 pins this with a test, and US-5.3
-  replaces that test with a gated one.
+  is off. Leaving them out would split the DID in a generated file whose user later enables the
+  component by hand: the hand-added `fdsc-edc.*` DID keys sit outside the owned block, so they are
+  pinned on the old DID, while the owned verifier/contract-management/keycloak targets follow a
+  `domain.base` change. As targets, the five keys sit in the owned block from the first generation and
+  follow too. Step 2 pins this with a test, and US-5.3 replaces that test with a gated one.
 
   `keycloak.signingKey.*` stays unowned: a render without keystore answers emits no leaf under it.
 
@@ -167,9 +180,14 @@ Tests in `config-tool/internal/render/provider_test.go`, modelled on the domain 
   output (targets plus pinned loaded keys) holds both `identityhub.bootstrap.did` and any
   `fdsc-edc.{common,deployment.*}.config.oid4vp.holder.kid`, each kid equals
   `<bootstrap.did>#<keyAlias>` (`keyAlias` from the output, else the chart default `key-1`). Cases: a
-  fresh render (neither key, so it passes trivially), `dsp-provider.yaml` loaded with a changed
-  `domain.base`, and a fixture with `bootstrap.did` set and a `<did>#key-1` kid, loaded with a changed
-  `domain.base`. Also assert that no render emits either key as a `did.value` target.
+  fresh render (neither key, so it passes trivially), and a tool-generated fixture in `testdata/`: an
+  owned marker block with the DID targets, plus a hand-added `identityhub.bootstrap.did: <old did>`
+  and `holder.kid: <old did>#key-1` outside it, loaded with a changed `domain.base`. For that fixture,
+  assert that the kid check holds, and pin the accepted drift explicitly: `bootstrap.did` stays the
+  old DID while `fdsc-edc.common.config.edc.participant.id` is the new one. The test comment says
+  US-8.11 flips that assertion. A hand-written `dsp-provider.yaml` is not a case here, because it pins
+  every DID leaf and so tests nothing. Also assert that no render emits either key as a `did.value`
+  target.
 - No `keycloak.signingKey.*` leaf: a render without keystore answers emits nothing under
   `keycloak.signingKey`, so the chart's `signingKey: {}` default and the `${DID}` fallback stay intact.
 - `TestProviderDIDChange`: changing `domain.base` changes exactly the domain leaves plus the DID
@@ -232,7 +250,10 @@ says so." `resolve` already keeps a given answer. What is missing is saying so.
   rules as bundle data, the conjunctive `equals` conditions (extend with new operators when a rule
   needs one), warning vs error, findings addressed by open-field id, and why this lives in
   `internal/check` and not `internal/validate` (L1 schema). It also carries the "Deviations from the
-  ticket" table of this plan, because the DID target list is the first foundation that narrows an AC.
+  ticket" table of this plan, because the DID target list is the first foundation that narrows an AC,
+  and the loaded-file consequence as stated in "Facts" above: a hand-written file pins every DID leaf,
+  and only a generated file with a hand-added bootstrap pair drifts (`bootstrap.did` ≠
+  `participant.id`) until US-8.11.
   Add it to `doc/adr/README.md`. In
   `FEATURE_MODEL.md` §L2, note that the rules are in `bundle.yaml` `rules:` instead of a separate
   `rules.yaml`.
