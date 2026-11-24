@@ -2,7 +2,13 @@
 import { api } from './client'
 
 /** Answer type, mirroring `model.FoundationType`; a choice is checked against its options, every other type with a pattern. */
-export type FoundationType = 'string' | 'hostname' | 'domain' | 'choice' | 'did'
+export type FoundationType = 'string' | 'hostname' | 'domain' | 'choice' | 'did' | 'url' | 'bool' | 'credentialTypes'
+
+/** One element of a `credentialTypes` answer, mirroring the Go check; types are unique within the list. */
+export interface CredentialType {
+  type: string
+  description?: string
+}
 
 /** One value a choice offers, mirroring `model.Option`; `note` is shown at the point of choice. */
 export interface FoundationOption {
@@ -12,7 +18,7 @@ export interface FoundationOption {
 }
 
 /** The Stage 3 panel that asks a foundation, mirroring `model.FoundationGroup`. */
-export type FoundationGroup = 'organization' | 'network'
+export type FoundationGroup = 'organization' | 'dataspace' | 'network'
 
 /** Holds while the resolved answer `id` equals `equals`, mirroring `model.Condition`. */
 export interface Condition {

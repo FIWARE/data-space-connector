@@ -1,5 +1,5 @@
 /** Save, open and list `.dscprofile.yaml` profiles through the loopback API (ADR 0015). */
-import { emptyAnswers, type Answers, type FeatureState, type Target } from '../state/answers'
+import { emptyAnswers, type Answers, type AnswerValue, type FeatureState, type Target } from '../state/answers'
 import { validAnswers } from '../state/foundations'
 import { isFieldId, type FieldId } from '../state/openQuestions'
 import type { AppState } from '../state/reducer'
@@ -89,9 +89,13 @@ export function toProfile(state: AppState): Profile {
   }
 }
 
-/** A profile's foundation answers as the UI keeps them; every shipped foundation type is a string. */
-export function answerValues(answers: Profile['answers']): Record<string, string> {
-  return Object.fromEntries(Object.entries(answers ?? {}).filter((e): e is [string, string] => typeof e[1] === 'string'))
+/** A profile's foundation answers as the UI keeps them: strings, bools and lists; the server has checked each type. */
+export function answerValues(answers: Profile['answers']): Record<string, AnswerValue> {
+  return Object.fromEntries(Object.entries(answers ?? {}).filter((e): e is [string, AnswerValue] => isAnswerValue(e[1])))
+}
+
+function isAnswerValue(v: unknown): v is AnswerValue {
+  return typeof v === 'string' || typeof v === 'boolean' || Array.isArray(v)
 }
 
 /** The answers and markers a profile restores; the server has validated its open ids already. */

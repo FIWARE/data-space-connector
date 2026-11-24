@@ -176,3 +176,48 @@
   err: "prefix references no answer"
   foundations:
     - {id: a, stage: foundations, type: string, label: A, prefix: "did:"}
+- name: bool with a default
+  err: "a bool takes no default, defaultWhen or prefix"
+  foundations:
+    - {id: a, stage: foundations, type: string, label: A}
+    - {id: b, stage: foundations, type: bool, label: B, default: "{{ .a }}"}
+- name: list with a constant default
+  err: "a credentialTypes takes no default, defaultWhen or prefix"
+  foundations:
+    - {id: a, stage: foundations, type: credentialTypes, label: A, default: "[]"}
+- name: bool with a prefix
+  err: "a bool takes no default, defaultWhen or prefix"
+  foundations:
+    - {id: a, stage: foundations, type: string, label: A}
+    - {id: b, stage: foundations, type: bool, label: B, prefix: "{{ .a }}"}
+- name: list gated by defaultWhen
+  err: "a credentialTypes takes no default, defaultWhen or prefix"
+  foundations:
+    - {id: a, stage: foundations, type: string, label: A}
+    - {id: b, stage: foundations, type: credentialTypes, label: B, defaultWhen: {id: a, equals: x}}
+- name: tpl references a bool
+  err: "targets[0] references b, a bool, which only a copy target may take"
+  foundations:
+    - {id: a, stage: foundations, type: string, label: A, targets: [{path: keycloak.a, fn: tpl, args: ["{{ .a }}-{{ .b }}"]}]}
+    - {id: b, stage: foundations, type: bool, label: B}
+- name: join references a list
+  err: "targets[0] references b, a credentialTypes, which only a copy target may take"
+  foundations:
+    - {id: a, stage: foundations, type: string, label: A, targets: [{path: keycloak.a, fn: join, args: ["{{ .a }}", "{{ .b }}"]}]}
+    - {id: b, stage: foundations, type: credentialTypes, label: B}
+- name: default references a bool
+  err: "default references b, a bool, which only a copy target may take"
+  foundations:
+    - {id: a, stage: foundations, type: string, label: A, default: "x-{{ .b }}"}
+    - {id: b, stage: foundations, type: bool, label: B}
+- name: prefix references a list
+  err: "prefix references b, a credentialTypes, which only a copy target may take"
+  foundations:
+    - {id: a, stage: foundations, type: string, label: A, prefix: "{{ .b }}"}
+    - {id: b, stage: foundations, type: credentialTypes, label: B}
+- name: defaultWhen compares a bool
+  err: "defaultWhen references b, a bool, which only a copy target may take"
+  foundations:
+    - {id: a, stage: foundations, type: string, label: A}
+    - {id: b, stage: foundations, type: bool, label: B}
+    - {id: c, stage: foundations, type: string, label: C, default: "x-{{ .a }}", defaultWhen: {id: b, equals: "true"}}

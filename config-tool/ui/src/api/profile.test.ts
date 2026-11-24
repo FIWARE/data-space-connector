@@ -32,6 +32,16 @@ describe('api/profile', () => {
     expect(fromProfile(profile)).toEqual({ answers: { values: {}, features: {}, target: { ...emptyAnswers().target, namespace: 'x' } }, open: ['target.namespace'] })
   })
 
+  it('restores string, bool and list answers and drops other shapes', () => {
+    const types = [{ type: 'UserCredential', description: 'Employees' }, { type: 'LegalPersonCredential' }]
+    const answers = { 'dataspace.tirAddress': 'https://tir.example.org/', 'dataspace.autoRegistration': false, 'dataspace.credentialTypes': types, n: 1, o: {} }
+    expect(fromProfile({ ...toProfile(ENTERED), answers }).answers.values).toEqual({
+      'dataspace.tirAddress': 'https://tir.example.org/',
+      'dataspace.autoRegistration': false,
+      'dataspace.credentialTypes': types,
+    })
+  })
+
   it('sends the held report as the source to reference', async () => {
     const loaded = reducer(initialState, { type: 'fileLoaded', report: REPORT, file: new File([''], REPORT.source) })
     expect((await sentBody(loaded)).sourceSha256).toBe(REPORT.sha256)

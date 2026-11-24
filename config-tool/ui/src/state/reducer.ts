@@ -5,7 +5,7 @@ import type { Foundation } from '../api/foundations'
 import type { ChartSwitch, RoleChange } from '../api/roles'
 import type { Trial } from '../api/trial'
 import { dropMismatched } from './foundations'
-import { emptyAnswers, Environment, type Answers, type FeatureState, type Session, type Target } from './answers'
+import { emptyAnswers, Environment, type Answers, type AnswerValue, type FeatureState, type Session, type Target } from './answers'
 import { answerFieldId, answerId, fieldStage, isAnswerFieldId, type FieldId, type QuestionId } from './openQuestions'
 import { FIRST_STAGE, StageId } from './stageIds'
 
@@ -204,7 +204,7 @@ function setTarget(state: AppState, change: Partial<Target>): AppState {
 }
 
 // An empty value is no answer, so clearing a field leaves the chart default in place.
-function setAnswer(values: Record<string, string>, id: string, value: string): Record<string, string> {
+function setAnswer(values: Record<string, AnswerValue>, id: string, value: string): Record<string, AnswerValue> {
   if (value !== '') return { ...values, [id]: value }
   return Object.fromEntries(Object.entries(values).filter(([key]) => key !== id))
 }

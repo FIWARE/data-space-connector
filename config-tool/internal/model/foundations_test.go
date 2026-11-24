@@ -1,6 +1,7 @@
 package model
 
 import (
+	"fmt"
 	"os"
 	"reflect"
 	"strings"
@@ -11,11 +12,12 @@ import (
 )
 
 const (
-	validFoundations   = "testdata/foundations/valid.yaml"
-	invalidFoundations = "testdata/foundations/invalid.yaml"
-	didFoundations     = "testdata/foundations/did.yaml"
-	prefixFoundations  = "testdata/foundations/prefix.yaml"
-	foundationsHead    = "chart: " + chart + "\nversion: 1.0.0\nrevision: 1\ntopLevelKeys: [keycloak, scorpio]\n"
+	validFoundations     = "testdata/foundations/valid.yaml"
+	invalidFoundations   = "testdata/foundations/invalid.yaml"
+	didFoundations       = "testdata/foundations/did.yaml"
+	prefixFoundations    = "testdata/foundations/prefix.yaml"
+	dataspaceFoundations = "testdata/foundations/dataspace.yaml"
+	foundationsHead      = "chart: " + chart + "\nversion: 1.0.0\nrevision: 1\ntopLevelKeys: [keycloak, scorpio]\n"
 )
 
 func loadFixture(t *testing.T, file string) Bundle {
@@ -100,6 +102,35 @@ func TestFoundationGroup(t *testing.T) {
 	for id, want := range map[string]FoundationGroup{"did.method": GroupOrganization, "did.value": GroupNetwork} {
 		if f, _ := b.Foundation(id); f.Group != want {
 			t.Errorf("%s group = %q, want %q", id, f.Group, want)
+		}
+	}
+}
+
+// TestFoundationsCompileDataspace pins that copy takes a bool and a list and a tpl interpolates a url.
+func TestFoundationsCompileDataspace(t *testing.T) {
+	b := loadFixture(t, dataspaceFoundations)
+	tests := []struct {
+		id    string
+		typ   FoundationType
+		group FoundationGroup
+		refs  []string
+	}{
+		{"dataspace.tirAddress", TypeURL, GroupDataspace, []string{"dataspace.tirAddress"}},
+		{"dataspace.autoRegistration", TypeBool, GroupDataspace, []string{"dataspace.autoRegistration"}},
+		{"dataspace.credentialTypes", TypeCredentialTypes, GroupDataspace, nil},
+		{"host.tir", TypeHostname, GroupNetwork, []string{"dataspace.tirAddress", "host.tir"}},
+	}
+	for _, tc := range tests {
+		f, ok := b.Foundation(tc.id)
+		if !ok {
+			t.Fatalf("Foundation(%s) not found", tc.id)
+		}
+		var refs []string
+		for _, target := range f.Targets {
+			refs = append(refs, target.Refs...)
+		}
+		if f.Type != tc.typ || f.Group != tc.group || !reflect.DeepEqual(refs, tc.refs) {
+			t.Errorf("%s = %s in %s, target refs %v; want %s in %s, %v", tc.id, f.Type, f.Group, refs, tc.typ, tc.group, tc.refs)
 		}
 	}
 }
@@ -202,12 +233,90 @@ func TestFoundationTypeCheck(t *testing.T) {
 		{TypeDID, "did:web::", false},
 		{TypeDID, "did:web:a%", false},
 		{TypeDID, "did:web:a%zz", false},
+		{TypeURL, "https://tir.127.0.0.1.nip.io/", true},
+		{TypeURL, "http://tir.example.org:8080/v4/issuers?page=1", true},
+		{TypeURL, "https://[::1]:8443", true},
+		{TypeURL, "https://tir.example.org/" + strings.Repeat("a", maxURLLength), false},
+		{TypeURL, "tir.example.org", false},
+		{TypeURL, "/v4/issuers", false},
+		{TypeURL, "ftp://tir.example.org/", false},
+		{TypeURL, "https://", false},
+		{TypeURL, "https:tir.example.org", false},
+		{TypeURL, "https://user:pass@tir.example.org/", false},
+		{TypeURL, "https://tir.example.org/#issuers", false},
+		{TypeURL, "https://tir.example.org/a b", false},
+		{TypeURL, "https://tir.example.org/\t", false},
+		{TypeURL, "https://tir.example.org/<x>", false},
+		{TypeURL, `https://tir.example.org/"x"`, false},
+		{TypeURL, " https://tir.example.org/", false},
+		{TypeURL, true, false},
+		{TypeBool, true, true},
+		{TypeBool, false, true},
+		{TypeBool, "true", false},
+		{TypeBool, 1, false},
+		{TypeCredentialTypes, credentialTypes(map[string]any{"type": "UserCredential"}), true},
+		{TypeCredentialTypes, credentialTypes(
+			map[string]any{"type": "UserCredential", "description": "Employees of a participant"},
+			map[string]any{"type": "LegalParticipant"},
+			map[string]any{"type": "eu.europa.ec.eudi.pid_1"},
+		), true},
+		{TypeCredentialTypes, credentialTypes(), false},
+		{TypeCredentialTypes, nil, false},
+		{TypeCredentialTypes, []map[string]any{{"type": "UserCredential"}}, false},
+		{TypeCredentialTypes, []any{"UserCredential"}, false},
+		{TypeCredentialTypes, credentialTypes(map[string]any{"description": "no type"}), false},
+		{TypeCredentialTypes, credentialTypes(map[string]any{"type": 42}), false},
+		{TypeCredentialTypes, credentialTypes(map[string]any{"type": "1Credential"}), false},
+		{TypeCredentialTypes, credentialTypes(map[string]any{"type": "User Credential"}), false},
+		{TypeCredentialTypes, credentialTypes(map[string]any{"type": "UserCredential", "format": "jwt_vc"}), false},
+		{TypeCredentialTypes, credentialTypes(map[string]any{"type": "UserCredential", "description": " padded"}), false},
+		{TypeCredentialTypes, credentialTypes(map[string]any{"type": "UserCredential", "description": 1}), false},
+		{TypeCredentialTypes, credentialTypes(map[string]any{"type": "A"}, map[string]any{"type": "A"}), false},
+		{TypeCredentialTypes, manyCredentialTypes(maxCredentialTypes), true},
+		{TypeCredentialTypes, manyCredentialTypes(maxCredentialTypes + 1), false},
 		{TypeChoice, "did:web", false},
 		{FoundationType("number"), "1", false},
 	}
 	for _, tc := range tests {
 		if err := tc.typ.Check(tc.value); (err == nil) != tc.ok {
-			t.Errorf("%s.Check(%q) = %v, want ok %v", tc.typ, tc.value, err, tc.ok)
+			t.Errorf("%s.Check(%v) = %v, want ok %v", tc.typ, tc.value, err, tc.ok)
+		}
+	}
+}
+
+// credentialTypes builds a credentialTypes answer the way yaml.v3 and encoding/json decode one.
+func credentialTypes(elems ...map[string]any) []any {
+	list := []any{}
+	for _, e := range elems {
+		list = append(list, e)
+	}
+	return list
+}
+
+// manyCredentialTypes is a valid answer of n distinct types.
+func manyCredentialTypes(n int) []any {
+	list := make([]any, n)
+	for i := range list {
+		list[i] = map[string]any{"type": fmt.Sprintf("Credential%d", i)}
+	}
+	return list
+}
+
+// TestCheckNeverEchoesValues keeps refused values out of error messages, which reach logs and the UI.
+func TestCheckNeverEchoesValues(t *testing.T) {
+	const secret = "s3cr3t"
+	tests := []struct {
+		typ   FoundationType
+		value any
+	}{
+		{TypeURL, "https://" + secret + "@tir.example.org/"},
+		{TypeCredentialTypes, credentialTypes(map[string]any{"type": secret + " x"})},
+		{TypeCredentialTypes, credentialTypes(map[string]any{"type": "A", "description": secret + "\n"})},
+		{TypeCredentialTypes, credentialTypes(map[string]any{"type": "A", secret: "x"})},
+	}
+	for _, tc := range tests {
+		if err := tc.typ.Check(tc.value); err == nil || strings.Contains(err.Error(), secret) {
+			t.Errorf("%s.Check = %v, want an error that does not echo the value", tc.typ, err)
 		}
 	}
 }

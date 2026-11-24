@@ -2,6 +2,7 @@ package profile
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -9,6 +10,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"testing/fstest"
 
 	"github.com/FIWARE/data-space-connector/config-tool/internal/atomicfile"
 	"github.com/FIWARE/data-space-connector/config-tool/internal/model"
@@ -95,7 +97,11 @@ func TestSaveLoadSave(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	tests := map[string][]byte{"full": readGolden(t), "role": role, "empty": empty}
+	dataspace, err := os.ReadFile(dataspaceProfileFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tests := map[string][]byte{"full": readGolden(t), "role": role, "dataspace": dataspace, "empty": empty}
 	for name, first := range tests {
 		t.Run(name, func(t *testing.T) {
 			p, err := Unmarshal(first)
@@ -374,6 +380,135 @@ func TestFileRefusesSuffix(t *testing.T) {
 			}
 			if _, err := ReadFile(path); !errors.Is(err, ErrSuffix) {
 				t.Errorf("ReadFile err = %v, want %v", err, ErrSuffix)
+			}
+		})
+	}
+}
+
+const (
+	dataspaceBundleFile  = "testdata/dataspace.bundle.yaml"
+	dataspaceProfileFile = "testdata/dataspace" + FileSuffix
+	answerTIR            = "dataspace.tirAddress"
+	answerAutoRegister   = "dataspace.autoRegistration"
+	answerCredentials    = "dataspace.credentialTypes"
+)
+
+// dataspaceBundles holds the fixture bundle declaring a url, a bool and a credentialTypes answer.
+func dataspaceBundles(t *testing.T) []model.Bundle {
+	t.Helper()
+	data, err := os.ReadFile(dataspaceBundleFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := model.Versions(fstest.MapFS{latest + "/bundle.yaml": {Data: data}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return b
+}
+
+// credentialTypeNames lists the type of every element of a credentialTypes answer, in order.
+func credentialTypeNames(v any) []string {
+	list, _ := v.([]any)
+	var names []string
+	for _, e := range list {
+		m, _ := e.(map[string]any)
+		name, _ := m["type"].(string)
+		names = append(names, name)
+	}
+	return names
+}
+
+// TestListAnswerRoundTrip pins that a list answer survives save and open, through YAML and the API's JSON,
+// with its order and its scalar neighbours' types.
+func TestListAnswerRoundTrip(t *testing.T) {
+	shipped := dataspaceBundles(t)
+	want, err := os.ReadFile(dataspaceProfileFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	opened, err := Unmarshal(want)
+	if err != nil {
+		t.Fatal(err)
+	}
+	viaJSON, err := json.Marshal(opened)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fromAPI Profile
+	if err := json.Unmarshal(viaJSON, &fromAPI); err != nil {
+		t.Fatal(err)
+	}
+	for name, p := range map[string]Profile{"yaml": opened, "json": fromAPI} {
+		t.Run(name, func(t *testing.T) {
+			if errs := p.Validate(shipped); len(errs) != 0 {
+				t.Errorf("Validate = %v, want no errors", errs)
+			}
+			if got, want := credentialTypeNames(p.Answers[answerCredentials]), []string{"UserCredential", "LegalPersonCredential", "OperatorCredential"}; !slices.Equal(got, want) {
+				t.Errorf("credential types = %v, want %v", got, want)
+			}
+			if got := p.Answers[answerAutoRegister]; got != true {
+				t.Errorf("%s = %#v, want true", answerAutoRegister, got)
+			}
+			path := filepath.Join(t.TempDir(), profileName)
+			if err := WriteFile(path, p, false); err != nil {
+				t.Fatal(err)
+			}
+			if data, _ := os.ReadFile(path); !bytes.Equal(data, want) {
+				t.Errorf("saved =\n%s\nwant\n%s", data, want)
+			}
+			reopened, err := ReadFile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(reopened.Answers, opened.Answers) {
+				t.Errorf("reopened answers = %#v, want %#v", reopened.Answers, opened.Answers)
+			}
+		})
+	}
+}
+
+func TestValidateDataspaceAnswers(t *testing.T) {
+	shipped := dataspaceBundles(t)
+	types := func(elems ...map[string]any) []any {
+		list := []any{}
+		for _, e := range elems {
+			list = append(list, e)
+		}
+		return list
+	}
+	tests := []struct {
+		name  string
+		id    string
+		value any
+		ok    bool
+	}{
+		{"url", answerTIR, "https://tir.example.org/v4", true},
+		{"url without scheme", answerTIR, "tir.example.org", false},
+		{"bool", answerAutoRegister, false, true},
+		{"bool as a string", answerAutoRegister, "true", false},
+		{"credential types", answerCredentials, types(map[string]any{"type": "UserCredential", "description": "Employees"}), true},
+		{"credential types as a scalar", answerCredentials, "UserCredential", false},
+		{"credential type with an unknown key", answerCredentials, types(map[string]any{"type": "UserCredential", "format": "jwt_vc"}), false},
+		{"credential types repeated", answerCredentials, types(map[string]any{"type": "A"}, map[string]any{"type": "A"}), false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			p, err := ReadFile(dataspaceProfileFile)
+			if err != nil {
+				t.Fatal(err)
+			}
+			p.Answers[tc.id] = tc.value
+			var got []string
+			for _, e := range p.Validate(shipped) {
+				got = append(got, e.Field)
+			}
+			var want []string
+			if !tc.ok {
+				want = []string{answersFieldPrefix + tc.id}
+			}
+			if !slices.Equal(got, want) {
+				t.Errorf("errors = %v, want fields %v", p.Validate(shipped), want)
 			}
 		})
 	}
