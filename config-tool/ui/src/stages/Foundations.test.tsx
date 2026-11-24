@@ -266,6 +266,24 @@ describe('Foundations', () => {
       expect(within(panel('Organization')).getByLabelText(DID_VALUE.label)).toHaveTextContent(`did:web:${BASE}`)
     })
 
+    it('keeps the DID derived when Edit changes nothing, so it follows the domain', async () => {
+      renderFoundations(ON_FOUNDATIONS, withDID)
+      await userEvent.type(await domainInput(), BASE)
+      await userEvent.click(screen.getByRole('button', { name: `${EDIT_LABEL} ${DID_VALUE.label}` }))
+      await userEvent.type(await domainInput(), '.eu')
+      expect(didInput()).toHaveValue(`did:web:${BASE}.eu`)
+    })
+
+    it('drops the answer again when the derived value is typed back', async () => {
+      renderFoundations(ON_FOUNDATIONS, withDID)
+      await userEvent.type(await domainInput(), BASE)
+      await userEvent.click(screen.getByRole('button', { name: `${EDIT_LABEL} ${DID_VALUE.label}` }))
+      await userEvent.type(didInput(), 'x')
+      await userEvent.type(didInput(), '{Backspace}')
+      await userEvent.type(await domainInput(), '.eu')
+      expect(didInput()).toHaveValue(`did:web:${BASE}.eu`)
+    })
+
     it('drops a DID the new method does not match and asks for one under did:key', async () => {
       const handSet: AppState = { ...ON_FOUNDATIONS, answers: { ...ON_FOUNDATIONS.answers, values: { 'domain.base': BASE, 'did.value': HAND_DID } } }
       renderFoundations(handSet, withDID)

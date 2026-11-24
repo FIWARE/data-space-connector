@@ -316,8 +316,8 @@ components* button that lists its targets. Every answer change renders the profi
 edit, with a hand-edited leaf of the loaded file flagged *pinned, not updated* next to its kept and would-be value.
 
 The DID is two answers. `did.method` is a radio group (`did:web` or `did:key`), each option with its note. `did.value`
-shows `did:web:<base domain>` as *derived* with *Edit* while the method is `did:web`; an edited value gets *Reset to
-derived*. Under `did:key` there is no default and the DID is asked for. A DID must start with `<method>:`, so switching
+shows `did:web:<base domain>` as *derived* with *Edit* while the method is `did:web`; *Edit* opens the input but the DID
+stays derived until its text differs from the derived one, and an edited value gets *Reset to derived*. Under `did:key` there is no default and the DID is asked for. A DID must start with `<method>:`, so switching
 the method drops a hand-set DID of the other method. The DID reaches the verifier, contract-management, the Keycloak
 issuer and the `fdsc-edc.common` participant, issuer, STS client and holder ids; [FEATURE_MODEL.md](../doc/config-tool/FEATURE_MODEL.md#cross-cutting-values)
 lists the DID keys left to other stories.

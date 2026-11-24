@@ -95,8 +95,20 @@ function FieldNotes({ foundation, id, error, own }: { foundation: Foundation; id
 }
 
 /** One answer the user gives: input, error, findings, help, doc link, "ask later" and its fan-out; `reset` drops it in
- *  favour of its derived default. */
-function AnswerField({ foundation, findings, reset }: { foundation: Foundation; findings: readonly Finding[]; reset?: () => void }) {
+ *  favour of its derived default. `value`/`onChange` replace the stored answer, for an edit not yet given. */
+function AnswerField({
+  foundation,
+  findings,
+  reset,
+  value,
+  onChange,
+}: {
+  foundation: Foundation
+  findings: readonly Finding[]
+  reset?: () => void
+  value?: string
+  onChange?: (value: string) => void
+}) {
   const { state, dispatch } = useStore()
   const field = answerFieldId(foundation.id)
   const id = fieldElementId(field)
@@ -107,10 +119,13 @@ function AnswerField({ foundation, findings, reset }: { foundation: Foundation; 
       <label htmlFor={id}>{foundation.label}</label>
       <input
         id={id}
-        value={state.answers.values[foundation.id] ?? ''}
+        value={value ?? state.answers.values[foundation.id] ?? ''}
         aria-invalid={error !== undefined}
         aria-describedby={describedBy(id, error, own)}
-        onChange={(e) => dispatch({ type: 'setAnswer', id: foundation.id, value: e.target.value })}
+        onChange={(e) => {
+          if (onChange) onChange(e.target.value)
+          else dispatch({ type: 'setAnswer', id: foundation.id, value: e.target.value })
+        }}
       />
       {reset && (
         <button type="button" className="link" onClick={reset}>
@@ -164,6 +179,8 @@ function ChoiceField({ foundation, findings }: { foundation: Foundation; finding
 function DerivedField({ foundation, findings }: { foundation: Foundation; findings: readonly Finding[] }) {
   const { state, dispatch } = useStore()
   const [editing, setEditing] = useState(false)
+  // Text typed while editing that is not an answer (yet): empty. Undefined shows the derived value.
+  const [draft, setDraft] = useState<string | undefined>(undefined)
   const field = answerFieldId(foundation.id)
   const id = fieldElementId(field)
   const foundations = state.foundations ?? []
@@ -180,21 +197,31 @@ function DerivedField({ foundation, findings }: { foundation: Foundation; findin
   const [appliedBefore, setAppliedBefore] = useState(applies)
   if (applies !== appliedBefore) {
     setAppliedBefore(applies)
-    if (!applies) setEditing(false)
+    if (!applies) {
+      setEditing(false)
+      setDraft(undefined)
+    }
   }
 
   if (!applies) return <AnswerField foundation={foundation} findings={findings} />
   if (given !== undefined || editing) {
     const reset = () => {
       setEditing(false)
+      setDraft(undefined)
       dispatch({ type: 'setAnswer', id: foundation.id, value: '' })
     }
-    return <AnswerField foundation={foundation} findings={findings} reset={reset} />
+    // Only text that differs from the derived value is an edit, so opening the input or typing the derived value back
+    // leaves the answer derived and it keeps following the answers it comes from.
+    const change = (value: string) => {
+      const same = value === derived
+      setEditing(true)
+      setDraft(same ? undefined : value)
+      dispatch({ type: 'setAnswer', id: foundation.id, value: same ? '' : value })
+    }
+    const text = given ?? draft ?? derived ?? ''
+    return <AnswerField foundation={foundation} findings={findings} reset={reset} value={text} onChange={change} />
   }
-  const edit = () => {
-    if (derived !== undefined) dispatch({ type: 'setAnswer', id: foundation.id, value: derived })
-    setEditing(true)
-  }
+  const edit = () => setEditing(true)
   const own = findings.filter((f) => f.field === field)
   return (
     <div className="row">
