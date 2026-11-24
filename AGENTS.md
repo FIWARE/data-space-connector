@@ -203,9 +203,13 @@ pom.xml                       # drives local-deploy + integration tests
 - US-2.2 (#123, shipped, ADR 0018): a user toggle sets a sticky `source: user`; not-offered
   features may be enabled by `user`/`loaded`. The core (`SetFeature`, `FeatureChoices`) returns values only, and every
   shown text is UI copy or bundle data (`summary`, `consequence`). Stage 5 is a minimal toggle list; `ui/src/chrome/ConfirmDialog.tsx` traps focus.
-- US-2.3 (#124, planned, see `IMPLEMENTATION_PLAN.md`, ADR 0019): `ApplyPreset` already re-applies; `POST /api/preset`
+- US-2.3 (#124, shipped, ADR 0019): `ApplyPreset` already re-applies; `POST /api/preset`
   has no side effects, so it is the preview too. Core `RoleChangeTo` diffs before/after; answers survive within a chart.
   The Review record of role changes is session state (`AppState.roleChanges`), not a profile field.
+- US-3.1 (#125, planned, see `IMPLEMENTATION_PLAN.md`, ADR 0020): `foundations:` in the bundle (id, type, default
+  template, targets with fn `tpl`/`join`/`copy`); `internal/render` turns answers into a sorted `Tree` with provenance,
+  pins non-owned loaded keys. Answer ids are dotted (`domain.base`), open field id `answers.<id>`.
+  `k3s/provider.yaml` is the acceptance measure (exclusion table for DID/TIR, not the literal "41").
 
 ## Documentation
 
