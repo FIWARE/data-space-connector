@@ -206,10 +206,16 @@ pom.xml                       # drives local-deploy + integration tests
 - US-2.3 (#124, shipped, ADR 0019): `ApplyPreset` already re-applies; `POST /api/preset`
   has no side effects, so it is the preview too. Core `RoleChangeTo` diffs before/after; answers survive within a chart.
   The Review record of role changes is session state (`AppState.roleChanges`), not a profile field.
-- US-3.1 (#125, planned, see `IMPLEMENTATION_PLAN.md`, ADR 0020): `foundations:` in the bundle (id, type, default
-  template, targets with fn `tpl`/`join`/`copy`); `internal/render` turns answers into a sorted `Tree` with provenance,
-  pins non-owned loaded keys. Answer ids are dotted (`domain.base`), open field id `answers.<id>`.
-  `k3s/provider.yaml` is the acceptance measure (exclusion table for DID/TIR, not the literal "41").
+- US-3.1 (#125, shipped, ADR 0020): `foundations:` in the bundle (id, type, default
+  template, targets with fn `tpl`/`join`/`copy`/`const`); `internal/render` turns answers into a sorted `Tree` with
+  provenance, pins non-owned loaded keys. Answer ids are dotted (`domain.base`), open field id `answers.<id>`.
+  A given answer overrides its default. `internal/render/provider_test.go` checks targets against `k3s/provider.yaml`
+  with an exclusion table, where each row names the story that owns the leaf.
+- US-3.2 (#126, planned, see `IMPLEMENTATION_PLAN.md`): `did.method`/`did.value` foundations, the first L2 rule
+  (`rules:` in the bundle, Go type `CheckRule` because `model.Rule` is `recognize:`; core package `internal/check`,
+  ADR 0021). Findings are warnings or errors, and only errors block `generate`. Of the 14 DID leaves in provider.yaml,
+  only 4 are owned scalars. The rest sit in lists or JSON strings that other stories own. `dataSpaceConfig`/APISIX
+  have no DID key.
 
 ## Documentation
 
