@@ -298,6 +298,11 @@ already refuses a key that is not in `values.yaml`, so this is the same gate CI 
 | `sealed` without a Sealed Secrets controller or a certificate | Nothing could decrypt it |
 | The same Secret claimed by both the chart and the tool | Two owners, one name |
 
+The L2 rules live in the bundle's `rules:` list (`model/<version>/bundle.yaml`), not in a separate
+`rules.yaml`: each is a warning or an error on one open field, raised while all of its `field equals value`
+conditions hold over the resolved answers. Only errors block `generate`
+([ADR 0021](../adr/0021-config-tool-l2-rules.md)).
+
 The secret-specific rules are listed in full in
 [Secret handling](SECRETS.md#validation).
 
@@ -324,7 +329,7 @@ config-tool/model/
     foundations.yaml     cross-cutting values and their render functions
     infrastructure.yaml  the dependencies and their three modes
     secrets.yaml         the Secrets per feature, their keys and the chart switch that owns them
-    rules.yaml           the L2 rules
+    rules.yaml           the L2 rules (shipped as bundle.yaml rules:, ADR 0021)
     migrations.yaml      how answers move from 10.x to 10.16.0
 ```
 

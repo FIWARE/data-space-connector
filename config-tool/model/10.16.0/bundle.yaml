@@ -1,6 +1,6 @@
 # Question-model bundle of chart 10.16.0: recognition rules, the feature catalogue and the role presets
 # (ADR 0017). The role guide's component matrix is authoritative; internal/model/rolematrix_test.go
-# keeps roles and roleMatrix in agreement with it. Value rules come with Epic 3's questions.
+# keeps roles and roleMatrix in agreement with it.
 #
 # The foundations list (ADR 0020) holds the cross-cutting answers of Stage 3 and the chart keys they reach:
 #   id       dotted answer id (domain.base): the key in the profile's answers, open field answers.<id>
@@ -19,9 +19,15 @@
 # Helm replaces a list instead of merging it, so a path indexes into a list only when the targets write
 # that list whole: indices 0..n-1 and every key of every element. Quote a path in a flow mapping: a plain
 # scalar there cannot hold '[' or ','. internal/render/provider_test.go checks the targets against k3s/provider.yaml.
+#
+# The rules list (ADR 0021) holds the L2 rules: a finding on field while every when holds.
+#   severity  warning (shown, never blocks) | error (blocks generate)
+#   stage     the stage that shows field; it labels and links the finding
+#   field     target.environment or answers.<foundation id>, the open field the finding points at
+#   when      [{field, equals}]: all must hold over the resolved answers, so a derived default counts
 chart: data-space-connector
 version: 10.16.0
-revision: 6
+revision: 7
 topLevelKeys: [
   nameOverride, fullnameOverride, imagePullSecrets, issuance, decentralizedIam, scorpio, elsi,
   keycloak, tm-forum-api, statusListServer, rainbow, contract-management, did, registration,
@@ -267,6 +273,18 @@ roleMatrix:
     FDSC-EDC: dsp.edc
     Trusted Issuers Registry: ta.registry
   infrastructure: [PostgreSQL]
+rules:
+  - id: did-key-in-production
+    severity: warning
+    stage: foundations
+    field: answers.did.method
+    when:
+      - {field: target.environment, equals: production}
+      - {field: answers.did.method, equals: "did:key"}
+    message: >-
+      A did:key in production: other participants cannot resolve it over the web, and its key cannot be rotated
+      without a new identity. Production data spaces usually expect did:web.
+    doc: doc/deployment-integration/roles/provider/README.md#did-and-key-management
 foundations:
   - id: org.displayName
     stage: foundations

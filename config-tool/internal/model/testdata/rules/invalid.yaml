@@ -1,0 +1,75 @@
+# Each case is a rules list Versions refuses over the foundations of ../foundations/did.yaml, with a
+# fragment of the error it must report.
+- name: id missing
+  err: "rules[0]: id is missing"
+  rules:
+    - {severity: warning, stage: foundations, field: answers.did.method, when: [{field: answers.did.method, equals: "did:key"}], message: M, doc: doc/a.md}
+- name: duplicate id
+  err: 'rules[1]: id "r" is already used by rules[0]'
+  rules:
+    - {id: r, severity: warning, stage: foundations, field: answers.did.method, when: [{field: answers.did.method, equals: "did:key"}], message: M, doc: doc/a.md}
+    - {id: r, severity: warning, stage: foundations, field: answers.did.method, when: [{field: answers.did.method, equals: "did:key"}], message: M, doc: doc/a.md}
+- name: severity unknown
+  err: 'severity "info" is unknown'
+  rules:
+    - {id: r, severity: info, stage: foundations, field: answers.did.method, when: [{field: answers.did.method, equals: "did:key"}], message: M, doc: doc/a.md}
+- name: stage unknown
+  err: 'stage "nowhere" is unknown'
+  rules:
+    - {id: r, severity: warning, stage: nowhere, field: answers.did.method, when: [{field: answers.did.method, equals: "did:key"}], message: M, doc: doc/a.md}
+- name: stage is not the field's
+  err: "stage target is not foundations, the stage of field answers.did.method"
+  rules:
+    - {id: r, severity: warning, stage: target, field: answers.did.method, when: [{field: answers.did.method, equals: "did:key"}], message: M, doc: doc/a.md}
+- name: message missing
+  err: "message is missing"
+  rules:
+    - {id: r, severity: warning, stage: foundations, field: answers.did.method, when: [{field: answers.did.method, equals: "did:key"}], doc: doc/a.md}
+- name: when missing
+  err: "when is missing"
+  rules:
+    - {id: r, severity: warning, stage: foundations, field: answers.did.method, message: M, doc: doc/a.md}
+- name: field is not a foundation
+  err: 'field: "answers.did.typo" is neither one of target.environment nor answers.<foundation id>'
+  rules:
+    - {id: r, severity: warning, stage: foundations, field: answers.did.typo, when: [{field: answers.did.method, equals: "did:key"}], message: M, doc: doc/a.md}
+- name: field without prefix
+  err: 'field: "did.method" is neither'
+  rules:
+    - {id: r, severity: warning, stage: foundations, field: did.method, when: [{field: answers.did.method, equals: "did:key"}], message: M, doc: doc/a.md}
+- name: when field unknown
+  err: 'when[0]: "target.namespace" is neither'
+  rules:
+    - {id: r, severity: warning, stage: foundations, field: answers.did.method, when: [{field: target.namespace, equals: x}], message: M, doc: doc/a.md}
+- name: when value not an option
+  err: 'when[0]: "did:jwk" is not a value of answers.did.method (did:web, did:key)'
+  rules:
+    - {id: r, severity: warning, stage: foundations, field: answers.did.method, when: [{field: answers.did.method, equals: "did:jwk"}], message: M, doc: doc/a.md}
+- name: when value not an environment
+  err: 'when[0]: "prod" is not a value of target.environment (development, production)'
+  rules:
+    - {id: r, severity: warning, stage: foundations, field: answers.did.method, when: [{field: target.environment, equals: prod}], message: M, doc: doc/a.md}
+- name: doc missing
+  err: 'doc "" is not a repo-relative path'
+  rules:
+    - {id: r, severity: warning, stage: foundations, field: answers.did.method, when: [{field: answers.did.method, equals: "did:key"}], message: M}
+- name: doc is a URL
+  err: 'doc "https://example.org/a.md" is not a repo-relative path'
+  rules:
+    - {id: r, severity: warning, stage: foundations, field: answers.did.method, when: [{field: answers.did.method, equals: "did:key"}], message: M, doc: "https://example.org/a.md"}
+- name: doc is absolute
+  err: 'doc "/doc/a.md" is not a repo-relative path'
+  rules:
+    - {id: r, severity: warning, stage: foundations, field: answers.did.method, when: [{field: answers.did.method, equals: "did:key"}], message: M, doc: /doc/a.md}
+- name: doc leaves the repo
+  err: 'doc "../a.md#x" is not a repo-relative path'
+  rules:
+    - {id: r, severity: warning, stage: foundations, field: answers.did.method, when: [{field: answers.did.method, equals: "did:key"}], message: M, doc: "../a.md#x"}
+- name: doc not clean
+  err: 'doc "doc/./a.md" is not a repo-relative path'
+  rules:
+    - {id: r, severity: warning, stage: foundations, field: answers.did.method, when: [{field: answers.did.method, equals: "did:key"}], message: M, doc: doc/./a.md}
+- name: unknown rule field
+  err: "field equal not found"
+  rules:
+    - {id: r, severity: warning, stage: foundations, field: answers.did.method, when: [{field: answers.did.method, equal: "did:key"}], message: M, doc: doc/a.md}
