@@ -1,6 +1,19 @@
 # Question-model bundle of the trust-anchor chart 1.3.6. Its roles and features come from the
-# data-space-connector bundle (model.RoleCatalogue, ADR 0017).
+# data-space-connector bundle (model.RoleCatalogue, ADR 0017). Its foundations carry the answers of a chart
+# switch (ADR 0020) and write no keys yet.
 chart: trust-anchor
 version: 1.3.6
-revision: 1
+revision: 2
 topLevelKeys: [postgres-operator, managedPostgres, trusted-issuers-list, managedMongo, consentManagement, consent-facade, consent-manager]
+foundations:
+  - id: org.displayName
+    stage: foundations
+    type: string
+    label: Display name
+    help: The organization's name as other participants see it.
+  - id: domain.base
+    stage: foundations
+    type: domain
+    label: Base domain
+    help: The public host names of the trust anchor are derived from it.
+    doc: doc/deployment-integration/roles/PREREQUISITES.md#public-names-have-to-resolve-inside-the-cluster

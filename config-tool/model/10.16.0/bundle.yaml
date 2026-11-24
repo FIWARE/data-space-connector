@@ -1,9 +1,22 @@
 # Question-model bundle of chart 10.16.0: recognition rules, the feature catalogue and the role presets
 # (ADR 0017). The role guide's component matrix is authoritative; internal/model/rolematrix_test.go
 # keeps roles and roleMatrix in agreement with it. Value rules come with Epic 3's questions.
+#
+# The foundations list (ADR 0020) holds the cross-cutting answers of Stage 3 and the chart keys they reach:
+#   id       dotted answer id (domain.base): the key in the profile's answers, open field answers.<id>
+#   type     string | hostname | domain, each checked with one pattern
+#   default  a template over other answers; the answer is derived only while all of them are answered
+#   targets  {path, fn, args, sep}; a target referencing an unanswered id writes nothing
+# Templates are Go text/template holding only text and {{ .id }} actions. The functions:
+#   tpl    renders its one template arg
+#   join   renders every template arg and joins the results with sep
+#   copy   takes the answer its one {{ .id }} arg names, keeping its type
+#   const  writes its one scalar arg verbatim; only under a list index, to complete an owned list
+# Helm replaces a list instead of merging it, so a path indexes into a list only when the targets write
+# that list whole: indices 0..n-1 and every key of every element.
 chart: data-space-connector
 version: 10.16.0
-revision: 3
+revision: 4
 topLevelKeys: [
   nameOverride, fullnameOverride, imagePullSecrets, issuance, decentralizedIam, scorpio, elsi,
   keycloak, tm-forum-api, statusListServer, rainbow, contract-management, did, registration,
@@ -249,3 +262,15 @@ roleMatrix:
     FDSC-EDC: dsp.edc
     Trusted Issuers Registry: ta.registry
   infrastructure: [PostgreSQL]
+foundations:
+  - id: org.displayName
+    stage: foundations
+    type: string
+    label: Display name
+    help: The organization's name as other participants see it.
+  - id: domain.base
+    stage: foundations
+    type: domain
+    label: Base domain
+    help: Every public host name is derived from it as <component>.<base domain>, unless that host is overridden.
+    doc: doc/deployment-integration/roles/PREREQUISITES.md#public-names-have-to-resolve-inside-the-cluster

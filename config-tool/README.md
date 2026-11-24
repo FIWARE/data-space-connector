@@ -194,7 +194,8 @@ features:           # excerpt: every offered or turned-on feature; source is pre
   data.scorpio:
     enabled: true
     source: preset
-answers: {}         # no answer id exists yet, so any key is refused
+answers:            # ids the bundle declares under foundations:, values checked against their type
+  domain.base: acme.example.org
 open:               # fields left open on purpose
   - field: target.context
 source:             # the loaded values file: metadata only, never its content
@@ -282,7 +283,8 @@ latest `data-space-connector` release bundle that declares them.
   notice names them (`chartSwitch.droppedChoices`).
 - **Answers survive a role change within the chart**, also those of a feature that goes off. A chart switch keeps
   the target fields except chart and version, every open-question mark, and the answers a `recognize:` rule of the
-  old bundle places in Target or Foundations. `chartSwitch.carriedAnswers` and `chartSwitch.droppedAnswers` list the
+  old bundle places in Target or Foundations (by a `recognize:` rule or its `foundations:`) that the new bundle also
+  declares in `foundations:` (ADR 0020 §9); a dropped answer loses its open-question mark too. `chartSwitch.carriedAnswers` and `chartSwitch.droppedAnswers` list the
   answer ids it kept and dropped, sorted.
 - **`change` summarises a role change** when the request profile already has a role (null on the first pick):
   `enabled` and `disabled` list the features whose effective state flips, and `kept` lists the user and loaded
@@ -401,6 +403,12 @@ keeps the latest bundle's list equal to the chart's `values.yaml`.
 `revision` (a positive integer, required) counts changes to a bundle within one chart version.
 A profile records `chart`, `version` and `revision` of the bundle it was built with (ADR 0015 §6).
 `features:`, `roles:` and `roleMatrix:` hold the [role presets](#roles).
+`foundations:` declares the cross-cutting answers of Stage 3 (`org.displayName`, `domain.base`) and the chart keys
+they fan out to (ADR 0020). Each has a dotted `id`, a `type` (`string`, `hostname` or `domain`), an optional
+`default` template over other answers, and `targets` written by the closed function set `tpl`, `join`, `copy` and
+`const`; the bundle header documents them. A bundle with an unknown function, a reference to an undeclared id, a
+cycle among defaults, a path outside `topLevelKeys`, a list index gap or two targets on one path fails to load.
+A profile's `answers` accepts exactly the declared ids, and `open` accepts `answers.<id>` for them.
 `roles:` rate the features of `features:`, and `roleMatrix:` needs `roles:`.
 Two charts are shipped: `data-space-connector` (`model/10.16.0/`) and `trust-anchor` (`model/1.3.6/`, only
-`topLevelKeys`, no rules and no roles). Their version numbers differ, so they fit the one-bundle-per-version layout.
+`topLevelKeys` and two foundations without targets, no rules and no roles). Their version numbers differ, so they fit the one-bundle-per-version layout.
