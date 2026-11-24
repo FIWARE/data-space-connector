@@ -211,11 +211,16 @@ pom.xml                       # drives local-deploy + integration tests
   provenance, pins non-owned loaded keys. Answer ids are dotted (`domain.base`), open field id `answers.<id>`.
   A given answer overrides its default. `internal/render/provider_test.go` checks targets against `k3s/provider.yaml`
   with an exclusion table, where each row names the story that owns the leaf.
-- US-3.2 (#126, planned, see `IMPLEMENTATION_PLAN.md`): `did.method`/`did.value` foundations, the first L2 rule
+- US-3.2 (#126, shipped): `did.method`/`did.value` foundations, the first L2 rule
   (`rules:` in the bundle, Go type `CheckRule` because `model.Rule` is `recognize:`; core package `internal/check`,
   ADR 0021). Findings are warnings or errors, and only errors block `generate`. Of the 14 DID leaves in provider.yaml,
   only 4 are owned scalars. The rest sit in lists or JSON strings that other stories own. `dataSpaceConfig`/APISIX
   have no DID key.
+- US-3.3 (#127, planned, see `IMPLEMENTATION_PLAN.md`, ADR 0022): `dataspace.*` foundations in group `dataspace`
+  (new types `url`, `bool`, `credentialTypes`, the last a list answer). Only `tirAddress` renders (verifier
+  `tirAddress`); the chart has no key for auto-registration or credential types, so they stay answers, read via core
+  package `internal/dataspace`. Outbound HTTP (TIR check, descriptor import) lives only in `internal/server`, runs only
+  on a button press, and goes through the swappable `Server.outbound` transport, so tests never reach the network.
 
 ## Documentation
 
