@@ -1,0 +1,30 @@
+# A bundle exercising every target function; host.keycloak is declared before the answer its default needs.
+chart: data-space-connector
+version: 1.0.0
+revision: 1
+topLevelKeys: [keycloak, scorpio]
+foundations:
+  - id: host.keycloak
+    stage: foundations
+    type: hostname
+    default: "keycloak.{{ .domain.base }}"
+    label: Keycloak host
+    help: Derived from the base domain.
+    targets:
+      - {path: keycloak.ingress.hostname, fn: copy, args: ["{{ .host.keycloak }}"]}
+      - {path: "keycloak.ingress.tls[0].hosts[0]", fn: tpl, args: ["{{ .host.keycloak }}"]}
+      - {path: "keycloak.ingress.tls[0].secretName", fn: tpl, args: ["{{ .host.keycloak }}-tls"]}
+      - {path: 'keycloak.ingress.annotations."cert-manager.io/alt-names"', fn: join, sep: ",", args: ["{{ .host.keycloak }}", "{{ .domain.base }}"]}
+  - id: domain.base
+    stage: foundations
+    type: domain
+    label: Base domain
+    help: Every host is derived from it.
+    targets:
+      - {path: "scorpio.ingress.hosts[0].host", fn: tpl, args: ["scorpio.{{ .domain.base }}"]}
+      - {path: "scorpio.ingress.hosts[0].paths[0]", fn: const, args: ["/"]}
+  - id: org.displayName
+    stage: foundations
+    type: string
+    label: Display name
+    help: The organization's name.

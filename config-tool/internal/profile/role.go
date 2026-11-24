@@ -42,9 +42,9 @@ type ChartSwitch struct {
 	ToChart     string `json:"toChart"`
 	// DroppedChoices are user toggles of the old chart, which the new chart cannot carry; never nil.
 	DroppedChoices []string `json:"droppedChoices"`
-	// CarriedAnswers are the answer ids kept because they belong to a carriedStages stage; sorted, never nil.
+	// CarriedAnswers are the answer ids kept: of a carriedStages stage and declared by the new bundle; sorted, never nil.
 	CarriedAnswers []string `json:"carriedAnswers"`
-	// DroppedAnswers are the other answer ids, including those no rule of the old bundle places; sorted, never nil.
+	// DroppedAnswers are the other answer ids, with their open questions; sorted, never nil.
 	DroppedAnswers []string `json:"droppedAnswers"`
 }
 
@@ -68,7 +68,7 @@ const msgOlderRevision = "the profile was saved with revision %d of bundle %s@%s
 
 // ApplyPreset sets role and its preset features; toggles from the loaded values file win over the preset,
 // and user toggles win over both (ADR 0018). It expects a normalised Model, never modifies p's maps and returns p unchanged with any error.
-// Answers are kept within a chart; a chart switch keeps only those of carriedStages (ADR 0019).
+// Answers are kept within a chart; a chart switch keeps only those of carriedStages the new bundle declares (ADR 0019, 0020).
 func (p Profile) ApplyPreset(bundles []model.Bundle, role string, loaded map[string]bool) (Profile, *ChartSwitch, error) {
 	cat, err := CatalogueBundle(bundles, p.Model, p.Catalogue)
 	if err != nil {
@@ -91,10 +91,14 @@ func (p Profile) ApplyPreset(bundles []model.Bundle, role string, loaded map[str
 			return p, nil, fmt.Errorf("chart %q of role %s is not shipped", r.Chart, role)
 		}
 		sw = &ChartSwitch{FromChart: p.Target.Chart, FromVersion: p.Target.ChartVersion, ToChart: r.Chart, DroppedChoices: []string{}}
-		sw.CarriedAnswers, sw.DroppedAnswers = splitAnswers(bundles, p.Model, p.Answers)
-		maps.DeleteFunc(out.Answers, func(id string, _ any) bool { return slices.Contains(sw.DroppedAnswers, id) })
-		out.Target.Chart, out.Target.ChartVersion = r.Chart, ""
 		out.Model = ModelRef{Chart: r.Chart, Version: bundles[i].Version, Revision: bundles[i].Revision}
+		sw.CarriedAnswers, sw.DroppedAnswers = splitAnswers(bundles, p.Model, out.Model, p.Answers)
+		maps.DeleteFunc(out.Answers, func(id string, _ any) bool { return slices.Contains(sw.DroppedAnswers, id) })
+		out.Open = slices.DeleteFunc(slices.Clone(p.Open), func(q OpenQuestion) bool {
+			id, ok := strings.CutPrefix(q.Field, answersFieldPrefix)
+			return ok && slices.Contains(sw.DroppedAnswers, id)
+		})
+		out.Target.Chart, out.Target.ChartVersion = r.Chart, ""
 		if cat, err = CatalogueBundle(bundles, out.Model, p.Catalogue); err != nil {
 			return p, nil, err
 		}
@@ -145,17 +149,24 @@ func (p Profile) ApplyPreset(bundles []model.Bundle, role string, loaded map[str
 	return out, sw, nil
 }
 
-// splitAnswers sorts answer ids into those a recognize rule of model m places in carriedStages and the rest.
-func splitAnswers(bundles []model.Bundle, m ModelRef, answers map[string]any) (carried, dropped []string) {
+// splitAnswers carries the answer ids whose stage in model from (by its recognize: rules or foundations:)
+// is in carriedStages and that model to declares in foundations:, so the result validates; it drops the rest.
+func splitAnswers(bundles []model.Bundle, from, to ModelRef, answers map[string]any) (carried, dropped []string) {
 	stages := map[string]model.Stage{}
-	if b := findBundle(bundles, m.Chart, m.Version); b != nil {
+	if b := findBundle(bundles, from.Chart, from.Version); b != nil {
 		for _, r := range b.Rules() {
 			stages[r.Answer] = r.Stage
 		}
+		for _, id := range b.FoundationOrder() {
+			f, _ := b.Foundation(id)
+			stages[id] = f.Stage
+		}
 	}
+	next := findBundle(bundles, to.Chart, to.Version)
 	carried, dropped = []string{}, []string{}
 	for _, id := range sortedKeys(answers) {
-		if s, ok := stages[id]; ok && slices.Contains(carriedStages, s) {
+		_, declares := declared(next, id)
+		if s, ok := stages[id]; ok && slices.Contains(carriedStages, s) && declares {
 			carried = append(carried, id)
 		} else {
 			dropped = append(dropped, id)
