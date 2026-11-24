@@ -14,6 +14,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"github.com/FIWARE/data-space-connector/config-tool/internal/load"
 	"github.com/FIWARE/data-space-connector/config-tool/internal/model"
 	"github.com/FIWARE/data-space-connector/config-tool/internal/profile"
 	"github.com/FIWARE/data-space-connector/config-tool/internal/roundtrip"
@@ -31,32 +32,98 @@ const (
 	orgName         = "MP Operations"
 	orgDisplayName  = "org.displayName"
 	domainBase      = "domain.base"
+	didMethodID     = "did.method"
+	didValueID      = "did.value"
+	didWebMethod    = "did:web"
+	didKeyMethod    = "did:key"
+	// referenceDID is the participant DID of provider.yaml and dsp-provider.yaml.
+	referenceDID = "did:web:mp-operations.org"
+	// dspProviderValues sets the fdsc-edc keys provider.yaml leaves out, because fdsc-edc is off there.
+	dspProviderValues = "../../../k3s/dsp-provider.yaml"
+	// generatedDID is a tool-generated file on oldDID, to which the user hand-added a bootstrap DID and kid.
+	generatedDID = fixtureDir + "/generated-did.yaml"
+	oldDID       = "did:web:old.example.org"
+	dspFeature   = "dsp.edc"
+	// The keys of the chart's dsc.identityhub.assertHolderKid; keyAliasDefault is values.yaml's keyAlias.
+	bootstrapDIDKey  = "identityhub.bootstrap.did"
+	keyAliasKey      = "identityhub.bootstrap.keyAlias"
+	keyAliasDefault  = "key-1"
+	commonKidKey     = "fdsc-edc.common.config.oid4vp.holder.kid"
+	edcDeploymentKey = "fdsc-edc.deployment"
+	deploymentKidKey = "config.oid4vp.holder.kid"
+	participantIDKey = "fdsc-edc.common.config.edc.participant.id"
+	fdscEdcPrefix    = "fdsc-edc."
 	// realmJSON mirrors how _realm.tpl interpolates keycloak.realm.displayNameHtml: unescaped, in a JSON string.
 	realmJSON       = `{"displayNameHtml": "%s"}`
 	displayNameKey  = "keycloak.realm.displayNameHtml"
 	loginHeaderHTML = `<div class='kc-logo-text'><span>`
 )
 
-// exclusion is a domain-bearing provider.yaml leaf another story owns, so no foundation targets it.
+// referenceValues is what each answer searched in provider.yaml is there.
+var referenceValues = map[string]string{domainBase: referenceDomain, didValueID: referenceDID}
+
+// exclusion is a provider.yaml leaf carrying one of answers that another story owns, so no foundation targets it.
 type exclusion struct {
 	pattern *regexp.Regexp
+	answers []string
 	story   string
 	reason  string
 }
 
+var (
+	domainOnly = []string{domainBase}
+	didOnly    = []string{didValueID}
+)
+
 var providerExclusions = []exclusion{
-	{regexp.MustCompile(`^decentralizedIam\.vcAuthentication\.vcverifier\.deployment\.verifier\.tirAddress$`),
+	{regexp.MustCompile(`^decentralizedIam\.vcAuthentication\.vcverifier\.deployment\.verifier\.tirAddress$`), domainOnly,
 		"US-3.3", "the data space's TIR, not one of the participant's hosts"},
-	{regexp.MustCompile(`^decentralizedIam\.vcAuthentication\.vcverifier\.registration\.services\[\d+\]\.oidcScopes\..+\.credentials\[\d+\]\.trustedParticipantsLists\[\d+\]$`),
+	{regexp.MustCompile(`^decentralizedIam\.vcAuthentication\.vcverifier\.registration\.services\[\d+\]\.oidcScopes\..+\.credentials\[\d+\]\.trustedParticipantsLists\[\d+\]$`), domainOnly,
 		"US-3.3", "the data space's TIR, not one of the participant's hosts"},
-	{regexp.MustCompile(`^decentralizedIam\.odrlAuthorization\.apisix\.routes\[\d+\]\.host$`),
+	{regexp.MustCompile(`^decentralizedIam\.odrlAuthorization\.apisix\.routes\[\d+\]\.host$`), domainOnly,
 		"US-5.6", "a route is a protected-service row; the list carries content no foundation owns"},
-	{regexp.MustCompile(`^keycloak\.realm\.clients\[\d+\]\.`),
+	{regexp.MustCompile(`^keycloak\.realm\.clients\[\d+\]\.`), []string{domainBase, didValueID},
 		"US-5.5", "realm clients belong to the realm; the list carries content no foundation owns"},
-	{regexp.MustCompile(`^fdsc-dashboard\.auth\.config\.providers\[\d+\]\.issuer$`),
+	{regexp.MustCompile(`^fdsc-dashboard\.auth\.config\.providers\[\d+\]\.issuer$`), domainOnly,
 		"US-5.3", "the dashboard's feature page; the list carries content no foundation owns"},
-	{regexp.MustCompile(`^decentralizedIam\.odrlAuthorization\.tpp\.transfers\.host$`),
+	{regexp.MustCompile(`^decentralizedIam\.odrlAuthorization\.tpp\.transfers\.host$`), domainOnly,
 		"US-5.3", "the DSP feature page; TPP's in-cluster back-channel to Rainbow, which local k3s reaches through nip.io"},
+	{regexp.MustCompile(`^decentralizedIam\.vcAuthentication\.vcverifier\.deployment\.initContainers\[\d+\]\.args\[\d+\]$`), didOnly,
+		"US-3.3", "a k3s-local TIR registration script in a list with content no foundation owns"},
+	{regexp.MustCompile(`^registration\.issuer\[\d+\]\.did$`), didOnly,
+		"US-3.3", "the TIL issuer list also names other participants"},
+	{regexp.MustCompile(`^decentralizedIam\.odrlAuthorization\.odrl-pap\.additionalEnvVars\[\d+\]\.value$`), didOnly,
+		"US-5.6", "an env list with other content"},
+	{regexp.MustCompile(`^marketplace\.bizEcosystemLogicProxy\.additionalEnvVars\[\d+\]\.value$`), didOnly,
+		"US-5.3", "an env list with other content"},
+	{regexp.MustCompile(`^fdsc-dashboard\.auth\.config\.providers\[\d+\]\.clientId$`), didOnly,
+		"US-5.3", "the dashboard's feature page; the list carries content no foundation owns"},
+	{regexp.MustCompile(`^keycloak\.signingKey\.did$`), didOnly,
+		"US-5.5", "alone it yields a java-keystore provider without store, password, alias or algorithm"},
+	{regexp.MustCompile(`^keycloak\.realm\.verifiableCredentials\..+\.protocolMappers\[\d+\]\.config\.staticValue$`), didOnly,
+		"US-5.5", "realm credentials"},
+	{regexp.MustCompile(`^keycloak\.realm\.(clientRoles|users)$`), didOnly,
+		"US-5.5", "JSON strings of the realm"},
+}
+
+// chartOnlyTarget is the reference of a target provider.yaml lacks; an empty file means no k3s file sets it.
+type chartOnlyTarget struct {
+	file, path, reason string
+}
+
+var chartOnlyTargets = map[string]chartOnlyTarget{
+	displayNameKey:   {"", "", "no k3s file sets a display name; TestProviderDisplayNameKeepsRealmJSONValid checks it"},
+	participantIDKey: {dspProviderValues, participantIDKey, "fdsc-edc is off in provider.yaml"},
+	"fdsc-edc.common.config.issuerId": {dspProviderValues, "fdsc-edc.common.config.issuerId",
+		"fdsc-edc is off in provider.yaml"},
+	"fdsc-edc.common.config.oauth.clientId": {dspProviderValues, "fdsc-edc.common.config.oauth.clientId",
+		"fdsc-edc is off in provider.yaml"},
+	"fdsc-edc.common.config.oauth.secretAlias": {dspProviderValues, "fdsc-edc.common.config.oauth.secretAlias",
+		"fdsc-edc is off in provider.yaml"},
+	// dsp-provider.yaml names its deployment, which the tool cannot: the target sits under common, which the
+	// subchart merges into every deployment.
+	"fdsc-edc.common.config.oid4vp.holder.id": {dspProviderValues, "fdsc-edc.deployment.oid4vc.config.oid4vp.holder.id",
+		"fdsc-edc is off in provider.yaml"},
 }
 
 func providerBundle(t *testing.T) model.Bundle {
@@ -74,9 +141,9 @@ func providerBundle(t *testing.T) model.Bundle {
 	return model.Bundle{}
 }
 
-func providerDoc(t *testing.T) *roundtrip.Document {
+func parseValues(t *testing.T, file string) *roundtrip.Document {
 	t.Helper()
-	src, err := os.ReadFile(providerValues)
+	src, err := os.ReadFile(file)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -87,18 +154,26 @@ func providerDoc(t *testing.T) *roundtrip.Document {
 	return doc
 }
 
-// domainLeaves returns the provider.yaml leaves containing the reference domain, minus the
-// exclusions, and fails when an exclusion row matches no leaf.
-func domainLeaves(t *testing.T, doc *roundtrip.Document) []string {
+func providerDoc(t *testing.T) *roundtrip.Document {
 	t.Helper()
+	return parseValues(t, providerValues)
+}
+
+// answerLeaves returns the provider.yaml leaves carrying answer's reference value, minus answer's
+// exclusions, and fails when one of those exclusion rows matches no leaf.
+func answerLeaves(t *testing.T, doc *roundtrip.Document, answer string) []string {
+	t.Helper()
+	needle := referenceValues[answer]
 	hits := make([]int, len(providerExclusions))
 	var paths []string
 	for _, l := range roundtrip.Classify(doc, roundtrip.DefaultClassifier) {
-		if l.Node.Kind != yaml.ScalarNode || !strings.Contains(l.Node.Value, referenceDomain) {
+		if l.Node.Kind != yaml.ScalarNode || !strings.Contains(l.Node.Value, needle) {
 			continue
 		}
 		p := l.Path.String()
-		i := slices.IndexFunc(providerExclusions, func(e exclusion) bool { return e.pattern.MatchString(p) })
+		i := slices.IndexFunc(providerExclusions, func(e exclusion) bool {
+			return slices.Contains(e.answers, answer) && e.pattern.MatchString(p)
+		})
 		if i >= 0 {
 			hits[i]++
 			continue
@@ -106,9 +181,8 @@ func domainLeaves(t *testing.T, doc *roundtrip.Document) []string {
 		paths = append(paths, p)
 	}
 	for i, n := range hits {
-		if n == 0 {
-			e := providerExclusions[i]
-			t.Errorf("exclusion %s (%s) matches no provider.yaml leaf; drop the stale row", e.pattern, e.story)
+		if e := providerExclusions[i]; n == 0 && slices.Contains(e.answers, answer) {
+			t.Errorf("exclusion %s (%s) matches no provider.yaml leaf carrying %s; drop the stale row", e.pattern, e.story, answer)
 		}
 	}
 	sort.Strings(paths)
@@ -124,11 +198,23 @@ func renderProvider(t *testing.T, b model.Bundle, answers map[string]any) Tree {
 	return tree
 }
 
-// derivedPaths are the domain-derived leaves: answer-derived (not const), not the display name's.
-func derivedPaths(tree Tree) []string {
+// carries reports whether a leaf with provenance p carries answer: the DID targets carry did.value, every
+// other answer-derived target but the display name's carries the domain.
+func carries(answer string, p Provenance) bool {
+	if p.Fn == string(model.FnConst) {
+		return false
+	}
+	if answer == didValueID {
+		return p.Foundation == didValueID
+	}
+	return p.Foundation != orgDisplayName && p.Foundation != didValueID
+}
+
+// carrierPaths returns the paths of tree's leaves carrying answer, minus the chart-only targets.
+func carrierPaths(tree Tree, answer string) []string {
 	var paths []string
 	for _, l := range tree.Leaves {
-		if l.Provenance.Fn != string(model.FnConst) && l.Provenance.Foundation != orgDisplayName {
+		if _, chartOnly := chartOnlyTargets[l.Path.String()]; !chartOnly && carries(answer, l.Provenance) {
 			paths = append(paths, l.Path.String())
 		}
 	}
@@ -150,20 +236,32 @@ func diffSets(want, got []string) (missing, extra []string) {
 	return missing, extra
 }
 
-func TestProviderKeySet(t *testing.T) {
-	want := domainLeaves(t, providerDoc(t))
-	tree := renderProvider(t, providerBundle(t), map[string]any{orgDisplayName: orgName, domainBase: referenceDomain})
-	missing, extra := diffSets(want, derivedPaths(tree))
+// checkKeySet fails unless the leaves carrying answer in provider.yaml are exactly its targets there.
+func checkKeySet(t *testing.T, answer string) {
+	t.Helper()
+	want := answerLeaves(t, providerDoc(t), answer)
+	tree := renderProvider(t, providerBundle(t), map[string]any{
+		orgDisplayName: orgName, domainBase: referenceDomain, didValueID: referenceDID,
+	})
+	missing, extra := diffSets(want, carrierPaths(tree, answer))
 	for _, p := range missing {
-		t.Errorf("provider.yaml leaf %s carries the domain but is neither a target nor excluded", p)
+		t.Errorf("provider.yaml leaf %s carries %s but is neither a target nor excluded", p, answer)
 	}
 	for _, p := range extra {
-		t.Errorf("target %s is not a domain-bearing provider.yaml leaf", p)
+		t.Errorf("target %s is not a provider.yaml leaf carrying %s, nor a chart-only target", p, answer)
 	}
 }
 
+func TestProviderKeySet(t *testing.T) {
+	checkKeySet(t, domainBase)
+}
+
+func TestProviderDIDKeySet(t *testing.T) {
+	checkKeySet(t, didValueID)
+}
+
 func TestProviderValues(t *testing.T) {
-	doc := providerDoc(t)
+	refs := map[string]*roundtrip.Document{providerValues: providerDoc(t)}
 	p, err := profile.ReadFile(providerProfile)
 	if err != nil {
 		t.Fatal(err)
@@ -177,27 +275,44 @@ func TestProviderValues(t *testing.T) {
 	}
 	tree := renderProvider(t, providerBundle(t), p.Answers)
 	owned := map[string]roundtrip.Path{}
+	rendered := map[string]bool{}
 	for _, l := range tree.Leaves {
+		key := l.Path.String()
+		rendered[key] = true
 		for _, lp := range lists(l.Path) {
 			owned[lp.String()] = lp
 		}
-		if l.Provenance.Foundation == orgDisplayName {
-			// provider.yaml sets no display name; the target is the chart's documented key.
-			continue
+		file, ref := providerValues, l.Path
+		if c, ok := chartOnlyTargets[key]; ok {
+			if _, err := refs[providerValues].Lookup(l.Path); err == nil {
+				t.Errorf("%s is in provider.yaml; drop its chartOnlyTargets row", key)
+			}
+			if c.file == "" {
+				continue
+			}
+			file, ref = c.file, mustPath(t, c.path)
 		}
-		n, err := doc.Lookup(l.Path)
+		if refs[file] == nil {
+			refs[file] = parseValues(t, file)
+		}
+		n, err := refs[file].Lookup(ref)
 		if err != nil {
-			t.Errorf("%s: not in provider.yaml: %v", l.Path, err)
+			t.Errorf("%s: %s not in %s: %v", key, ref, file, err)
 			continue
 		}
 		if got, ok := l.Value.(string); !ok || n.Kind != yaml.ScalarNode || got != n.Value {
-			t.Errorf("%s = %#v, provider.yaml has %q", l.Path, l.Value, n.Value)
+			t.Errorf("%s = %#v, %s has %q at %s", key, l.Value, file, n.Value, ref)
+		}
+	}
+	for _, key := range slices.Sorted(maps.Keys(chartOnlyTargets)) {
+		if !rendered[key] {
+			t.Errorf("chart-only target %s is not rendered; drop the stale row", key)
 		}
 	}
 	nested := tree.Nested()
 	for _, key := range slices.Sorted(maps.Keys(owned)) {
 		lp := owned[key]
-		n, err := doc.Lookup(lp)
+		n, err := refs[providerValues].Lookup(lp)
 		if err != nil {
 			t.Errorf("owned list %s: not in provider.yaml: %v", key, err)
 			continue
@@ -229,10 +344,7 @@ func subtree(node any, p roundtrip.Path) any {
 	return node
 }
 
-func TestProviderDomainChange(t *testing.T) {
-	b := providerBundle(t)
-	before := values(renderProvider(t, b, map[string]any{orgDisplayName: orgName, domainBase: referenceDomain}))
-	after := values(renderProvider(t, b, map[string]any{orgDisplayName: orgName, domainBase: otherDomain}))
+func changedPaths(before, after map[string]any) []string {
 	var changed []string
 	for p, v := range after {
 		if before[p] != v {
@@ -245,9 +357,209 @@ func TestProviderDomainChange(t *testing.T) {
 		}
 	}
 	sort.Strings(changed)
-	missing, extra := diffSets(domainLeaves(t, providerDoc(t)), changed)
-	if len(missing)+len(extra) > 0 {
-		t.Errorf("changing %s changed the wrong leaves: unchanged %v, unexpected %v", domainBase, missing, extra)
+	return changed
+}
+
+func TestProviderDIDChange(t *testing.T) {
+	b := providerBundle(t)
+	domainLeaves := answerLeaves(t, providerDoc(t), domainBase)
+	var didTargets []string
+	for _, l := range renderProvider(t, b, map[string]any{didValueID: referenceDID}).Leaves {
+		didTargets = append(didTargets, l.Path.String())
+	}
+	tests := []struct {
+		name  string
+		fixed map[string]any
+		want  []string
+	}{
+		{"did.value derived", map[string]any{orgDisplayName: orgName}, slices.Concat(domainLeaves, didTargets)},
+		{"did.value given", map[string]any{orgDisplayName: orgName, didValueID: referenceDID}, domainLeaves},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			answers := func(domain string) map[string]any {
+				return merge(tc.fixed, map[string]any{domainBase: domain})
+			}
+			changed := changedPaths(values(renderProvider(t, b, answers(referenceDomain))),
+				values(renderProvider(t, b, answers(otherDomain))))
+			missing, extra := diffSets(tc.want, changed)
+			if len(missing)+len(extra) > 0 {
+				t.Errorf("changing %s changed the wrong leaves: unchanged %v, unexpected %v", domainBase, missing, extra)
+			}
+		})
+	}
+}
+
+func TestProviderDIDMethod(t *testing.T) {
+	b := providerBundle(t)
+	tests := []struct {
+		name    string
+		answers map[string]any
+		// want is every DID target's value; empty when none may be emitted.
+		want string
+	}{
+		{"did:web derives from the domain", map[string]any{didMethodID: didWebMethod}, didWebMethod + ":" + referenceDomain},
+		{"did:key without a value emits nothing", map[string]any{didMethodID: didKeyMethod}, ""},
+		{"did:key with a value", map[string]any{didMethodID: didKeyMethod, didValueID: didKey}, didKey},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			tree := renderProvider(t, b, merge(tc.answers, map[string]any{domainBase: referenceDomain}))
+			n := 0
+			for _, l := range tree.Leaves {
+				if l.Provenance.Foundation != didValueID {
+					continue
+				}
+				n++
+				if tc.want == "" || !strings.HasPrefix(l.Value.(string), tc.want) {
+					t.Errorf("%s = %v, want a value starting with %q", l.Path, l.Value, tc.want)
+				}
+			}
+			if tc.want != "" && n == 0 {
+				t.Errorf("no DID target rendered, want %q", tc.want)
+			}
+		})
+	}
+}
+
+// TestChartOnlyTargetsUngated pins the accepted state that the fdsc-edc DID targets ignore the dsp.edc
+// feature; US-5.3 replaces it with a gated test.
+func TestChartOnlyTargetsUngated(t *testing.T) {
+	p := profile.Profile{
+		Answers:  map[string]any{domainBase: referenceDomain, didValueID: referenceDID},
+		Features: map[string]profile.FeatureState{dspFeature: {Enabled: false, Source: profile.SourceUser}},
+	}
+	tree, err := Render(providerBundle(t), p, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var want, got []string
+	for key := range chartOnlyTargets {
+		if strings.HasPrefix(key, fdscEdcPrefix) {
+			want = append(want, key)
+		}
+	}
+	for _, l := range tree.Leaves {
+		if key := l.Path.String(); strings.HasPrefix(key, fdscEdcPrefix) {
+			got = append(got, key)
+		}
+	}
+	sort.Strings(want)
+	if missing, extra := diffSets(want, got); len(missing)+len(extra) > 0 {
+		t.Errorf("fdsc-edc leaves with %s off: missing %v, unexpected %v", dspFeature, missing, extra)
+	}
+}
+
+// TestNoFdscEdcDeploymentTargets keeps every render from adding an fdsc-edc controlplane: the subchart
+// creates one per key under fdsc-edc.deployment.
+func TestNoFdscEdcDeploymentTargets(t *testing.T) {
+	b := providerBundle(t)
+	prefix := fdscEdcPrefix + "deployment"
+	for _, decl := range b.Foundations {
+		f, _ := b.Foundation(decl.ID)
+		for i, tg := range f.Targets {
+			if p := tg.Path.String(); overlaps(p, prefix) {
+				t.Errorf("%s targets[%d] writes %s, which adds an fdsc-edc deployment", f.ID, i, p)
+			}
+		}
+	}
+}
+
+// TestDIDKeysOtherStoriesOwn keeps the key-id and keystore keys out of every render: their right form
+// needs answers the tool does not own (US-8.11, US-5.5).
+func TestDIDKeysOtherStoriesOwn(t *testing.T) {
+	p, err := profile.ReadFile(providerProfile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	forbidden := regexp.MustCompile(`^(identityhub\.bootstrap\.did|fdsc-edc\.(common|deployment\..+)\.config\.oid4vp\.holder\.kid|keycloak\.signingKey(\..+)?)$`)
+	for _, l := range renderProvider(t, providerBundle(t), p.Answers).Leaves {
+		if forbidden.MatchString(l.Path.String()) {
+			t.Errorf("%s targets %s", l.Provenance.Foundation, l.Path)
+		}
+	}
+}
+
+// holderKidErrors mirrors the chart's dsc.identityhub.assertHolderKid over merged values.
+func holderKidErrors(t *testing.T, merged map[string]any) []string {
+	did, _ := subtree(merged, mustPath(t, bootstrapDIDKey)).(string)
+	if did == "" {
+		return nil
+	}
+	alias, ok := subtree(merged, mustPath(t, keyAliasKey)).(string)
+	if !ok {
+		alias = keyAliasDefault
+	}
+	want := did + "#" + alias
+	kids := map[string]any{commonKidKey: subtree(merged, mustPath(t, commonKidKey))}
+	deployments, _ := subtree(merged, mustPath(t, edcDeploymentKey)).(map[string]any)
+	for name, d := range deployments {
+		kids[edcDeploymentKey+"."+name+"."+deploymentKidKey] = subtree(d, mustPath(t, deploymentKidKey))
+	}
+	var errs []string
+	for key, kid := range kids {
+		if kid != nil && kid != any(want) {
+			errs = append(errs, fmt.Sprintf("%s = %v, want %s", key, kid, want))
+		}
+	}
+	sort.Strings(errs)
+	return errs
+}
+
+// TestHolderKidMatchesBootstrapDID checks the merged output (loaded file plus render) against the chart's
+// assertHolderKid, which fails helm template.
+func TestHolderKidMatchesBootstrapDID(t *testing.T) {
+	newDID := didWebMethod + ":" + otherDomain
+	tests := []struct {
+		name    string
+		loaded  string
+		answers map[string]any
+		// bootstrapDID and participantID are the merged values; empty means unset.
+		bootstrapDID, participantID string
+	}{
+		{"fresh render", "", map[string]any{domainBase: referenceDomain}, "", didWebMethod + ":" + referenceDomain},
+		// The hand-added bootstrap DID and kid stay on the old DID while the owned targets follow the domain.
+		// That drift is accepted until US-8.11 owns the pair, which flips bootstrapDID to newDID.
+		{"generated file, domain changed", generatedDID, map[string]any{domainBase: otherDomain}, oldDID, newDID},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			merged := map[string]any{}
+			var opts Options
+			if tc.loaded != "" {
+				src, err := os.ReadFile(tc.loaded)
+				if err != nil {
+					t.Fatal(err)
+				}
+				bs, err := model.Versions(bundles.FS)
+				if err != nil {
+					t.Fatal(err)
+				}
+				root := roundtrip.Path{}
+				if opts.Overrides, err = load.Load(src, tc.loaded, bs, load.Options{Root: &root}); err != nil {
+					t.Fatal(err)
+				}
+				if err := yaml.Unmarshal(src, &merged); err != nil {
+					t.Fatal(err)
+				}
+			}
+			tree, err := Render(providerBundle(t), profile.Profile{Answers: tc.answers}, opts)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, l := range nestedLeaves(tree) {
+				merged = insert(merged, l.Path, l.Value).(map[string]any)
+			}
+			if errs := holderKidErrors(t, merged); len(errs) > 0 {
+				t.Errorf("helm template would fail in assertHolderKid: %v", errs)
+			}
+			bootstrapDID, _ := subtree(merged, mustPath(t, bootstrapDIDKey)).(string)
+			participantID, _ := subtree(merged, mustPath(t, participantIDKey)).(string)
+			if bootstrapDID != tc.bootstrapDID || participantID != tc.participantID {
+				t.Errorf("%s = %q, %s = %q; want %q, %q", bootstrapDIDKey, bootstrapDID, participantIDKey, participantID,
+					tc.bootstrapDID, tc.participantID)
+			}
+		})
 	}
 }
 

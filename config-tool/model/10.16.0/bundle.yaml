@@ -21,7 +21,7 @@
 # scalar there cannot hold '[' or ','. internal/render/provider_test.go checks the targets against k3s/provider.yaml.
 chart: data-space-connector
 version: 10.16.0
-revision: 5
+revision: 6
 topLevelKeys: [
   nameOverride, fullnameOverride, imagePullSecrets, issuance, decentralizedIam, scorpio, elsi,
   keycloak, tm-forum-api, statusListServer, rainbow, contract-management, did, registration,
@@ -306,6 +306,55 @@ foundations:
           - "{{ .host.dcpManagement }}"
           - "{{ .host.consentDataService }}"
       - {path: 'decentralizedIam.odrlAuthorization.apisix.ingress.tls[0].secretName', fn: const, args: [apisix-provider-tls]}
+  - id: did.method
+    stage: foundations
+    type: choice
+    default: did:web
+    label: DID method
+    help: How other participants resolve the organization's DID to its keys.
+    doc: doc/deployment-integration/roles/provider/README.md#did-and-key-management
+    options:
+      - value: did:web
+        label: did:web
+        note: Resolved over HTTPS from the base domain, so the domain has to be public and the DID document served there.
+      - value: did:key
+        label: did:key
+        note: >-
+          Meant for local development: the key is the identifier, so it cannot be rotated without a new identity,
+          and production data spaces usually expect did:web.
+  - id: did.value
+    stage: foundations
+    type: did
+    default: "did:web:{{ .domain.base }}"
+    defaultWhen: {id: did.method, equals: "did:web"}
+    prefix: "{{ .did.method }}:"
+    label: Organization DID
+    help: >-
+      The participant's identifier in the data space. Derived from the base domain for did:web until it is
+      edited; an edited DID stays as it is when the domain changes.
+    doc: doc/deployment-integration/roles/provider/README.md#did-and-key-management
+    # Narrower than US-3.2's list of consumers (ADR 0021), each left to the story that owns the surrounding block:
+    #   registration.issuer[0].did and the verifier's TIR curl script (initContainers): lists naming other
+    #     participants or k3s-local content, US-3.3
+    #   keycloak.signingKey.did: alone it yields a keystore provider without a store, US-5.5 (with the realm's
+    #     clients, credentials, clientRoles and users)
+    #   identityhub.bootstrap.did and fdsc-edc's oid4vp.holder.kid: the kid must be <bootstrap.did>#<keyAlias> once
+    #     the bootstrap DID is set (dsc.identityhub.assertHolderKid), and keyAlias is not owned, US-8.11
+    #   the ODRL-PAP and marketplace env lists and the dashboard providers: lists with other content, US-5.6, US-5.3
+    #   dataSpaceConfig and APISIX: chart 10.16.0 has no DID key there
+    # The fdsc-edc keys sit under common, never under deployment.<name>: the subchart creates one controlplane per
+    # deployment entry, and their names are the user's. They are not gated on fdsc-edc yet (US-5.3).
+    targets:
+      - {path: 'decentralizedIam.vcAuthentication.vcverifier.deployment.verifier.did', fn: copy, args: ["{{ .did.value }}"]}
+      - {path: 'contract-management.did', fn: copy, args: ["{{ .did.value }}"]}
+      - {path: 'keycloak.issuerDid', fn: copy, args: ["{{ .did.value }}"]}
+      - {path: 'fdsc-edc.common.config.edc.participant.id', fn: copy, args: ["{{ .did.value }}"]}
+      - {path: 'fdsc-edc.common.config.issuerId', fn: copy, args: ["{{ .did.value }}"]}
+      # The STS client: it must equal the participant id, or the IdentityHub refuses the token request.
+      - {path: 'fdsc-edc.common.config.oauth.clientId', fn: copy, args: ["{{ .did.value }}"]}
+      # Names the secret the IdentityHub bootstrap writes for this DID.
+      - {path: 'fdsc-edc.common.config.oauth.secretAlias', fn: tpl, args: ["{{ .did.value }}-sts-client-secret"]}
+      - {path: 'fdsc-edc.common.config.oid4vp.holder.id', fn: copy, args: ["{{ .did.value }}"]}
   - id: host.keycloak
     stage: foundations
     type: hostname
