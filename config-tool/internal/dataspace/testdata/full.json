@@ -1,0 +1,12 @@
+{
+  "supported_models": ["https://example.org/schema.json"],
+  "supported_protocols": ["https"],
+  "authentication_protocols": ["oid4vp"],
+  "tir_address": "https://tir.example.org/",
+  "credential_types": [
+    {"type": "UserCredential", "description": "A natural person"},
+    "OperatorCredential"
+  ],
+  "participant_registration": "automatic",
+  "x_contact": "ops@example.org"
+}
