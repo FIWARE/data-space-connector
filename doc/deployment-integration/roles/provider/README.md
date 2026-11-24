@@ -115,6 +115,13 @@ scorpio:
 
 Scorpio needs the PostGIS extension in its database; the examples in [`k3s/`](../../../../k3s) create it, as a database named `ngb`, through the operator's `preparedDatabases`. The Identity Hub and the status list server, when enabled, take their database settings under `identityhub.postgresql` and `statusListServer.postgresql`.
 
+The Trusted Issuers List and the Credentials Config Service apply their database migrations at startup - on the first start, and after an upgrade that brings new ones - holding a lock in the `databasechangeloglock` table of their database while they do. If the pod is killed in the middle of the migrations (out of memory, a failed node, a pod deleted during an upgrade), the lock stays set, and the next start logs `Waiting for changelog lock....` and never completes. Release the lock in that database: the waiting pod then takes it and applies the remaining migrations. Do it only while no other pod of the service is applying them. With the chart's PostgreSQL, whose databases are `tildb` and `ccsdb`:
+
+```shell
+kubectl exec -n <namespace> postgres-0 -- psql -U postgres -d tildb \
+  -c 'UPDATE databasechangeloglock SET locked = false, lockgranted = NULL, lockedby = NULL WHERE id = 1;'
+```
+
 ## Optional components
 
 All optional components listed below can be deployed using the `fiware/data-space-connector` Helm chart. Some of them - Scorpio, the TMForum API and Contract Management - are **enabled by default**; set them to `false` explicitly if you do not need them. The [values example](#using-the-fiware-dsc-helm-chart-and-values) below lists the default of each one.
@@ -283,11 +290,15 @@ Enable the Eclipse Dataspace Components connector for DSP compliance. See [DSP I
 
 ### Using the FIWARE DSC Helm chart and values
 
+> **Start from the reference profile:** [`examples/provider.yaml`](../../../../charts/data-space-connector/examples/provider.yaml), and [`examples/provider-marketplace.yaml`](../../../../charts/data-space-connector/examples/provider-marketplace.yaml) for the provider's own local marketplace (not the Central Marketplace), are complete values files for a provider, to adapt to your installation. Their [README](../../../../charts/data-space-connector/examples/README.md) lists the prerequisites, the placeholders, the Secrets to create and the installation steps. The settings below explain each part.
+
 The provider uses the `fiware/data-space-connector` chart with authentication and authorization components enabled.
 
 1. Create a helm `values.yaml` file with the key settings for a provider deployment:
 
    The Ingresses in the example only carry the cert-manager annotations and use the cluster's default ingress class unless `className` is set. Add the class and the annotations your ingress controller needs; the [local deployment](../../local-deployment/LOCAL.MD) uses Traefik, for example.
+
+   With `certManagerResources.enabled: true` and `type: "prod"`, the chart creates the `prod-issuer` ClusterIssuer referenced below. Replace the `acmeEmail` and `ingressClass` placeholders with your own values. If your cluster already manages its own ClusterIssuer, disable `certManagerResources.enabled` and use that issuer's actual name in the annotations.
 
 ```yaml
 # Key settings for provider deployment
@@ -301,6 +312,8 @@ cert-manager:
 certManagerResources:
   enabled: true
   type: "prod"
+  acmeEmail: <your-email>              # ACME account contact; the chart's default is a placeholder
+  ingressClass: <your-ingress-class>   # the class that serves the HTTP-01 challenge
 
 # Keycloak — see ../KEYCLOAK.md for detailed configuration
 keycloak:
@@ -336,7 +349,7 @@ did:
     enabled: true
     className: <your-ingress-class>   # add the annotations your ingress controller needs
     annotations:
-      cert-manager.io/cluster-issuer: "prod" # Use self-signed for testing
+      cert-manager.io/cluster-issuer: "prod-issuer" # Use selfsigned-issuer with the selfsigned setup for testing
       cert-manager.io/private-key-algorithm: "ECDSA"
       # the Secret also holds the DID's key: renewals must keep it (cert-manager >= 1.18
       # generates a new one by default)
@@ -362,7 +375,7 @@ decentralizedIam:
       ingress:
         enabled: true
         annotations:
-          cert-manager.io/cluster-issuer: "prod"
+          cert-manager.io/cluster-issuer: "prod-issuer"
           cert-manager.io/private-key-algorithm: "ECDSA"
           cert-manager.io/common-name: "<your_verifier_domain>"
         tls:
@@ -403,7 +416,7 @@ decentralizedIam:
         til:
           enabled: true
           annotations:
-            cert-manager.io/cluster-issuer: "prod"
+            cert-manager.io/cluster-issuer: "prod-issuer"
             cert-manager.io/private-key-algorithm: "ECDSA"
             cert-manager.io/common-name: "<your_til_domain>"
           hosts:
@@ -432,7 +445,7 @@ decentralizedIam:
       ingress:
         enabled: true
         annotations:
-          cert-manager.io/cluster-issuer: "prod"
+          cert-manager.io/cluster-issuer: "prod-issuer"
           cert-manager.io/private-key-algorithm: "ECDSA"
         hosts:
           - host: <your_data_service_domain>       # Domain for the protected data service
@@ -479,7 +492,7 @@ decentralizedIam:
       ingress:
         enabled: true
         annotations:
-          cert-manager.io/cluster-issuer: "prod"
+          cert-manager.io/cluster-issuer: "prod-issuer"
           cert-manager.io/private-key-algorithm: "ECDSA"
           cert-manager.io/common-name: "<your_pap_domain>"
         hosts:
@@ -530,7 +543,7 @@ helm repo add fiware-dsc https://fiware.github.io/data-space-connector
 helm install provider fiware-dsc/data-space-connector --version <version> -n provider --create-namespace -f provider-values.yaml
 ```
 
-See [quick-start/values/provider.yaml](../../quick-start/values/provider.yaml) for a complete minimal example.
+See the reference profile [`examples/provider.yaml`](../../../../charts/data-space-connector/examples/provider.yaml) for a complete example.
 
 #### Other deployment options
 

@@ -1,0 +1,26 @@
+# Test plumbing for the consumer's reference profile in the local cluster: only what the test
+# environment needs and a real deployment does not. A fix to the profile itself belongs in
+# charts/data-space-connector/examples, not here.
+
+keycloak:
+  realm:
+    # the tests log their user in with the password grant, which the profile leaves off
+    defaultClients:
+      account-console:
+        directAccessGrantsEnabled: true
+    # a test user, holding READER at the provider, with the credentials of the realm
+    wallets:
+      issueCredentialsToUsers: true
+    users: |
+      {
+        "username": "employee",
+        "enabled": true,
+        "email": "employee@consumer.org",
+        "firstName": "Test",
+        "lastName": "User",
+        "credentials": [{"type": "password", "value": "test"}],
+        "clientRoles": {
+          "did:web:did-provider.127.0.0.1.nip.io": ["READER"],
+          "account": ["view-profile", "manage-account"]
+        }
+      }

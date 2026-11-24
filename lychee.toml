@@ -18,9 +18,3 @@ exclude_path = [
   "(^|/)maven-status/",
   "^charts/[^/]+/charts/",
 ]
-
-# The minimal values these links point to do not exist yet; remove this entry
-# once they are added.
-exclude = [
-  "doc/deployment-integration/quick-start/values/",
-]

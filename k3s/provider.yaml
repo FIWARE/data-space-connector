@@ -1036,9 +1036,6 @@ marketplace:
         path: /tmf-api/resourceInventoryManagement/v4
   bizEcosystemLogicProxy:
     purchaseEnabled: true
-    statefulset:
-      image:
-        tag: 11.11.1
     ingress:
       enabled: true
       annotations:
