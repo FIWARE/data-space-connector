@@ -43,6 +43,8 @@ type Bundle struct {
 	RoleMatrix *RoleMatrix `yaml:"roleMatrix"`
 	// Foundations are the cross-cutting answers and the chart keys they fan out to (ADR 0020).
 	Foundations []Foundation `yaml:"foundations"`
+	// Checks are the L2 rules, written as rules: in the bundle (ADR 0021); Rules is taken by Recognize.
+	Checks []CheckRule `yaml:"rules"`
 	// Latest marks the default version; Versions sets it, bundle files never do.
 	Latest bool `yaml:"-"`
 	// rules is Recognize compiled; readBundle sets it after validating every rule.
@@ -285,6 +287,9 @@ func readBundle(fsys fs.FS, file string) (versioned, error) {
 		return versioned{}, fmt.Errorf("%s: %w", file, err)
 	}
 	if b.foundations, b.order, err = compileFoundations(b.Foundations, b.TopLevelKeys); err != nil {
+		return versioned{}, fmt.Errorf("%s: %w", file, err)
+	}
+	if err := checkCheckRules(b.Checks, b.foundations); err != nil {
 		return versioned{}, fmt.Errorf("%s: %w", file, err)
 	}
 	return versioned{bundle: b, version: v}, nil

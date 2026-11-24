@@ -65,6 +65,12 @@ func Render(b model.Bundle, p profile.Profile, opts Options) (Tree, error) {
 	return Tree{Leaves: leaves}, nil
 }
 
+// Answers returns p's given answers plus the derived defaults, keyed by foundation id; it errors as Render does.
+func Answers(b model.Bundle, p profile.Profile) (map[string]any, error) {
+	answers, _, err := resolve(b, p.Answers)
+	return answers, err
+}
+
 // resolve returns the given answers plus the derived defaults, flat and as the template namespace. It
 // errors when a resolved answer does not start with its prefix.
 func resolve(b model.Bundle, given map[string]any) (map[string]any, map[string]any, error) {
