@@ -9,6 +9,7 @@ export const MSG_HOSTNAME = `must be a host name of lowercase letters, digits, '
 export const MSG_DOMAIN = 'must be a domain of at least two labels'
 
 // Go's \s is ASCII-only, so it is spelled out rather than taking JavaScript's Unicode \s.
+// eslint-disable-next-line no-control-regex -- mirrors model.plainLine in Go
 const PLAIN_LINE = /^[^\t\n\f\r \x00-\x1f\x7f"\\<>]([^\x00-\x1f\x7f"\\<>]*[^\t\n\f\r \x00-\x1f\x7f"\\<>])?$/u
 const HOSTNAME = /^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$/
 
