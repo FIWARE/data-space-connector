@@ -10,7 +10,8 @@ import { initialState, type AppState } from '../state/reducer'
 import { StageId } from '../state/stageIds'
 import { MSG_DOMAIN, MSG_HOSTNAME, MSG_PLAIN_LINE } from '../state/foundations'
 import { StoreProvider } from '../state/store'
-import { FOUNDATIONS, mockApi, type FoundationFakes, type RenderBody } from '../test/api'
+import { DOMAIN_WARNING, FOUNDATIONS, mockApi, renderWithFindings, type FoundationFakes, type RenderBody } from '../test/api'
+import { READ_MORE } from './findingsText'
 import { usedByText } from './foundationText'
 import { DIFF_HEADING, FOUNDATIONS_HEADING, HOSTS_PENDING, PINNED_LABEL, RENDER_DEBOUNCE_MS, RESOLVE_LINK } from './Foundations'
 
@@ -173,11 +174,35 @@ describe('Foundations', () => {
         ],
       },
       handSet: [],
+      findings: [],
     }
-    renderFoundations(ON_FOUNDATIONS, { render: (body) => (body.profile.answers?.['domain.base'] ? pinned : { tree: { leaves: [] }, diff: { groups: [] }, handSet: [] }) })
+    renderFoundations(ON_FOUNDATIONS, { render: (body) => (body.profile.answers?.['domain.base'] ? pinned : { tree: { leaves: [] }, diff: { groups: [] }, handSet: [], findings: [] }) })
     await userEvent.type(await domainInput(), BASE)
     const item = (await screen.findByText(PINNED_LABEL)).closest('li')
     expect(item).toHaveTextContent(FRONTEND_URL)
     expect(item).toHaveTextContent(`keeps https://idp.hand.org, would have become https://keycloak.${BASE}`)
+  })
+
+  describe('findings', () => {
+    const answered: AppState = { ...ON_FOUNDATIONS, answers: { ...ON_FOUNDATIONS.answers, values: { 'domain.base': BASE } } }
+    const ON_TARGET = { ...DOMAIN_WARNING, rule: 'on-target', stage: StageId.Target, field: 'target.environment', message: 'Not on this stage.' }
+
+    it('shows a finding under its field and keeps Next enabled', async () => {
+      renderFoundations(answered, { render: renderWithFindings([DOMAIN_WARNING, ON_TARGET]) })
+      const note = (await screen.findByText(new RegExp(DOMAIN_WARNING.message))).closest('p') as HTMLElement
+      expect(note).toHaveTextContent(`Warning: ${DOMAIN_WARNING.message}`)
+      expect(within(note).getByRole('link', { name: READ_MORE })).toHaveAttribute('href', repositoryDocUrl(DOMAIN_WARNING.doc))
+      expect(await domainInput()).toHaveAccessibleDescription(expect.stringContaining(DOMAIN_WARNING.message))
+      expect(screen.queryByText(ON_TARGET.message)).not.toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /^Next/ })).toBeEnabled()
+    })
+
+    it('drops the finding once a render no longer reports it', async () => {
+      const warnOnBase = renderWithFindings([DOMAIN_WARNING])
+      renderFoundations(answered, { render: (body) => ({ ...warnOnBase(body), findings: body.profile.answers?.['domain.base'] === BASE ? [DOMAIN_WARNING] : [] }) })
+      await screen.findByText(new RegExp(DOMAIN_WARNING.message))
+      await userEvent.type(await domainInput(), '.eu')
+      await waitFor(() => expect(screen.queryByText(new RegExp(DOMAIN_WARNING.message))).not.toBeInTheDocument())
+    })
   })
 })

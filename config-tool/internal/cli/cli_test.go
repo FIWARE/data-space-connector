@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"testing/fstest"
 
 	"github.com/FIWARE/data-space-connector/config-tool/internal/atomicfile"
 	"github.com/FIWARE/data-space-connector/config-tool/internal/profile"
@@ -187,6 +188,57 @@ func executeSplit(t *testing.T, args ...string) (stdout, stderr string, err erro
 	root.SetArgs(args)
 	err = root.ExecuteContext(context.Background())
 	return out.String(), errOut.String(), err
+}
+
+func TestGenerateReportsFindings(t *testing.T) {
+	const productionDIDKey = "testdata/production-did-key.dscprofile.yaml"
+	tests := []struct {
+		name       string
+		path       string
+		wantStderr string
+	}{
+		{name: "no finding", path: writeProfile(t, validProfile)},
+		{
+			name: "a warning goes to stderr and does not block",
+			path: productionDIDKey,
+			wantStderr: "warning: Stage 3 Foundations, answers.did.method: A did:key in production: other participants " +
+				"cannot resolve it over the web, and its key cannot be rotated without a new identity. Production data " +
+				"spaces usually expect did:web. (doc/deployment-integration/roles/provider/README.md#did-and-key-management)\n",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			_, stderr, err := executeSplit(t, "generate", "-p", tc.path)
+			if !errors.Is(err, errGeneratePending) {
+				t.Fatalf("error = %v, want only %v", err, errGeneratePending)
+			}
+			if stderr != tc.wantStderr {
+				t.Errorf("stderr = %q, want %q", stderr, tc.wantStderr)
+			}
+		})
+	}
+}
+
+func TestGenerateBlocksOnErrorFinding(t *testing.T) {
+	const bundle = `chart: data-space-connector
+version: 1.0.0
+revision: 1
+foundations:
+  - {id: domain.base, stage: foundations, type: domain, label: Base domain}
+rules:
+  - {id: an-error, severity: error, stage: target, field: target.environment,
+     when: [{field: target.environment, equals: production}], message: Not here., doc: doc/e.md}
+`
+	models := fstest.MapFS{"1.0.0/bundle.yaml": {Data: []byte(bundle)}}
+	path := writeProfile(t, strings.ReplaceAll(validProfile, "10.16.0", "1.0.0"))
+	var stderr bytes.Buffer
+	err := renderProfile(&stderr, path, models)
+	if !errors.Is(err, errBlockingFindings) {
+		t.Fatalf("error = %v, want %v", err, errBlockingFindings)
+	}
+	if want := "error: Stage 1 Target, target.environment: Not here. (doc/e.md)\n"; stderr.String() != want {
+		t.Errorf("stderr = %q, want %q", stderr.String(), want)
+	}
 }
 
 // trialOutputs renders the embedded trial as generate --trial does.

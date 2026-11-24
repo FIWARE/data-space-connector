@@ -2,7 +2,7 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import { fetchFoundations, type Foundation } from '../api/foundations'
 import { toProfile } from '../api/profile'
-import { fetchRender, type Change, type ChangeGroup } from '../api/render'
+import { fetchRender, type Change, type ChangeGroup, type Finding } from '../api/render'
 import { AskLater } from '../chrome/AskLater'
 import { PUBLIC_NAMES_URL, repositoryDocUrl } from '../links'
 import { useStore } from '../state/context'
@@ -10,6 +10,7 @@ import { answerErrors, checkAnswer, validAnswers } from '../state/foundations'
 import { answerFieldId, fieldElementId, fieldStage } from '../state/openQuestions'
 import { StageId } from '../state/stageIds'
 import { DerivedAnswers } from './DerivedAnswers'
+import { FindingNote } from './Findings'
 import { derivedValue, usedByText } from './foundationText'
 
 /** Pause after the last keystroke before the answers are rendered again. */
@@ -68,13 +69,15 @@ function DocLink({ foundation }: { foundation: Foundation }) {
   )
 }
 
-/** One answer the user gives: input, format error, help, doc link, "ask later" and its fan-out. */
-function AnswerField({ foundation }: { foundation: Foundation }) {
+/** One answer the user gives: input, format error, findings, help, doc link, "ask later" and its fan-out. */
+function AnswerField({ foundation, findings }: { foundation: Foundation; findings: readonly Finding[] }) {
   const { state, dispatch } = useStore()
   const field = answerFieldId(foundation.id)
   const id = fieldElementId(field)
   const value = state.answers.values[foundation.id]
   const error = value === undefined ? undefined : checkAnswer(foundation.type, value, foundation.options)
+  const own = findings.filter((f) => f.field === field)
+  const described = [error && `${id}-error`, ...own.map((f) => `${id}-${f.rule}`), `${id}-help`].filter(Boolean).join(' ')
   return (
     <div className="row">
       <label htmlFor={id}>{foundation.label}</label>
@@ -82,7 +85,7 @@ function AnswerField({ foundation }: { foundation: Foundation }) {
         id={id}
         value={value ?? ''}
         aria-invalid={error !== undefined}
-        aria-describedby={error ? `${id}-error ${id}-help` : `${id}-help`}
+        aria-describedby={described}
         onChange={(e) => dispatch({ type: 'setAnswer', id: foundation.id, value: e.target.value })}
       />
       <AskLater field={field} />
@@ -91,6 +94,9 @@ function AnswerField({ foundation }: { foundation: Foundation }) {
           {error}
         </p>
       )}
+      {own.map((f) => (
+        <FindingNote key={f.rule} finding={f} id={`${id}-${f.rule}`} />
+      ))}
       <p className="hint" id={`${id}-help`}>
         {foundation.help} <DocLink foundation={foundation} /> <UsedBy foundation={foundation} />
       </p>
@@ -166,14 +172,21 @@ function RenderDiff({ groups, foundations }: { groups: readonly ChangeGroup[]; f
   )
 }
 
-/** Renders the answers whenever they change (debounced) and keeps the diff; the first render is the baseline.
+/** What the last render of the answers left: its diff (none for the baseline), its findings and a refusal. */
+interface RenderState {
+  groups: readonly ChangeGroup[]
+  findings: readonly Finding[]
+  error?: string
+}
+
+/** Renders the answers whenever they change (debounced) and keeps the diff and findings; the first render is the baseline.
  *  Nothing is rendered while an answer is invalid, so the server's baseline stays the last valid tree. */
-function useRenderDiff(): { groups: readonly ChangeGroup[]; error?: string } {
+function useRenderDiff(): RenderState {
   const { state } = useStore()
   const values = state.answers.values
   const latest = useRef(state)
   const started = useRef(false)
-  const [result, setResult] = useState<{ groups: readonly ChangeGroup[]; error?: string }>({ groups: [] })
+  const [result, setResult] = useState<RenderState>({ groups: [], findings: [] })
 
   useEffect(() => {
     latest.current = state
@@ -188,9 +201,9 @@ function useRenderDiff(): { groups: readonly ChangeGroup[]; error?: string } {
         fetchRender(toProfile(latest.current), latest.current.loaded?.sha256, controller.signal).then(
           (r) => {
             started.current = true
-            setResult((prev) => ({ groups: baseline ? prev.groups : r.diff.groups }))
+            setResult((prev) => ({ groups: baseline ? prev.groups : r.diff.groups, findings: r.findings }))
           },
-          (err: Error) => controller.signal.aborted || setResult((prev) => ({ groups: prev.groups, error: err.message })),
+          (err: Error) => controller.signal.aborted || setResult((prev) => ({ ...prev, error: err.message })),
         ),
       baseline ? 0 : RENDER_DEBOUNCE_MS,
     )
@@ -242,7 +255,7 @@ export function Foundations() {
         <div className="panel" role="group" aria-labelledby="foundations-organization">
           <h3 id="foundations-organization">{ORGANIZATION_PANEL}</h3>
           {organization.map((f) => (
-            <AnswerField key={f.id} foundation={f} />
+            <AnswerField key={f.id} foundation={f} findings={diff.findings} />
           ))}
         </div>
       )}
@@ -250,7 +263,7 @@ export function Foundations() {
         <div className="panel" role="group" aria-labelledby="foundations-network">
           <h3 id="foundations-network">{NETWORK_PANEL}</h3>
           {network.map((f) => (
-            <AnswerField key={f.id} foundation={f} />
+            <AnswerField key={f.id} foundation={f} findings={diff.findings} />
           ))}
           {hosts.length > 0 && <Hosts hosts={hosts} />}
         </div>

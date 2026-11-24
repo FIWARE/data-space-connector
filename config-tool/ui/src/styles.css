@@ -79,6 +79,9 @@ a { color: var(--accent); }
 .row .inline { display: inline-flex; align-items: center; gap: 4px; }
 .field-error { flex-basis: 100%; margin: 2px 0 0 120px; color: var(--err); font-size: 12.5px; }
 .panel > .field-error, .start > .field-error { margin-left: 0; }
+p.finding { flex-basis: 100%; margin: 2px 0 0 120px; font-size: 12.5px; }
+.finding.warning .severity, p.finding.warning { color: var(--warn); }
+.finding.error .severity, p.finding.error { color: var(--err); }
 .cluster { margin-top: 12px; }
 .hint { color: var(--fg-dim); font-size: 12.5px; margin: 6px 0 0; }
 

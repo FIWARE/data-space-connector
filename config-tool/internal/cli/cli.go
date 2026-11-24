@@ -14,6 +14,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/FIWARE/data-space-connector/config-tool/internal/atomicfile"
+	"github.com/FIWARE/data-space-connector/config-tool/internal/check"
 	"github.com/FIWARE/data-space-connector/config-tool/internal/model"
 	"github.com/FIWARE/data-space-connector/config-tool/internal/profile"
 	"github.com/FIWARE/data-space-connector/config-tool/internal/render"
@@ -36,10 +37,16 @@ const (
 	// quickStartURL is the Quick Start guide that installs the trial releases.
 	quickStartURL = "https://github.com/FIWARE/data-space-connector/blob/main/doc/deployment-integration/local-deployment/LOCAL.MD"
 	warningPrefix = "warning: "
+	// firstStageNumber is the number the wizard shows for the first stage of model's stage order.
+	firstStageNumber = 1
 )
 
-// errGeneratePending answers a profile that renders until writing the values file is wired in.
-var errGeneratePending = errors.New("writing values.yaml lands with US-7.1")
+var (
+	// errGeneratePending answers a profile that renders until writing the values file is wired in.
+	errGeneratePending = errors.New("writing values.yaml lands with US-7.1")
+	// errBlockingFindings refuses a profile with an error finding; warnings never block.
+	errBlockingFindings = errors.New("error findings block generate")
+)
 
 // GUIOptions are the root command's settings for the GUI.
 type GUIOptions struct {
@@ -85,7 +92,7 @@ func newGenerateCommand() *cobra.Command {
 			if withTrial {
 				return generateTrial(cmd.OutOrStdout(), cmd.ErrOrStderr(), outputDir)
 			}
-			if err := renderProfile(profilePath, bundles.FS); err != nil {
+			if err := renderProfile(cmd.ErrOrStderr(), profilePath, bundles.FS); err != nil {
 				return fmt.Errorf("generate: %w", err)
 			}
 			return fmt.Errorf("generate: %w", errGeneratePending)
@@ -163,8 +170,8 @@ func loadProfile(path string, models fs.FS) (profile.Profile, model.Bundle, erro
 }
 
 // renderProfile renders the profile at path against the bundle it names, so bundle and profile
-// errors surface before anything is written.
-func renderProfile(path string, models fs.FS) error {
+// errors surface before anything is written. Every L2 finding goes to stderr; only an error one fails.
+func renderProfile(stderr io.Writer, path string, models fs.FS) error {
 	p, b, err := loadProfile(path, models)
 	if err != nil {
 		return err
@@ -172,7 +179,27 @@ func renderProfile(path string, models fs.FS) error {
 	if _, err := render.Render(b, p, render.Options{}); err != nil {
 		return fmt.Errorf("%s: %w", path, err)
 	}
+	findings, err := check.Evaluate(b, p)
+	if err != nil {
+		return fmt.Errorf("%s: %w", path, err)
+	}
+	for _, f := range findings {
+		fmt.Fprintf(stderr, "%s: Stage %d %s, %s: %s (%s)\n",
+			f.Severity, f.Stage.Rank()+firstStageNumber, stageLabel(f.Stage), f.Field, f.Message, f.Doc)
+	}
+	if check.Blocking(findings) {
+		return fmt.Errorf("%s: %w", path, errBlockingFindings)
+	}
 	return nil
+}
+
+// stageLabel is the wizard's rail label of s, which is its id capitalized.
+func stageLabel(s model.Stage) string {
+	id := string(s)
+	if id == "" {
+		return id
+	}
+	return strings.ToUpper(id[:1]) + id[1:]
 }
 
 // invalidProfileError lists every field error of a profile generate refuses.

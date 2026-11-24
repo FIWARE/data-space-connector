@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"slices"
 
+	"github.com/FIWARE/data-space-connector/config-tool/internal/check"
 	"github.com/FIWARE/data-space-connector/config-tool/internal/load"
 	"github.com/FIWARE/data-space-connector/config-tool/internal/model"
 	"github.com/FIWARE/data-space-connector/config-tool/internal/profile"
@@ -18,12 +19,13 @@ type renderRequest struct {
 	SourceSHA256 string          `json:"sourceSha256"`
 }
 
-// renderResponse is the tree of POST /api/render, its change against the previous render and the
-// answers given in place of their derived default.
+// renderResponse is the tree of POST /api/render, its change against the previous render, the
+// answers given in place of their derived default and the L2 findings, which never fail the request.
 type renderResponse struct {
-	Tree    render.Tree            `json:"tree"`
-	Diff    render.TreeDiff        `json:"diff"`
-	HandSet []render.HandSetAnswer `json:"handSet"`
+	Tree     render.Tree            `json:"tree"`
+	Diff     render.TreeDiff        `json:"diff"`
+	HandSet  []render.HandSetAnswer `json:"handSet"`
+	Findings []check.Finding        `json:"findings"`
 }
 
 // foundationsResponse lists a bundle's foundations in declaration order with their fan-out.
@@ -85,13 +87,18 @@ func (s *Server) handleRender(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnprocessableEntity, err.Error(), "")
 		return
 	}
+	findings, err := check.Evaluate(*b, p)
+	if err != nil {
+		writeError(w, http.StatusUnprocessableEntity, err.Error(), "")
+		return
+	}
 	// A render of another source (e.g. a new configuration after a load) starts a new baseline.
 	if s.lastRenderSHA != req.SourceSHA256 {
 		s.resetRender()
 	}
 	diff := render.Diff(*b, s.lastRender, tree)
 	s.lastRender, s.lastRenderSHA = tree, req.SourceSHA256
-	writeJSON(w, renderResponse{Tree: tree, Diff: diff, HandSet: handSet})
+	writeJSON(w, renderResponse{Tree: tree, Diff: diff, HandSet: handSet, Findings: findings})
 }
 
 // overridesFor is the loaded slot when it holds values of chart; paths of another chart would pin nonsense.
