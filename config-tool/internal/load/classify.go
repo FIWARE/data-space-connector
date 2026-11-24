@@ -22,6 +22,7 @@ const (
 	noteNotBool   = "not a boolean, so it does not answer %s"
 	noteNull      = "null does not answer %s"
 	notePattern   = "does not match the pattern of %s"
+	noteType      = "does not match the type of %s"
 	noteDiffers   = "differs from %s = %v"
 )
 
@@ -30,20 +31,24 @@ const (
 type classifier struct {
 	markers []roundtrip.OwnedMarker
 	// root is where the chart's values sit; rule paths are relative to it.
-	root    roundtrip.Path
-	rules   map[string]model.CompiledRule
-	answers map[string]*Answer
-	order   []string
+	root  roundtrip.Path
+	rules map[string]model.CompiledRule
+	// foundation finds the foundation a rule answers, whose type a derived value must pass.
+	foundation func(id string) (model.CompiledFoundation, bool)
+	answers    map[string]*Answer
+	order      []string
 	// leafAnswer and notes are keyed by path string; live leaf paths are unique.
 	leafAnswer map[string]string
 	notes      map[string]string
 }
 
-func newClassifier(markers []roundtrip.OwnedMarker, rules []model.CompiledRule, root roundtrip.Path) *classifier {
+func newClassifier(markers []roundtrip.OwnedMarker, b model.Bundle, root roundtrip.Path) *classifier {
+	rules := b.Rules()
 	c := &classifier{
 		markers:    markers,
 		root:       root,
 		rules:      make(map[string]model.CompiledRule, len(rules)),
+		foundation: b.Foundation,
 		answers:    map[string]*Answer{},
 		leafAnswer: map[string]string{},
 		notes:      map[string]string{},
@@ -92,6 +97,9 @@ func (c *classifier) derive(p roundtrip.Path, n *yaml.Node, from Origin) bool {
 	}
 	key := p.String()
 	v, note := readValue(rule, n)
+	if f, ok := c.foundation(rule.Answer); ok && note == "" && f.Check(v) != nil {
+		note = fmt.Sprintf(noteType, rule.Answer)
+	}
 	if note != "" {
 		c.notes[key] = note
 		return false

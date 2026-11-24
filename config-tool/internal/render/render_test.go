@@ -543,3 +543,45 @@ func TestRenderJSONIsStable(t *testing.T) {
 		t.Errorf("two renders differ:\n%s\n%s", first, second)
 	}
 }
+
+// TestRenderTIRAddress renders the data space's TIR address into the verifier key only when answered, and keeps a
+// loaded address unpinned once the load's derived answer is seeded.
+func TestRenderTIRAddress(t *testing.T) {
+	const (
+		tirPath = "decentralizedIam.vcAuthentication.vcverifier.deployment.verifier.tirAddress"
+		loaded  = "decentralizedIam:\n  vcAuthentication:\n    vcverifier:\n      deployment:\n        verifier:\n" +
+			"          tirAddress: " + referenceTIR + "\n"
+	)
+	b := providerBundle(t)
+	res, err := load.Load([]byte(loaded), "values.yaml", []model.Bundle{b}, load.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	tests := []struct {
+		name    string
+		answers map[string]any
+		opts    Options
+		want    any
+	}{
+		{"unanswered", map[string]any{}, Options{}, nil},
+		{"answered", map[string]any{tirAddressID: referenceTIR}, Options{}, referenceTIR},
+		{"loaded and seeded", load.SeedAnswers(res.Report, nil), Options{Overrides: res}, referenceTIR},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			tree, err := Render(b, profile.Profile{Answers: tc.answers}, tc.opts)
+			if err != nil {
+				t.Fatal(err)
+			}
+			got, ok := values(tree)[tirPath]
+			switch {
+			case tc.want == nil && ok:
+				t.Errorf("%s = %v, want no key", tirPath, got)
+			case tc.want != nil && got != tc.want:
+				t.Errorf("%s = %v, want %v", tirPath, got, tc.want)
+			case tc.want != nil && leaf(t, tree, tirPath).Provenance.Pinned:
+				t.Errorf("%s is pinned, want it re-rendered", tirPath)
+			}
+		})
+	}
+}

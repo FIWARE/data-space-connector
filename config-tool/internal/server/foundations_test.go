@@ -159,3 +159,18 @@ func TestFoundationsGroupAndCondition(t *testing.T) {
 		t.Errorf("%s = defaultWhen %+v, prefix %q; want neither", foundationHost, host.DefaultWhen, host.Prefix)
 	}
 }
+
+func TestFoundationsDataspace(t *testing.T) {
+	ps := newProfileSession(t)
+	_, foundations := getFoundations(t, ps, foundationsPath(dscChart, latestChart), true)
+	byID := map[string]foundationJSON{}
+	for _, f := range foundations {
+		byID[f.ID] = f
+	}
+	for id, count := range map[string]int{"dataspace.tirAddress": 1, "dataspace.credentialTypes": 0, "dataspace.autoRegistration": 0} {
+		f, ok := byID[id]
+		if !ok || f.Group != "dataspace" || f.Count != count {
+			t.Errorf("%s = present %v, group %q, count %d; want group dataspace, count %d", id, ok, f.Group, f.Count, count)
+		}
+	}
+}

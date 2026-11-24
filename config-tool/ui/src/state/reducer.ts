@@ -229,6 +229,12 @@ function loadedAnswers(report: LoadReport): Answers {
   if (report.chartVersionFrom === VersionSource.Header) {
     answers.target.chartVersion = report.chartVersion
   }
+  // A foundation answer the file derives counts as given, as the server seeds an opened profile (ADR 0022).
+  for (const a of report.answers) {
+    if (a.stage === StageId.Foundations && typeof a.value !== 'number') {
+      answers.values[a.id] = a.value
+    }
+  }
   return answers
 }
 

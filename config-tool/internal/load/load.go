@@ -158,7 +158,7 @@ func Load(src []byte, name string, bundles []model.Bundle, opts Options) (*Resul
 		root = candidates[0].path
 	}
 	markers := doc.OwnedMarkers()
-	c := newClassifier(markers, bundle.Rules(), root)
+	c := newClassifier(markers, bundle, root)
 	roundtrip.Classify(doc, c.ownedPass)
 	leaves := roundtrip.Classify(doc, c.classify)
 

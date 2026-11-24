@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { VersionSource } from '../api/load'
-import type { Profile } from '../api/profile'
+import { toProfile, type Profile } from '../api/profile'
 import type { RoleChange } from '../api/roles'
 import { FOUNDATIONS, REPORT, TRIAL } from '../test/api'
 import { emptyAnswers, Environment, TargetType } from './answers'
@@ -31,7 +31,14 @@ describe('reducer', () => {
     const next = reducer(BUSY, { type: 'fileLoaded', report: REPORT, file: FILE })
     expect(next).toMatchObject({ entered: true, stage: StageId.Review, visited: [StageId.Review], expert: false, loaded: REPORT, loadedFile: FILE })
     expect(next.session).toEqual({ kubeconfig: KUBECONFIG, chosenContext: undefined })
-    expect(next.answers).toEqual({ values: {}, features: {}, target: { ...emptyAnswers().target, chartVersion: REPORT.chartVersion } })
+    expect(next.answers).toEqual({ values: { 'domain.base': 'example.org' }, features: {}, target: { ...emptyAnswers().target, chartVersion: REPORT.chartVersion } })
+  })
+
+  it('seeds only the foundation answers a loaded file derives, and saving keeps them', () => {
+    const next = reducer(BUSY, { type: 'fileLoaded', report: REPORT, file: FILE })
+    expect(next.answers.values).toEqual({ 'domain.base': 'example.org' })
+    expect(next.answers.features).toEqual({})
+    expect(toProfile({ ...next, foundations: FOUNDATIONS.foundations }).answers).toEqual({ 'domain.base': 'example.org' })
   })
 
   it.each([
