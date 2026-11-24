@@ -42,9 +42,19 @@ method choice.
   - `fdsc-edc.*`, verified in `k3s/dsp-provider.yaml` (lines 41-42, 161-171):
     `fdsc-edc.common.config.edc.participant.id`, `fdsc-edc.common.config.issuerId`,
     `fdsc-edc.common.config.oauth.clientId` (the STS client; it must equal the participant id or STS
-    token requests fail) and `fdsc-edc.deployment.oid4vc.config.oid4vp.holder.id` are `copy` targets.
+    token requests fail) and `fdsc-edc.common.config.oid4vp.holder.id` are `copy` targets.
     `fdsc-edc.common.config.oauth.secretAlias` (`<did>-sts-client-secret`) is a `tpl` target, so the
     alias keeps naming the secret the IdentityHub bootstrap writes for this DID.
+  - Every target sits under `fdsc-edc.common.`, never under `fdsc-edc.deployment.`. In fdsc-edc 0.7.9,
+    `deployment.yaml`, `config-map.yaml`, `service.yaml`, `ingress.yaml` and `odrl-pap-configmaps.yaml`
+    each `range` over `.Values.deployment` (default `{}`) with no enabled gate, and merge every entry
+    over `common` (`mergeOverwrite (deepCopy common) $deployment`). A key under
+    `fdsc-edc.deployment.<name>` would therefore create a `<fullname>-<name>` controlplane the user
+    never asked for. The deployment names are the user's (`oid4vc` is only `dsp-provider.yaml`'s
+    choice), so the tool cannot own them. `common.config.oid4vp.holder.id` is declared by the
+    subchart, reaches every deployment through that merge, and stays inert while the map is empty.
+    `dsp-provider.yaml` sets `holder.id` per deployment (`deployment.oid4vc.config.oid4vp.holder.id`,
+    line 41), so the value comparison crosses paths.
 
   Two chart-only keys name the DID but are **not** targets, because together they trip the chart's
   `dsc.identityhub.assertHolderKid` (`_helpers.tpl` ~461, run by `identityhub-cm.yaml`; pinned by
@@ -55,7 +65,7 @@ method choice.
   `keyAlias`, which the tool does not own:
   - `identityhub.bootstrap.did` (values.yaml ~3087): exclusion, US-8.11 (identity material: the
     bootstrap block with `keyAlias`, whose fragment the DID document publishes).
-  - `fdsc-edc.deployment.oid4vc.config.oid4vp.holder.kid`: exclusion, US-8.11. It is a key id, like
+  - `fdsc-edc.{common,deployment.<name>}.config.oid4vp.holder.kid`: exclusion, US-8.11. It is a key id, like
     `keycloak.signingKey.did`, not the bare DID.
 
   How a loaded file behaves follows US-3.1's loader. `load` marks a leaf as owned only inside an owned
@@ -75,8 +85,9 @@ method choice.
   A fresh render emits neither key, so the chart defaults (`bootstrap.did: ""`, no kid) apply.
 
   The five `fdsc-edc.*` targets are not feature-gated (gating is US-5.3), so every render emits them,
-  even with `fdsc-edc` disabled. That is accepted until US-5.3: the keys are inert while the component
-  is off. Leaving them out would split the DID in a generated file whose user later enables the
+  even with `fdsc-edc` disabled. That is accepted until US-5.3: all five sit under `fdsc-edc.common`,
+  so they are inert while the component is off, and once it is on they only feed the deployments the
+  user declares; they never add a workload. Leaving them out would split the DID in a generated file whose user later enables the
   component by hand: the hand-added `fdsc-edc.*` DID keys sit outside the owned block, so they are
   pinned on the old DID, while the owned verifier/contract-management/keycloak targets follow a
   `domain.base` change. As targets, the five keys sit in the owned block from the first generation and
@@ -101,7 +112,7 @@ comment above the `did.value` targets, in ADR 0021 (Step 4) and in the corrected
 | APISIX | nothing | Chart 10.16.0 has no DID key there | none until the chart adds one |
 | Keycloak signing key `keycloak.signingKey.did` | not a target | Emitting it alone breaks the realm key provider (see the table above); it belongs with the keystore block | US-5.5 |
 | IdentityHub `identityhub.bootstrap.did` | not a target | With a bare `holder.kid` it fails the chart's `assertHolderKid`; with a `<did>#<keyAlias>` kid it needs `keyAlias`, which the tool does not own | US-8.11 |
-| EDC `fdsc-edc.deployment.oid4vc.config.oid4vp.holder.kid` | not a target | A key id whose form (`<did>` or `<did>#<keyAlias>`) depends on the IdentityHub bootstrap, see the row above | US-8.11 |
+| EDC `fdsc-edc.{common,deployment.<name>}.config.oid4vp.holder.kid` | not a target | A key id whose form (`<did>` or `<did>#<keyAlias>`) depends on the IdentityHub bootstrap, see the row above | US-8.11 |
 
 ## Steps
 
@@ -157,7 +168,8 @@ In `config-tool/model/10.16.0/bundle.yaml` (bump `revision` 5 → 6), after `dom
 ```
 Label, help and `doc` (`doc/deployment-integration/roles/README.md` or the IdentityHub/DID section that
 fits best) are bundle data. Add a comment above the targets that lists the deviations from the ticket
-(see that section) with their owning stories.
+(see that section) with their owning stories, and says why the fdsc-edc targets sit under `common`
+and never under `deployment.<name>` (see Facts).
 
 `did.method` has no targets, so it never emits a key. An unanswered `did.value` with `did:key` emits
 nothing.
@@ -170,12 +182,16 @@ Tests in `config-tool/internal/render/provider_test.go`, modelled on the domain 
   `did.value` target or excluded, every `did.value` target is such a leaf or a listed chart-only
   target, and stale exclusion rows fail.
 - `TestProviderValues`: rendered leaves absent from provider.yaml are allowed only if they are in a
-  `chartOnlyTargets` table (path → reference file, `k3s/dsp-provider.yaml` for `fdsc-edc.*`). The
-  same test asserts their values against that file: all five `fdsc-edc.*` targets, `oauth.clientId` and
-  `oauth.secretAlias` included, against `dsp-provider.yaml`. This replaces the `orgDisplayName` special
-  case.
+  `chartOnlyTargets` table (path → reference file and reference path, `k3s/dsp-provider.yaml` for
+  `fdsc-edc.*`). The same test asserts their values against that file: all five `fdsc-edc.*` targets,
+  `oauth.clientId` and `oauth.secretAlias` included, against `dsp-provider.yaml`. The reference path
+  equals the target path except for `fdsc-edc.common.config.oid4vp.holder.id`, which is compared with
+  dsp-provider.yaml's `fdsc-edc.deployment.oid4vc.config.oid4vp.holder.id`; the row's comment says why
+  (see Facts). This replaces the `orgDisplayName` special case.
 - `TestChartOnlyTargetsUngated`: a provider render with `fdsc-edc` off still emits the five
   `fdsc-edc.*` DID targets. It pins the accepted ungated state, and its comment says US-5.3 replaces it.
+- `TestNoFdscEdcDeploymentTargets`: no target of any foundation has a path starting with
+  `fdsc-edc.deployment.`, so a render never adds an fdsc-edc workload. This one outlives US-5.3.
 - `TestHolderKidMatchesBootstrapDID`, mirroring `dsc.identityhub.assertHolderKid`: whenever the merged
   output (targets plus pinned loaded keys) holds both `identityhub.bootstrap.did` and any
   `fdsc-edc.{common,deployment.*}.config.oid4vp.holder.kid`, each kid equals
@@ -253,7 +269,8 @@ says so." `resolve` already keeps a given answer. What is missing is saying so.
   ticket" table of this plan, because the DID target list is the first foundation that narrows an AC,
   and the loaded-file consequence as stated in "Facts" above: a hand-written file pins every DID leaf,
   and only a generated file with a hand-added bootstrap pair drifts (`bootstrap.did` ≠
-  `participant.id`) until US-8.11.
+  `participant.id`) until US-8.11. It also records that the fdsc-edc targets go under
+  `fdsc-edc.common` only, because any key under `fdsc-edc.deployment.<name>` creates a workload.
   Add it to `doc/adr/README.md`. In
   `FEATURE_MODEL.md` §L2, note that the rules are in `bundle.yaml` `rules:` instead of a separate
   `rules.yaml`.
