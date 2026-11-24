@@ -4,6 +4,7 @@ import type { LoadReport } from '../api/load'
 import type { FeatureState, Profile, ProfileResponse, RecentProfiles } from '../api/profile'
 import type { FeatureChoice, FeaturesResult, FeatureToggle } from '../api/features'
 import type { Foundation, FoundationList } from '../api/foundations'
+import type { ImportPreview, ImportResult, TIRCheckResult } from '../api/dataspace'
 import type { Change, ChangeGroup, Finding, HandSetAnswer, Leaf, RenderResult } from '../api/render'
 import type { Feature, Offer, PresetResult, RoleCatalogue, RoleChange } from '../api/roles'
 import type { Kubeconfig, ModelInfo } from '../api/target'
@@ -492,9 +493,100 @@ function foundationDefaults(): Required<FoundationFakes> {
   }
 }
 
+/** The dataspace foundations of the 10.16.0 bundle: the TIR address renders, the other two are answers only. */
+export const TIR_ADDRESS: Foundation = {
+  id: 'dataspace.tirAddress',
+  stage: 'foundations',
+  type: 'url',
+  group: 'dataspace',
+  default: '',
+  defaultWhen: null,
+  prefix: '',
+  options: [],
+  label: 'Trust Anchor TIR address',
+  help: "The Trusted Issuers Registry of the data space's Trust Anchor.",
+  doc: 'doc/deployment-integration/roles/provider/README.md#vcverifier',
+  targets: [{ path: 'decentralizedIam.vcAuthentication.vcverifier.deployment.verifier.tirAddress', component: 'decentralizedIam' }],
+  count: 1,
+  components: ['decentralizedIam'],
+}
+
+export const CREDENTIAL_TYPES: Foundation = {
+  ...TIR_ADDRESS,
+  id: 'dataspace.credentialTypes',
+  type: 'credentialTypes',
+  label: 'Credential types',
+  help: 'The Verifiable Credential types the data space accepts.',
+  doc: 'doc/deployment-integration/roles/provider/README.md#authentication-verifiable-credential-verification',
+  targets: [],
+  count: 0,
+  components: [],
+}
+
+export const AUTO_REGISTRATION: Foundation = {
+  ...CREDENTIAL_TYPES,
+  id: 'dataspace.autoRegistration',
+  type: 'bool',
+  label: 'Register at the Trust Anchor automatically',
+  help: 'Whether the data space registers new participants at its Trust Anchor.',
+  doc: 'doc/deployment-integration/roles/operator/README.md#participant-onboarding',
+}
+
+/** FOUNDATIONS with the dataspace group after the organization, as the bundle declares them. */
+export const DATASPACE_FOUNDATIONS: FoundationList = {
+  foundations: [...FOUNDATIONS.foundations.slice(0, 1), TIR_ADDRESS, CREDENTIAL_TYPES, AUTO_REGISTRATION, ...FOUNDATIONS.foundations.slice(1)],
+}
+
+/** The values the fake descriptor publishes, by answer id. */
+export const IMPORTED: Record<string, unknown> = {
+  'dataspace.tirAddress': 'https://tir.dataspace.org/',
+  'dataspace.credentialTypes': [{ description: 'issued to the organization', type: 'MembershipCredential' }, { type: 'UserCredential' }],
+  'dataspace.autoRegistration': true,
+}
+
+/** The descriptor path the server appends to a base URL. */
+export const DESCRIPTOR_PATH = '/.well-known/data-space-configuration'
+
+/** The preview of the fake descriptor against `profile`: every imported value its given answer does not equal. */
+export function importPreview(profile: Profile): ImportPreview {
+  const answers = profile.answers ?? {}
+  const changes = Object.entries(IMPORTED)
+    .filter(([id, value]) => JSON.stringify(answers[id]) !== JSON.stringify(value))
+    .map(([id, imported]) => ({ id, imported, ...(answers[id] === undefined ? {} : { current: answers[id] }) }))
+  return { changes, problems: [], known: { supported_protocols: ['dsp'] }, unused: ['contact'] } as ImportPreview
+}
+
+/** The body POST /api/dataspace/import receives. */
+export interface ImportBody {
+  url: string
+  profile: Profile
+}
+
+/** An answer of a dataspace route, or a status code it fails with. */
+export type DataspaceAnswer<T> = T | number
+
+/** The dataspace routes' fakes; by default the TIR answers 200 and the import previews IMPORTED. */
+export interface DataspaceFakes {
+  check?: (url: string) => DataspaceAnswer<TIRCheckResult> | Promise<DataspaceAnswer<TIRCheckResult>>
+  import?: (body: ImportBody) => DataspaceAnswer<ImportResult> | Promise<DataspaceAnswer<ImportResult>>
+}
+
+/** The server's message for a refused dataspace request. */
+export function refusedDataspace(status: number): string {
+  return `dataspace request refused with ${status}`
+}
+
+/** The HTTP status the fake TIR answers. */
+export const TIR_STATUS = 200
+
+const DATASPACE_DEFAULTS: Required<DataspaceFakes> = {
+  check: () => ({ status: 'reachable', httpStatus: TIR_STATUS }),
+  import: (body) => ({ url: `${body.url.replace(/\/$/, '')}${DESCRIPTOR_PATH}`, preview: importPreview(body.profile) }),
+}
+
 /** Answers GET /api/model with `model`, GET /api/cluster/contexts with `contexts(path)` and POST /api/load with
  *  `load(name, root)`; `root` is null when the upload lets the server detect it. The profile routes use `profiles`,
- *  the trial routes `trial`, the role routes `roles`, the foundation routes `foundations`. */
+ *  the trial routes `trial`, the role routes `roles`, the foundation routes `foundations`, the dataspace routes `dataspace`. */
 export function mockApi(
   contexts: (path: string) => ContextsAnswer = () => ({ paths: [], contexts: [], current: '' }),
   model: ModelInfo = MODEL,
@@ -503,11 +595,13 @@ export function mockApi(
   trial: TrialFakes = {},
   roles: RoleFakes = {},
   foundations: FoundationFakes = {},
+  dataspace: DataspaceFakes = {},
 ) {
   const fakes = { ...PROFILE_DEFAULTS, ...profiles }
   const trialFakes = { ...TRIAL_DEFAULTS, ...trial }
   const roleFakes = { ...ROLE_DEFAULTS, ...roles }
   const foundationFakes = { ...foundationDefaults(), ...foundations }
+  const dataspaceFakes = { ...DATASPACE_DEFAULTS, ...dataspace }
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(String(input), 'http://localhost')
     const json = (body: unknown, status = 200) => Promise.resolve(new Response(JSON.stringify(body), { status }))
@@ -553,6 +647,14 @@ export function mockApi(
     }
     if (url.pathname === '/api/render' && init?.method === 'POST') {
       return foundationAnswer(await foundationFakes.render(JSON.parse(String(init.body)) as RenderBody))
+    }
+    const dataspaceAnswer = <T,>(value: DataspaceAnswer<T>) => (typeof value === 'number' ? json({ error: refusedDataspace(value) }, value) : json(value))
+    if (url.pathname === '/api/dataspace/check' && init?.method === 'POST') {
+      const { url: address } = JSON.parse(String(init.body)) as { url: string }
+      return dataspaceAnswer(await dataspaceFakes.check(address))
+    }
+    if (url.pathname === '/api/dataspace/import' && init?.method === 'POST') {
+      return dataspaceAnswer(await dataspaceFakes.import(JSON.parse(String(init.body)) as ImportBody))
     }
     return json({ error: 'not found' }, HTTP_NOT_FOUND)
   })
