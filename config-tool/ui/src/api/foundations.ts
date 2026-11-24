@@ -11,6 +11,15 @@ export interface FoundationOption {
   note: string
 }
 
+/** The Stage 3 panel that asks a foundation, mirroring `model.FoundationGroup`. */
+export type FoundationGroup = 'organization' | 'network'
+
+/** Holds while the resolved answer `id` equals `equals`, mirroring `model.Condition`. */
+export interface Condition {
+  id: string
+  equals: string
+}
+
 /** One chart key a foundation reaches; `component` is the path's top-level key. */
 export interface TargetRef {
   path: string
@@ -22,8 +31,13 @@ export interface Foundation {
   id: string
   stage: string
   type: FoundationType
+  group: FoundationGroup
   /** Template the answer is derived from; empty for an answer the user gives. */
   default: string
+  /** Gates `default` on another answer; null when the default always applies. */
+  defaultWhen: Condition | null
+  /** Template the answer, given or derived, must start with; empty when there is none. */
+  prefix: string
   /** The values a choice offers; empty for every other type. */
   options: FoundationOption[]
   label: string

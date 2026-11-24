@@ -4,6 +4,7 @@ import { answerValues, fromProfile, type ModelRef, type Profile } from '../api/p
 import type { Foundation } from '../api/foundations'
 import type { ChartSwitch, RoleChange } from '../api/roles'
 import type { Trial } from '../api/trial'
+import { dropMismatched } from './foundations'
 import { emptyAnswers, Environment, type Answers, type FeatureState, type Session, type Target } from './answers'
 import { answerFieldId, answerId, fieldStage, isAnswerFieldId, type FieldId, type QuestionId } from './openQuestions'
 import { FIRST_STAGE, StageId } from './stageIds'
@@ -255,8 +256,10 @@ export function reducer(state: AppState, action: Action): AppState {
     case 'featuresChanged':
       // A new answers object is what makes the saved profile stale, as with every other edit.
       return { ...state, answers: { ...state.answers, features: action.features } }
-    case 'setAnswer':
-      return { ...state, answers: { ...state.answers, values: setAnswer(state.answers.values, action.id, action.value) } }
+    case 'setAnswer': {
+      const values = dropMismatched(setAnswer(state.answers.values, action.id, action.value), action.id, state.foundations)
+      return { ...state, answers: { ...state.answers, values } }
+    }
     case 'foundationsLoaded':
       return foundationsLoaded(state, action.foundations)
     case 'rootRereadStarted':

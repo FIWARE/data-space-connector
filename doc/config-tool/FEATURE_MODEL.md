@@ -189,7 +189,7 @@ rows are design.
 | `org.displayName` | `MP Operations` | **1 key** shipped: the Keycloak realm's `displayNameHtml` (provider.yaml sets none) |
 | `domain.base` | `mp-operations.org` | **76 keys in 7 components** of the provider profile, through the 22 derived hosts: every ingress host and its TLS `secretName` and host list, every `cert-manager.io/*` annotation, public URLs (Keycloak `frontendUrl`, the status list, the dashboard). The other 31 of the 107 leaves that carry the domain belong to later stories (see below) |
 | `host.<component>` | `keycloak.mp-operations.org` | derived from `domain.base` as `<component>.<base>`, overridable in the profile (UI: US-3.4); **6 keys** for Keycloak |
-| `did.method` / `did.value` | `did:web:mp-operations.org` | **15 lines**: verifier `did`, Keycloak `issuerDid`, the TIR registration job, fdsc-edc, IdentityHub, the dsconfig document, APISIX, contract-management |
+| `did.method` / `did.value` | `did:web:mp-operations.org` | **8 keys in 4 components** shipped: verifier `did`, contract-management `did`, Keycloak `issuerDid`, and under `fdsc-edc.common.config` the participant id, `issuerId`, the STS `oauth.clientId` and `secretAlias` (`<did>-sts-client-secret`) and `oid4vp.holder.id`. `did.value` derives `did:web:<domain.base>` while the method is `did:web` and must start with `<method>:`. The DID keys left to other stories are listed below the table |
 | `dataspace.tirAddress` | `https://tir.dataspace.org` | verifier `tirAddress`, registration job, trust framework checks |
 | `dataspace.credentialTypes` | `MembershipCredential`, `UserCredential` | Keycloak client scopes and protocol mappers, verifier service registration, local TIL entries, ODRL policies |
 | `tls.mode` + `tls.issuer` | cert-manager `ClusterIssuer letsencrypt-prod` | every Ingress `tls`, every `cert-manager.io/*` annotation, the identity keystore |
@@ -200,6 +200,17 @@ rows are design.
 | `images.pullSecrets`, `images.registryMirror` | | `imagePullSecrets` of every component, `keycloak.tokenStatusList.plugin.mavenBaseUrl` |
 | `proxy.https`, `proxy.no` | | verifier env, Keycloak `proxy.*`, BAE, vc-operator, APISIX `proxy_opts` |
 | `ca.privateSecret` | | APISIX `ssl.existingCASecret`, the verifier CA init container, `NODE_EXTRA_CA_CERTS`, Keycloak truststore |
+
+`provider.yaml` names the DID on 15 lines, one a comment. The DID keys that are not `did.value` targets (US-3.2, [ADR 0021](../adr/0021-config-tool-l2-rules.md#7-the-did-targets-narrow-the-story)):
+
+- the TIL issuer list `registration.issuer[0].did` and the verifier's TIR registration script: US-3.3, because the
+  lists hold content no foundation owns;
+- `dataSpaceConfig` and APISIX: none, chart 10.16.0 has no DID key there;
+- `keycloak.signingKey.did`: US-5.5, the keystore block; emitted alone it breaks the realm key provider;
+- `identityhub.bootstrap.did` and `fdsc-edc.*.config.oid4vp.holder.kid`: US-8.11, because the chart's
+  `assertHolderKid` ties the kid to the bootstrap DID and its `keyAlias`;
+- the realm's clients, users, client roles and credential mappers, and the env lists of the ODRL-PAP, the BAE proxy and
+  the dashboard's providers: US-5.3, US-5.5 and US-5.6.
 
 Each one renders through a declared function, so a change at stage 3 re-renders every
 dependent key and the review diff shows all of them. A key the user pinned by hand (an

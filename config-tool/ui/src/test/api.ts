@@ -3,7 +3,7 @@ import { vi } from 'vitest'
 import type { LoadReport } from '../api/load'
 import type { FeatureState, Profile, ProfileResponse, RecentProfiles } from '../api/profile'
 import type { FeatureChoice, FeaturesResult, FeatureToggle } from '../api/features'
-import type { FoundationList } from '../api/foundations'
+import type { Foundation, FoundationList } from '../api/foundations'
 import type { Change, ChangeGroup, Finding, HandSetAnswer, Leaf, RenderResult } from '../api/render'
 import type { Feature, Offer, PresetResult, RoleCatalogue, RoleChange } from '../api/roles'
 import type { Kubeconfig, ModelInfo } from '../api/target'
@@ -290,7 +290,10 @@ export const FOUNDATIONS: FoundationList = {
       id: 'org.displayName',
       stage: 'foundations',
       type: 'string',
+      group: 'organization',
       default: '',
+      defaultWhen: null,
+      prefix: '',
       options: [],
       label: 'Display name',
       help: 'The organization name other participants see.',
@@ -303,7 +306,10 @@ export const FOUNDATIONS: FoundationList = {
       id: 'domain.base',
       stage: 'foundations',
       type: 'domain',
+      group: 'network',
       default: '',
+      defaultWhen: null,
+      prefix: '',
       options: [],
       label: 'Base domain',
       help: 'Every public host name is derived from it.',
@@ -320,7 +326,10 @@ export const FOUNDATIONS: FoundationList = {
       id: 'host.keycloak',
       stage: 'foundations',
       type: 'hostname',
+      group: 'network',
       default: 'keycloak.{{ .domain.base }}',
+      defaultWhen: null,
+      prefix: '',
       options: [],
       label: 'Keycloak host',
       help: 'Keycloak, the credential issuer.',
@@ -333,6 +342,53 @@ export const FOUNDATIONS: FoundationList = {
       components: ['keycloak'],
     },
   ],
+}
+
+/** The DID pair of the 10.16.0 bundle: a method choice and a DID derived from the domain only while it is did:web. */
+export const DID_METHOD: Foundation = {
+  id: 'did.method',
+  stage: 'foundations',
+  type: 'choice',
+  group: 'organization',
+  default: 'did:web',
+  defaultWhen: null,
+  prefix: '',
+  options: [
+    { value: 'did:web', label: 'did:web', note: 'Resolved over HTTPS from the base domain.' },
+    { value: 'did:key', label: 'did:key', note: 'Meant for local development.' },
+  ],
+  label: 'DID method',
+  help: 'How other participants resolve the DID.',
+  doc: 'doc/deployment-integration/roles/provider/README.md#did-and-key-management',
+  targets: [],
+  count: 0,
+  components: [],
+}
+
+export const DID_VALUE: Foundation = {
+  id: 'did.value',
+  stage: 'foundations',
+  type: 'did',
+  group: 'organization',
+  default: 'did:web:{{ .domain.base }}',
+  defaultWhen: { id: 'did.method', equals: 'did:web' },
+  prefix: '{{ .did.method }}:',
+  options: [],
+  label: 'Organization DID',
+  help: 'The identity other participants know the organization by.',
+  doc: 'doc/deployment-integration/roles/provider/README.md#did-and-key-management',
+  targets: [
+    { path: 'contract-management.did', component: 'contract-management' },
+    { path: 'fdsc-edc.common.config.edc.participant.id', component: 'fdsc-edc' },
+    { path: 'keycloak.issuerDid', component: 'keycloak' },
+  ],
+  count: 3,
+  components: ['contract-management', 'fdsc-edc', 'keycloak'],
+}
+
+/** FOUNDATIONS with the DID pair after the base domain, as the bundle declares them. */
+export const DID_FOUNDATIONS: FoundationList = {
+  foundations: [...FOUNDATIONS.foundations.slice(0, 2), DID_METHOD, DID_VALUE, ...FOUNDATIONS.foundations.slice(2)],
 }
 
 /** The body POST /api/render receives. */

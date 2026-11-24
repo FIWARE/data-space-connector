@@ -31,6 +31,15 @@ const (
 	TypeDID FoundationType = "did"
 )
 
+// FoundationGroup is the Stage 3 panel a foundation is asked in.
+type FoundationGroup string
+
+// Foundation groups; an empty group in the bundle means GroupNetwork.
+const (
+	GroupOrganization FoundationGroup = "organization"
+	GroupNetwork      FoundationGroup = "network"
+)
+
 // Fn is a target function: how a target's value is made from answers (ADR 0020).
 type Fn string
 
@@ -52,6 +61,8 @@ const maxHostnameLength = 253
 var (
 	knownTypes = []FoundationType{TypeString, TypeHostname, TypeDomain, TypeChoice, TypeDID}
 	knownFns   = []Fn{FnTpl, FnJoin, FnCopy, FnConst}
+	// knownFoundationGroups are the Stage 3 panels, in screen order.
+	knownFoundationGroups = []FoundationGroup{GroupOrganization, GroupNetwork}
 	// idSegment keeps every segment of an answer id usable as a template field name.
 	idSegment = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 	plainLine = regexp.MustCompile(`^[^\s\x00-\x1f\x7f"\\<>]([^\x00-\x1f\x7f"\\<>]*[^\s\x00-\x1f\x7f"\\<>])?$`)
@@ -69,6 +80,8 @@ type Foundation struct {
 	ID    string         `yaml:"id"`
 	Stage Stage          `yaml:"stage"`
 	Type  FoundationType `yaml:"type"`
+	// Group is the Stage 3 panel; empty means GroupNetwork.
+	Group FoundationGroup `yaml:"group"`
 	// Default is a template over other answers; a defaulted answer exists only when all of them do.
 	// Only a choice may have a constant default, which must be one of its options.
 	Default string `yaml:"default"`
@@ -87,8 +100,8 @@ type Foundation struct {
 
 // Condition holds while the resolved answer ID equals Equals.
 type Condition struct {
-	ID     string `yaml:"id"`
-	Equals string `yaml:"equals"`
+	ID     string `yaml:"id" json:"id"`
+	Equals string `yaml:"equals" json:"equals"`
 }
 
 // Option is one value of a choice; Note is optional text shown at the point of choice.
@@ -113,6 +126,7 @@ type CompiledFoundation struct {
 	ID    string
 	Stage Stage
 	Type  FoundationType
+	Group FoundationGroup
 	// Refs are the answer ids Default, DefaultWhen and Prefix reference, sorted; nil without any. They
 	// order the foundations; DefaultRefs alone gates the default.
 	Refs        []string
@@ -275,10 +289,17 @@ func compileFoundation(f Foundation, topLevelKeys []string) (CompiledFoundation,
 	if f.Label == "" {
 		return CompiledFoundation{}, fmt.Errorf("label is missing")
 	}
+	group := f.Group
+	if group == "" {
+		group = GroupNetwork
+	}
+	if !slices.Contains(knownFoundationGroups, group) {
+		return CompiledFoundation{}, fmt.Errorf("group %q is unknown", f.Group)
+	}
 	if err := checkOptions(f); err != nil {
 		return CompiledFoundation{}, err
 	}
-	c := CompiledFoundation{ID: f.ID, Stage: f.Stage, Type: f.Type, Options: f.Options}
+	c := CompiledFoundation{ID: f.ID, Stage: f.Stage, Type: f.Type, Group: group, Options: f.Options}
 	if f.Default != "" {
 		t, refs, err := parseTemplate(f.ID, f.Default)
 		if err != nil {

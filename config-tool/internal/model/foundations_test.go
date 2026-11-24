@@ -95,6 +95,15 @@ func TestFoundationsCompileChoiceAndDID(t *testing.T) {
 	}
 }
 
+func TestFoundationGroup(t *testing.T) {
+	b := loadFixture(t, didFoundations)
+	for id, want := range map[string]FoundationGroup{"did.method": GroupOrganization, "did.value": GroupNetwork} {
+		if f, _ := b.Foundation(id); f.Group != want {
+			t.Errorf("%s group = %q, want %q", id, f.Group, want)
+		}
+	}
+}
+
 func TestDefaultRefsLeaveOutPrefixRefs(t *testing.T) {
 	f, _ := loadFixture(t, prefixFoundations).Foundation("tag.value")
 	if want := []string{"tag.code", "tag.scheme"}; !reflect.DeepEqual(f.Refs, want) {

@@ -8,6 +8,7 @@ topLevelKeys: [postgres-operator, managedPostgres, trusted-issuers-list, managed
 foundations:
   - id: org.displayName
     stage: foundations
+    group: organization
     type: string
     label: Display name
     help: The organization's name as other participants see it.

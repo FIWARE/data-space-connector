@@ -16,6 +16,7 @@ foundations:
       - {path: keycloak.issuerDid, fn: copy, args: ["{{ .did.value }}"]}
   - id: did.method
     stage: foundations
+    group: organization
     type: choice
     default: did:web
     label: DID method
