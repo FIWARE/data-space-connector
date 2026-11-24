@@ -13,10 +13,11 @@
 #   copy   takes the answer its one {{ .id }} arg names, keeping its type
 #   const  writes its one scalar arg verbatim; only under a list index, to complete an owned list
 # Helm replaces a list instead of merging it, so a path indexes into a list only when the targets write
-# that list whole: indices 0..n-1 and every key of every element.
+# that list whole: indices 0..n-1 and every key of every element. Quote a path in a flow mapping: a plain
+# scalar there cannot hold '[' or ','. internal/render/provider_test.go checks the targets against k3s/provider.yaml.
 chart: data-space-connector
 version: 10.16.0
-revision: 4
+revision: 5
 topLevelKeys: [
   nameOverride, fullnameOverride, imagePullSecrets, issuance, decentralizedIam, scorpio, elsi,
   keycloak, tm-forum-api, statusListServer, rainbow, contract-management, did, registration,
@@ -25,14 +26,14 @@ topLevelKeys: [
   prometheus, grafana, tracing, opentelemetry-operator, opentelemetry-collector, tempo,
   consentManagement, consent-facade, consent-owner-resolver]
 recognize:
-  - {path: did.enabled, answer: identity.did.enabled, stage: features, kind: toggle}
-  - {path: statusListServer.enabled, answer: identity.statuslist.enabled, stage: features, kind: toggle}
-  - {path: keycloak.realm.wallets.enabled, answer: identity.wallets.enabled, stage: features, kind: toggle}
-  - {path: scorpio.enabled, answer: data.scorpio.enabled, stage: features, kind: toggle}
-  - {path: tm-forum-api.enabled, answer: contract.tmforum.enabled, stage: features, kind: toggle}
-  - {path: marketplace.enabled, answer: market.local.enabled, stage: features, kind: toggle}
-  - {path: rainbow.enabled, answer: dsp.rainbow.enabled, stage: features, kind: toggle}
-  - {path: dataSpaceConfig.enabled, answer: dsp.config.enabled, stage: features, kind: toggle}
+  - {path: 'did.enabled', answer: identity.did.enabled, stage: features, kind: toggle}
+  - {path: 'statusListServer.enabled', answer: identity.statuslist.enabled, stage: features, kind: toggle}
+  - {path: 'keycloak.realm.wallets.enabled', answer: identity.wallets.enabled, stage: features, kind: toggle}
+  - {path: 'scorpio.enabled', answer: data.scorpio.enabled, stage: features, kind: toggle}
+  - {path: 'tm-forum-api.enabled', answer: contract.tmforum.enabled, stage: features, kind: toggle}
+  - {path: 'marketplace.enabled', answer: market.local.enabled, stage: features, kind: toggle}
+  - {path: 'rainbow.enabled', answer: dsp.rainbow.enabled, stage: features, kind: toggle}
+  - {path: 'dataSpaceConfig.enabled', answer: dsp.config.enabled, stage: features, kind: toggle}
 features:
   - {id: identity.issuer, title: Credential issuance, group: identity, keys: [keycloak, vcCredentials],
      summary: "Issue Verifiable Credentials to your users (Keycloak, OID4VCI)",
@@ -268,9 +269,316 @@ foundations:
     type: string
     label: Display name
     help: The organization's name as other participants see it.
+    doc: doc/deployment-integration/roles/KEYCLOAK.md
+    targets:
+      # _realm.tpl writes displayNameHtml into the realm JSON unescaped, so a '"' or '\' in the name breaks the import.
+      - {path: 'keycloak.realm.displayNameHtml', fn: tpl, args: ["{{ .org.displayName }}"]}
   - id: domain.base
     stage: foundations
     type: domain
     label: Base domain
     help: Every public host name is derived from it as <component>.<base domain>, unless that host is overridden.
     doc: doc/deployment-integration/roles/PREREQUISITES.md#public-names-have-to-resolve-inside-the-cluster
+    # The APISIX ingress is shared by every host behind policy enforcement; the host.* below own its elements.
+    targets:
+      - path: 'decentralizedIam.odrlAuthorization.apisix.ingress.annotations."cert-manager.io/alt-names"'
+        fn: join
+        sep: ","
+        args:
+          - "{{ .host.dataService }}"
+          - "{{ .host.tppDataService }}"
+          - "{{ .host.tppService }}"
+          - "{{ .host.tmfApi }}"
+          - "{{ .host.contractManagement }}"
+          - "{{ .host.dsp }}"
+          - "{{ .host.dcp }}"
+          - "{{ .host.identityhub }}"
+          - "{{ .host.identityhubManagement }}"
+          - "{{ .host.vault }}"
+          - "{{ .host.oid4vcManagement }}"
+          - "{{ .host.dcpManagement }}"
+          - "{{ .host.consentDataService }}"
+      - {path: 'decentralizedIam.odrlAuthorization.apisix.ingress.tls[0].secretName', fn: const, args: [apisix-provider-tls]}
+  - id: host.keycloak
+    stage: foundations
+    type: hostname
+    default: "keycloak.{{ .domain.base }}"
+    label: Keycloak host
+    help: Keycloak, the credential issuer, with its login pages and OID4VCI endpoints.
+    doc: doc/deployment-integration/roles/KEYCLOAK.md#ingress-and-tls
+    targets:
+      - {path: 'keycloak.ingress.annotations."cert-manager.io/common-name"', fn: copy, args: ["{{ .host.keycloak }}"]}
+      - {path: 'keycloak.ingress.annotations."cert-manager.io/alt-names"', fn: copy, args: ["{{ .host.keycloak }}"]}
+      - {path: 'keycloak.ingress.hosts[0].host', fn: copy, args: ["{{ .host.keycloak }}"]}
+      - {path: 'keycloak.ingress.hosts[0].paths[0].path', fn: const, args: [/]}
+      - {path: 'keycloak.ingress.hosts[0].paths[0].pathType', fn: const, args: [Prefix]}
+      - {path: 'keycloak.ingress.tls[0].secretName', fn: tpl, args: ["{{ .host.keycloak }}-tls"]}
+      - {path: 'keycloak.ingress.tls[0].hosts[0]', fn: copy, args: ["{{ .host.keycloak }}"]}
+      - {path: 'keycloak.realm.frontendUrl', fn: tpl, args: ["https://{{ .host.keycloak }}"]}
+  - id: host.statusList
+    stage: foundations
+    type: hostname
+    default: "status-list.{{ .domain.base }}"
+    label: Status list host
+    help: The status list server that publishes which issued credentials are revoked.
+    doc: doc/deployment-integration/roles/provider/README.md
+    targets:
+      - {path: 'statusListServer.env.serverDomain', fn: copy, args: ["{{ .host.statusList }}"]}
+      - {path: 'keycloak.tokenStatusList.serverUrl', fn: tpl, args: ["https://{{ .host.statusList }}"]}
+      - {path: 'statusListServer.ingress.annotations."cert-manager.io/common-name"', fn: copy, args: ["{{ .host.statusList }}"]}
+      - {path: 'statusListServer.ingress.annotations."cert-manager.io/alt-names"', fn: copy, args: ["{{ .host.statusList }}"]}
+      - {path: 'statusListServer.ingress.hosts[0].host', fn: copy, args: ["{{ .host.statusList }}"]}
+      - {path: 'statusListServer.ingress.hosts[0].paths[0]', fn: const, args: [/]}
+      - {path: 'statusListServer.ingress.tls[0].secretName', fn: tpl, args: ["{{ .host.statusList }}-tls"]}
+      - {path: 'statusListServer.ingress.tls[0].hosts[0]', fn: copy, args: ["{{ .host.statusList }}"]}
+  - id: host.til
+    stage: foundations
+    type: hostname
+    default: "til.{{ .domain.base }}"
+    label: Trusted Issuers List host
+    help: The management API of the local Trusted Issuers List.
+    doc: doc/deployment-integration/roles/operator/README.md#trusted-issuers-list-til-management-api
+    targets:
+      - {path: 'decentralizedIam.vcAuthentication.trusted-issuers-list.ingress.til.annotations."cert-manager.io/common-name"', fn: copy, args: ["{{ .host.til }}"]}
+      - {path: 'decentralizedIam.vcAuthentication.trusted-issuers-list.ingress.til.annotations."cert-manager.io/alt-names"', fn: copy, args: ["{{ .host.til }}"]}
+      - {path: 'decentralizedIam.vcAuthentication.trusted-issuers-list.ingress.til.hosts[0].host', fn: copy, args: ["{{ .host.til }}"]}
+      - {path: 'decentralizedIam.vcAuthentication.trusted-issuers-list.ingress.til.hosts[0].paths[0]', fn: const, args: [/]}
+      - {path: 'decentralizedIam.vcAuthentication.trusted-issuers-list.ingress.til.tls[0].secretName', fn: tpl, args: ["{{ .host.til }}-tls"]}
+      - {path: 'decentralizedIam.vcAuthentication.trusted-issuers-list.ingress.til.tls[0].hosts[0]', fn: copy, args: ["{{ .host.til }}"]}
+  - id: host.ccs
+    stage: foundations
+    type: hostname
+    default: "ccs.{{ .domain.base }}"
+    label: Credentials config host
+    help: The credentials config service, which tells the verifier which credentials a service accepts.
+    doc: doc/deployment-integration/roles/provider/README.md#authentication-verifiable-credential-verification
+    targets:
+      - {path: 'decentralizedIam.vcAuthentication.vcverifier.configIngress.annotations."cert-manager.io/common-name"', fn: copy, args: ["{{ .host.ccs }}"]}
+      - {path: 'decentralizedIam.vcAuthentication.vcverifier.configIngress.annotations."cert-manager.io/alt-names"', fn: copy, args: ["{{ .host.ccs }}"]}
+      - {path: 'decentralizedIam.vcAuthentication.vcverifier.configIngress.hosts[0].host', fn: copy, args: ["{{ .host.ccs }}"]}
+      - {path: 'decentralizedIam.vcAuthentication.vcverifier.configIngress.hosts[0].paths[0]', fn: const, args: [/]}
+      - {path: 'decentralizedIam.vcAuthentication.vcverifier.configIngress.tls[0].secretName', fn: tpl, args: ["{{ .host.ccs }}-tls"]}
+      - {path: 'decentralizedIam.vcAuthentication.vcverifier.configIngress.tls[0].hosts[0]', fn: copy, args: ["{{ .host.ccs }}"]}
+  - id: host.pap
+    stage: foundations
+    type: hostname
+    default: "pap.{{ .domain.base }}"
+    label: Policy administration host
+    help: The ODRL policy administration point, where access policies are managed.
+    doc: doc/deployment-integration/roles/provider/README.md#authorization-policy-enforcement
+    targets:
+      - {path: 'decentralizedIam.odrlAuthorization.odrl-pap.ingress.annotations."cert-manager.io/common-name"', fn: copy, args: ["{{ .host.pap }}"]}
+      - {path: 'decentralizedIam.odrlAuthorization.odrl-pap.ingress.annotations."cert-manager.io/alt-names"', fn: copy, args: ["{{ .host.pap }}"]}
+      - {path: 'decentralizedIam.odrlAuthorization.odrl-pap.ingress.hosts[0].host', fn: copy, args: ["{{ .host.pap }}"]}
+      - {path: 'decentralizedIam.odrlAuthorization.odrl-pap.ingress.hosts[0].paths[0]', fn: const, args: [/]}
+      - {path: 'decentralizedIam.odrlAuthorization.odrl-pap.ingress.tls[0].secretName', fn: tpl, args: ["{{ .host.pap }}-tls"]}
+      - {path: 'decentralizedIam.odrlAuthorization.odrl-pap.ingress.tls[0].hosts[0]', fn: copy, args: ["{{ .host.pap }}"]}
+  - id: host.rainbow
+    stage: foundations
+    type: hostname
+    default: "rainbow.{{ .domain.base }}"
+    label: Rainbow host
+    help: Rainbow, the Dataspace Protocol connector the policy enforcement asks for running transfers.
+    doc: doc/DSP_INTEGRATION.md
+    targets:
+      - {path: 'decentralizedIam.odrlAuthorization.tpp.transfers.host', fn: tpl, args: ["http://{{ .host.rainbow }}:8080"]}
+  - id: host.scorpio
+    stage: foundations
+    type: hostname
+    default: "scorpio.{{ .domain.base }}"
+    label: Scorpio host
+    help: Direct access to the NGSI-LD context broker, bypassing policy enforcement.
+    doc: doc/deployment-integration/roles/provider/README.md
+    targets:
+      - {path: 'scorpio.ingress.annotations."cert-manager.io/common-name"', fn: copy, args: ["{{ .host.scorpio }}"]}
+      - {path: 'scorpio.ingress.annotations."cert-manager.io/alt-names"', fn: copy, args: ["{{ .host.scorpio }}"]}
+      - {path: 'scorpio.ingress.hosts[0].host', fn: copy, args: ["{{ .host.scorpio }}"]}
+      - {path: 'scorpio.ingress.hosts[0].paths[0]', fn: const, args: [/]}
+      - {path: 'scorpio.ingress.tls[0].secretName', fn: tpl, args: ["{{ .host.scorpio }}-tls"]}
+      - {path: 'scorpio.ingress.tls[0].hosts[0]', fn: copy, args: ["{{ .host.scorpio }}"]}
+  - id: host.tmForumApi
+    stage: foundations
+    type: hostname
+    default: "tm-forum-api.{{ .domain.base }}"
+    label: TMForum API host
+    help: Direct access to the TMForum APIs, bypassing policy enforcement.
+    doc: doc/deployment-integration/roles/provider/README.md#tmforum-api
+    targets:
+      - {path: 'tm-forum-api.ingress.annotations."cert-manager.io/common-name"', fn: copy, args: ["{{ .host.tmForumApi }}"]}
+      - {path: 'tm-forum-api.ingress.annotations."cert-manager.io/alt-names"', fn: copy, args: ["{{ .host.tmForumApi }}"]}
+      - {path: 'tm-forum-api.ingress.hosts[0].host', fn: copy, args: ["{{ .host.tmForumApi }}"]}
+      - {path: 'tm-forum-api.ingress.hosts[0].paths[0]', fn: const, args: [/]}
+      - {path: 'tm-forum-api.ingress.tls[0].secretName', fn: tpl, args: ["{{ .host.tmForumApi }}-tls"]}
+      - {path: 'tm-forum-api.ingress.tls[0].hosts[0]', fn: copy, args: ["{{ .host.tmForumApi }}"]}
+  - id: host.marketplace
+    stage: foundations
+    type: hostname
+    default: "marketplace.{{ .domain.base }}"
+    label: Marketplace host
+    help: The marketplace (BAE) front end.
+    doc: doc/deployment-integration/roles/provider/LOCAL_MARKETPLACE.md
+    targets:
+      - {path: 'marketplace.externalUrl', fn: tpl, args: ["https://{{ .host.marketplace }}"]}
+      - {path: 'marketplace.bizEcosystemLogicProxy.ingress.annotations."cert-manager.io/common-name"', fn: copy, args: ["{{ .host.marketplace }}"]}
+      - {path: 'marketplace.bizEcosystemLogicProxy.ingress.annotations."cert-manager.io/alt-names"', fn: copy, args: ["{{ .host.marketplace }}"]}
+      - {path: 'marketplace.bizEcosystemLogicProxy.ingress.hosts[0].host', fn: copy, args: ["{{ .host.marketplace }}"]}
+      - {path: 'marketplace.bizEcosystemLogicProxy.ingress.hosts[0].paths[0]', fn: const, args: [/]}
+      - {path: 'marketplace.bizEcosystemLogicProxy.ingress.tls[0].secretName', fn: tpl, args: ["{{ .host.marketplace }}-tls"]}
+      - {path: 'marketplace.bizEcosystemLogicProxy.ingress.tls[0].hosts[0]', fn: copy, args: ["{{ .host.marketplace }}"]}
+  - id: host.dashboard
+    stage: foundations
+    type: hostname
+    default: "dashboard.{{ .domain.base }}"
+    label: Dashboard host
+    help: The FDSC dashboard.
+    doc: doc/config-tool/FEATURE_MODEL.md
+    targets:
+      - {path: 'fdsc-dashboard.ingress.annotations."cert-manager.io/common-name"', fn: copy, args: ["{{ .host.dashboard }}"]}
+      - {path: 'fdsc-dashboard.ingress.annotations."cert-manager.io/alt-names"', fn: copy, args: ["{{ .host.dashboard }}"]}
+      - {path: 'fdsc-dashboard.ingress.hosts[0].host', fn: copy, args: ["{{ .host.dashboard }}"]}
+      - {path: 'fdsc-dashboard.ingress.hosts[0].paths[0]', fn: const, args: [/]}
+      - {path: 'fdsc-dashboard.ingress.tls[0].secretName', fn: tpl, args: ["{{ .host.dashboard }}-tls"]}
+      - {path: 'fdsc-dashboard.ingress.tls[0].hosts[0]', fn: copy, args: ["{{ .host.dashboard }}"]}
+  - id: host.dataService
+    stage: foundations
+    type: hostname
+    default: "data-service.{{ .domain.base }}"
+    label: Data service host
+    help: The NGSI-LD data service behind policy enforcement.
+    doc: doc/deployment-integration/roles/provider/README.md#authorization-policy-enforcement
+    targets:
+      - {path: 'decentralizedIam.odrlAuthorization.apisix.ingress.hosts[0].host', fn: copy, args: ["{{ .host.dataService }}"]}
+      - {path: 'decentralizedIam.odrlAuthorization.apisix.ingress.hosts[0].paths[0]', fn: const, args: [/]}
+      - {path: 'decentralizedIam.odrlAuthorization.apisix.ingress.tls[0].hosts[0]', fn: copy, args: ["{{ .host.dataService }}"]}
+  - id: host.tppDataService
+    stage: foundations
+    type: hostname
+    default: "tpp-data-service.{{ .domain.base }}"
+    label: Transfer-checked data service host
+    help: The data service that is reachable only during a running Dataspace Protocol transfer.
+    doc: doc/DSP_INTEGRATION.md
+    targets:
+      - {path: 'decentralizedIam.odrlAuthorization.apisix.ingress.hosts[1].host', fn: copy, args: ["{{ .host.tppDataService }}"]}
+      - {path: 'decentralizedIam.odrlAuthorization.apisix.ingress.hosts[1].paths[0]', fn: const, args: [/]}
+      - {path: 'decentralizedIam.odrlAuthorization.apisix.ingress.tls[0].hosts[1]', fn: copy, args: ["{{ .host.tppDataService }}"]}
+  - id: host.tppService
+    stage: foundations
+    type: hostname
+    default: "tpp-service.{{ .domain.base }}"
+    label: Transfer-checked service host
+    help: The OpenID configuration of the transfer-checked data service.
+    doc: doc/DSP_INTEGRATION.md
+    targets:
+      - {path: 'decentralizedIam.odrlAuthorization.apisix.ingress.hosts[2].host', fn: copy, args: ["{{ .host.tppService }}"]}
+      - {path: 'decentralizedIam.odrlAuthorization.apisix.ingress.hosts[2].paths[0]', fn: const, args: [/]}
+      - {path: 'decentralizedIam.odrlAuthorization.apisix.ingress.tls[0].hosts[2]', fn: copy, args: ["{{ .host.tppService }}"]}
+  - id: host.tmfApi
+    stage: foundations
+    type: hostname
+    default: "tmf-api.{{ .domain.base }}"
+    label: Protected TMForum API host
+    help: The TMForum APIs behind policy enforcement, as participants call them.
+    doc: doc/deployment-integration/roles/provider/README.md#tmforum-api
+    targets:
+      - {path: 'decentralizedIam.odrlAuthorization.apisix.ingress.hosts[3].host', fn: copy, args: ["{{ .host.tmfApi }}"]}
+      - {path: 'decentralizedIam.odrlAuthorization.apisix.ingress.hosts[3].paths[0]', fn: const, args: [/]}
+      - {path: 'decentralizedIam.odrlAuthorization.apisix.ingress.tls[0].hosts[3]', fn: copy, args: ["{{ .host.tmfApi }}"]}
+  - id: host.contractManagement
+    stage: foundations
+    type: hostname
+    default: "contract-management.{{ .domain.base }}"
+    label: Contract management host
+    help: Contract management behind policy enforcement.
+    doc: doc/deployment-integration/roles/provider/README.md#contract-management
+    targets:
+      - {path: 'decentralizedIam.odrlAuthorization.apisix.ingress.hosts[4].host', fn: copy, args: ["{{ .host.contractManagement }}"]}
+      - {path: 'decentralizedIam.odrlAuthorization.apisix.ingress.hosts[4].paths[0]', fn: const, args: [/]}
+      - {path: 'decentralizedIam.odrlAuthorization.apisix.ingress.tls[0].hosts[4]', fn: copy, args: ["{{ .host.contractManagement }}"]}
+  - id: host.dsp
+    stage: foundations
+    type: hostname
+    default: "dsp.{{ .domain.base }}"
+    label: Dataspace Protocol host
+    help: The Dataspace Protocol endpoint of FDSC-EDC.
+    doc: doc/deployment-integration/roles/provider/README.md#fdsc-edc-dataspace-protocol
+    targets:
+      - {path: 'decentralizedIam.odrlAuthorization.apisix.ingress.hosts[5].host', fn: copy, args: ["{{ .host.dsp }}"]}
+      - {path: 'decentralizedIam.odrlAuthorization.apisix.ingress.hosts[5].paths[0]', fn: const, args: [/]}
+      - {path: 'decentralizedIam.odrlAuthorization.apisix.ingress.tls[0].hosts[5]', fn: copy, args: ["{{ .host.dsp }}"]}
+  - id: host.dcp
+    stage: foundations
+    type: hostname
+    default: "dcp.{{ .domain.base }}"
+    label: DCP host
+    help: The Decentralized Claims Protocol endpoint of the IdentityHub.
+    doc: doc/deployment-integration/roles/consumer/README.md#dataspace-protocolfdsc-edc-and-identityhub
+    targets:
+      - {path: 'decentralizedIam.odrlAuthorization.apisix.ingress.hosts[6].host', fn: copy, args: ["{{ .host.dcp }}"]}
+      - {path: 'decentralizedIam.odrlAuthorization.apisix.ingress.hosts[6].paths[0]', fn: const, args: [/]}
+      - {path: 'decentralizedIam.odrlAuthorization.apisix.ingress.tls[0].hosts[6]', fn: copy, args: ["{{ .host.dcp }}"]}
+  - id: host.identityhub
+    stage: foundations
+    type: hostname
+    default: "identityhub.{{ .domain.base }}"
+    label: IdentityHub host
+    help: The credentials API of the IdentityHub.
+    doc: doc/deployment-integration/roles/consumer/README.md#dataspace-protocolfdsc-edc-and-identityhub
+    targets:
+      - {path: 'decentralizedIam.odrlAuthorization.apisix.ingress.hosts[7].host', fn: copy, args: ["{{ .host.identityhub }}"]}
+      - {path: 'decentralizedIam.odrlAuthorization.apisix.ingress.hosts[7].paths[0]', fn: const, args: [/]}
+      - {path: 'decentralizedIam.odrlAuthorization.apisix.ingress.tls[0].hosts[7]', fn: copy, args: ["{{ .host.identityhub }}"]}
+  - id: host.identityhubManagement
+    stage: foundations
+    type: hostname
+    default: "identityhub-management.{{ .domain.base }}"
+    label: IdentityHub management host
+    help: The identity management API of the IdentityHub.
+    doc: doc/deployment-integration/roles/consumer/README.md#dataspace-protocolfdsc-edc-and-identityhub
+    targets:
+      - {path: 'decentralizedIam.odrlAuthorization.apisix.ingress.hosts[8].host', fn: copy, args: ["{{ .host.identityhubManagement }}"]}
+      - {path: 'decentralizedIam.odrlAuthorization.apisix.ingress.hosts[8].paths[0]', fn: const, args: [/]}
+      - {path: 'decentralizedIam.odrlAuthorization.apisix.ingress.tls[0].hosts[8]', fn: copy, args: ["{{ .host.identityhubManagement }}"]}
+  - id: host.vault
+    stage: foundations
+    type: hostname
+    default: "vault.{{ .domain.base }}"
+    label: Vault host
+    help: HashiCorp Vault, which holds the connector's keys.
+    doc: doc/deployment-integration/production/VAULT.md
+    targets:
+      - {path: 'decentralizedIam.odrlAuthorization.apisix.ingress.hosts[9].host', fn: copy, args: ["{{ .host.vault }}"]}
+      - {path: 'decentralizedIam.odrlAuthorization.apisix.ingress.hosts[9].paths[0]', fn: const, args: [/]}
+      - {path: 'decentralizedIam.odrlAuthorization.apisix.ingress.tls[0].hosts[9]', fn: copy, args: ["{{ .host.vault }}"]}
+  - id: host.oid4vcManagement
+    stage: foundations
+    type: hostname
+    default: "oid4vc-management.{{ .domain.base }}"
+    label: OID4VC management host
+    help: The management API of the FDSC-EDC instance that uses OID4VC.
+    doc: doc/deployment-integration/roles/provider/README.md#fdsc-edc-dataspace-protocol
+    targets:
+      - {path: 'decentralizedIam.odrlAuthorization.apisix.ingress.hosts[10].host', fn: copy, args: ["{{ .host.oid4vcManagement }}"]}
+      - {path: 'decentralizedIam.odrlAuthorization.apisix.ingress.hosts[10].paths[0]', fn: const, args: [/]}
+      - {path: 'decentralizedIam.odrlAuthorization.apisix.ingress.tls[0].hosts[10]', fn: copy, args: ["{{ .host.oid4vcManagement }}"]}
+  - id: host.dcpManagement
+    stage: foundations
+    type: hostname
+    default: "dcp-management.{{ .domain.base }}"
+    label: DCP management host
+    help: The management API of the FDSC-EDC instance that uses DCP.
+    doc: doc/deployment-integration/roles/provider/README.md#fdsc-edc-dataspace-protocol
+    targets:
+      - {path: 'decentralizedIam.odrlAuthorization.apisix.ingress.hosts[11].host', fn: copy, args: ["{{ .host.dcpManagement }}"]}
+      - {path: 'decentralizedIam.odrlAuthorization.apisix.ingress.hosts[11].paths[0]', fn: const, args: [/]}
+      - {path: 'decentralizedIam.odrlAuthorization.apisix.ingress.tls[0].hosts[11]', fn: copy, args: ["{{ .host.dcpManagement }}"]}
+  - id: host.consentDataService
+    stage: foundations
+    type: hostname
+    default: "data-service-consent.{{ .domain.base }}"
+    label: Consent data service host
+    help: The data service whose access is gated by a data owner's consent.
+    doc: doc/CONSENT_MANAGEMENT.md#consent-gated-data-access
+    targets:
+      - {path: 'decentralizedIam.odrlAuthorization.apisix.ingress.hosts[12].host', fn: copy, args: ["{{ .host.consentDataService }}"]}
+      - {path: 'decentralizedIam.odrlAuthorization.apisix.ingress.hosts[12].paths[0]', fn: const, args: [/]}
+      - {path: 'decentralizedIam.odrlAuthorization.apisix.ingress.tls[0].hosts[12]', fn: copy, args: ["{{ .host.consentDataService }}"]}
