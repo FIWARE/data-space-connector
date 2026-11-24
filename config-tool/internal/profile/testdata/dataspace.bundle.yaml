@@ -1,0 +1,21 @@
+# A bundle declaring one answer of each data-space type, for the profile round-trip of list and bool answers.
+chart: data-space-connector
+version: 10.16.0
+revision: 1
+topLevelKeys: [decentralizedIam]
+foundations:
+  - id: dataspace.tirAddress
+    stage: foundations
+    group: dataspace
+    type: url
+    label: Trust Anchor address
+  - id: dataspace.autoRegistration
+    stage: foundations
+    group: dataspace
+    type: bool
+    label: Register automatically
+  - id: dataspace.credentialTypes
+    stage: foundations
+    group: dataspace
+    type: credentialTypes
+    label: Credential types

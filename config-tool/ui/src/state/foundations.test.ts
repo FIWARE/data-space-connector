@@ -1,20 +1,35 @@
 import { describe, expect, it } from 'vitest'
-import type { Foundation, FoundationOption, FoundationType } from '../api/foundations'
+import type { CredentialType, Foundation, FoundationOption, FoundationType } from '../api/foundations'
+import type { AnswerValue } from './answers'
 import { DID_FOUNDATIONS, DID_METHOD, FOUNDATIONS } from '../test/api'
 import {
   answerErrors,
   checkAnswer,
   dropMismatched,
+  MAX_CREDENTIAL_TYPES,
   MAX_HOSTNAME_LENGTH,
+  MAX_URL_LENGTH,
+  MSG_BOOL,
+  MSG_CREDENTIAL_TYPES,
+  MSG_CREDENTIAL_TYPES_LENGTH,
   MSG_DID,
   MSG_DOMAIN,
   MSG_HOSTNAME,
   MSG_PLAIN_LINE,
+  MSG_STRING,
+  MSG_URL,
+  MSG_URL_LENGTH,
   msgChoice,
   msgPrefix,
   resolvedAnswer,
+  textAnswer,
   validAnswers,
 } from './foundations'
+
+/** `n` distinct credential types. */
+function manyTypes(n: number): CredentialType[] {
+  return Array.from({ length: n }, (_, i) => ({ type: `Credential${i}` }))
+}
 
 const METHODS: FoundationOption[] = [
   { value: 'did:web', label: 'Web', note: '' },
@@ -62,6 +77,72 @@ describe('checkAnswer', () => {
     ['did', 'did:web:a%zz', MSG_DID],
   ])('%s %j → %s', (type, value, message) => {
     expect(checkAnswer(type, value)).toBe(message)
+  })
+
+  // Mirrors the url, bool and credentialTypes rows of TestFoundationTypeCheck in Go.
+  it.each<[FoundationType, AnswerValue, string | undefined]>([
+    ['url', 'https://tir.127.0.0.1.nip.io/', undefined],
+    ['url', 'http://tir.example.org:8080/v4/issuers?page=1', undefined],
+    ['url', 'https://[::1]:8443', undefined],
+    ['url', `https://tir.example.org/${'a'.repeat(MAX_URL_LENGTH)}`, MSG_URL_LENGTH],
+    ['url', `https://tir.example.org/${'ü'.repeat(1100)}`, MSG_URL_LENGTH],
+    ['url', 'https://tür.example.org/', undefined],
+    ['url', "https://a!$&'()*+,;=b.example.org/", undefined],
+    ['url', 'https://a%C3%BCb.example.org/', undefined],
+    ['url', 'https://a{b}.example.org/', MSG_URL],
+    ['url', 'https://a|b.example.org/', MSG_URL],
+    ['url', 'https://a^b.example.org/', MSG_URL],
+    ['url', 'https://a`b.example.org/', MSG_URL],
+    ['url', 'https://a%41b.example.org/', MSG_URL],
+    ['url', 'https://tir.example.org:x/', MSG_URL],
+    ['url', 'https://x.org/%zz', MSG_URL],
+    ['url', 'https://x.org/a%', MSG_URL],
+    ['url', 'https://x.org/?a=%zz', undefined],
+    ['url', 'tir.example.org', MSG_URL],
+    ['url', '/v4/issuers', MSG_URL],
+    ['url', 'ftp://tir.example.org/', MSG_URL],
+    ['url', 'https://', MSG_URL],
+    ['url', 'https:tir.example.org', MSG_URL],
+    ['url', 'https://user:pass@tir.example.org/', MSG_URL],
+    ['url', 'https://@tir.example.org/', MSG_URL],
+    ['url', 'https://tir.example.org/#issuers', MSG_URL],
+    ['url', 'https://tir.example.org/a b', MSG_URL],
+    ['url', 'https://tir.example.org/<x>', MSG_URL],
+    ['url', ' https://tir.example.org/', MSG_URL],
+    ['url', true, MSG_STRING],
+    ['string', ['Acme'] as unknown as AnswerValue, MSG_STRING],
+    ['bool', true, undefined],
+    ['bool', false, undefined],
+    ['bool', 'true', MSG_BOOL],
+    ['credentialTypes', [{ type: 'UserCredential' }], undefined],
+    [
+      'credentialTypes',
+      [{ type: 'UserCredential', description: 'Employees of a participant' }, { type: 'LegalParticipant' }, { type: 'eu.europa.ec.eudi.pid_1' }],
+      undefined,
+    ],
+    ['credentialTypes', [], MSG_CREDENTIAL_TYPES],
+    ['credentialTypes', 'UserCredential', MSG_CREDENTIAL_TYPES],
+    ['credentialTypes', ['UserCredential'] as unknown as AnswerValue, '[0] must be a mapping with type and an optional description'],
+    ['credentialTypes', [{ description: 'no type' }] as unknown as AnswerValue, "[0].type must start with a letter, followed by letters, digits, '.', '_' and '-'"],
+    ['credentialTypes', [{ type: '1Credential' }], "[0].type must start with a letter, followed by letters, digits, '.', '_' and '-'"],
+    ['credentialTypes', [{ type: 'User Credential' }], "[0].type must start with a letter, followed by letters, digits, '.', '_' and '-'"],
+    ['credentialTypes', [{ type: 'A', format: 'jwt_vc' }] as unknown as AnswerValue, '[0] has a key other than type and description'],
+    ['credentialTypes', [{ type: 'A', description: ' padded' }], `[0].description ${MSG_PLAIN_LINE}`],
+    ['credentialTypes', [{ type: 'A', description: 1 }] as unknown as AnswerValue, `[0].description ${MSG_STRING}`],
+    ['credentialTypes', [{ type: 'A' }, { type: 'A' }], '[1].type repeats an earlier type'],
+    ['credentialTypes', manyTypes(MAX_CREDENTIAL_TYPES), undefined],
+    ['credentialTypes', manyTypes(MAX_CREDENTIAL_TYPES + 1), MSG_CREDENTIAL_TYPES_LENGTH],
+  ])('%s %j → %s', (type, value, message) => {
+    expect(checkAnswer(type, value)).toBe(message)
+  })
+
+  it.each<[AnswerValue | undefined, string | undefined]>([
+    ['Acme', 'Acme'],
+    [true, undefined],
+    [[{ type: 'A' }], undefined],
+    [undefined, undefined],
+  ])('textAnswer(%j) → %j', (value, text) => {
+    expect(textAnswer(value)).toBe(text)
   })
 
   // Mirrors TestCompiledFoundationCheck in Go.

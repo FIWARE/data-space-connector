@@ -6,7 +6,7 @@ import { fetchRender, type Change, type ChangeGroup, type Finding } from '../api
 import { AskLater } from '../chrome/AskLater'
 import { PUBLIC_NAMES_URL, repositoryDocUrl } from '../links'
 import { useStore } from '../state/context'
-import { answerErrors, defaultApplies, defaultValue, resolvedAnswer, validAnswers } from '../state/foundations'
+import { answerErrors, defaultApplies, defaultValue, resolvedAnswer, textAnswer, validAnswers } from '../state/foundations'
 import { answerFieldId, fieldElementId, fieldStage } from '../state/openQuestions'
 import { StageId } from '../state/stageIds'
 import { DerivedAnswers } from './DerivedAnswers'
@@ -119,7 +119,7 @@ function AnswerField({
       <label htmlFor={id}>{foundation.label}</label>
       <input
         id={id}
-        value={value ?? state.answers.values[foundation.id] ?? ''}
+        value={value ?? textAnswer(state.answers.values[foundation.id]) ?? ''}
         aria-invalid={error !== undefined}
         aria-describedby={describedBy(id, error, own)}
         onChange={(e) => {
@@ -184,7 +184,7 @@ function DerivedField({ foundation, findings }: { foundation: Foundation; findin
   const field = answerFieldId(foundation.id)
   const id = fieldElementId(field)
   const foundations = state.foundations ?? []
-  const given = state.answers.values[foundation.id]
+  const given = textAnswer(state.answers.values[foundation.id])
   // Only what the render is sent, so an invalid answer it comes from shows it as pending rather than a value never written.
   const values = validAnswers(state.answers.values, foundations)
   const applies = defaultApplies(foundation, values, foundations)
