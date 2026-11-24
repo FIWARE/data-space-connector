@@ -17,7 +17,8 @@ type FoundationType string
 
 // Foundation types.
 const (
-	// TypeString is a non-empty single line without leading or trailing whitespace.
+	// TypeString is a non-empty single line without leading or trailing whitespace, control characters or
+	// any of " \ < >, because chart templates interpolate it unescaped into JSON and HTML (_realm.tpl).
 	TypeString FoundationType = "string"
 	// TypeHostname is a DNS-1123 subdomain, as an ingress host must be.
 	TypeHostname FoundationType = "hostname"
@@ -47,9 +48,9 @@ var (
 	knownTypes = []FoundationType{TypeString, TypeHostname, TypeDomain}
 	knownFns   = []Fn{FnTpl, FnJoin, FnCopy, FnConst}
 	// idSegment keeps every segment of an answer id usable as a template field name.
-	idSegment  = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
-	singleLine = regexp.MustCompile(`^\S(.*\S)?$`)
-	hostname   = regexp.MustCompile(`^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$`)
+	idSegment = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+	plainLine = regexp.MustCompile(`^[^\s\x00-\x1f\x7f"\\<>]([^\x00-\x1f\x7f"\\<>]*[^\s\x00-\x1f\x7f"\\<>])?$`)
+	hostname  = regexp.MustCompile(`^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$`)
 )
 
 // Foundation is a cross-cutting answer as declared in a bundle's foundations list.
@@ -133,8 +134,8 @@ func (t FoundationType) Check(v any) error {
 	}
 	switch t {
 	case TypeString:
-		if !singleLine.MatchString(s) {
-			return fmt.Errorf("must be a single non-empty line without leading or trailing spaces")
+		if !plainLine.MatchString(s) {
+			return fmt.Errorf(`must be a single non-empty line without leading or trailing spaces, control characters, '"', '\', '<' or '>'`)
 		}
 	case TypeHostname, TypeDomain:
 		if len(s) > maxHostnameLength || !hostname.MatchString(s) {
