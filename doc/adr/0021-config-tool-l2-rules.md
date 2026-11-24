@@ -32,8 +32,8 @@ operator adds it to `RuleWhen`, with a load check and an amendment to this ADR.
 
 `field` (what the finding points at) and every `when.field` are `target.environment` or
 `answers.<declared foundation id>`, the ids the open-question marks and the UI links already use. The addressable
-Target fields are a named table in `internal/model`; a test in `internal/check` keeps it in step with
-`profile.Target`.
+Target fields are a named table in `internal/model`; a test in `internal/check` requires its fields and values to
+equal `profile.Target`'s and `profile.Environments`, which `Target.Validate` also reads.
 
 ### 4. Validation at bundle load
 

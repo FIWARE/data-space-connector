@@ -148,11 +148,18 @@ func TestEvaluateRefusesUnresolvedAnswers(t *testing.T) {
 
 // TestTargetFields keeps model's addressable Target fields in step with profile.Target, which model cannot import.
 func TestTargetFields(t *testing.T) {
-	envs := []profile.Environment{profile.EnvDevelopment, profile.EnvProduction}
-	if got, want := model.TargetFieldIDs(), []string{profile.TargetFieldPrefix + profile.FieldEnvironment}; !reflect.DeepEqual(got, want) {
+	envField := profile.TargetFieldPrefix + profile.FieldEnvironment
+	if got, want := model.TargetFieldIDs(), []string{envField}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("TargetFieldIDs() = %v, want %v; teach value to read a new field", got, want)
 	}
-	for _, env := range envs {
+	want := make([]string, len(profile.Environments))
+	for i, env := range profile.Environments {
+		want[i] = string(env)
+	}
+	if got := model.TargetFieldValues(envField); !reflect.DeepEqual(got, want) {
+		t.Fatalf("TargetFieldValues(%q) = %v, want profile.Environments %v", envField, got, want)
+	}
+	for _, env := range profile.Environments {
 		t.Run(string(env), func(t *testing.T) {
 			src := "chart: c\nversion: 1.0.0\nrevision: 1\nrules:\n" +
 				"  - {id: r, severity: warning, stage: target, field: target.environment, when: [{field: target.environment, equals: " +

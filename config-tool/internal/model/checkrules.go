@@ -34,7 +34,7 @@ const docAnchor = "#"
 var (
 	knownSeverities = []Severity{SeverityError, SeverityWarning}
 	// targetFields are the Target fields a check rule may address, with the values each takes. They mirror
-	// profile.Target, which imports this package; internal/check's test keeps the two in step.
+	// profile.Target and profile.Environments, which import this package; internal/check's test keeps them equal.
 	targetFields = map[string]struct {
 		stage  Stage
 		values []string
@@ -79,6 +79,11 @@ func (b Bundle) CheckRules() []CheckRule {
 // TargetFieldIDs lists the Target fields a check rule may address, sorted.
 func TargetFieldIDs() []string {
 	return slices.Sorted(maps.Keys(targetFields))
+}
+
+// TargetFieldValues lists the values a rule may compare Target field id with; nil for an unknown id.
+func TargetFieldValues(id string) []string {
+	return slices.Clone(targetFields[id].values)
 }
 
 // checkCheckRules validates rules against the compiled foundations fs.

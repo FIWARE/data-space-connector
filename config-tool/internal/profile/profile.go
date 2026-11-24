@@ -4,6 +4,9 @@ package profile
 import (
 	"fmt"
 	"regexp"
+	"slices"
+	"strconv"
+	"strings"
 )
 
 // TargetType says where the generated values go.
@@ -23,6 +26,9 @@ const (
 	EnvDevelopment Environment = "development"
 	EnvProduction  Environment = "production"
 )
+
+// Environments lists every Environment; model's check rules and Target.Validate both take it as the truth.
+var Environments = []Environment{EnvDevelopment, EnvProduction}
 
 // Length limits of the names a Target carries.
 const (
@@ -110,12 +116,12 @@ func (t Target) Validate() []FieldError {
 	if t.ChartVersion == "" {
 		errs = append(errs, FieldError{FieldChartVersion, msgRequired})
 	}
-	switch t.Environment {
-	case EnvDevelopment, EnvProduction:
-	case "":
+	switch {
+	case slices.Contains(Environments, t.Environment):
+	case t.Environment == "":
 		errs = append(errs, FieldError{FieldEnvironment, msgRequired})
 	default:
-		errs = append(errs, FieldError{FieldEnvironment, fmt.Sprintf("must be %q or %q", EnvDevelopment, EnvProduction)})
+		errs = append(errs, FieldError{FieldEnvironment, "must be " + quotedAlternatives(Environments)})
 	}
 	return errs
 }
@@ -131,4 +137,13 @@ func checkLabel(name string, maxLen int, pattern *regexp.Regexp, patternMsg stri
 		return patternMsg
 	}
 	return ""
+}
+
+// quotedAlternatives renders values as "a" or "b" or ... for a validation message.
+func quotedAlternatives[T ~string](values []T) string {
+	quoted := make([]string, len(values))
+	for i, v := range values {
+		quoted[i] = strconv.Quote(string(v))
+	}
+	return strings.Join(quoted, " or ")
 }
