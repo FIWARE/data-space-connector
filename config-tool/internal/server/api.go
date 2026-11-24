@@ -63,6 +63,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/trial/write", s.handleTrialWrite)
 	mux.HandleFunc("POST /api/render", s.handleRender)
 	mux.HandleFunc("GET /api/foundations", s.handleFoundations)
+	mux.HandleFunc("POST /api/dataspace/check", s.handleDataspaceCheck)
+	mux.HandleFunc("POST /api/dataspace/import", s.handleDataspaceImport)
 	mux.HandleFunc("POST /api/validate", handleValidate)
 	mux.HandleFunc("GET "+pathWS, s.handleWebSocket)
 	mux.HandleFunc(pathAPI, func(w http.ResponseWriter, _ *http.Request) {
