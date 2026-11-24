@@ -1,7 +1,25 @@
 import { describe, expect, it } from 'vitest'
-import type { FoundationType } from '../api/foundations'
-import { FOUNDATIONS } from '../test/api'
-import { answerErrors, checkAnswer, MAX_HOSTNAME_LENGTH, MSG_DOMAIN, MSG_HOSTNAME, MSG_PLAIN_LINE, validAnswers } from './foundations'
+import type { Foundation, FoundationOption, FoundationType } from '../api/foundations'
+import { DID_FOUNDATIONS, DID_METHOD, FOUNDATIONS } from '../test/api'
+import {
+  answerErrors,
+  checkAnswer,
+  dropMismatched,
+  MAX_HOSTNAME_LENGTH,
+  MSG_DID,
+  MSG_DOMAIN,
+  MSG_HOSTNAME,
+  MSG_PLAIN_LINE,
+  msgChoice,
+  msgPrefix,
+  resolvedAnswer,
+  validAnswers,
+} from './foundations'
+
+const METHODS: FoundationOption[] = [
+  { value: 'did:web', label: 'Web', note: '' },
+  { value: 'did:key', label: 'Key', note: 'Meant for local development.' },
+]
 
 describe('checkAnswer', () => {
   // Mirrors TestFoundationTypeCheck in Go, so both sides refuse the same answers.
@@ -28,8 +46,35 @@ describe('checkAnswer', () => {
     ['domain', 'localhost', MSG_DOMAIN],
     ['domain', 'Example.org', MSG_HOSTNAME],
     ['domain', 'https://example.org', MSG_HOSTNAME],
+    ['did', 'did:web:example.org', undefined],
+    ['did', 'did:web:example.org%3A8443:user:alice', undefined],
+    ['did', 'did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK', undefined],
+    ['did', 'did:web:', MSG_DID],
+    ['did', 'did:web', MSG_DID],
+    ['did', 'DID:web:example.org', MSG_DID],
+    ['did', 'did:Web:example.org', MSG_DID],
+    ['did', 'did:web:example.org/path', MSG_DID],
+    ['did', 'did:web:a"b', MSG_DID],
+    ['did', 'did:web:a b', MSG_DID],
+    ['did', 'did:web:example.org:', MSG_DID],
+    ['did', 'did:web::', MSG_DID],
+    ['did', 'did:web:a%', MSG_DID],
+    ['did', 'did:web:a%zz', MSG_DID],
   ])('%s %j → %s', (type, value, message) => {
     expect(checkAnswer(type, value)).toBe(message)
+  })
+
+  // Mirrors TestCompiledFoundationCheck in Go.
+  it.each<[string, string | undefined]>([
+    ['did:web', undefined],
+    ['did:key', undefined],
+    ['did:ebsi', 'must be one of did:web, did:key'],
+  ])('choice %j → %s', (value, message) => {
+    expect(checkAnswer('choice', value, METHODS)).toBe(message)
+  })
+
+  it('refuses every choice when no options are known', () => {
+    expect(checkAnswer('choice', 'did:web')).toBe(msgChoice([]))
   })
 })
 
@@ -40,10 +85,50 @@ describe('answer validity', () => {
     expect(answerErrors(values, FOUNDATIONS.foundations)).toEqual({ 'org.displayName': MSG_PLAIN_LINE })
   })
 
+  it('checks a choice against its options', () => {
+    const method: Foundation = { ...DID_METHOD, options: METHODS }
+    expect(answerErrors({ 'did.method': 'did:ebsi' }, [method])).toEqual({ 'did.method': msgChoice(METHODS) })
+    expect(answerErrors({ 'did.method': 'did:key' }, [method])).toEqual({})
+  })
+
   it.each([
     ['without the foundations', undefined, values],
     ['with the foundations', FOUNDATIONS.foundations, { 'domain.base': 'example.org', 'host.other': 'Not Checked' }],
   ])('keeps an invalid answer out of what is sent %s', (_, foundations, sent) => {
     expect(validAnswers(values, foundations)).toEqual(sent)
+  })
+})
+
+describe('resolution', () => {
+  const all = DID_FOUNDATIONS.foundations
+
+  it.each([
+    ['a choice falls back to its constant default', 'did.method', {}, 'did:web'],
+    ['a did:web DID derives from the domain', 'did.value', { 'domain.base': 'example.org' }, 'did:web:example.org'],
+    ['a derived DID waits for the domain', 'did.value', {}, undefined],
+    ['a did:key DID has no default', 'did.value', { 'domain.base': 'example.org', 'did.method': 'did:key' }, undefined],
+    ['a given answer wins over the default', 'did.value', { 'domain.base': 'example.org', 'did.value': 'did:web:other.org' }, 'did:web:other.org'],
+  ])('%s', (_, id, values, want) => {
+    expect(resolvedAnswer(id, values, all)).toEqual(want)
+  })
+
+  it.each([
+    ['refuses a DID of another method', { 'did.method': 'did:key', 'did.value': 'did:web:example.org' }, { 'did.value': msgPrefix('did:key:') }],
+    ['accepts a DID of the chosen method', { 'did.method': 'did:key', 'did.value': 'did:key:z6Mk' }, {}],
+    ['checks the prefix against the default method', { 'did.value': 'did:key:z6Mk' }, { 'did.value': msgPrefix('did:web:') }],
+  ])('%s', (_, values, want) => {
+    expect(answerErrors(values, all)).toEqual(want)
+  })
+
+  it.each([
+    ['drops a DID the new method no longer matches', { 'did.method': 'did:key', 'did.value': 'did:web:example.org' }, { 'did.method': 'did:key' }],
+    ['keeps a DID that still matches', { 'did.method': 'did:key', 'did.value': 'did:key:z6Mk' }, { 'did.method': 'did:key', 'did.value': 'did:key:z6Mk' }],
+  ])('%s', (_, values, want) => {
+    expect(dropMismatched(values, 'did.method', all)).toEqual(want)
+  })
+
+  it('keeps a mismatched DID when the change is the DID itself', () => {
+    const values = { 'did.value': 'did:key:z6Mk' }
+    expect(dropMismatched(values, 'did.value', all)).toBe(values)
   })
 })

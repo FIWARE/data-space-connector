@@ -3,8 +3,8 @@ import { vi } from 'vitest'
 import type { LoadReport } from '../api/load'
 import type { FeatureState, Profile, ProfileResponse, RecentProfiles } from '../api/profile'
 import type { FeatureChoice, FeaturesResult, FeatureToggle } from '../api/features'
-import type { FoundationList } from '../api/foundations'
-import type { Change, ChangeGroup, Leaf, RenderResult } from '../api/render'
+import type { Foundation, FoundationList } from '../api/foundations'
+import type { Change, ChangeGroup, Finding, HandSetAnswer, Leaf, RenderResult } from '../api/render'
 import type { Feature, Offer, PresetResult, RoleCatalogue, RoleChange } from '../api/roles'
 import type { Kubeconfig, ModelInfo } from '../api/target'
 import type { Trial, TrialWritten } from '../api/trial'
@@ -290,7 +290,11 @@ export const FOUNDATIONS: FoundationList = {
       id: 'org.displayName',
       stage: 'foundations',
       type: 'string',
+      group: 'organization',
       default: '',
+      defaultWhen: null,
+      prefix: '',
+      options: [],
       label: 'Display name',
       help: 'The organization name other participants see.',
       doc: 'doc/deployment-integration/roles/KEYCLOAK.md',
@@ -302,7 +306,11 @@ export const FOUNDATIONS: FoundationList = {
       id: 'domain.base',
       stage: 'foundations',
       type: 'domain',
+      group: 'network',
       default: '',
+      defaultWhen: null,
+      prefix: '',
+      options: [],
       label: 'Base domain',
       help: 'Every public host name is derived from it.',
       doc: 'doc/deployment-integration/roles/PREREQUISITES.md#public-names-have-to-resolve-inside-the-cluster',
@@ -318,7 +326,11 @@ export const FOUNDATIONS: FoundationList = {
       id: 'host.keycloak',
       stage: 'foundations',
       type: 'hostname',
+      group: 'network',
       default: 'keycloak.{{ .domain.base }}',
+      defaultWhen: null,
+      prefix: '',
+      options: [],
       label: 'Keycloak host',
       help: 'Keycloak, the credential issuer.',
       doc: 'doc/deployment-integration/roles/KEYCLOAK.md#ingress-and-tls',
@@ -330,6 +342,53 @@ export const FOUNDATIONS: FoundationList = {
       components: ['keycloak'],
     },
   ],
+}
+
+/** The DID pair of the 10.16.0 bundle: a method choice and a DID derived from the domain only while it is did:web. */
+export const DID_METHOD: Foundation = {
+  id: 'did.method',
+  stage: 'foundations',
+  type: 'choice',
+  group: 'organization',
+  default: 'did:web',
+  defaultWhen: null,
+  prefix: '',
+  options: [
+    { value: 'did:web', label: 'did:web', note: 'Resolved over HTTPS from the base domain.' },
+    { value: 'did:key', label: 'did:key', note: 'Meant for local development.' },
+  ],
+  label: 'DID method',
+  help: 'How other participants resolve the DID.',
+  doc: 'doc/deployment-integration/roles/provider/README.md#did-and-key-management',
+  targets: [],
+  count: 0,
+  components: [],
+}
+
+export const DID_VALUE: Foundation = {
+  id: 'did.value',
+  stage: 'foundations',
+  type: 'did',
+  group: 'organization',
+  default: 'did:web:{{ .domain.base }}',
+  defaultWhen: { id: 'did.method', equals: 'did:web' },
+  prefix: '{{ .did.method }}:',
+  options: [],
+  label: 'Organization DID',
+  help: 'The identity other participants know the organization by.',
+  doc: 'doc/deployment-integration/roles/provider/README.md#did-and-key-management',
+  targets: [
+    { path: 'contract-management.did', component: 'contract-management' },
+    { path: 'fdsc-edc.common.config.edc.participant.id', component: 'fdsc-edc' },
+    { path: 'keycloak.issuerDid', component: 'keycloak' },
+  ],
+  count: 3,
+  components: ['contract-management', 'fdsc-edc', 'keycloak'],
+}
+
+/** FOUNDATIONS with the DID pair after the base domain, as the bundle declares them. */
+export const DID_FOUNDATIONS: FoundationList = {
+  foundations: [...FOUNDATIONS.foundations.slice(0, 2), DID_METHOD, DID_VALUE, ...FOUNDATIONS.foundations.slice(2)],
 }
 
 /** The body POST /api/render receives. */
@@ -373,6 +432,35 @@ export function renderLeaves(profile: Profile): Leaf[] {
   return leaves.sort((a, b) => a.path.localeCompare(b.path))
 }
 
+/** The given answers of `profile` that FOUNDATIONS derives from the domain, as render.HandSet lists them. */
+export function handSetOf(profile: Profile): HandSetAnswer[] {
+  const answers = profile.answers ?? {}
+  const base = answers['domain.base']
+  return FOUNDATIONS.foundations
+    .filter((f) => f.default !== '' && answers[f.id] !== undefined)
+    .map((f) => ({ id: f.id, value: answers[f.id], derived: typeof base === 'string' ? f.default.replace('{{ .domain.base }}', base) : '' }))
+}
+
+/** A warning on the base domain, which the FOUNDATIONS cut can show; the real rule points at `did.method`. */
+export const DOMAIN_WARNING: Finding = {
+  rule: 'domain-warning',
+  severity: 'warning',
+  stage: 'foundations',
+  field: 'answers.domain.base',
+  message: 'A domain other participants may not resolve.',
+  doc: 'doc/deployment-integration/roles/PREREQUISITES.md#public-names-have-to-resolve-inside-the-cluster',
+}
+
+/** A render fake that answers `findings` once the base domain is given, and no diff. */
+export function renderWithFindings(findings: Finding[]): (body: RenderBody) => RenderResult {
+  return (body) => ({
+    tree: { leaves: renderLeaves(body.profile) },
+    diff: { groups: [] },
+    handSet: handSetOf(body.profile),
+    findings: body.profile.answers?.['domain.base'] === undefined ? [] : findings,
+  })
+}
+
 /** `next` against `prev` as render.Diff groups it, without pinning: by foundation in FOUNDATIONS order. */
 export function diffLeaves(prev: readonly Leaf[], next: readonly Leaf[]): ChangeGroup[] {
   const before = new Map(prev.map((l) => [l.path, l]))
@@ -399,7 +487,7 @@ function foundationDefaults(): Required<FoundationFakes> {
       const leaves = renderLeaves(body.profile)
       const groups = diffLeaves(last, leaves)
       last = leaves
-      return { tree: { leaves }, diff: { groups } }
+      return { tree: { leaves }, diff: { groups }, handSet: handSetOf(body.profile), findings: [] }
     },
   }
 }

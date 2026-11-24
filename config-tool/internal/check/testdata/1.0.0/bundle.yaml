@@ -1,0 +1,26 @@
+# Rules of both severities and two stages over a did:web/did:key choice, for ordering and Blocking.
+chart: data-space-connector
+version: 1.0.0
+revision: 1
+foundations:
+  - id: did.method
+    stage: foundations
+    type: choice
+    default: did:web
+    label: DID method
+    options:
+      - {value: "did:web", label: Web}
+      - {value: "did:key", label: Key}
+  - id: domain.base
+    stage: foundations
+    type: domain
+    label: Base domain
+rules:
+  - {id: a-warning, severity: warning, stage: foundations, field: answers.did.method,
+     when: [{field: target.environment, equals: production}], message: A, doc: doc/a.md}
+  - {id: b-warning, severity: warning, stage: target, field: target.environment,
+     when: [{field: target.environment, equals: production}], message: B, doc: doc/b.md}
+  - {id: c-error, severity: error, stage: foundations, field: answers.did.method,
+     when: [{field: answers.did.method, equals: "did:key"}], message: C, doc: doc/c.md}
+  - {id: d-error, severity: error, stage: target, field: target.environment,
+     when: [{field: target.environment, equals: production}, {field: answers.did.method, equals: "did:key"}], message: D, doc: doc/d.md#x}

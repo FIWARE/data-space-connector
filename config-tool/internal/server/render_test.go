@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/FIWARE/data-space-connector/config-tool/internal/check"
+	"github.com/FIWARE/data-space-connector/config-tool/internal/model"
 	"github.com/FIWARE/data-space-connector/config-tool/internal/profile"
 	"github.com/FIWARE/data-space-connector/config-tool/internal/render"
 )
@@ -45,6 +47,8 @@ type renderBody struct {
 			} `json:"changes"`
 		} `json:"groups"`
 	} `json:"diff"`
+	HandSet  []render.HandSetAnswer `json:"handSet"`
+	Findings []check.Finding        `json:"findings"`
 }
 
 // changes counts the diff's changes per status.
@@ -149,6 +153,66 @@ func TestRenderDiffsAgainstPreviousRender(t *testing.T) {
 	}
 	if got := second.changes(); got[render.StatusChanged] != changed || len(got) != 1 {
 		t.Errorf("domain change: changes = %v, want %d changed", got, changed)
+	}
+}
+
+func TestRenderListsHandSetAnswers(t *testing.T) {
+	const handDID = "did:web:id.acme.com"
+	ps := newProfileSession(t)
+	if status, raw, _ := ps.render(domainProfile(renderDomain), ""); status != http.StatusOK || !strings.Contains(raw, `"handSet":[]`) {
+		t.Errorf("derived answers only: status %d, body %s, want an empty handSet", status, raw)
+	}
+	for _, d := range []string{renderDomain, otherRenderDomain} {
+		p := domainProfile(d)
+		p.Answers["did.value"] = handDID
+		got := ps.mustRender(p, "")
+		want := []render.HandSetAnswer{{ID: "did.value", Value: handDID, Derived: "did:web:" + d}}
+		if !slices.Equal(got.HandSet, want) {
+			t.Errorf("domain %s: handSet = %+v, want %+v", d, got.HandSet, want)
+		}
+	}
+}
+
+func TestRenderReportsFindings(t *testing.T) {
+	const keyDID = "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK"
+	tests := []struct {
+		name   string
+		env    profile.Environment
+		method string
+		want   []string
+	}{
+		{name: "development did:web", env: profile.EnvDevelopment, method: "did:web"},
+		{name: "development did:key", env: profile.EnvDevelopment, method: "did:key"},
+		{name: "production did:web", env: profile.EnvProduction, method: "did:web"},
+		{name: "production did:key", env: profile.EnvProduction, method: "did:key", want: []string{"did-key-in-production"}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			ps := newProfileSession(t)
+			p := domainProfile(renderDomain)
+			p.Target.Environment = tc.env
+			p.Answers["did.method"] = tc.method
+			if tc.method == "did:key" {
+				p.Answers["did.value"] = keyDID
+			}
+			// Rendered twice: the second tree is unchanged, and its findings must still come back.
+			for range 2 {
+				got := ps.mustRender(p, "")
+				if len(got.Tree.Leaves) == 0 {
+					t.Fatal("a render with findings has no tree")
+				}
+				rules := []string{}
+				for _, f := range got.Findings {
+					rules = append(rules, f.Rule)
+					if f.Severity != model.SeverityWarning || f.Stage != model.StageFoundations || f.Field != "answers.did.method" {
+						t.Errorf("finding = %+v, want a foundations warning on answers.did.method", f)
+					}
+				}
+				if !slices.Equal(rules, append([]string{}, tc.want...)) {
+					t.Errorf("findings = %v, want %v", rules, tc.want)
+				}
+			}
+		})
 	}
 }
 

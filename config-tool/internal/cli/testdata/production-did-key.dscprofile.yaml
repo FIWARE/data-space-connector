@@ -1,0 +1,17 @@
+# A production profile with a did:key, which the did-key-in-production rule warns about.
+format: 1
+model: {chart: data-space-connector, version: 10.16.0, revision: 7}
+target:
+  type: file
+  namespace: provider
+  createNamespace: true
+  releaseName: provider
+  chart: data-space-connector
+  chartVersion: 10.16.0
+  environment: production
+answers:
+  domain.base: example.org
+  did.method: did:key
+  did.value: did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK
+open: []
+secrets: {}

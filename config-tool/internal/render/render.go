@@ -65,7 +65,14 @@ func Render(b model.Bundle, p profile.Profile, opts Options) (Tree, error) {
 	return Tree{Leaves: leaves}, nil
 }
 
-// resolve returns the given answers plus the derived defaults, flat and as the template namespace.
+// Answers returns p's given answers plus the derived defaults, keyed by foundation id; it errors as Render does.
+func Answers(b model.Bundle, p profile.Profile) (map[string]any, error) {
+	answers, _, err := resolve(b, p.Answers)
+	return answers, err
+}
+
+// resolve returns the given answers plus the derived defaults, flat and as the template namespace. It
+// errors when a resolved answer does not start with its prefix.
 func resolve(b model.Bundle, given map[string]any) (map[string]any, map[string]any, error) {
 	for _, id := range slices.Sorted(maps.Keys(given)) {
 		if _, ok := b.Foundation(id); !ok {
@@ -77,22 +84,48 @@ func resolve(b model.Bundle, given map[string]any) (map[string]any, map[string]a
 		f, _ := b.Foundation(id)
 		v, ok := given[id]
 		if !ok {
-			if f.DefaultTemplate() == nil || !all(answers, f.Refs) {
+			if !defaults(f, answers) {
 				continue
 			}
 			s, err := execute(f.DefaultTemplate(), ns)
 			if err != nil {
 				return nil, nil, fmt.Errorf("render: default of %s: %w", id, err)
 			}
-			if err := f.Type.Check(s); err != nil {
+			if err := f.Check(s); err != nil {
 				return nil, nil, fmt.Errorf("render: derived %s %w", id, err)
 			}
 			v = s
+		}
+		if err := checkPrefix(f, v, answers, ns); err != nil {
+			return nil, nil, err
 		}
 		answers[id] = v
 		setNested(ns, id, v)
 	}
 	return answers, ns, nil
+}
+
+// defaults reports whether f's default applies: it has one, its default refs are resolved and DefaultWhen holds.
+func defaults(f model.CompiledFoundation, answers map[string]any) bool {
+	if f.DefaultTemplate() == nil || !all(answers, f.DefaultRefs()) {
+		return false
+	}
+	return f.DefaultWhen == nil || answers[f.DefaultWhen.ID] == any(f.DefaultWhen.Equals)
+}
+
+// checkPrefix refuses v when it does not start with f's prefix; a prefix over unresolved answers is not checked.
+func checkPrefix(f model.CompiledFoundation, v any, answers, ns map[string]any) error {
+	if f.PrefixTemplate() == nil || !all(answers, f.PrefixRefs()) {
+		return nil
+	}
+	prefix, err := execute(f.PrefixTemplate(), ns)
+	if err != nil {
+		return fmt.Errorf("render: prefix of %s: %w", f.ID, err)
+	}
+	if s, ok := v.(string); !ok || !strings.HasPrefix(s, prefix) {
+		return fmt.Errorf("render: %s must start with %q, which %s sets", f.ID, prefix, strings.Join(f.PrefixRefs(), ", "))
+	}
+	return nil
 }
 
 func all(answers map[string]any, ids []string) bool {

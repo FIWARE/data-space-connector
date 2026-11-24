@@ -13,6 +13,8 @@ import (
 const (
 	validFoundations   = "testdata/foundations/valid.yaml"
 	invalidFoundations = "testdata/foundations/invalid.yaml"
+	didFoundations     = "testdata/foundations/did.yaml"
+	prefixFoundations  = "testdata/foundations/prefix.yaml"
 	foundationsHead    = "chart: " + chart + "\nversion: 1.0.0\nrevision: 1\ntopLevelKeys: [keycloak, scorpio]\n"
 )
 
@@ -69,6 +71,71 @@ func TestFoundationsCompile(t *testing.T) {
 	}
 }
 
+func TestFoundationsCompileChoiceAndDID(t *testing.T) {
+	b := loadFixture(t, didFoundations)
+	if got, want := b.FoundationOrder(), []string{"did.method", "domain.base", "did.value"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("FoundationOrder = %v, want %v", got, want)
+	}
+	method, _ := b.Foundation("did.method")
+	if method.Refs != nil || method.DefaultTemplate() == nil || len(method.Options) != 2 {
+		t.Errorf("did.method = refs %v, default %v, %d options; want a constant default and 2 options", method.Refs, method.DefaultTemplate(), len(method.Options))
+	}
+	value, _ := b.Foundation("did.value")
+	if want := []string{"did.method", "domain.base"}; !reflect.DeepEqual(value.Refs, want) {
+		t.Errorf("did.value refs = %v, want %v", value.Refs, want)
+	}
+	if want := []string{"did.method", "domain.base"}; !reflect.DeepEqual(value.DefaultRefs(), want) {
+		t.Errorf("did.value default refs = %v, want %v", value.DefaultRefs(), want)
+	}
+	if want := (&Condition{ID: "did.method", Equals: "did:web"}); !reflect.DeepEqual(value.DefaultWhen, want) {
+		t.Errorf("did.value defaultWhen = %+v, want %+v", value.DefaultWhen, want)
+	}
+	if want := []string{"did.method"}; value.PrefixTemplate() == nil || !reflect.DeepEqual(value.PrefixRefs(), want) {
+		t.Errorf("did.value prefix refs = %v, want %v with a template", value.PrefixRefs(), want)
+	}
+}
+
+func TestFoundationGroup(t *testing.T) {
+	b := loadFixture(t, didFoundations)
+	for id, want := range map[string]FoundationGroup{"did.method": GroupOrganization, "did.value": GroupNetwork} {
+		if f, _ := b.Foundation(id); f.Group != want {
+			t.Errorf("%s group = %q, want %q", id, f.Group, want)
+		}
+	}
+}
+
+func TestDefaultRefsLeaveOutPrefixRefs(t *testing.T) {
+	f, _ := loadFixture(t, prefixFoundations).Foundation("tag.value")
+	if want := []string{"tag.code", "tag.scheme"}; !reflect.DeepEqual(f.Refs, want) {
+		t.Errorf("refs = %v, want %v", f.Refs, want)
+	}
+	if want := []string{"tag.code"}; !reflect.DeepEqual(f.DefaultRefs(), want) {
+		t.Errorf("default refs = %v, want %v", f.DefaultRefs(), want)
+	}
+}
+
+func TestCompiledFoundationCheck(t *testing.T) {
+	b := loadFixture(t, didFoundations)
+	tests := []struct {
+		id    string
+		value any
+		ok    bool
+	}{
+		{"did.method", "did:web", true},
+		{"did.method", "did:key", true},
+		{"did.method", "did:ebsi", false},
+		{"did.method", 1, false},
+		{"did.value", "did:web:example.org", true},
+		{"did.value", "did:web", false},
+	}
+	for _, tc := range tests {
+		f, _ := b.Foundation(tc.id)
+		if err := f.Check(tc.value); (err == nil) != tc.ok {
+			t.Errorf("%s.Check(%v) = %v, want ok %v", tc.id, tc.value, err, tc.ok)
+		}
+	}
+}
+
 func TestFoundationsValidation(t *testing.T) {
 	data, err := os.ReadFile(invalidFoundations)
 	if err != nil {
@@ -121,6 +188,21 @@ func TestFoundationTypeCheck(t *testing.T) {
 		{TypeDomain, "example.org", true},
 		{TypeDomain, "localhost", false},
 		{TypeDomain, "https://example.org", false},
+		{TypeDID, "did:web:example.org", true},
+		{TypeDID, "did:web:example.org%3A8443:user:alice", true},
+		{TypeDID, "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK", true},
+		{TypeDID, "did:web:", false},
+		{TypeDID, "did:web", false},
+		{TypeDID, "DID:web:example.org", false},
+		{TypeDID, "did:Web:example.org", false},
+		{TypeDID, "did:web:example.org/path", false},
+		{TypeDID, `did:web:a"b`, false},
+		{TypeDID, "did:web:a b", false},
+		{TypeDID, "did:web:example.org:", false},
+		{TypeDID, "did:web::", false},
+		{TypeDID, "did:web:a%", false},
+		{TypeDID, "did:web:a%zz", false},
+		{TypeChoice, "did:web", false},
 		{FoundationType("number"), "1", false},
 	}
 	for _, tc := range tests {

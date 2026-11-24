@@ -17,6 +17,28 @@ const (
 	handEditedFile = "keycloak:\n  ingress:\n    hostname: keycloak." + domain + "\nrainbow:\n  ingress:\n    host: " + handEdit + "\n"
 )
 
+func TestTargetsFollowDefaultRefsOnly(t *testing.T) {
+	b := modelFixture(t, prefixFixture)
+	tests := []struct {
+		answer string
+		want   []string
+	}{
+		{answer: "tag.code", want: []string{didPath}},
+		{answer: "tag.scheme"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.answer, func(t *testing.T) {
+			var paths []string
+			for _, r := range Targets(b, tc.answer) {
+				paths = append(paths, r.Path.String())
+			}
+			if !slices.Equal(paths, tc.want) {
+				t.Errorf("targets = %v, want %v", paths, tc.want)
+			}
+		})
+	}
+}
+
 func TestTargets(t *testing.T) {
 	tests := []struct {
 		answer         string
@@ -209,7 +231,12 @@ func TestChangeJSON(t *testing.T) {
 
 func TestProviderTargetsAndDiff(t *testing.T) {
 	b := providerBundle(t)
-	want := domainLeaves(t, providerDoc(t))
+	// did.value derives from the domain while unanswered, so its targets are reached too.
+	want := answerLeaves(t, providerDoc(t), domainBase)
+	for _, r := range Targets(b, didValueID) {
+		want = append(want, r.Path.String())
+	}
+	sort.Strings(want)
 	var targets []string
 	for _, r := range Targets(b, domainBase) {
 		targets = append(targets, r.Path.String())

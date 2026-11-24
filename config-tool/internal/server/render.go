@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"slices"
 
+	"github.com/FIWARE/data-space-connector/config-tool/internal/check"
 	"github.com/FIWARE/data-space-connector/config-tool/internal/load"
 	"github.com/FIWARE/data-space-connector/config-tool/internal/model"
 	"github.com/FIWARE/data-space-connector/config-tool/internal/profile"
@@ -18,10 +19,13 @@ type renderRequest struct {
 	SourceSHA256 string          `json:"sourceSha256"`
 }
 
-// renderResponse is the tree of POST /api/render and its change against the previous render.
+// renderResponse is the tree of POST /api/render, its change against the previous render, the
+// answers given in place of their derived default and the L2 findings, which never fail the request.
 type renderResponse struct {
-	Tree render.Tree     `json:"tree"`
-	Diff render.TreeDiff `json:"diff"`
+	Tree     render.Tree            `json:"tree"`
+	Diff     render.TreeDiff        `json:"diff"`
+	HandSet  []render.HandSetAnswer `json:"handSet"`
+	Findings []check.Finding        `json:"findings"`
 }
 
 // foundationsResponse lists a bundle's foundations in declaration order with their fan-out.
@@ -33,8 +37,16 @@ type foundationBody struct {
 	ID    string               `json:"id"`
 	Stage model.Stage          `json:"stage"`
 	Type  model.FoundationType `json:"type"`
+	// Group is the Stage 3 panel, never empty.
+	Group model.FoundationGroup `json:"group"`
 	// Default is the template a derived answer comes from; empty when there is none.
-	Default string             `json:"default"`
+	Default string `json:"default"`
+	// DefaultWhen gates Default on another answer; null when Default always applies.
+	DefaultWhen *model.Condition `json:"defaultWhen"`
+	// Prefix is the template the answer must start with; empty when there is none.
+	Prefix string `json:"prefix"`
+	// Options are the values a choice offers; empty for every other type.
+	Options []model.Option     `json:"options"`
 	Label   string             `json:"label"`
 	Help    string             `json:"help"`
 	Doc     string             `json:"doc"`
@@ -76,13 +88,23 @@ func (s *Server) handleRender(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnprocessableEntity, err.Error(), "")
 		return
 	}
+	handSet, err := render.HandSet(*b, p)
+	if err != nil {
+		writeError(w, http.StatusUnprocessableEntity, err.Error(), "")
+		return
+	}
+	findings, err := check.Evaluate(*b, p)
+	if err != nil {
+		writeError(w, http.StatusUnprocessableEntity, err.Error(), "")
+		return
+	}
 	// A render of another source (e.g. a new configuration after a load) starts a new baseline.
 	if s.lastRenderSHA != req.SourceSHA256 {
 		s.resetRender()
 	}
 	diff := render.Diff(*b, s.lastRender, tree)
 	s.lastRender, s.lastRenderSHA = tree, req.SourceSHA256
-	writeJSON(w, renderResponse{Tree: tree, Diff: diff})
+	writeJSON(w, renderResponse{Tree: tree, Diff: diff, HandSet: handSet, Findings: findings})
 }
 
 // overridesFor is the loaded slot when it holds values of chart; paths of another chart would pin nonsense.
@@ -124,8 +146,11 @@ func (s *Server) handleFoundations(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		slices.Sort(components)
+		// Declared foundations compile, so the compiled one exists.
+		c, _ := b.Foundation(f.ID)
 		body.Foundations = append(body.Foundations, foundationBody{
-			ID: f.ID, Stage: f.Stage, Type: f.Type, Default: f.Default, Label: f.Label, Help: f.Help, Doc: f.Doc,
+			ID: f.ID, Stage: f.Stage, Type: f.Type, Group: c.Group, Default: f.Default, DefaultWhen: c.DefaultWhen, Prefix: f.Prefix, Options: append([]model.Option{}, f.Options...),
+			Label: f.Label, Help: f.Help, Doc: f.Doc,
 			Targets: targets, Count: len(targets), Components: components,
 		})
 	}

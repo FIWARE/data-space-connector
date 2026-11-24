@@ -58,7 +58,8 @@ printed URL yourself. `dsc-config --no-browser` only prints the URL.
 `dsc-config generate -p <name>.dscprofile.yaml [-o values.yaml]` renders a saved
 [profile](#profiles) without the GUI (stdout by default). It refuses a profile with an unanswered or malformed Target field, naming the file and the field,
 because rendering needs a complete target. It then renders the answers, so bundle and profile errors surface, and
-stops with "writing values.yaml lands with US-7.1". An existing output file is refused until the render
+prints every [finding](#rules-and-findings) to stderr (`warning: Stage 3 Foundations, answers.did.method: ...`), fails
+on an error finding only, and otherwise stops with "writing values.yaml lands with US-7.1". An existing output file is refused until the render
 epic decides how rendered keys merge with overrides (ADR 0015).
 
 `dsc-config generate --trial [--output-dir <dir>]` writes the three files of the
@@ -307,19 +308,28 @@ applies the same revision rules to it.
 ## Foundations (Stage 3)
 
 Stage 3 asks the cross-cutting answers of the target's bundle once ([ADR 0020](../doc/adr/0020-config-tool-foundations-render.md)).
-The *Organization* panel holds the `org.*` answers, the *Network* panel `domain.base` and, read-only, the hosts derived
-from it (`<component>.<base>`, editing them is US-3.4) with a link to the resolve-inside-the-cluster prerequisite.
+A foundation's `group` picks its panel. *Organization* holds the display name and the DID, *Network* `domain.base`
+and, read-only, the hosts derived from it (`<component>.<base>`, editing them is US-3.4) with a link to the resolve-inside-the-cluster prerequisite.
 Each field has its doc link, *Ask later* (an `answers.<id>` open question on Review) and a *used by N values in M
 components* button that lists its targets. Every answer change renders the profile through `POST /api/render`
 (debounced). The render on entering the stage is the baseline, and the screen shows the grouped diff of each later
 edit, with a hand-edited leaf of the loaded file flagged *pinned, not updated* next to its kept and would-be value.
 
+The DID is two answers. `did.method` is a radio group (`did:web` or `did:key`), each option with its note. `did.value`
+shows `did:web:<base domain>` as *derived* with *Edit* while the method is `did:web`; *Edit* opens the input but the DID
+stays derived until its text differs from the derived one, and an edited value gets *Reset to derived*. Under `did:key` there is no default and the DID is asked for. A DID must start with `<method>:`, so switching
+the method drops a hand-set DID of the other method. The DID reaches the verifier, contract-management, the Keycloak
+issuer and the `fdsc-edc.common` participant, issuer, STS client and holder ids; [FEATURE_MODEL.md](../doc/config-tool/FEATURE_MODEL.md#cross-cutting-values)
+lists the DID keys left to other stories.
+
 ### The `foundations:` section
 
 A bundle's `foundations:` list declares the answers and every chart key they reach; there is no Go code per key.
-Each entry has a dotted `id` (the key in the profile's `answers`), `stage`, `type` (`string`, `hostname` or
-`domain`, each checked by one pattern), `label`, `help`, an optional repo-relative `doc` path, an optional `default`
-and `targets`. A `default` is a template over other answers, so `host.keycloak` (`"keycloak.{{ .domain.base }}"`)
+Each entry has a dotted `id` (the key in the profile's `answers`), `stage`, an optional `group` (`organization` or
+`network`, the default), `type` (`string`, `hostname`, `domain` or `did`, each checked by one pattern, or `choice`
+from its `options`), `label`, `help`, an optional repo-relative `doc` path, an optional `default`, `defaultWhen`
+(`{id, equals}`: the default applies only while that answer resolves to `equals`), `prefix` (a template the answer must
+start with) and `targets`. A `default` is a template over other answers, so `host.keycloak` (`"keycloak.{{ .domain.base }}"`)
 exists only while `domain.base` is answered. Templates hold only text and `{{ .id }}` actions. A target writes one
 scalar with one of four functions:
 
@@ -350,13 +360,24 @@ nothing. With a loaded file, a target path that the load classified as unknown o
 loaded node is not a scalar, there is no kept value and `Nested()` leaves the path to the overrides layer. Owned and
 recognized leaves are re-rendered. The JSON of a tree is byte-identical across runs.
 
-`GET /api/foundations?chart=&version=` lists the foundations with label, help, doc, type, default, stage and their
+`GET /api/foundations?chart=&version=` lists the foundations with label, help, doc, type, group, options, default,
+`defaultWhen`, prefix, stage and their
 fan-out (`targets`, `count`, sorted `components`), transitive through derived hosts. `POST /api/render` takes
 `{profile, sourceSha256}` (422 with field errors when the profile does not validate, or when the sha is not the
 loaded file's), renders it with the load the sha names as the overrides layer (none when it is empty, as on save) and
-returns `{tree, diff}`. The diff groups `added`, `changed`, `removed` and `pinned` entries by foundation, against the
+returns `{tree, diff, handSet, findings}`. The diff groups `added`, `changed`, `removed` and `pinned` entries by foundation, against the
 previous render of the same source. A load, a profile open or a render of another source resets that baseline. A
 pinned leaf is reported only when its rendered value changes (ADR 0020 §7-8).
+
+### Rules and findings
+
+A bundle's `rules:` are L2 checks across answers ([ADR 0021](../doc/adr/0021-config-tool-l2-rules.md)). Each rule has
+an `id`, a `severity` (`warning` or `error`), the `stage` and open `field` it points at, `when` conditions
+(`{field, equals}`, all must hold, read on the resolved answers so a derived default counts), a `message` and a `doc`
+path. Core package `internal/check` evaluates them into findings. Stage 3 shows a finding under its field, Review lists
+it with a link back, and `generate` prints it. A warning never blocks; only an error stops `generate`. The 10.16.0
+bundle has one rule: `did-key-in-production` warns when the environment is `production` and the DID method is
+`did:key`.
 
 ## Features (Stage 5)
 

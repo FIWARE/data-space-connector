@@ -12,16 +12,26 @@ const (
 	foundationDomain = "domain.base"
 	foundationHost   = "host.keycloak"
 	foundationOrg    = "org.displayName"
+	foundationDID    = "did.value"
 )
 
 // foundationJSON is a decoded foundation, target paths kept as strings.
 type foundationJSON struct {
-	ID         string   `json:"id"`
-	Stage      string   `json:"stage"`
-	Default    string   `json:"default"`
-	Label      string   `json:"label"`
-	Count      int      `json:"count"`
-	Components []string `json:"components"`
+	ID      string `json:"id"`
+	Stage   string `json:"stage"`
+	Group   string `json:"group"`
+	Default string `json:"default"`
+	// DefaultWhen is nil when the response holds null.
+	DefaultWhen *struct {
+		ID     string `json:"id"`
+		Equals string `json:"equals"`
+	} `json:"defaultWhen"`
+	Prefix string `json:"prefix"`
+	// Options is nil only when the response holds null.
+	Options    []json.RawMessage `json:"options"`
+	Label      string            `json:"label"`
+	Count      int               `json:"count"`
+	Components []string          `json:"components"`
 	Targets    []struct {
 		Path      string `json:"path"`
 		Component string `json:"component"`
@@ -86,8 +96,8 @@ func TestFoundationsEndpoint(t *testing.T) {
 			var ids []string
 			for _, f := range foundations {
 				ids = append(ids, f.ID)
-				if f.Count != len(f.Targets) || f.Label == "" || f.Stage == "" {
-					t.Errorf("foundation %s = %+v, want a label, a stage and count = len(targets)", f.ID, f)
+				if f.Count != len(f.Targets) || f.Label == "" || f.Stage == "" || f.Options == nil {
+					t.Errorf("foundation %s = %+v, want a label, a stage, an options list and count = len(targets)", f.ID, f)
 				}
 			}
 			var listed []string
@@ -126,5 +136,26 @@ func TestFoundationsFanOut(t *testing.T) {
 	}
 	if org.Count != len(org.Targets) {
 		t.Errorf("%s count = %d, want %d", foundationOrg, org.Count, len(org.Targets))
+	}
+}
+
+func TestFoundationsGroupAndCondition(t *testing.T) {
+	ps := newProfileSession(t)
+	_, foundations := getFoundations(t, ps, foundationsPath(dscChart, latestChart), true)
+	byID := map[string]foundationJSON{}
+	for _, f := range foundations {
+		byID[f.ID] = f
+	}
+	for id, want := range map[string]string{foundationOrg: "organization", foundationDID: "organization", foundationDomain: "network", foundationHost: "network"} {
+		if got := byID[id].Group; got != want {
+			t.Errorf("%s group = %q, want %q", id, got, want)
+		}
+	}
+	did := byID[foundationDID]
+	if did.DefaultWhen == nil || did.DefaultWhen.ID != "did.method" || did.DefaultWhen.Equals != "did:web" || did.Prefix == "" {
+		t.Errorf("%s = defaultWhen %+v, prefix %q; want did.method = did:web and a prefix", foundationDID, did.DefaultWhen, did.Prefix)
+	}
+	if host := byID[foundationHost]; host.DefaultWhen != nil || host.Prefix != "" {
+		t.Errorf("%s = defaultWhen %+v, prefix %q; want neither", foundationHost, host.DefaultWhen, host.Prefix)
 	}
 }

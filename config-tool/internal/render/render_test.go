@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"testing/fstest"
 
 	"github.com/FIWARE/data-space-connector/config-tool/internal/load"
 	"github.com/FIWARE/data-space-connector/config-tool/internal/model"
@@ -26,6 +27,13 @@ const (
 	longRunes = 100
 	// scorpioAlt answers the host without a default, so the fixture's scorpio hosts list is complete.
 	scorpioAlt = "ld." + domain
+	// didFixture is the model package's choice-and-DID bundle.
+	didFixture = "../model/testdata/foundations/did.yaml"
+	didWeb     = "did:web:" + domain
+	didKey     = "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK"
+	didPath    = "keycloak.issuerDid"
+	// prefixFixture is the model package's bundle whose prefix names an answer its default does not.
+	prefixFixture = "../model/testdata/foundations/prefix.yaml"
 )
 
 func fixtureBundles(t *testing.T) []model.Bundle {
@@ -160,6 +168,99 @@ func TestRenderErrors(t *testing.T) {
 			_, err := Render(fixtureBundle(t), profile.Profile{Answers: tc.answers}, Options{})
 			if err == nil || !strings.Contains(err.Error(), tc.want) {
 				t.Errorf("error = %v, want it to contain %q", err, tc.want)
+			}
+		})
+	}
+}
+
+func modelFixture(t *testing.T, file string) model.Bundle {
+	t.Helper()
+	data, err := os.ReadFile(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bs, err := model.Versions(fstest.MapFS{"1.0.0/bundle.yaml": {Data: data}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return bs[0]
+}
+
+func renderDID(t *testing.T, answers map[string]any) (Tree, error) {
+	t.Helper()
+	return Render(modelFixture(t, didFixture), profile.Profile{Answers: answers}, Options{})
+}
+
+func TestRenderDefaultWhenAndPrefix(t *testing.T) {
+	scorpio := map[string]any{"scorpio.ingress.host": "scorpio." + domain}
+	tests := []struct {
+		name    string
+		answers map[string]any
+		want    map[string]any
+		wantErr string
+	}{
+		{name: "the constant method lets the DID derive", answers: map[string]any{"domain.base": domain},
+			want: merge(scorpio, map[string]any{didPath: didWeb})},
+		{name: "a given did:web derives too", answers: map[string]any{"domain.base": domain, "did.method": "did:web"},
+			want: merge(scorpio, map[string]any{didPath: didWeb})},
+		{name: "did:key skips the default", answers: map[string]any{"domain.base": domain, "did.method": "did:key"},
+			want: scorpio},
+		{name: "a given DID overrides the default", answers: map[string]any{"domain.base": domain, "did.value": "did:web:id.other.org"},
+			want: merge(scorpio, map[string]any{didPath: "did:web:id.other.org"})},
+		{name: "a given did:key DID passes its prefix", answers: map[string]any{"did.method": "did:key", "did.value": didKey},
+			want: map[string]any{didPath: didKey}},
+		{name: "a DID of another method fails its prefix", answers: map[string]any{"did.method": "did:key", "did.value": didWeb},
+			wantErr: `did.value must start with "did:key:", which did.method sets`},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			tree, err := renderDID(t, tc.answers)
+			if tc.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+					t.Errorf("error = %v, want it to contain %q", err, tc.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := values(tree); !reflect.DeepEqual(got, tc.want) {
+				t.Errorf("values = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestRenderPrefixRefsDoNotGateDefault(t *testing.T) {
+	tests := []struct {
+		name    string
+		answers map[string]any
+		want    map[string]any
+		wantErr string
+	}{
+		{name: "an unanswered prefix ref leaves the default derived and unchecked",
+			answers: map[string]any{"tag.code": "a"}, want: map[string]any{didPath: "x-a"}},
+		{name: "an answered prefix ref checks the derived value",
+			answers: map[string]any{"tag.code": "a", "tag.scheme": "x-"}, want: map[string]any{didPath: "x-a"}},
+		{name: "a derived value against its prefix fails",
+			answers: map[string]any{"tag.code": "a", "tag.scheme": "y-"}, wantErr: `tag.value must start with "y-"`},
+		{name: "a prefix ref alone derives nothing", answers: map[string]any{"tag.scheme": "x-"}, want: map[string]any{}},
+	}
+	b := modelFixture(t, prefixFixture)
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			tree, err := Render(b, profile.Profile{Answers: tc.answers}, Options{})
+			if tc.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+					t.Errorf("error = %v, want it to contain %q", err, tc.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := values(tree); !reflect.DeepEqual(got, tc.want) {
+				t.Errorf("values = %v, want %v", got, tc.want)
 			}
 		})
 	}

@@ -10,9 +10,13 @@ import type { FieldId } from '../state/openQuestions'
 import { initialState, type AppliedRoleChange, type AppState } from '../state/reducer'
 import { StageId } from '../state/stageIds'
 import { StoreProvider } from '../state/store'
-import { catalogueFeature, lateLoad, mockApi, recordToggle, refusedRole, REPORT, refusedUpload } from '../test/api'
+import { catalogueFeature, DOMAIN_WARNING, FOUNDATIONS, lateLoad, mockApi, recordToggle, refusedRole, REPORT, refusedUpload, renderWithFindings } from '../test/api'
+import { repositoryDocUrl } from '../links'
+import { FINDINGS_HEADING, FINDINGS_HINT, READ_MORE, stageName } from './findingsText'
 import { DELIBERATE_HEADING } from './DeliberateChoices'
 import { FEATURES_HEADING } from './Features'
+import { FOUNDATIONS_HEADING } from './Foundations'
+import { HAND_SET_HEADING, HAND_SET_HINT, wouldDerive } from './handSetText'
 import { ROOT_LABEL, WHOLE_FILE } from './Review'
 import { ROLE_CHANGES_HEADING, roleChanged, summaryToggleLabel, TURNS_OFF } from './roleChangeText'
 
@@ -278,5 +282,88 @@ describe('Review', () => {
     await act(async () => {})
     expect(featureRequests(fetchMock)).toHaveLength(0)
     expect(screen.queryByRole('heading', { name: new RegExp(DELIBERATE_HEADING) })).not.toBeInTheDocument()
+  })
+
+  describe('set by hand', () => {
+    const BASE = 'acme.org'
+    const HAND_HOST = 'sso.acme.com'
+    const handSetList = () => within(screen.getByRole('heading', { level: 3, name: HAND_SET_HEADING }).closest('.panel') as HTMLElement)
+    const withValues = (values: Record<string, string>): Partial<AppState> => ({
+      answers: { values, role: PICKED, features: {}, target: ANSWERED },
+      foundations: FOUNDATIONS.foundations,
+    })
+
+    it.each<[string, Record<string, string>, string]>([
+      ['names the value it would derive to', { 'domain.base': BASE, 'host.keycloak': HAND_HOST }, `Keycloak host${HAND_HOST}${wouldDerive(`keycloak.${BASE}`)}go ↗`],
+      ['leaves the note out when nothing would derive', { 'host.keycloak': HAND_HOST }, `Keycloak host${HAND_HOST}go ↗`],
+      ['leaves the note out when the derived value is the same', { 'domain.base': BASE, 'host.keycloak': `keycloak.${BASE}` }, `Keycloak hostkeycloak.${BASE}go ↗`],
+    ])('lists a hand-set answer and %s', async (_name, values, row) => {
+      mockApi()
+      renderReview(undefined, undefined, withValues(values))
+      expect(await screen.findByRole('heading', { level: 3, name: HAND_SET_HEADING })).toBeInTheDocument()
+      expect(handSetList().getByText(HAND_SET_HINT)).toBeInTheDocument()
+      expect(handSetList().getAllByRole('listitem').map((li) => li.textContent)).toEqual([row])
+    })
+
+    it('links a row to its field on Foundations', async () => {
+      mockApi()
+      renderReview(REPORT, undefined, withValues({ 'domain.base': BASE, 'host.keycloak': HAND_HOST }))
+      await screen.findByRole('heading', { level: 3, name: HAND_SET_HEADING })
+      await userEvent.click(handSetList().getByRole('button', { name: 'Go to Keycloak host' }))
+      expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(FOUNDATIONS_HEADING)
+    })
+
+    it('leaves the section out when every answer is derived or has no default', async () => {
+      const fetchMock = mockApi()
+      renderReview(undefined, undefined, withValues({ 'domain.base': BASE, 'org.displayName': 'ACME' }))
+      await waitFor(() => expect(fetchMock.mock.calls.some(([input]) => String(input).endsWith('/api/render'))).toBe(true))
+      await act(async () => {})
+      expect(screen.queryByRole('heading', { name: HAND_SET_HEADING })).not.toBeInTheDocument()
+    })
+
+    it('shows a refused render', async () => {
+      mockApi(undefined, undefined, undefined, {}, {}, {}, { render: () => HTTP_UNPROCESSABLE })
+      renderReview(undefined, undefined, withValues({ 'host.keycloak': HAND_HOST }))
+      expect(await screen.findByRole('alert')).toHaveTextContent(String(HTTP_UNPROCESSABLE))
+    })
+  })
+
+  describe('findings', () => {
+    const findingsPanel = () => within(screen.getByRole('heading', { level: 3, name: FINDINGS_HEADING }).closest('.panel') as HTMLElement)
+    const withDomain: Partial<AppState> = {
+      answers: { values: { 'domain.base': 'acme.org' }, role: PICKED, features: {}, target: ANSWERED },
+      foundations: FOUNDATIONS.foundations,
+    }
+
+    it.each<[string, Partial<AppState> | undefined]>([
+      ['without a loaded file', undefined],
+      ['with a loaded file', { loaded: REPORT }],
+    ])('lists a finding with its stage, field and doc %s', async (_name, more) => {
+      mockApi(undefined, undefined, undefined, {}, {}, {}, { render: renderWithFindings([DOMAIN_WARNING]) })
+      renderReview(more?.loaded, undefined, withDomain)
+      await screen.findByRole('heading', { level: 3, name: FINDINGS_HEADING })
+      expect(findingsPanel().getByText(FINDINGS_HINT)).toBeInTheDocument()
+      expect(findingsPanel().getByRole('listitem')).toHaveTextContent(
+        `Warning${stageName(StageId.Foundations)}Base domain${DOMAIN_WARNING.message}${READ_MORE}go ↗`,
+      )
+      expect(findingsPanel().getByRole('link', { name: READ_MORE })).toHaveAttribute('href', repositoryDocUrl(DOMAIN_WARNING.doc))
+      expect(stageName(StageId.Foundations)).toBe('Stage 3 · Foundations')
+    })
+
+    it('links a finding to its field on Foundations', async () => {
+      mockApi(undefined, undefined, undefined, {}, {}, {}, { render: renderWithFindings([DOMAIN_WARNING]) })
+      renderReview(undefined, undefined, withDomain)
+      await screen.findByRole('heading', { level: 3, name: FINDINGS_HEADING })
+      await userEvent.click(findingsPanel().getByRole('button', { name: 'Go to Base domain' }))
+      expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(FOUNDATIONS_HEADING)
+    })
+
+    it('leaves the section out without a finding', async () => {
+      const fetchMock = mockApi()
+      renderReview(undefined, undefined, withDomain)
+      await waitFor(() => expect(fetchMock.mock.calls.some(([input]) => String(input).endsWith('/api/render'))).toBe(true))
+      await act(async () => {})
+      expect(screen.queryByRole('heading', { name: FINDINGS_HEADING })).not.toBeInTheDocument()
+    })
   })
 })

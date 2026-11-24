@@ -1,8 +1,24 @@
 /** GET /api/foundations: the cross-cutting answers of a chart version and where each lands (ADR 0020). */
 import { api } from './client'
 
-/** Answer type, mirroring `model.FoundationType`; the server checks each with a pattern. */
-export type FoundationType = 'string' | 'hostname' | 'domain'
+/** Answer type, mirroring `model.FoundationType`; a choice is checked against its options, every other type with a pattern. */
+export type FoundationType = 'string' | 'hostname' | 'domain' | 'choice' | 'did'
+
+/** One value a choice offers, mirroring `model.Option`; `note` is shown at the point of choice. */
+export interface FoundationOption {
+  value: string
+  label: string
+  note: string
+}
+
+/** The Stage 3 panel that asks a foundation, mirroring `model.FoundationGroup`. */
+export type FoundationGroup = 'organization' | 'network'
+
+/** Holds while the resolved answer `id` equals `equals`, mirroring `model.Condition`. */
+export interface Condition {
+  id: string
+  equals: string
+}
 
 /** One chart key a foundation reaches; `component` is the path's top-level key. */
 export interface TargetRef {
@@ -15,8 +31,15 @@ export interface Foundation {
   id: string
   stage: string
   type: FoundationType
+  group: FoundationGroup
   /** Template the answer is derived from; empty for an answer the user gives. */
   default: string
+  /** Gates `default` on another answer; null when the default always applies. */
+  defaultWhen: Condition | null
+  /** Template the answer, given or derived, must start with; empty when there is none. */
+  prefix: string
+  /** The values a choice offers; empty for every other type. */
+  options: FoundationOption[]
   label: string
   help: string
   /** Repo-relative doc path, empty when there is none. */
