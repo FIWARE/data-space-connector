@@ -338,6 +338,31 @@ describe('reducer: foundation answers', () => {
     expect(next.open).toBe(declared.open)
   })
 
+  it('takes the carried answers on a chart switch and drops the markers of the dropped ones', () => {
+    const carried: Profile = { ...SAVED_PROFILE, target: { ...SAVED_PROFILE.target, chart: 'trust-anchor' }, role: 'operator', answers: { 'domain.base': 'example.org' } }
+    const chartSwitch = {
+      fromChart: 'data-space-connector',
+      fromVersion: '10.16.0',
+      toChart: 'trust-anchor',
+      droppedChoices: [],
+      carriedAnswers: ['domain.base'],
+      droppedAnswers: ['host.verifier'],
+    }
+    const next = reducer(ANSWERED, { type: 'roleApplied', profile: carried, chartSwitch, change: null })
+    expect(next.answers.values).toEqual({ 'domain.base': 'example.org' })
+    expect(next.open).toEqual(['target.namespace'])
+    expect(next.foundations).toBeUndefined()
+  })
+
+  it('keeps an answer still being typed on a preset that keeps the chart, which the request left out', () => {
+    const typing = { ...ANSWERED, answers: { ...ANSWERED.answers, values: { 'domain.base': 'example' } } }
+    const preset: Profile = { ...SAVED_PROFILE, target: { ...SAVED_PROFILE.target, chart: 'data-space-connector' }, role: 'provider', answers: {} }
+    const next = reducer(typing, { type: 'roleApplied', profile: preset, chartSwitch: null, change: null })
+    expect(next.answers.values).toBe(typing.answers.values)
+    expect(next.open).toEqual(typing.open)
+    expect(next.foundations).toBe(typing.foundations)
+  })
+
   it.each<Action>([{ type: 'newConfiguration' }, { type: 'fileLoaded', report: REPORT, file: FILE }])('forgets the foundations on $type', (action) => {
     expect(reducer(ANSWERED, action).foundations).toBeUndefined()
   })

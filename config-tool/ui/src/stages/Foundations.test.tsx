@@ -12,7 +12,7 @@ import { MSG_DOMAIN, MSG_HOSTNAME, MSG_PLAIN_LINE } from '../state/foundations'
 import { StoreProvider } from '../state/store'
 import { FOUNDATIONS, mockApi, type FoundationFakes, type RenderBody } from '../test/api'
 import { usedByText } from './foundationText'
-import { DIFF_HEADING, FOUNDATIONS_HEADING, HOSTS_PENDING, PINNED_LABEL, RESOLVE_LINK } from './Foundations'
+import { DIFF_HEADING, FOUNDATIONS_HEADING, HOSTS_PENDING, PINNED_LABEL, RENDER_DEBOUNCE_MS, RESOLVE_LINK } from './Foundations'
 
 function foundation(id: string): Foundation {
   const found = FOUNDATIONS.foundations.find((f) => f.id === id)
@@ -45,6 +45,7 @@ function renderFoundations(state: AppState = ON_FOUNDATIONS, foundations: Founda
   return fetchMock
 }
 
+const pastDebounce = () => new Promise((resolve) => setTimeout(resolve, RENDER_DEBOUNCE_MS * 2))
 const panel = (name: string) => screen.getByRole('group', { name })
 const domainInput = () => screen.findByLabelText(BASE_DOMAIN.label)
 
@@ -74,6 +75,13 @@ describe('Foundations', () => {
     expect(hosts.getByRole('row', { name: new RegExp(KEYCLOAK_HOST.label) })).toHaveTextContent(HOSTS_PENDING)
     await userEvent.type(await domainInput(), BASE)
     expect(hosts.getByRole('row', { name: new RegExp(KEYCLOAK_HOST.label) })).toHaveTextContent(`keycloak.${BASE}`)
+  })
+
+  it('shows the hosts as pending while the base domain is invalid, as the render writes none', async () => {
+    renderFoundations()
+    const hosts = within(await screen.findByRole('group', { name: /Host names/ }))
+    await userEvent.type(await domainInput(), 'Example.org')
+    expect(hosts.getByRole('row', { name: new RegExp(KEYCLOAK_HOST.label) })).toHaveTextContent(HOSTS_PENDING)
   })
 
   it.each([
@@ -123,18 +131,34 @@ describe('Foundations', () => {
     [BASE_DOMAIN.label, 'Example.org', MSG_HOSTNAME],
     [BASE_DOMAIN.label, 'localhost', MSG_DOMAIN],
     [DISPLAY_NAME.label, 'Acme ', MSG_PLAIN_LINE],
-  ])('shows a format error on %s %j, counts it and keeps it out of the profile', async (label, value, message) => {
+  ])('shows a format error on %s %j, counts it and does not render it', async (label, value, message) => {
     const fetchMock = renderFoundations()
+    const renders = () => fetchMock.mock.calls.filter(([url]) => url === '/api/render')
     const input = await screen.findByLabelText(label)
+    await waitFor(() => expect(renders()).toHaveLength(1))
     await userEvent.type(input, value)
     expect(input).toHaveAttribute('aria-invalid', 'true')
     expect(input).toHaveAccessibleDescription(expect.stringContaining(message))
     expect(screen.getByText(/✖ \d+ errors/)).toHaveTextContent('✖ 1 errors')
-    // Save, the role preset and the features toggle send the same profile, so none of them is refused for it.
-    await waitFor(() => expect(fetchMock.mock.calls.filter(([url]) => url === '/api/render').length).toBeGreaterThan(1))
-    const last = fetchMock.mock.calls.filter(([url]) => url === '/api/render').at(-1)
-    expect((JSON.parse(String((last?.[1] as RequestInit).body)) as RenderBody).profile.answers).toEqual({})
+    await pastDebounce()
+    expect(renders()).toHaveLength(1)
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('keeps the last valid render as the baseline while an intermediate value is invalid', async () => {
+    const answered = { ...ON_FOUNDATIONS, answers: { ...ON_FOUNDATIONS.answers, values: { 'domain.base': OLD_BASE } } }
+    const fetchMock = renderFoundations(answered)
+    const renders = () => fetchMock.mock.calls.filter(([url]) => url === '/api/render')
+    await waitFor(() => expect(renders()).toHaveLength(1))
+    await userEvent.clear(await domainInput())
+    await userEvent.type(await domainInput(), 'example')
+    await pastDebounce()
+    expect(renders()).toHaveLength(1)
+    expect(screen.queryByRole('group', { name: DIFF_HEADING })).not.toBeInTheDocument()
+    await userEvent.type(await domainInput(), '.org')
+    const diff = within(await screen.findByRole('group', { name: DIFF_HEADING }))
+    const keycloak = within(diff.getByRole('group', { name: KEYCLOAK_HOST.label }))
+    expect(keycloak.getByText(FRONTEND_URL).closest('li')).toHaveTextContent(`https://keycloak.${OLD_BASE} → https://keycloak.${BASE}`)
   })
 
   it('flags a pinned leaf with the kept value and the value it would have become', async () => {

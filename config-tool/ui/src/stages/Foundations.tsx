@@ -6,14 +6,14 @@ import { fetchRender, type Change, type ChangeGroup } from '../api/render'
 import { AskLater } from '../chrome/AskLater'
 import { PUBLIC_NAMES_URL, repositoryDocUrl } from '../links'
 import { useStore } from '../state/context'
-import { checkAnswer } from '../state/foundations'
+import { answerErrors, checkAnswer, validAnswers } from '../state/foundations'
 import { answerFieldId, fieldElementId, fieldStage } from '../state/openQuestions'
 import { StageId } from '../state/stageIds'
 import { DerivedAnswers } from './DerivedAnswers'
 import { derivedValue, usedByText } from './foundationText'
 
 /** Pause after the last keystroke before the answers are rendered again. */
-const RENDER_DEBOUNCE_MS = 300
+export const RENDER_DEBOUNCE_MS = 300
 
 /** The id prefix of the Organization panel's answers; every other foundation belongs to Network. */
 const ORGANIZATION_PREFIX = 'org.'
@@ -101,6 +101,8 @@ function AnswerField({ foundation }: { foundation: Foundation }) {
 /** The derived hosts, read-only with the value they render to. */
 function Hosts({ hosts }: { hosts: readonly Foundation[] }) {
   const { state } = useStore()
+  // Only what the render is sent, so an invalid base domain shows the hosts as pending rather than a value never written.
+  const values = validAnswers(state.answers.values, state.foundations)
   return (
     <div role="group" aria-labelledby="foundations-hosts">
       <h4 id="foundations-hosts">{HOSTS_HEADING}</h4>
@@ -109,7 +111,7 @@ function Hosts({ hosts }: { hosts: readonly Foundation[] }) {
           {hosts.map((h) => (
             <tr key={h.id}>
               <th scope="row">{h.label}</th>
-              <td>{derivedValue(h, state.answers.values) ?? <span className="hint">{HOSTS_PENDING}</span>}</td>
+              <td>{derivedValue(h, values) ?? <span className="hint">{HOSTS_PENDING}</span>}</td>
               <td>
                 <DocLink foundation={h} /> <UsedBy foundation={h} />
               </td>
@@ -164,12 +166,13 @@ function RenderDiff({ groups, foundations }: { groups: readonly ChangeGroup[]; f
   )
 }
 
-/** Renders the answers whenever they change (debounced) and keeps the diff; the render on entry is the baseline. */
+/** Renders the answers whenever they change (debounced) and keeps the diff; the first render is the baseline.
+ *  Nothing is rendered while an answer is invalid, so the server's baseline stays the last valid tree. */
 function useRenderDiff(): { groups: readonly ChangeGroup[]; error?: string } {
   const { state } = useStore()
   const values = state.answers.values
   const latest = useRef(state)
-  const entry = useRef(values)
+  const started = useRef(false)
   const [result, setResult] = useState<{ groups: readonly ChangeGroup[]; error?: string }>({ groups: [] })
 
   useEffect(() => {
@@ -177,12 +180,16 @@ function useRenderDiff(): { groups: readonly ChangeGroup[]; error?: string } {
   }, [state])
 
   useEffect(() => {
+    if (Object.keys(answerErrors(values, latest.current.foundations)).length > 0) return
     const controller = new AbortController()
-    const baseline = values === entry.current
+    const baseline = !started.current
     const timer = setTimeout(
       () =>
         fetchRender(toProfile(latest.current), latest.current.loaded?.sha256, controller.signal).then(
-          (r) => setResult((prev) => ({ groups: baseline ? prev.groups : r.diff.groups })),
+          (r) => {
+            started.current = true
+            setResult((prev) => ({ groups: baseline ? prev.groups : r.diff.groups }))
+          },
           (err: Error) => controller.signal.aborted || setResult((prev) => ({ groups: prev.groups, error: err.message })),
         ),
       baseline ? 0 : RENDER_DEBOUNCE_MS,

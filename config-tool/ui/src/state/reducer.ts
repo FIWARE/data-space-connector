@@ -160,14 +160,17 @@ function profileOpened(state: AppState, action: Extract<Action, { type: 'profile
   }
 }
 
-// The first pick has no change to record. A chart switch drops the answers the new chart does not declare.
+// The first pick has no change to record. A chart switch takes the answers the server carried and drops the rest; a
+// preset that keeps the chart keeps the client's, since the request left out the ones still being typed.
 function roleApplied(state: AppState, { profile, chartSwitch, change }: Extract<Action, { type: 'roleApplied' }>): AppState {
   const target = { ...state.answers.target, chart: profile.target.chart, chartVersion: profile.target.chartVersion }
   const dropped = new Set<FieldId>((chartSwitch?.droppedAnswers ?? []).map(answerFieldId))
+  const values = chartSwitch ? answerValues(profile.answers) : state.answers.values
   return {
     ...state,
-    answers: { ...state.answers, target, role: profile.role, features: profile.features ?? {}, values: answerValues(profile.answers) },
+    answers: { ...state.answers, target, role: profile.role, features: profile.features ?? {}, values },
     open: state.open.filter((field) => !dropped.has(field)),
+    foundations: chartSwitch ? undefined : state.foundations,
     profileModel: profile.model,
     profileCatalogue: profile.catalogue,
     versionOpen: chartSwitch !== null || state.versionOpen,
