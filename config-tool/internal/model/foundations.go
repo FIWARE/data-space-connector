@@ -109,7 +109,8 @@ type CompiledFoundation struct {
 	ID    string
 	Stage Stage
 	Type  FoundationType
-	// Refs are the answer ids Default, DefaultWhen and Prefix reference, sorted; nil without any.
+	// Refs are the answer ids Default, DefaultWhen and Prefix reference, sorted; nil without any. They
+	// order the foundations; DefaultRefs alone gates the default.
 	Refs        []string
 	DefaultWhen *Condition
 	Options     []Option
@@ -118,6 +119,8 @@ type CompiledFoundation struct {
 	prefix      *template.Template
 	// defaultRefs and prefixRefs split Refs by source, so a bad reference is reported where it is.
 	defaultRefs, prefixRefs []string
+	// defaultGate is defaultRefs plus the DefaultWhen id: the answers whose values decide the default.
+	defaultGate []string
 }
 
 // DefaultTemplate is the parsed Default; nil when the foundation has none.
@@ -128,6 +131,12 @@ func (f CompiledFoundation) DefaultTemplate() *template.Template {
 // PrefixTemplate is the parsed Prefix; nil when the foundation has none.
 func (f CompiledFoundation) PrefixTemplate() *template.Template {
 	return f.prefix
+}
+
+// DefaultRefs are the answer ids Default and DefaultWhen reference, sorted; nil without any.
+// Unlike Refs they leave out the prefix refs, which check a value but never gate its default.
+func (f CompiledFoundation) DefaultRefs() []string {
+	return f.defaultGate
 }
 
 // PrefixRefs are the answer ids Prefix references, sorted; nil without a prefix.
@@ -299,14 +308,18 @@ func compileFoundation(f Foundation, topLevelKeys []string) (CompiledFoundation,
 		}
 		c.prefix, c.prefixRefs = t, refs
 	}
-	refs := map[string]bool{}
-	for _, r := range slices.Concat(c.defaultRefs, c.prefixRefs) {
-		refs[r] = true
+	gate := map[string]bool{}
+	for _, r := range c.defaultRefs {
+		gate[r] = true
 	}
 	if c.DefaultWhen != nil {
-		refs[c.DefaultWhen.ID] = true
+		gate[c.DefaultWhen.ID] = true
 	}
-	c.Refs = sortedSet(refs)
+	c.defaultGate = sortedSet(gate)
+	for _, r := range c.prefixRefs {
+		gate[r] = true
+	}
+	c.Refs = sortedSet(gate)
 	for i, t := range f.Targets {
 		ct, err := compileTarget(f.ID, t, topLevelKeys)
 		if err != nil {

@@ -32,6 +32,8 @@ const (
 	didWeb     = "did:web:" + domain
 	didKey     = "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK"
 	didPath    = "keycloak.issuerDid"
+	// prefixFixture is the model package's bundle whose prefix names an answer its default does not.
+	prefixFixture = "../model/testdata/foundations/prefix.yaml"
 )
 
 func fixtureBundles(t *testing.T) []model.Bundle {
@@ -171,9 +173,9 @@ func TestRenderErrors(t *testing.T) {
 	}
 }
 
-func renderDID(t *testing.T, answers map[string]any) (Tree, error) {
+func modelFixture(t *testing.T, file string) model.Bundle {
 	t.Helper()
-	data, err := os.ReadFile(didFixture)
+	data, err := os.ReadFile(file)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -181,7 +183,12 @@ func renderDID(t *testing.T, answers map[string]any) (Tree, error) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return Render(bs[0], profile.Profile{Answers: answers}, Options{})
+	return bs[0]
+}
+
+func renderDID(t *testing.T, answers map[string]any) (Tree, error) {
+	t.Helper()
+	return Render(modelFixture(t, didFixture), profile.Profile{Answers: answers}, Options{})
 }
 
 func TestRenderDefaultWhenAndPrefix(t *testing.T) {
@@ -208,6 +215,41 @@ func TestRenderDefaultWhenAndPrefix(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			tree, err := renderDID(t, tc.answers)
+			if tc.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+					t.Errorf("error = %v, want it to contain %q", err, tc.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := values(tree); !reflect.DeepEqual(got, tc.want) {
+				t.Errorf("values = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestRenderPrefixRefsDoNotGateDefault(t *testing.T) {
+	tests := []struct {
+		name    string
+		answers map[string]any
+		want    map[string]any
+		wantErr string
+	}{
+		{name: "an unanswered prefix ref leaves the default derived and unchecked",
+			answers: map[string]any{"tag.code": "a"}, want: map[string]any{didPath: "x-a"}},
+		{name: "an answered prefix ref checks the derived value",
+			answers: map[string]any{"tag.code": "a", "tag.scheme": "x-"}, want: map[string]any{didPath: "x-a"}},
+		{name: "a derived value against its prefix fails",
+			answers: map[string]any{"tag.code": "a", "tag.scheme": "y-"}, wantErr: `tag.value must start with "y-"`},
+		{name: "a prefix ref alone derives nothing", answers: map[string]any{"tag.scheme": "x-"}, want: map[string]any{}},
+	}
+	b := modelFixture(t, prefixFixture)
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			tree, err := Render(b, profile.Profile{Answers: tc.answers}, Options{})
 			if tc.wantErr != "" {
 				if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
 					t.Errorf("error = %v, want it to contain %q", err, tc.wantErr)

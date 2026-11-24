@@ -99,9 +99,9 @@ func resolve(b model.Bundle, given map[string]any) (map[string]any, map[string]a
 	return answers, ns, nil
 }
 
-// defaults reports whether f's default applies: it has one, its refs are resolved and DefaultWhen holds.
+// defaults reports whether f's default applies: it has one, its default refs are resolved and DefaultWhen holds.
 func defaults(f model.CompiledFoundation, answers map[string]any) bool {
-	if f.DefaultTemplate() == nil || !all(answers, f.Refs) {
+	if f.DefaultTemplate() == nil || !all(answers, f.DefaultRefs()) {
 		return false
 	}
 	return f.DefaultWhen == nil || answers[f.DefaultWhen.ID] == any(f.DefaultWhen.Equals)

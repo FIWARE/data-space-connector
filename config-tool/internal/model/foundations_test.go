@@ -14,6 +14,7 @@ const (
 	validFoundations   = "testdata/foundations/valid.yaml"
 	invalidFoundations = "testdata/foundations/invalid.yaml"
 	didFoundations     = "testdata/foundations/did.yaml"
+	prefixFoundations  = "testdata/foundations/prefix.yaml"
 	foundationsHead    = "chart: " + chart + "\nversion: 1.0.0\nrevision: 1\ntopLevelKeys: [keycloak, scorpio]\n"
 )
 
@@ -83,11 +84,24 @@ func TestFoundationsCompileChoiceAndDID(t *testing.T) {
 	if want := []string{"did.method", "domain.base"}; !reflect.DeepEqual(value.Refs, want) {
 		t.Errorf("did.value refs = %v, want %v", value.Refs, want)
 	}
+	if want := []string{"did.method", "domain.base"}; !reflect.DeepEqual(value.DefaultRefs(), want) {
+		t.Errorf("did.value default refs = %v, want %v", value.DefaultRefs(), want)
+	}
 	if want := (&Condition{ID: "did.method", Equals: "did:web"}); !reflect.DeepEqual(value.DefaultWhen, want) {
 		t.Errorf("did.value defaultWhen = %+v, want %+v", value.DefaultWhen, want)
 	}
 	if want := []string{"did.method"}; value.PrefixTemplate() == nil || !reflect.DeepEqual(value.PrefixRefs(), want) {
 		t.Errorf("did.value prefix refs = %v, want %v with a template", value.PrefixRefs(), want)
+	}
+}
+
+func TestDefaultRefsLeaveOutPrefixRefs(t *testing.T) {
+	f, _ := loadFixture(t, prefixFoundations).Foundation("tag.value")
+	if want := []string{"tag.code", "tag.scheme"}; !reflect.DeepEqual(f.Refs, want) {
+		t.Errorf("refs = %v, want %v", f.Refs, want)
+	}
+	if want := []string{"tag.code"}; !reflect.DeepEqual(f.DefaultRefs(), want) {
+		t.Errorf("default refs = %v, want %v", f.DefaultRefs(), want)
 	}
 }
 
