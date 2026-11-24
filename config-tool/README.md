@@ -57,9 +57,9 @@ printed URL yourself. `dsc-config --no-browser` only prints the URL.
 
 `dsc-config generate -p <name>.dscprofile.yaml [-o values.yaml]` renders a saved
 [profile](#profiles) without the GUI (stdout by default). It refuses a profile with an unanswered or malformed Target field, naming the file and the field,
-because rendering needs a complete target. An existing output file is refused until the render
-epic decides how rendered keys merge with overrides (ADR 0015). Rendering itself is not
-implemented yet.
+because rendering needs a complete target. It then renders the answers, so bundle and profile errors surface, and
+stops with "writing values.yaml lands with US-7.1". An existing output file is refused until the render
+epic decides how rendered keys merge with overrides (ADR 0015).
 
 `dsc-config generate --trial [--output-dir <dir>]` writes the three files of the
 [local trial](#try-it-locally).
@@ -96,7 +96,7 @@ internal/model      core: question-model bundles per chart version
 internal/profile    core: the answer set and its .dscprofile.yaml format (ADR 0015)
 internal/atomicfile core: temp-file-and-rename writes that keep the file mode
 internal/cluster    core: kube context names from kubeconfig files, read-only
-internal/render     core: profile to values tree
+internal/render     core: answers to a values tree with provenance, fan-out and diff (ADR 0020)
 internal/roundtrip  core: parse / classify / merge / write of a values.yaml, byte-preserving
 internal/load       core: owned / recognized / unknown classification and the load report
 internal/validate   core: values against the chart's schema
@@ -194,7 +194,8 @@ features:           # excerpt: every offered or turned-on feature; source is pre
   data.scorpio:
     enabled: true
     source: preset
-answers: {}         # no answer id exists yet, so any key is refused
+answers:            # ids the bundle declares under foundations:, values checked against their type
+  domain.base: acme.example.org
 open:               # fields left open on purpose
   - field: target.context
 source:             # the loaded values file: metadata only, never its content
@@ -282,7 +283,8 @@ latest `data-space-connector` release bundle that declares them.
   notice names them (`chartSwitch.droppedChoices`).
 - **Answers survive a role change within the chart**, also those of a feature that goes off. A chart switch keeps
   the target fields except chart and version, every open-question mark, and the answers a `recognize:` rule of the
-  old bundle places in Target or Foundations. `chartSwitch.carriedAnswers` and `chartSwitch.droppedAnswers` list the
+  old bundle places in Target or Foundations (by a `recognize:` rule or its `foundations:`) that the new bundle also
+  declares in `foundations:` (ADR 0020 §9); a dropped answer loses its open-question mark too. `chartSwitch.carriedAnswers` and `chartSwitch.droppedAnswers` list the
   answer ids it kept and dropped, sorted.
 - **`change` summarises a role change** when the request profile already has a role (null on the first pick):
   `enabled` and `disabled` list the features whose effective state flips, and `kept` lists the user and loaded
@@ -301,6 +303,60 @@ current target and fall back to the id for a role or feature that catalogue does
 The profile records `role`, `features` (each offered or turned-on feature with `enabled` and `source`) and, when the roles came
 from another bundle than `model`, `catalogue`. The server sets `catalogue` on save, as it does `model`, and opening
 applies the same revision rules to it.
+
+## Foundations (Stage 3)
+
+Stage 3 asks the cross-cutting answers of the target's bundle once ([ADR 0020](../doc/adr/0020-config-tool-foundations-render.md)).
+The *Organization* panel holds the `org.*` answers, the *Network* panel `domain.base` and, read-only, the hosts derived
+from it (`<component>.<base>`, editing them is US-3.4) with a link to the resolve-inside-the-cluster prerequisite.
+Each field has its doc link, *Ask later* (an `answers.<id>` open question on Review) and a *used by N values in M
+components* button that lists its targets. Every answer change renders the profile through `POST /api/render`
+(debounced). The render on entering the stage is the baseline, and the screen shows the grouped diff of each later
+edit, with a hand-edited leaf of the loaded file flagged *pinned, not updated* next to its kept and would-be value.
+
+### The `foundations:` section
+
+A bundle's `foundations:` list declares the answers and every chart key they reach; there is no Go code per key.
+Each entry has a dotted `id` (the key in the profile's `answers`), `stage`, `type` (`string`, `hostname` or
+`domain`, each checked by one pattern), `label`, `help`, an optional repo-relative `doc` path, an optional `default`
+and `targets`. A `default` is a template over other answers, so `host.keycloak` (`"keycloak.{{ .domain.base }}"`)
+exists only while `domain.base` is answered. Templates hold only text and `{{ .id }}` actions. A target writes one
+scalar with one of four functions:
+
+```yaml
+- {path: 'keycloak.realm.frontendUrl', fn: tpl, args: ["https://{{ .host.keycloak }}"]}   # render one template
+- {path: 'keycloak.ingress.hosts[0].host', fn: copy, args: ["{{ .host.keycloak }}"]}     # the answer, type kept
+- path: 'decentralizedIam.odrlAuthorization.apisix.ingress.annotations."cert-manager.io/alt-names"'
+  fn: join                                                                               # render each, join with sep
+  sep: ","
+  args: ["{{ .host.dataService }}", "{{ .host.tmfApi }}"]
+- {path: 'keycloak.ingress.hosts[0].paths[0].pathType', fn: const, args: [Prefix]}       # verbatim, only in a list
+```
+
+Paths use the round-trip syntax with list indices; quote one in a flow mapping. Helm replaces a list instead of
+merging it, so a path indexes into a list only when the targets own it whole: elements `0..n-1` and every key of
+each, with `const` for the keys no answer derives. An owned list is emitted all or nothing. A bundle with an unknown
+function, a reference to an undeclared id, a cycle among defaults, a path outside `topLevelKeys`, a list index gap
+or two targets on one path fails to load. A profile's `answers` accepts exactly the declared ids, and `open` accepts
+`answers.<id>` for them. `internal/render/provider_test.go` measures the targets against `k3s/provider.yaml`: every
+leaf that carries the domain is a target or a row of an exclusion table naming the story that owns it.
+
+### The render
+
+`render.Render` turns the answers into a `Tree` of scalar leaves sorted by path, each with its provenance: the
+foundation, the answers it used, the function and the target's index. A target that references an unanswered id writes
+nothing. With a loaded file, a target path that the load classified as unknown or skipped (a hand edit) is
+`pinned`: the leaf keeps the loaded value (`kept`), and `rendered` holds what the render would have written. When the
+loaded node is not a scalar, there is no kept value and `Nested()` leaves the path to the overrides layer. Owned and
+recognized leaves are re-rendered. The JSON of a tree is byte-identical across runs.
+
+`GET /api/foundations?chart=&version=` lists the foundations with label, help, doc, type, default, stage and their
+fan-out (`targets`, `count`, sorted `components`), transitive through derived hosts. `POST /api/render` takes
+`{profile, sourceSha256}` (422 with field errors when the profile does not validate, or when the sha is not the
+loaded file's), renders it with the load the sha names as the overrides layer (none when it is empty, as on save) and
+returns `{tree, diff}`. The diff groups `added`, `changed`, `removed` and `pinned` entries by foundation, against the
+previous render of the same source. A load, a profile open or a render of another source resets that baseline. A
+pinned leaf is reported only when its rendered value changes (ADR 0020 §7-8).
 
 ## Features (Stage 5)
 
@@ -401,6 +457,7 @@ keeps the latest bundle's list equal to the chart's `values.yaml`.
 `revision` (a positive integer, required) counts changes to a bundle within one chart version.
 A profile records `chart`, `version` and `revision` of the bundle it was built with (ADR 0015 §6).
 `features:`, `roles:` and `roleMatrix:` hold the [role presets](#roles).
+`foundations:` holds the [cross-cutting answers](#foundations-stage-3) and the chart keys they reach.
 `roles:` rate the features of `features:`, and `roleMatrix:` needs `roles:`.
 Two charts are shipped: `data-space-connector` (`model/10.16.0/`) and `trust-anchor` (`model/1.3.6/`, only
-`topLevelKeys`, no rules and no roles). Their version numbers differ, so they fit the one-bundle-per-version layout.
+`topLevelKeys` and two foundations without targets, no rules and no roles). Their version numbers differ, so they fit the one-bundle-per-version layout.

@@ -1,0 +1,111 @@
+# Each case is a foundations list Versions refuses, with a fragment of the error it must report.
+- name: fn unknown
+  err: 'fn "upper" is unknown'
+  foundations:
+    - {id: a, stage: foundations, type: string, label: A, targets: [{path: keycloak.a, fn: upper, args: ["{{ .a }}"]}]}
+- name: stage unknown
+  err: 'stage "nowhere" is unknown'
+  foundations:
+    - {id: a, stage: nowhere, type: string, label: A}
+- name: type unknown
+  err: 'type "number" is unknown'
+  foundations:
+    - {id: a, stage: foundations, type: number, label: A}
+- name: duplicate id
+  err: 'id "a" is already declared by foundations[0]'
+  foundations:
+    - {id: a, stage: foundations, type: string, label: A}
+    - {id: a, stage: foundations, type: string, label: A}
+- name: id is a prefix of another
+  err: 'id "a" is a prefix of foundations[1] "a.b"'
+  foundations:
+    - {id: a, stage: foundations, type: string, label: A}
+    - {id: a.b, stage: foundations, type: string, label: B}
+- name: id segment not a field name
+  err: 'segment "1x" is not a letter'
+  foundations:
+    - {id: a.1x, stage: foundations, type: string, label: A}
+- name: template does not parse
+  err: "args[0]:"
+  foundations:
+    - {id: a, stage: foundations, type: string, label: A, targets: [{path: keycloak.a, fn: tpl, args: ["{{ .a "]}]}
+- name: template calls a function
+  err: "only {{ .id }} is allowed"
+  foundations:
+    - {id: a, stage: foundations, type: string, label: A, targets: [{path: keycloak.a, fn: tpl, args: ["{{ printf \"%s\" .a }}"]}]}
+- name: unknown target reference
+  err: 'targets[0] references unknown answer "nope"'
+  foundations:
+    - {id: a, stage: foundations, type: string, label: A, targets: [{path: keycloak.a, fn: tpl, args: ["{{ .nope }}"]}]}
+- name: unknown default reference
+  err: 'default references unknown answer "nope"'
+  foundations:
+    - {id: a, stage: foundations, type: string, label: A, default: "{{ .nope }}"}
+- name: cycle among defaults
+  err: "the defaults of a, b reference each other in a cycle"
+  foundations:
+    - {id: a, stage: foundations, type: string, label: A, default: "{{ .b }}"}
+    - {id: b, stage: foundations, type: string, label: B, default: "x-{{ .a }}"}
+- name: index gap
+  err: 'list "keycloak.hosts": index 1 is missing'
+  foundations:
+    - id: a
+      stage: foundations
+      type: string
+      label: A
+      targets:
+        - {path: "keycloak.hosts[0]", fn: tpl, args: ["{{ .a }}"]}
+        - {path: "keycloak.hosts[2]", fn: tpl, args: ["{{ .a }}"]}
+- name: duplicate path
+  err: 'path "keycloak.a" is already written by foundations[0] targets[0]'
+  foundations:
+    - {id: a, stage: foundations, type: string, label: A, targets: [{path: keycloak.a, fn: tpl, args: ["{{ .a }}"]}]}
+    - {id: b, stage: foundations, type: string, label: B, targets: [{path: 'keycloak."a"', fn: tpl, args: ["{{ .b }}"]}]}
+- name: path under another target
+  err: 'path "keycloak.a" is a prefix of another target'
+  foundations:
+    - id: a
+      stage: foundations
+      type: string
+      label: A
+      targets:
+        - {path: keycloak.a, fn: tpl, args: ["{{ .a }}"]}
+        - {path: keycloak.a.b, fn: tpl, args: ["{{ .a }}"]}
+- name: list and mapping at one prefix
+  err: '"keycloak.a" is used both as a list and as a mapping'
+  foundations:
+    - id: a
+      stage: foundations
+      type: string
+      label: A
+      targets:
+        - {path: "keycloak.a[0]", fn: tpl, args: ["{{ .a }}"]}
+        - {path: keycloak.a.b, fn: tpl, args: ["{{ .a }}"]}
+- name: root outside topLevelKeys
+  err: 'path "vault.a": root is not in topLevelKeys'
+  foundations:
+    - {id: a, stage: foundations, type: string, label: A, targets: [{path: vault.a, fn: tpl, args: ["{{ .a }}"]}]}
+- name: const outside a list
+  err: "const is only allowed under a list index"
+  foundations:
+    - {id: a, stage: foundations, type: string, label: A, targets: [{path: keycloak.a, fn: const, args: ["/"]}]}
+- name: const with an answer reference
+  err: "const is written verbatim and cannot reference an answer"
+  foundations:
+    - {id: a, stage: foundations, type: string, label: A, targets: [{path: "keycloak.a[0]", fn: const, args: ["{{ .a }}"]}]}
+- name: const with two args
+  err: "const takes exactly one scalar arg"
+  foundations:
+    - {id: a, stage: foundations, type: string, label: A, targets: [{path: "keycloak.a[0]", fn: const, args: ["/", "/x"]}]}
+- name: copy with text
+  err: "copy takes one {{ .id }} action and no text"
+  foundations:
+    - {id: a, stage: foundations, type: string, label: A, targets: [{path: keycloak.a, fn: copy, args: ["x-{{ .a }}"]}]}
+- name: sep on tpl
+  err: "sep is only allowed on join targets"
+  foundations:
+    - {id: a, stage: foundations, type: string, label: A, targets: [{path: keycloak.a, fn: tpl, sep: ",", args: ["{{ .a }}"]}]}
+- name: label missing
+  err: "label is missing"
+  foundations:
+    - {id: a, stage: foundations, type: string}

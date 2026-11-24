@@ -23,6 +23,7 @@ Short records of decisions that are expensive to reverse or easy to re-litigate.
 | [0017](0017-config-tool-role-presets.md) | Keep role presets as bundle data, checked against the role guide's component matrix | Proposed | |
 | [0018](0018-config-tool-deliberate-choices.md) | Keep user feature toggles sticky, scoped to the role's chart, with the core returning values only | Proposed | |
 | [0019](0019-config-tool-role-change.md) | Re-apply a role's preset to untouched features only, keep answers, and confirm the change from a summary | Proposed | |
+| [0020](0020-config-tool-foundations-render.md) | Keep foundations as bundle data rendered by a closed function set into a tree with provenance, pinning hand edits | Proposed | |
 
 ADRs 0002 and 0003 constrain the consent-facade's own API, so they are **mirrored** in
 [consent-facade](https://github.com/SEAMWARE/consent-facade) under `doc/adr/` with the same numbers. This repository holds the
@@ -32,4 +33,4 @@ Design document ADRs 0001-0005 belong to:
 [`../CONSENT_MANAGEMENT.md`](../CONSENT_MANAGEMENT.md). ADR 0006 belongs to
 [`../deployment-integration/eidas/README.md`](../deployment-integration/eidas/README.md). ADR 0007 belongs to
 [`../deployment-integration/local-deployment/LOCAL.MD`](../deployment-integration/local-deployment/LOCAL.MD). ADRs 0009 to
-0019 belong to [`../config-tool/`](../config-tool/README.md).
+0020 belong to [`../config-tool/`](../config-tool/README.md).

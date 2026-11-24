@@ -17,9 +17,10 @@ import (
 
 const (
 	roleGoldenFile = "testdata/role.dscprofile.yaml"
-	// shippedTAVersion and shippedDSCRevision are the shipped trust-anchor bundle and DSC bundle revision.
+	// shippedTAVersion, shippedTARevision and shippedDSCRevision identify the shipped bundles.
 	shippedTAVersion   = "1.3.6"
-	shippedDSCRevision = 3
+	shippedTARevision  = 2
+	shippedDSCRevision = 5
 )
 
 // Feature ids of the shipped catalogue, grouped as in the preset table of IMPLEMENTATION_PLAN.md decision 5.
@@ -119,7 +120,7 @@ func TestApplyPresetChartSwitch(t *testing.T) {
 	if op.Target.Chart != taChart || op.Target.ChartVersion != "" {
 		t.Errorf("target = %s@%q, want %s with an empty version", op.Target.Chart, op.Target.ChartVersion, taChart)
 	}
-	if want := (ModelRef{Chart: taChart, Version: shippedTAVersion, Revision: 1}); op.Model != want {
+	if want := (ModelRef{Chart: taChart, Version: shippedTAVersion, Revision: shippedTARevision}); op.Model != want {
 		t.Errorf("model = %+v, want %+v", op.Model, want)
 	}
 	if !reflect.DeepEqual(op.Catalogue, dscCatalogue) {
@@ -453,9 +454,12 @@ const (
 	taAnswerRules = `  - {path: managedPostgres.teamId, answer: foundations.organization, stage: foundations, kind: value}
 `
 	recognizeKey = "recognize:\n"
+	// answerFoundation declares answerFoundations in both bundles, so a chart switch carries it either way.
+	answerFoundation = "  - {id: foundations.organization, stage: foundations, type: string, label: Organization}\n"
+	foundationsKey   = "\nfoundations:\n"
 )
 
-// answerBundles are the shipped bundles with recognize rules for answers of several stages added.
+// answerBundles are the shipped bundles with recognize rules for answers of several stages and a foundation added.
 func answerBundles(t *testing.T) []model.Bundle {
 	t.Helper()
 	read := func(name string) string {
@@ -466,12 +470,14 @@ func answerBundles(t *testing.T) []model.Bundle {
 		return string(b)
 	}
 	dsc, ta := read(latest+"/bundle.yaml"), read(shippedTAVersion+"/bundle.yaml")
-	if !strings.Contains(dsc, recognizeKey) || strings.Contains(ta, recognizeKey) {
-		t.Fatal("shipped bundles changed shape: want recognize rules in the DSC bundle only")
+	if !strings.Contains(dsc, recognizeKey) || strings.Contains(ta, recognizeKey) ||
+		strings.Count(dsc, foundationsKey) != 1 || strings.Count(ta, foundationsKey) != 1 {
+		t.Fatal("shipped bundles changed shape: want recognize rules in the DSC bundle only and foundations in both")
 	}
+	dsc = strings.Replace(dsc, recognizeKey, recognizeKey+dscAnswerRules, 1)
 	fsys := fstest.MapFS{
-		latest + "/bundle.yaml":           {Data: []byte(strings.Replace(dsc, recognizeKey, recognizeKey+dscAnswerRules, 1))},
-		shippedTAVersion + "/bundle.yaml": {Data: []byte(ta + recognizeKey + taAnswerRules)},
+		latest + "/bundle.yaml":           {Data: []byte(strings.Replace(dsc, foundationsKey, foundationsKey+answerFoundation, 1))},
+		shippedTAVersion + "/bundle.yaml": {Data: []byte(strings.Replace(ta, foundationsKey, foundationsKey+answerFoundation, 1) + recognizeKey + taAnswerRules)},
 	}
 	b, err := model.Versions(fsys)
 	if err != nil {
@@ -595,9 +601,10 @@ func TestApplyPresetChartSwitchAnswers(t *testing.T) {
 		wantCarried     []string
 		wantDropped     []string
 	}{
-		{model.RoleOperator, taChart, []string{answerFoundations, answerTarget}, []string{answerConfig, answerUnknown}},
-		// The trust-anchor bundle places only answerFoundations, so answerTarget has no rule on the way back.
-		{model.RoleConsumer, dscChart, []string{answerFoundations}, []string{answerTarget}},
+		// Only answerFoundations is declared by the trust-anchor bundle; answerTarget is placed by a rule only.
+		{model.RoleOperator, taChart, []string{answerFoundations}, []string{answerConfig, answerUnknown, answerTarget}},
+		// The way back starts from the operator's result, which holds answerFoundations only.
+		{model.RoleConsumer, dscChart, []string{answerFoundations}, []string{}},
 	}
 	for _, tc := range tests {
 		before := p

@@ -1,6 +1,7 @@
 /** Save, open and list `.dscprofile.yaml` profiles through the loopback API (ADR 0015). */
 import { emptyAnswers, type Answers, type FeatureState, type Target } from '../state/answers'
-import { FIELD_IDS, type FieldId } from '../state/openQuestions'
+import { validAnswers } from '../state/foundations'
+import { isFieldId, type FieldId } from '../state/openQuestions'
 import type { AppState } from '../state/reducer'
 import { api } from './client'
 import type { LoadReport } from './load'
@@ -32,7 +33,7 @@ export interface ProfileSource {
 
 export type { FeatureSource, FeatureState } from '../state/answers'
 
-/** The `.dscprofile.yaml` content, mirroring `profile.Profile` in Go. `answers` and `secrets` stay empty in CT-4.
+/** The `.dscprofile.yaml` content, mirroring `profile.Profile` in Go. `secrets` stays empty in CT-4.
  *  `catalogue` names the bundle the roles came from when that is not `model`; the server owns it. */
 export interface Profile {
   format: number
@@ -71,9 +72,10 @@ export interface RecentProfiles {
   notes: string[]
 }
 
-/** The profile the UI's state stands for; the server fills in format, model and secrets and owns `catalogue`. */
+/** The profile the UI's state stands for; the server fills in format, model and secrets and owns `catalogue`.
+ *  An answer with a format error is left out, so one bad field does not make every profile request a 422. */
 export function toProfile(state: AppState): Profile {
-  const { target, role, features } = state.answers
+  const { target, role, features, values } = state.answers
   return {
     format: PROFILE_FORMAT,
     model: state.profileModel ?? { chart: target.chart, version: '', revision: 0 },
@@ -81,14 +83,15 @@ export function toProfile(state: AppState): Profile {
     target,
     role,
     features,
-    answers: {},
+    answers: validAnswers(values, state.foundations),
     open: state.open.map((field) => ({ field })),
     secrets: {},
   }
 }
 
-function isFieldId(id: string): id is FieldId {
-  return (FIELD_IDS as readonly string[]).includes(id)
+/** A profile's foundation answers as the UI keeps them; every shipped foundation type is a string. */
+export function answerValues(answers: Profile['answers']): Record<string, string> {
+  return Object.fromEntries(Object.entries(answers ?? {}).filter((e): e is [string, string] => typeof e[1] === 'string'))
 }
 
 /** The answers and markers a profile restores; the server has validated its open ids already. */
@@ -97,6 +100,7 @@ export function fromProfile(profile: Profile): { answers: Answers; open: FieldId
   answers.target = { ...answers.target, ...profile.target }
   answers.role = profile.role
   answers.features = profile.features ?? {}
+  answers.values = answerValues(profile.answers)
   const open = (profile.open ?? []).map((q) => q.field).filter(isFieldId)
   return { answers, open: [...new Set(open)].sort() }
 }

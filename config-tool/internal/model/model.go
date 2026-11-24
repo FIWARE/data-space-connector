@@ -41,10 +41,15 @@ type Bundle struct {
 	Roles []Role `yaml:"roles"`
 	// RoleMatrix maps the role guide's component matrix to Features; nil when not declared.
 	RoleMatrix *RoleMatrix `yaml:"roleMatrix"`
+	// Foundations are the cross-cutting answers and the chart keys they fan out to (ADR 0020).
+	Foundations []Foundation `yaml:"foundations"`
 	// Latest marks the default version; Versions sets it, bundle files never do.
 	Latest bool `yaml:"-"`
 	// rules is Recognize compiled; readBundle sets it after validating every rule.
 	rules []CompiledRule
+	// foundations is Foundations compiled and order their topological order; both nil without foundations.
+	foundations []CompiledFoundation
+	order       []string
 }
 
 // Rules returns the validated recognition rules in bundle order.
@@ -277,6 +282,9 @@ func readBundle(fsys fs.FS, file string) (versioned, error) {
 		return versioned{}, fmt.Errorf("%s: %w", file, err)
 	}
 	if err := checkCatalogue(&b); err != nil {
+		return versioned{}, fmt.Errorf("%s: %w", file, err)
+	}
+	if b.foundations, b.order, err = compileFoundations(b.Foundations, b.TopLevelKeys); err != nil {
 		return versioned{}, fmt.Errorf("%s: %w", file, err)
 	}
 	return versioned{bundle: b, version: v}, nil

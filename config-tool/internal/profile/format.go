@@ -61,7 +61,7 @@ type Profile struct {
 	// Features maps catalogue feature ids to their state; a not-offered feature is enabled only by user or loaded
 	// choice, and only within the role's chart.
 	Features map[string]FeatureState `json:"features,omitempty" yaml:"features,omitempty"`
-	// Answers maps answer ids to scalars; no answer id exists yet, so Validate refuses every key.
+	// Answers maps the dotted ids the model bundle declares under foundations: to scalars of their type.
 	Answers map[string]any `json:"answers" yaml:"answers"`
 	Open    []OpenQuestion `json:"open" yaml:"open"`
 	// Source references the loaded values file; nil when nothing was loaded.
@@ -158,11 +158,10 @@ func (p Profile) Validate(bundles []model.Bundle) []FieldError {
 	}
 	errs = append(errs, p.validateModel(bundles)...)
 	errs = append(errs, p.validateRole(bundles)...)
-	errs = append(errs, p.validateOpen()...)
+	b := findBundle(bundles, p.Model.Chart, p.Model.Version)
+	errs = append(errs, p.validateOpen(b)...)
 	errs = append(errs, p.Source.validate()...)
-	for _, k := range sortedKeys(p.Answers) {
-		errs = append(errs, FieldError{answersFieldPrefix + k, "is not a known answer id"})
-	}
+	errs = append(errs, p.validateAnswers(b)...)
 	for _, k := range sortedKeys(p.Secrets) {
 		errs = append(errs, FieldError{secretsFieldPrefix + k, "secrets are recorded from Epic 8 on"})
 	}
@@ -207,14 +206,29 @@ func checkRef(field string, m ModelRef, bundles []model.Bundle) []FieldError {
 	return nil
 }
 
-// validateOpen refuses unknown and repeated field ids.
-func (p Profile) validateOpen() []FieldError {
+// validateAnswers refuses an answer id the model bundle b does not declare and a value its type refuses.
+func (p Profile) validateAnswers(b *model.Bundle) []FieldError {
+	var errs []FieldError
+	for _, k := range sortedKeys(p.Answers) {
+		f, ok := declared(b, k)
+		if !ok {
+			errs = append(errs, FieldError{answersFieldPrefix + k, "is not a known answer id"})
+			continue
+		}
+		if err := f.Type.Check(p.Answers[k]); err != nil {
+			errs = append(errs, FieldError{answersFieldPrefix + k, err.Error()})
+		}
+	}
+	return errs
+}
+
+// validateOpen refuses unknown and repeated field ids; answers.<id> is known when b declares id.
+func (p Profile) validateOpen(b *model.Bundle) []FieldError {
 	var errs []FieldError
 	seen := map[string]bool{}
 	for _, q := range p.Open {
-		name, ok := strings.CutPrefix(q.Field, TargetFieldPrefix)
 		switch {
-		case !ok || !slices.Contains(targetFields, name):
+		case !isKnownField(q.Field, b):
 			errs = append(errs, FieldError{FieldOpen, fmt.Sprintf("%q is not a known field", q.Field)})
 		case seen[q.Field]:
 			errs = append(errs, FieldError{FieldOpen, fmt.Sprintf("%q is listed more than once", q.Field)})
@@ -243,6 +257,24 @@ func (s *Source) validate() []FieldError {
 // because "C:x" is drive-relative on Windows.
 func isBaseName(f string) bool {
 	return f != "" && f != "." && f != ".." && !strings.ContainsAny(f, `/\:`) && filepath.Base(f) == f
+}
+
+// isKnownField reports whether an open question may name field: a target key or an answer b declares.
+func isKnownField(field string, b *model.Bundle) bool {
+	if name, ok := strings.CutPrefix(field, TargetFieldPrefix); ok {
+		return slices.Contains(targetFields, name)
+	}
+	id, ok := strings.CutPrefix(field, answersFieldPrefix)
+	_, declares := declared(b, id)
+	return ok && declares
+}
+
+// declared returns the foundation b declares as id; false when b is nil or does not declare it.
+func declared(b *model.Bundle, id string) (model.CompiledFoundation, bool) {
+	if b == nil {
+		return model.CompiledFoundation{}, false
+	}
+	return b.Foundation(id)
 }
 
 func findBundle(bundles []model.Bundle, chart, version string) *model.Bundle {

@@ -41,6 +41,9 @@ toggles), `carriedAnswers` and `droppedAnswers` (answer ids, sorted). `ApplyPres
 it is in scope for the new role, and such a toggle is listed as *kept*, so the summary never assumes that none
 survives. The switch still needs no values file to be loaded.
 
+Amended by [ADR 0020 §9](0020-config-tool-foundations-render.md#9-a-chart-switch-carries-declared-foundation-answers):
+an answer is carried only when the new bundle also declares it in `foundations:`.
+
 ### 4. The core returns values, the UI words them
 
 `Profile.RoleChangeTo(bundles, after)` returns `RoleChange {fromRole, toRole, enabled, disabled, kept}`: ids,

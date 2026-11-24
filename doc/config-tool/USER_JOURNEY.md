@@ -129,19 +129,19 @@ The shipped stage differs from this design in five points
 ## Stage 3 — Foundations
 
 The cross-cutting values, asked **once**, before anything that consumes them. This is the
-stage that earns the tool its keep: these answers fan out to between 2 and 41 places in the
-chart (the full table is in
+stage that earns the tool its keep: the base domain alone reaches 76 keys of
+`k3s/provider.yaml` (the full table is in
 [Cross-cutting values](FEATURE_MODEL.md#cross-cutting-values)).
 
 Grouped into four short panels on one scrollable screen:
 
-1. **Organization** — display name, base domain, DID method and DID, legal identifier
+1. **Organization** — display name, DID method and DID, legal identifier
    (for eIDAS/Gaia-X if those are later enabled).
 2. **Data space** — Trust Anchor TIR address, the credential types the data space defines,
    whether participant registration is automatic. From the Operator's onboarding mail; the
    tool offers "import from a data space descriptor URL" where the data space publishes
    a `/.well-known/data-space-configuration`.
-3. **Network** — host naming scheme (derived from the base domain, each host editable),
+3. **Network** — base domain, host naming scheme (derived from the base domain, each host editable),
    ingress class and annotations, TLS mode, private CA, outbound proxy.
 4. **Platform** — storage class, resource profile, image pull secrets, registry mirror.
 
@@ -156,6 +156,18 @@ guide that explains it.
 > the resulting list, and lets any single host be overridden. This is where
 > [hairpin DNS](../deployment-integration/roles/PREREQUISITES.md#public-names-have-to-resolve-inside-the-cluster)
 > is warned about, because the generated configuration depends on it.
+
+The shipped stage differs from this design in two points, and from the [S3 mockup](MOCKUPS.md#s3--foundations) in a third
+([ADR 0020](../adr/0020-config-tool-foundations-render.md), [Foundations](../../config-tool/README.md#foundations-stage-3)):
+
+- **Only US-3.1 has shipped.** *Organization* holds the display name, *Network* the base domain and the derived hosts.
+  The DID (US-3.2), the data space panel (US-3.3) and the rest of the Network and Platform panels
+  come with their own stories.
+- **Derived hosts are read-only** and always use `<component>.<base>`. Editing one is US-3.4, and the path-prefix
+  scheme is not offered. The counts are measured (76 values in 7 components for the base domain), so the mockup's
+  41 is illustrative.
+- **Unlike the S3 mockup, the base domain sits in the Network panel**, above the hosts it derives, as in the list
+  above, not in the Organization panel.
 
 ## Stage 4 — Infrastructure
 

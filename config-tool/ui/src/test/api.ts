@@ -3,6 +3,8 @@ import { vi } from 'vitest'
 import type { LoadReport } from '../api/load'
 import type { FeatureState, Profile, ProfileResponse, RecentProfiles } from '../api/profile'
 import type { FeatureChoice, FeaturesResult, FeatureToggle } from '../api/features'
+import type { FoundationList } from '../api/foundations'
+import type { Change, ChangeGroup, Leaf, RenderResult } from '../api/render'
 import type { Feature, Offer, PresetResult, RoleCatalogue, RoleChange } from '../api/roles'
 import type { Kubeconfig, ModelInfo } from '../api/target'
 import type { Trial, TrialWritten } from '../api/trial'
@@ -281,9 +283,130 @@ const ROLE_DEFAULTS: Required<RoleFakes> = {
   features: recordToggle,
 }
 
+/** A cut of the 10.16.0 foundations: two answers the user gives and one host derived from the domain. */
+export const FOUNDATIONS: FoundationList = {
+  foundations: [
+    {
+      id: 'org.displayName',
+      stage: 'foundations',
+      type: 'string',
+      default: '',
+      label: 'Display name',
+      help: 'The organization name other participants see.',
+      doc: 'doc/deployment-integration/roles/KEYCLOAK.md',
+      targets: [{ path: 'keycloak.realm.displayNameHtml', component: 'keycloak' }],
+      count: 1,
+      components: ['keycloak'],
+    },
+    {
+      id: 'domain.base',
+      stage: 'foundations',
+      type: 'domain',
+      default: '',
+      label: 'Base domain',
+      help: 'Every public host name is derived from it.',
+      doc: 'doc/deployment-integration/roles/PREREQUISITES.md#public-names-have-to-resolve-inside-the-cluster',
+      targets: [
+        { path: 'decentralizedIam.odrlAuthorization.apisix.ingress.tls[0].secretName', component: 'decentralizedIam' },
+        { path: 'keycloak.ingress.hosts[0].host', component: 'keycloak' },
+        { path: 'keycloak.realm.frontendUrl', component: 'keycloak' },
+      ],
+      count: 3,
+      components: ['decentralizedIam', 'keycloak'],
+    },
+    {
+      id: 'host.keycloak',
+      stage: 'foundations',
+      type: 'hostname',
+      default: 'keycloak.{{ .domain.base }}',
+      label: 'Keycloak host',
+      help: 'Keycloak, the credential issuer.',
+      doc: 'doc/deployment-integration/roles/KEYCLOAK.md#ingress-and-tls',
+      targets: [
+        { path: 'keycloak.ingress.hosts[0].host', component: 'keycloak' },
+        { path: 'keycloak.realm.frontendUrl', component: 'keycloak' },
+      ],
+      count: 2,
+      components: ['keycloak'],
+    },
+  ],
+}
+
+/** The body POST /api/render receives. */
+export interface RenderBody {
+  profile: Profile
+  sourceSha256?: string
+}
+
+/** An answer of a foundations route, or a status code it fails with. */
+export type FoundationAnswer<T> = T | number
+
+/** The foundation routes' fakes; by default GET answers FOUNDATIONS and render answers `renderLeaves` diffed against
+ *  the previous render of the same mockApi. */
+export interface FoundationFakes {
+  foundations?: (chart: string, version: string) => FoundationAnswer<FoundationList>
+  render?: (body: RenderBody) => FoundationAnswer<RenderResult> | Promise<FoundationAnswer<RenderResult>>
+}
+
+/** The server's message for a refused foundations request. */
+export function refusedFoundations(status: number): string {
+  return `foundations request refused with ${status}`
+}
+
+const leaf = (path: string, value: unknown, foundation: string, fn: string): Leaf => ({
+  path,
+  value,
+  provenance: { foundation, answers: [foundation], fn, target: 0, pinned: false, kept: false },
+})
+
+/** The leaves the FOUNDATIONS cut renders from `profile`'s answers, sorted by path. */
+export function renderLeaves(profile: Profile): Leaf[] {
+  const answers = profile.answers ?? {}
+  const leaves: Leaf[] = []
+  if (typeof answers['domain.base'] === 'string') {
+    const host = `keycloak.${answers['domain.base']}`
+    leaves.push(leaf('keycloak.ingress.hosts[0].host', host, 'host.keycloak', 'copy'), leaf('keycloak.realm.frontendUrl', `https://${host}`, 'host.keycloak', 'tpl'))
+  }
+  if (typeof answers['org.displayName'] === 'string') {
+    leaves.push(leaf('keycloak.realm.displayNameHtml', `<span>${answers['org.displayName']}</span>`, 'org.displayName', 'tpl'))
+  }
+  return leaves.sort((a, b) => a.path.localeCompare(b.path))
+}
+
+/** `next` against `prev` as render.Diff groups it, without pinning: by foundation in FOUNDATIONS order. */
+export function diffLeaves(prev: readonly Leaf[], next: readonly Leaf[]): ChangeGroup[] {
+  const before = new Map(prev.map((l) => [l.path, l]))
+  const after = new Map(next.map((l) => [l.path, l]))
+  const changes: [string, Change][] = []
+  for (const l of next) {
+    const was = before.get(l.path)
+    if (!was) changes.push([l.provenance.foundation, { path: l.path, status: 'added', after: l.value }])
+    else if (was.value !== l.value) changes.push([l.provenance.foundation, { path: l.path, status: 'changed', before: was.value, after: l.value }])
+  }
+  for (const l of prev) {
+    if (!after.has(l.path)) changes.push([l.provenance.foundation, { path: l.path, status: 'removed', before: l.value }])
+  }
+  return FOUNDATIONS.foundations
+    .map((f) => ({ foundation: f.id, changes: changes.filter(([id]) => id === f.id).map(([, c]) => c) }))
+    .filter((g) => g.changes.length > 0)
+}
+
+function foundationDefaults(): Required<FoundationFakes> {
+  let last: Leaf[] = []
+  return {
+    foundations: () => FOUNDATIONS,
+    render: (body) => {
+      const leaves = renderLeaves(body.profile)
+      const groups = diffLeaves(last, leaves)
+      last = leaves
+      return { tree: { leaves }, diff: { groups } }
+    },
+  }
+}
+
 /** Answers GET /api/model with `model`, GET /api/cluster/contexts with `contexts(path)` and POST /api/load with
  *  `load(name, root)`; `root` is null when the upload lets the server detect it. The profile routes use `profiles`,
- *  the trial routes `trial`, the role routes `roles`. */
+ *  the trial routes `trial`, the role routes `roles`, the foundation routes `foundations`. */
 export function mockApi(
   contexts: (path: string) => ContextsAnswer = () => ({ paths: [], contexts: [], current: '' }),
   model: ModelInfo = MODEL,
@@ -291,10 +414,12 @@ export function mockApi(
   profiles: ProfileFakes = {},
   trial: TrialFakes = {},
   roles: RoleFakes = {},
+  foundations: FoundationFakes = {},
 ) {
   const fakes = { ...PROFILE_DEFAULTS, ...profiles }
   const trialFakes = { ...TRIAL_DEFAULTS, ...trial }
   const roleFakes = { ...ROLE_DEFAULTS, ...roles }
+  const foundationFakes = { ...foundationDefaults(), ...foundations }
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(String(input), 'http://localhost')
     const json = (body: unknown, status = 200) => Promise.resolve(new Response(JSON.stringify(body), { status }))
@@ -333,6 +458,13 @@ export function mockApi(
     }
     if (url.pathname === '/api/features' && init?.method === 'POST') {
       return roleAnswer(await roleFakes.features(JSON.parse(String(init.body)) as FeaturesBody))
+    }
+    const foundationAnswer = <T,>(value: FoundationAnswer<T>) => (typeof value === 'number' ? json({ error: refusedFoundations(value) }, value) : json(value))
+    if (url.pathname === '/api/foundations') {
+      return foundationAnswer(foundationFakes.foundations(url.searchParams.get('chart') ?? '', url.searchParams.get('version') ?? ''))
+    }
+    if (url.pathname === '/api/render' && init?.method === 'POST') {
+      return foundationAnswer(await foundationFakes.render(JSON.parse(String(init.body)) as RenderBody))
     }
     return json({ error: 'not found' }, HTTP_NOT_FOUND)
   })

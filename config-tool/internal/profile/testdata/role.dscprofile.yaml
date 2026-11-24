@@ -3,11 +3,11 @@ format: 1
 model:
   chart: trust-anchor
   version: 1.3.6
-  revision: 1
+  revision: 2
 catalogue:
   chart: data-space-connector
   version: 10.16.0
-  revision: 3
+  revision: 5
 target:
   type: cluster
   context: kind-provider

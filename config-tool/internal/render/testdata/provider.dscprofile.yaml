@@ -1,0 +1,41 @@
+# dsc-config profile: the answer set values.yaml is rendered from. It never holds a secret value.
+format: 1
+model:
+  chart: data-space-connector
+  version: 10.16.0
+  revision: 5
+target:
+  type: cluster
+  context: k3s
+  namespace: provider
+  releaseName: provider
+  chart: data-space-connector
+  chartVersion: 10.16.0
+  environment: development
+answers:
+  org.displayName: MP Operations
+  domain.base: 127.0.0.1.nip.io
+  host.keycloak: keycloak-provider.127.0.0.1.nip.io
+  host.statusList: provider-status-list.127.0.0.1.nip.io
+  host.til: til-provider.127.0.0.1.nip.io
+  host.ccs: provider-ccs.127.0.0.1.nip.io
+  host.pap: pap-provider.127.0.0.1.nip.io
+  host.scorpio: scorpio-provider.127.0.0.1.nip.io
+  host.tmForumApi: tm-forum-api.127.0.0.1.nip.io
+  host.marketplace: marketplace.127.0.0.1.nip.io
+  host.dashboard: dashboard-provider.127.0.0.1.nip.io
+  host.dataService: mp-data-service.127.0.0.1.nip.io
+  host.tppDataService: tpp-data-service.127.0.0.1.nip.io
+  host.tppService: tpp-service.127.0.0.1.nip.io
+  host.tmfApi: mp-tmf-api.127.0.0.1.nip.io
+  host.contractManagement: contract-management.127.0.0.1.nip.io
+  host.dsp: dsp-mp-operations.127.0.0.1.nip.io
+  host.dcp: dcp-mp-operations.127.0.0.1.nip.io
+  host.identityhub: identityhub-mp-operations.127.0.0.1.nip.io
+  host.identityhubManagement: identityhub-management-mp-operations.127.0.0.1.nip.io
+  host.vault: vault-mp-operations.127.0.0.1.nip.io
+  host.oid4vcManagement: provider-oid4vc-management.127.0.0.1.nip.io
+  host.dcpManagement: provider-dcp-management.127.0.0.1.nip.io
+  host.consentDataService: mp-data-service-consent.127.0.0.1.nip.io
+open: []
+secrets: {}
