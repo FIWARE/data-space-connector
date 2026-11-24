@@ -18,6 +18,15 @@ describe('api/foundations', () => {
     expect(init.signal).toBe(controller.signal)
   })
 
+  it.each([
+    ['host.keycloak', ['identity.issuer']],
+    ['domain.base', []],
+  ])('passes the display gate of %s on', async (id, features) => {
+    mockApi()
+    const { foundations } = await fetchFoundations(DSC_CHART, '')
+    expect(foundations.find((f) => f.id === id)?.features).toEqual(features)
+  })
+
   it('rejects a chart without a bundle with 404', async () => {
     mockApi(undefined, undefined, undefined, undefined, undefined, undefined, { foundations: () => HTTP_NOT_FOUND })
     await expect(fetchFoundations('unknown', '')).rejects.toMatchObject({

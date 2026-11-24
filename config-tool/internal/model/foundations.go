@@ -124,6 +124,9 @@ type Foundation struct {
 	// Doc is a repo-relative documentation path, optionally with an anchor.
 	Doc     string   `yaml:"doc"`
 	Targets []Target `yaml:"targets"`
+	// Features are feature ids; Stage 3 hides the foundation while any is off. Display only: neither the
+	// render nor the rules read them (US-5.3).
+	Features []string `yaml:"features"`
 }
 
 // Condition holds while the resolved answer ID equals Equals.
@@ -161,8 +164,10 @@ type CompiledFoundation struct {
 	DefaultWhen *Condition
 	Options     []Option
 	Targets     []CompiledTarget
-	deflt       *template.Template
-	prefix      *template.Template
+	// Features gate the foundation's display only; nil when it is always shown.
+	Features []string
+	deflt    *template.Template
+	prefix   *template.Template
 	// defaultRefs and prefixRefs split Refs by source, so a bad reference is reported where it is.
 	defaultRefs, prefixRefs []string
 	// defaultGate is defaultRefs plus the DefaultWhen id: the answers whose values decide the default.
@@ -399,7 +404,7 @@ func compileFoundation(f Foundation, topLevelKeys []string) (CompiledFoundation,
 	if !f.Type.IsString() && (f.Default != "" || f.DefaultWhen != nil || f.Prefix != "") {
 		return CompiledFoundation{}, fmt.Errorf("a %s takes no default, defaultWhen or prefix", f.Type)
 	}
-	c := CompiledFoundation{ID: f.ID, Stage: f.Stage, Type: f.Type, Group: group, Options: f.Options}
+	c := CompiledFoundation{ID: f.ID, Stage: f.Stage, Type: f.Type, Group: group, Options: f.Options, Features: f.Features}
 	if f.Default != "" {
 		t, refs, err := parseTemplate(f.ID, f.Default)
 		if err != nil {
@@ -453,6 +458,24 @@ func compileFoundation(f Foundation, topLevelKeys []string) (CompiledFoundation,
 		c.Targets = append(c.Targets, ct)
 	}
 	return c, nil
+}
+
+// checkFoundationFeatures refuses a feature id that is repeated or names no catalogue feature of chart.
+func checkFoundationFeatures(fs []CompiledFoundation, features []Feature, chart string) error {
+	for i, f := range fs {
+		for j, id := range f.Features {
+			k := slices.IndexFunc(features, func(c Feature) bool { return c.ID == id })
+			switch {
+			case k < 0:
+				return fmt.Errorf("foundations[%d] (%s): features[%d]: %q names no feature of the catalogue", i, f.ID, j, id)
+			case features[k].Chart != chart:
+				return fmt.Errorf("foundations[%d] (%s): features[%d]: %s is a feature of chart %s, not %s", i, f.ID, j, id, features[k].Chart, chart)
+			case slices.Index(f.Features, id) < j:
+				return fmt.Errorf("foundations[%d] (%s): features[%d]: %s is already listed", i, f.ID, j, id)
+			}
+		}
+	}
+	return nil
 }
 
 // checkOptions requires options with distinct values and labels on a choice and refuses them elsewhere.

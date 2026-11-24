@@ -35,12 +35,17 @@ const (
 	didMethodID     = "did.method"
 	didValueID      = "did.value"
 	tirAddressID    = "dataspace.tirAddress"
+	hostVerifierID  = "host.verifier"
+	hostDIDID       = "host.did"
 	// referenceTIR is the data space's TIR address in provider.yaml; it contains the domain without deriving from it.
 	referenceTIR = "https://tir." + referenceDomain + "/"
 	didWebMethod = "did:web"
 	didKeyMethod = "did:key"
+	// referenceDIDHost serves the DID document in provider.yaml; it and the verifier are not on referenceDomain.
+	referenceDIDHost      = "mp-operations.org"
+	referenceVerifierHost = "verifier." + referenceDIDHost
 	// referenceDID is the participant DID of provider.yaml and dsp-provider.yaml.
-	referenceDID = "did:web:mp-operations.org"
+	referenceDID = didWebMethod + ":" + referenceDIDHost
 	// dspProviderValues sets the fdsc-edc keys provider.yaml leaves out, because fdsc-edc is off there.
 	dspProviderValues = "../../../k3s/dsp-provider.yaml"
 	// generatedDID is a tool-generated file on oldDID, to which the user hand-added a bootstrap DID and kid.
@@ -63,7 +68,10 @@ const (
 )
 
 // referenceValues is what each answer searched in provider.yaml is there.
-var referenceValues = map[string]string{domainBase: referenceDomain, didValueID: referenceDID, tirAddressID: referenceTIR}
+var referenceValues = map[string]string{
+	domainBase: referenceDomain, didValueID: referenceDID, tirAddressID: referenceTIR,
+	hostVerifierID: referenceVerifierHost, hostDIDID: referenceDIDHost,
+}
 
 // exclusion is a provider.yaml leaf carrying one of answers that another story owns, so no foundation targets it.
 type exclusion struct {
@@ -73,9 +81,12 @@ type exclusion struct {
 	reason  string
 }
 
+// The DID document host is a substring of the DID and of the verifier host, so every row carrying them carries it too.
 var (
-	domainOnly = []string{domainBase}
-	didOnly    = []string{didValueID}
+	domainOnly   = []string{domainBase}
+	didOnly      = []string{didValueID, hostDIDID}
+	didHostOnly  = []string{hostDIDID}
+	verifierOnly = []string{hostVerifierID, hostDIDID}
 )
 
 var providerExclusions = []exclusion{
@@ -83,7 +94,7 @@ var providerExclusions = []exclusion{
 		"US-5.6", "the service registration list, which US-5.6 pre-seeds from the data space's answers"},
 	{regexp.MustCompile(`^decentralizedIam\.odrlAuthorization\.apisix\.routes\[\d+\]\.host$`), domainOnly,
 		"US-5.6", "a route is a protected-service row; the list carries content no foundation owns"},
-	{regexp.MustCompile(`^keycloak\.realm\.clients\[\d+\]\.`), []string{domainBase, didValueID},
+	{regexp.MustCompile(`^keycloak\.realm\.clients\[\d+\]\.`), []string{domainBase, didValueID, hostDIDID},
 		"US-5.5", "realm clients belong to the realm; the list carries content no foundation owns"},
 	{regexp.MustCompile(`^fdsc-dashboard\.auth\.config\.providers\[\d+\]\.issuer$`), domainOnly,
 		"US-5.3", "the dashboard's feature page; the list carries content no foundation owns"},
@@ -105,6 +116,20 @@ var providerExclusions = []exclusion{
 		"US-5.5", "realm credentials"},
 	{regexp.MustCompile(`^keycloak\.realm\.(clientRoles|users)$`), didOnly,
 		"US-5.5", "JSON strings of the realm"},
+	{regexp.MustCompile(`^decentralizedIam\.vcAuthentication\.vcverifier\.ingress\.(tls\[\d+\]\.|annotations\.)`), verifierOnly,
+		"US-8.11", "the TLS certificate is the verifier's signing key; deriving its name would orphan the mounted secret"},
+	{regexp.MustCompile(`^decentralizedIam\.vcAuthentication\.vcverifier\.deployment\.verifier\.clientIdentification\.id$`), verifierOnly,
+		"US-8.11", "x509_san_dns identification needs the signing key and certificate paths with it"},
+	{regexp.MustCompile(`^decentralizedIam\.vcAuthentication\.vcverifier\.deployment\.additionalVolumes\[\d+\]\.secret\.secretName$`), verifierOnly,
+		"US-8.11", "the signing-key mount of the TLS secret; the list carries other content"},
+	{regexp.MustCompile(`^decentralizedIam\.odrlAuthorization\.apisix\.routes\[\d+\]\.plugins\.openid-connect\.discovery$`), verifierOnly,
+		"US-5.6", "a route is a protected-service row; the list carries content no foundation owns"},
+	{regexp.MustCompile(`^did\.ingress\.(tls\[\d+\]\.|annotations\.)`), didHostOnly,
+		"US-8.11", "the TLS certificate holds the DID key; deriving its name would orphan the mounted secret"},
+	{regexp.MustCompile(`^(did\.volumes|keycloak\.extraVolumes|marketplace\.bizEcosystemLogicProxy\.extraContainerVolumes|vc-operator\.extraVolumes)\[\d+\]\.secret\.secretName$`), didHostOnly,
+		"US-8.11", "a mount of the DID key's TLS secret; the list carries other content"},
+	{regexp.MustCompile(`^statusListServer\.signing\.issuer\.dnsNames\[\d+\]$`), didHostOnly,
+		"US-8.11", "the status list's signing certificate"},
 }
 
 // chartOnlyTarget is the reference of a target provider.yaml lacks; an empty file means no k3s file sets it.
@@ -224,8 +249,8 @@ func renderProvider(t *testing.T, b model.Bundle, answers map[string]any) Tree {
 	return tree
 }
 
-// carries reports whether a leaf with provenance p carries answer: the DID and TIR targets carry their own
-// answer, every other answer-derived target but the display name's carries the domain.
+// carries reports whether a leaf with provenance p carries answer: a searched answer other than the domain is
+// carried by its own targets only, every other answer-derived target but the display name's carries the domain.
 func carries(answer string, p Provenance) bool {
 	if p.Fn == string(model.FnConst) {
 		return false
@@ -233,7 +258,8 @@ func carries(answer string, p Provenance) bool {
 	if answer != domainBase {
 		return p.Foundation == answer
 	}
-	return !slices.Contains([]string{orgDisplayName, didValueID, tirAddressID}, p.Foundation)
+	_, searched := referenceValues[p.Foundation]
+	return p.Foundation == domainBase || !searched && p.Foundation != orgDisplayName
 }
 
 // carrierPaths returns the paths of tree's leaves carrying answer, minus the chart-only targets.
@@ -266,9 +292,11 @@ func diffSets(want, got []string) (missing, extra []string) {
 func checkKeySet(t *testing.T, answer string) {
 	t.Helper()
 	want := answerLeaves(t, providerDoc(t), answer)
-	tree := renderProvider(t, providerBundle(t), map[string]any{
-		orgDisplayName: orgName, domainBase: referenceDomain, didValueID: referenceDID, tirAddressID: referenceTIR,
-	})
+	answers := map[string]any{orgDisplayName: orgName}
+	for id, v := range referenceValues {
+		answers[id] = v
+	}
+	tree := renderProvider(t, providerBundle(t), answers)
 	missing, extra := diffSets(want, carrierPaths(tree, answer))
 	for _, p := range missing {
 		t.Errorf("provider.yaml leaf %s carries %s but is neither a target nor excluded", p, answer)
@@ -279,15 +307,9 @@ func checkKeySet(t *testing.T, answer string) {
 }
 
 func TestProviderKeySet(t *testing.T) {
-	checkKeySet(t, domainBase)
-}
-
-func TestProviderDIDKeySet(t *testing.T) {
-	checkKeySet(t, didValueID)
-}
-
-func TestProviderTIRKeySet(t *testing.T) {
-	checkKeySet(t, tirAddressID)
+	for _, answer := range slices.Sorted(maps.Keys(referenceValues)) {
+		t.Run(answer, func(t *testing.T) { checkKeySet(t, answer) })
+	}
 }
 
 func TestProviderValues(t *testing.T) {
@@ -390,20 +412,30 @@ func changedPaths(before, after map[string]any) []string {
 	return changed
 }
 
+// targetPaths returns the paths of every target answer reaches, directly or through a derived answer.
+func targetPaths(b model.Bundle, answer string) []string {
+	var paths []string
+	for _, r := range Targets(b, answer) {
+		paths = append(paths, r.Path.String())
+	}
+	return paths
+}
+
 func TestProviderDIDChange(t *testing.T) {
 	b := providerBundle(t)
 	domainLeaves := answerLeaves(t, providerDoc(t), domainBase)
-	var didTargets []string
-	for _, r := range Targets(b, didValueID) {
-		didTargets = append(didTargets, r.Path.String())
-	}
+	// The verifier stays pinned: TestProviderTargetsAndDiff covers it deriving from the domain.
+	pinned := map[string]any{orgDisplayName: orgName, hostVerifierID: referenceVerifierHost}
+	didTargets := targetPaths(b, didValueID)
+	didHostTargets := slices.DeleteFunc(targetPaths(b, hostDIDID), func(p string) bool { return slices.Contains(didTargets, p) })
 	tests := []struct {
 		name  string
 		fixed map[string]any
 		want  []string
 	}{
-		{"did.value derived", map[string]any{orgDisplayName: orgName}, slices.Concat(domainLeaves, didTargets)},
-		{"did.value given", map[string]any{orgDisplayName: orgName, didValueID: referenceDID}, domainLeaves},
+		{"did.value and host.did derived", pinned, slices.Concat(domainLeaves, didHostTargets, didTargets)},
+		{"did.value given", merge(pinned, map[string]any{didValueID: referenceDID}), slices.Concat(domainLeaves, didHostTargets)},
+		{"host.did given", merge(pinned, map[string]any{hostDIDID: referenceDIDHost}), domainLeaves},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

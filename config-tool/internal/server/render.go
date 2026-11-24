@@ -54,6 +54,8 @@ type foundationBody struct {
 	Count   int                `json:"count"`
 	// Components are the distinct top-level keys of Targets, sorted.
 	Components []string `json:"components"`
+	// Features hide the foundation in Stage 3 while any is off; empty when it is always shown.
+	Features []string `json:"features"`
 }
 
 // handleRender renders the profile's answers against the bundle it names, pinning the hand edits of the
@@ -151,7 +153,7 @@ func (s *Server) handleFoundations(w http.ResponseWriter, r *http.Request) {
 		body.Foundations = append(body.Foundations, foundationBody{
 			ID: f.ID, Stage: f.Stage, Type: f.Type, Group: c.Group, Default: f.Default, DefaultWhen: c.DefaultWhen, Prefix: f.Prefix, Options: append([]model.Option{}, f.Options...),
 			Label: f.Label, Help: f.Help, Doc: f.Doc,
-			Targets: targets, Count: len(targets), Components: components,
+			Targets: targets, Count: len(targets), Components: components, Features: append([]string{}, f.Features...),
 		})
 	}
 	writeJSON(w, body)

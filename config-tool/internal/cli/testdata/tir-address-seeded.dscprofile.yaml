@@ -1,6 +1,6 @@
 # Saved after a load that set the verifier's TIR address: the seeded answer satisfies tir-address-for-verification.
 format: 1
-model: {chart: data-space-connector, version: 10.16.0, revision: 9}
+model: {chart: data-space-connector, version: 10.16.0, revision: 10}
 target:
   type: file
   namespace: provider

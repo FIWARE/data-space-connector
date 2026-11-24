@@ -289,6 +289,9 @@ func readBundle(fsys fs.FS, file string) (versioned, error) {
 	if b.foundations, b.order, err = compileFoundations(b.Foundations, b.TopLevelKeys); err != nil {
 		return versioned{}, fmt.Errorf("%s: %w", file, err)
 	}
+	if err := checkFoundationFeatures(b.foundations, b.Features, b.Chart); err != nil {
+		return versioned{}, fmt.Errorf("%s: %w", file, err)
+	}
 	if err := checkRecognizedFoundations(b.rules, b.foundations); err != nil {
 		return versioned{}, fmt.Errorf("%s: %w", file, err)
 	}

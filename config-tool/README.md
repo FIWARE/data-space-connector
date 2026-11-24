@@ -375,7 +375,8 @@ Each entry has a dotted `id` (the key in the profile's `answers`), `stage`, an o
 `network`, the default), `type` (`string`, `hostname`, `domain`, `did` or `url`, each checked by one pattern, `choice`
 from its `options`, `bool`, or `credentialTypes`, a list of `{type, description?}`), `label`, `help`, an optional repo-relative `doc` path, an optional `default`, `defaultWhen`
 (`{id, equals}`: the default applies only while that answer resolves to `equals`), `prefix` (a template the answer must
-start with) and `targets`. A `default` is a template over other answers, so `host.keycloak` (`"keycloak.{{ .domain.base }}"`)
+start with), an optional `features` list (display only: Stage 3 hides the answer while any listed feature is off; render
+is not gated) and `targets`. A `default` is a template over other answers, so `host.keycloak` (`"keycloak.{{ .domain.base }}"`)
 exists only while `domain.base` is answered. Templates hold only text and `{{ .id }}` actions. A target writes one
 value with one of four functions; only `copy` writes a `bool` or a list:
 
@@ -407,7 +408,7 @@ loaded node is not a scalar, there is no kept value and `Nested()` leaves the pa
 recognized leaves are re-rendered. The JSON of a tree is byte-identical across runs.
 
 `GET /api/foundations?chart=&version=` lists the foundations with label, help, doc, type, group, options, default,
-`defaultWhen`, prefix, stage and their
+`defaultWhen`, prefix, `features` (empty when ungated), stage and their
 fan-out (`targets`, `count`, sorted `components`), transitive through derived hosts. `POST /api/render` takes
 `{profile, sourceSha256}` (422 with field errors when the profile does not validate, or when the sha is not the
 loaded file's), renders it with the load the sha names as the overrides layer (none when it is empty, as on save) and
