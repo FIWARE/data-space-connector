@@ -7,13 +7,14 @@ import { STAGES } from '../stages'
 import { Environment, TargetType, type Target } from '../state/answers'
 import type { FeatureState } from '../api/profile'
 import type { FieldId } from '../state/openQuestions'
-import { initialState, type AppState } from '../state/reducer'
+import { initialState, type AppliedRoleChange, type AppState } from '../state/reducer'
 import { StageId } from '../state/stageIds'
 import { StoreProvider } from '../state/store'
 import { catalogueFeature, lateLoad, mockApi, recordToggle, refusedRole, REPORT, refusedUpload } from '../test/api'
 import { DELIBERATE_HEADING } from './DeliberateChoices'
 import { FEATURES_HEADING } from './Features'
 import { ROOT_LABEL, WHOLE_FILE } from './Review'
+import { ROLE_CHANGES_HEADING, roleChanged, summaryToggleLabel, TURNS_OFF } from './roleChangeText'
 
 const HTTP_UNPROCESSABLE = 422
 /** A picked role, so only the Target questions are open. */
@@ -215,6 +216,29 @@ describe('Review', () => {
       `${ISSUER.title}recommended on for Consumer — you turned it offgo ↗`,
       `${BROKER.title}not recommended for Consumer — your values file turns it ongo ↗`,
     ])
+  })
+
+  it.each<[string, LoadReport | undefined]>([
+    ['the placeholder', undefined],
+    ['the load report', REPORT],
+  ])('lists the role changes of this session on %s', async (_name, loaded) => {
+    const roleChanges: AppliedRoleChange[] = [
+      { change: { fromRole: 'consumer', toRole: 'provider', enabled: [BROKER.id], disabled: [], kept: [] }, chartSwitch: null },
+      { change: { fromRole: 'provider', toRole: 'gone-role', enabled: [], disabled: [BROKER.id], kept: [] }, chartSwitch: null },
+    ]
+    renderReview(loaded, undefined, { answers: { role: 'gone-role', features: {}, target: ANSWERED }, roleChanges })
+    const panel = within((await screen.findByRole('heading', { level: 3, name: ROLE_CHANGES_HEADING })).closest('.panel') as HTMLElement)
+    expect(await panel.findByText(roleChanged('Consumer', 'Provider'))).toBeInTheDocument()
+    expect(panel.getByText(roleChanged('Provider', 'gone-role'))).toBeInTheDocument()
+    await userEvent.click(panel.getByRole('button', { name: summaryToggleLabel('Provider', 'gone-role') }))
+    expect(within(panel.getByRole('list', { name: TURNS_OFF })).getByRole('listitem')).toHaveTextContent(BROKER.title)
+    expect(panel.getAllByRole('button', { expanded: true })).toHaveLength(1)
+  })
+
+  it('leaves the role changes out while there is none', async () => {
+    renderReview(undefined, undefined, { answers: { role: PICKED, features: {}, target: ANSWERED } })
+    await act(async () => {})
+    expect(screen.queryByRole('heading', { level: 3, name: ROLE_CHANGES_HEADING })).toBeNull()
   })
 
   it('jumps to Features from a deliberate choice', async () => {

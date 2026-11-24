@@ -10,6 +10,7 @@ import { DeliberateChoices } from './DeliberateChoices'
 import { AnswerList } from './DerivedAnswers'
 import { EntryTable, Overrides } from './Overrides'
 import { Placeholder } from './Placeholder'
+import { RoleChanges } from './RoleChanges'
 import { TrialReview } from './TrialReview'
 
 /** What Review shows without a loaded file. */
@@ -199,6 +200,7 @@ function Report({ report, file }: { report: LoadReport; file?: File }) {
       <ProfileNotes />
       <OpenQuestions />
       <DeliberateChoices />
+      <RoleChanges />
       <RootPicker report={report} file={file} />
       <div className="panel">
         <h3>Classification of {report.counts.total} keys</h3>
@@ -243,6 +245,7 @@ export function Review() {
       <ProfileNotes />
       <OpenQuestions />
       <DeliberateChoices />
+      <RoleChanges />
       <Actions />
     </Placeholder>
   )

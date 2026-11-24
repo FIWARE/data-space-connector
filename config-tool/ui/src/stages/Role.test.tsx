@@ -28,6 +28,8 @@ import {
   keepLabel,
   moveLabel,
   NO_FEATURE_CHANGES,
+  roleChanged,
+  summaryToggleLabel,
   TURNS_OFF,
   TURNS_ON,
 } from './roleChangeText'
@@ -367,6 +369,26 @@ describe('Role: changing the role', () => {
     const box = await dialog()
     expect(box).toHaveTextContent(NO_FEATURE_CHANGES)
     expect(summary(box)).toEqual(empty)
+  })
+
+  it.each<[string, AppState, string, string]>([
+    ['a change within the chart', withRole('consumer', { 'obs.tracing': true }), 'Consumer + Provider', changeLabel('Consumer + Provider')],
+    ['a move to Operator', withRole('consumer'), 'Operator', moveLabel(TRUST_ANCHOR)],
+  ])('lists %s on Review, whose summary reopens with the rows of the dialog', async (_name, state, title, confirm) => {
+    renderRole(state, { preset: serverPreset().preset })
+    await findCards()
+    await userEvent.click(card(title))
+    const box = await dialog()
+    const shown = summary(box)
+    await userEvent.click(within(box).getByRole('button', { name: confirm }))
+    await userEvent.click(screen.getByRole('button', { name: / Review$/ }))
+    const row = (await screen.findByText(roleChanged('Consumer', title))).closest('li') as HTMLElement
+    const toggle = within(row).getByRole('button', { name: summaryToggleLabel('Consumer', title) })
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    expect(rows(row, TURNS_ON)).toEqual([])
+    await userEvent.click(toggle)
+    expect(toggle).toHaveAttribute('aria-expanded', 'true')
+    expect(summary(row)).toEqual(shown)
   })
 
   it('lists what a move to Operator carries over and drops, and labels it with the chart', async () => {

@@ -176,7 +176,7 @@ export function Role() {
   }
 
   const apply = (result: PresetResult) => {
-    dispatch({ type: 'roleApplied', profile: result.profile, chartSwitch: result.chartSwitch })
+    dispatch({ type: 'roleApplied', profile: result.profile, chartSwitch: result.chartSwitch, change: result.change })
     setFocused(undefined)
   }
 
