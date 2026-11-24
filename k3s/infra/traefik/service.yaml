@@ -31,3 +31,12 @@ spec:
     - name: https
       port: 8443
       targetPort: https
+    # the default ports as well: CoreDNS resolves every *.127.0.0.1.nip.io host to this Service,
+    # so a pod that calls https://<host> without a proxy reaches the ingress, as it would through
+    # a public load balancer
+    - name: http-default
+      port: 80
+      targetPort: http
+    - name: https-default
+      port: 443
+      targetPort: https

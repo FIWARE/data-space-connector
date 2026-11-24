@@ -107,8 +107,10 @@ public class StandardStepDefinitions extends StepDefintions {
      * this would remove - the odrl-pap policy that authorizes the consent-facade's cross-org TM Forum
      * reads (without it no privacy notice can be projected) and the trusted issuers the facade and the
      * consent-filter plugin authenticate with. Those scenarios clean up their own fixtures instead.
+     * The reference scenario is excluded too: its provider publishes none of the internal endpoints
+     * this cleans up through.
      */
-    @Before("not @consent and not @eidas")
+    @Before("not @consent and not @eidas and not @reference")
     public void setup() throws Exception {
         CryptoIntegration.init(this.getClass().getClassLoader());
         Security.addProvider(new BouncyCastleProvider());
