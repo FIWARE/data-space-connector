@@ -157,16 +157,17 @@ guide that explains it.
 > [hairpin DNS](../deployment-integration/roles/PREREQUISITES.md#public-names-have-to-resolve-inside-the-cluster)
 > is warned about, because the generated configuration depends on it.
 
-The shipped stage differs from this design and from the [S3 mockup](MOCKUPS.md#s3--foundations) in three points
+The shipped stage differs from this design in two points, and from the [S3 mockup](MOCKUPS.md#s3--foundations) in a third
 ([ADR 0020](../adr/0020-config-tool-foundations-render.md), [Foundations](../../config-tool/README.md#foundations-stage-3)):
 
 - **Only US-3.1 has shipped.** *Organization* holds the display name, *Network* the base domain and the derived hosts.
   The DID (US-3.2), the data space panel (US-3.3) and the rest of the Network and Platform panels
   come with their own stories.
-- **The base domain sits in the Network panel**, above the hosts it derives, not in the Organization panel.
 - **Derived hosts are read-only** and always use `<component>.<base>`. Editing one is US-3.4, and the path-prefix
   scheme is not offered. The counts are measured (76 values in 7 components for the base domain), so the mockup's
   41 is illustrative.
+- **Unlike the S3 mockup, the base domain sits in the Network panel**, above the hosts it derives, as in the list
+  above, not in the Organization panel.
 
 ## Stage 4 — Infrastructure
 
