@@ -96,7 +96,7 @@ internal/model      core: question-model bundles per chart version
 internal/profile    core: the answer set and its .dscprofile.yaml format (ADR 0015)
 internal/atomicfile core: temp-file-and-rename writes that keep the file mode
 internal/cluster    core: kube context names from kubeconfig files, read-only
-internal/render     core: profile to values tree
+internal/render     core: answers to a values tree with provenance, fan-out and diff (ADR 0020)
 internal/roundtrip  core: parse / classify / merge / write of a values.yaml, byte-preserving
 internal/load       core: owned / recognized / unknown classification and the load report
 internal/validate   core: values against the chart's schema
@@ -314,6 +314,50 @@ components* button that lists its targets. Every answer change renders the profi
 (debounced). The render on entering the stage is the baseline, and the screen shows the grouped diff of each later
 edit, with a hand-edited leaf of the loaded file flagged *pinned, not updated* next to its kept and would-be value.
 
+### The `foundations:` section
+
+A bundle's `foundations:` list declares the answers and every chart key they reach; there is no Go code per key.
+Each entry has a dotted `id` (the key in the profile's `answers`), `stage`, `type` (`string`, `hostname` or
+`domain`, each checked by one pattern), `label`, `help`, an optional repo-relative `doc` path, an optional `default`
+and `targets`. A `default` is a template over other answers, so `host.keycloak` (`"keycloak.{{ .domain.base }}"`)
+exists only while `domain.base` is answered. Templates hold only text and `{{ .id }}` actions. A target writes one
+scalar with one of four functions:
+
+```yaml
+- {path: 'keycloak.realm.frontendUrl', fn: tpl, args: ["https://{{ .host.keycloak }}"]}   # render one template
+- {path: 'keycloak.ingress.hosts[0].host', fn: copy, args: ["{{ .host.keycloak }}"]}     # the answer, type kept
+- path: 'decentralizedIam.odrlAuthorization.apisix.ingress.annotations."cert-manager.io/alt-names"'
+  fn: join                                                                               # render each, join with sep
+  sep: ","
+  args: ["{{ .host.dataService }}", "{{ .host.tmfApi }}"]
+- {path: 'keycloak.ingress.hosts[0].paths[0].pathType', fn: const, args: [Prefix]}       # verbatim, only in a list
+```
+
+Paths use the round-trip syntax with list indices; quote one in a flow mapping. Helm replaces a list instead of
+merging it, so a path indexes into a list only when the targets own it whole: elements `0..n-1` and every key of
+each, with `const` for the keys no answer derives. An owned list is emitted all or nothing. A bundle with an unknown
+function, a reference to an undeclared id, a cycle among defaults, a path outside `topLevelKeys`, a list index gap
+or two targets on one path fails to load. A profile's `answers` accepts exactly the declared ids, and `open` accepts
+`answers.<id>` for them. `internal/render/provider_test.go` measures the targets against `k3s/provider.yaml`: every
+leaf that carries the domain is a target or a row of an exclusion table naming the story that owns it.
+
+### The render
+
+`render.Render` turns the answers into a `Tree` of scalar leaves sorted by path, each with its provenance: the
+foundation, the answers it used, the function and the target's index. A target that references an unanswered id writes
+nothing. With a loaded file, a target path that the load classified as unknown or skipped (a hand edit) is
+`pinned`: the leaf keeps the loaded value (`kept`), and `rendered` holds what the render would have written. When the
+loaded node is not a scalar, there is no kept value and `Nested()` leaves the path to the overrides layer. Owned and
+recognized leaves are re-rendered. The JSON of a tree is byte-identical across runs.
+
+`GET /api/foundations?chart=&version=` lists the foundations with label, help, doc, type, default, stage and their
+fan-out (`targets`, `count`, sorted `components`), transitive through derived hosts. `POST /api/render` takes
+`{profile, sourceSha256}` (422 with field errors when the profile does not validate, or when the sha is not the
+loaded file's), renders it with the load the sha names as the overrides layer (none when it is empty, as on save) and
+returns `{tree, diff}`. The diff groups `added`, `changed`, `removed` and `pinned` entries by foundation, against the
+previous render of the same source. A load, a profile open or a render of another source resets that baseline. A
+pinned leaf is reported only when its rendered value changes (ADR 0020 §7-8).
+
 ## Features (Stage 5)
 
 Stage 5 lists every feature of the chart the role deploys, and only those
@@ -413,18 +457,7 @@ keeps the latest bundle's list equal to the chart's `values.yaml`.
 `revision` (a positive integer, required) counts changes to a bundle within one chart version.
 A profile records `chart`, `version` and `revision` of the bundle it was built with (ADR 0015 §6).
 `features:`, `roles:` and `roleMatrix:` hold the [role presets](#roles).
-`foundations:` declares the cross-cutting answers of Stage 3 (`org.displayName`, `domain.base`) and the chart keys
-they fan out to (ADR 0020). Each has a dotted `id`, a `type` (`string`, `hostname` or `domain`), an optional
-`default` template over other answers, and `targets` written by the closed function set `tpl`, `join`, `copy` and
-`const`; the bundle header documents them. A bundle with an unknown function, a reference to an undeclared id, a
-cycle among defaults, a path outside `topLevelKeys`, a list index gap or two targets on one path fails to load.
-A profile's `answers` accepts exactly the declared ids, and `open` accepts `answers.<id>` for them.
-`GET /api/foundations?chart=&version=` lists them with label, help, doc, type, default, stage and their fan-out
-(`targets`, `count`, sorted `components`), transitive through derived hosts. `POST /api/render` takes `{profile, sourceSha256}`
-(422 with field errors when the profile does not validate, or when the sha is not the loaded file's), renders it with
-the load the sha names as the overrides layer (none when it is empty, as on save) and returns `{tree, diff}`. The diff
-is against the previous render of the same source; a load, a profile open or a render of another source resets it,
-and a hand-edited leaf of the loaded file is kept and reported `pinned` only when its rendered value changes (ADR 0020 §7-8).
+`foundations:` holds the [cross-cutting answers](#foundations-stage-3) and the chart keys they reach.
 `roles:` rate the features of `features:`, and `roleMatrix:` needs `roles:`.
 Two charts are shipped: `data-space-connector` (`model/10.16.0/`) and `trust-anchor` (`model/1.3.6/`, only
 `topLevelKeys` and two foundations without targets, no rules and no roles). Their version numbers differ, so they fit the one-bundle-per-version layout.

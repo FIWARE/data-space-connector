@@ -7,7 +7,7 @@ The connector is a Helm umbrella chart with **30 top-level feature toggles**, a 
 prerequisites that may or may not already exist in the target cluster. Today an operator
 assembles that by reading five role guides and copying from the `k3s/` example profiles. The
 scenario files show the cost: [`k3s/provider.yaml`](../../k3s/provider.yaml) is 1868 lines and
-names the same domain on **41** of them, the same DID on **15**.
+names the same base domain (`127.0.0.1.nip.io`) on **107** of them, the same DID on **15**.
 
 The tool replaces that assembly step with a guided configuration that produces the same
 artifact — a `values.yaml` — and, from the second iteration on, installs it.

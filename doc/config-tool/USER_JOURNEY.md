@@ -129,19 +129,19 @@ The shipped stage differs from this design in five points
 ## Stage 3 — Foundations
 
 The cross-cutting values, asked **once**, before anything that consumes them. This is the
-stage that earns the tool its keep: these answers fan out to between 2 and 41 places in the
-chart (the full table is in
+stage that earns the tool its keep: the base domain alone reaches 76 keys of
+`k3s/provider.yaml` (the full table is in
 [Cross-cutting values](FEATURE_MODEL.md#cross-cutting-values)).
 
 Grouped into four short panels on one scrollable screen:
 
-1. **Organization** — display name, base domain, DID method and DID, legal identifier
+1. **Organization** — display name, DID method and DID, legal identifier
    (for eIDAS/Gaia-X if those are later enabled).
 2. **Data space** — Trust Anchor TIR address, the credential types the data space defines,
    whether participant registration is automatic. From the Operator's onboarding mail; the
    tool offers "import from a data space descriptor URL" where the data space publishes
    a `/.well-known/data-space-configuration`.
-3. **Network** — host naming scheme (derived from the base domain, each host editable),
+3. **Network** — base domain, host naming scheme (derived from the base domain, each host editable),
    ingress class and annotations, TLS mode, private CA, outbound proxy.
 4. **Platform** — storage class, resource profile, image pull secrets, registry mirror.
 
