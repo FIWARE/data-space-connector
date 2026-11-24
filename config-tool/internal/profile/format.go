@@ -61,7 +61,8 @@ type Profile struct {
 	// Features maps catalogue feature ids to their state; a not-offered feature is enabled only by user or loaded
 	// choice, and only within the role's chart.
 	Features map[string]FeatureState `json:"features,omitempty" yaml:"features,omitempty"`
-	// Answers maps the dotted ids the model bundle declares under foundations: to scalars of their type.
+	// Answers maps the dotted ids the model bundle declares under foundations: to values of their type, a
+	// scalar or, for a list type such as credentialTypes, a list of mappings kept in the user's order.
 	Answers map[string]any `json:"answers" yaml:"answers"`
 	Open    []OpenQuestion `json:"open" yaml:"open"`
 	// Source references the loaded values file; nil when nothing was loaded.

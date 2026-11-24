@@ -13,6 +13,7 @@ import { Findings } from './Findings'
 import { HandSet } from './HandSet'
 import { Placeholder } from './Placeholder'
 import { RoleChanges } from './RoleChanges'
+import { TirCheckSummary } from './TirCheck'
 import { TrialReview } from './TrialReview'
 import { useReviewRender } from './useReviewRender'
 
@@ -216,6 +217,7 @@ function Report({ report, file }: { report: LoadReport; file?: File }) {
       <Rendered />
       <DeliberateChoices />
       <RoleChanges />
+      <TirCheckSummary />
       <RootPicker report={report} file={file} />
       <div className="panel">
         <h3>Classification of {report.counts.total} keys</h3>
@@ -262,6 +264,7 @@ export function Review() {
       <Rendered />
       <DeliberateChoices />
       <RoleChanges />
+      <TirCheckSummary />
       <Actions />
     </Placeholder>
   )

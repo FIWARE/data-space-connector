@@ -177,21 +177,23 @@ Asked in [Stage 3](USER_JOURNEY.md#stage-3--foundations). The "fans out to" coun
 against [`k3s/provider.yaml`](../../k3s/provider.yaml), which is what a fully configured
 provider looks like today.
 
-The first three rows are shipped as `foundations:` in the bundle ([ADR 0020](../adr/0020-config-tool-foundations-render.md)),
+The rows down to the data space's are shipped as `foundations:` in the bundle ([ADR 0020](../adr/0020-config-tool-foundations-render.md)),
 and `internal/render/provider_test.go` measures their counts. That test accounts for every leaf of provider.yaml that
-carries the domain: it is either a target or a row of an exclusion table naming the owning story. The excluded rows
-are the TIR address and trusted participant lists (9, US-3.3), the APISIX `routes[*].host` (18, US-5.6), the realm
-clients (2, US-5.5), the dashboard's provider issuer and TPP's in-cluster transfer host (1 each, US-5.3). The other
-rows are design.
+carries the domain: it is either a target or a row of an exclusion table naming the owning story. The TIR address is
+the `dataspace.tirAddress` target, which carries the domain without deriving from it. The excluded rows are the
+verifier's trusted participant lists (8, US-5.6, [ADR 0022](../adr/0022-config-tool-data-space-parameters.md#1-only-the-tir-address-renders)),
+the APISIX `routes[*].host` (18, US-5.6), the realm clients (2, US-5.5), the dashboard's provider issuer and TPP's
+in-cluster transfer host (1 each, US-5.3). The other rows are design.
 
 | Value | Example | Fans out to |
 |---|---|---|
 | `org.displayName` | `MP Operations` | **1 key** shipped: the Keycloak realm's `displayNameHtml` (provider.yaml sets none) |
-| `domain.base` | `mp-operations.org` | **76 keys in 7 components** of the provider profile, through the 22 derived hosts: every ingress host and its TLS `secretName` and host list, every `cert-manager.io/*` annotation, public URLs (Keycloak `frontendUrl`, the status list, the dashboard). The other 31 of the 107 leaves that carry the domain belong to later stories (see below) |
+| `domain.base` | `mp-operations.org` | **76 keys in 7 components** of the provider profile, through the 22 derived hosts: every ingress host and its TLS `secretName` and host list, every `cert-manager.io/*` annotation, public URLs (Keycloak `frontendUrl`, the status list, the dashboard). The other 31 of the 107 leaves that carry the domain are the TIR address and leaves of later stories (see above) |
 | `host.<component>` | `keycloak.mp-operations.org` | derived from `domain.base` as `<component>.<base>`, overridable in the profile (UI: US-3.4); **6 keys** for Keycloak |
 | `did.method` / `did.value` | `did:web:mp-operations.org` | **8 keys in 4 components** shipped: verifier `did`, contract-management `did`, Keycloak `issuerDid`, and under `fdsc-edc.common.config` the participant id, `issuerId`, the STS `oauth.clientId` and `secretAlias` (`<did>-sts-client-secret`) and `oid4vp.holder.id`. `did.value` derives `did:web:<domain.base>` while the method is `did:web` and must start with `<method>:`. The DID keys left to other stories are listed below the table |
-| `dataspace.tirAddress` | `https://tir.dataspace.org` | verifier `tirAddress`, registration job, trust framework checks |
-| `dataspace.credentialTypes` | `MembershipCredential`, `UserCredential` | Keycloak client scopes and protocol mappers, verifier service registration, local TIL entries, ODRL policies |
+| `dataspace.tirAddress` | `https://tir.dataspace.org` | **1 key** shipped: the verifier's `tirAddress`. A loaded file's value is recognized and back-derives the answer. The service registration's `trustedParticipantsLists` are US-5.6's; the verifier's k3s-only TIR registration script has no chart key |
+| `dataspace.credentialTypes` | `MembershipCredential`, `UserCredential` | shipped as an **answer only**: the chart key, `...registration.services[*].oidcScopes.*.credentials[*].type`, sits in the service registration list that US-5.6 owns and pre-seeds from it. Also read for Keycloak client scopes and protocol mappers, local TIL entries (US-5.5) and ODRL policies |
+| `dataspace.autoRegistration` | `true` | shipped as an **answer only**: chart 10.16.0 has no key for registering at the Trust Anchor (`registration.*` fills the participant's own TIL). Read by US-5.5 and the next-steps page |
 | `tls.mode` + `tls.issuer` | cert-manager `ClusterIssuer letsencrypt-prod` | every Ingress `tls`, every `cert-manager.io/*` annotation, the identity keystore |
 | `ingress.className` + `ingress.annotations` | `nginx` | every Ingress of the chart and of 6 subcharts |
 | `dns.mode` | external-dns annotations, or manual | Ingress annotations |
@@ -203,8 +205,9 @@ rows are design.
 
 `provider.yaml` names the DID on 15 lines, one a comment. The DID keys that are not `did.value` targets (US-3.2, [ADR 0021](../adr/0021-config-tool-l2-rules.md#7-the-did-targets-narrow-the-story)):
 
-- the TIL issuer list `registration.issuer[0].did` and the verifier's TIR registration script: US-3.3, because the
-  lists hold content no foundation owns;
+- the TIL issuer list `registration.issuer[0].did`: US-5.5, the local TIL entries, which also name other participants;
+- the verifier's TIR registration script (`initContainers[*].args[*]`): US-3.3 leaves it out, because it is a
+  k3s-local registration at the in-cluster TIR with no chart key ([ADR 0022](../adr/0022-config-tool-data-space-parameters.md#1-only-the-tir-address-renders));
 - `dataSpaceConfig` and APISIX: none, chart 10.16.0 has no DID key there;
 - `keycloak.signingKey.did`: US-5.5, the keystore block; emitted alone it breaks the realm key provider;
 - `identityhub.bootstrap.did` and `fdsc-edc.*.config.oid4vp.holder.kid`: US-8.11, because the chart's
@@ -294,7 +297,7 @@ already refuses a key that is not in `values.yaml`, so this is the same gate CI 
 
 | Rule | Why |
 |---|---|
-| `access.verification` on ⇒ `dataspace.tirAddress` set | The verifier cannot check issuers without it |
+| `access.verification` on ⇒ `dataspace.tirAddress` set (shipped: `tir-address-for-verification`, an error) | The verifier cannot check issuers without it |
 | Public hostnames must differ per component, and resolve inside the cluster | [Hairpin DNS](../deployment-integration/roles/PREREQUISITES.md#public-names-have-to-resolve-inside-the-cluster) |
 | Only one release per cluster may own `postgres-operator`, `mongo-operator` or `cert-manager` | Cluster-wide resources belong to one release |
 | `identity.issuer`: the keystore path must be under `/opt/keycloak/data/<realm>/` | KC ≥ 26.6.4 reads realm keystores only from there |

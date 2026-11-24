@@ -1,0 +1,5 @@
+{
+  "supported_models": [],
+  "supported_protocols": ["http", "https"],
+  "authentication_protocols": ["oid4vp"]
+}

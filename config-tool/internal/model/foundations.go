@@ -1,13 +1,16 @@
 package model
 
 import (
+	"errors"
 	"fmt"
 	"maps"
+	"net/url"
 	"regexp"
 	"slices"
 	"strings"
 	"text/template"
 	"text/template/parse"
+	"unicode"
 
 	"github.com/FIWARE/data-space-connector/config-tool/internal/roundtrip"
 )
@@ -29,6 +32,14 @@ const (
 	// TypeDID is a decentralized identifier, did:<method>:<id>, without characters a chart template would
 	// have to escape.
 	TypeDID FoundationType = "did"
+	// TypeURL is an absolute http or https URL with a host, without userinfo, fragment, whitespace or any
+	// character TypeString refuses.
+	TypeURL FoundationType = "url"
+	// TypeBool is a yes/no answer; only a copy target may write it.
+	TypeBool FoundationType = "bool"
+	// TypeCredentialTypes is a list of {type, description?} mappings with unique types; only a copy target
+	// may write it.
+	TypeCredentialTypes FoundationType = "credentialTypes"
 )
 
 // FoundationGroup is the Stage 3 panel a foundation is asked in.
@@ -37,6 +48,7 @@ type FoundationGroup string
 // Foundation groups; an empty group in the bundle means GroupNetwork.
 const (
 	GroupOrganization FoundationGroup = "organization"
+	GroupDataspace    FoundationGroup = "dataspace"
 	GroupNetwork      FoundationGroup = "network"
 )
 
@@ -58,17 +70,33 @@ const (
 // maxHostnameLength is the DNS limit on a full host name.
 const maxHostnameLength = 253
 
+const (
+	// maxURLLength caps a url answer at the length browsers and proxies reliably accept.
+	maxURLLength = 2048
+	// maxCredentialTypes caps a credentialTypes answer; a data space announces a handful.
+	maxCredentialTypes = 64
+	// CredentialTypeKey is the required key of one credentialTypes element.
+	CredentialTypeKey = "type"
+	// CredentialDescriptionKey is the optional key of one credentialTypes element.
+	CredentialDescriptionKey = "description"
+)
+
+// urlSchemes are the schemes a url answer may use.
+var urlSchemes = []string{"http", "https"}
+
 var (
-	knownTypes = []FoundationType{TypeString, TypeHostname, TypeDomain, TypeChoice, TypeDID}
+	knownTypes = []FoundationType{TypeString, TypeHostname, TypeDomain, TypeChoice, TypeDID, TypeURL, TypeBool, TypeCredentialTypes}
 	knownFns   = []Fn{FnTpl, FnJoin, FnCopy, FnConst}
 	// knownFoundationGroups are the Stage 3 panels, in screen order.
-	knownFoundationGroups = []FoundationGroup{GroupOrganization, GroupNetwork}
+	knownFoundationGroups = []FoundationGroup{GroupOrganization, GroupDataspace, GroupNetwork}
 	// idSegment keeps every segment of an answer id usable as a template field name.
 	idSegment = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 	plainLine = regexp.MustCompile(`^[^\s\x00-\x1f\x7f"\\<>]([^\x00-\x1f\x7f"\\<>]*[^\s\x00-\x1f\x7f"\\<>])?$`)
 	hostname  = regexp.MustCompile(`^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$`)
 	// did follows DID Core's ABNF: method-specific-id = *( *idchar ":" ) 1*idchar.
 	did = regexp.MustCompile(`^did:[a-z0-9]+:(?:` + didIDChar + `*:)*` + didIDChar + `+$`)
+	// credentialType is the name of a verifiable credential type, such as UserCredential.
+	credentialType = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9._-]*$`)
 )
 
 // didIDChar is DID Core's idchar: ALPHA / DIGIT / "." / "-" / "_" / pct-encoded.
@@ -216,6 +244,15 @@ func (b Bundle) FoundationOrder() []string {
 // Check returns why v is not a valid answer of pattern type t, without echoing v; nil when it is valid.
 // A choice has no pattern and always fails here: CompiledFoundation.Check checks it against its options.
 func (t FoundationType) Check(v any) error {
+	switch t {
+	case TypeBool:
+		if _, ok := v.(bool); !ok {
+			return fmt.Errorf("must be true or false")
+		}
+		return nil
+	case TypeCredentialTypes:
+		return checkCredentialTypes(v)
+	}
 	s, ok := v.(string)
 	if !ok {
 		return fmt.Errorf("must be a string")
@@ -236,10 +273,69 @@ func (t FoundationType) Check(v any) error {
 		if !did.MatchString(s) {
 			return fmt.Errorf("must be a DID: did:<method>:<identifier>, the method of lowercase letters and digits, the identifier of letters, digits, '.', '_', '-', %%XX escapes and ':', not ending in ':'")
 		}
+	case TypeURL:
+		return checkURL(s)
 	case TypeChoice:
 		return fmt.Errorf("a %s is checked against its foundation's options", t)
 	default:
 		return fmt.Errorf("type %q is unknown", t)
+	}
+	return nil
+}
+
+// IsString reports whether answers of t are strings, which a template may interpolate.
+func (t FoundationType) IsString() bool {
+	return t != TypeBool && t != TypeCredentialTypes
+}
+
+func checkURL(s string) error {
+	const want = "must be an absolute http or https URL with a host, without user info, fragment, spaces, control characters, '\"', '\\', '<' or '>'"
+	if len(s) > maxURLLength {
+		return fmt.Errorf("must be a URL of at most %d bytes", maxURLLength)
+	}
+	if !plainLine.MatchString(s) || strings.ContainsFunc(s, unicode.IsSpace) || strings.Contains(s, "#") {
+		return errors.New(want)
+	}
+	u, err := url.Parse(s)
+	if err != nil || !slices.Contains(urlSchemes, u.Scheme) || u.Hostname() == "" || u.User != nil {
+		return errors.New(want)
+	}
+	return nil
+}
+
+// checkCredentialTypes accepts what yaml.v3 and encoding/json decode a list of mappings to: []any of map[string]any.
+func checkCredentialTypes(v any) error {
+	list, ok := v.([]any)
+	if !ok || len(list) == 0 {
+		return fmt.Errorf("must be a non-empty list of credential types")
+	}
+	if len(list) > maxCredentialTypes {
+		return fmt.Errorf("must list at most %d credential types", maxCredentialTypes)
+	}
+	seen := map[string]bool{}
+	for i, e := range list {
+		m, ok := e.(map[string]any)
+		if !ok {
+			return fmt.Errorf("[%d] must be a mapping with %s and an optional %s", i, CredentialTypeKey, CredentialDescriptionKey)
+		}
+		for k := range m {
+			if k != CredentialTypeKey && k != CredentialDescriptionKey {
+				return fmt.Errorf("[%d] has a key other than %s and %s", i, CredentialTypeKey, CredentialDescriptionKey)
+			}
+		}
+		typ, ok := m[CredentialTypeKey].(string)
+		if !ok || !credentialType.MatchString(typ) {
+			return fmt.Errorf("[%d].%s must start with a letter, followed by letters, digits, '.', '_' and '-'", i, CredentialTypeKey)
+		}
+		if seen[typ] {
+			return fmt.Errorf("[%d].%s repeats an earlier type", i, CredentialTypeKey)
+		}
+		seen[typ] = true
+		if d, ok := m[CredentialDescriptionKey]; ok {
+			if err := TypeString.Check(d); err != nil {
+				return fmt.Errorf("[%d].%s %w", i, CredentialDescriptionKey, err)
+			}
+		}
 	}
 	return nil
 }
@@ -298,6 +394,10 @@ func compileFoundation(f Foundation, topLevelKeys []string) (CompiledFoundation,
 	}
 	if err := checkOptions(f); err != nil {
 		return CompiledFoundation{}, err
+	}
+	// Default, DefaultWhen and Prefix are string templates and comparisons; they cannot make or check a bool or a list.
+	if !f.Type.IsString() && (f.Default != "" || f.DefaultWhen != nil || f.Prefix != "") {
+		return CompiledFoundation{}, fmt.Errorf("a %s takes no default, defaultWhen or prefix", f.Type)
 	}
 	c := CompiledFoundation{ID: f.ID, Stage: f.Stage, Type: f.Type, Group: group, Options: f.Options}
 	if f.Default != "" {
@@ -520,8 +620,9 @@ func checkIDNesting(fs []CompiledFoundation) error {
 	return nil
 }
 
-// checkRefs refuses a reference to an undeclared id and a defaultWhen comparing a choice with a value
-// it does not offer; topoOrder refuses a foundation that depends on its own answer.
+// checkRefs refuses a reference to an undeclared id, a bool or list referenced other than by copy, and a
+// defaultWhen comparing a choice with a value it does not offer; topoOrder refuses a foundation that depends
+// on its own answer.
 func checkRefs(fs []CompiledFoundation) error {
 	find := func(id string) (CompiledFoundation, bool) {
 		i := slices.IndexFunc(fs, func(f CompiledFoundation) bool { return f.ID == id })
@@ -530,31 +631,40 @@ func checkRefs(fs []CompiledFoundation) error {
 		}
 		return fs[i], true
 	}
-	declared := func(id string) bool { _, ok := find(id); return ok }
+	// check refuses ref r from where unless it names a declared answer, a string one unless anyType.
+	check := func(i int, where, r string, anyType bool) error {
+		o, ok := find(r)
+		if !ok {
+			return fmt.Errorf("foundations[%d] (%s): %s references unknown answer %q", i, fs[i].ID, where, r)
+		}
+		if !anyType && !o.Type.IsString() {
+			return fmt.Errorf("foundations[%d] (%s): %s references %s, a %s, which only a %s target may take", i, fs[i].ID, where, r, o.Type, FnCopy)
+		}
+		return nil
+	}
 	for i, f := range fs {
 		for _, r := range f.defaultRefs {
-			if !declared(r) {
-				return fmt.Errorf("foundations[%d] (%s): default references unknown answer %q", i, f.ID, r)
+			if err := check(i, "default", r, false); err != nil {
+				return err
 			}
 		}
 		for _, r := range f.prefixRefs {
-			if !declared(r) {
-				return fmt.Errorf("foundations[%d] (%s): prefix references unknown answer %q", i, f.ID, r)
+			if err := check(i, "prefix", r, false); err != nil {
+				return err
 			}
 		}
 		if w := f.DefaultWhen; w != nil {
-			o, ok := find(w.ID)
-			if !ok {
-				return fmt.Errorf("foundations[%d] (%s): defaultWhen references unknown answer %q", i, f.ID, w.ID)
+			if err := check(i, "defaultWhen", w.ID, false); err != nil {
+				return err
 			}
-			if o.Type == TypeChoice && !slices.Contains(o.optionValues(), w.Equals) {
+			if o, _ := find(w.ID); o.Type == TypeChoice && !slices.Contains(o.optionValues(), w.Equals) {
 				return fmt.Errorf("foundations[%d] (%s): defaultWhen: %q is not an option of %s", i, f.ID, w.Equals, w.ID)
 			}
 		}
 		for j, t := range f.Targets {
 			for _, r := range t.Refs {
-				if !declared(r) {
-					return fmt.Errorf("foundations[%d] (%s): targets[%d] references unknown answer %q", i, f.ID, j, r)
+				if err := check(i, fmt.Sprintf("targets[%d]", j), r, t.Fn == FnCopy); err != nil {
+					return err
 				}
 			}
 		}

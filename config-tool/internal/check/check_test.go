@@ -7,6 +7,7 @@ import (
 	"testing"
 	"testing/fstest"
 
+	"github.com/FIWARE/data-space-connector/config-tool/internal/load"
 	"github.com/FIWARE/data-space-connector/config-tool/internal/model"
 	"github.com/FIWARE/data-space-connector/config-tool/internal/profile"
 	bundles "github.com/FIWARE/data-space-connector/config-tool/model"
@@ -20,6 +21,13 @@ const (
 	didMethod      = "did.method"
 	didKey         = "did:key"
 	didWeb         = "did:web"
+
+	tirRule          = "tir-address-for-verification"
+	tirAnswer        = "dataspace.tirAddress"
+	tirAddress       = "https://tir.example.org/"
+	verification     = "access.verification"
+	verificationOn   = "testdata/verification-on.dscprofile.yaml"
+	tirAddressValues = "testdata/tir-address.values.yaml"
 )
 
 func shipped(t *testing.T) model.Bundle {
@@ -93,6 +101,103 @@ func TestDIDKeyInProduction(t *testing.T) {
 			}
 			if Blocking(got) {
 				t.Errorf("Blocking(%+v) = true, want a warning not to block", got)
+			}
+		})
+	}
+}
+
+// readProfile decodes a profile fixture.
+func readProfile(t *testing.T, file string) profile.Profile {
+	t.Helper()
+	data, err := os.ReadFile(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, err := profile.Unmarshal(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return p
+}
+
+// loadedAnswers loads file against the shipped bundles and returns the derived answers SeedAnswers adds to answers.
+func loadedAnswers(t *testing.T, file string, answers map[string]any) map[string]any {
+	t.Helper()
+	src, err := os.ReadFile(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	all, err := model.Versions(bundles.FS)
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := load.Load(src, file, all, load.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return load.SeedAnswers(res.Report, answers)
+}
+
+func TestTIRAddressForVerification(t *testing.T) {
+	b := shipped(t)
+	type loading int
+	const (
+		notLoaded loading = iota
+		loadedOnly
+		loadedAndSeeded
+	)
+	tests := []struct {
+		name string
+		// features replaces the fixture's feature states when non-nil.
+		features map[string]profile.FeatureState
+		givenTIR bool
+		load     loading
+		fires    bool
+	}{
+		{name: "verification on, TIR unset", fires: true},
+		{name: "verification on, TIR set", givenTIR: true},
+		{name: "verification off, TIR unset", features: map[string]profile.FeatureState{
+			verification: {Enabled: false, Source: profile.SourceUser}}},
+		{name: "verification absent, TIR unset", features: map[string]profile.FeatureState{}},
+		{name: "loaded TIR, seeded", load: loadedAndSeeded},
+		// Nothing but the seeding carries the loaded address; Evaluate reads nothing from the load result.
+		{name: "loaded TIR, not seeded", load: loadedOnly, fires: true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			p := readProfile(t, verificationOn)
+			if tc.features != nil {
+				p.Features = tc.features
+			}
+			if tc.givenTIR {
+				p.Answers[tirAnswer] = tirAddress
+			}
+			if tc.load != notLoaded {
+				seeded := loadedAnswers(t, tirAddressValues, p.Answers)
+				if tc.load == loadedAndSeeded {
+					p.Answers = seeded
+				}
+			}
+			got, err := Evaluate(b, p)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !tc.fires {
+				if len(got) != 0 {
+					t.Errorf("findings = %+v, want none", got)
+				}
+				return
+			}
+			if len(got) != 1 {
+				t.Fatalf("findings = %+v, want exactly %s", got, tirRule)
+			}
+			f := got[0]
+			if f.Rule != tirRule || f.Severity != model.SeverityError || f.Stage != model.StageFoundations ||
+				f.Field != model.AnswerFieldPrefix+tirAnswer || f.Message == "" || f.Doc == "" {
+				t.Errorf("finding = %+v, want a %s error on answers.%s in stage foundations", f, tirRule, tirAnswer)
+			}
+			if !Blocking(got) {
+				t.Errorf("Blocking(%+v) = false, want the error to block", got)
 			}
 		})
 	}

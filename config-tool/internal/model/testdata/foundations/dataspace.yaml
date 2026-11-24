@@ -1,0 +1,31 @@
+# The data space's parameters: a url, a bool and a credentialTypes answer, each written only by copy.
+chart: data-space-connector
+version: 1.0.0
+revision: 1
+topLevelKeys: [keycloak, scorpio]
+foundations:
+  - id: dataspace.tirAddress
+    stage: foundations
+    group: dataspace
+    type: url
+    label: Trust Anchor address
+    targets:
+      - {path: keycloak.tirAddress, fn: copy, args: ["{{ .dataspace.tirAddress }}"]}
+  - id: dataspace.autoRegistration
+    stage: foundations
+    group: dataspace
+    type: bool
+    label: Register automatically
+    targets:
+      - {path: keycloak.register, fn: copy, args: ["{{ .dataspace.autoRegistration }}"]}
+  - id: dataspace.credentialTypes
+    stage: foundations
+    group: dataspace
+    type: credentialTypes
+    label: Credential types
+  - id: host.tir
+    stage: foundations
+    type: hostname
+    label: TIR host
+    targets:
+      - {path: scorpio.tir, fn: tpl, args: ["{{ .host.tir }} at {{ .dataspace.tirAddress }}"]}

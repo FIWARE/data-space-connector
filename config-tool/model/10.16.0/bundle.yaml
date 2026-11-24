@@ -4,8 +4,9 @@
 #
 # The foundations list (ADR 0020) holds the cross-cutting answers of Stage 3 and the chart keys they reach:
 #   id       dotted answer id (domain.base): the key in the profile's answers, open field answers.<id>
-#   type     string | hostname | domain | did, each checked with one pattern; choice, one of its options
-#   group    organization | network (default): the Stage 3 panel that asks it
+#   type     string | hostname | domain | did | url, each checked with one pattern; choice, one of its options;
+#            bool, true or false; credentialTypes, a list of {type, description?}. Only copy writes a bool or a list
+#   group    organization | dataspace | network (default): the Stage 3 panel that asks it
 #   options  a choice's {value, label, note}; note is optional text shown at the point of choice
 #   default  a template over other answers; the answer is derived only while all of them are answered.
 #            Only a choice may have a constant default, which must be one of its options
@@ -25,10 +26,11 @@
 #   severity  warning (shown, never blocks) | error (blocks generate)
 #   stage     the stage that shows field; it labels and links the finding
 #   field     target.environment or answers.<foundation id>, the open field the finding points at
-#   when      [{field, equals}]: all must hold over the resolved answers, so a derived default counts
+#   when      [{field, equals | unset: true}]: all must hold over the resolved answers, so a derived default counts;
+#             field may also be features.<feature id> (equals on|off, absent is off); unset takes answers.<id> only
 chart: data-space-connector
 version: 10.16.0
-revision: 7
+revision: 9
 topLevelKeys: [
   nameOverride, fullnameOverride, imagePullSecrets, issuance, decentralizedIam, scorpio, elsi,
   keycloak, tm-forum-api, statusListServer, rainbow, contract-management, did, registration,
@@ -45,6 +47,9 @@ recognize:
   - {path: 'marketplace.enabled', answer: market.local.enabled, stage: features, kind: toggle}
   - {path: 'rainbow.enabled', answer: dsp.rainbow.enabled, stage: features, kind: toggle}
   - {path: 'dataSpaceConfig.enabled', answer: dsp.config.enabled, stage: features, kind: toggle}
+  # A loaded TIR address answers its foundation, so the leaf re-renders instead of being pinned (ADR 0022).
+  - {path: 'decentralizedIam.vcAuthentication.vcverifier.deployment.verifier.tirAddress', answer: dataspace.tirAddress,
+     stage: foundations, kind: value}
 features:
   - {id: identity.issuer, title: Credential issuance, group: identity, keys: [keycloak, vcCredentials],
      summary: "Issue Verifiable Credentials to your users (Keycloak, OID4VCI)",
@@ -286,6 +291,17 @@ rules:
       A did:key in production: other participants cannot resolve it over the web, and its key cannot be rotated
       without a new identity. Production data spaces usually expect did:web.
     doc: doc/deployment-integration/roles/provider/README.md#did-and-key-management
+  - id: tir-address-for-verification
+    severity: error
+    stage: foundations
+    field: answers.dataspace.tirAddress
+    when:
+      - {field: features.access.verification, equals: "on"}
+      - {field: answers.dataspace.tirAddress, unset: true}
+    message: >-
+      The verifier cannot check issuers without the data space's Trust Anchor: credential verification is on, but
+      the TIR address is not set. Enter it, import it from the data space's descriptor, or turn verification off.
+    doc: doc/deployment-integration/roles/provider/README.md#vcverifier
 foundations:
   - id: org.displayName
     stage: foundations
@@ -651,3 +667,31 @@ foundations:
       - {path: 'decentralizedIam.odrlAuthorization.apisix.ingress.hosts[12].host', fn: copy, args: ["{{ .host.consentDataService }}"]}
       - {path: 'decentralizedIam.odrlAuthorization.apisix.ingress.hosts[12].paths[0]', fn: const, args: [/]}
       - {path: 'decentralizedIam.odrlAuthorization.apisix.ingress.tls[0].hosts[12]', fn: copy, args: ["{{ .host.consentDataService }}"]}
+  - id: dataspace.tirAddress
+    stage: foundations
+    group: dataspace
+    type: url
+    label: Trust Anchor TIR address
+    help: >-
+      The Trusted Issuers Registry of the data space's Trust Anchor. The verifier asks it which issuers the data
+      space trusts.
+    doc: doc/deployment-integration/roles/provider/README.md#vcverifier
+    targets:
+      - {path: 'decentralizedIam.vcAuthentication.vcverifier.deployment.verifier.tirAddress', fn: copy, args: ["{{ .dataspace.tirAddress }}"]}
+  # The next two are answers only (ADR 0022). Chart 10.16.0 has no key for registering at the Trust Anchor, and the
+  # credential types belong to the verifier's service registration list, which US-5.6 pre-seeds from them. US-5.5
+  # reads both for the local TIL.
+  - id: dataspace.credentialTypes
+    stage: foundations
+    group: dataspace
+    type: credentialTypes
+    label: Credential types
+    help: The Verifiable Credential types the data space accepts, such as UserCredential.
+    doc: doc/deployment-integration/roles/provider/README.md#authentication-verifiable-credential-verification
+  - id: dataspace.autoRegistration
+    stage: foundations
+    group: dataspace
+    type: bool
+    label: Register at the Trust Anchor automatically
+    help: Whether the data space registers new participants at its Trust Anchor, or the operator does it by hand.
+    doc: doc/deployment-integration/roles/operator/README.md#participant-onboarding

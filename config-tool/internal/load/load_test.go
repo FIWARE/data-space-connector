@@ -11,6 +11,7 @@ import (
 
 	"github.com/FIWARE/data-space-connector/config-tool/internal/model"
 	"github.com/FIWARE/data-space-connector/config-tool/internal/roundtrip"
+	"github.com/FIWARE/data-space-connector/config-tool/model"
 )
 
 const (
@@ -527,5 +528,51 @@ func assertInvariants(t *testing.T, src []byte, res *Result) {
 	out, err := res.Doc.Write()
 	if err != nil || !bytes.Equal(out, src) {
 		t.Errorf("Doc.Write changed the bytes (err %v)", err)
+	}
+}
+
+// TestLoadTIRAddress back-derives the data space's TIR address from the verifier key, checked against its url type.
+func TestLoadTIRAddress(t *testing.T) {
+	const (
+		answerID = "dataspace.tirAddress"
+		leaf     = "decentralizedIam.vcAuthentication.vcverifier.deployment.verifier.tirAddress"
+		prefix   = "decentralizedIam:\n  vcAuthentication:\n    vcverifier:\n      deployment:\n        verifier:\n"
+	)
+	embedded, err := model.Versions(bundles.FS)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tests := []struct {
+		name   string
+		src    string
+		leaf   *leafWant
+		answer any
+	}{
+		{name: "valid address", src: prefix + "          tirAddress: https://tir.127.0.0.1.nip.io/\n",
+			leaf: &leafWant{class: "recognized"}, answer: "https://tir.127.0.0.1.nip.io/"},
+		{name: "invalid address", src: prefix + "          tirAddress: not a url\n",
+			leaf: &leafWant{class: "unknown", note: "does not match the type of " + answerID}},
+		{name: "no address", src: prefix + "          port: 3000\n"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			res, err := Load([]byte(tt.src), "values.yaml", embedded, Options{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if tt.leaf != nil {
+				got := byPath(res.Report)[leaf]
+				if got.class != tt.leaf.class || got.entry.Note != tt.leaf.note {
+					t.Errorf("%s: class %s note %q, want %s note %q", leaf, got.class, got.entry.Note, tt.leaf.class, tt.leaf.note)
+				}
+			}
+			i := slices.IndexFunc(res.Report.Answers, func(a Answer) bool { return a.ID == answerID })
+			switch {
+			case tt.answer == nil && i >= 0:
+				t.Errorf("answer %s = %v, want none", answerID, res.Report.Answers[i].Value)
+			case tt.answer != nil && (i < 0 || res.Report.Answers[i].Value != tt.answer || res.Report.Answers[i].Stage != "foundations"):
+				t.Errorf("answers = %+v, want %s = %v", res.Report.Answers, answerID, tt.answer)
+			}
+		})
 	}
 }

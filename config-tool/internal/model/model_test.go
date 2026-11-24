@@ -158,8 +158,10 @@ func TestEmbeddedBundles(t *testing.T) {
 const (
 	repoRoot    = "../../.."
 	chartValues = repoRoot + "/charts/data-space-connector/values.yaml"
-	fixtureDir  = "testdata/bundles"
-	fixtureFile = "1.0.0/bundle.yaml"
+	// providerValues sets subchart keys whose defaults the umbrella chart does not restate.
+	providerValues = repoRoot + "/k3s/provider.yaml"
+	fixtureDir     = "testdata/bundles"
+	fixtureFile    = "1.0.0/bundle.yaml"
 )
 
 func rulesBundle(rules string) fstest.MapFS {
@@ -234,15 +236,19 @@ func TestRules(t *testing.T) {
 }
 
 // TestEmbeddedRulesResolve keeps every shipped rule pointing at a key the chart really has, so a
-// renamed chart key breaks the build.
+// renamed chart key breaks the build. A subchart key the umbrella does not restate resolves in provider.yaml.
 func TestEmbeddedRulesResolve(t *testing.T) {
-	src, err := os.ReadFile(chartValues)
-	if err != nil {
-		t.Fatal(err)
-	}
-	doc, err := roundtrip.Parse(src)
-	if err != nil {
-		t.Fatal(err)
+	var docs []*roundtrip.Document
+	for _, file := range []string{chartValues, providerValues} {
+		src, err := os.ReadFile(file)
+		if err != nil {
+			t.Fatal(err)
+		}
+		doc, err := roundtrip.Parse(src)
+		if err != nil {
+			t.Fatal(err)
+		}
+		docs = append(docs, doc)
 	}
 	got, err := Versions(bundles.FS)
 	if err != nil {
@@ -253,7 +259,10 @@ func TestEmbeddedRulesResolve(t *testing.T) {
 			continue
 		}
 		for _, r := range b.Rules() {
-			n, err := doc.Lookup(r.Path)
+			n, err := docs[0].Lookup(r.Path)
+			if err != nil {
+				n, err = docs[1].Lookup(r.Path)
+			}
 			if err != nil {
 				t.Errorf("%s %s: %v", b.Version, r.Path, err)
 				continue

@@ -51,8 +51,13 @@ func Blocking(findings []Finding) bool {
 	return slices.ContainsFunc(findings, func(f Finding) bool { return f.Severity == model.SeverityError })
 }
 
-// holds reports whether w's field resolves to w.Equals; an unanswered or non-string field never does.
+// holds reports whether w's field resolves to w.Equals, or for Unset whether the answer is absent; an
+// unanswered or non-string field never equals anything.
 func holds(w model.RuleWhen, p profile.Profile, answers map[string]any) bool {
+	if w.Unset {
+		_, ok := answers[strings.TrimPrefix(w.Field, model.AnswerFieldPrefix)]
+		return !ok
+	}
 	v, ok := value(w.Field, p, answers)
 	return ok && v == w.Equals
 }
@@ -61,6 +66,12 @@ func holds(w model.RuleWhen, p profile.Profile, answers map[string]any) bool {
 func value(field string, p profile.Profile, answers map[string]any) (string, bool) {
 	if field == model.FieldTargetEnvironment {
 		return string(p.Target.Environment), p.Target.Environment != ""
+	}
+	if id, ok := strings.CutPrefix(field, model.FeatureFieldPrefix); ok {
+		if p.Features[id].Enabled {
+			return model.FeatureOn, true
+		}
+		return model.FeatureOff, true
 	}
 	id, _ := strings.CutPrefix(field, model.AnswerFieldPrefix)
 	s, ok := answers[id].(string)

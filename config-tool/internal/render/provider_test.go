@@ -34,8 +34,11 @@ const (
 	domainBase      = "domain.base"
 	didMethodID     = "did.method"
 	didValueID      = "did.value"
-	didWebMethod    = "did:web"
-	didKeyMethod    = "did:key"
+	tirAddressID    = "dataspace.tirAddress"
+	// referenceTIR is the data space's TIR address in provider.yaml; it contains the domain without deriving from it.
+	referenceTIR = "https://tir." + referenceDomain + "/"
+	didWebMethod = "did:web"
+	didKeyMethod = "did:key"
 	// referenceDID is the participant DID of provider.yaml and dsp-provider.yaml.
 	referenceDID = "did:web:mp-operations.org"
 	// dspProviderValues sets the fdsc-edc keys provider.yaml leaves out, because fdsc-edc is off there.
@@ -60,7 +63,7 @@ const (
 )
 
 // referenceValues is what each answer searched in provider.yaml is there.
-var referenceValues = map[string]string{domainBase: referenceDomain, didValueID: referenceDID}
+var referenceValues = map[string]string{domainBase: referenceDomain, didValueID: referenceDID, tirAddressID: referenceTIR}
 
 // exclusion is a provider.yaml leaf carrying one of answers that another story owns, so no foundation targets it.
 type exclusion struct {
@@ -76,10 +79,8 @@ var (
 )
 
 var providerExclusions = []exclusion{
-	{regexp.MustCompile(`^decentralizedIam\.vcAuthentication\.vcverifier\.deployment\.verifier\.tirAddress$`), domainOnly,
-		"US-3.3", "the data space's TIR, not one of the participant's hosts"},
 	{regexp.MustCompile(`^decentralizedIam\.vcAuthentication\.vcverifier\.registration\.services\[\d+\]\.oidcScopes\..+\.credentials\[\d+\]\.trustedParticipantsLists\[\d+\]$`), domainOnly,
-		"US-3.3", "the data space's TIR, not one of the participant's hosts"},
+		"US-5.6", "the service registration list, which US-5.6 pre-seeds from the data space's answers"},
 	{regexp.MustCompile(`^decentralizedIam\.odrlAuthorization\.apisix\.routes\[\d+\]\.host$`), domainOnly,
 		"US-5.6", "a route is a protected-service row; the list carries content no foundation owns"},
 	{regexp.MustCompile(`^keycloak\.realm\.clients\[\d+\]\.`), []string{domainBase, didValueID},
@@ -89,9 +90,9 @@ var providerExclusions = []exclusion{
 	{regexp.MustCompile(`^decentralizedIam\.odrlAuthorization\.tpp\.transfers\.host$`), domainOnly,
 		"US-5.3", "the DSP feature page; TPP's in-cluster back-channel to Rainbow, which local k3s reaches through nip.io"},
 	{regexp.MustCompile(`^decentralizedIam\.vcAuthentication\.vcverifier\.deployment\.initContainers\[\d+\]\.args\[\d+\]$`), didOnly,
-		"US-3.3", "a k3s-local TIR registration script in a list with content no foundation owns"},
+		"US-3.3", "a k3s-local registration at the in-cluster TIR; no chart key, see ADR 0022"},
 	{regexp.MustCompile(`^registration\.issuer\[\d+\]\.did$`), didOnly,
-		"US-3.3", "the TIL issuer list also names other participants"},
+		"US-5.5", "local TIL entries, which also name other participants"},
 	{regexp.MustCompile(`^decentralizedIam\.odrlAuthorization\.odrl-pap\.additionalEnvVars\[\d+\]\.value$`), didOnly,
 		"US-5.6", "an env list with other content"},
 	{regexp.MustCompile(`^marketplace\.bizEcosystemLogicProxy\.additionalEnvVars\[\d+\]\.value$`), didOnly,
@@ -160,10 +161,12 @@ func providerDoc(t *testing.T) *roundtrip.Document {
 }
 
 // answerLeaves returns the provider.yaml leaves carrying answer's reference value, minus answer's
-// exclusions, and fails when one of those exclusion rows matches no leaf.
+// exclusions and the targets of another searched answer whose reference value contains it, and fails
+// when one of those exclusion rows matches no leaf.
 func answerLeaves(t *testing.T, doc *roundtrip.Document, answer string) []string {
 	t.Helper()
 	needle := referenceValues[answer]
+	others := otherTargets(t, answer, needle)
 	hits := make([]int, len(providerExclusions))
 	var paths []string
 	for _, l := range roundtrip.Classify(doc, roundtrip.DefaultClassifier) {
@@ -171,6 +174,9 @@ func answerLeaves(t *testing.T, doc *roundtrip.Document, answer string) []string
 			continue
 		}
 		p := l.Path.String()
+		if others[p] {
+			continue
+		}
 		i := slices.IndexFunc(providerExclusions, func(e exclusion) bool {
 			return slices.Contains(e.answers, answer) && e.pattern.MatchString(p)
 		})
@@ -189,6 +195,26 @@ func answerLeaves(t *testing.T, doc *roundtrip.Document, answer string) []string
 	return paths
 }
 
+// otherTargets returns the target paths of the searched answers other than answer whose reference value contains needle.
+func otherTargets(t *testing.T, answer, needle string) map[string]bool {
+	t.Helper()
+	b := providerBundle(t)
+	paths := map[string]bool{}
+	for id, ref := range referenceValues {
+		if id == answer || !strings.Contains(ref, needle) {
+			continue
+		}
+		f, ok := b.Foundation(id)
+		if !ok {
+			t.Fatalf("no foundation %s", id)
+		}
+		for _, tg := range f.Targets {
+			paths[tg.Path.String()] = true
+		}
+	}
+	return paths
+}
+
 func renderProvider(t *testing.T, b model.Bundle, answers map[string]any) Tree {
 	t.Helper()
 	tree, err := Render(b, profile.Profile{Answers: answers}, Options{})
@@ -198,16 +224,16 @@ func renderProvider(t *testing.T, b model.Bundle, answers map[string]any) Tree {
 	return tree
 }
 
-// carries reports whether a leaf with provenance p carries answer: the DID targets carry did.value, every
-// other answer-derived target but the display name's carries the domain.
+// carries reports whether a leaf with provenance p carries answer: the DID and TIR targets carry their own
+// answer, every other answer-derived target but the display name's carries the domain.
 func carries(answer string, p Provenance) bool {
 	if p.Fn == string(model.FnConst) {
 		return false
 	}
-	if answer == didValueID {
-		return p.Foundation == didValueID
+	if answer != domainBase {
+		return p.Foundation == answer
 	}
-	return p.Foundation != orgDisplayName && p.Foundation != didValueID
+	return !slices.Contains([]string{orgDisplayName, didValueID, tirAddressID}, p.Foundation)
 }
 
 // carrierPaths returns the paths of tree's leaves carrying answer, minus the chart-only targets.
@@ -241,7 +267,7 @@ func checkKeySet(t *testing.T, answer string) {
 	t.Helper()
 	want := answerLeaves(t, providerDoc(t), answer)
 	tree := renderProvider(t, providerBundle(t), map[string]any{
-		orgDisplayName: orgName, domainBase: referenceDomain, didValueID: referenceDID,
+		orgDisplayName: orgName, domainBase: referenceDomain, didValueID: referenceDID, tirAddressID: referenceTIR,
 	})
 	missing, extra := diffSets(want, carrierPaths(tree, answer))
 	for _, p := range missing {
@@ -258,6 +284,10 @@ func TestProviderKeySet(t *testing.T) {
 
 func TestProviderDIDKeySet(t *testing.T) {
 	checkKeySet(t, didValueID)
+}
+
+func TestProviderTIRKeySet(t *testing.T) {
+	checkKeySet(t, tirAddressID)
 }
 
 func TestProviderValues(t *testing.T) {

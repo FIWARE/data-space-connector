@@ -669,7 +669,7 @@ func TestSaveRole(t *testing.T) {
 	operatorTarget := completeTarget()
 	operatorTarget.Chart, operatorTarget.ChartVersion = trustAnchorChart, ""
 	enabled := map[string]profile.FeatureState{"ta.registry": {Enabled: true, Source: profile.SourcePreset}}
-	dscCatalogue := &profile.ModelRef{Chart: dscChart, Version: latestChart, Revision: 7}
+	dscCatalogue := &profile.ModelRef{Chart: dscChart, Version: latestChart, Revision: 9}
 	tests := []struct {
 		name          string
 		profile       profile.Profile
@@ -715,5 +715,65 @@ func TestSaveRecordsRoleInRecentList(t *testing.T) {
 	}
 	if len(entries) != 1 || entries[0].Path != path || entries[0].Role != model.RoleProvider {
 		t.Errorf("entries = %+v, want %s with role %s", entries, path, model.RoleProvider)
+	}
+}
+
+// TestOpenSeedsLoadedAnswers fills a foundation answer the restored source derives, unless the profile gives one.
+func TestOpenSeedsLoadedAnswers(t *testing.T) {
+	const (
+		answerID = "dataspace.tirAddress"
+		loaded   = "https://tir.example.org/"
+		given    = "https://tir.given.org/"
+		values   = "dsc:\n  decentralizedIam:\n    vcAuthentication:\n      vcverifier:\n        deployment:\n" +
+			"          verifier:\n            tirAddress: " + loaded + "\n"
+	)
+	tests := []struct {
+		name    string
+		answers map[string]any
+		want    string
+	}{
+		{"unanswered", nil, loaded},
+		{"given", map[string]any{answerID: given}, given},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			ps := newProfileSession(t)
+			dir := t.TempDir()
+			writeBytes(t, filepath.Join(dir, valuesName), values)
+			report := ps.load(valuesName, values)
+			path := filepath.Join(dir, profileName)
+			ps.mustSave(saveRequest{Path: path, SourceSHA256: report.SHA256,
+				Profile: profile.Profile{Target: completeTarget(), Answers: tc.answers}})
+
+			status, raw, got := ps.open(path)
+			if status != http.StatusOK {
+				t.Fatalf("status = %d: %s", status, raw)
+			}
+			if got.Profile.Answers[answerID] != tc.want {
+				t.Errorf("answers = %v, want %s = %s", got.Profile.Answers, answerID, tc.want)
+			}
+		})
+	}
+}
+
+// TestOpenedProfilePassesTIRRule renders an opened profile whose source sets the TIR address and whose answers do not:
+// the seeded answer keeps tir-address-for-verification from blocking it.
+func TestOpenedProfilePassesTIRRule(t *testing.T) {
+	ps := newProfileSession(t)
+	dir := t.TempDir()
+	writeBytes(t, filepath.Join(dir, valuesName), tirValues)
+	report := ps.load(valuesName, tirValues)
+	path := filepath.Join(dir, profileName)
+	ps.mustSave(saveRequest{Path: path, SourceSHA256: report.SHA256, Profile: verificationProfile(true)})
+
+	status, raw, got := ps.open(path)
+	if status != http.StatusOK {
+		t.Fatalf("status = %d: %s", status, raw)
+	}
+	if !got.Profile.Features["access.verification"].Enabled {
+		t.Fatalf("features = %v, want credential verification on", got.Profile.Features)
+	}
+	if rules := findingRules(ps.mustRender(got.Profile, report.SHA256).Findings); len(rules) != 0 {
+		t.Errorf("findings = %v, want none", rules)
 	}
 }

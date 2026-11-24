@@ -160,10 +160,12 @@ func (s *Server) handleOpenProfile(w http.ResponseWriter, r *http.Request) {
 	s.loaded = res
 	s.resetRender()
 	s.loadMu.Unlock()
-	resp := profileResponse{Path: path, Profile: p}
+	var report *load.Report
 	if res != nil {
-		resp.Report = &res.Report
+		report = &res.Report
+		p.Answers = load.SeedAnswers(res.Report, p.Answers)
 	}
+	resp := profileResponse{Path: path, Profile: p, Report: report}
 	resp.Notes = append(notes, s.addRecent(path, p)...)
 	writeJSON(w, resp)
 }

@@ -1,4 +1,5 @@
 /** The answer set: what the user decided, mirroring the Go `profile` package. */
+import type { CredentialType } from '../api/foundations'
 
 /** Where the generated values go. */
 export const TargetType = { File: 'file', Cluster: 'cluster' } as const
@@ -42,8 +43,11 @@ export interface Answers {
   role?: string
   features: Record<string, FeatureState>
   /** Foundation answers by dotted id (`domain.base`); an absent id is unanswered and renders nothing. */
-  values: Record<string, string>
+  values: Record<string, AnswerValue>
 }
+
+/** A foundation answer's value: a string, a `bool` answer or a `credentialTypes` list. */
+export type AnswerValue = string | boolean | CredentialType[]
 
 /** A fresh answer set, as "New configuration" starts it. */
 export function emptyAnswers(): Answers {
