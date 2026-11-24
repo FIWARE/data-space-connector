@@ -41,15 +41,20 @@ const DID_ID_CHAR = '(?:[A-Za-z0-9._-]|%[0-9A-Fa-f]{2})'
 const DID = new RegExp(`^did:[a-z0-9]+:(?:${DID_ID_CHAR}*:)*${DID_ID_CHAR}+$`)
 // Go's url.Parse reads "https:host" as opaque, without a host, so the authority's "//" is required here too.
 const URL_PREFIX = /^https?:\/\//i
+// Go's url.Parse takes only these in a host and port; WHATWG URL also takes '{', '}', '|', '^' and '`'.
+const URL_HOST = /^[A-Za-z0-9\-._~!$&'()*+,;=[\]:%\u{80}-\u{10ffff}]*$/u
+// Go refuses a host's %XX escape of an ASCII byte other than %25, which WHATWG URL decodes.
+const URL_HOST_ASCII_ESCAPE = /%(?!25)[0-7]/
 const CREDENTIAL_TYPE = /^[A-Za-z][A-Za-z0-9._-]*$/
 const CREDENTIAL_TYPE_KEYS = ['type', 'description']
 
 function checkURL(value: string): string | undefined {
-  if (value.length > MAX_URL_LENGTH) return MSG_URL_LENGTH
+  // Go's len counts UTF-8 bytes, not UTF-16 units.
+  if (new TextEncoder().encode(value).length > MAX_URL_LENGTH) return MSG_URL_LENGTH
   if (!PLAIN_LINE.test(value) || /\s|#/u.test(value) || !URL_PREFIX.test(value)) return MSG_URL
   // Go refuses any userinfo, even an empty one, which WHATWG URL parsing would hide.
   const authority = value.replace(URL_PREFIX, '').split(/[/?]/, 1)[0] ?? ''
-  if (authority.includes('@')) return MSG_URL
+  if (authority.includes('@') || !URL_HOST.test(authority) || URL_HOST_ASCII_ESCAPE.test(authority)) return MSG_URL
   try {
     return new URL(value).hostname === '' ? MSG_URL : undefined
   } catch {
