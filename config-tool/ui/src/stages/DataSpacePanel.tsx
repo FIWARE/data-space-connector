@@ -28,6 +28,7 @@ import {
   PREVIEW_LABEL,
   previewValue,
   PROBLEMS_HEADING,
+  rowError,
   rowLabels,
   TYPE_COLUMN,
   UNUSED_LABEL,
@@ -149,7 +150,9 @@ function CheckTir() {
   const check = tirCheckOf(state)
   const invalid = answerErrors(state.answers.values, state.foundations)[TIR_ADDRESS_ID] !== undefined
   const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string>()
+  // A refused check belongs to the address it ran for; once the address changes it reads as not checked.
+  const [error, setError] = useState<{ address: string; message: string }>()
+  const shownError = error?.address === check?.address ? error?.message : undefined
 
   async function run(address: string) {
     setBusy(true)
@@ -159,7 +162,7 @@ function CheckTir() {
       const detail = r.status === 'reachable' ? r.httpStatus && `HTTP ${r.httpStatus}` : r.error
       dispatch({ type: 'tirChecked', check: { address, outcome: r.status, detail: detail || undefined } })
     } catch (failure) {
-      setError(message(failure))
+      setError({ address, message: message(failure) })
     } finally {
       setBusy(false)
     }
@@ -170,7 +173,7 @@ function CheckTir() {
       <button type="button" className="sec" disabled={busy || !check || invalid} onClick={() => check && void run(check.address)}>
         {busy ? CHECKING : CHECK_LABEL}
       </button>
-      <span role="status">{error ? <span className="field-error">{error}</span> : check && !invalid && <TirOutcome check={check} />}</span>
+      <span role="status">{shownError ? <span className="field-error">{shownError}</span> : check && !invalid && <TirOutcome check={check} />}</span>
     </>
   )
 }
@@ -182,7 +185,12 @@ function CredentialTypesField({ foundation, findings }: { foundation: Foundation
   const id = fieldElementId(field)
   const given = state.answers.values[foundation.id]
   const rows: CredentialType[] = Array.isArray(given) ? given : []
-  const error = answerErrors(state.answers.values, state.foundations)[foundation.id]
+  const raw = answerErrors(state.answers.values, state.foundations)[foundation.id]
+  const located = raw === undefined ? undefined : rowError(raw)
+  const error = located?.text
+  // Marks the input the error points at; an error without a part covers both inputs of its row.
+  const invalidProps = (i: number, part: 'type' | 'description') =>
+    located?.row === i && (located.part ?? part) === part ? { 'aria-invalid': true, 'aria-describedby': `${id}-error` } : {}
   const own = findings.filter((f) => f.field === field)
   // The row whose type input takes focus once rendered: the one just added.
   const focusRow = useRef<number>(undefined)
@@ -234,10 +242,10 @@ function CredentialTypesField({ foundation, findings }: { foundation: Foundation
                 // Rows have no identity of their own while their type is being typed, so the position is the key.
                 <tr key={i}>
                   <td>
-                    <input id={`${id}-type-${i}`} aria-label={labels.type} value={r.type} onChange={(e) => edit(i, 'type', e.target.value)} />
+                    <input id={`${id}-type-${i}`} aria-label={labels.type} {...invalidProps(i, 'type')} value={r.type} onChange={(e) => edit(i, 'type', e.target.value)} />
                   </td>
                   <td>
-                    <input aria-label={labels.description} value={r.description ?? ''} onChange={(e) => edit(i, 'description', e.target.value)} />
+                    <input aria-label={labels.description} {...invalidProps(i, 'description')} value={r.description ?? ''} onChange={(e) => edit(i, 'description', e.target.value)} />
                   </td>
                   <td>
                     <button type="button" className="link" aria-label={labels.up} disabled={i === 0} onClick={() => move(i, i - 1)}>

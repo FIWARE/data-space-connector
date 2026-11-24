@@ -62,4 +62,25 @@ export const rowLabels = (n: number) => ({
   up: `Move credential type ${n} up`,
   down: `Move credential type ${n} down`,
   remove: `Remove credential type ${n}`,
+  row: `Credential type ${n}`,
 })
+
+// The `[i]` or `[i].type` prefix of a credentialTypes error, as `checkCredentialTypes` (and Go) word it.
+const ROW_ERROR = /^\[(\d+)\](?:\.(type|description))? (.*)$/s
+
+/** A credentialTypes error located on its row: `row` counts from 0 like the check, `part` is unset for the whole row. */
+export interface RowError {
+  row?: number
+  part?: 'type' | 'description'
+  text: string
+}
+
+/** `error` with its 0-based `[i]` prefix replaced by the row's 1-based label; a list-wide error stays as is. */
+export function rowError(error: string): RowError {
+  const m = ROW_ERROR.exec(error)
+  if (!m) return { text: error }
+  const row = Number(m[1])
+  const part = m[2] as RowError['part']
+  const labels = rowLabels(row + 1)
+  return { row, part, text: `${part ? labels[part] : labels.row} ${m[3]}` }
+}

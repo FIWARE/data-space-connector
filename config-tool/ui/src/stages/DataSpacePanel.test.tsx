@@ -133,13 +133,17 @@ describe('DataSpacePanel', () => {
     expect(await within(await panel()).findByText(refusedDataspace(HTTP_BAD_GATEWAY))).toBeInTheDocument()
   })
 
-  it('resets the outcome to not checked once the address changes', async () => {
-    renderPanel(withValues({ [TIR_ADDRESS_ID]: TIR }))
+  it.each<[string, DataspaceFakes, string]>([
+    ['checked', {}, 'reachable'],
+    ['refused', { check: () => HTTP_BAD_GATEWAY }, refusedDataspace(HTTP_BAD_GATEWAY)],
+  ])('resets a %s outcome to not checked once the address changes', async (_name, fakes, before) => {
+    renderPanel(withValues({ [TIR_ADDRESS_ID]: TIR }), fakes)
     await userEvent.click(within(await panel()).getByRole('button', { name: CHECK_LABEL }))
     const status = within(await panel()).getByRole('status')
-    await waitFor(() => expect(status).toHaveTextContent('reachable'))
+    await waitFor(() => expect(status).toHaveTextContent(before))
     await userEvent.type(await tirInput(), 'x')
     expect(status).toHaveTextContent('not checked')
+    expect(status).not.toHaveTextContent(before)
   })
 
   it('lists the outcome in Review as information', async () => {
@@ -224,6 +228,17 @@ describe('DataSpacePanel', () => {
     expect(typeValues()).toEqual(['A', 'B'])
     await userEvent.click(screen.getByRole('button', { name: rowLabels(1).remove }))
     expect(typeValues()).toEqual(['B'])
+  })
+
+  it('names the failing row by its label and marks its input', async () => {
+    renderPanel(withValues({ [CREDENTIAL_TYPES_ID]: [{ type: 'A' }, { type: 'A' }] }))
+    await panel()
+    const error = within(typesGroup()).getByText(`${rowLabels(2).type} repeats an earlier type`)
+    const second = screen.getByRole('textbox', { name: rowLabels(2).type })
+    expect(second).toHaveAttribute('aria-invalid', 'true')
+    expect(second).toHaveAttribute('aria-describedby', error.id)
+    expect(screen.getByRole('textbox', { name: rowLabels(1).type })).not.toHaveAttribute('aria-invalid')
+    expect(screen.getByRole('textbox', { name: rowLabels(2).description })).not.toHaveAttribute('aria-invalid')
   })
 
   it.each([TIR_ADDRESS, CREDENTIAL_TYPES, AUTO_REGISTRATION])('marks $label to ask later and links it back from Review', async (f) => {
