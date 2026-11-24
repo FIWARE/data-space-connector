@@ -1,11 +1,12 @@
-import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { useEffect } from 'react'
 import { describe, expect, it } from 'vitest'
 import { App } from '../App'
 import { Chrome } from '../chrome/Chrome'
 import type { FeatureState, Profile } from '../api/profile'
-import type { PresetResult } from '../api/roles'
+import { toProfile } from '../api/profile'
+import type { ChartSwitch, PresetResult } from '../api/roles'
 import { SIZING_URL } from '../links'
 import { STAGES } from '../stages'
 import { Environment, TargetType, type Target } from '../state/answers'
@@ -13,8 +14,23 @@ import { useStore } from '../state/context'
 import { initialState, type AppState } from '../state/reducer'
 import { StageId } from '../state/stageIds'
 import { StoreProvider } from '../state/store'
-import { DEFAULT_DIR, MODEL, mockApi, REPORT, refusedRole, ROLES, type PresetBody, type RoleFakes, type SaveBody } from '../test/api'
+import { DEFAULT_DIR, MODEL, mockApi, REPORT, refusedRole, roleChange, ROLES, type PresetBody, type RoleFakes, type SaveBody } from '../test/api'
 import { DEPENDS_ON_SELECTION, NOTHING_LOCKED } from './Role'
+import {
+  CARRIED_FIELDS,
+  CARRIED_OVER,
+  changeLabel,
+  changeTitle,
+  chartMoveSentence,
+  DROPPED,
+  droppedFeatureChoices,
+  KEPT,
+  keepLabel,
+  moveLabel,
+  NO_FEATURE_CHANGES,
+  TURNS_OFF,
+  TURNS_ON,
+} from './roleChangeText'
 
 const HTTP_UNPROCESSABLE = 422
 const DSC = 'data-space-connector'
@@ -40,6 +56,20 @@ const ON_ROLE: AppState = {
   profileModel: DSC_MODEL,
 }
 
+type AnswerSplit = Pick<ChartSwitch, 'carriedAnswers' | 'droppedAnswers'>
+const NO_ANSWERS: AnswerSplit = { carriedAnswers: [], droppedAnswers: [] }
+const roleTitleOf = (state: AppState) => ROLES.roles.find((r) => r.id === state.answers.role)?.title ?? ''
+const SECTIONS = [TURNS_ON, TURNS_OFF, KEPT, CARRIED_OVER, DROPPED]
+
+/** ON_ROLE with `role` picked: its recommended features as the preset set them, then `toggles` by hand. */
+function withRole(role: string, toggles: Record<string, boolean> = {}): AppState {
+  const offers = ROLES.roles.find((r) => r.id === role)?.features ?? {}
+  const features: Record<string, FeatureState> = {}
+  for (const [id, offer] of Object.entries(offers)) if (offer === 'recommended') features[id] = { enabled: true, source: 'preset' }
+  for (const [id, enabled] of Object.entries(toggles)) features[id] = { enabled, source: 'user' }
+  return { ...ON_ROLE, answers: { ...ON_ROLE.answers, role, features } }
+}
+
 const probe: { state: AppState } = { state: initialState }
 
 function Probe() {
@@ -50,8 +80,9 @@ function Probe() {
   return null
 }
 
-/** POST /api/preset as the server answers it: recommended features on, a switch for a role of another chart. */
-function serverPreset(loaded: Record<string, boolean> = {}, droppedChoices: string[] = []) {
+/** POST /api/preset as the server answers it: user toggles of the chart kept, recommended features on, a switch for a
+ *  role of another chart, and the role change once the profile has a role. */
+function serverPreset(loaded: Record<string, boolean> = {}, droppedChoices: string[] = [], answers: AnswerSplit = NO_ANSWERS) {
   const bodies: PresetBody[] = []
   const preset = (body: PresetBody): PresetResult => {
     bodies.push(body)
@@ -60,8 +91,12 @@ function serverPreset(loaded: Record<string, boolean> = {}, droppedChoices: stri
     const from = body.profile.target
     const switched = role.chart !== from.chart
     const features: Record<string, FeatureState> = {}
+    for (const [id, state] of Object.entries(body.profile.features ?? {})) {
+      if (!switched && state.source === 'user') features[id] = state
+    }
     for (const [id, offer] of Object.entries(role.features)) {
       const fromFile = body.sourceSha256 ? loaded[id] : undefined
+      if (features[id]) continue
       if (fromFile !== undefined) features[id] = { enabled: fromFile, source: 'loaded' }
       else if (offer === 'recommended') features[id] = { enabled: true, source: 'preset' }
     }
@@ -74,7 +109,8 @@ function serverPreset(loaded: Record<string, boolean> = {}, droppedChoices: stri
       role: role.id,
       features,
     }
-    return { profile, chartSwitch: switched ? { fromChart: from.chart, fromVersion: from.chartVersion, toChart: role.chart, droppedChoices } : null }
+    const chartSwitch = switched ? { fromChart: from.chart, fromVersion: from.chartVersion, toChart: role.chart, droppedChoices, ...answers } : null
+    return { profile, chartSwitch, change: roleChange(body.profile, profile) }
   }
   return { bodies, preset }
 }
@@ -99,6 +135,14 @@ function card(title: string): HTMLElement {
 }
 const findCards = () => screen.findAllByRole('radio')
 const notice = () => screen.getByRole('status')
+const dialog = () => screen.findByRole('dialog')
+/** The rows of the summary section `heading`; empty when the section is omitted. */
+function rows(box: HTMLElement, heading: string): (string | null)[] {
+  const list = within(box).queryByRole('list', { name: heading })
+  return list ? within(list).getAllByRole('listitem').map((li) => li.textContent) : []
+}
+/** Every section of the summary by heading, omitted ones as empty lists. */
+const summary = (box: HTMLElement) => Object.fromEntries(SECTIONS.map((heading) => [heading, rows(box, heading)]))
 const presetCalls = (fetchMock: ReturnType<typeof mockApi>) => fetchMock.mock.calls.filter(([input]) => String(input).endsWith('/api/preset'))
 
 describe('Role', () => {
@@ -130,12 +174,20 @@ describe('Role', () => {
     await userEvent.keyboard('{ArrowLeft}{ArrowLeft}')
     expect(card('Custom')).toHaveFocus()
     await userEvent.keyboard(' ')
+    await userEvent.click(within(await dialog()).getByRole('button', { name: changeLabel('Custom') }))
     await waitFor(() => expect(card('Custom')).toHaveAttribute('aria-checked', 'true'))
     expect(card('Provider')).toHaveAttribute('aria-checked', 'false')
   })
 
   it.each<[string, () => Promise<void>, string]>([
-    ['a mouse pick', () => userEvent.click(card('Provider')), 'Provider'],
+    [
+      'a confirmed mouse pick',
+      async () => {
+        await userEvent.click(card('Provider'))
+        await userEvent.click(within(await dialog()).getByRole('button', { name: changeLabel('Provider') }))
+      },
+      'Provider',
+    ],
     ['leaving the group', () => userEvent.tab(), 'Consumer'],
   ])('puts the tab stop back on the checked card after arrowing away and %s', async (_name, act, checked) => {
     renderRole({ ...ON_ROLE, answers: { ...ON_ROLE.answers, role: 'consumer' } }, { preset: serverPreset().preset })
@@ -155,6 +207,7 @@ describe('Role', () => {
     await userEvent.click(card(title))
     await waitFor(() => expect(card(title)).toHaveAttribute('aria-checked', 'true'))
     expect(bodies).toMatchObject([{ role: id, profile: { target: { chart: DSC, chartVersion: '10.16.0' } } }])
+    expect(screen.queryByRole('dialog')).toBeNull()
     expect(probe.state.answers.role).toBe(id)
     expect(radios().filter((radio) => radio.getAttribute('aria-checked') === 'true')).toHaveLength(1)
     expect(screen.getByRole('radio', { checked: true })).toBe(card(title))
@@ -185,6 +238,7 @@ describe('Role', () => {
     await findCards()
     expect(card('Operator')).toHaveAttribute('aria-checked', 'true')
     await userEvent.click(card('Custom'))
+    await userEvent.click(within(await dialog()).getByRole('button', { name: moveLabel(DSC) }))
     await waitFor(() => expect(notice()).toHaveTextContent('Target chart switched from trust-anchor 1.3.6 to data-space-connector — pick its version on step 1.'))
     expect(probe.state.answers.target).toMatchObject({ chart: DSC, chartVersion: '' })
   })
@@ -274,5 +328,118 @@ describe('Role: profiles', () => {
     expect(card('Operator')).toHaveAttribute('aria-checked', 'true')
     expect(screen.getByLabelText('Selected role')).toHaveTextContent('Operator turns on')
     expect(screen.getByLabelText('Selected role')).toHaveTextContent('Trusted issuers registry')
+  })
+})
+
+describe('Role: changing the role', () => {
+  const empty = { [TURNS_ON]: [], [TURNS_OFF]: [], [KEPT]: [], [CARRIED_OVER]: [], [DROPPED]: [] }
+
+  it.each<[string, AppState, string, Record<string, string[]>]>([
+    ['Consumer -> Consumer + Provider turns on what the new role recommends', withRole('consumer'), 'Consumer + Provider', { [TURNS_ON]: ['Context broker'] }],
+    [
+      'a hand toggle is kept going up',
+      withRole('consumer', { 'obs.tracing': true }),
+      'Consumer + Provider',
+      { [TURNS_ON]: ['Context broker'], [KEPT]: ['Tracing: on, you set it'] },
+    ],
+    [
+      'a hand toggle is kept going down',
+      withRole('consumer-provider', { 'obs.tracing': false }),
+      'Consumer',
+      { [TURNS_OFF]: ['Context broker'], [KEPT]: ['Tracing: off, you set it'] },
+    ],
+  ])('%s', async (_name, state, title, sections) => {
+    renderRole(state, { preset: serverPreset().preset })
+    await findCards()
+    await userEvent.click(card(title))
+    const box = await dialog()
+    expect(box).toHaveAccessibleName(changeTitle(roleTitleOf(state), title))
+    expect(summary(box)).toEqual({ ...empty, ...sections })
+    expect(within(box).getByRole('button', { name: keepLabel(roleTitleOf(state)) })).toHaveFocus()
+    expect(within(box).getByRole('button', { name: changeLabel(title) })).toBeInTheDocument()
+    expect(box).not.toHaveTextContent(NO_FEATURE_CHANGES)
+  })
+
+  it('says that no feature changes when the new role keeps every state', async () => {
+    renderRole(withRole('provider'), { preset: serverPreset().preset })
+    await findCards()
+    await userEvent.click(card('Consumer + Provider'))
+    const box = await dialog()
+    expect(box).toHaveTextContent(NO_FEATURE_CHANGES)
+    expect(summary(box)).toEqual(empty)
+  })
+
+  it('lists what a move to Operator carries over and drops, and labels it with the chart', async () => {
+    const answers = { carriedAnswers: ['domain.base'], droppedAnswers: ['data.scorpio.enabled'] }
+    renderRole(withRole('consumer'), { preset: serverPreset({}, [], answers).preset })
+    await findCards()
+    await userEvent.click(card('Operator'))
+    const box = await dialog()
+    const sw: ChartSwitch = { fromChart: DSC, fromVersion: '10.16.0', toChart: TRUST_ANCHOR, droppedChoices: [], ...answers }
+    expect(box).toHaveTextContent(chartMoveSentence(sw))
+    expect(summary(box)).toEqual({
+      ...empty,
+      [TURNS_ON]: ['Trusted issuers registry'],
+      [TURNS_OFF]: ['Credential issuer'],
+      [CARRIED_OVER]: [...CARRIED_FIELDS, 'domain.base'],
+      [DROPPED]: ['Chart version 10.16.0', droppedFeatureChoices(sw), 'data.scorpio.enabled'],
+    })
+    expect(within(box).getByRole('button', { name: moveLabel(TRUST_ANCHOR) })).toBeInTheDocument()
+    expect(within(box).getByRole('button', { name: keepLabel('Consumer') })).toBeInTheDocument()
+  })
+
+  it('lists a dropped hand toggle that was on only under Turns off, and one that was off only under Dropped', async () => {
+    renderRole(withRole('consumer', { 'obs.tracing': true, 'data.scorpio': false }), { preset: serverPreset({}, ['data.scorpio', 'obs.tracing']).preset })
+    await findCards()
+    await userEvent.click(card('Operator'))
+    const box = await dialog()
+    expect(rows(box, TURNS_OFF)).toEqual(['Credential issuer', 'Tracing'])
+    expect(rows(box, DROPPED)).toContain('Context broker')
+    expect(rows(box, DROPPED)).not.toContain('Tracing')
+    expect(within(box).getAllByText('Tracing')).toHaveLength(1)
+    expect(within(box).getAllByText('Context broker')).toHaveLength(1)
+  })
+
+  it.each<[string, () => Promise<unknown>]>([
+    ['Cancel', () => userEvent.click(screen.getByRole('button', { name: keepLabel('Consumer') }))],
+    ['Escape', () => userEvent.keyboard('{Escape}')],
+  ])('%s leaves the profile untouched', async (_name, dismiss) => {
+    const start = withRole('consumer', { 'obs.tracing': true })
+    const fetchMock = renderRole(start, { preset: serverPreset().preset })
+    await findCards()
+    const before = JSON.stringify(toProfile(probe.state))
+    await userEvent.click(card('Operator'))
+    await dialog()
+    await dismiss()
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(JSON.stringify(toProfile(probe.state))).toBe(before)
+    expect(probe.state.chartSwitch).toBe(start.chartSwitch)
+    expect(card('Consumer')).toHaveAttribute('aria-checked', 'true')
+    expect(card('Operator')).toHaveFocus()
+    expect(presetCalls(fetchMock)).toHaveLength(1)
+  })
+
+  it('applies the previewed profile on Confirm', async () => {
+    const { bodies, preset } = serverPreset()
+    renderRole(withRole('consumer', { 'obs.tracing': true }), { preset })
+    await findCards()
+    await userEvent.click(card('Consumer + Provider'))
+    await userEvent.click(within(await dialog()).getByRole('button', { name: changeLabel('Consumer + Provider') }))
+    await waitFor(() => expect(card('Consumer + Provider')).toHaveAttribute('aria-checked', 'true'))
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(bodies).toHaveLength(1)
+    expect(probe.state.answers.features).toEqual(preset(bodies[0] as PresetBody).profile.features)
+    expect(probe.state.answers.features['obs.tracing']).toEqual({ enabled: true, source: 'user' })
+  })
+
+  it('ignores card clicks while the summary is open', async () => {
+    const fetchMock = renderRole(withRole('consumer'), { preset: serverPreset().preset })
+    await findCards()
+    await userEvent.click(card('Provider'))
+    await dialog()
+    fireEvent.click(card('Custom'))
+    expect(presetCalls(fetchMock)).toHaveLength(1)
+    expect(screen.getAllByRole('dialog')).toHaveLength(1)
+    expect(screen.getByRole('dialog')).toHaveAccessibleName(changeTitle('Consumer', 'Provider'))
   })
 })
