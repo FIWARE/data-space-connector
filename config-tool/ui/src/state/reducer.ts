@@ -1,7 +1,7 @@
 /** The store's state and its pure transition function. */
 import { VersionSource, type LoadReport } from '../api/load'
 import { fromProfile, type ModelRef, type Profile } from '../api/profile'
-import type { ChartSwitch } from '../api/roles'
+import type { ChartSwitch, RoleChange } from '../api/roles'
 import type { Trial } from '../api/trial'
 import { emptyAnswers, Environment, type Answers, type FeatureState, type Session, type Target } from './answers'
 import { fieldStage, type FieldId, type QuestionId } from './openQuestions'
@@ -42,6 +42,14 @@ export interface AppState {
   chartSwitch?: ChartSwitch
   /** One-shot notice of a role cleared by a chart change on Stage 1; any stage jump drops it. */
   roleCleared?: RoleCleared
+  /** Role changes applied since this configuration was started or opened; session history Review lists (ADR 0019). */
+  roleChanges: readonly AppliedRoleChange[]
+}
+
+/** A confirmed role change and the chart switch it made, if any. */
+export interface AppliedRoleChange {
+  change: RoleChange
+  chartSwitch: ChartSwitch | null
 }
 
 /** A role that no longer fits the target chart, cleared by a chart change. */
@@ -68,7 +76,7 @@ export type Action =
   | { type: 'profileOpened'; path: string; profile: Profile; report?: LoadReport; notes: readonly string[] }
   | { type: 'profileSaved'; path: string; profile: Profile; notes: readonly string[] }
   | { type: 'trialStarted'; trial: Trial }
-  | { type: 'roleApplied'; profile: Profile; chartSwitch: ChartSwitch | null }
+  | { type: 'roleApplied'; profile: Profile; chartSwitch: ChartSwitch | null; change: RoleChange | null }
   | { type: 'featuresChanged'; features: Record<string, FeatureState> }
 
 /** The state before anything was chosen on S0. */
@@ -82,6 +90,7 @@ export const initialState: AppState = {
   rereading: false,
   open: [],
   versionOpen: false,
+  roleChanges: [],
 }
 
 function visit(visited: readonly StageId[], stage: StageId): readonly StageId[] {
@@ -119,6 +128,7 @@ function startOver(state: AppState, stage: StageId, answers: Answers, loaded?: L
     versionOpen: false,
     chartSwitch: undefined,
     roleCleared: undefined,
+    roleChanges: [],
   }
 }
 
@@ -144,7 +154,8 @@ function profileOpened(state: AppState, action: Extract<Action, { type: 'profile
   }
 }
 
-function roleApplied(state: AppState, { profile, chartSwitch }: Extract<Action, { type: 'roleApplied' }>): AppState {
+// The first pick has no change to record.
+function roleApplied(state: AppState, { profile, chartSwitch, change }: Extract<Action, { type: 'roleApplied' }>): AppState {
   const target = { ...state.answers.target, chart: profile.target.chart, chartVersion: profile.target.chartVersion }
   return {
     ...state,
@@ -154,6 +165,7 @@ function roleApplied(state: AppState, { profile, chartSwitch }: Extract<Action, 
     versionOpen: chartSwitch !== null || state.versionOpen,
     chartSwitch: chartSwitch ?? undefined,
     roleCleared: undefined,
+    roleChanges: change ? [...state.roleChanges, { change, chartSwitch }] : state.roleChanges,
   }
 }
 

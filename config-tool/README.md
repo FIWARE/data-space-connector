@@ -280,6 +280,23 @@ latest `data-space-connector` release bundle that declares them.
   request.
 - **User toggles win over both** and survive a role switch within the chart. A chart switch drops them, and the
   notice names them (`chartSwitch.droppedChoices`).
+- **Answers survive a role change within the chart**, also those of a feature that goes off. A chart switch keeps
+  the target fields except chart and version, every open-question mark, and the answers a `recognize:` rule of the
+  old bundle places in Target or Foundations. `chartSwitch.carriedAnswers` and `chartSwitch.droppedAnswers` list the
+  answer ids it kept and dropped, sorted.
+- **`change` summarises a role change** when the request profile already has a role (null on the first pick):
+  `enabled` and `disabled` list the features whose effective state flips, and `kept` lists the user and loaded
+  toggles that keep it, each with its `source`. It holds ids only, in catalogue order. The effective state is the
+  one Stage 5 shows: the recorded state, else the role's preset value. The call writes no server state, so the UI
+  sends it again as the preview of a change ([ADR 0019](../doc/adr/0019-config-tool-role-change.md)).
+
+Changing the role of a configuration that already has one asks first. The dialog shows the summary under *Turns
+on*, *Turns off* and *Kept as they are* (with "you set it" or "from your values.yaml"), and for a chart switch
+under *Carried over* and *Dropped*. Focus starts on *Keep <role>*, and Escape keeps the old role. The first pick
+applies at once. Review lists every role change of the session as *Role changed from X to Y*, and its *summary*
+button reopens the same summary, read-only. The record is session state, not part of the profile: starting over
+(new, open, load, trial) clears it, and a reopened profile shows none. Titles on Review come from the catalogue of the
+current target and fall back to the id for a role or feature that catalogue does not list.
 
 The profile records `role`, `features` (each offered or turned-on feature with `enabled` and `source`) and, when the roles came
 from another bundle than `model`, `catalogue`. The server sets `catalogue` on save, as it does `model`, and opening

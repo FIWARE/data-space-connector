@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { VersionSource } from '../api/load'
 import type { Profile } from '../api/profile'
+import type { RoleChange } from '../api/roles'
 import { REPORT, TRIAL } from '../test/api'
 import { emptyAnswers, Environment, TargetType } from './answers'
 import { initialState, reducer, type Action, type AppState } from './reducer'
@@ -172,7 +173,7 @@ describe('reducer: roles', () => {
   const DSC_MODEL = { chart: DSC, version: '10.16.0', revision: 3 }
   const TA_MODEL = { chart: TRUST_ANCHOR, version: '1.3.6', revision: 1 }
   const FEATURES = { 'data.scorpio': { enabled: false, source: 'loaded' }, 'identity.issuer': { enabled: true, source: 'preset' } } as const
-  const SWITCH = { fromChart: DSC, fromVersion: '10.15.0', toChart: TRUST_ANCHOR, droppedChoices: [] }
+  const SWITCH = { fromChart: DSC, fromVersion: '10.15.0', toChart: TRUST_ANCHOR, droppedChoices: [], carriedAnswers: [], droppedAnswers: [] }
   const PROVIDER: Profile = { ...SAVED_PROFILE, model: DSC_MODEL, role: 'provider', features: FEATURES }
   const OPERATOR: Profile = {
     ...SAVED_PROFILE,
@@ -182,8 +183,8 @@ describe('reducer: roles', () => {
     role: 'operator',
     features: { 'ta.registry': { enabled: true, source: 'preset' } },
   }
-  const provider = reducer(BUSY, { type: 'roleApplied', profile: PROVIDER, chartSwitch: null })
-  const operator = reducer(BUSY, { type: 'roleApplied', profile: OPERATOR, chartSwitch: SWITCH })
+  const provider = reducer(BUSY, { type: 'roleApplied', profile: PROVIDER, chartSwitch: null, change: null })
+  const operator = reducer(BUSY, { type: 'roleApplied', profile: OPERATOR, chartSwitch: SWITCH, change: null })
 
   it('takes role, features and model from a preset that keeps the chart, without a notice', () => {
     expect(provider.answers).toEqual({ ...BUSY.answers, role: 'provider', features: FEATURES })
@@ -260,9 +261,37 @@ describe('reducer: roles', () => {
 
   it.each<[string, Action]>([
     ['an unrelated answer', { type: 'setTarget', target: { namespace: 'other' } }],
-    ['a preset that keeps the chart', { type: 'roleApplied', profile: OPERATOR, chartSwitch: null }],
+    ['a preset that keeps the chart', { type: 'roleApplied', profile: OPERATOR, chartSwitch: null, change: null }],
   ])('keeps the version open on %s', (_name, action) => {
     expect(reducer(operator, action).versionOpen).toBe(true)
+  })
+
+  const CHANGE: RoleChange = { fromRole: 'provider', toRole: 'operator', enabled: ['ta.registry'], disabled: [], kept: [] }
+  const changed = reducer(provider, { type: 'roleApplied', profile: OPERATOR, chartSwitch: SWITCH, change: CHANGE })
+
+  it('records a role change with its chart switch, and nothing for the first pick', () => {
+    expect(provider.roleChanges).toEqual([])
+    expect(changed.roleChanges).toEqual([{ change: CHANGE, chartSwitch: SWITCH }])
+    const back = { ...CHANGE, fromRole: 'operator', toRole: 'provider' }
+    const again = reducer(changed, { type: 'roleApplied', profile: PROVIDER, chartSwitch: null, change: back })
+    expect(again.roleChanges).toEqual([{ change: CHANGE, chartSwitch: SWITCH }, { change: back, chartSwitch: null }])
+  })
+
+  it.each<[string, Action]>([
+    ['a new configuration', { type: 'newConfiguration' }],
+    ['an opened profile', { type: 'profileOpened', path: PROFILE_PATH, profile: PROVIDER, notes: [] }],
+    ['a loaded file', { type: 'fileLoaded', report: REPORT, file: FILE }],
+    ['the trial', { type: 'trialStarted', trial: TRIAL }],
+  ])('forgets the role changes on %s', (_name, action) => {
+    expect(reducer(changed, action).roleChanges).toEqual([])
+  })
+
+  it.each<[string, Action]>([
+    ['a chart change', { type: 'setTarget', target: { chart: DSC, chartVersion: '' } }],
+    ['a stage jump', { type: 'goTo', stage: StageId.Target }],
+    ['a save', { type: 'profileSaved', path: PROFILE_PATH, profile: OPERATOR, notes: [] }],
+  ])('keeps the role changes on %s', (_name, action) => {
+    expect(reducer(changed, action).roleChanges).toEqual(changed.roleChanges)
   })
 
   it('replaces the features on a toggle and keeps role, target and model, which makes the saved profile stale', () => {

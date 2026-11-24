@@ -34,7 +34,7 @@ describe('api/roles', () => {
   ])('posts profile, role and source %s', async (_, sha) => {
     const fetchMock = mockApi()
     const result = await applyPreset(PROFILE, 'provider', sha)
-    expect(result).toEqual({ profile: { ...PROFILE, role: 'provider', features: {} }, chartSwitch: null })
+    expect(result).toEqual({ profile: { ...PROFILE, role: 'provider', features: {} }, chartSwitch: null, change: null })
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit]
     expect(url).toBe('/api/preset')
     expect(init.method).toBe('POST')
@@ -42,9 +42,15 @@ describe('api/roles', () => {
   })
 
   it('returns the chart switch the server reports', async () => {
-    const chartSwitch = { fromChart: DSC_CHART, fromVersion: '10.16.0', toChart: 'trust-anchor', droppedChoices: [] }
-    mockApi(undefined, undefined, undefined, undefined, undefined, { preset: (body) => ({ profile: body.profile, chartSwitch }) })
+    const chartSwitch = { fromChart: DSC_CHART, fromVersion: '10.16.0', toChart: 'trust-anchor', droppedChoices: [], carriedAnswers: [], droppedAnswers: [] }
+    mockApi(undefined, undefined, undefined, undefined, undefined, { preset: (body) => ({ profile: body.profile, chartSwitch, change: null }) })
     await expect(applyPreset(PROFILE, 'operator')).resolves.toMatchObject({ chartSwitch })
+  })
+
+  it('returns the role change the server reports for a profile that has a role', async () => {
+    const change = { fromRole: 'consumer', toRole: 'provider', enabled: ['data.scorpio'], disabled: [], kept: [{ id: 'obs.tracing', enabled: true, source: 'user' as const }] }
+    mockApi(undefined, undefined, undefined, undefined, undefined, { preset: (body) => ({ profile: body.profile, chartSwitch: null, change }) })
+    await expect(applyPreset({ ...PROFILE, role: 'consumer' }, 'provider')).resolves.toMatchObject({ change })
   })
 
   it('rejects a refused preset with 422 and the server message', async () => {

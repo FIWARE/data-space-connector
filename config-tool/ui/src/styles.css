@@ -101,6 +101,8 @@ table.entries { width: 100%; border-collapse: collapse; margin: 6px 0; font-size
 table.entries th, table.entries td { text-align: left; padding: 3px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
 table.entries code { word-break: break-all; }
 .notes { margin: 0; padding-left: 18px; }
+.role-change { max-height: 60vh; overflow-y: auto; }
+.role-change h4 { margin: 10px 0 4px; font-size: 13px; }
 .trial-releases { margin: 0; padding-left: 18px; }
 .trial-release h4 { margin: 8px 0 4px; }
 .trial-release dd { font-size: 13px; font-weight: 400; }

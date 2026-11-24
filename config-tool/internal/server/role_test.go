@@ -2,6 +2,7 @@ package server
 
 import (
 	"encoding/json"
+	"maps"
 	"net/http"
 	"net/url"
 	"path/filepath"
@@ -119,12 +120,12 @@ func TestPresetEndpoint(t *testing.T) {
 			wantModel: dscLatest, wantScorpio: &profile.FeatureState{Enabled: true, Source: profile.SourcePreset}},
 		{name: "fresh configuration picks operator", profile: fresh, role: model.RoleOperator, want: http.StatusOK,
 			wantModel: taLatest, wantCatalogue: &dscLatest,
-			wantSwitch: &profile.ChartSwitch{FromChart: dscChart, ToChart: trustAnchorChart, DroppedChoices: []string{}}},
+			wantSwitch: &profile.ChartSwitch{FromChart: dscChart, ToChart: trustAnchorChart, DroppedChoices: []string{}, CarriedAnswers: []string{}, DroppedAnswers: []string{}}},
 		{name: "operator drops the chosen version", profile: profile.Profile{Target: completeTarget()}, role: model.RoleOperator,
 			want: http.StatusOK, wantModel: taLatest, wantCatalogue: &dscLatest,
-			wantSwitch: &profile.ChartSwitch{FromChart: dscChart, FromVersion: latestChart, ToChart: trustAnchorChart, DroppedChoices: []string{}}},
+			wantSwitch: &profile.ChartSwitch{FromChart: dscChart, FromVersion: latestChart, ToChart: trustAnchorChart, DroppedChoices: []string{}, CarriedAnswers: []string{}, DroppedAnswers: []string{}}},
 		{name: "operator back to provider", profile: operator, role: model.RoleProvider, want: http.StatusOK,
-			wantModel: dscLatest, wantSwitch: &profile.ChartSwitch{FromChart: trustAnchorChart, ToChart: dscChart, DroppedChoices: []string{}},
+			wantModel: dscLatest, wantSwitch: &profile.ChartSwitch{FromChart: trustAnchorChart, ToChart: dscChart, DroppedChoices: []string{}, CarriedAnswers: []string{}, DroppedAnswers: []string{}},
 			wantScorpio: &profile.FeatureState{Enabled: true, Source: profile.SourcePreset}},
 		{name: "consumer does not offer scorpio", profile: profile.Profile{Target: completeTarget()}, role: model.RoleConsumer,
 			want: http.StatusOK, wantModel: dscLatest},
@@ -321,6 +322,138 @@ func TestRoleSwitchKeepsUserChoices(t *testing.T) {
 	}
 }
 
+const (
+	featureIssuer    = "identity.issuer"
+	featureDID       = "identity.did"
+	featurePolicies  = "access.policies"
+	featureRainbow   = "dsp.rainbow"
+	featureAuthority = "consent.authority"
+)
+
+func TestPresetRoleChange(t *testing.T) {
+	enabledByProvider := []string{featureVerification, featurePolicies, featureScorpio}
+	user := func(id string, enabled bool) profile.KeptFeature {
+		return profile.KeptFeature{ID: id, Enabled: enabled, Source: profile.SourceUser}
+	}
+	tests := []struct {
+		name string
+		// from is the role set before the change; empty for the first pick.
+		from    string
+		toggles map[string]bool
+		// edit writes records SetFeature refuses, e.g. a feature of the other chart.
+		edit func(*profile.Profile)
+		to   string
+		// wantChange is nil when the response must carry change: null.
+		wantChange  *profile.RoleChange
+		wantDropped []string
+	}{
+		{name: "first pick", to: model.RoleConsumerProvider},
+		{name: "consumer to consumer + provider", from: model.RoleConsumer, to: model.RoleConsumerProvider,
+			wantChange: &profile.RoleChange{Enabled: enabledByProvider, Disabled: []string{}, Kept: []profile.KeptFeature{}}},
+		{name: "hand toggles kept on the way up", from: model.RoleConsumer, to: model.RoleConsumerProvider,
+			toggles: map[string]bool{featureIssuer: false, featureRainbow: true},
+			wantChange: &profile.RoleChange{Enabled: enabledByProvider, Disabled: []string{},
+				Kept: []profile.KeptFeature{user(featureIssuer, false), user(featureRainbow, true)}}},
+		{name: "hand toggles kept on the way down", from: model.RoleConsumerProvider, to: model.RoleConsumer,
+			toggles: map[string]bool{featureScorpio: false, featureMarket: true},
+			wantChange: &profile.RoleChange{Enabled: []string{}, Disabled: []string{featureVerification, featurePolicies},
+				Kept: []profile.KeptFeature{user(featureScorpio, false), user(featureMarket, true)}}},
+		{name: "consumer to operator", from: model.RoleConsumer, to: model.RoleOperator, wantDropped: []string{},
+			wantChange: &profile.RoleChange{Enabled: []string{featureRegistry}, Disabled: []string{featureIssuer, featureDID},
+				Kept: []profile.KeptFeature{}}},
+		{name: "operator carries an in-scope user toggle", from: model.RoleConsumer, to: model.RoleOperator,
+			edit: func(p *profile.Profile) {
+				p.Features[featureAuthority] = profile.FeatureState{Source: profile.SourceUser}
+			},
+			wantDropped: []string{},
+			wantChange: &profile.RoleChange{Enabled: []string{featureRegistry}, Disabled: []string{featureIssuer, featureDID},
+				Kept: []profile.KeptFeature{user(featureAuthority, false)}}},
+		{name: "operator drops a user toggle of the old chart", from: model.RoleConsumer, to: model.RoleOperator,
+			toggles: map[string]bool{featureRainbow: true}, wantDropped: []string{featureRainbow},
+			wantChange: &profile.RoleChange{Enabled: []string{featureRegistry},
+				Disabled: []string{featureIssuer, featureDID, featureRainbow}, Kept: []profile.KeptFeature{}}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			ps := newProfileSession(t)
+			p := profile.Profile{Target: completeTarget()}
+			if tc.from != "" {
+				p = ps.mustPreset(p, tc.from).Profile
+			}
+			for _, id := range slices.Sorted(maps.Keys(tc.toggles)) {
+				p = ps.mustToggle(p, id, tc.toggles[id]).Profile
+			}
+			if tc.edit != nil {
+				tc.edit(&p)
+			}
+			got := ps.mustPreset(p, tc.to)
+			if tc.wantChange != nil {
+				tc.wantChange.FromRole, tc.wantChange.ToRole = tc.from, tc.to
+			}
+			if c := got.Change; (c == nil) != (tc.wantChange == nil) || c != nil && !reflect.DeepEqual(*c, *tc.wantChange) {
+				t.Errorf("change = %+v, want %+v", c, tc.wantChange)
+			}
+			if sw := got.ChartSwitch; (sw != nil) != (tc.wantDropped != nil) || sw != nil && !slices.Equal(sw.DroppedChoices, tc.wantDropped) {
+				t.Errorf("chartSwitch = %+v, want droppedChoices %v", sw, tc.wantDropped)
+			}
+			if !reflect.DeepEqual(got.Profile.Answers, map[string]any{}) {
+				t.Errorf("answers = %v, want the request's {}", got.Profile.Answers)
+			}
+			if got.Change == nil {
+				return
+			}
+			// Kept must hold exactly the user toggles ApplyPreset carried into the new profile.
+			var carried, kept []string
+			for id, f := range got.Profile.Features {
+				if f.Source == profile.SourceUser {
+					carried = append(carried, id)
+				}
+			}
+			for _, k := range got.Change.Kept {
+				kept = append(kept, k.ID)
+			}
+			slices.Sort(carried)
+			slices.Sort(kept)
+			if !slices.Equal(kept, carried) {
+				t.Errorf("kept = %v, want the carried user toggles %v", kept, carried)
+			}
+		})
+	}
+}
+
+func TestPresetRoleChangeWithLoadedFileRefusesSwitch(t *testing.T) {
+	ps := newProfileSession(t)
+	p := ps.mustPreset(profile.Profile{Target: completeTarget()}, model.RoleConsumer).Profile
+	sha := ps.load(valuesName, scorpioOff).SHA256
+	status, raw, _ := ps.preset(presetRequest{Profile: p, Role: model.RoleOperator, SourceSHA256: sha})
+	if status != http.StatusUnprocessableEntity || !strings.Contains(raw, profile.ErrChartSwitchLoaded.Error()) {
+		t.Errorf("status = %d, body %s; want %d naming %q", status, raw, http.StatusUnprocessableEntity, profile.ErrChartSwitchLoaded)
+	}
+}
+
+// TestPresetHasNoSideEffects pins that the preview call writes no server state (ADR 0019).
+func TestPresetHasNoSideEffects(t *testing.T) {
+	ps := newProfileSession(t)
+	p := ps.mustPreset(profile.Profile{Target: completeTarget()}, model.RoleConsumer).Profile
+	sha := ps.load(valuesName, scorpioOn).SHA256
+	slot := loadedSlot(ps.srv)
+	req := presetRequest{Profile: p, Role: model.RoleConsumerProvider, SourceSHA256: sha}
+	var raws []string
+	for range 2 {
+		status, raw, got := ps.preset(req)
+		if status != http.StatusOK || got.Change == nil {
+			t.Fatalf("status = %d, change = %+v: %s", status, got.Change, raw)
+		}
+		raws = append(raws, raw)
+	}
+	if raws[0] != raws[1] {
+		t.Errorf("responses differ:\n%s\n%s", raws[0], raws[1])
+	}
+	if loadedSlot(ps.srv) != slot {
+		t.Error("preset replaced the loaded slot")
+	}
+}
+
 // features posts req to /api/features, without the session cookie when unauth is set.
 func (ps *profileSession) features(req featuresRequest, unauth bool) (int, string, featuresResponse) {
 	ps.t.Helper()
@@ -352,20 +485,29 @@ func (ps *profileSession) mustToggle(p profile.Profile, id string, enabled bool)
 	return got
 }
 
-// mustPreset applies role through the API and fails the test on any status but 200.
-func (ps *profileSession) mustPreset(p profile.Profile, role string) presetResponse {
+// preset posts req to /api/preset and decodes a 200 response.
+func (ps *profileSession) preset(req presetRequest) (int, string, presetResponse) {
 	ps.t.Helper()
-	data, err := json.Marshal(presetRequest{Profile: p, Role: role})
+	data, err := json.Marshal(req)
 	if err != nil {
 		ps.t.Fatal(err)
 	}
 	resp, raw := do(ps.t, ps.srv, request{method: http.MethodPost, path: "/api/preset", origin: ownOrigin(ps.srv), cookie: ps.cookie, body: string(data)})
-	if resp.StatusCode != http.StatusOK {
-		ps.t.Fatalf("preset status = %d: %s", resp.StatusCode, raw)
-	}
 	var got presetResponse
-	if err := json.Unmarshal([]byte(raw), &got); err != nil {
-		ps.t.Fatalf("body %q is not a preset response: %v", raw, err)
+	if resp.StatusCode == http.StatusOK {
+		if err := json.Unmarshal([]byte(raw), &got); err != nil {
+			ps.t.Fatalf("body %q is not a preset response: %v", raw, err)
+		}
+	}
+	return resp.StatusCode, raw, got
+}
+
+// mustPreset applies role through the API and fails the test on any status but 200.
+func (ps *profileSession) mustPreset(p profile.Profile, role string) presetResponse {
+	ps.t.Helper()
+	status, raw, got := ps.preset(presetRequest{Profile: p, Role: role})
+	if status != http.StatusOK {
+		ps.t.Fatalf("preset status = %d: %s", status, raw)
 	}
 	return got
 }

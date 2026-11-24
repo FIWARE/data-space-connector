@@ -200,9 +200,12 @@ pom.xml                       # drives local-deploy + integration tests
   trust-anchor chart gets its own minimal bundle (`model/1.3.6/`, no roles). The HTML matrix in
   `doc/deployment-integration/roles/README.md` is authoritative, and a Go test in `internal/model` checks it against the bundle.
   Profile gains `role` + `features {enabled, source}` (still `format: 1`).
-- US-2.2 (#123, planned, see `IMPLEMENTATION_PLAN.md`, ADR 0018): a user toggle sets a sticky `source: user`; not-offered
+- US-2.2 (#123, shipped, ADR 0018): a user toggle sets a sticky `source: user`; not-offered
   features may be enabled by `user`/`loaded`. The core (`SetFeature`, `FeatureChoices`) returns values only, and every
   shown text is UI copy or bundle data (`summary`, `consequence`). Stage 5 is a minimal toggle list; `ui/src/chrome/ConfirmDialog.tsx` traps focus.
+- US-2.3 (#124, planned, see `IMPLEMENTATION_PLAN.md`, ADR 0019): `ApplyPreset` already re-applies; `POST /api/preset`
+  has no side effects, so it is the preview too. Core `RoleChangeTo` diffs before/after; answers survive within a chart.
+  The Review record of role changes is session state (`AppState.roleChanges`), not a profile field.
 
 ## Documentation
 

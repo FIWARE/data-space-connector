@@ -56,10 +56,12 @@ type presetRequest struct {
 	SourceSHA256 string          `json:"sourceSha256"`
 }
 
-// presetResponse carries the profile with the preset applied; ChartSwitch is null without a switch.
+// presetResponse carries the profile with the preset applied; ChartSwitch is null without a switch,
+// Change is null on the first pick (the request profile has no role).
 type presetResponse struct {
 	Profile     profile.Profile      `json:"profile"`
 	ChartSwitch *profile.ChartSwitch `json:"chartSwitch"`
+	Change      *profile.RoleChange  `json:"change"`
 }
 
 // featuresRequest is the body of POST /api/features; Toggle is null to only read the choices.
@@ -122,6 +124,7 @@ func catalogueBody(b model.Bundle) rolesResponse {
 }
 
 // handlePreset applies a role preset to the profile after the same preparation a save does (ADR 0015 §7).
+// It writes no server state, so the UI uses the same call as the preview of a role change (ADR 0019).
 func (s *Server) handlePreset(w http.ResponseWriter, r *http.Request) {
 	var req presetRequest
 	if err := decodeJSON(w, r, &req); err != nil {
@@ -139,6 +142,12 @@ func (s *Server) handlePreset(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	out, sw, err := p.ApplyPreset(bundles, req.Role, loadedToggles(res))
+	var change *profile.RoleChange
+	if err == nil && p.Role != "" {
+		var rc profile.RoleChange
+		rc, err = p.RoleChangeTo(bundles, out)
+		change = &rc
+	}
 	switch {
 	case errors.Is(err, profile.ErrUnknownRole), errors.Is(err, profile.ErrChartSwitchLoaded),
 		errors.Is(err, profile.ErrFeatureOfOtherChart):
@@ -146,7 +155,7 @@ func (s *Server) handlePreset(w http.ResponseWriter, r *http.Request) {
 	case err != nil:
 		writeError(w, http.StatusInternalServerError, err.Error(), "")
 	default:
-		writeJSON(w, presetResponse{Profile: out, ChartSwitch: sw})
+		writeJSON(w, presetResponse{Profile: out, ChartSwitch: sw, Change: change})
 	}
 }
 
