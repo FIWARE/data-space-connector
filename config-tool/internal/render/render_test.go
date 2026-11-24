@@ -24,6 +24,8 @@ const (
 	nestKey = "dsc"
 	// longRunes exceeds the load report's value preview.
 	longRunes = 100
+	// scorpioAlt answers the host without a default, so the fixture's scorpio hosts list is complete.
+	scorpioAlt = "ld." + domain
 )
 
 func fixtureBundles(t *testing.T) []model.Bundle {
@@ -225,6 +227,14 @@ func TestNestedBuildsSlices(t *testing.T) {
 	}
 }
 
+// scorpioHostsPinned is the fixture's scorpio hosts list pinned whole without kept values.
+var scorpioHostsPinned = map[string]pinWant{
+	"scorpio.ingress.hosts[0].host":     {rendered: "scorpio." + domain},
+	"scorpio.ingress.hosts[0].paths[0]": {rendered: "/"},
+	"scorpio.ingress.hosts[1].host":     {rendered: scorpioAlt},
+	"scorpio.ingress.hosts[1].paths[0]": {rendered: "/"},
+}
+
 // pinWant is the expected state of one leaf after pinning; an unlisted leaf is re-rendered.
 type pinWant struct {
 	value    any
@@ -278,12 +288,38 @@ func TestRenderPinsHandEdits(t *testing.T) {
 			},
 		},
 		{
+			name: "an empty file pins nothing",
+			body: "{}\n",
+		},
+		{
+			name: "an empty mapping above a target pins nothing",
+			body: "marketplace: {}\n",
+		},
+		{
+			name: "a scalar element of an owned list pins the list whole",
+			body: "scorpio:\n  ingress:\n    hosts:\n      - x\n",
+			want: scorpioHostsPinned,
+		},
+		{
+			name: "an empty owned list pins the list whole",
+			body: "scorpio:\n  ingress:\n    hosts: []\n",
+			want: scorpioHostsPinned,
+		},
+		{
+			name: "a key no target writes inside an owned list pins the list whole",
+			body: "keycloak:\n  ingress:\n    tls:\n      - foo: x\n",
+			want: map[string]pinWant{
+				"keycloak.ingress.tls[0].hosts[0]":   {rendered: "keycloak." + domain},
+				"keycloak.ingress.tls[0].secretName": {rendered: "keycloak." + domain + "-tls"},
+			},
+		},
+		{
 			name: "a shadowed duplicate is pinned and keeps the last occurrence",
 			body: "rainbow:\n  ingress:\n    host: rainbow.a.org\n    host: rainbow.b.org\n",
 			want: map[string]pinWant{"rainbow.ingress.host": {value: "rainbow.b.org", kept: true, rendered: "rainbow." + domain}},
 		},
 	}
-	answers := map[string]any{"org.displayName": displayName, "domain.base": domain}
+	answers := map[string]any{"org.displayName": displayName, "domain.base": domain, "host.scorpioAlt": scorpioAlt}
 	for _, tc := range tests {
 		variants := []struct {
 			name string
@@ -301,8 +337,10 @@ func TestRenderPinsHandEdits(t *testing.T) {
 				}
 				tree := renderFixture(t, answers, Options{Overrides: r})
 				nested := values(Tree{Leaves: nestedLeaves(tree)})
+				seen := map[string]bool{}
 				for _, l := range tree.Leaves {
 					key := l.Path.String()
+					seen[key] = true
 					want, pinned := tc.want[key]
 					p := l.Provenance
 					if p.Pinned != pinned {
@@ -322,6 +360,11 @@ func TestRenderPinsHandEdits(t *testing.T) {
 						t.Errorf("%s in Nested() = %v, want %v", key, inNested, want.kept)
 					}
 				}
+				for key := range tc.want {
+					if !seen[key] {
+						t.Errorf("%s is missing from the tree", key)
+					}
+				}
 			})
 		}
 	}
@@ -339,15 +382,27 @@ func nestedLeaves(tree Tree) []Leaf {
 }
 
 func TestNestedOmitsUnkeptPin(t *testing.T) {
-	r, err := load.Load([]byte("marketplace:\n  title:\n    a: 1\n"), "values.yaml", fixtureBundles(t), load.Options{})
-	if err != nil {
-		t.Fatal(err)
+	tests := []struct {
+		name string
+		body string
+		key  string
+		want any
+	}{
+		{"a collection at a target path", "marketplace:\n  title:\n    a: 1\n", "marketplace", map[string]any{"url": "https://market." + domain}},
+		{"a scalar element of an owned list", "scorpio:\n  ingress:\n    hosts:\n      - x\n", "scorpio", nil},
 	}
-	tree := renderFixture(t, map[string]any{"org.displayName": displayName, "domain.base": domain}, Options{Overrides: r})
-	got := tree.Nested()["marketplace"]
-	want := map[string]any{"url": "https://market." + domain}
-	if !reflect.DeepEqual(got, want) {
-		t.Errorf("marketplace = %v, want %v", got, want)
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			r, err := load.Load([]byte(tc.body), "values.yaml", fixtureBundles(t), load.Options{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			answers := map[string]any{"org.displayName": displayName, "domain.base": domain, "host.scorpioAlt": scorpioAlt}
+			tree := renderFixture(t, answers, Options{Overrides: r})
+			if got := tree.Nested()[tc.key]; !reflect.DeepEqual(got, tc.want) {
+				t.Errorf("%s = %v, want %v", tc.key, got, tc.want)
+			}
+		})
 	}
 }
 

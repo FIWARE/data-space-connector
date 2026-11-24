@@ -41,7 +41,7 @@ func Render(b model.Bundle, p profile.Profile, opts Options) (Tree, error) {
 		for i, t := range f.Targets {
 			if !all(answers, t.Refs) {
 				for _, l := range lists(t.Path) {
-					incomplete[l] = true
+					incomplete[l.String()] = true
 				}
 				continue
 			}
@@ -56,7 +56,7 @@ func Render(b model.Bundle, p profile.Profile, opts Options) (Tree, error) {
 	}
 	// An owned list is written whole or not at all, so a fragment never replaces the chart's list.
 	leaves = slices.DeleteFunc(leaves, func(l Leaf) bool {
-		return slices.ContainsFunc(lists(l.Path), func(k string) bool { return incomplete[k] })
+		return slices.ContainsFunc(lists(l.Path), func(k roundtrip.Path) bool { return incomplete[k.String()] })
 	})
 	if opts.Overrides != nil {
 		pin(leaves, opts.Overrides)
@@ -100,35 +100,60 @@ func all(answers map[string]any, ids []string) bool {
 }
 
 // lists returns every prefix of p that is indexed into, i.e. the owned lists p writes into.
-func lists(p roundtrip.Path) []string {
-	var ls []string
+func lists(p roundtrip.Path) []roundtrip.Path {
+	var ls []roundtrip.Path
 	for k := 1; k < len(p); k++ {
 		if _, ok := p[k].Index(); ok {
-			ls = append(ls, p[:k].String())
+			ls = append(ls, p[:k])
 		}
 	}
 	return ls
 }
 
-// pin marks every leaf that overlaps a hand edit of r (an unknown or skipped leaf, ADR 0014 §4)
-// and keeps the loaded scalar in its place.
+// edit is a hand edit of the loaded file: an unknown or skipped leaf (ADR 0014 §4).
+type edit struct {
+	path string
+	// emptyMap is set for an empty mapping, which a path needing a mapping there merges into.
+	emptyMap bool
+}
+
+// conflicts reports whether e stands where the path key needs to write.
+func (e edit) conflicts(key string) bool {
+	if e.emptyMap && isUnder(key, e.path) && (e.path == "" || key[len(e.path)] == keySeparator) {
+		return false
+	}
+	return overlaps(key, e.path)
+}
+
+// pin marks every leaf that overlaps a hand edit of r and keeps the loaded scalar in its place.
+// An owned list a hand edit touches is pinned whole without kept values, so the overrides layer
+// keeps its list and Nested() never writes a fragment of it.
 func pin(leaves []Leaf, r *load.Result) {
-	var edits []string
+	var edits []edit
 	for _, e := range r.Report.Unknown {
-		edits = append(edits, e.Path)
+		p, err := roundtrip.ParsePath(e.Path)
+		n, lerr := r.Doc.Lookup(p)
+		empty := err == nil && lerr == nil && n.Kind == yaml.MappingNode && len(n.Content) == 0
+		edits = append(edits, edit{path: e.Path, emptyMap: empty})
 	}
 	for _, e := range r.Report.Skipped {
-		edits = append(edits, e.Path)
+		edits = append(edits, edit{path: e.Path})
+	}
+	hit := func(p roundtrip.Path) bool {
+		key := slices.Concat(r.Root, p).String()
+		return slices.ContainsFunc(edits, func(e edit) bool { return e.conflicts(key) })
 	}
 	for i := range leaves {
 		l := &leaves[i]
-		full := slices.Concat(r.Root, l.Path)
-		key := full.String()
-		if !slices.ContainsFunc(edits, func(e string) bool { return overlaps(key, e) }) {
+		inList := slices.ContainsFunc(lists(l.Path), hit)
+		if !inList && !hit(l.Path) {
 			continue
 		}
 		l.Provenance.Pinned, l.Provenance.Rendered = true, l.Value
-		l.Value, l.Provenance.Kept = kept(r.Doc, full)
+		l.Value, l.Provenance.Kept = nil, false
+		if !inList {
+			l.Value, l.Provenance.Kept = kept(r.Doc, slices.Concat(r.Root, l.Path))
+		}
 	}
 }
 
