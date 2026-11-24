@@ -4,7 +4,7 @@ import type { LoadReport } from '../api/load'
 import type { FeatureState, Profile, ProfileResponse, RecentProfiles } from '../api/profile'
 import type { FeatureChoice, FeaturesResult, FeatureToggle } from '../api/features'
 import type { FoundationList } from '../api/foundations'
-import type { Change, ChangeGroup, Leaf, RenderResult } from '../api/render'
+import type { Change, ChangeGroup, HandSetAnswer, Leaf, RenderResult } from '../api/render'
 import type { Feature, Offer, PresetResult, RoleCatalogue, RoleChange } from '../api/roles'
 import type { Kubeconfig, ModelInfo } from '../api/target'
 import type { Trial, TrialWritten } from '../api/trial'
@@ -376,6 +376,15 @@ export function renderLeaves(profile: Profile): Leaf[] {
   return leaves.sort((a, b) => a.path.localeCompare(b.path))
 }
 
+/** The given answers of `profile` that FOUNDATIONS derives from the domain, as render.HandSet lists them. */
+export function handSetOf(profile: Profile): HandSetAnswer[] {
+  const answers = profile.answers ?? {}
+  const base = answers['domain.base']
+  return FOUNDATIONS.foundations
+    .filter((f) => f.default !== '' && answers[f.id] !== undefined)
+    .map((f) => ({ id: f.id, value: answers[f.id], derived: typeof base === 'string' ? f.default.replace('{{ .domain.base }}', base) : '' }))
+}
+
 /** `next` against `prev` as render.Diff groups it, without pinning: by foundation in FOUNDATIONS order. */
 export function diffLeaves(prev: readonly Leaf[], next: readonly Leaf[]): ChangeGroup[] {
   const before = new Map(prev.map((l) => [l.path, l]))
@@ -402,7 +411,7 @@ function foundationDefaults(): Required<FoundationFakes> {
       const leaves = renderLeaves(body.profile)
       const groups = diffLeaves(last, leaves)
       last = leaves
-      return { tree: { leaves }, diff: { groups } }
+      return { tree: { leaves }, diff: { groups }, handSet: handSetOf(body.profile) }
     },
   }
 }

@@ -10,9 +10,11 @@ import type { FieldId } from '../state/openQuestions'
 import { initialState, type AppliedRoleChange, type AppState } from '../state/reducer'
 import { StageId } from '../state/stageIds'
 import { StoreProvider } from '../state/store'
-import { catalogueFeature, lateLoad, mockApi, recordToggle, refusedRole, REPORT, refusedUpload } from '../test/api'
+import { catalogueFeature, FOUNDATIONS, lateLoad, mockApi, recordToggle, refusedRole, REPORT, refusedUpload } from '../test/api'
 import { DELIBERATE_HEADING } from './DeliberateChoices'
 import { FEATURES_HEADING } from './Features'
+import { FOUNDATIONS_HEADING } from './Foundations'
+import { HAND_SET_HEADING, HAND_SET_HINT, wouldDerive } from './handSetText'
 import { ROOT_LABEL, WHOLE_FILE } from './Review'
 import { ROLE_CHANGES_HEADING, roleChanged, summaryToggleLabel, TURNS_OFF } from './roleChangeText'
 
@@ -278,5 +280,49 @@ describe('Review', () => {
     await act(async () => {})
     expect(featureRequests(fetchMock)).toHaveLength(0)
     expect(screen.queryByRole('heading', { name: new RegExp(DELIBERATE_HEADING) })).not.toBeInTheDocument()
+  })
+
+  describe('set by hand', () => {
+    const BASE = 'acme.org'
+    const HAND_HOST = 'sso.acme.com'
+    const handSetList = () => within(screen.getByRole('heading', { level: 3, name: HAND_SET_HEADING }).closest('.panel') as HTMLElement)
+    const withValues = (values: Record<string, string>): Partial<AppState> => ({
+      answers: { values, role: PICKED, features: {}, target: ANSWERED },
+      foundations: FOUNDATIONS.foundations,
+    })
+
+    it.each<[string, Record<string, string>, string]>([
+      ['names the value it would derive to', { 'domain.base': BASE, 'host.keycloak': HAND_HOST }, `Keycloak host${HAND_HOST}${wouldDerive(`keycloak.${BASE}`)}go ↗`],
+      ['leaves the note out when nothing would derive', { 'host.keycloak': HAND_HOST }, `Keycloak host${HAND_HOST}go ↗`],
+      ['leaves the note out when the derived value is the same', { 'domain.base': BASE, 'host.keycloak': `keycloak.${BASE}` }, `Keycloak hostkeycloak.${BASE}go ↗`],
+    ])('lists a hand-set answer and %s', async (_name, values, row) => {
+      mockApi()
+      renderReview(undefined, undefined, withValues(values))
+      expect(await screen.findByRole('heading', { level: 3, name: HAND_SET_HEADING })).toBeInTheDocument()
+      expect(handSetList().getByText(HAND_SET_HINT)).toBeInTheDocument()
+      expect(handSetList().getAllByRole('listitem').map((li) => li.textContent)).toEqual([row])
+    })
+
+    it('links a row to its field on Foundations', async () => {
+      mockApi()
+      renderReview(REPORT, undefined, withValues({ 'domain.base': BASE, 'host.keycloak': HAND_HOST }))
+      await screen.findByRole('heading', { level: 3, name: HAND_SET_HEADING })
+      await userEvent.click(handSetList().getByRole('button', { name: 'Go to Keycloak host' }))
+      expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(FOUNDATIONS_HEADING)
+    })
+
+    it('leaves the section out when every answer is derived or has no default', async () => {
+      const fetchMock = mockApi()
+      renderReview(undefined, undefined, withValues({ 'domain.base': BASE, 'org.displayName': 'ACME' }))
+      await waitFor(() => expect(fetchMock.mock.calls.some(([input]) => String(input).endsWith('/api/render'))).toBe(true))
+      await act(async () => {})
+      expect(screen.queryByRole('heading', { name: HAND_SET_HEADING })).not.toBeInTheDocument()
+    })
+
+    it('shows a refused render', async () => {
+      mockApi(undefined, undefined, undefined, {}, {}, {}, { render: () => HTTP_UNPROCESSABLE })
+      renderReview(undefined, undefined, withValues({ 'host.keycloak': HAND_HOST }))
+      expect(await screen.findByRole('alert')).toHaveTextContent(String(HTTP_UNPROCESSABLE))
+    })
   })
 })

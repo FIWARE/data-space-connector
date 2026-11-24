@@ -41,10 +41,19 @@ export interface ChangeGroup {
   changes: Change[]
 }
 
+/** A given answer that overrides a default derived from other answers, mirroring `render.HandSetAnswer`. */
+export interface HandSetAnswer {
+  id: string
+  value: unknown
+  /** What the default gives now; empty when it would derive nothing. */
+  derived: string
+}
+
 /** Answer of POST /api/render; the groups are in bundle order and the first render diffs against an empty tree. */
 export interface RenderResult {
   tree: { leaves: Leaf[] }
   diff: { groups: ChangeGroup[] }
+  handSet: HandSetAnswer[]
 }
 
 /** POST /api/render. `sourceSha256` names the held load as on save; without it nothing is pinned.

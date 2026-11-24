@@ -45,6 +45,7 @@ type renderBody struct {
 			} `json:"changes"`
 		} `json:"groups"`
 	} `json:"diff"`
+	HandSet []render.HandSetAnswer `json:"handSet"`
 }
 
 // changes counts the diff's changes per status.
@@ -149,6 +150,23 @@ func TestRenderDiffsAgainstPreviousRender(t *testing.T) {
 	}
 	if got := second.changes(); got[render.StatusChanged] != changed || len(got) != 1 {
 		t.Errorf("domain change: changes = %v, want %d changed", got, changed)
+	}
+}
+
+func TestRenderListsHandSetAnswers(t *testing.T) {
+	const handDID = "did:web:id.acme.com"
+	ps := newProfileSession(t)
+	if status, raw, _ := ps.render(domainProfile(renderDomain), ""); status != http.StatusOK || !strings.Contains(raw, `"handSet":[]`) {
+		t.Errorf("derived answers only: status %d, body %s, want an empty handSet", status, raw)
+	}
+	for _, d := range []string{renderDomain, otherRenderDomain} {
+		p := domainProfile(d)
+		p.Answers["did.value"] = handDID
+		got := ps.mustRender(p, "")
+		want := []render.HandSetAnswer{{ID: "did.value", Value: handDID, Derived: "did:web:" + d}}
+		if !slices.Equal(got.HandSet, want) {
+			t.Errorf("domain %s: handSet = %+v, want %+v", d, got.HandSet, want)
+		}
 	}
 }
 
