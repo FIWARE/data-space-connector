@@ -39,19 +39,34 @@ method choice.
 
   Chart keys that name the DID but are absent from `provider.yaml`, because those components are off
   there:
-  - `identityhub.bootstrap.did` (values.yaml ~3087: "DID of this participant ... must match").
   - `fdsc-edc.*`, verified in `k3s/dsp-provider.yaml` (lines 41-42, 161-171):
     `fdsc-edc.common.config.edc.participant.id`, `fdsc-edc.common.config.issuerId`,
     `fdsc-edc.common.config.oauth.clientId` (the STS client; it must equal the participant id or STS
-    token requests fail), `fdsc-edc.deployment.oid4vc.config.oid4vp.holder.id` and `.holder.kid` (the
-    bare DID there, not `<did>#<key>`) are `copy` targets. `fdsc-edc.common.config.oauth.secretAlias`
-    (`<did>-sts-client-secret`) is a `tpl` target, so the alias keeps naming the secret the IdentityHub
-    bootstrap writes for this DID.
+    token requests fail) and `fdsc-edc.deployment.oid4vc.config.oid4vp.holder.id` are `copy` targets.
+    `fdsc-edc.common.config.oauth.secretAlias` (`<did>-sts-client-secret`) is a `tpl` target, so the
+    alias keeps naming the secret the IdentityHub bootstrap writes for this DID.
 
-  These chart-only targets are not feature-gated (gating is US-5.3), so every render emits them, even
-  with `identityhub`/`fdsc-edc` disabled. That is accepted until US-5.3: the keys are inert while the
-  component is off, and leaving them out would split the DID in a loaded file that has the components
-  on (a loaded non-owned key is pinned and keeps the old DID). Step 2 pins this with a test, and US-5.3
+  Two chart-only keys name the DID but are **not** targets, because together they trip the chart's
+  `dsc.identityhub.assertHolderKid` (`_helpers.tpl` ~461, run by `identityhub-cm.yaml`; pinned by
+  `tests/identityhub-holder-kid_test.yaml`). Once `identityhub.bootstrap.did` is set, every
+  `fdsc-edc.{common,deployment.<name>}.config.oid4vp.holder.kid` must be `<bootstrap.did>#<keyAlias>`,
+  or `helm template` fails. `dsp-provider.yaml` has a bare `holder.kid` only because it leaves
+  `bootstrap.did` unset. The kid's right form therefore depends on the bootstrap switch and on
+  `keyAlias`, which the tool does not own:
+  - `identityhub.bootstrap.did` (values.yaml ~3087): exclusion, US-8.11 (identity material: the
+    bootstrap block with `keyAlias`, whose fragment the DID document publishes).
+  - `fdsc-edc.deployment.oid4vc.config.oid4vp.holder.kid`: exclusion, US-8.11. It is a key id, like
+    `keycloak.signingKey.did`, not the bare DID.
+
+  Consequence, accepted until US-8.11: in a loaded file these two keys are pinned, so a `domain.base`
+  change leaves them on the old DID while `holder.id` and `participant.id` follow. The pair stays
+  consistent with itself, so the chart check still passes. A fresh render emits neither, so the chart
+  defaults (`bootstrap.did: ""`, no kid) apply.
+
+  The five `fdsc-edc.*` targets are not feature-gated (gating is US-5.3), so every render emits them,
+  even with `fdsc-edc` disabled. That is accepted until US-5.3: the keys are inert while the component
+  is off, and leaving them out would split the DID in a loaded file that has the component on (a loaded
+  non-owned key is pinned and keeps the old DID). Step 2 pins this with a test, and US-5.3
   replaces that test with a gated one.
 
   `keycloak.signingKey.*` stays unowned: a render without keystore answers emits no leaf under it.
@@ -72,6 +87,8 @@ comment above the `did.value` targets, in ADR 0021 (Step 4) and in the corrected
 | `dataSpaceConfig` | nothing | Chart 10.16.0 has no DID key there | none until the chart adds one |
 | APISIX | nothing | Chart 10.16.0 has no DID key there | none until the chart adds one |
 | Keycloak signing key `keycloak.signingKey.did` | not a target | Emitting it alone breaks the realm key provider (see the table above); it belongs with the keystore block | US-5.5 |
+| IdentityHub `identityhub.bootstrap.did` | not a target | With a bare `holder.kid` it fails the chart's `assertHolderKid`; with a `<did>#<keyAlias>` kid it needs `keyAlias`, which the tool does not own | US-8.11 |
+| EDC `fdsc-edc.deployment.oid4vc.config.oid4vp.holder.kid` | not a target | A key id whose form (`<did>` or `<did>#<keyAlias>`) depends on the IdentityHub bootstrap, see the row above | US-8.11 |
 
 ## Steps
 
@@ -90,8 +107,14 @@ bundle entries.
   an error that names both ids. Its refs join `Refs`.
 - Allow a foundation with no `targets` when another foundation references it (for `did.method`).
   Check what `compileFoundation` currently refuses.
+- Constant default for `choice` only: `compileFoundation` refuses a default with no refs ("default
+  references no answer"), which would reject Step 2's `default: did:web`. Relax it for `type: choice`
+  only, and require the constant to be one of the declared `options`. Keep the check for every other
+  type, because it catches typos in derived values. `render.resolve` already derives a default whose
+  `Refs` are empty.
 - Tests: table-driven in `internal/model/foundations_test.go` (compile errors: unknown option, choice
-  without options, `defaultWhen` on an unknown id, a cycle through `defaultWhen` or `prefix`) and in
+  without options, `defaultWhen` on an unknown id, a cycle through `defaultWhen` or `prefix`, a constant
+  default on a non-choice type, a choice default that is not an option) and in
   `internal/render/render_test.go` (default applied or skipped by `defaultWhen`, prefix mismatch error,
   given answer overrides). Use fixtures in `internal/model/testdata/`, not the real bundle.
 - Mirror the two types in the UI's field validation (`ui/src/state/foundations.ts` `answerErrors`), so
@@ -116,7 +139,7 @@ In `config-tool/model/10.16.0/bundle.yaml` (bump `revision` 5 → 6), after `dom
     defaultWhen: {id: did.method, equals: "did:web"}
     prefix: "{{ .did.method }}:"
     targets: [copy of {{ .did.value }} to the 3 provider.yaml keys marked "target" above,
-              identityhub.bootstrap.did and the 5 fdsc-edc copy keys;
+              and the 4 fdsc-edc copy keys;
               tpl "{{ .did.value }}-sts-client-secret" to fdsc-edc.common.config.oauth.secretAlias]
 ```
 Label, help and `doc` (`doc/deployment-integration/roles/README.md` or the IdentityHub/DID section that
@@ -134,13 +157,19 @@ Tests in `config-tool/internal/render/provider_test.go`, modelled on the domain 
   `did.value` target or excluded, every `did.value` target is such a leaf or a listed chart-only
   target, and stale exclusion rows fail.
 - `TestProviderValues`: rendered leaves absent from provider.yaml are allowed only if they are in a
-  `chartOnlyTargets` table (path → reference file, e.g. `k3s/dsp-provider.yaml` for `fdsc-edc.*`,
-  `charts/data-space-connector/values.yaml` for `identityhub.bootstrap.did`). The same test asserts their
-  values against that file: all six `fdsc-edc.*` targets, `oauth.clientId`, `oauth.secretAlias` and
-  `holder.kid` included, against `dsp-provider.yaml`. This replaces the `orgDisplayName` special case.
-- `TestChartOnlyTargetsUngated`: a provider render with `identityhub`/`fdsc-edc` off still emits
-  `identityhub.bootstrap.did` and the `fdsc-edc.*` DID targets. It pins the accepted ungated state, and
-  its comment says US-5.3 replaces it.
+  `chartOnlyTargets` table (path → reference file, `k3s/dsp-provider.yaml` for `fdsc-edc.*`). The
+  same test asserts their values against that file: all five `fdsc-edc.*` targets, `oauth.clientId` and
+  `oauth.secretAlias` included, against `dsp-provider.yaml`. This replaces the `orgDisplayName` special
+  case.
+- `TestChartOnlyTargetsUngated`: a provider render with `fdsc-edc` off still emits the five
+  `fdsc-edc.*` DID targets. It pins the accepted ungated state, and its comment says US-5.3 replaces it.
+- `TestHolderKidMatchesBootstrapDID`, mirroring `dsc.identityhub.assertHolderKid`: whenever the merged
+  output (targets plus pinned loaded keys) holds both `identityhub.bootstrap.did` and any
+  `fdsc-edc.{common,deployment.*}.config.oid4vp.holder.kid`, each kid equals
+  `<bootstrap.did>#<keyAlias>` (`keyAlias` from the output, else the chart default `key-1`). Cases: a
+  fresh render (neither key, so it passes trivially), `dsp-provider.yaml` loaded with a changed
+  `domain.base`, and a fixture with `bootstrap.did` set and a `<did>#key-1` kid, loaded with a changed
+  `domain.base`. Also assert that no render emits either key as a `did.value` target.
 - No `keycloak.signingKey.*` leaf: a render without keystore answers emits nothing under
   `keycloak.signingKey`, so the chart's `signingKey: {}` default and the `${DID}` fallback stay intact.
 - `TestProviderDIDChange`: changing `domain.base` changes exactly the domain leaves plus the DID
@@ -154,10 +183,11 @@ Tests in `config-tool/internal/render/provider_test.go`, modelled on the domain 
 says so." `resolve` already keeps a given answer. What is missing is saying so.
 - Core: `render.HandSet(b model.Bundle, p profile.Profile) []HandSetAnswer` (name it as you see fit,
   but do not reuse `Pinned`, which means a loaded-file hand edit). It lists every given answer whose
-  foundation has a default, in `FoundationOrder`, with `ID`, `Value` and `Derived`. `Derived` is what the
-  default would give now, and empty when its refs or `defaultWhen` do not hold. Table-driven test: a
-  hand-set DID survives a `domain.base` change and `Derived` follows the new domain. Hosts are covered
-  the same way.
+  foundation has a default that references other answers (non-empty `Refs`), in `FoundationOrder`,
+  with `ID`, `Value` and `Derived`. A constant `choice` default such as `did.method`'s is left out:
+  picking a radio is not pinning. `Derived` is what the default would give now, and empty when its refs
+  or `defaultWhen` do not hold. Table-driven test: a hand-set DID survives a `domain.base` change and
+  `Derived` follows the new domain. Hosts are covered the same way. A given `did.method` is not listed.
 - API: add `handSet` to the `POST /api/render` response (`renderResponse` in
   `internal/server/render.go`). Add a server test.
 - UI: `ui/src/stages/Review.tsx` gets a "Set by hand" section, one row per entry: label, value, and
@@ -243,7 +273,7 @@ says so." `resolve` already keeps a given answer. What is missing is saying so.
   `doc/config-tool/USER_JOURNEY.md#stage-3--foundations` if the panel wording changed, and in
   `doc/config-tool/FEATURE_MODEL.md` correct the `did.method / did.value` row to the real target list
   and add the deviations (registration job and TIR script → US-3.3, `dataSpaceConfig`/APISIX have no
-  key, `keycloak.signingKey.did` → US-5.5).
+  key, `keycloak.signingKey.did` → US-5.5, `identityhub.bootstrap.did` and `holder.kid` → US-8.11).
   In `AGENTS.md`, mark US-3.2 shipped with one line. Its planned-entry wording "only 4 are owned
   scalars" becomes 3, since `keycloak.signingKey.did` is excluded.
 - Accept when `make ui`, `make build`, `make test` and `make lint` are green. Check the UI by hand with
