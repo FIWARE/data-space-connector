@@ -16,7 +16,6 @@ import (
 	"github.com/FIWARE/data-space-connector/config-tool/internal/atomicfile"
 	"github.com/FIWARE/data-space-connector/config-tool/internal/model"
 	"github.com/FIWARE/data-space-connector/config-tool/internal/profile"
-	"github.com/FIWARE/data-space-connector/config-tool/internal/render"
 	"github.com/FIWARE/data-space-connector/config-tool/internal/roundtrip"
 	"github.com/FIWARE/data-space-connector/config-tool/internal/trial"
 	"github.com/FIWARE/data-space-connector/config-tool/internal/version"
@@ -37,6 +36,9 @@ const (
 	quickStartURL = "https://github.com/FIWARE/data-space-connector/blob/main/doc/deployment-integration/local-deployment/LOCAL.MD"
 	warningPrefix = "warning: "
 )
+
+// errGeneratePending answers a valid generate until rendering is wired to the command.
+var errGeneratePending = errors.New("rendering a values.yaml is not implemented yet")
 
 // GUIOptions are the root command's settings for the GUI.
 type GUIOptions struct {
@@ -82,15 +84,10 @@ func newGenerateCommand() *cobra.Command {
 			if withTrial {
 				return generateTrial(cmd.OutOrStdout(), cmd.ErrOrStderr(), outputDir)
 			}
-			p, err := loadProfile(profilePath, bundles.FS)
-			if err != nil {
+			if _, err := loadProfile(profilePath, bundles.FS); err != nil {
 				return fmt.Errorf("generate: %w", err)
 			}
-			values, err := render.Render(cmd.Context(), p)
-			if err != nil {
-				return fmt.Errorf("generate: %w", err)
-			}
-			return writeOutput(cmd.OutOrStdout(), outputPath, values)
+			return fmt.Errorf("generate: %w", errGeneratePending)
 		},
 	}
 	cmd.Flags().StringVarP(&profilePath, flagProfile, "p", "", "profile (.dscprofile.yaml) holding the answers")

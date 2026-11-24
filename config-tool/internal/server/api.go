@@ -16,7 +16,6 @@ import (
 	"github.com/FIWARE/data-space-connector/config-tool/internal/load"
 	"github.com/FIWARE/data-space-connector/config-tool/internal/model"
 	"github.com/FIWARE/data-space-connector/config-tool/internal/profile"
-	"github.com/FIWARE/data-space-connector/config-tool/internal/render"
 	"github.com/FIWARE/data-space-connector/config-tool/internal/roundtrip"
 	"github.com/FIWARE/data-space-connector/config-tool/internal/validate"
 	"github.com/FIWARE/data-space-connector/config-tool/internal/version"
@@ -26,7 +25,6 @@ const (
 	// maxBodyBytes caps request bodies; a full values.yaml is a few hundred KiB.
 	maxBodyBytes    = 8 << 20
 	contentTypeJSON = "application/json"
-	contentTypeYAML = "application/yaml"
 	eventReady      = "ready"
 	// queryKubeconfig names the explicit kubeconfig path; empty means clientcmd's default rules.
 	queryKubeconfig = "kubeconfig"
@@ -43,7 +41,11 @@ const (
 	ticketRender = "Epic 3/5"
 )
 
-var errTrailingData = errors.New("unexpected data after the JSON value")
+var (
+	errTrailingData = errors.New("unexpected data after the JSON value")
+	// errRenderPending answers a valid render request until the render is wired to the API.
+	errRenderPending = errors.New("rendering a values.yaml is not implemented yet")
+)
 
 type errorBody struct {
 	Error  string `json:"error"`
@@ -129,16 +131,7 @@ func handleRender(w http.ResponseWriter, r *http.Request) {
 		writeError(w, bodyErrorStatus(err), "invalid profile: "+err.Error(), "")
 		return
 	}
-	values, err := render.Render(r.Context(), p)
-	switch {
-	case errors.Is(err, render.ErrNotImplemented):
-		writeError(w, http.StatusNotImplemented, err.Error(), ticketRender)
-	case err != nil:
-		writeError(w, http.StatusInternalServerError, err.Error(), "")
-	default:
-		w.Header().Set(headerContentType, contentTypeYAML)
-		_, _ = w.Write(values)
-	}
+	writeError(w, http.StatusNotImplemented, errRenderPending.Error(), ticketRender)
 }
 
 func handleValidate(w http.ResponseWriter, r *http.Request) {

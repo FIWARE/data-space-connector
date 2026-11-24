@@ -71,9 +71,9 @@ the map form, and the JSON of a tree is byte-identical across runs.
 ### 7. Hand edits are pinned by load classification
 
 With a loaded file (`*load.Result`), a target path that is an **unknown** or **skipped** leaf of the load report
-(ADR 0014 §4), or that runs through an unknown leaf, keeps the loaded value and is marked `pinned`. Owned and
-recognized leaves are re-rendered. The kept value is decoded from the loaded node, never from the report's capped
-preview, so its YAML type survives. A node that is not a scalar leaves the leaf pinned without a kept value, and
+(ADR 0014 §4), that runs through an unknown leaf, or that has unknown leaves below it (the file holds a collection
+there), keeps the loaded value and is marked `pinned`. Owned and recognized leaves are re-rendered. The kept value is
+decoded from the loaded node, never from the report's capped preview, so its YAML type survives. A node that is not a scalar leaves the leaf pinned without a kept value, and
 `Nested()` omits it so the overrides layer keeps the subtree. `rendered` holds what the render would have written.
 
 ### 8. The diff is grouped and baselined per session

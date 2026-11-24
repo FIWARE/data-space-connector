@@ -1,17 +1,159 @@
-// Package render turns a profile into a values tree for the data-space-connector chart.
+// Package render turns profile answers into a values tree whose leaves carry provenance (ADR 0020).
 package render
 
 import (
-	"context"
-	"errors"
+	"fmt"
+	"maps"
+	"slices"
+	"strings"
 
+	"gopkg.in/yaml.v3"
+
+	"github.com/FIWARE/data-space-connector/config-tool/internal/load"
+	"github.com/FIWARE/data-space-connector/config-tool/internal/model"
 	"github.com/FIWARE/data-space-connector/config-tool/internal/profile"
+	"github.com/FIWARE/data-space-connector/config-tool/internal/roundtrip"
 )
 
-// ErrNotImplemented is returned until rendering lands with Epic 3/5.
-var ErrNotImplemented = errors.New("rendering a values.yaml is not implemented yet")
+// The separators that follow a path's prefix in roundtrip.Path.String syntax.
+const (
+	keySeparator = '.'
+	indexOpen    = '['
+)
 
-// Render produces the values.yaml for p.
-func Render(_ context.Context, _ profile.Profile) ([]byte, error) {
-	return nil, ErrNotImplemented
+// Options tune a render; the zero value renders without a loaded file.
+type Options struct {
+	// Overrides is the loaded file whose hand edits pin leaves; nil when nothing is loaded.
+	Overrides *load.Result
+}
+
+// Render evaluates b's foundation targets over p's answers. It errors on an answer b does not
+// declare and on a derived answer its type refuses; an unanswered target writes nothing.
+func Render(b model.Bundle, p profile.Profile, opts Options) (Tree, error) {
+	answers, ns, err := resolve(b, p.Answers)
+	if err != nil {
+		return Tree{}, err
+	}
+	leaves := []Leaf{}
+	incomplete := map[string]bool{}
+	for _, decl := range b.Foundations {
+		f, _ := b.Foundation(decl.ID)
+		for i, t := range f.Targets {
+			if !all(answers, t.Refs) {
+				for _, l := range lists(t.Path) {
+					incomplete[l] = true
+				}
+				continue
+			}
+			v, err := evaluate(t, answers, ns)
+			if err != nil {
+				return Tree{}, fmt.Errorf("render: %s targets[%d]: %w", f.ID, i, err)
+			}
+			leaves = append(leaves, Leaf{Path: slices.Clone(t.Path), Value: v, Provenance: Provenance{
+				Foundation: f.ID, Answers: append([]string{}, t.Refs...), Fn: string(t.Fn), Target: i,
+			}})
+		}
+	}
+	// An owned list is written whole or not at all, so a fragment never replaces the chart's list.
+	leaves = slices.DeleteFunc(leaves, func(l Leaf) bool {
+		return slices.ContainsFunc(lists(l.Path), func(k string) bool { return incomplete[k] })
+	})
+	if opts.Overrides != nil {
+		pin(leaves, opts.Overrides)
+	}
+	sortLeaves(leaves)
+	return Tree{Leaves: leaves}, nil
+}
+
+// resolve returns the given answers plus the derived defaults, flat and as the template namespace.
+func resolve(b model.Bundle, given map[string]any) (map[string]any, map[string]any, error) {
+	for _, id := range slices.Sorted(maps.Keys(given)) {
+		if _, ok := b.Foundation(id); !ok {
+			return nil, nil, fmt.Errorf("render: answer %q is not declared by bundle %s %s", id, b.Chart, b.Version)
+		}
+	}
+	answers, ns := map[string]any{}, map[string]any{}
+	for _, id := range b.FoundationOrder() {
+		f, _ := b.Foundation(id)
+		v, ok := given[id]
+		if !ok {
+			if f.DefaultTemplate() == nil || !all(answers, f.Refs) {
+				continue
+			}
+			s, err := execute(f.DefaultTemplate(), ns)
+			if err != nil {
+				return nil, nil, fmt.Errorf("render: default of %s: %w", id, err)
+			}
+			if err := f.Type.Check(s); err != nil {
+				return nil, nil, fmt.Errorf("render: derived %s %w", id, err)
+			}
+			v = s
+		}
+		answers[id] = v
+		setNested(ns, id, v)
+	}
+	return answers, ns, nil
+}
+
+func all(answers map[string]any, ids []string) bool {
+	return !slices.ContainsFunc(ids, func(id string) bool { _, ok := answers[id]; return !ok })
+}
+
+// lists returns every prefix of p that is indexed into, i.e. the owned lists p writes into.
+func lists(p roundtrip.Path) []string {
+	var ls []string
+	for k := 1; k < len(p); k++ {
+		if _, ok := p[k].Index(); ok {
+			ls = append(ls, p[:k].String())
+		}
+	}
+	return ls
+}
+
+// pin marks every leaf that overlaps a hand edit of r (an unknown or skipped leaf, ADR 0014 §4)
+// and keeps the loaded scalar in its place.
+func pin(leaves []Leaf, r *load.Result) {
+	var edits []string
+	for _, e := range r.Report.Unknown {
+		edits = append(edits, e.Path)
+	}
+	for _, e := range r.Report.Skipped {
+		edits = append(edits, e.Path)
+	}
+	for i := range leaves {
+		l := &leaves[i]
+		full := slices.Concat(r.Root, l.Path)
+		key := full.String()
+		if !slices.ContainsFunc(edits, func(e string) bool { return overlaps(key, e) }) {
+			continue
+		}
+		l.Provenance.Pinned, l.Provenance.Rendered = true, l.Value
+		l.Value, l.Provenance.Kept = kept(r.Doc, full)
+	}
+}
+
+// kept decodes the loaded scalar at p with its YAML type. Report values are capped previews, so
+// they are never used. ok is false when p holds no scalar, runs through an alias or is missing.
+func kept(doc *roundtrip.Document, p roundtrip.Path) (v any, ok bool) {
+	n, err := doc.Lookup(p)
+	if err != nil || n.Kind != yaml.ScalarNode {
+		return nil, false
+	}
+	if err := n.Decode(&v); err != nil {
+		return nil, false
+	}
+	return v, true
+}
+
+// overlaps reports whether paths a and b are equal or one is a segment prefix of the other.
+func overlaps(a, b string) bool {
+	return a == b || isUnder(a, b) || isUnder(b, a)
+}
+
+// isUnder reports whether path p lies strictly below path q; every path lies below the root "".
+func isUnder(p, q string) bool {
+	if len(p) <= len(q) || !strings.HasPrefix(p, q) {
+		return false
+	}
+	return q == "" || p[len(q)] == keySeparator || p[len(q)] == indexOpen
 }
