@@ -341,7 +341,7 @@ The *Data space* panel holds three answers ([ADR 0022](../doc/adr/0022-config-to
 
 - `dataspace.tirAddress` (type `url`): the Trust Anchor's TIR. It is the only one that renders, to the verifier's
   `decentralizedIam.vcAuthentication.vcverifier.deployment.verifier.tirAddress`. *Check* sends one GET to it and shows
-  *reachable (HTTP n)* or *unreachable: <why>*. The result is session state, shown on Review as information that never
+  *reachable (HTTP n)* or *unreachable: reason*. The result is session state, shown on Review as information that never
   blocks; it is not saved in the profile.
 - `dataspace.credentialTypes` (type `credentialTypes`): an ordered list of `{type, description?}` rows with unique
   types, which can be added, moved and removed.
