@@ -17,6 +17,7 @@ import (
 
 	"github.com/FIWARE/data-space-connector/config-tool/internal/load"
 	"github.com/FIWARE/data-space-connector/config-tool/internal/recent"
+	"github.com/FIWARE/data-space-connector/config-tool/internal/render"
 	"github.com/FIWARE/data-space-connector/config-tool/internal/trial"
 	"github.com/FIWARE/data-space-connector/config-tool/model"
 	trialdata "github.com/FIWARE/data-space-connector/config-tool/trial"
@@ -57,6 +58,11 @@ type Server struct {
 
 	// loaded is the overrides layer: the latest POST /api/load or the source an opened profile restored.
 	loaded *load.Result
+	// lastRender is the previous POST /api/render tree; a load or profile open empties it.
+	lastRender render.Tree
+	// lastRenderSHA is the sourceSha256 lastRender was rendered with; a render of another one diffs against empty.
+	lastRenderSHA string
+	// loadMu guards loaded, lastRender and lastRenderSHA.
 	loadMu sync.Mutex
 
 	// trial holds the local trial descriptor and values; tests swap it before the first trial request.

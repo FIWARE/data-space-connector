@@ -36,16 +36,9 @@ const (
 	defaultLoadName = "values.yaml"
 	// pathSeparators covers browser-supplied names from both POSIX and Windows.
 	pathSeparators = `/\`
-
-	// ticketRender replaces the render stub and is reported with its 501.
-	ticketRender = "Epic 3/5"
 )
 
-var (
-	errTrailingData = errors.New("unexpected data after the JSON value")
-	// errRenderPending answers a valid render request until the render is wired to the API.
-	errRenderPending = errors.New("rendering a values.yaml is not implemented yet")
-)
+var errTrailingData = errors.New("unexpected data after the JSON value")
 
 type errorBody struct {
 	Error  string `json:"error"`
@@ -68,7 +61,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/load", s.handleLoad)
 	mux.HandleFunc("GET /api/trial", s.handleTrial)
 	mux.HandleFunc("POST /api/trial/write", s.handleTrialWrite)
-	mux.HandleFunc("POST /api/render", handleRender)
+	mux.HandleFunc("POST /api/render", s.handleRender)
+	mux.HandleFunc("GET /api/foundations", s.handleFoundations)
 	mux.HandleFunc("POST /api/validate", handleValidate)
 	mux.HandleFunc("GET "+pathWS, s.handleWebSocket)
 	mux.HandleFunc(pathAPI, func(w http.ResponseWriter, _ *http.Request) {
@@ -125,15 +119,6 @@ func handleContexts(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func handleRender(w http.ResponseWriter, r *http.Request) {
-	var p profile.Profile
-	if err := decodeJSON(w, r, &p); err != nil {
-		writeError(w, bodyErrorStatus(err), "invalid profile: "+err.Error(), "")
-		return
-	}
-	writeError(w, http.StatusNotImplemented, errRenderPending.Error(), ticketRender)
-}
-
 func handleValidate(w http.ResponseWriter, r *http.Request) {
 	values, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxBodyBytes))
 	if err != nil {
@@ -181,6 +166,7 @@ func (s *Server) handleLoad(w http.ResponseWriter, r *http.Request) {
 	default:
 		s.loadMu.Lock()
 		s.loaded = res
+		s.resetRender()
 		s.loadMu.Unlock()
 		writeJSON(w, res.Report)
 	}

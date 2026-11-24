@@ -57,9 +57,9 @@ printed URL yourself. `dsc-config --no-browser` only prints the URL.
 
 `dsc-config generate -p <name>.dscprofile.yaml [-o values.yaml]` renders a saved
 [profile](#profiles) without the GUI (stdout by default). It refuses a profile with an unanswered or malformed Target field, naming the file and the field,
-because rendering needs a complete target. An existing output file is refused until the render
-epic decides how rendered keys merge with overrides (ADR 0015). Rendering itself is not
-implemented yet.
+because rendering needs a complete target. It then renders the answers, so bundle and profile errors surface, and
+stops with "writing values.yaml lands with US-7.1". An existing output file is refused until the render
+epic decides how rendered keys merge with overrides (ADR 0015).
 
 `dsc-config generate --trial [--output-dir <dir>]` writes the three files of the
 [local trial](#try-it-locally).
@@ -409,6 +409,12 @@ they fan out to (ADR 0020). Each has a dotted `id`, a `type` (`string`, `hostnam
 `const`; the bundle header documents them. A bundle with an unknown function, a reference to an undeclared id, a
 cycle among defaults, a path outside `topLevelKeys`, a list index gap or two targets on one path fails to load.
 A profile's `answers` accepts exactly the declared ids, and `open` accepts `answers.<id>` for them.
+`GET /api/foundations?chart=&version=` lists them with label, help, doc, type, default, stage and their fan-out
+(`targets`, `count`, sorted `components`), transitive through derived hosts. `POST /api/render` takes `{profile, sourceSha256}`
+(422 with field errors when the profile does not validate, or when the sha is not the loaded file's), renders it with
+the load the sha names as the overrides layer (none when it is empty, as on save) and returns `{tree, diff}`. The diff
+is against the previous render of the same source; a load, a profile open or a render of another source resets it,
+and a hand-edited leaf of the loaded file is kept and reported `pinned` only when its rendered value changes (ADR 0020 §7-8).
 `roles:` rate the features of `features:`, and `roleMatrix:` needs `roles:`.
 Two charts are shipped: `data-space-connector` (`model/10.16.0/`) and `trust-anchor` (`model/1.3.6/`, only
 `topLevelKeys` and two foundations without targets, no rules and no roles). Their version numbers differ, so they fit the one-bundle-per-version layout.

@@ -16,6 +16,7 @@ import (
 	"github.com/FIWARE/data-space-connector/config-tool/internal/atomicfile"
 	"github.com/FIWARE/data-space-connector/config-tool/internal/model"
 	"github.com/FIWARE/data-space-connector/config-tool/internal/profile"
+	"github.com/FIWARE/data-space-connector/config-tool/internal/render"
 	"github.com/FIWARE/data-space-connector/config-tool/internal/roundtrip"
 	"github.com/FIWARE/data-space-connector/config-tool/internal/trial"
 	"github.com/FIWARE/data-space-connector/config-tool/internal/version"
@@ -37,8 +38,8 @@ const (
 	warningPrefix = "warning: "
 )
 
-// errGeneratePending answers a valid generate until rendering is wired to the command.
-var errGeneratePending = errors.New("rendering a values.yaml is not implemented yet")
+// errGeneratePending answers a profile that renders until writing the values file is wired in.
+var errGeneratePending = errors.New("writing values.yaml lands with US-7.1")
 
 // GUIOptions are the root command's settings for the GUI.
 type GUIOptions struct {
@@ -84,7 +85,7 @@ func newGenerateCommand() *cobra.Command {
 			if withTrial {
 				return generateTrial(cmd.OutOrStdout(), cmd.ErrOrStderr(), outputDir)
 			}
-			if _, err := loadProfile(profilePath, bundles.FS); err != nil {
+			if err := renderProfile(profilePath, bundles.FS); err != nil {
 				return fmt.Errorf("generate: %w", err)
 			}
 			return fmt.Errorf("generate: %w", errGeneratePending)
@@ -132,14 +133,15 @@ func generateTrial(stdout, stderr io.Writer, dir string) error {
 
 // loadProfile reads the profile at path and refuses it unless it is complete enough to render:
 // beyond the structural checks of save and open, every Target field must be answered and well-formed.
-func loadProfile(path string, models fs.FS) (profile.Profile, error) {
+// It returns the shipped bundle the profile names.
+func loadProfile(path string, models fs.FS) (profile.Profile, model.Bundle, error) {
 	p, err := profile.ReadFile(path)
 	if err != nil {
-		return profile.Profile{}, err
+		return profile.Profile{}, model.Bundle{}, err
 	}
 	shipped, err := model.Versions(models)
 	if err != nil {
-		return profile.Profile{}, err
+		return profile.Profile{}, model.Bundle{}, err
 	}
 	errs := p.Validate(shipped)
 	for _, e := range p.Target.Validate() {
@@ -149,13 +151,28 @@ func loadProfile(path string, models fs.FS) (profile.Profile, error) {
 		}
 	}
 	if len(errs) == 0 {
-		return p, nil
+		// Validate refuses a profile whose bundle is not shipped.
+		i := slices.IndexFunc(shipped, func(b model.Bundle) bool { return b.Chart == p.Model.Chart && b.Version == p.Model.Version })
+		return p, shipped[i], nil
 	}
 	msgs := make([]string, len(errs))
 	for i, e := range errs {
 		msgs[i] = e.Error()
 	}
-	return profile.Profile{}, fmt.Errorf("%s: %w", path, &invalidProfileError{msgs})
+	return profile.Profile{}, model.Bundle{}, fmt.Errorf("%s: %w", path, &invalidProfileError{msgs})
+}
+
+// renderProfile renders the profile at path against the bundle it names, so bundle and profile
+// errors surface before anything is written.
+func renderProfile(path string, models fs.FS) error {
+	p, b, err := loadProfile(path, models)
+	if err != nil {
+		return err
+	}
+	if _, err := render.Render(b, p, render.Options{}); err != nil {
+		return fmt.Errorf("%s: %w", path, err)
+	}
+	return nil
 }
 
 // invalidProfileError lists every field error of a profile generate refuses.

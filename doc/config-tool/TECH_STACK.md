@@ -102,7 +102,8 @@ Why this and not something else:
 │    GET  /api/roles          role presets and feature catalogue (stage 2)         │
 │    POST /api/preset         apply a role preset to a profile                     │
 │    POST /api/features       toggle a feature, list the choices vs. the preset    │
-│    POST /api/render         profile → values.yaml (+ diff)                       │
+│    POST /api/render         profile → values tree (+ diff)                       │
+│    GET  /api/foundations    stage 3 answers and the keys they fan out to         │
 │    POST /api/validate       L1 schema · L2 rules · L3 helm template              │
 │    POST /api/load           values.yaml → profile + overrides + conflicts        │
 │    GET  /api/cluster/scan   detection for stage 4, incl. sealed-secrets and ESO
