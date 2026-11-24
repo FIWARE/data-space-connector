@@ -11,8 +11,10 @@ import (
 const (
 	foundationDomain = "domain.base"
 	foundationHost   = "host.keycloak"
-	foundationOrg    = "org.displayName"
-	foundationDID    = "did.value"
+	// hostFeature is the only feature that gates foundationHost's display.
+	hostFeature   = "identity.issuer"
+	foundationOrg = "org.displayName"
+	foundationDID = "did.value"
 )
 
 // foundationJSON is a decoded foundation, target paths kept as strings.
@@ -32,7 +34,9 @@ type foundationJSON struct {
 	Label      string            `json:"label"`
 	Count      int               `json:"count"`
 	Components []string          `json:"components"`
-	Targets    []struct {
+	// Features is nil only when the response holds null.
+	Features []string `json:"features"`
+	Targets  []struct {
 		Path      string `json:"path"`
 		Component string `json:"component"`
 	} `json:"targets"`
@@ -96,8 +100,8 @@ func TestFoundationsEndpoint(t *testing.T) {
 			var ids []string
 			for _, f := range foundations {
 				ids = append(ids, f.ID)
-				if f.Count != len(f.Targets) || f.Label == "" || f.Stage == "" || f.Options == nil {
-					t.Errorf("foundation %s = %+v, want a label, a stage, an options list and count = len(targets)", f.ID, f)
+				if f.Count != len(f.Targets) || f.Label == "" || f.Stage == "" || f.Options == nil || f.Features == nil {
+					t.Errorf("foundation %s = %+v, want a label, a stage, options and features lists and count = len(targets)", f.ID, f)
 				}
 			}
 			var listed []string
@@ -133,6 +137,9 @@ func TestFoundationsFanOut(t *testing.T) {
 	}
 	if !slices.IsSorted(domain.Components) || !slices.Equal(host.Components, []string{"keycloak"}) {
 		t.Errorf("components: domain %v, host %v, want sorted and keycloak only for the host", domain.Components, host.Components)
+	}
+	if !slices.Equal(host.Features, []string{hostFeature}) || len(domain.Features) != 0 {
+		t.Errorf("features: %s %v, %s %v, want %s gated by %s only", foundationHost, host.Features, foundationDomain, domain.Features, foundationHost, hostFeature)
 	}
 	if org.Count != len(org.Targets) {
 		t.Errorf("%s count = %d, want %d", foundationOrg, org.Count, len(org.Targets))

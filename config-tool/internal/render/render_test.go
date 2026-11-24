@@ -585,3 +585,37 @@ func TestRenderTIRAddress(t *testing.T) {
 		})
 	}
 }
+
+func TestRenderShippedVerifierAndDIDHosts(t *testing.T) {
+	const pinnedDIDHost = "did." + domain
+	b := providerBundle(t)
+	tests := []struct {
+		name    string
+		answers map[string]any
+		want    map[string]any
+	}{
+		{"derived from the domain", map[string]any{domainBase: domain}, map[string]any{
+			"decentralizedIam.vcAuthentication.vcverifier.ingress.hosts[0].host":  "verifier." + domain,
+			"decentralizedIam.vcAuthentication.vcverifier.deployment.server.host": "https://verifier." + domain,
+			"marketplace.siop.verifier.host":                                      "https://verifier." + domain,
+			"did.ingress.hosts[0].host":                                           domain,
+			"did.config.server.hostUrl":                                           "http://" + domain,
+			participantIDKey:                                                      didWebMethod + ":" + domain,
+		}},
+		{"a pinned DID host re-derives the DID", map[string]any{domainBase: domain, hostDIDID: pinnedDIDHost}, map[string]any{
+			"did.ingress.hosts[0].host": pinnedDIDHost,
+			"did.config.server.hostUrl": "http://" + pinnedDIDHost,
+			participantIDKey:            didWebMethod + ":" + pinnedDIDHost,
+		}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := values(renderProvider(t, b, tc.answers))
+			for path, want := range tc.want {
+				if got[path] != want {
+					t.Errorf("%s = %v, want %v", path, got[path], want)
+				}
+			}
+		})
+	}
+}

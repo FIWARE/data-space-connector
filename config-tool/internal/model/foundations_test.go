@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -189,6 +190,48 @@ func TestFoundationsValidation(t *testing.T) {
 			_, err = Versions(fstest.MapFS{fixtureFile: {Data: []byte(foundationsHead + string(body))}})
 			if err == nil || !strings.Contains(err.Error(), fixtureFile) || !strings.Contains(err.Error(), tc.Err) {
 				t.Errorf("err = %v, want it to name %s and contain %q", err, fixtureFile, tc.Err)
+			}
+		})
+	}
+}
+
+func TestFoundationFeatures(t *testing.T) {
+	const hostID = "host.did"
+	tests := []struct {
+		name     string
+		features string
+		want     []string
+		wantErr  string
+	}{
+		{"ungated", "", nil, ""},
+		{"one feature", "[identity.did]", []string{"identity.did"}, ""},
+		{"two features", "[identity.did, data.scorpio]", []string{"identity.did", "data.scorpio"}, ""},
+		{"unknown feature", "[identity.nope]", nil, `features[0]: "identity.nope" names no feature of the catalogue`},
+		{"another chart's feature", "[ta.registry]", nil, "ta.registry is a feature of chart trust-anchor, not data-space-connector"},
+		{"repeated feature", "[identity.did, identity.did]", nil, "features[1]: identity.did is already listed"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			fsys := catalogueFS(t, "", "")
+			foundation := "\nfoundations:\n  - {id: " + hostID + ", stage: foundations, type: hostname, label: DID host"
+			if tc.features != "" {
+				foundation += ", features: " + tc.features
+			}
+			fsys[fixtureFile].Data = append(fsys[fixtureFile].Data, foundation+"}\n"...)
+			got, err := Versions(fsys)
+			if tc.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+					t.Fatalf("err = %v, want it to contain %q", err, tc.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			i := slices.IndexFunc(got, func(b Bundle) bool { return b.Chart == chart })
+			f, _ := got[i].Foundation(hostID)
+			if !reflect.DeepEqual(f.Features, tc.want) {
+				t.Errorf("features = %v, want %v", f.Features, tc.want)
 			}
 		})
 	}

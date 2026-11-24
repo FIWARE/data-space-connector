@@ -231,17 +231,10 @@ func TestChangeJSON(t *testing.T) {
 
 func TestProviderTargetsAndDiff(t *testing.T) {
 	b := providerBundle(t)
-	// did.value derives from the domain while unanswered, so its targets are reached too.
-	want := answerLeaves(t, providerDoc(t), domainBase)
-	for _, r := range Targets(b, didValueID) {
-		want = append(want, r.Path.String())
-	}
-	sort.Strings(want)
-	var targets []string
-	for _, r := range Targets(b, domainBase) {
-		targets = append(targets, r.Path.String())
-	}
-	sort.Strings(targets)
+	// The hosts provider.yaml keeps off the domain, and did.value, derive from it while unanswered, so their
+	// targets are reached too.
+	want := slices.Concat(answerLeaves(t, providerDoc(t), domainBase), targetPaths(b, hostVerifierID), targetPaths(b, hostDIDID))
+	targets := targetPaths(b, domainBase)
 	if missing, extra := diffSets(want, targets); len(missing)+len(extra) > 0 {
 		t.Errorf("Targets(%s): missing %v, extra %v", domainBase, missing, extra)
 	}

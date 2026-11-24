@@ -54,6 +54,8 @@ export interface Foundation {
   targets: TargetRef[]
   count: number
   components: string[]
+  /** Feature ids; Stage 3 hides the foundation while any is off. Empty when it is always shown. */
+  features: string[]
 }
 
 /** Answer of GET /api/foundations. */

@@ -302,6 +302,7 @@ export const FOUNDATIONS: FoundationList = {
       targets: [{ path: 'keycloak.realm.displayNameHtml', component: 'keycloak' }],
       count: 1,
       components: ['keycloak'],
+      features: [],
     },
     {
       id: 'domain.base',
@@ -322,6 +323,7 @@ export const FOUNDATIONS: FoundationList = {
       ],
       count: 3,
       components: ['decentralizedIam', 'keycloak'],
+      features: [],
     },
     {
       id: 'host.keycloak',
@@ -341,6 +343,7 @@ export const FOUNDATIONS: FoundationList = {
       ],
       count: 2,
       components: ['keycloak'],
+      features: ['identity.issuer'],
     },
   ],
 }
@@ -364,6 +367,7 @@ export const DID_METHOD: Foundation = {
   targets: [],
   count: 0,
   components: [],
+  features: [],
 }
 
 export const DID_VALUE: Foundation = {
@@ -385,6 +389,7 @@ export const DID_VALUE: Foundation = {
   ],
   count: 3,
   components: ['contract-management', 'fdsc-edc', 'keycloak'],
+  features: [],
 }
 
 /** FOUNDATIONS with the DID pair after the base domain, as the bundle declares them. */
@@ -509,6 +514,7 @@ export const TIR_ADDRESS: Foundation = {
   targets: [{ path: 'decentralizedIam.vcAuthentication.vcverifier.deployment.verifier.tirAddress', component: 'decentralizedIam' }],
   count: 1,
   components: ['decentralizedIam'],
+  features: [],
 }
 
 export const CREDENTIAL_TYPES: Foundation = {
@@ -521,6 +527,7 @@ export const CREDENTIAL_TYPES: Foundation = {
   targets: [],
   count: 0,
   components: [],
+  features: [],
 }
 
 export const AUTO_REGISTRATION: Foundation = {
