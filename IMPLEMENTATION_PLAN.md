@@ -57,6 +57,26 @@ reachability check, descriptor import). Nothing goes on the network unless the u
    that `TypeURL` refuses derives no answer and gets a load note, so the leaf stays pinned and the rule fires. That
    is correct, because the verifier would get an unusable address.
 
+   **Derived foundation answers are seeded into the profile.** `load.Load` only lists derived answers in
+   `Report.Answers`, and `check.Evaluate(b, p)` resolves answers from `p.Answers` and defaults alone, so the
+   `recognize:` rule by itself does not reach the check. The core therefore gets
+   `load.SeedAnswers(r Report, answers map[string]any) map[string]any`. It copies every derived answer of stage
+   `foundations` whose id the profile does not already answer, and returns the merged map without mutating its input.
+   - **A seeded answer counts as a given answer.** Profile answers carry no origin, and adding one would change the
+     profile format. The value is the user's own, taken from their file, and it renders to the same bytes. A given
+     answer always wins over a derived one, so seeding never overwrites a user's edit.
+   - **Where it runs:**
+     - `POST /api/profile/open` (`handleOpenProfile`, after `restoreSource`) seeds the returned profile.
+     - `POST /api/load` keeps returning the report. The UI's `loadedAnswers` in `ui/src/state/reducer.ts` copies the
+       report's `foundations`-stage answers into `answers.values`. `profileOpened` needs no change, because the server
+       has already seeded the profile it receives.
+   - Once saved, the answer is in the `.dscprofile.yaml`. The CLI (`renderProfile` in `internal/cli/cli.go`), which
+     never restores the source, then sees it without further plumbing. There is one limit: a profile saved by an
+     earlier build lacks the answer, so a CLI `generate` on it blocks until the profile is opened and saved once in
+     the GUI. The error names the field, and the README says so (step 7).
+   - Feature toggles are not affected. They keep their own `source: loaded` path (`loadedToggles`), and
+     `SeedAnswers` ignores answers of other stages.
+
 ## Steps
 
 ### Step 1: Foundation types `url`, `bool`, `credentialTypes` and the `dataspace` group
@@ -113,6 +133,19 @@ compile-time refusals) and in `internal/profile/format_test.go`, using fixtures 
   - Tests: `internal/load/load_test.go` rows for a loaded file with the TIR leaf set (answer derived, leaf
     recognized), with an invalid URL (no answer, note, leaf unknown), and without it (no answer). Also a
     `render_test.go` row: loading that file and rendering keeps the leaf unpinned and byte-identical.
+- Seeding derived foundation answers (Decision 7):
+  - `internal/load/seed.go`: `SeedAnswers`.
+  - `internal/server/profile.go`: `handleOpenProfile` seeds after `restoreSource`.
+  - `ui/src/state/reducer.ts`: `loadedAnswers` seeds the report's `foundations`-stage answers.
+  - Tests:
+    - `internal/load/seed_test.go`, table-driven: a derived foundation answer fills an empty slot; a given answer is
+      kept; a `features`-stage toggle is ignored; an invalid value derived nothing, so nothing is seeded; the input
+      map is not mutated.
+    - `internal/server/profile_test.go`: opening a profile whose source sets `verifier.tirAddress`, with no given
+      answer, returns a profile with `answers["dataspace.tirAddress"]`. A profile that already answers it keeps its
+      own value.
+    - `ui/src/state/reducer.test.ts`: `fileLoaded` with a report carrying a `foundations` answer and a `features`
+      toggle seeds only the former into `answers.values`. Saving afterwards puts it into the profile body.
 - In `internal/render/provider_test.go`:
   - Add a reference answer for `dataspace.tirAddress` (`https://tir.127.0.0.1.nip.io/`).
   - Make the domain-leaf search accept a leaf that a target of another foundation owns, when that foundation's
@@ -145,11 +178,22 @@ compile-time refusals) and in `internal/profile/format_test.go`, using fixtures 
   - `internal/check/check_test.go`: a dedicated table-driven test for this rule.
     - It fires as **error** with verification on and the TIR unset. That is the failure it was written for.
     - It does not fire with the TIR set, with verification off, or with the feature absent.
-    - It does not fire for a **loaded** file that sets `verifier.tirAddress` and has verification on: the answer is
-      back-derived through the Decision 7 `recognize:` rule, with no given answer in the profile. This row loads the
-      fixture through `internal/load` rather than hand-writing the answer.
+    - It does not fire for a **loaded** file that sets `verifier.tirAddress` and has verification on, with no given
+      answer in the profile. The row loads the fixture through `internal/load`, seeds with `load.SeedAnswers` and
+      then calls `Evaluate`; it does not hand-write the answer. A companion row skips the seeding and expects the
+      error, which pins that `Evaluate` itself reads nothing from the load result.
     - `Blocking` is true when it fires.
   - Use profile fixtures in `internal/check/testdata/`.
+  - Proof that the derived answer reaches `Evaluate` on every front end:
+    - **Server, load:** `internal/server/render_test.go` loads the fixture through `POST /api/load`, builds the
+      profile the way the UI does (report answers of stage `foundations` in `answers`), turns verification on, and
+      `POST /api/render` returns no `tir-address-for-verification` finding.
+    - **Server, open:** `internal/server/profile_test.go` opens a `.dscprofile.yaml` whose source sets the TIR and
+      whose answers do not, then renders the returned profile: no finding.
+    - **CLI:** `internal/cli/cli_test.go`, table-driven over `internal/cli/testdata/`. `generate` succeeds on a
+      profile saved after a load (the seeded answer present, verification on). The same profile without the answer
+      fails with `errBlockingFindings` and names `answers.dataspace.tirAddress`, which is the documented limit of
+      Decision 7.
 
 **Acceptance:** `go test ./...` and `make lint` are green, and the existing `did-key-in-production` tests pass unchanged.
 
@@ -269,6 +313,8 @@ fixtures, so there is no live network.
 - `config-tool/README.md`:
   - *Foundations (Stage 3)*: the data space panel, the new types, the import and its descriptor keys.
   - *Rules and findings*: the new `features.`/`unset` grammar and the rule.
+  - *Loading*: derived foundation answers are seeded into the profile as given answers (Decision 7). A profile
+    saved by an earlier build needs one open-and-save in the GUI before a CLI `generate`.
   - *Security model*: the only outbound HTTP requests are the two button-triggered ones.
   - *Package layout*: `internal/dataspace`.
 - `doc/config-tool/FEATURE_MODEL.md`: update the `dataspace.*` rows (1 key shipped, the rest answers-only, with
@@ -276,7 +322,8 @@ fixtures, so there is no live network.
 - `doc/config-tool/USER_JOURNEY.md` Stage 3: describe what shipped, including the descriptor keys.
 - `AGENTS.md`: flip the US-3.3 line to shipped and correct its reason: no chart key exists for auto-registration;
   credential types do have one (`registration.services[*]...credentials[*].type`), owned by US-5.6's list. Mention
-  the `recognize:` rule for the loaded TIR address.
+  the `recognize:` rule for the loaded TIR address and that `load.SeedAnswers` copies derived foundation answers
+  into the profile as given answers.
 - Run `.github/scripts/check-links.sh` if Docker is available.
 
 **Acceptance:** the docs match the code, the links resolve, and `make test` and `make lint` are green.
