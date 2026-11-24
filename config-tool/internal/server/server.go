@@ -48,7 +48,9 @@ type Server struct {
 	// models holds the question-model bundles; tests swap it before serving.
 	models fs.FS
 	// recent is the recent-profiles list; nil when there is no config directory. Tests swap it.
-	recent   *recent.Store
+	recent *recent.Store
+	// outbound carries the only calls that leave the machine, each one a user's button press; tests swap it.
+	outbound http.RoundTripper
 	progress *Progress
 	http     *http.Server
 	// shutdown is cancelled when the server shuts down, which ends open WebSockets.
@@ -99,6 +101,7 @@ func New(ui fs.FS) (*Server, error) {
 		ui:          ui,
 		models:      bundles.FS,
 		trial:       trialdata.FS,
+		outbound:    newOutbound(),
 		progress:    NewProgress(),
 		now:         time.Now,
 		sessions:    map[string]struct{}{},
