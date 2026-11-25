@@ -1,0 +1,53 @@
+# Reference profile: the trust anchor of a data space.
+#
+# It publishes the Trusted Issuers Registry (TIR), which every participant's verifier queries, and
+# keeps the Trusted Issuers List API (TIL), used to add participants, inside the cluster.
+#
+# Before installing, see charts/data-space-connector/examples/README.md: an ingress controller,
+# cert-manager with a ClusterIssuer and the Postgres operator must already run in the cluster.
+#
+#   helm install trust-anchor oci://quay.io/fiware/helm-charts/trust-anchor \
+#     --namespace trust-anchor --create-namespace -f trust-anchor.yaml
+#
+# Replace every <placeholder>.
+
+# The Postgres operator is installed once per cluster, not by each release.
+postgres-operator:
+  enabled: false
+
+managedPostgres:
+  config:
+    volume:
+      size: 5Gi
+      # storageClass: <storage-class>
+    # consent management is not deployed: no user or database for it
+    users:
+      consent_manager: null
+    databases:
+      consent_manager: null
+
+trusted-issuers-list:
+  ingress:
+    # the registry, public: the participants' verifiers check issuers against it
+    tir:
+      enabled: true
+      className: <ingress-class>
+      annotations:
+        cert-manager.io/cluster-issuer: <cluster-issuer>
+        cert-manager.io/private-key-algorithm: ECDSA
+      hosts:
+        - host: <tir-domain>
+      tls:
+        - secretName: tir-tls
+          hosts:
+            - <tir-domain>
+    # the list API writes the registry: keep it inside the cluster (the chart default)
+    til:
+      enabled: false
+  deployment:
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        memory: 512Mi
