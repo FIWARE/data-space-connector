@@ -8,7 +8,7 @@ import { useStore } from '../state/context'
 import { answerErrors, textAnswer } from '../state/foundations'
 import { answerFieldId, fieldElementId } from '../state/openQuestions'
 import { FindingNote } from './Findings'
-import { describedBy, usedByText } from './foundationText'
+import { describedBy, findingNoteId, usedByText } from './foundationText'
 
 export const RESET_LABEL = 'Reset to derived'
 
@@ -55,7 +55,7 @@ export function FieldNotes({ foundation, id, error, own }: { foundation: Foundat
         </p>
       )}
       {own.map((f) => (
-        <FindingNote key={f.rule} finding={f} id={`${id}-${f.rule}`} />
+        <FindingNote key={findingNoteId(id, f)} finding={f} id={findingNoteId(id, f)} />
       ))}
       <p className="hint" id={`${id}-help`}>
         {foundation.help} <DocLink foundation={foundation} /> {foundation.count > 0 && <UsedBy foundation={foundation} />}

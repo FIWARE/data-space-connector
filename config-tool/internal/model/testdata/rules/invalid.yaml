@@ -26,7 +26,7 @@
   rules:
     - {id: r, severity: warning, stage: foundations, field: answers.did.method, when: [{field: answers.did.method, equals: "did:key"}], doc: doc/a.md}
 - name: when missing
-  err: "when is missing"
+  err: "when, distinct or didWebHost is missing"
   rules:
     - {id: r, severity: warning, stage: foundations, field: answers.did.method, message: M, doc: doc/a.md}
 - name: field is not a foundation

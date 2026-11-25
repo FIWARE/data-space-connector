@@ -15,7 +15,7 @@ import (
 const (
 	answerDisplayName = "org.displayName"
 	answerDomain      = "domain.base"
-	answerHost        = "host.verifier"
+	answerHost        = "host.wallet"
 )
 
 func TestValidateAnswers(t *testing.T) {
@@ -28,7 +28,7 @@ func TestValidateAnswers(t *testing.T) {
 		want    []string
 	}{
 		{name: "declared answers", answers: map[string]any{answerDisplayName: "Acme Corp", answerDomain: "acme.example.org"}},
-		{name: "undeclared answer", answers: map[string]any{answerHost: "verifier.acme.example.org"}, want: []string{field(answerHost)}},
+		{name: "undeclared answer", answers: map[string]any{answerHost: "wallet.acme.example.org"}, want: []string{field(answerHost)}},
 		{name: "domain of one label", answers: map[string]any{answerDomain: "localhost"}, want: []string{field(answerDomain)}},
 		{name: "domain with upper case", answers: map[string]any{answerDomain: "Acme.example.org"}, want: []string{field(answerDomain)}},
 		{name: "domain too long", answers: map[string]any{answerDomain: longDomain()}, want: []string{field(answerDomain)}},
@@ -66,11 +66,11 @@ func longDomain() string {
 }
 
 // hostFoundation declares answerHost as a later step of US-3.1 does; it ends the DSC bundle's foundations list.
-const hostFoundation = `  - id: host.verifier
+const hostFoundation = `  - id: host.wallet
     stage: foundations
     type: hostname
-    default: "verifier.{{ .domain.base }}"
-    label: Verifier host
+    default: "wallet.{{ .domain.base }}"
+    label: Wallet host
     help: Derived from the base domain.
 `
 
@@ -103,7 +103,7 @@ func hostBundles(t *testing.T) []model.Bundle {
 func TestApplyPresetChartSwitchCarriesFoundations(t *testing.T) {
 	shipped := hostBundles(t)
 	p := dscProfile()
-	p.Answers = map[string]any{answerDisplayName: "Acme Corp", answerDomain: "acme.example.org", answerHost: "verifier.acme.example.org"}
+	p.Answers = map[string]any{answerDisplayName: "Acme Corp", answerDomain: "acme.example.org", answerHost: "wallet.acme.example.org"}
 	p.Open = []OpenQuestion{{answersFieldPrefix + answerDomain}, {answersFieldPrefix + answerHost}}
 	if errs := p.Validate(shipped); len(errs) > 0 {
 		t.Fatalf("the provider profile does not validate: %v", errs)

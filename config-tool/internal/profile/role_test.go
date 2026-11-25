@@ -20,7 +20,7 @@ const (
 	// shippedTAVersion, shippedTARevision and shippedDSCRevision identify the shipped bundles.
 	shippedTAVersion   = "1.3.6"
 	shippedTARevision  = 2
-	shippedDSCRevision = 9
+	shippedDSCRevision = 11
 )
 
 // Feature ids of the shipped catalogue, grouped as in the preset table of IMPLEMENTATION_PLAN.md decision 5.

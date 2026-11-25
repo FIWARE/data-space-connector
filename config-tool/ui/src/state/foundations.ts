@@ -1,6 +1,6 @@
 /** Foundation answer validation and resolution, mirroring `model.CompiledFoundation.Check` and `render.resolve` in Go. */
 import type { CredentialType, Foundation, FoundationOption, FoundationType } from '../api/foundations'
-import type { AnswerValue } from './answers'
+import type { Answers, AnswerValue } from './answers'
 
 /** DNS name limit, `maxHostnameLength` in Go. */
 export const MAX_HOSTNAME_LENGTH = 253
@@ -184,4 +184,10 @@ export function validAnswers(values: Record<string, AnswerValue>, foundations?: 
 /** A given answer as a text field holds it; undefined when absent or a bool or list, which no text field asks. */
 export function textAnswer(value: AnswerValue | undefined): string | undefined {
   return typeof value === 'string' ? value : undefined
+}
+
+/** Whether a feature `f` is gated on is off, which hides it on Stage 3 (display only, the render ignores it).
+ *  Nothing is off while no role is picked; after one, an absent feature is not offered and so off. */
+export function featureOff(f: Pick<Foundation, 'features'>, answers: Pick<Answers, 'role' | 'features'>): boolean {
+  return answers.role !== undefined && f.features.some((id) => answers.features[id]?.enabled !== true)
 }

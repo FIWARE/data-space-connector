@@ -11,7 +11,12 @@ export function usedByText(f: Pick<Foundation, 'count' | 'components'>): string 
   return `used by ${plural(f.count, 'value')} in ${plural(f.components.length, 'component')}`
 }
 
+/** The DOM id of a finding's note under field `id`; `related` keeps it unique when one rule names a field per pair. */
+export function findingNoteId(id: string, f: Pick<Finding, 'rule' | 'related'>): string {
+  return f.related ? `${id}-${f.rule}-${f.related}` : `${id}-${f.rule}`
+}
+
 /** The ids of a field's error, findings and help, for `aria-describedby`. */
 export function describedBy(id: string, error: string | undefined, own: readonly Finding[]): string {
-  return [error && `${id}-error`, ...own.map((f) => `${id}-${f.rule}`), `${id}-help`].filter(Boolean).join(' ')
+  return [error && `${id}-error`, ...own.map((f) => findingNoteId(id, f)), `${id}-help`].filter(Boolean).join(' ')
 }

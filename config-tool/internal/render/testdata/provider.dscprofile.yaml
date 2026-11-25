@@ -3,7 +3,7 @@ format: 1
 model:
   chart: data-space-connector
   version: 10.16.0
-  revision: 9
+  revision: 11
 target:
   type: cluster
   context: k3s
@@ -19,7 +19,9 @@ answers:
   did.value: did:web:mp-operations.org
   host.keycloak: keycloak-provider.127.0.0.1.nip.io
   host.statusList: provider-status-list.127.0.0.1.nip.io
+  host.did: mp-operations.org
   host.til: til-provider.127.0.0.1.nip.io
+  host.verifier: verifier.mp-operations.org
   host.ccs: provider-ccs.127.0.0.1.nip.io
   host.pap: pap-provider.127.0.0.1.nip.io
   host.scorpio: scorpio-provider.127.0.0.1.nip.io

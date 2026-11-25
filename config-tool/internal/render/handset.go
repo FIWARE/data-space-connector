@@ -1,8 +1,6 @@
 package render
 
 import (
-	"fmt"
-
 	"github.com/FIWARE/data-space-connector/config-tool/internal/model"
 	"github.com/FIWARE/data-space-connector/config-tool/internal/profile"
 )
@@ -31,17 +29,11 @@ func HandSet(b model.Bundle, p profile.Profile) ([]HandSetAnswer, error) {
 		if !ok || f.DefaultTemplate() == nil || len(f.DefaultRefs()) == 0 {
 			continue
 		}
-		h := HandSetAnswer{ID: id, Value: v}
-		if defaults(f, answers) {
-			s, err := execute(f.DefaultTemplate(), ns)
-			if err != nil {
-				return nil, fmt.Errorf("render: default of %s: %w", id, err)
-			}
-			if f.Check(s) == nil {
-				h.Derived = s
-			}
+		d, err := derived(f, answers, ns)
+		if err != nil {
+			return nil, err
 		}
-		list = append(list, h)
+		list = append(list, HandSetAnswer{ID: id, Value: v, Derived: d})
 	}
 	return list, nil
 }

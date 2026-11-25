@@ -16,7 +16,7 @@ import { FINDINGS_HEADING, FINDINGS_HINT, READ_MORE, stageName } from './finding
 import { DELIBERATE_HEADING } from './DeliberateChoices'
 import { FEATURES_HEADING } from './Features'
 import { FOUNDATIONS_HEADING } from './Foundations'
-import { HAND_SET_HEADING, HAND_SET_HINT, wouldDerive } from './handSetText'
+import { HAND_SET_HEADING, HAND_SET_HINT, PINNED_LABEL, wouldDerive } from './handSetText'
 import { ROOT_LABEL, WHOLE_FILE } from './Review'
 import { ROLE_CHANGES_HEADING, roleChanged, summaryToggleLabel, TURNS_OFF } from './roleChangeText'
 
@@ -295,9 +295,9 @@ describe('Review', () => {
     })
 
     it.each<[string, Record<string, string>, string]>([
-      ['names the value it would derive to', { 'domain.base': BASE, 'host.keycloak': HAND_HOST }, `Keycloak host${HAND_HOST}${wouldDerive(`keycloak.${BASE}`)}go ↗`],
-      ['leaves the note out when nothing would derive', { 'host.keycloak': HAND_HOST }, `Keycloak host${HAND_HOST}go ↗`],
-      ['leaves the note out when the derived value is the same', { 'domain.base': BASE, 'host.keycloak': `keycloak.${BASE}` }, `Keycloak hostkeycloak.${BASE}go ↗`],
+      ['names the value it would derive to', { 'domain.base': BASE, 'host.keycloak': HAND_HOST }, `Keycloak host${HAND_HOST}${PINNED_LABEL}${wouldDerive(`keycloak.${BASE}`)}go ↗`],
+      ['leaves the note out when nothing would derive', { 'host.keycloak': HAND_HOST }, `Keycloak host${HAND_HOST}${PINNED_LABEL}go ↗`],
+      ['leaves the note out when the derived value is the same', { 'domain.base': BASE, 'host.keycloak': `keycloak.${BASE}` }, `Keycloak hostkeycloak.${BASE}${PINNED_LABEL}go ↗`],
     ])('lists a hand-set answer and %s', async (_name, values, row) => {
       mockApi()
       renderReview(undefined, undefined, withValues(values))
@@ -357,6 +357,18 @@ describe('Review', () => {
       await screen.findByRole('heading', { level: 3, name: FINDINGS_HEADING })
       await userEvent.click(findingsPanel().getByRole('button', { name: 'Go to Base domain' }))
       expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(FOUNDATIONS_HEADING)
+    })
+
+    it('links a finding with a related field to both fields', async () => {
+      const collision = { ...DOMAIN_WARNING, rule: 'host-collision', severity: 'error' as const, field: 'answers.host.keycloak', related: 'answers.domain.base' }
+      mockApi(undefined, undefined, undefined, {}, {}, {}, { render: renderWithFindings([collision]) })
+      renderReview(undefined, undefined, withDomain)
+      await screen.findByRole('heading', { level: 3, name: FINDINGS_HEADING })
+      const links = findingsPanel().getAllByRole('button', { name: /^Go to / })
+      expect(links.map((b) => b.getAttribute('aria-label'))).toEqual(['Go to Keycloak host', 'Go to Base domain'])
+      await userEvent.click(links[0] as HTMLElement)
+      expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(FOUNDATIONS_HEADING)
+      await waitFor(() => expect(screen.getByLabelText('Keycloak host')).toHaveFocus())
     })
 
     it('leaves the section out without a finding', async () => {

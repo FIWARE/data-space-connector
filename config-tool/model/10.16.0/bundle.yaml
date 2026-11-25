@@ -13,6 +13,9 @@
 #   defaultWhen {id, equals}: the default applies only while the resolved answer id equals equals
 #   prefix   a template over other answers that the answer, given or derived, must start with
 #   targets  {path, fn, args, sep}; a target referencing an unanswered id writes nothing
+#   features feature ids; display only: Stage 3 hides the foundation while any of them is off. It gates
+#            neither the render nor the rules (US-5.3). A host lists the feature whose keys cover its ingress,
+#            plus, behind APISIX, the feature that deploys the route's upstream
 # Templates are Go text/template holding only text and {{ .id }} actions. The functions:
 #   tpl    renders its one template arg
 #   join   renders every template arg and joins the results with sep
@@ -28,9 +31,14 @@
 #   field     target.environment or answers.<foundation id>, the open field the finding points at
 #   when      [{field, equals | unset: true}]: all must hold over the resolved answers, so a derived default counts;
 #             field may also be features.<feature id> (equals on|off, absent is off); unset takes answers.<id> only
+#   distinct  {prefix}, instead of field and when: an error per pair of hostname foundations whose id starts with
+#             prefix (ending in a dot) and that resolve to the same host, ignoring case and a trailing dot. The
+#             message may use {{ .first }}, {{ .second }} (the pair's labels) and {{ .host }}
+#   didWebHost {did, host}, instead of field and when: a finding when the did:web DID's host (decoded, without port)
+#             is not the resolved host foundation. Neither kind reads features: every host renders whatever the role
 chart: data-space-connector
 version: 10.16.0
-revision: 9
+revision: 11
 topLevelKeys: [
   nameOverride, fullnameOverride, imagePullSecrets, issuance, decentralizedIam, scorpio, elsi,
   keycloak, tm-forum-api, statusListServer, rainbow, contract-management, did, registration,
@@ -302,6 +310,22 @@ rules:
       The verifier cannot check issuers without the data space's Trust Anchor: credential verification is on, but
       the TIR address is not set. Enter it, import it from the data space's descriptor, or turn verification off.
     doc: doc/deployment-integration/roles/provider/README.md#vcverifier
+  - id: host-collision
+    severity: error
+    stage: foundations
+    distinct: {prefix: host.}
+    message: >-
+      {{ .first }} and {{ .second }} both resolve to {{ .host }}. The chart routes by host, so one of them stops
+      being reachable. Give one of them another host.
+    doc: doc/deployment-integration/roles/PREREQUISITES.md#public-names-have-to-resolve-inside-the-cluster
+  - id: did-web-host
+    severity: error
+    stage: foundations
+    didWebHost: {did: did.value, host: host.did}
+    message: >-
+      The DID resolves on another host than the one serving its DID document. Pin the DID document host to the
+      DID's host, or reset the DID to derived.
+    doc: doc/deployment-integration/roles/provider/README.md#did-and-key-management
 foundations:
   - id: org.displayName
     stage: foundations
@@ -363,13 +387,13 @@ foundations:
     stage: foundations
     group: organization
     type: did
-    default: "did:web:{{ .domain.base }}"
+    default: "did:web:{{ .host.did }}"
     defaultWhen: {id: did.method, equals: "did:web"}
     prefix: "{{ .did.method }}:"
     label: Organization DID
     help: >-
-      The participant's identifier in the data space. Derived from the base domain for did:web until it is
-      edited; an edited DID stays as it is when the domain changes.
+      The participant's identifier in the data space. Derived from the DID document host for did:web until it is
+      edited; an edited DID stays as it is when the host changes.
     doc: doc/deployment-integration/roles/provider/README.md#did-and-key-management
     # Narrower than US-3.2's list of consumers (ADR 0021), each left to the story that owns the surrounding block:
     #   registration.issuer[0].did and the verifier's TIR curl script (initContainers): lists naming other
@@ -396,6 +420,7 @@ foundations:
   - id: host.keycloak
     stage: foundations
     type: hostname
+    features: [identity.issuer]
     default: "keycloak.{{ .domain.base }}"
     label: Keycloak host
     help: Keycloak, the credential issuer, with its login pages and OID4VCI endpoints.
@@ -412,6 +437,7 @@ foundations:
   - id: host.statusList
     stage: foundations
     type: hostname
+    features: [identity.statuslist]
     default: "status-list.{{ .domain.base }}"
     label: Status list host
     help: The status list server that publishes which issued credentials are revoked.
@@ -425,9 +451,27 @@ foundations:
       - {path: 'statusListServer.ingress.hosts[0].paths[0]', fn: const, args: [/]}
       - {path: 'statusListServer.ingress.tls[0].secretName', fn: tpl, args: ["{{ .host.statusList }}-tls"]}
       - {path: 'statusListServer.ingress.tls[0].hosts[0]', fn: copy, args: ["{{ .host.statusList }}"]}
+  - id: host.did
+    stage: foundations
+    type: hostname
+    features: [identity.did]
+    default: "{{ .domain.base }}"
+    label: DID document host
+    help: >-
+      Where the did:web document is served; a did:web DID names this host. The TLS certificate and its key are not
+      changed here.
+    doc: doc/deployment-integration/roles/provider/README.md#did-and-key-management
+    # The ingress TLS secret holds the DID key, mounted by the did chart, Keycloak and the status list server, so the
+    # certificate stays with US-8.11 (ADR 0023).
+    targets:
+      - {path: 'did.ingress.hosts[0].host', fn: copy, args: ["{{ .host.did }}"]}
+      - {path: 'did.ingress.hosts[0].paths[0].path', fn: const, args: [/]}
+      - {path: 'did.ingress.hosts[0].paths[0].pathType', fn: const, args: [ImplementationSpecific]}
+      - {path: 'did.config.server.hostUrl', fn: tpl, args: ["http://{{ .host.did }}"]}
   - id: host.til
     stage: foundations
     type: hostname
+    features: [access.verification]
     default: "til.{{ .domain.base }}"
     label: Trusted Issuers List host
     help: The management API of the local Trusted Issuers List.
@@ -439,9 +483,28 @@ foundations:
       - {path: 'decentralizedIam.vcAuthentication.trusted-issuers-list.ingress.til.hosts[0].paths[0]', fn: const, args: [/]}
       - {path: 'decentralizedIam.vcAuthentication.trusted-issuers-list.ingress.til.tls[0].secretName', fn: tpl, args: ["{{ .host.til }}-tls"]}
       - {path: 'decentralizedIam.vcAuthentication.trusted-issuers-list.ingress.til.tls[0].hosts[0]', fn: copy, args: ["{{ .host.til }}"]}
+  - id: host.verifier
+    stage: foundations
+    type: hostname
+    features: [access.verification]
+    default: "verifier.{{ .domain.base }}"
+    label: Verifier host
+    help: >-
+      The verifier, which checks presented credentials and hands out access tokens. The TLS certificate and its key
+      are not changed here.
+    doc: doc/deployment-integration/roles/provider/README.md#vcverifier
+    # The ingress TLS secret is the verifier's signing key, mounted by additionalVolumes and named in
+    # clientIdentification, so the certificate stays with US-8.11 (ADR 0023).
+    targets:
+      - {path: 'decentralizedIam.vcAuthentication.vcverifier.ingress.hosts[0].host', fn: copy, args: ["{{ .host.verifier }}"]}
+      - {path: 'decentralizedIam.vcAuthentication.vcverifier.ingress.hosts[0].paths[0]', fn: const, args: [/]}
+      - {path: 'decentralizedIam.vcAuthentication.vcverifier.deployment.server.host', fn: tpl, args: ["https://{{ .host.verifier }}"]}
+      # The marketplace's SIOP login goes to the verifier.
+      - {path: 'marketplace.siop.verifier.host', fn: tpl, args: ["https://{{ .host.verifier }}"]}
   - id: host.ccs
     stage: foundations
     type: hostname
+    features: [access.verification]
     default: "ccs.{{ .domain.base }}"
     label: Credentials config host
     help: The credentials config service, which tells the verifier which credentials a service accepts.
@@ -456,6 +519,7 @@ foundations:
   - id: host.pap
     stage: foundations
     type: hostname
+    features: [access.policies]
     default: "pap.{{ .domain.base }}"
     label: Policy administration host
     help: The ODRL policy administration point, where access policies are managed.
@@ -470,6 +534,7 @@ foundations:
   - id: host.scorpio
     stage: foundations
     type: hostname
+    features: [data.scorpio]
     default: "scorpio.{{ .domain.base }}"
     label: Scorpio host
     help: Direct access to the NGSI-LD context broker, bypassing policy enforcement.
@@ -484,6 +549,7 @@ foundations:
   - id: host.tmForumApi
     stage: foundations
     type: hostname
+    features: [contract.tmforum]
     default: "tm-forum-api.{{ .domain.base }}"
     label: TMForum API host
     help: Direct access to the TMForum APIs, bypassing policy enforcement.
@@ -498,6 +564,7 @@ foundations:
   - id: host.marketplace
     stage: foundations
     type: hostname
+    features: [market.local]
     default: "marketplace.{{ .domain.base }}"
     label: Marketplace host
     help: The marketplace (BAE) front end.
@@ -513,6 +580,7 @@ foundations:
   - id: host.dashboard
     stage: foundations
     type: hostname
+    features: [obs.metrics]
     default: "dashboard.{{ .domain.base }}"
     label: Dashboard host
     help: The FDSC dashboard.
@@ -527,6 +595,7 @@ foundations:
   - id: host.dataService
     stage: foundations
     type: hostname
+    features: [access.policies, data.scorpio]
     default: "data-service.{{ .domain.base }}"
     label: Data service host
     help: The NGSI-LD data service behind policy enforcement.
@@ -538,6 +607,7 @@ foundations:
   - id: host.tppDataService
     stage: foundations
     type: hostname
+    features: [access.policies, data.scorpio]
     default: "tpp-data-service.{{ .domain.base }}"
     label: Transfer-checked data service host
     help: The data service that is reachable only during a running Dataspace Protocol transfer.
@@ -549,6 +619,7 @@ foundations:
   - id: host.tppService
     stage: foundations
     type: hostname
+    features: [access.policies, access.verification]
     default: "tpp-service.{{ .domain.base }}"
     label: Transfer-checked service host
     help: The OpenID configuration of the transfer-checked data service.
@@ -560,6 +631,7 @@ foundations:
   - id: host.tmfApi
     stage: foundations
     type: hostname
+    features: [access.policies, contract.tmforum]
     default: "tmf-api.{{ .domain.base }}"
     label: Protected TMForum API host
     help: The TMForum APIs behind policy enforcement, as participants call them.
@@ -571,6 +643,7 @@ foundations:
   - id: host.contractManagement
     stage: foundations
     type: hostname
+    features: [access.policies, contract.management]
     default: "contract-management.{{ .domain.base }}"
     label: Contract management host
     help: Contract management behind policy enforcement.
@@ -582,6 +655,7 @@ foundations:
   - id: host.dsp
     stage: foundations
     type: hostname
+    features: [access.policies, dsp.edc]
     default: "dsp.{{ .domain.base }}"
     label: Dataspace Protocol host
     help: The Dataspace Protocol endpoint of FDSC-EDC.
@@ -593,6 +667,7 @@ foundations:
   - id: host.dcp
     stage: foundations
     type: hostname
+    features: [access.policies, dsp.edc]
     default: "dcp.{{ .domain.base }}"
     label: DCP host
     help: The Decentralized Claims Protocol endpoint of the IdentityHub.
@@ -604,6 +679,7 @@ foundations:
   - id: host.identityhub
     stage: foundations
     type: hostname
+    features: [access.policies, dsp.edc]
     default: "identityhub.{{ .domain.base }}"
     label: IdentityHub host
     help: The credentials API of the IdentityHub.
@@ -615,6 +691,7 @@ foundations:
   - id: host.identityhubManagement
     stage: foundations
     type: hostname
+    features: [access.policies, dsp.edc]
     default: "identityhub-management.{{ .domain.base }}"
     label: IdentityHub management host
     help: The identity management API of the IdentityHub.
@@ -626,6 +703,7 @@ foundations:
   - id: host.vault
     stage: foundations
     type: hostname
+    features: [access.policies]
     default: "vault.{{ .domain.base }}"
     label: Vault host
     help: HashiCorp Vault, which holds the connector's keys.
@@ -637,6 +715,7 @@ foundations:
   - id: host.oid4vcManagement
     stage: foundations
     type: hostname
+    features: [access.policies, dsp.edc]
     default: "oid4vc-management.{{ .domain.base }}"
     label: OID4VC management host
     help: The management API of the FDSC-EDC instance that uses OID4VC.
@@ -648,6 +727,7 @@ foundations:
   - id: host.dcpManagement
     stage: foundations
     type: hostname
+    features: [access.policies, dsp.edc]
     default: "dcp-management.{{ .domain.base }}"
     label: DCP management host
     help: The management API of the FDSC-EDC instance that uses DCP.
@@ -659,6 +739,7 @@ foundations:
   - id: host.consentDataService
     stage: foundations
     type: hostname
+    features: [access.policies, data.scorpio]
     default: "data-service-consent.{{ .domain.base }}"
     label: Consent data service host
     help: The data service whose access is gated by a data owner's consent.

@@ -16,6 +16,10 @@ import (
 const (
 	invalidRules = "testdata/rules/invalid.yaml"
 	ruleHead     = didFoundations
+	// hostRules holds the foundations the distinct and didWebHost fixtures are written against.
+	hostRules = "testdata/rules/hosts.yaml"
+	// invalidKindRules holds the distinct and didWebHost rules Versions refuses over hostRules.
+	invalidKindRules = "testdata/rules/invalid-kinds.yaml"
 	// ruleFeatures gives the rule fixtures a catalogue for features.<id> to address.
 	ruleFeatures = "features:\n  - {id: access.verification, title: T, summary: S, group: access}\n"
 )
@@ -30,29 +34,93 @@ func readRuleHead(t *testing.T) []byte {
 	return append(head, ruleFeatures...)
 }
 
-func TestCheckRulesValidation(t *testing.T) {
-	head := readRuleHead(t)
-	data, err := os.ReadFile(invalidRules)
+// readHostHead returns the foundations the distinct and didWebHost fixtures are written against.
+func readHostHead(t *testing.T) []byte {
+	t.Helper()
+	head, err := os.ReadFile(hostRules)
 	if err != nil {
 		t.Fatal(err)
 	}
-	var cases []struct {
-		Name  string    `yaml:"name"`
-		Err   string    `yaml:"err"`
-		Rules yaml.Node `yaml:"rules"`
+	return head
+}
+
+func TestCheckRulesValidation(t *testing.T) {
+	suites := []struct {
+		name  string
+		head  func(*testing.T) []byte
+		cases string
+	}{
+		{"when", readRuleHead, invalidRules},
+		{"distinct and didWebHost", readHostHead, invalidKindRules},
 	}
-	if err := yaml.Unmarshal(data, &cases); err != nil {
-		t.Fatal(err)
+	for _, s := range suites {
+		head := s.head(t)
+		data, err := os.ReadFile(s.cases)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var cases []struct {
+			Name  string    `yaml:"name"`
+			Err   string    `yaml:"err"`
+			Rules yaml.Node `yaml:"rules"`
+		}
+		if err := yaml.Unmarshal(data, &cases); err != nil {
+			t.Fatal(err)
+		}
+		for _, tc := range cases {
+			t.Run(s.name+"/"+tc.Name, func(t *testing.T) {
+				body, err := yaml.Marshal(map[string]*yaml.Node{"rules": &tc.Rules})
+				if err != nil {
+					t.Fatal(err)
+				}
+				_, err = Versions(fstest.MapFS{fixtureFile: {Data: append(slices.Clone(head), body...)}})
+				if err == nil || !strings.Contains(err.Error(), fixtureFile) || !strings.Contains(err.Error(), tc.Err) {
+					t.Errorf("err = %v, want it to name %s and contain %q", err, fixtureFile, tc.Err)
+				}
+			})
+		}
 	}
-	for _, tc := range cases {
-		t.Run(tc.Name, func(t *testing.T) {
-			body, err := yaml.Marshal(map[string]*yaml.Node{"rules": &tc.Rules})
+}
+
+// TestHostRules pins how distinct and didWebHost rules decode, which foundations a prefix matches and how a
+// distinct message renders.
+func TestHostRules(t *testing.T) {
+	const message = "{{ .first }} and {{ .second }} on {{ .host }}"
+	data := map[string]string{MessageFirst: "A host", MessageSecond: "B host", MessageHost: "a.example.org"}
+	tests := []struct {
+		name        string
+		rule        string
+		want        CheckRule
+		wantIDs     []string
+		wantMessage string
+	}{
+		{"distinct", "distinct: {prefix: host.}",
+			CheckRule{Distinct: &RuleDistinct{Prefix: "host."}},
+			[]string{"host.a", "host.b"}, "A host and B host on a.example.org"},
+		{"didWebHost", "didWebHost: {did: did.value, host: host.a}",
+			CheckRule{DIDWebHost: &RuleDIDWebHost{DID: "did.value", Host: "host.a"}},
+			nil, message},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			rules := "rules:\n  - {id: r, severity: error, stage: foundations, " + tc.rule +
+				", message: \"" + message + "\", doc: doc/a.md}\n"
+			got, err := Versions(fstest.MapFS{fixtureFile: {Data: append(readHostHead(t), rules...)}})
 			if err != nil {
 				t.Fatal(err)
 			}
-			_, err = Versions(fstest.MapFS{fixtureFile: {Data: append(head, body...)}})
-			if err == nil || !strings.Contains(err.Error(), fixtureFile) || !strings.Contains(err.Error(), tc.Err) {
-				t.Errorf("err = %v, want it to name %s and contain %q", err, fixtureFile, tc.Err)
+			want := tc.want
+			want.ID, want.Severity, want.Stage, want.Message, want.Doc = "r", SeverityError, StageFoundations, message, "doc/a.md"
+			rs := got[0].CheckRules()
+			if !reflect.DeepEqual(rs, []CheckRule{want}) {
+				t.Fatalf("CheckRules() = %+v, want %+v", rs, []CheckRule{want})
+			}
+			if ids := got[0].DistinctIDs(rs[0]); !slices.Equal(ids, tc.wantIDs) {
+				t.Errorf("DistinctIDs() = %v, want %v", ids, tc.wantIDs)
+			}
+			msg, err := rs[0].RenderMessage(data)
+			if err != nil || msg != tc.wantMessage {
+				t.Errorf("RenderMessage() = %q, %v, want %q", msg, err, tc.wantMessage)
 			}
 		})
 	}
