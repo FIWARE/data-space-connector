@@ -7,6 +7,7 @@ each through that component's own mechanism. Most of these targets are elements 
 that other stories also fill, or keys inside the APISIX routes. The render engine therefore first learns keyed list
 elements and per-element targets (ADR 0025). After that come the proxy and CA data, a CA-coverage L2 rule, the
 Secret requirement that NEXT_STEPS will list, a no-insecure-option test, and the Stage 3 panel with its docs.
+Step 7 then gives Contract Management a CA mechanism, which closes the one accepted deviation from the ticket.
 
 ## Decisions settled by this plan (record them in ADR 0025)
 - **Keyed elements.** A target may write one element of a list, identified by a key field (`name` for env vars,
@@ -184,14 +185,26 @@ Secret requirement that NEXT_STEPS will list, a no-insecure-option test, and the
   plus the listed directories. Check that in the Go source before relying on it, then update the PREREQUISITES row.
 - **One Secret, one key.** The user gives only the Secret name. The key is the fixed `ca.crt` (a named value in the
   bundle). The tool never reads or stores the bundle itself.
-- **Contract Management: a deviation from the ticket.** The ticket's L2 rule is an *error* for "an enabled component
-  that calls a public host [and] has no CA mechanism configured". Contract Management is exactly that case, and here
-  it gets a **warning** instead, telling the user that the hosts it calls need a publicly trusted certificate. The
-  reason: no configuration can ever clear that error, so it would block `generate` for every provider that uses a
-  private CA and Contract Management. The **error** is reserved for an enabled component that has a mechanism the
-  final tree does not carry (dropped or pinned by a hand edit), and for an APISIX route that does not verify (see
-  below). ADR 0025 records this under a "Deviation from the ticket" heading, and the Step 5 PR description repeats it
-  so the reviewer can accept or reject it.
+- **Contract Management: a deviation from the ticket, accepted for now and closed in Step 7.** The ticket's L2 rule
+  is an *error* for "an enabled component that calls a public host [and] has no CA mechanism configured". Steps 5
+  and 6 ship Contract Management as exactly that case, with a **warning** instead, telling the user that the hosts it
+  calls need a publicly trusted certificate. The **error** is reserved for an enabled component that has a mechanism
+  the final tree does not carry (dropped or pinned by a hand edit), and for an APISIX route that does not verify (see
+  below). wistefan accepted this on PR #44 on the condition that it is documented and solved in a later step.
+  - *Why it is not an error yet.* An error that no configuration can clear would block `generate` for every
+    provider that uses a private CA together with Contract Management, and Steps 1-6 build no mechanism for it.
+  - *Why it can be solved.* The PREREQUISITES row "No option to add a CA" is outdated. Checked while revising the
+    plan: contract-management 3.6.3 (`Chart.yaml`) templates `deployment.initContainers`,
+    `deployment.additionalVolumes`, `deployment.additionalVolumeMounts` (none declared in its `values.yaml`) and
+    `additionalEnvVars`. Its image `quay.io/fiware/contract-management:3.4.2` (the appVersion) is a plain JVM
+    (`ubi8/openjdk-21`, entrypoint `java -cp ...`, user 185) that ships `keytool`. Step 7 builds the mechanism.
+  - *How the warning turns into the error.* The `caCoverage` row for Contract Management is data
+    (`mechanism: none`). Step 7 replaces it with paths, so the existing error branch covers it without a code
+    change, and the warning branch then has no row left in `10.16.0`.
+  - *Where it is written down.* ADR 0025 has a "Deviation from the ticket" section that names Step 7 as the
+    resolution, and Step 7 updates that section to "resolved", or to the reason it could not be resolved. The Step 5
+    PR description repeats it. Until Step 7 is merged, the warning text and the Stage 3 preview say that the
+    mechanism is still missing in the tool, not that the chart cannot have one.
 - **No option disables certificate verification** anywhere. The loaded `NODE_TLS_REJECT_UNAUTHORIZED: "0"` in
   `k3s/provider.yaml` stays untouched as a non-owned element. The tool never writes or offers it.
 
@@ -333,7 +346,8 @@ Secret requirement that NEXT_STEPS will list, a no-insecure-option test, and the
   - A **warning** names every enabled component whose mechanism was withheld, with the foreign element and the path it
     occupies (see "Fields that must be unique besides the key"). `caCoverage` reads the `Withheld` list that
     `render` returns.
-  - A **warning** names the enabled components without a mechanism (contract-management).
+  - A **warning** names the enabled components without a mechanism (contract-management until Step 7, see the
+    Contract Management decision).
 
   Reuse the `enabledKeys` handling from `memory.go`. Add the two rules to `model/10.16.0/bundle.yaml` and bump
   `revision`.
@@ -390,3 +404,37 @@ Secret requirement that NEXT_STEPS will list, a no-insecure-option test, and the
   - Run `.github/scripts/check-links.sh` if links changed.
 - Acceptance: `make ui`, `make build`, `make test` (`go test ./...` + `npm test`) and `make lint` are green, and the
   Step 3 and Step 4 tests still pass.
+
+### Step 7: Contract Management CA mechanism (closes the accepted deviation)
+- Verify first, in the source and against the image, and record the result in ADR 0025:
+  - Contract Management's outgoing clients (Micronaut HTTP client, and any other client it uses for the Central
+    Marketplace and TIL calls) use the JVM default trust manager when no trust store is configured in its
+    `application.yaml`. Name the classes and lines.
+  - The `java` launcher reads `JDK_JAVA_OPTIONS`. Use it rather than `JAVA_TOOL_OPTIONS`, because users already set
+    `JAVA_TOOL_OPTIONS` for proxies, debuggers and agents (`k3s/dsp-consumer.yaml` L244), and a keyed element of that
+    name would be pinned away by their value.
+  - `keytool -importcert` imports only the first certificate of a PEM file. If the init container has to import a
+    bundle with several certificates, split it first (`csplit` or `awk`, whichever the image has).
+- `model/10.16.0/bundle.yaml`: a `lists:` row for each list, with bases pinned as in "Where a `lists:` base is
+  pinned": `contract-management.additionalEnvVars` against the umbrella (its `OTEL_*` elements), and
+  `contract-management.deployment.{initContainers,additionalVolumes,additionalVolumeMounts}` against a new fixture
+  `testdata/subchart-defaults/contract-management-3.6.3.yaml` (all three empty). The mount list declares
+  `unique: [mountPath]`. Keyed targets with `mechanism: contract-management-ca` and `requires: [ca.privateSecret]`:
+  - the `private-ca` Secret volume and a `ca-store` emptyDir;
+  - an init container `add-private-ca` with the Contract Management image (pinned as a named bundle value), which
+    copies `$JAVA_HOME/lib/security/cacerts` into `ca-store` and imports `ca.crt`, under the strict security context;
+  - the `ca-store` mount in the main container, outside the paths the chart already mounts (`/application.yaml`);
+  - `JDK_JAVA_OPTIONS` with `-Djavax.net.ssl.trustStore=<ca-store>/cacerts`, the store password as a named bundle
+    value (the JDK default store's well-known password, not a secret) and `-Djavax.net.ssl.trustStoreType=PKCS12`.
+- `caCoverage`: replace the `mechanism: none` row with the paths. Bump `revision`.
+- Tests: a row in `ca_test.go` for the mechanism, a withheld row with a foreign mount at the same path, the
+  invariant over `k3s/*.yaml`, and a `check` row in which Contract Management with a pinned-away mechanism is now an
+  error. The Step 5 warning row for Contract Management becomes a row that asserts no warning.
+- Docs: replace the PREREQUISITES Contract Management row with the mechanism. Change the ADR 0025 "Deviation from
+  the ticket" section to resolved, remove the "mechanism still missing" wording from the UI copy, and add
+  Contract Management to the US-3.6 bullet in `AGENTS.md`.
+- If the verification shows that Contract Management cannot trust the CA this way (for example a client with its
+  own fixed trust store), keep the warning, record the reason in ADR 0025, and correct the PREREQUISITES row to
+  the actual reason. The deviation then stays open, and a follow-up ticket for the Contract Management image is
+  needed.
+- Acceptance: `go test ./...`, `npm test` and `make lint` are green, and the Step 3-5 tests still pass.
