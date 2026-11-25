@@ -179,7 +179,7 @@ func renderProfile(stderr io.Writer, path string, models fs.FS) error {
 	if _, err := render.Render(b, p, render.Options{}); err != nil {
 		return fmt.Errorf("%s: %w", path, err)
 	}
-	findings, err := check.Evaluate(b, p)
+	findings, err := check.Evaluate(b, p, render.Options{})
 	if err != nil {
 		return fmt.Errorf("%s: %w", path, err)
 	}

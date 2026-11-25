@@ -11,6 +11,7 @@ import (
 	"github.com/FIWARE/data-space-connector/config-tool/internal/load"
 	"github.com/FIWARE/data-space-connector/config-tool/internal/model"
 	"github.com/FIWARE/data-space-connector/config-tool/internal/profile"
+	"github.com/FIWARE/data-space-connector/config-tool/internal/render"
 	bundles "github.com/FIWARE/data-space-connector/config-tool/model"
 )
 
@@ -82,7 +83,7 @@ func TestDIDKeyInProduction(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			got, err := Evaluate(b, profileOf(tc.env, tc.answers))
+			got, err := Evaluate(b, profileOf(tc.env, tc.answers), render.Options{})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -179,7 +180,7 @@ func TestTIRAddressForVerification(t *testing.T) {
 					p.Answers = seeded
 				}
 			}
-			got, err := Evaluate(b, p)
+			got, err := Evaluate(b, p, render.Options{})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -220,7 +221,7 @@ func TestEvaluateOrderAndBlocking(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			got, err := Evaluate(b, tc.p)
+			got, err := Evaluate(b, tc.p, render.Options{})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -235,7 +236,7 @@ func TestEvaluateOrderAndBlocking(t *testing.T) {
 }
 
 func TestEvaluateCopiesTheRule(t *testing.T) {
-	got, err := Evaluate(fixture(t), profileOf(profile.EnvProduction, map[string]any{didMethod: didKey}))
+	got, err := Evaluate(fixture(t), profileOf(profile.EnvProduction, map[string]any{didMethod: didKey}), render.Options{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -247,7 +248,7 @@ func TestEvaluateCopiesTheRule(t *testing.T) {
 }
 
 func TestEvaluateRefusesUnresolvedAnswers(t *testing.T) {
-	if _, err := Evaluate(fixture(t), profileOf(profile.EnvProduction, map[string]any{"undeclared": "x"})); err == nil {
+	if _, err := Evaluate(fixture(t), profileOf(profile.EnvProduction, map[string]any{"undeclared": "x"}), render.Options{}); err == nil {
 		t.Error("Evaluate with an undeclared answer = nil error, want one")
 	}
 }
@@ -274,7 +275,7 @@ func TestTargetFields(t *testing.T) {
 			if err != nil {
 				t.Fatalf("a rule on environment %s: %v", env, err)
 			}
-			got, err := Evaluate(all[0], profileOf(env, nil))
+			got, err := Evaluate(all[0], profileOf(env, nil), render.Options{})
 			if err != nil || len(got) != 1 {
 				t.Errorf("Evaluate on environment %s = %+v, %v, want one finding", env, got, err)
 			}
@@ -350,7 +351,7 @@ func TestHostCollision(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			p := profileOf(profile.EnvDevelopment, tc.answers)
 			p.Role, p.Features = tc.role, tc.features
-			findings, err := Evaluate(b, p)
+			findings, err := Evaluate(b, p, render.Options{})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -397,7 +398,7 @@ func TestDIDWebHost(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			p := profileOf(profile.EnvDevelopment, tc.answers)
 			p.Features = tc.features
-			findings, err := Evaluate(b, p)
+			findings, err := Evaluate(b, p, render.Options{})
 			if err != nil {
 				t.Fatal(err)
 			}

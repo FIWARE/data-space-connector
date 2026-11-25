@@ -269,6 +269,19 @@ func TestGenerateTIRAddressForVerification(t *testing.T) {
 	}
 }
 
+// TestGenerateJavaMemoryLimit pins that the java-memory-limit warning reaches stderr and does not block generate.
+func TestGenerateJavaMemoryLimit(t *testing.T) {
+	const want = "warning: Stage 3 Foundations, answers.resources.profile: Without a memory limit, the JVM sizes its heap " +
+		"from the node: Scorpio, TMForum API, Trusted Issuers List, contract-management."
+	_, stderr, err := executeSplit(t, "generate", "-p", "testdata/java-memory-limit.dscprofile.yaml")
+	if !errors.Is(err, errGeneratePending) {
+		t.Fatalf("error = %v, want %v", err, errGeneratePending)
+	}
+	if !strings.Contains(stderr, want) {
+		t.Errorf("stderr = %q, want it to contain %q", stderr, want)
+	}
+}
+
 // TestGenerateHostCollision pins that host-collision blocks generate whatever the profile's role and features.
 func TestGenerateHostCollision(t *testing.T) {
 	const want = "error: Stage 3 Foundations, answers.host.marketplace: Keycloak host and Marketplace host both resolve to keycloak.example.org."
