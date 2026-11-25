@@ -4,7 +4,7 @@
 Add the `resources.profile` foundation (`development` / `production` / `custom`, defaulting from
 `target.environment`) and a bundle `resources:` table that renders `requests`/`limits` on Keycloak,
 Scorpio, the TMForum API, the Trusted Issuers List and contract-management. Add a `memoryLimit` L2 warning for
-production profiles that leave an enabled Java component without a memory limit, and a Stage 3 *Platform*
+production profiles that leave a deployed Java component without a memory limit, and a Stage 3 *Platform*
 panel that previews the figures per component. All model content is bundle data (`model/10.16.0/bundle.yaml`).
 The Go core stays free of HTTP.
 
@@ -17,13 +17,17 @@ The Go core stays free of HTTP.
      measuredOn: 10.13.2                # chart version of PREREQUISITES.md#sizing
      doc: doc/deployment-integration/roles/PREREQUISITES.md#sizing
      components:
-       - {id: keycloak, label: Keycloak, path: keycloak.resources, features: [identity.issuer], chartMemoryLimit: 2Gi}
-       - {id: scorpio, label: Scorpio, path: scorpio.resources, features: [data.scorpio]}
-       - {id: tmforum, label: TMForum API, path: tm-forum-api.defaultConfig.resources, features: [contract.tmforum]}
+       - {id: keycloak, label: Keycloak, path: keycloak.resources,
+          enabledKeys: [keycloak.enabled], chartMemoryLimit: 2Gi}
+       - {id: scorpio, label: Scorpio, path: scorpio.resources,
+          enabledKeys: [scorpio.enabled]}
+       - {id: tmforum, label: TMForum API, path: tm-forum-api.defaultConfig.resources,
+          enabledKeys: [tm-forum-api.enabled]}
        - {id: til, label: Trusted Issuers List,
-          path: decentralizedIam.vcAuthentication.trusted-issuers-list.deployment.resources, features: [access.verification]}
+          path: decentralizedIam.vcAuthentication.trusted-issuers-list.deployment.resources,
+          enabledKeys: [decentralizedIam.enabled, decentralizedIam.vcAuthentication.trusted-issuers-list.enabled]}
        - {id: contractManagement, label: contract-management, path: contract-management.deployment.resources,
-          features: [contract.management, market.central]}
+          enabledKeys: [contract-management.enabled]}
      profiles:
        development: {keycloak: {requests: {cpu: 100m, memory: 768Mi}, limits: {cpu: "1", memory: 2Gi}}, ...}
        production:  {...}
@@ -32,7 +36,9 @@ The Go core stays free of HTTP.
    (both deploy modes), contract-management 3.6.3 reads `deployment.resources`, scorpio-broker-aaio 0.5.1 reads
    top-level `resources`, and the TIL path is the one `k3s/provider.yaml` uses. The umbrella `values.yaml` already sets
    `keycloak.resources` (500Mi/0.5 → 2Gi/1, kept above the chart default because of OOMs on kernel ≥ 6.14).
-   `chartMemoryLimit` records that default for the rule. Quantities are YAML strings.
+   `chartMemoryLimit` records that default for the rule. `enabledKeys` lists the chart switches that must all be true
+   for the component to deploy. The umbrella `values.yaml` defaults every one of them to `true` (Decision 6).
+   Quantities are YAML strings.
 2. **Figures** (component: requests cpu/memory → limits cpu/memory). The floors measured *at rest* on 10.13.2
    are Keycloak 0.6 GiB, Scorpio 0.4, TMF 0.35, TIL 0.2 and CM 0.2. Write them as a YAML comment next to the table.
 
@@ -57,17 +63,36 @@ The Go core stays free of HTTP.
    ref `target.environment` (`model.FieldTargetEnvironment`). It is seeded from `profile.Target.Environment`, is never a
    foundation, never appears in `Answers()`, the tree, `HandSet` or `DerivedDiff`, and an empty environment leaves it
    unresolved, so there is no default and no key. A given answer overrides it, as every given answer does (ADR 0020).
+   The default gate must see the reserved ref. `render.defaults` gates on `all(answers, f.DefaultRefs())`, and
+   `answers` never holds `target.environment`. `resolve` therefore builds a `reserved` set (the reserved refs with a
+   non-empty value, today only `target.environment`) and passes it to `defaults` and `checkPrefix`. They gate on
+   "every ref is in `answers` or in `reserved`" (a helper `resolved(answers, reserved, ids)` replaces `all` there).
+   `Render`'s target gate keeps `all(answers, t.Refs)`, because a target never references a reserved ref; the model
+   refuses that.
 4. **Render.** The model compiles the table into targets of the `answer` foundation: one `const` target per
    component × leaf (`requests.cpu`, `requests.memory`, `limits.cpu`, `limits.memory`) per profile, each carrying
-   `Only: <profile>`. The render emits a target with `Only` only while the resolved answer equals it. Provenance,
-   pinning of hand edits, `Diff` and the fan-out therefore work unchanged. The bundle-level rule "const only under a
-   list index" stays a rule for hand-written targets. `render.Targets` lists each path once, so
+   `Only: <profile>` and `Refs: [<answer>]`. A hand-written const has empty `Refs`, and `compileTarget` refuses an
+   answer reference on it. The table compiler builds its `CompiledTarget`s directly and does not go through
+   `compileTarget`, so it sets the ref itself. The ref is what makes the rest work:
+   - `Render`'s gate `all(answers, t.Refs)` skips the targets while the profile is unresolved;
+   - `Leaf.Provenance.Answers` names `resources.profile`;
+   - `render.Targets` reaches the targets, because it lists only targets whose `Refs` reach the answer.
+
+   The render emits a target with `Only` only while the resolved answer equals it. Pinning of hand edits and `Diff`
+   then work unchanged. The bundle-level rule "const only under a list index" stays a rule for hand-written targets.
+   `render.Targets` lists each path once (it dedupes, since every path has one target per profile), so
    `resources.profile` reports 20 values in 5 components.
 5. **No back-derivation on load.** A loaded `resources` block stays unknown and is pinned (ADR 0014). The answer
    lives in the profile, and re-loading a generated file without its profile lists `resources.profile` as underived.
 6. **Rule kind `memoryLimit`**: `{components: [<table component id>...]}`, combined with `when`. It is the first kind
    that keeps `when`. It produces one warning on `field` that names every listed component that:
-   - is enabled: any of its `features` is on in `p.Features`, and
+   - is deployed: every one of its `enabledKeys` is effectively true. The effective value of a key is the rendered
+     tree's leaf, else the loaded file's scalar, else `true`, which is the umbrella chart's default for all of them (a
+     Step 1 test pins that against `values.yaml`). Features in `p.Features` do not decide it. The tool renders no
+     `enabled` key until US-5.3, so a feature that is off does not stop the chart from deploying the component. A
+     production `custom` profile with `data.scorpio` off still runs Scorpio, and the warning names it. Once US-5.3
+     renders `enabled` from the features, the rule follows through the rendered leaf, with no change to the rule.
+     ADR 0024 and a YAML comment above the rule in the bundle record this;
    - has no memory limit. That means no `<path>.limits.memory` leaf in the rendered tree (overrides pinned in), no
      non-null scalar at that path in the loaded file, and no `chartMemoryLimit`, except where the loaded file sets that
      path to `null`.
@@ -85,14 +110,15 @@ The Go core stays free of HTTP.
 - `config-tool/internal/model/foundations.go`:
   - add `GroupPlatform FoundationGroup = "platform"`, last in `knownFoundationGroups` (screen order).
   - let `parseTemplate` refs include the reserved `FieldTargetEnvironment`. Exclude it from the refs that order
-    foundations or must name a foundation, and keep it in `DefaultRefs()` so the default stays gated on it.
+    foundations or must name a foundation, and keep it in `DefaultRefs()` so the default stays gated on it (the render
+    checks it against the seeded reserved set, Decision 3). A target template that references it is refused.
 - New `config-tool/internal/model/resources.go`:
   - types `ResourceTable`, `ResourceComponent`, `ResourceSpec` (`Requests`, `Limits` of `CPU`, `Memory`), plus
     `Bundle.Resources`, decoded from `resources:`.
   - validation, wired into the bundle loader. Each check gets its own error:
     - the answer is a choice foundation, and every profile key is one of its options;
     - `measuredOn` is semver;
-    - component ids are unique and `features` exist;
+    - component ids are unique, and every `enabledKeys` entry is a path whose root is in `topLevelKeys`;
     - every profile row names every component with all four quantities;
     - each quantity parses with `k8s.io/apimachinery/pkg/api/resource.ParseQuantity` (already in the module graph;
       becomes a direct dependency via `go mod tidy`), and request ≤ limit;
@@ -108,18 +134,20 @@ The Go core stays free of HTTP.
   - every validation error;
   - the shipped bundle loads;
   - every table path resolves in `../../../charts/data-space-connector/values.schema.json` (Decision 7);
-  - Keycloak's `chartMemoryLimit` equals `keycloak.resources.limits.memory` in the chart's `values.yaml`.
+  - Keycloak's `chartMemoryLimit` equals `keycloak.resources.limits.memory` in the chart's `values.yaml`;
+  - every `enabledKeys` entry is `true` in the chart's `values.yaml`, which is the default the rule assumes (Decision 6).
 
   `foundations_test.go` gains the cases for the platform group and the `target.environment` ref.
 - Acceptance: `go test ./...` and `make lint` are green. No render output changes yet, because the table is not
   compiled into targets.
 
 ### Step 2: Render — seed `target.environment`, compile the table, `custom` renders nothing
-- `internal/model`: compile the table into `CompiledTarget`s with the new field `Only string` on the answer
-  foundation (Decision 4). Paths are `<component path>.<requests|limits>.<cpu|memory>`.
+- `internal/model`: compile the table into `CompiledTarget`s with the new field `Only string` and `Refs: [<answer>]`
+  on the answer foundation (Decision 4). Paths are `<component path>.<requests|limits>.<cpu|memory>`.
 - `internal/render/render.go`: `resolve` takes the profile's environment and seeds the reserved ref into the
-  template namespace only, never into the returned answers. `Render` skips a target whose `Only` differs from the
-  foundation's resolved answer. `render.Targets` (fan-out) dedupes by path. Check that `HandSet` and `DerivedDiff`
+  template namespace only, never into the returned answers. It also passes the `reserved` set to `defaults` and
+  `checkPrefix`, which gate on `resolved(answers, reserved, ids)` instead of `all` (Decision 3). `Render` skips a
+  target whose `Only` differs from the foundation's resolved answer. `render.Targets` (fan-out) dedupes by path. Check that `HandSet` and `DerivedDiff`
   call the new `resolve` signature, and that switching Stage 1 environment re-derives an un-given profile.
 - `internal/render/testdata/provider.dscprofile.yaml` answers `resources.profile: custom`. Its environment is
   `development`, and `k3s/provider.yaml`'s resources are hand-tuned for a single k3s node. Add exclusion rows in
@@ -128,7 +156,11 @@ The Go core stays free of HTTP.
   - production → exactly 20 leaves, 4 on each of the 5 paths, with the production figures;
   - development → the development figures;
   - `custom` → no leaf under any table path;
+  - environment `production` and no answer → the 20 production leaves (the default gate sees the reserved ref);
+  - environment `development` and no answer → the development figures;
   - an empty environment and no answer → no leaf;
+  - every table leaf's `Provenance.Answers` is `[resources.profile]`;
+  - `Targets(b, "resources.profile")` returns the 20 paths, each once;
   - a given answer beats the environment;
   - a loaded hand edit of `scorpio.resources.limits.memory` is pinned and kept;
   - a production → development switch shows up in `Diff`.
@@ -161,14 +193,19 @@ The Go core stays free of HTTP.
       {{ .components }} run without a memory limit, so the JVM sizes its heap from the node.
     doc: doc/deployment-integration/roles/PREREQUISITES.md#set-memory-limits-on-the-java-components
   ```
-  Document the kind in the header comment and bump `revision` to 13.
+  A YAML comment above the rule says that a component's deployment is read from its `enabledKeys`, not from the
+  features, until US-5.3 renders `enabled` (Decision 6). Document the kind in the header comment and bump `revision`
+  to 13.
 - Tests (table-driven, `check_test.go`, `checkrules_test.go`):
-  - production + `custom` + Scorpio and TMF on → one warning naming exactly those two (Keycloak excluded through
-    `chartMemoryLimit`);
+  - production + `custom`, no loaded file → one warning naming Scorpio, TMForum API, Trusted Issuers List and
+    contract-management in table order (Keycloak excluded through `chartMemoryLimit`);
   - production + `production` → none;
   - production + `development` → none;
   - development + `custom` → none;
-  - a feature that is off → not named;
+  - production + `custom` with `data.scorpio` off and no loaded `scorpio.enabled` → Scorpio still named (the chart
+    default deploys it; the documented pre-US-5.3 limitation);
+  - a loaded `scorpio.enabled: false` → Scorpio not named;
+  - a loaded `decentralizedIam.enabled: false` → the Trusted Issuers List not named (every `enabledKeys` must hold);
   - a loaded `scorpio.resources.limits.memory` → not named;
   - a loaded `keycloak.resources.limits.memory: null` → named;
   - `check.Blocking` is false, and `generate` succeeds with the warning (CLI test);
@@ -199,8 +236,8 @@ The Go core stays free of HTTP.
   `make test` and `make lint` are green.
 
 ### Step 5: Documentation — ADR 0024, README, design docs, AGENTS.md
-- `doc/adr/0024-config-tool-resource-profile.md`, status Proposed: Decisions 1–8 with the figure derivation and
-  the 10.13.2 citation. Add it to the index in `doc/adr/README.md` (table row and the range sentence).
+- `doc/adr/0024-config-tool-resource-profile.md`, status Proposed: Decisions 1–8 (including the pre-US-5.3
+  enablement limitation of Decision 6) with the figure derivation and the 10.13.2 citation. Add it to the index in `doc/adr/README.md` (table row and the range sentence).
 - `config-tool/README.md`:
   - *Foundations (Stage 3)*: the Platform panel, the profile default and `custom`;
   - *The `foundations:` section*: the `platform` group, the `target.environment` ref and the `resources:` table;
