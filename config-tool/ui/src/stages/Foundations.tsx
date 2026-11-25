@@ -157,22 +157,26 @@ function OrganizationField({ foundation, findings }: { foundation: Foundation; f
 }
 
 /** The derived hosts, each editable (pinned) and resettable. A host with a feature off is hidden unless it is pinned,
- *  marked for later or named by a finding, so Reset and the links from Review still reach it. */
+ *  marked for later or named by a finding, so Reset and the links from Review still reach it. Once shown, it stays
+ *  for the visit, so Reset can show the value it derives and clearing the input does not unmount it mid-edit. */
 function Hosts({ hosts, findings }: { hosts: readonly Foundation[]; findings: readonly Finding[] }) {
   const { state } = useStore()
-  const shown = hosts.filter((h) => {
+  const [kept, setKept] = useState<ReadonlySet<string>>(() => new Set())
+  const exposed = (h: Foundation) => {
     const field = answerFieldId(h.id)
     return (
-      !featureOff(h, state.answers) ||
       state.answers.values[h.id] !== undefined ||
       state.open.includes(field) ||
       findings.some((f) => f.field === field || f.related === field)
     )
-  })
+  }
+  const visible = hosts.filter((h) => !featureOff(h, state.answers) || kept.has(h.id) || exposed(h))
+  const newlyKept = visible.filter((h) => featureOff(h, state.answers) && !kept.has(h.id)).map((h) => h.id)
+  if (newlyKept.length > 0) setKept(new Set([...kept, ...newlyKept]))
   return (
     <div role="group" aria-labelledby="foundations-hosts">
       <h4 id="foundations-hosts">{HOSTS_HEADING}</h4>
-      {shown.map((h) => (
+      {visible.map((h) => (
         <DerivedField key={h.id} foundation={h} findings={findings} pending={HOSTS_PENDING} />
       ))}
       <p className="hint">

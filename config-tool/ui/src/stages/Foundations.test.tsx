@@ -200,6 +200,7 @@ describe('Foundations', () => {
 
   describe('hosts', () => {
     const HAND_HOST = 'idp.hand.org'
+    const OTHER_HAND_HOST = 'login.hand.org'
     const withValues = (values: Record<string, string>, features = ON_FOUNDATIONS.answers.features): AppState => ({
       ...ON_FOUNDATIONS,
       answers: { ...ON_FOUNDATIONS.answers, values, features },
@@ -250,6 +251,23 @@ describe('Foundations', () => {
     })
 
     const OFF = {}
+    it('keeps a pinned host whose feature is off visible after Reset and shows the value it derives', async () => {
+      const fetchMock = renderFoundations(withValues({ 'domain.base': BASE, 'host.keycloak': HAND_HOST }, OFF))
+      const hosts = await hostsGroup()
+      await userEvent.click(await hosts.findByRole('button', { name: RESET_LABEL }))
+      expect(hosts.getByLabelText(KEYCLOAK_HOST.label)).toHaveTextContent(`keycloak.${BASE}`)
+      await waitFor(() => expect(lastAnswers(fetchMock)).toEqual({ 'domain.base': BASE }))
+    })
+
+    it('keeps a pinned host whose feature is off mounted while its input is cleared and retyped', async () => {
+      const fetchMock = renderFoundations(withValues({ 'domain.base': BASE, 'host.keycloak': HAND_HOST }, OFF))
+      await hostsGroup()
+      await userEvent.clear(await screen.findByRole('textbox', { name: KEYCLOAK_HOST.label }))
+      await userEvent.type(hostInput(), OTHER_HAND_HOST)
+      expect(hostInput()).toHaveValue(OTHER_HAND_HOST)
+      await waitFor(() => expect(lastAnswers(fetchMock)).toEqual({ 'domain.base': BASE, 'host.keycloak': OTHER_HAND_HOST }))
+    })
+
     const COLLISION = { ...DOMAIN_WARNING, rule: 'host-collision', severity: 'error' as const, message: 'Two components share a host.' }
     it.each<[string, Record<string, string>, readonly Finding[], boolean]>([
       ['hides a host whose feature is off', { 'domain.base': BASE }, [], false],
