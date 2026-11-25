@@ -197,9 +197,12 @@ The Go core stays free of HTTP.
   `all` (Decision 3). `Render` skips a target whose `Only` differs from the foundation's resolved answer.
   `render.Targets` (fan-out) dedupes by path. `HandSet` and `DerivedDiff` call the new `resolve` signature with
   each profile's own environment.
-- `internal/render/testdata/provider.dscprofile.yaml` answers `resources.profile: custom`. Its environment is
-  `development`, and `k3s/provider.yaml`'s resources are hand-tuned for a single k3s node. Add exclusion rows in
-  `provider_test.go` naming US-3.5 for provider.yaml's resources leaves on the five components.
+- `internal/render/testdata/provider.dscprofile.yaml` answers `resources.profile: custom`, because
+  `k3s/provider.yaml` hand-tunes resources for a single k3s node (Keycloak cpu only, Scorpio and the TIL; none on the
+  TMForum API or contract-management). No `providerExclusions` rows: they only match leaves carrying a
+  `referenceValues` needle, and the resources leaves carry none. `TestProviderValues` compares only rendered leaves,
+  so it gains an assertion that the fixture's tree has no leaf under any table path (`renderProvider` passes no
+  `Target`, so the answer, not the environment, decides this).
 - Tests (table-driven, `render_test.go`):
   - production → exactly 20 leaves, 4 on each of the 5 paths, with the production figures;
   - development → the development figures;
