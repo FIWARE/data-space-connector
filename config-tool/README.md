@@ -324,14 +324,25 @@ applies the same revision rules to it.
 
 Stage 3 asks the cross-cutting answers of the target's bundle once ([ADR 0020](../doc/adr/0020-config-tool-foundations-render.md)).
 A foundation's `group` picks its panel. *Organization* holds the display name and the DID, *Data space* the data
-space's parameters (below), *Network* `domain.base` and, read-only, the hosts derived from it (`<component>.<base>`, editing them is US-3.4) with a link to the resolve-inside-the-cluster prerequisite.
+space's parameters (below), *Network* `domain.base` and the hosts derived from it, with a link to the resolve-inside-the-cluster prerequisite.
 Each field has its doc link, *Ask later* (an `answers.<id>` open question on Review) and a *used by N values in M
 components* button that lists its targets. Every answer change renders the profile through `POST /api/render`
 (debounced). The render on entering the stage is the baseline, and the screen shows the grouped diff of each later
 edit, with a hand-edited leaf of the loaded file flagged *pinned, not updated* next to its kept and would-be value.
 
+A host derives as `<component>.<base>`, and `host.did` (the DID document host) as the base itself. Every host can be
+overridden ([ADR 0023](../doc/adr/0023-config-tool-pinned-hosts.md)). *Edit* opens the input, and a text that differs
+from the derived value pins the host: it becomes a given answer in the profile, shows a `pinned` badge and keeps its
+value when the base domain changes. *Reset to derived* drops the answer and shows the derived value again. Pinning
+needs no profile field, so it survives save and open. After a base change the diff lists the *Re-derived* answers
+(`before → after`) and the answers that are *pinned, not updated* (the kept value and what it would have become).
+Review lists every given answer that overrides a derived default with the label *pinned, not updated* and the value
+it would take if derived. A host whose `features` are off is hidden, unless it is pinned or a finding names it.
+There is no path-prefix scheme: every host is a sub-domain of the base domain. Pinning `host.verifier` or `host.did`
+moves the ingress host and the URLs, but not the TLS certificate and its key, which stay with US-8.11.
+
 The DID is two answers. `did.method` is a radio group (`did:web` or `did:key`), each option with its note. `did.value`
-shows `did:web:<base domain>` as *derived* with *Edit* while the method is `did:web`; *Edit* opens the input but the DID
+shows `did:web:<DID document host>` as *derived* with *Edit* while the method is `did:web`; *Edit* opens the input but the DID
 stays derived until its text differs from the derived one, and an edited value gets *Reset to derived*. Under `did:key` there is no default and the DID is asked for. A DID must start with `<method>:`, so switching
 the method drops a hand-set DID of the other method. The DID reaches the verifier, contract-management, the Keycloak
 issuer and the `fdsc-edc.common` participant, issuer, STS client and holder ids; [FEATURE_MODEL.md](../doc/config-tool/FEATURE_MODEL.md#cross-cutting-values)
@@ -412,7 +423,11 @@ recognized leaves are re-rendered. The JSON of a tree is byte-identical across r
 fan-out (`targets`, `count`, sorted `components`), transitive through derived hosts. `POST /api/render` takes
 `{profile, sourceSha256}` (422 with field errors when the profile does not validate, or when the sha is not the
 loaded file's), renders it with the load the sha names as the overrides layer (none when it is empty, as on save) and
-returns `{tree, diff, handSet, findings}`. The diff groups `added`, `changed`, `removed` and `pinned` entries by foundation, against the
+returns `{tree, diff, derived, handSet, findings}`. `derived` (`render.DerivedDiff`) lists the answers whose default
+derives from other answers and whose value moved since the previous render: `rederived` (`{id, before, after}`, not
+given) and `pinned` (`{id, kept, before, after}`, given, so kept). Its baseline is dropped on a load, a profile open, a
+source change and a model change, which return empty lists. `handSet` lists the given answers that override a derived
+default, with the value they would derive. The diff groups `added`, `changed`, `removed` and `pinned` entries by foundation, against the
 previous render of the same source. A load, a profile open or a render of another source resets that baseline. A
 pinned leaf is reported only when its rendered value changes (ADR 0020 §7-8).
 
@@ -426,11 +441,23 @@ it with a link back, and `generate` prints it. A warning never blocks; only an e
 
 A `when` may also address a feature as `features.<feature id>` with `equals: "on"` or `"off"`, and may use
 `unset: true` instead of `equals`, which holds while the resolved answer, given or derived, is absent. Each condition
-has exactly one of `equals` and `unset` (ADR 0022 Decision 6). The 10.16.0 bundle has two rules:
+has exactly one of `equals` and `unset` (ADR 0022 Decision 6).
+
+Two more rule kinds replace `field` and `when` ([ADR 0023](../doc/adr/0023-config-tool-pinned-hosts.md)).
+`distinct: {prefix}` is an error per pair of foundations under the prefix that resolve to the same host (ignoring case
+and a trailing dot); its `message` may use only `{{ .first }}`, `{{ .second }}` (the labels) and `{{ .host }}`.
+`didWebHost: {did, host}` fires when a `did:web` DID's host (percent-decoded, without port, before the document path)
+is not the resolved host foundation. Neither reads `features`, because every host renders whatever the role. Their
+findings point at one field and name the other in `related`, so Stage 3 and Review link both. The 10.16.0 bundle has
+four rules:
 
 - `did-key-in-production` warns when the environment is `production` and the DID method is `did:key`;
 - `tir-address-for-verification` is an error on `answers.dataspace.tirAddress` while the feature
-  `access.verification` is on and no TIR address is set, because the verifier cannot check issuers without it.
+  `access.verification` is on and no TIR address is set, because the verifier cannot check issuers without it;
+- `host-collision` (`distinct: {prefix: host.}`) is an error when two hosts resolve to the same name, because the
+  chart routes by host. It points at the pinned host when exactly one of the pair is pinned, else at the later one;
+- `did-web-host` (`didWebHost: {did: did.value, host: host.did}`) is an error on `answers.did.value` when a `did:web`
+  DID does not resolve on the DID document host.
 
 ## Features (Stage 5)
 

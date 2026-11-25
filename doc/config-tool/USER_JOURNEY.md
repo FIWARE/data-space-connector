@@ -160,9 +160,9 @@ guide that explains it.
 The shipped stage differs from this design in the points below, and from the [S3 mockup](MOCKUPS.md#s3--foundations) in the last
 ([ADR 0020](../adr/0020-config-tool-foundations-render.md), [Foundations](../../config-tool/README.md#foundations-stage-3)):
 
-- **US-3.1, US-3.2 and US-3.3 have shipped.** *Organization* holds the display name, the DID method (`did:web` or `did:key`,
-  each with its note) and the DID, derived as `did:web:<base domain>` with *Edit* and *Reset to derived*, or asked for
-  under `did:key`. *Network* holds the base domain and the derived hosts. A `did:key` in production gets a warning under
+- **US-3.1 to US-3.4 have shipped.** *Organization* holds the display name, the DID method (`did:web` or `did:key`,
+  each with its note) and the DID, derived as `did:web:<DID document host>` with *Edit* and *Reset to derived*, or asked
+  for under `did:key`. *Network* holds the base domain and the derived hosts. A `did:key` in production gets a warning under
   the method and on Review, which never blocks. The rest of the Network and Platform panels come with their own stories.
 - ***Data space*** ([ADR 0022](../adr/0022-config-tool-data-space-parameters.md)) holds the TIR address with a
   *Check* button, an ordered list of credential types (type and optional description), and whether participant
@@ -175,9 +175,15 @@ The shipped stage differs from this design in the points below, and from the [S3
   them only on *Apply*. No data space publishes these keys yet, the chart's own descriptor included, so today the
   preview says so and the values are typed in. Check and import are the tool's only requests to the network, and each
   runs only on its button.
-- **Derived hosts are read-only** and always use `<component>.<base>`. Editing one is US-3.4, and the path-prefix
-  scheme is not offered. The counts are measured (76 values in 7 components for the base domain), so the mockup's
-  41 is illustrative.
+- **Each derived host can be overridden** ([ADR 0023](../adr/0023-config-tool-pinned-hosts.md)). A host derives as
+  `<component>.<base>`, the DID document host as the base itself. *Edit* pins a host and *Reset to derived* unpins it.
+  A pinned host carries a `pinned` badge and keeps its value when the base domain changes. The diff then lists the
+  *Re-derived* hosts and the hosts that are *pinned, not updated*, with the value each would have become, and Review
+  lists the pinned hosts the same way. Two hosts on the same name are an error that blocks generating, and so is a
+  `did:web` DID that does not resolve on the DID document host. A host whose feature is off is hidden unless it is
+  pinned or has a finding. There is no path-prefix scheme: every host is a sub-domain of the base domain. The counts
+  are measured (76 values in 7 components through the hosts on the base domain, 89 in 10 with the verifier, the DID
+  document host and the DID), so the mockup's 41 is illustrative.
 - **Unlike the S3 mockup, the base domain sits in the Network panel**, above the hosts it derives, as in the list
   above, not in the Organization panel.
 
