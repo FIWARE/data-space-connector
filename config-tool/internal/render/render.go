@@ -189,9 +189,9 @@ func (e edit) conflicts(key string) bool {
 
 // pin marks every leaf that overlaps a hand edit of r and keeps the loaded scalar in its place.
 // An owned list a hand edit touches is pinned whole without kept values, so the overrides layer
-// keeps its list and Nested() never writes a fragment of it. A hand edit inside a leaf's block
+// keeps its list and Nested() never writes a fragment of it. A hand edit of one leaf of a block
 // (blocks, by leaf path) pins the whole block with kept values, so the file's block stays as written
-// and a rendered request never meets a hand-set limit below it; an empty mapping there is merged into.
+// and a rendered request never meets a hand-set limit below it.
 func pin(leaves []Leaf, blocks map[string]roundtrip.Path, r *load.Result) {
 	var edits []edit
 	for _, e := range r.Report.Unknown {
@@ -207,17 +207,21 @@ func pin(leaves []Leaf, blocks map[string]roundtrip.Path, r *load.Result) {
 		key := slices.Concat(r.Root, p).String()
 		return slices.ContainsFunc(edits, func(e edit) bool { return e.conflicts(key) })
 	}
-	inBlock := func(b roundtrip.Path) bool {
-		if b == nil {
-			return false
+	// A block is pinned only when an edit hits one of its own leaves; other keys under it merge.
+	hitBlocks := map[string]bool{}
+	for _, l := range leaves {
+		if b, ok := blocks[l.Path.String()]; ok && hit(l.Path) {
+			hitBlocks[b.String()] = true
 		}
-		key := slices.Concat(r.Root, b).String()
-		return slices.ContainsFunc(edits, func(e edit) bool { return !e.emptyMap && isUnder(e.path, key) })
+	}
+	inHitBlock := func(p roundtrip.Path) bool {
+		b, ok := blocks[p.String()]
+		return ok && hitBlocks[b.String()]
 	}
 	for i := range leaves {
 		l := &leaves[i]
 		inList := slices.ContainsFunc(lists(l.Path), hit)
-		if !inList && !hit(l.Path) && !inBlock(blocks[l.Path.String()]) {
+		if !inList && !hit(l.Path) && !inHitBlock(l.Path) {
 			continue
 		}
 		l.Provenance.Pinned, l.Provenance.Rendered = true, l.Value

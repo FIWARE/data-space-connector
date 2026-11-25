@@ -770,6 +770,10 @@ func TestRenderResourceProfileKeepsHandEdit(t *testing.T) {
 		{"a cpu limit below the request", "scorpio:\n  resources:\n    limits:\n      cpu: 200m\n",
 			map[string]any{block + ".limits.cpu": "200m"}},
 		{"an empty mapping is merged into", "scorpio:\n  resources:\n    limits: {}\n", nil},
+		{"an unrelated key in the block is merged",
+			"scorpio:\n  resources:\n    requests:\n      ephemeral-storage: 1Gi\n", nil},
+		{"an extended resource limit is merged",
+			"scorpio:\n  resources:\n    limits:\n      nvidia.com/gpu: 1\n", nil},
 	}
 	b := providerBundle(t)
 	for _, tc := range tests {
