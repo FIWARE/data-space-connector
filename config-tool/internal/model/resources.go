@@ -87,6 +87,9 @@ func checkResourceTable(t *ResourceTable, fs []CompiledFoundation, topLevelKeys 
 	if _, err := semver.StrictNewVersion(t.MeasuredOn); err != nil {
 		return fmt.Errorf("measuredOn %q is not semver", t.MeasuredOn)
 	}
+	if err := checkDoc(t.Doc); err != nil {
+		return err
+	}
 	ids := map[string]string{}
 	for _, list := range []struct {
 		name       string
