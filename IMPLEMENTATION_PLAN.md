@@ -384,7 +384,9 @@ Secret requirement that NEXT_STEPS will list, a no-insecure-option test, and the
     and the vc-operator row to `SSL_CERT_DIR`, and note that one PEM Secret with key `ca.crt` serves every
     mechanism. The APISIX row gains `ssl.enabled`, `ssl_verify: true` on every route, and the note that APISIX
     trusts only that bundle.
-  - `AGENTS.md`: mark US-3.5 shipped and add a US-3.6 line.
+  - `AGENTS.md`: mark US-3.6 (#130) shipped and drop the `IMPLEMENTATION_PLAN.md` reference. Correct the
+    CloudPirates keycloak chart version from 0.21.19 to 0.22.0 (`Chart.yaml`) in the Tech Stack line and the
+    Keycloak "Image" bullet.
   - Run `.github/scripts/check-links.sh` if links changed.
 - Acceptance: `make ui`, `make build`, `make test` (`go test ./...` + `npm test`) and `make lint` are green, and the
   Step 3 and Step 4 tests still pass.
