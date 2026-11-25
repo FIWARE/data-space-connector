@@ -18,6 +18,23 @@ Secret requirement that NEXT_STEPS will list, a no-insecure-option test, and the
   not change. Elements with keys the tool does not own are never touched. Appending beyond a loaded list's length is
   left to US-7.1's writer, which will need it (`roundtrip.Set` creates no sequence items, and `generate` does not write
   yet).
+- **Fields that must be unique besides the key.** Kubernetes also rejects two `volumeMounts` with the same `mountPath`
+  in one container ("must be unique"). A name-only match is not enough: `k3s/provider.yaml` (L118-122) mounts its own
+  `root-ca` at `/etc/ssl/cert.pem`, the pattern PREREQUISITES tells users to copy, and the verifier CA mechanism
+  mounts `ca-bundle` there too. So a `lists:` row may declare `unique: [<field>]` (every mount list declares
+  `unique: [mountPath]`), and keyed targets that only make sense together carry the same `mechanism: <id>`
+  (for example `verifier-ca`: two volumes, the mount and the init container).
+  - *Compile time:* two owned elements of one list, or an owned element and a `lists:` base element, may not share a
+    `unique` value.
+  - *Render time:* if an owned element would share a `unique` value with a foreign element of the final list, the
+    whole mechanism is **withheld**: none of its targets render, so no half-written mechanism is left behind. The
+    foreign element stays untouched. `render` returns the withheld mechanisms with the colliding element's key and
+    path (`Withheld{Mechanism, List, Field, Value, ForeignKey}`). The result is never an invalid manifest.
+  - *Report:* a withheld CA mechanism is a `caCoverage` **warning**, not an error (Step 5). The colliding element is
+    most likely a hand-made trust mechanism copied from PREREQUISITES, which the tool cannot inspect. k3s, for
+    example, takes the CA from the signing-key Secret, not from `ca.privateSecret`. The warning names the element
+    and says the tool does not know whether it trusts the private CA. An error would block `generate` until the user
+    deleted a working setup. The Stage 3 preview shows the same finding.
 - **Where a `lists:` base is pinned.** Helm replaces lists, so a base that misses one default element silently drops
   it as soon as the tool writes the list. Each base is therefore compared with the layer that actually supplies the
   default. If the umbrella `values.yaml` declares the list, the umbrella wins and is the reference. Otherwise the
@@ -196,14 +213,18 @@ Secret requirement that NEXT_STEPS will list, a no-insecure-option test, and the
   from the profile's Stage 1 target in `internal/render`, and the template function `fullname` (see the reserved-refs
   decision). Compile-time checks: a keyed element's list must be in
   `lists:`. The same list may not also be index-targeted. Two targets may not own the same key value. `each` is
-  refused on a list that `lists:` declares.
+  refused on a list that `lists:` declares. Two owned elements, or an owned and a base element, may not share a
+  `unique` value. A `mechanism` id must be used by keyed targets only.
 - `config-tool/internal/render/render.go` (and a new `elements.go`): compose keyed lists as the ADR describes, using
   `opts.Overrides` when a file is loaded. Expand `each` targets over the loaded list's elements that carry the parent
-  mapping. Gate on `requires`. Provenance records the element key. `pin` treats a loaded element with an owned key
-  whose content differs as a hand edit, exactly as a scalar pin.
+  mapping. Gate on `requires`. Withhold a whole `mechanism` when one of its elements collides on a `unique` field with
+  a foreign element, and return it in the result. Provenance records the element key. `pin` treats a loaded element
+  with an owned key whose content differs as a hand edit, exactly as a scalar pin.
 - Tests are table-driven, with fixture bundles in `internal/model/testdata` and `internal/render/testdata` and no
   `10.16.0` content yet. Cover: compile errors; the composition with and without a loaded list; the base kept; foreign
-  elements untouched; append order; `each` with zero, one and many routes; `requires` emitting nothing while
+  elements untouched; append order; a `unique` collision with a foreign element withholding the whole mechanism (the
+  foreign element unchanged, the other lists of the mechanism not written, `Withheld` filled); no collision with a
+  foreign element whose `mountPath` differs; `each` with zero, one and many routes; `requires` emitting nothing while
   unanswered; reserved refs; `fullname` against Helm's rule (release containing the chart name, the prefixed form,
   63-character truncation with a trailing `-`). Two gate rows use a fixture foundation whose default reads only
   reserved refs: with `defaultWhen: {set: true}` it is not derived while the gating answer is unset, and a target
@@ -278,7 +299,11 @@ Secret requirement that NEXT_STEPS will list, a no-insecure-option test, and the
   - Verifier: keyed `additionalVolumes` (`private-ca` Secret volume, plus a `ca-bundle` emptyDir),
     `additionalVolumeMounts` (`ca-bundle` over `/etc/ssl/cert.pem`, subPath `cert.pem`), and the `initContainers`
     element `add-private-ca`. That init container concatenates `/etc/ssl/cert.pem` and the CA into the emptyDir, uses
-    an image pinned as a named bundle value, and runs with the strict security context.
+    an image pinned as a named bundle value, and runs with the strict security context. All four carry
+    `mechanism: verifier-ca`.
+
+  Each component's CA targets share one `mechanism` id (`verifier-ca`, `marketplace-ca`, `vc-operator-ca`,
+  `keycloak-ca`). Each mount list's `lists:` row declares `unique: [mountPath]`.
   - Marketplace logic proxy: keyed `NODE_EXTRA_CA_CERTS` plus the volume and mount (BAE's `extraContainerVolumes` and
     `extraVolumeMounts`; check the shapes in BAE 1.2.0).
   - vc-operator: keyed `SSL_CERT_DIR` plus `extraVolumes`/`extraVolumeMounts`.
@@ -290,6 +315,12 @@ Secret requirement that NEXT_STEPS will list, a no-insecure-option test, and the
   answer; nothing renders while unanswered; a loaded route with `ssl_verify: false` stays `false` and is pinned, a
   loaded route with `ssl_verify: true` is owned and unchanged, and no route gets `ssl_verify` while the CA is unset) and `internal/requirements` tests. Extend `provider_test.go` exclusions
   (US-3.6), because k3s takes the verifier's CA from the signing-key Secret.
+- Collision rows in `ca_test.go`: load the verifier block of `k3s/provider.yaml` (with `root-ca` at
+  `/etc/ssl/cert.pem`) and set `ca.privateSecret`. The `verifier-ca` mechanism is withheld, the final
+  `additionalVolumeMounts` holds exactly one element at `/etc/ssl/cert.pem` (the loaded `root-ca`), no `private-ca`,
+  `ca-bundle` or `add-private-ca` element appears, and the other four components still render their CA. A second row
+  puts a foreign mount at the Keycloak truststore path and withholds `keycloak-ca` the same way. An invariant test
+  loads every `k3s/*.yaml` with `ca.privateSecret` set and asserts that each final mount list has unique `mountPath`s.
 - Acceptance: `go test ./...` and `make lint` are green.
 
 ### Step 5: CA-coverage rule and the no-insecure guard
@@ -297,7 +328,11 @@ Secret requirement that NEXT_STEPS will list, a no-insecure-option test, and the
   `components: [{id, label, enabledKeys, paths | mechanism: none}]` and the precondition `when: [{field:
   answers.ca.privateSecret, ...}]`. It needs a precondition form for "set", either a new `set: true` beside `unset` or
   the rule kind's own gate.
-  - An **error** names every enabled component whose CA paths are missing from the final tree (rendered plus loaded).
+  - An **error** names every enabled component whose CA paths are missing from the final tree (rendered plus loaded),
+    unless its mechanism was withheld.
+  - A **warning** names every enabled component whose mechanism was withheld, with the foreign element and the path it
+    occupies (see "Fields that must be unique besides the key"). `caCoverage` reads the `Withheld` list that
+    `render` returns.
   - A **warning** names the enabled components without a mechanism (contract-management).
 
   Reuse the `enabledKeys` handling from `memory.go`. Add the two rules to `model/10.16.0/bundle.yaml` and bump
@@ -323,8 +358,8 @@ Secret requirement that NEXT_STEPS will list, a no-insecure-option test, and the
   `InsecureSkipVerify: true`) and rows that must not (`ssl_verify: true`, `insecure` in prose, `verify: true`).
   `k3s/` and `config-tool/trial/` are reference files and are not scanned. If a
   legitimate line matches, reword it rather than adding an allow list.
-- Tests: table-driven `check` cases (CA unset; all covered; one component pinned away; contract-management enabled
-  and disabled; a route with `ssl_verify` unset, `false` pinned, and `true`; no routes; `noProxyCoverage` with the
+- Tests: table-driven `check` cases (CA unset; all covered; one component pinned away; the verifier mechanism withheld
+  by the loaded k3s `root-ca` mount, which warns and does not error; contract-management enabled and disabled; a route with `ssl_verify` unset, `false` pinned, and `true`; no routes; `noProxyCoverage` with the
   derived default, with a loaded `keycloak.fullnameOverride: idp` and the default (warns), and with the same override
   and a given `proxy.no` holding `idp` (silent)).
 - Acceptance: `go test ./...` and `make lint` are green.
@@ -333,7 +368,8 @@ Secret requirement that NEXT_STEPS will list, a no-insecure-option test, and the
 - UI: `ui/src/stages/EgressPanel.tsx` (+ `EgressPanel.test.tsx`), modelled on `PlatformPanel.tsx`. It shows the proxy
   fields with the derived `NO_PROXY` (editable, with the CIDR hint) and the CA Secret field with the required key
   `ca.crt`, plus the note that APISIX then trusts only that bundle. It also previews the fan-out per component,
-  including "no APISIX routes yet" when `each` has nothing to write, the Keycloak proxy-mappings case, the BAE
+  including "no APISIX routes yet" when `each` has nothing to write, a withheld CA mechanism and the element that
+  occupies its path, the Keycloak proxy-mappings case, the BAE
   login calls that always use the proxy, the vc-operator's API server calls while `proxy.no` holds no CIDR, and the
   `noProxyCoverage` findings. Wire the `egress` group into `Foundations.tsx`. Every shown text is UI copy or bundle data. The verification
   wording must pass the Step 5 guard.
