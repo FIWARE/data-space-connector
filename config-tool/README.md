@@ -324,7 +324,8 @@ applies the same revision rules to it.
 
 Stage 3 asks the cross-cutting answers of the target's bundle once ([ADR 0020](../doc/adr/0020-config-tool-foundations-render.md)).
 A foundation's `group` picks its panel. *Organization* holds the display name and the DID, *Data space* the data
-space's parameters (below), *Network* `domain.base` and the hosts derived from it, with a link to the resolve-inside-the-cluster prerequisite.
+space's parameters (below), *Network* `domain.base` and the hosts derived from it, with a link to the resolve-inside-the-cluster prerequisite,
+and *Platform* the resource profile (below).
 Each field has its doc link, *Ask later* (an `answers.<id>` open question on Review) and a *used by N values in M
 components* button that lists its targets. Every answer change renders the profile through `POST /api/render`
 (debounced). The render on entering the stage is the baseline, and the screen shows the grouped diff of each later
@@ -379,16 +380,24 @@ empty preview today, which says so and asks for the values by hand. `POST /api/d
 returns `{status, httpStatus?, error?}`; the import takes `{url, profile}` and returns `{url, preview}`, with 502 when
 the fetch or the parse fails.
 
+The *Platform* panel asks `resources.profile` (`development`, `production` or `custom`; [ADR 0024](../doc/adr/0024-config-tool-resource-profile.md)).
+It derives from Stage 1's environment and stays pending while no environment is chosen. Picking another profile pins it,
+and *Reset to derived* follows the environment again. Below the choice, a table shows the requests and limits the
+resolved profile sets on Keycloak, Scorpio, the TMForum API, the Trusted Issuers List and contract-management, with
+the chart version the figures were measured on and a link to the [sizing guidance](../doc/deployment-integration/roles/PREREQUISITES.md#sizing).
+`custom` sets nothing, so the chart's defaults stay in force.
+
 ### The `foundations:` section
 
 A bundle's `foundations:` list declares the answers and every chart key they reach; there is no Go code per key.
-Each entry has a dotted `id` (the key in the profile's `answers`), `stage`, an optional `group` (`organization`, `dataspace` or
-`network`, the default), `type` (`string`, `hostname`, `domain`, `did` or `url`, each checked by one pattern, `choice`
+Each entry has a dotted `id` (the key in the profile's `answers`), `stage`, an optional `group` (`organization`, `dataspace`,
+`platform` or `network`, the default), `type` (`string`, `hostname`, `domain`, `did` or `url`, each checked by one pattern, `choice`
 from its `options`, `bool`, or `credentialTypes`, a list of `{type, description?}`), `label`, `help`, an optional repo-relative `doc` path, an optional `default`, `defaultWhen`
 (`{id, equals}`: the default applies only while that answer resolves to `equals`), `prefix` (a template the answer must
 start with), an optional `features` list (display only: Stage 3 hides the answer while any listed feature is off; render
 is not gated) and `targets`. A `default` is a template over other answers, so `host.keycloak` (`"keycloak.{{ .domain.base }}"`)
-exists only while `domain.base` is answered. Templates hold only text and `{{ .id }}` actions. A target writes one
+exists only while `domain.base` is answered. A default may also read the reserved ref `target.environment`, Stage 1's
+environment, which is never an answer and which no target may read. Templates hold only text and `{{ .id }}` actions. A target writes one
 value with one of four functions; only `copy` writes a `bool` or a list:
 
 ```yaml
@@ -405,9 +414,16 @@ Paths use the round-trip syntax with list indices; quote one in a flow mapping. 
 merging it, so a path indexes into a list only when the targets own it whole: elements `0..n-1` and every key of
 each, with `const` for the keys no answer derives. An owned list is emitted all or nothing. A bundle with an unknown
 function, a reference to an undeclared id, a cycle among defaults, a path outside `topLevelKeys`, a list index gap
-or two targets on one path fails to load. A profile's `answers` accepts exactly the declared ids, and `open` accepts
+or two targets on one path (except the table's `Only` targets, below) fails to load. A profile's `answers` accepts exactly the declared ids, and `open` accepts
 `answers.<id>` for them. `internal/render/provider_test.go` measures the targets against `k3s/provider.yaml`: every
 leaf that carries the domain is a target or a row of an exclusion table naming the story that owns it.
+
+A bundle's `resources:` table sizes components per option of the choice foundation it names (`answer`). It lists the
+sized `components` (`id`, `label`, `path` of the `resources` block, `enabledKeys` with their chart defaults, optional
+`chartMemoryLimit`), the `unsized` JVM workloads only the `memoryLimit` rule reads (whose path may hold one `*` over a
+map's keys, with `fallbackPaths`), `measuredOn`, `doc` and `profiles`: one row per option, `requests` and `limits`
+(`cpu`, `memory`) per component. An option without a row (`custom`) sizes nothing. A Go test walks every table path
+through `values.schema.json`.
 
 ### The render
 
@@ -418,9 +434,16 @@ nothing. With a loaded file, a target path that the load classified as unknown o
 loaded node is not a scalar, there is no kept value and `Nested()` leaves the path to the overrides layer. Owned and
 recognized leaves are re-rendered. The JSON of a tree is byte-identical across runs.
 
+The model compiles the `resources:` table into `const` targets of its answer, one per profile, component and leaf,
+each with `Only: <option>` and the answer as its ref. The render writes such a target only while the resolved answer
+equals its `Only`, so one path may carry one target per option, and `render.Targets` lists each path once
+(`resources.profile`: 20 values in 5 components). A loaded `resources` block is not back-derived; it stays unknown and
+is pinned.
+
 `GET /api/foundations?chart=&version=` lists the foundations with label, help, doc, type, group, options, default,
 `defaultWhen`, prefix, `features` (empty when ungated), stage and their
-fan-out (`targets`, `count`, sorted `components`), transitive through derived hosts. `POST /api/render` takes
+fan-out (`targets`, `count`, sorted `components`), transitive through derived hosts, and `resources` (the table's
+`answer`, `measuredOn`, `doc`, sized components and profiles, without `unsized`; `null` without a table). `POST /api/render` takes
 `{profile, sourceSha256}` (422 with field errors when the profile does not validate, or when the sha is not the
 loaded file's), renders it with the load the sha names as the overrides layer (none when it is empty, as on save) and
 returns `{tree, diff, derived, handSet, findings}`. `derived` (`render.DerivedDiff`) lists the answers whose default
@@ -448,8 +471,15 @@ Two more rule kinds, each used instead of `field` and `when` ([ADR 0023](../doc/
 and a trailing dot); its `message` may use only `{{ .first }}`, `{{ .second }}` (the labels) and `{{ .host }}`.
 `didWebHost: {did, host}` fires when a `did:web` DID's host (percent-decoded, without port, before the document path)
 is not the resolved host foundation. Neither reads `features`, because every host renders whatever the role. Their
-findings point at one field and name the other in `related`, so Stage 3 and Review link both. The 10.16.0 bundle has
-four rules:
+findings point at one field and name the other in `related`, so Stage 3 and Review link both.
+
+`memoryLimit: {components}` ([ADR 0024](../doc/adr/0024-config-tool-resource-profile.md#6-rule-kind-memorylimit)) keeps
+`field` and `when` as its precondition and yields one finding naming every listed table component that deploys (each
+of its `enabledKeys` true in the render, else the loaded file, else the chart default) and ends up without a memory
+limit (none rendered, loaded or at a fallback path, and no `chartMemoryLimit`, which a loaded `null` drops). Its
+`message` may use only `{{ .components }}`. Until US-5.3 renders `enabled` keys, a feature that is off does not stop a
+component from being named. `check.Evaluate` takes the loaded overrides as `render.Options`. The 10.16.0 bundle has
+five rules:
 
 - `did-key-in-production` warns when the environment is `production` and the DID method is `did:key`;
 - `tir-address-for-verification` is an error on `answers.dataspace.tirAddress` while the feature
@@ -457,7 +487,9 @@ four rules:
 - `host-collision` (`distinct: {prefix: host.}`) is an error when two hosts resolve to the same name, because the
   chart routes by host. It points at the pinned host when exactly one of the pair is pinned, else at the later one;
 - `did-web-host` (`didWebHost: {did: did.value, host: host.did}`) is an error on `answers.did.value` when a `did:web`
-  DID does not resolve on the DID document host.
+  DID does not resolve on the DID document host;
+- `java-memory-limit` (`memoryLimit`) warns on `answers.resources.profile` while the environment is `production` and a
+  deployed Java component, sized by the table or not, has no memory limit.
 
 ## Features (Stage 5)
 

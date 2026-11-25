@@ -362,6 +362,7 @@ The Go core stays free of HTTP.
 - `doc/config-tool/FEATURE_MODEL.md` (`resources.profile` row: the default comes from the environment; `custom`) and
   `USER_JOURNEY.md` Stage 3 panel 4 (the preview), kept to one sentence each.
 - `AGENTS.md`: mark US-3.5 shipped. One line that names the table, `Only` targets, the `target.environment` ref and
-  `memoryLimit`.
+  `memoryLimit`. Deferred: step agents may not edit `AGENTS.md`, so the step's completion comment carries the line for
+  a plan-mode agent to apply.
 - Run `.github/scripts/check-links.sh` if docker is available, then the full `make test` and `make lint`.
 - Acceptance: the docs match the shipped behaviour, links resolve, and everything is green.
