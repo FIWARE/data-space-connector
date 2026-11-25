@@ -100,12 +100,18 @@ Secret requirement that NEXT_STEPS will list, a no-insecure-option test, and the
   | vc-operator | Kubernetes API | IP literal | client-go in-cluster config; only a CIDR entry helps (see below) |
   | all, with tracing | OTel Collector | `{{ fullname .target.release "opentelemetry-collector" }}` | opentelemetry-collector 0.176.1, umbrella sets no override |
   | APISIX | verifier discovery, OPA | public verifier host; `localhost` | role guides and k3s routes; OPA is a sidecar |
-  | Keycloak | none in the chart defaults | — | — |
+  | Keycloak (token-status-list plugin) | status-list-server | fixed | literal `metadata.name` in the umbrella's `templates/status-list-server-service.yaml` L5; `keycloak.tokenStatusList.serverUrl` documents `http://status-list-server:8081` (values.yaml L1398, L1593), `k3s/consumer-eidas.yaml` L152 uses it |
 
-  The fixed names go into the default as literal strings, and only the last two rows use `target.release`. The rows
+  The fixed names go into the default as literal strings, and only the Keycloak and OTel Collector rows use `target.release`. The rows
   are bundle data (`noProxyServices:` with `name` as a template and `overrides:` as the value paths that rename the
   service: `fullnameOverride`, `nameOverride` or the service `nameOverride`), so the Step 3 test and the Step 5
   warning read the same table. A test asserts that the default's bare names equal the table's names.
+  The `status-list-server` row has no `overrides`: the umbrella template hard-codes the name. The other bare-name
+  URLs in the umbrella `values.yaml` and `k3s/*.yaml` were re-checked for this table. They belong to callers that the
+  fan-out gives no proxy settings, so they need no entry: OPA (`odrl-pap`, an APISIX sidecar that `proxy_opts` does not
+  reach), tm-forum-api (`data-service-scorpio`), fdsc-edc and Contract Management (`odrl-pap`, `trusted-issuers-list`,
+  `tm-forum-api`, `rainbow`), the BAE charging backend (`tm-forum-api-svc`), and consent-facade. If a later story adds
+  one of them as a caller, its hosts get a row.
 - **A loaded file that renames one of those services.** The default reads only answers, so it cannot follow a loaded
   `fullnameOverride`. Step 5 adds the warning `noProxyCoverage`: for each `noProxyServices` row, the effective name
   is the final tree's value at the first set `overrides` path, otherwise the row's rendered `name`. When the final
@@ -246,7 +252,8 @@ Secret requirement that NEXT_STEPS will list, a no-insecure-option test, and the
   (release and namespace seeded) but `proxy.https` unanswered, nothing renders for any component, and `proxy.no`
   and `proxy.http` are not derived; the same holds with `proxy.no` given.
 - `internal/render/noproxy_names_test.go` pins `noProxyServices`: each fixed name equals the umbrella value at the
-  row's first `overrides` path (or the literal in the subchart fixture, for `tm-forum-api-svc`), and each
+  row's first `overrides` path (or the literal in the subchart fixture, for `tm-forum-api-svc`, or the `metadata.name`
+  of the umbrella's `templates/status-list-server-service.yaml`, for `status-list-server`), and each
   release-prefixed row's `overrides` paths are unset in the umbrella and empty in the subchart fixture. A renamed
   service, or a new umbrella override, fails the build. It also asserts that the default's bare names equal the
   table's names.
