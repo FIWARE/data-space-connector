@@ -91,7 +91,7 @@ This step is atomic on purpose: CI runs the scenario.
 **Chart default image** (the chart ships 2.0.0, not only the k3s scenario):
 - In `charts/data-space-connector/values.yaml`, under `fdsc-edc.common.deployment`, add
   `image.tag: "2.1.0"` with a `# --` comment: it stands in for the fdsc-edc chart's appVersion
-  until a chart with appVersion ≥ 2.0.0 is published, and Step 2 drops it then.
+  until a chart with appVersion ≥ 2.1.0 is published, and Step 2 drops it then.
 - It applies to `oid4vc` too, which is what the 0.7.11 bump would do anyway. Upstream did not
   change the OID4VC controlplane in 2.0.0, and `dsp_oid4vc_flow` in this step's CI run proves it.
   If that flow fails on the oid4vc 2.0.0 image, stop and report it as blocked instead of pinning
@@ -178,9 +178,11 @@ This step is atomic on purpose: CI runs the scenario.
 ### Step 2: Pin the multi-dataspace rendering with helm-unittest and move the chart to fdsc-edc 2.0.0
 - **Dependency** in `charts/data-space-connector/Chart.yaml`:
   - Run `helm show chart oci://quay.io/fiware/helm-charts/fdsc-edc --version 0.7.11` (or a newer
-    version with appVersion ≥ 2.0.0). If one is published, bump the `fdsc-edc` dependency to it,
+    version). If one with appVersion ≥ 2.1.0 is published, bump the `fdsc-edc` dependency to it,
     run `helm dependency update charts/data-space-connector`, and drop the now-redundant
     `fdsc-edc.common.deployment.image.tag` pin from Step 1.
+  - A chart with appVersion 2.0.0 (e.g. 0.7.11) may be bumped to, but keep the 2.1.0 pin: 2.0.0
+    lacks the v5beta EDR endpoint and `dsp_dcp_flow` would break without it.
   - If none is published, keep `0.7.10` and the pin. The chart still deploys 2.0.0 through it.
     Record in the release notes that the pin goes away with the next fdsc-edc chart bump, and
     that anyone who sets their own `image.tag` on a deployment overrides it. Do not change

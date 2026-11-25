@@ -33,7 +33,10 @@ import static org.junit.jupiter.api.Assertions.*;
  * in DSP_INTEGRATION.md "Order through DSP" section.
  * <p>
  * Supports both DCP and OID4VC management API endpoints by parameterizing the management
- * API base address.
+ * API base address. In the curl examples {@code {basePath}} is {@code /api/v1/management/v3} for
+ * OID4VC and {@code /api/v1/management/v5beta/participants/<consumer DID>} for DCP; DCP calls also
+ * carry {@code Authorization: Bearer <token>}, the profile name as {@code protocol} and
+ * {@code CatalogRequest} as {@code {catalogType}} (OID4VC: {@code CatalogRequestMessage}).
  *
  * @see DSPEnvironment
  */
@@ -235,14 +238,14 @@ public class DSPManagementHelper {
      * <p>
      * Equivalent to the curl command:
      * <pre>
-     * curl -X POST '{managementApiAddress}:8080/api/v1/management/v3/catalog/request' \
+     * curl -X POST '{managementApiAddress}{basePath}/catalog/request' \
      *   --header 'Content-Type: application/json' \
-     *   --data '{"@context":[...],"@type":"CatalogRequestMessage","protocol":"...","counterPartyId":"...","counterPartyAddress":"...","querySpec":{}}'
+     *   --data '{"@context":[...],"@type":"{catalogType}","protocol":"...","counterPartyId":"...","counterPartyAddress":"...","querySpec":{}}'
      * </pre>
      *
      * @param managementApiAddress the base URL of the management API (e.g., DCP or OID4VC)
      * @param counterPartyId       DID of the provider (e.g., {@code did:web:mp-operations.org})
-     * @param counterPartyAddress  DSP endpoint of the provider (e.g., {@code http://dcp-mp-operations.127.0.0.1.nip.io:8080/api/dsp/2025-1})
+     * @param counterPartyAddress  DSP endpoint of the provider (DCP: {@code https://dcp-mp-operations.127.0.0.1.nip.io/api/dsp/<provider DID>/http-dsp-profile-2025-1}, OID4VC: {@code .../api/dsp/2025-1})
      * @return the catalog response as a parsed JSON tree
      * @throws Exception if the HTTP request fails or returns a non-success status
      */
@@ -283,7 +286,7 @@ public class DSPManagementHelper {
      * <p>
      * Equivalent to the curl command:
      * <pre>
-     * curl -X POST '{managementApiAddress}:8080/api/v1/management/v3/contractnegotiations' \
+     * curl -X POST '{managementApiAddress}{basePath}/contractnegotiations' \
      *   --header 'Content-Type: application/json' \
      *   --data '{"@context":[...],"@type":"ContractRequest","counterPartyAddress":"...","counterPartyId":"...","protocol":"...","policy":{...}}'
      * </pre>
@@ -362,7 +365,7 @@ public class DSPManagementHelper {
      * <p>
      * Equivalent to the curl command:
      * <pre>
-     * curl -X POST '{managementApiAddress}:8080/api/v1/management/v3/contractnegotiations/request' \
+     * curl -X POST '{managementApiAddress}{basePath}/contractnegotiations/request' \
      *   --header 'Content-Type: application/json'
      * </pre>
      *
@@ -499,7 +502,7 @@ public class DSPManagementHelper {
      * <p>
      * Equivalent to the curl command:
      * <pre>
-     * curl -X POST '{managementApiAddress}:8080/api/v1/management/v3/transferprocesses' \
+     * curl -X POST '{managementApiAddress}{basePath}/transferprocesses' \
      *   --header 'Content-Type: application/json' \
      *   --data '{"@context":[...],"assetId":"...","counterPartyId":"...","counterPartyAddress":"...","connectorId":"...","contractId":"...","protocol":"...","transferType":"HttpData-PULL"}'
      * </pre>
@@ -610,7 +613,7 @@ public class DSPManagementHelper {
      * <p>
      * Equivalent to the curl command:
      * <pre>
-     * curl -X POST '{managementApiAddress}:8080/api/v1/management/v3/transferprocesses/request' \
+     * curl -X POST '{managementApiAddress}{basePath}/transferprocesses/request' \
      *   --header 'Content-Type: application/json' \
      *   --data '{"@context":[...],"@type":"QuerySpec"}'
      * </pre>
@@ -716,7 +719,7 @@ public class DSPManagementHelper {
      * <p>
      * Equivalent to the curl command:
      * <pre>
-     * curl -X GET '{managementApiAddress}:8080/api/v1/management/v3/edrs/{transferId}/dataaddress'
+     * curl -X GET '{managementApiAddress}{basePath}/edrs/{transferId}/dataaddress'
      * </pre>
      *
      * @param managementApiAddress the base URL of the management API
