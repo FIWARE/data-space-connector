@@ -428,8 +428,9 @@ const leaf = (path: string, value: unknown, foundation: string, fn: string): Lea
 export function renderLeaves(profile: Profile): Leaf[] {
   const answers = profile.answers ?? {}
   const leaves: Leaf[] = []
-  if (typeof answers['domain.base'] === 'string') {
-    const host = `keycloak.${answers['domain.base']}`
+  const given = answers['host.keycloak']
+  const host = typeof given === 'string' ? given : typeof answers['domain.base'] === 'string' ? `keycloak.${answers['domain.base']}` : undefined
+  if (host !== undefined) {
     leaves.push(leaf('keycloak.ingress.hosts[0].host', host, 'host.keycloak', 'copy'), leaf('keycloak.realm.frontendUrl', `https://${host}`, 'host.keycloak', 'tpl'))
   }
   if (typeof answers['org.displayName'] === 'string') {

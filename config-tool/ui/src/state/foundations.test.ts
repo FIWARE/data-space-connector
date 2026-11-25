@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import type { CredentialType, Foundation, FoundationOption, FoundationType } from '../api/foundations'
-import type { AnswerValue } from './answers'
+import type { Answers, AnswerValue } from './answers'
 import { DID_FOUNDATIONS, DID_METHOD, FOUNDATIONS } from '../test/api'
 import {
   answerErrors,
   checkAnswer,
   dropMismatched,
+  featureOff,
   MAX_CREDENTIAL_TYPES,
   MAX_HOSTNAME_LENGTH,
   MAX_URL_LENGTH,
@@ -211,5 +212,20 @@ describe('resolution', () => {
   it('keeps a mismatched DID when the change is the DID itself', () => {
     const values = { 'did.value': 'did:key:z6Mk' }
     expect(dropMismatched(values, 'did.value', all)).toBe(values)
+  })
+})
+
+describe('featureOff', () => {
+  const GATED = { features: ['identity.issuer'] }
+  const ON = { 'identity.issuer': { enabled: true, source: 'preset' as const } }
+  const OFF = { 'identity.issuer': { enabled: false, source: 'user' as const } }
+  it.each<[string, Pick<Foundation, 'features'>, Pick<Answers, 'role' | 'features'>, boolean]>([
+    ['nothing is off before a role is picked', GATED, { role: undefined, features: {} }, false],
+    ['an ungated foundation is never off', { features: [] }, { role: 'provider', features: {} }, false],
+    ['an enabled feature is on', GATED, { role: 'provider', features: ON }, false],
+    ['a disabled feature is off', GATED, { role: 'provider', features: OFF }, true],
+    ['a feature the role does not offer is off', GATED, { role: 'provider', features: {} }, true],
+  ])('%s', (_name, f, answers, off) => {
+    expect(featureOff(f, answers)).toBe(off)
   })
 })

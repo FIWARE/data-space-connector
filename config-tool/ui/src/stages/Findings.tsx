@@ -2,7 +2,7 @@
 import type { Finding } from '../api/render'
 import { repositoryDocUrl } from '../links'
 import { useStore } from '../state/context'
-import { fieldLabel, isFieldId } from '../state/openQuestions'
+import { fieldLabel, isFieldId, type FieldId } from '../state/openQuestions'
 import { FINDINGS_HEADING, FINDINGS_HINT, READ_MORE, SEVERITY_LABELS, stageName } from './findingsText'
 
 function ReadMore({ finding }: { finding: Finding }) {
@@ -22,9 +22,20 @@ export function FindingNote({ finding, id }: { finding: Finding; id?: string }) 
   )
 }
 
-/** Review's section, rendered only when a rule holds. */
-export function Findings({ findings }: { findings: readonly Finding[] }) {
+/** The link that takes Review to `field` on its stage. */
+function GoTo({ field }: { field: FieldId }) {
   const { state, dispatch } = useStore()
+  const label = fieldLabel(field, state.foundations)
+  return (
+    <button type="button" className="link" aria-label={`Go to ${label}`} onClick={() => dispatch({ type: 'focusField', field })}>
+      go ↗
+    </button>
+  )
+}
+
+/** Review's section, rendered only when a rule holds; a finding with a related field links both. */
+export function Findings({ findings }: { findings: readonly Finding[] }) {
+  const { state } = useStore()
   if (findings.length === 0) return null
   return (
     <div className="panel">
@@ -34,18 +45,16 @@ export function Findings({ findings }: { findings: readonly Finding[] }) {
         {findings.map((f) => {
           const field = isFieldId(f.field) ? f.field : undefined
           const label = field ? fieldLabel(field, state.foundations) : f.field
+          const related = f.related !== undefined && isFieldId(f.related) ? f.related : undefined
           return (
-            <li key={`${f.rule} ${f.field}`} className={`finding ${f.severity}`}>
+            <li key={`${f.rule} ${f.field} ${f.related ?? ''}`} className={`finding ${f.severity}`}>
               <span className="severity">{SEVERITY_LABELS[f.severity]}</span>
               <span className="stage">{stageName(f.stage)}</span>
               <span>{label}</span>
               <span>{f.message}</span>
               <ReadMore finding={f} />
-              {field && (
-                <button type="button" className="link" aria-label={`Go to ${label}`} onClick={() => dispatch({ type: 'focusField', field })}>
-                  go ↗
-                </button>
-              )}
+              {field && <GoTo field={field} />}
+              {related && <GoTo field={related} />}
             </li>
           )
         })}
