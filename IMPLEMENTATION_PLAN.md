@@ -60,13 +60,18 @@ The Go core stays free of HTTP.
    (Decision 6). Quantities are YAML strings.
 
    `unsized` lists the other JVM workloads of the chart, checked by their default images' entrypoints (`java …`):
-   credentials-config-service 3.4.3, dss-validation-service 0.0.1, consent-facade 0.4.2, the umbrella's IdentityHub and
-   the fdsc-edc connectors. The fdsc-edc chart renders one Deployment per key of `fdsc-edc.deployment` (empty by
+   credentials-config-service 3.4.3, dss-validation-service 0.0.1, consent-facade (chart 0.2.1, image tag = appVersion
+   0.4.2), the umbrella's IdentityHub and the fdsc-edc connectors. The fdsc-edc chart renders one Deployment per key of `fdsc-edc.deployment` (empty by
    default), each merged over `fdsc-edc.common.deployment`, so its `path` has one `*` segment over the map keys and a
    limit under a `fallbackPaths` entry covers every instance. A `*` is allowed only in `unsized` paths. Not JVM, and
    therefore not listed: `odrl-pap` 1.7.3 (a Quarkus native image, entrypoint `./application`), the verifier,
-   vc-operator, did-helper (Go), Rainbow (Rust), the status-list-server, the marketplace (Node/Python) and the
-   dashboard. Because the verdict holds for the default images, ADR 0024 records it next to the subchart versions.
+   vc-operator, did-helper (Go), Rainbow (Rust), the status-list-server, consent-owner-resolver (chart 0.2.0, image
+   0.0.8, entrypoint the native `/app/owner-resolver`; its chart also sets a 128Mi limit), the marketplace (Node/Python)
+   and the dashboard. The marketplace's `bizEcosystemApis.enabled` and `bizEcosystemRss.enabled` switches deploy
+   nothing in business-api-ecosystem 1.2.0: the chart has templates only for the charging backend (Python) and the
+   logic proxy (Node), which read `bizEcosystemApis` as legacy TMForum settings. The TMForum APIs come from the
+   umbrella's `tm-forum-api`, which the table sizes. Because the verdict holds for the default images, ADR 0024 records
+   it next to the subchart (and, where they differ, image) versions.
 2. **Figures** (component: requests cpu/memory → limits cpu/memory). The floors measured *at rest* on 10.13.2
    are Keycloak 0.6 GiB, Scorpio 0.4, TMF 0.35, TIL 0.2 and CM 0.2. Write them as a YAML comment next to the table.
 
@@ -113,6 +118,15 @@ The Go core stays free of HTTP.
    - `Leaf.Provenance.Answers` names `resources.profile`;
    - `render.Targets` reaches the targets, because it lists only targets whose `Refs` reach the answer.
 
+   The compiled targets join the hand-written ones before the path checks. `compileFoundations` takes the table:
+   once every foundation is compiled, it validates the table, then appends the compiled targets to the answer
+   foundation's `Targets`, and only then runs `checkRefs`, `checkTargetPaths` and `topoOrder`. `checkTargetPaths`
+   therefore sees every table target, and its duplicate rule changes in one place only: a path written twice is
+   accepted when both targets belong to the same foundation and carry distinct non-empty `Only` values. Every other
+   duplicate (another foundation, an empty `Only`, the same `Only` twice) and every prefix clash (a hand-written
+   `keycloak.resources`, or a leaf under a table path) is still refused. The target refs (`[<answer>]`, a choice) pass
+   `checkRefs` unchanged, and `topoOrder` reads only `f.Refs`, so the self-reference does not create a cycle.
+
    The render emits a target with `Only` only while the resolved answer equals it. Pinning of hand edits and `Diff`
    then work unchanged. The bundle-level rule "const only under a list index" stays a rule for hand-written targets.
    `render.Targets` lists each path once (it dedupes, since every path has one target per profile), so
@@ -158,7 +172,8 @@ The Go core stays free of HTTP.
   - types `ResourceTable` (with `Components` and `Unsized`), `ResourceComponent` (`EnabledKeys map[string]bool`,
     `FallbackPaths`), `ResourceSpec` (`Requests`, `Limits` of `CPU`, `Memory`), plus `Bundle.Resources`, decoded from
     `resources:`.
-  - validation, wired into the bundle loader. Each check gets its own error:
+  - validation, run inside `compileFoundations` (which gains the table argument) once every foundation is compiled
+    and before `checkRefs` (Decision 4). Each check gets its own error:
     - the answer is a choice foundation, and every profile key is one of its options;
     - `measuredOn` is semver;
     - component ids are unique across `components` and `unsized`, and every `enabledKeys` key and `fallbackPaths`
@@ -190,7 +205,14 @@ The Go core stays free of HTTP.
 
 ### Step 2: Render — seed `target.environment`, compile the table, `custom` renders nothing
 - `internal/model`: compile the table into `CompiledTarget`s with the new field `Only string` and `Refs: [<answer>]`
-  on the answer foundation (Decision 4). Paths are `<component path>.<requests|limits>.<cpu|memory>`.
+  on the answer foundation (Decision 4). Paths are `<component path>.<requests|limits>.<cpu|memory>`. The compile
+  sits in `compileFoundations` right after the table validation, so `checkTargetPaths` runs over the table targets.
+  Its duplicate check accepts a path written twice only by the same foundation with distinct non-empty `Only` values.
+  Table-driven cases in `foundations_test.go`:
+  - the shipped bundle loads (two `Only` targets per path);
+  - another foundation's hand-written target on `keycloak.resources.limits.memory` → "already written";
+  - a hand-written target on `keycloak.resources` → "prefix of another target's path";
+  - two targets of one foundation on one path with the same `Only`, and two with an empty `Only` → "already written".
 - `internal/render/render.go`: `resolve` takes the profile's environment and seeds the reserved ref into the
   template namespace only, never into the returned answers. It returns the `reserved` set as well, and `defaults`,
   `checkPrefix` and `derived()` (`derived.go`) take it and gate on `resolved(answers, reserved, ids)` instead of
