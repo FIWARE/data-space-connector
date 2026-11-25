@@ -224,8 +224,10 @@ type CompiledTarget struct {
 	// Value is the scalar of a const target; nil otherwise.
 	Value any
 	Sep   string
-	// Refs are the answer ids the target references, sorted; empty for const.
+	// Refs are the answer ids the target references, sorted; empty for a hand-written const.
 	Refs []string
+	// Only is the value of the foundation's own answer the target is written for; empty writes it for any.
+	Only string
 	tpls []*template.Template
 }
 
@@ -369,6 +371,9 @@ func compileFoundations(fs []Foundation, table *ResourceTable, topLevelKeys []st
 		return nil, nil, err
 	}
 	if err := checkResources(table, compiled, topLevelKeys); err != nil {
+		return nil, nil, err
+	}
+	if err := addResourceTargets(compiled, table); err != nil {
 		return nil, nil, err
 	}
 	if err := checkRefs(compiled); err != nil {
@@ -731,11 +736,13 @@ func checkRefs(fs []CompiledFoundation) error {
 	return nil
 }
 
-// checkTargetPaths refuses a path written twice, a path that is a prefix of another (every leaf is a
-// scalar), a prefix used both as a list and as a mapping, and a list whose indices are not 0..n-1.
+// checkTargetPaths refuses a path written twice (unless by one foundation for distinct non-empty Only values), a
+// path that is a prefix of another (every leaf is a scalar), a prefix used both as a list and as a mapping, and a
+// list whose indices are not 0..n-1.
 func checkTargetPaths(fs []CompiledFoundation) error {
 	type where struct{ f, t int }
-	leaves := map[string]where{}
+	// leaves lists every target writing a path; only one foundation's targets with distinct Only values share one.
+	leaves := map[string][]where{}
 	// interior maps every proper prefix to whether its child segment is an index.
 	interior := map[string]bool{}
 	indices := map[string]map[int]bool{}
@@ -743,10 +750,14 @@ func checkTargetPaths(fs []CompiledFoundation) error {
 	for i, f := range fs {
 		for j, t := range f.Targets {
 			key := t.Path.String()
-			if w, dup := leaves[key]; dup {
+			if k := slices.IndexFunc(leaves[key], func(w where) bool {
+				only := fs[w.f].Targets[w.t].Only
+				return w.f != i || t.Only == "" || only == "" || only == t.Only
+			}); k >= 0 {
+				w := leaves[key][k]
 				return fmt.Errorf("foundations[%d] (%s): targets[%d]: path %q is already written by foundations[%d] targets[%d]", i, f.ID, j, key, w.f, w.t)
 			}
-			leaves[key] = where{i, j}
+			leaves[key] = append(leaves[key], where{i, j})
 			for k := 1; k < len(t.Path); k++ {
 				prefix := t.Path[:k].String()
 				idx, isIndex := t.Path[k].Index()
@@ -764,8 +775,9 @@ func checkTargetPaths(fs []CompiledFoundation) error {
 			}
 		}
 	}
-	for key, w := range leaves {
+	for key, ws := range leaves {
 		if _, ok := interior[key]; ok {
+			w := ws[0]
 			return fmt.Errorf("foundations[%d] (%s): targets[%d]: path %q is a prefix of another target's path", w.f, fs[w.f].ID, w.t, key)
 		}
 	}

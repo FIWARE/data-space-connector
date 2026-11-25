@@ -18,7 +18,7 @@ type HandSetAnswer struct {
 // FoundationOrder. A constant default (a choice's) is left out: picking it is not pinning. Unlike
 // Provenance.Pinned, which marks a hand edit of a loaded file, this is about answers.
 func HandSet(b model.Bundle, p profile.Profile) ([]HandSetAnswer, error) {
-	answers, ns, err := resolve(b, p.Answers)
+	r, err := resolve(b, p)
 	if err != nil {
 		return nil, err
 	}
@@ -29,7 +29,7 @@ func HandSet(b model.Bundle, p profile.Profile) ([]HandSetAnswer, error) {
 		if !ok || f.DefaultTemplate() == nil || len(f.DefaultRefs()) == 0 {
 			continue
 		}
-		d, err := derived(f, answers, ns)
+		d, err := derived(f, r)
 		if err != nil {
 			return nil, err
 		}

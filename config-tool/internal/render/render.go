@@ -30,7 +30,7 @@ type Options struct {
 // Render evaluates b's foundation targets over p's answers. It errors on an answer b does not
 // declare and on a derived answer its type refuses; an unanswered target writes nothing.
 func Render(b model.Bundle, p profile.Profile, opts Options) (Tree, error) {
-	answers, ns, err := resolve(b, p.Answers)
+	r, err := resolve(b, p)
 	if err != nil {
 		return Tree{}, err
 	}
@@ -39,13 +39,16 @@ func Render(b model.Bundle, p profile.Profile, opts Options) (Tree, error) {
 	for _, decl := range b.Foundations {
 		f, _ := b.Foundation(decl.ID)
 		for i, t := range f.Targets {
-			if !all(answers, t.Refs) {
+			if !all(r.answers, t.Refs) {
 				for _, l := range lists(t.Path) {
 					incomplete[l.String()] = true
 				}
 				continue
 			}
-			v, err := evaluate(t, answers, ns)
+			if t.Only != "" && r.answers[f.ID] != any(t.Only) {
+				continue
+			}
+			v, err := evaluate(t, r.answers, r.ns)
 			if err != nil {
 				return Tree{}, fmt.Errorf("render: %s targets[%d]: %w", f.ID, i, err)
 			}
@@ -66,59 +69,80 @@ func Render(b model.Bundle, p profile.Profile, opts Options) (Tree, error) {
 }
 
 // Answers returns p's given answers plus the derived defaults, keyed by foundation id; it errors as Render does.
+// Reserved refs such as target.environment are not answers and are left out.
 func Answers(b model.Bundle, p profile.Profile) (map[string]any, error) {
-	answers, _, err := resolve(b, p.Answers)
-	return answers, err
+	r, err := resolve(b, p)
+	return r.answers, err
 }
 
-// resolve returns the given answers plus the derived defaults, flat and as the template namespace. It
-// errors when a resolved answer does not start with its prefix.
-func resolve(b model.Bundle, given map[string]any) (map[string]any, map[string]any, error) {
+// resolution is a profile's resolved answers.
+type resolution struct {
+	// answers are the given answers plus the derived defaults, flat; never a reserved ref.
+	answers map[string]any
+	// ns is answers nested by id segment plus the reserved refs, the namespace templates run against.
+	ns map[string]any
+	// reserved holds the reserved refs that have a value.
+	reserved map[string]bool
+}
+
+// resolved reports whether every id is an answer or a reserved ref with a value.
+func (r resolution) resolved(ids []string) bool {
+	return !slices.ContainsFunc(ids, func(id string) bool { _, ok := r.answers[id]; return !ok && !r.reserved[id] })
+}
+
+// resolve returns p's given answers plus the derived defaults, seeding the reserved target.environment from
+// p's target. It errors when a resolved answer does not start with its prefix.
+func resolve(b model.Bundle, p profile.Profile) (resolution, error) {
+	given := p.Answers
 	for _, id := range slices.Sorted(maps.Keys(given)) {
 		if _, ok := b.Foundation(id); !ok {
-			return nil, nil, fmt.Errorf("render: answer %q is not declared by bundle %s %s", id, b.Chart, b.Version)
+			return resolution{}, fmt.Errorf("render: answer %q is not declared by bundle %s %s", id, b.Chart, b.Version)
 		}
 	}
-	answers, ns := map[string]any{}, map[string]any{}
+	r := resolution{answers: map[string]any{}, ns: map[string]any{}, reserved: map[string]bool{}}
+	if env := p.Target.Environment; env != "" {
+		r.reserved[model.FieldTargetEnvironment] = true
+		setNested(r.ns, model.FieldTargetEnvironment, string(env))
+	}
 	for _, id := range b.FoundationOrder() {
 		f, _ := b.Foundation(id)
 		v, ok := given[id]
 		if !ok {
-			if !defaults(f, answers) {
+			if !defaults(f, r) {
 				continue
 			}
-			s, err := execute(f.DefaultTemplate(), ns)
+			s, err := execute(f.DefaultTemplate(), r.ns)
 			if err != nil {
-				return nil, nil, fmt.Errorf("render: default of %s: %w", id, err)
+				return resolution{}, fmt.Errorf("render: default of %s: %w", id, err)
 			}
 			if err := f.Check(s); err != nil {
-				return nil, nil, fmt.Errorf("render: derived %s %w", id, err)
+				return resolution{}, fmt.Errorf("render: derived %s %w", id, err)
 			}
 			v = s
 		}
-		if err := checkPrefix(f, v, answers, ns); err != nil {
-			return nil, nil, err
+		if err := checkPrefix(f, v, r); err != nil {
+			return resolution{}, err
 		}
-		answers[id] = v
-		setNested(ns, id, v)
+		r.answers[id] = v
+		setNested(r.ns, id, v)
 	}
-	return answers, ns, nil
+	return r, nil
 }
 
 // defaults reports whether f's default applies: it has one, its default refs are resolved and DefaultWhen holds.
-func defaults(f model.CompiledFoundation, answers map[string]any) bool {
-	if f.DefaultTemplate() == nil || !all(answers, f.DefaultRefs()) {
+func defaults(f model.CompiledFoundation, r resolution) bool {
+	if f.DefaultTemplate() == nil || !r.resolved(f.DefaultRefs()) {
 		return false
 	}
-	return f.DefaultWhen == nil || answers[f.DefaultWhen.ID] == any(f.DefaultWhen.Equals)
+	return f.DefaultWhen == nil || r.answers[f.DefaultWhen.ID] == any(f.DefaultWhen.Equals)
 }
 
 // checkPrefix refuses v when it does not start with f's prefix; a prefix over unresolved answers is not checked.
-func checkPrefix(f model.CompiledFoundation, v any, answers, ns map[string]any) error {
-	if f.PrefixTemplate() == nil || !all(answers, f.PrefixRefs()) {
+func checkPrefix(f model.CompiledFoundation, v any, r resolution) error {
+	if f.PrefixTemplate() == nil || !r.resolved(f.PrefixRefs()) {
 		return nil
 	}
-	prefix, err := execute(f.PrefixTemplate(), ns)
+	prefix, err := execute(f.PrefixTemplate(), r.ns)
 	if err != nil {
 		return fmt.Errorf("render: prefix of %s: %w", f.ID, err)
 	}

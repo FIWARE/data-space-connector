@@ -181,3 +181,21 @@ func TestFoundationsDataspace(t *testing.T) {
 		}
 	}
 }
+
+func TestFoundationsResourceProfile(t *testing.T) {
+	const (
+		id         = "resources.profile"
+		targets    = 20
+		components = 5
+	)
+	ps := newProfileSession(t)
+	_, foundations := getFoundations(t, ps, foundationsPath(dscChart, latestChart), true)
+	i := slices.IndexFunc(foundations, func(f foundationJSON) bool { return f.ID == id })
+	if i < 0 {
+		t.Fatalf("%s is not listed", id)
+	}
+	if f := foundations[i]; f.Group != "platform" || f.Count != targets || len(f.Targets) != targets || len(f.Components) != components {
+		t.Errorf("%s = group %q, count %d, %d targets in %v; want platform, %d targets in %d components",
+			id, f.Group, f.Count, len(f.Targets), f.Components, targets, components)
+	}
+}

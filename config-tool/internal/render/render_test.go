@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -617,5 +618,189 @@ func TestRenderShippedVerifierAndDIDHosts(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+const (
+	resourceProfileID = "resources.profile"
+	devProfile        = "development"
+	prodProfile       = "production"
+	customProfile     = "custom"
+	// resourceLeaves is what a sized profile writes: four quantities on each of the table's five paths.
+	resourceLeaves = 20
+)
+
+// resourceFigures are the shipped figures per table path: development and production requests cpu/memory,
+// limits cpu/memory.
+var resourceFigures = map[string][2][4]string{
+	"keycloak.resources":                       {{"100m", "768Mi", "1", "2Gi"}, {"500m", "2Gi", "2", "2Gi"}},
+	"scorpio.resources":                        {{"100m", "512Mi", "1500m", "1Gi"}, {"250m", "1Gi", "2", "1Gi"}},
+	"tm-forum-api.defaultConfig.resources":     {{"100m", "512Mi", "1", "1Gi"}, {"250m", "1Gi", "2", "1Gi"}},
+	"contract-management.deployment.resources": {{"50m", "256Mi", "500m", "512Mi"}, {"100m", "512Mi", "1", "512Mi"}},
+	"decentralizedIam.vcAuthentication.trusted-issuers-list.deployment.resources": {
+		{"50m", "256Mi", "500m", "512Mi"}, {"100m", "512Mi", "1", "512Mi"}},
+}
+
+// wantResources expands resourceFigures for a profile into leaf values by path; empty for custom.
+func wantResources(profileName string) map[string]any {
+	want := map[string]any{}
+	row := map[string]int{devProfile: 0, prodProfile: 1}
+	i, sized := row[profileName]
+	if !sized {
+		return want
+	}
+	leaves := []string{".requests.cpu", ".requests.memory", ".limits.cpu", ".limits.memory"}
+	for path, figures := range resourceFigures {
+		for j, l := range leaves {
+			want[path+l] = figures[i][j]
+		}
+	}
+	return want
+}
+
+// tableLeaves returns the tree's leaves under a resources table path, by path.
+func tableLeaves(tree Tree) map[string]Leaf {
+	got := map[string]Leaf{}
+	for _, l := range tree.Leaves {
+		key := l.Path.String()
+		for path := range resourceFigures {
+			if isUnder(key, path) || key == path {
+				got[key] = l
+			}
+		}
+	}
+	return got
+}
+
+func TestRenderResourceProfile(t *testing.T) {
+	b := providerBundle(t)
+	tests := []struct {
+		name    string
+		env     profile.Environment
+		answer  string
+		profile string
+	}{
+		{"production renders the production figures", "", prodProfile, prodProfile},
+		{"development renders the development figures", "", devProfile, devProfile},
+		{"custom renders nothing", profile.EnvProduction, customProfile, customProfile},
+		{"a production environment derives production", profile.EnvProduction, "", prodProfile},
+		{"a development environment derives development", profile.EnvDevelopment, "", devProfile},
+		{"no environment and no answer render nothing", "", "", customProfile},
+		{"a given answer beats the environment", profile.EnvProduction, devProfile, devProfile},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			p := profile.Profile{Target: profile.Target{Environment: tc.env}, Answers: map[string]any{}}
+			if tc.answer != "" {
+				p.Answers[resourceProfileID] = tc.answer
+			}
+			tree, err := Render(b, p, Options{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			got := map[string]any{}
+			for key, l := range tableLeaves(tree) {
+				got[key] = l.Value
+				if want := []string{resourceProfileID}; !reflect.DeepEqual(l.Provenance.Answers, want) {
+					t.Errorf("%s answers = %v, want %v", key, l.Provenance.Answers, want)
+				}
+			}
+			want := wantResources(tc.profile)
+			if !reflect.DeepEqual(got, want) {
+				t.Errorf("table leaves = %v, want %v", got, want)
+			}
+			if len(want) != 0 && len(got) != resourceLeaves {
+				t.Errorf("%d table leaves, want %d", len(got), resourceLeaves)
+			}
+		})
+	}
+}
+
+// TestRenderResourceProfileLeavesNoReservedRef keeps target.environment out of the answers.
+func TestRenderResourceProfileLeavesNoReservedRef(t *testing.T) {
+	got, err := Answers(providerBundle(t), profile.Profile{Target: profile.Target{Environment: profile.EnvProduction}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got[resourceProfileID] != prodProfile {
+		t.Errorf("%s = %v, want %s", resourceProfileID, got[resourceProfileID], prodProfile)
+	}
+	for id := range got {
+		if strings.HasPrefix(id, "target") {
+			t.Errorf("Answers holds %s, want no reserved ref", id)
+		}
+	}
+}
+
+func TestResourceProfileTargets(t *testing.T) {
+	refs := Targets(providerBundle(t), resourceProfileID)
+	got := map[string]bool{}
+	components := map[string]bool{}
+	for _, r := range refs {
+		got[r.Path.String()] = true
+		components[r.Component] = true
+	}
+	if len(refs) != resourceLeaves || len(got) != resourceLeaves {
+		t.Errorf("%d targets on %d paths, want %d each once", len(refs), len(got), resourceLeaves)
+	}
+	for path := range wantResources(prodProfile) {
+		if !got[path] {
+			t.Errorf("%s is not a target", path)
+		}
+	}
+	if want := len(resourceFigures); len(components) != want {
+		t.Errorf("components = %v, want %d", components, want)
+	}
+}
+
+func TestRenderResourceProfileKeepsHandEdit(t *testing.T) {
+	const (
+		path   = "scorpio.resources.limits.memory"
+		edited = "3Gi"
+	)
+	b := providerBundle(t)
+	r, err := load.Load([]byte("scorpio:\n  resources:\n    limits:\n      memory: "+edited+"\n"), "values.yaml", []model.Bundle{b}, load.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	tree, err := Render(b, profile.Profile{Answers: map[string]any{resourceProfileID: prodProfile}}, Options{Overrides: r})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for key, l := range tableLeaves(tree) {
+		p := l.Provenance
+		switch {
+		case key == path && (!p.Pinned || !p.Kept || l.Value != edited || p.Rendered != wantResources(prodProfile)[path]):
+			t.Errorf("%s = (value %v, pinned %v, kept %v, rendered %v), want %s kept over the rendered figure", key, l.Value, p.Pinned, p.Kept, p.Rendered, edited)
+		case key != path && p.Pinned:
+			t.Errorf("%s is pinned, want it rendered", key)
+		}
+	}
+}
+
+func TestDiffResourceProfileSwitch(t *testing.T) {
+	b := providerBundle(t)
+	render := func(name string) Tree {
+		tree, err := Render(b, profile.Profile{Answers: map[string]any{resourceProfileID: name}}, Options{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return tree
+	}
+	dev, prod := wantResources(devProfile), wantResources(prodProfile)
+	want := []change{}
+	for key := range prod {
+		if dev[key] != prod[key] {
+			want = append(want, change{foundation: resourceProfileID, path: key, status: StatusChanged, before: prod[key], after: dev[key]})
+		}
+	}
+	got := flatten(Diff(b, render(prodProfile), render(devProfile)))
+	if len(got) != len(want) {
+		t.Fatalf("diff = %v, want %d changes", got, len(want))
+	}
+	for _, c := range got {
+		if !slices.Contains(want, c) {
+			t.Errorf("unexpected change %+v", c)
+		}
 	}
 }

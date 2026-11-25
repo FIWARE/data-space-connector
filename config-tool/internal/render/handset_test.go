@@ -77,3 +77,28 @@ func TestHandSetDIDSurvivesDomainChange(t *testing.T) {
 		}
 	}
 }
+
+func TestHandSetResourceProfile(t *testing.T) {
+	b := providerBundle(t)
+	tests := []struct {
+		name    string
+		answers map[string]any
+		want    []HandSetAnswer
+	}{
+		{"a given profile names the environment's", map[string]any{resourceProfileID: customProfile},
+			[]HandSetAnswer{{ID: resourceProfileID, Value: customProfile, Derived: prodProfile}}},
+		{"an un-given profile is not listed", map[string]any{}, []HandSetAnswer{}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			p := profile.Profile{Target: profile.Target{Environment: profile.EnvProduction}, Answers: tc.answers}
+			got, err := HandSet(b, p)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(got, tc.want) {
+				t.Errorf("HandSet = %+v, want %+v", got, tc.want)
+			}
+		})
+	}
+}
