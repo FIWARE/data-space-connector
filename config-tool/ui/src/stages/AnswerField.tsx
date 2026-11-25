@@ -5,7 +5,7 @@ import type { Finding } from '../api/render'
 import { AskLater } from '../chrome/AskLater'
 import { repositoryDocUrl } from '../links'
 import { useStore } from '../state/context'
-import { answerErrors, textAnswer } from '../state/foundations'
+import { answerErrors, defaultApplies, derivedDefault, reservedRefs, resolvedAnswer, textAnswer, validAnswers } from '../state/foundations'
 import { answerFieldId, fieldElementId } from '../state/openQuestions'
 import { FindingNote } from './Findings'
 import { describedBy, findingNoteId, usedByText } from './foundationText'
@@ -85,7 +85,7 @@ export function AnswerField({
   const { state, dispatch } = useStore()
   const field = answerFieldId(foundation.id)
   const id = fieldElementId(field)
-  const error = answerErrors(state.answers.values, state.foundations)[foundation.id]
+  const error = answerErrors(state.answers.values, state.foundations, reservedRefs(state.answers.target))[foundation.id]
   const own = findings.filter((f) => f.field === field)
   return (
     <div className="row">
@@ -112,3 +112,50 @@ export function AnswerField({
   )
 }
 
+/** A choice as a radio group, each option with its note; the default option is checked while none is given. A given
+ *  choice whose default follows other answers can be reset to it. */
+export function ChoiceField({ foundation, findings }: { foundation: Foundation; findings: readonly Finding[] }) {
+  const { state, dispatch } = useStore()
+  const field = answerFieldId(foundation.id)
+  const id = fieldElementId(field)
+  const foundations = state.foundations ?? []
+  const reserved = reservedRefs(state.answers.target)
+  const chosen = resolvedAnswer(foundation.id, state.answers.values, foundations, reserved)
+  const resettable =
+    state.answers.values[foundation.id] !== undefined &&
+    derivedDefault(foundation) &&
+    defaultApplies(foundation, validAnswers(state.answers.values, foundations, reserved), foundations, reserved)
+  const own = findings.filter((f) => f.field === field)
+  return (
+    // tabIndex lets a Review link focus the group.
+    <fieldset className="row" id={id} tabIndex={-1} aria-describedby={describedBy(id, undefined, own)}>
+      <legend>{foundation.label}</legend>
+      {foundation.options.map((o, i) => (
+        <div key={o.value} className="choice">
+          <input
+            type="radio"
+            id={`${id}-option-${i}`}
+            name={id}
+            value={o.value}
+            checked={chosen === o.value}
+            aria-describedby={o.note ? `${id}-option-${i}-note` : undefined}
+            onChange={() => dispatch({ type: 'setAnswer', id: foundation.id, value: o.value })}
+          />
+          <label htmlFor={`${id}-option-${i}`}>{o.label}</label>
+          {o.note && (
+            <span className="hint" id={`${id}-option-${i}-note`}>
+              {o.note}
+            </span>
+          )}
+        </div>
+      ))}
+      {resettable && (
+        <button type="button" className="link" onClick={() => dispatch({ type: 'setAnswer', id: foundation.id, value: '' })}>
+          {RESET_LABEL}
+        </button>
+      )}
+      <AskLater field={field} />
+      <FieldNotes foundation={foundation} id={id} own={own} />
+    </fieldset>
+  )
+}

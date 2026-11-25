@@ -1,17 +1,18 @@
 /** S3 Foundations: the answers asked once and used everywhere, their fan-out, and what an edit re-renders. */
 import { useEffect, useRef, useState } from 'react'
-import { fetchFoundations, type Foundation } from '../api/foundations'
+import { fetchFoundations, type Foundation, type ResourceTable } from '../api/foundations'
 import { toProfile } from '../api/profile'
 import { fetchRender, type AnswerDiff, type Change, type ChangeGroup, type Finding } from '../api/render'
 import { AskLater } from '../chrome/AskLater'
 import { PUBLIC_NAMES_URL } from '../links'
 import { useStore } from '../state/context'
-import { answerErrors, defaultApplies, defaultValue, featureOff, resolvedAnswer, textAnswer, validAnswers } from '../state/foundations'
+import { answerErrors, defaultApplies, defaultValue, featureOff, reservedRefs, textAnswer, validAnswers } from '../state/foundations'
 import { answerFieldId, fieldElementId, fieldStage } from '../state/openQuestions'
 import { StageId } from '../state/stageIds'
-import { AnswerField, FieldNotes } from './AnswerField'
+import { AnswerField, ChoiceField, FieldNotes } from './AnswerField'
 import { DataSpacePanel } from './DataSpacePanel'
 import { DerivedAnswers } from './DerivedAnswers'
+import { PlatformPanel } from './PlatformPanel'
 import { describedBy } from './foundationText'
 import { PINNED_LABEL, wouldDerive } from './handSetText'
 
@@ -42,42 +43,6 @@ function shown(value: unknown): string {
   return typeof value === 'string' ? value : JSON.stringify(value)
 }
 
-/** A choice as a radio group, each option with its note; the default option is checked while none is given. */
-function ChoiceField({ foundation, findings }: { foundation: Foundation; findings: readonly Finding[] }) {
-  const { state, dispatch } = useStore()
-  const field = answerFieldId(foundation.id)
-  const id = fieldElementId(field)
-  const chosen = resolvedAnswer(foundation.id, state.answers.values, state.foundations ?? [])
-  const own = findings.filter((f) => f.field === field)
-  return (
-    // tabIndex lets a Review link focus the group.
-    <fieldset className="row" id={id} tabIndex={-1} aria-describedby={describedBy(id, undefined, own)}>
-      <legend>{foundation.label}</legend>
-      {foundation.options.map((o, i) => (
-        <div key={o.value} className="choice">
-          <input
-            type="radio"
-            id={`${id}-option-${i}`}
-            name={id}
-            value={o.value}
-            checked={chosen === o.value}
-            aria-describedby={o.note ? `${id}-option-${i}-note` : undefined}
-            onChange={() => dispatch({ type: 'setAnswer', id: foundation.id, value: o.value })}
-          />
-          <label htmlFor={`${id}-option-${i}`}>{o.label}</label>
-          {o.note && (
-            <span className="hint" id={`${id}-option-${i}-note`}>
-              {o.note}
-            </span>
-          )}
-        </div>
-      ))}
-      <AskLater field={field} />
-      <FieldNotes foundation={foundation} id={id} own={own} />
-    </fieldset>
-  )
-}
-
 /** An answer with a default: the derived value with "Edit" while none is given, else the input with "Reset to derived";
  *  a given answer is pinned. Where the default does not apply (e.g. its condition fails) the input is asked for directly. */
 function DerivedField({ foundation, findings, pending = DERIVED_PENDING }: { foundation: Foundation; findings: readonly Finding[]; pending?: string }) {
@@ -90,9 +55,10 @@ function DerivedField({ foundation, findings, pending = DERIVED_PENDING }: { fou
   const foundations = state.foundations ?? []
   const given = textAnswer(state.answers.values[foundation.id])
   // Only what the render is sent, so an invalid answer it comes from shows it as pending rather than a value never written.
-  const values = validAnswers(state.answers.values, foundations)
-  const applies = defaultApplies(foundation, values, foundations)
-  const derived = defaultValue(foundation, values, foundations)
+  const reserved = reservedRefs(state.answers.target)
+  const values = validAnswers(state.answers.values, foundations, reserved)
+  const applies = defaultApplies(foundation, values, foundations, reserved)
+  const derived = defaultValue(foundation, values, foundations, reserved)
 
   useEffect(() => {
     if (editing) document.getElementById(id)?.focus()
@@ -284,7 +250,7 @@ function useRenderDiff(): RenderState {
   }, [state])
 
   useEffect(() => {
-    if (Object.keys(answerErrors(values, latest.current.foundations)).length > 0) return
+    if (Object.keys(answerErrors(values, latest.current.foundations, reservedRefs(latest.current.answers.target))).length > 0) return
     const controller = new AbortController()
     const baseline = !started.current
     const timer = setTimeout(
@@ -315,12 +281,16 @@ export function Foundations() {
   const { state, dispatch } = useStore()
   const { chart, chartVersion } = state.answers.target
   const [error, setError] = useState<string>()
+  const [resources, setResources] = useState<ResourceTable | null>(null)
   const diff = useRenderDiff()
 
   useEffect(() => {
     const controller = new AbortController()
     fetchFoundations(chart, chartVersion, controller.signal).then(
-      (list) => dispatch({ type: 'foundationsLoaded', foundations: list.foundations }),
+      (list) => {
+        setResources(list.resources)
+        dispatch({ type: 'foundationsLoaded', foundations: list.foundations })
+      },
       (err: Error) => controller.signal.aborted || setError(err.message),
     )
     return () => controller.abort()
@@ -342,6 +312,7 @@ export function Foundations() {
   const dataspace = foundations.filter((f) => f.group === 'dataspace')
   const network = foundations.filter((f) => f.group === 'network' && f.default === '')
   const hosts = foundations.filter((f) => f.group === 'network' && f.default !== '')
+  const platform = foundations.filter((f) => f.group === 'platform')
 
   return (
     <section>
@@ -365,6 +336,7 @@ export function Foundations() {
           {hosts.length > 0 && <Hosts hosts={hosts} findings={diff.findings} />}
         </div>
       )}
+      {platform.length > 0 && <PlatformPanel foundations={platform} table={resources} findings={diff.findings} />}
       {diff.error && (
         <p className="field-error" role="alert">
           {diff.error}

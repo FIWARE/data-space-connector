@@ -7,7 +7,7 @@ import type { Finding } from '../api/render'
 import { AskLater } from '../chrome/AskLater'
 import { useStore } from '../state/context'
 import { AUTO_REGISTRATION_ID, CREDENTIAL_TYPES_ID, TIR_ADDRESS_ID, tirCheckOf } from '../state/dataspace'
-import { answerErrors } from '../state/foundations'
+import { answerErrors, reservedRefs } from '../state/foundations'
 import { answerFieldId, fieldElementId } from '../state/openQuestions'
 import { AnswerField, FieldNotes } from './AnswerField'
 import {
@@ -148,7 +148,7 @@ function Import({ foundations }: { foundations: readonly Foundation[] }) {
 function CheckTir() {
   const { state, dispatch } = useStore()
   const check = tirCheckOf(state)
-  const invalid = answerErrors(state.answers.values, state.foundations)[TIR_ADDRESS_ID] !== undefined
+  const invalid = answerErrors(state.answers.values, state.foundations, reservedRefs(state.answers.target))[TIR_ADDRESS_ID] !== undefined
   const [busy, setBusy] = useState(false)
   // A refused check belongs to the address it ran for; once the address changes it reads as not checked.
   const [error, setError] = useState<{ address: string; message: string }>()
@@ -185,7 +185,7 @@ function CredentialTypesField({ foundation, findings }: { foundation: Foundation
   const id = fieldElementId(field)
   const given = state.answers.values[foundation.id]
   const rows: CredentialType[] = Array.isArray(given) ? given : []
-  const raw = answerErrors(state.answers.values, state.foundations)[foundation.id]
+  const raw = answerErrors(state.answers.values, state.foundations, reservedRefs(state.answers.target))[foundation.id]
   const located = raw === undefined ? undefined : rowError(raw)
   const error = located?.text
   // Marks the input the error points at; an error without a part covers both inputs of its row.

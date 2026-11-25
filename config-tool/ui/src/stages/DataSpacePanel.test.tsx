@@ -266,7 +266,7 @@ describe('DataSpacePanel', () => {
   })
 
   it.each([CREDENTIAL_TYPES_ID, AUTO_REGISTRATION_ID])('leaves %s out when the bundle does not declare it', async (id) => {
-    renderPanel(ON_FOUNDATIONS, {}, { foundations: () => ({ foundations: DATASPACE_FOUNDATIONS.foundations.filter((f) => f.id !== id) }) })
+    renderPanel(ON_FOUNDATIONS, {}, { foundations: () => ({ ...DATASPACE_FOUNDATIONS, foundations: DATASPACE_FOUNDATIONS.foundations.filter((f) => f.id !== id) }) })
     await tirInput()
     const label = DATASPACE_FOUNDATIONS.foundations.find((f) => f.id === id)?.label ?? id
     expect(screen.queryByText(label)).not.toBeInTheDocument()
