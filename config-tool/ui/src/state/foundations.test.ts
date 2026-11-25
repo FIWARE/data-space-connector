@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import type { CredentialType, Foundation, FoundationOption, FoundationType } from '../api/foundations'
-import type { Answers, AnswerValue } from './answers'
-import { DID_FOUNDATIONS, DID_METHOD, FOUNDATIONS } from '../test/api'
+import { emptyAnswers, UNANSWERED, type Answers, type AnswerValue, type Environment } from './answers'
+import { DID_FOUNDATIONS, DID_METHOD, FOUNDATIONS, RESOURCE_PROFILE } from '../test/api'
 import {
   answerErrors,
   checkAnswer,
+  derivedDefault,
   dropMismatched,
   featureOff,
   MAX_CREDENTIAL_TYPES,
@@ -22,10 +23,15 @@ import {
   MSG_URL_LENGTH,
   msgChoice,
   msgPrefix,
+  reservedRefs,
   resolvedAnswer,
+  TARGET_ENVIRONMENT_REF,
   textAnswer,
   validAnswers,
 } from './foundations'
+
+/** No reserved ref resolves, as before Stage 1's environment is answered. */
+const NONE = {}
 
 /** `n` distinct credential types. */
 function manyTypes(n: number): CredentialType[] {
@@ -164,20 +170,20 @@ describe('answer validity', () => {
   const values = { 'org.displayName': 'Acme ', 'domain.base': 'example.org', 'host.other': 'Not Checked' }
 
   it('reports the format errors of declared answers only', () => {
-    expect(answerErrors(values, FOUNDATIONS.foundations)).toEqual({ 'org.displayName': MSG_PLAIN_LINE })
+    expect(answerErrors(values, FOUNDATIONS.foundations, NONE)).toEqual({ 'org.displayName': MSG_PLAIN_LINE })
   })
 
   it('checks a choice against its options', () => {
     const method: Foundation = { ...DID_METHOD, options: METHODS }
-    expect(answerErrors({ 'did.method': 'did:ebsi' }, [method])).toEqual({ 'did.method': msgChoice(METHODS) })
-    expect(answerErrors({ 'did.method': 'did:key' }, [method])).toEqual({})
+    expect(answerErrors({ 'did.method': 'did:ebsi' }, [method], NONE)).toEqual({ 'did.method': msgChoice(METHODS) })
+    expect(answerErrors({ 'did.method': 'did:key' }, [method], NONE)).toEqual({})
   })
 
   it.each([
     ['without the foundations', undefined, values],
     ['with the foundations', FOUNDATIONS.foundations, { 'domain.base': 'example.org', 'host.other': 'Not Checked' }],
   ])('keeps an invalid answer out of what is sent %s', (_, foundations, sent) => {
-    expect(validAnswers(values, foundations)).toEqual(sent)
+    expect(validAnswers(values, foundations, NONE)).toEqual(sent)
   })
 })
 
@@ -191,7 +197,7 @@ describe('resolution', () => {
     ['a did:key DID has no default', 'did.value', { 'domain.base': 'example.org', 'did.method': 'did:key' }, undefined],
     ['a given answer wins over the default', 'did.value', { 'domain.base': 'example.org', 'did.value': 'did:web:other.org' }, 'did:web:other.org'],
   ])('%s', (_, id, values, want) => {
-    expect(resolvedAnswer(id, values, all)).toEqual(want)
+    expect(resolvedAnswer(id, values, all, NONE)).toEqual(want)
   })
 
   it.each([
@@ -199,19 +205,56 @@ describe('resolution', () => {
     ['accepts a DID of the chosen method', { 'did.method': 'did:key', 'did.value': 'did:key:z6Mk' }, {}],
     ['checks the prefix against the default method', { 'did.value': 'did:key:z6Mk' }, { 'did.value': msgPrefix('did:web:') }],
   ])('%s', (_, values, want) => {
-    expect(answerErrors(values, all)).toEqual(want)
+    expect(answerErrors(values, all, NONE)).toEqual(want)
   })
 
   it.each([
     ['drops a DID the new method no longer matches', { 'did.method': 'did:key', 'did.value': 'did:web:example.org' }, { 'did.method': 'did:key' }],
     ['keeps a DID that still matches', { 'did.method': 'did:key', 'did.value': 'did:key:z6Mk' }, { 'did.method': 'did:key', 'did.value': 'did:key:z6Mk' }],
   ])('%s', (_, values, want) => {
-    expect(dropMismatched(values, 'did.method', all)).toEqual(want)
+    expect(dropMismatched(values, 'did.method', all, NONE)).toEqual(want)
   })
 
   it('keeps a mismatched DID when the change is the DID itself', () => {
     const values = { 'did.value': 'did:key:z6Mk' }
-    expect(dropMismatched(values, 'did.value', all)).toBe(values)
+    expect(dropMismatched(values, 'did.value', all, NONE)).toBe(values)
+  })
+})
+
+describe('reserved refs', () => {
+  const all = [RESOURCE_PROFILE]
+  const target = (environment: Environment | typeof UNANSWERED) => ({ ...emptyAnswers().target, environment })
+
+  it.each([
+    ['the environment derives the profile', 'production', {}, 'production'],
+    ['an unanswered environment leaves it unresolved', UNANSWERED, {}, undefined],
+    ['a given profile beats the environment', 'production', { 'resources.profile': 'custom' }, 'custom'],
+  ] as const)('%s', (_, environment, values, want) => {
+    expect(resolvedAnswer(RESOURCE_PROFILE.id, values, all, reservedRefs(target(environment)))).toEqual(want)
+  })
+
+  it('resolves only the answered environment', () => {
+    expect(reservedRefs(target(UNANSWERED))).toEqual({})
+    expect(reservedRefs(target('development'))).toEqual({ [TARGET_ENVIRONMENT_REF]: 'development' })
+  })
+
+  it('never turns the environment into an answer', () => {
+    const values = { 'resources.profile': 'custom' }
+    const reserved = reservedRefs(target('production'))
+    expect(validAnswers(values, all, reserved)).toEqual(values)
+    expect(dropMismatched(values, 'resources.profile', all, reserved)).toBe(values)
+    expect(answerErrors({}, all, reserved)).toEqual({})
+  })
+})
+
+describe('derivedDefault', () => {
+  it.each([
+    ['a reserved ref', RESOURCE_PROFILE.default, true],
+    ['an answer ref', 'did:web:{{ .domain.base }}', true],
+    ['a constant', DID_METHOD.default, false],
+    ['no default', '', false],
+  ])('%s', (_, template, want) => {
+    expect(derivedDefault({ default: template })).toBe(want)
   })
 })
 

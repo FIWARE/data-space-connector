@@ -160,7 +160,7 @@ guide that explains it.
 The shipped stage differs from this design in the points below, and from the [S3 mockup](MOCKUPS.md#s3--foundations) in the last
 ([ADR 0020](../adr/0020-config-tool-foundations-render.md), [Foundations](../../config-tool/README.md#foundations-stage-3)):
 
-- **US-3.1 to US-3.4 have shipped.** *Organization* holds the display name, the DID method (`did:web` or `did:key`,
+- **US-3.1 to US-3.5 have shipped.** *Organization* holds the display name, the DID method (`did:web` or `did:key`,
   each with its note) and the DID, derived as `did:web:<DID document host>` with *Edit* and *Reset to derived*, or asked
   for under `did:key`. *Network* holds the base domain and the derived hosts. A `did:key` in production gets a warning under
   the method and on Review, which never blocks. The rest of the Network and Platform panels come with their own stories.
@@ -184,6 +184,9 @@ The shipped stage differs from this design in the points below, and from the [S3
   pinned or has a finding. There is no path-prefix scheme: every host is a sub-domain of the base domain. The counts
   are measured (76 values in 7 components through the hosts on the base domain, 89 in 10 with the verifier, the DID
   document host and the DID), so the mockup's 41 is illustrative.
+- ***Platform*** holds only the resource profile so far ([ADR 0024](../adr/0024-config-tool-resource-profile.md)),
+  derived from the environment (*Reset to derived* once picked by hand) above a preview of the requests and limits it
+  sets per Java component. In production, a Java component without a memory limit gets a warning that never blocks.
 - **Unlike the S3 mockup, the base domain sits in the Network panel**, above the hosts it derives, as in the list
   above, not in the Organization panel.
 

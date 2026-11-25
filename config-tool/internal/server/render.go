@@ -33,6 +33,37 @@ type renderResponse struct {
 // foundationsResponse lists a bundle's foundations in declaration order with their fan-out.
 type foundationsResponse struct {
 	Foundations []foundationBody `json:"foundations"`
+	// Resources is the figures each resource profile renders; null for a bundle that sizes nothing.
+	Resources *resourcesBody `json:"resources"`
+}
+
+// resourcesBody is the bundle's resources table as the Stage 3 preview shows it; unsized components are a rule
+// input only and stay out.
+type resourcesBody struct {
+	Answer     string                  `json:"answer"`
+	MeasuredOn string                  `json:"measuredOn"`
+	Doc        string                  `json:"doc"`
+	Components []resourceComponentBody `json:"components"`
+	// Profiles maps a choice value to the spec of every component, by component id.
+	Profiles map[string]map[string]model.ResourceSpec `json:"profiles"`
+}
+
+type resourceComponentBody struct {
+	ID    string `json:"id"`
+	Label string `json:"label"`
+	Path  string `json:"path"`
+}
+
+// newResourcesBody is the preview of t; nil when t is.
+func newResourcesBody(t *model.ResourceTable) *resourcesBody {
+	if t == nil {
+		return nil
+	}
+	body := &resourcesBody{Answer: t.Answer, MeasuredOn: t.MeasuredOn, Doc: t.Doc, Components: make([]resourceComponentBody, 0, len(t.Components)), Profiles: t.Profiles}
+	for _, c := range t.Components {
+		body.Components = append(body.Components, resourceComponentBody{ID: c.ID, Label: c.Label, Path: c.Path})
+	}
+	return body
 }
 
 type foundationBody struct {
@@ -87,7 +118,8 @@ func (s *Server) handleRender(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnprocessableEntity, errSourceMismatch.Error(), "")
 		return
 	}
-	tree, err := render.Render(*b, p, render.Options{Overrides: overridesFor(res, b.Chart)})
+	opts := render.Options{Overrides: overridesFor(res, b.Chart)}
+	tree, err := render.Render(*b, p, opts)
 	if err != nil {
 		writeError(w, http.StatusUnprocessableEntity, err.Error(), "")
 		return
@@ -97,7 +129,7 @@ func (s *Server) handleRender(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnprocessableEntity, err.Error(), "")
 		return
 	}
-	findings, err := check.Evaluate(*b, p)
+	findings, err := check.Evaluate(*b, p, opts)
 	if err != nil {
 		writeError(w, http.StatusUnprocessableEntity, err.Error(), "")
 		return
@@ -147,7 +179,7 @@ func (s *Server) handleFoundations(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	b := bundles[i]
-	body := foundationsResponse{Foundations: make([]foundationBody, 0, len(b.Foundations))}
+	body := foundationsResponse{Foundations: make([]foundationBody, 0, len(b.Foundations)), Resources: newResourcesBody(b.Resources)}
 	for _, f := range b.Foundations {
 		targets := render.Targets(b, f.ID)
 		components := []string{}

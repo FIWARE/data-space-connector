@@ -10,6 +10,9 @@ import (
 	"testing/fstest"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/FIWARE/data-space-connector/config-tool/internal/roundtrip"
+	bundles "github.com/FIWARE/data-space-connector/config-tool/model"
 )
 
 const (
@@ -407,6 +410,105 @@ func TestRecognizedFoundationValidation(t *testing.T) {
 				t.Fatalf("err = %v, want none", err)
 			case tc.wantErr != "" && (err == nil || !strings.Contains(err.Error(), tc.wantErr)):
 				t.Fatalf("err = %v, want it to contain %q", err, tc.wantErr)
+			}
+		})
+	}
+}
+
+// TestShippedResourceTargets checks the table compiles into one const target per profile on each of its paths.
+func TestShippedResourceTargets(t *testing.T) {
+	const wantPaths = 20
+	got, err := Versions(bundles.FS)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, b := range got {
+		if b.Chart != chart || !b.Latest {
+			continue
+		}
+		f, _ := b.Foundation(profileAnswer)
+		onlys := map[string][]string{}
+		for _, ct := range f.Targets {
+			if ct.Fn != FnConst || !reflect.DeepEqual(ct.Refs, []string{profileAnswer}) {
+				t.Errorf("%s: fn %s, refs %v, want a const referencing %s", ct.Path, ct.Fn, ct.Refs, profileAnswer)
+			}
+			if block := ct.Path[:len(ct.Path)-2]; !reflect.DeepEqual(ct.Block, block) {
+				t.Errorf("%s: block %s, want %s", ct.Path, ct.Block, block)
+			}
+			onlys[ct.Path.String()] = append(onlys[ct.Path.String()], ct.Only)
+		}
+		if len(onlys) != wantPaths {
+			t.Errorf("%d paths, want %d", len(onlys), wantPaths)
+		}
+		for path, got := range onlys {
+			if want := []string{devProfile, "production"}; !reflect.DeepEqual(got, want) {
+				t.Errorf("%s: only %v, want %v", path, got, want)
+			}
+		}
+	}
+}
+
+// TestResourceTargetPaths refuses a hand-written target that clashes with a table path.
+func TestResourceTargetPaths(t *testing.T) {
+	data, err := os.ReadFile(resourcesFoundations)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tests := []struct {
+		name string
+		path string
+		err  string
+	}{
+		{"another foundation on a table leaf", "keycloak.resources.limits.memory", "already written by foundations[0]"},
+		{"a table path's prefix", "keycloak.resources", "is a prefix of another target's path"},
+		{"beside the table", "keycloak.title", ""},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			target := fmt.Sprintf("    label: Name\n    targets: [{path: %s, fn: copy, args: [\"{{ .org.name }}\"]}]\n", tc.path)
+			body := strings.Replace(string(data), "    label: Name\n", target, 1)
+			_, err := Versions(fstest.MapFS{fixtureFile: {Data: []byte(body)}})
+			switch {
+			case tc.err == "" && err != nil:
+				t.Fatalf("err = %v, want none", err)
+			case tc.err != "" && (err == nil || !strings.Contains(err.Error(), tc.err)):
+				t.Fatalf("err = %v, want it to contain %q", err, tc.err)
+			}
+		})
+	}
+}
+
+// TestCheckTargetPathsOnly accepts a path written twice only by one foundation for distinct Only values.
+func TestCheckTargetPathsOnly(t *testing.T) {
+	const path = "keycloak.resources.limits.memory"
+	p, err := roundtrip.ParsePath(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	target := func(only string) CompiledTarget { return CompiledTarget{Path: p, Fn: FnConst, Only: only} }
+	tests := []struct {
+		name string
+		fs   []CompiledFoundation
+		err  string
+	}{
+		{"distinct values", []CompiledFoundation{{ID: "a", Targets: []CompiledTarget{target("x"), target("y")}}}, ""},
+		{"the same value", []CompiledFoundation{{ID: "a", Targets: []CompiledTarget{target("x"), target("y"), target("x")}}},
+			"targets[2]: path \"" + path + "\" is already written by foundations[0] targets[0]"},
+		{"two empty values", []CompiledFoundation{{ID: "a", Targets: []CompiledTarget{target(""), target("")}}}, "already written"},
+		{"an empty value first", []CompiledFoundation{{ID: "a", Targets: []CompiledTarget{target(""), target("x")}}}, "already written"},
+		{"an empty value last", []CompiledFoundation{{ID: "a", Targets: []CompiledTarget{target("x"), target("")}}}, "already written"},
+		{"another foundation", []CompiledFoundation{
+			{ID: "a", Targets: []CompiledTarget{target("x")}}, {ID: "b", Targets: []CompiledTarget{target("y")}},
+		}, "foundations[1] (b): targets[0]: path \"" + path + "\" is already written by foundations[0] targets[0]"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			err := checkTargetPaths(tc.fs)
+			switch {
+			case tc.err == "" && err != nil:
+				t.Fatalf("err = %v, want none", err)
+			case tc.err != "" && (err == nil || !strings.Contains(err.Error(), tc.err)):
+				t.Fatalf("err = %v, want it to contain %q", err, tc.err)
 			}
 		})
 	}

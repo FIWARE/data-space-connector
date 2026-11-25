@@ -198,7 +198,7 @@ in-cluster transfer host (1 each, US-5.3). The other rows are design.
 | `ingress.className` + `ingress.annotations` | `nginx` | every Ingress of the chart and of 6 subcharts |
 | `dns.mode` | external-dns annotations, or manual | Ingress annotations |
 | `storage.className` | `gp3` | PostgreSQL, MongoDB, Vault, APISIX etcd |
-| `resources.profile` | `production` | `resources` of Scorpio, the TMForum API, the TIL, contract-management, Keycloak — the [sizing guidance](../deployment-integration/roles/PREREQUISITES.md#set-memory-limits-on-the-java-components) applied, not re-explained |
+| `resources.profile` | `production` | `resources` of Scorpio, the TMForum API, the TIL, contract-management, Keycloak — the [sizing guidance](../deployment-integration/roles/PREREQUISITES.md#set-memory-limits-on-the-java-components) applied, not re-explained. Shipped ([ADR 0024](../adr/0024-config-tool-resource-profile.md)): defaults to the Stage 1 environment (`development` or `production`); `custom` writes no key and leaves the chart's defaults |
 | `images.pullSecrets`, `images.registryMirror` | | `imagePullSecrets` of every component, `keycloak.tokenStatusList.plugin.mavenBaseUrl` |
 | `proxy.https`, `proxy.no` | | verifier env, Keycloak `proxy.*`, BAE, vc-operator, APISIX `proxy_opts` |
 | `ca.privateSecret` | | APISIX `ssl.existingCASecret`, the verifier CA init container, `NODE_EXTRA_CA_CERTS`, Keycloak truststore |

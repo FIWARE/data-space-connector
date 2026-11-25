@@ -50,6 +50,7 @@ const (
 	GroupOrganization FoundationGroup = "organization"
 	GroupDataspace    FoundationGroup = "dataspace"
 	GroupNetwork      FoundationGroup = "network"
+	GroupPlatform     FoundationGroup = "platform"
 )
 
 // Fn is a target function: how a target's value is made from answers (ADR 0020).
@@ -88,7 +89,9 @@ var (
 	knownTypes = []FoundationType{TypeString, TypeHostname, TypeDomain, TypeChoice, TypeDID, TypeURL, TypeBool, TypeCredentialTypes}
 	knownFns   = []Fn{FnTpl, FnJoin, FnCopy, FnConst}
 	// knownFoundationGroups are the Stage 3 panels, in screen order.
-	knownFoundationGroups = []FoundationGroup{GroupOrganization, GroupDataspace, GroupNetwork}
+	knownFoundationGroups = []FoundationGroup{GroupOrganization, GroupDataspace, GroupNetwork, GroupPlatform}
+	// reservedRefs are read-only refs a default may read that no foundation declares; the render seeds them.
+	reservedRefs = []string{FieldTargetEnvironment}
 	// idSegment keeps every segment of an answer id usable as a template field name.
 	idSegment = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 	plainLine = regexp.MustCompile(`^[^\s\x00-\x1f\x7f"\\<>]([^\x00-\x1f\x7f"\\<>]*[^\s\x00-\x1f\x7f"\\<>])?$`)
@@ -159,7 +162,7 @@ type CompiledFoundation struct {
 	Type  FoundationType
 	Group FoundationGroup
 	// Refs are the answer ids Default, DefaultWhen and Prefix reference, sorted; nil without any. They
-	// order the foundations; DefaultRefs alone gates the default.
+	// order the foundations and leave out reserved refs; DefaultRefs alone gates the default.
 	Refs        []string
 	DefaultWhen *Condition
 	Options     []Option
@@ -170,7 +173,7 @@ type CompiledFoundation struct {
 	prefix   *template.Template
 	// defaultRefs and prefixRefs split Refs by source, so a bad reference is reported where it is.
 	defaultRefs, prefixRefs []string
-	// defaultGate is defaultRefs plus the DefaultWhen id: the answers whose values decide the default.
+	// defaultGate is defaultRefs plus the reserved refs of Default and the DefaultWhen id: what decides the default.
 	defaultGate []string
 }
 
@@ -184,7 +187,7 @@ func (f CompiledFoundation) PrefixTemplate() *template.Template {
 	return f.prefix
 }
 
-// DefaultRefs are the answer ids Default and DefaultWhen reference, sorted; nil without any.
+// DefaultRefs are the ids Default and DefaultWhen reference, reserved refs included, sorted; nil without any.
 // Unlike Refs they leave out the prefix refs, which check a value but never gate its default.
 func (f CompiledFoundation) DefaultRefs() []string {
 	return f.defaultGate
@@ -221,9 +224,13 @@ type CompiledTarget struct {
 	// Value is the scalar of a const target; nil otherwise.
 	Value any
 	Sep   string
-	// Refs are the answer ids the target references, sorted; empty for const.
+	// Refs are the answer ids the target references, sorted; empty for a hand-written const.
 	Refs []string
-	tpls []*template.Template
+	// Only is the value of the foundation's own answer the target is written for; empty writes it for any.
+	Only string
+	// Block is the mapping the target writes as one unit: a hand edit inside it pins every target of the block.
+	Block roundtrip.Path
+	tpls  []*template.Template
 }
 
 // Templates are the parsed args of a tpl, join or copy target, in order; nil for const.
@@ -345,10 +352,11 @@ func checkCredentialTypes(v any) error {
 	return nil
 }
 
-// compileFoundations validates the foundations list and returns it compiled with its topological order.
-func compileFoundations(fs []Foundation, topLevelKeys []string) ([]CompiledFoundation, []string, error) {
+// compileFoundations validates the foundations list and the resources table and returns the list compiled with
+// its topological order.
+func compileFoundations(fs []Foundation, table *ResourceTable, topLevelKeys []string) ([]CompiledFoundation, []string, error) {
 	if len(fs) == 0 {
-		return nil, nil, nil
+		return nil, nil, checkResources(table, nil, topLevelKeys)
 	}
 	compiled := make([]CompiledFoundation, len(fs))
 	for i, f := range fs {
@@ -362,6 +370,12 @@ func compileFoundations(fs []Foundation, topLevelKeys []string) ([]CompiledFound
 		compiled[i] = c
 	}
 	if err := checkIDNesting(compiled); err != nil {
+		return nil, nil, err
+	}
+	if err := checkResources(table, compiled, topLevelKeys); err != nil {
+		return nil, nil, err
+	}
+	if err := addResourceTargets(compiled, table); err != nil {
 		return nil, nil, err
 	}
 	if err := checkRefs(compiled); err != nil {
@@ -405,6 +419,7 @@ func compileFoundation(f Foundation, topLevelKeys []string) (CompiledFoundation,
 		return CompiledFoundation{}, fmt.Errorf("a %s takes no default, defaultWhen or prefix", f.Type)
 	}
 	c := CompiledFoundation{ID: f.ID, Stage: f.Stage, Type: f.Type, Group: group, Options: f.Options, Features: f.Features}
+	var defaultReserved []string
 	if f.Default != "" {
 		t, refs, err := parseTemplate(f.ID, f.Default)
 		if err != nil {
@@ -417,7 +432,8 @@ func compileFoundation(f Foundation, topLevelKeys []string) (CompiledFoundation,
 		if len(refs) == 0 && !slices.Contains(c.optionValues(), f.Default) {
 			return CompiledFoundation{}, fmt.Errorf("default %q is not one of the options", f.Default)
 		}
-		c.deflt, c.defaultRefs = t, refs
+		c.deflt = t
+		c.defaultRefs, defaultReserved = splitReserved(refs)
 	}
 	if w := f.DefaultWhen; w != nil {
 		if f.Default == "" {
@@ -436,6 +452,9 @@ func compileFoundation(f Foundation, topLevelKeys []string) (CompiledFoundation,
 		if len(refs) == 0 {
 			return CompiledFoundation{}, fmt.Errorf("prefix references no answer")
 		}
+		if _, reserved := splitReserved(refs); len(reserved) > 0 {
+			return CompiledFoundation{}, fmt.Errorf("prefix references the reserved %s, which only a default may read", reserved[0])
+		}
 		c.prefix, c.prefixRefs = t, refs
 	}
 	gate := map[string]bool{}
@@ -445,11 +464,15 @@ func compileFoundation(f Foundation, topLevelKeys []string) (CompiledFoundation,
 	if c.DefaultWhen != nil {
 		gate[c.DefaultWhen.ID] = true
 	}
-	c.defaultGate = sortedSet(gate)
-	for _, r := range c.prefixRefs {
+	refs := maps.Clone(gate)
+	for _, r := range defaultReserved {
 		gate[r] = true
 	}
-	c.Refs = sortedSet(gate)
+	c.defaultGate = sortedSet(gate)
+	for _, r := range c.prefixRefs {
+		refs[r] = true
+	}
+	c.Refs = sortedSet(refs)
 	for i, t := range f.Targets {
 		ct, err := compileTarget(f.ID, t, topLevelKeys)
 		if err != nil {
@@ -568,6 +591,9 @@ func compileTarget(id string, t Target, topLevelKeys []string) (CompiledTarget, 
 		if len(r) == 0 {
 			return CompiledTarget{}, fmt.Errorf("args[%d] references no answer", i)
 		}
+		if _, reserved := splitReserved(r); len(reserved) > 0 {
+			return CompiledTarget{}, fmt.Errorf("args[%d] references the reserved %s, which only a default may read", i, reserved[0])
+		}
 		if t.Fn == FnCopy && !isSingleField(tpl) {
 			return CompiledTarget{}, fmt.Errorf("%s takes one {{ .id }} action and no text", FnCopy)
 		}
@@ -578,6 +604,18 @@ func compileTarget(id string, t Target, topLevelKeys []string) (CompiledTarget, 
 	}
 	c.Refs = sortedSet(refs)
 	return c, nil
+}
+
+// splitReserved splits sorted refs into foundation answer ids and reserved refs, each nil when empty.
+func splitReserved(refs []string) (answers, reserved []string) {
+	for _, r := range refs {
+		if slices.Contains(reservedRefs, r) {
+			reserved = append(reserved, r)
+		} else {
+			answers = append(answers, r)
+		}
+	}
+	return answers, reserved
 }
 
 func isScalar(v any) bool {
@@ -630,10 +668,15 @@ func isSingleField(t *template.Template) bool {
 	return ok && fieldOf(a) != nil
 }
 
-// checkIDNesting refuses an id that is a segment prefix of another: the template namespace nests ids,
-// so domain could not be both a value and the parent of domain.base.
+// checkIDNesting refuses an id that is a segment prefix of another or nests with a reserved ref: the template
+// namespace nests ids, so domain could not be both a value and the parent of domain.base.
 func checkIDNesting(fs []CompiledFoundation) error {
 	for i, f := range fs {
+		for _, r := range reservedRefs {
+			if f.ID == r || strings.HasPrefix(r, f.ID+".") || strings.HasPrefix(f.ID, r+".") {
+				return fmt.Errorf("foundations[%d]: id %q collides with the reserved ref %s", i, f.ID, r)
+			}
+		}
 		for j, o := range fs {
 			if strings.HasPrefix(o.ID, f.ID+".") {
 				return fmt.Errorf("foundations[%d]: id %q is a prefix of foundations[%d] %q", i, f.ID, j, o.ID)
@@ -695,11 +738,13 @@ func checkRefs(fs []CompiledFoundation) error {
 	return nil
 }
 
-// checkTargetPaths refuses a path written twice, a path that is a prefix of another (every leaf is a
-// scalar), a prefix used both as a list and as a mapping, and a list whose indices are not 0..n-1.
+// checkTargetPaths refuses a path written twice (unless by one foundation for distinct non-empty Only values), a
+// path that is a prefix of another (every leaf is a scalar), a prefix used both as a list and as a mapping, and a
+// list whose indices are not 0..n-1.
 func checkTargetPaths(fs []CompiledFoundation) error {
 	type where struct{ f, t int }
-	leaves := map[string]where{}
+	// leaves lists every target writing a path; only one foundation's targets with distinct Only values share one.
+	leaves := map[string][]where{}
 	// interior maps every proper prefix to whether its child segment is an index.
 	interior := map[string]bool{}
 	indices := map[string]map[int]bool{}
@@ -707,10 +752,14 @@ func checkTargetPaths(fs []CompiledFoundation) error {
 	for i, f := range fs {
 		for j, t := range f.Targets {
 			key := t.Path.String()
-			if w, dup := leaves[key]; dup {
+			if k := slices.IndexFunc(leaves[key], func(w where) bool {
+				only := fs[w.f].Targets[w.t].Only
+				return w.f != i || t.Only == "" || only == "" || only == t.Only
+			}); k >= 0 {
+				w := leaves[key][k]
 				return fmt.Errorf("foundations[%d] (%s): targets[%d]: path %q is already written by foundations[%d] targets[%d]", i, f.ID, j, key, w.f, w.t)
 			}
-			leaves[key] = where{i, j}
+			leaves[key] = append(leaves[key], where{i, j})
 			for k := 1; k < len(t.Path); k++ {
 				prefix := t.Path[:k].String()
 				idx, isIndex := t.Path[k].Index()
@@ -728,8 +777,9 @@ func checkTargetPaths(fs []CompiledFoundation) error {
 			}
 		}
 	}
-	for key, w := range leaves {
+	for key, ws := range leaves {
 		if _, ok := interior[key]; ok {
+			w := ws[0]
 			return fmt.Errorf("foundations[%d] (%s): targets[%d]: path %q is a prefix of another target's path", w.f, fs[w.f].ID, w.t, key)
 		}
 	}

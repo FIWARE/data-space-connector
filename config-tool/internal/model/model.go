@@ -43,6 +43,8 @@ type Bundle struct {
 	RoleMatrix *RoleMatrix `yaml:"roleMatrix"`
 	// Foundations are the cross-cutting answers and the chart keys they fan out to (ADR 0020).
 	Foundations []Foundation `yaml:"foundations"`
+	// Resources is the resource-profile table (ADR 0024); nil when the bundle sizes nothing.
+	Resources *ResourceTable `yaml:"resources"`
 	// Checks are the L2 rules, written as rules: in the bundle (ADR 0021); Rules is taken by Recognize.
 	Checks []CheckRule `yaml:"rules"`
 	// Latest marks the default version; Versions sets it, bundle files never do.
@@ -286,7 +288,7 @@ func readBundle(fsys fs.FS, file string) (versioned, error) {
 	if err := checkCatalogue(&b); err != nil {
 		return versioned{}, fmt.Errorf("%s: %w", file, err)
 	}
-	if b.foundations, b.order, err = compileFoundations(b.Foundations, b.TopLevelKeys); err != nil {
+	if b.foundations, b.order, err = compileFoundations(b.Foundations, b.Resources, b.TopLevelKeys); err != nil {
 		return versioned{}, fmt.Errorf("%s: %w", file, err)
 	}
 	if err := checkFoundationFeatures(b.foundations, b.Features, b.Chart); err != nil {
@@ -295,7 +297,7 @@ func readBundle(fsys fs.FS, file string) (versioned, error) {
 	if err := checkRecognizedFoundations(b.rules, b.foundations); err != nil {
 		return versioned{}, fmt.Errorf("%s: %w", file, err)
 	}
-	if err := checkCheckRules(b.Checks, b.foundations, b.Features, b.order); err != nil {
+	if err := checkCheckRules(b.Checks, b.foundations, b.Features, b.order, b.Resources); err != nil {
 		return versioned{}, fmt.Errorf("%s: %w", file, err)
 	}
 	return versioned{bundle: b, version: v}, nil

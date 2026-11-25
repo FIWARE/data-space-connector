@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { FOUNDATIONS, HTTP_NOT_FOUND, mockApi, refusedFoundations } from '../test/api'
-import { fetchFoundations } from './foundations'
+import { FOUNDATIONS, HTTP_NOT_FOUND, mockApi, PLATFORM_FOUNDATIONS, refusedFoundations, RESOURCES } from '../test/api'
+import { fetchFoundations, resourceRows } from './foundations'
 
 const DSC_CHART = 'data-space-connector'
 
@@ -34,5 +34,28 @@ describe('api/foundations', () => {
       status: HTTP_NOT_FOUND,
       message: refusedFoundations(HTTP_NOT_FOUND),
     })
+  })
+})
+
+describe('resourceRows', () => {
+  it.each(['development', 'production'])('lists the %s figures in component order', (profile) => {
+    expect(resourceRows(RESOURCES, profile)).toEqual(RESOURCES.components.map((component) => ({ component, spec: RESOURCES.profiles[profile]?.[component.id] })))
+  })
+
+  it.each(['custom', 'toString'])('sets nothing for %j, which has no row', (profile) => {
+    expect(resourceRows(RESOURCES, profile)).toBeUndefined()
+  })
+
+  it('skips a component the profile does not size', () => {
+    const keycloak = RESOURCES.profiles.production?.keycloak
+    if (!keycloak) throw new Error('fixture lacks production keycloak')
+    const keycloakOnly = { keycloak }
+    const rows = resourceRows({ ...RESOURCES, profiles: { production: keycloakOnly } }, 'production')
+    expect(rows?.map((r) => r.component.id)).toEqual(['keycloak'])
+  })
+
+  it('passes the resources table through', async () => {
+    mockApi(undefined, undefined, undefined, {}, {}, {}, { foundations: () => PLATFORM_FOUNDATIONS })
+    await expect(fetchFoundations(DSC_CHART, '')).resolves.toEqual(PLATFORM_FOUNDATIONS)
   })
 })

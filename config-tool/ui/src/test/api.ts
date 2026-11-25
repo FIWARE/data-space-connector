@@ -3,7 +3,7 @@ import { vi } from 'vitest'
 import type { LoadReport } from '../api/load'
 import type { FeatureState, Profile, ProfileResponse, RecentProfiles } from '../api/profile'
 import type { FeatureChoice, FeaturesResult, FeatureToggle } from '../api/features'
-import type { Foundation, FoundationList } from '../api/foundations'
+import type { Foundation, FoundationList, ResourceTable } from '../api/foundations'
 import type { ImportPreview, ImportResult, TIRCheckResult } from '../api/dataspace'
 import type { AnswerDiff, Change, ChangeGroup, Finding, HandSetAnswer, Leaf, RenderResult } from '../api/render'
 import type { Feature, Offer, PresetResult, RoleCatalogue, RoleChange } from '../api/roles'
@@ -346,6 +346,7 @@ export const FOUNDATIONS: FoundationList = {
       features: ['identity.issuer'],
     },
   ],
+  resources: null,
 }
 
 /** The DID pair of the 10.16.0 bundle: a method choice and a DID derived from the domain only while it is did:web. */
@@ -394,7 +395,61 @@ export const DID_VALUE: Foundation = {
 
 /** FOUNDATIONS with the DID pair after the base domain, as the bundle declares them. */
 export const DID_FOUNDATIONS: FoundationList = {
+  ...FOUNDATIONS,
   foundations: [...FOUNDATIONS.foundations.slice(0, 2), DID_METHOD, DID_VALUE, ...FOUNDATIONS.foundations.slice(2)],
+}
+
+/** The resource profile of the 10.16.0 bundle, derived from Stage 1's environment. */
+export const RESOURCE_PROFILE: Foundation = {
+  id: 'resources.profile',
+  stage: 'foundations',
+  type: 'choice',
+  group: 'platform',
+  default: '{{ .target.environment }}',
+  defaultWhen: null,
+  prefix: '',
+  options: [
+    { value: 'development', label: 'Development', note: 'Small requests that fit a single node.' },
+    { value: 'production', label: 'Production', note: 'Memory request equal to the limit.' },
+    { value: 'custom', label: 'Custom', note: "Leaves the chart's defaults; you size the components yourself." },
+  ],
+  label: 'Resource profile',
+  help: 'The CPU and memory requests and limits of the Java components.',
+  doc: 'doc/deployment-integration/roles/PREREQUISITES.md#set-memory-limits-on-the-java-components',
+  targets: [
+    { path: 'keycloak.resources.limits.cpu', component: 'keycloak' },
+    { path: 'scorpio.resources.limits.cpu', component: 'scorpio' },
+  ],
+  count: 2,
+  components: ['keycloak', 'scorpio'],
+  features: [],
+}
+
+/** A two-component cut of the 10.16.0 resources table. */
+export const RESOURCES: ResourceTable = {
+  answer: RESOURCE_PROFILE.id,
+  measuredOn: '10.13.2',
+  doc: 'doc/deployment-integration/roles/PREREQUISITES.md#sizing',
+  components: [
+    { id: 'keycloak', label: 'Keycloak', path: 'keycloak.resources' },
+    { id: 'scorpio', label: 'Scorpio', path: 'scorpio.resources' },
+  ],
+  profiles: {
+    development: {
+      keycloak: { requests: { cpu: '100m', memory: '768Mi' }, limits: { cpu: '1', memory: '2Gi' } },
+      scorpio: { requests: { cpu: '100m', memory: '512Mi' }, limits: { cpu: '1500m', memory: '1Gi' } },
+    },
+    production: {
+      keycloak: { requests: { cpu: '500m', memory: '2Gi' }, limits: { cpu: '2', memory: '2Gi' } },
+      scorpio: { requests: { cpu: '250m', memory: '1Gi' }, limits: { cpu: '2', memory: '1Gi' } },
+    },
+  },
+}
+
+/** FOUNDATIONS with the platform group last and its resources table, as the bundle declares them. */
+export const PLATFORM_FOUNDATIONS: FoundationList = {
+  foundations: [...FOUNDATIONS.foundations, RESOURCE_PROFILE],
+  resources: RESOURCES,
 }
 
 /** The body POST /api/render receives. */
@@ -573,6 +628,7 @@ export const AUTO_REGISTRATION: Foundation = {
 
 /** FOUNDATIONS with the dataspace group after the organization, as the bundle declares them. */
 export const DATASPACE_FOUNDATIONS: FoundationList = {
+  ...FOUNDATIONS,
   foundations: [...FOUNDATIONS.foundations.slice(0, 1), TIR_ADDRESS, CREDENTIAL_TYPES, AUTO_REGISTRATION, ...FOUNDATIONS.foundations.slice(1)],
 }
 

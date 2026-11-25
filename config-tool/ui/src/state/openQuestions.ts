@@ -1,7 +1,7 @@
 /** Open questions: fields left unanswered or deliberately marked "ask later", each counted once. */
 import type { Foundation } from '../api/foundations'
 import { TargetType, type Target } from './answers'
-import { answerErrors } from './foundations'
+import { answerErrors, reservedRefs } from './foundations'
 import type { Issues } from './issues'
 import type { AppState } from './reducer'
 import { StageId } from './stageIds'
@@ -138,7 +138,7 @@ export function roleIssues(state: AppState): Issues {
 
 /** The Foundations stage's counters: its marked answers and the answers with a format error. */
 export function foundationIssues(state: AppState): Issues {
-  const errors = Object.keys(answerErrors(state.answers.values, state.foundations)).length
+  const errors = Object.keys(answerErrors(state.answers.values, state.foundations, reservedRefs(state.answers.target))).length
   return { warnings: 0, errors, open: openCount(state, StageId.Foundations) }
 }
 

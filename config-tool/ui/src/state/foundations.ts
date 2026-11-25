@@ -1,6 +1,6 @@
 /** Foundation answer validation and resolution, mirroring `model.CompiledFoundation.Check` and `render.resolve` in Go. */
 import type { CredentialType, Foundation, FoundationOption, FoundationType } from '../api/foundations'
-import type { Answers, AnswerValue } from './answers'
+import { UNANSWERED, type Answers, type AnswerValue, type Target } from './answers'
 
 /** DNS name limit, `maxHostnameLength` in Go. */
 export const MAX_HOSTNAME_LENGTH = 253
@@ -103,11 +103,22 @@ export function checkAnswer(type: FoundationType, value: AnswerValue, options: r
 /** A template's `{{ .id }}` references, the only action the bundles may use. */
 const ANSWER_REFERENCE = /\{\{\s*\.([\w.]+)\s*\}\}/g
 
-/** `template` with its references filled from resolved answers; undefined while one of them is unresolved. */
-function fill(template: string, values: Record<string, AnswerValue>, foundations: readonly Foundation[]): string | undefined {
+/** The read-only ref a default may take from Stage 1's environment, `model.FieldTargetEnvironment` in Go. */
+export const TARGET_ENVIRONMENT_REF = 'target.environment'
+
+/** Values of the reserved refs by id; they are never answers, so they are never saved, counted or checked. */
+export type ReservedRefs = Readonly<Record<string, string>>
+
+/** The reserved refs `target` resolves: the environment once Stage 1 has it, else none. */
+export function reservedRefs(target: Pick<Target, 'environment'>): ReservedRefs {
+  return target.environment === UNANSWERED ? {} : { [TARGET_ENVIRONMENT_REF]: target.environment }
+}
+
+/** `template` with its references filled from the reserved refs, then resolved answers; undefined while one is unresolved. */
+function fill(template: string, values: Record<string, AnswerValue>, foundations: readonly Foundation[], reserved: ReservedRefs): string | undefined {
   let missing = false
   const filled = template.replace(ANSWER_REFERENCE, (_, id: string) => {
-    const value = resolvedAnswer(id, values, foundations)
+    const value = reserved[id] ?? resolvedAnswer(id, values, foundations, reserved)
     missing ||= value === undefined
     return value ?? ''
   })
@@ -115,45 +126,60 @@ function fill(template: string, values: Record<string, AnswerValue>, foundations
 }
 
 /** Whether `f`'s default applies: it has one and its `defaultWhen` holds over the resolved answers. */
-export function defaultApplies(f: Foundation, values: Record<string, AnswerValue>, foundations: readonly Foundation[]): boolean {
+export function defaultApplies(f: Foundation, values: Record<string, AnswerValue>, foundations: readonly Foundation[], reserved: ReservedRefs): boolean {
   if (f.default === '') return false
-  return !f.defaultWhen || resolvedAnswer(f.defaultWhen.id, values, foundations) === f.defaultWhen.equals
+  return !f.defaultWhen || resolvedAnswer(f.defaultWhen.id, values, foundations, reserved) === f.defaultWhen.equals
+}
+
+/** Whether `f`'s default follows other answers or reserved refs, so dropping a given answer lets it follow them again. */
+export function derivedDefault(f: Pick<Foundation, 'default'>): boolean {
+  return [...f.default.matchAll(ANSWER_REFERENCE)].length > 0
 }
 
 /** `f`'s default with its references filled; undefined when it does not apply or a reference is unresolved. */
-export function defaultValue(f: Foundation, values: Record<string, AnswerValue>, foundations: readonly Foundation[]): string | undefined {
-  return defaultApplies(f, values, foundations) ? fill(f.default, values, foundations) : undefined
+export function defaultValue(f: Foundation, values: Record<string, AnswerValue>, foundations: readonly Foundation[], reserved: ReservedRefs): string | undefined {
+  return defaultApplies(f, values, foundations, reserved) ? fill(f.default, values, foundations, reserved) : undefined
 }
 
 /** The answer `id` resolves to: the given one, else its applicable default; undefined while neither exists. */
-export function resolvedAnswer(id: string, values: Record<string, AnswerValue>, foundations: readonly Foundation[]): string | undefined {
+export function resolvedAnswer(id: string, values: Record<string, AnswerValue>, foundations: readonly Foundation[], reserved: ReservedRefs): string | undefined {
   // The bundle compiler lets only copy targets reference a bool or a list, so neither resolves into a template.
   const given = values[id]
   if (given !== undefined) return typeof given === 'string' ? given : undefined
   const f = foundations.find((o) => o.id === id)
-  return f && defaultValue(f, values, foundations)
+  return f && defaultValue(f, values, foundations, reserved)
 }
 
 /** Why the given `value` of `f` does not start with its prefix; undefined when it does or the prefix is unresolved. */
-function prefixError(f: Foundation, value: AnswerValue, values: Record<string, AnswerValue>, foundations: readonly Foundation[]): string | undefined {
+function prefixError(
+  f: Foundation,
+  value: AnswerValue,
+  values: Record<string, AnswerValue>,
+  foundations: readonly Foundation[],
+  reserved: ReservedRefs,
+): string | undefined {
   if (!f.prefix || typeof value !== 'string') return undefined
-  const prefix = fill(f.prefix, values, foundations)
+  const prefix = fill(f.prefix, values, foundations, reserved)
   return prefix === undefined || value.startsWith(prefix) ? undefined : msgPrefix(prefix)
 }
 
 /** The error of every given answer, by answer id: its format, then its prefix over the well-formed answers. An id the
  *  foundations do not declare is not checked. */
-export function answerErrors(values: Record<string, AnswerValue>, foundations: readonly Foundation[] = []): Record<string, string> {
+export function answerErrors(
+  values: Record<string, AnswerValue>,
+  foundations: readonly Foundation[] | undefined,
+  reserved: ReservedRefs,
+): Record<string, string> {
   const errors: Record<string, string> = {}
-  for (const f of foundations) {
+  for (const f of foundations ?? []) {
     const value = values[f.id]
     const error = value === undefined ? undefined : checkAnswer(f.type, value, f.options)
     if (error !== undefined) errors[f.id] = error
   }
   const wellFormed = Object.fromEntries(Object.entries(values).filter(([id]) => errors[id] === undefined))
-  for (const f of foundations) {
+  for (const f of foundations ?? []) {
     const value = wellFormed[f.id]
-    const error = value === undefined ? undefined : prefixError(f, value, wellFormed, foundations)
+    const error = value === undefined ? undefined : prefixError(f, value, wellFormed, foundations ?? [], reserved)
     if (error !== undefined) errors[f.id] = error
   }
   return errors
@@ -164,20 +190,25 @@ export function answerErrors(values: Record<string, AnswerValue>, foundations: r
 export function dropMismatched(
   values: Record<string, AnswerValue>,
   changed: string,
-  foundations: readonly Foundation[] = [],
+  foundations: readonly Foundation[] | undefined,
+  reserved: ReservedRefs,
 ): Record<string, AnswerValue> {
-  const stale = foundations.filter((f) => {
+  const stale = (foundations ?? []).filter((f) => {
     const value = values[f.id]
     if (f.id === changed || value === undefined) return false
-    return [...f.prefix.matchAll(ANSWER_REFERENCE)].some(([, id]) => id === changed) && prefixError(f, value, values, foundations) !== undefined
+    return [...f.prefix.matchAll(ANSWER_REFERENCE)].some(([, id]) => id === changed) && prefixError(f, value, values, foundations ?? [], reserved) !== undefined
   })
   if (stale.length === 0) return values
   return Object.fromEntries(Object.entries(values).filter(([id]) => !stale.some((f) => f.id === id)))
 }
 
 /** The answers the server accepts: an answer with a format error stays on screen but is not sent. */
-export function validAnswers(values: Record<string, AnswerValue>, foundations?: readonly Foundation[]): Record<string, AnswerValue> {
-  const errors = answerErrors(values, foundations)
+export function validAnswers(
+  values: Record<string, AnswerValue>,
+  foundations: readonly Foundation[] | undefined,
+  reserved: ReservedRefs,
+): Record<string, AnswerValue> {
+  const errors = answerErrors(values, foundations, reserved)
   return Object.fromEntries(Object.entries(values).filter(([id]) => errors[id] === undefined))
 }
 

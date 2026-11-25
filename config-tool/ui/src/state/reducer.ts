@@ -5,7 +5,7 @@ import type { Foundation } from '../api/foundations'
 import type { ChartSwitch, RoleChange } from '../api/roles'
 import type { Trial } from '../api/trial'
 import { TIR_ADDRESS_ID, type TirCheck } from './dataspace'
-import { dropMismatched } from './foundations'
+import { dropMismatched, reservedRefs } from './foundations'
 import { emptyAnswers, Environment, type Answers, type AnswerValue, type FeatureState, type Session, type Target } from './answers'
 import { answerFieldId, answerId, fieldStage, isAnswerFieldId, type FieldId, type QuestionId } from './openQuestions'
 import { FIRST_STAGE, StageId } from './stageIds'
@@ -289,7 +289,7 @@ export function reducer(state: AppState, action: Action): AppState {
       // A new answers object is what makes the saved profile stale, as with every other edit.
       return { ...state, answers: { ...state.answers, features: action.features } }
     case 'setAnswer': {
-      const values = dropMismatched(setAnswer(state.answers.values, action.id, action.value), action.id, state.foundations)
+      const values = dropMismatched(setAnswer(state.answers.values, action.id, action.value), action.id, state.foundations, reservedRefs(state.answers.target))
       // A check ran for one address only; a changed address has not been checked.
       const stale = action.id === TIR_ADDRESS_ID && state.tirCheck?.address !== action.value
       return { ...state, answers: { ...state.answers, values }, tirCheck: stale ? undefined : state.tirCheck }

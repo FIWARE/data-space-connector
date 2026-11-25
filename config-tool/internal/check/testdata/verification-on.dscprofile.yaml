@@ -1,6 +1,6 @@
 # A provider with credential verification on and no TIR address, which tir-address-for-verification refuses.
 format: 1
-model: {chart: data-space-connector, version: 10.16.0, revision: 11}
+model: {chart: data-space-connector, version: 10.16.0, revision: 13}
 target:
   type: file
   namespace: provider

@@ -221,10 +221,14 @@ pom.xml                       # drives local-deploy + integration tests
   `tirAddress`); the chart has no key for auto-registration or credential types, so they stay answers, read via core
   package `internal/dataspace`. Outbound HTTP (TIR check, descriptor import) lives only in `internal/server`, runs only
   on a button press, and goes through the swappable `Server.outbound` transport, so tests never reach the network.
-- US-3.4 (#128, planned, see `IMPLEMENTATION_PLAN.md`, ADR 0023): a pinned host is just a given `host.*` answer (no
+- US-3.4 (#128, shipped, ADR 0023): a pinned host is just a given `host.*` answer (no
   profile field); `render.HandSet` already lists them. New: `host.verifier`/`host.did`, a display-only `feature:` gate on
   foundations (render gating stays US-5.3), `render.DerivedDiff` (re-derived vs. *pinned, not updated*), and a `distinct`
   rule kind for the `host-collision` error. No path-prefix scheme: `<component>.<base>` only.
+- US-3.5 (#129, planned, see `IMPLEMENTATION_PLAN.md`, ADR 0024): `resources.profile` (group `platform`, default
+  `{{ .target.environment }}`, a reserved read-only ref) plus a bundle `resources:` table compiled into `Only` targets;
+  `custom` renders nothing. A `memoryLimit` rule kind (with `when`) warns in production; `check.Evaluate` takes
+  `render.Options`. Figures derive from PREREQUISITES.md#sizing (measured on 10.13.2).
 
 ## Documentation
 
