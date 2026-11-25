@@ -46,11 +46,27 @@ Secret requirement that NEXT_STEPS will list, a no-insecure-option test, and the
   belong to US-5.6 and stay non-targets (ADR 0020). An `each` target writes a key into every element of a list that
   already has the parent mapping, whether loaded now or rendered by US-5.6 later. It never creates routes. When there
   are no routes, nothing renders for APISIX, and the Stage 3 preview says so.
-- **`requires` on a target.** `keycloak.proxy.enabled: true` is a bool that comes from no answer. A `const` outside a
-  list is allowed only if the target lists `requires: [<answer id>]`, and it renders only while those answers are
-  given or derived. This keeps the rule that an unanswered question emits no key.
+- **`requires` on a target.** `keycloak.proxy.enabled: true` is a bool that comes from no answer. Any target may list
+  `requires: [<answer id>]`, and it then renders only while those answers are given or derived. A `const` outside a
+  list is allowed only with `requires`. This keeps the rule that an unanswered question emits no key.
+- **`proxy.https` is the switch for the whole proxy group.** `proxy.no`'s default reads only reserved refs, which
+  are seeded for every profile with a Stage 1 target, and today's `defaults()` (`render.go` L138-143) derives a
+  default as soon as its refs resolve. Without a gate, `NO_PROXY` would render into all five components with no
+  proxy set. Two gates close that:
+  - `defaultWhen` gains a `set: true` form beside `equals` (`Condition{ID, Equals, Set}`, exactly one of them). Both
+    `proxy.http` and `proxy.no` carry `defaultWhen: {id: proxy.https, set: true}`, so neither derives, and the Stage 3
+    panel shows neither as answered, while `proxy.https` is unanswered.
+  - Every `proxy.http` and `proxy.no` target carries `requires: [proxy.https]`, so a *given* `proxy.no` or
+    `proxy.http` without `proxy.https` renders nothing either. An HTTP-only proxy is not offered: every caller
+    reaches HTTPS hosts, and Keycloak's `proxy.enabled` needs `httpsProxy` anyway.
+
+  Step 1 tests both gates with rows where the default refs resolve but the gate fails.
 - **Reserved refs `target.release` and `target.namespace`** join `target.environment` (Stage 1), so the
-  `NO_PROXY` default can name the release's own services.
+  `NO_PROXY` default can name the release's own services. A template function `fullname <release> <chart>`
+  mirrors Helm's standard fullname rule (`cloudpirates.fullname` in keycloak 0.22.0, `fiwareCommon.names.fullname`
+  in tm-forum-api 0.19.4): the release name alone if it contains the chart name, otherwise `<release>-<chart>`,
+  truncated to 63 characters with a trailing `-` trimmed. It is the only entry in the template `FuncMap`
+  (`foundations.go` L632).
 - **`NO_PROXY`: one string, written so that every client understands it.** The five clients match entries
   differently. Each row below was checked in the source while revising the plan:
 
@@ -66,13 +82,42 @@ Secret requirement that NEXT_STEPS will list, a no-insecure-option test, and the
   works in all four, while an entry a client reads differently matches no real host there and does no harm.
   The default is therefore the union:
   `localhost,127.0.0.1,svc,.svc,cluster.local,.cluster.local,{{ .target.namespace }}.svc,` followed by the bare
-  in-cluster service names that the five callers reach, built from `{{ .target.release }}`. The `*.` forms are
-  dropped, because only Go and `proxy-from-env` read them, and both already match the `.x` forms. Step 3 ports the
-  four matchers into a test (see there).
+  in-cluster service names in the table below. The `*.` forms are dropped, because only Go and `proxy-from-env` read
+  them, and both already match the `.x` forms. Step 3 ports the four matchers into a test (see there).
+- **The bare service names come from where the chart fixes them, not from the release name.** The umbrella pins
+  `fullnameOverride` or a service `nameOverride` for most services, so every release gets the same name there. Only
+  services without such a pin carry the release prefix. What each caller reaches in-cluster, with the chart
+  defaults and the k3s files (checked while revising the plan):
+
+  | Caller | In-cluster host | Name | Source of the name |
+  |---|---|---|---|
+  | Verifier | credentials-config-service | fixed | umbrella `decentralizedIam.vcAuthentication.credentials-config-service.fullnameOverride` (L154) |
+  | Verifier | trusted-issuers-list | fixed | umbrella `decentralizedIam.vcAuthentication.trusted-issuers-list.fullnameOverride` (L72) |
+  | BAE logic proxy | tm-forum-api | fixed | umbrella `tm-forum-api.apiProxy.service.nameOverride` (L1521) |
+  | BAE logic proxy | tm-forum-api-svc (with `allInOne`, as in k3s) | fixed | literal in tm-forum-api 0.19.4 `templates/service.yaml` L31 |
+  | BAE logic proxy | charging backend | FQDN `<name>.<ns>.svc.cluster.local` | BAE 1.2.0 `bizEcosystemChargingBackend.hostnameonly`; covered by `cluster.local` |
+  | vc-operator | Keycloak | `{{ fullname .target.release "keycloak" }}` | keycloak 0.22.0, umbrella sets no override (k3s: `provider-keycloak`) |
+  | vc-operator | Kubernetes API | IP literal | client-go in-cluster config; only a CIDR entry helps (see below) |
+  | all, with tracing | OTel Collector | `{{ fullname .target.release "opentelemetry-collector" }}` | opentelemetry-collector 0.176.1, umbrella sets no override |
+  | APISIX | verifier discovery, OPA | public verifier host; `localhost` | role guides and k3s routes; OPA is a sidecar |
+  | Keycloak | none in the chart defaults | — | — |
+
+  The fixed names go into the default as literal strings, and only the last two rows use `target.release`. The rows
+  are bundle data (`noProxyServices:` with `name` as a template and `overrides:` as the value paths that rename the
+  service: `fullnameOverride`, `nameOverride` or the service `nameOverride`), so the Step 3 test and the Step 5
+  warning read the same table. A test asserts that the default's bare names equal the table's names.
+- **A loaded file that renames one of those services.** The default reads only answers, so it cannot follow a loaded
+  `fullnameOverride`. Step 5 adds the warning `noProxyCoverage`: for each `noProxyServices` row, the effective name
+  is the final tree's value at the first set `overrides` path, otherwise the row's rendered `name`. When the final
+  `proxy.no` (derived or given) does not bypass an effective name with the Go matcher from Step 3, the warning names
+  the service and the path that renamed it. The user then edits `proxy.no`, and the Stage 3 preview shows the same
+  finding. A given `proxy.no` is never rewritten.
   **No literal CIDR placeholder** goes into the value, because the clients would parse it as a host. CIDRs work only
   for the Go clients, and only when they dial an IP literal. The field's help says that, and suggests appending the
-  pod and service CIDRs (for example `10.42.0.0/16,10.43.0.0/16` on k3s) for the verifier and vc-operator. The value
-  stays editable as an ordinary given answer.
+  pod and service CIDRs (for example `10.42.0.0/16,10.43.0.0/16` on k3s) for the verifier and vc-operator. The
+  vc-operator reaches the Kubernetes API by the IP in `KUBERNETES_SERVICE_HOST`, so without the service CIDR its API
+  calls go through the proxy. The Stage 3 preview says so while `proxy.no` holds no CIDR. The value stays editable
+  as an ordinary given answer.
 - **Keycloak** reads `https_proxy`/`http_proxy`/`no_proxy` (lowercase first, `https_proxy` before `http_proxy`) for its
   outgoing HTTP client, **but only while `proxy-mappings` is unset** (`DefaultHttpClientFactory.java` L193-206 and
   `outgoinghttp.adoc` L104-122 at 26.7.0). The umbrella's `keycloak.proxy.{enabled,httpsProxy,httpProxy,noProxy}`
@@ -106,7 +151,7 @@ Secret requirement that NEXT_STEPS will list, a no-insecure-option test, and the
     `false` while `ca.privateSecret` is set. The default for routes without a private CA belongs to US-5.6, which
     should also write `true`. ADR 0025 hands that over.
 - **Keycloak CA: correct the PREREQUISITES table.** `tls.truststoreEnabled`/`truststoreExistingSecret` in CloudPirates
-  0.21.19 becomes `--https-trust-store-file`, which only validates *inbound* mTLS clients and needs a JKS file plus a
+  0.22.0 becomes `--https-trust-store-file`, which only validates *inbound* mTLS clients and needs a JKS file plus a
   password. Outgoing trust is `truststore-paths`, which accepts PEM. So one PEM Secret serves every mechanism. Keycloak
   gets keyed elements in `keycloak.extraVolumes` and `keycloak.extraVolumeMounts` (mount under
   `/opt/keycloak/conf/truststores/`) and in `keycloak.extraEnvVars` (`KC_TRUSTSTORE_PATHS`). The umbrella default
@@ -136,11 +181,14 @@ Secret requirement that NEXT_STEPS will list, a no-insecure-option test, and the
   - `element: {key: name, value: <mapping whose string scalars are templates>}` on a path that ends at a list (a
     keyed element);
   - `each: <subpath>` with a `[*]` path segment (a per-element target);
-  - `requires: [ids]`, which allows `const` outside a list index.
+  - `requires: [ids]` on any target, which also allows `const` outside a list index;
+  - `set: true` on `Condition` (`defaultWhen: {id, set: true}`), exactly one of `equals` and `set`, checked by
+    `defaults()` in `render.go`.
 
   Add a top-level `lists:` table (`{path, key, base: [elements]}`) declaring each list that keyed elements write
   into, with the chart's default elements. Add `target.release` and `target.namespace` to `reservedRefs`, seeded
-  from the profile's Stage 1 target in `internal/render`. Compile-time checks: a keyed element's list must be in
+  from the profile's Stage 1 target in `internal/render`, and the template function `fullname` (see the reserved-refs
+  decision). Compile-time checks: a keyed element's list must be in
   `lists:`. The same list may not also be index-targeted. Two targets may not own the same key value. `each` is
   refused on a list that `lists:` declares.
 - `config-tool/internal/render/render.go` (and a new `elements.go`): compose keyed lists as the ADR describes, using
@@ -150,7 +198,10 @@ Secret requirement that NEXT_STEPS will list, a no-insecure-option test, and the
 - Tests are table-driven, with fixture bundles in `internal/model/testdata` and `internal/render/testdata` and no
   `10.16.0` content yet. Cover: compile errors; the composition with and without a loaded list; the base kept; foreign
   elements untouched; append order; `each` with zero, one and many routes; `requires` emitting nothing while
-  unanswered; reserved refs.
+  unanswered; reserved refs; `fullname` against Helm's rule (release containing the chart name, the prefixed form,
+  63-character truncation with a trailing `-`). Two gate rows use a fixture foundation whose default reads only
+  reserved refs: with `defaultWhen: {set: true}` it is not derived while the gating answer is unset, and a target
+  with `requires` renders nothing for a *given* answer while the required answer is unset.
 - Acceptance: `go test ./...` and `make lint` are green. The existing bundle compiles and renders unchanged
   (`provider_test.go` is untouched).
 
@@ -170,9 +221,11 @@ Secret requirement that NEXT_STEPS will list, a no-insecure-option test, and the
   foundations below, in a new group `egress`. Bump `revision` and extend the header comment block for the new fields
   and the group.
   - `proxy.https` (type `url`).
-  - `proxy.http` (`url`, default `{{ .proxy.https }}`).
-  - `proxy.no` (`string`, default the `NO_PROXY` template above).
-- Targets, each written while its answer resolves:
+  - `proxy.http` (`url`, default `{{ .proxy.https }}`, `defaultWhen: {id: proxy.https, set: true}`).
+  - `proxy.no` (`string`, default the `NO_PROXY` template above, `defaultWhen: {id: proxy.https, set: true}`).
+  - The `noProxyServices:` table from the decision on bare service names.
+- Targets, each written while its answer resolves. Every `proxy.http` and `proxy.no` target also carries
+  `requires: [proxy.https]`:
   - Verifier: keyed `HTTPS_PROXY`/`HTTP_PROXY`/`NO_PROXY` in
     `decentralizedIam.vcAuthentication.vcverifier.deployment.additionalEnvVars`.
   - Keycloak: `keycloak.proxy.enabled` (`const true`, `requires: [proxy.https]`), plus `httpsProxy`, `httpProxy` and
@@ -188,11 +241,18 @@ Secret requirement that NEXT_STEPS will list, a no-insecure-option test, and the
   `charts/data-space-connector/values.yaml`: every scalar target path exists there or under a declared open subchart
   key. The same file adds the `lists:` base test against the umbrella or the subchart fixture in
   `testdata/subchart-defaults/`, including the check of each fixture's chart version against `Chart.yaml`. Add a
-  second test rendering a minimal profile with only `proxy.https` set: all five components render, `NO_PROXY` holds
-  the release's services, and nothing renders while `proxy.https` is unanswered.
+  second test rendering a minimal profile with only `proxy.https` set: all five components render, and `NO_PROXY` holds
+  the fixed names plus `<release>-keycloak` and `<release>-opentelemetry-collector`. Then, with a Stage 1 target
+  (release and namespace seeded) but `proxy.https` unanswered, nothing renders for any component, and `proxy.no`
+  and `proxy.http` are not derived; the same holds with `proxy.no` given.
+- `internal/render/noproxy_names_test.go` pins `noProxyServices`: each fixed name equals the umbrella value at the
+  row's first `overrides` path (or the literal in the subchart fixture, for `tm-forum-api-svc`), and each
+  release-prefixed row's `overrides` paths are unset in the umbrella and empty in the subchart fixture. A renamed
+  service, or a new umbrella override, fails the build. It also asserts that the default's bare names equal the
+  table's names.
 - `internal/render/noproxy_test.go` ports the four matchers from the `NO_PROXY` table (each a few lines, with the
-  upstream file and lines in a comment). It is table-driven over the hosts the five callers reach in-cluster: bare
-  service name, `<svc>.<ns>.svc`, `<svc>.<ns>.svc.cluster.local`, and `localhost`. It asserts that the rendered
+  upstream file and lines in a comment). It is table-driven over the hosts the five callers reach in-cluster: every
+  `noProxyServices` name bare, as `<svc>.<ns>.svc` and as `<svc>.<ns>.svc.cluster.local`, plus `localhost`. It asserts that the rendered
   default bypasses every one of them for every client, and that a public host (`example.org`) is not bypassed. The
   BAE `passport-vc` gap is not a matcher, so it is not in this table.
 - `internal/render/provider_test.go`: answer the proxy foundations from `k3s/provider.yaml`. Add exclusion rows (story
@@ -238,6 +298,9 @@ Secret requirement that NEXT_STEPS will list, a no-insecure-option test, and the
 - `caCoverage` also checks the APISIX routes. While `ca.privateSecret` is set, it raises an **error** for each route
   whose `openid-connect` has a final `ssl_verify: false`, which is a loaded `false` pinned over the owned `true`. The
   finding names the route by index and `uri`.
+- The **warning** `noProxyCoverage` (see "A loaded file that renames one of those services"), while `proxy.https`
+  resolves: one finding per `noProxyServices` row whose effective name the final `proxy.no` does not bypass, naming
+  the override path. Its matcher is the Go one ported in Step 3, moved from the test into `internal/check`.
 - A **warning** while `proxy.https` is given and the final tree holds a non-empty `keycloak.proxy.spiProxyMappings`:
   Keycloak then ignores the proxy env vars. Use an existing rule kind with `when` if one fits, otherwise add the check
   to `caCoverage`'s package as its own small kind.
@@ -254,15 +317,18 @@ Secret requirement that NEXT_STEPS will list, a no-insecure-option test, and the
   `k3s/` and `config-tool/trial/` are reference files and are not scanned. If a
   legitimate line matches, reword it rather than adding an allow list.
 - Tests: table-driven `check` cases (CA unset; all covered; one component pinned away; contract-management enabled
-  and disabled; a route with `ssl_verify` unset, `false` pinned, and `true`; no routes).
+  and disabled; a route with `ssl_verify` unset, `false` pinned, and `true`; no routes; `noProxyCoverage` with the
+  derived default, with a loaded `keycloak.fullnameOverride: idp` and the default (warns), and with the same override
+  and a given `proxy.no` holding `idp` (silent)).
 - Acceptance: `go test ./...` and `make lint` are green.
 
 ### Step 6: Stage 3 egress panel, API exposure and docs
 - UI: `ui/src/stages/EgressPanel.tsx` (+ `EgressPanel.test.tsx`), modelled on `PlatformPanel.tsx`. It shows the proxy
   fields with the derived `NO_PROXY` (editable, with the CIDR hint) and the CA Secret field with the required key
   `ca.crt`, plus the note that APISIX then trusts only that bundle. It also previews the fan-out per component,
-  including "no APISIX routes yet" when `each` has nothing to write, the Keycloak proxy-mappings case, and the BAE
-  login calls that always use the proxy. Wire the `egress` group into `Foundations.tsx`. Every shown text is UI copy or bundle data. The verification
+  including "no APISIX routes yet" when `each` has nothing to write, the Keycloak proxy-mappings case, the BAE
+  login calls that always use the proxy, the vc-operator's API server calls while `proxy.no` holds no CIDR, and the
+  `noProxyCoverage` findings. Wire the `egress` group into `Foundations.tsx`. Every shown text is UI copy or bundle data. The verification
   wording must pass the Step 5 guard.
 - Server: expose `requirements.Secrets` (and the new findings, which already flow through `check`) in the
   existing render/review response. No new outbound calls.
