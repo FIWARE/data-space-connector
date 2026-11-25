@@ -5,7 +5,9 @@ fdsc-edc 2.0.0 ([SEAMWARE/fdsc-edc#39](https://github.com/SEAMWARE/fdsc-edc/pull
 `controlplane-dcp` as EDC 0.18.1 virtual participant contexts, so one connector can take part in
 several dataspaces, each through its own DSP profiles. This plan moves the DSC to that release, keeps
 the `dsp` integration scenario green, demonstrates a second profile, and documents the feature.
-`controlplane-oid4vc` is unchanged by 2.0.0 and stays as is.
+The chart itself ships 2.0.0, not only the k3s scenario (Step 1). `controlplane-oid4vc` has no
+functional changes in 2.0.0: it moves to the 2.0.0 image with the DCP controlplane and keeps its
+configuration.
 
 ## Facts every step relies on
 Upstream sources: `docs/multi-dataspace.md`, `config/multi-dataspace/edc.properties` and
@@ -60,7 +62,14 @@ Upstream sources: `docs/multi-dataspace.md`, `config/multi-dataspace/edc.propert
   - `config.edc.dspCallback` is rendered verbatim, so `%s` survives.
   - Chart `0.7.11` (appVersion 2.0.0) exists only on the unmerged FIWARE/helm-charts branch
     `chore/update-fdsc-edc-2.0.0` and was not on quay on 2026-11-25. The umbrella pins `0.7.10`
-    (appVersion 1.8.7). Image `quay.io/seamware/fdsc-edc-controlplane-dcp:2.0.0` is published.
+    (appVersion 1.8.7). Both images, `quay.io/seamware/fdsc-edc-controlplane-dcp:2.0.0` and
+    `quay.io/seamware/fdsc-edc-controlplane-oid4vc:2.0.0`, are published (2026-11-20).
+  - The image tag is `$cfg.deployment.image.tag | default .Chart.AppVersion`, and
+    `deployment.yaml` ranges over `.Values.deployment` (default `{}`). The umbrella therefore
+    cannot pin a tag for "the dcp deployment" without creating one in every install. It can pin
+    `fdsc-edc.common.deployment.image.tag`, which applies to every deployment that sets no tag
+    of its own, exactly like an appVersion bump. A helm-unittest probe (v0.6.3) confirmed that
+    a `common` tag reaches both a `dcp` and an `oid4vc` deployment.
 - **Context id = DID.** The IdentityHub bootstrap already stores the STS secret under
   `did:web:<host>-sts-client-secret`, which is the upstream convention `<context id>-sts-client-secret`.
   Using the DID as context id reuses the existing identity, STS client and vault alias unchanged.
@@ -69,14 +78,26 @@ Upstream sources: `docs/multi-dataspace.md`, `config/multi-dataspace/edc.propert
 
 ## Steps
 
-### Step 1: Run controlplane-dcp 2.0.0 in participant-context mode in the k3s DSP scenario and migrate the DSP ITs
-Switch the DCP controlplane of the `dsp` scenario to fdsc-edc 2.0.0, configured as one participant
+### Step 1: Make fdsc-edc 2.0.0 the chart default, run controlplane-dcp in participant-context mode in the k3s DSP scenario and migrate the DSP ITs
+Make 2.0.0 the image the chart deploys, and switch the DCP controlplane of the `dsp` scenario to it, configured as one participant
 context per connector with the built-in `http-dsp-profile-2025-1`. Keep every existing DSP IT green.
 This step is atomic on purpose: CI runs the scenario.
 
+**Chart default image** (the chart ships 2.0.0, not only the k3s scenario):
+- In `charts/data-space-connector/values.yaml`, under `fdsc-edc.common.deployment`, add
+  `image.tag: "2.0.0"` with a `# --` comment: it stands in for the fdsc-edc chart's appVersion
+  until a chart with appVersion ≥ 2.0.0 is published, and Step 2 drops it then.
+- It applies to `oid4vc` too, which is what the 0.7.11 bump would do anyway. Upstream did not
+  change the OID4VC controlplane in 2.0.0, and `dsp_oid4vc_flow` in this step's CI run proves it.
+  If that flow fails on the oid4vc 2.0.0 image, stop and report it as blocked instead of pinning
+  around it.
+- Do not add a `deployment.dcp` entry to the umbrella values: that would render a DCP
+  Deployment in every install.
+- Run `.github/scripts/values-schema.sh --check`. `fdsc-edc` is an open object, so the schema
+  should not change; regenerate it if it does.
+- The k3s files set no tag: they use the chart default, so CI exercises what users install.
+
 **k3s values**, `dcp` deployment only in `k3s/dsp-provider.yaml` and `k3s/dsp-consumer.yaml`:
-- `fdsc-edc.deployment.dcp.deployment.image.tag: 2.0.0`. Check the key name in the fdsc-edc chart's
-  `values.yaml` first.
 - `config.edc.dspCallback`: `https://dcp-<participant>.127.0.0.1.nip.io:443/api/dsp/%s`.
 - `config.additionalProperties` (4-space pre-indented continuation lines; repeat the timeout lines)
   with:
@@ -154,17 +175,25 @@ This step is atomic on purpose: CI runs the scenario.
   - Run `helm show chart oci://quay.io/fiware/helm-charts/fdsc-edc --version 0.7.11` (or a newer
     version with appVersion ≥ 2.0.0). If one is published, bump the `fdsc-edc` dependency to it,
     run `helm dependency update charts/data-space-connector`, and drop the now-redundant
-    `image.tag: 2.0.0` pins from Step 1.
-  - If none is published, keep `0.7.10` and the pins. Record in the release notes that the chart
-    still defaults to 1.8.7 and the tag must be pinned. Do not change FIWARE/helm-charts from here.
+    `fdsc-edc.common.deployment.image.tag` pin from Step 1.
+  - If none is published, keep `0.7.10` and the pin. The chart still deploys 2.0.0 through it.
+    Record in the release notes that the pin goes away with the next fdsc-edc chart bump, and
+    that anyone who sets their own `image.tag` on a deployment overrides it. Do not change
+    FIWARE/helm-charts from here.
 - **Chart version:**
   - `Chart.yaml` reads `10.21.2`, the last version on gh-pages. `doc/release-notes/11-x.md`
     describes an 11.0.0 that a bot commit (`8313e4a3`) reverted and that was never published.
-  - The DCP change is breaking, so set `version: 11.0.0`. Add a new top section
+  - Either way, after Step 1 the chart's default DCP image is 2.0.0, so every DCP deployment
+    changes behaviour. That breaks existing users, so set `version: 11.0.0` in both cases. The
+    release notes describe the pin or the bump, whichever applies. Add a new top section
     `## 11.0.0 — fdsc-edc 2.0.0: multi-dataspace controlplane-dcp` in `doc/release-notes/11-x.md`,
     above the consent section, and adjust the file's intro paragraph, which currently says only
     consent users are affected.
   - Point out the 11.0.0 ambiguity in the PR description for the maintainers.
+  - `check.yaml`'s `chart-version` job (FIWARE `chart-pr.yml`) bumps the charts a PR changes,
+    based on a semver label. Ask for the `major` label in the PR description. Before committing
+    11.0.0 by hand, check how that job treats a version that is already bumped, so the chart
+    does not land on 12.0.0.
 - **Release notes:** a breaking-changes list for DCP users and a `:warning: Required action`
   checklist:
   - `fdsc.participants.*` (context id = DID);
@@ -177,16 +206,28 @@ This step is atomic on purpose: CI runs the scenario.
   - Link the upstream release notes and `doc/MULTI_DATASPACE.md` (created in Step 4; a forward
     link is fine, `check-links.sh` runs in CI, so create the file as a stub here if needed).
 - **New suite** `charts/data-space-connector/tests/fdsc-edc-multi-dataspace_test.yaml`. It opens
-  with a short header comment and has one `it:` per behaviour. It renders the subchart ConfigMap
-  `charts/fdsc-edc/templates/config-map.yaml` (see how `tracing_test.yaml` targets fdsc-edc) with
-  a two-participant, two-profile `additionalProperties` value and asserts that:
+  with a short header comment and has one `it:` per behaviour. No existing suite renders a
+  subchart template, so there is no precedent to copy:
+  - List `charts/fdsc-edc/templates/config-map.yaml` (and `deployment.yaml` for the image
+    assertion) under `templates:`. The path is relative to the umbrella chart and resolves into
+    the `charts/fdsc-edc-<version>.tgz` that `helm dependency update` fetches. CI runs that before
+    `helm unittest`.
+  - Set `fdsc-edc.deployment.{dcp,oid4vc}` in the suite's `set:` and pick each ConfigMap with
+    `documentSelector` on `metadata.name` (`RELEASE-NAME-fdsc-edc-dcp`, `...-oid4vc`,
+    `skipEmptyTemplates: true`). Match lines in `data["dataspaceconnector-configuration.properties"]`
+    with `matchRegex` and a `(?m)^ *<key>=<value>$` pattern.
+  - A throwaway probe built this way passed under helm-unittest v0.6.3 during planning, and it
+    failed when the expected value was changed. The resolution itself is not a risk.
+  Use a two-participant, two-profile `additionalProperties` value and assert that:
   - each `fdsc.participants.*` / `edc.dataspace.profiles.*` key lands on its own line (the
     4-space indentation contract);
   - the `%s` callback is rendered verbatim;
-  - the `oid4vc` deployment's ConfigMap does not get them.
+  - the `oid4vc` deployment's ConfigMap does not get them;
+  - both rendered Deployments use image tag `2.0.0` when no tag is set: Step 1's pin, or the
+    bumped appVersion.
   Define repeated literals once (YAML anchors).
-- `.github/scripts/values-schema.sh --check` must still pass: `fdsc-edc` is an open object, and no
-  `values.yaml` key is added.
+- `.github/scripts/values-schema.sh --check` must still pass: `fdsc-edc` is an open object, so
+  adding or dropping the `common.deployment.image.tag` pin does not change the schema.
 - **Acceptance:** `helm lint`, `helm unittest charts/data-space-connector`,
   `.github/scripts/render-examples.sh` and `values-schema.sh --check` all pass.
 
@@ -207,8 +248,18 @@ Attach a second profile to both DCP contexts and prove it end to end.
   tags/profile. Step definitions go in `DSPStepDefinitions.java`, or in a new
   `DSPMultiProfileStepDefinitions.java` if that file grows unwieldy. Scenarios:
   - the consumer requests the provider's catalog through each profile and gets the offers;
-  - a DSP request on a profile not attached to the provider context gets 404;
-  - `/api/dsp/<ctx>/.well-known/dspace-version` answers without a token.
+  - routing before authentication: send raw, tokenless `POST`s to the provider's
+    `DCP_PROVIDER_ADDRESS/api/dsp/<ctx>/<profile>/catalog/request`.
+    - A profile that is not attached, e.g. `dsp-unknown`, gets **404**.
+    - An attached profile without a DCP token gets **401**.
+    - The two are distinguishable only because fdsc-edc 2.0.0 resolves the context and profile
+      before it checks the token (upstream `docs/multi-dataspace.md`, "Poking at it yourself").
+      The provider's APISIX route for `dcp-mp-operations` (`k3s/provider.yaml`, `uri: /*` to
+      `provider-fdsc-edc-dcp:8080`) has no auth plugin, so the request reaches EDC unchanged.
+    - Assert both exact codes against the running pod. If the pod answers differently, report
+      it rather than loosening the assertion to "any 4xx";
+  - `/api/dsp/<ctx>/.well-known/dspace-version` answers 200 without a token and lists both
+    profiles, and only those.
   Use Cucumber `Scenario Outline` / `Examples` to parameterise over the profiles.
 - Out of scope: a second DID (a second participant context). The chart's
   `identityhub.bootstrap` provisions exactly one participant; Step 4 documents that path.
