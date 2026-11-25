@@ -63,6 +63,16 @@ type ResourceQuantities struct {
 	Memory string `yaml:"memory"`
 }
 
+// Component returns the entry of Components or Unsized with id.
+func (t *ResourceTable) Component(id string) (ResourceComponent, bool) {
+	for _, c := range slices.Concat(t.Components, t.Unsized) {
+		if c.ID == id {
+			return c, true
+		}
+	}
+	return ResourceComponent{}, false
+}
+
 // checkResources validates the table against the compiled foundations; nil when there is no table.
 func checkResources(t *ResourceTable, fs []CompiledFoundation, topLevelKeys []string) error {
 	if t == nil {

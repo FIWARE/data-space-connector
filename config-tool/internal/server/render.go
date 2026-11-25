@@ -87,7 +87,8 @@ func (s *Server) handleRender(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnprocessableEntity, errSourceMismatch.Error(), "")
 		return
 	}
-	tree, err := render.Render(*b, p, render.Options{Overrides: overridesFor(res, b.Chart)})
+	opts := render.Options{Overrides: overridesFor(res, b.Chart)}
+	tree, err := render.Render(*b, p, opts)
 	if err != nil {
 		writeError(w, http.StatusUnprocessableEntity, err.Error(), "")
 		return
@@ -97,7 +98,7 @@ func (s *Server) handleRender(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnprocessableEntity, err.Error(), "")
 		return
 	}
-	findings, err := check.Evaluate(*b, p)
+	findings, err := check.Evaluate(*b, p, opts)
 	if err != nil {
 		writeError(w, http.StatusUnprocessableEntity, err.Error(), "")
 		return

@@ -26,7 +26,7 @@
   rules:
     - {id: r, severity: warning, stage: foundations, field: answers.did.method, when: [{field: answers.did.method, equals: "did:key"}], doc: doc/a.md}
 - name: when missing
-  err: "when, distinct or didWebHost is missing"
+  err: "when, distinct, didWebHost or memoryLimit is missing"
   rules:
     - {id: r, severity: warning, stage: foundations, field: answers.did.method, message: M, doc: doc/a.md}
 - name: field is not a foundation
@@ -105,3 +105,23 @@
   err: "when[0]: unset applies to answers.<foundation id> only, not target.environment"
   rules:
     - {id: r, severity: warning, stage: foundations, field: answers.did.method, when: [{field: target.environment, unset: true}], message: M, doc: doc/a.md}
+- name: memoryLimit with distinct
+  err: "memoryLimit combines with when only, not with distinct or didWebHost"
+  rules:
+    - {id: r, severity: warning, stage: foundations, field: answers.did.method, when: [{field: target.environment, equals: production}], distinct: {prefix: did.}, memoryLimit: {components: [keycloak]}, message: M, doc: doc/a.md}
+- name: memoryLimit without when
+  err: "memoryLimit needs when, its precondition, and field, where the finding points"
+  rules:
+    - {id: r, severity: warning, stage: foundations, field: answers.did.method, memoryLimit: {components: [keycloak]}, message: M, doc: doc/a.md}
+- name: memoryLimit without field
+  err: "memoryLimit needs when, its precondition, and field, where the finding points"
+  rules:
+    - {id: r, severity: warning, stage: foundations, when: [{field: target.environment, equals: production}], memoryLimit: {components: [keycloak]}, message: M, doc: doc/a.md}
+- name: memoryLimit without a resources table
+  err: "memoryLimit: the bundle has no resources table"
+  rules:
+    - {id: r, severity: warning, stage: foundations, field: answers.did.method, when: [{field: target.environment, equals: production}], memoryLimit: {components: [keycloak]}, message: M, doc: doc/a.md}
+- name: memoryLimit with a bad when
+  err: "answers.nope"
+  rules:
+    - {id: r, severity: warning, stage: foundations, field: answers.did.method, when: [{field: answers.nope, equals: x}], memoryLimit: {components: [keycloak]}, message: M, doc: doc/a.md}

@@ -35,12 +35,18 @@ const (
 
 // Evaluate returns the findings of b's rules over p, sorted by severity, stage and rule id; a rule's own
 // findings keep foundation order. Rules read resolved answers, so a derived default counts, and never read
-// features, since every host renders whatever the role. It errors when the answers do not resolve.
-func Evaluate(b model.Bundle, p profile.Profile) ([]Finding, error) {
+// features, since every host renders whatever the role. A memoryLimit rule reads the tree rendered with opts
+// over the loaded file. It errors when the answers do not resolve or the render fails.
+func Evaluate(b model.Bundle, p profile.Profile, opts render.Options) ([]Finding, error) {
 	answers, err := render.Answers(b, p)
 	if err != nil {
 		return nil, err
 	}
+	tree, err := render.Render(b, p, opts)
+	if err != nil {
+		return nil, err
+	}
+	values := newChartValues(tree, opts.Overrides)
 	findings := []Finding{}
 	for _, r := range b.CheckRules() {
 		var fs []Finding
@@ -49,7 +55,12 @@ func Evaluate(b model.Bundle, p profile.Profile) ([]Finding, error) {
 			fs, err = distinct(b, r, p, answers)
 		case r.DIDWebHost != nil:
 			fs = didWebHost(r, answers)
-		case !slices.ContainsFunc(r.When, func(w model.RuleWhen) bool { return !holds(w, p, answers) }):
+		// Before the plain when case: a memoryLimit rule's when is only its precondition.
+		case r.MemoryLimit != nil:
+			if allHold(r.When, p, answers) {
+				fs, err = memoryLimit(b, r, values)
+			}
+		case allHold(r.When, p, answers):
 			fs = []Finding{finding(r, r.Field, "", r.Message)}
 		}
 		if err != nil {
@@ -146,6 +157,11 @@ func normalize(h string) string {
 func label(b model.Bundle, id string) string {
 	i := slices.IndexFunc(b.Foundations, func(f model.Foundation) bool { return f.ID == id })
 	return b.Foundations[i].Label
+}
+
+// allHold reports whether every condition of ws holds.
+func allHold(ws []model.RuleWhen, p profile.Profile, answers map[string]any) bool {
+	return !slices.ContainsFunc(ws, func(w model.RuleWhen) bool { return !holds(w, p, answers) })
 }
 
 // holds reports whether w's field resolves to w.Equals, or for Unset whether the answer is absent; an

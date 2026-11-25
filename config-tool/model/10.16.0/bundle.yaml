@@ -47,9 +47,12 @@
 #             message may use {{ .first }}, {{ .second }} (the pair's labels) and {{ .host }}
 #   didWebHost {did, host}, instead of field and when: a finding when the did:web DID's host (decoded, without port)
 #             is not the resolved host foundation. Neither kind reads features: every host renders whatever the role
+#   memoryLimit {components}, with field and when as its precondition: one finding naming every listed component
+#             of the resources table that deploys and ends up without a memory limit (rendered, loaded, a fallback
+#             path or chartMemoryLimit, which a loaded null drops). The message may use {{ .components }}
 chart: data-space-connector
 version: 10.16.0
-revision: 12
+revision: 13
 topLevelKeys: [
   nameOverride, fullnameOverride, imagePullSecrets, issuance, decentralizedIam, scorpio, elsi,
   keycloak, tm-forum-api, statusListServer, rainbow, contract-management, did, registration,
@@ -337,6 +340,19 @@ rules:
       The DID resolves on another host than the one serving its DID document. Pin the DID document host to the
       DID's host, or reset the DID to derived.
     doc: doc/deployment-integration/roles/provider/README.md#did-and-key-management
+  # Whether a component deploys is read from its enabledKeys (rendered, loaded, else the chart default), not from
+  # the features: the tool renders no enabled key until US-5.3, so a feature that is off still deploys (ADR 0024).
+  - id: java-memory-limit
+    severity: warning
+    stage: foundations
+    field: answers.resources.profile
+    when:
+      - {field: target.environment, equals: production}
+    memoryLimit: {components: [keycloak, scorpio, tmforum, til, contractManagement,
+                               ccs, dss, consentFacade, identityhub, edc]}
+    message: >-
+      Without a memory limit, the JVM sizes its heap from the node: {{ .components }}.
+    doc: doc/deployment-integration/roles/PREREQUISITES.md#set-memory-limits-on-the-java-components
 resources:
   answer: resources.profile
   measuredOn: 10.13.2

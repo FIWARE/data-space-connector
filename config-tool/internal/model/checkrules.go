@@ -53,8 +53,15 @@ const (
 	MessageHost = "host"
 )
 
-// distinctKeys are the keys a distinct message may use.
-var distinctKeys = []string{MessageFirst, MessageSecond, MessageHost}
+// MessageComponents is the key a memoryLimit message template may use: the labels of the unlimited components.
+const MessageComponents = "components"
+
+var (
+	// distinctKeys are the keys a distinct message may use.
+	distinctKeys = []string{MessageFirst, MessageSecond, MessageHost}
+	// memoryLimitKeys are the keys a memoryLimit message may use.
+	memoryLimitKeys = []string{MessageComponents}
+)
 
 var (
 	knownSeverities = []Severity{SeverityError, SeverityWarning}
@@ -79,16 +86,19 @@ func (s Stage) Rank() int {
 }
 
 // CheckRule is an L2 rule as written in a bundle's rules list. It has exactly one kind: When (a finding on
-// Field while every condition holds), Distinct or DIDWebHost; the last two name their field in the finding.
+// Field while every condition holds), Distinct, DIDWebHost, or MemoryLimit, which needs When as its precondition
+// and Field; Distinct and DIDWebHost name their field in the finding.
 type CheckRule struct {
-	ID         string          `yaml:"id"`
-	Severity   Severity        `yaml:"severity"`
-	Stage      Stage           `yaml:"stage"`
-	Field      string          `yaml:"field"`
-	When       []RuleWhen      `yaml:"when"`
-	Distinct   *RuleDistinct   `yaml:"distinct"`
-	DIDWebHost *RuleDIDWebHost `yaml:"didWebHost"`
-	// Message is fixed text, except for a distinct rule: a template over MessageFirst, MessageSecond and MessageHost.
+	ID          string           `yaml:"id"`
+	Severity    Severity         `yaml:"severity"`
+	Stage       Stage            `yaml:"stage"`
+	Field       string           `yaml:"field"`
+	When        []RuleWhen       `yaml:"when"`
+	Distinct    *RuleDistinct    `yaml:"distinct"`
+	DIDWebHost  *RuleDIDWebHost  `yaml:"didWebHost"`
+	MemoryLimit *RuleMemoryLimit `yaml:"memoryLimit"`
+	// Message is fixed text, except for a distinct rule (a template over MessageFirst, MessageSecond and
+	// MessageHost) and a memoryLimit rule (a template over MessageComponents).
 	Message string `yaml:"message"`
 	// Doc is a repo-relative documentation path, optionally with an anchor.
 	Doc string `yaml:"doc"`
@@ -105,6 +115,12 @@ type RuleDIDWebHost struct {
 	// DID is the id of a did foundation, Host the id of the hostname foundation serving its document.
 	DID  string `yaml:"did"`
 	Host string `yaml:"host"`
+}
+
+// RuleMemoryLimit finds the deployed components of the resources table that run without a memory limit.
+type RuleMemoryLimit struct {
+	// Components are ids of the table's components or unsized entries.
+	Components []string `yaml:"components"`
 }
 
 // RuleWhen holds while the resolved Field equals Equals, or with Unset while the answer Field is absent.
@@ -134,9 +150,9 @@ func (b Bundle) DistinctIDs(r CheckRule) []string {
 	return ids
 }
 
-// RenderMessage returns r's message, with data filled in for a distinct rule.
+// RenderMessage returns r's message, with data filled in for a distinct or memoryLimit rule.
 func (r CheckRule) RenderMessage(data map[string]string) (string, error) {
-	if r.Distinct == nil {
+	if r.Distinct == nil && r.MemoryLimit == nil {
 		return r.Message, nil
 	}
 	t, _, err := parseTemplate(r.ID, r.Message)
@@ -160,22 +176,22 @@ func TargetFieldValues(id string) []string {
 	return slices.Clone(targetFields[id].values)
 }
 
-// checkCheckRules validates rules against the compiled foundations fs and the feature catalogue.
-func checkCheckRules(rules []CheckRule, fs []CompiledFoundation, features []Feature, order []string) error {
+// checkCheckRules validates rules against the compiled foundations fs, the feature catalogue and the resources table.
+func checkCheckRules(rules []CheckRule, fs []CompiledFoundation, features []Feature, order []string, table *ResourceTable) error {
 	seen := map[string]int{}
 	for i, r := range rules {
 		if j, dup := seen[r.ID]; dup {
 			return fmt.Errorf("rules[%d]: id %q is already used by rules[%d]", i, r.ID, j)
 		}
 		seen[r.ID] = i
-		if err := checkCheckRule(r, fs, features, order); err != nil {
+		if err := checkCheckRule(r, fs, features, order, table); err != nil {
 			return fmt.Errorf("rules[%d]: %w", i, err)
 		}
 	}
 	return nil
 }
 
-func checkCheckRule(r CheckRule, fs []CompiledFoundation, features []Feature, order []string) error {
+func checkCheckRule(r CheckRule, fs []CompiledFoundation, features []Feature, order []string, table *ResourceTable) error {
 	switch {
 	case r.ID == "":
 		return errors.New("id is missing")
@@ -187,16 +203,21 @@ func checkCheckRule(r CheckRule, fs []CompiledFoundation, features []Feature, or
 		return errors.New("message is missing")
 	}
 	kinds := 0
-	for _, has := range []bool{len(r.When) > 0, r.Distinct != nil, r.DIDWebHost != nil} {
+	// A memoryLimit rule's when is its precondition, not a kind of its own.
+	for _, has := range []bool{len(r.When) > 0 && r.MemoryLimit == nil, r.Distinct != nil, r.DIDWebHost != nil, r.MemoryLimit != nil} {
 		if has {
 			kinds++
 		}
 	}
 	switch {
 	case kinds == 0:
-		return errors.New("when, distinct or didWebHost is missing")
+		return errors.New("when, distinct, didWebHost or memoryLimit is missing")
+	case kinds > 1 && r.MemoryLimit != nil:
+		return errors.New("memoryLimit combines with when only, not with distinct or didWebHost")
 	case kinds > 1:
 		return errors.New("a rule has exactly one of when, distinct and didWebHost")
+	case r.MemoryLimit != nil && (len(r.When) == 0 || r.Field == ""):
+		return errors.New("memoryLimit needs when, its precondition, and field, where the finding points")
 	case len(r.When) == 0 && r.Field != "":
 		return errors.New("field is for when only: the finding of distinct and didWebHost names its field")
 	}
@@ -206,6 +227,10 @@ func checkCheckRule(r CheckRule, fs []CompiledFoundation, features []Feature, or
 		err = checkDistinct(r, fs, order)
 	case r.DIDWebHost != nil:
 		err = checkDIDWebHost(r, fs)
+	case r.MemoryLimit != nil:
+		if err = checkWhenRule(r, fs, features); err == nil {
+			err = checkMemoryLimit(r, table)
+		}
 	default:
 		err = checkWhenRule(r, fs, features)
 	}
@@ -252,13 +277,39 @@ func checkDistinct(r CheckRule, fs []CompiledFoundation, order []string) error {
 	if n < 2 {
 		return fmt.Errorf("distinct: prefix %q matches %d foundations, want at least 2", p, n)
 	}
+	return checkMessage(r, distinctKeys)
+}
+
+// checkMemoryLimit refuses a rule without a resources table, without components, or naming a component the table
+// does not declare or one twice, and a message using keys other than memoryLimitKeys.
+func checkMemoryLimit(r CheckRule, table *ResourceTable) error {
+	ids := r.MemoryLimit.Components
+	switch {
+	case table == nil:
+		return errors.New("memoryLimit: the bundle has no resources table")
+	case len(ids) == 0:
+		return errors.New("memoryLimit: components is empty")
+	}
+	for i, id := range ids {
+		if _, ok := table.Component(id); !ok {
+			return fmt.Errorf("memoryLimit: components[%d]: %q names no entry of the resources table", i, id)
+		}
+		if slices.Index(ids, id) < i {
+			return fmt.Errorf("memoryLimit: components[%d]: %q is listed twice", i, id)
+		}
+	}
+	return checkMessage(r, memoryLimitKeys)
+}
+
+// checkMessage refuses a message template that does not parse or uses keys other than keys.
+func checkMessage(r CheckRule, keys []string) error {
 	_, refs, err := parseTemplate(r.ID, r.Message)
 	if err != nil {
 		return fmt.Errorf("message: %w", err)
 	}
 	for _, ref := range refs {
-		if !slices.Contains(distinctKeys, ref) {
-			return fmt.Errorf("message: {{ .%s }} is not one of %s", ref, strings.Join(distinctKeys, ", "))
+		if !slices.Contains(keys, ref) {
+			return fmt.Errorf("message: {{ .%s }} is not one of %s", ref, strings.Join(keys, ", "))
 		}
 	}
 	return nil

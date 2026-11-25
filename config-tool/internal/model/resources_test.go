@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -303,5 +304,54 @@ func TestWalkSchema(t *testing.T) {
 		if err := walkSchema(schema, tc.path); (err == nil) != tc.ok {
 			t.Errorf("walkSchema(%s) = %v, want ok %v", tc.path, err, tc.ok)
 		}
+	}
+}
+
+// TestMemoryLimitRules pins how a memoryLimit rule decodes and renders, and what the model refuses in one.
+func TestMemoryLimitRules(t *testing.T) {
+	const (
+		rulePrefix = "rules:\n  - {id: r, severity: warning, stage: foundations, field: answers.resources.profile, " +
+			"when: [{field: target.environment, equals: production}], "
+		message = "Without: {{ .components }}."
+	)
+	head, err := os.ReadFile(resourcesFoundations)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tests := []struct {
+		name       string
+		components string
+		message    string
+		// err is a fragment of the error; "" wants the rule accepted.
+		err string
+	}{
+		{"accepted across components and unsized", "[keycloak, edc]", message, ""},
+		{"components empty", "[]", message, "memoryLimit: components is empty"},
+		{"component unknown", "[keycloak, nope]", message, `memoryLimit: components[1]: "nope" names no entry of the resources table`},
+		{"component twice", "[scorpio, scorpio]", message, `memoryLimit: components[1]: "scorpio" is listed twice`},
+		{"message key unknown", "[keycloak]", "{{ .first }}", "message: {{ .first }} is not one of components"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			rules := rulePrefix + "memoryLimit: {components: " + tc.components + "}, message: \"" + tc.message + "\", doc: doc/a.md}\n"
+			got, err := Versions(fstest.MapFS{fixtureFile: {Data: append(slices.Clone(head), rules...)}})
+			if tc.err != "" {
+				if err == nil || !strings.Contains(err.Error(), tc.err) {
+					t.Errorf("err = %v, want it to contain %q", err, tc.err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			r := got[0].CheckRules()[0]
+			if want := []string{"keycloak", "edc"}; r.MemoryLimit == nil || !slices.Equal(r.MemoryLimit.Components, want) {
+				t.Fatalf("MemoryLimit = %+v, want components %v", r.MemoryLimit, want)
+			}
+			msg, err := r.RenderMessage(map[string]string{MessageComponents: "Keycloak, fdsc-edc (dcp)"})
+			if want := "Without: Keycloak, fdsc-edc (dcp)."; err != nil || msg != want {
+				t.Errorf("RenderMessage = %q, %v, want %q", msg, err, want)
+			}
+		})
 	}
 }
