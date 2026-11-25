@@ -50,6 +50,29 @@ export interface HandSetAnswer {
   derived: string
 }
 
+/** An unanswered derived answer whose resolved value changed, mirroring `render.DerivedChange`; null is unresolved. */
+export interface DerivedChange {
+  id: string
+  before: unknown
+  after: unknown
+}
+
+/** A given answer kept while its derived value moved: *pinned, not updated*. `before`/`after` are the derived values,
+ *  empty when nothing derives. */
+export interface PinnedAnswer {
+  id: string
+  kept: unknown
+  before: string
+  after: string
+}
+
+/** What the answer change since the previous render did to the derived answers, mirroring `render.AnswerDiff`.
+ *  Both lists are in foundation order and empty on the first render after a load, open or chart/version switch. */
+export interface AnswerDiff {
+  rederived: DerivedChange[]
+  pinned: PinnedAnswer[]
+}
+
 /** How much an L2 finding weighs; only an error blocks generate (ADR 0021). */
 export type Severity = 'error' | 'warning'
 
@@ -71,6 +94,7 @@ export interface Finding {
 export interface RenderResult {
   tree: { leaves: Leaf[] }
   diff: { groups: ChangeGroup[] }
+  derived: AnswerDiff
   handSet: HandSetAnswer[]
   findings: Finding[]
 }

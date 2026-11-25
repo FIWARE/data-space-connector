@@ -5,7 +5,7 @@ import type { FeatureState, Profile, ProfileResponse, RecentProfiles } from '../
 import type { FeatureChoice, FeaturesResult, FeatureToggle } from '../api/features'
 import type { Foundation, FoundationList } from '../api/foundations'
 import type { ImportPreview, ImportResult, TIRCheckResult } from '../api/dataspace'
-import type { Change, ChangeGroup, Finding, HandSetAnswer, Leaf, RenderResult } from '../api/render'
+import type { AnswerDiff, Change, ChangeGroup, Finding, HandSetAnswer, Leaf, RenderResult } from '../api/render'
 import type { Feature, Offer, PresetResult, RoleCatalogue, RoleChange } from '../api/roles'
 import type { Kubeconfig, ModelInfo } from '../api/target'
 import type { Trial, TrialWritten } from '../api/trial'
@@ -438,13 +438,40 @@ export function renderLeaves(profile: Profile): Leaf[] {
   return leaves.sort((a, b) => a.path.localeCompare(b.path))
 }
 
+/** The foundations of FOUNDATIONS whose default derives from the domain. */
+const derivedFoundations = () => FOUNDATIONS.foundations.filter((f) => f.default !== '')
+
+/** What `f`'s default derives from `profile`'s domain; empty without one. */
+function deriveOf(f: Foundation, profile: Profile): string {
+  const base = profile.answers?.['domain.base']
+  return typeof base === 'string' ? f.default.replace('{{ .domain.base }}', base) : ''
+}
+
 /** The given answers of `profile` that FOUNDATIONS derives from the domain, as render.HandSet lists them. */
 export function handSetOf(profile: Profile): HandSetAnswer[] {
   const answers = profile.answers ?? {}
-  const base = answers['domain.base']
-  return FOUNDATIONS.foundations
-    .filter((f) => f.default !== '' && answers[f.id] !== undefined)
-    .map((f) => ({ id: f.id, value: answers[f.id], derived: typeof base === 'string' ? f.default.replace('{{ .domain.base }}', base) : '' }))
+  return derivedFoundations()
+    .filter((f) => answers[f.id] !== undefined)
+    .map((f) => ({ id: f.id, value: answers[f.id], derived: deriveOf(f, profile) }))
+}
+
+/** `next`'s derived answers against `prev` as render.DerivedDiff reports them; empty without a previous render. */
+export function derivedOf(prev: Profile | undefined, next: Profile): AnswerDiff {
+  const diff: AnswerDiff = { rederived: [], pinned: [] }
+  if (!prev) return diff
+  for (const f of derivedFoundations()) {
+    const was = deriveOf(f, prev)
+    const now = deriveOf(f, next)
+    const kept = next.answers?.[f.id]
+    if (kept === undefined) {
+      const before = prev.answers?.[f.id] ?? (was || null)
+      const after = now || null
+      if (before !== after) diff.rederived.push({ id: f.id, before, after })
+    } else if (was !== now) {
+      diff.pinned.push({ id: f.id, kept, before: was, after: now })
+    }
+  }
+  return diff
 }
 
 /** A warning on the base domain, which the FOUNDATIONS cut can show; the real rule points at `did.method`. */
@@ -462,6 +489,7 @@ export function renderWithFindings(findings: Finding[]): (body: RenderBody) => R
   return (body) => ({
     tree: { leaves: renderLeaves(body.profile) },
     diff: { groups: [] },
+    derived: { rederived: [], pinned: [] },
     handSet: handSetOf(body.profile),
     findings: body.profile.answers?.['domain.base'] === undefined ? [] : findings,
   })
@@ -487,13 +515,16 @@ export function diffLeaves(prev: readonly Leaf[], next: readonly Leaf[]): Change
 
 function foundationDefaults(): Required<FoundationFakes> {
   let last: Leaf[] = []
+  let lastProfile: Profile | undefined
   return {
     foundations: () => FOUNDATIONS,
     render: (body) => {
       const leaves = renderLeaves(body.profile)
       const groups = diffLeaves(last, leaves)
+      const derived = derivedOf(lastProfile, body.profile)
       last = leaves
-      return { tree: { leaves }, diff: { groups }, handSet: handSetOf(body.profile), findings: [] }
+      lastProfile = body.profile
+      return { tree: { leaves }, diff: { groups }, derived, handSet: handSetOf(body.profile), findings: [] }
     },
   }
 }

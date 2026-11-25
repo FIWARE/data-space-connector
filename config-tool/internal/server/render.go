@@ -22,8 +22,10 @@ type renderRequest struct {
 // renderResponse is the tree of POST /api/render, its change against the previous render, the
 // answers given in place of their derived default and the L2 findings, which never fail the request.
 type renderResponse struct {
-	Tree     render.Tree            `json:"tree"`
-	Diff     render.TreeDiff        `json:"diff"`
+	Tree render.Tree     `json:"tree"`
+	Diff render.TreeDiff `json:"diff"`
+	// Derived is what the answer change did to the derived answers since the previous render.
+	Derived  render.AnswerDiff      `json:"derived"`
 	HandSet  []render.HandSetAnswer `json:"handSet"`
 	Findings []check.Finding        `json:"findings"`
 }
@@ -100,13 +102,19 @@ func (s *Server) handleRender(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnprocessableEntity, err.Error(), "")
 		return
 	}
-	// A render of another source (e.g. a new configuration after a load) starts a new baseline.
-	if s.lastRenderSHA != req.SourceSHA256 {
+	// A render of another source (e.g. a new configuration after a load) or of another chart or version (a
+	// Stage 1 switch keeps the source) starts a new baseline.
+	if s.lastRenderSHA != req.SourceSHA256 || s.lastProfile.Model != p.Model {
 		s.resetRender()
 	}
+	derived, err := render.DerivedDiff(*b, s.lastProfile, p)
+	if err != nil {
+		writeError(w, http.StatusUnprocessableEntity, err.Error(), "")
+		return
+	}
 	diff := render.Diff(*b, s.lastRender, tree)
-	s.lastRender, s.lastRenderSHA = tree, req.SourceSHA256
-	writeJSON(w, renderResponse{Tree: tree, Diff: diff, HandSet: handSet, Findings: findings})
+	s.lastRender, s.lastRenderSHA, s.lastProfile = tree, req.SourceSHA256, p
+	writeJSON(w, renderResponse{Tree: tree, Diff: diff, Derived: derived, HandSet: handSet, Findings: findings})
 }
 
 // overridesFor is the loaded slot when it holds values of chart; paths of another chart would pin nonsense.
@@ -117,9 +125,10 @@ func overridesFor(res *load.Result, chart string) *load.Result {
 	return res
 }
 
-// resetRender makes the next render diff against an empty tree; the caller holds loadMu.
+// resetRender makes the next render diff against an empty tree and no previous answers; the caller holds loadMu.
 func (s *Server) resetRender() {
 	s.lastRender = render.Tree{}
+	s.lastProfile = profile.Profile{}
 }
 
 // handleFoundations lists the foundations of chart@version; an empty version means the latest.

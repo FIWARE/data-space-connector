@@ -183,10 +183,11 @@ describe('Foundations', () => {
           },
         ],
       },
+      derived: { rederived: [], pinned: [] },
       handSet: [],
       findings: [],
     }
-    renderFoundations(ON_FOUNDATIONS, { render: (body) => (body.profile.answers?.['domain.base'] ? pinned : { tree: { leaves: [] }, diff: { groups: [] }, handSet: [], findings: [] }) })
+    renderFoundations(ON_FOUNDATIONS, { render: (body) => (body.profile.answers?.['domain.base'] ? pinned : { tree: { leaves: [] }, diff: { groups: [] }, derived: { rederived: [], pinned: [] }, handSet: [], findings: [] }) })
     await userEvent.type(await domainInput(), BASE)
     const item = (await screen.findByText(PINNED_LABEL)).closest('li')
     expect(item).toHaveTextContent(FRONTEND_URL)
