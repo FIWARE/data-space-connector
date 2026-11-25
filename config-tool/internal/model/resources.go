@@ -100,6 +100,7 @@ func addResourceTargets(fs []CompiledFoundation, t *ResourceTable) error {
 					Value: q.value,
 					Refs:  []string{t.Answer},
 					Only:  name,
+					Block: p,
 				})
 			}
 		}

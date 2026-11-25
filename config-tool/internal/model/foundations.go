@@ -228,7 +228,9 @@ type CompiledTarget struct {
 	Refs []string
 	// Only is the value of the foundation's own answer the target is written for; empty writes it for any.
 	Only string
-	tpls []*template.Template
+	// Block is the mapping the target writes as one unit: a hand edit inside it pins every target of the block.
+	Block roundtrip.Path
+	tpls  []*template.Template
 }
 
 // Templates are the parsed args of a tpl, join or copy target, in order; nil for const.

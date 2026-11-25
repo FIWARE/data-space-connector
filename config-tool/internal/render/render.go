@@ -36,6 +36,8 @@ func Render(b model.Bundle, p profile.Profile, opts Options) (Tree, error) {
 	}
 	leaves := []Leaf{}
 	incomplete := map[string]bool{}
+	// blocks maps a leaf's path to the block its target writes as one unit.
+	blocks := map[string]roundtrip.Path{}
 	for _, decl := range b.Foundations {
 		f, _ := b.Foundation(decl.ID)
 		for i, t := range f.Targets {
@@ -55,6 +57,9 @@ func Render(b model.Bundle, p profile.Profile, opts Options) (Tree, error) {
 			leaves = append(leaves, Leaf{Path: slices.Clone(t.Path), Value: v, Provenance: Provenance{
 				Foundation: f.ID, Answers: append([]string{}, t.Refs...), Fn: string(t.Fn), Target: i,
 			}})
+			if t.Block != nil {
+				blocks[t.Path.String()] = t.Block
+			}
 		}
 	}
 	// An owned list is written whole or not at all, so a fragment never replaces the chart's list.
@@ -62,7 +67,7 @@ func Render(b model.Bundle, p profile.Profile, opts Options) (Tree, error) {
 		return slices.ContainsFunc(lists(l.Path), func(k roundtrip.Path) bool { return incomplete[k.String()] })
 	})
 	if opts.Overrides != nil {
-		pin(leaves, opts.Overrides)
+		pin(leaves, blocks, opts.Overrides)
 	}
 	sortLeaves(leaves)
 	return Tree{Leaves: leaves}, nil
@@ -184,8 +189,10 @@ func (e edit) conflicts(key string) bool {
 
 // pin marks every leaf that overlaps a hand edit of r and keeps the loaded scalar in its place.
 // An owned list a hand edit touches is pinned whole without kept values, so the overrides layer
-// keeps its list and Nested() never writes a fragment of it.
-func pin(leaves []Leaf, r *load.Result) {
+// keeps its list and Nested() never writes a fragment of it. A hand edit inside a leaf's block
+// (blocks, by leaf path) pins the whole block with kept values, so the file's block stays as written
+// and a rendered request never meets a hand-set limit below it; an empty mapping there is merged into.
+func pin(leaves []Leaf, blocks map[string]roundtrip.Path, r *load.Result) {
 	var edits []edit
 	for _, e := range r.Report.Unknown {
 		p, err := roundtrip.ParsePath(e.Path)
@@ -200,10 +207,17 @@ func pin(leaves []Leaf, r *load.Result) {
 		key := slices.Concat(r.Root, p).String()
 		return slices.ContainsFunc(edits, func(e edit) bool { return e.conflicts(key) })
 	}
+	inBlock := func(b roundtrip.Path) bool {
+		if b == nil {
+			return false
+		}
+		key := slices.Concat(r.Root, b).String()
+		return slices.ContainsFunc(edits, func(e edit) bool { return !e.emptyMap && isUnder(e.path, key) })
+	}
 	for i := range leaves {
 		l := &leaves[i]
 		inList := slices.ContainsFunc(lists(l.Path), hit)
-		if !inList && !hit(l.Path) {
+		if !inList && !hit(l.Path) && !inBlock(blocks[l.Path.String()]) {
 			continue
 		}
 		l.Provenance.Pinned, l.Provenance.Rendered = true, l.Value

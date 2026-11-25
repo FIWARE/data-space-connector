@@ -432,6 +432,9 @@ func TestShippedResourceTargets(t *testing.T) {
 			if ct.Fn != FnConst || !reflect.DeepEqual(ct.Refs, []string{profileAnswer}) {
 				t.Errorf("%s: fn %s, refs %v, want a const referencing %s", ct.Path, ct.Fn, ct.Refs, profileAnswer)
 			}
+			if block := ct.Path[:len(ct.Path)-2]; !reflect.DeepEqual(ct.Block, block) {
+				t.Errorf("%s: block %s, want %s", ct.Path, ct.Block, block)
+			}
 			onlys[ct.Path.String()] = append(onlys[ct.Path.String()], ct.Only)
 		}
 		if len(onlys) != wantPaths {

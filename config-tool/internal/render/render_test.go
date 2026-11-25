@@ -753,28 +753,50 @@ func TestResourceProfileTargets(t *testing.T) {
 	}
 }
 
+// TestRenderResourceProfileKeepsHandEdit pins a component's whole block once a hand edit lies inside it, so a
+// hand-set limit below the profile's request never meets that request.
 func TestRenderResourceProfileKeepsHandEdit(t *testing.T) {
-	const (
-		path   = "scorpio.resources.limits.memory"
-		edited = "3Gi"
-	)
+	const block = "scorpio.resources"
+	tests := []struct {
+		name   string
+		values string
+		// kept are the loaded scalars the block keeps, by path; nil pins nothing.
+		kept map[string]any
+	}{
+		{"a limit above the request", "scorpio:\n  resources:\n    limits:\n      memory: 3Gi\n",
+			map[string]any{block + ".limits.memory": "3Gi"}},
+		{"a memory limit below the request", "scorpio:\n  resources:\n    limits:\n      memory: 512Mi\n",
+			map[string]any{block + ".limits.memory": "512Mi"}},
+		{"a cpu limit below the request", "scorpio:\n  resources:\n    limits:\n      cpu: 200m\n",
+			map[string]any{block + ".limits.cpu": "200m"}},
+		{"an empty mapping is merged into", "scorpio:\n  resources:\n    limits: {}\n", nil},
+	}
 	b := providerBundle(t)
-	r, err := load.Load([]byte("scorpio:\n  resources:\n    limits:\n      memory: "+edited+"\n"), "values.yaml", []model.Bundle{b}, load.Options{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	tree, err := Render(b, profile.Profile{Answers: map[string]any{resourceProfileID: prodProfile}}, Options{Overrides: r})
-	if err != nil {
-		t.Fatal(err)
-	}
-	for key, l := range tableLeaves(tree) {
-		p := l.Provenance
-		switch {
-		case key == path && (!p.Pinned || !p.Kept || l.Value != edited || p.Rendered != wantResources(prodProfile)[path]):
-			t.Errorf("%s = (value %v, pinned %v, kept %v, rendered %v), want %s kept over the rendered figure", key, l.Value, p.Pinned, p.Kept, p.Rendered, edited)
-		case key != path && p.Pinned:
-			t.Errorf("%s is pinned, want it rendered", key)
-		}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			r, err := load.Load([]byte(tc.values), "values.yaml", []model.Bundle{b}, load.Options{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			tree, err := Render(b, profile.Profile{Answers: map[string]any{resourceProfileID: prodProfile}}, Options{Overrides: r})
+			if err != nil {
+				t.Fatal(err)
+			}
+			rendered := wantResources(prodProfile)
+			for key, l := range tableLeaves(tree) {
+				p := l.Provenance
+				v, kept := tc.kept[key]
+				switch {
+				case tc.kept == nil || !isUnder(key, block):
+					if p.Pinned || l.Value != rendered[key] {
+						t.Errorf("%s = (value %v, pinned %v), want %v rendered", key, l.Value, p.Pinned, rendered[key])
+					}
+				case !p.Pinned || p.Kept != kept || l.Value != v || p.Rendered != rendered[key]:
+					t.Errorf("%s = (value %v, pinned %v, kept %v, rendered %v), want (%v, true, %v, %v)",
+						key, l.Value, p.Pinned, p.Kept, p.Rendered, v, kept, rendered[key])
+				}
+			}
+		})
 	}
 }
 
