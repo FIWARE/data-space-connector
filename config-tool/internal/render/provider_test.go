@@ -326,6 +326,10 @@ func TestProviderValues(t *testing.T) {
 		t.Fatalf("%s is invalid: %v", providerProfile, errs)
 	}
 	tree := renderProvider(t, providerBundle(t), p.Answers)
+	// provider.yaml hand-tunes resources, so the fixture answers custom and the table renders nothing.
+	if got := tableLeaves(tree); len(got) > 0 {
+		t.Errorf("%d leaves under resources table paths, want none", len(got))
+	}
 	owned := map[string]roundtrip.Path{}
 	rendered := map[string]bool{}
 	for _, l := range tree.Leaves {

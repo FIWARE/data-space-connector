@@ -42,5 +42,7 @@ answers:
   host.dcpManagement: provider-dcp-management.127.0.0.1.nip.io
   host.consentDataService: mp-data-service-consent.127.0.0.1.nip.io
   dataspace.tirAddress: https://tir.127.0.0.1.nip.io/
+  # provider.yaml hand-tunes resources for a single k3s node.
+  resources.profile: custom
 open: []
 secrets: {}

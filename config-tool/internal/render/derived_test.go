@@ -329,3 +329,35 @@ func TestHostChangeKeepsLoadedCertificates(t *testing.T) {
 		})
 	}
 }
+
+// TestDerivedDiffResourceProfile resolves prev and next with their own environments.
+func TestDerivedDiffResourceProfile(t *testing.T) {
+	b := providerBundle(t)
+	on := func(env profile.Environment, answers map[string]any) profile.Profile {
+		p := onProvider(answers)
+		p.Target.Environment = env
+		return p
+	}
+	tests := []struct {
+		name    string
+		answers map[string]any
+		want    AnswerDiff
+	}{
+		{"an un-given profile is re-derived", map[string]any{}, AnswerDiff{
+			Rederived: []DerivedChange{{ID: resourceProfileID, Before: devProfile, After: prodProfile}}, Pinned: []PinnedAnswer{}}},
+		{"a given profile is pinned", map[string]any{resourceProfileID: customProfile}, AnswerDiff{
+			Rederived: []DerivedChange{},
+			Pinned:    []PinnedAnswer{{ID: resourceProfileID, Kept: customProfile, Before: devProfile, After: prodProfile}}}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := DerivedDiff(b, on(profile.EnvDevelopment, tc.answers), on(profile.EnvProduction, tc.answers))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(got, tc.want) {
+				t.Errorf("DerivedDiff = %+v, want %+v", got, tc.want)
+			}
+		})
+	}
+}

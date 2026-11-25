@@ -74,6 +74,40 @@ func checkResources(t *ResourceTable, fs []CompiledFoundation, topLevelKeys []st
 	return nil
 }
 
+// addResourceTargets appends a const target per profile, component and quantity to the table's answer
+// foundation, written only while that answer resolves to the profile; the table must have passed checkResources.
+func addResourceTargets(fs []CompiledFoundation, t *ResourceTable) error {
+	if t == nil {
+		return nil
+	}
+	i := slices.IndexFunc(fs, func(f CompiledFoundation) bool { return f.ID == t.Answer })
+	for _, name := range sortedKeys(t.Profiles) {
+		for _, c := range t.Components {
+			p, err := roundtrip.ParsePath(c.Path)
+			if err != nil {
+				return fmt.Errorf("resources: components (%s): path: %w", c.ID, err)
+			}
+			spec := t.Profiles[name][c.ID]
+			for _, q := range []struct{ kind, name, value string }{
+				{ResourceRequests, ResourceCPU, spec.Requests.CPU},
+				{ResourceRequests, ResourceMemory, spec.Requests.Memory},
+				{ResourceLimits, ResourceCPU, spec.Limits.CPU},
+				{ResourceLimits, ResourceMemory, spec.Limits.Memory},
+			} {
+				fs[i].Targets = append(fs[i].Targets, CompiledTarget{
+					Path:  slices.Concat(p, roundtrip.Path{roundtrip.Key(q.kind), roundtrip.Key(q.name)}),
+					Fn:    FnConst,
+					Value: q.value,
+					Refs:  []string{t.Answer},
+					Only:  name,
+					Block: p,
+				})
+			}
+		}
+	}
+	return nil
+}
+
 func checkResourceTable(t *ResourceTable, fs []CompiledFoundation, topLevelKeys []string) error {
 	i := slices.IndexFunc(fs, func(f CompiledFoundation) bool { return f.ID == t.Answer })
 	switch {

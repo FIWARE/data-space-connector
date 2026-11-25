@@ -22,9 +22,9 @@ func (r TargetRef) MarshalJSON() ([]byte, error) {
 	}{r.Path.String(), r.Component})
 }
 
-// Targets lists the chart keys answerID fans out to, sorted by path: the targets that reference it
-// or an answer whose default derives from it, transitively. Const targets reference no answer and
-// are not listed. Nil when b does not declare answerID.
+// Targets lists the chart keys answerID fans out to, sorted by path and each once: the targets that reference it
+// or an answer whose default derives from it, transitively. A hand-written const references no answer and is
+// not listed. Nil when b does not declare answerID.
 func Targets(b model.Bundle, answerID string) []TargetRef {
 	if _, ok := b.Foundation(answerID); !ok {
 		return nil
@@ -48,5 +48,6 @@ func Targets(b model.Bundle, answerID string) []TargetRef {
 		}
 	}
 	slices.SortFunc(refs, func(a, b TargetRef) int { return comparePaths(a.Path, b.Path) })
-	return refs
+	// A resources table writes each path once per profile.
+	return slices.CompactFunc(refs, func(a, b TargetRef) bool { return comparePaths(a.Path, b.Path) == 0 })
 }
