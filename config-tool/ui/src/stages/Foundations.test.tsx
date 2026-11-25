@@ -283,6 +283,21 @@ describe('Foundations', () => {
         expect(hosts.queryByText(KEYCLOAK_HOST.label)).not.toBeInTheDocument()
       }
     })
+
+    it('shows and references every finding one rule anchors on a host, one per colliding pair', async () => {
+      const pairs = ['answers.host.marketplace', 'answers.host.tmForumApi'].map((related, i) => ({
+        ...COLLISION,
+        field: 'answers.host.keycloak',
+        related,
+        message: `Collision ${i + 1}.`,
+      }))
+      renderFoundations(withValues({ 'domain.base': BASE, 'host.keycloak': HAND_HOST }), { render: renderWithFindings(pairs) })
+      const hosts = await hostsGroup()
+      for (const f of pairs) {
+        expect(await hosts.findByText(new RegExp(f.message))).toBeInTheDocument()
+        expect(hostInput()).toHaveAccessibleDescription(expect.stringContaining(f.message))
+      }
+    })
   })
 
   describe('findings', () => {
