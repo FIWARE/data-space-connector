@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/FIWARE/data-space-connector/config-tool/internal/load"
+	"github.com/FIWARE/data-space-connector/config-tool/internal/profile"
 	"github.com/FIWARE/data-space-connector/config-tool/internal/recent"
 	"github.com/FIWARE/data-space-connector/config-tool/internal/render"
 	"github.com/FIWARE/data-space-connector/config-tool/internal/trial"
@@ -64,7 +65,9 @@ type Server struct {
 	lastRender render.Tree
 	// lastRenderSHA is the sourceSha256 lastRender was rendered with; a render of another one diffs against empty.
 	lastRenderSHA string
-	// loadMu guards loaded, lastRender and lastRenderSHA.
+	// lastProfile is the profile lastRender came from, the baseline of the derived-answer diff.
+	lastProfile profile.Profile
+	// loadMu guards loaded, lastRender, lastRenderSHA and lastProfile.
 	loadMu sync.Mutex
 
 	// trial holds the local trial descriptor and values; tests swap it before the first trial request.

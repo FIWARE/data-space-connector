@@ -2,16 +2,19 @@ package server
 
 import (
 	"encoding/json"
+	"io/fs"
 	"net/http"
 	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
+	"testing/fstest"
 
 	"github.com/FIWARE/data-space-connector/config-tool/internal/check"
 	"github.com/FIWARE/data-space-connector/config-tool/internal/model"
 	"github.com/FIWARE/data-space-connector/config-tool/internal/profile"
 	"github.com/FIWARE/data-space-connector/config-tool/internal/render"
+	bundles "github.com/FIWARE/data-space-connector/config-tool/model"
 )
 
 const (
@@ -70,6 +73,7 @@ type renderBody struct {
 			} `json:"changes"`
 		} `json:"groups"`
 	} `json:"diff"`
+	Derived  render.AnswerDiff      `json:"derived"`
 	HandSet  []render.HandSetAnswer `json:"handSet"`
 	Findings []check.Finding        `json:"findings"`
 }
@@ -355,5 +359,167 @@ func TestRenderResetOnProfileOpen(t *testing.T) {
 	got := ps.mustRender(domainProfile(renderDomain), "")
 	if n := got.changes(); n[render.StatusAdded] != len(got.Tree.Leaves) {
 		t.Errorf("render after open: changes = %v, want every leaf added", n)
+	}
+}
+
+const (
+	pinnedHost    = "host.keycloak"
+	hostPrefix    = "host."
+	collidingHost = "host.marketplace"
+	collisionRule = "host-collision"
+	// switchedVersion is a second DSC version, served from a copy of the latest bundle.
+	switchedVersion = "10.17.0"
+)
+
+// derivedHost is the host id derives under domain; host.keycloak derives keycloak.<domain>.
+func derivedHost(domain string) string {
+	return "keycloak." + domain
+}
+
+// onDomain reports whether host is domain or one of its sub-domains (host.did derives the bare domain).
+func onDomain(host, domain string) bool {
+	return host == domain || strings.HasSuffix(host, "."+domain)
+}
+
+// hostIDs lists the host foundations of the shipped DSC bundle in declaration order.
+func hostIDs(t *testing.T, srv *Server) []string {
+	t.Helper()
+	ids := []string{}
+	for _, id := range latestBundle(t, mustBundles(t, srv), dscChart).FoundationOrder() {
+		if strings.HasPrefix(id, hostPrefix) {
+			ids = append(ids, id)
+		}
+	}
+	return ids
+}
+
+func TestRenderDerivedDiff(t *testing.T) {
+	ps := newProfileSession(t)
+	if status, raw, _ := ps.render(domainProfile(renderDomain), ""); status != http.StatusOK ||
+		!strings.Contains(raw, `"derived":{"rederived":[],"pinned":[]}`) {
+		t.Fatalf("first render: status %d, body %s, want an empty derived diff", status, raw)
+	}
+	others := slices.DeleteFunc(hostIDs(t, ps.srv), func(id string) bool { return id == pinnedHost })
+	tests := []struct {
+		name          string
+		domain        string
+		pin           bool
+		wantPinned    []render.PinnedAnswer
+		wantRederived []string
+	}{
+		{name: "pin at the derived value", domain: renderDomain, pin: true, wantPinned: []render.PinnedAnswer{}},
+		{name: "domain change keeps the pinned host", domain: otherRenderDomain, pin: true,
+			wantPinned: []render.PinnedAnswer{{ID: pinnedHost, Kept: derivedHost(renderDomain),
+				Before: derivedHost(renderDomain), After: derivedHost(otherRenderDomain)}},
+			wantRederived: others},
+		{name: "reset to derived", domain: otherRenderDomain, wantPinned: []render.PinnedAnswer{}, wantRederived: []string{pinnedHost}},
+	}
+	for _, tc := range tests {
+		p := domainProfile(tc.domain)
+		if tc.pin {
+			p.Answers[pinnedHost] = derivedHost(renderDomain)
+		}
+		got := ps.mustRender(p, "").Derived
+		if !slices.Equal(got.Pinned, tc.wantPinned) {
+			t.Errorf("%s: pinned = %+v, want %+v", tc.name, got.Pinned, tc.wantPinned)
+		}
+		hosts := []string{}
+		for _, c := range got.Rederived {
+			if !strings.HasPrefix(c.ID, hostPrefix) {
+				continue
+			}
+			hosts = append(hosts, c.ID)
+			if before, after := c.Before.(string), c.After.(string); !onDomain(before, renderDomain) || !onDomain(after, otherRenderDomain) {
+				t.Errorf("%s: re-derived %+v, want a move from %s to %s", tc.name, c, renderDomain, otherRenderDomain)
+			}
+		}
+		if !slices.Equal(hosts, append([]string{}, tc.wantRederived...)) {
+			t.Errorf("%s: re-derived hosts = %v, want %v", tc.name, hosts, tc.wantRederived)
+		}
+	}
+}
+
+// switchModels serves the shipped bundles plus a copy of the latest DSC bundle as switchedVersion.
+func switchModels(t *testing.T) fstest.MapFS {
+	t.Helper()
+	fsys := fstest.MapFS{}
+	err := fs.WalkDir(bundles.FS, ".", func(path string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return err
+		}
+		data, err := fs.ReadFile(bundles.FS, path)
+		fsys[path] = &fstest.MapFile{Data: data}
+		return err
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	latest := fsys[latestChart+"/bundle.yaml"].Data
+	copied := strings.Replace(string(latest), "\nversion: "+latestChart+"\n", "\nversion: "+switchedVersion+"\n", 1)
+	if copied == string(latest) {
+		t.Fatalf("bundle %s declares no version line", latestChart)
+	}
+	fsys[switchedVersion+"/bundle.yaml"] = &fstest.MapFile{Data: []byte(copied)}
+	return fsys
+}
+
+// A load, a profile open and a switch of chart or version each drop the previous answers, so the next render
+// reports no derived change and diffs its leaves against an empty tree.
+func TestRenderDerivedBaselineReset(t *testing.T) {
+	switched := func(chart, version string) profile.Profile {
+		p := domainProfile(otherRenderDomain)
+		p.Target.Chart, p.Target.ChartVersion = chart, version
+		return p
+	}
+	tests := []struct {
+		name   string
+		action func(ps *profileSession)
+		next   profile.Profile
+	}{
+		{name: "load", action: func(ps *profileSession) { ps.load(valuesName, smallValues) }, next: domainProfile(otherRenderDomain)},
+		{name: "profile open", action: func(ps *profileSession) {
+			saved := ps.mustSave(saveRequest{Path: filepath.Join(ps.t.TempDir(), profileName), Profile: domainProfile(renderDomain)})
+			if status, raw, _ := ps.open(saved.Path); status != http.StatusOK {
+				ps.t.Fatalf("open status = %d: %s", status, raw)
+			}
+		}, next: domainProfile(otherRenderDomain)},
+		{name: "chart switch", next: switched(trustAnchorChart, "")},
+		{name: "version switch", next: switched(dscChart, switchedVersion)},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := newServer(t, builtUI)
+			srv.models = switchModels(t)
+			serve(t, srv)
+			ps := &profileSession{t: t, srv: srv, cookie: login(t, srv)}
+			baseline := domainProfile(renderDomain)
+			baseline.Answers[pinnedHost] = derivedHost(renderDomain)
+			ps.mustRender(baseline, "")
+			if tc.action != nil {
+				tc.action(ps)
+			}
+			got := ps.mustRender(tc.next, "")
+			if len(got.Derived.Rederived) != 0 || len(got.Derived.Pinned) != 0 {
+				t.Errorf("derived = %+v, want empty", got.Derived)
+			}
+			if n := got.changes(); n[render.StatusAdded] != len(got.Tree.Leaves) || len(n) > 1 {
+				t.Errorf("changes = %v, want all %d leaves added", n, len(got.Tree.Leaves))
+			}
+		})
+	}
+}
+
+func TestRenderCollisionNamesRelatedField(t *testing.T) {
+	ps := newProfileSession(t)
+	p := domainProfile(renderDomain)
+	p.Answers[collidingHost] = derivedHost(renderDomain)
+	got := ps.mustRender(p, "")
+	i := slices.IndexFunc(got.Findings, func(f check.Finding) bool { return f.Rule == collisionRule })
+	if i < 0 {
+		t.Fatalf("findings = %v, want %s", findingRules(got.Findings), collisionRule)
+	}
+	if f := got.Findings[i]; f.Field != "answers."+collidingHost || f.Related != "answers."+pinnedHost ||
+		f.Severity != model.SeverityError {
+		t.Errorf("finding = %+v, want an error on answers.%s related to answers.%s", f, collidingHost, pinnedHost)
 	}
 }

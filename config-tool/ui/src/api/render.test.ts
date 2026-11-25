@@ -1,12 +1,17 @@
 import { describe, expect, it } from 'vitest'
 import { initialState } from '../state/reducer'
 import { mockApi, refusedFoundations, REPORT, type RenderBody } from '../test/api'
+import type { AnswerValue } from '../state/answers'
 import { toProfile } from './profile'
-import { fetchRender } from './render'
+import { fetchRender, type AnswerDiff } from './render'
 
 const HTTP_UNPROCESSABLE = 422
 const BASE = 'example.org'
-const PROFILE = toProfile({ ...initialState, answers: { ...initialState.answers, values: { 'domain.base': BASE } } })
+const OTHER_BASE = 'example.com'
+const PINNED_HOST = 'host.keycloak'
+const withAnswers = (values: Record<string, AnswerValue>) => toProfile({ ...initialState, answers: { ...initialState.answers, values } })
+const PROFILE = withAnswers({ 'domain.base': BASE })
+const NO_CHANGE: AnswerDiff = { rederived: [], pinned: [] }
 
 describe('api/render', () => {
   it.each<[string, string | undefined]>([
@@ -38,6 +43,24 @@ describe('api/render', () => {
     ])
     const again = await fetchRender(PROFILE)
     expect(again.diff.groups).toEqual([])
+  })
+
+  it.each<[string, Record<string, AnswerValue>, AnswerDiff]>([
+    ['pinning at the derived value', { 'domain.base': BASE, [PINNED_HOST]: `keycloak.${BASE}` }, NO_CHANGE],
+    [
+      'a domain change past a pinned host',
+      { 'domain.base': OTHER_BASE, [PINNED_HOST]: `keycloak.${BASE}` },
+      { rederived: [], pinned: [{ id: PINNED_HOST, kept: `keycloak.${BASE}`, before: `keycloak.${BASE}`, after: `keycloak.${OTHER_BASE}` }] },
+    ],
+    [
+      'a domain change re-deriving the host',
+      { 'domain.base': OTHER_BASE },
+      { rederived: [{ id: PINNED_HOST, before: `keycloak.${BASE}`, after: `keycloak.${OTHER_BASE}` }], pinned: [] },
+    ],
+  ])('returns the derived diff after %s', async (_, values, want) => {
+    mockApi()
+    expect((await fetchRender(PROFILE)).derived).toEqual(NO_CHANGE)
+    expect((await fetchRender(withAnswers(values))).derived).toEqual(want)
   })
 
   it('rejects an invalid profile with 422 and the server message', async () => {
