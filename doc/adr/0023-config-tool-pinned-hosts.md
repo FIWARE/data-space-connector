@@ -9,7 +9,7 @@
 
 US-3.4 (#128) of [`USER_STORIES.md`](../config-tool/USER_STORIES.md) makes each derived host editable. An edited host
 is pinned: it is not re-derived when the base domain changes, and Review says so. US-3.1
-([ADR 0020](0020-config-tool-foundations-render.md)) shipped 21 `host.*` foundations, read-only, each derived as
+([ADR 0020](0020-config-tool-foundations-render.md)) shipped 22 `host.*` foundations, read-only, each derived as
 `<component>.<base>`. Two public names were missing, the verifier and the DID document host, because
 `k3s/provider.yaml` puts both on `mp-operations.org` and not on the reference base domain. ADR 0020 §7 already pins
 *leaves* that a loaded file edited by hand, but a pinned host leaves its leaves unchanged, so that leaf diff never

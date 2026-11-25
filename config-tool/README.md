@@ -443,7 +443,7 @@ A `when` may also address a feature as `features.<feature id>` with `equals: "on
 `unset: true` instead of `equals`, which holds while the resolved answer, given or derived, is absent. Each condition
 has exactly one of `equals` and `unset` (ADR 0022 Decision 6).
 
-Two more rule kinds replace `field` and `when` ([ADR 0023](../doc/adr/0023-config-tool-pinned-hosts.md)).
+Two more rule kinds, each used instead of `field` and `when` ([ADR 0023](../doc/adr/0023-config-tool-pinned-hosts.md)).
 `distinct: {prefix}` is an error per pair of foundations under the prefix that resolve to the same host (ignoring case
 and a trailing dot); its `message` may use only `{{ .first }}`, `{{ .second }}` (the labels) and `{{ .host }}`.
 `didWebHost: {did, host}` fires when a `did:web` DID's host (percent-decoded, without port, before the document path)
