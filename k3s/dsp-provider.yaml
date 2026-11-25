@@ -14,7 +14,7 @@ fdsc-edc:
         edc:
           hostname: dcp-mp-operations.127.0.0.1.nip.io
           dspCallback: https://dcp-mp-operations.127.0.0.1.nip.io:443/api/dsp/%s
-        # fdsc-edc 2.0.0 participant context (id = DID, reuses the IdentityHub STS client) and the
+        # fdsc-edc 2.x participant context (id = DID, reuses the IdentityHub STS client) and the
         # OAuth2 issuer of the v5beta management API. Replaces the common additionalProperties, so the
         # timeouts are repeated; continuation lines carry the 4 spaces the chart does not add.
         additionalProperties: "edc.http.client.timeout.connect=60\n    \
@@ -26,7 +26,7 @@ fdsc-edc:
           fdsc.participants.self.config.edc.iam.sts.oauth.client.id=did:web:mp-operations.org\n    \
           fdsc.participants.self.config.edc.iam.sts.oauth.client.secret.alias=did:web:mp-operations.org-sts-client-secret\n    \
           tmfExtension.defaultParticipantContextId=did:web:mp-operations.org\n    \
-          tmfExtension.schemaBaseUri=https://raw.githubusercontent.com/SEAMWARE/fdsc-edc/2.0.0/schemas/\n    \
+          tmfExtension.schemaBaseUri=https://raw.githubusercontent.com/SEAMWARE/fdsc-edc/2.1.0/schemas/\n    \
           edc.iam.oauth2.issuer=https://keycloak-provider.127.0.0.1.nip.io/realms/test-realm\n    \
           edc.iam.oauth2.jwks.url=http://provider-keycloak.provider.svc.cluster.local:8080/realms/test-realm/protocol/openid-connect/certs"
     oid4vc:
