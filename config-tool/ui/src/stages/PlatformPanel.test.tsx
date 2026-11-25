@@ -10,6 +10,7 @@ import { initialState, type AppState } from '../state/reducer'
 import { StageId } from '../state/stageIds'
 import { StoreProvider } from '../state/store'
 import { mockApi, PLATFORM_FOUNDATIONS, RESOURCE_PROFILE, RESOURCES, renderWithFindings, type FoundationFakes } from '../test/api'
+import { RESET_LABEL } from './AnswerField'
 import { CUSTOM_PROFILE, measuredCaption, PLATFORM_PANEL, PROFILE_DERIVED, PROFILE_PENDING, SIZING_LINK } from './platformText'
 
 const JAVA_MEMORY_LIMIT: Finding = {
@@ -133,6 +134,22 @@ describe('PlatformPanel', () => {
     expect(within(group).queryByText(PROFILE_DERIVED)).toBeNull()
     await userEvent.click(within(group).getByRole('radio', { name: option('production') }))
     expect(rowsOf(within(group).getByRole('table'))).toEqual(expectedRows('production'))
+  })
+
+  it('resets a given profile so it follows the environment again', async () => {
+    renderPanel(onFoundations('production', { [RESOURCE_PROFILE.id]: 'custom' }))
+    const group = await panel()
+    expect(within(group).queryByText(PROFILE_DERIVED)).toBeNull()
+    await userEvent.click(within(group).getByRole('button', { name: RESET_LABEL }))
+    expect(within(group).getByRole('radio', { checked: true })).toHaveAccessibleName(option('production'))
+    expect(within(group).getByText(PROFILE_DERIVED)).toBeInTheDocument()
+    expect(rowsOf(within(group).getByRole('table'))).toEqual(expectedRows('production'))
+    expect(within(group).queryByRole('button', { name: RESET_LABEL })).toBeNull()
+  })
+
+  it('offers no reset while the profile is derived or its default is unresolved', async () => {
+    renderPanel(onFoundations('development'))
+    expect(within(await panel()).queryByRole('button', { name: RESET_LABEL })).toBeNull()
   })
 
   it('shows the java-memory-limit finding on the field with its guidance', async () => {

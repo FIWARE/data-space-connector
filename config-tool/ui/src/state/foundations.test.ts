@@ -5,6 +5,7 @@ import { DID_FOUNDATIONS, DID_METHOD, FOUNDATIONS, RESOURCE_PROFILE } from '../t
 import {
   answerErrors,
   checkAnswer,
+  derivedDefault,
   dropMismatched,
   featureOff,
   MAX_CREDENTIAL_TYPES,
@@ -243,6 +244,17 @@ describe('reserved refs', () => {
     expect(validAnswers(values, all, reserved)).toEqual(values)
     expect(dropMismatched(values, 'resources.profile', all, reserved)).toBe(values)
     expect(answerErrors({}, all, reserved)).toEqual({})
+  })
+})
+
+describe('derivedDefault', () => {
+  it.each([
+    ['a reserved ref', RESOURCE_PROFILE.default, true],
+    ['an answer ref', 'did:web:{{ .domain.base }}', true],
+    ['a constant', DID_METHOD.default, false],
+    ['no default', '', false],
+  ])('%s', (_, template, want) => {
+    expect(derivedDefault({ default: template })).toBe(want)
   })
 })
 

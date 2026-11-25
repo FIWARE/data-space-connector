@@ -5,7 +5,7 @@ import type { Finding } from '../api/render'
 import { AskLater } from '../chrome/AskLater'
 import { repositoryDocUrl } from '../links'
 import { useStore } from '../state/context'
-import { answerErrors, reservedRefs, resolvedAnswer, textAnswer } from '../state/foundations'
+import { answerErrors, defaultApplies, derivedDefault, reservedRefs, resolvedAnswer, textAnswer, validAnswers } from '../state/foundations'
 import { answerFieldId, fieldElementId } from '../state/openQuestions'
 import { FindingNote } from './Findings'
 import { describedBy, findingNoteId, usedByText } from './foundationText'
@@ -112,12 +112,19 @@ export function AnswerField({
   )
 }
 
-/** A choice as a radio group, each option with its note; the default option is checked while none is given. */
+/** A choice as a radio group, each option with its note; the default option is checked while none is given. A given
+ *  choice whose default follows other answers can be reset to it. */
 export function ChoiceField({ foundation, findings }: { foundation: Foundation; findings: readonly Finding[] }) {
   const { state, dispatch } = useStore()
   const field = answerFieldId(foundation.id)
   const id = fieldElementId(field)
-  const chosen = resolvedAnswer(foundation.id, state.answers.values, state.foundations ?? [], reservedRefs(state.answers.target))
+  const foundations = state.foundations ?? []
+  const reserved = reservedRefs(state.answers.target)
+  const chosen = resolvedAnswer(foundation.id, state.answers.values, foundations, reserved)
+  const resettable =
+    state.answers.values[foundation.id] !== undefined &&
+    derivedDefault(foundation) &&
+    defaultApplies(foundation, validAnswers(state.answers.values, foundations, reserved), foundations, reserved)
   const own = findings.filter((f) => f.field === field)
   return (
     // tabIndex lets a Review link focus the group.
@@ -142,6 +149,11 @@ export function ChoiceField({ foundation, findings }: { foundation: Foundation; 
           )}
         </div>
       ))}
+      {resettable && (
+        <button type="button" className="link" onClick={() => dispatch({ type: 'setAnswer', id: foundation.id, value: '' })}>
+          {RESET_LABEL}
+        </button>
+      )}
       <AskLater field={field} />
       <FieldNotes foundation={foundation} id={id} own={own} />
     </fieldset>

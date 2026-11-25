@@ -131,6 +131,11 @@ export function defaultApplies(f: Foundation, values: Record<string, AnswerValue
   return !f.defaultWhen || resolvedAnswer(f.defaultWhen.id, values, foundations, reserved) === f.defaultWhen.equals
 }
 
+/** Whether `f`'s default follows other answers or reserved refs, so dropping a given answer lets it follow them again. */
+export function derivedDefault(f: Pick<Foundation, 'default'>): boolean {
+  return [...f.default.matchAll(ANSWER_REFERENCE)].length > 0
+}
+
 /** `f`'s default with its references filled; undefined when it does not apply or a reference is unresolved. */
 export function defaultValue(f: Foundation, values: Record<string, AnswerValue>, foundations: readonly Foundation[], reserved: ReservedRefs): string | undefined {
   return defaultApplies(f, values, foundations, reserved) ? fill(f.default, values, foundations, reserved) : undefined
