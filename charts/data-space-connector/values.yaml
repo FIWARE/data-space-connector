@@ -2419,6 +2419,10 @@ fdsc-edc:
 
     ## deployment specific configuration
     deployment:
+      image:
+        # -- image tag of every fdsc-edc deployment without a tag of its own. Stands in for the
+        # fdsc-edc chart's appVersion (1.8.7) until a chart with appVersion >= 2.0.0 is published.
+        tag: "2.0.0"
       # -- port that the cp container uses
       port: 8080
       # -- base path of the controlplane
