@@ -240,9 +240,27 @@ ports 8080 API / 9090 management).
 - The consent-filter plugin source is NOT in this repo; only its tag and
   route config live here.
 
+## fdsc-edc 2.0.0 multi-dataspace (ticket-202)
+- fdsc-edc 2.0.0 runs `controlplane-dcp` as EDC virtual participant contexts,
+  with no legacy mode (no `fdsc.participants.*` means DSP returns 404).
+  `controlplane-oid4vc` is unchanged: keep its v3 management API and
+  `/api/dsp/2025-1`.
+- The fdsc-edc chart (umbrella pins `0.7.10`; `0.7.11` = appVersion 2.0.0,
+  unpublished as of 2026-11-25) has no keys for the new properties. Set them
+  via `fdsc-edc.deployment.dcp.config.additionalProperties`: a string rendered
+  without indent, so each continuation line needs exactly 4 leading spaces. A
+  per-deployment value replaces the `common` one (mergeOverwrite).
+- Context id = participant DID, so the IdentityHub STS alias
+  `<did>-sts-client-secret` is reused. DSP: `/api/dsp/<ctx>/<profile>/...`;
+  management: `.../v5beta/participants/<ctx>/...` with an OAuth2 JWT
+  (`edc.iam.oauth2.issuer`/`jwks.url`, scopes `management-api:*`).
+- Plan and full fact list: `IMPLEMENTATION_PLAN.md`; upstream reference:
+  SEAMWARE/fdsc-edc `docs/multi-dataspace.md`.
+
 ## Important Files
-- `charts/data-space-connector/Chart.yaml` -- dependency graph (current
-  version 11.0.0).
+- `charts/data-space-connector/Chart.yaml` -- dependency graph (version
+  10.21.2 on main; `11-x.md` documents an 11.0.0 that a bot commit reverted
+  and that was never published).
 - `charts/data-space-connector/values.yaml` -- ~4190-line config surface;
   top-level sections start at these approximate line numbers:
   `decentralizedIam` (26), `scorpio` (291), `keycloak` (420),
