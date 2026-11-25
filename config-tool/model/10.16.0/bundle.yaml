@@ -6,10 +6,11 @@
 #   id       dotted answer id (domain.base): the key in the profile's answers, open field answers.<id>
 #   type     string | hostname | domain | did | url, each checked with one pattern; choice, one of its options;
 #            bool, true or false; credentialTypes, a list of {type, description?}. Only copy writes a bool or a list
-#   group    organization | dataspace | network (default): the Stage 3 panel that asks it
+#   group    organization | dataspace | network (default) | platform: the Stage 3 panel that asks it
 #   options  a choice's {value, label, note}; note is optional text shown at the point of choice
 #   default  a template over other answers; the answer is derived only while all of them are answered.
-#            Only a choice may have a constant default, which must be one of its options
+#            Only a choice may have a constant default, which must be one of its options. A default may also
+#            read the reserved target.environment (Stage 1), which no foundation declares and no target reads
 #   defaultWhen {id, equals}: the default applies only while the resolved answer id equals equals
 #   prefix   a template over other answers that the answer, given or derived, must start with
 #   targets  {path, fn, args, sep}; a target referencing an unanswered id writes nothing
@@ -25,6 +26,16 @@
 # that list whole: indices 0..n-1 and every key of every element. Quote a path in a flow mapping: a plain
 # scalar there cannot hold '[' or ','. internal/render/provider_test.go checks the targets against k3s/provider.yaml.
 #
+# The resources table (ADR 0024) sizes the Java components per value of the choice foundation answer:
+#   measuredOn  the chart version PREREQUISITES.md#sizing measured the figures on; doc links that guidance
+#   components  {id, label, path, enabledKeys, fallbackPaths?, chartMemoryLimit?}: path is the resources block;
+#               enabledKeys maps every switch that must be true for the component to deploy to its chart default;
+#               chartMemoryLimit is the memory limit the chart sets when the values set none
+#   unsized     the other JVM workloads, in the same form; no profile sizes them, so their path may hold one '*'
+#               segment for every key of a map, covered by a limit under any of fallbackPaths
+#   profiles    <option>: {<component id>: {requests: {cpu, memory}, limits: {cpu, memory}}}, every component of
+#               components in every row; an option without a row (custom) sizes nothing
+#
 # The rules list (ADR 0021) holds the L2 rules: a finding on field while every when holds.
 #   severity  warning (shown, never blocks) | error (blocks generate)
 #   stage     the stage that shows field; it labels and links the finding
@@ -38,7 +49,7 @@
 #             is not the resolved host foundation. Neither kind reads features: every host renders whatever the role
 chart: data-space-connector
 version: 10.16.0
-revision: 11
+revision: 12
 topLevelKeys: [
   nameOverride, fullnameOverride, imagePullSecrets, issuance, decentralizedIam, scorpio, elsi,
   keycloak, tm-forum-api, statusListServer, rainbow, contract-management, did, registration,
@@ -326,6 +337,58 @@ rules:
       The DID resolves on another host than the one serving its DID document. Pin the DID document host to the
       DID's host, or reset the DID to derived.
     doc: doc/deployment-integration/roles/provider/README.md#did-and-key-management
+resources:
+  answer: resources.profile
+  measuredOn: 10.13.2
+  doc: doc/deployment-integration/roles/PREREQUISITES.md#sizing
+  components:
+    # keycloak.resources is already set in the umbrella values.yaml (500Mi/0.5 -> 2Gi/1): OOMs on kernel >= 6.14.
+    - {id: keycloak, label: Keycloak, path: keycloak.resources,
+       enabledKeys: {keycloak.enabled: true}, chartMemoryLimit: 2Gi}
+    - {id: scorpio, label: Scorpio, path: scorpio.resources,
+       enabledKeys: {scorpio.enabled: true}}
+    - {id: tmforum, label: TMForum API, path: tm-forum-api.defaultConfig.resources,
+       enabledKeys: {tm-forum-api.enabled: true}}
+    - {id: til, label: Trusted Issuers List,
+       path: decentralizedIam.vcAuthentication.trusted-issuers-list.deployment.resources,
+       enabledKeys: {decentralizedIam.enabled: true, decentralizedIam.vcAuthentication.enabled: true,
+                     decentralizedIam.vcAuthentication.trusted-issuers-list.enabled: true}}
+    - {id: contractManagement, label: contract-management, path: contract-management.deployment.resources,
+       enabledKeys: {contract-management.enabled: true}}
+  # Not JVM, so not listed: odrl-pap (Quarkus native), verifier, vc-operator, did-helper, Rainbow, the
+  # status-list-server, consent-owner-resolver (native), the marketplace (Node/Python) and the dashboard.
+  unsized:
+    - {id: ccs, label: credentials-config-service,
+       path: decentralizedIam.vcAuthentication.credentials-config-service.deployment.resources,
+       enabledKeys: {decentralizedIam.enabled: true, decentralizedIam.vcAuthentication.enabled: true,
+                     decentralizedIam.vcAuthentication.credentials-config-service.enabled: false}}
+    - {id: dss, label: DSS validation service, path: decentralizedIam.vcAuthentication.dss.deployment.resources,
+       enabledKeys: {decentralizedIam.enabled: true, decentralizedIam.vcAuthentication.enabled: true,
+                     decentralizedIam.vcAuthentication.dss.enabled: false}}
+    - {id: consentFacade, label: consent-facade, path: consent-facade.deployment.resources,
+       enabledKeys: {consent-facade.enabled: false}}
+    - {id: identityhub, label: IdentityHub, path: identityhub.resources,
+       enabledKeys: {identityhub.enabled: false}, chartMemoryLimit: 512Mi}
+    # fdsc-edc renders one Deployment per key of fdsc-edc.deployment, each merged over fdsc-edc.common.deployment.
+    - {id: edc, label: fdsc-edc, path: fdsc-edc.deployment.*.deployment.resources,
+       fallbackPaths: [fdsc-edc.common.deployment.resources], enabledKeys: {fdsc-edc.enabled: true}}
+  # Memory floors at rest on 10.13.2: Keycloak 0.6 GiB, Scorpio 0.4, TMForum API 0.35, TIL 0.2, contract-management 0.2.
+  # development: memory request = floor rounded up to 256Mi, limit = 2x the request.
+  # production: memory request = limit = 2.5x the floor rounded up to 512Mi, so the pod is not evicted first.
+  # Neither lowers the chart's Keycloak limit of 2Gi. CPU limits leave room for the JVM's start-up burst.
+  profiles:
+    development:
+      keycloak: {requests: {cpu: 100m, memory: 768Mi}, limits: {cpu: "1", memory: 2Gi}}
+      scorpio: {requests: {cpu: 100m, memory: 512Mi}, limits: {cpu: 1500m, memory: 1Gi}}
+      tmforum: {requests: {cpu: 100m, memory: 512Mi}, limits: {cpu: "1", memory: 1Gi}}
+      til: {requests: {cpu: 50m, memory: 256Mi}, limits: {cpu: 500m, memory: 512Mi}}
+      contractManagement: {requests: {cpu: 50m, memory: 256Mi}, limits: {cpu: 500m, memory: 512Mi}}
+    production:
+      keycloak: {requests: {cpu: 500m, memory: 2Gi}, limits: {cpu: "2", memory: 2Gi}}
+      scorpio: {requests: {cpu: 250m, memory: 1Gi}, limits: {cpu: "2", memory: 1Gi}}
+      tmforum: {requests: {cpu: 250m, memory: 1Gi}, limits: {cpu: "2", memory: 1Gi}}
+      til: {requests: {cpu: 100m, memory: 512Mi}, limits: {cpu: "1", memory: 512Mi}}
+      contractManagement: {requests: {cpu: 100m, memory: 512Mi}, limits: {cpu: "1", memory: 512Mi}}
 foundations:
   - id: org.displayName
     stage: foundations
@@ -776,3 +839,23 @@ foundations:
     label: Register at the Trust Anchor automatically
     help: Whether the data space registers new participants at its Trust Anchor, or the operator does it by hand.
     doc: doc/deployment-integration/roles/operator/README.md#participant-onboarding
+  - id: resources.profile
+    stage: foundations
+    group: platform
+    type: choice
+    default: "{{ .target.environment }}"
+    label: Resource profile
+    help: >-
+      The CPU and memory requests and limits of the Java components. It follows the environment chosen on Target
+      unless you pick another.
+    doc: doc/deployment-integration/roles/PREREQUISITES.md#set-memory-limits-on-the-java-components
+    options:
+      - value: development
+        label: Development
+        note: Small requests that fit a single node, with limits that leave room for the JVM's start-up.
+      - value: production
+        label: Production
+        note: Memory request equal to the limit, so the scheduler reserves what the JVM may take.
+      - value: custom
+        label: Custom
+        note: Leaves the chart's defaults; you size the components yourself.

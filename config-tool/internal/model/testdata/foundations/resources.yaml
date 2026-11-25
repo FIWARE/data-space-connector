@@ -1,0 +1,38 @@
+# A resource profile defaulting from the reserved target.environment, and the smallest valid resources table.
+chart: data-space-connector
+version: 1.0.0
+revision: 1
+topLevelKeys: [keycloak, scorpio, fdsc-edc]
+foundations:
+  - id: org.name
+    stage: foundations
+    type: string
+    label: Name
+  - id: resources.profile
+    stage: foundations
+    group: platform
+    type: choice
+    default: "{{ .target.environment }}"
+    label: Resource profile
+    options:
+      - {value: development, label: Development}
+      - {value: production, label: Production}
+      - {value: custom, label: Custom}
+resources:
+  answer: resources.profile
+  measuredOn: 1.0.0
+  doc: doc/sizing.md
+  components:
+    - {id: keycloak, label: Keycloak, path: keycloak.resources, enabledKeys: {keycloak.enabled: true},
+       chartMemoryLimit: 2Gi}
+    - {id: scorpio, label: Scorpio, path: scorpio.resources, enabledKeys: {scorpio.enabled: true}}
+  unsized:
+    - {id: edc, label: fdsc-edc, path: fdsc-edc.deployment.*.deployment.resources,
+       fallbackPaths: [fdsc-edc.common.deployment.resources], enabledKeys: {fdsc-edc.enabled: true}}
+  profiles:
+    development:
+      keycloak: {requests: {cpu: 100m, memory: 768Mi}, limits: {cpu: "1", memory: 2Gi}}
+      scorpio: {requests: {cpu: 100m, memory: 512Mi}, limits: {cpu: 1500m, memory: 1Gi}}
+    production:
+      keycloak: {requests: {cpu: 500m, memory: 2Gi}, limits: {cpu: "2", memory: 2Gi}}
+      scorpio: {requests: {cpu: 250m, memory: 1Gi}, limits: {cpu: "2", memory: 1Gi}}

@@ -3,7 +3,7 @@ format: 1
 model:
   chart: data-space-connector
   version: 10.16.0
-  revision: 11
+  revision: 12
 target:
   type: cluster
   context: k3s

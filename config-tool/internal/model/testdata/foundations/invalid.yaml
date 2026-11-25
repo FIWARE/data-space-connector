@@ -221,3 +221,23 @@
     - {id: a, stage: foundations, type: string, label: A}
     - {id: b, stage: foundations, type: bool, label: B}
     - {id: c, stage: foundations, type: string, label: C, default: "x-{{ .a }}", defaultWhen: {id: b, equals: "true"}}
+- name: target reads the reserved environment
+  err: 'args[0] references the reserved target.environment, which only a default may read'
+  foundations:
+    - {id: a, stage: foundations, type: string, label: A, targets: [{path: keycloak.a, fn: tpl, args: ["{{ .target.environment }}"]}]}
+- name: prefix reads the reserved environment
+  err: 'prefix references the reserved target.environment, which only a default may read'
+  foundations:
+    - {id: a, stage: foundations, type: string, label: A, prefix: "{{ .target.environment }}"}
+- name: id is the reserved environment
+  err: 'id "target.environment" collides with the reserved ref target.environment'
+  foundations:
+    - {id: target.environment, stage: foundations, type: string, label: A}
+- name: id is a parent of the reserved environment
+  err: 'id "target" collides with the reserved ref target.environment'
+  foundations:
+    - {id: target, stage: foundations, type: string, label: A}
+- name: id nests under the reserved environment
+  err: 'id "target.environment.x" collides with the reserved ref target.environment'
+  foundations:
+    - {id: target.environment.x, stage: foundations, type: string, label: A}
