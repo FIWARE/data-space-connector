@@ -2,17 +2,18 @@
 import { useEffect, useRef, useState } from 'react'
 import { fetchFoundations, type Foundation } from '../api/foundations'
 import { toProfile } from '../api/profile'
-import { fetchRender, type Change, type ChangeGroup, type Finding } from '../api/render'
+import { fetchRender, type AnswerDiff, type Change, type ChangeGroup, type Finding } from '../api/render'
 import { AskLater } from '../chrome/AskLater'
 import { PUBLIC_NAMES_URL } from '../links'
 import { useStore } from '../state/context'
-import { answerErrors, defaultApplies, defaultValue, resolvedAnswer, textAnswer, validAnswers } from '../state/foundations'
+import { answerErrors, defaultApplies, defaultValue, featureOff, resolvedAnswer, textAnswer, validAnswers } from '../state/foundations'
 import { answerFieldId, fieldElementId, fieldStage } from '../state/openQuestions'
 import { StageId } from '../state/stageIds'
-import { AnswerField, DocLink, FieldNotes, UsedBy } from './AnswerField'
+import { AnswerField, FieldNotes } from './AnswerField'
 import { DataSpacePanel } from './DataSpacePanel'
 import { DerivedAnswers } from './DerivedAnswers'
 import { describedBy } from './foundationText'
+import { PINNED_LABEL, wouldDerive } from './handSetText'
 
 /** Pause after the last keystroke before the answers are rendered again. */
 export const RENDER_DEBOUNCE_MS = 300
@@ -20,21 +21,24 @@ export const RENDER_DEBOUNCE_MS = 300
 export const FOUNDATIONS_HEADING = 'Foundations — asked once, used everywhere'
 export const ORGANIZATION_PANEL = 'Organization'
 export const NETWORK_PANEL = 'Network'
-export const HOSTS_HEADING = 'Host names, derived from the base domain'
+export const HOSTS_HEADING = 'Host names, derived from the base domain; each can be overridden'
 export const HOSTS_PENDING = 'Derived once the base domain is answered.'
 export const DERIVED_PENDING = 'Derived once the answers it comes from are given.'
 export const DERIVED_BADGE = 'derived'
 export const EDIT_LABEL = 'Edit'
-export const HOSTS_EDIT_HINT = 'Editing a single host comes with a later release.'
+/** Badge of a given answer that no longer follows the answers it would derive from. */
+export const PINNED_BADGE = 'pinned'
 export const RESOLVE_WARNING = '⚠ These names are called from inside the cluster as well as from outside. Check that they resolve to the ingress from a pod.'
 export const RESOLVE_LINK = 'Why, and how ↗'
 export const DIFF_HEADING = 'What the last edit changed'
-export const PINNED_LABEL = 'pinned, not updated'
+export const REDERIVED_HEADING = 'Re-derived'
+export const PINNED_HEADING = 'Pinned, not updated'
 export const LOADED_HINT = 'Found in the loaded file, which keeps them while the fields above are unanswered.'
 const NOT_SET = '—'
+const NO_DERIVED_CHANGE: AnswerDiff = { rederived: [], pinned: [] }
 
 function shown(value: unknown): string {
-  if (value === undefined) return NOT_SET
+  if (value === undefined || value === null || value === '') return NOT_SET
   return typeof value === 'string' ? value : JSON.stringify(value)
 }
 
@@ -74,9 +78,9 @@ function ChoiceField({ foundation, findings }: { foundation: Foundation; finding
   )
 }
 
-/** An answer with a default: the derived value with "Edit" while none is given, else the input with "Reset to derived".
- *  Where the default does not apply (e.g. its condition fails) the input is asked for directly. */
-function DerivedField({ foundation, findings }: { foundation: Foundation; findings: readonly Finding[] }) {
+/** An answer with a default: the derived value with "Edit" while none is given, else the input with "Reset to derived";
+ *  a given answer is pinned. Where the default does not apply (e.g. its condition fails) the input is asked for directly. */
+function DerivedField({ foundation, findings, pending = DERIVED_PENDING }: { foundation: Foundation; findings: readonly Finding[]; pending?: string }) {
   const { state, dispatch } = useStore()
   const [editing, setEditing] = useState(false)
   // Text typed while editing that is not an answer (yet): empty. Undefined shows the derived value.
@@ -119,7 +123,12 @@ function DerivedField({ foundation, findings }: { foundation: Foundation; findin
       dispatch({ type: 'setAnswer', id: foundation.id, value: same ? '' : value })
     }
     const text = given ?? draft ?? derived ?? ''
-    return <AnswerField foundation={foundation} findings={findings} reset={reset} value={text} onChange={change} />
+    return (
+      <AnswerField foundation={foundation} findings={findings} reset={reset} value={text} onChange={change}>
+        {given !== undefined && <span className="deliberate">{PINNED_BADGE}</span>}
+        {given !== undefined && derived !== undefined && derived !== given && <span className="hint">{wouldDerive(derived)}</span>}
+      </AnswerField>
+    )
   }
   const edit = () => setEditing(true)
   const own = findings.filter((f) => f.field === field)
@@ -128,7 +137,7 @@ function DerivedField({ foundation, findings }: { foundation: Foundation; findin
       <label htmlFor={id}>{foundation.label}</label>
       {/* tabIndex lets a Review link focus the value while it is derived. */}
       <output id={id} tabIndex={-1} aria-describedby={describedBy(id, undefined, own)}>
-        {derived ?? <span className="hint">{DERIVED_PENDING}</span>}
+        {derived ?? <span className="hint">{pending}</span>}
       </output>
       {derived !== undefined && <span className="deliberate">{DERIVED_BADGE}</span>}
       <button type="button" className="link" aria-label={`${EDIT_LABEL} ${foundation.label}`} onClick={edit}>
@@ -147,28 +156,25 @@ function OrganizationField({ foundation, findings }: { foundation: Foundation; f
   return <AnswerField foundation={foundation} findings={findings} />
 }
 
-/** The derived hosts, read-only with the value they render to. */
-function Hosts({ hosts }: { hosts: readonly Foundation[] }) {
+/** The derived hosts, each editable (pinned) and resettable. A host with a feature off is hidden unless it is pinned,
+ *  marked for later or named by a finding, so Reset and the links from Review still reach it. */
+function Hosts({ hosts, findings }: { hosts: readonly Foundation[]; findings: readonly Finding[] }) {
   const { state } = useStore()
-  // Only what the render is sent, so an invalid base domain shows the hosts as pending rather than a value never written.
-  const values = validAnswers(state.answers.values, state.foundations)
+  const shown = hosts.filter((h) => {
+    const field = answerFieldId(h.id)
+    return (
+      !featureOff(h, state.answers) ||
+      state.answers.values[h.id] !== undefined ||
+      state.open.includes(field) ||
+      findings.some((f) => f.field === field || f.related === field)
+    )
+  })
   return (
     <div role="group" aria-labelledby="foundations-hosts">
       <h4 id="foundations-hosts">{HOSTS_HEADING}</h4>
-      <table className="hosts">
-        <tbody>
-          {hosts.map((h) => (
-            <tr key={h.id}>
-              <th scope="row">{h.label}</th>
-              <td>{resolvedAnswer(h.id, values, state.foundations ?? []) ?? <span className="hint">{HOSTS_PENDING}</span>}</td>
-              <td>
-                <DocLink foundation={h} /> <UsedBy foundation={h} />
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      <p className="hint">{HOSTS_EDIT_HINT}</p>
+      {shown.map((h) => (
+        <DerivedField key={h.id} foundation={h} findings={findings} pending={HOSTS_PENDING} />
+      ))}
       <p className="hint">
         {RESOLVE_WARNING}{' '}
         <a href={PUBLIC_NAMES_URL} target="_blank" rel="noreferrer">
@@ -195,15 +201,52 @@ function ChangeItem({ change }: { change: Change }) {
   )
 }
 
-/** The grouped diff of the last render against the one before it. */
-function RenderDiff({ groups, foundations }: { groups: readonly ChangeGroup[]; foundations: readonly Foundation[] }) {
-  if (groups.length === 0) return null
+function labelOf(foundations: readonly Foundation[], id: string): string {
+  return foundations.find((f) => f.id === id)?.label ?? id
+}
+
+/** The derived answers the last edit moved, then the given ones it left: *pinned, not updated*. */
+function DerivedDiff({ derived, foundations }: { derived: AnswerDiff; foundations: readonly Foundation[] }) {
+  return (
+    <>
+      {derived.rederived.length > 0 && (
+        <div role="group" aria-labelledby="foundations-rederived">
+          <h4 id="foundations-rederived">{REDERIVED_HEADING}</h4>
+          <ul>
+            {derived.rederived.map((c) => (
+              <li key={c.id}>
+                {labelOf(foundations, c.id)}: {shown(c.before)} → {shown(c.after)}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {derived.pinned.length > 0 && (
+        <div role="group" aria-labelledby="foundations-pinned">
+          <h4 id="foundations-pinned">{PINNED_HEADING}</h4>
+          <ul>
+            {derived.pinned.map((p) => (
+              <li key={p.id} className="pinned">
+                {labelOf(foundations, p.id)}: keeps {shown(p.kept)}, would have become {shown(p.after)}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </>
+  )
+}
+
+/** The diff of the last render against the one before it: derived answers first, then the leaves by foundation. */
+function RenderDiff({ groups, derived, foundations }: { groups: readonly ChangeGroup[]; derived: AnswerDiff; foundations: readonly Foundation[] }) {
+  if (groups.length + derived.rederived.length + derived.pinned.length === 0) return null
   return (
     <div className="panel" role="group" aria-labelledby="foundations-diff">
       <h3 id="foundations-diff">{DIFF_HEADING}</h3>
+      <DerivedDiff derived={derived} foundations={foundations} />
       {groups.map((g) => (
-        <div key={g.foundation} role="group" aria-label={foundations.find((f) => f.id === g.foundation)?.label ?? g.foundation}>
-          <h4>{foundations.find((f) => f.id === g.foundation)?.label ?? g.foundation}</h4>
+        <div key={g.foundation} role="group" aria-label={labelOf(foundations, g.foundation)}>
+          <h4>{labelOf(foundations, g.foundation)}</h4>
           <ul>
             {g.changes.map((c) => (
               <ChangeItem key={c.path} change={c} />
@@ -215,9 +258,10 @@ function RenderDiff({ groups, foundations }: { groups: readonly ChangeGroup[]; f
   )
 }
 
-/** What the last render of the answers left: its diff (none for the baseline), its findings and a refusal. */
+/** What the last render of the answers left: its diffs (none for the baseline), its findings and a refusal. */
 interface RenderState {
   groups: readonly ChangeGroup[]
+  derived: AnswerDiff
   findings: readonly Finding[]
   error?: string
 }
@@ -229,7 +273,7 @@ function useRenderDiff(): RenderState {
   const values = state.answers.values
   const latest = useRef(state)
   const started = useRef(false)
-  const [result, setResult] = useState<RenderState>({ groups: [], findings: [] })
+  const [result, setResult] = useState<RenderState>({ groups: [], derived: NO_DERIVED_CHANGE, findings: [] })
 
   useEffect(() => {
     latest.current = state
@@ -244,7 +288,11 @@ function useRenderDiff(): RenderState {
         fetchRender(toProfile(latest.current), latest.current.loaded?.sha256, controller.signal).then(
           (r) => {
             started.current = true
-            setResult((prev) => ({ groups: baseline ? prev.groups : r.diff.groups, findings: r.findings }))
+            setResult((prev) => ({
+              groups: baseline ? prev.groups : r.diff.groups,
+              derived: baseline ? prev.derived : r.derived,
+              findings: r.findings,
+            }))
           },
           (err: Error) => controller.signal.aborted || setResult((prev) => ({ ...prev, error: err.message })),
         ),
@@ -274,7 +322,8 @@ export function Foundations() {
     return () => controller.abort()
   }, [chart, chartVersion, dispatch])
 
-  // A Review link may arrive before the foundations, so the field is focused once its input exists.
+  // A Review link may arrive before the foundations, or before the findings that show a hidden host,
+  // so the field is focused once its input exists.
   useEffect(() => {
     if (!state.focus || fieldStage(state.focus) !== StageId.Foundations) return
     const input = document.getElementById(fieldElementId(state.focus))
@@ -282,7 +331,7 @@ export function Foundations() {
     input.scrollIntoView({ block: 'center' })
     input.focus({ preventScroll: true })
     dispatch({ type: 'focusDone' })
-  }, [state.focus, state.foundations, dispatch])
+  }, [state.focus, state.foundations, diff.findings, dispatch])
 
   const foundations = state.foundations ?? []
   const organization = foundations.filter((f) => f.group === 'organization')
@@ -309,7 +358,7 @@ export function Foundations() {
           {network.map((f) => (
             <AnswerField key={f.id} foundation={f} findings={diff.findings} />
           ))}
-          {hosts.length > 0 && <Hosts hosts={hosts} />}
+          {hosts.length > 0 && <Hosts hosts={hosts} findings={diff.findings} />}
         </div>
       )}
       {diff.error && (
@@ -317,7 +366,7 @@ export function Foundations() {
           {diff.error}
         </p>
       )}
-      <RenderDiff groups={diff.groups} foundations={foundations} />
+      <RenderDiff groups={diff.groups} derived={diff.derived} foundations={foundations} />
       <DerivedAnswers stage={StageId.Foundations} hint={LOADED_HINT} />
     </section>
   )

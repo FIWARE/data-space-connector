@@ -2,7 +2,7 @@ import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
 import type { Foundation } from '../api/foundations'
-import type { RenderResult } from '../api/render'
+import type { Finding, RenderResult } from '../api/render'
 import { Chrome } from '../chrome/Chrome'
 import { PUBLIC_NAMES_URL, repositoryDocUrl } from '../links'
 import { STAGES } from '../stages'
@@ -19,11 +19,15 @@ import {
   DIFF_HEADING,
   EDIT_LABEL,
   FOUNDATIONS_HEADING,
+  HOSTS_HEADING,
   HOSTS_PENDING,
-  PINNED_LABEL,
+  PINNED_BADGE,
+  PINNED_HEADING,
+  REDERIVED_HEADING,
   RENDER_DEBOUNCE_MS,
   RESOLVE_LINK,
 } from './Foundations'
+import { PINNED_LABEL, wouldDerive } from './handSetText'
 
 function foundation(id: string): Foundation {
   const found = FOUNDATIONS.foundations.find((f) => f.id === id)
@@ -43,7 +47,7 @@ const ON_FOUNDATIONS: AppState = {
   entered: true,
   stage: StageId.Foundations,
   visited: [StageId.Target, StageId.Role, StageId.Foundations],
-  answers: { ...initialState.answers, role: 'provider' },
+  answers: { ...initialState.answers, role: 'provider', features: { 'identity.issuer': { enabled: true, source: 'preset' } } },
 }
 
 function renderFoundations(state: AppState = ON_FOUNDATIONS, foundations: FoundationFakes = {}) {
@@ -82,17 +86,17 @@ describe('Foundations', () => {
 
   it('derives the hosts from the base domain once it is answered', async () => {
     renderFoundations()
-    const hosts = within(await screen.findByRole('group', { name: /Host names/ }))
-    expect(hosts.getByRole('row', { name: new RegExp(KEYCLOAK_HOST.label) })).toHaveTextContent(HOSTS_PENDING)
+    const hosts = within(await screen.findByRole('group', { name: HOSTS_HEADING }))
+    expect(hosts.getByLabelText(KEYCLOAK_HOST.label)).toHaveTextContent(HOSTS_PENDING)
     await userEvent.type(await domainInput(), BASE)
-    expect(hosts.getByRole('row', { name: new RegExp(KEYCLOAK_HOST.label) })).toHaveTextContent(`keycloak.${BASE}`)
+    expect(hosts.getByLabelText(KEYCLOAK_HOST.label)).toHaveTextContent(`keycloak.${BASE}`)
   })
 
   it('shows the hosts as pending while the base domain is invalid, as the render writes none', async () => {
     renderFoundations()
-    const hosts = within(await screen.findByRole('group', { name: /Host names/ }))
+    const hosts = within(await screen.findByRole('group', { name: HOSTS_HEADING }))
     await userEvent.type(await domainInput(), 'Example.org')
-    expect(hosts.getByRole('row', { name: new RegExp(KEYCLOAK_HOST.label) })).toHaveTextContent(HOSTS_PENDING)
+    expect(hosts.getByLabelText(KEYCLOAK_HOST.label)).toHaveTextContent(HOSTS_PENDING)
   })
 
   it.each([
@@ -192,6 +196,75 @@ describe('Foundations', () => {
     const item = (await screen.findByText(PINNED_LABEL)).closest('li')
     expect(item).toHaveTextContent(FRONTEND_URL)
     expect(item).toHaveTextContent(`keeps https://idp.hand.org, would have become https://keycloak.${BASE}`)
+  })
+
+  describe('hosts', () => {
+    const HAND_HOST = 'idp.hand.org'
+    const withValues = (values: Record<string, string>, features = ON_FOUNDATIONS.answers.features): AppState => ({
+      ...ON_FOUNDATIONS,
+      answers: { ...ON_FOUNDATIONS.answers, values, features },
+    })
+    const hostsGroup = async () => within(await screen.findByRole('group', { name: HOSTS_HEADING }))
+    const hostInput = () => screen.getByRole('textbox', { name: KEYCLOAK_HOST.label })
+    const lastAnswers = (fetchMock: ReturnType<typeof renderFoundations>) => {
+      const renders = fetchMock.mock.calls.filter(([url]) => url === '/api/render')
+      return (JSON.parse(String((renders.at(-1)?.[1] as RequestInit).body)) as RenderBody).profile.answers
+    }
+
+    it('pins an edited host and sends it as an answer', async () => {
+      const fetchMock = renderFoundations(withValues({ 'domain.base': BASE }))
+      const hosts = await hostsGroup()
+      await userEvent.click(hosts.getByRole('button', { name: `${EDIT_LABEL} ${KEYCLOAK_HOST.label}` }))
+      await userEvent.clear(hostInput())
+      await userEvent.type(hostInput(), HAND_HOST)
+      expect(hosts.getByText(PINNED_BADGE)).toBeInTheDocument()
+      expect(hosts.getByText(wouldDerive(`keycloak.${BASE}`))).toBeInTheDocument()
+      await waitFor(() => expect(lastAnswers(fetchMock)).toEqual({ 'domain.base': BASE, 'host.keycloak': HAND_HOST }))
+    })
+
+    it('resets a pinned host to the value it derives and drops the answer', async () => {
+      const fetchMock = renderFoundations(withValues({ 'domain.base': BASE, 'host.keycloak': HAND_HOST }))
+      const hosts = await hostsGroup()
+      expect(hostInput()).toHaveValue(HAND_HOST)
+      await userEvent.click(hosts.getByRole('button', { name: RESET_LABEL }))
+      expect(hosts.getByLabelText(KEYCLOAK_HOST.label)).toHaveTextContent(`keycloak.${BASE}`)
+      expect(hosts.queryByText(PINNED_BADGE)).not.toBeInTheDocument()
+      await waitFor(() => expect(lastAnswers(fetchMock)).toEqual({ 'domain.base': BASE }))
+    })
+
+    it.each<[string, Record<string, string>, string, string]>([
+      ['re-derives an unpinned host', {}, REDERIVED_HEADING, `${KEYCLOAK_HOST.label}: keycloak.${OLD_BASE} → keycloak.${BASE}`],
+      [
+        'keeps a pinned host and names what it would have become',
+        { 'host.keycloak': HAND_HOST },
+        PINNED_HEADING,
+        `${KEYCLOAK_HOST.label}: keeps ${HAND_HOST}, would have become keycloak.${BASE}`,
+      ],
+    ])('on a domain change %s', async (_name, pinned, heading, line) => {
+      const fetchMock = renderFoundations(withValues({ 'domain.base': OLD_BASE, ...pinned }))
+      await waitFor(() => expect(fetchMock.mock.calls.filter(([url]) => url === '/api/render')).toHaveLength(1))
+      await userEvent.clear(await domainInput())
+      await userEvent.type(await domainInput(), BASE)
+      const diff = within(await screen.findByRole('group', { name: DIFF_HEADING }))
+      expect(diff.getByRole('group', { name: heading })).toHaveTextContent(line)
+    })
+
+    const OFF = {}
+    const COLLISION = { ...DOMAIN_WARNING, rule: 'host-collision', severity: 'error' as const, message: 'Two components share a host.' }
+    it.each<[string, Record<string, string>, readonly Finding[], boolean]>([
+      ['hides a host whose feature is off', { 'domain.base': BASE }, [], false],
+      ['shows a pinned host whose feature is off', { 'domain.base': BASE, 'host.keycloak': HAND_HOST }, [], true],
+      ['shows a host whose feature is off while a finding names it', { 'domain.base': BASE }, [{ ...COLLISION, field: 'answers.host.keycloak' }], true],
+      ['shows a host whose feature is off while a finding relates to it', { 'domain.base': BASE }, [{ ...COLLISION, related: 'answers.host.keycloak' }], true],
+    ])('%s', async (_name, values, findings, visible) => {
+      renderFoundations(withValues(values, OFF), { render: renderWithFindings([...findings]) })
+      const hosts = await hostsGroup()
+      if (visible) expect(await hosts.findByText(KEYCLOAK_HOST.label)).toBeInTheDocument()
+      else {
+        await pastDebounce()
+        expect(hosts.queryByText(KEYCLOAK_HOST.label)).not.toBeInTheDocument()
+      }
+    })
   })
 
   describe('findings', () => {

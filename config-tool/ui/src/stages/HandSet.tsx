@@ -1,8 +1,8 @@
-/** S7 Review's "Set by hand" section: answers given in place of their derived default, which no longer follow it. */
+/** S7 Review's "Set by hand" section: answers given in place of their derived default, pinned, not updated. */
 import type { HandSetAnswer } from '../api/render'
 import { useStore } from '../state/context'
 import { answerFieldId, fieldLabel } from '../state/openQuestions'
-import { HAND_SET_HEADING, HAND_SET_HINT, wouldDerive } from './handSetText'
+import { HAND_SET_HEADING, HAND_SET_HINT, PINNED_LABEL, wouldDerive } from './handSetText'
 
 /** The section, rendered only when an answer is set by hand or the render failed. */
 export function HandSet({ entries, error }: { entries: readonly HandSetAnswer[]; error?: string }) {
@@ -26,6 +26,7 @@ export function HandSet({ entries, error }: { entries: readonly HandSetAnswer[];
                 <li key={entry.id}>
                   <span>{label}</span>
                   <code>{String(entry.value)}</code>
+                  <span className="deliberate">{PINNED_LABEL}</span>
                   {entry.derived !== '' && entry.derived !== entry.value && <span className="stage">{wouldDerive(entry.derived)}</span>}
                   <button type="button" className="link" aria-label={`Go to ${label}`} onClick={() => dispatch({ type: 'focusField', field })}>
                     go ↗
