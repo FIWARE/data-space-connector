@@ -225,10 +225,15 @@ pom.xml                       # drives local-deploy + integration tests
   profile field); `render.HandSet` already lists them. New: `host.verifier`/`host.did`, a display-only `feature:` gate on
   foundations (render gating stays US-5.3), `render.DerivedDiff` (re-derived vs. *pinned, not updated*), and a `distinct`
   rule kind for the `host-collision` error. No path-prefix scheme: `<component>.<base>` only.
-- US-3.5 (#129, planned, see `IMPLEMENTATION_PLAN.md`, ADR 0024): `resources.profile` (group `platform`, default
+- US-3.5 (#129, shipped, ADR 0024): `resources.profile` (group `platform`, default
   `{{ .target.environment }}`, a reserved read-only ref) plus a bundle `resources:` table compiled into `Only` targets;
   `custom` renders nothing. A `memoryLimit` rule kind (with `when`) warns in production; `check.Evaluate` takes
   `render.Options`. Figures derive from PREREQUISITES.md#sizing (measured on 10.13.2).
+- US-3.6 (#130, planned, see `IMPLEMENTATION_PLAN.md`, ADR 0025): `proxy.{https,http,no}` and `ca.privateSecret`
+  (group `egress`). Most targets are list elements, so the render gains keyed elements (`lists:` table with the chart's
+  base elements), `each` targets (APISIX `proxy_opts` in existing routes only), `requires` and the reserved refs
+  `target.release`/`target.namespace`. One PEM Secret, key `ca.crt`. Keycloak trusts it via `truststore-paths` (not
+  `tls.truststore*`, which is inbound mTLS only). No option ever disables TLS verification.
 
 ## Documentation
 
