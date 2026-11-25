@@ -18,7 +18,7 @@ export interface FoundationOption {
 }
 
 /** The Stage 3 panel that asks a foundation, mirroring `model.FoundationGroup`. */
-export type FoundationGroup = 'organization' | 'dataspace' | 'network'
+export type FoundationGroup = 'organization' | 'dataspace' | 'network' | 'platform'
 
 /** Holds while the resolved answer `id` equals `equals`, mirroring `model.Condition`. */
 export interface Condition {
@@ -58,9 +58,59 @@ export interface Foundation {
   features: string[]
 }
 
+/** Kubernetes quantities as the chart receives them, mirroring `model.ResourceQuantities`. */
+export interface ResourceQuantities {
+  cpu: string
+  memory: string
+}
+
+/** What a profile renders for one component, mirroring `model.ResourceSpec`. */
+export interface ResourceSpec {
+  requests: ResourceQuantities
+  limits: ResourceQuantities
+}
+
+/** One component a resource profile sizes; `path` is its resources block. */
+export interface ResourceComponent {
+  id: string
+  label: string
+  path: string
+}
+
+/** The bundle's resources table as the server's `resourcesBody` previews it (ADR 0024). */
+export interface ResourceTable {
+  /** The choice foundation whose resolved value selects a profile. */
+  answer: string
+  /** Chart version the figures were measured on. */
+  measuredOn: string
+  /** Repo-relative doc path of the sizing guidance. */
+  doc: string
+  components: ResourceComponent[]
+  /** Spec by profile, then component id; a choice value without a row (`custom`) renders nothing. */
+  profiles: Record<string, Record<string, ResourceSpec>>
+}
+
+/** A component with the figures a profile gives it. */
+export interface ResourceRow {
+  component: ResourceComponent
+  spec: ResourceSpec
+}
+
+/** The rows `profile` renders, in table order; undefined when the table has no such profile, so it sets nothing. */
+export function resourceRows(table: ResourceTable, profile: string): ResourceRow[] | undefined {
+  const specs = Object.hasOwn(table.profiles, profile) ? table.profiles[profile] : undefined
+  if (specs === undefined) return undefined
+  return table.components.flatMap((component) => {
+    const spec = specs[component.id]
+    return spec === undefined ? [] : [{ component, spec }]
+  })
+}
+
 /** Answer of GET /api/foundations. */
 export interface FoundationList {
   foundations: Foundation[]
+  /** Null for a bundle that sizes nothing. */
+  resources: ResourceTable | null
 }
 
 /** GET /api/foundations; an empty `version` means the chart's latest. 404 for a chart or version without a bundle. */

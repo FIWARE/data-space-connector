@@ -199,3 +199,73 @@ func TestFoundationsResourceProfile(t *testing.T) {
 			id, f.Group, f.Count, len(f.Targets), f.Components, targets, components)
 	}
 }
+
+func TestFoundationsResources(t *testing.T) {
+	type quantities struct {
+		CPU    string `json:"cpu"`
+		Memory string `json:"memory"`
+	}
+	type spec struct {
+		Requests quantities `json:"requests"`
+		Limits   quantities `json:"limits"`
+	}
+	type table struct {
+		Answer     string `json:"answer"`
+		MeasuredOn string `json:"measuredOn"`
+		Doc        string `json:"doc"`
+		Components []struct {
+			ID    string `json:"id"`
+			Label string `json:"label"`
+			Path  string `json:"path"`
+		} `json:"components"`
+		Profiles map[string]map[string]spec `json:"profiles"`
+	}
+	ps := newProfileSession(t)
+	taVersion := latestBundle(t, mustBundles(t, ps.srv), trustAnchorChart).Version
+	tests := []struct {
+		name  string
+		path  string
+		check func(t *testing.T, got *table)
+	}{
+		{name: "DSC previews the components, not the unsized ones", path: foundationsPath(dscChart, latestChart), check: func(t *testing.T, got *table) {
+			if got == nil {
+				t.Fatal("resources = null, want the table")
+			}
+			var ids []string
+			for _, c := range got.Components {
+				if c.Label == "" || c.Path == "" {
+					t.Errorf("component %+v, want a label and a path", c)
+				}
+				ids = append(ids, c.ID)
+			}
+			wantIDs := []string{"keycloak", "scorpio", "tmforum", "til", "contractManagement"}
+			if got.Answer != "resources.profile" || got.MeasuredOn == "" || got.Doc == "" || !slices.Equal(ids, wantIDs) {
+				t.Errorf("resources = %+v, want answer resources.profile, measuredOn, doc and components %v", got, wantIDs)
+			}
+			want := spec{Requests: quantities{CPU: "500m", Memory: "2Gi"}, Limits: quantities{CPU: "2", Memory: "2Gi"}}
+			if k := got.Profiles["production"]["keycloak"]; k != want || len(got.Profiles) != 2 {
+				t.Errorf("profiles = %+v, want development and production, production keycloak %+v", got.Profiles, want)
+			}
+		}},
+		{name: "trust anchor sizes nothing", path: foundationsPath(trustAnchorChart, taVersion), check: func(t *testing.T, got *table) {
+			if got != nil {
+				t.Errorf("resources = %+v, want null", got)
+			}
+		}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			resp, raw := do(t, ps.srv, request{path: tc.path, cookie: ps.cookie})
+			if resp.StatusCode != http.StatusOK {
+				t.Fatalf("status = %d", resp.StatusCode)
+			}
+			var got struct {
+				Resources *table `json:"resources"`
+			}
+			if err := json.Unmarshal([]byte(raw), &got); err != nil {
+				t.Fatalf("body is not a foundations response: %v", err)
+			}
+			tc.check(t, got.Resources)
+		})
+	}
+}

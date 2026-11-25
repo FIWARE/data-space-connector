@@ -53,14 +53,14 @@ type ResourceComponent struct {
 
 // ResourceSpec is the requests and limits a profile renders for one component.
 type ResourceSpec struct {
-	Requests ResourceQuantities `yaml:"requests"`
-	Limits   ResourceQuantities `yaml:"limits"`
+	Requests ResourceQuantities `yaml:"requests" json:"requests"`
+	Limits   ResourceQuantities `yaml:"limits" json:"limits"`
 }
 
 // ResourceQuantities are Kubernetes quantities, kept as the strings the chart receives.
 type ResourceQuantities struct {
-	CPU    string `yaml:"cpu"`
-	Memory string `yaml:"memory"`
+	CPU    string `yaml:"cpu" json:"cpu"`
+	Memory string `yaml:"memory" json:"memory"`
 }
 
 // Component returns the entry of Components or Unsized with id.

@@ -1,6 +1,6 @@
 /** Save, open and list `.dscprofile.yaml` profiles through the loopback API (ADR 0015). */
 import { emptyAnswers, type Answers, type AnswerValue, type FeatureState, type Target } from '../state/answers'
-import { validAnswers } from '../state/foundations'
+import { reservedRefs, validAnswers } from '../state/foundations'
 import { isFieldId, type FieldId } from '../state/openQuestions'
 import type { AppState } from '../state/reducer'
 import { api } from './client'
@@ -83,7 +83,7 @@ export function toProfile(state: AppState): Profile {
     target,
     role,
     features,
-    answers: validAnswers(values, state.foundations),
+    answers: validAnswers(values, state.foundations, reservedRefs(target)),
     open: state.open.map((field) => ({ field })),
     secrets: {},
   }
