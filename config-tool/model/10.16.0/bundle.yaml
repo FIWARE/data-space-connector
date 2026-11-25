@@ -31,9 +31,14 @@
 #   field     target.environment or answers.<foundation id>, the open field the finding points at
 #   when      [{field, equals | unset: true}]: all must hold over the resolved answers, so a derived default counts;
 #             field may also be features.<feature id> (equals on|off, absent is off); unset takes answers.<id> only
+#   distinct  {prefix}, instead of field and when: an error per pair of hostname foundations whose id starts with
+#             prefix (ending in a dot) and that resolve to the same host, ignoring case and a trailing dot. The
+#             message may use {{ .first }}, {{ .second }} (the pair's labels) and {{ .host }}
+#   didWebHost {did, host}, instead of field and when: a finding when the did:web DID's host (decoded, without port)
+#             is not the resolved host foundation. Neither kind reads features: every host renders whatever the role
 chart: data-space-connector
 version: 10.16.0
-revision: 10
+revision: 11
 topLevelKeys: [
   nameOverride, fullnameOverride, imagePullSecrets, issuance, decentralizedIam, scorpio, elsi,
   keycloak, tm-forum-api, statusListServer, rainbow, contract-management, did, registration,
@@ -305,6 +310,22 @@ rules:
       The verifier cannot check issuers without the data space's Trust Anchor: credential verification is on, but
       the TIR address is not set. Enter it, import it from the data space's descriptor, or turn verification off.
     doc: doc/deployment-integration/roles/provider/README.md#vcverifier
+  - id: host-collision
+    severity: error
+    stage: foundations
+    distinct: {prefix: host.}
+    message: >-
+      {{ .first }} and {{ .second }} both resolve to {{ .host }}. The chart routes by host, so one of them stops
+      being reachable. Give one of them another host.
+    doc: doc/deployment-integration/roles/PREREQUISITES.md#public-names-have-to-resolve-inside-the-cluster
+  - id: did-web-host
+    severity: error
+    stage: foundations
+    didWebHost: {did: did.value, host: host.did}
+    message: >-
+      The DID resolves on another host than the one serving its DID document. Pin the DID document host to the
+      DID's host, or reset the DID to derived.
+    doc: doc/deployment-integration/roles/provider/README.md#did-and-key-management
 foundations:
   - id: org.displayName
     stage: foundations

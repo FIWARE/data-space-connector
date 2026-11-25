@@ -59,6 +59,8 @@ export interface Finding {
   severity: Severity
   stage: StageId
   field: string
+  /** The other field of a host-collision or did-web-host finding. */
+  related?: string
   message: string
   /** A repository-relative doc path, optionally with an anchor. */
   doc: string

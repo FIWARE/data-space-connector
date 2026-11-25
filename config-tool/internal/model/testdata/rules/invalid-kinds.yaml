@@ -1,0 +1,74 @@
+# Each case is a distinct or didWebHost rules list Versions refuses over the foundations of hosts.yaml, with a
+# fragment of the error it must report.
+- name: when and distinct
+  err: "a rule has exactly one of when, distinct and didWebHost"
+  rules:
+    - {id: r, severity: error, stage: foundations, field: answers.host.a, when: [{field: answers.host.a, unset: true}], distinct: {prefix: host.}, message: M, doc: doc/a.md}
+- name: distinct and didWebHost
+  err: "a rule has exactly one of when, distinct and didWebHost"
+  rules:
+    - {id: r, severity: error, stage: foundations, distinct: {prefix: host.}, didWebHost: {did: did.value, host: host.a}, message: M, doc: doc/a.md}
+- name: distinct with a field
+  err: "field is for when only"
+  rules:
+    - {id: r, severity: error, stage: foundations, field: answers.host.a, distinct: {prefix: host.}, message: M, doc: doc/a.md}
+- name: didWebHost with a field
+  err: "field is for when only"
+  rules:
+    - {id: r, severity: error, stage: foundations, field: answers.did.value, didWebHost: {did: did.value, host: host.a}, message: M, doc: doc/a.md}
+- name: distinct prefix not a segment
+  err: 'distinct: prefix "host" does not end in "."'
+  rules:
+    - {id: r, severity: error, stage: foundations, distinct: {prefix: host}, message: M, doc: doc/a.md}
+- name: distinct prefix missing
+  err: 'distinct: prefix "" does not end in "."'
+  rules:
+    - {id: r, severity: error, stage: foundations, distinct: {}, message: M, doc: doc/a.md}
+- name: distinct prefix matches one foundation
+  err: 'distinct: prefix "solo." matches 1 foundations, want at least 2'
+  rules:
+    - {id: r, severity: error, stage: foundations, distinct: {prefix: solo.}, message: M, doc: doc/a.md}
+- name: distinct prefix matches none
+  err: 'distinct: prefix "nothing." matches 0 foundations, want at least 2'
+  rules:
+    - {id: r, severity: error, stage: foundations, distinct: {prefix: nothing.}, message: M, doc: doc/a.md}
+- name: distinct prefix matches a non-hostname
+  err: "distinct: domain.base is of type domain, not hostname"
+  rules:
+    - {id: r, severity: error, stage: foundations, distinct: {prefix: domain.}, message: M, doc: doc/a.md}
+- name: distinct prefix matches another stage
+  err: "distinct: stage foundations is not configuration, the stage of edge.later"
+  rules:
+    - {id: r, severity: error, stage: foundations, distinct: {prefix: edge.}, message: M, doc: doc/a.md}
+- name: distinct message with an unknown key
+  err: "message: {{ .third }} is not one of first, second, host"
+  rules:
+    - {id: r, severity: error, stage: foundations, distinct: {prefix: host.}, message: "{{ .first }} and {{ .third }}", doc: doc/a.md}
+- name: distinct message with a function
+  err: "message: action {{printf \"x\"}}: only {{ .id }} is allowed"
+  rules:
+    - {id: r, severity: error, stage: foundations, distinct: {prefix: host.}, message: '{{ printf "x" }}', doc: doc/a.md}
+- name: distinct doc missing
+  err: 'doc "" is not a repo-relative path'
+  rules:
+    - {id: r, severity: error, stage: foundations, distinct: {prefix: host.}, message: M}
+- name: didWebHost did not a DID
+  err: "didWebHost: did: host.a is of type hostname, not did"
+  rules:
+    - {id: r, severity: error, stage: foundations, didWebHost: {did: host.a, host: host.b}, message: M, doc: doc/a.md}
+- name: didWebHost did unknown
+  err: 'didWebHost: did: "did.typo" names no foundation'
+  rules:
+    - {id: r, severity: error, stage: foundations, didWebHost: {did: did.typo, host: host.a}, message: M, doc: doc/a.md}
+- name: didWebHost did in another stage
+  err: "didWebHost: did: stage review is not foundations, the stage of did.value"
+  rules:
+    - {id: r, severity: error, stage: review, didWebHost: {did: did.value, host: host.a}, message: M, doc: doc/a.md}
+- name: didWebHost host not a hostname
+  err: "didWebHost: host: domain.base is of type domain, not hostname"
+  rules:
+    - {id: r, severity: error, stage: foundations, didWebHost: {did: did.value, host: domain.base}, message: M, doc: doc/a.md}
+- name: didWebHost host missing
+  err: 'didWebHost: host: "" names no foundation'
+  rules:
+    - {id: r, severity: error, stage: foundations, didWebHost: {did: did.value}, message: M, doc: doc/a.md}
