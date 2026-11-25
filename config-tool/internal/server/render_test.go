@@ -523,3 +523,42 @@ func TestRenderCollisionNamesRelatedField(t *testing.T) {
 		t.Errorf("finding = %+v, want an error on answers.%s related to answers.%s", f, collidingHost, pinnedHost)
 	}
 }
+
+// TestRenderMemoryLimitReadsLoad pins that /api/render evaluates java-memory-limit over the loaded file: a loaded
+// limit takes its component off the list, and a loaded null drops Keycloak's chart default.
+func TestRenderMemoryLimitReadsLoad(t *testing.T) {
+	const (
+		memoryRule   = "java-memory-limit"
+		memoryPrefix = "Without a memory limit, the JVM sizes its heap from the node: "
+		unlimited    = "TMForum API, Trusted Issuers List, contract-management"
+	)
+	tests := []struct {
+		name   string
+		values string
+		want   string
+	}{
+		{name: "nothing loaded", want: "Scorpio, " + unlimited},
+		{name: "loaded Scorpio limit", values: "scorpio:\n  resources:\n    limits:\n      memory: 1Gi\n", want: unlimited},
+		{name: "loaded Keycloak null", values: "keycloak:\n  resources: null\n", want: "Keycloak, Scorpio, " + unlimited},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			ps := newProfileSession(t)
+			sha := ""
+			if tc.values != "" {
+				sha = ps.load(valuesName, tc.values).SHA256
+			}
+			p := domainProfile(renderDomain)
+			p.Target.Environment = profile.EnvProduction
+			p.Answers["resources.profile"] = "custom"
+			got := ps.mustRender(p, sha)
+			i := slices.IndexFunc(got.Findings, func(f check.Finding) bool { return f.Rule == memoryRule })
+			if i < 0 {
+				t.Fatalf("findings = %v, want %s", findingRules(got.Findings), memoryRule)
+			}
+			if want := memoryPrefix + tc.want + "."; got.Findings[i].Message != want {
+				t.Errorf("message = %q, want %q", got.Findings[i].Message, want)
+			}
+		})
+	}
+}
