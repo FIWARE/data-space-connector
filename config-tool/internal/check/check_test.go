@@ -4,6 +4,7 @@ import (
 	"os"
 	"reflect"
 	"slices"
+	"strings"
 	"testing"
 	"testing/fstest"
 
@@ -276,6 +277,137 @@ func TestTargetFields(t *testing.T) {
 			got, err := Evaluate(all[0], profileOf(env, nil))
 			if err != nil || len(got) != 1 {
 				t.Errorf("Evaluate on environment %s = %+v, %v, want one finding", env, got, err)
+			}
+		})
+	}
+}
+
+const (
+	collisionRule  = "host-collision"
+	didWebHostRule = "did-web-host"
+	domainBase     = "domain.base"
+	domain         = "example.org"
+	hostKeycloak   = "host.keycloak"
+	hostMarket     = "host.marketplace"
+	hostScorpio    = "host.scorpio"
+	hostDID        = "host.did"
+	didValue       = "did.value"
+	keycloakHost   = "keycloak.example.org"
+	marketHost     = "marketplace.example.org"
+	marketFeature  = "market.local"
+	didFeature     = "identity.did"
+	providerRole   = "provider"
+	customRole     = "custom"
+)
+
+// only keeps the findings of rule.
+func only(findings []Finding, rule string) []Finding {
+	return slices.DeleteFunc(slices.Clone(findings), func(f Finding) bool { return f.Rule != rule })
+}
+
+// field is the open field id of answer id.
+func field(id string) string {
+	return model.AnswerFieldPrefix + id
+}
+
+// TestHostCollision pins host-collision over pinned and derived hosts, whatever the role and features say.
+func TestHostCollision(t *testing.T) {
+	b := shipped(t)
+	type want struct{ field, related, message string }
+	pair := func(first, second, host, f, related string) want {
+		return want{field(f), field(related), first + " and " + second + " both resolve to " + host + "."}
+	}
+	keycloakMarket := pair("Keycloak host", "Marketplace host", keycloakHost, hostMarket, hostKeycloak)
+	off := map[string]profile.FeatureState{marketFeature: {Enabled: false, Source: profile.SourceUser}}
+	sparse := map[string]profile.FeatureState{didFeature: {Enabled: true, Source: profile.SourceUser}}
+	tests := []struct {
+		name     string
+		role     string
+		features map[string]profile.FeatureState
+		answers  map[string]any
+		want     []want
+	}{
+		{"derived hosts only", "", nil, map[string]any{domainBase: domain}, nil},
+		{"later host pinned onto a derived one", "", nil,
+			map[string]any{domainBase: domain, hostMarket: keycloakHost}, []want{keycloakMarket}},
+		{"earlier host pinned onto a derived one", "", nil,
+			map[string]any{domainBase: domain, hostKeycloak: marketHost},
+			[]want{pair("Keycloak host", "Marketplace host", marketHost, hostKeycloak, hostMarket)}},
+		{"case and a trailing dot differ", "", nil,
+			map[string]any{domainBase: domain, hostMarket: "Keycloak.Example.ORG."}, []want{keycloakMarket}},
+		{"three-way", "", nil,
+			map[string]any{domainBase: domain, hostMarket: keycloakHost, hostScorpio: keycloakHost}, []want{
+				pair("Keycloak host", "Scorpio host", keycloakHost, hostScorpio, hostKeycloak),
+				keycloakMarket,
+				pair("Scorpio host", "Marketplace host", keycloakHost, hostMarket, hostScorpio),
+			}},
+		{"gated feature off", providerRole, off,
+			map[string]any{domainBase: domain, hostMarket: keycloakHost}, []want{keycloakMarket}},
+		{"sparse custom features", customRole, sparse,
+			map[string]any{domainBase: domain, hostMarket: keycloakHost}, []want{keycloakMarket}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			p := profileOf(profile.EnvDevelopment, tc.answers)
+			p.Role, p.Features = tc.role, tc.features
+			findings, err := Evaluate(b, p)
+			if err != nil {
+				t.Fatal(err)
+			}
+			got := []want{}
+			for _, f := range only(findings, collisionRule) {
+				if f.Severity != model.SeverityError || f.Stage != model.StageFoundations {
+					t.Errorf("finding %+v, want an error of stage %s", f, model.StageFoundations)
+				}
+				got = append(got, want{f.Field, f.Related, f.Message})
+			}
+			// The message's first sentence names the pair and the host; the advice after it is bundle copy.
+			if !slices.EqualFunc(got, tc.want, func(g, w want) bool {
+				return g.field == w.field && g.related == w.related && strings.HasPrefix(g.message, w.message)
+			}) {
+				t.Errorf("findings = %+v, want %+v", got, tc.want)
+			}
+			if Blocking(findings) != (len(tc.want) > 0) {
+				t.Errorf("Blocking() = %t, want %t", Blocking(findings), len(tc.want) > 0)
+			}
+		})
+	}
+}
+
+// TestDIDWebHost pins did-web-host: a did:web DID must resolve on the DID document host.
+func TestDIDWebHost(t *testing.T) {
+	b := shipped(t)
+	off := map[string]profile.FeatureState{didFeature: {Enabled: false, Source: profile.SourceUser}}
+	tests := []struct {
+		name     string
+		features map[string]profile.FeatureState
+		answers  map[string]any
+		want     bool
+	}{
+		{"derived DID", nil, map[string]any{domainBase: domain}, false},
+		{"pinned on another host", nil, map[string]any{domainBase: domain, didValue: "did:web:other.org"}, true},
+		{"document path", nil, map[string]any{domainBase: domain, didValue: "did:web:" + domain + ":users:alice"}, false},
+		{"encoded port", nil, map[string]any{domainBase: domain, didValue: "did:web:" + domain + "%3A8443"}, false},
+		{"host case differs", nil, map[string]any{domainBase: domain, didValue: "did:web:Example.ORG"}, false},
+		{"did:key", nil, map[string]any{domainBase: domain, didMethod: didKey, didValue: "did:key:z6MkTest"}, false},
+		{"pinned on another host, identity.did off", off,
+			map[string]any{domainBase: domain, didValue: "did:web:other.org"}, true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			p := profileOf(profile.EnvDevelopment, tc.answers)
+			p.Features = tc.features
+			findings, err := Evaluate(b, p)
+			if err != nil {
+				t.Fatal(err)
+			}
+			got := only(findings, didWebHostRule)
+			if len(got) != map[bool]int{false: 0, true: 1}[tc.want] {
+				t.Fatalf("findings = %+v, want %t", got, tc.want)
+			}
+			if tc.want && (got[0].Field != field(didValue) || got[0].Related != field(hostDID) ||
+				got[0].Severity != model.SeverityError) {
+				t.Errorf("finding = %+v, want an error on %s related to %s", got[0], field(didValue), field(hostDID))
 			}
 		})
 	}

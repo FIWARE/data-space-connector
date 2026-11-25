@@ -269,6 +269,29 @@ func TestGenerateTIRAddressForVerification(t *testing.T) {
 	}
 }
 
+// TestGenerateHostCollision pins that host-collision blocks generate whatever the profile's role and features.
+func TestGenerateHostCollision(t *testing.T) {
+	const want = "error: Stage 3 Foundations, answers.host.marketplace: Keycloak host and Marketplace host both resolve to keycloak.example.org."
+	tests := []struct {
+		name string
+		path string
+	}{
+		{"provider role", "testdata/host-collision.dscprofile.yaml"},
+		{"no role and no features", "testdata/host-collision-no-role.dscprofile.yaml"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			_, stderr, err := executeSplit(t, "generate", "-p", tc.path)
+			if !errors.Is(err, errBlockingFindings) {
+				t.Fatalf("error = %v, want %v", err, errBlockingFindings)
+			}
+			if !strings.Contains(stderr, want) {
+				t.Errorf("stderr = %q, want it to contain %q", stderr, want)
+			}
+		})
+	}
+}
+
 // trialOutputs renders the embedded trial as generate --trial does.
 func trialOutputs(t *testing.T) []trial.Output {
 	t.Helper()

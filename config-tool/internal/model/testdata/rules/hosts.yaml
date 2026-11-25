@@ -1,0 +1,14 @@
+# Hosts and a DID for the distinct and didWebHost rule fixtures; edge.later sits in another stage.
+chart: data-space-connector
+version: 1.0.0
+revision: 1
+topLevelKeys: [keycloak]
+foundations:
+  - {id: domain.base, stage: foundations, type: domain, label: Base domain}
+  - {id: host.a, stage: foundations, type: hostname, default: "a.{{ .domain.base }}", label: A host}
+  - {id: host.b, stage: foundations, type: hostname, default: "b.{{ .domain.base }}", label: B host}
+  - {id: solo.host, stage: foundations, type: hostname, label: Solo host}
+  - {id: edge.now, stage: foundations, type: hostname, label: Edge now}
+  - {id: edge.later, stage: configuration, type: hostname, label: Edge later}
+  - {id: name.display, stage: foundations, type: string, label: Name}
+  - {id: did.value, stage: foundations, type: did, default: "did:web:{{ .host.a }}", label: DID}

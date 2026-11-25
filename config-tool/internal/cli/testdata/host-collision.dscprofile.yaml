@@ -1,0 +1,20 @@
+# A provider that pinned the marketplace host to Keycloak's derived host: host-collision blocks it.
+format: 1
+model: {chart: data-space-connector, version: 10.16.0, revision: 11}
+target:
+  type: file
+  namespace: provider
+  createNamespace: true
+  releaseName: provider
+  chart: data-space-connector
+  chartVersion: 10.16.0
+  environment: development
+role: provider
+features:
+  identity.issuer: {enabled: true, source: preset}
+  market.local: {enabled: true, source: preset}
+answers:
+  domain.base: example.org
+  host.marketplace: keycloak.example.org
+open: []
+secrets: {}

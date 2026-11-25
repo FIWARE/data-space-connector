@@ -3,6 +3,7 @@ package check
 
 import (
 	"cmp"
+	"net/url"
 	"slices"
 	"strings"
 
@@ -19,10 +20,22 @@ type Finding struct {
 	Field    string         `json:"field"`
 	Message  string         `json:"message"`
 	Doc      string         `json:"doc"`
+	// Related is the other field a distinct or didWebHost finding concerns; empty for a when rule.
+	Related string `json:"related,omitempty"`
 }
 
-// Evaluate returns the findings of b's rules over p, sorted by severity, stage and rule id. Conditions
-// read resolved answers, so a derived default counts; it errors when the answers do not resolve.
+const (
+	// didWebPrefix starts a did:web DID; its method-specific id follows.
+	didWebPrefix = "did:web:"
+	// didWebSeparator ends the host of a did:web method-specific id; a path follows it, and decoded, a port.
+	didWebSeparator = ":"
+	// rootDot is the trailing dot of a fully qualified host name.
+	rootDot = "."
+)
+
+// Evaluate returns the findings of b's rules over p, sorted by severity, stage and rule id; a rule's own
+// findings keep foundation order. Rules read resolved answers, so a derived default counts, and never read
+// features, since every host renders whatever the role. It errors when the answers do not resolve.
 func Evaluate(b model.Bundle, p profile.Profile) ([]Finding, error) {
 	answers, err := render.Answers(b, p)
 	if err != nil {
@@ -30,13 +43,21 @@ func Evaluate(b model.Bundle, p profile.Profile) ([]Finding, error) {
 	}
 	findings := []Finding{}
 	for _, r := range b.CheckRules() {
-		if !slices.ContainsFunc(r.When, func(w model.RuleWhen) bool { return !holds(w, p, answers) }) {
-			findings = append(findings, Finding{
-				Rule: r.ID, Severity: r.Severity, Stage: r.Stage, Field: r.Field, Message: r.Message, Doc: r.Doc,
-			})
+		var fs []Finding
+		switch {
+		case r.Distinct != nil:
+			fs, err = distinct(b, r, p, answers)
+		case r.DIDWebHost != nil:
+			fs = didWebHost(r, answers)
+		case !slices.ContainsFunc(r.When, func(w model.RuleWhen) bool { return !holds(w, p, answers) }):
+			fs = []Finding{finding(r, r.Field, "", r.Message)}
 		}
+		if err != nil {
+			return nil, err
+		}
+		findings = append(findings, fs...)
 	}
-	slices.SortFunc(findings, func(a, b Finding) int {
+	slices.SortStableFunc(findings, func(a, b Finding) int {
 		return cmp.Or(
 			cmp.Compare(a.Severity.Rank(), b.Severity.Rank()),
 			cmp.Compare(a.Stage.Rank(), b.Stage.Rank()),
@@ -49,6 +70,82 @@ func Evaluate(b model.Bundle, p profile.Profile) ([]Finding, error) {
 // Blocking reports whether any finding is an error, which stops generate.
 func Blocking(findings []Finding) bool {
 	return slices.ContainsFunc(findings, func(f Finding) bool { return f.Severity == model.SeverityError })
+}
+
+func finding(r model.CheckRule, field, related, message string) Finding {
+	return Finding{
+		Rule: r.ID, Severity: r.Severity, Stage: r.Stage, Field: field, Related: related, Message: message, Doc: r.Doc,
+	}
+}
+
+// distinct returns one finding per pair of r's foundations resolving to the same host. It points at the pinned
+// one of the pair when exactly one is given, else at the later one.
+func distinct(b model.Bundle, r model.CheckRule, p profile.Profile, answers map[string]any) ([]Finding, error) {
+	ids := b.DistinctIDs(r)
+	var out []Finding
+	for i, first := range ids {
+		h, ok := host(answers, first)
+		if !ok {
+			continue
+		}
+		for _, second := range ids[i+1:] {
+			if h2, ok := host(answers, second); !ok || h2 != h {
+				continue
+			}
+			msg, err := r.RenderMessage(map[string]string{
+				model.MessageFirst: label(b, first), model.MessageSecond: label(b, second), model.MessageHost: h,
+			})
+			if err != nil {
+				return nil, err
+			}
+			field, related := second, first
+			if _, firstGiven := p.Answers[first]; firstGiven {
+				if _, secondGiven := p.Answers[second]; !secondGiven {
+					field, related = first, second
+				}
+			}
+			out = append(out, finding(r, model.AnswerFieldPrefix+field, model.AnswerFieldPrefix+related, msg))
+		}
+	}
+	return out, nil
+}
+
+// didWebHost returns a finding when the resolved DID is a did:web whose host is not the resolved document host.
+func didWebHost(r model.CheckRule, answers map[string]any) []Finding {
+	did, ok := answers[r.DIDWebHost.DID].(string)
+	msid, isWeb := strings.CutPrefix(did, didWebPrefix)
+	docHost, hostOK := host(answers, r.DIDWebHost.Host)
+	if !ok || !isWeb || !hostOK {
+		return nil
+	}
+	enc, _, _ := strings.Cut(msid, didWebSeparator)
+	// The did type admits only well-formed percent-encoding, so decoding fails only on a hand-built profile.
+	dec, err := url.PathUnescape(enc)
+	if err != nil {
+		dec = enc
+	}
+	didHost, _, _ := strings.Cut(dec, didWebSeparator)
+	if normalize(didHost) == docHost {
+		return nil
+	}
+	return []Finding{finding(r, model.AnswerFieldPrefix+r.DIDWebHost.DID, model.AnswerFieldPrefix+r.DIDWebHost.Host, r.Message)}
+}
+
+// host returns the normalized resolved answer id; false when it is unanswered.
+func host(answers map[string]any, id string) (string, bool) {
+	s, ok := answers[id].(string)
+	return normalize(s), ok
+}
+
+// normalize makes host names compare equal regardless of case and a trailing root dot.
+func normalize(h string) string {
+	return strings.ToLower(strings.TrimSuffix(h, rootDot))
+}
+
+// label is the label of foundation id as the bundle declares it.
+func label(b model.Bundle, id string) string {
+	i := slices.IndexFunc(b.Foundations, func(f model.Foundation) bool { return f.ID == id })
+	return b.Foundations[i].Label
 }
 
 // holds reports whether w's field resolves to w.Equals, or for Unset whether the answer is absent; an
