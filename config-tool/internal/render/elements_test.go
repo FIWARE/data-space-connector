@@ -10,6 +10,8 @@ import (
 	"github.com/FIWARE/data-space-connector/config-tool/internal/model"
 	"github.com/FIWARE/data-space-connector/config-tool/internal/profile"
 	"github.com/FIWARE/data-space-connector/config-tool/internal/roundtrip"
+
+	"gopkg.in/yaml.v3"
 )
 
 const (
@@ -503,5 +505,127 @@ func TestRequiresAndDefaultWhenSet(t *testing.T) {
 				t.Errorf("Answers has proxy.no = %v", derived)
 			}
 		})
+	}
+}
+
+// TestLoadRenderRoundTrip loads a rendered tree and renders it again from the answers the load derived: the trees
+// must be equal and no list leaf may be pinned.
+func TestLoadRenderRoundTrip(t *testing.T) {
+	const foreign = "keycloak:\n  extraEnvVars:\n    - {name: NODE_TLS_REJECT_UNAUTHORIZED, value: '0'}\n" +
+		"apisix:\n  routes:\n    - plugins:\n        openid-connect: {discovery: d}\n    - plugins:\n        opa: {}\n"
+	tests := []struct {
+		name    string
+		answers map[string]any
+		loaded  string
+	}{
+		{name: "proxy", answers: map[string]any{"proxy.https": httpsProxy}},
+		{name: "proxy and no proxy", answers: map[string]any{"proxy.https": httpsProxy, "proxy.no": "localhost,dsc.svc"}},
+		{name: "private CA", answers: caAnswers},
+		{name: "two mechanisms over two foundations", answers: map[string]any{"ca.secret": caSecret, "ca.extra": "x.crt", "proxy.https": httpsProxy}},
+		{name: "among foreign elements", answers: map[string]any{"ca.secret": caSecret, "proxy.https": httpsProxy}, loaded: foreign},
+	}
+	b := modelFixture(t, elementsFixture)
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			first := renderElements(t, tc.answers, tc.loaded)
+			src, err := yaml.Marshal(first.Nested())
+			if err != nil {
+				t.Fatal(err)
+			}
+			root := roundtrip.Path{}
+			r, err := load.Load(src, "values.yaml", []model.Bundle{b}, load.Options{Root: &root, Bundle: &b})
+			if err != nil {
+				t.Fatal(err)
+			}
+			p := profile.Profile{Answers: load.SeedAnswers(r.Report, nil), Target: profile.Target{ReleaseName: release, Namespace: namespace}}
+			second, err := Render(b, p, Options{Overrides: r})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(second.Nested(), first.Nested()) {
+				t.Errorf("round trip:\n got %v\nwant %v\nloaded\n%s", second.Nested(), first.Nested(), src)
+			}
+			// Scalar targets are owned only through owned markers (ADR 0020), which Marshal does not write.
+			for _, l := range second.Leaves {
+				if l.Provenance.Pinned && len(lists(l.Path)) > 0 {
+					t.Errorf("%s pinned after a round trip", l.Path)
+				}
+			}
+		})
+	}
+}
+
+// TestLoadOwnedIsRendered checks that every list leaf the load reports as owned is one the render writes unpinned
+// from the seeded answers, so the report never claims an element the render leaves foreign.
+func TestLoadOwnedIsRendered(t *testing.T) {
+	tests := []struct{ name, loaded string }{
+		{name: "mount without its volume", loaded: "verifier:\n  mounts:\n    - {name: ca-bundle, mountPath: /etc/ssl/cert.pem, subPath: ca.crt}\n"},
+		{name: "mechanism over two foundations, one missing", loaded: "verifier:\n  mounts:\n    - {name: extra-ca, mountPath: /etc/extra, subPath: x.crt}\n"},
+		{name: "each without its requires", loaded: "apisix:\n  routes:\n    - plugins:\n        openid-connect: {ssl_verify: true}\n"},
+		{name: "mechanism withheld for a unique collision", loaded: "verifier:\n  volumes:\n    - {name: ca-bundle, secret: {secretName: s}}\n" +
+			"  mounts:\n    - {name: root-ca, mountPath: /etc/ssl/cert.pem}\n"},
+		{name: "template field loaded as an unquoted int", loaded: "verifier:\n  volumes:\n    - {name: extra-ca, secret: {secretName: s}}\n" +
+			"  mounts:\n    - {name: extra-ca, mountPath: /etc/extra, subPath: 123}\n"},
+		{name: "complete mechanism", loaded: "verifier:\n  volumes:\n    - {name: extra-ca, secret: {secretName: s}}\n" +
+			"  mounts:\n    - {name: extra-ca, mountPath: /etc/extra, subPath: x.crt}\n"},
+	}
+	b := modelFixture(t, elementsFixture)
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			root := roundtrip.Path{}
+			r, err := load.Load([]byte(tc.loaded), "values.yaml", []model.Bundle{b}, load.Options{Root: &root, Bundle: &b})
+			if err != nil {
+				t.Fatal(err)
+			}
+			p := profile.Profile{Answers: load.SeedAnswers(r.Report, nil), Target: profile.Target{ReleaseName: release, Namespace: namespace}}
+			tree, err := Render(b, p, Options{Overrides: r})
+			if err != nil {
+				t.Fatal(err)
+			}
+			rendered := map[string]bool{}
+			for _, l := range tree.Leaves {
+				rendered[l.Path.String()] = !l.Provenance.Pinned
+			}
+			for _, e := range r.Report.Owned {
+				if !rendered[e.Path] {
+					t.Errorf("%s is owned, but the render does not write it unpinned", e.Path)
+				}
+			}
+		})
+	}
+}
+
+// TestDiffPinnedElement reports a hand-edited owned element once, under its key, with the whole elements.
+func TestDiffPinnedElement(t *testing.T) {
+	const (
+		before = "http://old:3128"
+		edited = "keycloak:\n  extraEnvVars:\n    - {name: HTTPS_PROXY, value: '" + before + "', note: kept}\n"
+	)
+	b := modelFixture(t, elementsFixture)
+	prev := renderElements(t, map[string]any{"proxy.https": before}, edited)
+	next := renderElements(t, map[string]any{"proxy.https": httpsProxy}, edited)
+	var got []Change
+	for _, g := range Diff(b, prev, next).Groups {
+		for _, c := range g.Changes {
+			if c.Element != "" {
+				if g.Foundation != "proxy.https" {
+					t.Errorf("%s[%s] in %q, want proxy.https", c.Path, c.Element, g.Foundation)
+				}
+				got = append(got, c)
+			}
+		}
+	}
+	if len(got) != 1 {
+		t.Fatalf("element changes = %+v, want one", got)
+	}
+	data, err := json.Marshal(got[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	const want = `{"path":"keycloak.extraEnvVars[name=HTTPS_PROXY]","status":"pinned",` +
+		`"before":{"name":"HTTPS_PROXY","value":"` + before + `"},"after":{"name":"HTTPS_PROXY","value":"` + httpsProxy + `"},` +
+		`"kept":{"name":"HTTPS_PROXY","note":"kept","value":"` + before + `"}}`
+	if string(data) != want {
+		t.Errorf("change = %s\nwant     %s", data, want)
 	}
 }

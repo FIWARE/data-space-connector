@@ -12,6 +12,7 @@ import (
 )
 
 const (
+	strTag   = "!!str"
 	boolTag  = "!!bool"
 	intTag   = "!!int"
 	floatTag = "!!float"
@@ -40,18 +41,27 @@ type classifier struct {
 	// leafAnswer and notes are keyed by path string; live leaf paths are unique.
 	leafAnswer map[string]string
 	notes      map[string]string
+	// elements are the loaded nodes owned element and each targets write; elementOwned the leaves among them that
+	// are the target's rendering, by path string.
+	elements     []elementRule
+	elementOwned map[string]bool
+	// elementPinned are the loaded elements, by path string, a leaf of which is not their target's rendering.
+	elementPinned map[string]bool
 }
 
-func newClassifier(markers []roundtrip.OwnedMarker, b model.Bundle, root roundtrip.Path) *classifier {
+func newClassifier(markers []roundtrip.OwnedMarker, b model.Bundle, root roundtrip.Path, elements []elementRule) *classifier {
 	rules := b.Rules()
 	c := &classifier{
-		markers:    markers,
-		root:       root,
-		rules:      make(map[string]model.CompiledRule, len(rules)),
-		foundation: b.Foundation,
-		answers:    map[string]*Answer{},
-		leafAnswer: map[string]string{},
-		notes:      map[string]string{},
+		markers:       markers,
+		root:          root,
+		rules:         make(map[string]model.CompiledRule, len(rules)),
+		foundation:    b.Foundation,
+		answers:       map[string]*Answer{},
+		leafAnswer:    map[string]string{},
+		notes:         map[string]string{},
+		elements:      elements,
+		elementOwned:  map[string]bool{},
+		elementPinned: map[string]bool{},
 	}
 	for _, r := range rules {
 		c.rules[r.Path.String()] = r
@@ -64,8 +74,13 @@ func (c *classifier) owned(p roundtrip.Path) bool {
 	return ok
 }
 
-// ownedPass derives answers from owned leaves only; its classes are discarded.
+// ownedPass derives answers from owned leaves only; its classes are discarded. A leaf of an element a keyed target
+// matches is owned by its key, as no marker can sit on a sequence item.
 func (c *classifier) ownedPass(p roundtrip.Path, n *yaml.Node) roundtrip.Class {
+	if r, sub, ok := c.element(p); ok {
+		c.deriveElement(p, r, sub, n)
+		return roundtrip.ClassOwned
+	}
 	if !c.owned(p) {
 		return roundtrip.ClassUnknown
 	}
@@ -76,12 +91,20 @@ func (c *classifier) ownedPass(p roundtrip.Path, n *yaml.Node) roundtrip.Class {
 // classify is the final classifier; owned leaves already derived their answers in ownedPass.
 func (c *classifier) classify(p roundtrip.Path, n *yaml.Node) roundtrip.Class {
 	switch {
-	case c.owned(p):
+	case c.owned(p), c.elementOwned[p.String()]:
 		return roundtrip.ClassOwned
+	case c.inElement(p):
+		// It disagrees with its target, so it is a hand edit the render pins.
+		return roundtrip.ClassUnknown
 	case c.derive(p, n, FromRecognized):
 		return roundtrip.ClassRecognized
 	}
 	return roundtrip.ClassUnknown
+}
+
+func (c *classifier) inElement(p roundtrip.Path) bool {
+	_, _, ok := c.element(p)
+	return ok
 }
 
 // derive applies p's rule to n, setting the answer when it is still unset. It reports whether n

@@ -43,6 +43,21 @@ are unchanged. Provenance gains `element` (the key) and `origin` (`base` or `loa
 does not own. Such a leaf carries the first foundation, in bundle order, whose element makes the list be written, so
 the Stage 3 diff files the base under that foundation. Appending beyond a loaded list's length is left to US-7.1's writer.
 
+Loading needs no marker on a sequence item: a loaded element whose key matches an owned keyed target is owned, and so is
+an `each` leaf under any element that has the parent mapping. Their leaves back-derive the answers by inverting the
+target's templates (`model.Invert`); the first element in document order sets an answer, and a leaf that disagrees, or
+a field the target does not write, stays unknown and pins the element. So does the key leaf of an element that lacks a
+field the target writes. An element or `each` leaf is owned only while the render would write it: every `refs` and
+`requires` id of its target, and of every target of its mechanism, must be among the derived answers or follow from
+them by a default, and the render must not withhold its mechanism (a `unique` collision with a foreign or pinned
+element, or a list loaded as a non-sequence). Otherwise its key leaf (or the `each` leaf) stays unknown with a note,
+and the load classifies again without the answers that rule had derived. A template field matches only a string
+scalar, since the render compares typed values. A reserved ref such as `{{ .target.namespace }}` reads as any text: the load report does not
+depend on the Stage 1 target, which may change after the load, so an element rendered for another release or namespace
+is reported as owned. The render compares the whole element with what it writes for the current target and pins it
+all the same. The Stage 3 diff reports a pinned element once,
+under its key (`keycloak.extraEnvVars[name=HTTPS_PROXY]`), with the whole rendered and kept elements.
+
 Compile-time checks: a keyed element's list must be in `lists:`, and no target may also index into it. Two targets may
 not own the same key, and an owned key may not be a `base` key. An element that reads no answer needs `requires`.
 

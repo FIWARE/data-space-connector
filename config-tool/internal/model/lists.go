@@ -3,6 +3,7 @@ package model
 import (
 	"fmt"
 	"maps"
+	"reflect"
 	"slices"
 	"strings"
 	"text/template"
@@ -97,6 +98,35 @@ func (b Bundle) List(path roundtrip.Path) (CompiledList, bool) {
 		return CompiledList{}, false
 	}
 	return b.lists[i], true
+}
+
+// KeyOf returns the string at l's key field of a mapping element; false for any other element.
+func (l CompiledList) KeyOf(e any) (string, bool) {
+	m, ok := e.(map[string]any)
+	if !ok {
+		return "", false
+	}
+	s, ok := m[l.Key].(string)
+	return s, ok
+}
+
+// Collision returns the first unique field of l whose value in owned a foreign element shares, and that element's
+// index in foreign. The render and the load both decide with it whether a mechanism is withheld (ADR 0025).
+func (l CompiledList) Collision(owned map[string]any, foreign []any) (string, int, bool) {
+	for _, u := range l.Unique {
+		v, ok := owned[u]
+		if !ok {
+			continue
+		}
+		i := slices.IndexFunc(foreign, func(f any) bool {
+			m, ok := f.(map[string]any)
+			return ok && reflect.DeepEqual(m[u], v)
+		})
+		if i >= 0 {
+			return u, i, true
+		}
+	}
+	return "", 0, false
 }
 
 // Fullname is Helm's standard fullname rule: release alone when it contains chart, else release-chart,
