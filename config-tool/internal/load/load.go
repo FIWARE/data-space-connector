@@ -166,7 +166,7 @@ func Load(src []byte, name string, bundles []model.Bundle, opts Options) (*Resul
 		c = newClassifier(markers, bundle, root, elements)
 		roundtrip.Classify(doc, c.ownedPass)
 		leaves = roundtrip.Classify(doc, c.classify)
-		if !deactivate(elements, bundle, c.answers) {
+		if !deactivate(elements, bundle, c.answers) && !withhold(doc, root, elements, bundle, c) {
 			break
 		}
 	}

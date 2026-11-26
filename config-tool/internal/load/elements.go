@@ -1,6 +1,8 @@
 package load
 
 import (
+	"cmp"
+	"errors"
 	"fmt"
 	"reflect"
 	"slices"
@@ -18,6 +20,8 @@ const (
 	noteNotRendered  = "is not what %s writes here"
 	noteMissing      = "the element lacks %s, which %s writes"
 	noteInactive     = "%s is not answered, so %s does not write here"
+	noteCollision    = "%s is withheld: %s takes %s %v in %s"
+	noteEdited       = "%s is withheld: %s is not a list"
 )
 
 // elementRule is a loaded node an owned element or each target writes (ADR 0025): a list element whose key field
@@ -120,6 +124,106 @@ func unresolved(b model.Bundle, t model.CompiledTarget, resolved map[string]any)
 	return "", false
 }
 
+// withhold marks the rules of every group composeLists withholds and deactivate does not catch: one with an element
+// in a loaded list that is not a sequence, or whose unpinned element shares a unique field's value with a foreign one
+// (model.CompiledList.Collision). It reports whether it marked one; the load then classifies again.
+func withhold(doc *roundtrip.Document, root roundtrip.Path, rules []elementRule, b model.Bundle, c *classifier) bool {
+	resolved := resolvable(b, c.answers)
+	off := map[string]bool{}
+	for _, r := range rules {
+		if r.inactive != "" && r.target.Element != nil {
+			off[groupOf(r.foundation, r.target)] = true
+		}
+	}
+	notes := map[string]string{}
+	withheld := func(foundation string, t model.CompiledTarget, format string, args ...any) {
+		g := groupOf(foundation, t)
+		if _, ok := notes[g]; !ok {
+			notes[g] = fmt.Sprintf(format, append([]any{cmp.Or(t.Mechanism, foundation)}, args...)...)
+		}
+	}
+	for _, l := range b.ListTable() {
+		var owned []elementRule
+		for _, decl := range b.Foundations {
+			f, _ := b.Foundation(decl.ID)
+			for _, t := range f.Targets {
+				if t.Element == nil || !slices.Equal(t.Path, l.Path) || off[groupOf(f.ID, t)] {
+					continue
+				}
+				if _, ok := unresolved(b, t, resolved); !ok {
+					owned = append(owned, elementRule{foundation: f.ID, target: t})
+				}
+			}
+		}
+		at := slices.Concat(root, l.Path)
+		n, err := doc.Lookup(at)
+		if len(owned) == 0 || errors.Is(err, roundtrip.ErrNotFound) ||
+			(err == nil && n.Kind == yaml.ScalarNode && n.ShortTag() == nullTag) {
+			continue
+		}
+		var elems []any
+		if err != nil || n.Kind != yaml.SequenceNode || n.Decode(&elems) != nil {
+			for _, o := range owned {
+				withheld(o.foundation, o.target, noteEdited, l.Path)
+			}
+			continue
+		}
+		// As compose does: a loaded element under an owned key is the owned one unless pinned, then it is foreign;
+		// an owned key the list lacks is appended.
+		var foreign []any
+		checked := map[string]bool{}
+		loaded := map[string]bool{}
+		for j, e := range elems {
+			key, _ := l.KeyOf(e)
+			if !slices.ContainsFunc(owned, func(o elementRule) bool { return o.target.Element.Key == key }) {
+				foreign = append(foreign, e)
+				continue
+			}
+			loaded[key] = true
+			if c.elementPinned[append(slices.Clone(at), roundtrip.Index(j)).String()] {
+				foreign = append(foreign, e)
+			} else {
+				checked[key] = true
+			}
+		}
+		for _, o := range owned {
+			key := o.target.Element.Key
+			if loaded[key] && !checked[key] {
+				continue
+			}
+			unique := map[string]any{}
+			for _, u := range l.Unique {
+				if v, ok := o.target.Element.At(roundtrip.Path{roundtrip.Key(u)}); ok {
+					unique[u] = v
+				}
+			}
+			if u, i, ok := l.Collision(unique, foreign); ok {
+				other, _ := l.KeyOf(foreign[i])
+				withheld(o.foundation, o.target, noteCollision, other, u, unique[u], l.Path)
+			}
+		}
+	}
+	changed := false
+	for i, r := range rules {
+		if r.target.Element == nil || r.inactive != "" {
+			continue
+		}
+		if note, ok := notes[groupOf(r.foundation, r.target)]; ok {
+			rules[i].inactive, changed = note, true
+		}
+	}
+	return changed
+}
+
+// groupOf identifies what renders or is withheld as a unit, as the render's group does: a mechanism, or one element
+// target without one.
+func groupOf(foundation string, t model.CompiledTarget) string {
+	if t.Mechanism != "" {
+		return t.Mechanism
+	}
+	return foundation + " " + t.Path.String() + "[" + t.Element.Key + "]"
+}
+
 // resolvable mirrors the render's resolve over what the seeded profile will hold: the foundations-stage answers,
 // plus every default whose refs resolve. A default's value is unknown here (nil), and a reserved ref counts as
 // resolved, as the load does not know the Stage 1 target (ADR 0025).
@@ -174,6 +278,7 @@ func (c *classifier) deriveElement(p roundtrip.Path, r elementRule, sub roundtri
 	}
 	if note != "" {
 		c.notes[key] = note
+		c.elementPinned[r.at.String()] = true
 		return false
 	}
 	ids := make([]string, 0, len(texts))
@@ -252,6 +357,10 @@ func (c *classifier) readElement(r elementRule, sub roundtrip.Path, n *yaml.Node
 		return nil, notRendered
 	}
 	if tpls, ok := want.([]*template.Template); ok {
+		// The render compares typed values, so an unquoted 123 is not the string "123" a template writes.
+		if n.ShortTag() != c.renderedTag(t) {
+			return nil, notRendered
+		}
 		texts, ok := model.Invert(tpls, t.Sep, n.Value)
 		if !ok {
 			return nil, notRendered
@@ -263,6 +372,16 @@ func (c *classifier) readElement(r elementRule, sub roundtrip.Path, n *yaml.Node
 		return nil, notRendered
 	}
 	return nil, ""
+}
+
+// renderedTag is the YAML tag of what t's templates render: a string, except an each copy of a bool answer.
+func (c *classifier) renderedTag(t model.CompiledTarget) string {
+	if t.Element == nil && t.Fn == model.FnCopy {
+		if f, ok := c.foundation(t.Refs[0]); ok && f.Type == model.TypeBool {
+			return boolTag
+		}
+	}
+	return strTag
 }
 
 func isKeyField(sub roundtrip.Path, field string) bool {

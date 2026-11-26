@@ -132,6 +132,35 @@ func TestLoadElements(t *testing.T) {
 			answers: map[string]any{},
 		},
 		{
+			name: "a mechanism the render withholds for a unique collision",
+			src:  volume + "  mounts:\n    - {name: root-ca, mountPath: /etc/ssl/cert.pem}\n",
+			unknown: map[string]string{
+				"verifier.volumes[0].name":              "verifier-ca is withheld: root-ca takes mountPath /etc/ssl/cert.pem in verifier.mounts",
+				"verifier.volumes[0].secret.secretName": "", "verifier.mounts[0].name": "", "verifier.mounts[0].mountPath": ""},
+			answers: map[string]any{},
+		},
+		{
+			name: "a pinned owned element is foreign to the other owned ones",
+			src: volume + "    - {name: extra-ca, secret: {secretName: s}}\n" +
+				"  mounts:\n    - {name: extra-ca, mountPath: /etc/ssl/cert.pem, subPath: x.crt}\n",
+			owned: []string{"verifier.volumes[1].name", "verifier.volumes[1].secret.secretName",
+				"verifier.mounts[0].name", "verifier.mounts[0].subPath"},
+			unknown: map[string]string{
+				"verifier.volumes[0].name":              "verifier-ca is withheld: extra-ca takes mountPath /etc/ssl/cert.pem in verifier.mounts",
+				"verifier.volumes[0].secret.secretName": "", "verifier.mounts[0].mountPath": "is not what ca.extra writes here"},
+			answers: map[string]any{"ca.secret": "s", "ca.extra": "x.crt"},
+		},
+		{
+			name: "a template field loaded as an unquoted int",
+			src: "verifier:\n  volumes:\n    - {name: extra-ca, secret: {secretName: s}}\n" +
+				"  mounts:\n    - {name: extra-ca, mountPath: /etc/extra, subPath: 123}\n",
+			unknown: map[string]string{
+				"verifier.volumes[0].name":              "ca.extra is not answered, so ca.extra does not write here",
+				"verifier.volumes[0].secret.secretName": "", "verifier.mounts[0].name": "ca.extra is not answered, so ca.extra does not write here",
+				"verifier.mounts[0].mountPath": "", "verifier.mounts[0].subPath": "is not what ca.extra writes here"},
+			answers: map[string]any{},
+		},
+		{
 			name:    "not a list",
 			src:     "keycloak:\n  extraEnvVars: {name: HTTPS_PROXY, value: x}\n",
 			unknown: map[string]string{"keycloak.extraEnvVars.name": "", "keycloak.extraEnvVars.value": ""},

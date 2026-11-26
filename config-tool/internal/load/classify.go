@@ -45,20 +45,23 @@ type classifier struct {
 	// are the target's rendering, by path string.
 	elements     []elementRule
 	elementOwned map[string]bool
+	// elementPinned are the loaded elements, by path string, a leaf of which is not their target's rendering.
+	elementPinned map[string]bool
 }
 
 func newClassifier(markers []roundtrip.OwnedMarker, b model.Bundle, root roundtrip.Path, elements []elementRule) *classifier {
 	rules := b.Rules()
 	c := &classifier{
-		markers:      markers,
-		root:         root,
-		rules:        make(map[string]model.CompiledRule, len(rules)),
-		foundation:   b.Foundation,
-		answers:      map[string]*Answer{},
-		leafAnswer:   map[string]string{},
-		notes:        map[string]string{},
-		elements:     elements,
-		elementOwned: map[string]bool{},
+		markers:       markers,
+		root:          root,
+		rules:         make(map[string]model.CompiledRule, len(rules)),
+		foundation:    b.Foundation,
+		answers:       map[string]*Answer{},
+		leafAnswer:    map[string]string{},
+		notes:         map[string]string{},
+		elements:      elements,
+		elementOwned:  map[string]bool{},
+		elementPinned: map[string]bool{},
 	}
 	for _, r := range rules {
 		c.rules[r.Path.String()] = r

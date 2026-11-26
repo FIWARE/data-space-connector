@@ -562,6 +562,10 @@ func TestLoadOwnedIsRendered(t *testing.T) {
 		{name: "mount without its volume", loaded: "verifier:\n  mounts:\n    - {name: ca-bundle, mountPath: /etc/ssl/cert.pem, subPath: ca.crt}\n"},
 		{name: "mechanism over two foundations, one missing", loaded: "verifier:\n  mounts:\n    - {name: extra-ca, mountPath: /etc/extra, subPath: x.crt}\n"},
 		{name: "each without its requires", loaded: "apisix:\n  routes:\n    - plugins:\n        openid-connect: {ssl_verify: true}\n"},
+		{name: "mechanism withheld for a unique collision", loaded: "verifier:\n  volumes:\n    - {name: ca-bundle, secret: {secretName: s}}\n" +
+			"  mounts:\n    - {name: root-ca, mountPath: /etc/ssl/cert.pem}\n"},
+		{name: "template field loaded as an unquoted int", loaded: "verifier:\n  volumes:\n    - {name: extra-ca, secret: {secretName: s}}\n" +
+			"  mounts:\n    - {name: extra-ca, mountPath: /etc/extra, subPath: 123}\n"},
 		{name: "complete mechanism", loaded: "verifier:\n  volumes:\n    - {name: extra-ca, secret: {secretName: s}}\n" +
 			"  mounts:\n    - {name: extra-ca, mountPath: /etc/extra, subPath: x.crt}\n"},
 	}

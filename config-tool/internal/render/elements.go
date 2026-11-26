@@ -187,7 +187,7 @@ func compose(l model.CompiledList, state listState, loaded []any, owned []*owned
 	placed := map[string]bool{}
 	if state == listLoaded {
 		for _, e := range loaded {
-			key, _ := keyOf(e, l.Key)
+			key, _ := l.KeyOf(e)
 			i := slices.IndexFunc(owned, func(o *ownedElement) bool { return o.key == key })
 			if i < 0 {
 				out = append(out, entry{value: e, origin: OriginLoaded})
@@ -223,29 +223,25 @@ type collision struct {
 // collisions lists every owned element that shares a unique field's value with a foreign one; a pinned owned
 // element holds the user's content, so it counts as foreign.
 func collisions(l model.CompiledList, entries []entry) []collision {
+	var foreign []any
+	for _, e := range entries {
+		if e.owner == nil || e.pinned {
+			foreign = append(foreign, e.value)
+		}
+	}
 	var out []collision
 	for _, e := range entries {
 		if e.owner == nil || e.pinned {
 			continue
 		}
-		for _, u := range l.Unique {
-			v, ok := e.owner.value[u]
-			if !ok {
-				continue
-			}
-			i := slices.IndexFunc(entries, func(f entry) bool {
-				m, ok := f.value.(map[string]any)
-				return (f.owner == nil || f.pinned) && ok && reflect.DeepEqual(m[u], v)
-			})
-			if i < 0 {
-				continue
-			}
-			foreign, _ := keyOf(entries[i].value, l.Key)
-			out = append(out, collision{group: e.owner.group, Withheld: Withheld{
-				Reason: WithheldCollision, Mechanism: e.owner.group.mechanism, Element: e.owner.key, List: l.Path.String(), Field: u, Value: v, ForeignKey: foreign,
-			}})
-			break
+		u, i, ok := l.Collision(e.owner.value, foreign)
+		if !ok {
+			continue
 		}
+		key, _ := l.KeyOf(foreign[i])
+		out = append(out, collision{group: e.owner.group, Withheld: Withheld{
+			Reason: WithheldCollision, Mechanism: e.owner.group.mechanism, Element: e.owner.key, List: l.Path.String(), Field: u, Value: e.owner.value[u], ForeignKey: key,
+		}})
 	}
 	return out
 }
@@ -254,7 +250,7 @@ func collisions(l model.CompiledList, entries []entry) []collision {
 // the foundation whose element makes the list be written, so a diff groups it there. On a pinned owned element
 // Rendered is the whole rendered element.
 func entryLeaves(l model.CompiledList, i int, e entry, owner string) []Leaf {
-	key, _ := keyOf(e.value, l.Key)
+	key, _ := l.KeyOf(e.value)
 	prov := Provenance{Foundation: owner, Answers: []string{}, Element: key, Origin: e.origin}
 	if e.owner != nil {
 		prov = Provenance{Foundation: e.owner.foundation, Answers: append([]string{}, e.owner.refs...), Target: e.owner.target, Element: key}
@@ -289,16 +285,6 @@ func flattenElement(p roundtrip.Path, v any, leaf func(roundtrip.Path, any)) {
 	default:
 		leaf(p, v)
 	}
-}
-
-// keyOf returns the string at field of a mapping element; false for any other element.
-func keyOf(e any, field string) (string, bool) {
-	m, ok := e.(map[string]any)
-	if !ok {
-		return "", false
-	}
-	s, ok := m[field].(string)
-	return s, ok
 }
 
 func sortedWithheld(ws map[group]Withheld) []Withheld {
