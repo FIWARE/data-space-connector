@@ -28,7 +28,7 @@ type Options struct {
 }
 
 // Render evaluates b's foundation targets over p's answers. It errors on an answer b does not
-// declare and on a derived answer its type refuses; an unanswered target writes nothing.
+// declare and on a derived answer its type refuses; an unanswered target, or one whose requires are, writes nothing.
 func Render(b model.Bundle, p profile.Profile, opts Options) (Tree, error) {
 	r, err := resolve(b, p)
 	if err != nil {
@@ -41,7 +41,10 @@ func Render(b model.Bundle, p profile.Profile, opts Options) (Tree, error) {
 	for _, decl := range b.Foundations {
 		f, _ := b.Foundation(decl.ID)
 		for i, t := range f.Targets {
-			if !all(r.answers, t.Refs) {
+			if t.Element != nil || t.Each != nil {
+				continue
+			}
+			if !all(r.answers, t.Refs) || !all(r.answers, t.Requires) {
 				for _, l := range lists(t.Path) {
 					incomplete[l.String()] = true
 				}
@@ -69,8 +72,18 @@ func Render(b model.Bundle, p profile.Profile, opts Options) (Tree, error) {
 	if opts.Overrides != nil {
 		pin(leaves, blocks, opts.Overrides)
 	}
+	// Element and each leaves are pinned by content, not by the hand edits pin reads: a loaded list holds them.
+	elements, withheld, err := composeLists(b, r, opts)
+	if err != nil {
+		return Tree{}, err
+	}
+	each, err := eachLeaves(b, r, opts)
+	if err != nil {
+		return Tree{}, err
+	}
+	leaves = slices.Concat(leaves, elements, each)
 	sortLeaves(leaves)
-	return Tree{Leaves: leaves}, nil
+	return Tree{Leaves: leaves, Withheld: withheld}, nil
 }
 
 // Answers returns p's given answers plus the derived defaults, keyed by foundation id; it errors as Render does.
@@ -95,8 +108,7 @@ func (r resolution) resolved(ids []string) bool {
 	return !slices.ContainsFunc(ids, func(id string) bool { _, ok := r.answers[id]; return !ok && !r.reserved[id] })
 }
 
-// resolve returns p's given answers plus the derived defaults, seeding the reserved target.environment from
-// p's target. It errors when a resolved answer does not start with its prefix.
+// resolve returns p's given answers plus the derived defaults, seeding the reserved target refs from p's target. It errors when a resolved answer does not start with its prefix.
 func resolve(b model.Bundle, p profile.Profile) (resolution, error) {
 	given := p.Answers
 	for _, id := range slices.Sorted(maps.Keys(given)) {
@@ -105,9 +117,15 @@ func resolve(b model.Bundle, p profile.Profile) (resolution, error) {
 		}
 	}
 	r := resolution{answers: map[string]any{}, ns: map[string]any{}, reserved: map[string]bool{}}
-	if env := p.Target.Environment; env != "" {
-		r.reserved[model.FieldTargetEnvironment] = true
-		setNested(r.ns, model.FieldTargetEnvironment, string(env))
+	for ref, v := range map[string]string{
+		model.FieldTargetEnvironment: string(p.Target.Environment),
+		model.RefTargetRelease:       p.Target.ReleaseName,
+		model.RefTargetNamespace:     p.Target.Namespace,
+	} {
+		if v != "" {
+			r.reserved[ref] = true
+			setNested(r.ns, ref, v)
+		}
 	}
 	for _, id := range b.FoundationOrder() {
 		f, _ := b.Foundation(id)
@@ -139,7 +157,7 @@ func defaults(f model.CompiledFoundation, r resolution) bool {
 	if f.DefaultTemplate() == nil || !r.resolved(f.DefaultRefs()) {
 		return false
 	}
-	return f.DefaultWhen == nil || r.answers[f.DefaultWhen.ID] == any(f.DefaultWhen.Equals)
+	return f.DefaultWhen == nil || f.DefaultWhen.Holds(r.answers)
 }
 
 // checkPrefix refuses v when it does not start with f's prefix; a prefix over unresolved answers is not checked.

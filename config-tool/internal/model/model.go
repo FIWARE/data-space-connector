@@ -47,6 +47,8 @@ type Bundle struct {
 	Resources *ResourceTable `yaml:"resources"`
 	// Checks are the L2 rules, written as rules: in the bundle (ADR 0021); Rules is taken by Recognize.
 	Checks []CheckRule `yaml:"rules"`
+	// Lists declares the lists element targets write into, with their base elements (ADR 0025).
+	Lists []List `yaml:"lists"`
 	// Latest marks the default version; Versions sets it, bundle files never do.
 	Latest bool `yaml:"-"`
 	// rules is Recognize compiled; readBundle sets it after validating every rule.
@@ -54,6 +56,8 @@ type Bundle struct {
 	// foundations is Foundations compiled and order their topological order; both nil without foundations.
 	foundations []CompiledFoundation
 	order       []string
+	// lists is Lists compiled.
+	lists []CompiledList
 }
 
 // Rules returns the validated recognition rules in bundle order.
@@ -288,7 +292,10 @@ func readBundle(fsys fs.FS, file string) (versioned, error) {
 	if err := checkCatalogue(&b); err != nil {
 		return versioned{}, fmt.Errorf("%s: %w", file, err)
 	}
-	if b.foundations, b.order, err = compileFoundations(b.Foundations, b.Resources, b.TopLevelKeys); err != nil {
+	if b.lists, err = compileLists(b.Lists, b.TopLevelKeys); err != nil {
+		return versioned{}, fmt.Errorf("%s: %w", file, err)
+	}
+	if b.foundations, b.order, err = compileFoundations(b.Foundations, b.lists, b.Resources, b.TopLevelKeys); err != nil {
 		return versioned{}, fmt.Errorf("%s: %w", file, err)
 	}
 	if err := checkFoundationFeatures(b.foundations, b.Features, b.Chart); err != nil {
