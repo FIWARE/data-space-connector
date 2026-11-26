@@ -162,7 +162,7 @@ mvn clean deploy -Pconsent
 This deploys the standard local data space plus the consent overlays.
 
 > :warning: A local bring-up with consent management is resource-hungry; the &ge;24 GB of the
-> [local deployment requirements](deployment-integration/local-deployment/LOCAL.MD#requirements)
+> [local deployment requirements](deployment-integration/local-deployment/LOCAL.md#requirements)
 > apply.
 
 ### Preparing a wallet and some shell variables
@@ -171,7 +171,7 @@ Run everything below from the repository root. All public hostnames of the local
 inside the cluster only, so every call goes through the squid proxy on `localhost:8888`.
 
 First create the holder identity in `cert/` and issue its credentials, as in the
-[local deployment guide](deployment-integration/local-deployment/LOCAL.MD#the-data-consumer). In this
+[local deployment guide](deployment-integration/local-deployment/LOCAL.md#the-data-consumer). In this
 scenario that one identity plays two roles: it is the **data subject** (through its
 `UserCredential`) and the consumer's **employee** (through its `MembershipCredential`).
 

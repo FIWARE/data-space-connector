@@ -2,7 +2,7 @@
 
 What a Kubernetes cluster needs before any role of the FIWARE Data Space Connector is installed in it: the operators the charts rely on, the network the components expect, and the resources they use. It applies to every role - [Consumer](consumer/README.md), [Provider](provider/README.md) and [Operator](operator/README.md) - and to the [local marketplace](provider/LOCAL_MARKETPLACE.md).
 
-The [local deployment](../local-deployment/LOCAL.MD) sets all of this up on its own, for a test environment on a single machine; this page is for clusters that are set up by hand.
+The [local deployment](../local-deployment/LOCAL.md) sets all of this up on its own, for a test environment on a single machine; this page is for clusters that are set up by hand.
 
 <!-- ToC -->
 - [Cluster Prerequisites](#cluster-prerequisites)

@@ -60,7 +60,7 @@ discriminates on. A characteristic without a `valueType` is skipped.
 
 ## Worked example
 
-Continuing the "M&P K8S" example of the [local deployment](../../local-deployment/LOCAL.MD): the
+Continuing the "M&P K8S" example of the [local deployment](../../local-deployment/LOCAL.md): the
 product is composed of one service that carries the cluster-creation policy.
 
 **1 — the service specification, with the policy**

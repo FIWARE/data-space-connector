@@ -145,6 +145,6 @@ kubectl apply -n kube-system -f ./yaml/nginx-ingress-controller.yaml
 ## Next Steps
 Once your Amazon EKS Cluster is ready, head to the specific step-by-step procedure that best describes your current environment in the following links of this documentation:
 
-* [1/ No existing AWS Garnet Framework deployment in the AWS Account](./scenario-1-deployment/)
+* [1/ No existing AWS Garnet Framework deployment in the AWS Account](./scenario-1-deployment/README.md)
 
-* [2/ Existing AWS Garnet Framework deployment in the AWS Account with a Context Broker on AWS ECS Fargate](./scenario-2-deployment/)
+* [2/ Existing AWS Garnet Framework deployment in the AWS Account with a Context Broker on AWS ECS Fargate](./scenario-2-deployment/README.md)

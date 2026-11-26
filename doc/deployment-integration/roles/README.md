@@ -2,13 +2,13 @@
 
 In a FIWARE Data Space, each organization plays one or more roles. Each role requires a different set of components from the FIWARE Data Space Connector. This section provides deployment guidance specific to each role.
 
-If you are new to the FIWARE DSC, start with the [Quick Start Guide](../local-deployment/LOCAL.MD) to understand how all the components work together before deploying for production.
+If you are new to the FIWARE DSC, start with the [Quick Start Guide](../local-deployment/LOCAL.md) to understand how all the components work together before deploying for production.
 
 To deploy a role, start from its [reference profile](../../../charts/data-space-connector/examples/README.md): an example values file for a provider, a consumer or a trust anchor, to adapt to your installation. The guides below explain each part of it.
 
 Before installing any role, check that the cluster has what the charts need - databases, network and resources: see [Cluster Prerequisites](PREREQUISITES.md).
 
-The [Glossary](../../README.md#glossary) explains the abbreviations and the example organizations used throughout these guides.
+The [Glossary](../../glossary.md) explains the abbreviations and the example organizations used throughout these guides.
 
 ## Roles in a Data Space
 

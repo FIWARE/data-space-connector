@@ -37,7 +37,7 @@ States:
 
 In order to access a Service by using the Transfer Process Protocol, the following steps need to be taken:
 
-> :warning: The example calls are using the [local deployment](./deployment-integration/local-deployment/LOCAL.MD). Make sure its running before trying them out.
+> :warning: The example calls are using the [local deployment](./deployment-integration/local-deployment/LOCAL.md). Make sure its running before trying them out.
 
 ### Preparation 
 

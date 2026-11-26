@@ -626,7 +626,7 @@ limitation of its `eidas` package -- so the mock is served unsigned.
 This walks an eIDAS credential end to end: the consumer's Keycloak issues a
 credential signed with an eIDAS certificate, and the provider's VCVerifier
 accepts it after validating the `x5c` chain. It is the standard OID4VP flow
-from [LOCAL.MD](../local-deployment/LOCAL.MD#demo-interactions) -- the
+from [LOCAL.md](../local-deployment/LOCAL.md#demo-interactions) -- the
 eIDAS-specific parts are steps 3 and 4.
 
 ### 1. Confirm the verifier started
@@ -851,8 +851,8 @@ matched the `did:elsi` issuer, and the provider's policy granted access.
 
 > The entity and the access policy have to exist for this step. Creating them
 > is not eIDAS-specific -- see
-> [The Data Provider](../local-deployment/LOCAL.MD#the-data-provider) in
-> `LOCAL.MD`.
+> [The Data Provider](../local-deployment/LOCAL.md#the-data-provider) in
+> `LOCAL.md`.
 
 ### 8. Confirm that validation actually bites
 

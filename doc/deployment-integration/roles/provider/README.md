@@ -296,7 +296,7 @@ The provider uses the `fiware/data-space-connector` chart with authentication an
 
 1. Create a helm `values.yaml` file with the key settings for a provider deployment:
 
-   The Ingresses in the example only carry the cert-manager annotations and use the cluster's default ingress class unless `className` is set. Add the class and the annotations your ingress controller needs; the [local deployment](../../local-deployment/LOCAL.MD) uses Traefik, for example.
+   The Ingresses in the example only carry the cert-manager annotations and use the cluster's default ingress class unless `className` is set. Add the class and the annotations your ingress controller needs; the [local deployment](../../local-deployment/LOCAL.md) uses Traefik, for example.
 
    With `certManagerResources.enabled: true` and `type: "prod"`, the chart creates the `prod-issuer` ClusterIssuer referenced below. Replace the `acmeEmail` and `ingressClass` placeholders with your own values. If your cluster already manages its own ClusterIssuer, disable `certManagerResources.enabled` and use that issuer's actual name in the annotations.
 

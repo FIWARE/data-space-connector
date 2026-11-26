@@ -512,7 +512,7 @@ Find more information in the dedicated [Marketplace Integration Section](./doc/M
 
 In order to be compatible with common european frameworks for Dataspaces, the FIWARE Data Space Connector provides integrations with the [Gaia-X Trustframework](https://gaia-x.gitlab.io/policy-rules-committee/trust-framework/). [Gaia-X Digital Clearing House's](https://gaia-x.eu/services-deliverables/digital-clearing-house/) can be used as Trust Anchors for the FIWARE Data Space Connector.
 
-Find out more in the dedicated [Gaia-X Integration Documentation](./doc/GAIA_X.MD).
+Find out more in the dedicated [Gaia-X Integration Documentation](./doc/GAIA_X.md).
 
 
 ## Deployment
@@ -521,7 +521,7 @@ Find out more in the dedicated [Gaia-X Integration Documentation](./doc/GAIA_X.M
 
 The Quick Start Guide helps you understand how a FIWARE DSC-based Data Space works by exploring the data space flows and the interaction between its components. To do so, it automatically deploys a minimal Data Space that is intended for learning and development purposes only, not for production.
 
-* [Quick Start Guide](./doc/deployment-integration/local-deployment/LOCAL.MD)
+* [Quick Start Guide](./doc/deployment-integration/local-deployment/LOCAL.md)
 
 > **Note:** The Quick Start Guide is for **learning and development purposes only**. It deploys all the components of a data space together to show how they interact, not from the perspective of any specific role.
 
@@ -575,7 +575,7 @@ keycloak:
 
 For development and testing with all components, a Maven-based local deployment is also available. It automatically spins up a full data space using k3s and Docker:
 
-* [Local Deployment](./doc/deployment-integration/local-deployment/LOCAL.MD)
+* [Local Deployment](./doc/deployment-integration/local-deployment/LOCAL.md)
 
 ```shell
     # Default local deployment
@@ -616,7 +616,7 @@ The tests can be executed via:
 ```shell
     mvn clean integration-test -Ptest
 ```
-They will spin up the [Local Data Space](./doc/deployment-integration/local-deployment/LOCAL.MD) and run
+They will spin up the [Local Data Space](./doc/deployment-integration/local-deployment/LOCAL.md) and run
 the [test-scenarios](./it/src/test/resources/it/mvds_basic.feature) against it.
 
 By default the charts are rendered with `helm template` and applied with `kubectl`, as a GitOps tool does; add the
@@ -631,13 +631,13 @@ Additional and more detailed documentation about the FIWARE Data Space Connector
 specific flows and its deployment and integration with other frameworks:
 
 * [Dataspace Protocol Integration](./doc/DSP_INTEGRATION.md)
-* [Gaia-X Integration](./doc/GAIA_X.MD)
+* [Gaia-X Integration](./doc/GAIA_X.md)
 * [Marketplace Integration](./doc/MARKETPLACE_INTEGRATION.md)
 * [Central Marketplace](./doc/CENTRAL_MARKETPLACE.md)
 * [Contract Negotiation](./doc/CONTRACT_NEGOTIATION.md)
 * [Service Interaction (M2M)](./doc/flows/service-interaction-m2m)
 * [Contract Management flows](./doc/flows/contract-management)
-* [Local Deployment](./doc/deployment-integration/local-deployment/LOCAL.MD)
+* [Local Deployment](./doc/deployment-integration/local-deployment/LOCAL.md)
 * [fdsc-verify](https://github.com/SEAMWARE/fdsc-verify) — Validate a deployed connector: configuration, identity wiring and end-to-end flows
 * [Distributed Tracing (OpenTelemetry)](./doc/deployment-integration/observability/README.md) — Enable end-to-end distributed tracing across all DSC components using OpenTelemetry, with support for Jaeger, Grafana Tempo, Honeycomb, and other OTLP-compatible backends
 * [Additional documentation](./doc)

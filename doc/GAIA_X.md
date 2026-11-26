@@ -6,21 +6,21 @@ In order to be compatible with common european frameworks for Dataspaces, the FI
 
 ## Gaia-X Digital Clearing Houses as Trusted Issuers Registry
 
-The FIWARE Data Space Connector requires at least one Trusted Issuers Registry as its [Trust Anchor](./deployment-integration/local-deployment/LOCAL.MD#the-trust-anchor). While one of the options is the usage of an [EBSI-Trusted Issuers Registry compatible service](https://hub.ebsi.eu/api/core/issuers-registry), its also possible to rely on [Gaia-X Digital Clearing Houses(GDCH)](https://gaia-x.eu/services-deliverables/digital-clearing-house/). 
+The FIWARE Data Space Connector requires at least one Trusted Issuers Registry as its [Trust Anchor](./deployment-integration/local-deployment/LOCAL.md#the-trust-anchor). While one of the options is the usage of an [EBSI-Trusted Issuers Registry compatible service](https://hub.ebsi.eu/api/core/issuers-registry), its also possible to rely on [Gaia-X Digital Clearing Houses(GDCH)](https://gaia-x.eu/services-deliverables/digital-clearing-house/). 
 As part of its mandatory components, each GDCH has to provide a [Gaia-X Registry Service](https://docs.gaia-x.eu/technical-committee/architecture-document/24.04/gx_services/#gaia-x-registry). The registry-service is responsible for storing the Trust Anchors accepted by the Gaia-X Trust Framework and provides an [API](https://registry.lab.gaia-x.eu/v2/docs/) that can be used for verifying such trust chains. 
 
 Since Gaia-X supports [did:web as schema for credentials issuers](https://gitlab.com/gaia-x/technical-committee/identity-credentials-and-access-management-working-group/icam/-/blob/main/docs/credential_format.md#issuers), an integration with the FIWARE Data Space Connector can be achieved by just using such identity for the participant. Thus, when a participant is registered with a Gaia-X compatible ```did:web``` in the Data Space and the [Verifier is configured to use a Gaia-X registry](https://github.com/FIWARE/VCVerifier?tab=readme-ov-file#gaia-x-registry), a GDCH can be used as participants registry.
 
 ### Demo Usage
 
-A demonstrational support for integration of the Gaia-X Digital Clearing House is provided as part of the [Local-Deployment](./deployment-integration/local-deployment/LOCAL.MD). As a deviation from the default-example(using did:key for the consumer), the ```gaia-x``` profile has to be used to create a local-resolvable, gaia-x compliant ```did:web``` and a local instance of a GDCH.
+A demonstrational support for integration of the Gaia-X Digital Clearing House is provided as part of the [Local-Deployment](./deployment-integration/local-deployment/LOCAL.md). As a deviation from the default-example(using did:key for the consumer), the ```gaia-x``` profile has to be used to create a local-resolvable, gaia-x compliant ```did:web``` and a local instance of a GDCH.
 
 To run the local setup:
 ```shell
       mvn clean deploy -Plocal,gaia-x
 ```
 
-Once the system started, all flows described for the [local setup](./deployment-integration/local-deployment/LOCAL.MD#the-data-space) can be executed. 
+Once the system started, all flows described for the [local setup](./deployment-integration/local-deployment/LOCAL.md#the-data-space) can be executed. 
 
 #### Differences to local deployment
 
@@ -101,7 +101,7 @@ Not supported:
 
 Policies can be created at the [ODRL-PAP](https://github.com/wistefan/odrl-pap). 
 
-> :bulb: The following examples use the [local-deployment of the connector](./deployment-integration/local-deployment/LOCAL.MD). However, all of them can be run on any other installation of the Data Space Connector.
+> :bulb: The following examples use the [local-deployment of the connector](./deployment-integration/local-deployment/LOCAL.md). However, all of them can be run on any other installation of the Data Space Connector.
 
 The policy would allow any caller providing a Verifiable Credential with the the ```credentialSubject.type``` being ```gx:LegalParticipant``` and containing a claim ```credentialSubject.gx:legalAddress.gx:countrySubdivisionCode``` with the value either being ```FR-HDF``` or ```BE-BRU``` to read the entity with the id ```my-secured-object``` .
 

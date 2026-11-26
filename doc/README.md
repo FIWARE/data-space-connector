@@ -44,9 +44,9 @@ specific flows and its deployment and integration with other frameworks.
 The FIWARE Data Space Connector provides components to perform contract management based on the TMForum APIs. 
 
 More information can be found here:
-* [Contract Management](./flows/contract-management) - Information about the Contract Management and its 
+* [Contract Management](./flows/contract-management/README.md) - Information about the Contract Management and its 
   authentication/authorization
-* [TMForum contract management example](./flows/contract-management/tmf) - Example requests to interact 
+* [TMForum contract management example](./flows/contract-management/tmf/README.md) - Example requests to interact 
   with the TMForum APIs
 
 
@@ -55,7 +55,7 @@ More information can be found here:
 
 A detailed description about the steps to be performed in a Machine-To-Machine (M2M) service interaction 
 can be found here:
-* [Service Interaction (M2M)](./flows/service-interaction-m2m)
+* [Service Interaction (M2M)](./flows/service-interaction-m2m/README.md)
 
 ### Consent Management
 
@@ -77,7 +77,7 @@ data access flow are documented here:
 
 An automated minimal deployment of a complete data space (trust anchor + provider + consumer) for **learning and development purposes**. Its goal is not to show how to deploy each component individually, but to provide a running environment where you can explore the flows and understand how a FIWARE DSC-based Data Space works.
 
-* [Quick Start Guide](./deployment-integration/local-deployment/LOCAL.MD)
+* [Quick Start Guide](./deployment-integration/local-deployment/LOCAL.md)
 
 > **Note:** The Quick Start Guide is not intended for production deployments. For deploying in a real environment, start from the reference profiles below.
 
@@ -109,7 +109,7 @@ After installing the connector, [fdsc-verify](https://github.com/SEAMWARE/fdsc-v
 
 For development and testing, a Maven-based local deployment automatically spins up a full data space using k3s and Docker.
 
-* [Local Deployment](./deployment-integration/local-deployment/LOCAL.MD)
+* [Local Deployment](./deployment-integration/local-deployment/LOCAL.md)
 
 ### Packet Delivery Company (ArgoCD)
 
@@ -153,7 +153,7 @@ In general, this example deploys a data service provider based on the Data Space
 but integrating the FIWARE Context Broker from the STF.
 
 More information can be found here:
-* [Integration with AWS Garnet Framework](./deployment-integration/aws-garnet/)
+* [Integration with AWS Garnet Framework](./deployment-integration/aws-garnet/README.md)
 
 ## Glossary
 

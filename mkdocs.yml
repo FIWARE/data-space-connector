@@ -1,0 +1,135 @@
+site_name: FIWARE Data Space Connector
+site_description: Documentation for deploying and integrating the FIWARE Data Space Connector
+site_url: https://fiware.github.io/data-space-connector/
+repo_url: https://github.com/FIWARE/data-space-connector
+repo_name: FIWARE/data-space-connector
+edit_uri: edit/main/doc/
+
+docs_dir: doc
+
+theme:
+  name: material
+  features:
+    - navigation.tabs
+    - navigation.tabs.sticky
+    - navigation.sections
+    - navigation.top
+    - navigation.indexes
+    - navigation.footer
+    - toc.follow
+    - content.code.copy
+    - content.action.edit
+    - search.suggest
+    - search.highlight
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: teal
+      accent: teal
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: teal
+      accent: teal
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+      # GitHub-compatible slugs: the source docs were authored for GitHub, so
+      # intra-page anchors (e.g. "wallets--scripts") must slugify the GitHub way.
+      slugify: !!python/object/apply:pymdownx.slugs.slugify
+        kwds:
+          case: lower
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+
+plugins:
+  - search
+
+# Files kept in the repo for GitHub browsing but left out of the site:
+#  - /README.md        : the detailed doc index; the site has its own home (index.md) and nav
+#  - aws-garnet-iot-module/ : a vendored third-party module's meta files
+exclude_docs: |
+  /README.md
+  deployment-integration/aws-garnet/scenario-1-deployment/aws-garnet-iot-module/
+
+# Surface broken/omitted links and files during build so we can triage them.
+validation:
+  omitted_files: warn
+  absolute_links: warn
+  unrecognized_links: warn
+  anchors: warn
+  nav:
+    omitted_files: warn
+
+nav:
+  - Home: index.md
+  - Get Started:
+      - Quick Start (Local Deployment): deployment-integration/local-deployment/LOCAL.md
+  - Deploy by Role:
+      - Choose your role: deployment-integration/roles/README.md
+      - Cluster Prerequisites: deployment-integration/roles/PREREQUISITES.md
+      - Keycloak Setup: deployment-integration/roles/KEYCLOAK.md
+      - Consumer: deployment-integration/roles/consumer/README.md
+      - Provider: deployment-integration/roles/provider/README.md
+      - Provider — Local Marketplace: deployment-integration/roles/provider/LOCAL_MARKETPLACE.md
+      - Provider — Composed Specifications: deployment-integration/roles/provider/COMPOSED_SPECIFICATIONS.md
+      - Consumer + Provider: deployment-integration/roles/consumer-provider/README.md
+      - Operator (Data Space Governance): deployment-integration/roles/operator/README.md
+  - Concepts & Flows:
+      - Contract Management: flows/contract-management/README.md
+      - TMForum Contract Management Example: flows/contract-management/tmf/README.md
+      - M2M Service Interaction: flows/service-interaction-m2m/README.md
+      - Consent Management: CONSENT_MANAGEMENT.md
+      - Contract Negotiation: CONTRACT_NEGOTIATION.md
+      - DSP Integration: DSP_INTEGRATION.md
+      - Marketplace Integration: MARKETPLACE_INTEGRATION.md
+      - Central Marketplace: CENTRAL_MARKETPLACE.md
+      - Rainbow Integration: RAINBOW_INTEGRATION.md
+  - Operations & Production:
+      - Production (Vault & Identity): deployment-integration/production/VAULT.md
+      - Observability: deployment-integration/observability/README.md
+      - eIDAS 2.0 Compliance: deployment-integration/eidas/README.md
+      - Keycloak OID4VC Protocol Mappers: keycloak/oid4vc-protocol-mappers.md
+      - Gaia-X: GAIA_X.md
+      - AWS Garnet Framework:
+          - Overview: deployment-integration/aws-garnet/README.md
+          - Scenario 1: deployment-integration/aws-garnet/scenario-1-deployment/README.md
+          - Scenario 2: deployment-integration/aws-garnet/scenario-2-deployment/README.md
+  - Reference:
+      - Glossary: glossary.md
+      - Release Notes:
+          - "11.x": release-notes/11-x.md
+          - "10.x": release-notes/10-x.md
+          - "9.x": release-notes/9-x.md
+          - "8.x": release-notes/8-x.md
+  - Contribute:
+      - Architecture Decisions:
+          - Overview: adr/README.md
+          - "ADR-0001: OID4VP for Participant Authentication": adr/0001-oid4vp-for-participant-authentication.md
+          - "ADR-0002: Reuse Facade OID4VP Client": adr/0002-reuse-facade-oid4vp-client.md
+          - "ADR-0003: Token Endpoint, not Consent Proxy": adr/0003-token-endpoint-not-consent-proxy.md
+          - "ADR-0004: Map OID4VP Tokens to Participants by DID": adr/0004-map-oid4vp-tokens-to-participants-by-did.md
+          - "ADR-0005: VC-based Participant Onboarding": adr/0005-vc-based-participant-onboarding.md
+          - "ADR-0006: eIDAS Validation in VCVerifier": adr/0006-eidas-validation-in-vcverifier.md
+          - "ADR-0007: Test Both Deployment Paths": adr/0007-test-both-deployment-paths.md
+          - "ADR-0008: DSC Consent Manager": adr/0008-dsc-consent-manager.md
+      - Ongoing Work: ONGOING_WORK.md

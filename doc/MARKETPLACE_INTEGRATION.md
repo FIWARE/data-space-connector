@@ -6,7 +6,7 @@ In order to offer data and data services or buy them, the FIWARE Data Space Conn
 
 ## Demo Usage
 
-The Marketplace is integrated into the [Local Deployment](./deployment-integration/local-deployment/LOCAL.MD). To prepare the DEMO interaction, deploy it via ```mvn clean deploy -Plocal```. Since it contains a frontend and needs to integrate with a wallet, the deployment contains [Squid](https://www.squid-cache.org/) as an https-forward-proxy in order to delegate DNS-resolution directly to the [Traefik-Ingress Controller](https://traefik.io). Follow the documented steps to prepare the demo.
+The Marketplace is integrated into the [Local Deployment](./deployment-integration/local-deployment/LOCAL.md). To prepare the DEMO interaction, deploy it via ```mvn clean deploy -Plocal```. Since it contains a frontend and needs to integrate with a wallet, the deployment contains [Squid](https://www.squid-cache.org/) as an https-forward-proxy in order to delegate DNS-resolution directly to the [Traefik-Ingress Controller](https://traefik.io). Follow the documented steps to prepare the demo.
 
 ### The Wallet
 
@@ -110,7 +110,7 @@ In order to test the marketplace integration, a Provider and a Consumer will be 
 
 > :warning: When the pages are first opened in the browser, a certificate warning will be shown. The local environment uses self-signed certificates, add an exception for those sites.
 
-The following flow will enable a customer to use a service offered by the provider by presenting an "OperatorCredential". The data-service is available for M2M-interactions, thus the flows described in the [Local Deployment](./deployment-integration/local-deployment/LOCAL.MD) can be used. To test that the service is not available before the process, do the following steps:
+The following flow will enable a customer to use a service offered by the provider by presenting an "OperatorCredential". The data-service is available for M2M-interactions, thus the flows described in the [Local Deployment](./deployment-integration/local-deployment/LOCAL.md) can be used. To test that the service is not available before the process, do the following steps:
 
 * Create an identity for the Consumer Service:
 ```shell

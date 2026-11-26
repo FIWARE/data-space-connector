@@ -33,7 +33,7 @@ PROVIDER: "GET","POST","PUT","DELETE" on all deployed TMForum APIs
 CONSUMER: "GET" on the ProductCatalogManagement-API and "GET","POST","PUT" on the ProductOrderingManagement-API
 LEGAL_REPRESENTATIVE: "GET", "POST" and "PUT" on the Parties-API 
 
-> :warning: The hosted DSBA demo endpoints below are historical and are no longer available. Use the [local deployment guide](../../deployment-integration/local-deployment/LOCAL.MD) to run a current environment; adapt the example endpoints and users to your deployment.
+> :warning: The hosted DSBA demo endpoints below are historical and are no longer available. Use the [local deployment guide](../../deployment-integration/local-deployment/LOCAL.md) to run a current environment; adapt the example endpoints and users to your deployment.
 
 ### Credentials and Role-Assignment
 
@@ -51,7 +51,7 @@ In order to get the credentials, use the HappyPets Keycloak (`https://happypets-
 > :construction: The [Business API Ecosystem](https://github.com/FIWARE-TMForum/Business-API-Ecosystem) as a Marketplace solution build on top of the TMForum-APIs is currently beeing updated to the latest TMForum-APIs and the security framework. Once its finished, it can be used a Marketplace, including UI, for the Data Space Connector.
 
 
-To provide a working example for Contract Management, using the Data Space Connector, a [postman colletion is provided](./tmf/).
+To provide a working example for Contract Management, using the Data Space Connector, a [postman colletion is provided](./tmf/README.md).
 It includes the following steps of the aquisition process:
 
 > :bulb: Since frontend-solutions are still under construction, plain REST-calls are used for the flow. Since all calls require a valid JWT, the demo-portal (`https://packetdelivery-portal.dsba.fiware.dev/`) for the provider has a link to get a plain token in exchange for the Verifiable Credential. Log-in either as CONSUMER or PROVIDER (see [Credentials and Role-Assignment](#credentials-and-role-assignment)) to get tokens.
