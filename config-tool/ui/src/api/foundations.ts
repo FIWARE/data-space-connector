@@ -20,10 +20,11 @@ export interface FoundationOption {
 /** The Stage 3 panel that asks a foundation, mirroring `model.FoundationGroup`. */
 export type FoundationGroup = 'organization' | 'dataspace' | 'network' | 'platform'
 
-/** Holds while the resolved answer `id` equals `equals`, mirroring `model.Condition`. */
+/** Holds while the resolved answer `id` equals `equals`, or with `set` while it resolves at all, mirroring `model.Condition`. */
 export interface Condition {
   id: string
   equals: string
+  set?: boolean
 }
 
 /** One chart key a foundation reaches; `component` is the path's top-level key. */

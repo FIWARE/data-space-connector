@@ -115,18 +115,16 @@ func composeLists(b model.Bundle, r resolution, opts Options) ([]Leaf, []Withhel
 			return unready[o.group] || w
 		})
 	}
-	// Withholding a mechanism restores the loaded elements it replaced, which may collide in turn.
-	for changed := true; changed; {
-		changed = false
-		for k, l := range table {
-			if states[k] == listEdited {
-				continue
-			}
-			for _, w := range collisions(l, compose(l, states[k], loaded[k], active(k))) {
-				if _, ok := withheld[w.group]; !ok {
-					withheld[w.group] = w.Withheld
-					changed = true
-				}
+	// One pass suffices: withholding restores a loaded owned element as foreign, but an unpinned one equals its
+	// rendered value, whose literal unique values no other owned element shares (model.checkElements), and a
+	// pinned one already counts as foreign.
+	for k, l := range table {
+		if states[k] == listEdited {
+			continue
+		}
+		for _, w := range collisions(l, compose(l, states[k], loaded[k], active(k))) {
+			if _, ok := withheld[w.group]; !ok {
+				withheld[w.group] = w.Withheld
 			}
 		}
 	}
@@ -137,7 +135,7 @@ func composeLists(b model.Bundle, r resolution, opts Options) ([]Leaf, []Withhel
 			continue
 		}
 		for i, e := range compose(l, states[k], loaded[k], act) {
-			leaves = append(leaves, entryLeaves(l, i, e, states[k] == listEdited)...)
+			leaves = append(leaves, entryLeaves(l, i, e, act[0].foundation, states[k] == listEdited)...)
 		}
 	}
 	return leaves, sortedWithheld(withheld), nil
@@ -229,11 +227,13 @@ func collisions(l model.CompiledList, entries []entry) []collision {
 	return out
 }
 
-// entryLeaves flattens the i-th element of l into leaves. In an edited list every leaf is pinned without a kept
-// value, so the loaded value stays; on a pinned owned element Rendered is the whole rendered element.
-func entryLeaves(l model.CompiledList, i int, e entry, edited bool) []Leaf {
+// entryLeaves flattens the i-th element of l into leaves. A base or loaded foreign element is attributed to owner,
+// the foundation whose element makes the list be written, so a diff groups it there. In an edited list every leaf
+// is pinned without a kept value, so the loaded value stays; on a pinned owned element Rendered is the whole
+// rendered element.
+func entryLeaves(l model.CompiledList, i int, e entry, owner string, edited bool) []Leaf {
 	key, _ := keyOf(e.value, l.Key)
-	prov := Provenance{Element: key, Origin: e.origin}
+	prov := Provenance{Foundation: owner, Answers: []string{}, Element: key, Origin: e.origin}
 	if e.owner != nil {
 		prov = Provenance{Foundation: e.owner.foundation, Answers: append([]string{}, e.owner.refs...), Target: e.owner.target, Element: key}
 		if e.pinned {

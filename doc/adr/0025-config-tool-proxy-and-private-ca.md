@@ -38,7 +38,8 @@ Elements with keys the tool does not own are never changed. A loaded element wit
 a hand edit: it is kept and pinned, with the rendered element as `Rendered`, exactly like a scalar pin. A loaded value
 that is not a sequence pins the whole list. Leaves keep concrete indices, so `render.Tree`, `Nested()` and the leaf JSON
 are unchanged. Provenance gains `element` (the key) and `origin` (`base` or `loaded`) for elements the render writes but
-does not own. Appending beyond a loaded list's length is left to US-7.1's writer.
+does not own. Such a leaf carries the first foundation, in bundle order, whose element makes the list be written, so
+the Stage 3 diff files the base under that foundation. Appending beyond a loaded list's length is left to US-7.1's writer.
 
 Compile-time checks: a keyed element's list must be in `lists:`, and no target may also index into it. Two targets may
 not own the same key, and an owned key may not be a `base` key. An element that reads no answer needs `requires`.

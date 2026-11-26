@@ -8,8 +8,10 @@ import {
   derivedDefault,
   dropMismatched,
   featureOff,
+  fullname,
   MAX_CREDENTIAL_TYPES,
   MAX_HOSTNAME_LENGTH,
+  MAX_RESOURCE_NAME,
   MAX_URL_LENGTH,
   MSG_BOOL,
   MSG_CREDENTIAL_TYPES,
@@ -26,6 +28,8 @@ import {
   reservedRefs,
   resolvedAnswer,
   TARGET_ENVIRONMENT_REF,
+  TARGET_NAMESPACE_REF,
+  TARGET_RELEASE_REF,
   textAnswer,
   validAnswers,
 } from './foundations'
@@ -247,8 +251,55 @@ describe('reserved refs', () => {
   })
 })
 
+describe('release and namespace refs, fullname and defaultWhen set', () => {
+  const HTTPS: Foundation = { ...RESOURCE_PROFILE, id: 'proxy.https', type: 'url', group: 'network', default: '', options: [], targets: [] }
+  const NO: Foundation = {
+    ...HTTPS,
+    id: 'proxy.no',
+    type: 'string',
+    default: 'localhost,{{ .target.namespace }}.svc,{{ fullname .target.release "keycloak" }}',
+    defaultWhen: { id: HTTPS.id, equals: '', set: true },
+  }
+  const all = [HTTPS, NO]
+  const proxy = 'http://proxy:3128'
+  const target = (releaseName: string, namespace: string) => ({ ...emptyAnswers().target, releaseName, namespace })
+
+  it('seeds release and namespace once Stage 1 has them', () => {
+    expect(reservedRefs(target('', ''))).toEqual({})
+    expect(reservedRefs(target('provider', 'dsc'))).toEqual({ [TARGET_RELEASE_REF]: 'provider', [TARGET_NAMESPACE_REF]: 'dsc' })
+  })
+
+  it.each([
+    ['not derived while the gating answer is unset, though its refs resolve', {}, target('provider', 'dsc'), undefined],
+    ['derived once the gating answer is given', { 'proxy.https': proxy }, target('provider', 'dsc'), 'localhost,dsc.svc,provider-keycloak'],
+    ['fullname keeps a release that contains the chart', { 'proxy.https': proxy }, target('my-keycloak', 'dsc'), 'localhost,dsc.svc,my-keycloak'],
+    ['waits for the release', { 'proxy.https': proxy }, target('', 'dsc'), undefined],
+    ['a given answer wins', { 'proxy.https': proxy, 'proxy.no': 'x' }, target('provider', 'dsc'), 'x'],
+  ])('%s', (_, values, t, want) => {
+    expect(resolvedAnswer(NO.id, values, all, reservedRefs(t))).toEqual(want)
+  })
+
+  it('counts a given bool as set', () => {
+    const flag: Foundation = { ...HTTPS, id: 'flag', type: 'bool' }
+    const gated: Foundation = { ...NO, default: 'on', defaultWhen: { id: flag.id, equals: '', set: true } }
+    expect(resolvedAnswer(gated.id, { flag: false }, [flag, gated], NONE)).toBe('on')
+  })
+
+  const long = 'r'.repeat(54)
+  it.each([
+    ['release contains chart', 'provider-keycloak', 'keycloak', 'provider-keycloak'],
+    ['release equals chart', 'keycloak', 'keycloak', 'keycloak'],
+    ['prefixed', 'provider', 'keycloak', 'provider-keycloak'],
+    [`truncated to ${MAX_RESOURCE_NAME}`, long, 'keycloak-x', `${long}-keycloak-x`.slice(0, MAX_RESOURCE_NAME)],
+    ['trailing dash trimmed', 'r'.repeat(62), 'keycloak', 'r'.repeat(62)],
+  ])('fullname: %s', (_, release, chart, want) => {
+    expect(fullname(release, chart)).toBe(want)
+  })
+})
+
 describe('derivedDefault', () => {
   it.each([
+    ['a fullname of a reserved ref', '{{ fullname .target.release "keycloak" }}', true],
     ['a reserved ref', RESOURCE_PROFILE.default, true],
     ['an answer ref', 'did:web:{{ .domain.base }}', true],
     ['a constant', DID_METHOD.default, false],

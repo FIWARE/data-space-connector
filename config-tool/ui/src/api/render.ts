@@ -15,6 +15,10 @@ export interface Provenance {
   kept: boolean
   /** What the render would have written; set on a pinned leaf only. */
   rendered?: unknown
+  /** The key of the list element the leaf lies in, for a list written by keyed elements. */
+  element?: string
+  /** `base` or `loaded` on a leaf of an element the render keeps but does not own. */
+  origin?: 'base' | 'loaded'
 }
 
 /** One scalar of the tree; `path` is in roundtrip.ParsePath syntax. */

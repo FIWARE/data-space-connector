@@ -100,27 +100,51 @@ export function checkAnswer(type: FoundationType, value: AnswerValue, options: r
   return undefined
 }
 
-/** A template's `{{ .id }}` references, the only action the bundles may use. */
-const ANSWER_REFERENCE = /\{\{\s*\.([\w.]+)\s*\}\}/g
+/** A template's two actions the bundles may use: `{{ fullname .id "chart" }}` (groups 1 and 2) and `{{ .id }}` (group 3). */
+const ANSWER_REFERENCE = /\{\{\s*(?:fullname\s+\.([\w.]+)\s+"([^"\\]*)"|\.([\w.]+))\s*\}\}/g
+
+/** The id a match of ANSWER_REFERENCE references. */
+function referencedId(match: RegExpMatchArray): string {
+  return match[1] ?? match[3] ?? ''
+}
 
 /** The read-only ref a default may take from Stage 1's environment, `model.FieldTargetEnvironment` in Go. */
 export const TARGET_ENVIRONMENT_REF = 'target.environment'
+/** The read-only refs a default may take from Stage 1's release and namespace, `model.RefTargetRelease`/`RefTargetNamespace`. */
+export const TARGET_RELEASE_REF = 'target.release'
+export const TARGET_NAMESPACE_REF = 'target.namespace'
+
+/** Longest Kubernetes resource name, `maxResourceName` in Go. */
+export const MAX_RESOURCE_NAME = 63
 
 /** Values of the reserved refs by id; they are never answers, so they are never saved, counted or checked. */
 export type ReservedRefs = Readonly<Record<string, string>>
 
-/** The reserved refs `target` resolves: the environment once Stage 1 has it, else none. */
-export function reservedRefs(target: Pick<Target, 'environment'>): ReservedRefs {
-  return target.environment === UNANSWERED ? {} : { [TARGET_ENVIRONMENT_REF]: target.environment }
+/** The reserved refs `target` resolves: each of environment, release and namespace once Stage 1 has it. */
+export function reservedRefs(target: Pick<Target, 'environment' | 'releaseName' | 'namespace'>): ReservedRefs {
+  const refs: Record<string, string> = {}
+  if (target.environment !== UNANSWERED) refs[TARGET_ENVIRONMENT_REF] = target.environment
+  if (target.releaseName !== '') refs[TARGET_RELEASE_REF] = target.releaseName
+  if (target.namespace !== '') refs[TARGET_NAMESPACE_REF] = target.namespace
+  return refs
+}
+
+/** Helm's standard fullname rule, `model.Fullname` in Go: the release alone when it contains the chart, else
+ *  release-chart, truncated to 63 characters without a trailing '-'. */
+export function fullname(release: string, chart: string): string {
+  const name = (release.includes(chart) ? release : `${release}-${chart}`).slice(0, MAX_RESOURCE_NAME)
+  return name.endsWith('-') ? name.slice(0, -1) : name
 }
 
 /** `template` with its references filled from the reserved refs, then resolved answers; undefined while one is unresolved. */
 function fill(template: string, values: Record<string, AnswerValue>, foundations: readonly Foundation[], reserved: ReservedRefs): string | undefined {
   let missing = false
-  const filled = template.replace(ANSWER_REFERENCE, (_, id: string) => {
-    const value = reserved[id] ?? resolvedAnswer(id, values, foundations, reserved)
+  const filled = template.replace(ANSWER_REFERENCE, (_, fullnameOf: string | undefined, chart: string | undefined, id: string | undefined) => {
+    const ref = fullnameOf ?? id ?? ''
+    const value = reserved[ref] ?? resolvedAnswer(ref, values, foundations, reserved)
     missing ||= value === undefined
-    return value ?? ''
+    if (value === undefined) return ''
+    return chart === undefined ? value : fullname(value, chart)
   })
   return missing ? undefined : filled
 }
@@ -128,7 +152,11 @@ function fill(template: string, values: Record<string, AnswerValue>, foundations
 /** Whether `f`'s default applies: it has one and its `defaultWhen` holds over the resolved answers. */
 export function defaultApplies(f: Foundation, values: Record<string, AnswerValue>, foundations: readonly Foundation[], reserved: ReservedRefs): boolean {
   if (f.default === '') return false
-  return !f.defaultWhen || resolvedAnswer(f.defaultWhen.id, values, foundations, reserved) === f.defaultWhen.equals
+  const when = f.defaultWhen
+  if (!when) return true
+  // A given bool or list resolves too, though resolvedAnswer, which feeds templates, leaves it out.
+  if (when.set) return values[when.id] !== undefined || resolvedAnswer(when.id, values, foundations, reserved) !== undefined
+  return resolvedAnswer(when.id, values, foundations, reserved) === when.equals
 }
 
 /** Whether `f`'s default follows other answers or reserved refs, so dropping a given answer lets it follow them again. */
@@ -196,7 +224,7 @@ export function dropMismatched(
   const stale = (foundations ?? []).filter((f) => {
     const value = values[f.id]
     if (f.id === changed || value === undefined) return false
-    return [...f.prefix.matchAll(ANSWER_REFERENCE)].some(([, id]) => id === changed) && prefixError(f, value, values, foundations ?? [], reserved) !== undefined
+    return [...f.prefix.matchAll(ANSWER_REFERENCE)].some((m) => referencedId(m) === changed) && prefixError(f, value, values, foundations ?? [], reserved) !== undefined
   })
   if (stale.length === 0) return values
   return Object.fromEntries(Object.entries(values).filter(([id]) => !stale.some((f) => f.id === id)))

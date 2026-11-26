@@ -139,7 +139,7 @@ func TestKeyedElementProvenance(t *testing.T) {
 		path string
 		want Provenance
 	}{
-		{"keycloak.extraVolumeMounts[0].name", Provenance{Element: "realms", Origin: OriginBase}},
+		{"keycloak.extraVolumeMounts[0].name", Provenance{Foundation: "ca.secret", Answers: []string{}, Element: "realms", Origin: OriginBase}},
 		{"keycloak.extraVolumeMounts[1].mountPath", Provenance{Foundation: "ca.secret", Answers: []string{}, Target: 2, Element: "ca-bundle"}},
 		{"verifier.volumes[0].secret.secretName", Provenance{Foundation: "ca.secret", Answers: []string{"ca.secret"}, Target: 0, Element: "ca-bundle"}},
 		{"keycloak.extraEnvVars[0].value", Provenance{
@@ -189,6 +189,118 @@ func TestMechanismWithheld(t *testing.T) {
 	}
 	if got := at(t, tree, "keycloak.extraVolumeMounts"); !reflect.DeepEqual(got, []any{realmMount, trustMount}) {
 		t.Errorf("other mechanism: extraVolumeMounts = %v", got)
+	}
+}
+
+func TestMechanismInterplay(t *testing.T) {
+	const extraFile = "extra.crt"
+	rootCA := map[string]any{"name": "root-ca", "mountPath": caMountPath}
+	extraVolume := map[string]any{"name": "extra-ca", "secret": map[string]any{"secretName": caSecret}}
+	extraMount := map[string]any{"name": "extra-ca", "mountPath": "/etc/extra", "subPath": extraFile}
+	verifierCA := Withheld{Mechanism: "verifier-ca", Element: "ca-bundle", List: "verifier.mounts", Field: "mountPath", Value: caMountPath, ForeignKey: "root-ca"}
+	both := map[string]any{"ca.secret": caSecret, "ca.extra": extraFile}
+	tests := []struct {
+		name     string
+		answers  map[string]any
+		loaded   string
+		want     map[string]any
+		withheld []Withheld
+	}{
+		{
+			name:    "mechanism over two foundations with one answer renders nothing and is not withheld",
+			answers: caAnswers,
+			want:    map[string]any{"verifier.volumes": []any{caVolume}, "verifier.mounts": []any{caMount}},
+		},
+		{
+			name:    "mechanism over two foundations with both answers renders",
+			answers: both,
+			want:    map[string]any{"verifier.volumes": []any{caVolume, extraVolume}, "verifier.mounts": []any{caMount, extraMount}},
+		},
+		{
+			name:     "withheld mechanism's loaded owned element stays as foreign and withholds no other mechanism",
+			answers:  both,
+			loaded:   "verifier:\n  volumes:\n    - {name: ca-bundle, secret: {secretName: " + caSecret + "}}\n  mounts:\n    - {name: root-ca, mountPath: " + caMountPath + "}\n",
+			want:     map[string]any{"verifier.volumes": []any{caVolume, extraVolume}, "verifier.mounts": []any{rootCA, extraMount}},
+			withheld: []Withheld{verifierCA},
+		},
+		{
+			name:    "two mechanisms withheld in one list leave it unwritten",
+			answers: both,
+			loaded:  "verifier:\n  mounts:\n    - {name: root-ca, mountPath: " + caMountPath + "}\n    - {name: other, mountPath: /etc/extra}\n",
+			want:    map[string]any{"verifier.volumes": nil, "verifier.mounts": nil},
+			withheld: []Withheld{
+				{Mechanism: "extra-ca", Element: "extra-ca", List: "verifier.mounts", Field: "mountPath", Value: "/etc/extra", ForeignKey: "other"},
+				verifierCA,
+			},
+		},
+		{
+			name:     "owned element pinned by a hand edit counts as foreign",
+			answers:  both,
+			loaded:   "verifier:\n  mounts:\n    - {name: ca-bundle, mountPath: /etc/extra}\n",
+			want:     map[string]any{"verifier.mounts": []any{map[string]any{"name": "ca-bundle", "mountPath": "/etc/extra"}}},
+			withheld: []Withheld{{Mechanism: "extra-ca", Element: "extra-ca", List: "verifier.mounts", Field: "mountPath", Value: "/etc/extra", ForeignKey: "ca-bundle"}},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			tree := renderElements(t, tc.answers, tc.loaded)
+			for p, want := range tc.want {
+				if got := at(t, tree, p); !reflect.DeepEqual(got, want) {
+					t.Errorf("%s = %v, want %v", p, got, want)
+				}
+			}
+			if !reflect.DeepEqual(tree.Withheld, tc.withheld) {
+				t.Errorf("Withheld = %+v, want %+v", tree.Withheld, tc.withheld)
+			}
+		})
+	}
+}
+
+func TestElementsDiff(t *testing.T) {
+	b := modelFixture(t, elementsFixture)
+	const rootCA = "verifier:\n  mounts:\n    - {name: root-ca, mountPath: " + caMountPath + "}\n"
+	tests := []struct {
+		name               string
+		prev, next         map[string]any
+		loaded             string
+		wantStatus         Status
+		wantPath, wantFrom string
+		// withheld is set when verifier-ca is withheld, so no verifier leaf may change.
+		withheld bool
+	}{
+		{name: "list written with its base", prev: map[string]any{}, next: caAnswers, wantStatus: StatusAdded,
+			wantPath: "keycloak.extraVolumeMounts[0].name", wantFrom: "ca.secret"},
+		{name: "list dropped with its base", prev: caAnswers, next: map[string]any{}, wantStatus: StatusRemoved,
+			wantPath: "keycloak.extraEnvVars[0].value", wantFrom: "ca.secret"},
+		{name: "index shift goes to the owner of the new element", prev: caAnswers, next: map[string]any{"ca.secret": caSecret, "proxy.https": httpsProxy},
+			wantStatus: StatusChanged, wantPath: "keycloak.extraEnvVars[1].name", wantFrom: "proxy.https"},
+		{name: "withheld mechanism", prev: map[string]any{}, next: caAnswers, loaded: rootCA, wantStatus: StatusAdded,
+			wantPath: "keycloak.extraVolumeMounts[0].name", wantFrom: "ca.secret", withheld: true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			d := Diff(b, renderElements(t, tc.prev, tc.loaded), renderElements(t, tc.next, tc.loaded))
+			found := false
+			for _, g := range d.Groups {
+				if g.Foundation == "" {
+					t.Errorf("group without a foundation: %+v", g.Changes)
+				}
+				for _, c := range g.Changes {
+					if tc.withheld && c.Path[0] == roundtrip.Key("verifier") {
+						t.Errorf("%s in %s: withheld mechanism in the diff", c.Path, g.Foundation)
+					}
+					if c.Path.String() == tc.wantPath {
+						found = true
+						if c.Status != tc.wantStatus || g.Foundation != tc.wantFrom {
+							t.Errorf("%s: %s in %q, want %s in %q", c.Path, c.Status, g.Foundation, tc.wantStatus, tc.wantFrom)
+						}
+					}
+				}
+			}
+			if !found {
+				t.Errorf("no change at %s in %+v", tc.wantPath, d.Groups)
+			}
+		})
 	}
 }
 

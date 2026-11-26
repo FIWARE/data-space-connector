@@ -56,3 +56,15 @@ foundations:
         element: {key: KC_TRUSTSTORE_PATHS, value: {value: /opt/keycloak/conf/truststores/ca.crt}}
         requires: [ca.secret]
       - {path: apisix.routes, each: plugins.openid-connect.ssl_verify, fn: const, args: [true], requires: [ca.secret]}
+  - id: ca.extra
+    stage: foundations
+    type: string
+    label: Extra CA file
+    targets:
+      # extra-ca spans two foundations, so it renders only while both ca.secret and ca.extra are given.
+      - path: verifier.volumes
+        mechanism: extra-ca
+        element: {key: extra-ca, value: {secret: {secretName: "{{ .ca.secret }}"}}}
+      - path: verifier.mounts
+        mechanism: extra-ca
+        element: {key: extra-ca, value: {mountPath: /etc/extra, subPath: "{{ .ca.extra }}"}}

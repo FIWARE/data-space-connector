@@ -37,7 +37,8 @@ type Provenance struct {
 	Rendered any `json:"rendered,omitempty"`
 	// Element is the key of the list element the leaf lies in, for a list written by keyed elements.
 	Element string `json:"element,omitempty"`
-	// Origin is OriginBase or OriginLoaded on a leaf of an element the render keeps but does not own.
+	// Origin is OriginBase or OriginLoaded on a leaf of an element the render keeps but does not own; Foundation
+	// is then the first foundation in bundle order whose element makes the list be written.
 	Origin string `json:"origin,omitempty"`
 }
 
