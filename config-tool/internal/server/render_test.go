@@ -14,6 +14,7 @@ import (
 	"github.com/FIWARE/data-space-connector/config-tool/internal/model"
 	"github.com/FIWARE/data-space-connector/config-tool/internal/profile"
 	"github.com/FIWARE/data-space-connector/config-tool/internal/render"
+	"github.com/FIWARE/data-space-connector/config-tool/internal/requirements"
 	bundles "github.com/FIWARE/data-space-connector/config-tool/model"
 )
 
@@ -76,6 +77,7 @@ type renderBody struct {
 	Derived  render.AnswerDiff      `json:"derived"`
 	HandSet  []render.HandSetAnswer `json:"handSet"`
 	Findings []check.Finding        `json:"findings"`
+	Secrets  []requirements.Secret  `json:"secrets"`
 }
 
 // changes counts the diff's changes per status.
@@ -197,6 +199,38 @@ func TestRenderListsHandSetAnswers(t *testing.T) {
 		if !slices.Equal(got.HandSet, want) {
 			t.Errorf("domain %s: handSet = %+v, want %+v", d, got.HandSet, want)
 		}
+	}
+}
+
+func TestRenderListsSecrets(t *testing.T) {
+	const caSecret = "corp-ca"
+	tests := []struct {
+		name    string
+		answers map[string]any
+		want    []string
+	}{
+		{name: "no private CA", answers: map[string]any{"domain.base": renderDomain}, want: []string{}},
+		{name: "private CA", answers: map[string]any{"domain.base": renderDomain, "ca.privateSecret": caSecret},
+			want: []string{completeTarget().Namespace + "/" + caSecret + "#ca.crt"}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			ps := newProfileSession(t)
+			status, raw, got := ps.render(profile.Profile{Target: completeTarget(), Answers: tc.answers}, "")
+			if status != http.StatusOK || !strings.Contains(raw, `"secrets":[`) {
+				t.Fatalf("status %d, body %s, want a secrets list", status, raw)
+			}
+			secrets := []string{}
+			for _, s := range got.Secrets {
+				if s.Purpose == "" {
+					t.Errorf("secret %+v has no purpose", s)
+				}
+				secrets = append(secrets, s.Namespace+"/"+s.Name+"#"+s.Key)
+			}
+			if !slices.Equal(secrets, tc.want) {
+				t.Errorf("secrets = %v, want %v", secrets, tc.want)
+			}
+		})
 	}
 }
 

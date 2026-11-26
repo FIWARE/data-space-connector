@@ -10,6 +10,7 @@ import (
 	"github.com/FIWARE/data-space-connector/config-tool/internal/model"
 	"github.com/FIWARE/data-space-connector/config-tool/internal/profile"
 	"github.com/FIWARE/data-space-connector/config-tool/internal/render"
+	"github.com/FIWARE/data-space-connector/config-tool/internal/requirements"
 )
 
 // renderRequest is the body of POST /api/render; SourceSHA256 names the loaded slot as on save, and
@@ -20,7 +21,8 @@ type renderRequest struct {
 }
 
 // renderResponse is the tree of POST /api/render, its change against the previous render, the
-// answers given in place of their derived default and the L2 findings, which never fail the request.
+// answers given in place of their derived default, the L2 findings, which never fail the request, and the
+// Secrets the values reference but the tool never creates.
 type renderResponse struct {
 	Tree render.Tree     `json:"tree"`
 	Diff render.TreeDiff `json:"diff"`
@@ -28,6 +30,7 @@ type renderResponse struct {
 	Derived  render.AnswerDiff      `json:"derived"`
 	HandSet  []render.HandSetAnswer `json:"handSet"`
 	Findings []check.Finding        `json:"findings"`
+	Secrets  []requirements.Secret  `json:"secrets"`
 }
 
 // foundationsResponse lists a bundle's foundations in declaration order with their fan-out.
@@ -134,6 +137,14 @@ func (s *Server) handleRender(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnprocessableEntity, err.Error(), "")
 		return
 	}
+	secrets, err := requirements.Secrets(*b, p)
+	if err != nil {
+		writeError(w, http.StatusUnprocessableEntity, err.Error(), "")
+		return
+	}
+	if secrets == nil {
+		secrets = []requirements.Secret{}
+	}
 	// A render of another source (e.g. a new configuration after a load) or of another chart or version (a
 	// Stage 1 switch keeps the source) starts a new baseline.
 	if s.lastRenderSHA != req.SourceSHA256 || s.lastProfile.Model != p.Model {
@@ -146,7 +157,7 @@ func (s *Server) handleRender(w http.ResponseWriter, r *http.Request) {
 	}
 	diff := render.Diff(*b, s.lastRender, tree)
 	s.lastRender, s.lastRenderSHA, s.lastProfile = tree, req.SourceSHA256, p
-	writeJSON(w, renderResponse{Tree: tree, Diff: diff, Derived: derived, HandSet: handSet, Findings: findings})
+	writeJSON(w, renderResponse{Tree: tree, Diff: diff, Derived: derived, HandSet: handSet, Findings: findings, Secrets: secrets})
 }
 
 // overridesFor is the loaded slot when it holds values of chart; paths of another chart would pin nonsense.

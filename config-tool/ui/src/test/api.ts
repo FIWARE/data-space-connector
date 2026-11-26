@@ -452,6 +452,37 @@ export const PLATFORM_FOUNDATIONS: FoundationList = {
   resources: RESOURCES,
 }
 
+const egressFoundation = (f: Pick<Foundation, 'id' | 'type' | 'label' | 'default' | 'defaultWhen'>): Foundation => ({
+  stage: 'foundations',
+  group: 'egress',
+  prefix: '',
+  options: [],
+  help: '',
+  doc: 'doc/deployment-integration/roles/PREREQUISITES.md#outbound-access',
+  targets: [{ path: 'keycloak.proxy.noProxy', component: 'keycloak' }],
+  count: 1,
+  components: ['keycloak'],
+  features: [],
+  ...f,
+})
+
+/** The egress group of the 10.16.0 bundle: proxy.https switches the other two proxy answers (ADR 0025). */
+export const EGRESS: Foundation[] = [
+  egressFoundation({ id: 'proxy.https', type: 'url', label: 'HTTPS proxy', default: '', defaultWhen: null }),
+  egressFoundation({ id: 'proxy.http', type: 'url', label: 'HTTP proxy', default: '{{ .proxy.https }}', defaultWhen: { id: 'proxy.https', equals: '', set: true } }),
+  egressFoundation({
+    id: 'proxy.no',
+    type: 'string',
+    label: 'No proxy',
+    default: 'localhost,{{ .target.namespace }}.svc,{{ fullname .target.release "keycloak" }}',
+    defaultWhen: { id: 'proxy.https', equals: '', set: true },
+  }),
+  egressFoundation({ id: 'ca.privateSecret', type: 'secretName', label: 'Private CA Secret', default: '', defaultWhen: null }),
+]
+
+/** FOUNDATIONS with the egress group last, as the bundle declares it. */
+export const EGRESS_FOUNDATIONS: FoundationList = { foundations: [...FOUNDATIONS.foundations, ...EGRESS], resources: null }
+
 /** The body POST /api/render receives. */
 export interface RenderBody {
   profile: Profile
@@ -548,6 +579,7 @@ export function renderWithFindings(findings: Finding[]): (body: RenderBody) => R
     derived: { rederived: [], pinned: [] },
     handSet: handSetOf(body.profile),
     findings: body.profile.answers?.['domain.base'] === undefined ? [] : findings,
+    secrets: [],
   })
 }
 
@@ -580,7 +612,7 @@ function foundationDefaults(): Required<FoundationFakes> {
       const derived = derivedOf(lastProfile, body.profile)
       last = leaves
       lastProfile = body.profile
-      return { tree: { leaves }, diff: { groups }, derived, handSet: handSetOf(body.profile), findings: [] }
+      return { tree: { leaves }, diff: { groups }, derived, handSet: handSetOf(body.profile), findings: [], secrets: [] }
     },
   }
 }

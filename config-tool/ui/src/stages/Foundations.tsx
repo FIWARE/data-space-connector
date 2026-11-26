@@ -12,6 +12,7 @@ import { StageId } from '../state/stageIds'
 import { AnswerField, ChoiceField, FieldNotes } from './AnswerField'
 import { DataSpacePanel } from './DataSpacePanel'
 import { DerivedAnswers } from './DerivedAnswers'
+import { EgressPanel, type EgressRender } from './EgressPanel'
 import { PlatformPanel } from './PlatformPanel'
 import { describedBy } from './foundationText'
 import { PINNED_LABEL, wouldDerive } from './handSetText'
@@ -37,6 +38,7 @@ export const PINNED_HEADING = 'Pinned, not updated'
 export const LOADED_HINT = 'Found in the loaded file, which keeps them while the fields above are unanswered.'
 const NOT_SET = '—'
 const NO_DERIVED_CHANGE: AnswerDiff = { rederived: [], pinned: [] }
+const NOTHING_RENDERED: EgressRender = { leaves: [], withheld: [], secrets: [] }
 
 function shown(value: unknown): string {
   if (value === undefined || value === null || value === '') return NOT_SET
@@ -233,6 +235,8 @@ interface RenderState {
   groups: readonly ChangeGroup[]
   derived: AnswerDiff
   findings: readonly Finding[]
+  /** The tree's leaves, withheld mechanisms and required Secrets, also of the baseline. */
+  rendered: EgressRender
   error?: string
 }
 
@@ -243,7 +247,7 @@ function useRenderDiff(): RenderState {
   const values = state.answers.values
   const latest = useRef(state)
   const started = useRef(false)
-  const [result, setResult] = useState<RenderState>({ groups: [], derived: NO_DERIVED_CHANGE, findings: [] })
+  const [result, setResult] = useState<RenderState>({ groups: [], derived: NO_DERIVED_CHANGE, findings: [], rendered: NOTHING_RENDERED })
 
   useEffect(() => {
     latest.current = state
@@ -262,6 +266,7 @@ function useRenderDiff(): RenderState {
               groups: baseline ? prev.groups : r.diff.groups,
               derived: baseline ? prev.derived : r.derived,
               findings: r.findings,
+              rendered: { leaves: r.tree.leaves, withheld: r.tree.withheld ?? [], secrets: r.secrets ?? [] },
             }))
           },
           (err: Error) => controller.signal.aborted || setResult((prev) => ({ ...prev, error: err.message })),
@@ -313,6 +318,7 @@ export function Foundations() {
   const network = foundations.filter((f) => f.group === 'network' && f.default === '')
   const hosts = foundations.filter((f) => f.group === 'network' && f.default !== '')
   const platform = foundations.filter((f) => f.group === 'platform')
+  const egress = foundations.filter((f) => f.group === 'egress')
 
   return (
     <section>
@@ -337,6 +343,14 @@ export function Foundations() {
         </div>
       )}
       {platform.length > 0 && <PlatformPanel foundations={platform} table={resources} findings={diff.findings} />}
+      {egress.length > 0 && (
+        <EgressPanel
+          foundations={egress}
+          findings={diff.findings}
+          rendered={diff.rendered}
+          field={(f) => <OrganizationField foundation={f} findings={diff.findings} />}
+        />
+      )}
       {diff.error && (
         <p className="field-error" role="alert">
           {diff.error}

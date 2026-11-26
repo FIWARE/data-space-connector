@@ -93,14 +93,37 @@ export interface Finding {
   doc: string
 }
 
+/** A mechanism none of whose targets rendered, mirroring `render.Withheld` (ADR 0025); `field`, `value` and
+ *  `foreignKey` are set for a collision only, `conflict` for a conflict only. */
+export interface Withheld {
+  reason: 'collision' | 'edited' | 'conflict'
+  mechanism: string
+  element: string
+  list: string
+  field?: string
+  value?: unknown
+  foreignKey?: string
+  conflict?: string[]
+}
+
+/** A Secret the values reference but the tool never creates, mirroring `requirements.Secret`. */
+export interface RequiredSecret {
+  /** Empty while Stage 1 leaves the namespace unanswered. */
+  namespace?: string
+  name: string
+  key: string
+  purpose: string
+}
+
 /** Answer of POST /api/render; the groups are in bundle order and the first render diffs against an empty tree.
  *  Findings come with every render, also an unchanged one, and never fail it. */
 export interface RenderResult {
-  tree: { leaves: Leaf[] }
+  tree: { leaves: Leaf[]; withheld?: Withheld[] }
   diff: { groups: ChangeGroup[] }
   derived: AnswerDiff
   handSet: HandSetAnswer[]
   findings: Finding[]
+  secrets: RequiredSecret[]
 }
 
 /** POST /api/render. `sourceSha256` names the held load as on save; without it nothing is pinned.
