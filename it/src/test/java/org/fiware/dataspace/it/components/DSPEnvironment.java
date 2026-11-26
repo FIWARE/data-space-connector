@@ -42,7 +42,7 @@ public abstract class DSPEnvironment {
     /** Participant context id of the consumer's DCP controlplane (its DID). */
     public static final String CONSUMER_CONTEXT_ID = FancyMarketplaceEnvironment.CONSUMER_DID;
 
-    /** DSP profile both DCP contexts are attached to. */
+    /** Built-in DSP profile both DCP contexts are attached to; the existing DCP flows use it. */
     public static final String DSP_PROFILE = "http-dsp-profile-2025-1";
 
     // --- DSP Provider endpoints ---

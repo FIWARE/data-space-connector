@@ -17,11 +17,28 @@ fdsc-edc:
         # fdsc-edc 2.x participant context (id = DID, reuses the IdentityHub STS client) and the
         # OAuth2 issuer of the v5beta management API. Replaces the common additionalProperties, so the
         # timeouts are repeated; continuation lines carry the 4 spaces the chart does not add.
+        # Two dataspace profiles: declaring one drops the built-in http-dsp-profile-2025-1, so it is
+        # declared too. dsp-fiware-ds2 sets its own DCP scopes and TIL; they equal the defaults because
+        # k3s has a single trust anchor. Never repeat these scopes in edc.iam.dcp.scopes.*: both are unioned.
         additionalProperties: "edc.http.client.timeout.connect=60\n    \
           edc.http.client.timeout.read=120\n    \
+          edc.dataspace.profiles.default.name=http-dsp-profile-2025-1\n    \
+          edc.dataspace.profiles.default.protocol.version=2025-1\n    \
+          edc.dataspace.profiles.default.protocol.binding=HTTPS\n    \
+          edc.dataspace.profiles.default.protocol.namespace=https://w3id.org/dspace/2025/1/\n    \
+          edc.dataspace.profiles.default.jsonld.context.urls=https://w3id.org/dspace/2025/1/context.jsonld,https://w3id.org/edc/dspace/v0.0.1\n    \
+          edc.dataspace.profiles.ds2.name=dsp-fiware-ds2\n    \
+          edc.dataspace.profiles.ds2.protocol.version=2025-1\n    \
+          edc.dataspace.profiles.ds2.protocol.binding=HTTPS\n    \
+          edc.dataspace.profiles.ds2.protocol.namespace=https://w3id.org/dspace/2025/1/\n    \
+          edc.dataspace.profiles.ds2.jsonld.context.urls=https://w3id.org/dspace/2025/1/context.jsonld,https://w3id.org/edc/dspace/v0.0.1\n    \
+          dcp.profiles.dsp-fiware-ds2.scopes.catalog=org.eclipse.tractusx.vc.type:MembershipCredential:read\n    \
+          dcp.profiles.dsp-fiware-ds2.scopes.negotiation=org.eclipse.tractusx.vc.type:MembershipCredential:read\n    \
+          dcp.profiles.dsp-fiware-ds2.scopes.transfer=org.eclipse.tractusx.vc.type:MembershipCredential:read\n    \
+          ebsiTir.profiles.dsp-fiware-ds2.tilAddress=http://trusted-issuers-list.provider.svc.cluster.local:8080\n    \
           fdsc.participants.self.id=did:web:mp-operations.org\n    \
           fdsc.participants.self.identity=did:web:mp-operations.org\n    \
-          fdsc.participants.self.profiles=http-dsp-profile-2025-1\n    \
+          fdsc.participants.self.profiles=http-dsp-profile-2025-1,dsp-fiware-ds2\n    \
           fdsc.participants.self.config.edc.iam.sts.oauth.token.url=http://identityhub-service.provider.svc.cluster.local:8087/api/sts/token\n    \
           fdsc.participants.self.config.edc.iam.sts.oauth.client.id=did:web:mp-operations.org\n    \
           fdsc.participants.self.config.edc.iam.sts.oauth.client.secret.alias=did:web:mp-operations.org-sts-client-secret\n    \
