@@ -16,6 +16,7 @@ import (
 const (
 	noteNotInElement = "not a field of the %s element %s writes"
 	noteNotRendered  = "is not what %s writes here"
+	noteMissing      = "the element lacks %s, which %s writes"
 )
 
 // elementRule is a loaded node an owned element or each target writes (ADR 0025): a list element whose key field
@@ -24,6 +25,8 @@ type elementRule struct {
 	at         roundtrip.Path
 	foundation string
 	target     model.CompiledTarget
+	// missing is the note on an element that lacks a field the target writes; it lands on the key leaf.
+	missing string
 }
 
 // elementRules lists the loaded nodes b's element and each targets write, in bundle order.
@@ -45,7 +48,8 @@ func elementRules(doc *roundtrip.Document, b model.Bundle, root roundtrip.Path) 
 				if t.Element != nil {
 					k, err := doc.Lookup(append(slices.Clone(elem), roundtrip.Key(t.Element.KeyField)))
 					if err == nil && k.Kind == yaml.ScalarNode && k.ShortTag() == strTag && k.Value == t.Element.Key {
-						rules = append(rules, elementRule{at: elem, foundation: f.ID, target: t})
+						rules = append(rules, elementRule{at: elem, foundation: f.ID, target: t,
+							missing: missingLeaf(doc, elem, t.Element, f.ID)})
 					}
 					continue
 				}
@@ -57,6 +61,16 @@ func elementRules(doc *roundtrip.Document, b model.Bundle, root roundtrip.Path) 
 		}
 	}
 	return rules
+}
+
+// missingLeaf is the note on the loaded element at elem when it lacks a leaf e writes; "" when it has them all.
+func missingLeaf(doc *roundtrip.Document, elem roundtrip.Path, e *model.CompiledElement, foundation string) string {
+	for _, sub := range e.Leaves() {
+		if _, err := doc.Lookup(slices.Concat(elem, sub)); err != nil {
+			return fmt.Sprintf(noteMissing, sub, foundation)
+		}
+	}
+	return ""
 }
 
 // element returns the rule whose element holds p, or whose each leaf is p, and p's path below it.
@@ -78,6 +92,9 @@ func (c *classifier) element(p roundtrip.Path) (elementRule, roundtrip.Path, boo
 func (c *classifier) deriveElement(p roundtrip.Path, r elementRule, sub roundtrip.Path, n *yaml.Node) bool {
 	key := p.String()
 	texts, note := c.readElement(r, sub, n)
+	if note == "" && r.missing != "" && r.target.Element != nil && isKeyField(sub, r.target.Element.KeyField) {
+		note = r.missing
+	}
 	if note != "" {
 		c.notes[key] = note
 		return false
@@ -140,8 +157,9 @@ func (c *classifier) readElement(r elementRule, sub roundtrip.Path, n *yaml.Node
 	case *template.Template:
 		want = []*template.Template{w}
 	case map[string]any, []any:
+		// The walk reaches a collection only as an empty leaf, which matches only an empty one of the same kind.
 		if (n.Kind != yaml.MappingNode && n.Kind != yaml.SequenceNode) || len(n.Content) > 0 ||
-			(n.Kind == yaml.MappingNode) != (reflect.TypeOf(w).Kind() == reflect.Map) {
+			reflect.ValueOf(w).Len() > 0 || (n.Kind == yaml.MappingNode) != (reflect.TypeOf(w).Kind() == reflect.Map) {
 			return nil, notRendered
 		}
 		return nil, ""
@@ -161,6 +179,14 @@ func (c *classifier) readElement(r elementRule, sub roundtrip.Path, n *yaml.Node
 		return nil, notRendered
 	}
 	return nil, ""
+}
+
+func isKeyField(sub roundtrip.Path, field string) bool {
+	if len(sub) != 1 {
+		return false
+	}
+	k, ok := sub[0].Key()
+	return ok && k == field
 }
 
 // typed is the answer value of text s as f's type stores it.

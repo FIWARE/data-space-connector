@@ -31,7 +31,7 @@ export interface Leaf {
 /** How a leaf changed between two renders. */
 export type ChangeStatus = 'added' | 'changed' | 'removed' | 'pinned'
 
-/** One changed leaf; a pinned one carries the two rendered values and, when it has one, the kept value. */
+/** One changed leaf, or a pinned keyed element (`list[field=key]`, values whole elements); a pinned one carries the two rendered values and, when it has one, the kept value. */
 export interface Change {
   path: string
   status: ChangeStatus

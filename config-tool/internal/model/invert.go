@@ -2,6 +2,7 @@ package model
 
 import (
 	"regexp"
+	"slices"
 	"strings"
 	"text/template"
 	"text/template/parse"
@@ -37,6 +38,36 @@ func (e CompiledElement) At(sub roundtrip.Path) (any, bool) {
 		v = l[i]
 	}
 	return v, true
+}
+
+// Leaves returns the paths inside the element of every scalar and empty collection its value writes, sorted; the key
+// field is not among them.
+func (e CompiledElement) Leaves() []roundtrip.Path {
+	var out []roundtrip.Path
+	var walk func(roundtrip.Path, any)
+	walk = func(at roundtrip.Path, v any) {
+		switch v := v.(type) {
+		case map[string]any:
+			if len(v) == 0 && len(at) > 0 {
+				out = append(out, at)
+			}
+			for k, c := range v {
+				walk(append(slices.Clone(at), roundtrip.Key(k)), c)
+			}
+		case []any:
+			if len(v) == 0 {
+				out = append(out, at)
+			}
+			for i, c := range v {
+				walk(append(slices.Clone(at), roundtrip.Index(i)), c)
+			}
+		default:
+			out = append(out, at)
+		}
+	}
+	walk(nil, e.value)
+	slices.SortFunc(out, func(a, b roundtrip.Path) int { return strings.Compare(a.String(), b.String()) })
+	return out
 }
 
 // Invert reads back the answers that tpls, joined by sep, rendered as s, one string per answer id; false when s is

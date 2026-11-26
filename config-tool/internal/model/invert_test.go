@@ -41,3 +41,29 @@ func TestInvert(t *testing.T) {
 		})
 	}
 }
+
+func TestElementLeaves(t *testing.T) {
+	tpl := template.Must(template.New("").Parse("{{ .a }}"))
+	tests := []struct {
+		name  string
+		value map[string]any
+		want  []string
+	}{
+		{name: "flat", value: map[string]any{"value": tpl, "mountPath": "/x"}, want: []string{"mountPath", "value"}},
+		{name: "nested", value: map[string]any{"secret": map[string]any{"secretName": tpl}}, want: []string{"secret.secretName"}},
+		{name: "empty collections", value: map[string]any{"emptyDir": map[string]any{}, "args": []any{}}, want: []string{"args", "emptyDir"}},
+		{name: "list items", value: map[string]any{"args": []any{"-c", tpl}}, want: []string{"args[0]", "args[1]"}},
+		{name: "key only", value: map[string]any{}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			var got []string
+			for _, p := range (CompiledElement{KeyField: "name", Key: "k", value: tc.value}).Leaves() {
+				got = append(got, p.String())
+			}
+			if !reflect.DeepEqual(got, tc.want) {
+				t.Errorf("Leaves() = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}

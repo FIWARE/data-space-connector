@@ -30,6 +30,7 @@ func TestLoadElements(t *testing.T) {
 	const (
 		proxy      = "http://proxy:3128"
 		notField   = "not a field of the HTTPS_PROXY element proxy.https writes"
+		noValue    = "the element lacks value, which proxy.https writes"
 		notCA      = "is not what ca.secret writes here"
 		differsCA  = "differs from ca.secret = first"
 		verifyPath = ".plugins.openid-connect.ssl_verify"
@@ -60,10 +61,24 @@ func TestLoadElements(t *testing.T) {
 			answers: map[string]any{"ca.secret": "first"},
 		},
 		{
-			name:    "a field the element does not write",
-			src:     "keycloak:\n  extraEnvVars:\n    - name: HTTPS_PROXY\n      valueFrom: {secretKeyRef: {name: s, key: k}}\n",
-			owned:   []string{"keycloak.extraEnvVars[0].name"},
-			unknown: map[string]string{"keycloak.extraEnvVars[0].valueFrom.secretKeyRef.key": notField, "keycloak.extraEnvVars[0].valueFrom.secretKeyRef.name": notField},
+			name: "a field the element does not write",
+			src:  "keycloak:\n  extraEnvVars:\n    - name: HTTPS_PROXY\n      valueFrom: {secretKeyRef: {name: s, key: k}}\n",
+			unknown: map[string]string{"keycloak.extraEnvVars[0].name": noValue,
+				"keycloak.extraEnvVars[0].valueFrom.secretKeyRef.key":  notField,
+				"keycloak.extraEnvVars[0].valueFrom.secretKeyRef.name": notField},
+			answers: map[string]any{},
+		},
+		{
+			name:    "a field the element writes is missing",
+			src:     "keycloak:\n  extraEnvVars:\n    - {name: HTTPS_PROXY}\n",
+			unknown: map[string]string{"keycloak.extraEnvVars[0].name": noValue},
+			answers: map[string]any{},
+		},
+		{
+			name: "a nested field the element writes is missing",
+			src:  "verifier:\n  volumes:\n    - {name: ca-bundle, secret: {}}\n",
+			unknown: map[string]string{"verifier.volumes[0].name": "the element lacks secret.secretName, which ca.secret writes",
+				"verifier.volumes[0].secret": notCA},
 			answers: map[string]any{},
 		},
 		{

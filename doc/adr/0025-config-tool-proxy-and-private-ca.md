@@ -46,7 +46,11 @@ the Stage 3 diff files the base under that foundation. Appending beyond a loaded
 Loading needs no marker on a sequence item: a loaded element whose key matches an owned keyed target is owned, and so is
 an `each` leaf under any element that has the parent mapping. Their leaves back-derive the answers by inverting the
 target's templates (`model.Invert`); the first element in document order sets an answer, and a leaf that disagrees, or
-a field the target does not write, stays unknown and pins the element. The Stage 3 diff reports a pinned element once,
+a field the target does not write, stays unknown and pins the element. So does the key leaf of an element that lacks a
+field the target writes. A reserved ref such as `{{ .target.namespace }}` reads as any text: the load report does not
+depend on the Stage 1 target, which may change after the load, so an element rendered for another release or namespace
+is reported as owned. The render compares the whole element with what it writes for the current target and pins it
+all the same. The Stage 3 diff reports a pinned element once,
 under its key (`keycloak.extraEnvVars[name=HTTPS_PROXY]`), with the whole rendered and kept elements.
 
 Compile-time checks: a keyed element's list must be in `lists:`, and no target may also index into it. Two targets may

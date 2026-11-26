@@ -49,7 +49,8 @@ type Change struct {
 	Element string
 }
 
-// MarshalJSON writes the path in roundtrip.ParsePath syntax and omits the absent values.
+// MarshalJSON writes the path in roundtrip.ParsePath syntax, suffixed with [field=key] for an element, and omits the
+// absent values.
 func (c Change) MarshalJSON() ([]byte, error) {
 	opt := func(v any, ok bool) *any {
 		if !ok {
