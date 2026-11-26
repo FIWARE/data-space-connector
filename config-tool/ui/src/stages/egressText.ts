@@ -8,6 +8,7 @@ export const NOTHING_SET = '—'
 export const PROXY_SET = 'set'
 export const PROXY_IGNORED = 'ignored: the loaded file sets proxy mappings'
 export const CA_TRUSTED = 'trusts ca.crt'
+export const CA_NOT_IN_EFFECT = 'not in effect: the loaded file overrides what the tool writes; see the private CA finding'
 export const CA_KEY_NOTE = 'The Secret needs the key ca.crt with the PEM bundle. APISIX then trusts only that bundle.'
 export const SECRETS_HEADING = 'Create before installing'
 export const NO_ROUTES =
@@ -20,8 +21,8 @@ export const VC_OPERATOR_CIDR =
 /** Matches an IPv4 CIDR entry of a NO_PROXY list. */
 export const CIDR = /^\d{1,3}(\.\d{1,3}){3}\/\d{1,2}$/
 
-/** What the preview says for a mechanism left out because of the element `foreign` (or an edit) in `list`. */
-export function caWithheld(reason: string, list: string, foreign?: string): string {
+/** What the preview says for an element or mechanism left out because of the element `foreign` (or an edit) in `list`. */
+export function withheldCell(reason: string, list: string, foreign?: string): string {
   if (reason === 'collision' && foreign) return `withheld: ${foreign} in ${list} occupies its path`
   if (reason === 'conflict') return 'withheld: the loaded file mounts its own CA bundle'
   return `withheld: the loaded file changed ${list}`

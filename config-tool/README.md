@@ -402,7 +402,8 @@ vc-operator and APISIX.
   route that calls a publicly signed provider needs the public roots appended to `ca.crt`.
 
 Below the fields, a table previews what each component gets: *set* for the proxy, *trusts ca.crt* for the CA, or why a
-mechanism is withheld and which loaded element occupies its path. Notes then cover what the values cannot reach:
+proxy element or CA mechanism is withheld and which loaded element occupies its path. The CA shows *not in effect*
+while the loaded file overrides a value it needs, such as a route's `ssl_verify: false`. Notes then cover what the values cannot reach:
 APISIX without an openid-connect route (the per-route values appear once US-5.6 or the loaded file has one), the
 marketplace's VC login, which always uses the HTTPS proxy, and the vc-operator's Kubernetes API calls while `proxy.no`
 holds no CIDR. Keycloak shows *ignored* while the loaded file sets `keycloak.proxy.spiProxyMappings`. *Create before

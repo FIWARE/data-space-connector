@@ -8,8 +8,8 @@ import {
   BAE_LOGIN,
   CA_HEADER,
   CA_KEY_NOTE,
+  CA_NOT_IN_EFFECT,
   CA_TRUSTED,
-  caWithheld,
   CIDR,
   COMPONENT_HEADER,
   EGRESS_PANEL,
@@ -23,6 +23,7 @@ import {
   SECRETS_HEADING,
   secretLine,
   VC_OPERATOR_CIDR,
+  withheldCell,
 } from './egressText'
 
 const PROXY_HTTPS = 'proxy.https'
@@ -32,6 +33,7 @@ const PROXY_GROUP_PREFIX = 'proxy.'
 const RULE_PROXY_MAPPINGS = 'keycloak-proxy-mappings'
 const RULE_NO_PROXY_COVERAGE = 'no-proxy-coverage'
 const APISIX_ROUTES = 'decentralizedIam.odrlAuthorization.apisix.routes['
+const OIDC_PLUGIN = '.plugins.openid-connect.'
 
 /** A component the egress foundations reach, by the values prefix its targets lie under. */
 interface EgressComponent {
@@ -61,6 +63,14 @@ function owned(leaves: readonly Leaf[], owns: (foundation: string) => boolean): 
 
 const under = (leaves: readonly Leaf[], c: EgressComponent) => leaves.some((l) => l.path.startsWith(c.prefix))
 
+/** A pinned leaf whose kept value is not what the render would write, mirroring `inEffect` in `internal/check`. */
+const overridden = (l: Leaf) => l.provenance.pinned && !(l.provenance.kept && l.value === l.provenance.rendered)
+
+/** The withheld entry under `c`; every bundle mechanism is a CA one, so `ca` picks those and !`ca` the proxy elements. */
+function withheldUnder(withheld: readonly Withheld[], c: EgressComponent, ca: boolean): Withheld | undefined {
+  return withheld.find((w) => (w.mechanism !== '') === ca && (w.list || w.conflict?.[0] || '').startsWith(c.prefix))
+}
+
 /** The per-component table and the notes on what the proxy and the CA do not reach. */
 function Preview({ rendered, findings }: { rendered: EgressRender; findings: readonly Finding[] }) {
   const { state } = useStore()
@@ -74,18 +84,23 @@ function Preview({ rendered, findings }: { rendered: EgressRender; findings: rea
 
   const proxy = owned(rendered.leaves, (f) => f.startsWith(PROXY_GROUP_PREFIX))
   const ca = owned(rendered.leaves, (f) => f === CA_SECRET)
-  const routes = [...proxy, ...ca].some((l) => l.path.startsWith(APISIX_ROUTES))
+  // Any provenance: a route whose loaded ssl_verify or proxy_opts is pinned is still a route.
+  const routes = rendered.leaves.some((l) => l.path.startsWith(APISIX_ROUTES) && l.path.includes(OIDC_PLUGIN))
+  const caOverridden = rendered.leaves.filter((l) => l.provenance.foundation === CA_SECRET && overridden(l))
   const mappings = findings.some((f) => f.rule === RULE_PROXY_MAPPINGS)
   const gaps = findings.filter((f) => f.rule === RULE_NO_PROXY_COVERAGE).length
   const cidr = (noProxy ?? '').split(',').some((e) => CIDR.test(e.trim()))
 
   const proxyCell = (c: EgressComponent) => {
+    const w = withheldUnder(rendered.withheld, c, false)
+    if (w) return withheldCell(w.reason, w.list, w.foreignKey)
     if (!under(proxy, c)) return NOTHING_SET
     return c === KEYCLOAK && mappings ? PROXY_IGNORED : PROXY_SET
   }
   const caCell = (c: EgressComponent) => {
-    const w = rendered.withheld.find((x) => (x.list || x.conflict?.[0] || '').startsWith(c.prefix))
-    if (w) return caWithheld(w.reason, w.list, w.foreignKey)
+    const w = withheldUnder(rendered.withheld, c, true)
+    if (w) return withheldCell(w.reason, w.list, w.foreignKey)
+    if (under(caOverridden, c)) return CA_NOT_IN_EFFECT
     return under(ca, c) ? CA_TRUSTED : NOTHING_SET
   }
   const notes = [

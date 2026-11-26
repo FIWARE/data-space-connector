@@ -11,8 +11,8 @@ import { EGRESS_FOUNDATIONS, mockApi, type RenderBody } from '../test/api'
 import {
   BAE_LOGIN,
   CA_KEY_NOTE,
+  CA_NOT_IN_EFFECT,
   CA_TRUSTED,
-  caWithheld,
   EGRESS_PANEL,
   NO_ROUTES,
   noProxyGaps,
@@ -23,6 +23,7 @@ import {
   SECRETS_HEADING,
   secretLine,
   VC_OPERATOR_CIDR,
+  withheldCell,
 } from './egressText'
 
 const RELEASE = 'provider'
@@ -31,7 +32,10 @@ const PROXY = 'http://proxy.corp.example:3128'
 const CA = 'corp-ca'
 const VERIFIER_ENV = 'decentralizedIam.vcAuthentication.vcverifier.deployment.additionalEnvVars'
 const VERIFIER_MOUNTS = 'decentralizedIam.vcAuthentication.vcverifier.deployment.additionalVolumeMounts'
+const VERIFIER_VOLUMES = 'decentralizedIam.vcAuthentication.vcverifier.deployment.additionalVolumes'
+const VERIFIER_CA_CERT = 'decentralizedIam.vcAuthentication.vcverifier.deployment.serverCertificates.caCert.enabled'
 const ROUTE_PROXY = 'decentralizedIam.odrlAuthorization.apisix.routes[0].plugins.openid-connect.proxy_opts.https_proxy'
+const ROUTE_VERIFY = 'decentralizedIam.odrlAuthorization.apisix.routes[0].plugins.openid-connect.ssl_verify'
 const CA_SECRET: RequiredSecret = { namespace: NAMESPACE, name: CA, key: 'ca.crt', purpose: 'The PEM bundle of the private CA.' }
 
 const leaf = (path: string, value: unknown, foundation: string, element?: string): Leaf => ({
@@ -40,9 +44,18 @@ const leaf = (path: string, value: unknown, foundation: string, element?: string
   provenance: { foundation, answers: [foundation], fn: 'copy', target: 0, pinned: false, kept: false, element },
 })
 
+/** A leaf the render pinned: the loaded file keeps `value` where the render would write `rendered`. */
+const pinned = (path: string, value: unknown, rendered: unknown, foundation: string): Leaf => ({
+  path,
+  value,
+  provenance: { foundation, answers: [foundation], fn: 'const', target: 0, pinned: true, kept: true, rendered },
+})
+
 /** What the fake render adds to the egress leaves the answers give. */
 interface Extra {
   routes?: boolean
+  /** The loaded route sets its own proxy_opts and ssl_verify: false, both pinned over the rendered values. */
+  pinnedRoute?: boolean
   withheld?: Withheld[]
   findings?: Finding[]
 }
@@ -57,20 +70,26 @@ interface PreviewCase {
 }
 
 /** The egress leaves a render of `answers` writes into each component, the APISIX routes only with `routes`. */
-function egressRender({ routes = false, withheld = [], findings = [] }: Extra) {
+function egressRender({ routes = false, pinnedRoute = false, withheld = [], findings = [] }: Extra) {
+  // A withheld element or mechanism renders none of its leaves.
+  const proxyWithheld = withheld.some((w) => w.mechanism === '' && w.list === VERIFIER_ENV)
+  const caWithheld = withheld.some((w) => w.mechanism === 'verifier-ca')
   return (body: RenderBody): RenderResult => {
     const a = body.profile.answers ?? {}
     const leaves: Leaf[] = []
     if (typeof a['proxy.https'] === 'string') {
+      if (!proxyWithheld) leaves.push(leaf(`${VERIFIER_ENV}[0].value`, a['proxy.https'], 'proxy.https', 'HTTPS_PROXY'))
       leaves.push(
-        leaf(`${VERIFIER_ENV}[0].value`, a['proxy.https'], 'proxy.https', 'HTTPS_PROXY'),
         leaf('keycloak.proxy.httpsProxy', a['proxy.https'], 'proxy.https'),
         leaf('marketplace.bizEcosystemLogicProxy.additionalEnvVars[2].value', a['proxy.https'], 'proxy.https', 'HTTPS_PROXY'),
         leaf('vc-operator.extraEnvVars[0].value', a['proxy.https'], 'proxy.https', 'HTTPS_PROXY'),
       )
       if (routes) leaves.push(leaf(ROUTE_PROXY, a['proxy.https'], 'proxy.https'))
+      if (pinnedRoute) leaves.push(pinned(ROUTE_PROXY, 'http://other.proxy:3128', a['proxy.https'], 'proxy.https'))
     }
     if (typeof a['ca.privateSecret'] === 'string') {
+      if (!caWithheld) leaves.push(leaf(`${VERIFIER_VOLUMES}[0].secret.secretName`, a['ca.privateSecret'], 'ca.privateSecret', 'private-ca'))
+      if (pinnedRoute) leaves.push(pinned(ROUTE_VERIFY, false, true, 'ca.privateSecret'))
       leaves.push(
         leaf('decentralizedIam.odrlAuthorization.apisix.apisix.ssl.existingCASecret', a['ca.privateSecret'], 'ca.privateSecret'),
         leaf('keycloak.extraVolumes[0].secret.secretName', a['ca.privateSecret'], 'ca.privateSecret', 'private-ca'),
@@ -131,6 +150,11 @@ const collision: Withheld = {
   value: '/etc/ssl/cert.pem',
   foreignKey: 'root-ca',
 }
+
+const conflict: Withheld = { reason: 'conflict', mechanism: 'verifier-ca', element: '', list: '', conflict: [VERIFIER_CA_CERT] }
+
+/** The loaded verifier env list is no sequence, so the proxy's element is withheld; it has no mechanism. */
+const editedProxy: Withheld = { reason: 'edited', mechanism: '', element: 'HTTPS_PROXY', list: VERIFIER_ENV }
 
 const finding = (rule: string, field: string): Finding => ({
   rule,
@@ -212,13 +236,65 @@ describe('EgressPanel', () => {
       values: { 'ca.privateSecret': CA },
       extra: { withheld: [collision] },
       rows: [
-        ['Verifier', NOTHING_SET, caWithheld('collision', VERIFIER_MOUNTS, 'root-ca')],
+        ['Verifier', NOTHING_SET, withheldCell('collision', VERIFIER_MOUNTS, 'root-ca')],
         ['APISIX', NOTHING_SET, CA_TRUSTED],
         ['Keycloak', NOTHING_SET, CA_TRUSTED],
         ['Marketplace', NOTHING_SET, NOTHING_SET],
         ['vc-operator', NOTHING_SET, NOTHING_SET],
       ],
       notes: [NO_ROUTES],
+    },
+    {
+      name: 'private CA with the verifier mechanism withheld by a chart-mounted bundle',
+      values: { 'ca.privateSecret': CA },
+      extra: { withheld: [conflict] },
+      rows: [
+        ['Verifier', NOTHING_SET, withheldCell('conflict', '')],
+        ['APISIX', NOTHING_SET, CA_TRUSTED],
+        ['Keycloak', NOTHING_SET, CA_TRUSTED],
+        ['Marketplace', NOTHING_SET, NOTHING_SET],
+        ['vc-operator', NOTHING_SET, NOTHING_SET],
+      ],
+      notes: [NO_ROUTES],
+    },
+    {
+      name: 'proxy element withheld by an edited list, CA mechanism rendered',
+      values: { 'proxy.https': PROXY, 'proxy.no': 'localhost,10.43.0.0/16', 'ca.privateSecret': CA },
+      extra: { routes: true, withheld: [editedProxy] },
+      rows: [
+        ['Verifier', withheldCell('edited', VERIFIER_ENV), CA_TRUSTED],
+        ['APISIX', PROXY_SET, CA_TRUSTED],
+        ['Keycloak', PROXY_SET, CA_TRUSTED],
+        ['Marketplace', PROXY_SET, NOTHING_SET],
+        ['vc-operator', PROXY_SET, NOTHING_SET],
+      ],
+      notes: [BAE_LOGIN],
+    },
+    {
+      name: 'private CA with a loaded route that does not verify',
+      values: { 'ca.privateSecret': CA },
+      extra: { pinnedRoute: true },
+      rows: [
+        ['Verifier', NOTHING_SET, CA_TRUSTED],
+        ['APISIX', NOTHING_SET, CA_NOT_IN_EFFECT],
+        ['Keycloak', NOTHING_SET, CA_TRUSTED],
+        ['Marketplace', NOTHING_SET, NOTHING_SET],
+        ['vc-operator', NOTHING_SET, NOTHING_SET],
+      ],
+      notes: [],
+    },
+    {
+      name: 'proxy with a loaded route whose proxy_opts is pinned',
+      values: { 'proxy.https': PROXY, 'proxy.no': 'localhost,10.43.0.0/16' },
+      extra: { pinnedRoute: true },
+      rows: [
+        ['Verifier', PROXY_SET, NOTHING_SET],
+        ['APISIX', NOTHING_SET, NOTHING_SET],
+        ['Keycloak', PROXY_SET, NOTHING_SET],
+        ['Marketplace', PROXY_SET, NOTHING_SET],
+        ['vc-operator', PROXY_SET, NOTHING_SET],
+      ],
+      notes: [BAE_LOGIN],
     },
   ])('previews the fan-out: $name', async ({ values, extra, rows, notes }) => {
     renderPanel(values, extra)
