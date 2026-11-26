@@ -1,0 +1,275 @@
+package render
+
+import (
+	"reflect"
+	"testing"
+
+	"github.com/FIWARE/data-space-connector/config-tool/internal/load"
+	"github.com/FIWARE/data-space-connector/config-tool/internal/model"
+	"github.com/FIWARE/data-space-connector/config-tool/internal/profile"
+	"github.com/FIWARE/data-space-connector/config-tool/internal/roundtrip"
+)
+
+const (
+	elementsFixture = "testdata/elements.yaml"
+	caSecret        = "my-ca"
+	httpsProxy      = "http://proxy:3128"
+	release         = "provider"
+	namespace       = "dsc"
+	caMountPath     = "/etc/ssl/cert.pem"
+)
+
+var (
+	heapEnv    = map[string]any{"name": "KC_HEAP_SIZE", "value": "1g"}
+	realmMount = map[string]any{"name": "realms", "mountPath": "/opt/keycloak/data/import"}
+	proxyEnv   = map[string]any{"name": "HTTPS_PROXY", "value": httpsProxy}
+	trustEnv   = map[string]any{"name": "KC_TRUSTSTORE_PATHS", "value": "/opt/keycloak/conf/truststores/ca.crt"}
+	trustMount = map[string]any{"name": "ca-bundle", "mountPath": "/opt/keycloak/conf/truststores"}
+	caVolume   = map[string]any{"name": "ca-bundle", "secret": map[string]any{"secretName": caSecret}}
+	caMount    = map[string]any{"name": "ca-bundle", "mountPath": caMountPath, "subPath": "ca.crt"}
+	caAnswers  = map[string]any{"ca.secret": caSecret}
+)
+
+// renderElements renders the elements fixture over answers, with src as the loaded file when it is not empty.
+func renderElements(t *testing.T, answers map[string]any, src string) Tree {
+	t.Helper()
+	b := modelFixture(t, elementsFixture)
+	var opts Options
+	if src != "" {
+		root := roundtrip.Path{}
+		r, err := load.Load([]byte(src), "values.yaml", []model.Bundle{b}, load.Options{Root: &root, Bundle: &b})
+		if err != nil {
+			t.Fatal(err)
+		}
+		opts.Overrides = r
+	}
+	p := profile.Profile{Answers: answers, Target: profile.Target{ReleaseName: release, Namespace: namespace}}
+	tree, err := Render(b, p, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return tree
+}
+
+// at returns the nested value at the dotted path p, nil when absent.
+func at(t *testing.T, tree Tree, p string) any {
+	t.Helper()
+	path, err := roundtrip.ParsePath(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return subtree(tree.Nested(), path)
+}
+
+func TestKeyedElements(t *testing.T) {
+	both := map[string]any{"ca.secret": caSecret, "proxy.https": httpsProxy}
+	tests := []struct {
+		name    string
+		answers map[string]any
+		loaded  string
+		want    map[string]any
+	}{
+		{
+			name:    "base kept, owned appended in bundle order",
+			answers: both,
+			want: map[string]any{
+				"keycloak.extraEnvVars":      []any{heapEnv, proxyEnv, trustEnv},
+				"keycloak.extraVolumeMounts": []any{realmMount, trustMount},
+				"verifier.volumes":           []any{caVolume},
+				"verifier.mounts":            []any{caMount},
+			},
+		},
+		{
+			name:    "no answer writes no list, not even the base",
+			answers: map[string]any{},
+			want:    map[string]any{"keycloak.extraEnvVars": nil, "keycloak.extraVolumeMounts": nil, "verifier.volumes": nil},
+		},
+		{
+			name:    "loaded list replaces the base; foreign elements untouched, owned replaced in place",
+			answers: both,
+			loaded: "keycloak:\n  extraEnvVars:\n    - {name: FOO, value: bar}\n" +
+				"    - {name: KC_TRUSTSTORE_PATHS, value: /opt/keycloak/conf/truststores/ca.crt}\n    - {name: BAZ, value: qux}\n",
+			want: map[string]any{
+				"keycloak.extraEnvVars": []any{
+					map[string]any{"name": "FOO", "value": "bar"}, trustEnv, map[string]any{"name": "BAZ", "value": "qux"}, proxyEnv,
+				},
+				"keycloak.extraVolumeMounts": []any{realmMount, trustMount},
+			},
+		},
+		{
+			name:    "loaded owned element with other content is kept as a hand edit",
+			answers: caAnswers,
+			loaded:  "keycloak:\n  extraEnvVars:\n    - {name: KC_TRUSTSTORE_PATHS, value: /elsewhere}\n",
+			want: map[string]any{
+				"keycloak.extraEnvVars": []any{map[string]any{"name": "KC_TRUSTSTORE_PATHS", "value": "/elsewhere"}},
+			},
+		},
+		{
+			name:    "foreign mount with another mountPath does not collide",
+			answers: caAnswers,
+			loaded:  "verifier:\n  mounts:\n    - {name: root-ca, mountPath: /etc/other}\n",
+			want: map[string]any{
+				"verifier.mounts":  []any{map[string]any{"name": "root-ca", "mountPath": "/etc/other"}, caMount},
+				"verifier.volumes": []any{caVolume},
+			},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			tree := renderElements(t, tc.answers, tc.loaded)
+			for p, want := range tc.want {
+				if got := at(t, tree, p); !reflect.DeepEqual(got, want) {
+					t.Errorf("%s = %v, want %v", p, got, want)
+				}
+			}
+			if len(tree.Withheld) != 0 {
+				t.Errorf("Withheld = %v, want none", tree.Withheld)
+			}
+		})
+	}
+}
+
+func TestKeyedElementProvenance(t *testing.T) {
+	tree := renderElements(t, caAnswers, "keycloak:\n  extraEnvVars:\n    - {name: KC_TRUSTSTORE_PATHS, value: /elsewhere}\n")
+	got := map[string]Provenance{}
+	for _, l := range tree.Leaves {
+		got[l.Path.String()] = l.Provenance
+	}
+	tests := []struct {
+		path string
+		want Provenance
+	}{
+		{"keycloak.extraVolumeMounts[0].name", Provenance{Element: "realms", Origin: OriginBase}},
+		{"keycloak.extraVolumeMounts[1].mountPath", Provenance{Foundation: "ca.secret", Answers: []string{}, Target: 2, Element: "ca-bundle"}},
+		{"verifier.volumes[0].secret.secretName", Provenance{Foundation: "ca.secret", Answers: []string{"ca.secret"}, Target: 0, Element: "ca-bundle"}},
+		{"keycloak.extraEnvVars[0].value", Provenance{
+			Foundation: "ca.secret", Answers: []string{}, Target: 3, Element: "KC_TRUSTSTORE_PATHS", Pinned: true, Kept: true, Rendered: trustEnv,
+		}},
+	}
+	for _, tc := range tests {
+		if p := got[tc.path]; !reflect.DeepEqual(p, tc.want) {
+			t.Errorf("%s provenance = %+v, want %+v", tc.path, p, tc.want)
+		}
+	}
+}
+
+func TestEditedListPinsEveryLeaf(t *testing.T) {
+	tree := renderElements(t, caAnswers, "keycloak:\n  extraEnvVars: hand-written\n")
+	n := 0
+	for _, l := range tree.Leaves {
+		if l.Path[1] != roundtrip.Key("extraEnvVars") {
+			continue
+		}
+		n++
+		if !l.Provenance.Pinned || l.Provenance.Kept {
+			t.Errorf("%s: provenance %+v, want pinned without a kept value", l.Path, l.Provenance)
+		}
+	}
+	if n == 0 {
+		t.Fatal("no extraEnvVars leaves")
+	}
+	if got := at(t, tree, "keycloak.extraEnvVars"); got != nil {
+		t.Errorf("Nested keeps %v, want the loaded value left alone", got)
+	}
+}
+
+func TestMechanismWithheld(t *testing.T) {
+	tree := renderElements(t, caAnswers, "verifier:\n  mounts:\n    - {name: root-ca, mountPath: "+caMountPath+"}\n")
+	want := []Withheld{{
+		Mechanism: "verifier-ca", Element: "ca-bundle", List: "verifier.mounts", Field: "mountPath", Value: caMountPath, ForeignKey: "root-ca",
+	}}
+	if !reflect.DeepEqual(tree.Withheld, want) {
+		t.Errorf("Withheld = %+v, want %+v", tree.Withheld, want)
+	}
+	// The foreign mount stays as loaded because no leaf of either verifier list is written.
+	for _, l := range tree.Leaves {
+		if l.Path[0] == roundtrip.Key("verifier") {
+			t.Errorf("withheld mechanism wrote %s", l.Path)
+		}
+	}
+	if got := at(t, tree, "keycloak.extraVolumeMounts"); !reflect.DeepEqual(got, []any{realmMount, trustMount}) {
+		t.Errorf("other mechanism: extraVolumeMounts = %v", got)
+	}
+}
+
+func TestEachTargets(t *testing.T) {
+	const verify = "plugins.openid-connect.ssl_verify"
+	tests := []struct {
+		name   string
+		loaded string
+		want   map[string]any
+		pinned []string
+	}{
+		{name: "no loaded file", want: map[string]any{"apisix.routes": nil}},
+		{name: "zero routes", loaded: "apisix:\n  routes: []\n", want: map[string]any{"apisix.routes": nil}},
+		{
+			name:   "one route",
+			loaded: "apisix:\n  routes:\n    - plugins:\n        openid-connect: {discovery: d}\n",
+			want:   map[string]any{"apisix.routes[0]." + verify: true},
+		},
+		{
+			name: "many routes; one without the parent, one set false by hand",
+			loaded: "apisix:\n  routes:\n    - plugins:\n        openid-connect: {ssl_verify: true}\n" +
+				"    - plugins:\n        opa: {}\n    - plugins:\n        openid-connect: {ssl_verify: false}\n",
+			want:   map[string]any{"apisix.routes[0]." + verify: true, "apisix.routes[1]": nil, "apisix.routes[2]." + verify: false},
+			pinned: []string{"apisix.routes[2]." + verify},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			tree := renderElements(t, caAnswers, tc.loaded)
+			for p, want := range tc.want {
+				if got := at(t, tree, p); !reflect.DeepEqual(got, want) {
+					t.Errorf("%s = %v, want %v", p, got, want)
+				}
+			}
+			var pinned []string
+			for _, l := range tree.Leaves {
+				if l.Provenance.Pinned {
+					pinned = append(pinned, l.Path.String())
+				}
+			}
+			if !reflect.DeepEqual(pinned, tc.pinned) {
+				t.Errorf("pinned = %v, want %v", pinned, tc.pinned)
+			}
+		})
+	}
+	if got := at(t, renderElements(t, nil, "apisix:\n  routes:\n    - plugins:\n        openid-connect: {}\n"), "apisix.routes"); got != nil {
+		t.Errorf("unanswered each target wrote %v", got)
+	}
+}
+
+func TestRequiresAndDefaultWhenSet(t *testing.T) {
+	const noProxy = "localhost," + namespace + ".svc," + release + "-keycloak"
+	tests := []struct {
+		name        string
+		answers     map[string]any
+		wantNo      any
+		wantEnabled any
+	}{
+		{name: "nothing given: proxy.no not derived though its refs resolve", answers: map[string]any{}},
+		{name: "given proxy.no without proxy.https renders nothing", answers: map[string]any{"proxy.no": "x"}},
+		{name: "proxy.https derives proxy.no", answers: map[string]any{"proxy.https": httpsProxy}, wantNo: noProxy, wantEnabled: true},
+		{name: "given proxy.no wins", answers: map[string]any{"proxy.https": httpsProxy, "proxy.no": "x"}, wantNo: "x", wantEnabled: true},
+	}
+	b := modelFixture(t, elementsFixture)
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			tree := renderElements(t, tc.answers, "")
+			if got := at(t, tree, "keycloak.proxy.noProxy"); got != tc.wantNo {
+				t.Errorf("noProxy = %v, want %v", got, tc.wantNo)
+			}
+			if got := at(t, tree, "keycloak.proxy.enabled"); got != tc.wantEnabled {
+				t.Errorf("enabled = %v, want %v", got, tc.wantEnabled)
+			}
+			p := profile.Profile{Answers: tc.answers, Target: profile.Target{ReleaseName: release, Namespace: namespace}}
+			answers, err := Answers(b, p)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, derived := answers["proxy.no"]; derived != (tc.wantNo != nil || tc.answers["proxy.no"] != nil) {
+				t.Errorf("Answers has proxy.no = %v", derived)
+			}
+		})
+	}
+}

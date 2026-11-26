@@ -1,0 +1,152 @@
+# Each case is a lists table plus a foundations list Versions refuses, with a fragment of the error it must report.
+- name: list path indexed
+  err: "an index is not allowed in a list path"
+  lists: [{path: "keycloak.env[0]", key: name}]
+  foundations: []
+- name: list key missing
+  err: "key is missing"
+  lists: [{path: keycloak.env}]
+  foundations: []
+- name: list root unknown
+  err: "root is not in topLevelKeys"
+  lists: [{path: nowhere.env, key: name}]
+  foundations: []
+- name: lists overlap
+  err: "overlaps lists[0]"
+  lists: [{path: keycloak.env, key: name}, {path: keycloak.env.more, key: name}]
+  foundations: []
+- name: unique repeats the key
+  err: "is the key, which is unique anyway"
+  lists: [{path: keycloak.env, key: name, unique: [name]}]
+  foundations: []
+- name: base key not a string
+  err: "base[0]: name is not a non-empty string"
+  lists: [{path: keycloak.env, key: name, base: [{value: x}]}]
+  foundations: []
+- name: base key repeated
+  err: 'base[1]: name "A" is already declared'
+  lists: [{path: keycloak.env, key: name, base: [{name: A}, {name: A}]}]
+  foundations: []
+- name: list without element target
+  err: "no element target writes it"
+  lists: [{path: keycloak.env, key: name}]
+  foundations: []
+- name: element list not declared
+  err: 'element list "keycloak.env" is not declared'
+  lists: []
+  foundations:
+    - {id: a, stage: foundations, type: string, label: A, targets: [{path: keycloak.env, element: {key: A, value: {value: "{{ .a }}"}}}]}
+- name: element with fn
+  err: "an element target takes no fn, args, sep or each"
+  lists: [{path: keycloak.env, key: name}]
+  foundations:
+    - {id: a, stage: foundations, type: string, label: A, targets: [{path: keycloak.env, fn: copy, element: {key: A, value: {value: "{{ .a }}"}}}]}
+- name: element key templated
+  err: "key must be a non-empty literal"
+  lists: [{path: keycloak.env, key: name}]
+  foundations:
+    - {id: a, stage: foundations, type: string, label: A, targets: [{path: keycloak.env, element: {key: "{{ .a }}", value: {value: x}}}]}
+- name: element without answer or requires
+  err: "element references no answer, so it needs requires"
+  lists: [{path: keycloak.env, key: name}]
+  foundations:
+    - {id: a, stage: foundations, type: string, label: A, targets: [{path: keycloak.env, element: {key: A, value: {value: x}}}]}
+- name: element reads a reserved ref
+  err: "references the reserved target.namespace"
+  lists: [{path: keycloak.env, key: name}]
+  foundations:
+    - {id: a, stage: foundations, type: string, label: A, targets: [{path: keycloak.env, element: {key: A, value: {value: "{{ .target.namespace }}"}}, requires: [a]}]}
+- name: element value holds the key field
+  err: "element value holds the key field name"
+  lists: [{path: keycloak.env, key: name}]
+  foundations:
+    - {id: a, stage: foundations, type: string, label: A, targets: [{path: keycloak.env, element: {key: A, value: {name: B, value: "{{ .a }}"}}}]}
+- name: element is a base element
+  err: "element A is base[0]"
+  lists: [{path: keycloak.env, key: name, base: [{name: A}]}]
+  foundations:
+    - {id: a, stage: foundations, type: string, label: A, targets: [{path: keycloak.env, element: {key: A, value: {value: "{{ .a }}"}}}]}
+- name: element key owned twice
+  err: "element A of list \"keycloak.env\" is already written by foundations[0]"
+  lists: [{path: keycloak.env, key: name}]
+  foundations:
+    - {id: a, stage: foundations, type: string, label: A, targets: [{path: keycloak.env, element: {key: A, value: {value: "{{ .a }}"}}}]}
+    - {id: b, stage: foundations, type: string, label: B, targets: [{path: keycloak.env, element: {key: A, value: {value: "{{ .b }}"}}}]}
+- name: owned elements share a unique value
+  err: "element B shares mountPath /x with foundations[0]"
+  lists: [{path: keycloak.mounts, key: name, unique: [mountPath]}]
+  foundations:
+    - {id: a, stage: foundations, type: string, label: A, targets: [{path: keycloak.mounts, element: {key: A, value: {mountPath: /x}}, requires: [a]}]}
+    - {id: b, stage: foundations, type: string, label: B, targets: [{path: keycloak.mounts, element: {key: B, value: {mountPath: /x}}, requires: [b]}]}
+- name: owned element shares a unique value with the base
+  err: "element A shares mountPath /x with base[0]"
+  lists: [{path: keycloak.mounts, key: name, unique: [mountPath], base: [{name: realms, mountPath: /x}]}]
+  foundations:
+    - {id: a, stage: foundations, type: string, label: A, targets: [{path: keycloak.mounts, element: {key: A, value: {mountPath: /x}}, requires: [a]}]}
+- name: unique value templated
+  err: "unique field mountPath must be a literal scalar"
+  lists: [{path: keycloak.mounts, key: name, unique: [mountPath]}]
+  foundations:
+    - {id: a, stage: foundations, type: string, label: A, targets: [{path: keycloak.mounts, element: {key: A, value: {mountPath: "{{ .a }}"}}}]}
+- name: element list also indexed
+  err: "is written per element, so no target may index into it"
+  lists: [{path: keycloak.env, key: name}]
+  foundations:
+    - {id: a, stage: foundations, type: string, label: A, targets: [{path: keycloak.env, element: {key: A, value: {value: "{{ .a }}"}}}, {path: "keycloak.env[0].name", fn: copy, args: ["{{ .a }}"]}]}
+- name: each on a declared list
+  err: "each is not allowed on \"keycloak.env\""
+  lists: [{path: keycloak.env, key: name}]
+  foundations:
+    - {id: a, stage: foundations, type: string, label: A, targets: [{path: keycloak.env, element: {key: A, value: {value: "{{ .a }}"}}}, {path: keycloak.env, each: value, fn: copy, args: ["{{ .a }}"]}]}
+- name: each with an index
+  err: "an index is not allowed below an element"
+  lists: []
+  foundations:
+    - {id: a, stage: foundations, type: string, label: A, targets: [{path: keycloak.routes, each: "plugins[0]", fn: copy, args: ["{{ .a }}"]}]}
+- name: each paths overlap
+  err: "overlaps each"
+  lists: []
+  foundations:
+    - {id: a, stage: foundations, type: string, label: A, targets: [{path: keycloak.routes, each: plugins.oidc, fn: copy, args: ["{{ .a }}"]}, {path: keycloak.routes, each: plugins.oidc.x, fn: copy, args: ["{{ .a }}"]}]}
+- name: mechanism outside an element
+  err: "mechanism is only allowed on an element target"
+  lists: []
+  foundations:
+    - {id: a, stage: foundations, type: string, label: A, targets: [{path: keycloak.a, fn: copy, args: ["{{ .a }}"], mechanism: m}]}
+- name: const without index or requires
+  err: "or with requires"
+  lists: []
+  foundations:
+    - {id: a, stage: foundations, type: string, label: A, targets: [{path: keycloak.a, fn: const, args: [true]}]}
+- name: requires an undeclared answer
+  err: "requires"
+  lists: []
+  foundations:
+    - {id: a, stage: foundations, type: string, label: A, targets: [{path: keycloak.a, fn: const, args: [true], requires: [nope]}]}
+- name: requires a reserved ref
+  err: "target.release is a reserved ref, not an answer"
+  lists: []
+  foundations:
+    - {id: a, stage: foundations, type: string, label: A, targets: [{path: keycloak.a, fn: const, args: [true], requires: [target.release]}]}
+- name: requires repeated
+  err: "requires[1]: a is already listed"
+  lists: []
+  foundations:
+    - {id: a, stage: foundations, type: string, label: A, targets: [{path: keycloak.a, fn: const, args: [true], requires: [a, a]}]}
+- name: defaultWhen with equals and set
+  err: "give exactly one of equals and set: true"
+  lists: []
+  foundations:
+    - {id: a, stage: foundations, type: string, label: A}
+    - {id: b, stage: foundations, type: string, label: B, default: "{{ .a }}-x", defaultWhen: {id: a, equals: y, set: true}}
+- name: defaultWhen with neither
+  err: "give exactly one of equals and set: true"
+  lists: []
+  foundations:
+    - {id: a, stage: foundations, type: string, label: A}
+    - {id: b, stage: foundations, type: string, label: B, default: "{{ .a }}-x", defaultWhen: {id: a}}
+- name: fullname with a non-string chart
+  err: "only {{ .id }} is allowed"
+  lists: []
+  foundations:
+    - {id: a, stage: foundations, type: string, label: A, default: "{{ fullname .target.release .a }}"}
