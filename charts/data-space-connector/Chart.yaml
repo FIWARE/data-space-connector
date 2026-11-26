@@ -101,7 +101,7 @@ dependencies:
   # consent-facade (the consent-plugin's token service, and contract-driven resolution).
   - name: consent-facade
     condition: consent-facade.enabled
-    version: 0.2.3
+    version: 0.2.4
     repository: oci://quay.io/fiware/helm-charts
   - name: consent-owner-resolver
     condition: consent-owner-resolver.enabled
