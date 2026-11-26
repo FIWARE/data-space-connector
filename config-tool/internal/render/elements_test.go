@@ -402,7 +402,7 @@ func TestElementTargets(t *testing.T) {
 	}{
 		// keycloak.proxy.enabled is a const reached only through requires.
 		{answer: "proxy.https", wantPaths: []string{
-			"keycloak.extraEnvVars", "keycloak.proxy.enabled", "keycloak.proxy.httpsProxy", "keycloak.proxy.noProxy",
+			"apisix.routes", "keycloak.extraEnvVars", "keycloak.proxy.enabled", "keycloak.proxy.httpsProxy", "keycloak.proxy.noProxy",
 		}},
 		// apisix.routes is an each const, and both keycloak-ca elements hold literals only.
 		{answer: "ca.secret", wantPaths: []string{
@@ -470,6 +470,20 @@ func TestEachTargets(t *testing.T) {
 	}
 	if got := at(t, renderElements(t, nil, "apisix:\n  routes:\n    - plugins:\n        openid-connect: {}\n"), "apisix.routes"); got != nil {
 		t.Errorf("unanswered each target wrote %v", got)
+	}
+}
+
+func TestEachWithin(t *testing.T) {
+	const opts = "plugins.openid-connect.proxy_opts.https_proxy"
+	loaded := "apisix:\n  routes:\n    - plugins:\n        openid-connect: {discovery: d}\n" +
+		"    - plugins:\n        opa: {}\n    - plugins:\n        openid-connect: {proxy_opts: {https_proxy: other}}\n"
+	tree := renderElements(t, map[string]any{"proxy.https": httpsProxy}, loaded)
+	want := map[string]any{"apisix.routes[0]." + opts: httpsProxy, "apisix.routes[1].plugins.openid-connect": nil,
+		"apisix.routes[2]." + opts: "other"}
+	for p, w := range want {
+		if got := at(t, tree, p); !reflect.DeepEqual(got, w) {
+			t.Errorf("%s = %v, want %v", p, got, w)
+		}
 	}
 }
 

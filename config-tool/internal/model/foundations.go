@@ -173,8 +173,10 @@ type Target struct {
 	Sep  string `yaml:"sep"`
 	// Element makes the target one keyed element of a list the lists table declares; it takes no fn (ADR 0025).
 	Element *Element `yaml:"element"`
-	// Each is a key path written into every loaded element of the list that holds its parent mapping.
+	// Each is a key path written into every loaded element of the list that holds its Within mapping.
 	Each string `yaml:"each"`
+	// Within is the mapping below the element, a proper prefix of Each, that must be loaded; empty means Each's parent.
+	Within string `yaml:"within"`
 	// Requires are answer ids that must resolve for the target to render.
 	Requires []string `yaml:"requires"`
 	// Mechanism names keyed targets that render together or, after a collision, not at all.
@@ -267,6 +269,8 @@ type CompiledTarget struct {
 	Element *CompiledElement
 	// Each is the path written below every loaded element of the list at Path; nil otherwise.
 	Each roundtrip.Path
+	// Within is the prefix of Each that an element must hold as a mapping for Each to be written there.
+	Within roundtrip.Path
 	// Requires are answer ids that must resolve for the target to render, sorted; nil without any.
 	Requires []string
 	// Mechanism is withheld as a whole when one of its elements collides with a foreign one; empty for none.
@@ -614,9 +618,11 @@ func compileTarget(id string, t Target, topLevelKeys []string) (CompiledTarget, 
 		return compileElementTarget(id, t, c)
 	}
 	if t.Each != "" {
-		if c.Each, err = compileEach(t.Each); err != nil {
+		if c.Each, c.Within, err = compileEach(t.Each, t.Within); err != nil {
 			return CompiledTarget{}, err
 		}
+	} else if t.Within != "" {
+		return CompiledTarget{}, fmt.Errorf("within is only allowed with each")
 	}
 	switch t.Fn {
 	case FnConst:
@@ -688,19 +694,30 @@ func compileRequires(ids []string) ([]string, error) {
 	return sortedSet(set), nil
 }
 
-// compileEach parses an each path: mapping keys only, so every element is addressed the same way.
-func compileEach(s string) (roundtrip.Path, error) {
+// compileEach parses an each path and its within prefix: mapping keys only, so every element is addressed the same
+// way. An empty within is each's parent.
+func compileEach(s, within string) (roundtrip.Path, roundtrip.Path, error) {
 	p, err := roundtrip.ParsePath(s)
 	if err != nil {
-		return nil, fmt.Errorf("each: %w", err)
+		return nil, nil, fmt.Errorf("each: %w", err)
 	}
 	if len(p) == 0 {
-		return nil, fmt.Errorf("each is empty")
+		return nil, nil, fmt.Errorf("each is empty")
 	}
 	if slices.ContainsFunc(p, func(s roundtrip.Segment) bool { _, ok := s.Index(); return ok }) {
-		return nil, fmt.Errorf("each %q: an index is not allowed below an element", s)
+		return nil, nil, fmt.Errorf("each %q: an index is not allowed below an element", s)
 	}
-	return p, nil
+	if within == "" {
+		return p, p[:len(p)-1], nil
+	}
+	w, err := roundtrip.ParsePath(within)
+	if err != nil {
+		return nil, nil, fmt.Errorf("within: %w", err)
+	}
+	if len(w) >= len(p) || !hasPathPrefix(p, w) {
+		return nil, nil, fmt.Errorf("within %q is not a proper prefix of each %q", within, s)
+	}
+	return p, w, nil
 }
 
 // splitReserved splits sorted refs into foundation answer ids and reserved refs, each nil when empty.

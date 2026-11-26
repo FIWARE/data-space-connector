@@ -61,9 +61,8 @@ func elementRules(doc *roundtrip.Document, b model.Bundle, root roundtrip.Path) 
 					}
 					continue
 				}
-				at := slices.Concat(elem, t.Each)
-				if parent, err := doc.Lookup(at[:len(at)-1]); err == nil && parent.Kind == yaml.MappingNode {
-					rules = append(rules, elementRule{at: at, foundation: f.ID, target: t})
+				if within, err := doc.Lookup(slices.Concat(elem, t.Within)); err == nil && within.Kind == yaml.MappingNode {
+					rules = append(rules, elementRule{at: slices.Concat(elem, t.Each), foundation: f.ID, target: t})
 				}
 			}
 		}

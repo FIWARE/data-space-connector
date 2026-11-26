@@ -44,7 +44,7 @@ does not own. Such a leaf carries the first foundation, in bundle order, whose e
 the Stage 3 diff files the base under that foundation. Appending beyond a loaded list's length is left to US-7.1's writer.
 
 Loading needs no marker on a sequence item: a loaded element whose key matches an owned keyed target is owned, and so is
-an `each` leaf under any element that has the parent mapping. Their leaves back-derive the answers by inverting the
+an `each` leaf under any element that has its `within` mapping. Their leaves back-derive the answers by inverting the
 target's templates (`model.Invert`); the first element in document order sets an answer, and a leaf that disagrees, or
 a field the target does not write, stays unknown and pins the element. So does the key leaf of an element that lacks a
 field the target writes. An element or `each` leaf is owned only while the render would write it: every `refs` and
@@ -91,7 +91,9 @@ dependency version in `Chart.yaml`, so a subchart bump fails until the fixture i
 ### 4. Per-element (`each`) targets
 
 `{path: apisix.routes, each: plugins.openid-connect.ssl_verify, ...}` writes a key into every element of the loaded list
-that already holds the parent mapping. It never creates elements, so routes stay US-5.6's. Without routes nothing renders
+that already holds the parent mapping. `within` names a shorter prefix of `each` to look for instead, so
+`{each: plugins.openid-connect.proxy_opts.https_proxy, within: plugins.openid-connect}` creates the missing
+`proxy_opts`. It never creates elements, so routes stay US-5.6's. Without routes nothing renders
 for APISIX, and the Stage 3 preview says so. A loaded value that differs is pinned as a hand edit. `each` is refused on a
 list the `lists:` table declares.
 
