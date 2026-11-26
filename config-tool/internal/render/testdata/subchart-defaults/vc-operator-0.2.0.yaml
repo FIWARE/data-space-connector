@@ -3,3 +3,5 @@ chart: vc-operator
 version: 0.2.0
 values:
   extraEnvVars: []
+  extraVolumes: []
+  extraVolumeMounts: []

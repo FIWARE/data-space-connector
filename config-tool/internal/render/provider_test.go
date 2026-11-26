@@ -713,19 +713,6 @@ func matchProxyExclusion(foundation, path string) int {
 // TestProviderProxy renders the proxy answer over provider.yaml: every proxy leaf reproduces the file unless a
 // providerProxyExclusions row says why not, and every leaf of the file carrying the proxy is a proxy target or excluded.
 func TestProviderProxy(t *testing.T) {
-	src, err := os.ReadFile(providerValues)
-	if err != nil {
-		t.Fatal(err)
-	}
-	bs, err := model.Versions(bundles.FS)
-	if err != nil {
-		t.Fatal(err)
-	}
-	root := roundtrip.Path{}
-	loaded, err := load.Load(src, providerValues, bs, load.Options{Root: &root})
-	if err != nil {
-		t.Fatal(err)
-	}
 	p, err := profile.ReadFile(providerProfile)
 	if err != nil {
 		t.Fatal(err)
@@ -733,10 +720,7 @@ func TestProviderProxy(t *testing.T) {
 	if got := p.Answers[proxyHTTPSID]; got != referenceProxy {
 		t.Fatalf("%s answers %s = %v, want %s", providerProfile, proxyHTTPSID, got, referenceProxy)
 	}
-	tree, err := Render(providerBundle(t), p, Options{Overrides: loaded})
-	if err != nil {
-		t.Fatal(err)
-	}
+	tree := renderOverProvider(t, p)
 	doc := providerDoc(t)
 	hits := make([]int, len(providerProxyExclusions))
 	written := map[string]bool{}
@@ -783,5 +767,102 @@ func TestProviderProxy(t *testing.T) {
 	want := []string{"decentralizedIam", "keycloak", "marketplace", "vc-operator"}
 	if got := slices.Sorted(maps.Keys(components)); !reflect.DeepEqual(got, want) {
 		t.Errorf("the proxy reaches %v in provider.yaml, want %v", got, want)
+	}
+}
+
+// renderOverProvider renders p over the loaded provider.yaml.
+func renderOverProvider(t *testing.T, p profile.Profile) Tree {
+	t.Helper()
+	src, err := os.ReadFile(providerValues)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bs, err := model.Versions(bundles.FS)
+	if err != nil {
+		t.Fatal(err)
+	}
+	root := roundtrip.Path{}
+	loaded, err := load.Load(src, providerValues, bs, load.Options{Root: &root})
+	if err != nil {
+		t.Fatal(err)
+	}
+	tree, err := Render(providerBundle(t), p, Options{Overrides: loaded})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return tree
+}
+
+// referenceCASecret is the cert-manager Secret whose ca.crt provider.yaml's hand-made CA mechanisms read.
+const referenceCASecret = "mp-operations.org-tls"
+
+// caExclusion is a CA leaf on which the fan-out deliberately differs from provider.yaml.
+type caExclusion struct {
+	pattern *regexp.Regexp
+	reason  string
+}
+
+// providerCAExclusions hold because provider.yaml trusts its CA by hand-made mechanisms the tool does not own.
+var providerCAExclusions = []caExclusion{
+	{regexp.MustCompile(`^decentralizedIam\.odrlAuthorization\.apisix\.apisix\.ssl\.`),
+		"US-3.6: k3s gives APISIX no trust store, because its routes set ssl_verify false"},
+	{regexp.MustCompile(`^keycloak\.extra(Volumes|VolumeMounts|EnvVars)\[\d+\]\.`),
+		"US-3.6: k3s gives Keycloak no outgoing trust store; the fan-out adds truststore-paths"},
+	{regexp.MustCompile(`^marketplace\.bizEcosystemLogicProxy\.(extraContainerVolumes|extraVolumeMounts|additionalEnvVars)\[\d+\]\.`),
+		"US-3.6: k3s turns the logic proxy's verification off instead, which the tool never writes"},
+	{regexp.MustCompile(`^vc-operator\.(extraVolumes|extraVolumeMounts|extraEnvVars)\[\d+\]\.`),
+		"US-3.6: k3s mounts the CA into /etc/ssl/certs; the fan-out uses its own mount and SSL_CERT_DIR"},
+}
+
+// TestProviderCA renders the private CA over provider.yaml. The verifier mechanism is withheld, because k3s
+// already puts its own bundle (from the signing-key Secret) at /etc/ssl/cert.pem; the routes' loaded ssl_verify
+// false stays pinned; every other owned CA leaf reproduces the file or is excluded with a reason.
+func TestProviderCA(t *testing.T) {
+	p, err := profile.ReadFile(providerProfile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := p.Answers[caSecretID]; ok {
+		t.Fatalf("%s answers %s; provider.yaml trusts its CA by hand", providerProfile, caSecretID)
+	}
+	p.Answers[caSecretID] = referenceCASecret
+	tree := renderOverProvider(t, p)
+	want := []Withheld{{Reason: WithheldCollision, Mechanism: "verifier-ca", Element: "private-ca-bundle",
+		List: verifierMounts, Field: "mountPath", Value: "/etc/ssl/cert.pem", ForeignKey: "root-ca"}}
+	if !reflect.DeepEqual(tree.Withheld, want) {
+		t.Errorf("withheld = %+v, want %+v", tree.Withheld, want)
+	}
+	doc := providerDoc(t)
+	hits := make([]int, len(providerCAExclusions))
+	routes := 0
+	for _, l := range tree.Leaves {
+		if l.Provenance.Foundation != caSecretID || l.Provenance.Origin != "" {
+			continue
+		}
+		key := l.Path.String()
+		if strings.HasSuffix(key, ".ssl_verify") {
+			routes++
+			if !l.Provenance.Pinned || l.Value != false {
+				t.Errorf("%s = %v (pinned %v), want the loaded false pinned", key, l.Value, l.Provenance.Pinned)
+			}
+			continue
+		}
+		if n, err := doc.Lookup(l.Path); err == nil && n.Kind == yaml.ScalarNode && fmt.Sprint(l.Value) == n.Value {
+			continue
+		}
+		i := slices.IndexFunc(providerCAExclusions, func(e caExclusion) bool { return e.pattern.MatchString(key) })
+		if i < 0 {
+			t.Errorf("%s = %v, which provider.yaml does not hold", key, l.Value)
+			continue
+		}
+		hits[i]++
+	}
+	if routes == 0 {
+		t.Error("no route ssl_verify rendered; provider.yaml has openid-connect routes")
+	}
+	for i, n := range hits {
+		if n == 0 {
+			t.Errorf("CA exclusion %s (%s) matches nothing; drop the stale row", providerCAExclusions[i].pattern, providerCAExclusions[i].reason)
+		}
 	}
 }

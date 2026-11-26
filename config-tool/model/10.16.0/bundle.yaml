@@ -60,7 +60,7 @@
 #             path or chartMemoryLimit, which a loaded null drops). The message may use {{ .components }}
 chart: data-space-connector
 version: 10.16.0
-revision: 14
+revision: 15
 topLevelKeys: [
   nameOverride, fullnameOverride, imagePullSecrets, issuance, decentralizedIam, scorpio, elsi,
   keycloak, tm-forum-api, statusListServer, rainbow, contract-management, did, registration,
@@ -432,6 +432,34 @@ lists:
       - {name: OTEL_LOGS_EXPORTER, value: none}
   - path: vc-operator.extraEnvVars
     key: name
+  - path: decentralizedIam.vcAuthentication.vcverifier.deployment.additionalVolumes
+    key: name
+  - path: decentralizedIam.vcAuthentication.vcverifier.deployment.additionalVolumeMounts
+    key: name
+    unique: [mountPath]
+  - path: decentralizedIam.vcAuthentication.vcverifier.deployment.initContainers
+    key: name
+  - path: marketplace.bizEcosystemLogicProxy.extraContainerVolumes
+    key: name
+  - path: marketplace.bizEcosystemLogicProxy.extraVolumeMounts
+    key: name
+    unique: [mountPath]
+  - path: vc-operator.extraVolumes
+    key: name
+  - path: vc-operator.extraVolumeMounts
+    key: name
+    unique: [mountPath]
+  - path: keycloak.extraEnvVars
+    key: name
+    base:
+      - {name: KC_HEAP_SIZE, value: "1024m"}
+  - path: keycloak.extraVolumes
+    key: name
+  - path: keycloak.extraVolumeMounts
+    key: name
+    unique: [mountPath]
+    base:
+      - {name: realms, mountPath: /opt/keycloak/data/import}
 # The in-cluster services a proxied component calls, which the proxy.no default bypasses by bare name (ADR 0025).
 # name is a template over target.release and target.namespace; overrides are the value paths that rename the
 # service, the first set one wins. Otherwise a set nameOverride replaces the chart name in fullname, as Helm's
@@ -448,6 +476,13 @@ noProxyServices:
      nameOverride: keycloak.nameOverride}
   - {name: '{{ fullname .target.release "opentelemetry-collector" }}', overrides: [opentelemetry-collector.fullnameOverride],
      nameOverride: opentelemetry-collector.nameOverride}
+# Cluster objects the rendered values reference and the user creates before installing; NEXT_STEPS.md lists them.
+#   kind     secret
+#   name     a template over answers; the requirement applies only while all of them resolve
+#   key      the data key the object must hold
+requirements:
+  - {kind: secret, name: "{{ .ca.privateSecret }}", key: ca.crt,
+     purpose: The PEM bundle of the private CA that signs the public hosts.}
 foundations:
   - id: org.displayName
     stage: foundations
@@ -996,3 +1031,90 @@ foundations:
         requires: [proxy.https]
       - {path: decentralizedIam.odrlAuthorization.apisix.routes, each: plugins.openid-connect.proxy_opts.no_proxy,
          within: plugins.openid-connect, fn: copy, args: ["{{ .proxy.no }}"], requires: [proxy.https]}
+  # One PEM Secret, key ca.crt, reaches each component through that component's own mechanism (ADR 0025). The
+  # element names avoid the vcverifier chart's own caCert names (ca-bundle, custom-ca-volume, add-root-ca).
+  - id: ca.privateSecret
+    stage: foundations
+    group: egress
+    type: secretName
+    label: Private CA Secret
+    help: >-
+      The Secret in the release namespace whose key ca.crt holds the PEM bundle of the private CA that signs the
+      public hosts. APISIX then trusts only that file, so append the public roots when a route calls a publicly
+      signed provider. Leave it empty when every host has a publicly trusted certificate.
+    doc: doc/deployment-integration/roles/PREREQUISITES.md#private-ca
+    targets:
+      - {path: decentralizedIam.odrlAuthorization.apisix.apisix.ssl.existingCASecret, fn: copy, args: ["{{ .ca.privateSecret }}"]}
+      - {path: decentralizedIam.odrlAuthorization.apisix.apisix.ssl.certCAFilename, fn: const, args: [ca.crt],
+         requires: [ca.privateSecret]}
+      # The trust store is written only while the HTTPS listener is on; TLS still ends at the Ingress.
+      - {path: decentralizedIam.odrlAuthorization.apisix.apisix.ssl.enabled, fn: const, args: [true],
+         requires: [ca.privateSecret]}
+      - {path: decentralizedIam.odrlAuthorization.apisix.routes, each: plugins.openid-connect.ssl_verify,
+         within: plugins.openid-connect, fn: const, args: [true], requires: [ca.privateSecret]}
+      - path: decentralizedIam.vcAuthentication.vcverifier.deployment.additionalVolumes
+        mechanism: verifier-ca
+        element: {key: private-ca, value: {secret: {secretName: "{{ .ca.privateSecret }}", items: [{key: ca.crt, path: ca.crt}]}}}
+      - path: decentralizedIam.vcAuthentication.vcverifier.deployment.additionalVolumes
+        mechanism: verifier-ca
+        element: {key: private-ca-bundle, value: {emptyDir: {}}}
+        requires: [ca.privateSecret]
+      # Go reads /etc/ssl/cert.pem; the bundle replaces it with the system roots plus the private CA.
+      - path: decentralizedIam.vcAuthentication.vcverifier.deployment.additionalVolumeMounts
+        mechanism: verifier-ca
+        element: {key: private-ca-bundle, value: {mountPath: /etc/ssl/cert.pem, subPath: cert.pem}}
+        requires: [ca.privateSecret]
+      # The image is the vcverifier chart's caCert.bundleImage default; internal/render/ca_test.go pins it.
+      - path: decentralizedIam.vcAuthentication.vcverifier.deployment.initContainers
+        mechanism: verifier-ca
+        element:
+          key: add-private-ca
+          value:
+            image: alpine:3.23.3
+            command: [sh, -c, cat /etc/ssl/cert.pem /private-ca/ca.crt > /bundle/cert.pem]
+            volumeMounts:
+              - {name: private-ca, mountPath: /private-ca, readOnly: true}
+              - {name: private-ca-bundle, mountPath: /bundle}
+            securityContext:
+              runAsNonRoot: true
+              runAsUser: 65534
+              readOnlyRootFilesystem: true
+              allowPrivilegeEscalation: false
+              capabilities: {drop: [ALL]}
+        requires: [ca.privateSecret]
+      # Node 18 adds NODE_EXTRA_CA_CERTS to its bundled roots.
+      - path: marketplace.bizEcosystemLogicProxy.extraContainerVolumes
+        mechanism: marketplace-ca
+        element: {key: private-ca, value: {secret: {secretName: "{{ .ca.privateSecret }}", items: [{key: ca.crt, path: ca.crt}]}}}
+      - path: marketplace.bizEcosystemLogicProxy.extraVolumeMounts
+        mechanism: marketplace-ca
+        element: {key: private-ca, value: {mountPath: /etc/ssl/private-ca, readOnly: true}}
+        requires: [ca.privateSecret]
+      - path: marketplace.bizEcosystemLogicProxy.additionalEnvVars
+        mechanism: marketplace-ca
+        element: {key: NODE_EXTRA_CA_CERTS, value: {value: /etc/ssl/private-ca/ca.crt}}
+        requires: [ca.privateSecret]
+      # Go's SSL_CERT_DIR adds the directory to the default bundle file, where SSL_CERT_FILE would replace it.
+      - path: vc-operator.extraVolumes
+        mechanism: vc-operator-ca
+        element: {key: private-ca, value: {secret: {secretName: "{{ .ca.privateSecret }}", items: [{key: ca.crt, path: ca.crt}]}}}
+      - path: vc-operator.extraVolumeMounts
+        mechanism: vc-operator-ca
+        element: {key: private-ca, value: {mountPath: /etc/ssl/private-ca, readOnly: true}}
+        requires: [ca.privateSecret]
+      - path: vc-operator.extraEnvVars
+        mechanism: vc-operator-ca
+        element: {key: SSL_CERT_DIR, value: {value: /etc/ssl/private-ca}}
+        requires: [ca.privateSecret]
+      # truststore-paths is the outgoing trust and takes PEM; tls.truststore* only checks inbound mTLS clients.
+      - path: keycloak.extraVolumes
+        mechanism: keycloak-ca
+        element: {key: private-ca, value: {secret: {secretName: "{{ .ca.privateSecret }}", items: [{key: ca.crt, path: private-ca.pem}]}}}
+      - path: keycloak.extraVolumeMounts
+        mechanism: keycloak-ca
+        element: {key: private-ca, value: {mountPath: /opt/keycloak/conf/truststores/private-ca.pem, subPath: private-ca.pem, readOnly: true}}
+        requires: [ca.privateSecret]
+      - path: keycloak.extraEnvVars
+        mechanism: keycloak-ca
+        element: {key: KC_TRUSTSTORE_PATHS, value: {value: /opt/keycloak/conf/truststores/private-ca.pem}}
+        requires: [ca.privateSecret]

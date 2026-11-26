@@ -8,6 +8,20 @@ values:
     vcverifier:
       deployment:
         additionalEnvVars: null
+        additionalVolumes: null
+        additionalVolumeMounts: null
+        initContainers: null
+        serverCertificates:
+          caCert:
+            bundleImage:
+              repository: alpine
+              tag: 3.23.3
+              bundlePath: /etc/ssl/cert.pem
   odrlAuthorization:
     apisix:
       routes: []
+      apisix:
+        ssl:
+          enabled: false
+          existingCASecret: ""
+          certCAFilename: ""

@@ -40,6 +40,8 @@ const (
 	// TypeCredentialTypes is a list of {type, description?} mappings with unique types; only a copy target
 	// may write it.
 	TypeCredentialTypes FoundationType = "credentialTypes"
+	// TypeSecretName is the name of a Kubernetes Secret: a DNS-1123 subdomain, like TypeHostname.
+	TypeSecretName FoundationType = "secretName"
 )
 
 // FoundationGroup is the Stage 3 panel a foundation is asked in.
@@ -87,7 +89,7 @@ const (
 var urlSchemes = []string{"http", "https"}
 
 var (
-	knownTypes = []FoundationType{TypeString, TypeHostname, TypeDomain, TypeChoice, TypeDID, TypeURL, TypeBool, TypeCredentialTypes}
+	knownTypes = []FoundationType{TypeString, TypeHostname, TypeDomain, TypeChoice, TypeDID, TypeURL, TypeBool, TypeCredentialTypes, TypeSecretName}
 	knownFns   = []Fn{FnTpl, FnJoin, FnCopy, FnConst}
 	// knownFoundationGroups are the Stage 3 panels, in screen order.
 	knownFoundationGroups = []FoundationGroup{GroupOrganization, GroupDataspace, GroupNetwork, GroupPlatform, GroupEgress}
@@ -326,6 +328,10 @@ func (t FoundationType) Check(v any) error {
 		}
 		if t == TypeDomain && !strings.Contains(s, ".") {
 			return fmt.Errorf("must be a domain of at least two labels")
+		}
+	case TypeSecretName:
+		if len(s) > maxHostnameLength || !hostname.MatchString(s) {
+			return fmt.Errorf("must be a Secret name of lowercase letters, digits, '-' and '.', at most %d characters", maxHostnameLength)
 		}
 	case TypeDID:
 		if !did.MatchString(s) {
