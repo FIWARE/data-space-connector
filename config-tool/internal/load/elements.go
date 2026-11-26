@@ -17,6 +17,7 @@ const (
 	noteNotInElement = "not a field of the %s element %s writes"
 	noteNotRendered  = "is not what %s writes here"
 	noteMissing      = "the element lacks %s, which %s writes"
+	noteInactive     = "%s is not answered, so %s does not write here"
 )
 
 // elementRule is a loaded node an owned element or each target writes (ADR 0025): a list element whose key field
@@ -27,6 +28,9 @@ type elementRule struct {
 	target     model.CompiledTarget
 	// missing is the note on an element that lacks a field the target writes; it lands on the key leaf.
 	missing string
+	// inactive is the note on a rule whose target the render leaves out for an unresolved answer; it lands on the
+	// key leaf, or on the each leaf.
+	inactive string
 }
 
 // elementRules lists the loaded nodes b's element and each targets write, in bundle order.
@@ -73,6 +77,78 @@ func missingLeaf(doc *roundtrip.Document, elem roundtrip.Path, e *model.Compiled
 	return ""
 }
 
+// deactivate marks every active rule whose target the render would leave out under answers, as composeLists and
+// eachLeaves do: a ref or requires that does not resolve, also on another target of its mechanism. It reports
+// whether it marked one; the load then classifies again, as the marked rules' answers no longer count.
+func deactivate(rules []elementRule, b model.Bundle, answers map[string]*Answer) bool {
+	resolved := resolvable(b, answers)
+	changed := false
+	for i, r := range rules {
+		if r.inactive != "" {
+			continue
+		}
+		id, ok := unresolved(b, r.target, resolved)
+		if !ok {
+			continue
+		}
+		rules[i].inactive, changed = fmt.Sprintf(noteInactive, id, r.foundation), true
+	}
+	return changed
+}
+
+// unresolved returns the first answer id t or a target of its mechanism needs that is not in resolved.
+func unresolved(b model.Bundle, t model.CompiledTarget, resolved map[string]any) (string, bool) {
+	targets := []model.CompiledTarget{t}
+	if t.Mechanism != "" {
+		targets = nil
+		for _, decl := range b.Foundations {
+			f, _ := b.Foundation(decl.ID)
+			for _, o := range f.Targets {
+				if o.Element != nil && o.Mechanism == t.Mechanism {
+					targets = append(targets, o)
+				}
+			}
+		}
+	}
+	for _, o := range targets {
+		for _, id := range slices.Concat(o.Refs, o.Requires) {
+			if _, ok := resolved[id]; !ok {
+				return id, true
+			}
+		}
+	}
+	return "", false
+}
+
+// resolvable mirrors the render's resolve over what the seeded profile will hold: the foundations-stage answers,
+// plus every default whose refs resolve. A default's value is unknown here (nil), and a reserved ref counts as
+// resolved, as the load does not know the Stage 1 target (ADR 0025).
+func resolvable(b model.Bundle, answers map[string]*Answer) map[string]any {
+	out := map[string]any{}
+	for _, a := range answers {
+		if a.Stage == string(model.StageFoundations) {
+			out[a.ID] = a.Value
+		}
+	}
+	// A default ref that no foundation declares is a reserved one.
+	unset := func(r string) bool {
+		_, answered := out[r]
+		_, declared := b.Foundation(r)
+		return !answered && declared
+	}
+	for _, id := range b.FoundationOrder() {
+		f, _ := b.Foundation(id)
+		if _, ok := out[id]; ok || f.DefaultTemplate() == nil {
+			continue
+		}
+		if !slices.ContainsFunc(f.DefaultRefs(), unset) &&
+			(f.DefaultWhen == nil || f.DefaultWhen.Holds(out)) {
+			out[id] = nil
+		}
+	}
+	return out
+}
+
 // element returns the rule whose element holds p, or whose each leaf is p, and p's path below it.
 func (c *classifier) element(p roundtrip.Path) (elementRule, roundtrip.Path, bool) {
 	for _, r := range c.elements {
@@ -91,8 +167,9 @@ func (c *classifier) element(p roundtrip.Path) (elementRule, roundtrip.Path, boo
 // first loaded element in document order sets an answer; a leaf that disagrees with it gets a note, so it is pinned.
 func (c *classifier) deriveElement(p roundtrip.Path, r elementRule, sub roundtrip.Path, n *yaml.Node) bool {
 	key := p.String()
+	onKey := r.target.Each != nil || isKeyField(sub, r.target.Element.KeyField)
 	texts, note := c.readElement(r, sub, n)
-	if note == "" && r.missing != "" && r.target.Element != nil && isKeyField(sub, r.target.Element.KeyField) {
+	if note == "" && r.missing != "" && r.target.Element != nil && onKey {
 		note = r.missing
 	}
 	if note != "" {
@@ -117,6 +194,13 @@ func (c *classifier) deriveElement(p roundtrip.Path, r elementRule, sub roundtri
 			return false
 		}
 		ids, values[id] = append(ids, id), v
+	}
+	// A leaf that matches still is not the render's while its rule is inactive; a content note above is more specific.
+	if r.inactive != "" {
+		if onKey {
+			c.notes[key] = r.inactive
+		}
+		return false
 	}
 	slices.Sort(ids)
 	for _, id := range ids {

@@ -47,7 +47,10 @@ Loading needs no marker on a sequence item: a loaded element whose key matches a
 an `each` leaf under any element that has the parent mapping. Their leaves back-derive the answers by inverting the
 target's templates (`model.Invert`); the first element in document order sets an answer, and a leaf that disagrees, or
 a field the target does not write, stays unknown and pins the element. So does the key leaf of an element that lacks a
-field the target writes. A reserved ref such as `{{ .target.namespace }}` reads as any text: the load report does not
+field the target writes. An element or `each` leaf is owned only while the render would write it: every `refs` and
+`requires` id of its target, and of every target of its mechanism, must be among the derived answers or follow from
+them by a default. Otherwise its key leaf (or the `each` leaf) stays unknown with a note, and the load classifies again
+without the answers that rule had derived. A reserved ref such as `{{ .target.namespace }}` reads as any text: the load report does not
 depend on the Stage 1 target, which may change after the load, so an element rendered for another release or namespace
 is reported as owned. The render compares the whole element with what it writes for the current target and pins it
 all the same. The Stage 3 diff reports a pinned element once,

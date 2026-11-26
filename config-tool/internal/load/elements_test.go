@@ -34,6 +34,8 @@ func TestLoadElements(t *testing.T) {
 		notCA      = "is not what ca.secret writes here"
 		differsCA  = "differs from ca.secret = first"
 		verifyPath = ".plugins.openid-connect.ssl_verify"
+		volume     = "verifier:\n  volumes:\n    - {name: ca-bundle, secret: {secretName: s}}\n"
+		inactiveCA = "ca.secret is not answered, so ca.secret does not write here"
 	)
 	tests := []struct {
 		name  string
@@ -55,10 +57,12 @@ func TestLoadElements(t *testing.T) {
 		{
 			name: "first element in document order wins, the other is pinned",
 			src: "verifier:\n  volumes:\n    - {name: ca-bundle, secret: {secretName: first}}\n" +
-				"    - {name: extra-ca, secret: {secretName: second}}\n",
-			owned:   []string{"verifier.volumes[0].name", "verifier.volumes[0].secret.secretName", "verifier.volumes[1].name"},
+				"    - {name: extra-ca, secret: {secretName: second}}\n" +
+				"  mounts:\n    - {name: extra-ca, mountPath: /etc/extra, subPath: x.crt}\n",
+			owned: []string{"verifier.volumes[0].name", "verifier.volumes[0].secret.secretName", "verifier.volumes[1].name",
+				"verifier.mounts[0].name", "verifier.mounts[0].mountPath", "verifier.mounts[0].subPath"},
 			unknown: map[string]string{"verifier.volumes[1].secret.secretName": differsCA},
-			answers: map[string]any{"ca.secret": "first"},
+			answers: map[string]any{"ca.secret": "first", "ca.extra": "x.crt"},
 		},
 		{
 			name: "a field the element does not write",
@@ -82,26 +86,49 @@ func TestLoadElements(t *testing.T) {
 			answers: map[string]any{},
 		},
 		{
-			name:    "a literal that differs",
-			src:     "verifier:\n  mounts:\n    - {name: ca-bundle, mountPath: /other, subPath: ca.crt}\n",
-			owned:   []string{"verifier.mounts[0].name", "verifier.mounts[0].subPath"},
+			name: "a literal that differs",
+			src:  volume + "  mounts:\n    - {name: ca-bundle, mountPath: /other, subPath: ca.crt}\n",
+			owned: []string{"verifier.volumes[0].name", "verifier.volumes[0].secret.secretName",
+				"verifier.mounts[0].name", "verifier.mounts[0].subPath"},
 			unknown: map[string]string{"verifier.mounts[0].mountPath": notCA},
+			answers: map[string]any{"ca.secret": "s"},
+		},
+		{
+			name: "a template inside a literal field",
+			src: "verifier:\n  volumes:\n    - {name: extra-ca, secret: {secretName: s}}\n" +
+				"  mounts:\n    - {name: extra-ca, mountPath: /etc/extra, subPath: x.crt}\n",
+			owned: []string{"verifier.volumes[0].name", "verifier.volumes[0].secret.secretName",
+				"verifier.mounts[0].name", "verifier.mounts[0].mountPath", "verifier.mounts[0].subPath"},
+			unknown: map[string]string{},
+			answers: map[string]any{"ca.extra": "x.crt", "ca.secret": "s"},
+		},
+		{
+			name: "a target whose requires is not answered",
+			src:  "verifier:\n  mounts:\n    - {name: ca-bundle, mountPath: /etc/ssl/cert.pem, subPath: ca.crt}\n",
+			unknown: map[string]string{"verifier.mounts[0].name": inactiveCA,
+				"verifier.mounts[0].mountPath": "", "verifier.mounts[0].subPath": ""},
 			answers: map[string]any{},
 		},
 		{
-			name:    "a template inside a literal field",
-			src:     "verifier:\n  mounts:\n    - {name: extra-ca, mountPath: /etc/extra, subPath: x.crt}\n",
-			owned:   []string{"verifier.mounts[0].name", "verifier.mounts[0].mountPath", "verifier.mounts[0].subPath"},
-			unknown: map[string]string{},
-			answers: map[string]any{"ca.extra": "x.crt"},
+			name: "a mechanism target whose own answer derives but another target's does not",
+			src:  "verifier:\n  mounts:\n    - {name: extra-ca, mountPath: /etc/extra, subPath: x.crt}\n",
+			unknown: map[string]string{"verifier.mounts[0].name": "ca.secret is not answered, so ca.extra does not write here",
+				"verifier.mounts[0].mountPath": "", "verifier.mounts[0].subPath": ""},
+			answers: map[string]any{},
 		},
 		{
 			name: "each leaf under every element with the parent",
-			src: "apisix:\n  routes:\n    - plugins:\n        openid-connect: {ssl_verify: true, discovery: d}\n" +
+			src: volume + "apisix:\n  routes:\n    - plugins:\n        openid-connect: {ssl_verify: true, discovery: d}\n" +
 				"    - plugins:\n        opa: {}\n    - plugins:\n        openid-connect: {ssl_verify: false}\n",
-			owned: []string{"apisix.routes[0]" + verifyPath},
+			owned: []string{"verifier.volumes[0].name", "verifier.volumes[0].secret.secretName", "apisix.routes[0]" + verifyPath},
 			unknown: map[string]string{"apisix.routes[0].plugins.openid-connect.discovery": "", "apisix.routes[1].plugins.opa": "",
 				"apisix.routes[2]" + verifyPath: notCA},
+			answers: map[string]any{"ca.secret": "s"},
+		},
+		{
+			name:    "each leaf while its requires is not answered",
+			src:     "apisix:\n  routes:\n    - plugins:\n        openid-connect: {ssl_verify: true}\n",
+			unknown: map[string]string{"apisix.routes[0]" + verifyPath: inactiveCA},
 			answers: map[string]any{},
 		},
 		{

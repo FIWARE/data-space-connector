@@ -555,6 +555,42 @@ func TestLoadRenderRoundTrip(t *testing.T) {
 	}
 }
 
+// TestLoadOwnedIsRendered checks that every list leaf the load reports as owned is one the render writes unpinned
+// from the seeded answers, so the report never claims an element the render leaves foreign.
+func TestLoadOwnedIsRendered(t *testing.T) {
+	tests := []struct{ name, loaded string }{
+		{name: "mount without its volume", loaded: "verifier:\n  mounts:\n    - {name: ca-bundle, mountPath: /etc/ssl/cert.pem, subPath: ca.crt}\n"},
+		{name: "mechanism over two foundations, one missing", loaded: "verifier:\n  mounts:\n    - {name: extra-ca, mountPath: /etc/extra, subPath: x.crt}\n"},
+		{name: "each without its requires", loaded: "apisix:\n  routes:\n    - plugins:\n        openid-connect: {ssl_verify: true}\n"},
+		{name: "complete mechanism", loaded: "verifier:\n  volumes:\n    - {name: extra-ca, secret: {secretName: s}}\n" +
+			"  mounts:\n    - {name: extra-ca, mountPath: /etc/extra, subPath: x.crt}\n"},
+	}
+	b := modelFixture(t, elementsFixture)
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			root := roundtrip.Path{}
+			r, err := load.Load([]byte(tc.loaded), "values.yaml", []model.Bundle{b}, load.Options{Root: &root, Bundle: &b})
+			if err != nil {
+				t.Fatal(err)
+			}
+			p := profile.Profile{Answers: load.SeedAnswers(r.Report, nil), Target: profile.Target{ReleaseName: release, Namespace: namespace}}
+			tree, err := Render(b, p, Options{Overrides: r})
+			if err != nil {
+				t.Fatal(err)
+			}
+			rendered := map[string]bool{}
+			for _, l := range tree.Leaves {
+				rendered[l.Path.String()] = !l.Provenance.Pinned
+			}
+			for _, e := range r.Report.Owned {
+				if !rendered[e.Path] {
+					t.Errorf("%s is owned, but the render does not write it unpinned", e.Path)
+				}
+			}
+		})
+	}
+}
+
 // TestDiffPinnedElement reports a hand-edited owned element once, under its key, with the whole elements.
 func TestDiffPinnedElement(t *testing.T) {
 	const (

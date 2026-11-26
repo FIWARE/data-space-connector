@@ -47,7 +47,7 @@ type classifier struct {
 	elementOwned map[string]bool
 }
 
-func newClassifier(doc *roundtrip.Document, markers []roundtrip.OwnedMarker, b model.Bundle, root roundtrip.Path) *classifier {
+func newClassifier(markers []roundtrip.OwnedMarker, b model.Bundle, root roundtrip.Path, elements []elementRule) *classifier {
 	rules := b.Rules()
 	c := &classifier{
 		markers:      markers,
@@ -57,7 +57,7 @@ func newClassifier(doc *roundtrip.Document, markers []roundtrip.OwnedMarker, b m
 		answers:      map[string]*Answer{},
 		leafAnswer:   map[string]string{},
 		notes:        map[string]string{},
-		elements:     elementRules(doc, b, root),
+		elements:     elements,
 		elementOwned: map[string]bool{},
 	}
 	for _, r := range rules {
