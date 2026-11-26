@@ -475,15 +475,49 @@ func TestEachTargets(t *testing.T) {
 
 func TestEachWithin(t *testing.T) {
 	const opts = "plugins.openid-connect.proxy_opts.https_proxy"
-	loaded := "apisix:\n  routes:\n    - plugins:\n        openid-connect: {discovery: d}\n" +
-		"    - plugins:\n        opa: {}\n    - plugins:\n        openid-connect: {proxy_opts: {https_proxy: other}}\n"
-	tree := renderElements(t, map[string]any{"proxy.https": httpsProxy}, loaded)
-	want := map[string]any{"apisix.routes[0]." + opts: httpsProxy, "apisix.routes[1].plugins.openid-connect": nil,
-		"apisix.routes[2]." + opts: "other"}
-	for p, w := range want {
-		if got := at(t, tree, p); !reflect.DeepEqual(got, w) {
-			t.Errorf("%s = %v, want %v", p, got, w)
-		}
+	route := func(oidc string) string {
+		return "apisix:\n  routes:\n    - plugins:\n        openid-connect: " + oidc + "\n"
+	}
+	tests := []struct {
+		name   string
+		loaded string
+		want   map[string]any
+		// pinned lists the each leaves that must be pinned with nothing kept, as under a hand-edited ancestor.
+		pinned []string
+	}{
+		{
+			name: "created where only openid-connect is loaded, kept where proxy_opts differs",
+			loaded: route("{discovery: d}") + "    - plugins:\n        opa: {}\n" +
+				"    - plugins:\n        openid-connect: {proxy_opts: {https_proxy: other}}\n",
+			want: map[string]any{"apisix.routes[0]." + opts: httpsProxy, "apisix.routes[1].plugins.openid-connect": nil,
+				"apisix.routes[2]." + opts: "other"},
+		},
+		{name: "empty proxy_opts mapping", loaded: route("{proxy_opts: {}}"), want: map[string]any{"apisix.routes[0]." + opts: httpsProxy}},
+		{name: "null proxy_opts", loaded: route("{discovery: d, proxy_opts: null}"), pinned: []string{"apisix.routes[0]." + opts}},
+		{name: "scalar proxy_opts", loaded: route("{proxy_opts: x}"), pinned: []string{"apisix.routes[0]." + opts}},
+		{name: "list proxy_opts", loaded: route("{proxy_opts: [a]}"), pinned: []string{"apisix.routes[0]." + opts}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			tree := renderElements(t, map[string]any{"proxy.https": httpsProxy}, tc.loaded)
+			for p, w := range tc.want {
+				if got := at(t, tree, p); !reflect.DeepEqual(got, w) {
+					t.Errorf("%s = %v, want %v", p, got, w)
+				}
+			}
+			for _, p := range tc.pinned {
+				i := slices.IndexFunc(tree.Leaves, func(l Leaf) bool { return l.Path.String() == p })
+				if i < 0 {
+					t.Fatalf("no leaf at %s", p)
+				}
+				if prov := tree.Leaves[i].Provenance; !prov.Pinned || prov.Kept || prov.Rendered != httpsProxy {
+					t.Errorf("%s provenance = %+v, want pinned, not kept, rendered %q", p, prov, httpsProxy)
+				}
+				if got := at(t, tree, "apisix.routes[0].plugins.openid-connect.proxy_opts"); got != nil {
+					t.Errorf("proxy_opts = %v, want nothing written over the loaded value", got)
+				}
+			}
+		})
 	}
 }
 

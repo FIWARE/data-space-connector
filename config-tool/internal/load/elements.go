@@ -61,13 +61,29 @@ func elementRules(doc *roundtrip.Document, b model.Bundle, root roundtrip.Path) 
 					}
 					continue
 				}
-				if within, err := doc.Lookup(slices.Concat(elem, t.Within)); err == nil && within.Kind == yaml.MappingNode {
+				if within, err := doc.Lookup(slices.Concat(elem, t.Within)); err == nil && within.Kind == yaml.MappingNode &&
+					!EachBlocked(doc, elem, t) {
 					rules = append(rules, elementRule{at: slices.Concat(elem, t.Each), foundation: f.ID, target: t})
 				}
 			}
 		}
 	}
 	return rules
+}
+
+// EachBlocked reports whether a loaded node strictly between t.Within and the each leaf below elem is not a
+// mapping, so writing the leaf would replace a value the tool does not own. A missing node does not block.
+func EachBlocked(doc *roundtrip.Document, elem roundtrip.Path, t model.CompiledTarget) bool {
+	for k := len(t.Within) + 1; k < len(t.Each); k++ {
+		n, err := doc.Lookup(slices.Concat(elem, t.Each[:k]))
+		if errors.Is(err, roundtrip.ErrNotFound) {
+			return false
+		}
+		if err != nil || n.Kind != yaml.MappingNode {
+			return true
+		}
+	}
+	return false
 }
 
 // missingLeaf is the note on the loaded element at elem when it lacks a leaf e writes; "" when it has them all.

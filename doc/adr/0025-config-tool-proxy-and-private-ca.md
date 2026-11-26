@@ -93,7 +93,8 @@ dependency version in `Chart.yaml`, so a subchart bump fails until the fixture i
 `{path: apisix.routes, each: plugins.openid-connect.ssl_verify, ...}` writes a key into every element of the loaded list
 that already holds the parent mapping. `within` names a shorter prefix of `each` to look for instead, so
 `{each: plugins.openid-connect.proxy_opts.https_proxy, within: plugins.openid-connect}` creates the missing
-`proxy_opts`. It never creates elements, so routes stay US-5.6's. Without routes nothing renders
+`proxy_opts`. A loaded node between `within` and the leaf that is not a mapping (`proxy_opts: null`, a scalar or a
+list) is a hand edit: the leaf is pinned and nothing is written over it. It never creates elements, so routes stay US-5.6's. Without routes nothing renders
 for APISIX, and the Stage 3 preview says so. A loaded value that differs is pinned as a hand edit. `each` is refused on a
 list the `lists:` table declares.
 

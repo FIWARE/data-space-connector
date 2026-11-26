@@ -34,6 +34,7 @@ func TestLoadElements(t *testing.T) {
 		notCA      = "is not what ca.secret writes here"
 		differsCA  = "differs from ca.secret = first"
 		verifyPath = ".plugins.openid-connect.ssl_verify"
+		proxyOpts  = ".plugins.openid-connect.proxy_opts"
 		volume     = "verifier:\n  volumes:\n    - {name: ca-bundle, secret: {secretName: s}}\n"
 		inactiveCA = "ca.secret is not answered, so ca.secret does not write here"
 	)
@@ -129,6 +130,25 @@ func TestLoadElements(t *testing.T) {
 			name:    "each leaf while its requires is not answered",
 			src:     "apisix:\n  routes:\n    - plugins:\n        openid-connect: {ssl_verify: true}\n",
 			unknown: map[string]string{"apisix.routes[0]" + verifyPath: inactiveCA},
+			answers: map[string]any{},
+		},
+		{
+			name:    "each leaf created below within, loaded with the rendered value",
+			src:     "apisix:\n  routes:\n    - plugins:\n        openid-connect: {proxy_opts: {https_proxy: '" + proxy + "'}}\n",
+			owned:   []string{"apisix.routes[0]" + proxyOpts + ".https_proxy"},
+			unknown: map[string]string{},
+			answers: map[string]any{"proxy.https": proxy},
+		},
+		{
+			name:    "each leaf below a hand-written null between within and the leaf",
+			src:     "apisix:\n  routes:\n    - plugins:\n        openid-connect: {proxy_opts: null}\n",
+			unknown: map[string]string{"apisix.routes[0]" + proxyOpts: ""},
+			answers: map[string]any{},
+		},
+		{
+			name:    "each leaf below a hand-written scalar between within and the leaf",
+			src:     "apisix:\n  routes:\n    - plugins:\n        openid-connect: {proxy_opts: x}\n",
+			unknown: map[string]string{"apisix.routes[0]" + proxyOpts: ""},
 			answers: map[string]any{},
 		},
 		{
