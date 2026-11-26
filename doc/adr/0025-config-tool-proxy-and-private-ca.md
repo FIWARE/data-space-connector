@@ -195,8 +195,11 @@ that resolves.
 `internal/model/insecure_test.go` scans every bundle, `ui/src` and the CLI flags for values that disable
 verification (`ssl_verify: false`, `insecureSkipVerify: true`, `rejectUnauthorized: false`, `--insecure`) and for
 `NODE_TLS_REJECT_UNAUTHORIZED`, and for prose offering to skip TLS or certificate verification. A structural check
-also refuses any foundation id, and any target key outside a `const true`, that names verification (`insecure`,
-`skip...verify`, `ssl_verify`, ...), so an option whose value comes from an answer is caught too. A legitimate match
+also refuses any foundation id that names verification, and any target key that names it with any value except one
+pointing the safe way, so an option whose value comes from an answer is caught too. A key where `true` turns
+verification on (`ssl_verify`, `tls_verify`, `verify_ssl`, `rejectUnauthorized`) may be written by a `const true`
+only. A key where `true` turns it off (`insecure`, `skip...verify`, `no_verify`, `disable...verify`) and
+`NODE_TLS_REJECT_UNAUTHORIZED` are refused whatever the value. A legitimate match
 is reworded, never allow-listed.
 
 ## Deviation from the ticket

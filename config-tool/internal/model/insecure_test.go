@@ -37,8 +37,33 @@ var insecurePatterns = []*regexp.Regexp{
 	regexp.MustCompile(`(?i)skip\w*[\s_-]*(tls|ssl|cert\w*)[\s_-]*verif`),
 }
 
-// insecureName matches a foundation id or target key that would offer an option about verification.
-var insecureName = regexp.MustCompile(`(?i)insecure|skip\w*verif|no_?verif|reject_?unauthorized|(ssl|tls)_?verif`)
+// Target keys and foundation ids about verification. A verifyOnName key turns verification on when true, so a const
+// true may write it; an offName key turns it off when true (or, for NODE_TLS_REJECT_UNAUTHORIZED, when set at all),
+// so no target may write it whatever the value. offName is checked first.
+var (
+	offName      = regexp.MustCompile(`(?i)insecure|skip\w*verif|no_?(ssl_?|tls_?|cert\w*)?verif|disable\w*verif|NODE_TLS_REJECT_UNAUTHORIZED`)
+	verifyOnName = regexp.MustCompile(`(?i)(ssl|tls)_?verif|verify_?(ssl|tls)|reject_?unauthorized`)
+)
+
+// nameClass is how the structural scan treats a key or foundation id.
+type nameClass int
+
+const (
+	nameNeutral nameClass = iota
+	nameVerifyOn
+	nameOff
+)
+
+// classify sorts name by offName, then verifyOnName.
+func classify(name string) nameClass {
+	switch {
+	case offName.MatchString(name):
+		return nameOff
+	case verifyOnName.MatchString(name):
+		return nameVerifyOn
+	}
+	return nameNeutral
+}
 
 // insecure reports whether line disables verification by any of insecurePatterns.
 func insecure(line string) bool {
@@ -124,34 +149,39 @@ func TestNoInsecureOption(t *testing.T) {
 	}
 }
 
-// TestInsecureNames pins which foundation ids and target keys the structural scan refuses.
+// TestInsecureNames pins how the structural scan classifies foundation ids and target keys.
 func TestInsecureNames(t *testing.T) {
 	tests := []struct {
 		name string
-		want bool
+		want nameClass
 	}{
-		{"tls.skipVerify", true},
-		{"insecureSkipVerify", true},
-		{"insecure", true},
-		{"ssl_verify", true},
-		{"tlsVerify", true},
-		{"noVerify", true},
-		{"NODE_TLS_REJECT_UNAUTHORIZED", true},
-		{"ca.privateSecret", false},
-		{"ssl", false},
-		{"verify", false},
+		{"tls.skipVerify", nameOff},
+		{"skipVerify", nameOff},
+		{"insecureSkipVerify", nameOff},
+		{"insecure", nameOff},
+		{"noVerify", nameOff},
+		{"noTlsVerify", nameOff},
+		{"disableCertificateVerification", nameOff},
+		{"NODE_TLS_REJECT_UNAUTHORIZED", nameOff},
+		{"ssl_verify", nameVerifyOn},
+		{"tlsVerify", nameVerifyOn},
+		{"verify_ssl", nameVerifyOn},
+		{"rejectUnauthorized", nameVerifyOn},
+		{"ca.privateSecret", nameNeutral},
+		{"ssl", nameNeutral},
+		{"verify", nameNeutral},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := insecureName.MatchString(tc.name); got != tc.want {
-				t.Errorf("insecureName(%q) = %v, want %v", tc.name, got, tc.want)
+			if got := classify(tc.name); got != tc.want {
+				t.Errorf("classify(%q) = %v, want %v", tc.name, got, tc.want)
 			}
 		})
 	}
 }
 
-// TestNoInsecureTarget fails when a shipped bundle offers a foundation about verification, or a target that can
-// write a verification key with anything but a const true; the text scan misses an option whose value is an answer.
+// TestNoInsecureTarget fails when a shipped bundle offers a foundation about verification, or a target that can turn
+// verification off; the text scan misses an option whose key and value sit in different fields.
 func TestNoInsecureTarget(t *testing.T) {
 	got, err := Versions(bundles.FS)
 	if err != nil {
@@ -179,6 +209,10 @@ func TestInsecureTargets(t *testing.T) {
 		{"verify key copied from an answer", `  - {id: a, stage: foundations, type: string, label: A, targets: [{path: keycloak.insecureSkipVerify, fn: copy, args: ["{{ .a }}"]}]}`, 1},
 		{"each verify key copied from an answer", `  - {id: a, stage: foundations, type: string, label: A, targets: [{path: keycloak.routes, each: plugins.oidc.ssl_verify, fn: copy, args: ["{{ .a }}"]}]}`, 1},
 		{"const false verify key", `  - {id: a, stage: foundations, type: string, label: A, targets: [{path: keycloak.ssl_verify, fn: const, args: [false], requires: [a]}]}`, 1},
+		{"const true skip-verify key", `  - {id: a, stage: foundations, type: string, label: A, targets: [{path: keycloak.insecureSkipVerify, fn: const, args: [true], requires: [a]}]}`, 1},
+		{"const true nested skipVerify", `  - {id: a, stage: foundations, type: string, label: A, targets: [{path: keycloak.tls.skipVerify, fn: const, args: [true], requires: [a]}]}`, 1},
+		{"const true NODE_TLS_REJECT_UNAUTHORIZED", `  - {id: a, stage: foundations, type: string, label: A, targets: [{path: keycloak.NODE_TLS_REJECT_UNAUTHORIZED, fn: const, args: [true], requires: [a]}]}`, 1},
+		{"const true rejectUnauthorized", `  - {id: a, stage: foundations, type: string, label: A, targets: [{path: keycloak.rejectUnauthorized, fn: const, args: [true], requires: [a]}]}`, 0},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -193,22 +227,25 @@ func TestInsecureTargets(t *testing.T) {
 	}
 }
 
-// insecureTargets describes every foundation of b about verification and every target that writes a verification
-// key with anything but a const true.
+// insecureTargets describes every foundation of b about verification, every target that writes a key turning
+// verification off, and every target that writes a key turning it on with anything but a const true.
 func insecureTargets(b Bundle) []string {
 	var out []string
 	for _, decl := range b.Foundations {
 		f, _ := b.Foundation(decl.ID)
-		if insecureName.MatchString(f.ID) {
+		if classify(f.ID) != nameNeutral {
 			out = append(out, fmt.Sprintf("foundation %s offers an option about verification", f.ID))
 		}
 		for i, tg := range f.Targets {
-			if tg.Fn == FnConst && tg.Value == true {
-				continue
-			}
+			constTrue := tg.Fn == FnConst && tg.Value == true
 			for _, key := range targetKeys(tg) {
-				if insecureName.MatchString(key) {
-					out = append(out, fmt.Sprintf("%s target %d writes %s with something other than a const true", f.ID, i, key))
+				switch classify(key) {
+				case nameOff:
+					out = append(out, fmt.Sprintf("%s target %d writes %s, which turns verification off", f.ID, i, key))
+				case nameVerifyOn:
+					if !constTrue {
+						out = append(out, fmt.Sprintf("%s target %d writes %s with something other than a const true", f.ID, i, key))
+					}
 				}
 			}
 		}
