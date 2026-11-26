@@ -1,6 +1,7 @@
 package render
 
 import (
+	"encoding/json"
 	"reflect"
 	"slices"
 	"testing"
@@ -223,6 +224,38 @@ func TestEditedListWithholds(t *testing.T) {
 						t.Errorf("edited list %s got leaf %s", w.List, l.Path)
 					}
 				}
+			}
+		})
+	}
+}
+
+func TestWithheldJSON(t *testing.T) {
+	tests := []struct {
+		name     string
+		withheld Withheld
+		want     string
+	}{
+		{
+			name:     "edited carries no collision fields",
+			withheld: Withheld{Reason: WithheldEdited, Mechanism: "verifier-ca", Element: "ca-bundle", List: "verifier.mounts"},
+			want:     `{"reason":"edited","mechanism":"verifier-ca","element":"ca-bundle","list":"verifier.mounts"}`,
+		},
+		{
+			name: "collision carries field, value and foreign key",
+			withheld: Withheld{
+				Reason: WithheldCollision, Mechanism: "verifier-ca", Element: "ca-bundle", List: "verifier.mounts", Field: "mountPath", Value: caMountPath, ForeignKey: "root-ca",
+			},
+			want: `{"reason":"collision","mechanism":"verifier-ca","element":"ca-bundle","list":"verifier.mounts","field":"mountPath","value":"` + caMountPath + `","foreignKey":"root-ca"}`,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := json.Marshal(tc.withheld)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if string(got) != tc.want {
+				t.Errorf("json = %s, want %s", got, tc.want)
 			}
 		})
 	}

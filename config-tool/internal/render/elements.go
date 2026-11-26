@@ -41,7 +41,7 @@ type Withheld struct {
 	Mechanism  string `json:"mechanism"`
 	Element    string `json:"element"`
 	List       string `json:"list"`
-	Field      string `json:"field"`
+	Field      string `json:"field,omitempty"`
 	Value      any    `json:"value,omitempty"`
 	ForeignKey string `json:"foreignKey,omitempty"`
 }
