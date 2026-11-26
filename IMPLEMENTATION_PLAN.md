@@ -132,7 +132,8 @@ Step 7 then gives Contract Management a CA mechanism, which closes the one accep
   one of them as a caller, its hosts get a row.
 - **A loaded file that renames one of those services.** The default reads only answers, so it cannot follow a loaded
   `fullnameOverride`. Step 5 adds the warning `noProxyCoverage`: for each `noProxyServices` row, the effective name
-  is the final tree's value at the first set `overrides` path, otherwise the row's rendered `name`. When the final
+  is the final tree's value at the first set `overrides` path, otherwise the row's `name` rendered with the final
+  tree's value at its `nameOverride` path (if set) in place of the chart name (`RenderNamed`). When the final
   `proxy.no` (derived or given) does not bypass an effective name with the Go matcher from Step 3, the warning names
   the service and the path that renamed it. The user then edits `proxy.no`, and the Stage 3 preview shows the same
   finding. A given `proxy.no` is never rewritten.

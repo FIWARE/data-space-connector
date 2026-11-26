@@ -4,9 +4,11 @@ import (
 	"os"
 	"reflect"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 
+	"github.com/FIWARE/data-space-connector/config-tool/internal/model"
 	"github.com/FIWARE/data-space-connector/config-tool/internal/profile"
 )
 
@@ -19,7 +21,8 @@ const (
 var metadataName = regexp.MustCompile(`(?m)^metadata:\n  name: (\S+)$`)
 
 // TestNoProxyServiceNames pins every noProxyServices row to the chart: a fixed name to the umbrella override that
-// fixes it or to the template literal, a release-prefixed name to overrides nobody sets. A renamed service fails.
+// fixes it or to the template literal, a release-prefixed name to overrides and a nameOverride nobody sets. A renamed
+// service fails.
 func TestNoProxyServiceNames(t *testing.T) {
 	umbrella, fixtures := parseValues(t, umbrellaValues), subchartFixtures(t)
 	literals := map[string]bool{}
@@ -48,10 +51,13 @@ func TestNoProxyServiceNames(t *testing.T) {
 		}
 		switch {
 		case name != other:
-			if len(s.Overrides) == 0 {
-				t.Errorf("noProxyServices[%d] %s: a release-prefixed name needs the overrides that rename it", i, name)
+			if len(s.Overrides) == 0 || s.NameOverride == nil {
+				t.Errorf("noProxyServices[%d] %s: a release-prefixed name needs the overrides and nameOverride that rename it", i, name)
 			}
-			for _, o := range s.Overrides {
+			for _, o := range append(slices.Clone(s.Overrides), s.NameOverride) {
+				if o == nil {
+					continue
+				}
 				if n, err := umbrella.Lookup(o); err == nil && n.Value != "" {
 					t.Errorf("noProxyServices[%d] %s: the umbrella sets %s to %q; the name is fixed now", i, name, o, n.Value)
 				}
@@ -73,6 +79,33 @@ func TestNoProxyServiceNames(t *testing.T) {
 				t.Errorf("noProxyServices[%d] %s: the umbrella's %s does not fix the name: %v", i, name, s.Overrides[0], err)
 			}
 		}
+	}
+}
+
+// TestNoProxyNameOverride checks that a nameOverride replaces the chart name as Helm's fullname does.
+func TestNoProxyNameOverride(t *testing.T) {
+	var keycloak model.CompiledNoProxyService
+	for _, s := range providerBundle(t).NoProxyServices() {
+		if s.NameOverride.String() == "keycloak.nameOverride" {
+			keycloak = s
+		}
+	}
+	if keycloak.Name == nil {
+		t.Fatal("no noProxyServices row with nameOverride keycloak.nameOverride")
+	}
+	for _, tc := range []struct {
+		name, release, nameOverride, want string
+	}{
+		{"unset keeps the chart name", release, "", release + "-keycloak"},
+		{"set replaces the chart name", release, "idp", release + "-idp"},
+		{"release containing the override", "my-idp", "idp", "my-idp"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := keycloak.RenderNamed(tc.release, namespace, tc.nameOverride)
+			if err != nil || got != tc.want {
+				t.Errorf("RenderNamed = %q, %v; want %q", got, err, tc.want)
+			}
+		})
 	}
 }
 

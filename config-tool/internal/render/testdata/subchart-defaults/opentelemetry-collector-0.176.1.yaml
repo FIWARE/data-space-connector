@@ -2,4 +2,5 @@
 chart: opentelemetry-collector
 version: 0.176.1
 values:
+  nameOverride: ""
   fullnameOverride: ""

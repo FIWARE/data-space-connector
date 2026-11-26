@@ -124,8 +124,11 @@ and APISIX (`lua-resty-http`) match entries differently, and no wildcard works i
 `localhost,127.0.0.1,svc,.svc,cluster.local,.cluster.local,<namespace>.svc,` followed by the bare in-cluster service
 names. An entry that one client reads differently matches no real host there and does no harm. The names come from where
 the chart fixes them (`fullnameOverride`, a service `nameOverride`, a literal in a template). Only the Keycloak and OTel
-Collector names use `fullname` over the release. The rows are bundle data (`noProxyServices:` with `name` and
-`overrides:`), so a test and the `noProxyCoverage` warning read the same table. That warning fires when a loaded file
+Collector names use `fullname` over the release. Their charts also rename the Service through `nameOverride`, which
+replaces the chart name inside `fullname` rather than the whole name. The rows are bundle data (`noProxyServices:` with
+`name`, `overrides:` and an optional `nameOverride:` path; the effective name is the first set `overrides` value, else
+`name` rendered with a set `nameOverride` in place of the chart name), so a test and the `noProxyCoverage` warning read
+the same table. That warning fires when a loaded file
 renames a service the final `proxy.no` does not bypass. A given `proxy.no` is never rewritten. No CIDR placeholder goes
 into the value: CIDRs only help the Go clients dialling IP literals, so the field help suggests appending the pod and
 service CIDRs, which the vc-operator needs to reach the Kubernetes API directly.

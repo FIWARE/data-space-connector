@@ -434,7 +434,8 @@ lists:
     key: name
 # The in-cluster services a proxied component calls, which the proxy.no default bypasses by bare name (ADR 0025).
 # name is a template over target.release and target.namespace; overrides are the value paths that rename the
-# service, the first set one wins. internal/render/noproxy_names_test.go pins every row against the charts.
+# service, the first set one wins. Otherwise a set nameOverride replaces the chart name in fullname, as Helm's
+# fullname does. internal/render/noproxy_names_test.go pins every row against the charts.
 noProxyServices:
   - {name: credentials-config-service, overrides: [decentralizedIam.vcAuthentication.credentials-config-service.fullnameOverride]}
   - {name: trusted-issuers-list, overrides: [decentralizedIam.vcAuthentication.trusted-issuers-list.fullnameOverride]}
@@ -443,8 +444,10 @@ noProxyServices:
   - {name: tm-forum-api-svc}
   # templates/status-list-server-service.yaml hard-codes the name.
   - {name: status-list-server}
-  - {name: '{{ fullname .target.release "keycloak" }}', overrides: [keycloak.fullnameOverride]}
-  - {name: '{{ fullname .target.release "opentelemetry-collector" }}', overrides: [opentelemetry-collector.fullnameOverride]}
+  - {name: '{{ fullname .target.release "keycloak" }}', overrides: [keycloak.fullnameOverride],
+     nameOverride: keycloak.nameOverride}
+  - {name: '{{ fullname .target.release "opentelemetry-collector" }}', overrides: [opentelemetry-collector.fullnameOverride],
+     nameOverride: opentelemetry-collector.nameOverride}
 foundations:
   - id: org.displayName
     stage: foundations

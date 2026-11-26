@@ -2,4 +2,5 @@
 chart: keycloak
 version: 0.22.0
 values:
+  nameOverride: ""
   fullnameOverride: ""
