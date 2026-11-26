@@ -35,7 +35,7 @@ const (
 
 // Evaluate returns the findings of b's rules over p, sorted by severity, stage and rule id; a rule's own
 // findings keep foundation order. Rules read resolved answers, so a derived default counts, and never read
-// features, since every host renders whatever the role. A memoryLimit rule reads the tree rendered with opts
+// features, since every host renders whatever the role. The precondition kinds read the tree rendered with opts
 // over the loaded file. It errors when the answers do not resolve or the render fails.
 func Evaluate(b model.Bundle, p profile.Profile, opts render.Options) ([]Finding, error) {
 	answers, err := render.Answers(b, p)
@@ -59,6 +59,18 @@ func Evaluate(b model.Bundle, p profile.Profile, opts render.Options) ([]Finding
 		case r.MemoryLimit != nil:
 			if allHold(r.When, p, answers) {
 				fs, err = memoryLimit(b, r, values)
+			}
+		case r.CACoverage != nil:
+			if allHold(r.When, p, answers) {
+				fs, err = caCoverage(b, r, tree, values)
+			}
+		case r.NoProxyCoverage != nil:
+			if allHold(r.When, p, answers) {
+				fs, err = noProxyCoverage(b, r, p, answers, values)
+			}
+		case r.ValueSet != nil:
+			if allHold(r.When, p, answers) && valueSet(r, values) {
+				fs = []Finding{finding(r, r.Field, "", r.Message)}
 			}
 		case allHold(r.When, p, answers):
 			fs = []Finding{finding(r, r.Field, "", r.Message)}
@@ -164,12 +176,12 @@ func allHold(ws []model.RuleWhen, p profile.Profile, answers map[string]any) boo
 	return !slices.ContainsFunc(ws, func(w model.RuleWhen) bool { return !holds(w, p, answers) })
 }
 
-// holds reports whether w's field resolves to w.Equals, or for Unset whether the answer is absent; an
-// unanswered or non-string field never equals anything.
+// holds reports whether w's field resolves to w.Equals, or for Unset or Set whether the answer is absent or
+// resolves; an unanswered or non-string field never equals anything.
 func holds(w model.RuleWhen, p profile.Profile, answers map[string]any) bool {
-	if w.Unset {
+	if w.Unset || w.Set {
 		_, ok := answers[strings.TrimPrefix(w.Field, model.AnswerFieldPrefix)]
-		return !ok
+		return ok == w.Set
 	}
 	v, ok := value(w.Field, p, answers)
 	return ok && v == w.Equals

@@ -176,6 +176,32 @@ subdomain) is the first, with key `ca.crt`. The core package `internal/requireme
 per row whose name template resolves, that is, only while every answer it reads is given or derived. It yields names
 and keys only and never reads, stores or asks for the Secret's content, so US-7.3 can list them in `NEXT_STEPS.md`.
 
+### 10. L2 rules and the no-insecure guard
+
+Three rule kinds join `internal/check`, each with `when` as its precondition; `when` gains `set: true` for an answer
+that resolves.
+- `caCoverage` (`ca-coverage`, error) runs while `ca.privateSecret` is set. A component's mechanism counts as in
+  effect only if each of its final leaves was rendered by the tool or equals the rendered value, so a loaded element
+  that keeps the owned key (`KC_TRUSTSTORE_PATHS`, `SSL_CERT_DIR`, ...) but carries other content is an error, not a
+  pass. A withheld mechanism is a warning naming the foreign element; `mechanism: none` is a warning; a route whose
+  final `ssl_verify` is `false` is an error naming its index and `uri`. A loaded untagged `no`, `off` or `n` counts as
+  `false`, because Helm reads values as YAML 1.1.
+- `noProxyCoverage` (`no-proxy-coverage`, warning) runs while `proxy.https` resolves and checks each deployed
+  `noProxyServices` row (its `enabledKeys`, as in `resources:`) against the final `proxy.no` with the Go matcher
+  (`model.NoProxyBypasses`).
+- `valueSet` (`keycloak-proxy-mappings`, warning) fires while the final values hold a non-empty value at a path, here
+  `keycloak.proxy.spiProxyMappings`.
+
+`internal/model/insecure_test.go` scans every bundle, `ui/src` and the CLI flags for values that disable
+verification (`ssl_verify: false`, `insecureSkipVerify: true`, `rejectUnauthorized: false`, `--insecure`) and for
+`NODE_TLS_REJECT_UNAUTHORIZED`, and for prose offering to skip TLS or certificate verification. A structural check
+also refuses any foundation id that names verification, and any target key that names it with any value except one
+pointing the safe way, so an option whose value comes from an answer is caught too. A key where `true` turns
+verification on (`ssl_verify`, `tls_verify`, `verify_ssl`, `rejectUnauthorized`) may be written by a `const true`
+only. A key where `true` turns it off (`insecure`, `skip...verify`, `no_verify`, `disable...verify`) and
+`NODE_TLS_REJECT_UNAUTHORIZED` are refused whatever the value. A legitimate match
+is reworded, never allow-listed.
+
 ## Deviation from the ticket
 
 The ticket asks for an L2 *error* when an enabled component that calls a public host has no CA mechanism. Contract

@@ -26,7 +26,7 @@
   rules:
     - {id: r, severity: warning, stage: foundations, field: answers.did.method, when: [{field: answers.did.method, equals: "did:key"}], doc: doc/a.md}
 - name: when missing
-  err: "when, distinct, didWebHost or memoryLimit is missing"
+  err: "when, distinct, didWebHost, memoryLimit, caCoverage, noProxyCoverage or valueSet is missing"
   rules:
     - {id: r, severity: warning, stage: foundations, field: answers.did.method, message: M, doc: doc/a.md}
 - name: field is not a foundation
@@ -85,28 +85,28 @@
   err: 'when[0]: "true" is not a value of features.access.verification (on, off)'
   rules:
     - {id: r, severity: warning, stage: foundations, field: answers.did.method, when: [{field: features.access.verification, equals: "true"}], message: M, doc: doc/a.md}
-- name: when has both equals and unset
-  err: "when[0]: answers.did.value has both equals and unset"
+- name: when has more than one of equals, unset and set
+  err: "when[0]: answers.did.value has more than one of equals, unset and set"
   rules:
     - {id: r, severity: warning, stage: foundations, field: answers.did.method, when: [{field: answers.did.value, equals: x, unset: true}], message: M, doc: doc/a.md}
-- name: when has neither equals nor unset
-  err: "when[0]: answers.did.value has neither equals nor unset"
+- name: when has none of equals, unset and set
+  err: "when[0]: answers.did.value has none of equals, unset and set"
   rules:
     - {id: r, severity: warning, stage: foundations, field: answers.did.method, when: [{field: answers.did.value}], message: M, doc: doc/a.md}
 - name: when unset is false
-  err: "when[0]: answers.did.value has neither equals nor unset"
+  err: "when[0]: answers.did.value has none of equals, unset and set"
   rules:
     - {id: r, severity: warning, stage: foundations, field: answers.did.method, when: [{field: answers.did.value, unset: false}], message: M, doc: doc/a.md}
 - name: when unset on a feature
-  err: "when[0]: unset applies to answers.<foundation id> only, not features.access.verification"
+  err: "when[0]: unset and set apply to answers.<foundation id> only, not features.access.verification"
   rules:
     - {id: r, severity: warning, stage: foundations, field: answers.did.method, when: [{field: features.access.verification, unset: true}], message: M, doc: doc/a.md}
 - name: when unset on the environment
-  err: "when[0]: unset applies to answers.<foundation id> only, not target.environment"
+  err: "when[0]: unset and set apply to answers.<foundation id> only, not target.environment"
   rules:
     - {id: r, severity: warning, stage: foundations, field: answers.did.method, when: [{field: target.environment, unset: true}], message: M, doc: doc/a.md}
 - name: memoryLimit with distinct
-  err: "memoryLimit combines with when only, not with distinct or didWebHost"
+  err: "memoryLimit combines with when only, not with distinct, didWebHost or another kind"
   rules:
     - {id: r, severity: warning, stage: foundations, field: answers.did.method, when: [{field: target.environment, equals: production}], distinct: {prefix: did.}, memoryLimit: {components: [keycloak]}, message: M, doc: doc/a.md}
 - name: memoryLimit without when

@@ -2,10 +2,13 @@ package model
 
 import (
 	"fmt"
+	"net/url"
 	"slices"
 	"strings"
 	"text/template"
 	"text/template/parse"
+
+	"golang.org/x/net/http/httpproxy"
 
 	"github.com/FIWARE/data-space-connector/config-tool/internal/roundtrip"
 )
@@ -19,6 +22,9 @@ type NoProxyService struct {
 	// NameOverride is the value path whose value replaces the chart name in the name's fullname call, as Helm's
 	// fullname does with nameOverride; an Overrides value still wins.
 	NameOverride string `yaml:"nameOverride"`
+	// EnabledKeys maps every switch that must be true for the service to deploy to the chart's default; none means
+	// it always deploys.
+	EnabledKeys map[string]bool `yaml:"enabledKeys"`
 }
 
 // CompiledNoProxyService is a validated NoProxyService.
@@ -27,6 +33,9 @@ type CompiledNoProxyService struct {
 	Overrides []roundtrip.Path
 	// NameOverride is nil when the row declares none.
 	NameOverride roundtrip.Path
+	EnabledKeys  map[string]bool
+	// ReadsRelease is true when the name template reads the release name, so it cannot render without one.
+	ReadsRelease bool
 }
 
 // NoProxyServices returns the bundle's noProxyServices table in bundle order.
@@ -78,12 +87,19 @@ func compileNoProxyService(i int, s NoProxyService, topLevelKeys []string) (Comp
 	if err != nil {
 		return CompiledNoProxyService{}, err
 	}
+	readsRelease := false
 	for _, r := range refs {
+		readsRelease = readsRelease || r == RefTargetRelease
 		if r != RefTargetRelease && r != RefTargetNamespace {
 			return CompiledNoProxyService{}, fmt.Errorf("name reads %s; only %s and %s are allowed", r, RefTargetRelease, RefTargetNamespace)
 		}
 	}
-	c := CompiledNoProxyService{Name: t}
+	c := CompiledNoProxyService{Name: t, EnabledKeys: s.EnabledKeys, ReadsRelease: readsRelease}
+	for _, key := range sortedKeys(s.EnabledKeys) {
+		if err := checkResourcePath(key, false, topLevelKeys); err != nil {
+			return CompiledNoProxyService{}, fmt.Errorf("enabledKeys: %w", err)
+		}
+	}
 	for j, o := range s.Overrides {
 		p, err := overridePath(o, topLevelKeys)
 		if err != nil {
@@ -123,4 +139,15 @@ func callsFullname(t *template.Template) bool {
 		}
 	}
 	return false
+}
+
+// bypassProbeProxy is a proxy URL that only lets the matcher tell a bypassed host from a proxied one.
+const bypassProbeProxy = "http://proxy.invalid:3128"
+
+// NoProxyBypasses reports whether a Go client (golang.org/x/net/http/httpproxy, which net/http's
+// ProxyFromEnvironment wraps) with noProxy as NO_PROXY reaches https://host without the proxy.
+func NoProxyBypasses(noProxy, host string) bool {
+	proxy := (&httpproxy.Config{HTTPSProxy: bypassProbeProxy, NoProxy: noProxy}).ProxyFunc()
+	u, err := proxy(&url.URL{Scheme: "https", Host: host})
+	return err == nil && u == nil
 }
