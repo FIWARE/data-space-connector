@@ -23,15 +23,27 @@ const (
 	OriginLoaded = "loaded"
 )
 
-// Withheld is a mechanism none of whose targets rendered: its element Element would share the unique Field's
-// Value with the foreign element ForeignKey of List. Mechanism is empty for an element target without one.
+// Reasons a mechanism is withheld.
+const (
+	// WithheldCollision: Element would share the unique Field's Value with the foreign element ForeignKey of List.
+	WithheldCollision = "collision"
+	// WithheldEdited: the loaded file holds something other than a sequence or null at List, a hand edit.
+	WithheldEdited = "edited"
+)
+
+// nullTag is the YAML tag of a null scalar, written as `key:`, `key: ~` or `key: null`.
+const nullTag = "!!null"
+
+// Withheld is a mechanism none of whose targets rendered because of its element Element in List.
+// Mechanism is empty for an element target without one; Field, Value and ForeignKey are set for a collision only.
 type Withheld struct {
+	Reason     string `json:"reason"`
 	Mechanism  string `json:"mechanism"`
 	Element    string `json:"element"`
 	List       string `json:"list"`
 	Field      string `json:"field"`
-	Value      any    `json:"value"`
-	ForeignKey string `json:"foreignKey"`
+	Value      any    `json:"value,omitempty"`
+	ForeignKey string `json:"foreignKey,omitempty"`
 }
 
 // group is what renders or is withheld as a unit: a named mechanism, or one element target without one.
@@ -59,7 +71,7 @@ const (
 	listAbsent listState = iota
 	// listLoaded: a sequence whose elements the owned ones merge into.
 	listLoaded
-	// listEdited: something other than a sequence, a hand edit that pins the whole list.
+	// listEdited: something other than a sequence or null, a hand edit that withholds every element written there.
 	listEdited
 )
 
@@ -73,8 +85,8 @@ type entry struct {
 }
 
 // composeLists writes every lists-table list that a ready element target writes into, and returns the
-// mechanisms withheld for a unique collision with a foreign element. A mechanism with an unready target renders
-// nothing either, so no half-written mechanism is left behind.
+// mechanisms withheld for an edited list or a unique collision with a foreign element. A mechanism with an unready
+// target renders nothing either, so no half-written mechanism is left behind.
 func composeLists(b model.Bundle, r resolution, opts Options) ([]Leaf, []Withheld, error) {
 	table := b.ListTable()
 	owned := make([][]*ownedElement, len(table))
@@ -115,13 +127,20 @@ func composeLists(b model.Bundle, r resolution, opts Options) ([]Leaf, []Withhel
 			return unready[o.group] || w
 		})
 	}
+	for k, l := range table {
+		if states[k] != listEdited {
+			continue
+		}
+		for _, o := range owned[k] {
+			if _, ok := withheld[o.group]; !ok && !unready[o.group] {
+				withheld[o.group] = Withheld{Reason: WithheldEdited, Mechanism: o.group.mechanism, Element: o.key, List: l.Path.String()}
+			}
+		}
+	}
 	// One pass suffices: withholding restores a loaded owned element as foreign, but an unpinned one equals its
 	// rendered value, whose literal unique values no other owned element shares (model.checkElements), and a
 	// pinned one already counts as foreign.
 	for k, l := range table {
-		if states[k] == listEdited {
-			continue
-		}
 		for _, w := range collisions(l, compose(l, states[k], loaded[k], active(k))) {
 			if _, ok := withheld[w.group]; !ok {
 				withheld[w.group] = w.Withheld
@@ -135,17 +154,21 @@ func composeLists(b model.Bundle, r resolution, opts Options) ([]Leaf, []Withhel
 			continue
 		}
 		for i, e := range compose(l, states[k], loaded[k], act) {
-			leaves = append(leaves, entryLeaves(l, i, e, act[0].foundation, states[k] == listEdited)...)
+			leaves = append(leaves, entryLeaves(l, i, e, act[0].foundation)...)
 		}
 	}
 	return leaves, sortedWithheld(withheld), nil
 }
 
-// loadedList reads the loaded file at the chart-relative list path p.
+// loadedList reads the loaded file at the chart-relative list path p. A null there is an empty list, not an absent
+// one: Helm deletes a key set to null, chart default included, so writing the base would revive what the user removed.
 func loadedList(o *load.Result, p roundtrip.Path) (listState, []any) {
 	n, err := o.Doc.Lookup(slices.Concat(o.Root, p))
 	if errors.Is(err, roundtrip.ErrNotFound) {
 		return listAbsent, nil
+	}
+	if err == nil && n.Kind == yaml.ScalarNode && n.Tag == nullTag {
+		return listLoaded, nil
 	}
 	if err != nil || n.Kind != yaml.SequenceNode {
 		return listEdited, nil
@@ -219,7 +242,7 @@ func collisions(l model.CompiledList, entries []entry) []collision {
 			}
 			foreign, _ := keyOf(entries[i].value, l.Key)
 			out = append(out, collision{group: e.owner.group, Withheld: Withheld{
-				Mechanism: e.owner.group.mechanism, Element: e.owner.key, List: l.Path.String(), Field: u, Value: v, ForeignKey: foreign,
+				Reason: WithheldCollision, Mechanism: e.owner.group.mechanism, Element: e.owner.key, List: l.Path.String(), Field: u, Value: v, ForeignKey: foreign,
 			}})
 			break
 		}
@@ -228,10 +251,9 @@ func collisions(l model.CompiledList, entries []entry) []collision {
 }
 
 // entryLeaves flattens the i-th element of l into leaves. A base or loaded foreign element is attributed to owner,
-// the foundation whose element makes the list be written, so a diff groups it there. In an edited list every leaf
-// is pinned without a kept value, so the loaded value stays; on a pinned owned element Rendered is the whole
-// rendered element.
-func entryLeaves(l model.CompiledList, i int, e entry, owner string, edited bool) []Leaf {
+// the foundation whose element makes the list be written, so a diff groups it there. On a pinned owned element
+// Rendered is the whole rendered element.
+func entryLeaves(l model.CompiledList, i int, e entry, owner string) []Leaf {
 	key, _ := keyOf(e.value, l.Key)
 	prov := Provenance{Foundation: owner, Answers: []string{}, Element: key, Origin: e.origin}
 	if e.owner != nil {
@@ -242,11 +264,7 @@ func entryLeaves(l model.CompiledList, i int, e entry, owner string, edited bool
 	}
 	var leaves []Leaf
 	flattenElement(append(slices.Clone(l.Path), roundtrip.Index(i)), e.value, func(p roundtrip.Path, v any) {
-		pv := prov
-		if edited {
-			pv.Pinned, pv.Kept, pv.Rendered, v = true, false, v, nil
-		}
-		leaves = append(leaves, Leaf{Path: p, Value: v, Provenance: pv})
+		leaves = append(leaves, Leaf{Path: p, Value: v, Provenance: prov})
 	})
 	return leaves
 }

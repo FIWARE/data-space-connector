@@ -35,8 +35,10 @@ Every list that keyed elements write into is declared once in a top-level `lists
 - **Otherwise:** the `base` elements (the chart's defaults), then the owned elements in bundle order.
 
 Elements with keys the tool does not own are never changed. A loaded element with an owned key but different content is
-a hand edit: it is kept and pinned, with the rendered element as `Rendered`, exactly like a scalar pin. A loaded value
-that is not a sequence pins the whole list. Leaves keep concrete indices, so `render.Tree`, `Nested()` and the leaf JSON
+a hand edit: it is kept and pinned, with the rendered element as `Rendered`, exactly like a scalar pin. A loaded null
+(`key:`, `key: ~`) is an empty loaded list: Helm deletes a key set to null, chart default included, so the base is not
+written. Any other loaded value that is not a sequence is a hand edit of the whole list, and every mechanism with an
+element there is withheld (see 2). Leaves keep concrete indices, so `render.Tree`, `Nested()` and the leaf JSON
 are unchanged. Provenance gains `element` (the key) and `origin` (`base` or `loaded`) for elements the render writes but
 does not own. Such a leaf carries the first foundation, in bundle order, whose element makes the list be written, so
 the Stage 3 diff files the base under that foundation. Appending beyond a loaded list's length is left to US-7.1's writer.
@@ -55,9 +57,11 @@ therefore declares `unique: [mountPath]`, and keyed targets that only work toget
   is allowed on keyed targets only.
 - **Render time:** when an owned element would share a `unique` value with a foreign element of the final list, the
   whole mechanism is **withheld**. None of its targets render, and the foreign element stays as it is. A mechanism with
-  a target that is not ready (unanswered refs or requires) renders nothing either. `Tree.Withheld` lists each case as
-  `{mechanism, element, list, field, value, foreignKey}`. The result is never an invalid manifest.
-- **Report:** a withheld CA mechanism is a `caCoverage` *warning*. The foreign element is most likely a hand-made trust
+  a target that is not ready (unanswered refs or requires) renders nothing either. A ready mechanism with an element in
+  a list the loaded file holds as a scalar or mapping is withheld the same way, so it never writes its other lists.
+  `Tree.Withheld` lists each case as `{reason, mechanism, element, list, field, value, foreignKey}`, with reason
+  `collision` or `edited` (the last without field, value and foreign key). The result is never an invalid manifest.
+- **Report:** a withheld CA mechanism is a `caCoverage` *warning*, for either reason. The foreign element is most likely a hand-made trust
   setup copied from PREREQUISITES, which the tool cannot inspect, and an error would block `generate` until the user
   deleted a working setup.
 

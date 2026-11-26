@@ -2,6 +2,7 @@ package render
 
 import (
 	"reflect"
+	"slices"
 	"testing"
 
 	"github.com/FIWARE/data-space-connector/config-tool/internal/load"
@@ -105,6 +106,17 @@ func TestKeyedElements(t *testing.T) {
 			},
 		},
 		{
+			name:    "loaded null is an empty list: no base, owned elements only",
+			answers: both,
+			loaded:  "keycloak:\n  extraEnvVars:\n  extraVolumeMounts: null\nverifier:\n  mounts: ~\n",
+			want: map[string]any{
+				"keycloak.extraEnvVars":      []any{proxyEnv, trustEnv},
+				"keycloak.extraVolumeMounts": []any{trustMount},
+				"verifier.volumes":           []any{caVolume},
+				"verifier.mounts":            []any{caMount},
+			},
+		},
+		{
 			name:    "foreign mount with another mountPath does not collide",
 			answers: caAnswers,
 			loaded:  "verifier:\n  mounts:\n    - {name: root-ca, mountPath: /etc/other}\n",
@@ -153,30 +165,73 @@ func TestKeyedElementProvenance(t *testing.T) {
 	}
 }
 
-func TestEditedListPinsEveryLeaf(t *testing.T) {
-	tree := renderElements(t, caAnswers, "keycloak:\n  extraEnvVars: hand-written\n")
-	n := 0
-	for _, l := range tree.Leaves {
-		if l.Path[1] != roundtrip.Key("extraEnvVars") {
-			continue
-		}
-		n++
-		if !l.Provenance.Pinned || l.Provenance.Kept {
-			t.Errorf("%s: provenance %+v, want pinned without a kept value", l.Path, l.Provenance)
-		}
+func TestEditedListWithholds(t *testing.T) {
+	edited := func(mechanism, element, list string) Withheld {
+		return Withheld{Reason: WithheldEdited, Mechanism: mechanism, Element: element, List: list}
 	}
-	if n == 0 {
-		t.Fatal("no extraEnvVars leaves")
+	tests := []struct {
+		name     string
+		answers  map[string]any
+		loaded   string
+		want     map[string]any
+		withheld []Withheld
+	}{
+		{
+			name:     "scalar withholds the mechanism, its other list stays unwritten",
+			answers:  caAnswers,
+			loaded:   "verifier:\n  mounts: hand-written\n",
+			want:     map[string]any{"verifier.volumes": nil, "verifier.mounts": nil, "keycloak.extraVolumeMounts": []any{realmMount, trustMount}},
+			withheld: []Withheld{edited("verifier-ca", "ca-bundle", "verifier.mounts")},
+		},
+		{
+			name:     "mapping withholds the mechanism",
+			answers:  caAnswers,
+			loaded:   "verifier:\n  volumes: {ca-bundle: {}}\n",
+			want:     map[string]any{"verifier.volumes": nil, "verifier.mounts": nil},
+			withheld: []Withheld{edited("verifier-ca", "ca-bundle", "verifier.volumes")},
+		},
+		{
+			name:    "every element written there is withheld, with or without a mechanism",
+			answers: map[string]any{"ca.secret": caSecret, "proxy.https": httpsProxy},
+			loaded:  "keycloak:\n  extraEnvVars: hand-written\n",
+			want: map[string]any{
+				"keycloak.extraVolumeMounts": nil, "keycloak.proxy.httpsProxy": httpsProxy, "verifier.mounts": []any{caMount},
+			},
+			withheld: []Withheld{edited("", "HTTPS_PROXY", "keycloak.extraEnvVars"), edited("keycloak-ca", "KC_TRUSTSTORE_PATHS", "keycloak.extraEnvVars")},
+		},
+		{
+			name:    "an unready element in an edited list is not reported",
+			answers: map[string]any{"proxy.https": httpsProxy},
+			loaded:  "verifier:\n  mounts: hand-written\n",
+			want:    map[string]any{"verifier.mounts": nil, "keycloak.extraEnvVars": []any{heapEnv, proxyEnv}},
+		},
 	}
-	if got := at(t, tree, "keycloak.extraEnvVars"); got != nil {
-		t.Errorf("Nested keeps %v, want the loaded value left alone", got)
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			tree := renderElements(t, tc.answers, tc.loaded)
+			for p, want := range tc.want {
+				if got := at(t, tree, p); !reflect.DeepEqual(got, want) {
+					t.Errorf("%s = %v, want %v", p, got, want)
+				}
+			}
+			if !reflect.DeepEqual(tree.Withheld, tc.withheld) {
+				t.Errorf("Withheld = %+v, want %+v", tree.Withheld, tc.withheld)
+			}
+			for _, w := range tc.withheld {
+				for _, l := range tree.Leaves {
+					if p, _ := roundtrip.ParsePath(w.List); len(l.Path) > len(p) && slices.Equal(l.Path[:len(p)], p) {
+						t.Errorf("edited list %s got leaf %s", w.List, l.Path)
+					}
+				}
+			}
+		})
 	}
 }
 
 func TestMechanismWithheld(t *testing.T) {
 	tree := renderElements(t, caAnswers, "verifier:\n  mounts:\n    - {name: root-ca, mountPath: "+caMountPath+"}\n")
 	want := []Withheld{{
-		Mechanism: "verifier-ca", Element: "ca-bundle", List: "verifier.mounts", Field: "mountPath", Value: caMountPath, ForeignKey: "root-ca",
+		Reason: WithheldCollision, Mechanism: "verifier-ca", Element: "ca-bundle", List: "verifier.mounts", Field: "mountPath", Value: caMountPath, ForeignKey: "root-ca",
 	}}
 	if !reflect.DeepEqual(tree.Withheld, want) {
 		t.Errorf("Withheld = %+v, want %+v", tree.Withheld, want)
@@ -197,7 +252,7 @@ func TestMechanismInterplay(t *testing.T) {
 	rootCA := map[string]any{"name": "root-ca", "mountPath": caMountPath}
 	extraVolume := map[string]any{"name": "extra-ca", "secret": map[string]any{"secretName": caSecret}}
 	extraMount := map[string]any{"name": "extra-ca", "mountPath": "/etc/extra", "subPath": extraFile}
-	verifierCA := Withheld{Mechanism: "verifier-ca", Element: "ca-bundle", List: "verifier.mounts", Field: "mountPath", Value: caMountPath, ForeignKey: "root-ca"}
+	verifierCA := Withheld{Reason: WithheldCollision, Mechanism: "verifier-ca", Element: "ca-bundle", List: "verifier.mounts", Field: "mountPath", Value: caMountPath, ForeignKey: "root-ca"}
 	both := map[string]any{"ca.secret": caSecret, "ca.extra": extraFile}
 	tests := []struct {
 		name     string
@@ -229,7 +284,7 @@ func TestMechanismInterplay(t *testing.T) {
 			loaded:  "verifier:\n  mounts:\n    - {name: root-ca, mountPath: " + caMountPath + "}\n    - {name: other, mountPath: /etc/extra}\n",
 			want:    map[string]any{"verifier.volumes": nil, "verifier.mounts": nil},
 			withheld: []Withheld{
-				{Mechanism: "extra-ca", Element: "extra-ca", List: "verifier.mounts", Field: "mountPath", Value: "/etc/extra", ForeignKey: "other"},
+				{Reason: WithheldCollision, Mechanism: "extra-ca", Element: "extra-ca", List: "verifier.mounts", Field: "mountPath", Value: "/etc/extra", ForeignKey: "other"},
 				verifierCA,
 			},
 		},
@@ -238,7 +293,7 @@ func TestMechanismInterplay(t *testing.T) {
 			answers:  both,
 			loaded:   "verifier:\n  mounts:\n    - {name: ca-bundle, mountPath: /etc/extra}\n",
 			want:     map[string]any{"verifier.mounts": []any{map[string]any{"name": "ca-bundle", "mountPath": "/etc/extra"}}},
-			withheld: []Withheld{{Mechanism: "extra-ca", Element: "extra-ca", List: "verifier.mounts", Field: "mountPath", Value: "/etc/extra", ForeignKey: "ca-bundle"}},
+			withheld: []Withheld{{Reason: WithheldCollision, Mechanism: "extra-ca", Element: "extra-ca", List: "verifier.mounts", Field: "mountPath", Value: "/etc/extra", ForeignKey: "ca-bundle"}},
 		},
 	}
 	for _, tc := range tests {
