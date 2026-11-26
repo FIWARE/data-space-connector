@@ -54,6 +54,33 @@ func TestNoProxyServiceDefaults(t *testing.T) {
 	}
 }
 
+// TestCACoverageDefaults keeps the enabledKeys defaults of the shipped caCoverage components equal to the chart's.
+func TestCACoverageDefaults(t *testing.T) {
+	got, err := Versions(bundles.FS)
+	if err != nil {
+		t.Fatal(err)
+	}
+	values := chartValuesRoot(t)
+	components := 0
+	for _, b := range got {
+		if b.Chart != chart || !b.Latest {
+			continue
+		}
+		for _, r := range b.CheckRules() {
+			if r.CACoverage == nil {
+				continue
+			}
+			for _, c := range r.CACoverage.Components {
+				checkEnabledDefaults(t, values, c.ID, c.EnabledKeys)
+				components++
+			}
+		}
+	}
+	if components == 0 {
+		t.Fatalf("the latest %s bundle has no caCoverage components", chart)
+	}
+}
+
 // TestNoProxyServiceReadsRelease pins which names need the release name, so the coverage check skips only those.
 func TestNoProxyServiceReadsRelease(t *testing.T) {
 	for _, tc := range []struct {

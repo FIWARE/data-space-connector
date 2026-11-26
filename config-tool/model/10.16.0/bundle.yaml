@@ -387,12 +387,14 @@ rules:
     caCoverage:
       components:
         - {id: verifier, label: verifier, mechanism: verifier-ca,
-           enabledKeys: {decentralizedIam.enabled: true, decentralizedIam.vcAuthentication.enabled: true}}
+           enabledKeys: {decentralizedIam.enabled: true, decentralizedIam.vcAuthentication.enabled: true,
+                         decentralizedIam.vcAuthentication.vcverifier.enabled: true}}
         - {id: apisix, label: APISIX,
            paths: [decentralizedIam.odrlAuthorization.apisix.apisix.ssl.existingCASecret,
                    decentralizedIam.odrlAuthorization.apisix.apisix.ssl.certCAFilename,
                    decentralizedIam.odrlAuthorization.apisix.apisix.ssl.enabled],
-           enabledKeys: {decentralizedIam.enabled: true, decentralizedIam.odrlAuthorization.apisix.enabled: true}}
+           enabledKeys: {decentralizedIam.enabled: true, decentralizedIam.odrlAuthorization.enabled: true,
+                         decentralizedIam.odrlAuthorization.apisix.enabled: true}}
         - {id: keycloak, label: Keycloak, mechanism: keycloak-ca, enabledKeys: {keycloak.enabled: true}}
         - {id: marketplace, label: marketplace, mechanism: marketplace-ca, enabledKeys: {marketplace.enabled: false}}
         - {id: vcOperator, label: vc-operator, mechanism: vc-operator-ca, enabledKeys: {vc-operator.enabled: false}}

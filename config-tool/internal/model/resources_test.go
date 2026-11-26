@@ -220,8 +220,10 @@ func walkSchema(node map[string]any, path string) error {
 
 // subchartDefaults are enabledKeys the umbrella values.yaml leaves unset, with what supplies their true default.
 var subchartDefaults = map[string]string{
-	"decentralizedIam.vcAuthentication.enabled": "decentralized-iam chart default",
-	"fdsc-edc.enabled":                          "Helm treats a missing dependency condition as true",
+	"decentralizedIam.vcAuthentication.enabled":         "decentralized-iam chart default",
+	"decentralizedIam.odrlAuthorization.enabled":        "decentralized-iam chart default",
+	"decentralizedIam.odrlAuthorization.apisix.enabled": "odrl-authorization chart default",
+	"fdsc-edc.enabled": "Helm treats a missing dependency condition as true",
 }
 
 // checkEnabledDefaults fails for every enabled key of id whose recorded default differs from the chart's.

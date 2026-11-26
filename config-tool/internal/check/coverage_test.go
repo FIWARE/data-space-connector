@@ -117,6 +117,10 @@ func TestCACoverage(t *testing.T) {
 		{name: "route verify true", loaded: apisixRoutes + "              ssl_verify: true\n", warns: []string{contract}},
 		{name: "APISIX disabled skips its routes", loaded: apisixRoutes + "              ssl_verify: false\n" +
 			"      enabled: false\n", warns: []string{contract}},
+		{name: "odrl-authorization disabled skips its routes", loaded: apisixRoutes +
+			"              ssl_verify: false\n    enabled: false\n", warns: []string{contract}},
+		{name: "verifier disabled is not withheld", loaded: verifierMounts + "      enabled: false\n",
+			warns: []string{contract}},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
