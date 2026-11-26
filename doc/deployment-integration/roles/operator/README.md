@@ -2,9 +2,9 @@
 
 ## Overview
 
-The Data Space Operator operates the **shared trust infrastructure** of the data space. Unlike consumer or provider roles, the Operator is not a participant in data exchange — it is the **neutral governance authority** that maintains the trust framework enabling all participants to interact securely.
+The Data Space Operator runs the shared trust infrastructure of the data space. It does not take part in data exchange the way a consumer or provider does; it is the neutral authority that maintains the trust framework so participants can interact securely.
 
-In a FIWARE Data Space, the Operator's primary responsibility is operating the **Trust Anchor**: the central registry where all trusted participants and their credentials are registered.
+In a FIWARE Data Space, the Operator's main responsibility is running the Trust Anchor: the central registry where all trusted participants and their credentials are registered.
 
 The cluster that runs the Trust Anchor needs the [Cluster Prerequisites](../PREREQUISITES.md), in particular, when the chart deploys its PostgreSQL, a single installation of the Postgres operator per cluster.
 
@@ -12,7 +12,7 @@ The cluster that runs the Trust Anchor needs the [Cluster Prerequisites](../PRER
 
 ### Participant onboarding
 
-The Operator is also responsible for the **onboarding of new organizations** into the data space. This process includes validating the required documentation and registering the organization in the Trust Anchor.
+The Operator is also responsible for onboarding new organizations into the data space. This involves validating the required documentation and registering the organization in the Trust Anchor.
 
 1. Verify the organization's identity and legitimacy (out-of-band process)
 2. Register the organization's DID at the Trust Anchor
@@ -32,7 +32,7 @@ The [Trusted Issuers Registry](https://github.com/FIWARE/trusted-issuers-list) i
 
 !!! note
 
-    The FIWARE [Trusted Issuers Registry](https://github.com/FIWARE/trusted-issuers-list) is the default implementation shipped with the FIWARE Data Space Connector, but it is not the only option. Any component that exposes the [EBSI Trusted Issuers Registry API](https://hub.ebsi.eu/api/core/issuers-registry) can be used as the Trust Anchor's registry — including **blockchain-backed implementations** such as the [EBSI Trusted Issuers Registry](https://hub.ebsi.eu/api/core/issuers-registry) itself. This allows data spaces to align the trust registry with the governance and decentralization model that best fits their requirements.
+    The FIWARE [Trusted Issuers Registry](https://github.com/FIWARE/trusted-issuers-list) is the default implementation shipped with the FIWARE Data Space Connector, but it is not the only option. Any component that exposes the [EBSI Trusted Issuers Registry API](https://hub.ebsi.eu/api/core/issuers-registry) can serve as the Trust Anchor's registry, including blockchain-backed implementations such as the [EBSI Trusted Issuers Registry](https://hub.ebsi.eu/api/core/issuers-registry) itself. A data space can then match the trust registry to its own governance and decentralization model.
 
 ### Trusted Issuers List (TIL) management API
 
@@ -45,7 +45,7 @@ The management interface allows the Operator to:
 
 The Trust Anchor requires an SQL database to persist the list of trusted issuers.
 
-**Important:** The Trust Anchor must have its own **dedicated database instance**, completely separate from any participant's infrastructure. Since the Operator is a neutral entity independent of any provider or consumer, sharing database infrastructure would compromise the neutrality and security of the trust registry.
+The Trust Anchor must have its own dedicated database instance, separate from any participant's infrastructure. Because the Operator is neutral and independent of any provider or consumer, sharing a database would compromise the neutrality and security of the trust registry.
 
 ## Optional components
 
@@ -67,7 +67,7 @@ Some data spaces run a **shared Central Marketplace** where providers publish of
 
     The Central Marketplace is **not a Provider**. It does not host data services or protect them with a PAP; it only provides a catalog, an ordering API and a UI. Its role is to broker purchases and notify the actual data providers so they can enforce access on their own infrastructure.
 
-Hosting the Central Marketplace is **optional** and independent from operating the Trust Anchor. Both responsibilities can be concentrated in the same actor or split among different ones. In either case, the Central Marketplace must be deployed with its **own DID, its own database and its own Kubernetes namespace** — never sharing infrastructure with the Trust Anchor's TIR.
+Hosting the Central Marketplace is optional and independent from operating the Trust Anchor. Both responsibilities can sit with the same actor or be split between different ones. Either way, the Central Marketplace must be deployed with its own DID, its own database and its own Kubernetes namespace, and must not share infrastructure with the Trust Anchor's TIR.
 
 #### Required components
 
@@ -82,7 +82,7 @@ The Central Marketplace is deployed using the same `fiware/data-space-connector`
 | **Contract Management** | Configured in central-marketplace mode: `enableCentralMarketplace: true`, `enableOdrlPap: false`, `oid4vp.enabled: true`. On order completion, it authenticates with the marketplace's credential and notifies the provider's Contract Management. |
 | **VCVerifier + Trusted Issuers List (local)** | Authenticate the providers (and users) that access the marketplace's catalog and ordering APIs. |
 
-The **ODRL-PAP, OPA and data-service protection** components that a Provider deploys are **not** needed in the Central Marketplace — the marketplace does not expose protected data services.
+The ODRL-PAP, OPA and data-service protection components that a Provider deploys are not needed in the Central Marketplace, because it does not expose protected data services.
 
 #### Optional components
 
@@ -142,7 +142,7 @@ contract-management:
       tag: 3.3.8                            # minimum image required for central marketplace mode
 ```
 
-When a TMForum `ProductOrder` is completed, Contract Management inspects the `relatedParty` list of the underlying `ProductSpecification` to determine which participant is the provider — and therefore to which Contract Management it must send the activation notification. `organization.provider.role` configures the `relatedParty.role` value that Contract Management looks for. The chart default is `provider`, which matches the value written by clients that call the TMForum API directly (as in the [demo flow](../../../CENTRAL_MARKETPLACE.md#create-the-offering-step-2)). When the Marketplace UI (BAE) is deployed instead, it tags the provider with the role `seller`, so **in that case this value must be overridden to `seller`**. If the configured value does not match the role that clients write into `relatedParty`, Contract Management will not be able to resolve the provider from the order and no notification will be sent.
+When a TMForum `ProductOrder` is completed, Contract Management inspects the `relatedParty` list of the underlying `ProductSpecification` to determine which participant is the provider, and therefore which Contract Management it must send the activation notification to. `organization.provider.role` configures the `relatedParty.role` value that Contract Management looks for. The chart default is `provider`, which matches the value written by clients that call the TMForum API directly (as in the [demo flow](../../../CENTRAL_MARKETPLACE.md#create-the-offering-step-2)). When the Marketplace UI (BAE) is deployed instead, it tags the provider with the role `seller`, so **in that case this value must be overridden to `seller`**. If the configured value does not match the role that clients write into `relatedParty`, Contract Management will not be able to resolve the provider from the order and no notification will be sent.
 
 **2. Enable the TMForum API and its NGSI-LD backend**
 
@@ -351,7 +351,7 @@ Start from the reference profile [`examples/trust-anchor.yaml`](../../../../char
 
 ### Dedicated infrastructure
 
-The Trust Anchor should be deployed on **infrastructure managed independently** from any participant:
+The Trust Anchor should be deployed on infrastructure managed independently from any participant:
 - Separate Kubernetes cluster, or at minimum a dedicated namespace with strict RBAC
 - Dedicated database instance (not shared with provider or consumer databases)
 - Independent operations team with its own access controls
@@ -366,19 +366,19 @@ The Trust Anchor should be deployed on **infrastructure managed independently** 
 - Enable persistence for the SQL database with durable storage
 - Configure automated backups with a recovery point objective (RPO) appropriate for your data space
 - Test restore procedures regularly
-- The Trust Anchor's data is critical — if it's lost, all participants lose their trust relationships
+- The Trust Anchor's data is critical: if it is lost, all participants lose their trust relationships
 
 ### TLS and network security
 
 - Use valid TLS certificates from a real CA (not self-signed)
 - The TIR read API (`/v4/issuers`) should be publicly accessible (participants need to query it)
-- The TIL management API (`/issuer`) must be **strictly restricted** — only authorized operators should be able to register or remove issuers
+- The TIL management API (`/issuer`) must be strictly restricted: only authorized operators should be able to register or remove issuers
 
 ### Integration with trust frameworks
 
 For production data spaces, consider integrating with established trust frameworks:
-- [Gaia-X Digital Clearing Houses (GXDCH)](https://gaia-x.eu/services-deliverables/digital-clearing-house/) — for Gaia-X compliance. See [Gaia-X Integration](../../../GAIA_X.md)
-- [EBSI](https://ec.europa.eu/digital-building-blocks/sites/display/EBSI) — for European Blockchain Services Infrastructure compatibility
+- [Gaia-X Digital Clearing Houses (GXDCH)](https://gaia-x.eu/services-deliverables/digital-clearing-house/): for Gaia-X compliance. See [Gaia-X Integration](../../../GAIA_X.md)
+- [EBSI](https://ec.europa.eu/digital-building-blocks/sites/display/EBSI): for European Blockchain Services Infrastructure compatibility
 - Custom trust frameworks defined by the data space governance body
 
 ## Monitoring

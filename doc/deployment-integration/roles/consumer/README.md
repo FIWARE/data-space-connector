@@ -17,7 +17,7 @@ Before deploying, contact the **Data Space Operator** to initiate the onboarding
 - The credential types your organization is allowed to issue and their required configuration (claims, attribute mappings, etc.)
 - The Trust Anchor's TIR endpoint URL
 
-This information is essential for configuring Keycloak, the DID, and the Verifiable Credentials correctly.
+This information is needed to configure Keycloak, the DID, and the Verifiable Credentials correctly.
 
 Check also that the cluster meets the [Cluster Prerequisites](../PREREQUISITES.md): its databases, the network requirements and the resources the consumer needs.
 
@@ -25,7 +25,7 @@ Check also that the cluster meets the [Cluster Prerequisites](../PREREQUISITES.m
 
 ### Verifiable Credential Issuer
 
-A consumer organization requires a **Verifiable Credential (VC) Issuer** — a component capable of issuing [Verifiable Credentials](https://www.w3.org/TR/vc-data-model/) to its users so they can authenticate and access services offered by providers in the data space.
+A consumer organization requires a **Verifiable Credential (VC) Issuer**, a component capable of issuing [Verifiable Credentials](https://www.w3.org/TR/vc-data-model/) to its users so they can authenticate and access services offered by providers in the data space.
 
 The FIWARE Data Space Connector uses [Keycloak](https://github.com/keycloak/keycloak) as the VC issuer. For detailed configuration instructions, see the [Keycloak Configuration](../KEYCLOAK.md) guide.
 
@@ -35,7 +35,7 @@ Keycloak stores its data in PostgreSQL: an existing one, or one the chart deploy
 
 ### DID
 
-Every participant in the data space needs a [Decentralized Identifier (DID)](https://www.w3.org/TR/did-core/) — a globally unique identifier that the organization controls and that is not dependent on a centralized registry. DIDs can be of different types (methods), such as `did:key`, `did:web`, `did:ebsi`, among others.
+Every participant in the data space needs a [Decentralized Identifier (DID)](https://www.w3.org/TR/did-core/), a globally unique identifier that the organization controls and that is not dependent on a centralized registry. DIDs can be of different types (methods), such as `did:key`, `did:web`, `did:ebsi`, among others.
 
 - **`did:web`** — Recommended for **production** environments. It relies on a domain name controlled by the organization and serves the DID document over HTTPS, providing discoverability and a natural trust anchor tied to DNS.
 - **`did:key`** — Suitable only for **test or development** environments. It encodes the public key directly in the identifier itself, which makes it simple to generate but offers no discoverability or key rotation capabilities.
@@ -245,7 +245,7 @@ helm install consumer oci://quay.io/fiware/helm-charts/data-space-connector --ve
 
 - Use a registered domain name that your organization controls for the [`did:web`](https://w3c-ccg.github.io/did-method-web/) identifier
 - Ensure the DID document is served over HTTPS with a valid certificate
-- Protect the private key associated with your DID — it is the foundation of your organization's identity in the data space. If compromised, an attacker could issue credentials on your behalf
+- Protect the private key associated with your DID: it is the foundation of your organization's identity in the data space. If compromised, an attacker could issue credentials on your behalf
 - Give the DID a dedicated key that renewals do not regenerate, not the TLS Secret of an Ingress: see [Identity key lifecycle](../provider/README.md#identity-key-lifecycle) in the provider guide, which applies to consumers as well
 
 ### Trust Anchor registration
@@ -263,7 +263,7 @@ helm install consumer oci://quay.io/fiware/helm-charts/data-space-connector --ve
 
 ### Keycloak
 
-- Do not hardcode passwords in values files — use Kubernetes Secrets
+- Do not hardcode passwords in values files; use Kubernetes Secrets
 - Rotate Keycloak admin credentials and the keystore password regularly
 - For high availability, deploy at least 2 replicas with Infinispan cache replication enabled
 

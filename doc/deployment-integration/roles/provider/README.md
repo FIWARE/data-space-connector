@@ -144,7 +144,7 @@ The [TMForum API](https://github.com/FIWARE/tmforum-api) implements standardized
 
 ### Contract Management
 
-The [Contract Management](https://github.com/FIWARE/contract-management) component automates access control based on product orders. When a consumer purchases a product offering via the TMForum API, Contract Management reacts to the order and, most importantly, **registers the consumer's DID in the provider's local Trusted Issuers List**, so the consumer's credentials are accepted at the provider when accessing the purchased service. The credential types granted to the consumer are taken from the ordered product. Additionally, if the [ODRL-PAP](https://github.com/SEAMWARE/odrl-pap) is deployed, Contract Management also creates the ODRL access policies that encode the contract terms. Enable this when:
+The [Contract Management](https://github.com/FIWARE/contract-management) component automates access control based on product orders. When a consumer purchases a product offering via the TMForum API, Contract Management reacts to the order and **registers the consumer's DID in the provider's local Trusted Issuers List**, so the consumer's credentials are accepted at the provider when accessing the purchased service. The credential types granted to the consumer are taken from the ordered product. Additionally, if the [ODRL-PAP](https://github.com/SEAMWARE/odrl-pap) is deployed, Contract Management also creates the ODRL access policies that encode the contract terms. Enable this when:
 - You use TMForum APIs for product ordering
 - Access should be granted/revoked automatically based on contracts
 - You need audit trails for data access agreements
@@ -598,7 +598,7 @@ helm install provider oci://quay.io/fiware/helm-charts/data-space-connector --ve
 
 - Use a registered domain name that your organization controls for the `did:web` identifier
 - Ensure the DID document is served over HTTPS with a valid certificate
-- Protect the private key associated with your DID — it is the foundation of your organization's identity in the data space. If compromised, an attacker could issue credentials on your behalf
+- Protect the private key associated with your DID: it is the foundation of your organization's identity in the data space. If compromised, an attacker could issue credentials on your behalf
 
 #### Identity key lifecycle
 
@@ -721,7 +721,7 @@ By default (`generateKey: true`) the verifier generates that key at startup and 
 
 If the provider participates in a [Central Marketplace](../../../CENTRAL_MARKETPLACE.md):
 
-- The Contract Management host exposed through APISIX must be reachable from the Central Marketplace over HTTPS with a valid certificate. The `contractManagement.address` registered in the provider's Organization at the marketplace must match this host exactly — no trailing paths, and the scheme/port used when registering must remain valid from the marketplace's network.
+- The Contract Management host exposed through APISIX must be reachable from the Central Marketplace over HTTPS with a valid certificate. The `contractManagement.address` registered in the provider's Organization at the marketplace must match this host exactly: no trailing paths, and the scheme/port used when registering must remain valid from the marketplace's network.
 - Coordinate version upgrades with the Central Marketplace operator: changes in the `contract-management` notification contract require both sides to be aligned. Keep the minimum versions noted in [Participating in a Central Marketplace](#participating-in-a-central-marketplace) as a floor.
 - Keep the local Trusted Issuers List aligned with the Central Marketplace's `MarketplaceCredential` issuer. If the marketplace rotates its DID, the provider will stop accepting notifications until the TIL and the Trust Anchor's TIR are updated.
 

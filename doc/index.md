@@ -9,7 +9,7 @@ hide:
 
 The FIWARE Data Space Connector (FIWARE DSC) is a data space connector built from the integration
 of open-source components of the [FIWARE Dataspace Components](https://github.com/FIWARE). Any organization
-participating in a data space can deploy it to connect — acting as a provider of data (processing)
+participating in a data space can deploy it to connect, acting as a provider of data (processing)
 services, a consumer of them, or both.
 
 [Get Started](deployment-integration/local-deployment/LOCAL.md){ .md-button .md-button--primary }

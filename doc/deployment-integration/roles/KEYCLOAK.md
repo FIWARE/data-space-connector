@@ -41,7 +41,7 @@ For detailed information on configuring OID4VC credential types in Keycloak, ref
 
 ### Consumer
 
-When acting as a **consumer only**, Keycloak issues VCs for the organization's users to present to external providers. No verification of external credentials is needed on the consumer side — that is handled by the provider.
+When acting as a **consumer only**, Keycloak issues VCs for the organization's users to present to external providers. No verification of external credentials is needed on the consumer side. That is handled by the provider.
 
 See the [Consumer deployment guide](consumer/README.md) for details.
 
@@ -111,7 +111,7 @@ The private key used by Keycloak to sign Verifiable Credentials **must** be the 
 
 If the keystore contains a different key pair than the one referenced in the DID Document, **signature verification will fail** and the issued credentials will be rejected by other participants in the data space.
 
-This requirement is the reason why the init container, volumes, and signing key configuration sections below all reference the same DID TLS secret — they must all work with the **same key material** that backs the organization's DID.
+This requirement is the reason why the init container, volumes, and signing key configuration sections below all reference the same DID TLS secret; they must all work with the **same key material** that backs the organization's DID.
 
 ### Ingress and TLS
 

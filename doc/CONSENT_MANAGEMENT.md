@@ -325,7 +325,7 @@ curl -k -x localhost:8888 -s -X POST $CM/participants -H "Authorization: Bearer 
 On a re-run `POST /v1/participants` answers `409` - also expected; an existing registration is
 updated with `PUT /v1/participants/me`.
 
-**The same thing, the way the plugin does it.** On every gated request the consent-filter plugin
+The same thing, the way the plugin does it. On every gated request the consent-filter plugin
 makes two lookups - who am I, and is the consumer a known participant. The plugin has no wallet, so
 it asks the provider-local consent-facade for a token instead
 ([token service](#the-providers-token-service)); that machine path exists for the plugin alone,
@@ -356,7 +356,7 @@ concludes it; here it is seeded directly into the TM Forum API. Three things abo
   be processed for;
 * it carries the ODRL policy for the entity, as any agreement in the connector does.
 
-**First, clean up after an earlier run.** The owner-resolver takes the *first* contract that permits
+First, clean up after an earlier run. The owner-resolver takes the *first* contract that permits
 the entity, and the plugin allows on *any* granted consent of the owner for this provider/consumer
 pair - so leftovers would both shadow the new agreement and keep step 8 at `200`. (The
 [integration test](#integration-tests) does not need this: it generates a fresh `did:key` subject per
@@ -375,7 +375,7 @@ curl -k -x localhost:8888 -s "$CM/consents?userIdentifier=${SUBJECT_DID}" -H "Au
       -H "Authorization: Bearer ${PROVIDER_TOKEN}"
 ```
 
-**Then seed specification, offering and agreement:**
+Then seed specification, offering and agreement:
 
 ```shell
 export SPEC_ID=$(curl -k -x localhost:8888 -s -X POST $TMF/productCatalogManagement/v4/productSpecification \
