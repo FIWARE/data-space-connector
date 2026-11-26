@@ -251,12 +251,22 @@ public class DSPManagementHelper {
      */
     public static JsonNode requestCatalog(String managementApiAddress, String counterPartyId,
                                           String counterPartyAddress) throws Exception {
+        return requestCatalog(managementApiAddress, counterPartyId, counterPartyAddress,
+                api(managementApiAddress).protocol());
+    }
+
+    /**
+     * Requests the provider catalog with an explicit {@code protocol}; on the DCP controlplane that is a profile
+     * name attached to the consumer context, and {@code counterPartyAddress} must end in the same profile.
+     */
+    public static JsonNode requestCatalog(String managementApiAddress, String counterPartyId,
+                                          String counterPartyAddress, String protocol) throws Exception {
         ObjectNode requestBody = OBJECT_MAPPER.createObjectNode();
         ArrayNode context = OBJECT_MAPPER.createArrayNode();
         context.add(api(managementApiAddress).context());
         requestBody.set("@context", context);
         requestBody.put("@type", api(managementApiAddress).catalogRequestType());
-        requestBody.put("protocol", api(managementApiAddress).protocol());
+        requestBody.put("protocol", protocol);
         requestBody.put("counterPartyId", counterPartyId);
         requestBody.put("counterPartyAddress", counterPartyAddress);
         requestBody.set("querySpec", OBJECT_MAPPER.createObjectNode().put("@type", "QuerySpec"));
@@ -279,6 +289,18 @@ public class DSPManagementHelper {
             }
             return OBJECT_MAPPER.readTree(responseBody);
         }
+    }
+
+    /**
+     * Whether a DCAT catalog lists at least one dataset, under {@code dcat:dataset} or the compacted {@code dataset},
+     * as an array or as a single object.
+     */
+    public static boolean containsDataset(JsonNode catalog) {
+        JsonNode datasets = catalog.path("dcat:dataset");
+        if (datasets.isMissingNode()) {
+            datasets = catalog.path("dataset");
+        }
+        return datasets.isArray() ? !datasets.isEmpty() : !datasets.isMissingNode();
     }
 
     /**

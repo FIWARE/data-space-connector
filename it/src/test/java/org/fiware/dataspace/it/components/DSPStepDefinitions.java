@@ -1642,25 +1642,8 @@ public class DSPStepDefinitions extends StepDefintions {
     @Then("The DCP catalog contains at least one dataset with the DSP asset.")
     public void theDcpCatalogContainsAtLeastOneDataset() {
         assertNotNull(dcpCatalogResponse, "DCP catalog response must have been retrieved first.");
-
-        // Look for datasets in the catalog - the EDC returns them under "dcat:dataset"
-        JsonNode datasets = dcpCatalogResponse.path("dcat:dataset");
-        if (datasets.isMissingNode()) {
-            // Also try "@graph" or direct array
-            datasets = dcpCatalogResponse.path("dataset");
-        }
-
-        boolean hasDataset;
-        if (datasets.isArray()) {
-            hasDataset = datasets.size() > 0;
-        } else if (!datasets.isMissingNode()) {
-            // Single dataset (not wrapped in array)
-            hasDataset = true;
-        } else {
-            hasDataset = false;
-        }
-
-        assertTrue(hasDataset, "DCP catalog should contain at least one dataset. Catalog: "
+        assertTrue(DSPManagementHelper.containsDataset(dcpCatalogResponse),
+                "DCP catalog should contain at least one dataset. Catalog: "
                 + dcpCatalogResponse.toString().substring(0,
                 Math.min(dcpCatalogResponse.toString().length(), 1000)));
         log.debug("DCP catalog contains dataset(s) with the DSP asset.");
