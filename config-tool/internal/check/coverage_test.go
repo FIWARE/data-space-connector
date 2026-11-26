@@ -33,6 +33,7 @@ const (
 	keycloakIdp     = "keycloak:\n  fullnameOverride: idp\n"
 	enableAddOns    = "marketplace:\n  enabled: true\nvc-operator:\n  enabled: true\n"
 	disableContract = "contract-management:\n  enabled: false\n"
+	enableTracing   = "opentelemetry-collector:\n  enabled: true\n"
 )
 
 // targetProfile is a profile whose release and namespace resolve the NO_PROXY default.
@@ -104,6 +105,12 @@ func TestCACoverage(t *testing.T) {
 		{name: "route verify unset", loaded: apisixRoutes + "              client_id: c\n", warns: []string{contract}},
 		{name: "route verify pinned false", loaded: apisixRoutes + "              ssl_verify: false\n",
 			errs: []string{"APISIX route 0 (/a) does not verify"}, warns: []string{contract}},
+		{name: "route verify no, false to Helm's YAML 1.1", loaded: apisixRoutes + "              ssl_verify: no\n",
+			errs: []string{"APISIX route 0 (/a) does not verify"}, warns: []string{contract}},
+		{name: "route verify OFF", loaded: apisixRoutes + "              ssl_verify: OFF\n",
+			errs: []string{"APISIX route 0 (/a) does not verify"}, warns: []string{contract}},
+		{name: "route verify quoted no is a string", loaded: apisixRoutes + "              ssl_verify: \"no\"\n",
+			warns: []string{contract}},
 		{name: "route verify true", loaded: apisixRoutes + "              ssl_verify: true\n", warns: []string{contract}},
 		{name: "APISIX disabled skips its routes", loaded: apisixRoutes + "              ssl_verify: false\n" +
 			"      enabled: false\n", warns: []string{contract}},
@@ -138,6 +145,10 @@ func TestNoProxyCoverage(t *testing.T) {
 		t.Fatal(err)
 	}
 	def, _ := derived[noProxyAnswer].(string)
+	noCollector := strings.TrimSuffix(def, ",provider-opentelemetry-collector")
+	if noCollector == def {
+		t.Fatalf("default %q does not end with the collector", def)
+	}
 	tests := []struct {
 		name    string
 		noProxy string
@@ -154,8 +165,10 @@ func TestNoProxyCoverage(t *testing.T) {
 			want: []string{"The loaded file renames an in-cluster service to provider-sso (keycloak.nameOverride)"}},
 		{name: "fullnameOverride wins over nameOverride", loaded: keycloakIdp + "  nameOverride: sso\n",
 			want: []string{"The loaded file renames an in-cluster service to idp (keycloak.fullnameOverride)"}},
-		{name: "unrenamed service", noProxy: strings.TrimSuffix(def, ",provider-opentelemetry-collector"),
+		{name: "unrenamed service", noProxy: noCollector, loaded: enableTracing,
 			want: []string{"No proxy does not cover the in-cluster service provider-opentelemetry-collector"}},
+		{name: "unrenamed service not deployed", noProxy: noCollector},
+		{name: "renamed service not deployed", loaded: keycloakIdp + "  enabled: false\n"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

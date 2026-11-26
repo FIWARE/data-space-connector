@@ -150,7 +150,7 @@ func unverifiedRoutes(r model.CheckRule, tree render.Tree, v chartValues) ([]Fin
 	var out []Finding
 	for _, i := range v.indices(routes) {
 		route := append(slices.Clone(routes), roundtrip.Index(i))
-		if val, ok := v.final(slices.Concat(route, verify)); !ok || val != false {
+		if !v.falseAt(slices.Concat(route, verify)) {
 			continue
 		}
 		uri, _ := v.final(append(route, roundtrip.Key(rt.URI)))
@@ -173,8 +173,8 @@ func cmpNil(v any) any {
 	return v
 }
 
-// noProxyCoverage returns one warning per noProxyServices row whose effective name the resolved answer does not
-// bypass for a Go client; none while the answer or the release name is unresolved, since names derive from it.
+// noProxyCoverage returns one warning per deployed noProxyServices row whose effective name the resolved answer does
+// not bypass for a Go client; none while the answer or the release name is unresolved, since names derive from it.
 func noProxyCoverage(b model.Bundle, r model.CheckRule, p profile.Profile, answers map[string]any, v chartValues) ([]Finding, error) {
 	noProxy, ok := answers[r.NoProxyCoverage.Answer].(string)
 	if !ok || p.Target.ReleaseName == "" {
@@ -182,6 +182,9 @@ func noProxyCoverage(b model.Bundle, r model.CheckRule, p profile.Profile, answe
 	}
 	var out []Finding
 	for _, s := range b.NoProxyServices() {
+		if !v.deployed(model.ResourceComponent{EnabledKeys: s.EnabledKeys}) {
+			continue
+		}
 		name, path, err := effectiveName(s, p.Target, v)
 		if err != nil {
 			return nil, fmt.Errorf("rule %s: %w", r.ID, err)
@@ -258,6 +261,28 @@ func (v chartValues) final(p roundtrip.Path) (any, bool) {
 		return nil, false
 	}
 	return out, true
+}
+
+// yaml11False are the plain scalars that Helm's YAML 1.1 reader takes for false and yaml.v3 decodes as strings.
+var yaml11False = []string{"no", "off", "n"}
+
+// falseAt reports whether the chart receives false at p. A loaded untagged plain scalar is read as YAML 1.1 reads it.
+func (v chartValues) falseAt(p roundtrip.Path) bool {
+	if val, ok := v.rendered(p); ok {
+		return val == false
+	}
+	n, ok := v.loaded(p)
+	switch {
+	case !ok || n.Kind != yaml.ScalarNode:
+		return false
+	case n.ShortTag() == tagBool:
+		var b bool
+		return n.Decode(&b) == nil && !b
+	case n.Style != 0:
+		// Quoted or tagged: a string for YAML 1.1 too.
+		return false
+	}
+	return slices.ContainsFunc(yaml11False, func(s string) bool { return strings.EqualFold(s, n.Value) })
 }
 
 // indices lists, sorted, the indices of the list at p in the rendered tree and the loaded file.

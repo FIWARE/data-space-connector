@@ -22,6 +22,9 @@ type NoProxyService struct {
 	// NameOverride is the value path whose value replaces the chart name in the name's fullname call, as Helm's
 	// fullname does with nameOverride; an Overrides value still wins.
 	NameOverride string `yaml:"nameOverride"`
+	// EnabledKeys maps every switch that must be true for the service to deploy to the chart's default; none means
+	// it always deploys.
+	EnabledKeys map[string]bool `yaml:"enabledKeys"`
 }
 
 // CompiledNoProxyService is a validated NoProxyService.
@@ -30,6 +33,7 @@ type CompiledNoProxyService struct {
 	Overrides []roundtrip.Path
 	// NameOverride is nil when the row declares none.
 	NameOverride roundtrip.Path
+	EnabledKeys  map[string]bool
 }
 
 // NoProxyServices returns the bundle's noProxyServices table in bundle order.
@@ -86,7 +90,12 @@ func compileNoProxyService(i int, s NoProxyService, topLevelKeys []string) (Comp
 			return CompiledNoProxyService{}, fmt.Errorf("name reads %s; only %s and %s are allowed", r, RefTargetRelease, RefTargetNamespace)
 		}
 	}
-	c := CompiledNoProxyService{Name: t}
+	c := CompiledNoProxyService{Name: t, EnabledKeys: s.EnabledKeys}
+	for _, key := range sortedKeys(s.EnabledKeys) {
+		if err := checkResourcePath(key, false, topLevelKeys); err != nil {
+			return CompiledNoProxyService{}, fmt.Errorf("enabledKeys: %w", err)
+		}
+	}
 	for j, o := range s.Overrides {
 		p, err := overridePath(o, topLevelKeys)
 		if err != nil {

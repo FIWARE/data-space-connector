@@ -550,19 +550,25 @@ lists:
 # The in-cluster services a proxied component calls, which the proxy.no default bypasses by bare name (ADR 0025).
 # name is a template over target.release and target.namespace; overrides are the value paths that rename the
 # service, the first set one wins. Otherwise a set nameOverride replaces the chart name in fullname, as Helm's
-# fullname does. internal/render/noproxy_names_test.go pins every row against the charts.
+# fullname does. internal/render/noproxy_names_test.go pins every row against the charts. enabledKeys, as in the
+# resources table, gates the noProxyCoverage warning to services that deploy; the default bypasses every row.
 noProxyServices:
-  - {name: credentials-config-service, overrides: [decentralizedIam.vcAuthentication.credentials-config-service.fullnameOverride]}
-  - {name: trusted-issuers-list, overrides: [decentralizedIam.vcAuthentication.trusted-issuers-list.fullnameOverride]}
-  - {name: tm-forum-api, overrides: [tm-forum-api.apiProxy.service.nameOverride]}
+  - {name: credentials-config-service, overrides: [decentralizedIam.vcAuthentication.credentials-config-service.fullnameOverride],
+     enabledKeys: {decentralizedIam.enabled: true, decentralizedIam.vcAuthentication.enabled: true,
+                   decentralizedIam.vcAuthentication.credentials-config-service.enabled: false}}
+  - {name: trusted-issuers-list, overrides: [decentralizedIam.vcAuthentication.trusted-issuers-list.fullnameOverride],
+     enabledKeys: {decentralizedIam.enabled: true, decentralizedIam.vcAuthentication.enabled: true,
+                   decentralizedIam.vcAuthentication.trusted-issuers-list.enabled: true}}
+  - {name: tm-forum-api, overrides: [tm-forum-api.apiProxy.service.nameOverride],
+     enabledKeys: {tm-forum-api.enabled: true, tm-forum-api.apiProxy.enabled: true}}
   # The all-in-one service: tm-forum-api names it so while its defaultConfig.serverHost holds the name, as by default.
-  - {name: tm-forum-api-svc}
+  - {name: tm-forum-api-svc, enabledKeys: {tm-forum-api.enabled: true, tm-forum-api.allInOne.enabled: false}}
   # templates/status-list-server-service.yaml hard-codes the name.
-  - {name: status-list-server}
+  - {name: status-list-server, enabledKeys: {statusListServer.enabled: false}}
   - {name: '{{ fullname .target.release "keycloak" }}', overrides: [keycloak.fullnameOverride],
-     nameOverride: keycloak.nameOverride}
+     nameOverride: keycloak.nameOverride, enabledKeys: {keycloak.enabled: true}}
   - {name: '{{ fullname .target.release "opentelemetry-collector" }}', overrides: [opentelemetry-collector.fullnameOverride],
-     nameOverride: opentelemetry-collector.nameOverride}
+     nameOverride: opentelemetry-collector.nameOverride, enabledKeys: {opentelemetry-collector.enabled: false}}
 # Cluster objects the rendered values reference and the user creates before installing; NEXT_STEPS.md lists them.
 #   kind     secret
 #   name     a template over answers; the requirement applies only while all of them resolve

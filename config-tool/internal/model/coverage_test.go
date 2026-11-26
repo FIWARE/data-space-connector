@@ -34,7 +34,7 @@ func TestCoverageRulesValidation(t *testing.T) {
 			"has exactly one of mechanism and paths"},
 		{"path no target", "decentralizedIam.odrlAuthorization.apisix.apisix.ssl.enabled],",
 			"decentralizedIam.odrlAuthorization.apisix.apisix.ssl.foo],", "is no scalar target's path"},
-		{"enabledKey outside the chart", "enabledKeys: {keycloak.enabled: true}}", "enabledKeys: {nope.enabled: true}}",
+		{"enabledKey outside the chart", "mechanism: keycloak-ca, enabledKeys: {keycloak.enabled: true}}", "mechanism: keycloak-ca, enabledKeys: {nope.enabled: true}}",
 			"enabledKeys"},
 		{"duplicate component", "{id: marketplace, label: marketplace", "{id: keycloak, label: marketplace",
 			`id "keycloak" is already used`},

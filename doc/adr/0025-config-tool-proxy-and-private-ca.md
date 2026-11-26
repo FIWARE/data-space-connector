@@ -184,15 +184,20 @@ that resolves.
   effect only if each of its final leaves was rendered by the tool or equals the rendered value, so a loaded element
   that keeps the owned key (`KC_TRUSTSTORE_PATHS`, `SSL_CERT_DIR`, ...) but carries other content is an error, not a
   pass. A withheld mechanism is a warning naming the foreign element; `mechanism: none` is a warning; a route whose
-  final `ssl_verify` is `false` is an error naming its index and `uri`.
-- `noProxyCoverage` (`no-proxy-coverage`, warning) runs while `proxy.https` resolves and checks each `noProxyServices`
-  row's effective name against the final `proxy.no` with the Go matcher (`model.NoProxyBypasses`).
+  final `ssl_verify` is `false` is an error naming its index and `uri`. A loaded untagged `no`, `off` or `n` counts as
+  `false`, because Helm reads values as YAML 1.1.
+- `noProxyCoverage` (`no-proxy-coverage`, warning) runs while `proxy.https` resolves and checks each deployed
+  `noProxyServices` row (its `enabledKeys`, as in `resources:`) against the final `proxy.no` with the Go matcher
+  (`model.NoProxyBypasses`).
 - `valueSet` (`keycloak-proxy-mappings`, warning) fires while the final values hold a non-empty value at a path, here
   `keycloak.proxy.spiProxyMappings`.
 
 `internal/model/insecure_test.go` scans every bundle, `ui/src` and the CLI flags for values that disable
 verification (`ssl_verify: false`, `insecureSkipVerify: true`, `rejectUnauthorized: false`, `--insecure`) and for
-`NODE_TLS_REJECT_UNAUTHORIZED`. A legitimate match is reworded, never allow-listed.
+`NODE_TLS_REJECT_UNAUTHORIZED`, and for prose offering to skip TLS or certificate verification. A structural check
+also refuses any foundation id, and any target key outside a `const true`, that names verification (`insecure`,
+`skip...verify`, `ssl_verify`, ...), so an option whose value comes from an answer is caught too. A legitimate match
+is reworded, never allow-listed.
 
 ## Deviation from the ticket
 
