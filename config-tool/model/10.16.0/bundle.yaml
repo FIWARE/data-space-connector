@@ -428,6 +428,8 @@ lists:
       - {name: OTEL_TRACES_SAMPLER, value: parentbased_traceidratio}
       - {name: OTEL_TRACES_SAMPLER_ARG, value: "1.0"}
       - {name: OTEL_PROPAGATORS, value: "tracecontext,baggage"}
+      - {name: OTEL_METRICS_EXPORTER, value: none}
+      - {name: OTEL_LOGS_EXPORTER, value: none}
   - path: vc-operator.extraEnvVars
     key: name
 # The in-cluster services a proxied component calls, which the proxy.no default bypasses by bare name (ADR 0025).

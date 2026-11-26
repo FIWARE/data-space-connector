@@ -1,0 +1,8 @@
+# helm pull oci://quay.io/fiware/helm-charts/tm-forum-api --version 0.19.4 --untar
+chart: tm-forum-api
+version: 0.19.4
+values:
+  defaultConfig:
+    serverHost: http://tm-forum-api-svc:8080
+# Service names templates/service.yaml (L31) writes literally: the all-in-one service, while serverHost holds it.
+names: [tm-forum-api-svc]

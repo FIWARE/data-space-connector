@@ -44,5 +44,7 @@ answers:
   dataspace.tirAddress: https://tir.127.0.0.1.nip.io/
   # provider.yaml hand-tunes resources for a single k3s node.
   resources.profile: custom
+  # provider.yaml routes every component through the local squid; it tailors NO_PROXY per component.
+  proxy.https: http://squid-proxy.infra.svc.cluster.local:8888
 open: []
 secrets: {}

@@ -1,0 +1,13 @@
+# helm pull decentralized-iam --repo https://fiware.github.io/decentralized-iam --version 2.1.30 --untar
+# The effective defaults after decentralized-iam -> vc-authentication -> vcverifier.
+# null: declared in none of the three layers, so the subchart's template sees nothing.
+chart: decentralized-iam
+version: 2.1.30
+values:
+  vcAuthentication:
+    vcverifier:
+      deployment:
+        additionalEnvVars: null
+  odrlAuthorization:
+    apisix:
+      routes: []

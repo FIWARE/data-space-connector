@@ -1,0 +1,5 @@
+# helm pull oci://quay.io/seamware/helm-charts/vc-operator --version 0.2.0 --untar
+chart: vc-operator
+version: 0.2.0
+values:
+  extraEnvVars: []
