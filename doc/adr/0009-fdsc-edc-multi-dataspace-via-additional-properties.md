@@ -30,7 +30,7 @@ and stores its STS secret under `<DID>-sts-client-secret`.
   values.
 - The context id is the participant's DID. The existing identity, STS client and vault alias are
   reused unchanged, and DSP addresses, management paths and token `sub` all name the same string.
-- Until an fdsc-edc chart with a 2.x appVersion is published, the image is pinned through
+- Until an fdsc-edc chart with appVersion 2.1.0 or newer is published, the image is pinned through
   `fdsc-edc.common.deployment.image.tag`.
 
 ## Consequences

@@ -197,8 +197,8 @@ For the second DID:
    it once more with the second DID's settings, as in the manual procedure in
    [DSP integration](./DSP_INTEGRATION.md#setup-the-consumer) (`derive-key.sh`, then `register.sh`
    with `DID`, `KEY_ALIAS`, `KEY_ID`, `STS_CLIENT_SECRET` and the identity key of the second DID).
-   The script also writes the alias with every `:` encoded as `%253A`, the spelling EDC's vault
-   client actually looks up.
+   The script also writes the alias with every `:` replaced by `%3A`, the key EDC's vault client
+   actually resolves.
 3. **Membership credential.** Have the issuer of dataspace B issue its membership credential
    (`DataspaceBMembership` in the example) to the second DID, and store it in the IdentityHub under
    that participant, `POST .../api/identity/v1beta/participants/<URL-encoded DID>/credentials`, like
@@ -310,6 +310,9 @@ keycloak:
               userinfo.token.claim: "false"
               introspection.token.claim: "true"
 ```
+
+Checked against Keycloak 26.7.0: a client-credentials token from this client carries the DID as
+`sub`, also with `basic` (whose `oidc-sub-mapper` normally sets `sub`) added to its default scopes.
 
 Keycloak does not re-import an existing realm: add the client in the admin console or recreate the
 realm. A token from this client and a catalog request of the context then look like this:
