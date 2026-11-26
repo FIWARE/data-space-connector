@@ -919,7 +919,8 @@ foundations:
         label: Custom
         note: Leaves the chart's defaults; you size the components yourself.
   # The proxy group (ADR 0025): proxy.https switches it, so neither the other two derive nor any target renders
-  # without it. Keycloak reads the env vars the umbrella's keycloak.proxy sets only while spiProxyMappings is empty.
+  # without it. No target renders without proxy.no either, so a proxy never goes out without its NO_PROXY (an
+  # unanswered release name or namespace leaves the default underived). Keycloak reads the env vars the umbrella's keycloak.proxy sets only while spiProxyMappings is empty.
   - id: proxy.https
     stage: foundations
     group: egress
@@ -933,14 +934,17 @@ foundations:
     targets:
       - path: decentralizedIam.vcAuthentication.vcverifier.deployment.additionalEnvVars
         element: {key: HTTPS_PROXY, value: {value: "{{ .proxy.https }}"}}
-      - {path: keycloak.proxy.enabled, fn: const, args: [true], requires: [proxy.https]}
-      - {path: keycloak.proxy.httpsProxy, fn: copy, args: ["{{ .proxy.https }}"]}
+        requires: [proxy.no]
+      - {path: keycloak.proxy.enabled, fn: const, args: [true], requires: [proxy.https, proxy.no]}
+      - {path: keycloak.proxy.httpsProxy, fn: copy, args: ["{{ .proxy.https }}"], requires: [proxy.no]}
       - path: marketplace.bizEcosystemLogicProxy.additionalEnvVars
         element: {key: HTTPS_PROXY, value: {value: "{{ .proxy.https }}"}}
+        requires: [proxy.no]
       - path: vc-operator.extraEnvVars
         element: {key: HTTPS_PROXY, value: {value: "{{ .proxy.https }}"}}
+        requires: [proxy.no]
       - {path: decentralizedIam.odrlAuthorization.apisix.routes, each: plugins.openid-connect.proxy_opts.https_proxy,
-         within: plugins.openid-connect, fn: copy, args: ["{{ .proxy.https }}"]}
+         within: plugins.openid-connect, fn: copy, args: ["{{ .proxy.https }}"], requires: [proxy.no]}
   - id: proxy.http
     stage: foundations
     group: egress
@@ -953,16 +957,16 @@ foundations:
     targets:
       - path: decentralizedIam.vcAuthentication.vcverifier.deployment.additionalEnvVars
         element: {key: HTTP_PROXY, value: {value: "{{ .proxy.http }}"}}
-        requires: [proxy.https]
-      - {path: keycloak.proxy.httpProxy, fn: copy, args: ["{{ .proxy.http }}"], requires: [proxy.https]}
+        requires: [proxy.https, proxy.no]
+      - {path: keycloak.proxy.httpProxy, fn: copy, args: ["{{ .proxy.http }}"], requires: [proxy.https, proxy.no]}
       - path: marketplace.bizEcosystemLogicProxy.additionalEnvVars
         element: {key: HTTP_PROXY, value: {value: "{{ .proxy.http }}"}}
-        requires: [proxy.https]
+        requires: [proxy.https, proxy.no]
       - path: vc-operator.extraEnvVars
         element: {key: HTTP_PROXY, value: {value: "{{ .proxy.http }}"}}
-        requires: [proxy.https]
+        requires: [proxy.https, proxy.no]
       - {path: decentralizedIam.odrlAuthorization.apisix.routes, each: plugins.openid-connect.proxy_opts.http_proxy,
-         within: plugins.openid-connect, fn: copy, args: ["{{ .proxy.http }}"], requires: [proxy.https]}
+         within: plugins.openid-connect, fn: copy, args: ["{{ .proxy.http }}"], requires: [proxy.https, proxy.no]}
   # Each client matches NO_PROXY entries differently (ADR 0025), so the default lists every form that one of them
   # reads, then the bare names of the noProxyServices table in its order.
   - id: proxy.no

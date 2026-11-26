@@ -108,7 +108,10 @@ targets is reached, because the mechanism renders as a whole.
 `defaultWhen` takes either `equals` or `set: true`. `proxy.http` and `proxy.no` carry `defaultWhen: {id: proxy.https,
 set: true}` and every one of their targets carries `requires: [proxy.https]`. Without both gates the `proxy.no` default,
 which reads only reserved refs, would derive for every profile and render `NO_PROXY` into five components without a
-proxy. `proxy.https` is the switch for the whole group; an HTTP-only proxy is not offered.
+proxy. `proxy.https` is the switch for the whole group; an HTTP-only proxy is not offered. Conversely, every
+`proxy.https` and `proxy.http` target also carries `requires: [proxy.no]`: while Stage 1 leaves the release name or
+namespace unanswered, the default cannot derive, and a proxy without `NO_PROXY` would send every in-cluster call
+through it. The group then renders nothing until the user gives `proxy.no` or completes Stage 1.
 
 ### 6. Reserved refs `target.release` and `target.namespace`, and `fullname`
 

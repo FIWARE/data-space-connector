@@ -77,6 +77,9 @@ Step 7 then gives Contract Management a CA mechanism, which closes the one accep
   - Every `proxy.http` and `proxy.no` target carries `requires: [proxy.https]`, so a *given* `proxy.no` or
     `proxy.http` without `proxy.https` renders nothing either. An HTTP-only proxy is not offered: every caller
     reaches HTTPS hosts, and Keycloak's `proxy.enabled` needs `httpsProxy` anyway.
+  - Every `proxy.https` and `proxy.http` target carries `requires: [proxy.no]` (PR #47 review). While Stage 1 leaves
+    the release name or namespace unanswered, the default cannot derive, and a proxy without `NO_PROXY` would route
+    every in-cluster call through it. The group renders nothing until `proxy.no` resolves.
 
   Step 1 tests both gates with rows where the default refs resolve but the gate fails.
 - **Reserved refs `target.release` and `target.namespace`** join `target.environment` (Stage 1), so the
@@ -266,7 +269,7 @@ Step 7 then gives Contract Management a CA mechanism, which closes the one accep
   - `proxy.no` (`string`, default the `NO_PROXY` template above, `defaultWhen: {id: proxy.https, set: true}`).
   - The `noProxyServices:` table from the decision on bare service names.
 - Targets, each written while its answer resolves. Every `proxy.http` and `proxy.no` target also carries
-  `requires: [proxy.https]`:
+  `requires: [proxy.https]`, and every `proxy.https` and `proxy.http` target `requires: [proxy.no]`:
   - Verifier: keyed `HTTPS_PROXY`/`HTTP_PROXY`/`NO_PROXY` in
     `decentralizedIam.vcAuthentication.vcverifier.deployment.additionalEnvVars`.
   - Keycloak: `keycloak.proxy.enabled` (`const true`, `requires: [proxy.https]`), plus `httpsProxy`, `httpProxy` and

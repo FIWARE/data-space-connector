@@ -41,6 +41,10 @@ const (
 
 var proxyIDs = []string{proxyHTTPSID, proxyHTTPID, proxyNoID}
 
+// proxyComponents are the first two path segments of each of the five components the proxy group reaches.
+var proxyComponents = []string{"decentralizedIam.odrlAuthorization", "decentralizedIam.vcAuthentication", "keycloak.proxy",
+	"marketplace.bizEcosystemLogicProxy", "vc-operator.extraEnvVars"}
+
 // subchartFixture holds the defaults of one subchart version that a lists: base or a noProxyServices row reads.
 type subchartFixture struct {
 	Chart   string         `yaml:"chart"`
@@ -190,15 +194,19 @@ func TestProxyTargetPaths(t *testing.T) {
 			components[tg.Path[:2].String()] = true
 		}
 	}
-	want := []string{"decentralizedIam.odrlAuthorization", "decentralizedIam.vcAuthentication", "keycloak.proxy",
-		"marketplace.bizEcosystemLogicProxy", "vc-operator.extraEnvVars"}
-	if got := slices.Sorted(maps.Keys(components)); !reflect.DeepEqual(got, want) {
-		t.Errorf("proxy targets reach %v, want the five components %v", got, want)
+	if got := slices.Sorted(maps.Keys(components)); !reflect.DeepEqual(got, proxyComponents) {
+		t.Errorf("proxy targets reach %v, want the five components %v", got, proxyComponents)
 	}
 }
 
 // renderShipped renders the shipped bundle for release in namespace, over src as the loaded file when not empty.
 func renderShipped(t *testing.T, answers map[string]any, src string) Tree {
+	t.Helper()
+	return renderShippedFor(t, answers, src, profile.Target{ReleaseName: release, Namespace: namespace})
+}
+
+// renderShippedFor is renderShipped for target.
+func renderShippedFor(t *testing.T, answers map[string]any, src string, target profile.Target) Tree {
 	t.Helper()
 	b := providerBundle(t)
 	var opts Options
@@ -210,7 +218,7 @@ func renderShipped(t *testing.T, answers map[string]any, src string) Tree {
 		}
 		opts.Overrides = r
 	}
-	tree, err := Render(b, profile.Profile{Answers: answers, Target: profile.Target{ReleaseName: release, Namespace: namespace}}, opts)
+	tree, err := Render(b, profile.Profile{Answers: answers, Target: target}, opts)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -271,6 +279,48 @@ func TestProxyGate(t *testing.T) {
 			for _, id := range []string{proxyHTTPID, proxyNoID} {
 				if _, got := answers[id]; got != (tc.answers[id] != nil) {
 					t.Errorf("Answers has %s: %v, given: %v", id, got, tc.answers[id] != nil)
+				}
+			}
+		})
+	}
+}
+
+// TestProxyNeedsNoProxy checks that no proxy goes out without NO_PROXY: while the proxy.no default cannot derive
+// because Stage 1 leaves the release name or namespace unanswered, nothing in the group renders until proxy.no is given.
+func TestProxyNeedsNoProxy(t *testing.T) {
+	tests := []struct {
+		name    string
+		target  profile.Target
+		answers map[string]any
+		renders bool
+	}{
+		{name: "release unanswered", target: profile.Target{Namespace: namespace},
+			answers: map[string]any{proxyHTTPSID: httpsProxy}},
+		{name: "namespace unanswered", target: profile.Target{ReleaseName: release},
+			answers: map[string]any{proxyHTTPSID: httpsProxy}},
+		{name: "release unanswered, proxy.no given", target: profile.Target{Namespace: namespace},
+			answers: map[string]any{proxyHTTPSID: httpsProxy, proxyNoID: noProxyForms}, renders: true},
+		{name: "namespace unanswered, proxy.no given", target: profile.Target{ReleaseName: release},
+			answers: map[string]any{proxyHTTPSID: httpsProxy, proxyNoID: noProxyForms}, renders: true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			reached := map[string]map[string]bool{}
+			for _, l := range renderShippedFor(t, tc.answers, oneRoute, tc.target).Leaves {
+				if id := l.Provenance.Foundation; slices.Contains(proxyIDs, id) {
+					if reached[id] == nil {
+						reached[id] = map[string]bool{}
+					}
+					reached[id][l.Path[:2].String()] = true
+				}
+			}
+			for _, id := range proxyIDs {
+				got := slices.Sorted(maps.Keys(reached[id]))
+				if tc.renders && !reflect.DeepEqual(got, proxyComponents) {
+					t.Errorf("%s reaches %v, want %v", id, got, proxyComponents)
+				}
+				if !tc.renders && len(got) > 0 {
+					t.Errorf("%s renders into %v without proxy.no", id, got)
 				}
 			}
 		})
