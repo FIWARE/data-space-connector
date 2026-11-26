@@ -298,8 +298,9 @@ func sortedWithheld(ws map[group]Withheld) []Withheld {
 	return out
 }
 
-// eachLeaves writes every ready each target into the elements of the loaded list that hold its parent mapping;
-// nothing without a loaded file. A loaded value that differs from the rendered one pins the leaf as a hand edit.
+// eachLeaves writes every ready each target into the elements of the loaded list that hold its Within mapping;
+// nothing without a loaded file. A loaded value that differs from the rendered one, or a loaded non-mapping between
+// Within and the leaf, pins the leaf as a hand edit.
 func eachLeaves(b model.Bundle, r resolution, opts Options) ([]Leaf, error) {
 	o := opts.Overrides
 	if o == nil {
@@ -321,13 +322,17 @@ func eachLeaves(b model.Bundle, r resolution, opts Options) ([]Leaf, error) {
 				return nil, fmt.Errorf("render: %s targets[%d]: %w", f.ID, i, err)
 			}
 			for j := range n.Content {
-				p := slices.Concat(t.Path, roundtrip.Path{roundtrip.Index(j)}, t.Each)
-				if parent, err := o.Doc.Lookup(slices.Concat(o.Root, p[:len(p)-1])); err != nil || parent.Kind != yaml.MappingNode {
+				elem := slices.Concat(t.Path, roundtrip.Path{roundtrip.Index(j)})
+				p := slices.Concat(elem, t.Each)
+				if within, err := o.Doc.Lookup(slices.Concat(o.Root, elem, t.Within)); err != nil || within.Kind != yaml.MappingNode {
 					continue
 				}
 				l := Leaf{Path: p, Value: v, Provenance: Provenance{Foundation: f.ID, Answers: append([]string{}, t.Refs...), Fn: string(t.Fn), Target: i}}
 				at := slices.Concat(o.Root, p)
-				if _, err := o.Doc.Lookup(at); err == nil {
+				if load.EachBlocked(o.Doc, slices.Concat(o.Root, elem), t) {
+					// A hand-written non-mapping on the way is kept, as under a pinned scalar's edited ancestor.
+					l.Value, l.Provenance.Pinned, l.Provenance.Kept, l.Provenance.Rendered = nil, true, false, v
+				} else if _, err := o.Doc.Lookup(at); err == nil {
 					if kv, ok := kept(o.Doc, at); !ok || !reflect.DeepEqual(kv, v) {
 						l.Value, l.Provenance.Pinned, l.Provenance.Kept, l.Provenance.Rendered = kv, true, ok, v
 					}

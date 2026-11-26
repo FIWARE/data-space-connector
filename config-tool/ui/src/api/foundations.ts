@@ -18,7 +18,7 @@ export interface FoundationOption {
 }
 
 /** The Stage 3 panel that asks a foundation, mirroring `model.FoundationGroup`. */
-export type FoundationGroup = 'organization' | 'dataspace' | 'network' | 'platform'
+export type FoundationGroup = 'organization' | 'dataspace' | 'network' | 'platform' | 'egress'
 
 /** Holds while the resolved answer `id` equals `equals`, or with `set` while it resolves at all, mirroring `model.Condition`. */
 export interface Condition {

@@ -1,0 +1,6 @@
+# helm pull oci://registry-1.docker.io/cloudpirates/keycloak --version 0.22.0 --untar
+chart: keycloak
+version: 0.22.0
+values:
+  nameOverride: ""
+  fullnameOverride: ""

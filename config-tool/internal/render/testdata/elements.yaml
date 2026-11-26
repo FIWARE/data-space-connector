@@ -27,6 +27,9 @@ foundations:
       - {path: keycloak.proxy.httpsProxy, fn: copy, args: ["{{ .proxy.https }}"]}
       - {path: keycloak.proxy.enabled, fn: const, args: [true], requires: [proxy.https]}
       - {path: keycloak.extraEnvVars, element: {key: HTTPS_PROXY, value: {value: "{{ .proxy.https }}"}}}
+      # within lets the target create proxy_opts in every route that has openid-connect.
+      - {path: apisix.routes, each: plugins.openid-connect.proxy_opts.https_proxy, within: plugins.openid-connect,
+         fn: copy, args: ["{{ .proxy.https }}"]}
   - id: proxy.no
     stage: foundations
     type: string

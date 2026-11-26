@@ -333,6 +333,10 @@ func TestProviderValues(t *testing.T) {
 	owned := map[string]roundtrip.Path{}
 	rendered := map[string]bool{}
 	for _, l := range tree.Leaves {
+		// The proxy fan-out writes into lists provider.yaml also fills; TestProviderProxy checks it over the file.
+		if slices.Contains(proxyIDs, l.Provenance.Foundation) {
+			continue
+		}
 		key := l.Path.String()
 		rendered[key] = true
 		for _, lp := range lists(l.Path) {
@@ -657,5 +661,127 @@ func TestProviderDisplayNameKeepsRealmJSONValid(t *testing.T) {
 				t.Errorf("realm JSON is invalid with %s = %q", displayNameKey, v)
 			}
 		})
+	}
+}
+
+// referenceProxy is the forward proxy every proxied component of provider.yaml uses.
+const referenceProxy = "http://squid-proxy.infra.svc.cluster.local:8888"
+
+// proxyExclusion is a proxy leaf on which the fan-out deliberately differs from provider.yaml; a nil foundation
+// list matches a provider.yaml leaf carrying referenceProxy that no proxy target writes.
+type proxyExclusion struct {
+	foundations []string
+	pattern     *regexp.Regexp
+	reason      string
+}
+
+const (
+	verifierEnvPattern = `^decentralizedIam\.vcAuthentication\.vcverifier\.deployment\.additionalEnvVars\[\d+\]\.`
+	routeProxyOpts     = `^decentralizedIam\.odrlAuthorization\.apisix\.routes\[\d+\]\.plugins\.openid-connect\.proxy_opts\.`
+)
+
+var (
+	httpAndNo               = []string{proxyHTTPID, proxyNoID}
+	providerProxyExclusions = []proxyExclusion{
+		{[]string{proxyNoID}, regexp.MustCompile(verifierEnvPattern),
+			"US-3.6: k3s tailors the verifier's NO_PROXY (w3.org); the default bypasses every in-cluster service instead"},
+		{[]string{proxyNoID}, regexp.MustCompile(`^vc-operator\.extraEnvVars\[\d+\]\.`),
+			"US-3.6: k3s appends the 10.0.0.0/8 CIDR; the default holds none, the field help says to append it"},
+		{[]string{proxyNoID}, regexp.MustCompile(`^keycloak\.proxy\.noProxy$`),
+			"US-3.6: k3s writes *. forms Keycloak does not match, and relies on spiProxyMappings instead"},
+		{[]string{proxyHTTPID}, regexp.MustCompile(`^keycloak\.proxy\.httpProxy$`),
+			"US-3.6: k3s sets no HTTP proxy for Keycloak; the fan-out sets all three"},
+		{httpAndNo, regexp.MustCompile(`^marketplace\.bizEcosystemLogicProxy\.additionalEnvVars\[\d+\]\.`),
+			"US-3.6: k3s sets only HTTPS_PROXY for the logic proxy; the fan-out sets all three"},
+		{httpAndNo, regexp.MustCompile(routeProxyOpts),
+			"US-3.6: k3s sets only https_proxy in a route; the fan-out sets all three"},
+		{nil, regexp.MustCompile(`^keycloak\.proxy\.spiProxyMappings$`),
+			"US-3.6: the tool never writes it; Keycloak ignores the proxy env vars while it is set (a Step 5 warning)"},
+	}
+)
+
+// matchProxyExclusion returns the index of the row matching a leaf at path from foundation, or -1.
+func matchProxyExclusion(foundation, path string) int {
+	return slices.IndexFunc(providerProxyExclusions, func(e proxyExclusion) bool {
+		if foundation == "" {
+			return e.foundations == nil && e.pattern.MatchString(path)
+		}
+		return slices.Contains(e.foundations, foundation) && e.pattern.MatchString(path)
+	})
+}
+
+// TestProviderProxy renders the proxy answer over provider.yaml: every proxy leaf reproduces the file unless a
+// providerProxyExclusions row says why not, and every leaf of the file carrying the proxy is a proxy target or excluded.
+func TestProviderProxy(t *testing.T) {
+	src, err := os.ReadFile(providerValues)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bs, err := model.Versions(bundles.FS)
+	if err != nil {
+		t.Fatal(err)
+	}
+	root := roundtrip.Path{}
+	loaded, err := load.Load(src, providerValues, bs, load.Options{Root: &root})
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, err := profile.ReadFile(providerProfile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := p.Answers[proxyHTTPSID]; got != referenceProxy {
+		t.Fatalf("%s answers %s = %v, want %s", providerProfile, proxyHTTPSID, got, referenceProxy)
+	}
+	tree, err := Render(providerBundle(t), p, Options{Overrides: loaded})
+	if err != nil {
+		t.Fatal(err)
+	}
+	doc := providerDoc(t)
+	hits := make([]int, len(providerProxyExclusions))
+	written := map[string]bool{}
+	components := map[string]bool{}
+	for _, l := range tree.Leaves {
+		if !slices.Contains(proxyIDs, l.Provenance.Foundation) || l.Provenance.Origin != "" {
+			continue
+		}
+		key := l.Path.String()
+		written[key] = true
+		k, _ := l.Path[0].Key()
+		components[k] = true
+		v := l.Value
+		if l.Provenance.Pinned {
+			v = l.Provenance.Rendered
+		}
+		n, err := doc.Lookup(l.Path)
+		if err == nil && n.Kind == yaml.ScalarNode && fmt.Sprint(v) == n.Value {
+			continue
+		}
+		if i := matchProxyExclusion(l.Provenance.Foundation, key); i >= 0 {
+			hits[i]++
+			continue
+		}
+		t.Errorf("%s renders %s = %v, which provider.yaml does not hold", l.Provenance.Foundation, key, v)
+	}
+	for _, l := range roundtrip.Classify(doc, roundtrip.DefaultClassifier) {
+		key := l.Path.String()
+		if l.Node.Kind != yaml.ScalarNode || !strings.Contains(l.Node.Value, referenceProxy) || written[key] {
+			continue
+		}
+		if i := matchProxyExclusion("", key); i >= 0 {
+			hits[i]++
+			continue
+		}
+		t.Errorf("provider.yaml leaf %s carries the proxy but no proxy target writes it", key)
+	}
+	for i, n := range hits {
+		if n == 0 {
+			t.Errorf("proxy exclusion %s (%s) matches nothing; drop the stale row", providerProxyExclusions[i].pattern, providerProxyExclusions[i].reason)
+		}
+	}
+	// decentralizedIam holds both the verifier and APISIX.
+	want := []string{"decentralizedIam", "keycloak", "marketplace", "vc-operator"}
+	if got := slices.Sorted(maps.Keys(components)); !reflect.DeepEqual(got, want) {
+		t.Errorf("the proxy reaches %v in provider.yaml, want %v", got, want)
 	}
 }

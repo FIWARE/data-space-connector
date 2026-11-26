@@ -103,6 +103,21 @@
   lists: []
   foundations:
     - {id: a, stage: foundations, type: string, label: A, targets: [{path: keycloak.routes, each: "plugins[0]", fn: copy, args: ["{{ .a }}"]}]}
+- name: within without each
+  err: "within is only allowed with each"
+  lists: []
+  foundations:
+    - {id: a, stage: foundations, type: string, label: A, targets: [{path: keycloak.x, within: plugins, fn: copy, args: ["{{ .a }}"]}]}
+- name: within not a prefix of each
+  err: "is not a proper prefix of each"
+  lists: []
+  foundations:
+    - {id: a, stage: foundations, type: string, label: A, targets: [{path: keycloak.routes, each: plugins.oidc.opts.x, within: plugins.other, fn: copy, args: ["{{ .a }}"]}]}
+- name: within equals each
+  err: "is not a proper prefix of each"
+  lists: []
+  foundations:
+    - {id: a, stage: foundations, type: string, label: A, targets: [{path: keycloak.routes, each: plugins.oidc, within: plugins.oidc, fn: copy, args: ["{{ .a }}"]}]}
 - name: each paths overlap
   err: "overlaps each"
   lists: []

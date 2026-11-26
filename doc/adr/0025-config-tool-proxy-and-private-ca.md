@@ -44,7 +44,7 @@ does not own. Such a leaf carries the first foundation, in bundle order, whose e
 the Stage 3 diff files the base under that foundation. Appending beyond a loaded list's length is left to US-7.1's writer.
 
 Loading needs no marker on a sequence item: a loaded element whose key matches an owned keyed target is owned, and so is
-an `each` leaf under any element that has the parent mapping. Their leaves back-derive the answers by inverting the
+an `each` leaf under any element that has its `within` mapping. Their leaves back-derive the answers by inverting the
 target's templates (`model.Invert`); the first element in document order sets an answer, and a leaf that disagrees, or
 a field the target does not write, stays unknown and pins the element. So does the key leaf of an element that lacks a
 field the target writes. An element or `each` leaf is owned only while the render would write it: every `refs` and
@@ -91,7 +91,10 @@ dependency version in `Chart.yaml`, so a subchart bump fails until the fixture i
 ### 4. Per-element (`each`) targets
 
 `{path: apisix.routes, each: plugins.openid-connect.ssl_verify, ...}` writes a key into every element of the loaded list
-that already holds the parent mapping. It never creates elements, so routes stay US-5.6's. Without routes nothing renders
+that already holds the parent mapping. `within` names a shorter prefix of `each` to look for instead, so
+`{each: plugins.openid-connect.proxy_opts.https_proxy, within: plugins.openid-connect}` creates the missing
+`proxy_opts`. A loaded node between `within` and the leaf that is not a mapping (`proxy_opts: null`, a scalar or a
+list) is a hand edit: the leaf is pinned and nothing is written over it. It never creates elements, so routes stay US-5.6's. Without routes nothing renders
 for APISIX, and the Stage 3 preview says so. A loaded value that differs is pinned as a hand edit. `each` is refused on a
 list the `lists:` table declares.
 
@@ -106,7 +109,10 @@ targets is reached, because the mechanism renders as a whole.
 `defaultWhen` takes either `equals` or `set: true`. `proxy.http` and `proxy.no` carry `defaultWhen: {id: proxy.https,
 set: true}` and every one of their targets carries `requires: [proxy.https]`. Without both gates the `proxy.no` default,
 which reads only reserved refs, would derive for every profile and render `NO_PROXY` into five components without a
-proxy. `proxy.https` is the switch for the whole group; an HTTP-only proxy is not offered.
+proxy. `proxy.https` is the switch for the whole group; an HTTP-only proxy is not offered. Conversely, every
+`proxy.https` and `proxy.http` target also carries `requires: [proxy.no]`: while Stage 1 leaves the release name or
+namespace unanswered, the default cannot derive, and a proxy without `NO_PROXY` would send every in-cluster call
+through it. The group then renders nothing until the user gives `proxy.no` or completes Stage 1.
 
 ### 6. Reserved refs `target.release` and `target.namespace`, and `fullname`
 
@@ -122,8 +128,11 @@ and APISIX (`lua-resty-http`) match entries differently, and no wildcard works i
 `localhost,127.0.0.1,svc,.svc,cluster.local,.cluster.local,<namespace>.svc,` followed by the bare in-cluster service
 names. An entry that one client reads differently matches no real host there and does no harm. The names come from where
 the chart fixes them (`fullnameOverride`, a service `nameOverride`, a literal in a template). Only the Keycloak and OTel
-Collector names use `fullname` over the release. The rows are bundle data (`noProxyServices:` with `name` and
-`overrides:`), so a test and the `noProxyCoverage` warning read the same table. That warning fires when a loaded file
+Collector names use `fullname` over the release. Their charts also rename the Service through `nameOverride`, which
+replaces the chart name inside `fullname` rather than the whole name. The rows are bundle data (`noProxyServices:` with
+`name`, `overrides:` and an optional `nameOverride:` path; the effective name is the first set `overrides` value, else
+`name` rendered with a set `nameOverride` in place of the chart name), so a test and the `noProxyCoverage` warning read
+the same table. That warning fires when a loaded file
 renames a service the final `proxy.no` does not bypass. A given `proxy.no` is never rewritten. No CIDR placeholder goes
 into the value: CIDRs only help the Go clients dialling IP literals, so the field help suggests appending the pod and
 service CIDRs, which the vc-operator needs to reach the Kubernetes API directly.

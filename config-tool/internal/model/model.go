@@ -49,6 +49,8 @@ type Bundle struct {
 	Checks []CheckRule `yaml:"rules"`
 	// Lists declares the lists element targets write into, with their base elements (ADR 0025).
 	Lists []List `yaml:"lists"`
+	// NoProxyServicesTable lists the in-cluster services the proxy.no default bypasses (ADR 0025).
+	NoProxyServicesTable []NoProxyService `yaml:"noProxyServices"`
 	// Latest marks the default version; Versions sets it, bundle files never do.
 	Latest bool `yaml:"-"`
 	// rules is Recognize compiled; readBundle sets it after validating every rule.
@@ -58,6 +60,8 @@ type Bundle struct {
 	order       []string
 	// lists is Lists compiled.
 	lists []CompiledList
+	// noProxyServices is NoProxyServicesTable compiled.
+	noProxyServices []CompiledNoProxyService
 }
 
 // Rules returns the validated recognition rules in bundle order.
@@ -293,6 +297,9 @@ func readBundle(fsys fs.FS, file string) (versioned, error) {
 		return versioned{}, fmt.Errorf("%s: %w", file, err)
 	}
 	if b.lists, err = compileLists(b.Lists, b.TopLevelKeys); err != nil {
+		return versioned{}, fmt.Errorf("%s: %w", file, err)
+	}
+	if b.noProxyServices, err = compileNoProxyServices(b.NoProxyServicesTable, b.TopLevelKeys); err != nil {
 		return versioned{}, fmt.Errorf("%s: %w", file, err)
 	}
 	if b.foundations, b.order, err = compileFoundations(b.Foundations, b.lists, b.Resources, b.TopLevelKeys); err != nil {

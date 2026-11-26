@@ -1,6 +1,6 @@
 # The same collision in a profile without a role or features: the rule ignores features, so it still blocks.
 format: 1
-model: {chart: data-space-connector, version: 10.16.0, revision: 13}
+model: {chart: data-space-connector, version: 10.16.0, revision: 14}
 target:
   type: file
   namespace: provider
