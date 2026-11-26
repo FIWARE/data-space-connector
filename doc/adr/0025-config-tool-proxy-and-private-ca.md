@@ -43,6 +43,12 @@ are unchanged. Provenance gains `element` (the key) and `origin` (`base` or `loa
 does not own. Such a leaf carries the first foundation, in bundle order, whose element makes the list be written, so
 the Stage 3 diff files the base under that foundation. Appending beyond a loaded list's length is left to US-7.1's writer.
 
+Loading needs no marker on a sequence item: a loaded element whose key matches an owned keyed target is owned, and so is
+an `each` leaf under any element that has the parent mapping. Their leaves back-derive the answers by inverting the
+target's templates (`model.Invert`); the first element in document order sets an answer, and a leaf that disagrees, or
+a field the target does not write, stays unknown and pins the element. The Stage 3 diff reports a pinned element once,
+under its key (`keycloak.extraEnvVars[name=HTTPS_PROXY]`), with the whole rendered and kept elements.
+
 Compile-time checks: a keyed element's list must be in `lists:`, and no target may also index into it. Two targets may
 not own the same key, and an owned key may not be a `base` key. An element that reads no answer needs `requires`.
 
