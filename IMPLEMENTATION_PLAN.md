@@ -73,6 +73,11 @@ Upstream sources: `docs/multi-dataspace.md`, `config/multi-dataspace/edc.propert
 - **Context id = DID.** The IdentityHub bootstrap already stores the STS secret under
   `did:web:<host>-sts-client-secret`, which is the upstream convention `<context id>-sts-client-secret`.
   Using the DID as context id reuses the existing identity, STS client and vault alias unchanged.
+- **Tag 2.1.0, not 2.0.0.** 2.0.0 serves only v5beta and EDC 0.18.1 has no v5 EDR resource, so a
+  consumer cannot read a STARTED transfer's `dataaddress`. 2.1.0 (published on quay for both images,
+  `RELEASE_NOTES_EDR_API_V5.md`) adds `POST .../v5beta/participants/<ctx>/edrs/request` and
+  `GET .../edrs/<transferId>/dataaddress`. The pin and `schemaBaseUri` therefore use 2.1.0; read
+  "2.0.0" below as "2.x, pinned at 2.1.0".
 - **CI:** CI runs the `dsp` scenario (`.github/workflows/test.yaml`, profiles
   `test,dsp,dsp-test`), so the image switch and the IT migration must land in the same step.
 
@@ -85,8 +90,8 @@ This step is atomic on purpose: CI runs the scenario.
 
 **Chart default image** (the chart ships 2.0.0, not only the k3s scenario):
 - In `charts/data-space-connector/values.yaml`, under `fdsc-edc.common.deployment`, add
-  `image.tag: "2.0.0"` with a `# --` comment: it stands in for the fdsc-edc chart's appVersion
-  until a chart with appVersion ≥ 2.0.0 is published, and Step 2 drops it then.
+  `image.tag: "2.1.0"` with a `# --` comment: it stands in for the fdsc-edc chart's appVersion
+  until a chart with appVersion ≥ 2.1.0 is published, and Step 2 drops it then.
 - It applies to `oid4vc` too, which is what the 0.7.11 bump would do anyway. Upstream did not
   change the OID4VC controlplane in 2.0.0, and `dsp_oid4vc_flow` in this step's CI run proves it.
   If that flow fails on the oid4vc 2.0.0 image, stop and report it as blocked instead of pinning
@@ -107,7 +112,7 @@ This step is atomic on purpose: CI runs the scenario.
   - The three `fdsc.participants.self.config.edc.iam.sts.oauth.*` keys, with the values the
     common `config.oauth` already carries.
   - `tmfExtension.defaultParticipantContextId=<DID>`.
-  - `tmfExtension.schemaBaseUri=https://raw.githubusercontent.com/SEAMWARE/fdsc-edc/2.0.0/schemas/`.
+  - `tmfExtension.schemaBaseUri=https://raw.githubusercontent.com/SEAMWARE/fdsc-edc/2.1.0/schemas/`.
     Verify that the TMForum API reaches it through the squid proxy. If it doesn't, serve the
     schemas in-cluster.
   - `edc.iam.oauth2.issuer` and `edc.iam.oauth2.jwks.url`.
@@ -173,9 +178,11 @@ This step is atomic on purpose: CI runs the scenario.
 ### Step 2: Pin the multi-dataspace rendering with helm-unittest and move the chart to fdsc-edc 2.0.0
 - **Dependency** in `charts/data-space-connector/Chart.yaml`:
   - Run `helm show chart oci://quay.io/fiware/helm-charts/fdsc-edc --version 0.7.11` (or a newer
-    version with appVersion ≥ 2.0.0). If one is published, bump the `fdsc-edc` dependency to it,
+    version). If one with appVersion ≥ 2.1.0 is published, bump the `fdsc-edc` dependency to it,
     run `helm dependency update charts/data-space-connector`, and drop the now-redundant
     `fdsc-edc.common.deployment.image.tag` pin from Step 1.
+  - A chart with appVersion 2.0.0 (e.g. 0.7.11) may be bumped to, but keep the 2.1.0 pin: 2.0.0
+    lacks the v5beta EDR endpoint and `dsp_dcp_flow` would break without it.
   - If none is published, keep `0.7.10` and the pin. The chart still deploys 2.0.0 through it.
     Record in the release notes that the pin goes away with the next fdsc-edc chart bump, and
     that anyone who sets their own `image.tag` on a deployment overrides it. Do not change

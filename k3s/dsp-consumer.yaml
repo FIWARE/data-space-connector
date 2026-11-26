@@ -9,7 +9,20 @@ fdsc-edc:
       config:
         edc:
           hostname: dcp-fancy-marketplace.127.0.0.1.nip.io
-          dspCallback: https://dcp-fancy-marketplace.127.0.0.1.nip.io:443/api/dsp
+          dspCallback: https://dcp-fancy-marketplace.127.0.0.1.nip.io:443/api/dsp/%s
+        # fdsc-edc 2.x participant context (id = DID, reuses the IdentityHub STS client) and the
+        # OAuth2 issuer of the v5beta management API. Continuation lines carry the 4 spaces the chart
+        # does not add.
+        additionalProperties: "fdsc.participants.self.id=did:web:fancy-marketplace.biz\n    \
+          fdsc.participants.self.identity=did:web:fancy-marketplace.biz\n    \
+          fdsc.participants.self.profiles=http-dsp-profile-2025-1\n    \
+          fdsc.participants.self.config.edc.iam.sts.oauth.token.url=http://identityhub-service.consumer.svc.cluster.local:8087/api/sts/token\n    \
+          fdsc.participants.self.config.edc.iam.sts.oauth.client.id=did:web:fancy-marketplace.biz\n    \
+          fdsc.participants.self.config.edc.iam.sts.oauth.client.secret.alias=did:web:fancy-marketplace.biz-sts-client-secret\n    \
+          tmfExtension.defaultParticipantContextId=did:web:fancy-marketplace.biz\n    \
+          tmfExtension.schemaBaseUri=https://raw.githubusercontent.com/SEAMWARE/fdsc-edc/2.1.0/schemas/\n    \
+          edc.iam.oauth2.issuer=https://keycloak-consumer.127.0.0.1.nip.io/realms/test-realm\n    \
+          edc.iam.oauth2.jwks.url=http://consumer-keycloak.consumer.svc.cluster.local:8080/realms/test-realm/protocol/openid-connect/certs"
     oid4vc:
       deployment:
         image:
