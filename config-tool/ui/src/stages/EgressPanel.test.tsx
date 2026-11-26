@@ -47,6 +47,15 @@ interface Extra {
   findings?: Finding[]
 }
 
+/** One fan-out preview case: the answers, the fake render's extras and the expected table and notes. */
+interface PreviewCase {
+  name: string
+  values: Record<string, AnswerValue>
+  extra: Extra
+  rows: string[][]
+  notes: string[]
+}
+
 /** The egress leaves a render of `answers` writes into each component, the APISIX routes only with `routes`. */
 function egressRender({ routes = false, withheld = [], findings = [] }: Extra) {
   return (body: RenderBody): RenderResult => {
@@ -151,7 +160,7 @@ describe('EgressPanel', () => {
     expect(within(group).getByLabelText('No proxy')).toHaveTextContent(`localhost,${NAMESPACE}.svc,${RELEASE}-keycloak`)
   })
 
-  it.each([
+  it.each<PreviewCase>([
     {
       name: 'proxy without CIDR or routes',
       values: { 'proxy.https': PROXY },
@@ -211,13 +220,13 @@ describe('EgressPanel', () => {
       ],
       notes: [NO_ROUTES],
     },
-  ] as const)('previews the fan-out: $name', async ({ values, extra, rows, notes }) => {
-    renderPanel(values, extra as Extra)
+  ])('previews the fan-out: $name', async ({ values, extra, rows, notes }) => {
+    renderPanel(values, extra)
     const group = await preview()
     // The table shows before the first render answers, so wait for its leaves.
     await waitFor(() => expect(rowsOf(group)).toEqual(rows))
     for (const n of [NO_ROUTES, BAE_LOGIN, VC_OPERATOR_CIDR, noProxyGaps(2)]) {
-      expect(within(group).queryByText(n) !== null).toBe((notes as readonly string[]).includes(n))
+      expect(within(group).queryByText(n) !== null).toBe(notes.includes(n))
     }
   })
 
