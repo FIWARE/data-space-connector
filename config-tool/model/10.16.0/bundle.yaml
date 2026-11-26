@@ -6,22 +6,30 @@
 #   id       dotted answer id (domain.base): the key in the profile's answers, open field answers.<id>
 #   type     string | hostname | domain | did | url, each checked with one pattern; choice, one of its options;
 #            bool, true or false; credentialTypes, a list of {type, description?}. Only copy writes a bool or a list
-#   group    organization | dataspace | network (default) | platform: the Stage 3 panel that asks it
+#   group    organization | dataspace | network (default) | platform | egress: the Stage 3 panel that asks it
 #   options  a choice's {value, label, note}; note is optional text shown at the point of choice
 #   default  a template over other answers; the answer is derived only while all of them are answered.
 #            Only a choice may have a constant default, which must be one of its options. A default may also
-#            read the reserved target.environment (Stage 1), which no foundation declares and no target reads
-#   defaultWhen {id, equals}: the default applies only while the resolved answer id equals equals
+#            read the reserved target.environment, target.release and target.namespace (Stage 1), which no
+#            foundation declares and no target reads
+#   defaultWhen {id, equals | set: true}: the default applies only while the resolved answer id equals equals,
+#            or while it resolves at all
 #   prefix   a template over other answers that the answer, given or derived, must start with
-#   targets  {path, fn, args, sep}; a target referencing an unanswered id writes nothing
+#   targets  {path, fn, args, sep, requires}; a target referencing an unanswered id, or one whose requires are
+#            not all resolved, writes nothing. The list forms (ADR 0025):
+#            element {key, value}: one element of a list the lists table declares, found by its key field;
+#              mechanism names the elements that render together, or not at all after a unique collision
+#            each, within: a key path written into every loaded element of the list at path that holds the
+#              mapping within (default: each's parent); it never creates an element
 #   features feature ids; display only: Stage 3 hides the foundation while any of them is off. It gates
 #            neither the render nor the rules (US-5.3). A host lists the feature whose keys cover its ingress,
 #            plus, behind APISIX, the feature that deploys the route's upstream
-# Templates are Go text/template holding only text and {{ .id }} actions. The functions:
+# Templates are Go text/template holding only text and {{ .id }} actions, plus {{ fullname .ref "chart" }}:
+# Helm's standard fullname of a release's chart. The target fns:
 #   tpl    renders its one template arg
 #   join   renders every template arg and joins the results with sep
 #   copy   takes the answer its one {{ .id }} arg names, keeping its type
-#   const  writes its one scalar arg verbatim; only under a list index, to complete an owned list
+#   const  writes its one scalar arg verbatim; only under a list index, to complete an owned list, or with requires
 # Helm replaces a list instead of merging it, so a path indexes into a list only when the targets write
 # that list whole: indices 0..n-1 and every key of every element. Quote a path in a flow mapping: a plain
 # scalar there cannot hold '[' or ','. internal/render/provider_test.go checks the targets against k3s/provider.yaml.
@@ -52,7 +60,7 @@
 #             path or chartMemoryLimit, which a loaded null drops). The message may use {{ .components }}
 chart: data-space-connector
 version: 10.16.0
-revision: 13
+revision: 14
 topLevelKeys: [
   nameOverride, fullnameOverride, imagePullSecrets, issuance, decentralizedIam, scorpio, elsi,
   keycloak, tm-forum-api, statusListServer, rainbow, contract-management, did, registration,
@@ -405,6 +413,36 @@ resources:
       tmforum: {requests: {cpu: 250m, memory: 1Gi}, limits: {cpu: "2", memory: 1Gi}}
       til: {requests: {cpu: 100m, memory: 512Mi}, limits: {cpu: "1", memory: 512Mi}}
       contractManagement: {requests: {cpu: 100m, memory: 512Mi}, limits: {cpu: "1", memory: 512Mi}}
+# Lists keyed element targets write into (ADR 0025). base holds the default elements of the layer that supplies the
+# list, the umbrella's values.yaml or the subchart's; internal/render/proxy_test.go pins each against it.
+lists:
+  - path: decentralizedIam.vcAuthentication.vcverifier.deployment.additionalEnvVars
+    key: name
+  - path: marketplace.bizEcosystemLogicProxy.additionalEnvVars
+    key: name
+    base:
+      - {name: OTEL_SDK_DISABLED, value: "true"}
+      - {name: OTEL_SERVICE_NAME, value: marketplace}
+      - {name: OTEL_EXPORTER_OTLP_ENDPOINT, value: ""}
+      - {name: OTEL_EXPORTER_OTLP_PROTOCOL, value: grpc}
+      - {name: OTEL_TRACES_SAMPLER, value: parentbased_traceidratio}
+      - {name: OTEL_TRACES_SAMPLER_ARG, value: "1.0"}
+      - {name: OTEL_PROPAGATORS, value: "tracecontext,baggage"}
+  - path: vc-operator.extraEnvVars
+    key: name
+# The in-cluster services a proxied component calls, which the proxy.no default bypasses by bare name (ADR 0025).
+# name is a template over target.release and target.namespace; overrides are the value paths that rename the
+# service, the first set one wins. internal/render/noproxy_names_test.go pins every row against the charts.
+noProxyServices:
+  - {name: credentials-config-service, overrides: [decentralizedIam.vcAuthentication.credentials-config-service.fullnameOverride]}
+  - {name: trusted-issuers-list, overrides: [decentralizedIam.vcAuthentication.trusted-issuers-list.fullnameOverride]}
+  - {name: tm-forum-api, overrides: [tm-forum-api.apiProxy.service.nameOverride]}
+  # The all-in-one service: tm-forum-api names it so while its defaultConfig.serverHost holds the name, as by default.
+  - {name: tm-forum-api-svc}
+  # templates/status-list-server-service.yaml hard-codes the name.
+  - {name: status-list-server}
+  - {name: '{{ fullname .target.release "keycloak" }}', overrides: [keycloak.fullnameOverride]}
+  - {name: '{{ fullname .target.release "opentelemetry-collector" }}', overrides: [opentelemetry-collector.fullnameOverride]}
 foundations:
   - id: org.displayName
     stage: foundations
@@ -875,3 +913,77 @@ foundations:
       - value: custom
         label: Custom
         note: Leaves the chart's defaults; you size the components yourself.
+  # The proxy group (ADR 0025): proxy.https switches it, so neither the other two derive nor any target renders
+  # without it. Keycloak reads the env vars the umbrella's keycloak.proxy sets only while spiProxyMappings is empty.
+  - id: proxy.https
+    stage: foundations
+    group: egress
+    type: url
+    label: HTTPS proxy
+    help: >-
+      The forward proxy the components use for outbound HTTPS calls, such as http://proxy.infra.svc.cluster.local:3128.
+      The verifier, Keycloak, the marketplace, the vc-operator and APISIX's openid-connect routes get it. Leave it
+      empty when the cluster reaches the internet directly.
+    doc: doc/deployment-integration/roles/PREREQUISITES.md#outbound-access
+    targets:
+      - path: decentralizedIam.vcAuthentication.vcverifier.deployment.additionalEnvVars
+        element: {key: HTTPS_PROXY, value: {value: "{{ .proxy.https }}"}}
+      - {path: keycloak.proxy.enabled, fn: const, args: [true], requires: [proxy.https]}
+      - {path: keycloak.proxy.httpsProxy, fn: copy, args: ["{{ .proxy.https }}"]}
+      - path: marketplace.bizEcosystemLogicProxy.additionalEnvVars
+        element: {key: HTTPS_PROXY, value: {value: "{{ .proxy.https }}"}}
+      - path: vc-operator.extraEnvVars
+        element: {key: HTTPS_PROXY, value: {value: "{{ .proxy.https }}"}}
+      - {path: decentralizedIam.odrlAuthorization.apisix.routes, each: plugins.openid-connect.proxy_opts.https_proxy,
+         within: plugins.openid-connect, fn: copy, args: ["{{ .proxy.https }}"]}
+  - id: proxy.http
+    stage: foundations
+    group: egress
+    type: url
+    default: "{{ .proxy.https }}"
+    defaultWhen: {id: proxy.https, set: true}
+    label: HTTP proxy
+    help: The forward proxy for plain HTTP calls. It follows the HTTPS proxy unless you set another.
+    doc: doc/deployment-integration/roles/PREREQUISITES.md#outbound-access
+    targets:
+      - path: decentralizedIam.vcAuthentication.vcverifier.deployment.additionalEnvVars
+        element: {key: HTTP_PROXY, value: {value: "{{ .proxy.http }}"}}
+        requires: [proxy.https]
+      - {path: keycloak.proxy.httpProxy, fn: copy, args: ["{{ .proxy.http }}"], requires: [proxy.https]}
+      - path: marketplace.bizEcosystemLogicProxy.additionalEnvVars
+        element: {key: HTTP_PROXY, value: {value: "{{ .proxy.http }}"}}
+        requires: [proxy.https]
+      - path: vc-operator.extraEnvVars
+        element: {key: HTTP_PROXY, value: {value: "{{ .proxy.http }}"}}
+        requires: [proxy.https]
+      - {path: decentralizedIam.odrlAuthorization.apisix.routes, each: plugins.openid-connect.proxy_opts.http_proxy,
+         within: plugins.openid-connect, fn: copy, args: ["{{ .proxy.http }}"], requires: [proxy.https]}
+  # Each client matches NO_PROXY entries differently (ADR 0025), so the default lists every form that one of them
+  # reads, then the bare names of the noProxyServices table in its order.
+  - id: proxy.no
+    stage: foundations
+    group: egress
+    type: string
+    default: >-
+      localhost,127.0.0.1,svc,.svc,cluster.local,.cluster.local,{{ .target.namespace }}.svc,credentials-config-service,trusted-issuers-list,tm-forum-api,tm-forum-api-svc,status-list-server,{{ fullname .target.release "keycloak" }},{{ fullname .target.release "opentelemetry-collector" }}
+    defaultWhen: {id: proxy.https, set: true}
+    label: No proxy
+    help: >-
+      Comma-separated hosts and domains the components reach directly. The default covers the in-cluster services
+      by every form the five clients understand. Only the verifier and the vc-operator read CIDRs, and only for
+      calls to an IP address: append the pod and service CIDRs (10.42.0.0/16,10.43.0.0/16 on k3s), or the
+      vc-operator reaches the Kubernetes API through the proxy.
+    doc: doc/deployment-integration/roles/PREREQUISITES.md#outbound-access
+    targets:
+      - path: decentralizedIam.vcAuthentication.vcverifier.deployment.additionalEnvVars
+        element: {key: NO_PROXY, value: {value: "{{ .proxy.no }}"}}
+        requires: [proxy.https]
+      - {path: keycloak.proxy.noProxy, fn: copy, args: ["{{ .proxy.no }}"], requires: [proxy.https]}
+      - path: marketplace.bizEcosystemLogicProxy.additionalEnvVars
+        element: {key: NO_PROXY, value: {value: "{{ .proxy.no }}"}}
+        requires: [proxy.https]
+      - path: vc-operator.extraEnvVars
+        element: {key: NO_PROXY, value: {value: "{{ .proxy.no }}"}}
+        requires: [proxy.https]
+      - {path: decentralizedIam.odrlAuthorization.apisix.routes, each: plugins.openid-connect.proxy_opts.no_proxy,
+         within: plugins.openid-connect, fn: copy, args: ["{{ .proxy.no }}"], requires: [proxy.https]}

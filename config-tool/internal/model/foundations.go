@@ -51,6 +51,7 @@ const (
 	GroupDataspace    FoundationGroup = "dataspace"
 	GroupNetwork      FoundationGroup = "network"
 	GroupPlatform     FoundationGroup = "platform"
+	GroupEgress       FoundationGroup = "egress"
 )
 
 // Fn is a target function: how a target's value is made from answers (ADR 0020).
@@ -89,7 +90,7 @@ var (
 	knownTypes = []FoundationType{TypeString, TypeHostname, TypeDomain, TypeChoice, TypeDID, TypeURL, TypeBool, TypeCredentialTypes}
 	knownFns   = []Fn{FnTpl, FnJoin, FnCopy, FnConst}
 	// knownFoundationGroups are the Stage 3 panels, in screen order.
-	knownFoundationGroups = []FoundationGroup{GroupOrganization, GroupDataspace, GroupNetwork, GroupPlatform}
+	knownFoundationGroups = []FoundationGroup{GroupOrganization, GroupDataspace, GroupNetwork, GroupPlatform, GroupEgress}
 	// reservedRefs are read-only refs a default may read that no foundation declares; the render seeds them.
 	reservedRefs = []string{FieldTargetEnvironment, RefTargetRelease, RefTargetNamespace}
 	// idSegment keeps every segment of an answer id usable as a template field name.
