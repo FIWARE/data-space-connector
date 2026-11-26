@@ -115,6 +115,11 @@ Two things it does that are easy to miss when doing this by hand:
   HTTP layer then encodes the `%` again, so a lookup for `did:web:x-sts-client-secret` actually
   resolves the key literally named `did%3Aweb%3Ax-sts-client-secret`.
 
+The participant context registered in the identityhub and the participant context of the DCP
+controlplane share one id, the DID. The controlplane's STS client reads its secret from the vault
+alias `<DID>-sts-client-secret` written here, see
+[Multi-dataspace operation](./MULTI_DATASPACE.md#participant-contexts-and-profiles).
+
 **The manual procedure** is below, and it is what to reach for in a local deployment or when
 debugging. It runs the very same scripts, from a workstation instead of from a Job, so the two paths
 cannot drift apart. (The integration tests are a third thing: they reimplement the steps in Java, in
@@ -394,7 +399,7 @@ export PRODUCT_SPEC_ID=$(curl -k -x localhost:8888 -X 'POST' \
                    "description": "Endpoint, that the service can be negotiated at via DCP.",
                    "valueType":"endpointUrl",
                    "productSpecCharacteristicValue": [{
-                      "value":"https://dcp-mp-operations.127.0.0.1.nip.io/api/dsp/2025-1",
+                      "value":"https://dcp-mp-operations.127.0.0.1.nip.io/api/dsp/did:web:mp-operations.org/http-dsp-profile-2025-1",
                       "isDefault": true
                    }]
                },{
@@ -936,6 +941,26 @@ The same product now can be negotiated through the Dataspace Protocol. The inter
 
 #### DCP
 
+Since chart 11.0.0 the DCP controlplane runs fdsc-edc 2.x: every management call goes to the v5beta
+API of one participant context, `<management path>/v5beta/participants/<context id>/...`, and
+carries an OAuth2 token with the `management-api:*` scopes. The context id is the participant's DID.
+The DSP address of the provider names its context and a [profile](./MULTI_DATASPACE.md), and
+`protocol` in the request bodies is that profile's name. A connector that takes part in several
+dataspaces is described in [Multi-dataspace operation](./MULTI_DATASPACE.md).
+
+In the local setup the consumer's Keycloak has the client-credentials client `edc-management`, whose
+tokens carry all three scopes. Fetch a token (it expires after a few minutes; repeat this when calls
+return 401) and set the consumer context's management base:
+
+```shell
+export MANAGEMENT_API=https://dsp-dcp-management.127.0.0.1.nip.io/api/v1/management/v5beta/participants/did:web:fancy-marketplace.biz
+export MANAGEMENT_TOKEN=$(curl -k -x localhost:8888 -s -X POST \
+  'https://keycloak-consumer.127.0.0.1.nip.io/realms/test-realm/protocol/openid-connect/token' \
+  --data grant_type=client_credentials \
+  --data client_id=edc-management \
+  --data client_secret=edc-management-client-secret | jq -r .access_token); echo ${MANAGEMENT_TOKEN}
+```
+
 > :bulb: **Automated walk-through.** The manual steps below (catalog → contract
 > negotiation → transfer process → EDR) can be run end-to-end with the helper
 > script [`dsp-consume.sh`](./scripts/dsp-consume.sh). It requests the catalog,
@@ -950,53 +975,54 @@ The same product now can be negotiated through the Dataspace Protocol. The inter
 > kubectl port-forward svc/consumer-fdsc-edc-dcp 8085:8085
 > ```
 >
-> Then run it with the provider DSP endpoint, the local management base and the
-> provider DID:
+> Then run it with the provider DSP endpoint, the local management base of the
+> consumer context and the provider DID, passing the token from above:
 >
 > ```shell
-> ./doc/scripts/dsp-consume.sh \
->   https://dcp-mp-operations.127.0.0.1.nip.io/api/dsp/2025-1 \
->   http://localhost:8085/api/v1/management/v3 \
+> MANAGEMENT_TOKEN=${MANAGEMENT_TOKEN} ./doc/scripts/dsp-consume.sh \
+>   https://dcp-mp-operations.127.0.0.1.nip.io/api/dsp/did:web:mp-operations.org/http-dsp-profile-2025-1 \
+>   http://localhost:8085/api/v1/management/v5beta/participants/did:web:fancy-marketplace.biz \
 >   did:web:mp-operations.org
 > ```
 >
 > Run `./doc/scripts/dsp-consume.sh --help` for the full argument and environment
-> reference (transfer type, protocol, poll timeout/interval). The steps below
+> reference (management token, transfer type, profile, poll timeout/interval). The steps below
 > document the same flow performed by hand.
 
 1. Read the catalog:
 ```shell
 curl -k -x localhost:8888 -X POST \
-  'https://dsp-dcp-management.127.0.0.1.nip.io/api/v1/management/v3/catalog/request' \
+  "${MANAGEMENT_API}/catalog/request" \
+  --header "Authorization: Bearer ${MANAGEMENT_TOKEN}" \
   --header 'Accept: */*' \
   --header 'Content-Type: application/json' \
   --data-raw '{
         "@context": [
-            "https://w3id.org/edc/connector/management/v0.0.1"
+            "https://w3id.org/edc/connector/management/v2"
         ],
-        "@type": "CatalogRequestMessage",
-        "protocol": "dataspace-protocol-http:2025-1",
+        "@type": "CatalogRequest",
+        "protocol": "http-dsp-profile-2025-1",
         "counterPartyId": "did:web:mp-operations.org",
-        "counterPartyAddress": "https://dcp-mp-operations.127.0.0.1.nip.io/api/dsp/2025-1",
-        "querySpec": {
-        }
+        "counterPartyAddress": "https://dcp-mp-operations.127.0.0.1.nip.io/api/dsp/did:web:mp-operations.org/http-dsp-profile-2025-1",
+        "querySpec": {"@type": "QuerySpec"}
     }' | jq .
 ```
 
 2. Start the negotiation by selecting the offer:
 ```shell
 curl -k -x localhost:8888 -X POST \
-  'https://dsp-dcp-management.127.0.0.1.nip.io/api/v1/management/v3/contractnegotiations' \
+  "${MANAGEMENT_API}/contractnegotiations" \
+  --header "Authorization: Bearer ${MANAGEMENT_TOKEN}" \
   --header 'Accept: */*' \
   --header 'Content-Type: application/json' \
   --data-raw '{
         "@context": [
-            "https://w3id.org/edc/connector/management/v0.0.1"
+            "https://w3id.org/edc/connector/management/v2"
         ],
         "@type": "ContractRequest",
-        "counterPartyAddress": "https://dcp-mp-operations.127.0.0.1.nip.io/api/dsp/2025-1",
+        "counterPartyAddress": "https://dcp-mp-operations.127.0.0.1.nip.io/api/dsp/did:web:mp-operations.org/http-dsp-profile-2025-1",
         "counterPartyId": "did:web:mp-operations.org",
-        "protocol": "dataspace-protocol-http:2025-1",
+        "protocol": "http-dsp-profile-2025-1",
         "policy": {
             "@context": [
               "http://www.w3.org/ns/odrl.jsonld",
@@ -1032,36 +1058,42 @@ curl -k -x localhost:8888 -X POST \
 3. Check the negotiation state:
 ```shell
 curl -k -x localhost:8888 -X POST \
-  'https://dsp-dcp-management.127.0.0.1.nip.io/api/v1/management/v3/contractnegotiations/request' \
+  "${MANAGEMENT_API}/contractnegotiations/request" \
+  --header "Authorization: Bearer ${MANAGEMENT_TOKEN}" \
   --header 'Accept: */*' \
-  --header 'Content-Type: application/json' | jq .
+  --header 'Content-Type: application/json' \
+  --data-raw '{"@context": ["https://w3id.org/edc/connector/management/v2"], "@type": "QuerySpec"}' | jq .
 ```
 
 4. When the state of the negotiation is "finalized", the agreement id can be retrieved:
 
 ```shell
 export AGREEMENT_ID=$(curl -k -x localhost:8888 -X POST \
-  'https://dsp-dcp-management.127.0.0.1.nip.io/api/v1/management/v3/contractnegotiations/request' \
+  "${MANAGEMENT_API}/contractnegotiations/request" \
+  --header "Authorization: Bearer ${MANAGEMENT_TOKEN}" \
   --header 'Accept: */*' \
-  --header 'Content-Type: application/json' | jq -r '.[0].contractAgreementId'); echo ${AGREEMENT_ID}
+  --header 'Content-Type: application/json' \
+  --data-raw '{"@context": ["https://w3id.org/edc/connector/management/v2"], "@type": "QuerySpec"}' | jq -r '.[0].contractAgreementId'); echo ${AGREEMENT_ID}
 ```
 
 5. With the aggreement, the transfer can be started:
 ```shell
 curl -k -x localhost:8888 -X POST \
-  'https://dsp-dcp-management.127.0.0.1.nip.io/api/v1/management/v3/transferprocesses' \
+  "${MANAGEMENT_API}/transferprocesses" \
+  --header "Authorization: Bearer ${MANAGEMENT_TOKEN}" \
   --header 'Accept: */*' \
   --header 'Content-Type: application/json' \
   --data-raw "{
     \"@context\": [
-        \"https://w3id.org/edc/connector/management/v0.0.1\"
+        \"https://w3id.org/edc/connector/management/v2\"
     ],
+    \"@type\": \"TransferRequest\",
     \"assetId\": \"ASSET-1\",
     \"counterPartyId\": \"did:web:mp-operations.org\",
-    \"counterPartyAddress\":  \"https://dcp-mp-operations.127.0.0.1.nip.io/api/dsp/2025-1\",
+    \"counterPartyAddress\":  \"https://dcp-mp-operations.127.0.0.1.nip.io/api/dsp/did:web:mp-operations.org/http-dsp-profile-2025-1\",
     \"connectorId\": \"did:web:mp-operations.org\",
     \"contractId\": \"${AGREEMENT_ID}\",
-    \"protocol\": \"dataspace-protocol-http:2025-1\",
+    \"protocol\": \"http-dsp-profile-2025-1\",
     \"transferType\": \"HttpData-PULL\"
 }" | jq .
 ```
@@ -1069,11 +1101,12 @@ curl -k -x localhost:8888 -X POST \
 6. Retrieve the transfer state:
 ```shell
 curl -k -x localhost:8888 -X POST \
-  'https://dsp-dcp-management.127.0.0.1.nip.io/api/v1/management/v3/transferprocesses/request' \
+  "${MANAGEMENT_API}/transferprocesses/request" \
+  --header "Authorization: Bearer ${MANAGEMENT_TOKEN}" \
   --header 'Accept: */*' \
   --header 'Content-Type: application/json' \
   --data-raw '{
-    "@context": ["https://w3id.org/edc/connector/management/v0.0.1"],
+    "@context": ["https://w3id.org/edc/connector/management/v2"],
     "@type": "QuerySpec"
   }' | jq .
 ```
@@ -1081,15 +1114,16 @@ curl -k -x localhost:8888 -X POST \
 7. Get the transfer Id and use it for retrieving endpoint-url and access-token:
 ```shell
 export TRANSFER_ID=$(curl -k -x localhost:8888 -s -X POST \
-  'https://dsp-dcp-management.127.0.0.1.nip.io/api/v1/management/v3/transferprocesses/request' \
+  "${MANAGEMENT_API}/transferprocesses/request" \
+  --header "Authorization: Bearer ${MANAGEMENT_TOKEN}" \
   --header 'Accept: */*' \
   --header 'Content-Type: application/json' \
   --data-raw '{
-    "@context": ["https://w3id.org/edc/connector/management/v0.0.1"],
+    "@context": ["https://w3id.org/edc/connector/management/v2"],
     "@type": "QuerySpec"
   }' | jq -r '.[]."@id"'); echo Transfer ID: ${TRANSFER_ID}
-export ENDPOINT=$(curl -k -x localhost:8888 -s -X GET "https://dsp-dcp-management.127.0.0.1.nip.io/api/v1/management/v3/edrs/${TRANSFER_ID}/dataaddress" | jq -r .endpoint); echo Endpoint: ${ENDPOINT}
-export ACCESS_TOKEN=$(curl -k -x localhost:8888 -s -X GET "https://dsp-dcp-management.127.0.0.1.nip.io/api/v1/management/v3/edrs/${TRANSFER_ID}/dataaddress" | jq -r .authorization); echo Access Token: ${ACCESS_TOKEN}
+export ENDPOINT=$(curl -k -x localhost:8888 -s -X GET "${MANAGEMENT_API}/edrs/${TRANSFER_ID}/dataaddress" -H "Authorization: Bearer ${MANAGEMENT_TOKEN}" | jq -r .endpoint); echo Endpoint: ${ENDPOINT}
+export ACCESS_TOKEN=$(curl -k -x localhost:8888 -s -X GET "${MANAGEMENT_API}/edrs/${TRANSFER_ID}/dataaddress" -H "Authorization: Bearer ${MANAGEMENT_TOKEN}" | jq -r .authorization); echo Access Token: ${ACCESS_TOKEN}
 ```
 
 8. Access the service:
@@ -1098,6 +1132,16 @@ curl -L -s -k -x localhost:8888 -X GET ${ENDPOINT} \
   --header 'Content-Type: application/json' \
   --header "Authorization: Bearer ${ACCESS_TOKEN}" | jq .
 ```
+
+#### Multiple dataspaces
+
+The provider in this scenario serves two DSP profiles from one participant context:
+`http-dsp-profile-2025-1` and `dsp-fiware-ds2`. The second stands for another dataspace with its own
+DCP scopes and trusted issuers list. Both are reached at
+`https://dcp-mp-operations.127.0.0.1.nip.io/api/dsp/did:web:mp-operations.org/<profile>`. To read the
+catalog through the second profile, repeat step 1 with `dsp-fiware-ds2` as both `protocol` and the
+last segment of `counterPartyAddress`. How to declare profiles, attach them to a context, and run a
+second DID in the same connector is described in [Multi-dataspace operation](./MULTI_DATASPACE.md).
 
 #### Advanced Policy Scenarios
 
@@ -1125,7 +1169,7 @@ export RESTRICTED_SPEC_ID=$(curl -k -x localhost:8888 -X 'POST' \
                    "name":"Endpoint, that the service can be negotiated at via DCP.",
                    "valueType":"endpointUrl",
                    "productSpecCharacteristicValue": [{
-                      "value":"https://dcp-mp-operations.127.0.0.1.nip.io/api/dsp/2025-1",
+                      "value":"https://dcp-mp-operations.127.0.0.1.nip.io/api/dsp/did:web:mp-operations.org/http-dsp-profile-2025-1",
                       "isDefault": true
                    }]
                },
@@ -1203,19 +1247,19 @@ curl -k -x localhost:8888 -X 'POST' \
 3. Request the catalog from the consumer side. The consumer only holds a `MembershipCredential`, not a `PremiumPartnerCredential`, so ASSET-2 will not appear:
 ```shell
 curl -k -x localhost:8888 -X POST \
-  'https://dsp-dcp-management.127.0.0.1.nip.io/api/v1/management/v3/catalog/request' \
+  "${MANAGEMENT_API}/catalog/request" \
+  --header "Authorization: Bearer ${MANAGEMENT_TOKEN}" \
   --header 'Accept: */*' \
   --header 'Content-Type: application/json' \
   --data-raw '{
         "@context": [
-            "https://w3id.org/edc/connector/management/v0.0.1"
+            "https://w3id.org/edc/connector/management/v2"
         ],
-        "@type": "CatalogRequestMessage",
-        "protocol": "dataspace-protocol-http:2025-1",
+        "@type": "CatalogRequest",
+        "protocol": "http-dsp-profile-2025-1",
         "counterPartyId": "did:web:mp-operations.org",
-        "counterPartyAddress": "https://dcp-mp-operations.127.0.0.1.nip.io/api/dsp/2025-1",
-        "querySpec": {
-        }
+        "counterPartyAddress": "https://dcp-mp-operations.127.0.0.1.nip.io/api/dsp/did:web:mp-operations.org/http-dsp-profile-2025-1",
+        "querySpec": {"@type": "QuerySpec"}
     }' | jq .
 ```
 
@@ -1241,7 +1285,7 @@ export VISIBLE_SPEC_ID=$(curl -k -x localhost:8888 -X 'POST' \
                    "name":"Endpoint, that the service can be negotiated at via DCP.",
                    "valueType":"endpointUrl",
                    "productSpecCharacteristicValue": [{
-                      "value":"https://dcp-mp-operations.127.0.0.1.nip.io/api/dsp/2025-1",
+                      "value":"https://dcp-mp-operations.127.0.0.1.nip.io/api/dsp/did:web:mp-operations.org/http-dsp-profile-2025-1",
                       "isDefault": true
                    }]
                },
@@ -1319,36 +1363,37 @@ curl -k -x localhost:8888 -X 'POST' \
 3. Request the catalog — ASSET-3 will appear alongside ASSET-1:
 ```shell
 curl -k -x localhost:8888 -X POST \
-  'https://dsp-dcp-management.127.0.0.1.nip.io/api/v1/management/v3/catalog/request' \
+  "${MANAGEMENT_API}/catalog/request" \
+  --header "Authorization: Bearer ${MANAGEMENT_TOKEN}" \
   --header 'Accept: */*' \
   --header 'Content-Type: application/json' \
   --data-raw '{
         "@context": [
-            "https://w3id.org/edc/connector/management/v0.0.1"
+            "https://w3id.org/edc/connector/management/v2"
         ],
-        "@type": "CatalogRequestMessage",
-        "protocol": "dataspace-protocol-http:2025-1",
+        "@type": "CatalogRequest",
+        "protocol": "http-dsp-profile-2025-1",
         "counterPartyId": "did:web:mp-operations.org",
-        "counterPartyAddress": "https://dcp-mp-operations.127.0.0.1.nip.io/api/dsp/2025-1",
-        "querySpec": {
-        }
+        "counterPartyAddress": "https://dcp-mp-operations.127.0.0.1.nip.io/api/dsp/did:web:mp-operations.org/http-dsp-profile-2025-1",
+        "querySpec": {"@type": "QuerySpec"}
     }' | jq .
 ```
 
 4. Attempt to negotiate ASSET-3 — the negotiation will be rejected:
 ```shell
 curl -k -x localhost:8888 -X POST \
-  'https://dsp-dcp-management.127.0.0.1.nip.io/api/v1/management/v3/contractnegotiations' \
+  "${MANAGEMENT_API}/contractnegotiations" \
+  --header "Authorization: Bearer ${MANAGEMENT_TOKEN}" \
   --header 'Accept: */*' \
   --header 'Content-Type: application/json' \
   --data-raw '{
         "@context": [
-            "https://w3id.org/edc/connector/management/v0.0.1"
+            "https://w3id.org/edc/connector/management/v2"
         ],
         "@type": "ContractRequest",
-        "counterPartyAddress": "https://dcp-mp-operations.127.0.0.1.nip.io/api/dsp/2025-1",
+        "counterPartyAddress": "https://dcp-mp-operations.127.0.0.1.nip.io/api/dsp/did:web:mp-operations.org/http-dsp-profile-2025-1",
         "counterPartyId": "did:web:mp-operations.org",
-        "protocol": "dataspace-protocol-http:2025-1",
+        "protocol": "http-dsp-profile-2025-1",
         "policy": {
             "@context": [
               "http://www.w3.org/ns/odrl.jsonld",
@@ -1373,9 +1418,11 @@ curl -k -x localhost:8888 -X POST \
 5. Check the negotiation state — it will show `TERMINATED` (rejected):
 ```shell
 curl -k -x localhost:8888 -X POST \
-  'https://dsp-dcp-management.127.0.0.1.nip.io/api/v1/management/v3/contractnegotiations/request' \
+  "${MANAGEMENT_API}/contractnegotiations/request" \
+  --header "Authorization: Bearer ${MANAGEMENT_TOKEN}" \
   --header 'Accept: */*' \
-  --header 'Content-Type: application/json' | jq '.[] | select(.state == "TERMINATED")'
+  --header 'Content-Type: application/json' \
+  --data-raw '{"@context": ["https://w3id.org/edc/connector/management/v2"], "@type": "QuerySpec"}' | jq '.[] | select(.state == "TERMINATED")'
 ```
 
 The consumer can browse the offer (access policy allows it) but cannot form a contract because the contract policy requires `membershipStatus == "premium"`, which the consumer's `MembershipCredential` does not satisfy.
@@ -1402,7 +1449,7 @@ export SCOPED_SPEC_ID=$(curl -k -x localhost:8888 -X 'POST' \
                    "name":"Endpoint, that the service can be negotiated at via DCP.",
                    "valueType":"endpointUrl",
                    "productSpecCharacteristicValue": [{
-                      "value":"https://dcp-mp-operations.127.0.0.1.nip.io/api/dsp/2025-1",
+                      "value":"https://dcp-mp-operations.127.0.0.1.nip.io/api/dsp/did:web:mp-operations.org/http-dsp-profile-2025-1",
                       "isDefault": true
                    }]
                },

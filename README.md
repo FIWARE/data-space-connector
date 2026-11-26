@@ -500,6 +500,9 @@ From an architectural standpoint, the value of the Transfer Process lies in the 
 
 Find out more in the [Dataspace Protocol Integration Documentation](./doc/DSP_INTEGRATION.md).
 
+One connector can take part in several dataspaces, each through its own DSP profiles and, if needed,
+its own DID, see [Multi-dataspace operation](./doc/MULTI_DATASPACE.md).
+
 
 ### Marketplace Portal
 
@@ -633,6 +636,7 @@ Additional and more detailed documentation about the FIWARE Data Space Connector
 specific flows and its deployment and integration with other frameworks:
 
 * [Dataspace Protocol Integration](./doc/DSP_INTEGRATION.md)
+* [Multi-dataspace operation](./doc/MULTI_DATASPACE.md) — Run one connector in several dataspaces through fdsc-edc participant contexts and DSP profiles
 * [Gaia-X Integration](./doc/GAIA_X.MD)
 * [Marketplace Integration](./doc/MARKETPLACE_INTEGRATION.md)
 * [Central Marketplace](./doc/CENTRAL_MARKETPLACE.md)

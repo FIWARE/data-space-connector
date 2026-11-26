@@ -147,3 +147,53 @@ tests:
       - notMatchRegex:
           path: data["test-realm-realm.json"]
           pattern: '"ADMIN"|"admin-user"'
+
+  # fdsc-edc 2.x grants a token without management-api:admin only the context named by its `sub`.
+  # Keycloak puts the service-account id there, so a per-context client overrides it with a mapper.
+  # The values double as the example in doc/MULTI_DATASPACE.md.
+  - it: should import a management client whose tokens carry a participant context as sub
+    set:
+      keycloak.enabled: true
+      keycloak.realm.clientScopes:
+        - name: management-api:read
+          protocol: openid-connect
+          attributes:
+            include.in.token.scope: "true"
+        - name: management-api:write
+          protocol: openid-connect
+          attributes:
+            include.in.token.scope: "true"
+      keycloak.realm.clients:
+        - clientId: edc-management-dataspace-b
+          enabled: true
+          clientAuthenticatorType: client-secret
+          secret: change-me
+          standardFlowEnabled: false
+          directAccessGrantsEnabled: false
+          serviceAccountsEnabled: true
+          publicClient: false
+          protocol: openid-connect
+          defaultClientScopes: ["management-api:read", "management-api:write"]
+          optionalClientScopes: []
+          protocolMappers:
+            - name: sub-participant-context
+              protocol: openid-connect
+              protocolMapper: oidc-hardcoded-claim-mapper
+              config:
+                claim.name: sub
+                claim.value: did:web:dataspace-b.example.org
+                jsonType.label: String
+                access.token.claim: "true"
+                id.token.claim: "false"
+                userinfo.token.claim: "false"
+                introspection.token.claim: "true"
+    asserts:
+      - matchRegex:
+          path: data["test-realm-realm.json"]
+          pattern: '"clientId": "edc-management-dataspace-b"'
+      - matchRegex:
+          path: data["test-realm-realm.json"]
+          pattern: '"claim.name": "sub",\s*"claim.value": "did:web:dataspace-b.example.org"'
+      - matchRegex:
+          path: data["test-realm-realm.json"]
+          pattern: '"name": "management-api:write"'
