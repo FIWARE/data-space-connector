@@ -4,6 +4,7 @@
 # subchart's `config.additionalProperties`: a string rendered without indent, so each continuation
 # line carries its own 4 spaces. Two participants on two profiles pin that contract, the `%s`
 # callback, the isolation of the oid4vc deployment, and the image tag the umbrella pins.
+# The values double as the two-DID example in doc/MULTI_DATASPACE.md; keep the two in step.
 suite: fdsc-edc multi-dataspace configuration
 templates:
   - charts/fdsc-edc/templates/config-map.yaml
@@ -20,17 +21,37 @@ set:
           edc:
             dspCallback: https://dcp.example.org/api/dsp/%s
           additionalProperties: "edc.http.client.timeout.connect=60\n    \
+            edc.http.client.timeout.read=120\n    \
             edc.dataspace.profiles.default.name=http-dsp-profile-2025-1\n    \
             edc.dataspace.profiles.default.protocol.version=2025-1\n    \
+            edc.dataspace.profiles.default.protocol.binding=HTTPS\n    \
+            edc.dataspace.profiles.default.protocol.namespace=https://w3id.org/dspace/2025/1/\n    \
+            edc.dataspace.profiles.default.jsonld.context.urls=https://w3id.org/dspace/2025/1/context.jsonld,https://w3id.org/edc/dspace/v0.0.1\n    \
             edc.dataspace.profiles.b.name=dsp-dataspace-b\n    \
             edc.dataspace.profiles.b.protocol.version=2025-1\n    \
+            edc.dataspace.profiles.b.protocol.binding=HTTPS\n    \
+            edc.dataspace.profiles.b.protocol.namespace=https://w3id.org/dspace/2025/1/\n    \
+            edc.dataspace.profiles.b.jsonld.context.urls=https://w3id.org/dspace/2025/1/context.jsonld,https://w3id.org/edc/dspace/v0.0.1\n    \
+            dcp.profiles.dsp-dataspace-b.scopes.catalog=org.eclipse.tractusx.vc.type:DataspaceBMembership:read\n    \
+            dcp.profiles.dsp-dataspace-b.scopes.negotiation=org.eclipse.tractusx.vc.type:DataspaceBMembership:read\n    \
+            dcp.profiles.dsp-dataspace-b.scopes.transfer=org.eclipse.tractusx.vc.type:DataspaceBMembership:read\n    \
+            ebsiTir.profiles.dsp-dataspace-b.tilAddress=https://til.dataspace-b.example.org\n    \
             fdsc.participants.a.id=did:web:dataspace-a.example.org\n    \
             fdsc.participants.a.identity=did:web:dataspace-a.example.org\n    \
             fdsc.participants.a.profiles=http-dsp-profile-2025-1\n    \
+            fdsc.participants.a.config.edc.iam.sts.oauth.token.url=http://identityhub-service:8087/api/sts/token\n    \
+            fdsc.participants.a.config.edc.iam.sts.oauth.client.id=did:web:dataspace-a.example.org\n    \
+            fdsc.participants.a.config.edc.iam.sts.oauth.client.secret.alias=did:web:dataspace-a.example.org-sts-client-secret\n    \
             fdsc.participants.b.id=did:web:dataspace-b.example.org\n    \
             fdsc.participants.b.identity=did:web:dataspace-b.example.org\n    \
-            fdsc.participants.b.profiles=dsp-dataspace-b,http-dsp-profile-2025-1\n    \
-            tmfExtension.defaultParticipantContextId=did:web:dataspace-a.example.org"
+            fdsc.participants.b.profiles=dsp-dataspace-b\n    \
+            fdsc.participants.b.config.edc.iam.sts.oauth.token.url=http://identityhub-service:8087/api/sts/token\n    \
+            fdsc.participants.b.config.edc.iam.sts.oauth.client.id=did:web:dataspace-b.example.org\n    \
+            fdsc.participants.b.config.edc.iam.sts.oauth.client.secret.alias=did:web:dataspace-b.example.org-sts-client-secret\n    \
+            tmfExtension.defaultParticipantContextId=did:web:dataspace-a.example.org\n    \
+            tmfExtension.schemaBaseUri=https://raw.githubusercontent.com/SEAMWARE/fdsc-edc/2.1.0/schemas/\n    \
+            edc.iam.oauth2.issuer=https://keycloak.example.org/realms/dsc\n    \
+            edc.iam.oauth2.jwks.url=http://keycloak.dsc.svc.cluster.local:8080/realms/dsc/protocol/openid-connect/certs"
       oid4vc:
         deployment:
           image:
@@ -75,10 +96,22 @@ tests:
           pattern: (?m)^ *fdsc\.participants\.b\.identity=did:web:dataspace-b\.example\.org$
       - matchRegex:
           path: *properties
-          pattern: (?m)^ *fdsc\.participants\.b\.profiles=dsp-dataspace-b,http-dsp-profile-2025-1$
+          pattern: (?m)^ *fdsc\.participants\.b\.profiles=dsp-dataspace-b$
       - matchRegex:
           path: *properties
           pattern: (?m)^ *tmfExtension\.defaultParticipantContextId=did:web:dataspace-a\.example\.org$
+      - matchRegex:
+          path: *properties
+          pattern: (?m)^ *fdsc\.participants\.b\.config\.edc\.iam\.sts\.oauth\.client\.secret\.alias=did:web:dataspace-b\.example\.org-sts-client-secret$
+      - matchRegex:
+          path: *properties
+          pattern: (?m)^ *dcp\.profiles\.dsp-dataspace-b\.scopes\.catalog=org\.eclipse\.tractusx\.vc\.type:DataspaceBMembership:read$
+      - matchRegex:
+          path: *properties
+          pattern: (?m)^ *ebsiTir\.profiles\.dsp-dataspace-b\.tilAddress=https://til\.dataspace-b\.example\.org$
+      - matchRegex:
+          path: *properties
+          pattern: (?m)^ *edc\.iam\.oauth2\.issuer=https://keycloak\.example\.org/realms/dsc$
 
   - it: renders the callback address with the context id placeholder verbatim
     template: charts/fdsc-edc/templates/config-map.yaml

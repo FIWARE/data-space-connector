@@ -131,6 +131,16 @@ the runbook for rotating the signing key.
 
 * [Production setup for Vault and the participant identity](./deployment-integration/production/VAULT.md)
 
+### Several dataspaces in one connector
+
+The DCP controlplane (fdsc-edc 2.x) serves one participant context per identity and one DSP profile
+per dataspace, configured entirely through the fdsc-edc subchart's values.
+
+* [Multi-dataspace operation](./MULTI_DATASPACE.md) - contexts and profiles, a two-profile and a
+  two-DID example, the v5beta management API and the migration from 10.x
+* [ADR 0009](./adr/0009-fdsc-edc-multi-dataspace-via-additional-properties.md) - why it is
+  configured through `additionalProperties` with the DID as context id
+
 ### Observability
 
 Documentation for enabling distributed tracing across the FIWARE DSC using OpenTelemetry, including how to connect external backends (Jaeger, Tempo, Honeycomb) and per-component configuration notes.
@@ -179,5 +189,5 @@ Terms and example names used across this documentation and the examples in [`k3s
 | VCVerifier | Verifies the credentials presented over OID4VP and issues access tokens. It also serves the credentials configuration API (what each service accepts), formerly the separate Credentials Config Service |
 | PEP / PDP / PAP | Policy enforcement, decision and administration points: APISIX, OPA and the ODRL-PAP |
 | OID4VCI / OID4VP | OpenID for Verifiable Credential Issuance and for Verifiable Presentations: how credentials are issued (by Keycloak) and presented (to the VCVerifier) |
-| DSP / DCP | Dataspace Protocol and Decentralized Claims Protocol, used by FDSC-EDC and the Identity Hub, see [DSP_INTEGRATION.md](./DSP_INTEGRATION.md) |
+| DSP / DCP | Dataspace Protocol and Decentralized Claims Protocol, used by FDSC-EDC and the Identity Hub, see [DSP_INTEGRATION.md](./DSP_INTEGRATION.md) and, for several dataspaces in one connector, [MULTI_DATASPACE.md](./MULTI_DATASPACE.md) |
 | did-helper | Publishes the organization's `did:web` document |
