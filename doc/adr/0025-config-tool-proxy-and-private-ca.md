@@ -84,7 +84,9 @@ list the `lists:` table declares.
 
 Any target may list `requires: [<answer id>]` and then renders only while those answers are given or derived. A `const`
 outside a list index is allowed with `requires`, so `keycloak.proxy.enabled: true` renders only with `proxy.https`, and
-an unanswered question still emits no key.
+an unanswered question still emits no key. The fan-out a foundation reports (`render.Targets`) counts a
+target reached through `requires` as well as through its refs, and lists every target of a mechanism one of whose
+targets is reached, because the mechanism renders as a whole.
 
 `defaultWhen` takes either `equals` or `set: true`. `proxy.http` and `proxy.no` carry `defaultWhen: {id: proxy.https,
 set: true}` and every one of their targets carries `requires: [proxy.https]`. Without both gates the `proxy.no` default,

@@ -392,6 +392,38 @@ func TestElementsDiff(t *testing.T) {
 	}
 }
 
+// TestElementTargets pins the fan-out of targets reached through requires or a mechanism, each list once.
+func TestElementTargets(t *testing.T) {
+	tests := []struct {
+		answer    string
+		wantPaths []string
+	}{
+		// keycloak.proxy.enabled is a const reached only through requires.
+		{answer: "proxy.https", wantPaths: []string{
+			"keycloak.extraEnvVars", "keycloak.proxy.enabled", "keycloak.proxy.httpsProxy", "keycloak.proxy.noProxy",
+		}},
+		// apisix.routes is an each const, and both keycloak-ca elements hold literals only.
+		{answer: "ca.secret", wantPaths: []string{
+			"apisix.routes", "keycloak.extraEnvVars", "keycloak.extraVolumeMounts", "verifier.mounts", "verifier.volumes",
+		}},
+		// extra-ca's volume references only ca.secret but renders with its mechanism.
+		{answer: "ca.extra", wantPaths: []string{"verifier.mounts", "verifier.volumes"}},
+		{answer: "proxy.no", wantPaths: []string{"keycloak.proxy.noProxy"}},
+	}
+	b := modelFixture(t, elementsFixture)
+	for _, tc := range tests {
+		t.Run(tc.answer, func(t *testing.T) {
+			var paths []string
+			for _, r := range Targets(b, tc.answer) {
+				paths = append(paths, r.Path.String())
+			}
+			if !slices.Equal(paths, tc.wantPaths) {
+				t.Errorf("targets = %v, want %v", paths, tc.wantPaths)
+			}
+		})
+	}
+}
+
 func TestEachTargets(t *testing.T) {
 	const verify = "plugins.openid-connect.ssl_verify"
 	tests := []struct {
