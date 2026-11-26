@@ -74,121 +74,45 @@ However, for easier deployment of these components, you can use the same `fiware
 
     [`examples/consumer.yaml`](../../../../charts/data-space-connector/examples/consumer.yaml) is a complete values file for a consumer, to adapt to your installation. Its [README](../../../../charts/data-space-connector/examples/README.md) lists the prerequisites, the placeholders, the Secrets to create and the installation steps. The settings below explain each part.
 
-The consumer could use the same `fiware/data-space-connector` chart as the provider, but with most components disabled (since it is not a real connector).
+Build a `values.yaml` for the consumer by adapting [`examples/consumer.yaml`](../../../../charts/data-space-connector/examples/consumer.yaml). It uses the same `fiware/data-space-connector` chart as the provider, but with most components disabled: a consumer only issues credentials to its users. The sections below show that file piece by piece; replace every `<placeholder>`.
 
-1. Create a helm `values.yaml` file with the key settings to enable only the consumer-related components like this:
+The ingresses use cert-manager through annotations and the ingress class you set (the [local deployment](../../local-deployment/LOCAL.md) uses Traefik). A `ClusterIssuer` is a prerequisite: use your own, or let the chart create one with `certManagerResources` (the [examples README](../../../../charts/data-space-connector/examples/README.md) covers the prerequisites, Secrets and placeholders).
 
-   The Ingresses in the example only carry the cert-manager annotations and use the cluster's default ingress class unless `className` is set. Add the class and the annotations your ingress controller needs; the [local deployment](../../local-deployment/LOCAL.md) uses Traefik, for example.
+#### Identity: did:web
 
-   With `certManagerResources.enabled: true` and `type: "prod"`, the chart creates the `prod-issuer` ClusterIssuer referenced below. Replace the `acmeEmail` and `ingressClass` placeholders with your own values. If your cluster already manages its own ClusterIssuer, disable `certManagerResources.enabled` and use that issuer's actual name in the annotations.
+did-helper serves the organization's `did:web`. Its key is the TLS certificate cert-manager issues for the ingress, and it must never rotate: a new key changes the DID, and every credential issued with the old one stops verifying (hence `private-key-rotation-policy: Never`; see [Identity key lifecycle](../provider/README.md#identity-key-lifecycle) in the provider guide, which applies to consumers too).
 
 ```yaml
-# Key settings for consumer-only deployment
-
-# Enable cert-manager for prod
-cert-manager:
-  enabled: true
-  crds:
-    enabled: true
-
-certManagerResources:
-  enabled: true
-  type: "prod"
-  acmeEmail: <your-email>              # ACME account contact; the chart's default is a placeholder
-  ingressClass: <your-ingress-class>   # the class that serves the HTTP-01 challenge
-
-# Keycloak — see ../KEYCLOAK.md for detailed configuration
-keycloak:
-
-
-# DID of type web using cert-manager for TLS and for the DID document public key
-did:
-  enabled: true
-  config:
-    server:
-      # https: did-helper also publishes <hostUrl>/.well-known/tls.crt as the x5u of the key
-      hostUrl: "https://<your_did_domain>"
-      certPath: "/certs/tls.crt"
-  volumes:
-    - name: certs
-      secret:
-        # the DID's key, issued by cert-manager for the Ingress below and never rotated: see
-        # "Identity key lifecycle"
-        secretName: <your_did_domain>-tls
-        items:
-          - key: tls.crt
-            path: tls.crt
-  volumeMounts:
-    - name: certs
-      mountPath: /certs
-  # with certPath did-helper writes nothing, so it runs on a read-only root filesystem
-  securityContext:
-    readOnlyRootFilesystem: true
-    allowPrivilegeEscalation: false
-    capabilities:
-      drop: ["ALL"]
-  ingress:
-    enabled: true
-    className: <your-ingress-class>   # add the annotations your ingress controller needs
-    annotations:
-      cert-manager.io/cluster-issuer: "prod-issuer" # Use selfsigned-issuer with the selfsigned setup for testing
-      cert-manager.io/private-key-algorithm: "ECDSA"
-      # the Secret also holds the DID's key: renewals must keep it (cert-manager >= 1.18
-      # generates a new one by default)
-      cert-manager.io/private-key-rotation-policy: "Never"
-      cert-manager.io/common-name: "<your_did_domain>"
-    hosts:
-      - host: <your_did_domain>
-        paths:
-          - path: /
-            pathType: ImplementationSpecific
-    tls:
-      - secretName: <your_did_domain>-tls
-        hosts:
-          - <your_did_domain>
-
-decentralizedIam:
-  enabled: true
-  vcAuthentication:
-    vcverifier:
-      enabled: false
-    credentials-config-service:
-      enabled: false
-    trusted-issuers-list:
-      enabled: false
-    managedPostgres: # Only needed if using the built-in PSQL for the keycloak.
-      enabled: true
-      config:
-        volume:
-          storageClass: "" # Use default storage class or specify one if needed
-  odrlAuthorization:
-    enabled: false
-    odrl-pap:
-      enabled: false
-    apisix:
-      enabled: false
-
-
-contract-management:
-  enabled: false
-
-fdsc-edc:
-  enabled: false
-
-identityhub:
-  enabled: false
-
-vault:
-  enabled: false
-
-scorpio:
-  enabled: false
-
-tm-forum-api:
-  enabled: false
+--8<-- "charts/data-space-connector/examples/consumer.yaml:identity"
 ```
 
-2. Install the chart with your values, pinning its version (see the [release notes](../../../release-notes) for what changes between versions):
+#### Credential issuer: Keycloak
+
+Keycloak issues the consumer's users their credentials and signs them with the DID's key: the `prepare-keystore` init container turns the DID Secret into the PKCS12 keystore the realm reads. The ingress publishes only `/realms/<realm>` and `/resources`; the admin console and the master realm stay inside the cluster. See [Keycloak configuration](../KEYCLOAK.md).
+
+```yaml
+--8<-- "charts/data-space-connector/examples/consumer.yaml:keycloak"
+```
+
+#### Database
+
+A consumer only runs Keycloak's database. The chart's managed PostgreSQL creates its user, with the Postgres operator installed once per cluster; the verifier, trusted issuers list and policy components stay off.
+
+```yaml
+--8<-- "charts/data-space-connector/examples/consumer.yaml:database"
+```
+
+#### Disabled components
+
+The data and contract components a consumer does not run are set to `false`.
+
+```yaml
+--8<-- "charts/data-space-connector/examples/consumer.yaml:disabled"
+```
+
+#### Install the chart
+
+Install the chart with your values, pinning its version (see the [release notes](../../../release-notes) for what changes between versions):
 
 ```shell
 helm install consumer oci://quay.io/fiware/helm-charts/data-space-connector \

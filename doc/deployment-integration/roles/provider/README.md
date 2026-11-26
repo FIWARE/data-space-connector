@@ -311,239 +311,57 @@ Enable the Eclipse Dataspace Components connector for DSP compliance. See [DSP I
 
 The provider uses the `fiware/data-space-connector` chart with authentication and authorization components enabled.
 
-1. Create a helm `values.yaml` file with the key settings for a provider deployment:
+Build a `values.yaml` for the provider by adapting [`examples/provider.yaml`](../../../../charts/data-space-connector/examples/provider.yaml). The sections below show that file piece by piece and explain the key settings; replace every `<placeholder>`.
 
-   The Ingresses in the example only carry the cert-manager annotations and use the cluster's default ingress class unless `className` is set. Add the class and the annotations your ingress controller needs; the [local deployment](../../local-deployment/LOCAL.md) uses Traefik, for example.
+The ingresses use cert-manager through annotations and the ingress class you set, so adapt them to the controller your cluster runs (the [local deployment](../../local-deployment/LOCAL.md) uses Traefik). A `ClusterIssuer` is a prerequisite: use your own, or let the chart create one with `certManagerResources` (the [examples README](../../../../charts/data-space-connector/examples/README.md) covers the prerequisites, Secrets and placeholders).
 
-   With `certManagerResources.enabled: true` and `type: "prod"`, the chart creates the `prod-issuer` ClusterIssuer referenced below. Replace the `acmeEmail` and `ingressClass` placeholders with your own values. If your cluster already manages its own ClusterIssuer, disable `certManagerResources.enabled` and use that issuer's actual name in the annotations.
+#### Identity: did:web
+
+did-helper serves the organization's `did:web`. Its key is the TLS certificate cert-manager issues for the ingress, and it must never rotate: a new key changes the DID, and every credential issued with the old one stops verifying (hence `private-key-rotation-policy: Never`; see [Identity key lifecycle](#identity-key-lifecycle)). did-helper also publishes that certificate at `/.well-known/tls.crt`, as the `x5u` of the key.
 
 ```yaml
-# Key settings for provider deployment
-
-# Enable cert-manager for prod
-cert-manager:
-  enabled: true
-  crds:
-    enabled: true
-
-certManagerResources:
-  enabled: true
-  type: "prod"
-  acmeEmail: <your-email>              # ACME account contact; the chart's default is a placeholder
-  ingressClass: <your-ingress-class>   # the class that serves the HTTP-01 challenge
-
-# Keycloak — see ../KEYCLOAK.md for detailed configuration
-keycloak:
-
-
-# DID of type web using cert-manager for TLS and for the DID document public key
-did:
-  enabled: true
-  config:
-    server:
-      # https: did-helper also publishes <hostUrl>/.well-known/tls.crt as the x5u of the key
-      hostUrl: "https://<your_did_domain>"
-      certPath: "/certs/tls.crt"
-  volumes:
-    - name: certs
-      secret:
-        # the DID's key, issued by cert-manager for the Ingress below and never rotated: see
-        # "Identity key lifecycle"
-        secretName: <your_did_domain>-tls
-        items:
-          - key: tls.crt
-            path: tls.crt
-  volumeMounts:
-    - name: certs
-      mountPath: /certs
-  # with certPath did-helper writes nothing, so it runs on a read-only root filesystem
-  securityContext:
-    readOnlyRootFilesystem: true
-    allowPrivilegeEscalation: false
-    capabilities:
-      drop: ["ALL"]
-  ingress:
-    enabled: true
-    className: <your-ingress-class>   # add the annotations your ingress controller needs
-    annotations:
-      cert-manager.io/cluster-issuer: "prod-issuer" # Use selfsigned-issuer with the selfsigned setup for testing
-      cert-manager.io/private-key-algorithm: "ECDSA"
-      # the Secret also holds the DID's key: renewals must keep it (cert-manager >= 1.18
-      # generates a new one by default)
-      cert-manager.io/private-key-rotation-policy: "Never"
-      cert-manager.io/common-name: "<your_did_domain>"
-    hosts:
-      - host: <your_did_domain>
-        paths:
-          - path: /
-            pathType: ImplementationSpecific
-    tls:
-      - secretName: <your_did_domain>-tls
-        hosts:
-          - <your_did_domain>
-
-# --- Authentication and Authorization ---
-
-decentralizedIam:
-  enabled: true
-  vcAuthentication:
-    # VCVerifier — verifies incoming Verifiable Credentials via OID4VP
-    vcverifier:
-      ingress:
-        enabled: true
-        annotations:
-          cert-manager.io/cluster-issuer: "prod-issuer"
-          cert-manager.io/private-key-algorithm: "ECDSA"
-          cert-manager.io/common-name: "<your_verifier_domain>"
-        tls:
-          - hosts:
-              - <your_verifier_domain>
-            secretName: <your_verifier_domain>-tls
-        hosts:
-          - host: <your_verifier_domain>
-            paths:
-              - "/"
-      deployment:
-        verifier:
-          tirAddress: <trust_anchor_tir_url>     # Trust Anchor's TIR endpoint
-          did: <your-organization's-DID>
-        server:
-          host: https://<your_verifier_domain>
-      # Services and the credentials they accept, registered at the VCVerifier's configuration
-      # API on install and upgrade. A service that is already registered is left as it is: change
-      # it through that API (`PUT http://verifier:8090/service/<id>`).
-      registration:
-        enabled: true
-        services:
-          - id: data-service                       # ID for the protected service
-            defaultOidcScope: "default"
-            authorizationType: "DEEPLINK"
-            oidcScopes:
-              "default":
-                credentials:
-                  - type: UserCredential           # Accepted credential type
-                    trustedParticipantsLists:
-                      - <trust_anchor_tir_url>     # Trust Anchor's TIR endpoint
-                    trustedIssuersLists:
-                      - http://trusted-issuers-list:8080  # Local TIL
-
-    # Trusted Issuers List — local list of trusted issuers
-    trusted-issuers-list:
-      ingress:
-        til:
-          enabled: true
-          annotations:
-            cert-manager.io/cluster-issuer: "prod-issuer"
-            cert-manager.io/private-key-algorithm: "ECDSA"
-            cert-manager.io/common-name: "<your_til_domain>"
-          hosts:
-            - host: <your_til_domain>
-              paths:
-                - /
-          tls:
-            - secretName: <your_til_domain>-tls
-              hosts:
-                - <your_til_domain>
-
-    # Managed PostgreSQL for IAM components
-    managedPostgres:
-      enabled: true
-      config:
-        volume:
-          storageClass: "" # Use default storage class or specify one if needed
-
-  # --- Authorization: APISIX (PEP) + OPA (PDP) + ODRL-PAP ---
-  odrlAuthorization:
-    apisix:
-      apisix:
-        admin:
-          credentials:
-            admin: <your_apisix_admin_password>    # Change from default!
-      ingress:
-        enabled: true
-        annotations:
-          cert-manager.io/cluster-issuer: "prod-issuer"
-          cert-manager.io/private-key-algorithm: "ECDSA"
-        hosts:
-          - host: <your_data_service_domain>       # Domain for the protected data service
-            paths: ["/"]
-        tls:
-          - secretName: <your_apisix_tls_secret>
-            hosts:
-              - <your_data_service_domain>
-      routes:
-        # Route: OpenID Configuration for the data service (VCVerifier)
-        - uri: /.well-known/openid-configuration
-          host: <your_data_service_domain>
-          upstream:
-            nodes:
-              verifier:3000: 1
-            type: roundrobin
-          plugins:
-            proxy-rewrite:
-              uri: /services/data-service/.well-known/openid-configuration
-        # Route: Data service requests (authenticated + authorized)
-        - uri: /*
-          host: <your_data_service_domain>
-          upstream:
-            nodes:
-              <your_backend_service>: 1            # Upstream to your actual data service
-            type: roundrobin
-          plugins:
-            openid-connect:
-              bearer_only: true
-              use_jwks: true
-              client_id: data-service
-              client_secret: unused
-              ssl_verify: true            # see "Trusting a private CA" below if your certificates are not publicly trusted
-              discovery: https://<your_verifier_domain>/services/data-service/.well-known/openid-configuration
-            opa:
-              host: http://localhost:8181
-              policy: policy/main
-
-    # ODRL-PAP — Policy Administration Point
-    odrl-pap:
-      additionalEnvVars:
-        - name: GENERAL_ORGANIZATION_DID
-          value: <your-organization's-DID>
-      ingress:
-        enabled: true
-        annotations:
-          cert-manager.io/cluster-issuer: "prod-issuer"
-          cert-manager.io/private-key-algorithm: "ECDSA"
-          cert-manager.io/common-name: "<your_pap_domain>"
-        hosts:
-          - host: <your_pap_domain>
-            paths:
-              - "/"
-        tls:
-          - secretName: <your_pap_domain>-tls
-            hosts:
-              - <your_pap_domain>
-
-# --- Enabled by default: set to false if you do not need them ---
-# Scorpio Context Broker (TMForum backend — see note on Scorpio above)
-scorpio:
-  enabled: true
-tm-forum-api:
-  enabled: true         # TMForum APIs: product catalog, ordering, ...
-contract-management:
-  enabled: true         # contract-based access, needs the TMForum API
-
-# --- Disabled by default (enable as needed) ---
-marketplace:
-  enabled: false        # local marketplace portal (BAE), needs MongoDB
-fdsc-edc:
-  enabled: false        # Dataspace Protocol connector
-identityhub:
-  enabled: false        # only needed with the Decentralized Claims Protocol
-vault:
-  enabled: false
+--8<-- "charts/data-space-connector/examples/provider.yaml:identity"
 ```
 
-A provider without any of the optional components sets `scorpio`, `tm-forum-api` and `contract-management` to `false`: leaving them out of the values file deploys them.
+#### Credential issuer: Keycloak
 
-2. Install the chart with your values, pinning its version (see the [release notes](../../../release-notes) for what changes between versions):
+Keycloak issues the provider's own users their credentials and signs them with the DID's key: the `prepare-keystore` init container turns the DID Secret into the PKCS12 keystore the realm reads. The ingress publishes only `/realms/<realm>` and `/resources`; the admin console and the master realm stay inside the cluster. See [Keycloak configuration](../KEYCLOAK.md).
+
+```yaml
+--8<-- "charts/data-space-connector/examples/provider.yaml:keycloak"
+```
+
+#### Authentication and authorization
+
+The verifier checks each request's credentials against the Trust Anchor's registry (`tirAddress`) and the provider's local trusted issuers list, and issues access tokens signed with a persistent RSA key. APISIX is the gateway in standalone mode with its Admin API disabled, OPA decides on the ODRL policies the PAP holds, and each component connects to its own PostgreSQL user. If the certificates in the chain are not publicly trusted, see [Trusting a private CA](#trusting-a-private-ca) for `ssl_verify`.
+
+```yaml
+--8<-- "charts/data-space-connector/examples/provider.yaml:auth"
+```
+
+#### Offers and contracts
+
+Scorpio stores the TM Forum data and the TM Forum API serves it; both stay internal, reachable only through APISIX. contract-management turns completed orders into ODRL policies at the PAP.
+
+```yaml
+--8<-- "charts/data-space-connector/examples/provider.yaml:offers"
+```
+
+#### Signing key
+
+The verifier's token-signing key is a persistent RSA key kept in a Secret, so access tokens stay valid across restarts and replicas.
+
+```yaml
+--8<-- "charts/data-space-connector/examples/provider.yaml:extra"
+```
+
+#### Optional components
+
+`scorpio`, `tm-forum-api` and `contract-management` are part of the profile because a provider that offers TM Forum products needs them; a provider that only protects a plain data service can set them to `false`. Other components are optional and off by default: a local marketplace ([`examples/provider-marketplace.yaml`](../../../../charts/data-space-connector/examples/provider-marketplace.yaml)), the Dataspace Protocol connector ([DSP Integration](../../../DSP_INTEGRATION.md)), and Vault for production identity material ([Production setup for Vault](../../production/VAULT.md)).
+
+#### Install the chart
+
+Install the chart with your values, pinning its version (see the [release notes](../../../release-notes) for what changes between versions):
 
 ```shell
 helm install provider oci://quay.io/fiware/helm-charts/data-space-connector \
