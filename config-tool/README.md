@@ -325,7 +325,7 @@ applies the same revision rules to it.
 Stage 3 asks the cross-cutting answers of the target's bundle once ([ADR 0020](../doc/adr/0020-config-tool-foundations-render.md)).
 A foundation's `group` picks its panel. *Organization* holds the display name and the DID, *Data space* the data
 space's parameters (below), *Network* `domain.base` and the hosts derived from it, with a link to the resolve-inside-the-cluster prerequisite,
-and *Platform* the resource profile (below).
+*Platform* the resource profile and *Egress* the forward proxy and the private CA (both below).
 Each field has its doc link, *Ask later* (an `answers.<id>` open question on Review) and a *used by N values in M
 components* button that lists its targets. Every answer change renders the profile through `POST /api/render`
 (debounced). The render on entering the stage is the baseline, and the screen shows the grouped diff of each later
@@ -387,13 +387,35 @@ resolved profile sets on Keycloak, Scorpio, the TMForum API, the Trusted Issuers
 the chart version the figures were measured on and a link to the [sizing guidance](../doc/deployment-integration/roles/PREREQUISITES.md#sizing).
 `custom` sets nothing, so the chart's defaults stay in force.
 
+The *Egress* panel declares the forward proxy and the private CA once ([ADR 0025](../doc/adr/0025-config-tool-proxy-and-private-ca.md)).
+Each component gets them through its own mechanism: the verifier, Keycloak, the marketplace logic proxy, the
+vc-operator and APISIX.
+
+- `proxy.https` switches the proxy group. While it is empty, `proxy.http` and `proxy.no` do not derive and no proxy
+  value renders. `proxy.http` follows `proxy.https`. `proxy.no` derives as soon as Stage 1 names the release and the
+  namespace. It is one string that the Go, Keycloak, `proxy-from-env` and lua-resty-http matchers all read: loopback,
+  `svc`, `cluster.local`, `<namespace>.svc` and the bare in-cluster service names of the bundle's `noProxyServices`
+  table. It stays editable. CIDRs help only the verifier and the vc-operator, so the field asks for the pod and
+  service CIDRs. Nothing renders while `proxy.no` is unresolved, so a proxy never goes out without it.
+- `ca.privateSecret` names one Secret in the release namespace whose key `ca.crt` holds the PEM bundle. The tool never
+  reads it. APISIX then trusts only that file and verifies every route's OpenID provider (`ssl_verify: true`), so a
+  route that calls a publicly signed provider needs the public roots appended to `ca.crt`.
+
+Below the fields, a table previews what each component gets: *set* for the proxy, *trusts ca.crt* for the CA, or why a
+mechanism is withheld and which loaded element occupies its path. Notes then cover what the values cannot reach:
+APISIX without an openid-connect route (the per-route values appear once US-5.6 or the loaded file has one), the
+marketplace's VC login, which always uses the HTTPS proxy, and the vc-operator's Kubernetes API calls while `proxy.no`
+holds no CIDR. Keycloak shows *ignored* while the loaded file sets `keycloak.proxy.spiProxyMappings`. *Create before
+installing* lists the Secrets the values reference. No option disables TLS verification, and
+`internal/model/insecure_test.go` keeps it that way.
+
 ### The `foundations:` section
 
 A bundle's `foundations:` list declares the answers and every chart key they reach; there is no Go code per key.
 Each entry has a dotted `id` (the key in the profile's `answers`), `stage`, an optional `group` (`organization`, `dataspace`,
-`platform` or `network`, the default), `type` (`string`, `hostname`, `domain`, `did` or `url`, each checked by one pattern, `choice`
+`platform`, `egress` or `network`, the default), `type` (`string`, `hostname`, `domain`, `did` or `url`, each checked by one pattern, `choice`
 from its `options`, `bool`, or `credentialTypes`, a list of `{type, description?}`), `label`, `help`, an optional repo-relative `doc` path, an optional `default`, `defaultWhen`
-(`{id, equals}`: the default applies only while that answer resolves to `equals`), `prefix` (a template the answer must
+(`{id, equals}`: the default applies only while that answer resolves to `equals`; `{id, set: true}`: while it resolves at all), `prefix` (a template the answer must
 start with), an optional `features` list (display only: Stage 3 hides the answer while any listed feature is off; render
 is not gated) and `targets`. A `default` is a template over other answers, so `host.keycloak` (`"keycloak.{{ .domain.base }}"`)
 exists only while `domain.base` is answered. A default may also read the reserved ref `target.environment`, Stage 1's
@@ -417,6 +439,16 @@ function, a reference to an undeclared id, a cycle among defaults, a path outsid
 or two targets on one path (except the table's `Only` targets, below) fails to load. A profile's `answers` accepts exactly the declared ids, and `open` accepts
 `answers.<id>` for them. `internal/render/provider_test.go` measures the targets against `k3s/provider.yaml`: every
 leaf that carries the domain is a target or a row of an exclusion table naming the story that owns it.
+
+Lists that other stories also fill take keyed elements instead ([ADR 0025](../doc/adr/0025-config-tool-proxy-and-private-ca.md)):
+`{path, element: {key, value}}` writes the one element whose `name` is `key`, into a list declared in the top-level
+`lists:` table with its key field, the fields that must stay `unique` (`mountPath`) and the chart's `base` elements.
+The render keeps the loaded elements, replaces the owned ones in place and appends the missing ones; without a loaded
+list it writes the base first. Targets that only work together share a `mechanism`, which is withheld whole when one
+of its elements would collide with a foreign one. `each: <list>` with `within: <mapping>` writes a key into every
+element that has the mapping (APISIX `proxy_opts` and `ssl_verify` per route) and never creates one. `requires: [ids]`
+renders a target only while those answers resolve. Defaults may read the reserved refs `target.release` and
+`target.namespace`, and the template function `fullname <release> <chart>` follows Helm's fullname rule.
 
 A bundle's `resources:` table sizes components per option of the choice foundation it names (`answer`). It lists the
 sized `components` (`id`, `label`, `path` of the `resources` block, `enabledKeys` with their chart defaults, optional
@@ -446,7 +478,8 @@ fan-out (`targets`, `count`, sorted `components`), transitive through derived ho
 `answer`, `measuredOn`, `doc`, sized components and profiles, without `unsized`; `null` without a table). `POST /api/render` takes
 `{profile, sourceSha256}` (422 with field errors when the profile does not validate, or when the sha is not the
 loaded file's), renders it with the load the sha names as the overrides layer (none when it is empty, as on save) and
-returns `{tree, diff, derived, handSet, findings}`. `derived` (`render.DerivedDiff`) lists the answers whose default
+returns `{tree, diff, derived, handSet, findings, secrets}`. `tree.withheld` lists the mechanisms that did not
+render, and `secrets` (`{namespace, name, key, purpose}`, from `requirements.Secrets`) the Secrets the values reference. `derived` (`render.DerivedDiff`) lists the answers whose default
 derives from other answers and whose value moved since the previous render: `rederived` (`{id, before, after}`, not
 given) and `pinned` (`{id, kept, before, after}`, given, so kept). Its baseline is dropped on a load, a profile open, a
 source change and a model change, which return empty lists. `handSet` lists the given answers that override a derived
@@ -478,8 +511,10 @@ findings point at one field and name the other in `related`, so Stage 3 and Revi
 of its `enabledKeys` true in the render, else the loaded file, else the chart default) and ends up without a memory
 limit (none rendered, loaded or at a fallback path, and no `chartMemoryLimit`, which a loaded `null` drops). Its
 `message` may use only `{{ .components }}`. Until US-5.3 renders `enabled` keys, a feature that is off does not stop a
-component from being named. `check.Evaluate` takes the loaded overrides as `render.Options`. The 10.16.0 bundle has
-five rules:
+component from being named. `check.Evaluate` takes the loaded overrides as `render.Options`.
+
+`caCoverage`, `noProxyCoverage` and `valueSet` ([ADR 0025](../doc/adr/0025-config-tool-proxy-and-private-ca.md#10-l2-rules-and-the-no-insecure-guard))
+check the egress fan-out against the final values. The 10.16.0 bundle has eight rules:
 
 - `did-key-in-production` warns when the environment is `production` and the DID method is `did:key`;
 - `tir-address-for-verification` is an error on `answers.dataspace.tirAddress` while the feature
@@ -489,7 +524,14 @@ five rules:
 - `did-web-host` (`didWebHost: {did: did.value, host: host.did}`) is an error on `answers.did.value` when a `did:web`
   DID does not resolve on the DID document host;
 - `java-memory-limit` (`memoryLimit`) warns on `answers.resources.profile` while the environment is `production` and a
-  deployed Java component, sized by the table or not, has no memory limit.
+  deployed Java component, sized by the table or not, has no memory limit;
+- `ca-coverage` (`caCoverage`) is an error while `ca.privateSecret` is set and a deployed component's CA mechanism is
+  not in effect in the final values, or an APISIX route keeps `ssl_verify: false`. A withheld mechanism and
+  contract-management, which has no mechanism in the tool yet, are warnings;
+- `no-proxy-coverage` (`noProxyCoverage`) warns when `proxy.no` does not bypass an in-cluster service, for example one
+  the loaded file renames;
+- `keycloak-proxy-mappings` (`valueSet`) warns while the loaded file sets `keycloak.proxy.spiProxyMappings`, which makes
+  Keycloak ignore the proxy settings.
 
 ## Features (Stage 5)
 
