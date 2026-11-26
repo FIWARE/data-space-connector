@@ -11,6 +11,7 @@ export const MAX_CREDENTIAL_TYPES = 64
 
 export const MSG_PLAIN_LINE = `must be a single non-empty line without leading or trailing spaces, control characters, '"', '\\', '<' or '>'`
 export const MSG_HOSTNAME = `must be a host name of lowercase letters, digits, '-' and '.', at most ${MAX_HOSTNAME_LENGTH} characters`
+export const MSG_SECRET_NAME = `must be a Secret name of lowercase letters, digits, '-' and '.', at most ${MAX_HOSTNAME_LENGTH} characters`
 export const MSG_DOMAIN = 'must be a domain of at least two labels'
 export const MSG_STRING = 'must be a string'
 export const MSG_URL =
@@ -95,7 +96,7 @@ export function checkAnswer(type: FoundationType, value: AnswerValue, options: r
   if (type === 'string') return PLAIN_LINE.test(value) ? undefined : MSG_PLAIN_LINE
   if (type === 'choice') return options.some((o) => o.value === value) ? undefined : msgChoice(options)
   if (type === 'did') return DID.test(value) ? undefined : MSG_DID
-  if (value.length > MAX_HOSTNAME_LENGTH || !HOSTNAME.test(value)) return MSG_HOSTNAME
+  if (value.length > MAX_HOSTNAME_LENGTH || !HOSTNAME.test(value)) return type === 'secretName' ? MSG_SECRET_NAME : MSG_HOSTNAME
   if (type === 'domain' && !value.includes('.')) return MSG_DOMAIN
   return undefined
 }

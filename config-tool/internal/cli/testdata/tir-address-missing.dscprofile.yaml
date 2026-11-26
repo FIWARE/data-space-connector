@@ -1,6 +1,6 @@
 # The same profile saved by a build that did not seed the loaded TIR address: tir-address-for-verification blocks it.
 format: 1
-model: {chart: data-space-connector, version: 10.16.0, revision: 14}
+model: {chart: data-space-connector, version: 10.16.0, revision: 16}
 target:
   type: file
   namespace: provider

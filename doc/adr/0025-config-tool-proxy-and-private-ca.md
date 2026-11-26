@@ -74,8 +74,17 @@ therefore declares `unique: [mountPath]`, and keyed targets that only work toget
   whole mechanism is **withheld**. None of its targets render, and the foreign element stays as it is. A mechanism with
   a target that is not ready (unanswered refs or requires) renders nothing either. A ready mechanism with an element in
   a list the loaded file holds as a scalar or mapping is withheld the same way, so it never writes its other lists.
-  `Tree.Withheld` lists each case as `{reason, mechanism, element, list, field, value, foreignKey}`, with reason
-  `collision` or `edited` (the last without field, value and foreign key). The result is never an invalid manifest.
+  `Tree.Withheld` lists each case as `{reason, mechanism, element, list, field, value, foreignKey, conflict}`, with
+  reason `collision`, `edited` (without field, value and foreign key) or `conflict` (see below). The result is never an
+  invalid manifest.
+- **Conflicts with what the chart templates itself:** a `unique` check only sees list elements. The vcverifier chart
+  (decentralized-iam 2.1.30, `vcverifier/templates/deployment.yaml` L48-50, L157-163) mounts its own `ca-bundle` at
+  `/etc/ssl/cert.pem` while `serverCertificates.clientKey.secretName` and `clientIdentification.certificatePath` are
+  set, and renders its `add-root-ca` init container for `serverCertificates.caCert.enabled` as soon as
+  `deployment.initContainers` is non-empty, which `add-private-ca` makes it. A top-level `mechanisms:` table therefore
+  lists, per mechanism id, `conflicts: [{whenSet: [paths]}]`. While the loaded file sets every path of one entry as a
+  Helm `if` reads it (not absent, null, false, zero or empty), the mechanism is withheld with reason `conflict` and the
+  paths in `conflict`. No target may write a conflict path, so only a loaded file can set one.
 - **Report:** a withheld CA mechanism is a `caCoverage` *warning*, for either reason. The foreign element is most likely a hand-made trust
   setup copied from PREREQUISITES, which the tool cannot inspect, and an error would block `generate` until the user
   deleted a working setup.
@@ -158,6 +167,14 @@ service CIDRs, which the vc-operator needs to reach the Kubernetes API directly.
   stores the bundle.
 - **No option disables certificate verification.** A loaded `NODE_TLS_REJECT_UNAUTHORIZED: "0"` stays untouched as a
   foreign element; the tool never writes or offers it.
+
+### 9. Secret requirements
+
+Rendered values may name a Secret the tool never creates. A bundle `requirements:` table lists them as
+`{kind: secret, name: <template over answers>, key, purpose}`; `ca.privateSecret` (type `secretName`, a DNS-1123
+subdomain) is the first, with key `ca.crt`. The core package `internal/requirements` returns `Secrets(b, p)`: one entry
+per row whose name template resolves, that is, only while every answer it reads is given or derived. It yields names
+and keys only and never reads, stores or asks for the Secret's content, so US-7.3 can list them in `NEXT_STEPS.md`.
 
 ## Deviation from the ticket
 

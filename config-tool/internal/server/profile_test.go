@@ -669,7 +669,7 @@ func TestSaveRole(t *testing.T) {
 	operatorTarget := completeTarget()
 	operatorTarget.Chart, operatorTarget.ChartVersion = trustAnchorChart, ""
 	enabled := map[string]profile.FeatureState{"ta.registry": {Enabled: true, Source: profile.SourcePreset}}
-	dscCatalogue := &profile.ModelRef{Chart: dscChart, Version: latestChart, Revision: 14}
+	dscCatalogue := &profile.ModelRef{Chart: dscChart, Version: latestChart, Revision: 16}
 	tests := []struct {
 		name          string
 		profile       profile.Profile

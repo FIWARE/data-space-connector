@@ -29,21 +29,26 @@ const (
 	WithheldCollision = "collision"
 	// WithheldEdited: the loaded file holds something other than a sequence or null at List, a hand edit.
 	WithheldEdited = "edited"
+	// WithheldConflict: the loaded file sets every path of Conflict, so the chart templates something of its own that
+	// the mechanism would collide with (model.Mechanism).
+	WithheldConflict = "conflict"
 )
 
 // nullTag is the YAML tag of a null scalar, written as `key:`, `key: ~` or `key: null`.
 const nullTag = "!!null"
 
-// Withheld is a mechanism none of whose targets rendered because of its element Element in List.
-// Mechanism is empty for an element target without one; Field, Value and ForeignKey are set for a collision only.
+// Withheld is a mechanism none of whose targets rendered because of its element Element in List, or, for a
+// conflict, because of the loaded paths Conflict (Element and List empty). Mechanism is empty for an element target
+// without one; Field, Value and ForeignKey are set for a collision only.
 type Withheld struct {
-	Reason     string `json:"reason"`
-	Mechanism  string `json:"mechanism"`
-	Element    string `json:"element"`
-	List       string `json:"list"`
-	Field      string `json:"field,omitempty"`
-	Value      any    `json:"value,omitempty"`
-	ForeignKey string `json:"foreignKey,omitempty"`
+	Reason     string   `json:"reason"`
+	Mechanism  string   `json:"mechanism"`
+	Element    string   `json:"element"`
+	List       string   `json:"list"`
+	Field      string   `json:"field,omitempty"`
+	Value      any      `json:"value,omitempty"`
+	ForeignKey string   `json:"foreignKey,omitempty"`
+	Conflict   []string `json:"conflict,omitempty"`
 }
 
 // group is what renders or is withheld as a unit: a named mechanism, or one element target without one.
@@ -105,7 +110,7 @@ func composeLists(b model.Bundle, r resolution, opts Options) ([]Leaf, []Withhel
 				unready[g] = true
 				continue
 			}
-			v, err := t.Element.Expand(func(tpl *template.Template) (string, error) { return execute(tpl, r.ns) })
+			v, err := t.Element.Expand(func(tpl *template.Template) (string, error) { return model.Execute(tpl, r.ns) })
 			if err != nil {
 				return nil, nil, fmt.Errorf("render: %s targets[%d]: %w", f.ID, i, err)
 			}
@@ -121,6 +126,15 @@ func composeLists(b model.Bundle, r resolution, opts Options) ([]Leaf, []Withhel
 		}
 	}
 	withheld := map[group]Withheld{}
+	for _, m := range b.Mechanisms() {
+		g := group{mechanism: m.ID}
+		if opts.Overrides == nil || unready[g] {
+			continue
+		}
+		if paths, ok := m.Conflict(opts.Overrides.Doc, opts.Overrides.Root); ok {
+			withheld[g] = Withheld{Reason: WithheldConflict, Mechanism: m.ID, Conflict: paths}
+		}
+	}
 	active := func(k int) []*ownedElement {
 		return slices.DeleteFunc(slices.Clone(owned[k]), func(o *ownedElement) bool {
 			_, w := withheld[o.group]

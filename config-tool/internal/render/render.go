@@ -124,7 +124,7 @@ func resolve(b model.Bundle, p profile.Profile) (resolution, error) {
 	} {
 		if v != "" {
 			r.reserved[ref] = true
-			setNested(r.ns, ref, v)
+			model.SetNested(r.ns, ref, v)
 		}
 	}
 	for _, id := range b.FoundationOrder() {
@@ -134,7 +134,7 @@ func resolve(b model.Bundle, p profile.Profile) (resolution, error) {
 			if !defaults(f, r) {
 				continue
 			}
-			s, err := execute(f.DefaultTemplate(), r.ns)
+			s, err := model.Execute(f.DefaultTemplate(), r.ns)
 			if err != nil {
 				return resolution{}, fmt.Errorf("render: default of %s: %w", id, err)
 			}
@@ -147,7 +147,7 @@ func resolve(b model.Bundle, p profile.Profile) (resolution, error) {
 			return resolution{}, err
 		}
 		r.answers[id] = v
-		setNested(r.ns, id, v)
+		model.SetNested(r.ns, id, v)
 	}
 	return r, nil
 }
@@ -165,7 +165,7 @@ func checkPrefix(f model.CompiledFoundation, v any, r resolution) error {
 	if f.PrefixTemplate() == nil || !r.resolved(f.PrefixRefs()) {
 		return nil
 	}
-	prefix, err := execute(f.PrefixTemplate(), r.ns)
+	prefix, err := model.Execute(f.PrefixTemplate(), r.ns)
 	if err != nil {
 		return fmt.Errorf("render: prefix of %s: %w", f.ID, err)
 	}

@@ -78,7 +78,7 @@ func derived(f model.CompiledFoundation, r resolution) (string, error) {
 	if !defaults(f, r) {
 		return "", nil
 	}
-	s, err := execute(f.DefaultTemplate(), r.ns)
+	s, err := model.Execute(f.DefaultTemplate(), r.ns)
 	if err != nil {
 		return "", fmt.Errorf("render: default of %s: %w", f.ID, err)
 	}

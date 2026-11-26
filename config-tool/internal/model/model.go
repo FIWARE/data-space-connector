@@ -51,6 +51,10 @@ type Bundle struct {
 	Lists []List `yaml:"lists"`
 	// NoProxyServicesTable lists the in-cluster services the proxy.no default bypasses (ADR 0025).
 	NoProxyServicesTable []NoProxyService `yaml:"noProxyServices"`
+	// RequirementsTable lists the Secrets the rendered values reference and the user creates (ADR 0025).
+	RequirementsTable []Requirement `yaml:"requirements"`
+	// MechanismsTable declares when a mechanism is withheld for what the chart templates itself (ADR 0025).
+	MechanismsTable []Mechanism `yaml:"mechanisms"`
 	// Latest marks the default version; Versions sets it, bundle files never do.
 	Latest bool `yaml:"-"`
 	// rules is Recognize compiled; readBundle sets it after validating every rule.
@@ -62,6 +66,10 @@ type Bundle struct {
 	lists []CompiledList
 	// noProxyServices is NoProxyServicesTable compiled.
 	noProxyServices []CompiledNoProxyService
+	// requirements is RequirementsTable compiled.
+	requirements []CompiledRequirement
+	// mechanisms is MechanismsTable compiled.
+	mechanisms []CompiledMechanism
 }
 
 // Rules returns the validated recognition rules in bundle order.
@@ -303,6 +311,12 @@ func readBundle(fsys fs.FS, file string) (versioned, error) {
 		return versioned{}, fmt.Errorf("%s: %w", file, err)
 	}
 	if b.foundations, b.order, err = compileFoundations(b.Foundations, b.lists, b.Resources, b.TopLevelKeys); err != nil {
+		return versioned{}, fmt.Errorf("%s: %w", file, err)
+	}
+	if b.requirements, err = compileRequirements(b.RequirementsTable, b.foundations); err != nil {
+		return versioned{}, fmt.Errorf("%s: %w", file, err)
+	}
+	if b.mechanisms, err = compileMechanisms(b.MechanismsTable, b.foundations, b.TopLevelKeys); err != nil {
 		return versioned{}, fmt.Errorf("%s: %w", file, err)
 	}
 	if err := checkFoundationFeatures(b.foundations, b.Features, b.Chart); err != nil {
