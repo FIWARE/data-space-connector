@@ -1,13 +1,11 @@
 package render
 
 import (
-	"net/url"
 	"regexp"
 	"strings"
 	"testing"
 
-	"golang.org/x/net/http/httpproxy"
-
+	"github.com/FIWARE/data-space-connector/config-tool/internal/model"
 	"github.com/FIWARE/data-space-connector/config-tool/internal/profile"
 )
 
@@ -18,17 +16,10 @@ const (
 
 // noProxyClients are the NO_PROXY matchers of the five proxied components; each reports whether host bypasses the proxy.
 var noProxyClients = map[string]func(noProxy, host string) bool{
-	"go":             goBypass,           // verifier, vc-operator
-	"keycloak":       keycloakBypass,     // Keycloak
-	"proxy-from-env": proxyFromEnvBypass, // marketplace logic proxy (axios)
-	"lua-resty-http": luaBypass,          // APISIX proxy_opts
-}
-
-// goBypass is golang.org/x/net/http/httpproxy itself, which net/http's ProxyFromEnvironment wraps.
-func goBypass(noProxy, host string) bool {
-	proxy := (&httpproxy.Config{HTTPSProxy: httpsProxy, NoProxy: noProxy}).ProxyFunc()
-	u, err := proxy(&url.URL{Scheme: "https", Host: host})
-	return err == nil && u == nil
+	"go":             model.NoProxyBypasses, // verifier, vc-operator
+	"keycloak":       keycloakBypass,        // Keycloak
+	"proxy-from-env": proxyFromEnvBypass,    // marketplace logic proxy (axios)
+	"lua-resty-http": luaBypass,             // APISIX proxy_opts
 }
 
 // keycloakBypass ports ProxyMappings.withFixedProxyMapping (keycloak 26.7.0, services/.../ProxyMappings.java

@@ -2,10 +2,13 @@ package model
 
 import (
 	"fmt"
+	"net/url"
 	"slices"
 	"strings"
 	"text/template"
 	"text/template/parse"
+
+	"golang.org/x/net/http/httpproxy"
 
 	"github.com/FIWARE/data-space-connector/config-tool/internal/roundtrip"
 )
@@ -123,4 +126,15 @@ func callsFullname(t *template.Template) bool {
 		}
 	}
 	return false
+}
+
+// bypassProbeProxy is a proxy URL that only lets the matcher tell a bypassed host from a proxied one.
+const bypassProbeProxy = "http://proxy.invalid:3128"
+
+// NoProxyBypasses reports whether a Go client (golang.org/x/net/http/httpproxy, which net/http's
+// ProxyFromEnvironment wraps) with noProxy as NO_PROXY reaches https://host without the proxy.
+func NoProxyBypasses(noProxy, host string) bool {
+	proxy := (&httpproxy.Config{HTTPSProxy: bypassProbeProxy, NoProxy: noProxy}).ProxyFunc()
+	u, err := proxy(&url.URL{Scheme: "https", Host: host})
+	return err == nil && u == nil
 }

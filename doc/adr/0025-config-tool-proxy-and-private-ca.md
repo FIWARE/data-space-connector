@@ -176,6 +176,24 @@ subdomain) is the first, with key `ca.crt`. The core package `internal/requireme
 per row whose name template resolves, that is, only while every answer it reads is given or derived. It yields names
 and keys only and never reads, stores or asks for the Secret's content, so US-7.3 can list them in `NEXT_STEPS.md`.
 
+### 10. L2 rules and the no-insecure guard
+
+Three rule kinds join `internal/check`, each with `when` as its precondition; `when` gains `set: true` for an answer
+that resolves.
+- `caCoverage` (`ca-coverage`, error) runs while `ca.privateSecret` is set. A component's mechanism counts as in
+  effect only if each of its final leaves was rendered by the tool or equals the rendered value, so a loaded element
+  that keeps the owned key (`KC_TRUSTSTORE_PATHS`, `SSL_CERT_DIR`, ...) but carries other content is an error, not a
+  pass. A withheld mechanism is a warning naming the foreign element; `mechanism: none` is a warning; a route whose
+  final `ssl_verify` is `false` is an error naming its index and `uri`.
+- `noProxyCoverage` (`no-proxy-coverage`, warning) runs while `proxy.https` resolves and checks each `noProxyServices`
+  row's effective name against the final `proxy.no` with the Go matcher (`model.NoProxyBypasses`).
+- `valueSet` (`keycloak-proxy-mappings`, warning) fires while the final values hold a non-empty value at a path, here
+  `keycloak.proxy.spiProxyMappings`.
+
+`internal/model/insecure_test.go` scans every bundle, `ui/src` and the CLI flags for values that disable
+verification (`ssl_verify: false`, `insecureSkipVerify: true`, `rejectUnauthorized: false`, `--insecure`) and for
+`NODE_TLS_REJECT_UNAUTHORIZED`. A legitimate match is reworded, never allow-listed.
+
 ## Deviation from the ticket
 
 The ticket asks for an L2 *error* when an enabled component that calls a public host has no CA mechanism. Contract

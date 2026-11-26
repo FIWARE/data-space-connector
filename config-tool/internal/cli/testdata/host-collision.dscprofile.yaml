@@ -1,6 +1,6 @@
 # A provider that pinned the marketplace host to Keycloak's derived host: host-collision blocks it.
 format: 1
-model: {chart: data-space-connector, version: 10.16.0, revision: 16}
+model: {chart: data-space-connector, version: 10.16.0, revision: 17}
 target:
   type: file
   namespace: provider

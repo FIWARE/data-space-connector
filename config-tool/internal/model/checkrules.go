@@ -86,19 +86,23 @@ func (s Stage) Rank() int {
 }
 
 // CheckRule is an L2 rule as written in a bundle's rules list. It has exactly one kind: When (a finding on
-// Field while every condition holds), Distinct, DIDWebHost, or MemoryLimit, which needs When as its precondition
-// and Field; Distinct and DIDWebHost name their field in the finding.
+// Field while every condition holds), Distinct, DIDWebHost, or one of the precondition kinds (MemoryLimit,
+// CACoverage, NoProxyCoverage, ValueSet), which need When as their precondition and Field; Distinct and
+// DIDWebHost name their field in the finding.
 type CheckRule struct {
-	ID          string           `yaml:"id"`
-	Severity    Severity         `yaml:"severity"`
-	Stage       Stage            `yaml:"stage"`
-	Field       string           `yaml:"field"`
-	When        []RuleWhen       `yaml:"when"`
-	Distinct    *RuleDistinct    `yaml:"distinct"`
-	DIDWebHost  *RuleDIDWebHost  `yaml:"didWebHost"`
-	MemoryLimit *RuleMemoryLimit `yaml:"memoryLimit"`
-	// Message is fixed text, except for a distinct rule (a template over MessageFirst, MessageSecond and
-	// MessageHost) and a memoryLimit rule (a template over MessageComponents).
+	ID              string               `yaml:"id"`
+	Severity        Severity             `yaml:"severity"`
+	Stage           Stage                `yaml:"stage"`
+	Field           string               `yaml:"field"`
+	When            []RuleWhen           `yaml:"when"`
+	Distinct        *RuleDistinct        `yaml:"distinct"`
+	DIDWebHost      *RuleDIDWebHost      `yaml:"didWebHost"`
+	MemoryLimit     *RuleMemoryLimit     `yaml:"memoryLimit"`
+	CACoverage      *RuleCACoverage      `yaml:"caCoverage"`
+	NoProxyCoverage *RuleNoProxyCoverage `yaml:"noProxyCoverage"`
+	ValueSet        *RuleValueSet        `yaml:"valueSet"`
+	// Message is fixed text, except for a distinct, memoryLimit, caCoverage or noProxyCoverage rule, where it is a
+	// template over the keys its kind documents.
 	Message string `yaml:"message"`
 	// Doc is a repo-relative documentation path, optionally with an anchor.
 	Doc string `yaml:"doc"`
@@ -123,12 +127,13 @@ type RuleMemoryLimit struct {
 	Components []string `yaml:"components"`
 }
 
-// RuleWhen holds while the resolved Field equals Equals, or with Unset while the answer Field is absent.
-// It has exactly one of the two; an absent field never equals anything.
+// RuleWhen holds while the resolved Field equals Equals, with Unset while the answer Field is absent, or with Set
+// while it resolves. It has exactly one of the three; an absent field never equals anything.
 type RuleWhen struct {
 	Field  string `yaml:"field"`
 	Equals string `yaml:"equals"`
 	Unset  bool   `yaml:"unset"`
+	Set    bool   `yaml:"set"`
 }
 
 // CheckRules returns the validated check rules in bundle order.
@@ -150,12 +155,17 @@ func (b Bundle) DistinctIDs(r CheckRule) []string {
 	return ids
 }
 
-// RenderMessage returns r's message, with data filled in for a distinct or memoryLimit rule.
+// RenderMessage returns r's message, with data filled in for a rule whose kind makes it a template.
 func (r CheckRule) RenderMessage(data map[string]string) (string, error) {
-	if r.Distinct == nil && r.MemoryLimit == nil {
+	if r.Distinct == nil && r.MemoryLimit == nil && r.CACoverage == nil && r.NoProxyCoverage == nil {
 		return r.Message, nil
 	}
-	t, _, err := parseTemplate(r.ID, r.Message)
+	return RenderTemplate(r.ID, r.Message, data)
+}
+
+// RenderTemplate fills data into the message template s of rule id.
+func RenderTemplate(id, s string, data map[string]string) (string, error) {
+	t, _, err := parseTemplate(id, s)
 	if err != nil {
 		return "", err
 	}
@@ -176,22 +186,31 @@ func TargetFieldValues(id string) []string {
 	return slices.Clone(targetFields[id].values)
 }
 
-// checkCheckRules validates rules against the compiled foundations fs, the feature catalogue and the resources table.
-func checkCheckRules(rules []CheckRule, fs []CompiledFoundation, features []Feature, order []string, table *ResourceTable) error {
+// ruleContext is what a rule is validated against.
+type ruleContext struct {
+	fs           []CompiledFoundation
+	features     []Feature
+	order        []string
+	table        *ResourceTable
+	topLevelKeys []string
+}
+
+// checkCheckRules validates rules against the compiled foundations, the feature catalogue and the resources table.
+func checkCheckRules(rules []CheckRule, c ruleContext) error {
 	seen := map[string]int{}
 	for i, r := range rules {
 		if j, dup := seen[r.ID]; dup {
 			return fmt.Errorf("rules[%d]: id %q is already used by rules[%d]", i, r.ID, j)
 		}
 		seen[r.ID] = i
-		if err := checkCheckRule(r, fs, features, order, table); err != nil {
+		if err := checkCheckRule(r, c); err != nil {
 			return fmt.Errorf("rules[%d]: %w", i, err)
 		}
 	}
 	return nil
 }
 
-func checkCheckRule(r CheckRule, fs []CompiledFoundation, features []Feature, order []string, table *ResourceTable) error {
+func checkCheckRule(r CheckRule, c ruleContext) error {
 	switch {
 	case r.ID == "":
 		return errors.New("id is missing")
@@ -202,42 +221,81 @@ func checkCheckRule(r CheckRule, fs []CompiledFoundation, features []Feature, or
 	case r.Message == "":
 		return errors.New("message is missing")
 	}
+	// A precondition kind's when is its precondition, not a kind of its own.
+	pre := r.preconditionKind()
 	kinds := 0
-	// A memoryLimit rule's when is its precondition, not a kind of its own.
-	for _, has := range []bool{len(r.When) > 0 && r.MemoryLimit == nil, r.Distinct != nil, r.DIDWebHost != nil, r.MemoryLimit != nil} {
+	for _, has := range []bool{len(r.When) > 0 && pre == "", r.Distinct != nil, r.DIDWebHost != nil} {
 		if has {
+			kinds++
+		}
+	}
+	for _, k := range r.preconditionKinds() {
+		if k != "" {
 			kinds++
 		}
 	}
 	switch {
 	case kinds == 0:
-		return errors.New("when, distinct, didWebHost or memoryLimit is missing")
-	case kinds > 1 && r.MemoryLimit != nil:
-		return errors.New("memoryLimit combines with when only, not with distinct or didWebHost")
+		return errors.New("when, distinct, didWebHost, memoryLimit, caCoverage, noProxyCoverage or valueSet is missing")
+	case kinds > 1 && pre != "":
+		return fmt.Errorf("%s combines with when only, not with distinct, didWebHost or another kind", pre)
 	case kinds > 1:
 		return errors.New("a rule has exactly one of when, distinct and didWebHost")
-	case r.MemoryLimit != nil && (len(r.When) == 0 || r.Field == ""):
-		return errors.New("memoryLimit needs when, its precondition, and field, where the finding points")
+	case pre != "" && (len(r.When) == 0 || r.Field == ""):
+		return fmt.Errorf("%s needs when, its precondition, and field, where the finding points", pre)
 	case len(r.When) == 0 && r.Field != "":
 		return errors.New("field is for when only: the finding of distinct and didWebHost names its field")
 	}
 	var err error
 	switch {
 	case r.Distinct != nil:
-		err = checkDistinct(r, fs, order)
+		err = checkDistinct(r, c.fs, c.order)
 	case r.DIDWebHost != nil:
-		err = checkDIDWebHost(r, fs)
-	case r.MemoryLimit != nil:
-		if err = checkWhenRule(r, fs, features); err == nil {
-			err = checkMemoryLimit(r, table)
-		}
+		err = checkDIDWebHost(r, c.fs)
 	default:
-		err = checkWhenRule(r, fs, features)
+		err = checkWhenRule(r, c.fs, c.features)
+	}
+	if err == nil {
+		switch {
+		case r.MemoryLimit != nil:
+			err = checkMemoryLimit(r, c.table)
+		case r.CACoverage != nil:
+			err = checkCACoverage(r, c)
+		case r.NoProxyCoverage != nil:
+			err = checkNoProxyCoverage(r, c.fs)
+		case r.ValueSet != nil:
+			err = checkValueSet(r, c.topLevelKeys)
+		}
 	}
 	if err != nil {
 		return err
 	}
 	return checkDoc(r.Doc)
+}
+
+// preconditionKinds names each precondition kind r has, in declaration order; empty for one it lacks.
+func (r CheckRule) preconditionKinds() []string {
+	return []string{
+		kindIf(r.MemoryLimit != nil, "memoryLimit"), kindIf(r.CACoverage != nil, "caCoverage"),
+		kindIf(r.NoProxyCoverage != nil, "noProxyCoverage"), kindIf(r.ValueSet != nil, "valueSet"),
+	}
+}
+
+// preconditionKind is the first precondition kind of r; empty for none.
+func (r CheckRule) preconditionKind() string {
+	for _, k := range r.preconditionKinds() {
+		if k != "" {
+			return k
+		}
+	}
+	return ""
+}
+
+func kindIf(has bool, kind string) string {
+	if has {
+		return kind
+	}
+	return ""
 }
 
 func checkWhenRule(r CheckRule, fs []CompiledFoundation, features []Feature) error {
@@ -303,13 +361,22 @@ func checkMemoryLimit(r CheckRule, table *ResourceTable) error {
 
 // checkMessage refuses a message template that does not parse or uses keys other than keys.
 func checkMessage(r CheckRule, keys []string) error {
-	_, refs, err := parseTemplate(r.ID, r.Message)
+	return checkTemplate(r.ID, "message", r.Message, keys)
+}
+
+// checkTemplate refuses the message template s, named name, of rule id when it is empty, does not parse or uses
+// keys other than keys.
+func checkTemplate(id, name, s string, keys []string) error {
+	if s == "" {
+		return fmt.Errorf("%s is missing", name)
+	}
+	_, refs, err := parseTemplate(id, s)
 	if err != nil {
-		return fmt.Errorf("message: %w", err)
+		return fmt.Errorf("%s: %w", name, err)
 	}
 	for _, ref := range refs {
 		if !slices.Contains(keys, ref) {
-			return fmt.Errorf("message: {{ .%s }} is not one of %s", ref, strings.Join(keys, ", "))
+			return fmt.Errorf("%s: {{ .%s }} is not one of %s", name, ref, strings.Join(keys, ", "))
 		}
 	}
 	return nil
@@ -355,15 +422,21 @@ func checkWhen(w RuleWhen, fs []CompiledFoundation, features []Feature) error {
 			return err
 		}
 	}
+	forms := 0
+	for _, has := range []bool{w.Equals != "", w.Unset, w.Set} {
+		if has {
+			forms++
+		}
+	}
 	switch {
-	case w.Unset && w.Equals != "":
-		return fmt.Errorf("%s has both equals and unset", w.Field)
-	case w.Unset && !strings.HasPrefix(w.Field, AnswerFieldPrefix):
-		return fmt.Errorf("unset applies to %s<foundation id> only, not %s", AnswerFieldPrefix, w.Field)
-	case w.Unset:
+	case forms > 1:
+		return fmt.Errorf("%s has more than one of equals, unset and set", w.Field)
+	case (w.Unset || w.Set) && !strings.HasPrefix(w.Field, AnswerFieldPrefix):
+		return fmt.Errorf("unset and set apply to %s<foundation id> only, not %s", AnswerFieldPrefix, w.Field)
+	case w.Unset || w.Set:
 		return nil
 	case w.Equals == "":
-		return fmt.Errorf("%s has neither equals nor unset", w.Field)
+		return fmt.Errorf("%s has none of equals, unset and set", w.Field)
 	case values != nil && !slices.Contains(values, w.Equals):
 		return fmt.Errorf("%q is not a value of %s (%s)", w.Equals, w.Field, strings.Join(values, ", "))
 	}

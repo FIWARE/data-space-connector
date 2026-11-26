@@ -60,9 +60,23 @@
 #   memoryLimit {components}, with field and when as its precondition: one finding naming every listed component
 #             of the resources table that deploys and ends up without a memory limit (rendered, loaded, a fallback
 #             path or chartMemoryLimit, which a loaded null drops). The message may use {{ .components }}
+#   caCoverage {components: [{id, label, enabledKeys, mechanism | paths}], routes: {path, verify, uri, component},
+#             withheldCollision, withheldEdited, withheldConflict, none, route}, with field and when (set: true takes
+#             answers.<id> only) as its precondition, over the deployed components (ADR 0025). The rule's severity
+#             applies to one finding naming every component whose mechanism (all its element targets) or paths are
+#             not in effect: absent, or pinned to another value. The message may use {{ .components }}. A withheld
+#             mechanism is a warning per component (withheld*: {{ .component }}, {{ .element }}, {{ .list }}, and
+#             {{ .field }}, {{ .value }}, {{ .foreign }} for a collision, or {{ .paths }} for a conflict); mechanism:
+#             none is one warning naming them all (none: {{ .components }}). route is one finding of the rule's
+#             severity per route whose final verify key is false ({{ .index }}, {{ .uri }})
+#   noProxyCoverage {answer, unrenamed}, with field and when as its precondition: a warning per noProxyServices row
+#             whose effective name the resolved answer does not bypass for a Go client. The message, for a service
+#             a loaded value renamed, may use {{ .service }} and {{ .path }}; unrenamed {{ .service }} only
+#   valueSet  {path}, with field and when as its precondition: the message while the final values hold a non-empty
+#             value at path
 chart: data-space-connector
 version: 10.16.0
-revision: 16
+revision: 17
 topLevelKeys: [
   nameOverride, fullnameOverride, imagePullSecrets, issuance, decentralizedIam, scorpio, elsi,
   keycloak, tm-forum-api, statusListServer, rainbow, contract-management, did, registration,
@@ -363,6 +377,77 @@ rules:
     message: >-
       Without a memory limit, the JVM sizes its heap from the node: {{ .components }}.
     doc: doc/deployment-integration/roles/PREREQUISITES.md#set-memory-limits-on-the-java-components
+  # Each mechanism is the ca.privateSecret targets of the same name; enabledKeys as for java-memory-limit.
+  - id: ca-coverage
+    severity: error
+    stage: foundations
+    field: answers.ca.privateSecret
+    when:
+      - {field: answers.ca.privateSecret, set: true}
+    caCoverage:
+      components:
+        - {id: verifier, label: verifier, mechanism: verifier-ca,
+           enabledKeys: {decentralizedIam.enabled: true, decentralizedIam.vcAuthentication.enabled: true}}
+        - {id: apisix, label: APISIX,
+           paths: [decentralizedIam.odrlAuthorization.apisix.apisix.ssl.existingCASecret,
+                   decentralizedIam.odrlAuthorization.apisix.apisix.ssl.certCAFilename,
+                   decentralizedIam.odrlAuthorization.apisix.apisix.ssl.enabled],
+           enabledKeys: {decentralizedIam.enabled: true, decentralizedIam.odrlAuthorization.apisix.enabled: true}}
+        - {id: keycloak, label: Keycloak, mechanism: keycloak-ca, enabledKeys: {keycloak.enabled: true}}
+        - {id: marketplace, label: marketplace, mechanism: marketplace-ca, enabledKeys: {marketplace.enabled: false}}
+        - {id: vcOperator, label: vc-operator, mechanism: vc-operator-ca, enabledKeys: {vc-operator.enabled: false}}
+        # Step 7 of #130 gives it a mechanism (ADR 0025, "Deviation from the ticket").
+        - {id: contractManagement, label: contract-management, mechanism: none,
+           enabledKeys: {contract-management.enabled: true}}
+      routes: {path: decentralizedIam.odrlAuthorization.apisix.routes, verify: plugins.openid-connect.ssl_verify,
+               uri: uri, component: apisix}
+      withheldCollision: >-
+        {{ .component }} does not get the private CA: its element {{ .element }} would share {{ .field }}
+        {{ .value }} in {{ .list }} with {{ .foreign }}, which the loaded file sets. The tool cannot tell whether
+        {{ .foreign }} trusts the private CA; check it, or remove it so the tool can add its own.
+      withheldEdited: >-
+        {{ .component }} does not get the private CA: the loaded file changed its element {{ .element }} in
+        {{ .list }}. The tool cannot tell whether the edited element still trusts the private CA; check it, or
+        remove it so the tool can write it again.
+      withheldConflict: >-
+        {{ .component }} does not get the private CA: the loaded file sets {{ .paths }}, so the chart already
+        mounts its own CA bundle there. The tool cannot tell whether that bundle holds the private CA; check it.
+      none: >-
+        The tool cannot give {{ .components }} the private CA yet. Until it can, the hosts they call need a
+        publicly trusted certificate.
+      route: >-
+        APISIX route {{ .index }} ({{ .uri }}) does not verify the certificate of its OpenID provider: the loaded
+        file sets ssl_verify to false. Remove it, so the tool can turn verification on.
+    message: >-
+      The private CA does not reach {{ .components }}: the loaded file removed or changed what the tool writes for
+      it, so their calls to hosts the private CA signs fail. Reset those values, or remove the private CA Secret.
+    doc: doc/deployment-integration/roles/PREREQUISITES.md#private-ca
+  - id: no-proxy-coverage
+    severity: warning
+    stage: foundations
+    field: answers.proxy.no
+    when:
+      - {field: answers.proxy.https, set: true}
+    noProxyCoverage:
+      answer: proxy.no
+      unrenamed: >-
+        No proxy does not cover the in-cluster service {{ .service }}, so the components reach it through the
+        proxy. Add it to No proxy.
+    message: >-
+      The loaded file renames an in-cluster service to {{ .service }} ({{ .path }}), which No proxy does not cover,
+      so the components reach it through the proxy. Add {{ .service }} to No proxy.
+    doc: doc/deployment-integration/roles/PREREQUISITES.md#outbound-access
+  - id: keycloak-proxy-mappings
+    severity: warning
+    stage: foundations
+    field: answers.proxy.https
+    when:
+      - {field: answers.proxy.https, set: true}
+    valueSet: {path: keycloak.proxy.spiProxyMappings}
+    message: >-
+      The loaded file sets keycloak.proxy.spiProxyMappings, so Keycloak ignores the proxy settings and follows only
+      those mappings. Add the proxy to the mappings, or remove them.
+    doc: doc/deployment-integration/roles/PREREQUISITES.md#outbound-access
 resources:
   answer: resources.profile
   measuredOn: 10.13.2
