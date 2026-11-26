@@ -160,6 +160,14 @@ func TestLoadElements(t *testing.T) {
 			answers: map[string]any{},
 		},
 		{
+			name: "a mechanism the render withholds for a conflict with the chart's own",
+			src:  volume + "  ownCA: {enabled: true}\n",
+			unknown: map[string]string{
+				"verifier.volumes[0].name":              "verifier-ca is withheld: the chart writes its own while verifier.ownCA.enabled are set",
+				"verifier.volumes[0].secret.secretName": "", "verifier.ownCA.enabled": ""},
+			answers: map[string]any{},
+		},
+		{
 			name: "a pinned owned element is foreign to the other owned ones",
 			src: volume + "    - {name: extra-ca, secret: {secretName: s}}\n" +
 				"  mounts:\n    - {name: extra-ca, mountPath: /etc/ssl/cert.pem, subPath: x.crt}\n",

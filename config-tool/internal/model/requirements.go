@@ -41,28 +41,10 @@ func (r CompiledRequirement) Resolve(answers map[string]any) (string, bool, erro
 		if !ok {
 			return "", false, nil
 		}
-		nest(ns, id, v)
+		SetNested(ns, id, v)
 	}
-	var b strings.Builder
-	if err := r.Name.Execute(&b, ns); err != nil {
-		return "", false, err
-	}
-	return b.String(), true, nil
-}
-
-// nest sets the dotted id in a template namespace ({{ .ca.privateSecret }}).
-func nest(ns map[string]any, id string, v any) {
-	segs := strings.Split(id, ".")
-	m := ns
-	for _, s := range segs[:len(segs)-1] {
-		next, ok := m[s].(map[string]any)
-		if !ok {
-			next = map[string]any{}
-			m[s] = next
-		}
-		m = next
-	}
-	m[segs[len(segs)-1]] = v
+	s, err := Execute(r.Name, ns)
+	return s, err == nil, err
 }
 
 // compileRequirements validates the requirements table against the compiled foundations.

@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -205,18 +206,64 @@ func TestCACollision(t *testing.T) {
 			if n, names := at(mounts); n != 1 || names[0] != tc.foreign {
 				t.Errorf("%s at %s = %v, want only %s", tc.list, tc.mountPath, names, tc.foreign)
 			}
-			rendered := map[string]bool{}
-			for _, l := range tree.Leaves {
-				if l.Provenance.Foundation == caSecretID {
-					rendered[l.Path[:2].String()] = true
-				}
-			}
-			for _, m := range caMechanisms {
-				if got := rendered[mechanismComponent[m]]; got == (m == tc.mechanism) {
-					t.Errorf("%s rendered = %v, want %v", m, got, m != tc.mechanism)
-				}
-			}
+			assertOnlyWithheld(t, tree, tc.mechanism)
 		})
+	}
+}
+
+// TestCAConflict checks that a loaded chart setting the mechanisms table names withholds verifier-ca only.
+func TestCAConflict(t *testing.T) {
+	const (
+		caCert    = "decentralizedIam.vcAuthentication.vcverifier.deployment.serverCertificates.caCert.enabled"
+		clientKey = "decentralizedIam.vcAuthentication.vcverifier.deployment.serverCertificates.clientKey.secretName"
+		certPath  = "decentralizedIam.vcAuthentication.vcverifier.deployment.verifier.clientIdentification.certificatePath"
+	)
+	verifier := func(serverCertificates, clientIdentification string) string {
+		return fmt.Sprintf(`decentralizedIam:
+  vcAuthentication:
+    vcverifier:
+      deployment:
+        serverCertificates: %s
+        verifier: {clientIdentification: %s}
+`, serverCertificates, clientIdentification)
+	}
+	tests := []struct {
+		name, src string
+		conflict  []string
+	}{
+		{"the chart's own caCert", verifier("{caCert: {enabled: true, secretName: my-ca}}", "{}"), []string{caCert}},
+		{"the chart's mount with a client certificate",
+			verifier("{clientKey: {secretName: client-tls}}", "{certificatePath: /certs/tls.crt}"), []string{clientKey, certPath}},
+		{"caCert off", verifier("{caCert: {enabled: false}}", "{}"), nil},
+		{"a client key without a certificate path", verifier("{clientKey: {secretName: client-tls}}", "{}"), nil},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			tree := renderShipped(t, map[string]any{caSecretID: privateCASecret}, tc.src)
+			var want []Withheld
+			mechanism := ""
+			if tc.conflict != nil {
+				mechanism = "verifier-ca"
+				want = []Withheld{{Reason: WithheldConflict, Mechanism: mechanism, Conflict: tc.conflict}}
+			}
+			if !reflect.DeepEqual(tree.Withheld, want) {
+				t.Errorf("withheld = %+v, want %+v", tree.Withheld, want)
+			}
+			assertOnlyWithheld(t, tree, mechanism)
+		})
+	}
+}
+
+// assertOnlyWithheld checks that withheld, if any, renders no CA leaf in any list it writes and the others render.
+func assertOnlyWithheld(t *testing.T, tree Tree, withheld string) {
+	t.Helper()
+	for _, m := range caMechanisms {
+		rendered := slices.ContainsFunc(tree.Leaves, func(l Leaf) bool {
+			return l.Provenance.Foundation == caSecretID && strings.HasPrefix(l.Path.String(), mechanismComponent[m]+".")
+		})
+		if rendered == (m == withheld) {
+			t.Errorf("%s rendered = %v, want %v", m, rendered, m != withheld)
+		}
 	}
 }
 
@@ -231,12 +278,13 @@ func finalList(t *testing.T, tree Tree, src string, p roundtrip.Path) ([]any, bo
 	return l, ok
 }
 
-// mechanismComponent maps each mechanism to the first two path segments of the component it reaches.
+// mechanismComponent maps each mechanism to the path prefix of the component it reaches, which covers every list
+// the mechanism writes.
 var mechanismComponent = map[string]string{
-	"verifier-ca":    "decentralizedIam.vcAuthentication",
+	"verifier-ca":    "decentralizedIam.vcAuthentication.vcverifier",
 	"marketplace-ca": "marketplace.bizEcosystemLogicProxy",
-	"vc-operator-ca": "vc-operator.extraVolumes",
-	"keycloak-ca":    "keycloak.extraVolumes",
+	"vc-operator-ca": "vc-operator",
+	"keycloak-ca":    "keycloak",
 }
 
 // elementAt names the element of a mechanism whose mount collides; both colliding mounts are named so.

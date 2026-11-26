@@ -11,7 +11,7 @@ import (
 // Tree is a rendered values tree: one scalar per leaf, sorted by path.
 type Tree struct {
 	Leaves []Leaf `json:"leaves"`
-	// Withheld are the mechanisms left out for an edited list or a collision with a foreign element (ADR 0025).
+	// Withheld are the mechanisms left out for an edited list, a collision with a foreign element or a conflict (ADR 0025).
 	Withheld []Withheld `json:"withheld,omitempty"`
 }
 

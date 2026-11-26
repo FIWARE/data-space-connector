@@ -18,6 +18,10 @@ lists:
   - path: verifier.mounts
     key: name
     unique: [mountPath]
+mechanisms:
+  - id: verifier-ca
+    conflicts:
+      - whenSet: [verifier.ownCA.enabled]
 foundations:
   - id: proxy.https
     stage: foundations

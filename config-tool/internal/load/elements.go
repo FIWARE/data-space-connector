@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"slices"
 	"strconv"
+	"strings"
 	"text/template"
 
 	"gopkg.in/yaml.v3"
@@ -22,6 +23,7 @@ const (
 	noteInactive     = "%s is not answered, so %s does not write here"
 	noteCollision    = "%s is withheld: %s takes %s %v in %s"
 	noteEdited       = "%s is withheld: %s is not a list"
+	noteConflict     = "%s is withheld: the chart writes its own while %s are set"
 )
 
 // elementRule is a loaded node an owned element or each target writes (ADR 0025): a list element whose key field
@@ -139,9 +141,10 @@ func unresolved(b model.Bundle, t model.CompiledTarget, resolved map[string]any)
 	return "", false
 }
 
-// withhold marks the rules of every group composeLists withholds and deactivate does not catch: one with an element
-// in a loaded list that is not a sequence, or whose unpinned element shares a unique field's value with a foreign one
-// (model.CompiledList.Collision). It reports whether it marked one; the load then classifies again.
+// withhold marks the rules of every group composeLists withholds and deactivate does not catch: a mechanism whose
+// model.CompiledMechanism.Conflict holds, and one with an element in a loaded list that is not a sequence, or whose
+// unpinned element shares a unique field's value with a foreign one (model.CompiledList.Collision). It reports
+// whether it marked one; the load then classifies again.
 func withhold(doc *roundtrip.Document, root roundtrip.Path, rules []elementRule, b model.Bundle, c *classifier) bool {
 	resolved := resolvable(b, c.answers)
 	off := map[string]bool{}
@@ -155,6 +158,20 @@ func withhold(doc *roundtrip.Document, root roundtrip.Path, rules []elementRule,
 		g := groupOf(foundation, t)
 		if _, ok := notes[g]; !ok {
 			notes[g] = fmt.Sprintf(format, append([]any{cmp.Or(t.Mechanism, foundation)}, args...)...)
+		}
+	}
+	for _, m := range b.Mechanisms() {
+		paths, ok := m.Conflict(doc, root)
+		if !ok || off[m.ID] {
+			continue
+		}
+		for _, decl := range b.Foundations {
+			f, _ := b.Foundation(decl.ID)
+			for _, t := range f.Targets {
+				if _, unready := unresolved(b, t, resolved); t.Mechanism == m.ID && !unready {
+					withheld(f.ID, t, noteConflict, strings.Join(paths, ", "))
+				}
+			}
 		}
 	}
 	for _, l := range b.ListTable() {

@@ -4,7 +4,8 @@
 #
 # The foundations list (ADR 0020) holds the cross-cutting answers of Stage 3 and the chart keys they reach:
 #   id       dotted answer id (domain.base): the key in the profile's answers, open field answers.<id>
-#   type     string | hostname | domain | did | url, each checked with one pattern; choice, one of its options;
+#   type     string | hostname | domain | did | url | secretName, each checked with one pattern; choice, one of its
+#            options;
 #            bool, true or false; credentialTypes, a list of {type, description?}. Only copy writes a bool or a list
 #   group    organization | dataspace | network (default) | platform | egress: the Stage 3 panel that asks it
 #   options  a choice's {value, label, note}; note is optional text shown at the point of choice
@@ -18,7 +19,8 @@
 #   targets  {path, fn, args, sep, requires}; a target referencing an unanswered id, or one whose requires are
 #            not all resolved, writes nothing. The list forms (ADR 0025):
 #            element {key, value}: one element of a list the lists table declares, found by its key field;
-#              mechanism names the elements that render together, or not at all after a unique collision
+#              mechanism names the elements that render together, or not at all after a unique collision or a
+#              conflict from the mechanisms table
 #            each, within: a key path written into every loaded element of the list at path that holds the
 #              mapping within (default: each's parent); it never creates an element
 #   features feature ids; display only: Stage 3 hides the foundation while any of them is off. It gates
@@ -60,7 +62,7 @@
 #             path or chartMemoryLimit, which a loaded null drops). The message may use {{ .components }}
 chart: data-space-connector
 version: 10.16.0
-revision: 15
+revision: 16
 topLevelKeys: [
   nameOverride, fullnameOverride, imagePullSecrets, issuance, decentralizedIam, scorpio, elsi,
   keycloak, tm-forum-api, statusListServer, rainbow, contract-management, did, registration,
@@ -483,6 +485,18 @@ noProxyServices:
 requirements:
   - {kind: secret, name: "{{ .ca.privateSecret }}", key: ca.crt,
      purpose: The PEM bundle of the private CA that signs the public hosts.}
+# Mechanisms that collide with something the chart templates itself, which no lists row's unique check sees.
+#   id         a mechanism of the element targets
+#   conflicts  [{whenSet: [paths]}]: the mechanism is withheld while a loaded file sets every path of any one entry,
+#              as a Helm `if` reads it; no target may write these paths
+mechanisms:
+  # The vcverifier chart mounts its own ca-bundle at /etc/ssl/cert.pem with a client certificate, and renders its
+  # add-root-ca init container, so its caCert, as soon as deployment.initContainers is non-empty.
+  - id: verifier-ca
+    conflicts:
+      - whenSet: [decentralizedIam.vcAuthentication.vcverifier.deployment.serverCertificates.caCert.enabled]
+      - whenSet: [decentralizedIam.vcAuthentication.vcverifier.deployment.serverCertificates.clientKey.secretName,
+                  decentralizedIam.vcAuthentication.vcverifier.deployment.verifier.clientIdentification.certificatePath]
 foundations:
   - id: org.displayName
     stage: foundations
