@@ -189,7 +189,7 @@ Step 7 then gives Contract Management a CA mechanism, which closes the one accep
   is an *error* for "an enabled component that calls a public host [and] has no CA mechanism configured". Steps 5
   and 6 ship Contract Management as exactly that case, with a **warning** instead, telling the user that the hosts it
   calls need a publicly trusted certificate. The **error** is reserved for an enabled component that has a mechanism
-  the final tree does not carry (dropped or pinned by a hand edit), and for an APISIX route that does not verify (see
+  the final tree does not carry in effect (dropped, or pinned by a hand edit to a different value; see Step 5), and for an APISIX route that does not verify (see
   below). wistefan accepted this on PR #44 on the condition that it is documented and solved in a later step.
   - *Why it is not an error yet.* An error that no configuration can clear would block `generate` for every
     provider that uses a private CA together with Contract Management, and Steps 1-6 build no mechanism for it.
@@ -341,8 +341,13 @@ Step 7 then gives Contract Management a CA mechanism, which closes the one accep
   `components: [{id, label, enabledKeys, paths | mechanism: none}]` and the precondition `when: [{field:
   answers.ca.privateSecret, ...}]`. It needs a precondition form for "set", either a new `set: true` beside `unset` or
   the rule kind's own gate.
-  - An **error** names every enabled component whose CA paths are missing from the final tree (rendered plus loaded),
-    unless its mechanism was withheld.
+  - An **error** names every enabled component whose CA mechanism is not in effect, unless the mechanism was withheld.
+    A CA path counts as covered only if its final leaf was rendered by the tool (owned provenance) or equals the
+    rendered value. A path counts as missing when the leaf is absent, and also when it is pinned with a different
+    value: a loaded element with the owned key (for example `KC_TRUSTSTORE_PATHS`, `NODE_EXTRA_CA_CERTS`,
+    `SSL_CERT_DIR`, or `JDK_JAVA_OPTIONS` after Step 7) keeps its path, but carries the user's content, so a presence
+    check alone would pass while TLS fails at runtime. `caCoverage` therefore reads the leaf provenance from the render
+    result, not just the tree.
   - A **warning** names every enabled component whose mechanism was withheld, with the foreign element and the path it
     occupies (see "Fields that must be unique besides the key"). `caCoverage` reads the `Withheld` list that
     `render` returns.
@@ -372,7 +377,9 @@ Step 7 then gives Contract Management a CA mechanism, which closes the one accep
   `InsecureSkipVerify: true`) and rows that must not (`ssl_verify: true`, `insecure` in prose, `verify: true`).
   `k3s/` and `config-tool/trial/` are reference files and are not scanned. If a
   legitimate line matches, reword it rather than adding an allow list.
-- Tests: table-driven `check` cases (CA unset; all covered; one component pinned away; the verifier mechanism withheld
+- Tests: table-driven `check` cases (CA unset; all covered; one component pinned away, in two rows: the element
+  deleted from the loaded list, and a loaded element with the owned key and a different value, both errors; a loaded
+  element with the owned key and the rendered value, no error; the verifier mechanism withheld
   by the loaded k3s `root-ca` mount, which warns and does not error; contract-management enabled and disabled; a route with `ssl_verify` unset, `false` pinned, and `true`; no routes; `noProxyCoverage` with the
   derived default, with a loaded `keycloak.fullnameOverride: idp` and the default (warns), and with the same override
   and a given `proxy.no` holding `idp` (silent)).
@@ -428,8 +435,8 @@ Step 7 then gives Contract Management a CA mechanism, which closes the one accep
     value (the JDK default store's well-known password, not a secret) and `-Djavax.net.ssl.trustStoreType=PKCS12`.
 - `caCoverage`: replace the `mechanism: none` row with the paths. Bump `revision`.
 - Tests: a row in `ca_test.go` for the mechanism, a withheld row with a foreign mount at the same path, the
-  invariant over `k3s/*.yaml`, and a `check` row in which Contract Management with a pinned-away mechanism is now an
-  error. The Step 5 warning row for Contract Management becomes a row that asserts no warning.
+  invariant over `k3s/*.yaml`, and a `check` row in which Contract Management with a pinned-away mechanism (a loaded
+  `JDK_JAVA_OPTIONS` with a different value) is now an error. The Step 5 warning row for Contract Management becomes a row that asserts no warning.
 - Docs: replace the PREREQUISITES Contract Management row with the mechanism. Change the ADR 0025 "Deviation from
   the ticket" section to resolved, remove the "mechanism still missing" wording from the UI copy, and add
   Contract Management to the US-3.6 bullet in `AGENTS.md`.
