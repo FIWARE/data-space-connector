@@ -25,7 +25,9 @@ Check also that the cluster meets the [Cluster Prerequisites](../PREREQUISITES.m
 
 ## Required components
 
-> **Note:** The data services that the provider wants to expose through the FIWARE Data Space Connector (APIs, web applications, etc.) are not included in this list. These are external to the connector and must be deployed and managed independently.
+!!! note
+
+    The data services that the provider wants to expose through the FIWARE Data Space Connector (APIs, web applications, etc.) are not included in this list. These are external to the connector and must be deployed and managed independently.
 
 ### Everything from the Consumer role
 
@@ -34,7 +36,9 @@ The provider needs the same base components as a consumer:
 - **DID Helper** — publishes the provider's DID document
 - **PostgreSQL** — database for Keycloak and the IAM components: an existing one, or one the chart deploys (see [Databases](#databases))
 
-> **Note:** If the data space uses the [Decentralized Claims Protocol (DCP)](https://eclipse-dataspace-dcp.github.io/decentralized-claims-protocol/v1.0.1/) (typically together with the [Dataspace Protocol](https://docs.internationaldataspaces.org/ids-knowledgebase/dataspace-protocol) via [FDSC-EDC](#fdsc-edc-dataspace-protocol)), the **DID Helper is replaced by the Identity Hub**, which serves the DID document (and the provider's credentials) as required by DCP. See the [Dataspace Protocol Integration Guide](../../../DSP_INTEGRATION.md) for details.
+!!! note
+
+    If the data space uses the [Decentralized Claims Protocol (DCP)](https://eclipse-dataspace-dcp.github.io/decentralized-claims-protocol/v1.0.1/) (typically together with the [Dataspace Protocol](https://docs.internationaldataspaces.org/ids-knowledgebase/dataspace-protocol) via [FDSC-EDC](#fdsc-edc-dataspace-protocol)), the **DID Helper is replaced by the Identity Hub**, which serves the DID document (and the provider's credentials) as required by DCP. See the [Dataspace Protocol Integration Guide](../../../DSP_INTEGRATION.md) for details.
 
 ### Authentication: Verifiable Credential verification
 
@@ -126,7 +130,9 @@ kubectl exec -n <namespace> postgres-0 -- psql -U postgres -d tildb \
 
 All optional components listed below can be deployed using the `fiware/data-space-connector` Helm chart. Some of them - Scorpio, the TMForum API and Contract Management - are **enabled by default**; set them to `false` explicitly if you do not need them. The [values example](#using-the-fiware-dsc-helm-chart-and-values) below lists the default of each one.
 
-> **Note on Scorpio Context Broker:** The FIWARE implementation of the [TMForum APIs](https://github.com/FIWARE/tmforum-api) is based on [NGSI-LD](https://www.etsi.org/deliver/etsi_gs/CIM/001_099/009/01.08.01_60/gs_CIM009v010801p.pdf), which is why the `fiware/data-space-connector` Helm chart deploys a [Scorpio Context Broker](https://github.com/ScorpioBroker/ScorpioBroker) as its backend. In the provided examples, this same Scorpio instance is also used as the NGSI-LD endpoint that the provider exposes through the connector. However, **in production**, if you want to expose an NGSI-LD endpoint as a data service, you should deploy a **separate Context Broker** for that purpose and not reuse the Scorpio instance that backs the TMForum APIs.
+!!! note "Note on Scorpio Context Broker"
+
+    The FIWARE implementation of the [TMForum APIs](https://github.com/FIWARE/tmforum-api) is based on [NGSI-LD](https://www.etsi.org/deliver/etsi_gs/CIM/001_099/009/01.08.01_60/gs_CIM009v010801p.pdf), which is why the `fiware/data-space-connector` Helm chart deploys a [Scorpio Context Broker](https://github.com/ScorpioBroker/ScorpioBroker) as its backend. In the provided examples, this same Scorpio instance is also used as the NGSI-LD endpoint that the provider exposes through the connector. However, **in production**, if you want to expose an NGSI-LD endpoint as a data service, you should deploy a **separate Context Broker** for that purpose and not reuse the Scorpio instance that backs the TMForum APIs.
 
 ### TMForum API
 
@@ -143,9 +149,13 @@ The [Contract Management](https://github.com/FIWARE/contract-management) compone
 - Access should be granted/revoked automatically based on contracts
 - You need audit trails for data access agreements
 
-> **Note:** If the data space uses a [central marketplace](../../../CENTRAL_MARKETPLACE.md), the Contract Management component requires specific configuration to work with it. See the [Central Marketplace documentation](../../../CENTRAL_MARKETPLACE.md) for details on how to configure Contract Management in that scenario.
+!!! note
 
-> **Note:** The policies and the credential configuration are read from the ordered `ProductSpecification` by default. A product can instead be composed of `ServiceSpecification`s that carry their own policies - an access policy protects an API, and in TMForum an API is a `ServiceSpecification`. See [Authoring a composed ProductSpecification](./COMPOSED_SPECIFICATIONS.md).
+    If the data space uses a [central marketplace](../../../CENTRAL_MARKETPLACE.md), the Contract Management component requires specific configuration to work with it. See the [Central Marketplace documentation](../../../CENTRAL_MARKETPLACE.md) for details on how to configure Contract Management in that scenario.
+
+!!! note
+
+    The policies and the credential configuration are read from the ordered `ProductSpecification` by default. A product can instead be composed of `ServiceSpecification`s that carry their own policies - an access policy protects an API, and in TMForum an API is a `ServiceSpecification`. See [Authoring a composed ProductSpecification](./COMPOSED_SPECIFICATIONS.md).
 
 ### Marketplace (BAE)
 
@@ -158,18 +168,23 @@ Enable the local marketplace when:
 - You want a user-facing web interface for your own data marketplace
 - Consumers should be able to browse and order offerings through a portal hosted by the provider
 
-> **Note:** The local Marketplace requires MongoDB in addition to the existing PostgreSQL, deployed by the chart through the MongoDB Community Operator. [Running a local marketplace](./LOCAL_MARKETPLACE.md) covers the whole setup: the operator, the values, the login with Verifiable Credentials and the security considerations.
+!!! note
 
-> **Note:** To create **DSP-compatible** products and offerings (i.e. offerings whose data is exchanged over the Dataspace Protocol — see [FDSC-EDC (Dataspace Protocol)](#fdsc-edc-dataspace-protocol)) through the local marketplace UI, the BAE Logic Proxy must be deployed with `BAE_LP_DSP_ENABLED=true`, set under `marketplace.bizEcosystemLogicProxy.additionalEnvVars`. This flag exposes the DSP-specific fields in the offering-creation forms; omit it for a marketplace that only brokers classic FIWARE offerings. See [Using the BAE Marketplace](../../../DSP_INTEGRATION.md#using-the-bae-marketplace) in the DSP Integration documentation.
+    The local Marketplace requires MongoDB in addition to the existing PostgreSQL, deployed by the chart through the MongoDB Community Operator. [Running a local marketplace](./LOCAL_MARKETPLACE.md) covers the whole setup: the operator, the values, the login with Verifiable Credentials and the security considerations.
+
+!!! note
+
+    To create **DSP-compatible** products and offerings (i.e. offerings whose data is exchanged over the Dataspace Protocol — see [FDSC-EDC (Dataspace Protocol)](#fdsc-edc-dataspace-protocol)) through the local marketplace UI, the BAE Logic Proxy must be deployed with `BAE_LP_DSP_ENABLED=true`, set under `marketplace.bizEcosystemLogicProxy.additionalEnvVars`. This flag exposes the DSP-specific fields in the offering-creation forms; omit it for a marketplace that only brokers classic FIWARE offerings. See [Using the BAE Marketplace](../../../DSP_INTEGRATION.md#using-the-bae-marketplace) in the DSP Integration documentation.
 
 #### Participating in a Central Marketplace
 
 If the data space runs a shared [Central Marketplace](../../../CENTRAL_MARKETPLACE.md) hosted by another actor (typically the Data Space Operator), the provider publishes its offerings there and does **not** deploy the marketplace itself. However, the provider's DSC needs specific configuration so the Central Marketplace can reach the local Contract Management and trigger the activation flow after each purchase.
 
-> **Minimum versions**
-> - `fiware/data-space-connector` Helm chart ≥ **9.0.1**
-> - `fiware/contract-management` Helm chart ≥ **3.5.22**
-> - `contract-management` container image ≥ **3.3.8**
+!!! note "Minimum versions"
+
+    - `fiware/data-space-connector` Helm chart ≥ **9.0.1**
+    - `fiware/contract-management` Helm chart ≥ **3.5.22**
+    - `contract-management` container image ≥ **3.3.8**
 
 The following configuration is required on the provider side. The example in [`k3s/provider.yaml`](../../../../k3s/provider.yaml) already includes all of the pieces below and can be used as a reference.
 
@@ -290,7 +305,9 @@ Enable the Eclipse Dataspace Components connector for DSP compliance. See [DSP I
 
 ### Using the FIWARE DSC Helm chart and values
 
-> **Start from the reference profile:** [`examples/provider.yaml`](../../../../charts/data-space-connector/examples/provider.yaml), and [`examples/provider-marketplace.yaml`](../../../../charts/data-space-connector/examples/provider-marketplace.yaml) for the provider's own local marketplace (not the Central Marketplace), are complete values files for a provider, to adapt to your installation. Their [README](../../../../charts/data-space-connector/examples/README.md) lists the prerequisites, the placeholders, the Secrets to create and the installation steps. The settings below explain each part.
+!!! note "Start from the reference profile"
+
+    [`examples/provider.yaml`](../../../../charts/data-space-connector/examples/provider.yaml), and [`examples/provider-marketplace.yaml`](../../../../charts/data-space-connector/examples/provider-marketplace.yaml) for the provider's own local marketplace (not the Central Marketplace), are complete values files for a provider, to adapt to your installation. Their [README](../../../../charts/data-space-connector/examples/README.md) lists the prerequisites, the placeholders, the Secrets to create and the installation steps. The settings below explain each part.
 
 The provider uses the `fiware/data-space-connector` chart with authentication and authorization components enabled.
 
@@ -549,7 +566,9 @@ See the reference profile [`examples/provider.yaml`](../../../../charts/data-spa
 
 A base example for a provider deployment can be found at [k3s/provider.yaml](../../../../k3s/provider.yaml).
 
-> **Note:** These values are intended for **local development and testing** environments. For a real production deployment, they must be customized to meet your infrastructure, security, and availability requirements. See [Production considerations](#production-considerations) below.
+!!! note
+
+    These values are intended for **local development and testing** environments. For a real production deployment, they must be customized to meet your infrastructure, security, and availability requirements. See [Production considerations](#production-considerations) below.
 
 For other deployment scenarios, the base `provider.yaml` can be extended with additional overlay values files (which take precedence over the base). The following overlays are available:
 

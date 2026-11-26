@@ -2,7 +2,9 @@
 
 In order to be compatible with common european frameworks for Dataspaces, the FIWARE Data Space Connector provides integrations with the [Gaia-X Trustframework](https://gaia-x.gitlab.io/policy-rules-committee/trust-framework/). 
 
-> :warning: The FIWARE Data Space Connector is not supporting the full Gaia-X Trustframework. While a number of features is still under development(see [Ongoing-Work](./ONGOING_WORK.md)), others (like ```did:web``` for Verifiable Presentations) are not enforced in order to keep it more flexible. If strict support is required, users need to ensure that holders are also using ```did:web``` based identities, instead of the default ```did:key```
+!!! warning
+
+    The FIWARE Data Space Connector is not supporting the full Gaia-X Trustframework. While a number of features is still under development(see [Ongoing-Work](./ONGOING_WORK.md)), others (like ```did:web``` for Verifiable Presentations) are not enforced in order to keep it more flexible. If strict support is required, users need to ensure that holders are also using ```did:web``` based identities, instead of the default ```did:key```
 
 ## Gaia-X Digital Clearing Houses as Trusted Issuers Registry
 
@@ -101,7 +103,9 @@ Not supported:
 
 Policies can be created at the [ODRL-PAP](https://github.com/wistefan/odrl-pap). 
 
-> :bulb: The following examples use the [local-deployment of the connector](./deployment-integration/local-deployment/LOCAL.md). However, all of them can be run on any other installation of the Data Space Connector.
+!!! tip
+
+    The following examples use the [local-deployment of the connector](./deployment-integration/local-deployment/LOCAL.md). However, all of them can be run on any other installation of the Data Space Connector.
 
 The policy would allow any caller providing a Verifiable Credential with the the ```credentialSubject.type``` being ```gx:LegalParticipant``` and containing a claim ```credentialSubject.gx:legalAddress.gx:countrySubdivisionCode``` with the value either being ```FR-HDF``` or ```BE-BRU``` to read the entity with the id ```my-secured-object``` .
 

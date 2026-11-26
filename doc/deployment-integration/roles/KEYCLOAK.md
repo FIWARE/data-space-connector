@@ -74,7 +74,9 @@ Keycloak is enabled by default in the `fiware/data-space-connector` Helm chart. 
 
 The following sections walk through each part of a typical configuration. For a complete working example, see [k3s/consumer.yaml](../../../k3s/consumer.yaml).
 
-> **Important:** Most realm sub-keys (`clientRoles`, `users`, `clients`, `clientScopes`) accept either YAML objects or **raw JSON strings** inside YAML block scalars (`|`); the Helm template injects them directly into the realm import JSON file. The dedicated `verifiableCredentials:` map is YAML-only and renders one ClientScope per entry.
+!!! important
+
+    Most realm sub-keys (`clientRoles`, `users`, `clients`, `clientScopes`) accept either YAML objects or **raw JSON strings** inside YAML block scalars (`|`); the Helm template injects them directly into the realm import JSON file. The dedicated `verifiableCredentials:` map is YAML-only and renders one ClientScope per entry.
 
 Here is the overall structure at a glance:
 
@@ -177,17 +179,21 @@ Keycloak needs a PKCS12 keystore to sign Verifiable Credentials. An init contain
 
 This reads the DID private key and certificate from a TLS secret and produces a `cert.pfx` keystore in the shared `did-material` volume.
 
-> **Note:** the key is `extraInitContainers`. `initContainers` configures the chart's own init containers and takes a map, so a list there fails validation.
+!!! note
+
+    the key is `extraInitContainers`. `initContainers` configures the chart's own init containers and takes a map, so a list there fails validation.
 
 ### Volumes
 
 Three volumes connect the init container, the Helm-generated realm ConfigMap, and the DID private key to Keycloak:
 
-> :warning: Since Keycloak 26.6.4 the `java-keystore` realm key provider only reads keystores from
-> `${kc.home.dir}/data/<realm-name>` (`/opt/keycloak/data/<realm-name>` on the official image). The
-> mount path below must therefore end in the realm name configured under `realm.name` — `test-realm`
-> in this example. Keystores outside that boundary make Keycloak reject any create/update on the key
-> provider.
+!!! warning
+
+    Since Keycloak 26.6.4 the `java-keystore` realm key provider only reads keystores from
+    `${kc.home.dir}/data/<realm-name>` (`/opt/keycloak/data/<realm-name>` on the official image). The
+    mount path below must therefore end in the realm name configured under `realm.name` — `test-realm`
+    in this example. Keystores outside that boundary make Keycloak reject any create/update on the key
+    provider.
 
 ```yaml
   extraVolumeMounts:
@@ -227,14 +233,16 @@ The `did` and `issuerDid` must match your organization's registered DID. `ES256`
 
 ### Environment variables
 
-> :warning: **Changed in 10.x.** The Bitnami-only `KEYCLOAK_EXTRA_ARGS` is gone, and several settings that used to live in `extraEnvVars` are now first-class chart values:
->
-> - `--import-realm` is auto-added by the umbrella when `realm.import: true`.
-> - `KC_FEATURES` → `keycloak.features.enabled` (must include both `oid4vc-vci` and `oid4vc-vci-preauth-code` since KC 26.4+).
-> - `KC_HEALTH_ENABLED` is enabled automatically by any active probe (or `metrics.enabled: true`).
-> - `KC_ADMIN_PASSWORD` → handled via `keycloak.keycloak.existingSecret` and `keycloak.keycloak.secretKeys.adminPasswordKey`.
->
-> Use `extraEnvVars` for genuinely custom env vars only (heap tuning, secrets consumed by templated realm config, etc.).
+!!! warning
+
+    **Changed in 10.x.** The Bitnami-only `KEYCLOAK_EXTRA_ARGS` is gone, and several settings that used to live in `extraEnvVars` are now first-class chart values:
+
+    - `--import-realm` is auto-added by the umbrella when `realm.import: true`.
+    - `KC_FEATURES` → `keycloak.features.enabled` (must include both `oid4vc-vci` and `oid4vc-vci-preauth-code` since KC 26.4+).
+    - `KC_HEALTH_ENABLED` is enabled automatically by any active probe (or `metrics.enabled: true`).
+    - `KC_ADMIN_PASSWORD` → handled via `keycloak.keycloak.existingSecret` and `keycloak.keycloak.secretKeys.adminPasswordKey`.
+
+    Use `extraEnvVars` for genuinely custom env vars only (heap tuning, secrets consumed by templated realm config, etc.).
 
 ```yaml
   extraEnvVars:
@@ -250,13 +258,15 @@ The `did` and `issuerDid` must match your organization's registered DID. `ES256`
 
 ### Realm: credential type definitions
 
-> :warning: **Changed in 10.x (Keycloak 26.4+).** The legacy `realm.attributes` flat
-> scheme `vc.<name>.<property>` and the `realm.credentialBuilder` block are no
-> longer recognised. Each credential type is now declared once under
-> `realm.verifiableCredentials.<name>`, and the chart renders one ClientScope
-> (with `protocol: "oid4vc"`) per entry. See
-> [`doc/release-notes/10-x.md`](../../release-notes/10-x.md) for the full
-> migration guide.
+!!! warning
+
+    **Changed in 10.x (Keycloak 26.4+).** The legacy `realm.attributes` flat
+    scheme `vc.<name>.<property>` and the `realm.credentialBuilder` block are no
+    longer recognised. Each credential type is now declared once under
+    `realm.verifiableCredentials.<name>`, and the chart renders one ClientScope
+    (with `protocol: "oid4vc"`) per entry. See
+    [`doc/release-notes/10-x.md`](../../release-notes/10-x.md) for the full
+    migration guide.
 
 Example defining one credential type (`user-credential` in JWT-VC JSON format):
 
@@ -356,7 +366,9 @@ The `clientRoles` section assigns the roles defined above to this user. The `acc
 
 The chart imports no users and no client roles by default: a realm only has the ones its values declare.
 
-> **Production note:** Do not hardcode passwords in values files. Use Kubernetes Secrets or an external identity provider for user management.
+!!! note "Production note"
+
+    Do not hardcode passwords in values files. Use Kubernetes Secrets or an external identity provider for user management.
 
 ### Realm: protocol mappers per VC
 

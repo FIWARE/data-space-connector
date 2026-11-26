@@ -4,7 +4,9 @@ In order to support development and exploration of the FIWARE Data Space Connect
 provided as part of this repo.
 An alternative deployment guide, based on [MicroK8s](https://microk8s.io/) can be found here: https://github.com/cgonzalezITA/DSFiware-hackathon?tab=readme-ov-file#quick-deployment-from-scratch
 
-> **Note:** The Local Deployment is for **learning and development purposes only**. It deploys all the components of a data space together to show how they interact, not from the perspective of any specific role. For deploying the FIWARE DSC in a real environment, refer to the documentation that matches your organization's role in the data space: [Deployment by Role](../roles/README.md).
+!!! note
+
+    The Local Deployment is for **learning and development purposes only**. It deploys all the components of a data space together to show how they interact, not from the perspective of any specific role. For deploying the FIWARE DSC in a real environment, refer to the documentation that matches your organization's role in the data space: [Deployment by Role](../roles/README.md).
 
 ## Requirements
 
@@ -39,9 +41,13 @@ The script does not create a Kubernetes cluster or verify deployment readiness.
 
 ## Quick Start
 
-> :warning: The local deployment uses [k3s](https://k3s.io/) in a docker container and is currently only tested on linux and MacOS.
+!!! warning
 
-> :warning: On Linux hosts, k3s networking needs the ```br_netfilter``` kernel module, which current distributions do not load by default. Without it, the connector does not start up properly. Enable it with ```sudo modprobe br_netfilter```. It is not needed on macOS, where Docker runs in its own Linux VM. See [Stackoverflow](https://stackoverflow.com/questions/48148838/kube-dns-error-reply-from-unexpected-source/48151279#48151279) for more.
+    The local deployment uses [k3s](https://k3s.io/) in a docker container and is currently only tested on linux and MacOS.
+
+!!! warning
+
+    On Linux hosts, k3s networking needs the ```br_netfilter``` kernel module, which current distributions do not load by default. Without it, the connector does not start up properly. Enable it with ```sudo modprobe br_netfilter```. It is not needed on macOS, where Docker runs in its own Linux VM. See [Stackoverflow](https://stackoverflow.com/questions/48148838/kube-dns-error-reply-from-unexpected-source/48151279#48151279) for more.
 
 To start the Data Space, just use:
 
@@ -139,15 +145,19 @@ In order to retrieve an actual credential two ways are available:
   case.
 * Get the credential via http-requests through the `SameDevice-Flow`:
 
-> :warning: The pre-authorized code and the offer expire within 30s for security reasons. Be fast.
+!!! warning
 
-> :bulb: In case you did the demo before, you can use the following snippet to unset the env-vars:
-> ```shell
->           unset ACCESS_TOKEN; unset OFFER_URI; unset PRE_AUTHORIZED_CODE; \
->           unset CREDENTIAL_ACCESS_TOKEN; unset VERIFIABLE_CREDENTIAL; unset HOLDER_DID; \
->           unset VERIFIABLE_PRESENTATION; unset JWT_HEADER; unset PAYLOAD; unset SIGNATURE; unset JWT; \
->           unset VP_TOKEN; unset DATA_SERVICE_ACCESS_TOKEN;
-> ```
+    The pre-authorized code and the offer expire within 30s for security reasons. Be fast.
+
+!!! tip
+
+    In case you did the demo before, you can use the following snippet to unset the env-vars:
+    ```shell
+              unset ACCESS_TOKEN; unset OFFER_URI; unset PRE_AUTHORIZED_CODE; \
+              unset CREDENTIAL_ACCESS_TOKEN; unset VERIFIABLE_CREDENTIAL; unset HOLDER_DID; \
+              unset VERIFIABLE_PRESENTATION; unset JWT_HEADER; unset PAYLOAD; unset SIGNATURE; unset JWT; \
+              unset VP_TOKEN; unset DATA_SERVICE_ACCESS_TOKEN;
+    ```
 
 Get an AccessToken from Keycloak. This logs in with the password grant, which the local environment turns on for the
 `account-console` client: the chart leaves it off, so outside the local environment a user logs in through the browser
@@ -250,8 +260,10 @@ After the deployment, the provider can create a policy to allow access to its da
 the [test-resources](../../../it/src/test/resources/policies/energyReport.json)
 It allows every participant to access entities of type ```EnergyReport```.
 
-> :warning: The PAP and Scorpio APIs are only published to make demo interactions easier.
-> In real environments, they should never be public without any authentication/authorization framework in front of them.
+!!! warning
+
+    The PAP and Scorpio APIs are only published to make demo interactions easier.
+    In real environments, they should never be public without any authentication/authorization framework in front of them.
 
 The policy can be created at the PAP via:
 
@@ -330,9 +342,11 @@ the consumer can access the data as following:
 
 ### Authenticate via OID4VP
 
-> :warning: Those steps assume that interaction with consumer and provider already happend, e.g. a VerifiableCredential
-> is available
-> and policy/entity are created.
+!!! warning
+
+    Those steps assume that interaction with consumer and provider already happend, e.g. a VerifiableCredential
+    is available
+    and policy/entity are created.
 
 The credential needs to be presented for authentication
 through [OID4VP]((https://openid.net/specs/openid-4-verifiable-presentations-1_0.html).
@@ -760,8 +774,10 @@ usually hidden behind a marketplace application, taking care of the concrete TMF
 In addition to the policies, an offering should be created. Similar to the broker access, the local deployment contains a direct
 ingress to the TMForum API for test and demo instrumentation. In production environments, this should never be accessible without an IAM framework in front.
 
-> :warning: This is a very simple demo product. Please check the [TMForum API Documentation](https://www.tmforum.org/oda/open-apis/directory/product-catalog-management-api-TMF620/v5.0.0)
-> for all available options.
+!!! warning
+
+    This is a very simple demo product. Please check the [TMForum API Documentation](https://www.tmforum.org/oda/open-apis/directory/product-catalog-management-api-TMF620/v5.0.0)
+    for all available options.
 
 The offer creation includes multiple steps:
 
@@ -1064,7 +1080,9 @@ In order to prove that not every user can just create a cluster, try the followi
     ./doc/scripts/get_access_token_oid4vp.sh https://mp-data-service.127.0.0.1.nip.io $OPERATOR_CREDENTIAL operator
 ```
 
-> :bulb: For easier access, the identity(in form of the did) of the consumer is available at ```https://did-consumer.127.0.0.1.nip.io/did-material/did.env```.
+!!! tip
+
+    For easier access, the identity(in form of the did) of the consumer is available at ```https://did-consumer.127.0.0.1.nip.io/did-material/did.env```.
 
 3. Export the Fancy Marketplace's did:
 ```shell

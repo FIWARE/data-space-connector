@@ -572,10 +572,12 @@ fdsc-edc:
       pullPolicy: "IfNotPresent"
 ```
 
-> **Note:** If you override `fdsc-edc.common.additonalEnvVars`,
-> `initContainers`, or volume settings, you must manually merge the
-> tracing entries. See the inline comments in `values.yaml` for a
-> ready-to-copy snippet.
+!!! note
+
+    If you override `fdsc-edc.common.additonalEnvVars`,
+    `initContainers`, or volume settings, you must manually merge the
+    tracing entries. See the inline comments in `values.yaml` for a
+    ready-to-copy snippet.
 
 ### Keycloak (Native OTEL)
 
@@ -605,11 +607,13 @@ variables (`QUARKUS_OTEL_ENABLED=true`,
 `QUARKUS_OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`, etc.) through the
 Scorpio subchart's `env` hook.
 
-> **Note:** The current Scorpio container image (`scorpiobroker/all-in-one-runner:java-4.1.10`)
-> does not include the `quarkus-opentelemetry` extension, so the static
-> env vars have no effect. Use
-> [auto-instrumentation via the OTel Operator](#auto-instrumentation-via-opentelemetry-operator)
-> to inject the Java agent into Scorpio pods.
+!!! note
+
+    The current Scorpio container image (`scorpiobroker/all-in-one-runner:java-4.1.10`)
+    does not include the `quarkus-opentelemetry` extension, so the static
+    env vars have no effect. Use
+    [auto-instrumentation via the OTel Operator](#auto-instrumentation-via-opentelemetry-operator)
+    to inject the Java agent into Scorpio pods.
 
 **Per-component overrides:**
 
@@ -632,10 +636,12 @@ These components receive the same set of environment variables:
 `OTEL_RESOURCE_ATTRIBUTES`, `OTEL_METRICS_EXPORTER=none`, and
 `OTEL_LOGS_EXPORTER=none`.
 
-> **Note:** These subcharts do not bundle an OTEL SDK, so the static
-> env vars alone will not produce traces. Use
-> [auto-instrumentation via the OTel Operator](#auto-instrumentation-via-opentelemetry-operator)
-> to inject the appropriate language agent.
+!!! note
+
+    These subcharts do not bundle an OTEL SDK, so the static
+    env vars alone will not produce traces. Use
+    [auto-instrumentation via the OTel Operator](#auto-instrumentation-via-opentelemetry-operator)
+    to inject the appropriate language agent.
 
 **Per-component overrides:**
 

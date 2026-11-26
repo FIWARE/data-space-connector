@@ -33,7 +33,9 @@ To setup your (Android) Mobile Phone, the following is required:
 
 #### Android Emulator
 
-> :warning: This is only tested on Ubuntu. In other systems, different solutions might be required.
+!!! warning
+
+    This is only tested on Ubuntu. In other systems, different solutions might be required.
 
 If running on the Mobile Phone is not possible or desirable, the Android Emulator can be used:
 
@@ -76,7 +78,9 @@ Once this is done, the camera can be connected to the emulator:
 ```shell
     adb install app-dev-debug.apk
 ```
-> :bulb: When first starting the app on the device, an error will be displayed. This is due to not having a Personal ID available in the demo environment and wallet and can just be ignored.
+!!! tip
+
+    When first starting the app on the device, an error will be displayed. This is due to not having a Personal ID available in the demo environment and wallet and can just be ignored.
 
 ##### Debug the wallet
 
@@ -106,9 +110,13 @@ When enabled, every request will be routed through the squid-proxy inside the lo
 
 In order to test the marketplace integration, a Provider and a Consumer will be required. For both, Verifiable Credentials will be required. In the example, Credentials for both Participants will be in the same wallet. In real environments, every user will have its own wallet. 
 
-> :warning: All interactions need to happen in the proxied browser.
+!!! warning
 
-> :warning: When the pages are first opened in the browser, a certificate warning will be shown. The local environment uses self-signed certificates, add an exception for those sites.
+    All interactions need to happen in the proxied browser.
+
+!!! warning
+
+    When the pages are first opened in the browser, a certificate warning will be shown. The local environment uses self-signed certificates, add an exception for those sites.
 
 The following flow will enable a customer to use a service offered by the provider by presenting an "OperatorCredential". The data-service is available for M2M-interactions, thus the flows described in the [Local Deployment](./deployment-integration/local-deployment/LOCAL.md) can be used. To test that the service is not available before the process, do the following steps:
 

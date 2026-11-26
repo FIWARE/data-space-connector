@@ -1,7 +1,9 @@
 # Integration with AWS Garnet Framework
 
-> :construction: Please note, that this document is currently being reworked for the latest updates of the 
-> connector and does not contain the latest information
+!!! warning "Work in progress"
+
+    Please note, that this document is currently being reworked for the latest updates of the
+    connector and does not contain the latest information
 
 ## Overview
 

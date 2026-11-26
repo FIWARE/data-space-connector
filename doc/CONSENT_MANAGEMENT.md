@@ -161,9 +161,11 @@ mvn clean deploy -Pconsent
 
 This deploys the standard local data space plus the consent overlays.
 
-> :warning: A local bring-up with consent management is resource-hungry; the &ge;24 GB of the
-> [local deployment requirements](deployment-integration/local-deployment/LOCAL.md#requirements)
-> apply.
+!!! warning
+
+    A local bring-up with consent management is resource-hungry; the &ge;24 GB of the
+    [local deployment requirements](deployment-integration/local-deployment/LOCAL.md#requirements)
+    apply.
 
 ### Preparing a wallet and some shell variables
 
@@ -585,10 +587,12 @@ as a characteristic **named `purpose`**:
   purpose name. `name` and `description` become the notice's purpose; a DPV URI in `purpose`
   documents it machine-readably.
 
-> :warning: **A missing purpose degrades silently.** Without the characteristic the facade uses the
-> product specification's `name` as the purpose, so the subject consents to a product name rather
-> than a processing purpose, and nothing downstream notices. Check that a notice's purposes carry the
-> value you declared.
+!!! warning
+
+    **A missing purpose degrades silently.** Without the characteristic the facade uses the
+    product specification's `name` as the purpose, so the subject consents to a product name rather
+    than a processing purpose, and nothing downstream notices. Check that a notice's purposes carry the
+    value you declared.
 
 ### Granting, checking and revoking
 
@@ -1261,9 +1265,11 @@ self-descriptions stay stable across runs; a registration left by an earlier run
 with `PUT /v1/participants/me`. The provider consent-facade's token service is reached through a
 port-forward, everything else through the ingress hosts via squid.
 
-> :warning: `integration-test` leaves the k3s container running for inspection
-> (`export KUBECONFIG=$(pwd)/it/target/k3s.yaml`). Remove it (`docker rm -f k3s-maven-plugin`) to start
-> from a clean cluster.
+!!! warning
+
+    `integration-test` leaves the k3s container running for inspection
+    (`export KUBECONFIG=$(pwd)/it/target/k3s.yaml`). Remove it (`docker rm -f k3s-maven-plugin`) to start
+    from a clean cluster.
 
 ## Migrating from the Prometheus-X consent-manager
 

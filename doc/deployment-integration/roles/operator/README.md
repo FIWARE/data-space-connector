@@ -30,7 +30,9 @@ The [Trusted Issuers Registry](https://github.com/FIWARE/trusted-issuers-list) i
 - Exposes a read-only API (`/v4/issuers`) for participants to verify trust
 - Backed by a management API (`/issuer`) for registering and managing trusted issuers
 
-> **Note:** The FIWARE [Trusted Issuers Registry](https://github.com/FIWARE/trusted-issuers-list) is the default implementation shipped with the FIWARE Data Space Connector, but it is not the only option. Any component that exposes the [EBSI Trusted Issuers Registry API](https://hub.ebsi.eu/api/core/issuers-registry) can be used as the Trust Anchor's registry — including **blockchain-backed implementations** such as the [EBSI Trusted Issuers Registry](https://hub.ebsi.eu/api/core/issuers-registry) itself. This allows data spaces to align the trust registry with the governance and decentralization model that best fits their requirements.
+!!! note
+
+    The FIWARE [Trusted Issuers Registry](https://github.com/FIWARE/trusted-issuers-list) is the default implementation shipped with the FIWARE Data Space Connector, but it is not the only option. Any component that exposes the [EBSI Trusted Issuers Registry API](https://hub.ebsi.eu/api/core/issuers-registry) can be used as the Trust Anchor's registry — including **blockchain-backed implementations** such as the [EBSI Trusted Issuers Registry](https://hub.ebsi.eu/api/core/issuers-registry) itself. This allows data spaces to align the trust registry with the governance and decentralization model that best fits their requirements.
 
 ### Trusted Issuers List (TIL) management API
 
@@ -61,7 +63,9 @@ The Onboarding Portal simplifies the Operator's work by replacing manual registr
 
 Some data spaces run a **shared Central Marketplace** where providers publish offerings and consumers browse and purchase access. In a neutral governance model, the Operator is the natural host for such a marketplace, since it is already the non-participant entity trusted by every organization in the data space.
 
-> **Note:** The Central Marketplace is **not a Provider**. It does not host data services or protect them with a PAP; it only provides a catalog, an ordering API and a UI. Its role is to broker purchases and notify the actual data providers so they can enforce access on their own infrastructure.
+!!! note
+
+    The Central Marketplace is **not a Provider**. It does not host data services or protect them with a PAP; it only provides a catalog, an ordering API and a UI. Its role is to broker purchases and notify the actual data providers so they can enforce access on their own infrastructure.
 
 Hosting the Central Marketplace is **optional** and independent from operating the Trust Anchor. Both responsibilities can be concentrated in the same actor or split among different ones. In either case, the Central Marketplace must be deployed with its **own DID, its own database and its own Kubernetes namespace** — never sharing infrastructure with the Trust Anchor's TIR.
 
@@ -86,8 +90,10 @@ The **ODRL-PAP, OPA and data-service protection** components that a Provider dep
 |-----------|---------|
 | **Marketplace UI (BAE)** | Business API Ecosystem web portal (Logic Proxy + Charging Backend + APIs) on top of the TMForum API. Offers a user-friendly interface for participants to register, publish offerings and purchase access — all the same actions that can be performed directly through the TMForum APIs. Requires `BAE_LP_DATASPACE_ENABLED=true` and `BAE_LP_PURCHASE_ENABLED=true` for data space purchase flows, plus its own MongoDB. |
 
-> **Note:** The Marketplace UI is **not strictly required** for the Central Marketplace to be operational — a headless deployment (TMForum API + Contract Management only) is valid, and all the flows documented in [CENTRAL_MARKETPLACE.md](../../../CENTRAL_MARKETPLACE.md) can be driven exclusively through the TMForum APIs.
-> However, for **production deployments it is highly recommended** to deploy the UI, since it provides a usable experience for end-users (sellers publishing offerings, customers browsing and buying). A UI-less deployment is a reasonable choice only when the scenario is **purely machine-to-machine** and participants integrate directly with the TMForum APIs from their own systems.
+!!! note
+
+    The Marketplace UI is **not strictly required** for the Central Marketplace to be operational — a headless deployment (TMForum API + Contract Management only) is valid, and all the flows documented in [CENTRAL_MARKETPLACE.md](../../../CENTRAL_MARKETPLACE.md) can be driven exclusively through the TMForum APIs.
+    However, for **production deployments it is highly recommended** to deploy the UI, since it provides a usable experience for end-users (sellers publishing offerings, customers browsing and buying). A UI-less deployment is a reasonable choice only when the scenario is **purely machine-to-machine** and participants integrate directly with the TMForum APIs from their own systems.
 
 #### Database
 
@@ -298,7 +304,9 @@ If the type is changed, it must be changed consistently on all three sides or pr
 
 Providers and users accessing the catalog and ordering APIs authenticate via OID4VP against the marketplace's own VCVerifier + local Trusted Issuers List. The values mirror those of a Provider ([see Provider role](../provider/README.md#deployment)), but the services registered with `vcverifier.registration.services` must expose a `LegalPersonCredential`-based scope for the catalog/ordering endpoints (so any registered participant can log in to publish or buy offerings).
 
-> **Note:** The Central Marketplace does **not** deploy the ODRL-PAP + OPA data-service-protection stack. Its only protected surface is the TMForum API behind APISIX with OID4VP auth.
+!!! note
+
+    The Central Marketplace does **not** deploy the ODRL-PAP + OPA data-service-protection stack. Its only protected surface is the TMForum API behind APISIX with OID4VP auth.
 
 #### k3s/ reference values
 

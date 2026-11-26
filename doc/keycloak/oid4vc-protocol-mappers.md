@@ -1,13 +1,15 @@
 # OID4VC Protocol Mappers — Keycloak 26.7.0
 
-> **Feature flags required:** `keycloak.features.enabled` must contain both
-> `oid4vc-vci` and (since KC 26.4+) `oid4vc-vci-preauth-code` for the
-> pre-authorized_code grant to work.
->
-> **`name` field:** A free-form identifier you choose to recognise the mapper
-> within Keycloak. It has no functional impact — use any value that is
-> meaningful to you (e.g. `"my-email-mapper"`, `"context-w3c"`, etc.). KC requires
-> the `name` to be unique within a single ClientScope.
+!!! note "Feature flags required"
+
+    `keycloak.features.enabled` must contain both
+    `oid4vc-vci` and (since KC 26.4+) `oid4vc-vci-preauth-code` for the
+    pre-authorized_code grant to work.
+
+    **`name` field:** A free-form identifier you choose to recognise the mapper
+    within Keycloak. It has no functional impact — use any value that is
+    meaningful to you (e.g. `"my-email-mapper"`, `"context-w3c"`, etc.). KC requires
+    the `name` to be unique within a single ClientScope.
 
 ## Changes since 26.3.3
 
@@ -86,13 +88,15 @@ Assigns a `@context` entry to the Verifiable Credential. This is required by the
 
 ## oid4vc-vc-type-mapper (deprecated)
 
-> :warning: **Deprecated in KC 26.4+.** The Verifiable Credential Type is now
-> a ClientScope attribute (`vc.verifiable_credential_type`), not a per-mapper
-> setting. The DSC chart populates it from
-> `keycloak.realm.verifiableCredentials.<name>.attributes.verifiable_credential_type`
-> and also auto-derives `vc.supported_credential_types` from it (controlling
-> the `type` array of JWT-VC JSON credentials). Do not declare this mapper in
-> new realms; the section is kept here only for users migrating from 26.3.
+!!! warning
+
+    **Deprecated in KC 26.4+.** The Verifiable Credential Type is now
+    a ClientScope attribute (`vc.verifiable_credential_type`), not a per-mapper
+    setting. The DSC chart populates it from
+    `keycloak.realm.verifiableCredentials.<name>.attributes.verifiable_credential_type`
+    and also auto-derives `vc.supported_credential_types` from it (controlling
+    the `type` array of JWT-VC JSON credentials). Do not declare this mapper in
+    new realms; the section is kept here only for users migrating from 26.3.
 
 **Name:** Credential Type Mapper
 
@@ -280,12 +284,14 @@ within a credential.
     clientId: did:web:my-client.example.org
 ```
 
-> :warning: KC 26.4+ does not allow two `oid4vc-target-role-mapper` mappers with
-> the same `claim.name` in the same scope (the realm import will fail with
-> `Duplicate key [credentialSubject, roles]`). Pick one target per VC, or use
-> distinct claim names. Note that the FIWARE vcverifier and the chart's
-> ODRL/OPA helpers look for `credentialSubject.roles[*].target` by default,
-> so deviating from the `roles` claim name requires a matching policy update.
+!!! warning
+
+    KC 26.4+ does not allow two `oid4vc-target-role-mapper` mappers with
+    the same `claim.name` in the same scope (the realm import will fail with
+    `Duplicate key [credentialSubject, roles]`). Pick one target per VC, or use
+    distinct claim names. Note that the FIWARE vcverifier and the chart's
+    ODRL/OPA helpers look for `credentialSubject.roles[*].target` by default,
+    so deviating from the `roles` claim name requires a matching policy update.
 
 ---
 

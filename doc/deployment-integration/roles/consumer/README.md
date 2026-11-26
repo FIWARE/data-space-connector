@@ -1,6 +1,8 @@
 # Consumer Role
 
-> **Note:** This guide covers the deployment of an organization acting **exclusively as a consumer**. If your organization also needs to act as a provider (offering data or services to other participants), refer to the [Consumer & Provider guide](../consumer-provider/README.md) instead.
+!!! note
+
+    This guide covers the deployment of an organization acting **exclusively as a consumer**. If your organization also needs to act as a provider (offering data or services to other participants), refer to the [Consumer & Provider guide](../consumer-provider/README.md) instead.
 
 ## Overview
 
@@ -40,7 +42,9 @@ Every participant in the data space needs a [Decentralized Identifier (DID)](htt
 
 The [DID Helper](https://github.com/SEAMWARE/did-helper) is a lightweight service that creates `did:key` or serves the consumer's [DID document](https://www.w3.org/TR/did-core/).
 
-> **Note:** If the data space uses the [Decentralized Claims Protocol (DCP)](https://eclipse-dataspace-dcp.github.io/decentralized-claims-protocol/v1.0.1/) (typically together with the [Dataspace Protocol](https://docs.internationaldataspaces.org/ids-knowledgebase/dataspace-protocol) via [FDSC-EDC](#dataspace-protocolfdsc-edc-and-identityhub)), the **DID Helper is replaced by the Identity Hub**, which serves the DID document (and the consumer's credentials) as required by DCP. See the [Dataspace Protocol Integration Guide](../../../DSP_INTEGRATION.md) for details.
+!!! note
+
+    If the data space uses the [Decentralized Claims Protocol (DCP)](https://eclipse-dataspace-dcp.github.io/decentralized-claims-protocol/v1.0.1/) (typically together with the [Dataspace Protocol](https://docs.internationaldataspaces.org/ids-knowledgebase/dataspace-protocol) via [FDSC-EDC](#dataspace-protocolfdsc-edc-and-identityhub)), the **DID Helper is replaced by the Identity Hub**, which serves the DID document (and the consumer's credentials) as required by DCP. See the [Dataspace Protocol Integration Guide](../../../DSP_INTEGRATION.md) for details.
 
 The DID document contains the consumer's public key, which providers use to verify that credentials were issued by this organization. The DID must be registered at the data space's Trust Anchor following the Data Space onboarding process.
 
@@ -66,7 +70,9 @@ However, for easier deployment of these components, you can use the same `fiware
 
 ### Using the FIWARE DSC Helm chart and values
 
-> **Start from the reference profile:** [`examples/consumer.yaml`](../../../../charts/data-space-connector/examples/consumer.yaml) is a complete values file for a consumer, to adapt to your installation. Its [README](../../../../charts/data-space-connector/examples/README.md) lists the prerequisites, the placeholders, the Secrets to create and the installation steps. The settings below explain each part.
+!!! note "Start from the reference profile"
+
+    [`examples/consumer.yaml`](../../../../charts/data-space-connector/examples/consumer.yaml) is a complete values file for a consumer, to adapt to your installation. Its [README](../../../../charts/data-space-connector/examples/README.md) lists the prerequisites, the placeholders, the Secrets to create and the installation steps. The settings below explain each part.
 
 The consumer could use the same `fiware/data-space-connector` chart as the provider, but with most components disabled (since it is not a real connector).
 
@@ -203,7 +209,9 @@ helm install consumer fiware-dsc/data-space-connector --version <version> -n con
 
 A base example for a consumer deployment can be found at [k3s/consumer.yaml](../../../../k3s/consumer.yaml).
 
-> **Note:** These values are intended for **local development and testing** environments. For a real production deployment, they must be customized to meet your infrastructure, security, and availability requirements. See [Production considerations](#production-considerations) below.
+!!! note
+
+    These values are intended for **local development and testing** environments. For a real production deployment, they must be customized to meet your infrastructure, security, and availability requirements. See [Production considerations](#production-considerations) below.
 
 For other deployment scenarios, the base `consumer.yaml` can be extended with additional overlay values files (which take precedence over the base). The following overlays are available:
 

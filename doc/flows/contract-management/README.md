@@ -1,6 +1,8 @@
 # Contract Management
 
-> :construction: Please note, that this document is currently being reworked for the usage of ODRL policies and does not contain the latest information
+!!! warning "Work in progress"
+
+    Please note, that this document is currently being reworked for the usage of ODRL policies and does not contain the latest information
 
 With the [tmforum-api](https://github.com/FIWARE/tmforum-api) and the 
 [contract-management](https://github.com/FIWARE/contract-management) notification listener, the FIWARE 
@@ -17,7 +19,9 @@ of [Consumer registration](#example-flow) and [Contract management](#contract-ma
 
 The current implementation of the FIWARE Data Space Connector uses the decentralised version of the [i4Trust framework](https://i4trust.github.io/building-blocks/docs/i4Trust-BuildingBlocks_v4.0.pdf) with addtional support for http-path based decisions. This required, since the FIWARE Data Space Connector provides the [TMForum APIs](https://github.com/FIWARE/tmforum-api), instead of NGSI-LD APIs.
 
-> :construction: A more powerful security framework, also supporting attribute-based policies for the TMForum API, is currently build on top of the existing framework within the [DOME Marketplace Project](https://dome-marketplace.eu/).
+!!! warning "Work in progress"
+
+    A more powerful security framework, also supporting attribute-based policies for the TMForum API, is currently build on top of the existing framework within the [DOME Marketplace Project](https://dome-marketplace.eu/).
 
 ### Roles
 
@@ -33,7 +37,9 @@ PROVIDER: "GET","POST","PUT","DELETE" on all deployed TMForum APIs
 CONSUMER: "GET" on the ProductCatalogManagement-API and "GET","POST","PUT" on the ProductOrderingManagement-API
 LEGAL_REPRESENTATIVE: "GET", "POST" and "PUT" on the Parties-API 
 
-> :warning: The hosted DSBA demo endpoints below are historical and are no longer available. Use the [local deployment guide](../../deployment-integration/local-deployment/LOCAL.md) to run a current environment; adapt the example endpoints and users to your deployment.
+!!! warning
+
+    The hosted DSBA demo endpoints below are historical and are no longer available. Use the [local deployment guide](../../deployment-integration/local-deployment/LOCAL.md) to run a current environment; adapt the example endpoints and users to your deployment.
 
 ### Credentials and Role-Assignment
 
@@ -44,17 +50,23 @@ For the Consumer-Participant, two users are provided:
 - the ```standard-user```(see the [documentation](https://github.com/FIWARE-Ops/fiware-gitops/tree/master/aws/dsba#credentials)) with the role ```CONSUMER```
 In order to get the credentials, use the HappyPets Keycloak (`https://happypets-kc.dsba.fiware.dev/realms/fiware-server/account/#/`).
 
-> :bulb: The framework would allow users that have both roles already. We decided to split them in order to have a clear flow. 
+!!! tip
+
+    The framework would allow users that have both roles already. We decided to split them in order to have a clear flow.
 
 ### Example flow 
 
-> :construction: The [Business API Ecosystem](https://github.com/FIWARE-TMForum/Business-API-Ecosystem) as a Marketplace solution build on top of the TMForum-APIs is currently beeing updated to the latest TMForum-APIs and the security framework. Once its finished, it can be used a Marketplace, including UI, for the Data Space Connector.
+!!! warning "Work in progress"
+
+    The [Business API Ecosystem](https://github.com/FIWARE-TMForum/Business-API-Ecosystem) as a Marketplace solution build on top of the TMForum-APIs is currently beeing updated to the latest TMForum-APIs and the security framework. Once its finished, it can be used a Marketplace, including UI, for the Data Space Connector.
 
 
 To provide a working example for Contract Management, using the Data Space Connector, a [postman colletion is provided](./tmf/README.md).
 It includes the following steps of the aquisition process:
 
-> :bulb: Since frontend-solutions are still under construction, plain REST-calls are used for the flow. Since all calls require a valid JWT, the demo-portal (`https://packetdelivery-portal.dsba.fiware.dev/`) for the provider has a link to get a plain token in exchange for the Verifiable Credential. Log-in either as CONSUMER or PROVIDER (see [Credentials and Role-Assignment](#credentials-and-role-assignment)) to get tokens.
+!!! tip
+
+    Since frontend-solutions are still under construction, plain REST-calls are used for the flow. Since all calls require a valid JWT, the demo-portal (`https://packetdelivery-portal.dsba.fiware.dev/`) for the provider has a link to get a plain token in exchange for the Verifiable Credential. Log-in either as CONSUMER or PROVIDER (see [Credentials and Role-Assignment](#credentials-and-role-assignment)) to get tokens.
 
 0. In order to have the consumer registered, it has to be created as an ```Organization``` through the [TMForum Party-API](https://github.com/FIWARE/tmforum-api/tree/main/party-catalog). The registration needs to happen with a direct api-call to the Parties-API, with a token in Role ```LEGAL_REPRESENTATIVE```: [POST /organization](./tmf/tmf.postman_collection.json)
 
