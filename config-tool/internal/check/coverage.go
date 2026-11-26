@@ -174,10 +174,11 @@ func cmpNil(v any) any {
 }
 
 // noProxyCoverage returns one warning per deployed noProxyServices row whose effective name the resolved answer does
-// not bypass for a Go client; none while the answer or the release name is unresolved, since names derive from it.
+// not bypass for a Go client; none while the answer is unresolved. A row whose name needs the missing release name
+// is skipped.
 func noProxyCoverage(b model.Bundle, r model.CheckRule, p profile.Profile, answers map[string]any, v chartValues) ([]Finding, error) {
 	noProxy, ok := answers[r.NoProxyCoverage.Answer].(string)
-	if !ok || p.Target.ReleaseName == "" {
+	if !ok {
 		return nil, nil
 	}
 	var out []Finding
@@ -185,11 +186,11 @@ func noProxyCoverage(b model.Bundle, r model.CheckRule, p profile.Profile, answe
 		if !v.deployed(model.ResourceComponent{EnabledKeys: s.EnabledKeys}) {
 			continue
 		}
-		name, path, err := effectiveName(s, p.Target, v)
+		name, path, known, err := effectiveName(s, p.Target, v)
 		if err != nil {
 			return nil, fmt.Errorf("rule %s: %w", r.ID, err)
 		}
-		if model.NoProxyBypasses(noProxy, name) {
+		if !known || model.NoProxyBypasses(noProxy, name) {
 			continue
 		}
 		tpl, data := r.NoProxyCoverage.Unrenamed, map[string]string{model.MessageService: name}
@@ -207,21 +208,24 @@ func noProxyCoverage(b model.Bundle, r model.CheckRule, p profile.Profile, answe
 
 // effectiveName is the name the chart gives service s under the final values, with the value path that renamed
 // it: the first set override, else the name with a set nameOverride in place of the chart name; path is empty
-// for the chart default.
-func effectiveName(s model.CompiledNoProxyService, t profile.Target, v chartValues) (name, path string, err error) {
+// for the chart default. known is false when the name needs the release name and t has none.
+func effectiveName(s model.CompiledNoProxyService, t profile.Target, v chartValues) (name, path string, known bool, err error) {
 	for _, o := range s.Overrides {
 		if n, ok := v.final(o); ok && n != nil && n != "" {
-			return fmt.Sprint(n), o.String(), nil
+			return fmt.Sprint(n), o.String(), true, nil
 		}
+	}
+	if s.ReadsRelease && t.ReleaseName == "" {
+		return "", "", false, nil
 	}
 	if s.NameOverride != nil {
 		if n, ok := v.final(s.NameOverride); ok && n != nil && n != "" {
 			name, err = s.RenderNamed(t.ReleaseName, t.Namespace, fmt.Sprint(n))
-			return name, s.NameOverride.String(), err
+			return name, s.NameOverride.String(), true, err
 		}
 	}
 	name, err = s.Render(t.ReleaseName, t.Namespace)
-	return name, "", err
+	return name, "", true, err
 }
 
 // valueSet reports whether the final values hold a non-empty value at r's path.

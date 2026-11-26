@@ -53,3 +53,28 @@ func TestNoProxyServiceDefaults(t *testing.T) {
 		t.Fatalf("the latest %s bundle has no noProxyServices rows", chart)
 	}
 }
+
+// TestNoProxyServiceReadsRelease pins which names need the release name, so the coverage check skips only those.
+func TestNoProxyServiceReadsRelease(t *testing.T) {
+	for _, tc := range []struct {
+		name, row string
+		want      bool
+	}{
+		{"fixed", `{name: trusted-issuers-list}`, false},
+		{"namespace only", `{name: 'svc.{{ .target.namespace }}'}`, false},
+		{"release prefixed", `{name: '{{ fullname .target.release "keycloak" }}'}`, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			body := elementsHead + "noProxyServices:\n  - " + tc.row + "\n"
+			got, err := Versions(fstest.MapFS{fixtureFile: {Data: []byte(body)}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, b := range got {
+				if s := b.NoProxyServices(); len(s) != 1 || s[0].ReadsRelease != tc.want {
+					t.Errorf("services = %+v, want one with ReadsRelease %v", s, tc.want)
+				}
+			}
+		})
+	}
+}

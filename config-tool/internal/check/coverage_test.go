@@ -34,6 +34,9 @@ const (
 	enableAddOns    = "marketplace:\n  enabled: true\nvc-operator:\n  enabled: true\n"
 	disableContract = "contract-management:\n  enabled: false\n"
 	enableTracing   = "opentelemetry-collector:\n  enabled: true\n"
+	// proxyMappings is the string form the chart declares, with the value k3s/provider.yaml sets.
+	proxyMappings = "keycloak:\n  proxy:\n    spiProxyMappings: \".*\\\\.127\\\\.0\\\\.0\\\\.1\\\\.nip\\\\.io;http://squid-proxy.infra.svc.cluster.local:8888\"\n"
+	tilRenamed    = "decentralizedIam:\n  vcAuthentication:\n    trusted-issuers-list:\n      fullnameOverride: til\n"
 )
 
 // targetProfile is a profile whose release and namespace resolve the NO_PROXY default.
@@ -150,11 +153,12 @@ func TestNoProxyCoverage(t *testing.T) {
 		t.Fatalf("default %q does not end with the collector", def)
 	}
 	tests := []struct {
-		name    string
-		noProxy string
-		noHTTPS bool
-		loaded  string
-		want    []string
+		name      string
+		noProxy   string
+		noHTTPS   bool
+		noRelease bool
+		loaded    string
+		want      []string
 	}{
 		{name: "derived default"},
 		{name: "no proxy", noHTTPS: true, loaded: keycloakIdp},
@@ -169,6 +173,11 @@ func TestNoProxyCoverage(t *testing.T) {
 			want: []string{"No proxy does not cover the in-cluster service provider-opentelemetry-collector"}},
 		{name: "unrenamed service not deployed", noProxy: noCollector},
 		{name: "renamed service not deployed", loaded: keycloakIdp + "  enabled: false\n"},
+		{name: "no release, fixed name renamed", noRelease: true, noProxy: def, loaded: tilRenamed,
+			want: []string{"The loaded file renames an in-cluster service to til (decentralizedIam.vcAuthentication.trusted-issuers-list.fullnameOverride)"}},
+		{name: "no release, release-prefixed name renamed", noRelease: true, noProxy: def, loaded: keycloakIdp,
+			want: []string{"The loaded file renames an in-cluster service to idp (keycloak.fullnameOverride)"}},
+		{name: "no release, release-prefixed name skipped", noRelease: true, noProxy: noCollector, loaded: enableTracing},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -179,7 +188,11 @@ func TestNoProxyCoverage(t *testing.T) {
 			if tc.noProxy != "" {
 				answers[noProxyAnswer] = tc.noProxy
 			}
-			findings, err := Evaluate(b, targetProfile(answers), loadedOptions(t, tc.loaded))
+			p := targetProfile(answers)
+			if tc.noRelease {
+				p.Target.ReleaseName = ""
+			}
+			findings, err := Evaluate(b, p, loadedOptions(t, tc.loaded))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -199,9 +212,9 @@ func TestKeycloakProxyMappings(t *testing.T) {
 		loaded string
 		want   bool
 	}{
-		{name: "mappings with a proxy", https: true, loaded: "keycloak:\n  proxy:\n    spiProxyMappings: ['.*;NO_PROXY']\n", want: true},
-		{name: "mappings without a proxy", loaded: "keycloak:\n  proxy:\n    spiProxyMappings: ['.*;NO_PROXY']\n"},
-		{name: "empty mappings", https: true, loaded: "keycloak:\n  proxy:\n    spiProxyMappings: []\n"},
+		{name: "mappings with a proxy", https: true, loaded: proxyMappings, want: true},
+		{name: "mappings without a proxy", loaded: proxyMappings},
+		{name: "empty mappings", https: true, loaded: "keycloak:\n  proxy:\n    spiProxyMappings: \"\"\n"},
 		{name: "nothing loaded", https: true},
 	}
 	for _, tc := range tests {

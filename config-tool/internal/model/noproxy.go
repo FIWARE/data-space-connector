@@ -34,6 +34,8 @@ type CompiledNoProxyService struct {
 	// NameOverride is nil when the row declares none.
 	NameOverride roundtrip.Path
 	EnabledKeys  map[string]bool
+	// ReadsRelease is true when the name template reads the release name, so it cannot render without one.
+	ReadsRelease bool
 }
 
 // NoProxyServices returns the bundle's noProxyServices table in bundle order.
@@ -85,12 +87,14 @@ func compileNoProxyService(i int, s NoProxyService, topLevelKeys []string) (Comp
 	if err != nil {
 		return CompiledNoProxyService{}, err
 	}
+	readsRelease := false
 	for _, r := range refs {
+		readsRelease = readsRelease || r == RefTargetRelease
 		if r != RefTargetRelease && r != RefTargetNamespace {
 			return CompiledNoProxyService{}, fmt.Errorf("name reads %s; only %s and %s are allowed", r, RefTargetRelease, RefTargetNamespace)
 		}
 	}
-	c := CompiledNoProxyService{Name: t, EnabledKeys: s.EnabledKeys}
+	c := CompiledNoProxyService{Name: t, EnabledKeys: s.EnabledKeys, ReadsRelease: readsRelease}
 	for _, key := range sortedKeys(s.EnabledKeys) {
 		if err := checkResourcePath(key, false, topLevelKeys); err != nil {
 			return CompiledNoProxyService{}, fmt.Errorf("enabledKeys: %w", err)
