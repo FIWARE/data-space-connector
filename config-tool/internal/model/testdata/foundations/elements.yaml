@@ -1,0 +1,47 @@
+# Keyed elements, an each target and requires (ADR 0025): ca.secret fans out to one mechanism over two lists.
+chart: data-space-connector
+version: 1.0.0
+revision: 1
+topLevelKeys: [keycloak, apisix]
+lists:
+  - path: keycloak.extraEnvVars
+    key: name
+    base:
+      - {name: KC_HEAP_SIZE, value: 1g}
+  - path: keycloak.extraVolumeMounts
+    key: name
+    unique: [mountPath]
+    base:
+      - {name: realms, mountPath: /opt/keycloak/data/import}
+foundations:
+  - id: proxy.https
+    stage: foundations
+    type: string
+    label: HTTPS proxy
+    targets:
+      - {path: keycloak.proxy.httpsProxy, fn: copy, args: ["{{ .proxy.https }}"]}
+      - {path: keycloak.proxy.enabled, fn: const, args: [true], requires: [proxy.https]}
+  - id: proxy.no
+    stage: foundations
+    type: string
+    label: No proxy
+    default: "localhost,{{ .target.namespace }}.svc,{{ fullname .target.release \"keycloak\" }}"
+    defaultWhen: {id: proxy.https, set: true}
+    targets:
+      - {path: keycloak.proxy.noProxy, fn: copy, args: ["{{ .proxy.no }}"], requires: [proxy.https]}
+  - id: ca.secret
+    stage: foundations
+    type: string
+    label: CA secret
+    targets:
+      - path: keycloak.extraEnvVars
+        mechanism: keycloak-ca
+        element: {key: KC_TRUSTSTORE_PATHS, value: {value: /opt/keycloak/conf/truststores/ca.crt}}
+        requires: [ca.secret]
+      - path: keycloak.extraVolumeMounts
+        mechanism: keycloak-ca
+        element: {key: ca-bundle, value: {mountPath: /opt/keycloak/conf/truststores, readOnly: true}}
+        requires: [ca.secret]
+      - path: keycloak.extraEnvVars
+        element: {key: CA_SECRET, value: {valueFrom: {secretKeyRef: {name: "{{ .ca.secret }}", key: ca.crt}}}}
+      - {path: apisix.routes, each: plugins.openid-connect.ssl_verify, fn: const, args: [true], requires: [ca.secret]}

@@ -31,7 +31,7 @@ type PinnedAnswer struct {
 }
 
 // DerivedDiff compares the derived answers of prev and next in FoundationOrder, each resolved with its own
-// target environment. A prev of another chart or
+// target (environment, release and namespace). A prev of another chart or
 // version than b is no baseline, so the diff is empty; next must be on b.
 func DerivedDiff(b model.Bundle, prev, next profile.Profile) (AnswerDiff, error) {
 	diff := AnswerDiff{Rederived: []DerivedChange{}, Pinned: []PinnedAnswer{}}
