@@ -102,7 +102,7 @@ func TestInfrastructureTargets(t *testing.T) {
 	}
 }
 
-// TestInfrastructureReplacedDefaults checks that a replacing question derives today's Secret name.
+// TestInfrastructureReplacedDefaults checks that a replacing question derives today's Secret name, only in its mode.
 func TestInfrastructureReplacedDefaults(t *testing.T) {
 	b := loadFixture(t, validInfrastructure)
 	answers := map[string]any{"domain": map[string]any{"base": "example.org"}, "host": map[string]any{"keycloak": "kc.example.org"}}
@@ -111,14 +111,17 @@ func TestInfrastructureReplacedDefaults(t *testing.T) {
 		refs []string
 		want string
 	}{
-		{"infra.certManager.secret.apisix", nil, "apisix-provider-tls"},
-		{"infra.certManager.secret.keycloak", []string{"host.keycloak"}, "kc.example.org-tls"},
+		{"infra.certManager.secret.apisix", []string{modeAnswer}, "apisix-provider-tls"},
+		{"infra.certManager.secret.keycloak", []string{"host.keycloak", modeAnswer}, "kc.example.org-tls"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.id, func(t *testing.T) {
 			f, _ := b.Foundation(tc.id)
 			if f.DefaultTemplate() == nil || !reflect.DeepEqual(f.DefaultRefs(), tc.refs) {
 				t.Fatalf("default %v with refs %v, want one with refs %v", f.DefaultTemplate(), f.DefaultRefs(), tc.refs)
+			}
+			if want := []TargetCondition{{ID: modeAnswer, Equals: ModeExternal}}; !reflect.DeepEqual(f.AskedWhen, want) {
+				t.Errorf("AskedWhen = %v, want %v", f.AskedWhen, want)
 			}
 			if got, err := Execute(f.DefaultTemplate(), answers); err != nil || got != tc.want {
 				t.Errorf("default = %q, %v; want %q", got, err, tc.want)

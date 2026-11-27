@@ -230,8 +230,11 @@ type CompiledFoundation struct {
 	// order the foundations and leave out reserved refs; DefaultRefs alone gates the default.
 	Refs        []string
 	DefaultWhen *Condition
-	Options     []Option
-	Targets     []CompiledTarget
+	// AskedWhen are the conditions an infrastructure question is asked under; its default derives only while all
+	// hold. Nil for a declared foundation.
+	AskedWhen []TargetCondition
+	Options   []Option
+	Targets   []CompiledTarget
 	// Features gate the foundation's display only; nil when it is always shown.
 	Features []string
 	deflt    *template.Template

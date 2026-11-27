@@ -325,7 +325,10 @@ func TestProviderValues(t *testing.T) {
 	if errs := p.Validate(bs); len(errs) > 0 {
 		t.Fatalf("%s is invalid: %v", providerProfile, errs)
 	}
-	tree := renderProvider(t, providerBundle(t), p.Answers)
+	tree, err := Render(providerBundle(t), profile.Profile{Answers: p.Answers, Infrastructure: p.Infrastructure}, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
 	// provider.yaml hand-tunes resources, so the fixture answers custom and the table renders nothing.
 	if got := tableLeaves(tree); len(got) > 0 {
 		t.Errorf("%d leaves under resources table paths, want none", len(got))
@@ -360,7 +363,7 @@ func TestProviderValues(t *testing.T) {
 			t.Errorf("%s: %s not in %s: %v", key, ref, file, err)
 			continue
 		}
-		if got, ok := l.Value.(string); !ok || n.Kind != yaml.ScalarNode || got != n.Value {
+		if !scalarEquals(t, l.Value, n) {
 			t.Errorf("%s = %#v, %s has %q at %s", key, l.Value, file, n.Value, ref)
 		}
 	}
@@ -385,6 +388,22 @@ func TestProviderValues(t *testing.T) {
 			t.Errorf("owned list %s = %#v, provider.yaml has %#v", key, got, want)
 		}
 	}
+}
+
+// scalarEquals reports whether n is a scalar holding v: a string as written, anything else as decoded.
+func scalarEquals(t *testing.T, v any, n *yaml.Node) bool {
+	t.Helper()
+	if n.Kind != yaml.ScalarNode {
+		return false
+	}
+	if s, ok := v.(string); ok {
+		return s == n.Value
+	}
+	var decoded any
+	if err := n.Decode(&decoded); err != nil {
+		t.Fatal(err)
+	}
+	return reflect.DeepEqual(v, decoded)
 }
 
 func subtree(node any, p roundtrip.Path) any {

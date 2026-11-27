@@ -232,10 +232,11 @@ func TestChangeJSON(t *testing.T) {
 func TestProviderTargetsAndDiff(t *testing.T) {
 	b := providerBundle(t)
 	// The hosts provider.yaml keeps off the domain, and did.value, derive from it while unanswered, so their
-	// targets are reached too.
+	// targets are reached too. Every ingress's issuer annotation and replacing Secret name require their owner, but
+	// render only once a cert-manager mode is chosen.
 	want := slices.Concat(answerLeaves(t, providerDoc(t), domainBase), targetPaths(b, hostVerifierID), targetPaths(b, hostDIDID))
 	targets := targetPaths(b, domainBase)
-	if missing, extra := diffSets(want, targets); len(missing)+len(extra) > 0 {
+	if missing, extra := diffSets(slices.Concat(want, rowPaths(b, issuerKey), rowPaths(b, secretNameKey)), targets); len(missing)+len(extra) > 0 {
 		t.Errorf("Targets(%s): missing %v, extra %v", domainBase, missing, extra)
 	}
 	prev := renderProvider(t, b, map[string]any{orgDisplayName: orgName, domainBase: referenceDomain})

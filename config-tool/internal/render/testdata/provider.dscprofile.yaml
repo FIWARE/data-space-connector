@@ -3,7 +3,7 @@ format: 1
 model:
   chart: data-space-connector
   version: 10.16.0
-  revision: 18
+  revision: 19
 target:
   type: cluster
   context: k3s
@@ -46,5 +46,11 @@ answers:
   resources.profile: custom
   # provider.yaml routes every component through the local squid; it tailors NO_PROXY per component.
   proxy.https: http://squid-proxy.infra.svc.cluster.local:8888
+# provider.yaml uses the operators release's cert-manager and its selfsigned-issuer.
+infrastructure:
+  certManager:
+    mode: cluster
+    answers:
+      issuer: selfsigned-issuer
 open: []
 secrets: {}

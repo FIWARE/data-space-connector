@@ -274,7 +274,8 @@ func resolvable(b model.Bundle, answers map[string]*Answer) map[string]any {
 			continue
 		}
 		if !slices.ContainsFunc(f.DefaultRefs(), unset) &&
-			(f.DefaultWhen == nil || f.DefaultWhen.Holds(out)) {
+			(f.DefaultWhen == nil || f.DefaultWhen.Holds(out)) &&
+			!slices.ContainsFunc(f.AskedWhen, func(c model.TargetCondition) bool { return !c.Holds(out) }) {
 			out[id] = nil
 		}
 	}
