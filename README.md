@@ -1,5 +1,7 @@
 # FIWARE Data Space Connector
 
+📖 **Documentation:** **[fiware.github.io/data-space-connector](https://fiware.github.io/data-space-connector/)** — browsable deployment and integration guides, organized by role (operator, provider, consumer).
+
 
 > [!IMPORTANT]
 > **Get involved and help us improve the FIWARE Data Space Connector**
