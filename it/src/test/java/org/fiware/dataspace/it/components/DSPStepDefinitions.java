@@ -117,9 +117,14 @@ public class DSPStepDefinitions extends StepDefintions {
     private static final String DSP_OFFER_EXTERNAL_ID = "OFFER-1";
 
     /**
-     * The DCP endpoint path suffix for DSP protocol interactions.
+     * DSP endpoint path suffix of the OID4VC controlplane.
      */
     private static final String DSP_ENDPOINT_PATH = "/api/dsp/2025-1";
+
+    /**
+     * DSP endpoint path suffix of the provider's participant context and profile on the DCP controlplane.
+     */
+    private static final String DCP_DSP_ENDPOINT_PATH = "/api/dsp/" + PROVIDER_CONTEXT_ID + "/" + DSP_PROFILE;
 
     /**
      * The internal upstream address for the data service (Scorpio via K8s service).
@@ -1168,7 +1173,7 @@ public class DSPStepDefinitions extends StepDefintions {
         characteristics.add(buildCharacteristic("dcp",
                 "Endpoint, that the service can be negotiated at via DCP.",
                 "endpointUrl",
-                DCP_PROVIDER_ADDRESS + DSP_ENDPOINT_PATH));
+                DCP_PROVIDER_ADDRESS + DCP_DSP_ENDPOINT_PATH));
 
         // OID4VC endpoint
         characteristics.add(buildCharacteristic("oid4vc",
@@ -1620,7 +1625,7 @@ public class DSPStepDefinitions extends StepDefintions {
      */
     @When("The consumer requests the provider catalog via the DCP management API.")
     public void theConsumerRequestsTheProviderCatalogViaDcp() throws Exception {
-        String counterPartyAddress = DCP_PROVIDER_ADDRESS + DSP_ENDPOINT_PATH;
+        String counterPartyAddress = DCP_PROVIDER_ADDRESS + DCP_DSP_ENDPOINT_PATH;
         dcpCatalogResponse = DSPManagementHelper.requestCatalog(
                 DCP_MANAGEMENT_API_ADDRESS,
                 PROVIDER_DID,
@@ -1637,25 +1642,8 @@ public class DSPStepDefinitions extends StepDefintions {
     @Then("The DCP catalog contains at least one dataset with the DSP asset.")
     public void theDcpCatalogContainsAtLeastOneDataset() {
         assertNotNull(dcpCatalogResponse, "DCP catalog response must have been retrieved first.");
-
-        // Look for datasets in the catalog - the EDC returns them under "dcat:dataset"
-        JsonNode datasets = dcpCatalogResponse.path("dcat:dataset");
-        if (datasets.isMissingNode()) {
-            // Also try "@graph" or direct array
-            datasets = dcpCatalogResponse.path("dataset");
-        }
-
-        boolean hasDataset;
-        if (datasets.isArray()) {
-            hasDataset = datasets.size() > 0;
-        } else if (!datasets.isMissingNode()) {
-            // Single dataset (not wrapped in array)
-            hasDataset = true;
-        } else {
-            hasDataset = false;
-        }
-
-        assertTrue(hasDataset, "DCP catalog should contain at least one dataset. Catalog: "
+        assertTrue(DSPManagementHelper.containsDataset(dcpCatalogResponse),
+                "DCP catalog should contain at least one dataset. Catalog: "
                 + dcpCatalogResponse.toString().substring(0,
                 Math.min(dcpCatalogResponse.toString().length(), 1000)));
         log.debug("DCP catalog contains dataset(s) with the DSP asset.");
@@ -1682,7 +1670,7 @@ public class DSPStepDefinitions extends StepDefintions {
         // Build the contract policy matching DSP_INTEGRATION.md
         ObjectNode policy = buildDcpContractPolicy(offerId);
 
-        String counterPartyAddress = DCP_PROVIDER_ADDRESS + DSP_ENDPOINT_PATH;
+        String counterPartyAddress = DCP_PROVIDER_ADDRESS + DCP_DSP_ENDPOINT_PATH;
         IdResponse negotiationResponse = DSPManagementHelper.startNegotiation(
                 DCP_MANAGEMENT_API_ADDRESS,
                 counterPartyAddress,
@@ -1767,7 +1755,7 @@ public class DSPStepDefinitions extends StepDefintions {
      */
     @When("The consumer starts a transfer process via the DCP management API.")
     public void theConsumerStartsTransferProcessViaDcp() throws Exception {
-        String counterPartyAddress = DCP_PROVIDER_ADDRESS + DSP_ENDPOINT_PATH;
+        String counterPartyAddress = DCP_PROVIDER_ADDRESS + DCP_DSP_ENDPOINT_PATH;
         IdResponse transferResponse = DSPManagementHelper.startTransferProcess(
                 DCP_MANAGEMENT_API_ADDRESS,
                 DSP_ASSET_ID,
@@ -2436,13 +2424,13 @@ public class DSPStepDefinitions extends StepDefintions {
 
         ObjectNode permission = OBJECT_MAPPER.createObjectNode();
         permission.put("action", "use");
-        permission.set("constraint", constraint);
+        permission.set("constraint", constraintArray(constraint));
 
         ArrayNode permissions = OBJECT_MAPPER.createArrayNode();
         permissions.add(permission);
         policy.set("permission", permissions);
 
-        String counterPartyAddress = DCP_PROVIDER_ADDRESS + DSP_ENDPOINT_PATH;
+        String counterPartyAddress = DCP_PROVIDER_ADDRESS + DCP_DSP_ENDPOINT_PATH;
         IdResponse negotiationResponse = DSPManagementHelper.startNegotiation(
                 DCP_MANAGEMENT_API_ADDRESS,
                 counterPartyAddress,
@@ -2648,7 +2636,7 @@ public class DSPStepDefinitions extends StepDefintions {
         dowRightOperand.put("@value", 6);
         dowRightOperand.put("@type", "xsd:integer");
         dowConstraint.set("rightOperand", dowRightOperand);
-        transferPerm.set("constraint", dowConstraint);
+        transferPerm.set("constraint", constraintArray(dowConstraint));
         permissions.add(transferPerm);
 
         // membershipType == "FullMember" scoped to contract.negotiation
@@ -2659,12 +2647,12 @@ public class DSPStepDefinitions extends StepDefintions {
         memberConstraint.put("leftOperand", "dspace:membershipType");
         memberConstraint.put("operator", "eq");
         memberConstraint.put("rightOperand", "FullMember");
-        negotiationPerm.set("constraint", memberConstraint);
+        negotiationPerm.set("constraint", constraintArray(memberConstraint));
         permissions.add(negotiationPerm);
 
         policy.set("permission", permissions);
 
-        String counterPartyAddress = DCP_PROVIDER_ADDRESS + DSP_ENDPOINT_PATH;
+        String counterPartyAddress = DCP_PROVIDER_ADDRESS + DCP_DSP_ENDPOINT_PATH;
         IdResponse negotiationResponse = DSPManagementHelper.startNegotiation(
                 DCP_MANAGEMENT_API_ADDRESS,
                 counterPartyAddress,
@@ -2699,7 +2687,7 @@ public class DSPStepDefinitions extends StepDefintions {
     public void theConsumerStartsTransferForAsset4() throws Exception {
         assertNotNull(scopedAgreementId,
                 "Agreement for " + SCOPED_ASSET_ID + " must exist.");
-        String counterPartyAddress = DCP_PROVIDER_ADDRESS + DSP_ENDPOINT_PATH;
+        String counterPartyAddress = DCP_PROVIDER_ADDRESS + DCP_DSP_ENDPOINT_PATH;
         IdResponse transferResponse = DSPManagementHelper.startTransferProcess(
                 DCP_MANAGEMENT_API_ADDRESS,
                 SCOPED_ASSET_ID,
@@ -2819,6 +2807,21 @@ public class DSPStepDefinitions extends StepDefintions {
      * @param offerId the offer ID extracted from the catalog
      * @return the policy as an ObjectNode
      */
+    /**
+     * Wraps ODRL constraints in the array the v5beta management API expects.
+     * A bare object is refused with "object found, array expected"; the provider catalog
+     * advertises the same permissions with an array, so a consumer has to echo that shape.
+     *
+     * @param constraints the constraints of one permission, in order
+     */
+    private static ArrayNode constraintArray(ObjectNode... constraints) {
+        ArrayNode array = OBJECT_MAPPER.createArrayNode();
+        for (ObjectNode constraint : constraints) {
+            array.add(constraint);
+        }
+        return array;
+    }
+
     private ObjectNode buildDcpContractPolicy(String offerId) {
         ObjectNode policy = OBJECT_MAPPER.createObjectNode();
         policy.put("@context", "http://www.w3.org/ns/odrl.jsonld");
@@ -2838,7 +2841,7 @@ public class DSPStepDefinitions extends StepDefintions {
 
         ObjectNode permission = OBJECT_MAPPER.createObjectNode();
         permission.put("action", "use");
-        permission.set("constraint", constraint);
+        permission.set("constraint", constraintArray(constraint));
 
         ArrayNode permissions = OBJECT_MAPPER.createArrayNode();
         permissions.add(permission);
@@ -2869,7 +2872,7 @@ public class DSPStepDefinitions extends StepDefintions {
         characteristics.add(buildCharacteristic("dcp",
                 "Endpoint, that the service can be negotiated at via DCP.",
                 "endpointUrl",
-                DCP_PROVIDER_ADDRESS + DSP_ENDPOINT_PATH));
+                DCP_PROVIDER_ADDRESS + DCP_DSP_ENDPOINT_PATH));
         characteristics.add(buildCharacteristic("upstreamAddress",
                 "Address of the upstream serving the data",
                 "upstreamAddress",

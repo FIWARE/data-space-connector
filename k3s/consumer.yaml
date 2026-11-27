@@ -721,6 +721,21 @@ keycloak:
         },
         "groups": []
       }
+    # -- scopes the fdsc-edc 2.0.0 v5beta management API requires in the token; `admin` grants
+    # every participant context
+    clientScopes:
+      - name: management-api:read
+        protocol: openid-connect
+        attributes:
+          include.in.token.scope: "true"
+      - name: management-api:write
+        protocol: openid-connect
+        attributes:
+          include.in.token.scope: "true"
+      - name: management-api:admin
+        protocol: openid-connect
+        attributes:
+          include.in.token.scope: "true"
     clients:
       - clientId: did:web:mp-operations.org
         enabled: true
@@ -848,6 +863,25 @@ keycloak:
         defaultClientScopes: []
         optionalClientScopes: []
         optionalClientScopes: ["membership-credential"]
+      # client-credentials client the DSP ITs use to call the DCP controlplane's management API
+      - clientId: edc-management
+        enabled: true
+        description: Client calling the fdsc-edc management API
+        clientAuthenticatorType: client-secret
+        secret: edc-management-client-secret
+        redirectUris: []
+        webOrigins: []
+        bearerOnly: false
+        consentRequired: false
+        standardFlowEnabled: false
+        implicitFlowEnabled: false
+        directAccessGrantsEnabled: false
+        serviceAccountsEnabled: true
+        publicClient: false
+        protocol: openid-connect
+        fullScopeAllowed: true
+        defaultClientScopes: ["management-api:read", "management-api:write", "management-api:admin"]
+        optionalClientScopes: []
 
 did:
   enabled: true

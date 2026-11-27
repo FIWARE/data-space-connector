@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import lombok.extern.slf4j.Slf4j;
+import okhttp3.FormBody;
 import okhttp3.MediaType;
 import okhttp3.Request;
 import okhttp3.RequestBody;
@@ -12,10 +13,12 @@ import org.awaitility.Awaitility;
 import org.fiware.dataspace.it.components.model.ContractNegotiation;
 import org.fiware.dataspace.it.components.model.DataAddress;
 import org.fiware.dataspace.it.components.model.IdResponse;
+import org.fiware.dataspace.it.components.model.TokenResponse;
 import org.fiware.dataspace.it.components.model.TransferProcess;
 
 import java.net.SocketTimeoutException;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 
 import static org.fiware.dataspace.it.components.TestUtils.OBJECT_MAPPER;
@@ -30,7 +33,10 @@ import static org.junit.jupiter.api.Assertions.*;
  * in DSP_INTEGRATION.md "Order through DSP" section.
  * <p>
  * Supports both DCP and OID4VC management API endpoints by parameterizing the management
- * API base address.
+ * API base address. In the curl examples {@code {basePath}} is {@code /api/v1/management/v3} for
+ * OID4VC and {@code /api/v1/management/v5beta/participants/<consumer DID>} for DCP; DCP calls also
+ * carry {@code Authorization: Bearer <token>}, the profile name as {@code protocol} and
+ * {@code CatalogRequest} as {@code {catalogType}} (OID4VC: {@code CatalogRequestMessage}).
  *
  * @see DSPEnvironment
  */
@@ -43,14 +49,57 @@ public class DSPManagementHelper {
     private static final MediaType JSON = MediaType.parse("application/json");
 
     /**
-     * EDC Management API context URI.
+     * JSON-LD context of the OID4VC controlplane's v3 management API.
      */
-    private static final String EDC_MANAGEMENT_CONTEXT = "https://w3id.org/edc/connector/management/v0.0.1";
+    private static final String OID4VC_MANAGEMENT_CONTEXT = "https://w3id.org/edc/connector/management/v0.0.1";
 
     /**
-     * DSP protocol version used in all requests.
+     * JSON-LD context the DCP controlplane's v5beta schema check requires.
      */
-    private static final String DSP_PROTOCOL = "dataspace-protocol-http:2025-1";
+    private static final String DCP_MANAGEMENT_CONTEXT = "https://w3id.org/edc/connector/management/v2";
+
+    /**
+     * DSP protocol of the OID4VC controlplane, which still serves the v3 management API.
+     */
+    private static final String OID4VC_DSP_PROTOCOL = "dataspace-protocol-http:2025-1";
+
+    /**
+     * Base path of the OID4VC controlplane's v3 management API.
+     */
+    private static final String OID4VC_MANAGEMENT_BASE_PATH = "/api/v1/management/v3";
+
+    /**
+     * Base path of the consumer context on the DCP controlplane's v5beta management API (fdsc-edc 2.x).
+     */
+    private static final String DCP_MANAGEMENT_BASE_PATH =
+            "/api/v1/management/v5beta/participants/" + DSPEnvironment.CONSUMER_CONTEXT_ID;
+
+    /**
+     * Seconds before expiry at which a cached management token is renewed.
+     */
+    private static final long TOKEN_RENEWAL_MARGIN_SECONDS = 30;
+
+    /**
+     * Management API of the OID4VC controlplane: v3, unauthenticated.
+     */
+    private static final ManagementApi OID4VC_API = new ManagementApi(
+            OID4VC_MANAGEMENT_BASE_PATH, OID4VC_MANAGEMENT_CONTEXT, OID4VC_DSP_PROTOCOL, "CatalogRequestMessage", false);
+
+    /**
+     * Management API of the DCP controlplane: v5beta, scoped to the consumer context, OAuth2-protected.
+     */
+    private static final ManagementApi DCP_API = new ManagementApi(
+            DCP_MANAGEMENT_BASE_PATH, DCP_MANAGEMENT_CONTEXT, DSPEnvironment.DSP_PROFILE, "CatalogRequest", true);
+
+    /**
+     * Cached client-credentials token for the DCP management API; guarded by the class lock.
+     */
+    private static String managementToken;
+
+    /**
+     * Instant after which {@link #managementToken} must be renewed; guarded by the class lock.
+     */
+    private static Instant managementTokenRenewAt = Instant.MIN;
 
     /**
      * ODRL JSON-LD context URI used in policy objects.
@@ -60,32 +109,32 @@ public class DSPManagementHelper {
     /**
      * API path for catalog requests.
      */
-    private static final String CATALOG_REQUEST_PATH = "/api/v1/management/v3/catalog/request";
+    private static final String CATALOG_REQUEST_PATH = "/catalog/request";
 
     /**
      * API path for contract negotiation operations.
      */
-    private static final String CONTRACT_NEGOTIATIONS_PATH = "/api/v1/management/v3/contractnegotiations";
+    private static final String CONTRACT_NEGOTIATIONS_PATH = "/contractnegotiations";
 
     /**
      * API path for querying contract negotiations.
      */
-    private static final String CONTRACT_NEGOTIATIONS_REQUEST_PATH = "/api/v1/management/v3/contractnegotiations/request";
+    private static final String CONTRACT_NEGOTIATIONS_REQUEST_PATH = "/contractnegotiations/request";
 
     /**
      * API path for transfer process operations.
      */
-    private static final String TRANSFER_PROCESSES_PATH = "/api/v1/management/v3/transferprocesses";
+    private static final String TRANSFER_PROCESSES_PATH = "/transferprocesses";
 
     /**
      * API path for querying transfer processes.
      */
-    private static final String TRANSFER_PROCESSES_REQUEST_PATH = "/api/v1/management/v3/transferprocesses/request";
+    private static final String TRANSFER_PROCESSES_REQUEST_PATH = "/transferprocesses/request";
 
     /**
      * API path prefix for EDR data address retrieval; append /{transferId}/dataaddress.
      */
-    private static final String EDRS_PATH_PREFIX = "/api/v1/management/v3/edrs/";
+    private static final String EDRS_PATH_PREFIX = "/edrs/";
 
     /**
      * Negotiation state indicating a finalized contract agreement.
@@ -122,36 +171,109 @@ public class DSPManagementHelper {
     }
 
     /**
+     * Per-controlplane flavour of the management API: the DCP image moved to v5beta, the OID4VC one did not.
+     */
+    private record ManagementApi(String basePath, String context, String protocol, String catalogRequestType,
+                                 boolean tokenRequired) {
+    }
+
+    /**
+     * Picks the management API flavour served at the given address.
+     */
+    private static ManagementApi api(String managementApiAddress) {
+        return DSPEnvironment.DCP_MANAGEMENT_API_ADDRESS.equals(managementApiAddress) ? DCP_API : OID4VC_API;
+    }
+
+    /**
+     * Base URL of the management resources at the given address, up to and excluding the resource path.
+     */
+    private static String managementUrl(String managementApiAddress) {
+        return managementApiAddress + api(managementApiAddress).basePath();
+    }
+
+    /**
+     * Request builder carrying the bearer token when the management API at the given address requires one.
+     */
+    private static Request.Builder newRequest(String managementApiAddress) throws Exception {
+        Request.Builder builder = new Request.Builder();
+        if (api(managementApiAddress).tokenRequired()) {
+            builder.header("Authorization", "Bearer " + getManagementToken());
+        }
+        return builder;
+    }
+
+    /**
+     * Client-credentials token for the DCP management API, fetched from the consumer Keycloak and cached until shortly
+     * before it expires.
+     */
+    private static synchronized String getManagementToken() throws Exception {
+        if (managementToken != null && Instant.now().isBefore(managementTokenRenewAt)) {
+            return managementToken;
+        }
+        RequestBody body = new FormBody.Builder()
+                .add("grant_type", "client_credentials")
+                .add("client_id", DSPEnvironment.MANAGEMENT_CLIENT_ID)
+                .add("client_secret", DSPEnvironment.MANAGEMENT_CLIENT_SECRET)
+                .build();
+        Request request = new Request.Builder()
+                .url(DSPEnvironment.CONSUMER_KEYCLOAK_TOKEN_URL)
+                .post(body)
+                .build();
+        try (Response response = OK_HTTP_CLIENT.newCall(request).execute()) {
+            String responseBody = response.body() != null ? response.body().string() : "";
+            if (!response.isSuccessful()) {
+                throw new RuntimeException(String.format(
+                        "Management token request failed with status %d: %s", response.code(), responseBody));
+            }
+            TokenResponse tokenResponse = OBJECT_MAPPER.readValue(responseBody, TokenResponse.class);
+            managementToken = tokenResponse.getAccessToken();
+            managementTokenRenewAt = Instant.now()
+                    .plusSeconds(tokenResponse.getExpiresIn() - TOKEN_RENEWAL_MARGIN_SECONDS);
+            return managementToken;
+        }
+    }
+
+    /**
      * Requests the catalog from the provider via the DSP Management API.
      * <p>
      * Equivalent to the curl command:
      * <pre>
-     * curl -X POST '{managementApiAddress}:8080/api/v1/management/v3/catalog/request' \
+     * curl -X POST '{managementApiAddress}{basePath}/catalog/request' \
      *   --header 'Content-Type: application/json' \
-     *   --data '{"@context":[...],"@type":"CatalogRequestMessage","protocol":"...","counterPartyId":"...","counterPartyAddress":"...","querySpec":{}}'
+     *   --data '{"@context":[...],"@type":"{catalogType}","protocol":"...","counterPartyId":"...","counterPartyAddress":"...","querySpec":{}}'
      * </pre>
      *
      * @param managementApiAddress the base URL of the management API (e.g., DCP or OID4VC)
      * @param counterPartyId       DID of the provider (e.g., {@code did:web:mp-operations.org})
-     * @param counterPartyAddress  DSP endpoint of the provider (e.g., {@code http://dcp-mp-operations.127.0.0.1.nip.io:8080/api/dsp/2025-1})
+     * @param counterPartyAddress  DSP endpoint of the provider (DCP: {@code https://dcp-mp-operations.127.0.0.1.nip.io/api/dsp/<provider DID>/http-dsp-profile-2025-1}, OID4VC: {@code .../api/dsp/2025-1})
      * @return the catalog response as a parsed JSON tree
      * @throws Exception if the HTTP request fails or returns a non-success status
      */
     public static JsonNode requestCatalog(String managementApiAddress, String counterPartyId,
                                           String counterPartyAddress) throws Exception {
+        return requestCatalog(managementApiAddress, counterPartyId, counterPartyAddress,
+                api(managementApiAddress).protocol());
+    }
+
+    /**
+     * Requests the provider catalog with an explicit {@code protocol}; on the DCP controlplane that is a profile
+     * name attached to the consumer context, and {@code counterPartyAddress} must end in the same profile.
+     */
+    public static JsonNode requestCatalog(String managementApiAddress, String counterPartyId,
+                                          String counterPartyAddress, String protocol) throws Exception {
         ObjectNode requestBody = OBJECT_MAPPER.createObjectNode();
         ArrayNode context = OBJECT_MAPPER.createArrayNode();
-        context.add(EDC_MANAGEMENT_CONTEXT);
+        context.add(api(managementApiAddress).context());
         requestBody.set("@context", context);
-        requestBody.put("@type", "CatalogRequestMessage");
-        requestBody.put("protocol", DSP_PROTOCOL);
+        requestBody.put("@type", api(managementApiAddress).catalogRequestType());
+        requestBody.put("protocol", protocol);
         requestBody.put("counterPartyId", counterPartyId);
         requestBody.put("counterPartyAddress", counterPartyAddress);
-        requestBody.set("querySpec", OBJECT_MAPPER.createObjectNode());
+        requestBody.set("querySpec", OBJECT_MAPPER.createObjectNode().put("@type", "QuerySpec"));
 
-        String url = managementApiAddress + CATALOG_REQUEST_PATH;
+        String url = managementUrl(managementApiAddress) + CATALOG_REQUEST_PATH;
         RequestBody body = RequestBody.create(OBJECT_MAPPER.writeValueAsString(requestBody), JSON);
-        Request request = new Request.Builder()
+        Request request = newRequest(managementApiAddress)
                 .url(url)
                 .post(body)
                 .header("Accept", "*/*")
@@ -170,11 +292,23 @@ public class DSPManagementHelper {
     }
 
     /**
+     * Whether a DCAT catalog lists at least one dataset, under {@code dcat:dataset} or the compacted {@code dataset},
+     * as an array or as a single object.
+     */
+    public static boolean containsDataset(JsonNode catalog) {
+        JsonNode datasets = catalog.path("dcat:dataset");
+        if (datasets.isMissingNode()) {
+            datasets = catalog.path("dataset");
+        }
+        return datasets.isArray() ? !datasets.isEmpty() : !datasets.isMissingNode();
+    }
+
+    /**
      * Starts a contract negotiation with the provider via the DSP Management API.
      * <p>
      * Equivalent to the curl command:
      * <pre>
-     * curl -X POST '{managementApiAddress}:8080/api/v1/management/v3/contractnegotiations' \
+     * curl -X POST '{managementApiAddress}{basePath}/contractnegotiations' \
      *   --header 'Content-Type: application/json' \
      *   --data '{"@context":[...],"@type":"ContractRequest","counterPartyAddress":"...","counterPartyId":"...","protocol":"...","policy":{...}}'
      * </pre>
@@ -193,12 +327,12 @@ public class DSPManagementHelper {
                                               Object policy) throws Exception {
         ObjectNode requestBody = OBJECT_MAPPER.createObjectNode();
         ArrayNode context = OBJECT_MAPPER.createArrayNode();
-        context.add(EDC_MANAGEMENT_CONTEXT);
+        context.add(api(managementApiAddress).context());
         requestBody.set("@context", context);
         requestBody.put("@type", "ContractRequest");
         requestBody.put("counterPartyAddress", counterPartyAddress);
         requestBody.put("counterPartyId", counterPartyId);
-        requestBody.put("protocol", DSP_PROTOCOL);
+        requestBody.put("protocol", api(managementApiAddress).protocol());
 
         // Build the policy node
         JsonNode policyNode;
@@ -228,9 +362,9 @@ public class DSPManagementHelper {
 
         requestBody.set("policy", policyObj);
 
-        String url = managementApiAddress + CONTRACT_NEGOTIATIONS_PATH;
+        String url = managementUrl(managementApiAddress) + CONTRACT_NEGOTIATIONS_PATH;
         RequestBody body = RequestBody.create(OBJECT_MAPPER.writeValueAsString(requestBody), JSON);
-        Request request = new Request.Builder()
+        Request request = newRequest(managementApiAddress)
                 .url(url)
                 .post(body)
                 .header("Accept", "*/*")
@@ -253,7 +387,7 @@ public class DSPManagementHelper {
      * <p>
      * Equivalent to the curl command:
      * <pre>
-     * curl -X POST '{managementApiAddress}:8080/api/v1/management/v3/contractnegotiations/request' \
+     * curl -X POST '{managementApiAddress}{basePath}/contractnegotiations/request' \
      *   --header 'Content-Type: application/json'
      * </pre>
      *
@@ -262,9 +396,15 @@ public class DSPManagementHelper {
      * @throws Exception if the HTTP request fails or returns a non-success status
      */
     public static List<ContractNegotiation> getNegotiations(String managementApiAddress) throws Exception {
-        String url = managementApiAddress + CONTRACT_NEGOTIATIONS_REQUEST_PATH;
-        RequestBody body = RequestBody.create("", JSON);
-        Request request = new Request.Builder()
+        ObjectNode requestBody = OBJECT_MAPPER.createObjectNode();
+        ArrayNode context = OBJECT_MAPPER.createArrayNode();
+        context.add(api(managementApiAddress).context());
+        requestBody.set("@context", context);
+        requestBody.put("@type", "QuerySpec");
+
+        String url = managementUrl(managementApiAddress) + CONTRACT_NEGOTIATIONS_REQUEST_PATH;
+        RequestBody body = RequestBody.create(OBJECT_MAPPER.writeValueAsString(requestBody), JSON);
+        Request request = newRequest(managementApiAddress)
                 .url(url)
                 .post(body)
                 .header("Accept", "*/*")
@@ -296,8 +436,8 @@ public class DSPManagementHelper {
      */
     public static ContractNegotiation getNegotiation(String managementApiAddress,
                                                      String negotiationId) throws Exception {
-        String url = managementApiAddress + CONTRACT_NEGOTIATIONS_PATH + "/" + negotiationId;
-        Request request = new Request.Builder()
+        String url = managementUrl(managementApiAddress) + CONTRACT_NEGOTIATIONS_PATH + "/" + negotiationId;
+        Request request = newRequest(managementApiAddress)
                 .url(url)
                 .get()
                 .header("Accept", "*/*")
@@ -384,7 +524,7 @@ public class DSPManagementHelper {
      * <p>
      * Equivalent to the curl command:
      * <pre>
-     * curl -X POST '{managementApiAddress}:8080/api/v1/management/v3/transferprocesses' \
+     * curl -X POST '{managementApiAddress}{basePath}/transferprocesses' \
      *   --header 'Content-Type: application/json' \
      *   --data '{"@context":[...],"assetId":"...","counterPartyId":"...","counterPartyAddress":"...","connectorId":"...","contractId":"...","protocol":"...","transferType":"HttpData-PULL"}'
      * </pre>
@@ -403,19 +543,20 @@ public class DSPManagementHelper {
                                                   String contractId, String transferType) throws Exception {
         ObjectNode requestBody = OBJECT_MAPPER.createObjectNode();
         ArrayNode context = OBJECT_MAPPER.createArrayNode();
-        context.add(EDC_MANAGEMENT_CONTEXT);
+        context.add(api(managementApiAddress).context());
         requestBody.set("@context", context);
+        requestBody.put("@type", "TransferRequest");
         requestBody.put("assetId", assetId);
         requestBody.put("counterPartyId", counterPartyId);
         requestBody.put("counterPartyAddress", counterPartyAddress);
         requestBody.put("connectorId", counterPartyId);
         requestBody.put("contractId", contractId);
-        requestBody.put("protocol", DSP_PROTOCOL);
+        requestBody.put("protocol", api(managementApiAddress).protocol());
         requestBody.put("transferType", transferType);
 
-        String url = managementApiAddress + TRANSFER_PROCESSES_PATH;
+        String url = managementUrl(managementApiAddress) + TRANSFER_PROCESSES_PATH;
         RequestBody body = RequestBody.create(OBJECT_MAPPER.writeValueAsString(requestBody), JSON);
-        Request request = new Request.Builder()
+        Request request = newRequest(managementApiAddress)
                 .url(url)
                 .post(body)
                 .header("Accept", "*/*")
@@ -453,8 +594,9 @@ public class DSPManagementHelper {
                                                                      String contractId, String transferType) throws Exception {
         ObjectNode requestBody = OBJECT_MAPPER.createObjectNode();
         ArrayNode context = OBJECT_MAPPER.createArrayNode();
-        context.add(EDC_MANAGEMENT_CONTEXT);
+        context.add(api(managementApiAddress).context());
         requestBody.set("@context", context);
+        requestBody.put("@type", "TransferRequest");
         requestBody.put("assetId", assetId);
         requestBody.put("counterPartyId", counterPartyId);
         requestBody.put("counterPartyAddress", counterPartyAddress);
@@ -465,12 +607,12 @@ public class DSPManagementHelper {
         dataDestination.put("type", "HttpProxy");
         requestBody.set("dataDestination", dataDestination);
 
-        requestBody.put("protocol", DSP_PROTOCOL);
+        requestBody.put("protocol", api(managementApiAddress).protocol());
         requestBody.put("transferType", transferType);
 
-        String url = managementApiAddress + TRANSFER_PROCESSES_PATH;
+        String url = managementUrl(managementApiAddress) + TRANSFER_PROCESSES_PATH;
         RequestBody body = RequestBody.create(OBJECT_MAPPER.writeValueAsString(requestBody), JSON);
-        Request request = new Request.Builder()
+        Request request = newRequest(managementApiAddress)
                 .url(url)
                 .post(body)
                 .header("Accept", "*/*")
@@ -493,7 +635,7 @@ public class DSPManagementHelper {
      * <p>
      * Equivalent to the curl command:
      * <pre>
-     * curl -X POST '{managementApiAddress}:8080/api/v1/management/v3/transferprocesses/request' \
+     * curl -X POST '{managementApiAddress}{basePath}/transferprocesses/request' \
      *   --header 'Content-Type: application/json' \
      *   --data '{"@context":[...],"@type":"QuerySpec"}'
      * </pre>
@@ -505,13 +647,13 @@ public class DSPManagementHelper {
     public static List<TransferProcess> getTransferProcesses(String managementApiAddress) throws Exception {
         ObjectNode requestBody = OBJECT_MAPPER.createObjectNode();
         ArrayNode context = OBJECT_MAPPER.createArrayNode();
-        context.add(EDC_MANAGEMENT_CONTEXT);
+        context.add(api(managementApiAddress).context());
         requestBody.set("@context", context);
         requestBody.put("@type", "QuerySpec");
 
-        String url = managementApiAddress + TRANSFER_PROCESSES_REQUEST_PATH;
+        String url = managementUrl(managementApiAddress) + TRANSFER_PROCESSES_REQUEST_PATH;
         RequestBody body = RequestBody.create(OBJECT_MAPPER.writeValueAsString(requestBody), JSON);
-        Request request = new Request.Builder()
+        Request request = newRequest(managementApiAddress)
                 .url(url)
                 .post(body)
                 .header("Accept", "*/*")
@@ -540,8 +682,8 @@ public class DSPManagementHelper {
      */
     public static TransferProcess getTransferProcess(String managementApiAddress,
                                                      String transferId) throws Exception {
-        String url = managementApiAddress + TRANSFER_PROCESSES_PATH + "/" + transferId;
-        Request request = new Request.Builder()
+        String url = managementUrl(managementApiAddress) + TRANSFER_PROCESSES_PATH + "/" + transferId;
+        Request request = newRequest(managementApiAddress)
                 .url(url)
                 .get()
                 .header("Accept", "*/*")
@@ -599,7 +741,7 @@ public class DSPManagementHelper {
      * <p>
      * Equivalent to the curl command:
      * <pre>
-     * curl -X GET '{managementApiAddress}:8080/api/v1/management/v3/edrs/{transferId}/dataaddress'
+     * curl -X GET '{managementApiAddress}{basePath}/edrs/{transferId}/dataaddress'
      * </pre>
      *
      * @param managementApiAddress the base URL of the management API
@@ -608,13 +750,13 @@ public class DSPManagementHelper {
      * @throws Exception if the HTTP request fails or returns a non-success status
      */
     public static DataAddress getDataAddress(String managementApiAddress, String transferId) throws Exception {
-        String url = managementApiAddress + EDRS_PATH_PREFIX + transferId + "/dataaddress";
+        String url = managementUrl(managementApiAddress) + EDRS_PATH_PREFIX + transferId + "/dataaddress";
         final DataAddress[] dataAddress = new DataAddress[1];
         Awaitility.await()
                 .atMost(Duration.ofSeconds(DEFAULT_POLL_TIMEOUT_SECONDS))
                 .pollInterval(Duration.ofSeconds(DEFAULT_POLL_INTERVAL_SECONDS))
                 .untilAsserted(() -> {
-                    Request request = new Request.Builder()
+                    Request request = newRequest(managementApiAddress)
                             .url(url)
                             .get()
                             .header("Accept", "*/*")

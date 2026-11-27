@@ -22,6 +22,29 @@ public abstract class DSPEnvironment {
      */
     public static final String OID4VC_MANAGEMENT_API_ADDRESS = "https://dsp-oid4vc-management.127.0.0.1.nip.io";
 
+    // --- DCP management API authorization (fdsc-edc 2.x v5beta) ---
+
+    /** Token endpoint of the consumer Keycloak; its host must match {@code edc.iam.oauth2.issuer} in k3s/dsp-consumer.yaml. */
+    public static final String CONSUMER_KEYCLOAK_TOKEN_URL = FancyMarketplaceEnvironment.CONSUMER_KEYCLOAK_ADDRESS
+            + "/realms/test-realm/protocol/openid-connect/token";
+
+    /** Client-credentials client holding the {@code management-api:*} scopes (k3s/consumer.yaml). */
+    public static final String MANAGEMENT_CLIENT_ID = "edc-management";
+
+    /** Secret of {@link #MANAGEMENT_CLIENT_ID}. */
+    public static final String MANAGEMENT_CLIENT_SECRET = "edc-management-client-secret";
+
+    // --- DCP participant contexts ---
+
+    /** Participant context id of the provider's DCP controlplane (its DID). */
+    public static final String PROVIDER_CONTEXT_ID = MPOperationsEnvironment.PROVIDER_DID;
+
+    /** Participant context id of the consumer's DCP controlplane (its DID). */
+    public static final String CONSUMER_CONTEXT_ID = FancyMarketplaceEnvironment.CONSUMER_DID;
+
+    /** Built-in DSP profile both DCP contexts are attached to; the existing DCP flows use it. */
+    public static final String DSP_PROFILE = "http-dsp-profile-2025-1";
+
     // --- DSP Provider endpoints ---
 
     /**

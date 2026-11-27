@@ -13,7 +13,39 @@ fdsc-edc:
       config:
         edc:
           hostname: dcp-mp-operations.127.0.0.1.nip.io
-          dspCallback: https://dcp-mp-operations.127.0.0.1.nip.io:443/api/dsp
+          dspCallback: https://dcp-mp-operations.127.0.0.1.nip.io:443/api/dsp/%s
+        # fdsc-edc 2.x participant context (id = DID, reuses the IdentityHub STS client) and the
+        # OAuth2 issuer of the v5beta management API. Replaces the common additionalProperties, so the
+        # timeouts are repeated; continuation lines carry the 4 spaces the chart does not add.
+        # Two dataspace profiles: declaring one drops the built-in http-dsp-profile-2025-1, so it is
+        # declared too. dsp-fiware-ds2 sets its own DCP scopes and TIL; they equal the defaults because
+        # k3s has a single trust anchor. Never repeat these scopes in edc.iam.dcp.scopes.*: both are unioned.
+        additionalProperties: "edc.http.client.timeout.connect=60\n    \
+          edc.http.client.timeout.read=120\n    \
+          edc.dataspace.profiles.default.name=http-dsp-profile-2025-1\n    \
+          edc.dataspace.profiles.default.protocol.version=2025-1\n    \
+          edc.dataspace.profiles.default.protocol.binding=HTTPS\n    \
+          edc.dataspace.profiles.default.protocol.namespace=https://w3id.org/dspace/2025/1/\n    \
+          edc.dataspace.profiles.default.jsonld.context.urls=https://w3id.org/dspace/2025/1/context.jsonld,https://w3id.org/edc/dspace/v0.0.1\n    \
+          edc.dataspace.profiles.ds2.name=dsp-fiware-ds2\n    \
+          edc.dataspace.profiles.ds2.protocol.version=2025-1\n    \
+          edc.dataspace.profiles.ds2.protocol.binding=HTTPS\n    \
+          edc.dataspace.profiles.ds2.protocol.namespace=https://w3id.org/dspace/2025/1/\n    \
+          edc.dataspace.profiles.ds2.jsonld.context.urls=https://w3id.org/dspace/2025/1/context.jsonld,https://w3id.org/edc/dspace/v0.0.1\n    \
+          dcp.profiles.dsp-fiware-ds2.scopes.catalog=org.eclipse.tractusx.vc.type:MembershipCredential:read\n    \
+          dcp.profiles.dsp-fiware-ds2.scopes.negotiation=org.eclipse.tractusx.vc.type:MembershipCredential:read\n    \
+          dcp.profiles.dsp-fiware-ds2.scopes.transfer=org.eclipse.tractusx.vc.type:MembershipCredential:read\n    \
+          ebsiTir.profiles.dsp-fiware-ds2.tilAddress=http://trusted-issuers-list.provider.svc.cluster.local:8080\n    \
+          fdsc.participants.self.id=did:web:mp-operations.org\n    \
+          fdsc.participants.self.identity=did:web:mp-operations.org\n    \
+          fdsc.participants.self.profiles=http-dsp-profile-2025-1,dsp-fiware-ds2\n    \
+          fdsc.participants.self.config.edc.iam.sts.oauth.token.url=http://identityhub-service.provider.svc.cluster.local:8087/api/sts/token\n    \
+          fdsc.participants.self.config.edc.iam.sts.oauth.client.id=did:web:mp-operations.org\n    \
+          fdsc.participants.self.config.edc.iam.sts.oauth.client.secret.alias=did:web:mp-operations.org-sts-client-secret\n    \
+          tmfExtension.defaultParticipantContextId=did:web:mp-operations.org\n    \
+          tmfExtension.schemaBaseUri=https://raw.githubusercontent.com/SEAMWARE/fdsc-edc/2.1.1/schemas/\n    \
+          edc.iam.oauth2.issuer=https://keycloak-provider.127.0.0.1.nip.io/realms/test-realm\n    \
+          edc.iam.oauth2.jwks.url=http://provider-keycloak.provider.svc.cluster.local:8080/realms/test-realm/protocol/openid-connect/certs"
     oid4vc:
       deployment:
         image:
@@ -39,7 +71,9 @@ fdsc-edc:
           trustAll: true
           holder:
             id: did:web:mp-operations.org
-            kid: did:web:mp-operations.org
+            # the fragment the identityhub publishes the key under; a counterparty resolves the DID
+            # document and rejects anything signed with a kid that is not in it
+            kid: did:web:mp-operations.org#key-1
             key:
               path: /signing-key/tls.key
           proxy:
@@ -325,5 +359,48 @@ identityhub:
       authKeyAlias: "sup3r$3cr3t"
   superuser:
     key: c3VwZXItdXNlcg==.random
+  # Provisioning of the participant: the key in vault, the participant context with its
+  # CredentialService endpoint and the STS client secret the DCP controlplane reads under
+  # `<did>-sts-client-secret`. Without it the identityhub is inert and every DCP flow fails with
+  # "Failed to fetch client secret from the vault with alias: ...", so the demo flows of
+  # doc/MULTI_DATASPACE.md need it. The Job is a post-install/post-upgrade hook and idempotent;
+  # vault runs in dev mode here, so a vault restart needs the next deploy to put the state back.
+  bootstrap:
+    enabled: true
+    did: did:web:mp-operations.org
+    keyAlias: key-1
+    # published in the DID document, so it has to resolve from outside the cluster
+    credentialServiceUrl: https://identityhub-mp-operations.127.0.0.1.nip.io
+    identityKey:
+      secretName: mp-operations.org-tls
+      key: tls.key
+      algorithm: EC
+    stsClientSecret:
+      existingSecret: identityhub-sts-client-secret
+      existingSecretKey: sts-client-secret
+  # Mirrors the membership credential the vc-operator requests from Keycloak into the participant
+  # context. The bootstrap only creates the context; a context without a credential presents
+  # nothing and is rejected by every counterparty.
+  credentialSync:
+    enabled: true
+    secretName: vc-fdsc-edc-credential
+    key: credential
+    id: membership-credential
   env:
     JAVA_TOOL_OPTIONS: -Dhttps.proxyHost=squid-proxy.infra.svc.cluster.local -Dhttps.proxyPort=8888 -Dhttp.proxyHost=squid-proxy.infra.svc.cluster.local -Dhttp.proxyPort=8888 -Dhttp.nonProxyHosts="*-vault|*.cluster.local|odrl-pap|trusted-issuers-list|contract-management" -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=5005
+
+# STS client secret shared between the DCP controlplane's oauth client and the identityhub's
+# embedded STS. Both sides only compare against the copy the bootstrap writes to vault, so the
+# value is free to choose - which is what makes the bootstrap repeatable, unlike the secret the
+# identityhub generates once and never reveals again.
+extraManifests:
+  - apiVersion: v1
+    kind: Secret
+    metadata:
+      name: identityhub-sts-client-secret
+      # the template deploy path applies the render with kubectl and without a namespace, so an
+      # extra manifest that does not name one lands in `default`
+      namespace: "{{ .Release.Namespace }}"
+    type: Opaque
+    stringData:
+      sts-client-secret: local-demo-sts-client-secret

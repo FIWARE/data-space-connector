@@ -118,6 +118,7 @@ contain breaking changes. Important releases will be listed below, with addition
 * [9.x.x](doc/release-notes/9-x.md) - :warning: **Breaking changes** - Upgrade the FIWARE Data Space Connector from 8.5.2 to 9.x.x
   * **9.1.0** — Optional end-to-end [OpenTelemetry distributed tracing](doc/deployment-integration/observability/README.md) across all DSC components
 * [10.x.x](doc/release-notes/10-x.md) - :warning: **Breaking changes** - Keycloak chart migration (Bitnami → CloudPirates), Keycloak 26.7.0 and OID4VCI realm model rewrite
+  * **10.23.0** — :warning: fdsc-edc 2.x: the DCP controlplane runs as [multi-dataspace](doc/MULTI_DATASPACE.md) participant contexts, its management API moves to v5beta
   * **10.4.0** — :warning: Keycloak `java-keystore` keystores must move to `/opt/keycloak/data/<realm-name>/`
 * [11.x.x](doc/release-notes/11-x.md) - :warning: **Breaking changes for consent users** - [consent management](doc/CONSENT_MANAGEMENT.md) moves to dsc-consent-manager on PostgreSQL (trust-anchor chart 2.0.0, consent-filter plugin 1.0.0)
 
@@ -498,6 +499,9 @@ From an architectural standpoint, the value of the Transfer Process lies in the 
 
 Find out more in the [Dataspace Protocol Integration Documentation](./doc/DSP_INTEGRATION.md).
 
+One connector can take part in several dataspaces, each through its own DSP profiles and, if needed,
+its own DID, see [Multi-dataspace operation](./doc/MULTI_DATASPACE.md).
+
 
 ### Marketplace Portal
 
@@ -631,6 +635,7 @@ Additional and more detailed documentation about the FIWARE Data Space Connector
 specific flows and its deployment and integration with other frameworks:
 
 * [Dataspace Protocol Integration](./doc/DSP_INTEGRATION.md)
+* [Multi-dataspace operation](./doc/MULTI_DATASPACE.md) — Run one connector in several dataspaces through fdsc-edc participant contexts and DSP profiles
 * [Gaia-X Integration](./doc/GAIA_X.MD)
 * [Marketplace Integration](./doc/MARKETPLACE_INTEGRATION.md)
 * [Central Marketplace](./doc/CENTRAL_MARKETPLACE.md)

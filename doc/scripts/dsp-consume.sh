@@ -11,14 +11,15 @@
 #   dsp-consume.sh <dsp-endpoint> <management-api> <counter-party-id>
 #
 #   <dsp-endpoint>      provider DSP address (counterPartyAddress),
-#                       e.g. https://dcp-producer.example.org/api/dsp/2025-1
-#   <management-api>    local consumer EDC management base,
-#                       e.g. http://localhost:8085/api/v1/management/v3
+#                       e.g. https://dcp-producer.example.org/api/dsp/<provider DID>/http-dsp-profile-2025-1
+#   <management-api>    management base of the consumer's participant context (fdsc-edc 2.x),
+#                       e.g. http://localhost:8085/api/v1/management/v5beta/participants/<consumer DID>
 #   <counter-party-id>  provider DID, e.g. did:web:did-producer.example.org:did
 #
 # Env overrides (optional):
+#   MANAGEMENT_TOKEN  bearer token with the management-api:* scopes (default: none)
 #   TRANSFER_TYPE   transfer type            (default: HttpData-PULL)
-#   PROTOCOL        DSP protocol string      (default: dataspace-protocol-http:2025-1)
+#   PROTOCOL        DSP profile name         (default: http-dsp-profile-2025-1)
 #   POLL_TIMEOUT    max seconds to poll      (default: 150)
 #   POLL_INTERVAL   seconds between polls    (default: 3)
 #
@@ -28,10 +29,12 @@
 set -euo pipefail
 
 TRANSFER_TYPE="${TRANSFER_TYPE:-HttpData-PULL}"
-PROTOCOL="${PROTOCOL:-dataspace-protocol-http:2025-1}"
+PROTOCOL="${PROTOCOL:-http-dsp-profile-2025-1}"
 POLL_TIMEOUT="${POLL_TIMEOUT:-150}"
 POLL_INTERVAL="${POLL_INTERVAL:-3}"
-EDC_CTX='["https://w3id.org/edc/connector/management/v0.0.1"]'
+EDC_CTX='["https://w3id.org/edc/connector/management/v2"]'
+AUTH=()
+[ -z "${MANAGEMENT_TOKEN:-}" ] || AUTH=(-H "Authorization: Bearer ${MANAGEMENT_TOKEN}")
 
 # ---- output helpers (everything to stderr) ----------------------------------
 if [ -t 2 ]; then C_B=$'\033[1m'; C_G=$'\033[32m'; C_Y=$'\033[33m'; C_R=$'\033[31m'; C_0=$'\033[0m'
@@ -59,11 +62,11 @@ COUNTER_PARTY_ID="$3"
 api() {
   local method="$1" path="$2" body="${3:-}" resp code out
   if [ -n "$body" ]; then
-    resp=$(curl -sS -X "$method" "${MGMT}${path}" \
+    resp=$(curl -sS -X "$method" "${MGMT}${path}" ${AUTH[@]+"${AUTH[@]}"} \
       -H 'Accept: */*' -H 'Content-Type: application/json' \
       --data-raw "$body" -w $'\n%{http_code}') || die "curl failed: $method $path"
   else
-    resp=$(curl -sS -X "$method" "${MGMT}${path}" \
+    resp=$(curl -sS -X "$method" "${MGMT}${path}" ${AUTH[@]+"${AUTH[@]}"} \
       -H 'Accept: */*' -w $'\n%{http_code}') || die "curl failed: $method $path"
   fi
   code="${resp##*$'\n'}"; out="${resp%$'\n'*}"
@@ -77,8 +80,8 @@ api() {
 step "1/4  Requesting catalog from ${DSP_ENDPOINT}"
 CAT_REQ=$(jq -n --argjson ctx "$EDC_CTX" --arg p "$PROTOCOL" \
   --arg cpid "$COUNTER_PARTY_ID" --arg cpa "$DSP_ENDPOINT" '{
-    "@context":$ctx, "@type":"CatalogRequestMessage", protocol:$p,
-    counterPartyId:$cpid, counterPartyAddress:$cpa, querySpec:{}
+    "@context":$ctx, "@type":"CatalogRequest", protocol:$p,
+    counterPartyId:$cpid, counterPartyAddress:$cpa, querySpec:{"@type":"QuerySpec"}
   }')
 CATALOG=$(api POST /catalog/request "$CAT_REQ")
 
@@ -210,7 +213,7 @@ esac
 step "3/4  Starting transfer process"
 TP_REQ=$(jq -n --argjson ctx "$EDC_CTX" --arg p "$PROTOCOL" --arg tt "$TRANSFER_TYPE" \
   --arg asset "$ASSET_ID" --arg cpid "$COUNTER_PARTY_ID" --arg cpa "$DSP_ENDPOINT" --arg aid "$AGREEMENT_ID" '{
-    "@context":$ctx, assetId:$asset, counterPartyId:$cpid, counterPartyAddress:$cpa,
+    "@context":$ctx, "@type":"TransferRequest", assetId:$asset, counterPartyId:$cpid, counterPartyAddress:$cpa,
     connectorId:$cpid, contractId:$aid, protocol:$p, transferType:$tt
   }')
 TP_ID=$(api POST /transferprocesses "$TP_REQ" | jq -r '.["@id"]')
@@ -239,7 +242,7 @@ step "4/4  Fetching EDR data address"
 EDR=""
 deadline=$(( $(date +%s) + POLL_TIMEOUT )); notified=""
 while :; do
-  resp=$(curl -sS -X GET "${MGMT}/edrs/${TP_ID}/dataaddress" \
+  resp=$(curl -sS -X GET "${MGMT}/edrs/${TP_ID}/dataaddress" ${AUTH[@]+"${AUTH[@]}"} \
     -H 'Accept: */*' -w $'\n%{http_code}') || die "curl failed: GET /edrs/${TP_ID}/dataaddress"
   code="${resp##*$'\n'}"; body="${resp%$'\n'*}"
   if [ "$code" -ge 200 ] && [ "$code" -lt 300 ]; then
