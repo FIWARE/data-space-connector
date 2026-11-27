@@ -94,11 +94,17 @@ func compileRequirement(i int, r Requirement, fs []CompiledFoundation) (Compiled
 		return CompiledRequirement{}, fmt.Errorf("purpose is missing")
 	}
 	for _, c := range r.When {
+		j := slices.IndexFunc(fs, func(f CompiledFoundation) bool { return f.ID == c.ID })
 		switch {
 		case c.Equals == "":
 			return CompiledRequirement{}, fmt.Errorf("when: %s: equals is missing", c.ID)
-		case !slices.ContainsFunc(fs, func(f CompiledFoundation) bool { return f.ID == c.ID }):
+		case j < 0:
 			return CompiledRequirement{}, fmt.Errorf("when: %s is no foundation", c.ID)
+		case !fs[j].Type.IsString():
+			// TargetCondition.Holds compares with a string, so a condition on a bool or a list never holds.
+			return CompiledRequirement{}, fmt.Errorf("when: %s is a %s; a condition compares a string answer", c.ID, fs[j].Type)
+		case fs[j].Type == TypeChoice && !slices.Contains(fs[j].optionValues(), c.Equals):
+			return CompiledRequirement{}, fmt.Errorf("when: %q is not an option of %s", c.Equals, c.ID)
 		}
 	}
 	t, refs, err := parseTemplate(fmt.Sprintf("requirements[%d]", i), r.Name)

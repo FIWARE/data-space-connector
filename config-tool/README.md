@@ -480,7 +480,7 @@ fan-out (`targets`, `count`, sorted `components`), transitive through derived ho
 `{profile, sourceSha256}` (422 with field errors when the profile does not validate, or when the sha is not the
 loaded file's), renders it with the load the sha names as the overrides layer (none when it is empty, as on save) and
 returns `{tree, diff, derived, handSet, findings, secrets}`. `tree.withheld` lists the mechanisms that did not
-render, and `secrets` (`{namespace, name, key, purpose}`, from `requirements.Secrets`) the Secrets the values reference. `derived` (`render.DerivedDiff`) lists the answers whose default
+render, and `secrets` (`{namespace, name, keys, purpose}`, from `requirements.Secrets`) the Secrets the values reference; rows that name the same Secret merge their keys into one entry, which keeps the first row's purpose. `derived` (`render.DerivedDiff`) lists the answers whose default
 derives from other answers and whose value moved since the previous render: `rederived` (`{id, before, after}`, not
 given) and `pinned` (`{id, kept, before, after}`, given, so kept). Its baseline is dropped on a load, a profile open, a
 source change and a model change, which return empty lists. `handSet` lists the given answers that override a derived

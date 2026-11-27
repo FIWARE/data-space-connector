@@ -7,7 +7,7 @@ import (
 	"testing/fstest"
 )
 
-// requirementsFoundation is the one foundation a requirements row may reference in these tests.
+// requirementsFoundation holds the foundations a requirements row may reference in these tests.
 const requirementsFoundation = `foundations:
   - id: ca.privateSecret
     stage: foundations
@@ -16,6 +16,21 @@ const requirementsFoundation = `foundations:
     help: The Secret holding the CA.
     targets:
       - {path: keycloak.ca, fn: copy, args: ["{{ .ca.privateSecret }}"]}
+  - id: ca.mode
+    stage: foundations
+    type: choice
+    label: CA mode
+    help: Where the CA comes from.
+    options: [{value: private, label: Private}, {value: public, label: Public}]
+    targets:
+      - {path: keycloak.caMode, fn: copy, args: ["{{ .ca.mode }}"]}
+  - id: ca.trust
+    stage: foundations
+    type: bool
+    label: Trust the CA
+    help: Whether Keycloak trusts the CA.
+    targets:
+      - {path: keycloak.caTrust, fn: copy, args: ["{{ .ca.trust }}"]}
 `
 
 func readRequirements(row string) (Bundle, error) {
@@ -43,6 +58,10 @@ func TestRequirementsValidation(t *testing.T) {
 			"when: ca.privateSecret: equals is missing"},
 		{"when on no foundation", `{kind: secret, name: "{{ .ca.privateSecret }}", key: ca.crt, purpose: p, when: [{id: proxy.https, equals: x}]}`,
 			"when: proxy.https is no foundation"},
+		{"when equals no option", `{kind: secret, name: "{{ .ca.privateSecret }}", key: ca.crt, purpose: p, when: [{id: ca.mode, equals: privat}]}`,
+			`when: "privat" is not an option of ca.mode`},
+		{"when on a bool", `{kind: secret, name: "{{ .ca.privateSecret }}", key: ca.crt, purpose: p, when: [{id: ca.trust, equals: "true"}]}`,
+			"when: ca.trust is a bool; a condition compares a string answer"},
 		{"unknown answer", `{kind: secret, name: "{{ .proxy.https }}", key: ca.crt, purpose: p}`, "proxy.https, which is no foundation"},
 	}
 	for _, tc := range tests {
