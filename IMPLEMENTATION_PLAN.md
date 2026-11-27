@@ -14,12 +14,18 @@ requirements therefore keep working without a second engine (ADR 0026).
   with the reserved id prefix `infra.`:
   - `infra.<dep>.mode`, a choice of the dependency's modes. It has no default, because a never-chosen mode must
     render nothing.
-  - `infra.<dep>.<question>`, one for each question of each mode.
+  - `infra.<dep>.<question>`, one for each question of each mode. A `perIngressQuestion` expands to one
+    foundation per `ingresses:` row, `infra.<dep>.<question>.<ingressId>`.
 
   Bundle templates refer to them fully qualified (`{{ .infra.certManager.issuer }}`), so `parseTemplate`, `checkRefs`
   and `topoOrder` work unchanged. A declared foundation id may not start with `infra.`, and `profile.answers` may not
-  hold an `infra.*` id: those answers live only under `infrastructure`. Dependency and question ids must match
-  `idSegment`, so the dependency is `certManager`, not `cert-manager`.
+  hold an `infra.*` id: those answers live only under `infrastructure`. Dependency ids, declared question ids
+  (plain and `perIngressQuestion`) and ingress ids are each one `idSegment`, so the dependency is `certManager`,
+  not `cert-manager`. Only the per-ingress expansion produces a two-segment local id, `<question>.<ingressId>`
+  (`secret.keycloak`). That expanded id is the key in the profile's `answers` map, and it is what the uniqueness
+  checks see: question ids are unique across all modes of a dependency, the reserved `mode` check, and
+  `checkIDNesting`, all run on the expanded ids. A plain question that equals a per-ingress question's id (`secret`
+  next to `secret.<ingressId>`) is a compile error that names both questions, before the generic nesting check.
 - **Synthetic foundations are not Stage 3 foundations.** They are part of the compiled list (`FoundationOrder`, `Foundation(id)`)
   but not of the declared `b.Foundations`. Every `range b.Foundations` site must decide whether it covers them:
   `render/render.go:41`, `render/elements.go:99,324`, `render/diff.go:120`, `load/elements.go`, `check/coverage.go:70`
@@ -55,8 +61,11 @@ requirements therefore keep working without a second engine (ADR 0026).
 - **One `ingresses:` table** (top level, reusable by the Ingress/DNS story) lists every ingress whose TLS the tool
   owns: `{id, label, path, owner}`, where `path` is the ingress block (for example `keycloak.ingress`) and `owner` is
   the foundation whose `<path>.tls[0].secretName` target exists. A mode's `perIngress:` targets (relative `key` plus
-  fn/args) and `perIngressQuestion:` are expanded per row at compile time. They carry the refs of the owner's
-  secretName target as `requires`, so an annotation renders only on an ingress that renders. Compile checks run both
+  fn/args) and `perIngressQuestion:` are expanded per row at compile time. Each expanded target gets as `requires`
+  the union of the owner's secretName target's refs, that target's own `requires`, and the owner foundation id. The
+  owner id is needed because APISIX's owner target is a ref-less `const` (`apisix-provider-tls` under `domain.base`),
+  so refs alone would leave its annotation and its replacing Secret name ungated. An annotation or a replacing
+  `secretName` therefore renders only on an ingress whose owner resolves. Compile checks run both
   ways: every row's owner target exists, and every foundation target ending in `.tls[0].secretName` has a row. The
   verifier (`vcverifier.ingress`) and DID (`did.ingress`) ingresses are not rows: their TLS certificate is the signing
   key, owned by US-8.11. They are added to `provider_test.go`'s exclusions for the annotation, with story US-8.11.
@@ -65,9 +74,9 @@ requirements therefore keep working without a second engine (ADR 0026).
 
   | Mode | Mode targets | Questions → targets |
   |---|---|---|
-  | `bundled` | `cert-manager.enabled: true`, `cert-manager.crds.enabled: true` (the issuers need the CRDs; `k3s/operators.yaml` sets it), `certManagerResources.enabled: true` | `type` choice `selfsigned`/`prod`, constant default `selfsigned` (the chart default `prod` with `admins@example.com` must never apply silently) → `certManagerResources.type`; `acmeEmail` (when `type=prod`, new type `email`, no default) → `certManagerResources.acmeEmail`, guarded by the error rule `acme-email-for-prod-issuer` (see below); `ingressClass` (when `type=prod`) → `certManagerResources.ingressClass`; `namespace` (when `type=selfsigned`, `readOnly`, default `{{ .target.namespace }}`: a bundled cert-manager runs in the release namespace, where the CA ClusterIssuer finds `ca-secret`) → `certManagerResources.namespace`; per ingress `annotations."cert-manager.io/cluster-issuer"` = `{{ .infra.certManager.type }}-issuer` |
+  | `bundled` | `cert-manager.enabled: true`, `cert-manager.crds.enabled: true` (the issuers need the CRDs; `k3s/operators.yaml` sets it), `certManagerResources.enabled: true` | `type` choice `selfsigned`/`prod`, constant default `selfsigned` (the chart default `prod` with `admins@example.com` must never apply silently) → `certManagerResources.type`; `acmeEmail` (when `type=prod`, new type `email`, no default) → `certManagerResources.acmeEmail`, guarded by the error rule `acme-email-for-prod-issuer` (see below); `ingressClass` (when `type=prod`, DNS-1123 subdomain, no default) → `certManagerResources.ingressClass`, guarded by the error rule `acme-ingress-class-for-prod-issuer` (see below); `namespace` (when `type=selfsigned`, `readOnly`, default `{{ .target.namespace }}`: a bundled cert-manager runs in the release namespace, where the CA ClusterIssuer finds `ca-secret`) → `certManagerResources.namespace`; per ingress `annotations."cert-manager.io/cluster-issuer"` = `{{ .infra.certManager.type }}-issuer` |
   | `cluster` | `cert-manager.enabled: false`, `certManagerResources.enabled: false` | exactly one: `issuer` (ClusterIssuer name, DNS-1123 subdomain) → per ingress `annotations."cert-manager.io/cluster-issuer"` (copy) |
-  | `external` | `cert-manager.enabled: false`, `certManagerResources.enabled: false` | per ingress `secret.<ingressId>` (type `secretName`, default from the owner target) → `<path>.tls[0].secretName`, `replaces: true` |
+  | `external` | `cert-manager.enabled: false`, `certManagerResources.enabled: false` | `perIngressQuestion` `secret`, expanded to `secret.<ingressId>` (type `secretName`, default from the owner target) → `<path>.tls[0].secretName`, `replaces: true` |
 
   `<type>-issuer` matches the chart's ClusterIssuer names (`prod-issuer`, `selfsigned-issuer`), and a test reads
   `templates/cert-manager-issuer.yaml` to pin this. Namespaced `Issuer`s are out of scope, because the one cluster question names a
@@ -85,6 +94,13 @@ requirements therefore keep working without a second engine (ADR 0026).
     `infrastructure.certManager.type` equals `prod` and `infrastructure.certManager.acmeEmail` is unset. As an error
     it blocks `generate` (ADR 0021). The rule reads the resolved answers, so `type`'s default `selfsigned` never
     triggers it.
+
+  The same holds for `ingressClass`: if it is unanswered, the chart's `ingressClass: "nginx"` applies, and on a
+  cluster with another controller (k3s ships traefik) the HTTP-01 solver never completes, so `prod-issuer` never
+  issues a certificate. No default is right for every cluster, and cluster detection is not in this ticket. The
+  check rule `acme-ingress-class-for-prod-issuer` (severity `error`, stage `infrastructure`, field
+  `infrastructure.certManager.ingressClass`) therefore fires on the same `bundled` + `prod` condition when
+  `ingressClass` is unset. A user whose controller is nginx answers `nginx`, so the choice is explicit.
 
   Check rules may therefore address infrastructure fields: `when` and `field` accept the single field-id scheme
   below, and the bundle compile resolves each id to its synthetic foundation (an unknown dependency or question is a
@@ -148,13 +164,17 @@ Code only, tested against fixture bundles. The shipped bundle does not change ye
 - The compile step, called from `readBundle` after `compileFoundations`, produces synthetic `CompiledFoundation`s:
   - the mode choice;
   - one foundation per question, with local `when` ids qualified;
-  - the per-ingress expansion with `requires` taken from the owner target;
+  - the per-ingress expansion with `requires` = owner target refs ∪ its `requires` ∪ the owner foundation id;
   - `replaces` with its default copied from the owner target (template or const value).
 
   Teach `compileTarget`'s `const` rule that a non-empty `When` gates the constant (see the decisions). Re-run `checkIDNesting`, `checkRefs`, `topoOrder` and `checkTargetPaths` over the combined list. Extend
   `CompiledTarget` with `When []TargetCondition` and `Replaces bool`, and teach `checkTargetPaths` the exclusivity and
   `replaces` rules from the decisions. Add `Bundle.CompiledFoundations()`, `Bundle.Dependencies()` and
   `Bundle.Dependency(id)`.
+- `InfraFieldAnswer` splits the field at the first dot after `infrastructure.`: that segment is the dependency, and
+  the rest is the local question id, which may be an expanded `<question>.<ingressId>`. It resolves only ids the
+  compiled bundle holds. Table rows: `infrastructure.certManager` → `infra.certManager.mode`,
+  `infrastructure.certManager.secret.keycloak` → `infra.certManager.secret.keycloak`, and unknown ids → `ok=false`.
 - Add `TypeEmail` to `foundations.go` (pattern and RFC 2606 refusal as in the decisions; `Check` never echoes the
   value), with table rows for valid addresses, `admins@example.com`, `a@b.test`, a missing `@` and a single-label
   domain. Add `InfrastructureFieldPrefix`, `InfraFieldAnswer` and `InfraAnswerField` to `checkrules.go`, and let
@@ -173,6 +193,8 @@ Code only, tested against fixture bundles. The shipped bundle does not change ye
   - `development` without `productionDoc`;
   - a question `when` naming an unknown question;
   - a question with the reserved id `mode`;
+  - a declared question id with a dot, and an ingress id that is not one `idSegment`;
+  - a plain question `secret` beside a `perIngressQuestion` `secret` (the error names both);
   - a check rule `field`/`when` naming an unknown `infrastructure.<dep>[.<q>]`, or an `answers.infra.*` field.
 
   Also test that `b.Foundations` (the Stage 3 list) is unchanged and that `CompiledFoundations()` contains the synthetic ids.
@@ -238,6 +260,9 @@ Code only, tested against fixture bundles. The shipped bundle does not change ye
     hand-set (unknown) annotation at an owned path stays pinned;
   - an inactive mode's unresolved target never marks a list incomplete (`cluster` chosen, `external` Secret
     questions unanswered, every `tls[0]` block still rendered);
+  - per-ingress targets are gated on the owner (table-driven over the fixture's const-owned and ref-owned rows):
+    `cluster` with `issuer` set, and `external` with defaults only, each with the owner unanswered, emit no
+    `infra.<dep>.*` leaf on that ingress, and the expanded target's `requires` contains the owner foundation id;
   - load of a file with `dsc-config:owned infra.*` markers derives no `infra.*` answer, keeps the leaves owned and
     lists the ids in `Marker.Underived` (`internal/load/load_test.go`).
 - Acceptance: the existing render, load and check suites pass unchanged, and `go test ./...` is green.
@@ -277,6 +302,12 @@ Code only, tested against fixture bundles. The shipped bundle does not change ye
     which defaults to `selfsigned`), `cluster` or `external`. A further row asserts that no render of `bundled` + `prod`
     ever emits `certManagerResources.acmeEmail: admins@example.com`, and that the profile refuses
     `acmeEmail: admins@example.com` with field `infrastructure.certManager.acmeEmail`.
+    The same table covers `acme-ingress-class-for-prod-issuer`: it blocks for `bundled` + `prod` with `ingressClass`
+    unanswered or marked *Ask later*, and not once `ingressClass` is answered (`traefik`, `nginx`) or for the other
+    modes and types. A row asserts that no render ever emits `certManagerResources.ingressClass` unless the answer
+    is given.
+  - **APISIX gating:** with the shipped bundle, `cluster` with `issuer` set and `domain.base` unanswered emits no
+    `infra.certManager.*` leaf anywhere. The same holds for `external` with default Secret names.
 - Acceptance: `go test ./...` is green and the model test confirms the revision bump.
 
 ### Step 5: Server API and CLI
@@ -295,7 +326,8 @@ Code only, tested against fixture bundles. The shipped bundle does not change ye
   - `PUT /api/profile` refuses an unknown mode with the field id.
 - CLI: `dsc-config generate -p <profile>` (`internal/cli`) already validates and renders the profile. Add a table test
   that a profile with each cert-manager mode validates and renders, that an invalid mode fails with the field id, and
-  that `bundled` + `prod` without `acmeEmail` fails `generate` with the `acme-email-for-prod-issuer` finding.
+  that `bundled` + `prod` without `acmeEmail` or `ingressClass` fails `generate` with the matching
+  `acme-email-for-prod-issuer` or `acme-ingress-class-for-prod-issuer` finding.
 - Keep `internal/layering_test.go` green (no `net/http` in the core).
 
 ### Step 6: Stage 4 UI — `ui/src/stages/Infrastructure.tsx`
@@ -320,7 +352,7 @@ Code only, tested against fixture bundles. The shipped bundle does not change ye
 - `Infrastructure.test.tsx` (table-driven where it fits):
   - three radios render;
   - choosing `cluster` reveals exactly one field (`issuer`);
-  - `bundled` shows the warning with the PREREQUISITES link, and `acmeEmail` appears only for `prod`;
+  - `bundled` shows the warning with the PREREQUISITES link, and `acmeEmail` and `ingressClass` appear only for `prod`;
   - `external` lists one field per ingress;
   - switching modes hides the previous fields but keeps their values;
   - *Ask later* marks the field open and the rail count follows;
@@ -334,7 +366,7 @@ Code only, tested against fixture bundles. The shipped bundle does not change ye
 ### Step 7: Documentation and final verification
 - `config-tool/README.md`: a new "Infrastructure (Stage 4)" section. It covers the `infrastructure:` and `ingresses:`
   grammar, the three modes and their keys for cert-manager (the decision table), `when`, `replaces` and `perIngress`,
-  the `infra.` namespace and the one `infrastructure.<dep>[.<q>]` field-id scheme, the `email` type and the ACME rule, `GET /api/infrastructure`, and the rule that a never-chosen mode emits no key. Link
+  the `infra.` namespace and the one `infrastructure.<dep>[.<q>]` field-id scheme, the `email` type and the two ACME rules, `GET /api/infrastructure`, and the rule that a never-chosen mode emits no key. Link
   ADR 0026.
 - `doc/config-tool/FEATURE_MODEL.md#integration-modes`: one sentence that cert-manager's `cluster` mode references a
   ClusterIssuer, and a link to ADR 0026. `doc/config-tool/USER_JOURNEY.md` stays as it is unless wording drifted.
