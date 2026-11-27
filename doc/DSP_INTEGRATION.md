@@ -239,23 +239,25 @@ curl -x localhost:8888 https://mp-operations.org/.well-known/did.json -k | jq .
 ### Issue membership-credentials
 
 The demo deployment of the DSP is configured to require every participant to identify itself with a "MembershipCredential". In most use-cases, this credential will be issued by a central data-space authority. In order to keep the local deployment at managable size, we allow self-issuance of such credentials.
-The OID4VC based flows are automatically configured to get such credential in the local deployment, thus the Credential only needs to be issued for usage in DCP-based flows. The deployed [Tractus-X Identityhub](https://github.com/eclipse-tractusx/tractusx-identityhub) supports integration with compliant [Issuer Services](https://eclipse-dataspace-dcp.github.io/decentralized-claims-protocol/v1.0.1/#credential-issuance-protocol). However, we are reusing the [default issuer](./deployment-integration/local-deployment/LOCAL.MD#credentials-issuance-at-the-consumer) from the FIWARE Data Space Connector and insert the credential manually into the identity hub:
+The OID4VC based flows are automatically configured to get such credential in the local deployment, thus the Credential only needs to be issued for usage in DCP-based flows. The deployed [Tractus-X Identityhub](https://github.com/eclipse-tractusx/tractusx-identityhub) supports integration with compliant [Issuer Services](https://eclipse-dataspace-dcp.github.io/decentralized-claims-protocol/v1.0.1/#credential-issuance-protocol). However, we are reusing the [default issuer](./deployment-integration/local-deployment/LOCAL.md#credentials-issuance-at-the-consumer) from the FIWARE Data Space Connector and insert the credential manually into the identity hub:
 
-> :warning: A credential inserted this way is a **copy**, and nothing in the steps below keeps it in
-> step with the one the issuer renews, so once it expires every DCP exchange starts failing with
-> nothing having changed in the cluster. Set `identityhub.credentialSync.enabled` and the chart
-> renders a sidecar in the identityhub pod that mirrors the Secret the vc-operator maintains, on
-> issuance and on every renewal - which makes the manual steps below a one-off illustration rather
-> than something to run. The sidecar only writes into a participant context that already exists, so
-> it goes together with `identityhub.bootstrap.enabled`; enabled on its own it just reports a 404
-> for the participant on every cycle.
->
-> Note what this is *not*: the identityhub can fetch credentials by itself. It ships
-> `credential-watchdog`, which re-requests an expiring credential, and the
-> `POST /participants/{id}/credentials/request` endpoint that starts one. What the local deployment
-> lacks is a DCP-compliant [Issuer Service](https://eclipse-dataspace-dcp.github.io/decentralized-claims-protocol/v1.0.1/#credential-issuance-protocol)
-> to ask - the default issuer here speaks OID4VCI - which is why the credential arrives out of band
-> and the watchdog is off by default (`identityhub.credentialWatchdog.checkPeriodSeconds: 0`).
+!!! warning
+
+    A credential inserted this way is a **copy**, and nothing in the steps below keeps it in
+    step with the one the issuer renews, so once it expires every DCP exchange starts failing with
+    nothing having changed in the cluster. Set `identityhub.credentialSync.enabled` and the chart
+    renders a sidecar in the identityhub pod that mirrors the Secret the vc-operator maintains, on
+    issuance and on every renewal - which makes the manual steps below a one-off illustration rather
+    than something to run. The sidecar only writes into a participant context that already exists, so
+    it goes together with `identityhub.bootstrap.enabled`; enabled on its own it just reports a 404
+    for the participant on every cycle.
+
+    Note what this is *not*: the identityhub can fetch credentials by itself. It ships
+    `credential-watchdog`, which re-requests an expiring credential, and the
+    `POST /participants/{id}/credentials/request` endpoint that starts one. What the local deployment
+    lacks is a DCP-compliant [Issuer Service](https://eclipse-dataspace-dcp.github.io/decentralized-claims-protocol/v1.0.1/#credential-issuance-protocol)
+    to ask - the default issuer here speaks OID4VCI - which is why the credential arrives out of band
+    and the watchdog is off by default (`identityhub.credentialWatchdog.checkPeriodSeconds: 0`).
 
 #### Consumer
 
@@ -583,10 +585,12 @@ export PRODUCT_SPEC_ID=$(curl -k -x localhost:8888 -X 'POST' \
     }' | jq '.id' -r); echo ${PRODUCT_SPEC_ID}
 ```
 
-> **On `transferType` / `HttpData-PULL`.** The catalog distribution `transferType` is
-> configurable through the `transferType` product-spec characteristic, but the current
-> implementation only supports `HttpData-PULL`. When the characteristic is omitted,
-> `HttpData-PULL` is used as the default.
+!!! note
+
+    **On `transferType` / `HttpData-PULL`.** The catalog distribution `transferType` is
+    configurable through the `transferType` product-spec characteristic, but the current
+    implementation only supports `HttpData-PULL`. When the characteristic is omitted,
+    `HttpData-PULL` is used as the default.
 
 4. Create the coresponding offering. It includes the policies required to make it accessible through DSP:
 ```shell
@@ -664,7 +668,9 @@ curl -k -x localhost:8888 -X 'POST' \
 
 #### Using the BAE Marketplace
 
-> :warning: The BAE Marketplace is not enabled in the deployment used for these tests, in order to keep the deployment minimal. The steps below are provided for reference only; in this environment, use the TMForum API approach described in the previous section.
+!!! warning
+
+    The BAE Marketplace is not enabled in the deployment used for these tests, in order to keep the deployment minimal. The steps below are provided for reference only; in this environment, use the TMForum API approach described in the previous section.
 
 To be able to use the BAE Marketplace for creating DSP-compatible products and offerings, that Marketplace must have been deployed with the configuration required to support the creation of offerings with the characteristics needed for DSP integration (see the [documentation on deployment configuration by role](https://github.com/FIWARE/data-space-connector/blob/main/doc/deployment-integration/roles/README.md) for more information).
 
@@ -860,7 +866,9 @@ odrlPap.policy.additionalContextsPath=/etc/edc/additional-contexts.json
 
 After JSON-LD expand-then-compact, a permission with `"action": "use"` will be compacted to `"action": "dspace:use"`, allowing the PAP to map it to the correct Rego rule via `mapping.json`.
 
-> **Important**: `"odrl": null` is required in the scoped context. Without it, both prefixes map to the same namespace IRI and the compactor may still choose `odrl`. `"@type": "@id"` is also required for prefix compaction to apply to the values.
+!!! important
+
+    `"odrl": null` is required in the scoped context. Without it, both prefixes map to the same namespace IRI and the compactor may still choose `odrl`. `"@type": "@id"` is also required for prefix compaction to apply to the values.
 
 For more details on the JSON-LD scoped context mechanism, see the [FDSC-EDC additional contexts documentation](https://github.com/SEAMWARE/fdsc-edc/blob/ticket-36/work/policy-extension/additional-contexts.md).
 
@@ -936,33 +944,35 @@ The same product now can be negotiated through the Dataspace Protocol. The inter
 
 #### DCP
 
-> :bulb: **Automated walk-through.** The manual steps below (catalog → contract
-> negotiation → transfer process → EDR) can be run end-to-end with the helper
-> script [`dsp-consume.sh`](./scripts/dsp-consume.sh). It requests the catalog,
-> lets you pick a dataset and offer, polls the negotiation until `FINALIZED`,
-> optionally starts the transfer, polls it until `STARTED`, and finally prints
-> the data endpoint and access token.
->
-> The script talks to the consumer EDC management API directly (no proxy, TLS
-> verification on), so expose it via a port-forward first:
->
-> ```shell
-> kubectl port-forward svc/consumer-fdsc-edc-dcp 8085:8085
-> ```
->
-> Then run it with the provider DSP endpoint, the local management base and the
-> provider DID:
->
-> ```shell
-> ./doc/scripts/dsp-consume.sh \
->   https://dcp-mp-operations.127.0.0.1.nip.io/api/dsp/2025-1 \
->   http://localhost:8085/api/v1/management/v3 \
->   did:web:mp-operations.org
-> ```
->
-> Run `./doc/scripts/dsp-consume.sh --help` for the full argument and environment
-> reference (transfer type, protocol, poll timeout/interval). The steps below
-> document the same flow performed by hand.
+!!! tip
+
+    **Automated walk-through.** The manual steps below (catalog → contract
+    negotiation → transfer process → EDR) can be run end-to-end with the helper
+    script [`dsp-consume.sh`](./scripts/dsp-consume.sh). It requests the catalog,
+    lets you pick a dataset and offer, polls the negotiation until `FINALIZED`,
+    optionally starts the transfer, polls it until `STARTED`, and finally prints
+    the data endpoint and access token.
+
+    The script talks to the consumer EDC management API directly (no proxy, TLS
+    verification on), so expose it via a port-forward first:
+
+    ```shell
+    kubectl port-forward svc/consumer-fdsc-edc-dcp 8085:8085
+    ```
+
+    Then run it with the provider DSP endpoint, the local management base and the
+    provider DID:
+
+    ```shell
+    ./doc/scripts/dsp-consume.sh \
+      https://dcp-mp-operations.127.0.0.1.nip.io/api/dsp/2025-1 \
+      http://localhost:8085/api/v1/management/v3 \
+      did:web:mp-operations.org
+    ```
+
+    Run `./doc/scripts/dsp-consume.sh --help` for the full argument and environment
+    reference (transfer type, protocol, poll timeout/interval). The steps below
+    document the same flow performed by hand.
 
 1. Read the catalog:
 ```shell

@@ -1,6 +1,8 @@
 # Consumer Role
 
-> **Note:** This guide covers the deployment of an organization acting **exclusively as a consumer**. If your organization also needs to act as a provider (offering data or services to other participants), refer to the [Consumer & Provider guide](../consumer-provider/README.md) instead.
+!!! note
+
+    This guide covers the deployment of an organization acting **exclusively as a consumer**. If your organization also needs to act as a provider (offering data or services to other participants), refer to the [Consumer & Provider guide](../consumer-provider/README.md) instead.
 
 ## Overview
 
@@ -15,7 +17,7 @@ Before deploying, contact the **Data Space Operator** to initiate the onboarding
 - The credential types your organization is allowed to issue and their required configuration (claims, attribute mappings, etc.)
 - The Trust Anchor's TIR endpoint URL
 
-This information is essential for configuring Keycloak, the DID, and the Verifiable Credentials correctly.
+This information is needed to configure Keycloak, the DID, and the Verifiable Credentials correctly.
 
 Check also that the cluster meets the [Cluster Prerequisites](../PREREQUISITES.md): its databases, the network requirements and the resources the consumer needs.
 
@@ -23,7 +25,7 @@ Check also that the cluster meets the [Cluster Prerequisites](../PREREQUISITES.m
 
 ### Verifiable Credential Issuer
 
-A consumer organization requires a **Verifiable Credential (VC) Issuer** — a component capable of issuing [Verifiable Credentials](https://www.w3.org/TR/vc-data-model/) to its users so they can authenticate and access services offered by providers in the data space.
+A consumer organization requires a **Verifiable Credential (VC) Issuer**, a component capable of issuing [Verifiable Credentials](https://www.w3.org/TR/vc-data-model/) to its users so they can authenticate and access services offered by providers in the data space.
 
 The FIWARE Data Space Connector uses [Keycloak](https://github.com/keycloak/keycloak) as the VC issuer. For detailed configuration instructions, see the [Keycloak Configuration](../KEYCLOAK.md) guide.
 
@@ -33,14 +35,16 @@ Keycloak stores its data in PostgreSQL: an existing one, or one the chart deploy
 
 ### DID
 
-Every participant in the data space needs a [Decentralized Identifier (DID)](https://www.w3.org/TR/did-core/) — a globally unique identifier that the organization controls and that is not dependent on a centralized registry. DIDs can be of different types (methods), such as `did:key`, `did:web`, `did:ebsi`, among others.
+Every participant in the data space needs a [Decentralized Identifier (DID)](https://www.w3.org/TR/did-core/), a globally unique identifier that the organization controls and that is not dependent on a centralized registry. DIDs can be of different types (methods), such as `did:key`, `did:web`, `did:ebsi`, among others.
 
 - **`did:web`** — Recommended for **production** environments. It relies on a domain name controlled by the organization and serves the DID document over HTTPS, providing discoverability and a natural trust anchor tied to DNS.
 - **`did:key`** — Suitable only for **test or development** environments. It encodes the public key directly in the identifier itself, which makes it simple to generate but offers no discoverability or key rotation capabilities.
 
 The [DID Helper](https://github.com/SEAMWARE/did-helper) is a lightweight service that creates `did:key` or serves the consumer's [DID document](https://www.w3.org/TR/did-core/).
 
-> **Note:** If the data space uses the [Decentralized Claims Protocol (DCP)](https://eclipse-dataspace-dcp.github.io/decentralized-claims-protocol/v1.0.1/) (typically together with the [Dataspace Protocol](https://docs.internationaldataspaces.org/ids-knowledgebase/dataspace-protocol) via [FDSC-EDC](#dataspace-protocolfdsc-edc-and-identityhub)), the **DID Helper is replaced by the Identity Hub**, which serves the DID document (and the consumer's credentials) as required by DCP. See the [Dataspace Protocol Integration Guide](../../../DSP_INTEGRATION.md) for details.
+!!! note
+
+    If the data space uses the [Decentralized Claims Protocol (DCP)](https://eclipse-dataspace-dcp.github.io/decentralized-claims-protocol/v1.0.1/) (typically together with the [Dataspace Protocol](https://docs.internationaldataspaces.org/ids-knowledgebase/dataspace-protocol) via [FDSC-EDC](#dataspace-protocolfdsc-edc-and-identityhub)), the **DID Helper is replaced by the Identity Hub**, which serves the DID document (and the consumer's credentials) as required by DCP. See the [Dataspace Protocol Integration Guide](../../../DSP_INTEGRATION.md) for details.
 
 The DID document contains the consumer's public key, which providers use to verify that credentials were issued by this organization. The DID must be registered at the data space's Trust Anchor following the Data Space onboarding process.
 
@@ -66,123 +70,49 @@ However, for easier deployment of these components, you can use the same `fiware
 
 ### Using the FIWARE DSC Helm chart and values
 
-> **Start from the reference profile:** [`examples/consumer.yaml`](../../../../charts/data-space-connector/examples/consumer.yaml) is a complete values file for a consumer, to adapt to your installation. Its [README](../../../../charts/data-space-connector/examples/README.md) lists the prerequisites, the placeholders, the Secrets to create and the installation steps. The settings below explain each part.
+!!! note "Start from the reference profile"
 
-The consumer could use the same `fiware/data-space-connector` chart as the provider, but with most components disabled (since it is not a real connector).
+    [`examples/consumer.yaml`](https://github.com/FIWARE/data-space-connector/blob/main/charts/data-space-connector/examples/consumer.yaml) is a complete values file for a consumer, to adapt to your installation. Its [README](https://github.com/FIWARE/data-space-connector/blob/main/charts/data-space-connector/examples/README.md) lists the prerequisites, the placeholders, the Secrets to create and the installation steps. The settings below explain each part.
 
-1. Create a helm `values.yaml` file with the key settings to enable only the consumer-related components like this:
+Build a `values.yaml` for the consumer by adapting [`examples/consumer.yaml`](https://github.com/FIWARE/data-space-connector/blob/main/charts/data-space-connector/examples/consumer.yaml). It uses the same `fiware/data-space-connector` chart as the provider, but with most components disabled: a consumer only issues credentials to its users. The sections below show that file piece by piece; replace every `<placeholder>`.
 
-   The Ingresses in the example only carry the cert-manager annotations and use the cluster's default ingress class unless `className` is set. Add the class and the annotations your ingress controller needs; the [local deployment](../../local-deployment/LOCAL.MD) uses Traefik, for example.
+The ingresses use cert-manager through annotations and the ingress class you set (the [local deployment](../../local-deployment/LOCAL.md) uses Traefik). A `ClusterIssuer` is a prerequisite: use your own, or let the chart create one with `certManagerResources` (the [examples README](https://github.com/FIWARE/data-space-connector/blob/main/charts/data-space-connector/examples/README.md) covers the prerequisites, Secrets and placeholders).
 
-   With `certManagerResources.enabled: true` and `type: "prod"`, the chart creates the `prod-issuer` ClusterIssuer referenced below. Replace the `acmeEmail` and `ingressClass` placeholders with your own values. If your cluster already manages its own ClusterIssuer, disable `certManagerResources.enabled` and use that issuer's actual name in the annotations.
+#### Identity: did:web
+
+did-helper serves the organization's `did:web`. Its key is the TLS certificate cert-manager issues for the ingress, and it must never rotate: a new key changes the DID, and every credential issued with the old one stops verifying (hence `private-key-rotation-policy: Never`; see [Identity key lifecycle](../provider/README.md#identity-key-lifecycle) in the provider guide, which applies to consumers too).
 
 ```yaml
-# Key settings for consumer-only deployment
-
-# Enable cert-manager for prod
-cert-manager:
-  enabled: true
-  crds:
-    enabled: true
-
-certManagerResources:
-  enabled: true
-  type: "prod"
-  acmeEmail: <your-email>              # ACME account contact; the chart's default is a placeholder
-  ingressClass: <your-ingress-class>   # the class that serves the HTTP-01 challenge
-
-# Keycloak — see ../KEYCLOAK.md for detailed configuration
-keycloak:
-
-
-# DID of type web using cert-manager for TLS and for the DID document public key
-did:
-  enabled: true
-  config:
-    server:
-      # https: did-helper also publishes <hostUrl>/.well-known/tls.crt as the x5u of the key
-      hostUrl: "https://<your_did_domain>"
-      certPath: "/certs/tls.crt"
-  volumes:
-    - name: certs
-      secret:
-        # the DID's key, issued by cert-manager for the Ingress below and never rotated: see
-        # "Identity key lifecycle"
-        secretName: <your_did_domain>-tls
-        items:
-          - key: tls.crt
-            path: tls.crt
-  volumeMounts:
-    - name: certs
-      mountPath: /certs
-  # with certPath did-helper writes nothing, so it runs on a read-only root filesystem
-  securityContext:
-    readOnlyRootFilesystem: true
-    allowPrivilegeEscalation: false
-    capabilities:
-      drop: ["ALL"]
-  ingress:
-    enabled: true
-    className: <your-ingress-class>   # add the annotations your ingress controller needs
-    annotations:
-      cert-manager.io/cluster-issuer: "prod-issuer" # Use selfsigned-issuer with the selfsigned setup for testing
-      cert-manager.io/private-key-algorithm: "ECDSA"
-      # the Secret also holds the DID's key: renewals must keep it (cert-manager >= 1.18
-      # generates a new one by default)
-      cert-manager.io/private-key-rotation-policy: "Never"
-      cert-manager.io/common-name: "<your_did_domain>"
-    hosts:
-      - host: <your_did_domain>
-        paths:
-          - path: /
-            pathType: ImplementationSpecific
-    tls:
-      - secretName: <your_did_domain>-tls
-        hosts:
-          - <your_did_domain>
-
-decentralizedIam:
-  enabled: true
-  vcAuthentication:
-    vcverifier:
-      enabled: false
-    credentials-config-service:
-      enabled: false
-    trusted-issuers-list:
-      enabled: false
-    managedPostgres: # Only needed if using the built-in PSQL for the keycloak.
-      enabled: true
-      config:
-        volume:
-          storageClass: "" # Use default storage class or specify one if needed
-  odrlAuthorization:
-    enabled: false
-    odrl-pap:
-      enabled: false
-    apisix:
-      enabled: false
-
-
-contract-management:
-  enabled: false
-
-fdsc-edc:
-  enabled: false
-
-identityhub:
-  enabled: false
-
-vault:
-  enabled: false
-
-scorpio:
-  enabled: false
-
-tm-forum-api:
-  enabled: false
+--8<-- "charts/data-space-connector/examples/consumer.yaml:identity"
 ```
 
-2. Install the chart with your values, pinning its version (see the [release notes](../../../release-notes) for what changes between versions):
+#### Credential issuer: Keycloak
+
+Keycloak issues the consumer's users their credentials and signs them with the DID's key: the `prepare-keystore` init container turns the DID Secret into the PKCS12 keystore the realm reads. The ingress publishes only `/realms/<realm>` and `/resources`; the admin console and the master realm stay inside the cluster. See [Keycloak configuration](../KEYCLOAK.md).
+
+```yaml
+--8<-- "charts/data-space-connector/examples/consumer.yaml:keycloak"
+```
+
+#### Database
+
+A consumer only runs Keycloak's database. The chart's managed PostgreSQL creates its user, with the Postgres operator installed once per cluster; the verifier, trusted issuers list and policy components stay off.
+
+```yaml
+--8<-- "charts/data-space-connector/examples/consumer.yaml:database"
+```
+
+#### Disabled components
+
+The data and contract components a consumer does not run are set to `false`.
+
+```yaml
+--8<-- "charts/data-space-connector/examples/consumer.yaml:disabled"
+```
+
+#### Install the chart
+
+Install the chart with your values, pinning its version (see the [release notes](../../../release-notes/11-x.md) for what changes between versions):
 
 ```shell
 helm install consumer oci://quay.io/fiware/helm-charts/data-space-connector \
@@ -201,19 +131,21 @@ helm install consumer fiware-dsc/data-space-connector --version <version> -n con
 
 #### Other deployment options
 
-A base example for a consumer deployment can be found at [k3s/consumer.yaml](../../../../k3s/consumer.yaml).
+A base example for a consumer deployment can be found at [k3s/consumer.yaml](https://github.com/FIWARE/data-space-connector/blob/main/k3s/consumer.yaml).
 
-> **Note:** These values are intended for **local development and testing** environments. For a real production deployment, they must be customized to meet your infrastructure, security, and availability requirements. See [Production considerations](#production-considerations) below.
+!!! note
+
+    These values are intended for **local development and testing** environments. For a real production deployment, they must be customized to meet your infrastructure, security, and availability requirements. See [Production considerations](#production-considerations) below.
 
 For other deployment scenarios, the base `consumer.yaml` can be extended with additional overlay values files (which take precedence over the base). The following overlays are available:
 
 | Overlay | File | Description |
 |---------|------|-------------|
-| **eIDAS / ELSI** | [k3s/consumer-eidas.yaml](../../../../k3s/consumer-eidas.yaml) | Configuration for deployments compliant with the [ELSI](https://alastria.github.io/did-method-elsi/) trust framework, including eIDAS certificate issuance via Keycloak. See [eIDAS 2.0 Compliance](../../eidas/README.md) for details |
-| **Gaia-X** | [k3s/consumer-gaia-x.yaml](../../../../k3s/consumer-gaia-x.yaml) | Configuration for [Gaia-X](https://gaia-x.eu/) compliant deployments |
-| **TM Forum APIs** | [k3s/consumer-tmf.yaml](../../../../k3s/consumer-tmf.yaml) | Enables [TM Forum APIs](https://www.tmforum.org/oda/open-apis/) on the consumer (required for central marketplace and EDC-related features) |
-| **Auth components** | [k3s/consumer-auth.yaml](../../../../k3s/consumer-auth.yaml) | Configures authentication components for the consumer (required for central marketplace and EDC-related features) |
-| **DSP** | [k3s/dsp-consumer.yaml](../../../../k3s/dsp-consumer.yaml) | Enables the [Dataspace Protocol (DSP)](https://docs.internationaldataspaces.org/ids-knowledgebase/dataspace-protocol) connector on the consumer side |
+| **eIDAS / ELSI** | [k3s/consumer-eidas.yaml](https://github.com/FIWARE/data-space-connector/blob/main/k3s/consumer-eidas.yaml) | Configuration for deployments compliant with the [ELSI](https://alastria.github.io/did-method-elsi/) trust framework, including eIDAS certificate issuance via Keycloak. See [eIDAS 2.0 Compliance](../../eidas/README.md) for details |
+| **Gaia-X** | [k3s/consumer-gaia-x.yaml](https://github.com/FIWARE/data-space-connector/blob/main/k3s/consumer-gaia-x.yaml) | Configuration for [Gaia-X](https://gaia-x.eu/) compliant deployments |
+| **TM Forum APIs** | [k3s/consumer-tmf.yaml](https://github.com/FIWARE/data-space-connector/blob/main/k3s/consumer-tmf.yaml) | Enables [TM Forum APIs](https://www.tmforum.org/oda/open-apis/) on the consumer (required for central marketplace and EDC-related features) |
+| **Auth components** | [k3s/consumer-auth.yaml](https://github.com/FIWARE/data-space-connector/blob/main/k3s/consumer-auth.yaml) | Configures authentication components for the consumer (required for central marketplace and EDC-related features) |
+| **DSP** | [k3s/dsp-consumer.yaml](https://github.com/FIWARE/data-space-connector/blob/main/k3s/dsp-consumer.yaml) | Enables the [Dataspace Protocol (DSP)](https://docs.internationaldataspaces.org/ids-knowledgebase/dataspace-protocol) connector on the consumer side |
 
 For example, to deploy a consumer with DSP support and TM Forum APIs:
 
@@ -237,7 +169,7 @@ helm install consumer oci://quay.io/fiware/helm-charts/data-space-connector --ve
 
 - Use a registered domain name that your organization controls for the [`did:web`](https://w3c-ccg.github.io/did-method-web/) identifier
 - Ensure the DID document is served over HTTPS with a valid certificate
-- Protect the private key associated with your DID — it is the foundation of your organization's identity in the data space. If compromised, an attacker could issue credentials on your behalf
+- Protect the private key associated with your DID: it is the foundation of your organization's identity in the data space. If compromised, an attacker could issue credentials on your behalf
 - Give the DID a dedicated key that renewals do not regenerate, not the TLS Secret of an Ingress: see [Identity key lifecycle](../provider/README.md#identity-key-lifecycle) in the provider guide, which applies to consumers as well
 
 ### Trust Anchor registration
@@ -255,7 +187,7 @@ helm install consumer oci://quay.io/fiware/helm-charts/data-space-connector --ve
 
 ### Keycloak
 
-- Do not hardcode passwords in values files — use Kubernetes Secrets
+- Do not hardcode passwords in values files; use Kubernetes Secrets
 - Rotate Keycloak admin credentials and the keystore password regularly
 - For high availability, deploy at least 2 replicas with Infinispan cache replication enabled
 

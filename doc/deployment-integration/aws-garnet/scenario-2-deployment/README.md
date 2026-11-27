@@ -79,10 +79,10 @@ helm install -n ips -f ./yaml/values-dsc-aws-load-balancer-controller-scenario2.
 ```
 
 ## Other Resources - Troubleshooting
-Once the Data Space Connector is deployed via the Helm chart in your cluster, additional scripts are also provided in this [repository](../scripts/) to help any troubleshooting of your connector deployment.
+Once the Data Space Connector is deployed via the Helm chart in your cluster, additional scripts are also provided in this [repository](https://github.com/FIWARE/data-space-connector/tree/main/doc/deployment-integration/aws-garnet/scripts) to help any troubleshooting of your connector deployment.
 Two main scripts are provided:
 
-* 1/ Save all pods logs from a EKS cluster namespace using `kubectl` to your local deployment machine under `./podLogs/` [in this repository structure](./podLogs/)
+* 1/ Save all pods logs from a EKS cluster namespace using `kubectl` to your local deployment machine under `./podLogs/` [in this repository structure](https://github.com/FIWARE/data-space-connector/tree/main/doc/deployment-integration/aws-garnet/scenario-2-deployment/podLogs)
 The script `kubectlLogsFromNamespace.sh` [link](../scripts/kubectlLogsFromNamespace.sh) runs a local process in your deployment machine to poll logs from all currently running pods under a namespace from your cluster and save locally for further analysis.
 It can be manually modified to change the desired namespace to be analyzed 
 

@@ -41,7 +41,7 @@ For detailed information on configuring OID4VC credential types in Keycloak, ref
 
 ### Consumer
 
-When acting as a **consumer only**, Keycloak issues VCs for the organization's users to present to external providers. No verification of external credentials is needed on the consumer side — that is handled by the provider.
+When acting as a **consumer only**, Keycloak issues VCs for the organization's users to present to external providers. No verification of external credentials is needed on the consumer side. That is handled by the provider.
 
 See the [Consumer deployment guide](consumer/README.md) for details.
 
@@ -72,9 +72,11 @@ Keycloak is enabled by default in the `fiware/data-space-connector` Helm chart. 
 1. **Infrastructure** — ingress, TLS, init containers, volumes, signing key, environment variables
 2. **Realm import** — credential type definitions, clients, roles, users, and credential scopes
 
-The following sections walk through each part of a typical configuration. For a complete working example, see [k3s/consumer.yaml](../../../k3s/consumer.yaml).
+The following sections walk through each part of a typical configuration. For a complete working example, see [k3s/consumer.yaml](https://github.com/FIWARE/data-space-connector/blob/main/k3s/consumer.yaml).
 
-> **Important:** Most realm sub-keys (`clientRoles`, `users`, `clients`, `clientScopes`) accept either YAML objects or **raw JSON strings** inside YAML block scalars (`|`); the Helm template injects them directly into the realm import JSON file. The dedicated `verifiableCredentials:` map is YAML-only and renders one ClientScope per entry.
+!!! important
+
+    Most realm sub-keys (`clientRoles`, `users`, `clients`, `clientScopes`) accept either YAML objects or **raw JSON strings** inside YAML block scalars (`|`); the Helm template injects them directly into the realm import JSON file. The dedicated `verifiableCredentials:` map is YAML-only and renders one ClientScope per entry.
 
 Here is the overall structure at a glance:
 
@@ -109,7 +111,7 @@ The private key used by Keycloak to sign Verifiable Credentials **must** be the 
 
 If the keystore contains a different key pair than the one referenced in the DID Document, **signature verification will fail** and the issued credentials will be rejected by other participants in the data space.
 
-This requirement is the reason why the init container, volumes, and signing key configuration sections below all reference the same DID TLS secret — they must all work with the **same key material** that backs the organization's DID.
+This requirement is the reason why the init container, volumes, and signing key configuration sections below all reference the same DID TLS secret; they must all work with the **same key material** that backs the organization's DID.
 
 ### Ingress and TLS
 
@@ -177,17 +179,21 @@ Keycloak needs a PKCS12 keystore to sign Verifiable Credentials. An init contain
 
 This reads the DID private key and certificate from a TLS secret and produces a `cert.pfx` keystore in the shared `did-material` volume.
 
-> **Note:** the key is `extraInitContainers`. `initContainers` configures the chart's own init containers and takes a map, so a list there fails validation.
+!!! note
+
+    the key is `extraInitContainers`. `initContainers` configures the chart's own init containers and takes a map, so a list there fails validation.
 
 ### Volumes
 
 Three volumes connect the init container, the Helm-generated realm ConfigMap, and the DID private key to Keycloak:
 
-> :warning: Since Keycloak 26.6.4 the `java-keystore` realm key provider only reads keystores from
-> `${kc.home.dir}/data/<realm-name>` (`/opt/keycloak/data/<realm-name>` on the official image). The
-> mount path below must therefore end in the realm name configured under `realm.name` — `test-realm`
-> in this example. Keystores outside that boundary make Keycloak reject any create/update on the key
-> provider.
+!!! warning
+
+    Since Keycloak 26.6.4 the `java-keystore` realm key provider only reads keystores from
+    `${kc.home.dir}/data/<realm-name>` (`/opt/keycloak/data/<realm-name>` on the official image). The
+    mount path below must therefore end in the realm name configured under `realm.name` — `test-realm`
+    in this example. Keystores outside that boundary make Keycloak reject any create/update on the key
+    provider.
 
 ```yaml
   extraVolumeMounts:
@@ -227,14 +233,16 @@ The `did` and `issuerDid` must match your organization's registered DID. `ES256`
 
 ### Environment variables
 
-> :warning: **Changed in 10.x.** The Bitnami-only `KEYCLOAK_EXTRA_ARGS` is gone, and several settings that used to live in `extraEnvVars` are now first-class chart values:
->
-> - `--import-realm` is auto-added by the umbrella when `realm.import: true`.
-> - `KC_FEATURES` → `keycloak.features.enabled` (must include both `oid4vc-vci` and `oid4vc-vci-preauth-code` since KC 26.4+).
-> - `KC_HEALTH_ENABLED` is enabled automatically by any active probe (or `metrics.enabled: true`).
-> - `KC_ADMIN_PASSWORD` → handled via `keycloak.keycloak.existingSecret` and `keycloak.keycloak.secretKeys.adminPasswordKey`.
->
-> Use `extraEnvVars` for genuinely custom env vars only (heap tuning, secrets consumed by templated realm config, etc.).
+!!! warning
+
+    **Changed in 10.x.** The Bitnami-only `KEYCLOAK_EXTRA_ARGS` is gone, and several settings that used to live in `extraEnvVars` are now first-class chart values:
+
+    - `--import-realm` is auto-added by the umbrella when `realm.import: true`.
+    - `KC_FEATURES` → `keycloak.features.enabled` (must include both `oid4vc-vci` and `oid4vc-vci-preauth-code` since KC 26.4+).
+    - `KC_HEALTH_ENABLED` is enabled automatically by any active probe (or `metrics.enabled: true`).
+    - `KC_ADMIN_PASSWORD` → handled via `keycloak.keycloak.existingSecret` and `keycloak.keycloak.secretKeys.adminPasswordKey`.
+
+    Use `extraEnvVars` for genuinely custom env vars only (heap tuning, secrets consumed by templated realm config, etc.).
 
 ```yaml
   extraEnvVars:
@@ -250,13 +258,15 @@ The `did` and `issuerDid` must match your organization's registered DID. `ES256`
 
 ### Realm: credential type definitions
 
-> :warning: **Changed in 10.x (Keycloak 26.4+).** The legacy `realm.attributes` flat
-> scheme `vc.<name>.<property>` and the `realm.credentialBuilder` block are no
-> longer recognised. Each credential type is now declared once under
-> `realm.verifiableCredentials.<name>`, and the chart renders one ClientScope
-> (with `protocol: "oid4vc"`) per entry. See
-> [`doc/release-notes/10-x.md`](../../release-notes/10-x.md) for the full
-> migration guide.
+!!! warning
+
+    **Changed in 10.x (Keycloak 26.4+).** The legacy `realm.attributes` flat
+    scheme `vc.<name>.<property>` and the `realm.credentialBuilder` block are no
+    longer recognised. Each credential type is now declared once under
+    `realm.verifiableCredentials.<name>`, and the chart renders one ClientScope
+    (with `protocol: "oid4vc"`) per entry. See
+    [`doc/release-notes/10-x.md`](../../release-notes/10-x.md) for the full
+    migration guide.
 
 Example defining one credential type (`user-credential` in JWT-VC JSON format):
 
@@ -294,7 +304,7 @@ The most relevant attributes per credential are:
 
 To define additional credential types, add more entries under `verifiableCredentials`. The key of each entry is the ClientScope name — i.e. the value the wallet sends as `credential_configuration_id`.
 
-See [k3s/consumer.yaml](../../../k3s/consumer.yaml) for a complete example with multiple credential types (LegalPersonCredential, UserCredential, OperatorCredential, MarketplaceCredential, MembershipCredential, etc.).
+See [k3s/consumer.yaml](https://github.com/FIWARE/data-space-connector/blob/main/k3s/consumer.yaml) for a complete example with multiple credential types (LegalPersonCredential, UserCredential, OperatorCredential, MarketplaceCredential, MembershipCredential, etc.).
 
 ### Realm: client roles
 
@@ -356,7 +366,9 @@ The `clientRoles` section assigns the roles defined above to this user. The `acc
 
 The chart imports no users and no client roles by default: a realm only has the ones its values declare.
 
-> **Production note:** Do not hardcode passwords in values files. Use Kubernetes Secrets or an external identity provider for user management.
+!!! note "Production note"
+
+    Do not hardcode passwords in values files. Use Kubernetes Secrets or an external identity provider for user management.
 
 ### Realm: protocol mappers per VC
 
@@ -411,7 +423,7 @@ Key points:
 - **`oid4vc-target-role-mapper`** does not allow two mappers with the same `claim.name` in the same scope. Pick one target per VC, or use distinct claim names; downstream verifiers (FIWARE vcverifier, ODRL/OPA) read `credentialSubject.roles[*].target` by default.
 - For the full mapper API reference (properties, defaults, examples), see [`doc/keycloak/oid4vc-protocol-mappers.md`](../../keycloak/oid4vc-protocol-mappers.md).
 
-For a complete example with all credential types, see [k3s/consumer.yaml](../../../k3s/consumer.yaml).
+For a complete example with all credential types, see [k3s/consumer.yaml](https://github.com/FIWARE/data-space-connector/blob/main/k3s/consumer.yaml).
 
 ### Realm: clients
 
@@ -464,7 +476,7 @@ keycloak:
 
 `account-console` and `admin-cli` are public clients, and they come without the password grant (`directAccessGrantsEnabled: false`): with it, anyone who knows a user's password could get a token from the token endpoint, without the login page and whatever it enforces, such as a second factor. Users log in to the account console through the browser, or get their credentials with a wallet. Components get theirs with a confidential client of their own and the client credentials grant, which is how the vc-operator requests them (`vcCredentials`, see the [Central Marketplace](operator/README.md#central-marketplace) for an example).
 
-The local environment turns the password grant back on for `account-console`, because the integration tests and [`doc/scripts/get_credential.sh`](../../scripts/get_credential.sh) log in with it ([k3s/consumer.yaml](../../../k3s/consumer.yaml)):
+The local environment turns the password grant back on for `account-console`, because the integration tests and [`doc/scripts/get_credential.sh`](../../scripts/get_credential.sh) log in with it ([k3s/consumer.yaml](https://github.com/FIWARE/data-space-connector/blob/main/k3s/consumer.yaml)):
 
 ```yaml
 keycloak:
@@ -508,7 +520,7 @@ The chart ships the upstream `keycloak/keycloak` image, 26.7.0 or later (the exa
 
 ### Complete example
 
-A complete working example with multiple credential types, users, and clients is available at [k3s/consumer.yaml](../../../k3s/consumer.yaml). This file is intended for local development and testing. For production deployments, replace test values (passwords, DIDs, domains) with your real configuration.
+A complete working example with multiple credential types, users, and clients is available at [k3s/consumer.yaml](https://github.com/FIWARE/data-space-connector/blob/main/k3s/consumer.yaml). This file is intended for local development and testing. For production deployments, replace test values (passwords, DIDs, domains) with your real configuration.
 
 ### Production considerations
 
