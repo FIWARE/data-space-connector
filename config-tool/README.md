@@ -212,6 +212,11 @@ features:           # excerpt: every offered or turned-on feature; source is pre
     source: preset
 answers:            # ids the bundle declares under foundations:, values checked against their type
   domain.base: acme.example.org
+infrastructure:     # Stage 4: the chosen mode and its answers per dependency (see Infrastructure)
+  certManager:
+    mode: cluster
+    answers:
+      issuer: letsencrypt-prod
 open:               # fields left open on purpose
   - field: target.context
 source:             # the loaded values file: metadata only, never its content
@@ -488,15 +493,6 @@ default, with the value they would derive. The diff groups `added`, `changed`, `
 previous render of the same source. A load, a profile open or a render of another source resets that baseline. A
 pinned leaf is reported only when its rendered value changes (ADR 0020 §7-8).
 
-`GET /api/infrastructure?chart=&version=` lists the Stage 4 dependencies (`{id, title, help, doc, clusterWide,
-modes}`, empty for a bundle without any; 404 for an unknown bundle). A mode carries `{id, label, note, warning, doc,
-development, productionDoc, keys, questions}`, where `keys` are the chart keys it may write. A question carries `{id,
-type, label, help, doc, options, default, when, readOnly, ingress}`; a per-ingress question appears once per
-`ingresses:` row, its id expanded to `<question>.<ingressId>` and `ingress` naming the row (`{id, label, owner}`; the
-row renders only while its `owner` foundation resolves). Every string is bundle data.
-The answers travel in the profile's `infrastructure` map, so `PUT /api/profile` validates them and `POST /api/render`
-renders them (ADR 0026).
-
 ### Rules and findings
 
 A bundle's `rules:` are L2 checks across answers ([ADR 0021](../doc/adr/0021-config-tool-l2-rules.md)). Each rule has
@@ -542,6 +538,106 @@ check the egress fan-out against the final values. The 10.16.0 bundle has eight 
   the loaded file renames;
 - `keycloak-proxy-mappings` (`valueSet`) warns while the loaded file sets `keycloak.proxy.spiProxyMappings`, which makes
   Keycloak ignore the proxy settings.
+
+## Infrastructure (Stage 4)
+
+Stage 4 asks how each dependency the chart shares with the cluster is met
+([ADR 0026](../doc/adr/0026-config-tool-infrastructure-modes.md)). Every dependency has three modes: `bundled`
+(installed with the connector), `cluster` (already in the cluster) and `external` (provided by hand). The screen shows
+one card per dependency with its modes as a radio group, each mode's note, the chosen mode's warning, its questions
+and a *writes N keys* disclosure. Every text is bundle data. A mode nobody chose emits no key, so a profile that
+skips Stage 4 renders what it rendered before.
+
+The first dependency is cert-manager, id `certManager`:
+
+| Mode | Writes | Questions |
+|---|---|---|
+| `bundled` | `cert-manager.enabled`, `cert-manager.crds.enabled`, `certManagerResources.enabled`: `true` | `type` (`selfsigned`, the default, or `prod`) → `certManagerResources.type`; while `prod`: `acmeEmail` → `certManagerResources.acmeEmail` and `ingressClass` → `certManagerResources.ingressClass`; while `selfsigned`: the read-only `namespace` (the release namespace) → `certManagerResources.namespace`. Each ingress gets `cert-manager.io/cluster-issuer: <type>-issuer` |
+| `cluster` | `cert-manager.enabled`, `certManagerResources.enabled`: `false` | `issuer`, a ClusterIssuer name, copied to each ingress's `cert-manager.io/cluster-issuer` |
+| `external` | as `cluster` | `secret.<ingressId>`, one TLS Secret per ingress, replacing its `tls[0].secretName` (default `<host>-tls`) |
+
+`bundled` carries the warning that a cluster can only have one cert-manager, with a link to
+[installing the operators once](../doc/deployment-integration/roles/PREREQUISITES.md#installing-the-operators-once).
+`<type>-issuer` is the ClusterIssuer `templates/cert-manager-issuer.yaml` creates, and a test pins that. A namespaced
+`Issuer` is not offered; a hand-set `cert-manager.io/issuer` stays an override. In `external`, each Secret is listed
+once in *Create before installing* and NEXT_STEPS.md with the keys `tls.crt` and `tls.key`. The tool never creates it.
+
+### The `infrastructure:` and `ingresses:` sections
+
+```yaml
+ingresses:            # every ingress whose TLS the tool owns
+  - {id: keycloak, label: Keycloak, path: keycloak.ingress, owner: host.keycloak}
+infrastructure:
+  - id: certManager   # one id segment
+    title: TLS certificates (cert-manager)
+    clusterWide: true # bundled must then carry warning and doc
+    modes:
+      - id: bundled
+        warning: A cluster can only have one cert-manager. ...
+        doc: doc/deployment-integration/roles/PREREQUISITES.md#installing-the-operators-once
+        targets: [{path: cert-manager.enabled, fn: const, args: [true]}]
+        questions:
+          - {id: type, type: choice, default: selfsigned, options: [...], targets: [...]}
+          - id: acmeEmail
+            type: email
+            when: {question: type, equals: prod}
+            targets: [{path: certManagerResources.acmeEmail, fn: copy, args: ["{{ .infra.certManager.acmeEmail }}"]}]
+        perIngress:   # expanded per ingresses: row, key relative to its path
+          - {key: 'annotations."cert-manager.io/cluster-issuer"', fn: tpl, args: ["{{ .infra.certManager.type }}-issuer"]}
+      - id: external
+        perIngressQuestion:
+          {id: secret, type: secretName, key: 'tls[0].secretName', replaces: true,
+           requirement: {kind: secret, keys: [tls.crt, tls.key], purpose: ...}}
+```
+
+A dependency is `{id, title, help, doc, clusterWide, modes}`. A mode is `{id, label, note, warning, doc, development,
+productionDoc, targets, questions, perIngress, perIngressQuestion, requirements}`; `development: true` marks it
+*suitable for development* and requires `productionDoc`. A question has a foundation's fields plus `when` and
+`readOnly`. `when: {question, equals}` names another question of the same mode, holds only while that answer resolves
+to `equals`, and does not chain.
+
+The bundle compiles each dependency into synthetic foundations under the reserved prefix `infra.`: `infra.<dep>.mode`
+(a choice without default), `infra.<dep>.<question>` and, per `ingresses:` row, `infra.<dep>.<question>.<ingressId>`.
+Templates read them fully qualified (`{{ .infra.certManager.issuer }}`). Each of a mode's targets carries the condition
+`infra.<dep>.mode equals <mode>`, plus the question's `when`. Two targets may write one path only when their conditions
+exclude each other, so all three modes write `cert-manager.enabled`. A `perIngress` target renders only while the
+row's `owner` foundation resolves. `replaces: true` overwrites the owner's unconditional target at that path, whose
+template or constant becomes the question's default; switching away from `external` brings `<host>-tls` back.
+Compile checks run both ways: every row's owner writes `<path>.tls[0].secretName`, and every such target has a row.
+The verifier and DID ingresses are not rows, because their certificate is the signing key (US-8.11).
+
+The synthetic foundations are in `Bundle.CompiledFoundations()`, which render, load ownership and the diff use, but
+not in the declared `foundations:` list, so Stage 3 and `GET /api/foundations` never show them. A declared id may not
+start with `infra.`.
+
+### Answers, fields and rules
+
+The profile keeps the answers under `infrastructure: {<dep>: {mode, answers: {<question>: value}}}` with local
+question ids (`issuer`, `secret.keycloak`), never in `answers`. Validation refuses an unknown dependency, a mode the
+dependency does not offer and a question no mode declares, and checks each value against its question's type. The
+answers of an inactive mode stay, so switching back restores them; only the active mode renders.
+
+Every place that names a field uses one scheme: `infrastructure.<dep>` is the mode, `infrastructure.<dep>.<question>`
+a question (`model.InfraFieldAnswer` / `InfraAnswerField`). Field errors, *Ask later*, findings and Review links use
+it. `answers.infra.*` is refused. An unanswered read-only question does not count as open.
+
+The type `email` is new (`local@domain`; the domain may not be an RFC 2606 example or test name, so
+`admins@example.com` cannot be typed); names of Kubernetes objects use `resourceName` and `secretName`. In `bundled` with `prod`, two error rules block `generate` while the answer is unset, because the chart
+default would apply and no certificate would ever be issued: `acme-email-for-prod-issuer` (the chart's
+`admins@example.com`, which Let's Encrypt refuses) and `acme-ingress-class-for-prod-issuer` (the chart's `nginx`,
+wrong on any other controller). A rule's `field` and `when` may name infrastructure fields; an unknown dependency or
+question fails the bundle.
+
+Loading a values file does not derive infrastructure answers: several modes write the same keys, so the mode is
+ambiguous. Owned infra leaves stay owned and are listed as underived; the mode comes from the saved profile. Detection
+is US-4.6.
+
+`GET /api/infrastructure?chart=&version=` lists the dependencies (`{id, title, help, doc, clusterWide, modes}`, empty
+for a bundle without any; 404 for an unknown bundle). A mode carries `{id, label, note, warning, doc, development,
+productionDoc, keys, questions}`, where `keys` are the chart keys it may write. A question carries `{id, type, label,
+help, doc, options, default, when, readOnly, ingress}`; a per-ingress question appears once per `ingresses:` row, its
+id expanded to `<question>.<ingressId>` and `ingress` naming the row (`{id, label, owner}`). The answers travel in the
+profile, so `PUT /api/profile` validates them and `POST /api/render` renders them.
 
 ## Features (Stage 5)
 
