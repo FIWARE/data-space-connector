@@ -113,6 +113,7 @@ func TestValidateInfrastructure(t *testing.T) {
 		{"per-ingress question of an unknown ingress", choice(model.ModeExternal, map[string]any{"secret.apisix": "my-tls"}), []string{infraField + ".secret.apisix"}},
 		{"value of the wrong type", choice(model.ModeCluster, map[string]any{"issuer": "Not A Host"}), []string{infraField + ".issuer"}},
 		{"option not offered", choice(model.ModeBundled, map[string]any{"type": "staging"}), []string{infraField + ".type"}},
+		{"read-only question answered", choice(model.ModeBundled, map[string]any{"namespace": "other"}), []string{infraField + ".namespace"}},
 		{"reserved email", choice(model.ModeBundled, map[string]any{"acmeEmail": "admins@example.com"}), []string{infraField + ".acmeEmail"}},
 	}
 	for _, tc := range tests {

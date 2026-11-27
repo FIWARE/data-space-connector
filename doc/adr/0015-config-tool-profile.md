@@ -252,7 +252,8 @@ infrastructure:
 Answers are keyed by local question id; a per-ingress question is `<question>.<ingressId>`. Field
 ids are `infrastructure.<dep>` for the mode and `infrastructure.<dep>.<question>` for an answer,
 both in `FieldError`s and in `open`. `Validate` refuses an unknown dependency, a mode it does not
-offer, a question none of its modes declares and a value the question's type refuses. The
+offer, a question none of its modes declares, an answer to a `readOnly` question (its derived
+value must apply) and a value the question's type refuses. The
 compiled `infra.*` ids are never answers of their own: `answers.infra.*` is refused, as an answer
 and as an open field. Answers of inactive modes stay, so switching back restores them; only the
 active mode renders. A chart switch drops the whole map and its open questions. Like every other

@@ -28,6 +28,12 @@ infrastructure:
               - {value: selfsigned, label: Self-signed}
               - {value: prod, label: "Let's Encrypt"}
           - {id: acmeEmail, type: email, label: ACME contact, when: {question: type, equals: prod}}
+          - id: namespace
+            type: secretName
+            label: Namespace
+            readOnly: true
+            default: '{{ .target.namespace }}'
+            when: {question: type, equals: selfsigned}
       - id: cluster
         label: Use the cert-manager already in the cluster
         targets: [{path: cert-manager.enabled, fn: const, args: [false]}]

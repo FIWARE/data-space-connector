@@ -62,7 +62,7 @@ func (p Profile) withInfra(dep string, edit func(*InfraChoice)) Profile {
 }
 
 // validateInfrastructure refuses an unknown dependency, a mode it does not offer, a question none of its modes
-// declares and a value the question's type refuses; fields are infrastructure.<dep>[.<question>].
+// declares, an answer to a read-only question and a value the question's type refuses; fields are infrastructure.<dep>[.<question>].
 func (p Profile) validateInfrastructure(b *model.Bundle) []FieldError {
 	var errs []FieldError
 	for _, dep := range sortedKeys(p.Infrastructure) {
@@ -87,6 +87,10 @@ func (p Profile) validateInfrastructure(b *model.Bundle) []FieldError {
 				errs = append(errs, FieldError{qField, "is not a question of " + dep})
 				continue
 			}
+			if isReadOnly(d, q) {
+				errs = append(errs, FieldError{qField, "is read-only"})
+				continue
+			}
 			if err := f.Check(c.Answers[q]); err != nil {
 				errs = append(errs, FieldError{qField, err.Error()})
 			}
@@ -98,6 +102,18 @@ func (p Profile) validateInfrastructure(b *model.Bundle) []FieldError {
 // isInfraAnswerID reports whether id lies in the infra namespace, whose answers live only under infrastructure.
 func isInfraAnswerID(id string) bool {
 	return strings.HasPrefix(id, model.InfraIDPrefix)
+}
+
+// isReadOnly reports whether question q of d shows only its derived value, so a stored answer would override it.
+func isReadOnly(d model.Dependency, q string) bool {
+	for _, m := range d.Modes {
+		for _, mq := range m.Questions {
+			if mq.ID == q {
+				return mq.ReadOnly
+			}
+		}
+	}
+	return false
 }
 
 // modeIDs lists the mode ids d offers, in bundle order.
