@@ -25,16 +25,30 @@ requirements therefore keep working without a second engine (ADR 0026).
   `render/render.go:41`, `render/elements.go:99,324`, `render/diff.go:120`, `load/elements.go`, `check/coverage.go:70`
   and `server/render.go:194`. Render, load and diff need to see them, so they iterate a new
   `b.CompiledFoundations()`. `/api/foundations` must not list them. A test pins that Stage 3's list does not change.
-- **Mode gating.** A compiled target gains `When []Condition` (all must hold over the resolved answers). Each mode
-  target gets `{infra.<dep>.mode equals <mode>}`, and a question's `when` (for example `type equals prod`) is
-  ANDed. `Only` stays as it is. `checkTargetPaths` lets two targets share a leaf path when they are *exclusive*,
+- **Mode gating.** A compiled target gains `When []TargetCondition`, where the new type
+  `TargetCondition{ID, Equals string}` names a compiled answer id (not a field id, so `RuleWhen` from `checkrules.go`
+  is not reused). All conditions must hold over the resolved answers, and an unset answer never holds. Each mode
+  target gets `{infra.<dep>.mode equals <mode>}`, and a question's `when` (declared as `{question, equals}` with a
+  local id, for example `type equals prod`) is qualified and ANDed. `Only` stays as it is. `checkTargetPaths` lets two targets share a leaf path when they are *exclusive*,
   meaning both carry a condition on the same id with different `equals`. `Only` counts as a condition on the target's own
   foundation id. So `cert-manager.enabled` can be written by all three modes, and the
   `cert-manager.io/cluster-issuer` annotation by `bundled` and `cluster`.
+  - **`const` targets.** `compileTarget` refuses a `const` that is neither under a list index nor has `requires`,
+    because an ungated constant would always render. A non-empty `When` satisfies that rule too: a conditioned
+    constant renders only while its mode is chosen. The mode targets (`cert-manager.enabled`,
+    `cert-manager.crds.enabled`, `certManagerResources.enabled`) are therefore top-level `const` targets with `When`
+    and no `requires`. The existing error message names all three options, and a fixture row pins that an
+    unconditioned top-level `const` is still refused.
+  - **`When` before refs.** In `Render`, a target whose refs or requires are unresolved marks its owned lists
+    `incomplete`, which drops each list whole. The `When` check runs first, so a target of an inactive mode (or a
+    question whose `when` does not hold) is skipped without marking anything. It can never wipe `<ingress>.tls`
+    (hosts and secretName) from the active render. A render test pins this: `cluster` chosen, the `external` Secret
+    questions unanswered, and every `tls[0]` block still rendered.
 - **Replacing a host's TLS Secret name.** The host foundations (US-3.4) already write `<ingress>.tls[0].secretName`
   as `<host>-tls` (`apisix-provider-tls` for APISIX). The `external` mode's per-host questions write the same path
   with `replaces: true`. At compile time, an unconditional foundation target must exist at exactly that path, and
-  the question's default is copied from that target's template, so a derived external answer equals today's value.
+  the question's default is copied from that target's template or, for a `const` target (APISIX's
+  `apisix-provider-tls`), its const value, so a derived external answer equals today's value.
   At render time, a rendered replacing leaf drops the replaced leaf, and provenance names the infrastructure answer.
   Nothing else may share a path with an unconditional target. When the mode is switched away from `external`,
   `<host>-tls` comes back on its own.
@@ -99,11 +113,25 @@ requirements therefore keep working without a second engine (ADR 0026).
   `infra.<dep>.mode` (compile error). `infra.*` is never addressable as `answers.<id>`: `profile.declared` (used by
   both `validateAnswers` and `isKnownField`) refuses ids under `infra.`, so `answers.infra.certManager.issuer` is
   neither a valid answer nor a valid open field once `Bundle.Foundation` resolves synthetic ids.
-- **Load.** Owned infra leaves derive flat `infra.*` answers, and `load/seed.go` moves them into
-  `profile.Infrastructure`. The mode is derived only when the derived infra answers belong to exactly one mode
-  (`issuer` → `cluster`, `secret.*` → `external`, `type`/`cert-manager.enabled: true` → `bundled`). Otherwise it
-  stays unanswered, and the marker reports it as underived (the existing `Marker.Underived`). Recognizing
-  cert-manager in hand-written files is US-4.6 detection, not this ticket.
+- **Load: no back-derivation of `infra.*` in this ticket.** In `internal/load`, an owned scalar leaf derives an
+  answer only through a `recognize:` rule (`classifier.derive` looks up one rule per path), and elements go through
+  `model.Invert`. Scalar foundation targets such as `domain.base` and `host.*` are not back-derived today; they show
+  up in `Marker.Underived`. Infrastructure answers are treated the same way. Several modes write the same paths (all
+  three `const` targets on `cert-manager.enabled`; the issuer annotation from `bundled`'s `tpl` and `cluster`'s
+  `copy`), so a one-rule-per-path map cannot express them. A per-target inversion would derive both `issuer` and
+  `type` from `selfsigned-issuer` and leave even a tool-written `cluster` file (k3s/provider.yaml) ambiguous.
+  Therefore:
+  - no `recognize:` rule and no inversion is added for `infra.*`, and `load/seed.go` does not change;
+  - owned infra leaves stay owned (`dsc-config:owned infra.certManager.issuer` resolves, because `Bundle.Foundation`
+    resolves synthetic ids) and their ids are listed in `Marker.Underived`, like the Stage 3 scalars;
+  - the infrastructure answers come from the profile (`.dscprofile.yaml` keeps them, CT-4), so a saved session
+    reopens with its mode. A values file loaded without a profile shows the mode as unanswered;
+  - a re-render with a different mode drops the owned leaves of the old mode, because ownership is by marker, not
+    by derived answer.
+
+  Whole-mode inversion (a mode is a candidate only if every owned, mode-gated leaf inverts consistently, the
+  `const` targets included; the mode is derived only for exactly one candidate) is left to US-4.6 detection, which
+  also recognizes cert-manager in hand-written files. ADR 0026 records this as a consequence.
 
 ## Steps
 
@@ -113,7 +141,7 @@ Code only, tested against fixture bundles. The shipped bundle does not change ye
   the `infra` prefix and the mode ids (`ModeBundled`, `ModeCluster`, `ModeExternal`):
   - `Dependency{ID, Title, Help, Doc, ClusterWide, Modes []Mode}`;
   - `Mode{ID, Label, Note, Warning, Doc, Development, ProductionDoc, Targets []Target, Questions []Question, PerIngress []IngressTarget, PerIngressQuestion *IngressQuestion, Requirements}`;
-  - `Question` = a foundation-like `{id, type, label, help, doc, options, default, when *Condition (local id), readOnly, targets}`;
+  - `Question` = a foundation-like `{id, type, label, help, doc, options, default, when *QuestionWhen{question, equals} (local id), readOnly, targets}`;
   - `Ingress{ID, Label, Path, Owner}`.
   
   Add `Infrastructure []Dependency` (`yaml:"infrastructure"`) and `Ingresses []Ingress` (`yaml:"ingresses"`) to `Bundle` in `model.go`.
@@ -121,10 +149,10 @@ Code only, tested against fixture bundles. The shipped bundle does not change ye
   - the mode choice;
   - one foundation per question, with local `when` ids qualified;
   - the per-ingress expansion with `requires` taken from the owner target;
-  - `replaces` with its default copied from the owner target.
+  - `replaces` with its default copied from the owner target (template or const value).
 
-  Re-run `checkIDNesting`, `checkRefs`, `topoOrder` and `checkTargetPaths` over the combined list. Extend
-  `CompiledTarget` with `When []Condition` and `Replaces bool`, and teach `checkTargetPaths` the exclusivity and
+  Teach `compileTarget`'s `const` rule that a non-empty `When` gates the constant (see the decisions). Re-run `checkIDNesting`, `checkRefs`, `topoOrder` and `checkTargetPaths` over the combined list. Extend
+  `CompiledTarget` with `When []TargetCondition` and `Replaces bool`, and teach `checkTargetPaths` the exclusivity and
   `replaces` rules from the decisions. Add `Bundle.CompiledFoundations()`, `Bundle.Dependencies()` and
   `Bundle.Dependency(id)`.
 - Add `TypeEmail` to `foundations.go` (pattern and RFC 2606 refusal as in the decisions; `Check` never echoes the
@@ -139,6 +167,7 @@ Code only, tested against fixture bundles. The shipped bundle does not change ye
   - an ingress row whose owner has no `<path>.tls[0].secretName` target;
   - an owned `tls[0].secretName` without a row;
   - a non-exclusive shared path;
+  - an unconditioned top-level `const` (still refused), next to an accepted `const` mode target;
   - `replaces` without an unconditional foundation target;
   - `clusterWide` without a `bundled` warning or doc;
   - `development` without `productionDoc`;
@@ -193,8 +222,8 @@ Code only, tested against fixture bundles. The shipped bundle does not change ye
     infra id. `pin` treats the replacing leaf like any other.
   - `render.Targets(b, id)` and `TargetRef` cover synthetic ids, so Stage 4 can show the keys of each mode.
 - `internal/load/elements.go` and `check/coverage.go` switch to `CompiledFoundations()` where ownership is
-  meant, and the load inversion (`invert.go`) handles conditioned targets. `load/seed.go` moves derived `infra.*`
-  answers into `profile.Infrastructure` and derives the mode as described in the decisions.
+  meant. No element or each target is synthetic, so `model.Invert` is not touched, and no `recognize:` rule is
+  added: per the Load decision, `infra.*` answers are not back-derived, and `load/seed.go` does not change.
 - `internal/model/requirements.go` and `internal/requirements`: add `When` gating and `keys`, and list each Secret once.
 - `internal/check/check.go`: `holds` and `value` resolve `infrastructure.<dep>[.<q>]` fields through
   `model.InfraFieldAnswer` against the resolved answers (which include `p.InfraAnswers()`), and a finding's `field` is
@@ -207,7 +236,10 @@ Code only, tested against fixture bundles. The shipped bundle does not change ye
   - `when`-gated questions;
   - a loaded file whose `dsc-config:owned infra.*` keys belong to the old mode loses them in the re-render, while a
     hand-set (unknown) annotation at an owned path stays pinned;
-  - load derives the mode only when it is unambiguous.
+  - an inactive mode's unresolved target never marks a list incomplete (`cluster` chosen, `external` Secret
+    questions unanswered, every `tls[0]` block still rendered);
+  - load of a file with `dsc-config:owned infra.*` markers derives no `infra.*` answer, keeps the leaves owned and
+    lists the ids in `Marker.Underived` (`internal/load/load_test.go`).
 - Acceptance: the existing render, load and check suites pass unchanged, and `go test ./...` is green.
 
 ### Step 4: The cert-manager entry in bundle 10.16.0
