@@ -1,0 +1,8 @@
+# helm pull oci://quay.io/fiware/helm-charts/business-api-ecosystem --version 1.2.0 --untar
+# null: not declared, so the logic proxy template sees nothing.
+chart: business-api-ecosystem
+version: 1.2.0
+values:
+  bizEcosystemLogicProxy:
+    extraContainerVolumes: null
+    extraVolumeMounts: []

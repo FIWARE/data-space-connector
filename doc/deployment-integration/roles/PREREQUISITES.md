@@ -160,18 +160,22 @@ Besides the other participants' public names (their DIDs, the Trust Anchor's TIR
 
 If outbound traffic goes through a proxy, give `HTTPS_PROXY` to the components that call out - the verifier's `deployment.additionalEnvVars`, Keycloak's `proxy.*`, the marketplace's and the vc-operator's environment, and `proxy_opts` in APISIX's `openid-connect` plugin - and keep the in-cluster services out of it with `NO_PROXY` (`.svc`, `.cluster.local`, and the Service names the component calls, such as `trusted-issuers-list` and `credentials-config-service` for the verifier).
 
+The configuration tool writes all of these from `proxy.https`, `proxy.http` and `proxy.no`. Three limits remain. Keycloak ignores the proxy settings while `keycloak.proxy.spiProxyMappings` is set. The marketplace's VC login (token request and key fetch) always goes through the HTTPS proxy, even to an in-cluster verifier. `NO_PROXY` CIDRs only work for the verifier and the vc-operator, so append the service CIDR, or the vc-operator reaches the Kubernetes API through the proxy.
+
 ### Private CA
 
 If the public hosts have certificates from a private CA, every component that calls them has to trust it. Never turn the verification off instead.
 
+One Secret in the release namespace serves every mechanism below: its key `ca.crt` holds the PEM bundle of the private CA. The configuration tool asks only for its name (`ca.privateSecret`, see the [config tool README](../../../config-tool/README.md#foundations-stage-3)) and writes each component's mechanism.
+
 | Component | How to trust the CA |
 |---|---|
-| APISIX | `apisix.ssl.existingCASecret`, see [Trusting a private CA](provider/README.md#trusting-a-private-ca) |
+| APISIX | `apisix.ssl.enabled: true` with `apisix.ssl.existingCASecret` and `certCAFilename: ca.crt`, and `ssl_verify: true` in the `openid-connect` plugin of every route, see [Trusting a private CA](provider/README.md#trusting-a-private-ca). `ssl.enabled` also opens the HTTPS listener, which needs nothing more while TLS ends at the Ingress. APISIX then trusts **only** that bundle, not the public roots: when a route calls a publicly signed provider, append the public roots to `ca.crt` |
 | VCVerifier | An init container that appends the CA to the image's bundle (`/etc/ssl/cert.pem`) in a shared volume mounted over it, as [`k3s/provider.yaml`](../../../k3s/provider.yaml) does. The chart's `serverCertificates.caCert` only takes effect when other init containers are configured too |
 | Marketplace logic proxy | `NODE_EXTRA_CA_CERTS`, see [Running a local marketplace](provider/LOCAL_MARKETPLACE.md) |
-| vc-operator | `SSL_CERT_FILE` pointing to the CA, mounted with `extraVolumes`/`extraVolumeMounts`, as in [`k3s/provider.yaml`](../../../k3s/provider.yaml). |
-| Keycloak | `tls.truststoreEnabled` with a Java truststore in `tls.truststoreExistingSecret` |
-| Contract Management | No option to add a CA: the hosts it calls (the Central Marketplace) need a certificate from a public CA |
+| vc-operator | `SSL_CERT_DIR` pointing to the directory the Secret is mounted in (`extraVolumes`/`extraVolumeMounts`). Go then loads its default bundle plus that directory. `SSL_CERT_FILE` would replace the default bundle and break calls to publicly signed hosts |
+| Keycloak | `truststore-paths` (`KC_TRUSTSTORE_PATHS`) pointing to the PEM file, mounted under `/opt/keycloak/conf/truststores/` with `extraVolumes`/`extraVolumeMounts`. Not `tls.truststoreEnabled`/`tls.truststoreExistingSecret`: they only validate inbound mTLS clients and need a JKS truststore |
+| Contract Management | An init container with the Contract Management image copies `$JAVA_HOME/lib/security/cacerts` into an emptyDir and imports every certificate of the CA bundle with `keytool` (split first: `keytool -importcert` imports only the first certificate of a PEM file), and `JDK_JAVA_OPTIONS` points `javax.net.ssl.trustStore` at the copy (`deployment.initContainers`/`additionalVolumes`/`additionalVolumeMounts`, `additionalEnvVars`). The configuration tool writes this when `ca.privateSecret` is set |
 
 ## Sizing
 

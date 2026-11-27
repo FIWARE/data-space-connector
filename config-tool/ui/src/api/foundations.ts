@@ -2,7 +2,7 @@
 import { api } from './client'
 
 /** Answer type, mirroring `model.FoundationType`; a choice is checked against its options, every other type with a pattern. */
-export type FoundationType = 'string' | 'hostname' | 'domain' | 'choice' | 'did' | 'url' | 'bool' | 'credentialTypes'
+export type FoundationType = 'string' | 'hostname' | 'domain' | 'choice' | 'did' | 'url' | 'bool' | 'credentialTypes' | 'secretName'
 
 /** One element of a `credentialTypes` answer, mirroring the Go check; types are unique within the list. */
 export interface CredentialType {
@@ -18,12 +18,13 @@ export interface FoundationOption {
 }
 
 /** The Stage 3 panel that asks a foundation, mirroring `model.FoundationGroup`. */
-export type FoundationGroup = 'organization' | 'dataspace' | 'network' | 'platform'
+export type FoundationGroup = 'organization' | 'dataspace' | 'network' | 'platform' | 'egress'
 
-/** Holds while the resolved answer `id` equals `equals`, mirroring `model.Condition`. */
+/** Holds while the resolved answer `id` equals `equals`, or with `set` while it resolves at all, mirroring `model.Condition`. */
 export interface Condition {
   id: string
   equals: string
+  set?: boolean
 }
 
 /** One chart key a foundation reaches; `component` is the path's top-level key. */

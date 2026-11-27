@@ -1,0 +1,12 @@
+# helm pull oci://quay.io/fiware/helm-charts/contract-management --version 3.6.3 --untar
+# null: not declared, so the deployment template sees nothing. The image tag defaults to appVersion.
+chart: contract-management
+version: 3.6.3
+appVersion: 3.4.2
+values:
+  deployment:
+    image:
+      repository: quay.io/fiware/contract-management
+    initContainers: null
+    additionalVolumes: null
+    additionalVolumeMounts: null

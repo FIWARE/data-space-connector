@@ -177,7 +177,7 @@ Asked in [Stage 3](USER_JOURNEY.md#stage-3--foundations). The "fans out to" coun
 against [`k3s/provider.yaml`](../../k3s/provider.yaml), which is what a fully configured
 provider looks like today.
 
-The rows down to the data space's are shipped as `foundations:` in the bundle ([ADR 0020](../adr/0020-config-tool-foundations-render.md)),
+The rows down to the data space's, and the proxy and private CA rows, are shipped as `foundations:` in the bundle ([ADR 0020](../adr/0020-config-tool-foundations-render.md)),
 and `internal/render/provider_test.go` measures their counts. That test accounts for every leaf of provider.yaml that
 carries the domain: it is either a target or a row of an exclusion table naming the owning story. The TIR address is
 the `dataspace.tirAddress` target, which carries the domain without deriving from it. The excluded rows are the
@@ -200,8 +200,8 @@ in-cluster transfer host (1 each, US-5.3). The other rows are design.
 | `storage.className` | `gp3` | PostgreSQL, MongoDB, Vault, APISIX etcd |
 | `resources.profile` | `production` | `resources` of Scorpio, the TMForum API, the TIL, contract-management, Keycloak — the [sizing guidance](../deployment-integration/roles/PREREQUISITES.md#set-memory-limits-on-the-java-components) applied, not re-explained. Shipped ([ADR 0024](../adr/0024-config-tool-resource-profile.md)): defaults to the Stage 1 environment (`development` or `production`); `custom` writes no key and leaves the chart's defaults |
 | `images.pullSecrets`, `images.registryMirror` | | `imagePullSecrets` of every component, `keycloak.tokenStatusList.plugin.mavenBaseUrl` |
-| `proxy.https`, `proxy.no` | | verifier env, Keycloak `proxy.*`, BAE, vc-operator, APISIX `proxy_opts` |
-| `ca.privateSecret` | | APISIX `ssl.existingCASecret`, the verifier CA init container, `NODE_EXTRA_CA_CERTS`, Keycloak truststore |
+| `proxy.https`, `proxy.http`, `proxy.no` | `http://proxy.infra.svc.cluster.local:3128` | shipped ([ADR 0025](../adr/0025-config-tool-proxy-and-private-ca.md)): **8, 5 and 8 targets** in 5 components: the verifier, BAE logic proxy and vc-operator `HTTPS_PROXY`/`HTTP_PROXY`/`NO_PROXY` env elements, Keycloak `proxy.*`, and APISIX `proxy_opts` in each existing openid-connect route. `proxy.https` switches the group; `proxy.http` follows it; `proxy.no` derives from the release and namespace and lists every in-cluster form the five clients read |
+| `ca.privateSecret` | `corp-ca` (key `ca.crt`) | shipped: **22 targets** in 6 components, one PEM Secret for all: the verifier CA init container, volumes and mount, APISIX `ssl.enabled`/`existingCASecret`/`certCAFilename` plus `ssl_verify: true` on each route, Keycloak `KC_TRUSTSTORE_PATHS` with its volume and mount, BAE `NODE_EXTRA_CA_CERTS`, vc-operator `SSL_CERT_DIR`, Contract Management `JDK_JAVA_OPTIONS` with an init container that imports `ca.crt` into a copy of the JDK trust store |
 
 `provider.yaml` names the DID on 15 lines, one a comment. The DID keys that are not `did.value` targets (US-3.2, [ADR 0021](../adr/0021-config-tool-l2-rules.md#7-the-did-targets-narrow-the-story)):
 
@@ -305,7 +305,7 @@ already refuses a key that is not in `values.yaml`, so this is the same gate CI 
 | `data.scorpio` with an existing PostgreSQL ⇒ PostGIS required | Scorpio's queries need it |
 | `dsp.edc` on ⇒ a secret store chosen, and `identity.did` replaced by the IdentityHub | DCP serves the DID document from the IdentityHub |
 | `environment: production` ⇒ `did:web`, a non-self-signed issuer, memory limits on the Java components | [Sizing](../deployment-integration/roles/PREREQUISITES.md#set-memory-limits-on-the-java-components) |
-| A private CA ⇒ every component that calls a public host must trust it | The per-component table in PREREQUISITES |
+| A private CA ⇒ every component that calls a public host must trust it (shipped: `ca-coverage`) | The per-component table in PREREQUISITES |
 | Every `external` dependency's Secret appears in `NEXT_STEPS.md` | The install fails without it |
 | `generatePasswords: true` with a `helm template` or GitOps target | `lookup` is unavailable there, so the value is re-randomised on every render |
 | A referenced Secret is missing, or lacks a key the component reads | The component crash-loops on start |

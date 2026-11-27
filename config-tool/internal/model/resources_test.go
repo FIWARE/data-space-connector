@@ -220,8 +220,26 @@ func walkSchema(node map[string]any, path string) error {
 
 // subchartDefaults are enabledKeys the umbrella values.yaml leaves unset, with what supplies their true default.
 var subchartDefaults = map[string]string{
-	"decentralizedIam.vcAuthentication.enabled": "decentralized-iam chart default",
-	"fdsc-edc.enabled":                          "Helm treats a missing dependency condition as true",
+	"decentralizedIam.vcAuthentication.enabled":         "decentralized-iam chart default",
+	"decentralizedIam.odrlAuthorization.enabled":        "decentralized-iam chart default",
+	"decentralizedIam.odrlAuthorization.apisix.enabled": "odrl-authorization chart default",
+	"fdsc-edc.enabled": "Helm treats a missing dependency condition as true",
+}
+
+// checkEnabledDefaults fails for every enabled key of id whose recorded default differs from the chart's.
+func checkEnabledDefaults(t *testing.T, values *yaml.Node, id string, keys map[string]bool) {
+	t.Helper()
+	for _, k := range sortedKeys(keys) {
+		got, ok := scalarAt(t, values, k)
+		switch {
+		case !ok && subchartDefaults[k] == "":
+			t.Errorf("%s: %s is not in values.yaml and not listed in subchartDefaults", id, k)
+		case !ok && !keys[k]:
+			t.Errorf("%s: %s defaults to true (%s), table has false", id, k, subchartDefaults[k])
+		case ok && got != strconv.FormatBool(keys[k]):
+			t.Errorf("%s: %s = %s in values.yaml, table has %t", id, k, got, keys[k])
+		}
+	}
 }
 
 // TestEmbeddedResourceDefaults keeps the defaults the table records equal to the chart's values.yaml.
@@ -229,17 +247,7 @@ func TestEmbeddedResourceDefaults(t *testing.T) {
 	values := chartValuesRoot(t)
 	r := shippedResources(t)
 	for _, c := range append(r.Components, r.Unsized...) {
-		for _, k := range sortedKeys(c.EnabledKeys) {
-			got, ok := scalarAt(t, values, k)
-			switch {
-			case !ok && subchartDefaults[k] == "":
-				t.Errorf("%s: %s is not in values.yaml and not listed in subchartDefaults", c.ID, k)
-			case !ok && !c.EnabledKeys[k]:
-				t.Errorf("%s: %s defaults to true (%s), table has false", c.ID, k, subchartDefaults[k])
-			case ok && got != strconv.FormatBool(c.EnabledKeys[k]):
-				t.Errorf("%s: %s = %s in values.yaml, table has %t", c.ID, k, got, c.EnabledKeys[k])
-			}
-		}
+		checkEnabledDefaults(t, values, c.ID, c.EnabledKeys)
 		if c.ChartMemoryLimit == "" {
 			continue
 		}

@@ -11,6 +11,8 @@ import (
 // Tree is a rendered values tree: one scalar per leaf, sorted by path.
 type Tree struct {
 	Leaves []Leaf `json:"leaves"`
+	// Withheld are the mechanisms left out for an edited list, a collision with a foreign element or a conflict (ADR 0025).
+	Withheld []Withheld `json:"withheld,omitempty"`
 }
 
 // Leaf is one chart key the render writes. Path is chart-relative.
@@ -33,6 +35,11 @@ type Provenance struct {
 	Kept bool `json:"kept"`
 	// Rendered is what the render would have written; set only on a pinned leaf.
 	Rendered any `json:"rendered,omitempty"`
+	// Element is the key of the list element the leaf lies in, for a list written by keyed elements.
+	Element string `json:"element,omitempty"`
+	// Origin is OriginBase or OriginLoaded on a leaf of an element the render keeps but does not own; Foundation
+	// is then the first foundation in bundle order whose element makes the list be written.
+	Origin string `json:"origin,omitempty"`
 }
 
 // MarshalJSON writes the path in roundtrip.ParsePath syntax.

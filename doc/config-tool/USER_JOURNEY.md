@@ -133,7 +133,7 @@ stage that earns the tool its keep: the base domain alone reaches 76 keys of
 `k3s/provider.yaml` (the full table is in
 [Cross-cutting values](FEATURE_MODEL.md#cross-cutting-values)).
 
-Grouped into four short panels on one scrollable screen:
+Grouped into five short panels on one scrollable screen:
 
 1. **Organization** — display name, DID method and DID, legal identifier
    (for eIDAS/Gaia-X if those are later enabled).
@@ -142,8 +142,10 @@ Grouped into four short panels on one scrollable screen:
    tool offers "import from a data space descriptor URL" where the data space publishes
    a `/.well-known/data-space-configuration`.
 3. **Network** — base domain, host naming scheme (derived from the base domain, each host editable),
-   ingress class and annotations, TLS mode, private CA, outbound proxy.
+   ingress class and annotations, TLS mode.
 4. **Platform** — storage class, resource profile, image pull secrets, registry mirror.
+5. **Egress** — outbound proxy (`proxy.https`, `proxy.http`, `proxy.no`) and the private CA Secret
+   (`ca.privateSecret`), with a preview of what each component gets from them.
 
 Everything here has a default that a development environment can accept unchanged. Each
 field shows **where it will be used** ("used by 25 values in 9 components") and a link to the

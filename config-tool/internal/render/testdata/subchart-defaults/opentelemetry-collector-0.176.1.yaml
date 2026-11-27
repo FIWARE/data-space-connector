@@ -1,0 +1,6 @@
+# helm pull opentelemetry-collector --repo https://open-telemetry.github.io/opentelemetry-helm-charts --version 0.176.1 --untar
+chart: opentelemetry-collector
+version: 0.176.1
+values:
+  nameOverride: ""
+  fullnameOverride: ""

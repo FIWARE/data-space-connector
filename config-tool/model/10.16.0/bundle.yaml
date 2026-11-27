@@ -4,24 +4,34 @@
 #
 # The foundations list (ADR 0020) holds the cross-cutting answers of Stage 3 and the chart keys they reach:
 #   id       dotted answer id (domain.base): the key in the profile's answers, open field answers.<id>
-#   type     string | hostname | domain | did | url, each checked with one pattern; choice, one of its options;
+#   type     string | hostname | domain | did | url | secretName, each checked with one pattern; choice, one of its
+#            options;
 #            bool, true or false; credentialTypes, a list of {type, description?}. Only copy writes a bool or a list
-#   group    organization | dataspace | network (default) | platform: the Stage 3 panel that asks it
+#   group    organization | dataspace | network (default) | platform | egress: the Stage 3 panel that asks it
 #   options  a choice's {value, label, note}; note is optional text shown at the point of choice
 #   default  a template over other answers; the answer is derived only while all of them are answered.
 #            Only a choice may have a constant default, which must be one of its options. A default may also
-#            read the reserved target.environment (Stage 1), which no foundation declares and no target reads
-#   defaultWhen {id, equals}: the default applies only while the resolved answer id equals equals
+#            read the reserved target.environment, target.release and target.namespace (Stage 1), which no
+#            foundation declares and no target reads
+#   defaultWhen {id, equals | set: true}: the default applies only while the resolved answer id equals equals,
+#            or while it resolves at all
 #   prefix   a template over other answers that the answer, given or derived, must start with
-#   targets  {path, fn, args, sep}; a target referencing an unanswered id writes nothing
+#   targets  {path, fn, args, sep, requires}; a target referencing an unanswered id, or one whose requires are
+#            not all resolved, writes nothing. The list forms (ADR 0025):
+#            element {key, value}: one element of a list the lists table declares, found by its key field;
+#              mechanism names the elements that render together, or not at all after a unique collision or a
+#              conflict from the mechanisms table
+#            each, within: a key path written into every loaded element of the list at path that holds the
+#              mapping within (default: each's parent); it never creates an element
 #   features feature ids; display only: Stage 3 hides the foundation while any of them is off. It gates
 #            neither the render nor the rules (US-5.3). A host lists the feature whose keys cover its ingress,
 #            plus, behind APISIX, the feature that deploys the route's upstream
-# Templates are Go text/template holding only text and {{ .id }} actions. The functions:
+# Templates are Go text/template holding only text and {{ .id }} actions, plus {{ fullname .ref "chart" }}:
+# Helm's standard fullname of a release's chart. The target fns:
 #   tpl    renders its one template arg
 #   join   renders every template arg and joins the results with sep
 #   copy   takes the answer its one {{ .id }} arg names, keeping its type
-#   const  writes its one scalar arg verbatim; only under a list index, to complete an owned list
+#   const  writes its one scalar arg verbatim; only under a list index, to complete an owned list, or with requires
 # Helm replaces a list instead of merging it, so a path indexes into a list only when the targets write
 # that list whole: indices 0..n-1 and every key of every element. Quote a path in a flow mapping: a plain
 # scalar there cannot hold '[' or ','. internal/render/provider_test.go checks the targets against k3s/provider.yaml.
@@ -50,9 +60,22 @@
 #   memoryLimit {components}, with field and when as its precondition: one finding naming every listed component
 #             of the resources table that deploys and ends up without a memory limit (rendered, loaded, a fallback
 #             path or chartMemoryLimit, which a loaded null drops). The message may use {{ .components }}
+#   caCoverage {components: [{id, label, enabledKeys, mechanism | paths}], routes: {path, verify, uri, component},
+#             withheldCollision, withheldEdited, withheldConflict, route}, with field and when (set: true takes
+#             answers.<id> only) as its precondition, over the deployed components (ADR 0025). The rule's severity
+#             applies to one finding naming every component whose mechanism (all its element targets) or paths are
+#             not in effect: absent, or pinned to another value. The message may use {{ .components }}. A withheld
+#             mechanism is a warning per component (withheld*: {{ .component }}, {{ .element }}, {{ .list }}, and
+#             {{ .field }}, {{ .value }}, {{ .foreign }} for a collision, or {{ .paths }} for a conflict). route is
+#             one finding of the rule's severity per route whose final verify key is false ({{ .index }}, {{ .uri }})
+#   noProxyCoverage {answer, unrenamed}, with field and when as its precondition: a warning per noProxyServices row
+#             whose effective name the resolved answer does not bypass for a Go client. The message, for a service
+#             a loaded value renamed, may use {{ .service }} and {{ .path }}; unrenamed {{ .service }} only
+#   valueSet  {path}, with field and when as its precondition: the message while the final values hold a non-empty
+#             value at path
 chart: data-space-connector
 version: 10.16.0
-revision: 13
+revision: 18
 topLevelKeys: [
   nameOverride, fullnameOverride, imagePullSecrets, issuance, decentralizedIam, scorpio, elsi,
   keycloak, tm-forum-api, statusListServer, rainbow, contract-management, did, registration,
@@ -353,6 +376,75 @@ rules:
     message: >-
       Without a memory limit, the JVM sizes its heap from the node: {{ .components }}.
     doc: doc/deployment-integration/roles/PREREQUISITES.md#set-memory-limits-on-the-java-components
+  # Each mechanism is the ca.privateSecret targets of the same name; enabledKeys as for java-memory-limit.
+  - id: ca-coverage
+    severity: error
+    stage: foundations
+    field: answers.ca.privateSecret
+    when:
+      - {field: answers.ca.privateSecret, set: true}
+    caCoverage:
+      components:
+        - {id: verifier, label: verifier, mechanism: verifier-ca,
+           enabledKeys: {decentralizedIam.enabled: true, decentralizedIam.vcAuthentication.enabled: true,
+                         decentralizedIam.vcAuthentication.vcverifier.enabled: true}}
+        - {id: apisix, label: APISIX,
+           paths: [decentralizedIam.odrlAuthorization.apisix.apisix.ssl.existingCASecret,
+                   decentralizedIam.odrlAuthorization.apisix.apisix.ssl.certCAFilename,
+                   decentralizedIam.odrlAuthorization.apisix.apisix.ssl.enabled],
+           enabledKeys: {decentralizedIam.enabled: true, decentralizedIam.odrlAuthorization.enabled: true,
+                         decentralizedIam.odrlAuthorization.apisix.enabled: true}}
+        - {id: keycloak, label: Keycloak, mechanism: keycloak-ca, enabledKeys: {keycloak.enabled: true}}
+        - {id: marketplace, label: marketplace, mechanism: marketplace-ca, enabledKeys: {marketplace.enabled: false}}
+        - {id: vcOperator, label: vc-operator, mechanism: vc-operator-ca, enabledKeys: {vc-operator.enabled: false}}
+        - {id: contractManagement, label: contract-management, mechanism: contract-management-ca,
+           enabledKeys: {contract-management.enabled: true}}
+      routes: {path: decentralizedIam.odrlAuthorization.apisix.routes, verify: plugins.openid-connect.ssl_verify,
+               uri: uri, component: apisix}
+      withheldCollision: >-
+        {{ .component }} does not get the private CA: its element {{ .element }} would share {{ .field }}
+        {{ .value }} in {{ .list }} with {{ .foreign }}, which the loaded file sets. The tool cannot tell whether
+        {{ .foreign }} trusts the private CA; check it, or remove it so the tool can add its own.
+      withheldEdited: >-
+        {{ .component }} does not get the private CA: the loaded file changed its element {{ .element }} in
+        {{ .list }}. The tool cannot tell whether the edited element still trusts the private CA; check it, or
+        remove it so the tool can write it again.
+      withheldConflict: >-
+        {{ .component }} does not get the private CA: the loaded file sets {{ .paths }}, so the chart already
+        mounts its own CA bundle there. The tool cannot tell whether that bundle holds the private CA; check it.
+      route: >-
+        APISIX route {{ .index }} ({{ .uri }}) does not verify the certificate of its OpenID provider: the loaded
+        file sets ssl_verify to false. Remove it, so the tool can turn verification on.
+    message: >-
+      The private CA does not reach {{ .components }}: the loaded file removed or changed what the tool writes for
+      it, so their calls to hosts the private CA signs fail. Reset those values, or remove the private CA Secret.
+    doc: doc/deployment-integration/roles/PREREQUISITES.md#private-ca
+  - id: no-proxy-coverage
+    severity: warning
+    stage: foundations
+    field: answers.proxy.no
+    when:
+      - {field: answers.proxy.https, set: true}
+    noProxyCoverage:
+      answer: proxy.no
+      unrenamed: >-
+        No proxy does not cover the in-cluster service {{ .service }}, so the components reach it through the
+        proxy. Add it to No proxy.
+    message: >-
+      The loaded file renames an in-cluster service to {{ .service }} ({{ .path }}), which No proxy does not cover,
+      so the components reach it through the proxy. Add {{ .service }} to No proxy.
+    doc: doc/deployment-integration/roles/PREREQUISITES.md#outbound-access
+  - id: keycloak-proxy-mappings
+    severity: warning
+    stage: foundations
+    field: answers.proxy.https
+    when:
+      - {field: answers.proxy.https, set: true}
+    valueSet: {path: keycloak.proxy.spiProxyMappings}
+    message: >-
+      The loaded file sets keycloak.proxy.spiProxyMappings, so Keycloak ignores the proxy settings and follows only
+      those mappings. Add the proxy to the mappings, or remove them.
+    doc: doc/deployment-integration/roles/PREREQUISITES.md#outbound-access
 resources:
   answer: resources.profile
   measuredOn: 10.13.2
@@ -405,6 +497,113 @@ resources:
       tmforum: {requests: {cpu: 250m, memory: 1Gi}, limits: {cpu: "2", memory: 1Gi}}
       til: {requests: {cpu: 100m, memory: 512Mi}, limits: {cpu: "1", memory: 512Mi}}
       contractManagement: {requests: {cpu: 100m, memory: 512Mi}, limits: {cpu: "1", memory: 512Mi}}
+# Lists keyed element targets write into (ADR 0025). base holds the default elements of the layer that supplies the
+# list, the umbrella's values.yaml or the subchart's; internal/render/proxy_test.go pins each against it.
+lists:
+  - path: decentralizedIam.vcAuthentication.vcverifier.deployment.additionalEnvVars
+    key: name
+  - path: marketplace.bizEcosystemLogicProxy.additionalEnvVars
+    key: name
+    base:
+      - {name: OTEL_SDK_DISABLED, value: "true"}
+      - {name: OTEL_SERVICE_NAME, value: marketplace}
+      - {name: OTEL_EXPORTER_OTLP_ENDPOINT, value: ""}
+      - {name: OTEL_EXPORTER_OTLP_PROTOCOL, value: grpc}
+      - {name: OTEL_TRACES_SAMPLER, value: parentbased_traceidratio}
+      - {name: OTEL_TRACES_SAMPLER_ARG, value: "1.0"}
+      - {name: OTEL_PROPAGATORS, value: "tracecontext,baggage"}
+      - {name: OTEL_METRICS_EXPORTER, value: none}
+      - {name: OTEL_LOGS_EXPORTER, value: none}
+  - path: vc-operator.extraEnvVars
+    key: name
+  - path: decentralizedIam.vcAuthentication.vcverifier.deployment.additionalVolumes
+    key: name
+  - path: decentralizedIam.vcAuthentication.vcverifier.deployment.additionalVolumeMounts
+    key: name
+    unique: [mountPath]
+  - path: decentralizedIam.vcAuthentication.vcverifier.deployment.initContainers
+    key: name
+  - path: marketplace.bizEcosystemLogicProxy.extraContainerVolumes
+    key: name
+  - path: marketplace.bizEcosystemLogicProxy.extraVolumeMounts
+    key: name
+    unique: [mountPath]
+  - path: vc-operator.extraVolumes
+    key: name
+  - path: vc-operator.extraVolumeMounts
+    key: name
+    unique: [mountPath]
+  - path: keycloak.extraEnvVars
+    key: name
+    base:
+      - {name: KC_HEAP_SIZE, value: "1024m"}
+  - path: keycloak.extraVolumes
+    key: name
+  - path: keycloak.extraVolumeMounts
+    key: name
+    unique: [mountPath]
+    base:
+      - {name: realms, mountPath: /opt/keycloak/data/import}
+  - path: contract-management.additionalEnvVars
+    key: name
+    base:
+      - {name: OTEL_SDK_DISABLED, value: "true"}
+      - {name: OTEL_SERVICE_NAME, value: contract-management}
+      - {name: OTEL_EXPORTER_OTLP_ENDPOINT, value: ""}
+      - {name: OTEL_EXPORTER_OTLP_PROTOCOL, value: grpc}
+      - {name: OTEL_TRACES_SAMPLER, value: parentbased_traceidratio}
+      - {name: OTEL_TRACES_SAMPLER_ARG, value: "1.0"}
+      - {name: OTEL_PROPAGATORS, value: "tracecontext,baggage"}
+      - {name: OTEL_METRICS_EXPORTER, value: none}
+      - {name: OTEL_LOGS_EXPORTER, value: none}
+  - path: contract-management.deployment.initContainers
+    key: name
+  - path: contract-management.deployment.additionalVolumes
+    key: name
+  - path: contract-management.deployment.additionalVolumeMounts
+    key: name
+    unique: [mountPath]
+# The in-cluster services a proxied component calls, which the proxy.no default bypasses by bare name (ADR 0025).
+# name is a template over target.release and target.namespace; overrides are the value paths that rename the
+# service, the first set one wins. Otherwise a set nameOverride replaces the chart name in fullname, as Helm's
+# fullname does. internal/render/noproxy_names_test.go pins every row against the charts. enabledKeys, as in the
+# resources table, gates the noProxyCoverage warning to services that deploy; the default bypasses every row.
+noProxyServices:
+  - {name: credentials-config-service, overrides: [decentralizedIam.vcAuthentication.credentials-config-service.fullnameOverride],
+     enabledKeys: {decentralizedIam.enabled: true, decentralizedIam.vcAuthentication.enabled: true,
+                   decentralizedIam.vcAuthentication.credentials-config-service.enabled: false}}
+  - {name: trusted-issuers-list, overrides: [decentralizedIam.vcAuthentication.trusted-issuers-list.fullnameOverride],
+     enabledKeys: {decentralizedIam.enabled: true, decentralizedIam.vcAuthentication.enabled: true,
+                   decentralizedIam.vcAuthentication.trusted-issuers-list.enabled: true}}
+  - {name: tm-forum-api, overrides: [tm-forum-api.apiProxy.service.nameOverride],
+     enabledKeys: {tm-forum-api.enabled: true, tm-forum-api.apiProxy.enabled: true}}
+  # The all-in-one service: tm-forum-api names it so while its defaultConfig.serverHost holds the name, as by default.
+  - {name: tm-forum-api-svc, enabledKeys: {tm-forum-api.enabled: true, tm-forum-api.allInOne.enabled: false}}
+  # templates/status-list-server-service.yaml hard-codes the name.
+  - {name: status-list-server, enabledKeys: {statusListServer.enabled: false}}
+  - {name: '{{ fullname .target.release "keycloak" }}', overrides: [keycloak.fullnameOverride],
+     nameOverride: keycloak.nameOverride, enabledKeys: {keycloak.enabled: true}}
+  - {name: '{{ fullname .target.release "opentelemetry-collector" }}', overrides: [opentelemetry-collector.fullnameOverride],
+     nameOverride: opentelemetry-collector.nameOverride, enabledKeys: {opentelemetry-collector.enabled: false}}
+# Cluster objects the rendered values reference and the user creates before installing; NEXT_STEPS.md lists them.
+#   kind     secret
+#   name     a template over answers; the requirement applies only while all of them resolve
+#   key      the data key the object must hold
+requirements:
+  - {kind: secret, name: "{{ .ca.privateSecret }}", key: ca.crt,
+     purpose: The PEM bundle of the private CA that signs the public hosts.}
+# Mechanisms that collide with something the chart templates itself, which no lists row's unique check sees.
+#   id         a mechanism of the element targets
+#   conflicts  [{whenSet: [paths]}]: the mechanism is withheld while a loaded file sets every path of any one entry,
+#              as a Helm `if` reads it; no target may write these paths
+mechanisms:
+  # The vcverifier chart mounts its own ca-bundle at /etc/ssl/cert.pem with a client certificate, and renders its
+  # add-root-ca init container, so its caCert, as soon as deployment.initContainers is non-empty.
+  - id: verifier-ca
+    conflicts:
+      - whenSet: [decentralizedIam.vcAuthentication.vcverifier.deployment.serverCertificates.caCert.enabled]
+      - whenSet: [decentralizedIam.vcAuthentication.vcverifier.deployment.serverCertificates.clientKey.secretName,
+                  decentralizedIam.vcAuthentication.vcverifier.deployment.verifier.clientIdentification.certificatePath]
 foundations:
   - id: org.displayName
     stage: foundations
@@ -875,3 +1074,219 @@ foundations:
       - value: custom
         label: Custom
         note: Leaves the chart's defaults; you size the components yourself.
+  # The proxy group (ADR 0025): proxy.https switches it, so neither the other two derive nor any target renders
+  # without it. No target renders without proxy.no either, so a proxy never goes out without its NO_PROXY (an
+  # unanswered release name or namespace leaves the default underived). Keycloak reads the env vars the umbrella's keycloak.proxy sets only while spiProxyMappings is empty.
+  - id: proxy.https
+    stage: foundations
+    group: egress
+    type: url
+    label: HTTPS proxy
+    help: >-
+      The forward proxy the components use for outbound HTTPS calls, such as http://proxy.infra.svc.cluster.local:3128.
+      The verifier, Keycloak, the marketplace, the vc-operator and APISIX's openid-connect routes get it. Leave it
+      empty when the cluster reaches the internet directly.
+    doc: doc/deployment-integration/roles/PREREQUISITES.md#outbound-access
+    targets:
+      - path: decentralizedIam.vcAuthentication.vcverifier.deployment.additionalEnvVars
+        element: {key: HTTPS_PROXY, value: {value: "{{ .proxy.https }}"}}
+        requires: [proxy.no]
+      - {path: keycloak.proxy.enabled, fn: const, args: [true], requires: [proxy.https, proxy.no]}
+      - {path: keycloak.proxy.httpsProxy, fn: copy, args: ["{{ .proxy.https }}"], requires: [proxy.no]}
+      - path: marketplace.bizEcosystemLogicProxy.additionalEnvVars
+        element: {key: HTTPS_PROXY, value: {value: "{{ .proxy.https }}"}}
+        requires: [proxy.no]
+      - path: vc-operator.extraEnvVars
+        element: {key: HTTPS_PROXY, value: {value: "{{ .proxy.https }}"}}
+        requires: [proxy.no]
+      - {path: decentralizedIam.odrlAuthorization.apisix.routes, each: plugins.openid-connect.proxy_opts.https_proxy,
+         within: plugins.openid-connect, fn: copy, args: ["{{ .proxy.https }}"], requires: [proxy.no]}
+  - id: proxy.http
+    stage: foundations
+    group: egress
+    type: url
+    default: "{{ .proxy.https }}"
+    defaultWhen: {id: proxy.https, set: true}
+    label: HTTP proxy
+    help: The forward proxy for plain HTTP calls. It follows the HTTPS proxy unless you set another.
+    doc: doc/deployment-integration/roles/PREREQUISITES.md#outbound-access
+    targets:
+      - path: decentralizedIam.vcAuthentication.vcverifier.deployment.additionalEnvVars
+        element: {key: HTTP_PROXY, value: {value: "{{ .proxy.http }}"}}
+        requires: [proxy.https, proxy.no]
+      - {path: keycloak.proxy.httpProxy, fn: copy, args: ["{{ .proxy.http }}"], requires: [proxy.https, proxy.no]}
+      - path: marketplace.bizEcosystemLogicProxy.additionalEnvVars
+        element: {key: HTTP_PROXY, value: {value: "{{ .proxy.http }}"}}
+        requires: [proxy.https, proxy.no]
+      - path: vc-operator.extraEnvVars
+        element: {key: HTTP_PROXY, value: {value: "{{ .proxy.http }}"}}
+        requires: [proxy.https, proxy.no]
+      - {path: decentralizedIam.odrlAuthorization.apisix.routes, each: plugins.openid-connect.proxy_opts.http_proxy,
+         within: plugins.openid-connect, fn: copy, args: ["{{ .proxy.http }}"], requires: [proxy.https, proxy.no]}
+  # Each client matches NO_PROXY entries differently (ADR 0025), so the default lists every form that one of them
+  # reads, then the bare names of the noProxyServices table in its order.
+  - id: proxy.no
+    stage: foundations
+    group: egress
+    type: string
+    default: >-
+      localhost,127.0.0.1,svc,.svc,cluster.local,.cluster.local,{{ .target.namespace }}.svc,credentials-config-service,trusted-issuers-list,tm-forum-api,tm-forum-api-svc,status-list-server,{{ fullname .target.release "keycloak" }},{{ fullname .target.release "opentelemetry-collector" }}
+    defaultWhen: {id: proxy.https, set: true}
+    label: No proxy
+    help: >-
+      Comma-separated hosts and domains the components reach directly. The default covers the in-cluster services
+      by every form the five clients understand. Only the verifier and the vc-operator read CIDRs, and only for
+      calls to an IP address: append the pod and service CIDRs (10.42.0.0/16,10.43.0.0/16 on k3s), or the
+      vc-operator reaches the Kubernetes API through the proxy.
+    doc: doc/deployment-integration/roles/PREREQUISITES.md#outbound-access
+    targets:
+      - path: decentralizedIam.vcAuthentication.vcverifier.deployment.additionalEnvVars
+        element: {key: NO_PROXY, value: {value: "{{ .proxy.no }}"}}
+        requires: [proxy.https]
+      - {path: keycloak.proxy.noProxy, fn: copy, args: ["{{ .proxy.no }}"], requires: [proxy.https]}
+      - path: marketplace.bizEcosystemLogicProxy.additionalEnvVars
+        element: {key: NO_PROXY, value: {value: "{{ .proxy.no }}"}}
+        requires: [proxy.https]
+      - path: vc-operator.extraEnvVars
+        element: {key: NO_PROXY, value: {value: "{{ .proxy.no }}"}}
+        requires: [proxy.https]
+      - {path: decentralizedIam.odrlAuthorization.apisix.routes, each: plugins.openid-connect.proxy_opts.no_proxy,
+         within: plugins.openid-connect, fn: copy, args: ["{{ .proxy.no }}"], requires: [proxy.https]}
+  # One PEM Secret, key ca.crt, reaches each component through that component's own mechanism (ADR 0025). The
+  # element names avoid the vcverifier chart's own caCert names (ca-bundle, custom-ca-volume, add-root-ca).
+  - id: ca.privateSecret
+    stage: foundations
+    group: egress
+    type: secretName
+    label: Private CA Secret
+    help: >-
+      The Secret in the release namespace whose key ca.crt holds the PEM bundle of the private CA that signs the
+      public hosts. APISIX then trusts only that file, so append the public roots when a route calls a publicly
+      signed provider. Leave it empty when every host has a publicly trusted certificate.
+    doc: doc/deployment-integration/roles/PREREQUISITES.md#private-ca
+    targets:
+      - {path: decentralizedIam.odrlAuthorization.apisix.apisix.ssl.existingCASecret, fn: copy, args: ["{{ .ca.privateSecret }}"]}
+      - {path: decentralizedIam.odrlAuthorization.apisix.apisix.ssl.certCAFilename, fn: const, args: [ca.crt],
+         requires: [ca.privateSecret]}
+      # The trust store is written only while the HTTPS listener is on; TLS still ends at the Ingress.
+      - {path: decentralizedIam.odrlAuthorization.apisix.apisix.ssl.enabled, fn: const, args: [true],
+         requires: [ca.privateSecret]}
+      - {path: decentralizedIam.odrlAuthorization.apisix.routes, each: plugins.openid-connect.ssl_verify,
+         within: plugins.openid-connect, fn: const, args: [true], requires: [ca.privateSecret]}
+      - path: decentralizedIam.vcAuthentication.vcverifier.deployment.additionalVolumes
+        mechanism: verifier-ca
+        element: {key: private-ca, value: {secret: {secretName: "{{ .ca.privateSecret }}", items: [{key: ca.crt, path: ca.crt}]}}}
+      - path: decentralizedIam.vcAuthentication.vcverifier.deployment.additionalVolumes
+        mechanism: verifier-ca
+        element: {key: private-ca-bundle, value: {emptyDir: {}}}
+        requires: [ca.privateSecret]
+      # Go reads /etc/ssl/cert.pem; the bundle replaces it with the system roots plus the private CA.
+      - path: decentralizedIam.vcAuthentication.vcverifier.deployment.additionalVolumeMounts
+        mechanism: verifier-ca
+        element: {key: private-ca-bundle, value: {mountPath: /etc/ssl/cert.pem, subPath: cert.pem}}
+        requires: [ca.privateSecret]
+      # The image is the vcverifier chart's caCert.bundleImage default; internal/render/ca_test.go pins it.
+      - path: decentralizedIam.vcAuthentication.vcverifier.deployment.initContainers
+        mechanism: verifier-ca
+        element:
+          key: add-private-ca
+          value:
+            image: alpine:3.23.3
+            command: [sh, -c, cat /etc/ssl/cert.pem /private-ca/ca.crt > /bundle/cert.pem]
+            volumeMounts:
+              - {name: private-ca, mountPath: /private-ca, readOnly: true}
+              - {name: private-ca-bundle, mountPath: /bundle}
+            securityContext:
+              runAsNonRoot: true
+              runAsUser: 65534
+              readOnlyRootFilesystem: true
+              allowPrivilegeEscalation: false
+              capabilities: {drop: [ALL]}
+        requires: [ca.privateSecret]
+      # Node 18 adds NODE_EXTRA_CA_CERTS to its bundled roots.
+      - path: marketplace.bizEcosystemLogicProxy.extraContainerVolumes
+        mechanism: marketplace-ca
+        element: {key: private-ca, value: {secret: {secretName: "{{ .ca.privateSecret }}", items: [{key: ca.crt, path: ca.crt}]}}}
+      - path: marketplace.bizEcosystemLogicProxy.extraVolumeMounts
+        mechanism: marketplace-ca
+        element: {key: private-ca, value: {mountPath: /etc/ssl/private-ca, readOnly: true}}
+        requires: [ca.privateSecret]
+      - path: marketplace.bizEcosystemLogicProxy.additionalEnvVars
+        mechanism: marketplace-ca
+        element: {key: NODE_EXTRA_CA_CERTS, value: {value: /etc/ssl/private-ca/ca.crt}}
+        requires: [ca.privateSecret]
+      # Go's SSL_CERT_DIR adds the directory to the default bundle file, where SSL_CERT_FILE would replace it.
+      - path: vc-operator.extraVolumes
+        mechanism: vc-operator-ca
+        element: {key: private-ca, value: {secret: {secretName: "{{ .ca.privateSecret }}", items: [{key: ca.crt, path: ca.crt}]}}}
+      - path: vc-operator.extraVolumeMounts
+        mechanism: vc-operator-ca
+        element: {key: private-ca, value: {mountPath: /etc/ssl/private-ca, readOnly: true}}
+        requires: [ca.privateSecret]
+      - path: vc-operator.extraEnvVars
+        mechanism: vc-operator-ca
+        element: {key: SSL_CERT_DIR, value: {value: /etc/ssl/private-ca}}
+        requires: [ca.privateSecret]
+      # truststore-paths is the outgoing trust and takes PEM; tls.truststore* only checks inbound mTLS clients.
+      - path: keycloak.extraVolumes
+        mechanism: keycloak-ca
+        element: {key: private-ca, value: {secret: {secretName: "{{ .ca.privateSecret }}", items: [{key: ca.crt, path: private-ca.pem}]}}}
+      - path: keycloak.extraVolumeMounts
+        mechanism: keycloak-ca
+        element: {key: private-ca, value: {mountPath: /opt/keycloak/conf/truststores/private-ca.pem, subPath: private-ca.pem, readOnly: true}}
+        requires: [ca.privateSecret]
+      - path: keycloak.extraEnvVars
+        mechanism: keycloak-ca
+        element: {key: KC_TRUSTSTORE_PATHS, value: {value: /opt/keycloak/conf/truststores/private-ca.pem}}
+        requires: [ca.privateSecret]
+      # Its Micronaut and java.net.http clients use the JVM default trust store. The init container copies the JDK's
+      # cacerts (password changeit, the JDK default) and adds every certificate of ca.crt: keytool imports only the
+      # first certificate of a PEM file. The image is the chart's own; internal/render/ca_test.go pins it. The script
+      # starts from an empty store, because the kubelet reruns init containers on a kept emptyDir and keytool refuses an
+      # existing alias.
+      - path: contract-management.deployment.additionalVolumes
+        mechanism: contract-management-ca
+        element: {key: private-ca, value: {secret: {secretName: "{{ .ca.privateSecret }}", items: [{key: ca.crt, path: ca.crt}]}}}
+      - path: contract-management.deployment.additionalVolumes
+        mechanism: contract-management-ca
+        element: {key: ca-store, value: {emptyDir: {}}}
+        requires: [ca.privateSecret]
+      - path: contract-management.deployment.initContainers
+        mechanism: contract-management-ca
+        element:
+          key: add-private-ca
+          value:
+            image: quay.io/fiware/contract-management:3.4.2
+            command:
+              - sh
+              - -c
+              - |
+                set -e
+                rm -f /ca-store/cacerts /ca-store/private-ca-*.pem
+                keytool -importkeystore -noprompt -srckeystore "$JAVA_HOME/lib/security/cacerts" -srcstorepass changeit -destkeystore /ca-store/cacerts -deststoretype PKCS12 -deststorepass changeit
+                awk '/-BEGIN CERTIFICATE-/ {n++; p=1} p {print > ("/ca-store/private-ca-" n ".pem")} /-END CERTIFICATE-/ {p=0}' /private-ca/ca.crt
+                for f in /ca-store/private-ca-*.pem; do keytool -importcert -noprompt -keystore /ca-store/cacerts -storetype PKCS12 -storepass changeit -alias "$(basename "$f" .pem)" -file "$f"; rm "$f"; done
+            volumeMounts:
+              - {name: private-ca, mountPath: /private-ca, readOnly: true}
+              - {name: ca-store, mountPath: /ca-store}
+            securityContext:
+              runAsNonRoot: true
+              runAsUser: 185
+              readOnlyRootFilesystem: true
+              allowPrivilegeEscalation: false
+              capabilities: {drop: [ALL]}
+        requires: [ca.privateSecret]
+      - path: contract-management.deployment.additionalVolumeMounts
+        mechanism: contract-management-ca
+        element: {key: ca-store, value: {mountPath: /ca-store, readOnly: true}}
+        requires: [ca.privateSecret]
+      # JDK_JAVA_OPTIONS, which the java launcher reads, leaves JAVA_TOOL_OPTIONS to the user's agents and proxies.
+      - path: contract-management.additionalEnvVars
+        mechanism: contract-management-ca
+        element:
+          key: JDK_JAVA_OPTIONS
+          value:
+            value: >-
+              -Djavax.net.ssl.trustStore=/ca-store/cacerts -Djavax.net.ssl.trustStorePassword=changeit
+              -Djavax.net.ssl.trustStoreType=PKCS12
+        requires: [ca.privateSecret]

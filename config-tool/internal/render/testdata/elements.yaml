@@ -1,0 +1,77 @@
+# Keyed elements, mechanisms, an each target and the requires/defaultWhen-set gates (ADR 0025), with no 10.16.0 content.
+chart: data-space-connector
+version: 1.0.0
+revision: 1
+topLevelKeys: [keycloak, verifier, apisix]
+lists:
+  - path: keycloak.extraEnvVars
+    key: name
+    base:
+      - {name: KC_HEAP_SIZE, value: 1g}
+  - path: keycloak.extraVolumeMounts
+    key: name
+    unique: [mountPath]
+    base:
+      - {name: realms, mountPath: /opt/keycloak/data/import}
+  - path: verifier.volumes
+    key: name
+  - path: verifier.mounts
+    key: name
+    unique: [mountPath]
+mechanisms:
+  - id: verifier-ca
+    conflicts:
+      - whenSet: [verifier.ownCA.enabled]
+foundations:
+  - id: proxy.https
+    stage: foundations
+    type: string
+    label: HTTPS proxy
+    targets:
+      - {path: keycloak.proxy.httpsProxy, fn: copy, args: ["{{ .proxy.https }}"]}
+      - {path: keycloak.proxy.enabled, fn: const, args: [true], requires: [proxy.https]}
+      - {path: keycloak.extraEnvVars, element: {key: HTTPS_PROXY, value: {value: "{{ .proxy.https }}"}}}
+      # within lets the target create proxy_opts in every route that has openid-connect.
+      - {path: apisix.routes, each: plugins.openid-connect.proxy_opts.https_proxy, within: plugins.openid-connect,
+         fn: copy, args: ["{{ .proxy.https }}"]}
+  - id: proxy.no
+    stage: foundations
+    type: string
+    label: No proxy
+    default: "localhost,{{ .target.namespace }}.svc,{{ fullname .target.release \"keycloak\" }}"
+    defaultWhen: {id: proxy.https, set: true}
+    targets:
+      - {path: keycloak.proxy.noProxy, fn: copy, args: ["{{ .proxy.no }}"], requires: [proxy.https]}
+  - id: ca.secret
+    stage: foundations
+    type: string
+    label: CA secret
+    targets:
+      - path: verifier.volumes
+        mechanism: verifier-ca
+        element: {key: ca-bundle, value: {secret: {secretName: "{{ .ca.secret }}"}}}
+      - path: verifier.mounts
+        mechanism: verifier-ca
+        element: {key: ca-bundle, value: {mountPath: /etc/ssl/cert.pem, subPath: ca.crt}}
+        requires: [ca.secret]
+      - path: keycloak.extraVolumeMounts
+        mechanism: keycloak-ca
+        element: {key: ca-bundle, value: {mountPath: /opt/keycloak/conf/truststores}}
+        requires: [ca.secret]
+      - path: keycloak.extraEnvVars
+        mechanism: keycloak-ca
+        element: {key: KC_TRUSTSTORE_PATHS, value: {value: /opt/keycloak/conf/truststores/ca.crt}}
+        requires: [ca.secret]
+      - {path: apisix.routes, each: plugins.openid-connect.ssl_verify, fn: const, args: [true], requires: [ca.secret]}
+  - id: ca.extra
+    stage: foundations
+    type: string
+    label: Extra CA file
+    targets:
+      # extra-ca spans two foundations, so it renders only while both ca.secret and ca.extra are given.
+      - path: verifier.volumes
+        mechanism: extra-ca
+        element: {key: extra-ca, value: {secret: {secretName: "{{ .ca.secret }}"}}}
+      - path: verifier.mounts
+        mechanism: extra-ca
+        element: {key: extra-ca, value: {mountPath: /etc/extra, subPath: "{{ .ca.extra }}"}}

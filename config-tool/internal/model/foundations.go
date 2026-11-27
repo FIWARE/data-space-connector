@@ -40,6 +40,8 @@ const (
 	// TypeCredentialTypes is a list of {type, description?} mappings with unique types; only a copy target
 	// may write it.
 	TypeCredentialTypes FoundationType = "credentialTypes"
+	// TypeSecretName is the name of a Kubernetes Secret: a DNS-1123 subdomain, like TypeHostname.
+	TypeSecretName FoundationType = "secretName"
 )
 
 // FoundationGroup is the Stage 3 panel a foundation is asked in.
@@ -51,6 +53,7 @@ const (
 	GroupDataspace    FoundationGroup = "dataspace"
 	GroupNetwork      FoundationGroup = "network"
 	GroupPlatform     FoundationGroup = "platform"
+	GroupEgress       FoundationGroup = "egress"
 )
 
 // Fn is a target function: how a target's value is made from answers (ADR 0020).
@@ -86,12 +89,12 @@ const (
 var urlSchemes = []string{"http", "https"}
 
 var (
-	knownTypes = []FoundationType{TypeString, TypeHostname, TypeDomain, TypeChoice, TypeDID, TypeURL, TypeBool, TypeCredentialTypes}
+	knownTypes = []FoundationType{TypeString, TypeHostname, TypeDomain, TypeChoice, TypeDID, TypeURL, TypeBool, TypeCredentialTypes, TypeSecretName}
 	knownFns   = []Fn{FnTpl, FnJoin, FnCopy, FnConst}
 	// knownFoundationGroups are the Stage 3 panels, in screen order.
-	knownFoundationGroups = []FoundationGroup{GroupOrganization, GroupDataspace, GroupNetwork, GroupPlatform}
+	knownFoundationGroups = []FoundationGroup{GroupOrganization, GroupDataspace, GroupNetwork, GroupPlatform, GroupEgress}
 	// reservedRefs are read-only refs a default may read that no foundation declares; the render seeds them.
-	reservedRefs = []string{FieldTargetEnvironment}
+	reservedRefs = []string{FieldTargetEnvironment, RefTargetRelease, RefTargetNamespace}
 	// idSegment keeps every segment of an answer id usable as a template field name.
 	idSegment = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 	plainLine = regexp.MustCompile(`^[^\s\x00-\x1f\x7f"\\<>]([^\x00-\x1f\x7f"\\<>]*[^\s\x00-\x1f\x7f"\\<>])?$`)
@@ -100,6 +103,12 @@ var (
 	did = regexp.MustCompile(`^did:[a-z0-9]+:(?:` + didIDChar + `*:)*` + didIDChar + `+$`)
 	// credentialType is the name of a verifiable credential type, such as UserCredential.
 	credentialType = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9._-]*$`)
+)
+
+// Reserved refs seeded from the Stage 1 target besides FieldTargetEnvironment (ADR 0025).
+const (
+	RefTargetRelease   = "target.release"
+	RefTargetNamespace = "target.namespace"
 )
 
 // didIDChar is DID Core's idchar: ALPHA / DIGIT / "." / "-" / "_" / pct-encoded.
@@ -132,10 +141,21 @@ type Foundation struct {
 	Features []string `yaml:"features"`
 }
 
-// Condition holds while the resolved answer ID equals Equals.
+// Condition holds while the resolved answer ID equals Equals, or, with Set, while it is resolved at all.
+// Exactly one of Equals and Set is given.
 type Condition struct {
 	ID     string `yaml:"id" json:"id"`
 	Equals string `yaml:"equals" json:"equals"`
+	Set    bool   `yaml:"set" json:"set"`
+}
+
+// Holds reports whether c holds over the resolved answers.
+func (c Condition) Holds(answers map[string]any) bool {
+	v, ok := answers[c.ID]
+	if c.Set {
+		return ok
+	}
+	return ok && v == any(c.Equals)
 }
 
 // Option is one value of a choice; Note is optional text shown at the point of choice.
@@ -147,12 +167,30 @@ type Option struct {
 
 // Target is one chart key a foundation writes.
 type Target struct {
-	// Path is in roundtrip.ParsePath syntax; an index is allowed only into a list the bundle owns whole.
+	// Path is in roundtrip.ParsePath syntax; an index is allowed only into a list the bundle owns whole. With
+	// Element or Each it is the list itself.
 	Path string `yaml:"path"`
 	Fn   Fn     `yaml:"fn"`
 	// Args are templates for tpl, join and copy, and the one scalar of const.
 	Args []any  `yaml:"args"`
 	Sep  string `yaml:"sep"`
+	// Element makes the target one keyed element of a list the lists table declares; it takes no fn (ADR 0025).
+	Element *Element `yaml:"element"`
+	// Each is a key path written into every loaded element of the list that holds its Within mapping.
+	Each string `yaml:"each"`
+	// Within is the mapping below the element, a proper prefix of Each, that must be loaded; empty means Each's parent.
+	Within string `yaml:"within"`
+	// Requires are answer ids that must resolve for the target to render.
+	Requires []string `yaml:"requires"`
+	// Mechanism names keyed targets that render together or, after a collision, not at all.
+	Mechanism string `yaml:"mechanism"`
+}
+
+// Element is one keyed list element: Key is the value of the list's key field, Value the other fields, whose
+// string scalars are templates.
+type Element struct {
+	Key   string         `yaml:"key"`
+	Value map[string]any `yaml:"value"`
 }
 
 // CompiledFoundation is a validated Foundation with its templates parsed.
@@ -230,7 +268,17 @@ type CompiledTarget struct {
 	Only string
 	// Block is the mapping the target writes as one unit: a hand edit inside it pins every target of the block.
 	Block roundtrip.Path
-	tpls  []*template.Template
+	// Element is the keyed element the target writes into the list at Path; nil otherwise.
+	Element *CompiledElement
+	// Each is the path written below every loaded element of the list at Path; nil otherwise.
+	Each roundtrip.Path
+	// Within is the prefix of Each that an element must hold as a mapping for Each to be written there.
+	Within roundtrip.Path
+	// Requires are answer ids that must resolve for the target to render, sorted; nil without any.
+	Requires []string
+	// Mechanism is withheld as a whole when one of its elements collides with a foreign one; empty for none.
+	Mechanism string
+	tpls      []*template.Template
 }
 
 // Templates are the parsed args of a tpl, join or copy target, in order; nil for const.
@@ -280,6 +328,10 @@ func (t FoundationType) Check(v any) error {
 		}
 		if t == TypeDomain && !strings.Contains(s, ".") {
 			return fmt.Errorf("must be a domain of at least two labels")
+		}
+	case TypeSecretName:
+		if len(s) > maxHostnameLength || !hostname.MatchString(s) {
+			return fmt.Errorf("must be a Secret name of lowercase letters, digits, '-' and '.', at most %d characters", maxHostnameLength)
 		}
 	case TypeDID:
 		if !did.MatchString(s) {
@@ -352,10 +404,13 @@ func checkCredentialTypes(v any) error {
 	return nil
 }
 
-// compileFoundations validates the foundations list and the resources table and returns the list compiled with
-// its topological order.
-func compileFoundations(fs []Foundation, table *ResourceTable, topLevelKeys []string) ([]CompiledFoundation, []string, error) {
+// compileFoundations validates the foundations list against the lists and the resources table and returns the
+// list compiled with its topological order.
+func compileFoundations(fs []Foundation, lists []CompiledList, table *ResourceTable, topLevelKeys []string) ([]CompiledFoundation, []string, error) {
 	if len(fs) == 0 {
+		if err := checkElements(nil, lists); err != nil {
+			return nil, nil, err
+		}
 		return nil, nil, checkResources(table, nil, topLevelKeys)
 	}
 	compiled := make([]CompiledFoundation, len(fs))
@@ -382,6 +437,9 @@ func compileFoundations(fs []Foundation, table *ResourceTable, topLevelKeys []st
 		return nil, nil, err
 	}
 	if err := checkTargetPaths(compiled); err != nil {
+		return nil, nil, err
+	}
+	if err := checkElements(compiled, lists); err != nil {
 		return nil, nil, err
 	}
 	order, err := topoOrder(compiled)
@@ -442,7 +500,10 @@ func compileFoundation(f Foundation, topLevelKeys []string) (CompiledFoundation,
 		if w.ID == "" {
 			return CompiledFoundation{}, fmt.Errorf("defaultWhen: id is missing")
 		}
-		c.DefaultWhen = &Condition{ID: w.ID, Equals: w.Equals}
+		if (w.Equals == "") == !w.Set {
+			return CompiledFoundation{}, fmt.Errorf("defaultWhen: give exactly one of equals and set: true")
+		}
+		c.DefaultWhen = &Condition{ID: w.ID, Equals: w.Equals, Set: w.Set}
 	}
 	if f.Prefix != "" {
 		t, refs, err := parseTemplate(f.ID+":prefix", f.Prefix)
@@ -550,14 +611,30 @@ func compileTarget(id string, t Target, topLevelKeys []string) (CompiledTarget, 
 	if k, ok := p[0].Key(); !ok || !slices.Contains(topLevelKeys, k) {
 		return CompiledTarget{}, fmt.Errorf("path %q: root is not in topLevelKeys", t.Path)
 	}
-	c := CompiledTarget{Path: p, Fn: t.Fn, Sep: t.Sep}
+	c := CompiledTarget{Path: p, Fn: t.Fn, Sep: t.Sep, Mechanism: t.Mechanism}
 	if t.Sep != "" && t.Fn != FnJoin {
 		return CompiledTarget{}, fmt.Errorf("sep is only allowed on %s targets", FnJoin)
 	}
+	if c.Requires, err = compileRequires(t.Requires); err != nil {
+		return CompiledTarget{}, err
+	}
+	if t.Mechanism != "" && t.Element == nil {
+		return CompiledTarget{}, fmt.Errorf("mechanism is only allowed on an element target")
+	}
+	if t.Element != nil {
+		return compileElementTarget(id, t, c)
+	}
+	if t.Each != "" {
+		if c.Each, c.Within, err = compileEach(t.Each, t.Within); err != nil {
+			return CompiledTarget{}, err
+		}
+	} else if t.Within != "" {
+		return CompiledTarget{}, fmt.Errorf("within is only allowed with each")
+	}
 	switch t.Fn {
 	case FnConst:
-		if !slices.ContainsFunc(p, func(s roundtrip.Segment) bool { _, ok := s.Index(); return ok }) {
-			return CompiledTarget{}, fmt.Errorf("%s is only allowed under a list index, which completes an owned list", FnConst)
+		if len(c.Requires) == 0 && !slices.ContainsFunc(p, func(s roundtrip.Segment) bool { _, ok := s.Index(); return ok }) {
+			return CompiledTarget{}, fmt.Errorf("%s is only allowed under a list index, which completes an owned list, or with requires", FnConst)
 		}
 		if len(t.Args) != 1 || !isScalar(t.Args[0]) {
 			return CompiledTarget{}, fmt.Errorf("%s takes exactly one scalar arg", FnConst)
@@ -606,6 +683,50 @@ func compileTarget(id string, t Target, topLevelKeys []string) (CompiledTarget, 
 	return c, nil
 }
 
+// compileRequires refuses a malformed, reserved or repeated id and returns ids sorted; nil without any.
+func compileRequires(ids []string) ([]string, error) {
+	set := map[string]bool{}
+	for i, id := range ids {
+		if err := checkID(id); err != nil {
+			return nil, fmt.Errorf("requires[%d]: %w", i, err)
+		}
+		if slices.Contains(reservedRefs, id) {
+			return nil, fmt.Errorf("requires[%d]: %s is a reserved ref, not an answer", i, id)
+		}
+		if set[id] {
+			return nil, fmt.Errorf("requires[%d]: %s is already listed", i, id)
+		}
+		set[id] = true
+	}
+	return sortedSet(set), nil
+}
+
+// compileEach parses an each path and its within prefix: mapping keys only, so every element is addressed the same
+// way. An empty within is each's parent.
+func compileEach(s, within string) (roundtrip.Path, roundtrip.Path, error) {
+	p, err := roundtrip.ParsePath(s)
+	if err != nil {
+		return nil, nil, fmt.Errorf("each: %w", err)
+	}
+	if len(p) == 0 {
+		return nil, nil, fmt.Errorf("each is empty")
+	}
+	if slices.ContainsFunc(p, func(s roundtrip.Segment) bool { _, ok := s.Index(); return ok }) {
+		return nil, nil, fmt.Errorf("each %q: an index is not allowed below an element", s)
+	}
+	if within == "" {
+		return p, p[:len(p)-1], nil
+	}
+	w, err := roundtrip.ParsePath(within)
+	if err != nil {
+		return nil, nil, fmt.Errorf("within: %w", err)
+	}
+	if len(w) >= len(p) || !hasPathPrefix(p, w) {
+		return nil, nil, fmt.Errorf("within %q is not a proper prefix of each %q", within, s)
+	}
+	return p, w, nil
+}
+
 // splitReserved splits sorted refs into foundation answer ids and reserved refs, each nil when empty.
 func splitReserved(refs []string) (answers, reserved []string) {
 	for _, r := range refs {
@@ -626,10 +747,10 @@ func isScalar(v any) bool {
 	return false
 }
 
-// parseTemplate parses s and returns the answer ids it references. Only text and {{ .id }} actions
-// are allowed, so the references read from the parse tree are complete.
+// parseTemplate parses s and returns the answer ids it references. Only text, {{ .id }} and
+// {{ fullname .id "chart" }} actions are allowed, so the references read from the parse tree are complete.
 func parseTemplate(name, s string) (*template.Template, []string, error) {
-	t, err := template.New(name).Option("missingkey=error").Funcs(template.FuncMap{}).Parse(s)
+	t, err := template.New(name).Option("missingkey=error").Funcs(template.FuncMap{fullnameFunc: Fullname}).Parse(s)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -640,7 +761,10 @@ func parseTemplate(name, s string) (*template.Template, []string, error) {
 		case *parse.ActionNode:
 			f := fieldOf(n)
 			if f == nil {
-				return nil, nil, fmt.Errorf("action %s: only {{ .id }} is allowed", n)
+				f = fullnameField(n)
+			}
+			if f == nil {
+				return nil, nil, fmt.Errorf(`action %s: only {{ .id }} is allowed, or {{ %s .id "chart" }}`, n, fullnameFunc)
 			}
 			refs[strings.Join(f.Ident, ".")] = true
 		default:
@@ -656,6 +780,25 @@ func fieldOf(n *parse.ActionNode) *parse.FieldNode {
 		return nil
 	}
 	f, _ := n.Pipe.Cmds[0].Args[0].(*parse.FieldNode)
+	return f
+}
+
+// fullnameField returns the field of an action that is exactly {{ fullname .a.b "chart" }}; nil otherwise.
+func fullnameField(n *parse.ActionNode) *parse.FieldNode {
+	if len(n.Pipe.Decl) > 0 || len(n.Pipe.Cmds) != 1 {
+		return nil
+	}
+	args := n.Pipe.Cmds[0].Args
+	if len(args) != 3 {
+		return nil
+	}
+	if fn, ok := args[0].(*parse.IdentifierNode); !ok || fn.Ident != fullnameFunc {
+		return nil
+	}
+	if _, ok := args[2].(*parse.StringNode); !ok {
+		return nil
+	}
+	f, _ := args[1].(*parse.FieldNode)
 	return f
 }
 
@@ -720,10 +863,10 @@ func checkRefs(fs []CompiledFoundation) error {
 			}
 		}
 		if w := f.DefaultWhen; w != nil {
-			if err := check(i, "defaultWhen", w.ID, false); err != nil {
+			if err := check(i, "defaultWhen", w.ID, w.Set); err != nil {
 				return err
 			}
-			if o, _ := find(w.ID); o.Type == TypeChoice && !slices.Contains(o.optionValues(), w.Equals) {
+			if o, _ := find(w.ID); !w.Set && o.Type == TypeChoice && !slices.Contains(o.optionValues(), w.Equals) {
 				return fmt.Errorf("foundations[%d] (%s): defaultWhen: %q is not an option of %s", i, f.ID, w.Equals, w.ID)
 			}
 		}
@@ -733,14 +876,19 @@ func checkRefs(fs []CompiledFoundation) error {
 					return err
 				}
 			}
+			for _, r := range t.Requires {
+				if err := check(i, fmt.Sprintf("targets[%d] requires", j), r, true); err != nil {
+					return err
+				}
+			}
 		}
 	}
 	return nil
 }
 
 // checkTargetPaths refuses a path written twice (unless by one foundation for distinct non-empty Only values), a
-// path that is a prefix of another (every leaf is a scalar), a prefix used both as a list and as a mapping, and a
-// list whose indices are not 0..n-1.
+// path that is a prefix of another (every leaf is a scalar), a prefix used both as a list and as a mapping, a
+// list whose indices are not 0..n-1, a list both indexed and written per element, and overlapping each paths.
 func checkTargetPaths(fs []CompiledFoundation) error {
 	type where struct{ f, t int }
 	// leaves lists every target writing a path; only one foundation's targets with distinct Only values share one.
@@ -749,9 +897,50 @@ func checkTargetPaths(fs []CompiledFoundation) error {
 	interior := map[string]bool{}
 	indices := map[string]map[int]bool{}
 	var lists []string
+	// perElement maps each list an element or each target writes into to the first such target.
+	perElement := map[string]where{}
+	eachPaths := map[string][]roundtrip.Path{}
 	for i, f := range fs {
 		for j, t := range f.Targets {
 			key := t.Path.String()
+			// An element or each target's path is a list, so it is a prefix whose child is an index.
+			list := t.Element != nil || t.Each != nil
+			end := len(t.Path)
+			if list {
+				end++
+			}
+			for k := 1; k < end; k++ {
+				prefix := t.Path[:k].String()
+				idx, isIndex := 0, true
+				if k < len(t.Path) {
+					idx, isIndex = t.Path[k].Index()
+				}
+				if was, seen := interior[prefix]; seen && was != isIndex {
+					return fmt.Errorf("foundations[%d] (%s): targets[%d]: %q is used both as a list and as a mapping", i, f.ID, j, prefix)
+				}
+				interior[prefix] = isIndex
+				if isIndex && k < len(t.Path) {
+					if indices[prefix] == nil {
+						indices[prefix] = map[int]bool{}
+						lists = append(lists, prefix)
+					}
+					indices[prefix][idx] = true
+				}
+			}
+			if list {
+				if _, ok := perElement[key]; !ok {
+					perElement[key] = where{i, j}
+				}
+				if t.Each != nil {
+					for _, o := range eachPaths[key] {
+						if hasPathPrefix(o, t.Each) || hasPathPrefix(t.Each, o) {
+							return fmt.Errorf("foundations[%d] (%s): targets[%d]: each %q overlaps each %q of the same list %q", i, f.ID, j, t.Each, o, key)
+						}
+					}
+					eachPaths[key] = append(eachPaths[key], t.Each)
+				}
+				continue
+			}
 			if k := slices.IndexFunc(leaves[key], func(w where) bool {
 				only := fs[w.f].Targets[w.t].Only
 				return w.f != i || t.Only == "" || only == "" || only == t.Only
@@ -760,21 +949,6 @@ func checkTargetPaths(fs []CompiledFoundation) error {
 				return fmt.Errorf("foundations[%d] (%s): targets[%d]: path %q is already written by foundations[%d] targets[%d]", i, f.ID, j, key, w.f, w.t)
 			}
 			leaves[key] = append(leaves[key], where{i, j})
-			for k := 1; k < len(t.Path); k++ {
-				prefix := t.Path[:k].String()
-				idx, isIndex := t.Path[k].Index()
-				if was, seen := interior[prefix]; seen && was != isIndex {
-					return fmt.Errorf("foundations[%d] (%s): targets[%d]: %q is used both as a list and as a mapping", i, f.ID, j, prefix)
-				}
-				interior[prefix] = isIndex
-				if isIndex {
-					if indices[prefix] == nil {
-						indices[prefix] = map[int]bool{}
-						lists = append(lists, prefix)
-					}
-					indices[prefix][idx] = true
-				}
-			}
 		}
 	}
 	for key, ws := range leaves {
@@ -784,6 +958,9 @@ func checkTargetPaths(fs []CompiledFoundation) error {
 		}
 	}
 	for _, l := range lists {
+		if w, ok := perElement[l]; ok {
+			return fmt.Errorf("foundations[%d] (%s): targets[%d]: list %q is written per element, so no target may index into it", w.f, fs[w.f].ID, w.t, l)
+		}
 		for i := range len(indices[l]) {
 			if !indices[l][i] {
 				return fmt.Errorf("list %q: index %d is missing; an owned list is written whole, from index 0 without gaps", l, i)
@@ -791,6 +968,11 @@ func checkTargetPaths(fs []CompiledFoundation) error {
 		}
 	}
 	return nil
+}
+
+// hasPathPrefix reports whether q is a segment prefix of p, or equal to it.
+func hasPathPrefix(p, q roundtrip.Path) bool {
+	return len(q) <= len(p) && slices.Equal(p[:len(q)], q)
 }
 
 // topoOrder orders ids after the ids their Refs name, in declaration order otherwise.

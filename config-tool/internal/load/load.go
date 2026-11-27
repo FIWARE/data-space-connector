@@ -158,9 +158,18 @@ func Load(src []byte, name string, bundles []model.Bundle, opts Options) (*Resul
 		root = candidates[0].path
 	}
 	markers := doc.OwnedMarkers()
-	c := newClassifier(markers, bundle, root)
-	roundtrip.Classify(doc, c.ownedPass)
-	leaves := roundtrip.Classify(doc, c.classify)
+	elements := elementRules(doc, bundle, root)
+	var c *classifier
+	var leaves []roundtrip.Leaf
+	// Each round can only deactivate more rules, so this ends after at most len(elements)+1 rounds.
+	for {
+		c = newClassifier(markers, bundle, root, elements)
+		roundtrip.Classify(doc, c.ownedPass)
+		leaves = roundtrip.Classify(doc, c.classify)
+		if !deactivate(elements, bundle, c.answers) && !withhold(doc, root, elements, bundle, c) {
+			break
+		}
+	}
 
 	r := Report{
 		Source: name, SHA256: digest(src), Chart: bundle.Chart, ChartVersion: bundle.Version,
