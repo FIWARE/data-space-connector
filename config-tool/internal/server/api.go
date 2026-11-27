@@ -63,6 +63,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/trial/write", s.handleTrialWrite)
 	mux.HandleFunc("POST /api/render", s.handleRender)
 	mux.HandleFunc("GET /api/foundations", s.handleFoundations)
+	mux.HandleFunc("GET /api/infrastructure", s.handleInfrastructure)
 	mux.HandleFunc("POST /api/dataspace/check", s.handleDataspaceCheck)
 	mux.HandleFunc("POST /api/dataspace/import", s.handleDataspaceImport)
 	mux.HandleFunc("POST /api/validate", handleValidate)

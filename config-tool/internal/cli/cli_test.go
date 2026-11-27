@@ -635,3 +635,48 @@ func TestReplaceOutput(t *testing.T) {
 		})
 	}
 }
+
+// TestGenerateCertManagerModes pins that generate validates and checks a profile's Stage 4 cert-manager choice.
+func TestGenerateCertManagerModes(t *testing.T) {
+	const (
+		acmeEmailRule    = "error: Stage 4 Infrastructure, infrastructure.certManager.acmeEmail:"
+		ingressClassRule = "error: Stage 4 Infrastructure, infrastructure.certManager.ingressClass:"
+	)
+	tests := []struct {
+		name string
+		// infrastructure is the profile's infrastructure block, in flow style.
+		infrastructure string
+		wantErr        error
+		// wantMsg is a fragment of the error, wantStderr of stderr; wantAbsent must not be in stderr.
+		wantMsg, wantStderr, wantAbsent string
+	}{
+		{name: "bundled", infrastructure: "{certManager: {mode: bundled}}", wantErr: errGeneratePending},
+		{name: "bundled prod answered", wantErr: errGeneratePending,
+			infrastructure: "{certManager: {mode: bundled, answers: {type: prod, acmeEmail: ops@fiware.org, ingressClass: traefik}}}"},
+		{name: "cluster", infrastructure: "{certManager: {mode: cluster, answers: {issuer: letsencrypt}}}", wantErr: errGeneratePending},
+		{name: "external", infrastructure: "{certManager: {mode: external, answers: {secret.keycloak: kc-tls}}}", wantErr: errGeneratePending},
+		{name: "invalid mode", infrastructure: "{certManager: {mode: operator}}", wantMsg: "infrastructure.certManager: "},
+		{name: "prod without ACME email", wantErr: errBlockingFindings, wantStderr: acmeEmailRule, wantAbsent: ingressClassRule,
+			infrastructure: "{certManager: {mode: bundled, answers: {type: prod, ingressClass: traefik}}}"},
+		{name: "prod without ingress class", wantErr: errBlockingFindings, wantStderr: ingressClassRule, wantAbsent: acmeEmailRule,
+			infrastructure: "{certManager: {mode: bundled, answers: {type: prod, acmeEmail: ops@fiware.org}}}"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			path := writeProfile(t, validProfile+"infrastructure: "+tc.infrastructure+"\n")
+			_, stderr, err := executeSplit(t, "generate", "-p", path)
+			if tc.wantErr != nil && !errors.Is(err, tc.wantErr) {
+				t.Fatalf("error = %v, want %v; stderr %q", err, tc.wantErr, stderr)
+			}
+			if tc.wantMsg != "" && (err == nil || !strings.Contains(err.Error(), tc.wantMsg) || errors.Is(err, errGeneratePending)) {
+				t.Fatalf("error = %v, want the profile refused naming %q", err, tc.wantMsg)
+			}
+			if !strings.Contains(stderr, tc.wantStderr) || tc.wantStderr == "" && stderr != "" {
+				t.Errorf("stderr = %q, want it to contain %q", stderr, tc.wantStderr)
+			}
+			if tc.wantAbsent != "" && strings.Contains(stderr, tc.wantAbsent) {
+				t.Errorf("stderr = %q, want no %q", stderr, tc.wantAbsent)
+			}
+		})
+	}
+}

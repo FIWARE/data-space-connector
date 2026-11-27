@@ -104,6 +104,7 @@ Why this and not something else:
 │    POST /api/features       toggle a feature, list the choices vs. the preset    │
 │    POST /api/render         profile → values tree (+ diff)                       │
 │    GET  /api/foundations    stage 3 answers and the keys they fan out to         │
+│    GET  /api/infrastructure stage 4 dependencies, modes and their questions     │
 │    POST /api/validate       L1 schema · L2 rules · L3 helm template              │
 │    POST /api/load           values.yaml → profile + overrides + conflicts        │
 │    GET  /api/cluster/scan   detection for stage 4, incl. sealed-secrets and ESO

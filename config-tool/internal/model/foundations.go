@@ -241,7 +241,9 @@ type CompiledFoundation struct {
 	// Features gate the foundation's display only; nil when it is always shown.
 	Features []string
 	deflt    *template.Template
-	prefix   *template.Template
+	// defaultSource is the text deflt was parsed from.
+	defaultSource string
+	prefix        *template.Template
 	// defaultRefs and prefixRefs split Refs by source, so a bad reference is reported where it is.
 	defaultRefs, prefixRefs []string
 	// defaultGate is defaultRefs plus the reserved refs of Default and the DefaultWhen id: what decides the default.
@@ -251,6 +253,11 @@ type CompiledFoundation struct {
 // DefaultTemplate is the parsed Default; nil when the foundation has none.
 func (f CompiledFoundation) DefaultTemplate() *template.Template {
 	return f.deflt
+}
+
+// DefaultSource is the template text DefaultTemplate was parsed from; empty when there is no default.
+func (f CompiledFoundation) DefaultSource() string {
+	return f.defaultSource
 }
 
 // PrefixTemplate is the parsed Prefix; nil when the foundation has none.
@@ -569,7 +576,7 @@ func compileFoundation(f Foundation, topLevelKeys []string) (CompiledFoundation,
 		if len(refs) == 0 && !slices.Contains(c.optionValues(), f.Default) {
 			return CompiledFoundation{}, fmt.Errorf("default %q is not one of the options", f.Default)
 		}
-		c.deflt = t
+		c.deflt, c.defaultSource = t, f.Default
 		c.defaultRefs, defaultReserved = splitReserved(refs)
 	}
 	if w := f.DefaultWhen; w != nil {
