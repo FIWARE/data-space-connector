@@ -389,7 +389,7 @@ the chart version the figures were measured on and a link to the [sizing guidanc
 
 The *Egress* panel declares the forward proxy and the private CA once ([ADR 0025](../doc/adr/0025-config-tool-proxy-and-private-ca.md)).
 Each component gets them through its own mechanism: the verifier, Keycloak, the marketplace logic proxy, the
-vc-operator and APISIX.
+vc-operator and APISIX. Contract Management gets the private CA too, but no proxy.
 
 - `proxy.https` switches the proxy group. While it is empty, `proxy.http` and `proxy.no` do not derive and no proxy
   value renders. `proxy.http` follows `proxy.https`. `proxy.no` derives as soon as Stage 1 names the release and the
@@ -527,8 +527,8 @@ check the egress fan-out against the final values. The 10.16.0 bundle has eight 
 - `java-memory-limit` (`memoryLimit`) warns on `answers.resources.profile` while the environment is `production` and a
   deployed Java component, sized by the table or not, has no memory limit;
 - `ca-coverage` (`caCoverage`) is an error while `ca.privateSecret` is set and a deployed component's CA mechanism is
-  not in effect in the final values, or an APISIX route keeps `ssl_verify: false`. A withheld mechanism and
-  contract-management, which has no mechanism in the tool yet, are warnings;
+  not in effect in the final values, or an APISIX route keeps `ssl_verify: false`. A withheld mechanism is a
+  warning;
 - `no-proxy-coverage` (`noProxyCoverage`) warns when `proxy.no` does not bypass an in-cluster service, for example one
   the loaded file renames;
 - `keycloak-proxy-mappings` (`valueSet`) warns while the loaded file sets `keycloak.proxy.spiProxyMappings`, which makes

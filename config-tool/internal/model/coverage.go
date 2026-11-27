@@ -8,9 +8,6 @@ import (
 	"github.com/FIWARE/data-space-connector/config-tool/internal/roundtrip"
 )
 
-// MechanismNone marks a caCoverage component the tool has no CA mechanism for yet (ADR 0025).
-const MechanismNone = "none"
-
 // Keys of the caCoverage and noProxyCoverage message templates.
 const (
 	// MessageComponent is the label of the one component a withheld finding concerns.
@@ -39,7 +36,7 @@ const (
 
 // RuleCACoverage checks that every deployed component trusts the private CA through its mechanism (ADR 0025).
 // The rule's severity applies to a mechanism not in effect and to a route that does not verify; a withheld mechanism
-// and a component without one are warnings, since the tool cannot tell whether a hand-made setup trusts the CA.
+// is a warning, since the tool cannot tell whether a hand-made setup trusts the CA.
 type RuleCACoverage struct {
 	Components []CACoverageComponent `yaml:"components"`
 	Routes     *CACoverageRoutes     `yaml:"routes"`
@@ -47,12 +44,11 @@ type RuleCACoverage struct {
 	WithheldCollision string `yaml:"withheldCollision"`
 	WithheldEdited    string `yaml:"withheldEdited"`
 	WithheldConflict  string `yaml:"withheldConflict"`
-	None              string `yaml:"none"`
 	Route             string `yaml:"route"`
 }
 
 // CACoverageComponent is one component that calls a host the private CA may sign. It has exactly one of Mechanism,
-// whose element targets must all be in effect, or MechanismNone, and Paths, scalar targets that must be.
+// whose element targets must all be in effect, and Paths, scalar targets that must be.
 type CACoverageComponent struct {
 	ID        string   `yaml:"id"`
 	Label     string   `yaml:"label"`
@@ -119,7 +115,6 @@ func checkCACoverage(r CheckRule, c ruleContext) error {
 		{"caCoverage: withheldCollision", k.WithheldCollision, collisionKeys},
 		{"caCoverage: withheldEdited", k.WithheldEdited, editedKeys},
 		{"caCoverage: withheldConflict", k.WithheldConflict, conflictKeys},
-		{"caCoverage: none", k.None, []string{MessageComponents}},
 	} {
 		if err := checkTemplate(r.ID, m.name, m.s, m.keys); err != nil {
 			return err
@@ -144,7 +139,7 @@ func checkCAComponent(comp CACoverageComponent, ids []string, c ruleContext) err
 			return fmt.Errorf("%s: enabledKeys: %w", comp.ID, err)
 		}
 	}
-	if comp.Mechanism != "" && comp.Mechanism != MechanismNone &&
+	if comp.Mechanism != "" &&
 		!hasTarget(c.fs, func(t CompiledTarget) bool { return t.Mechanism == comp.Mechanism }) {
 		return fmt.Errorf("%s: mechanism %q is no target's mechanism", comp.ID, comp.Mechanism)
 	}

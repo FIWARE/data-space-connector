@@ -47,9 +47,11 @@ var proxyComponents = []string{"decentralizedIam.odrlAuthorization", "decentrali
 
 // subchartFixture holds the defaults of one subchart version that a lists: base or a noProxyServices row reads.
 type subchartFixture struct {
-	Chart   string         `yaml:"chart"`
-	Version string         `yaml:"version"`
-	Values  map[string]any `yaml:"values"`
+	Chart   string `yaml:"chart"`
+	Version string `yaml:"version"`
+	// AppVersion is the chart's appVersion, recorded where an image tag defaults to it.
+	AppVersion string         `yaml:"appVersion"`
+	Values     map[string]any `yaml:"values"`
 	// Names are service names the subchart's templates write literally.
 	Names []string `yaml:"names"`
 }

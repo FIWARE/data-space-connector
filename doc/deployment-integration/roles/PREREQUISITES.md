@@ -175,7 +175,7 @@ One Secret in the release namespace serves every mechanism below: its key `ca.cr
 | Marketplace logic proxy | `NODE_EXTRA_CA_CERTS`, see [Running a local marketplace](provider/LOCAL_MARKETPLACE.md) |
 | vc-operator | `SSL_CERT_DIR` pointing to the directory the Secret is mounted in (`extraVolumes`/`extraVolumeMounts`). Go then loads its default bundle plus that directory. `SSL_CERT_FILE` would replace the default bundle and break calls to publicly signed hosts |
 | Keycloak | `truststore-paths` (`KC_TRUSTSTORE_PATHS`) pointing to the PEM file, mounted under `/opt/keycloak/conf/truststores/` with `extraVolumes`/`extraVolumeMounts`. Not `tls.truststoreEnabled`/`tls.truststoreExistingSecret`: they only validate inbound mTLS clients and need a JKS truststore |
-| Contract Management | The chart templates init containers, volumes, mounts and env vars, but the configuration tool does not add the CA there yet. Until then the hosts it calls (the Central Marketplace) need a certificate from a public CA |
+| Contract Management | An init container with the Contract Management image copies `$JAVA_HOME/lib/security/cacerts` into an emptyDir and imports every certificate of the CA bundle with `keytool` (split first: `keytool -importcert` imports only the first certificate of a PEM file), and `JDK_JAVA_OPTIONS` points `javax.net.ssl.trustStore` at the copy (`deployment.initContainers`/`additionalVolumes`/`additionalVolumeMounts`, `additionalEnvVars`). The configuration tool writes this when `ca.privateSecret` is set |
 
 ## Sizing
 

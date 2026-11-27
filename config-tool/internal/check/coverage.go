@@ -16,11 +16,11 @@ import (
 )
 
 // caCoverage returns, over the deployed components of r in table order, one finding naming every component whose
-// CA mechanism is not in effect, one warning per withheld mechanism, one warning naming every component without a
-// mechanism, and one finding per route whose final verify key is false (ADR 0025).
+// CA mechanism is not in effect, one warning per withheld mechanism, and one finding per route whose final verify
+// key is false (ADR 0025).
 func caCoverage(b model.Bundle, r model.CheckRule, tree render.Tree, v chartValues) ([]Finding, error) {
 	k := r.CACoverage
-	var missing, none []string
+	var missing []string
 	var warnings []Finding
 	deployed := map[string]bool{}
 	for _, c := range k.Components {
@@ -29,8 +29,6 @@ func caCoverage(b model.Bundle, r model.CheckRule, tree render.Tree, v chartValu
 		}
 		deployed[c.ID] = true
 		switch {
-		case c.Mechanism == model.MechanismNone:
-			none = append(none, c.Label)
 		case c.Mechanism != "":
 			i := slices.IndexFunc(tree.Withheld, func(w render.Withheld) bool { return w.Mechanism == c.Mechanism })
 			if i >= 0 {
@@ -64,13 +62,6 @@ func caCoverage(b model.Bundle, r model.CheckRule, tree render.Tree, v chartValu
 		out = append(out, fs...)
 	}
 	out = append(out, warnings...)
-	if len(none) > 0 {
-		msg, err := model.RenderTemplate(r.ID, k.None, map[string]string{model.MessageComponents: strings.Join(none, labelSeparator)})
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, warning(r, msg))
-	}
 	return out, nil
 }
 
