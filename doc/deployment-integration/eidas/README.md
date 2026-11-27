@@ -212,7 +212,7 @@ All values live under `decentralizedIam.vcAuthentication.vcverifier.deployment.e
 | `countries` | filter to relevant countries | `[]` (all) |
 | `lotlUrl` | default (official EU LOTL) | the in-cluster mock, see [Demo Flow](#demo-flow) |
 
-See the [k3s/provider-eidas.yaml](../../../k3s/provider-eidas.yaml) overlay
+See the [k3s/provider-eidas.yaml](https://github.com/FIWARE/data-space-connector/blob/main/k3s/provider-eidas.yaml) overlay
 for a complete local-deployment example.
 
 ---
@@ -253,7 +253,7 @@ elsi:
 ```
 
 This creates a Kubernetes Secret with the keystore and configures the
-Keycloak [realm template](../../../charts/data-space-connector/templates/realm.yaml)
+Keycloak [realm template](https://github.com/FIWARE/data-space-connector/blob/main/charts/data-space-connector/templates/realm.yaml)
 to use `did:elsi` with the corresponding java-keystore key provider.
 
 !!! important
@@ -322,14 +322,14 @@ keycloak:
           mountPath: /target
 ```
 
-See the [k3s/consumer-eidas.yaml](../../../k3s/consumer-eidas.yaml) overlay
+See the [k3s/consumer-eidas.yaml](https://github.com/FIWARE/data-space-connector/blob/main/k3s/consumer-eidas.yaml) overlay
 for the complete init container, volume, and volume-mount configuration.
 
 ### Keystore Volume Mount
 
 The eIDAS signing keystore must be mounted into the Keycloak container.
 The chart's
-[elsi-secret.yaml](../../../charts/data-space-connector/templates/elsi-secret.yaml)
+[elsi-secret.yaml](https://github.com/FIWARE/data-space-connector/blob/main/charts/data-space-connector/templates/elsi-secret.yaml)
 template creates the Secret from the `elsi.keystore` values. It is then
 mounted via Keycloak's `extraVolumeMounts` and `extraVolumes`:
 
@@ -576,8 +576,8 @@ mvn clean deploy -Plocal,eidas
 ```
 
 This uses the Maven `eidas` profile, which applies the
-[k3s/provider-eidas.yaml](../../../k3s/provider-eidas.yaml) and
-[k3s/consumer-eidas.yaml](../../../k3s/consumer-eidas.yaml) overlay files on
+[k3s/provider-eidas.yaml](https://github.com/FIWARE/data-space-connector/blob/main/k3s/provider-eidas.yaml) and
+[k3s/consumer-eidas.yaml](https://github.com/FIWARE/data-space-connector/blob/main/k3s/consumer-eidas.yaml) overlay files on
 top of the base configuration.
 
 All commands below go through the squid proxy the local deployment brings
@@ -604,7 +604,7 @@ qualified CA. The eIDAS overlay ships one:
 | `tl-de.xml` | National list (territory `DE`) carrying the test CA as `CA/QC`, status `granted` |
 
 Both live as ConfigMap entries in the `extraManifests` block at the end of
-[k3s/provider-eidas.yaml](../../../k3s/provider-eidas.yaml) -- that is the only
+[k3s/provider-eidas.yaml](https://github.com/FIWARE/data-space-connector/blob/main/k3s/provider-eidas.yaml) -- that is the only
 copy, so edit them there. A small static web server defined in the same block
 serves them in-cluster, and the verifier is pointed at it:
 
@@ -777,7 +777,7 @@ chain0.pem: OK
 
 A simpler equivalent: the root in the credential's `x5c[-1]` must be
 byte-identical to the certificate in
-the `tl-de.xml` entry of [k3s/provider-eidas.yaml](../../../k3s/provider-eidas.yaml). If they differ,
+the `tl-de.xml` entry of [k3s/provider-eidas.yaml](https://github.com/FIWARE/data-space-connector/blob/main/k3s/provider-eidas.yaml). If they differ,
 the trust list was built from a different run of the certificate tool than the
 keystore in `k3s/consumer-eidas.yaml`, and the verifier rejects the credential
 with `certificate does not chain to any trusted service`.

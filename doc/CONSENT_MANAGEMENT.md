@@ -685,7 +685,7 @@ role. `participant_id` is the credential's `issuer`, the DID the TIR check cover
 win. That is only a wallet hint, which the verifier does not enforce (see
 [Known limitations](#known-limitations)).
 
-The relevant settings, from [`k3s/consent-trust-anchor-components.yaml`](../k3s/consent-trust-anchor-components.yaml):
+The relevant settings, from [`k3s/consent-trust-anchor-components.yaml`](https://github.com/FIWARE/data-space-connector/blob/main/k3s/consent-trust-anchor-components.yaml):
 
 ```yaml
 consent-manager:
@@ -708,7 +708,7 @@ consent-manager:
 
 The verifier side is the `consent-manager` entry under
 `decentralizedIam.vcAuthentication.vcverifier.registration.services` in
-[`k3s/consent-trust-anchor.yaml`](../k3s/consent-trust-anchor.yaml).
+[`k3s/consent-trust-anchor.yaml`](https://github.com/FIWARE/data-space-connector/blob/main/k3s/consent-trust-anchor.yaml).
 
 ### The provider's token service
 
@@ -789,7 +789,7 @@ sequenceDiagram
 
 ### Route configuration
 
-The route conf in [`k3s/provider.yaml`](../k3s/provider.yaml):
+The route conf in [`k3s/provider.yaml`](https://github.com/FIWARE/data-space-connector/blob/main/k3s/provider.yaml):
 
 ```json
 {
@@ -884,12 +884,12 @@ record's own lifecycle lives in the consent-manager.
 The authority side is deployed as **two releases**, split along the chart boundary and sharing the
 `trust-anchor` namespace:
 
-* the **`trust-anchor` release** ([`charts/trust-anchor`](../charts/trust-anchor)) carries the consent
+* the **`trust-anchor` release** ([`charts/trust-anchor`](https://github.com/FIWARE/data-space-connector/tree/main/charts/trust-anchor)) carries the consent
   **data plane**: the consent-manager, the authority consent-facade, the setup Job and the
   NetworkPolicies, on the chart's Zalando `managedPostgres`. The k3s scenario turns it on with
-  [`k3s/consent-trust-anchor-components.yaml`](../k3s/consent-trust-anchor-components.yaml);
-* the **`consent-authority` release** ([`charts/data-space-connector`](../charts/data-space-connector),
-  via [`k3s/consent-trust-anchor.yaml`](../k3s/consent-trust-anchor.yaml)) carries the **IAM** that
+  [`k3s/consent-trust-anchor-components.yaml`](https://github.com/FIWARE/data-space-connector/blob/main/k3s/consent-trust-anchor-components.yaml);
+* the **`consent-authority` release** ([`charts/data-space-connector`](https://github.com/FIWARE/data-space-connector/tree/main/charts/data-space-connector),
+  via [`k3s/consent-trust-anchor.yaml`](https://github.com/FIWARE/data-space-connector/blob/main/k3s/consent-trust-anchor.yaml)) carries the **IAM** that
   backs consent: the keycloak issuer, the VCVerifier with its `consent-manager` service, the
   `did:web:dataspace-authority.org` helper, the vc-operator, and an APISIX gateway that publishes
   `consent-manager.dataspace-authority.org`.
@@ -1166,8 +1166,8 @@ consent-facade:
 The facade's credential is the provider's MembershipCredential
 (`consent-facade.oid4vp.credentials`), and the plugin image and its route are set on the provider's
 APISIX (`decentralizedIam.odrlAuthorization.apisix`): see
-[`k3s/consent-provider.yaml`](../k3s/consent-provider.yaml) and the
-`mp-data-service-consent` route in [`k3s/provider.yaml`](../k3s/provider.yaml).
+[`k3s/consent-provider.yaml`](https://github.com/FIWARE/data-space-connector/blob/main/k3s/consent-provider.yaml) and the
+`mp-data-service-consent` route in [`k3s/provider.yaml`](https://github.com/FIWARE/data-space-connector/blob/main/k3s/provider.yaml).
 
 ### The k3s `consent` profile
 
@@ -1177,11 +1177,11 @@ mvn clean deploy -Pconsent
 
 The profile deploys the standard local data space plus three overlays:
 
-* [`k3s/consent-trust-anchor-components.yaml`](../k3s/consent-trust-anchor-components.yaml), on
+* [`k3s/consent-trust-anchor-components.yaml`](https://github.com/FIWARE/data-space-connector/blob/main/k3s/consent-trust-anchor-components.yaml), on
   `k3s/trust-anchor.yaml` - the consent data plane in the `trust-anchor` release;
-* [`k3s/consent-trust-anchor.yaml`](../k3s/consent-trust-anchor.yaml) - the `consent-authority`
+* [`k3s/consent-trust-anchor.yaml`](https://github.com/FIWARE/data-space-connector/blob/main/k3s/consent-trust-anchor.yaml) - the `consent-authority`
   release in namespace `trust-anchor`;
-* [`k3s/consent-provider.yaml`](../k3s/consent-provider.yaml), on `k3s/provider.yaml` - the plugin,
+* [`k3s/consent-provider.yaml`](https://github.com/FIWARE/data-space-connector/blob/main/k3s/consent-provider.yaml), on `k3s/provider.yaml` - the plugin,
   the owner-resolver and the provider consent-facade.
 
 `mvn clean deploy -Plocal` brings the connector up without consent management.
@@ -1238,7 +1238,7 @@ seconds until its IP is synced: retry the first in-cluster call.
 
 ## Integration tests
 
-The feature [`it/src/test/resources/it/consent_management.feature`](../it/src/test/resources/it/consent_management.feature)
+The feature [`it/src/test/resources/it/consent_management.feature`](https://github.com/FIWARE/data-space-connector/blob/main/it/src/test/resources/it/consent_management.feature)
 (tag `@consent`, implemented by `ConsentStepDefinitions`) runs the
 [walkthrough](#walkthrough-consent-in-the-local-k3s-scenario) through the real `/v1` API, with
 nothing written into the database, in three scenarios: denied without consent, allowed after the

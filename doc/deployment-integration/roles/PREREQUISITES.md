@@ -99,7 +99,7 @@ postgres-operator:
   enabled: false
 ```
 
-The local deployment follows the same pattern with the connector chart itself: [`k3s/operators.yaml`](../../../k3s/operators.yaml) installs the Postgres and MongoDB operators and cert-manager as a release of their own, with every other component disabled, and the participants' profiles turn them off. It is a test setup; in a production cluster, the upstream charts keep the operators' lifecycle independent of the connector's.
+The local deployment follows the same pattern with the connector chart itself: [`k3s/operators.yaml`](https://github.com/FIWARE/data-space-connector/blob/main/k3s/operators.yaml) installs the Postgres and MongoDB operators and cert-manager as a release of their own, with every other component disabled, and the participants' profiles turn them off. It is a test setup; in a production cluster, the upstream charts keep the operators' lifecycle independent of the connector's.
 
 ## cert-manager
 
@@ -167,15 +167,15 @@ If the public hosts have certificates from a private CA, every component that ca
 | Component | How to trust the CA |
 |---|---|
 | APISIX | `apisix.ssl.existingCASecret`, see [Trusting a private CA](provider/README.md#trusting-a-private-ca) |
-| VCVerifier | An init container that appends the CA to the image's bundle (`/etc/ssl/cert.pem`) in a shared volume mounted over it, as [`k3s/provider.yaml`](../../../k3s/provider.yaml) does. The chart's `serverCertificates.caCert` only takes effect when other init containers are configured too |
+| VCVerifier | An init container that appends the CA to the image's bundle (`/etc/ssl/cert.pem`) in a shared volume mounted over it, as [`k3s/provider.yaml`](https://github.com/FIWARE/data-space-connector/blob/main/k3s/provider.yaml) does. The chart's `serverCertificates.caCert` only takes effect when other init containers are configured too |
 | Marketplace logic proxy | `NODE_EXTRA_CA_CERTS`, see [Running a local marketplace](provider/LOCAL_MARKETPLACE.md) |
-| vc-operator | `SSL_CERT_FILE` pointing to the CA, mounted with `extraVolumes`/`extraVolumeMounts`, as in [`k3s/provider.yaml`](../../../k3s/provider.yaml). |
+| vc-operator | `SSL_CERT_FILE` pointing to the CA, mounted with `extraVolumes`/`extraVolumeMounts`, as in [`k3s/provider.yaml`](https://github.com/FIWARE/data-space-connector/blob/main/k3s/provider.yaml). |
 | Keycloak | `tls.truststoreEnabled` with a Java truststore in `tls.truststoreExistingSecret` |
 | Contract Management | No option to add a CA: the hosts it calls (the Central Marketplace) need a certificate from a public CA |
 
 ## Sizing
 
-The figures below were measured with chart 10.13.2 (trust-anchor 1.3.0) and the local deployment's profiles ([`k3s/`](../../../k3s/)), one release per role on a single k3s node, after the components had settled and **without load**. They give the floor a role needs, not its capacity: plan the headroom for your traffic on top of them.
+The figures below were measured with chart 10.13.2 (trust-anchor 1.3.0) and the local deployment's profiles ([`k3s/`](https://github.com/FIWARE/data-space-connector/tree/main/k3s)), one release per role on a single k3s node, after the components had settled and **without load**. They give the floor a role needs, not its capacity: plan the headroom for your traffic on top of them.
 
 | Role | Memory in use | CPU in use | Images (compressed) | Disk for images |
 |---|---|---|---|---|

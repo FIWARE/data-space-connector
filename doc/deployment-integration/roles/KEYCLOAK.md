@@ -72,7 +72,7 @@ Keycloak is enabled by default in the `fiware/data-space-connector` Helm chart. 
 1. **Infrastructure** — ingress, TLS, init containers, volumes, signing key, environment variables
 2. **Realm import** — credential type definitions, clients, roles, users, and credential scopes
 
-The following sections walk through each part of a typical configuration. For a complete working example, see [k3s/consumer.yaml](../../../k3s/consumer.yaml).
+The following sections walk through each part of a typical configuration. For a complete working example, see [k3s/consumer.yaml](https://github.com/FIWARE/data-space-connector/blob/main/k3s/consumer.yaml).
 
 !!! important
 
@@ -304,7 +304,7 @@ The most relevant attributes per credential are:
 
 To define additional credential types, add more entries under `verifiableCredentials`. The key of each entry is the ClientScope name — i.e. the value the wallet sends as `credential_configuration_id`.
 
-See [k3s/consumer.yaml](../../../k3s/consumer.yaml) for a complete example with multiple credential types (LegalPersonCredential, UserCredential, OperatorCredential, MarketplaceCredential, MembershipCredential, etc.).
+See [k3s/consumer.yaml](https://github.com/FIWARE/data-space-connector/blob/main/k3s/consumer.yaml) for a complete example with multiple credential types (LegalPersonCredential, UserCredential, OperatorCredential, MarketplaceCredential, MembershipCredential, etc.).
 
 ### Realm: client roles
 
@@ -423,7 +423,7 @@ Key points:
 - **`oid4vc-target-role-mapper`** does not allow two mappers with the same `claim.name` in the same scope. Pick one target per VC, or use distinct claim names; downstream verifiers (FIWARE vcverifier, ODRL/OPA) read `credentialSubject.roles[*].target` by default.
 - For the full mapper API reference (properties, defaults, examples), see [`doc/keycloak/oid4vc-protocol-mappers.md`](../../keycloak/oid4vc-protocol-mappers.md).
 
-For a complete example with all credential types, see [k3s/consumer.yaml](../../../k3s/consumer.yaml).
+For a complete example with all credential types, see [k3s/consumer.yaml](https://github.com/FIWARE/data-space-connector/blob/main/k3s/consumer.yaml).
 
 ### Realm: clients
 
@@ -476,7 +476,7 @@ keycloak:
 
 `account-console` and `admin-cli` are public clients, and they come without the password grant (`directAccessGrantsEnabled: false`): with it, anyone who knows a user's password could get a token from the token endpoint, without the login page and whatever it enforces, such as a second factor. Users log in to the account console through the browser, or get their credentials with a wallet. Components get theirs with a confidential client of their own and the client credentials grant, which is how the vc-operator requests them (`vcCredentials`, see the [Central Marketplace](operator/README.md#central-marketplace) for an example).
 
-The local environment turns the password grant back on for `account-console`, because the integration tests and [`doc/scripts/get_credential.sh`](../../scripts/get_credential.sh) log in with it ([k3s/consumer.yaml](../../../k3s/consumer.yaml)):
+The local environment turns the password grant back on for `account-console`, because the integration tests and [`doc/scripts/get_credential.sh`](../../scripts/get_credential.sh) log in with it ([k3s/consumer.yaml](https://github.com/FIWARE/data-space-connector/blob/main/k3s/consumer.yaml)):
 
 ```yaml
 keycloak:
@@ -520,7 +520,7 @@ The chart ships the upstream `keycloak/keycloak` image, 26.7.0 or later (the exa
 
 ### Complete example
 
-A complete working example with multiple credential types, users, and clients is available at [k3s/consumer.yaml](../../../k3s/consumer.yaml). This file is intended for local development and testing. For production deployments, replace test values (passwords, DIDs, domains) with your real configuration.
+A complete working example with multiple credential types, users, and clients is available at [k3s/consumer.yaml](https://github.com/FIWARE/data-space-connector/blob/main/k3s/consumer.yaml). This file is intended for local development and testing. For production deployments, replace test values (passwords, DIDs, domains) with your real configuration.
 
 ### Production considerations
 

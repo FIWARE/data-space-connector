@@ -103,7 +103,7 @@ If the [Marketplace UI (BAE)](#optional-components) is also deployed, its Chargi
 
 #### Deployment values
 
-The Central Marketplace uses the `fiware/data-space-connector` Helm chart with a different subset of components enabled than a Provider. The snippets below show the key values required on top of a standard deployment — the full list of components (ingresses, TLS, Keycloak realm, credential definitions, etc.) follows the same patterns documented for the [Provider role](../provider/README.md#deployment). See also the local demo overlays in [`k3s/consumer.yaml`](../../../../k3s/consumer.yaml), [`k3s/consumer-auth.yaml`](../../../../k3s/consumer-auth.yaml) and [`k3s/consumer-tmf.yaml`](../../../../k3s/consumer-tmf.yaml) for a complete example.
+The Central Marketplace uses the `fiware/data-space-connector` Helm chart with a different subset of components enabled than a Provider. The snippets below show the key values required on top of a standard deployment — the full list of components (ingresses, TLS, Keycloak realm, credential definitions, etc.) follows the same patterns documented for the [Provider role](../provider/README.md#deployment). See also the local demo overlays in [`k3s/consumer.yaml`](https://github.com/FIWARE/data-space-connector/blob/main/k3s/consumer.yaml), [`k3s/consumer-auth.yaml`](https://github.com/FIWARE/data-space-connector/blob/main/k3s/consumer-auth.yaml) and [`k3s/consumer-tmf.yaml`](https://github.com/FIWARE/data-space-connector/blob/main/k3s/consumer-tmf.yaml) for a complete example.
 
 **1. Enable Contract Management in central-marketplace mode**
 
@@ -212,7 +212,7 @@ When this block is enabled, remember to also override `contract-management.organ
 
 **4. Issue the marketplace's authentication credential from Keycloak**
 
-The Contract Management sends the notifications authenticated with a Verifiable Credential issued by the marketplace's own Keycloak. In this documentation and in the shipped examples this credential is a `MarketplaceCredential`, defined in the realm as the `marketplace-credential` entry of `keycloak.realm.verifiableCredentials` (see [`k3s/consumer.yaml`](../../../../k3s/consumer.yaml)).
+The Contract Management sends the notifications authenticated with a Verifiable Credential issued by the marketplace's own Keycloak. In this documentation and in the shipped examples this credential is a `MarketplaceCredential`, defined in the realm as the `marketplace-credential` entry of `keycloak.realm.verifiableCredentials` (see [`k3s/consumer.yaml`](https://github.com/FIWARE/data-space-connector/blob/main/k3s/consumer.yaml)).
 
 The [vc-operator](https://github.com/SEAMWARE/vc-operator) requests the credential and keeps it renewed in a Secret, which is mounted into the Contract Management pod. It authenticates at Keycloak as a confidential client of its own, with the client credentials grant, so no user password is involved:
 
@@ -288,11 +288,11 @@ The [vc-operator](https://github.com/SEAMWARE/vc-operator) requests the credenti
             mountPath: /credential-repo
     ```
 
-[`k3s/consumer-auth.yaml`](../../../../k3s/consumer-auth.yaml) and [`k3s/consumer-tmf.yaml`](../../../../k3s/consumer-tmf.yaml) do the same for the local demo, together with a `LegalPersonCredential`.
+[`k3s/consumer-auth.yaml`](https://github.com/FIWARE/data-space-connector/blob/main/k3s/consumer-auth.yaml) and [`k3s/consumer-tmf.yaml`](https://github.com/FIWARE/data-space-connector/blob/main/k3s/consumer-tmf.yaml) do the same for the local demo, together with a `LegalPersonCredential`.
 
 ##### Authentication credential type
 
-The `MarketplaceCredential` type is **not mandatory** — it is simply the type used throughout this documentation, the [local demo](../../../CENTRAL_MARKETPLACE.md) and the shipped examples (see [`k3s/consumer.yaml`](../../../../k3s/consumer.yaml) Keycloak realm and [`k3s/provider.yaml`](../../../../k3s/provider.yaml) policies). Any credential type can be used as long as the three sides agree on it:
+The `MarketplaceCredential` type is **not mandatory** — it is simply the type used throughout this documentation, the [local demo](../../../CENTRAL_MARKETPLACE.md) and the shipped examples (see [`k3s/consumer.yaml`](https://github.com/FIWARE/data-space-connector/blob/main/k3s/consumer.yaml) Keycloak realm and [`k3s/provider.yaml`](https://github.com/FIWARE/data-space-connector/blob/main/k3s/provider.yaml) policies). Any credential type can be used as long as the three sides agree on it:
 
 1. **Keycloak (this realm)** must issue the chosen type — adjust the `verifiable_credential_type` of its `verifiableCredentials.<id>` entry, the `credentialType` of the request under `vcCredentials`, and the file name the Secret is mounted as, which Contract Management reads.
 2. **Central Marketplace VCVerifier + PAP** use that same type to let its Contract Management present it to providers. No extra configuration is typically needed here.
@@ -314,9 +314,9 @@ The local demo (`mvn clean deploy -Plocal,central`) deploys the Central Marketpl
 
 | File | Description |
 |------|-------------|
-| [k3s/consumer.yaml](../../../../k3s/consumer.yaml) | Base values for the organization hosting the Central Marketplace (Keycloak, DID, database, etc.) |
-| [k3s/consumer-auth.yaml](../../../../k3s/consumer-auth.yaml) | Authentication stack (VCVerifier, Trusted Issuers List, APISIX routes) required to protect the marketplace APIs |
-| [k3s/consumer-tmf.yaml](../../../../k3s/consumer-tmf.yaml) | TMForum API, Scorpio backend and Contract Management configured in central-marketplace mode (`enableCentralMarketplace: true`, `oid4vp.enabled: true`) |
+| [k3s/consumer.yaml](https://github.com/FIWARE/data-space-connector/blob/main/k3s/consumer.yaml) | Base values for the organization hosting the Central Marketplace (Keycloak, DID, database, etc.) |
+| [k3s/consumer-auth.yaml](https://github.com/FIWARE/data-space-connector/blob/main/k3s/consumer-auth.yaml) | Authentication stack (VCVerifier, Trusted Issuers List, APISIX routes) required to protect the marketplace APIs |
+| [k3s/consumer-tmf.yaml](https://github.com/FIWARE/data-space-connector/blob/main/k3s/consumer-tmf.yaml) | TMForum API, Scorpio backend and Contract Management configured in central-marketplace mode (`enableCentralMarketplace: true`, `oid4vp.enabled: true`) |
 
 Deploying the Central Marketplace with the same layout:
 
@@ -345,7 +345,7 @@ helm repo add fiware-dsc https://fiware.github.io/data-space-connector
 helm install trust-anchor fiware-dsc/trust-anchor --version <version> -n trust-anchor --create-namespace -f values.yaml
 ```
 
-Start from the reference profile [`examples/trust-anchor.yaml`](../../../../charts/trust-anchor/examples/trust-anchor.yaml), an example values file to adapt to your installation. Its [README](../../../../charts/data-space-connector/examples/README.md) explains the prerequisites, the installation and how to register the participants.
+Start from the reference profile [`examples/trust-anchor.yaml`](https://github.com/FIWARE/data-space-connector/blob/main/charts/trust-anchor/examples/trust-anchor.yaml), an example values file to adapt to your installation. Its [README](https://github.com/FIWARE/data-space-connector/blob/main/charts/data-space-connector/examples/README.md) explains the prerequisites, the installation and how to register the participants.
 
 ## Production deployment
 

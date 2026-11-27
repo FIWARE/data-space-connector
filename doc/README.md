@@ -85,7 +85,7 @@ An automated minimal deployment of a complete data space (trust anchor + provide
 
 Example values files to deploy a provider (with or without its own local marketplace, not the data space's Central Marketplace), a consumer or a trust anchor, to adapt to your installation. Their README lists the prerequisites, the placeholders, the Secrets to create and the installation steps.
 
-* [Reference profiles](../charts/data-space-connector/examples/README.md)
+* [Reference profiles](https://github.com/FIWARE/data-space-connector/blob/main/charts/data-space-connector/examples/README.md)
 
 ### Deployment by Role
 
@@ -157,7 +157,7 @@ More information can be found here:
 
 ## Glossary
 
-Terms and example names used across this documentation and the examples in [`k3s/`](../k3s).
+Terms and example names used across this documentation and the examples in [`k3s/`](https://github.com/FIWARE/data-space-connector/tree/main/k3s).
 
 **Example participants**
 

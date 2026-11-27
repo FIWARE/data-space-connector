@@ -72,11 +72,11 @@ However, for easier deployment of these components, you can use the same `fiware
 
 !!! note "Start from the reference profile"
 
-    [`examples/consumer.yaml`](../../../../charts/data-space-connector/examples/consumer.yaml) is a complete values file for a consumer, to adapt to your installation. Its [README](../../../../charts/data-space-connector/examples/README.md) lists the prerequisites, the placeholders, the Secrets to create and the installation steps. The settings below explain each part.
+    [`examples/consumer.yaml`](https://github.com/FIWARE/data-space-connector/blob/main/charts/data-space-connector/examples/consumer.yaml) is a complete values file for a consumer, to adapt to your installation. Its [README](https://github.com/FIWARE/data-space-connector/blob/main/charts/data-space-connector/examples/README.md) lists the prerequisites, the placeholders, the Secrets to create and the installation steps. The settings below explain each part.
 
-Build a `values.yaml` for the consumer by adapting [`examples/consumer.yaml`](../../../../charts/data-space-connector/examples/consumer.yaml). It uses the same `fiware/data-space-connector` chart as the provider, but with most components disabled: a consumer only issues credentials to its users. The sections below show that file piece by piece; replace every `<placeholder>`.
+Build a `values.yaml` for the consumer by adapting [`examples/consumer.yaml`](https://github.com/FIWARE/data-space-connector/blob/main/charts/data-space-connector/examples/consumer.yaml). It uses the same `fiware/data-space-connector` chart as the provider, but with most components disabled: a consumer only issues credentials to its users. The sections below show that file piece by piece; replace every `<placeholder>`.
 
-The ingresses use cert-manager through annotations and the ingress class you set (the [local deployment](../../local-deployment/LOCAL.md) uses Traefik). A `ClusterIssuer` is a prerequisite: use your own, or let the chart create one with `certManagerResources` (the [examples README](../../../../charts/data-space-connector/examples/README.md) covers the prerequisites, Secrets and placeholders).
+The ingresses use cert-manager through annotations and the ingress class you set (the [local deployment](../../local-deployment/LOCAL.md) uses Traefik). A `ClusterIssuer` is a prerequisite: use your own, or let the chart create one with `certManagerResources` (the [examples README](https://github.com/FIWARE/data-space-connector/blob/main/charts/data-space-connector/examples/README.md) covers the prerequisites, Secrets and placeholders).
 
 #### Identity: did:web
 
@@ -112,7 +112,7 @@ The data and contract components a consumer does not run are set to `false`.
 
 #### Install the chart
 
-Install the chart with your values, pinning its version (see the [release notes](../../../release-notes) for what changes between versions):
+Install the chart with your values, pinning its version (see the [release notes](../../../release-notes/11-x.md) for what changes between versions):
 
 ```shell
 helm install consumer oci://quay.io/fiware/helm-charts/data-space-connector \
@@ -131,7 +131,7 @@ helm install consumer fiware-dsc/data-space-connector --version <version> -n con
 
 #### Other deployment options
 
-A base example for a consumer deployment can be found at [k3s/consumer.yaml](../../../../k3s/consumer.yaml).
+A base example for a consumer deployment can be found at [k3s/consumer.yaml](https://github.com/FIWARE/data-space-connector/blob/main/k3s/consumer.yaml).
 
 !!! note
 
@@ -141,11 +141,11 @@ For other deployment scenarios, the base `consumer.yaml` can be extended with ad
 
 | Overlay | File | Description |
 |---------|------|-------------|
-| **eIDAS / ELSI** | [k3s/consumer-eidas.yaml](../../../../k3s/consumer-eidas.yaml) | Configuration for deployments compliant with the [ELSI](https://alastria.github.io/did-method-elsi/) trust framework, including eIDAS certificate issuance via Keycloak. See [eIDAS 2.0 Compliance](../../eidas/README.md) for details |
-| **Gaia-X** | [k3s/consumer-gaia-x.yaml](../../../../k3s/consumer-gaia-x.yaml) | Configuration for [Gaia-X](https://gaia-x.eu/) compliant deployments |
-| **TM Forum APIs** | [k3s/consumer-tmf.yaml](../../../../k3s/consumer-tmf.yaml) | Enables [TM Forum APIs](https://www.tmforum.org/oda/open-apis/) on the consumer (required for central marketplace and EDC-related features) |
-| **Auth components** | [k3s/consumer-auth.yaml](../../../../k3s/consumer-auth.yaml) | Configures authentication components for the consumer (required for central marketplace and EDC-related features) |
-| **DSP** | [k3s/dsp-consumer.yaml](../../../../k3s/dsp-consumer.yaml) | Enables the [Dataspace Protocol (DSP)](https://docs.internationaldataspaces.org/ids-knowledgebase/dataspace-protocol) connector on the consumer side |
+| **eIDAS / ELSI** | [k3s/consumer-eidas.yaml](https://github.com/FIWARE/data-space-connector/blob/main/k3s/consumer-eidas.yaml) | Configuration for deployments compliant with the [ELSI](https://alastria.github.io/did-method-elsi/) trust framework, including eIDAS certificate issuance via Keycloak. See [eIDAS 2.0 Compliance](../../eidas/README.md) for details |
+| **Gaia-X** | [k3s/consumer-gaia-x.yaml](https://github.com/FIWARE/data-space-connector/blob/main/k3s/consumer-gaia-x.yaml) | Configuration for [Gaia-X](https://gaia-x.eu/) compliant deployments |
+| **TM Forum APIs** | [k3s/consumer-tmf.yaml](https://github.com/FIWARE/data-space-connector/blob/main/k3s/consumer-tmf.yaml) | Enables [TM Forum APIs](https://www.tmforum.org/oda/open-apis/) on the consumer (required for central marketplace and EDC-related features) |
+| **Auth components** | [k3s/consumer-auth.yaml](https://github.com/FIWARE/data-space-connector/blob/main/k3s/consumer-auth.yaml) | Configures authentication components for the consumer (required for central marketplace and EDC-related features) |
+| **DSP** | [k3s/dsp-consumer.yaml](https://github.com/FIWARE/data-space-connector/blob/main/k3s/dsp-consumer.yaml) | Enables the [Dataspace Protocol (DSP)](https://docs.internationaldataspaces.org/ids-knowledgebase/dataspace-protocol) connector on the consumer side |
 
 For example, to deploy a consumer with DSP support and TM Forum APIs:
 

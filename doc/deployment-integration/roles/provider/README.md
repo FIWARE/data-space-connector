@@ -117,7 +117,7 @@ scorpio:
       key: password
 ```
 
-Scorpio needs the PostGIS extension in its database; the examples in [`k3s/`](../../../../k3s) create it, as a database named `ngb`, through the operator's `preparedDatabases`. The Identity Hub and the status list server, when enabled, take their database settings under `identityhub.postgresql` and `statusListServer.postgresql`.
+Scorpio needs the PostGIS extension in its database; the examples in [`k3s/`](https://github.com/FIWARE/data-space-connector/tree/main/k3s) create it, as a database named `ngb`, through the operator's `preparedDatabases`. The Identity Hub and the status list server, when enabled, take their database settings under `identityhub.postgresql` and `statusListServer.postgresql`.
 
 The Trusted Issuers List and the Credentials Config Service apply their database migrations at startup - on the first start, and after an upgrade that brings new ones - holding a lock in the `databasechangeloglock` table of their database while they do. If the pod is killed in the middle of the migrations (out of memory, a failed node, a pod deleted during an upgrade), the lock stays set, and the next start logs `Waiting for changelog lock....` and never completes. Release the lock in that database: the waiting pod then takes it and applies the remaining migrations. Do it only while no other pod of the service is applying them. With the chart's PostgreSQL, whose databases are `tildb` and `ccsdb`:
 
@@ -186,7 +186,7 @@ If the data space runs a shared [Central Marketplace](../../../CENTRAL_MARKETPLA
     - `fiware/contract-management` Helm chart ≥ **3.5.22**
     - `contract-management` container image ≥ **3.3.8**
 
-The following configuration is required on the provider side. The example in [`k3s/provider.yaml`](../../../../k3s/provider.yaml) already includes all of the pieces below and can be used as a reference.
+The following configuration is required on the provider side. The example in [`k3s/provider.yaml`](https://github.com/FIWARE/data-space-connector/blob/main/k3s/provider.yaml) already includes all of the pieces below and can be used as a reference.
 
 **1. Enable and configure Contract Management in central-marketplace mode**
 
@@ -307,13 +307,13 @@ Enable the Eclipse Dataspace Components connector for DSP compliance. See [DSP I
 
 !!! note "Start from the reference profile"
 
-    [`examples/provider.yaml`](../../../../charts/data-space-connector/examples/provider.yaml), and [`examples/provider-marketplace.yaml`](../../../../charts/data-space-connector/examples/provider-marketplace.yaml) for the provider's own local marketplace (not the Central Marketplace), are complete values files for a provider, to adapt to your installation. Their [README](../../../../charts/data-space-connector/examples/README.md) lists the prerequisites, the placeholders, the Secrets to create and the installation steps. The settings below explain each part.
+    [`examples/provider.yaml`](https://github.com/FIWARE/data-space-connector/blob/main/charts/data-space-connector/examples/provider.yaml), and [`examples/provider-marketplace.yaml`](https://github.com/FIWARE/data-space-connector/blob/main/charts/data-space-connector/examples/provider-marketplace.yaml) for the provider's own local marketplace (not the Central Marketplace), are complete values files for a provider, to adapt to your installation. Their [README](https://github.com/FIWARE/data-space-connector/blob/main/charts/data-space-connector/examples/README.md) lists the prerequisites, the placeholders, the Secrets to create and the installation steps. The settings below explain each part.
 
 The provider uses the `fiware/data-space-connector` chart with authentication and authorization components enabled.
 
-Build a `values.yaml` for the provider by adapting [`examples/provider.yaml`](../../../../charts/data-space-connector/examples/provider.yaml). The sections below show that file piece by piece and explain the key settings; replace every `<placeholder>`.
+Build a `values.yaml` for the provider by adapting [`examples/provider.yaml`](https://github.com/FIWARE/data-space-connector/blob/main/charts/data-space-connector/examples/provider.yaml). The sections below show that file piece by piece and explain the key settings; replace every `<placeholder>`.
 
-The ingresses use cert-manager through annotations and the ingress class you set, so adapt them to the controller your cluster runs (the [local deployment](../../local-deployment/LOCAL.md) uses Traefik). A `ClusterIssuer` is a prerequisite: use your own, or let the chart create one with `certManagerResources` (the [examples README](../../../../charts/data-space-connector/examples/README.md) covers the prerequisites, Secrets and placeholders).
+The ingresses use cert-manager through annotations and the ingress class you set, so adapt them to the controller your cluster runs (the [local deployment](../../local-deployment/LOCAL.md) uses Traefik). A `ClusterIssuer` is a prerequisite: use your own, or let the chart create one with `certManagerResources` (the [examples README](https://github.com/FIWARE/data-space-connector/blob/main/charts/data-space-connector/examples/README.md) covers the prerequisites, Secrets and placeholders).
 
 #### Identity: did:web
 
@@ -357,11 +357,11 @@ The verifier's token-signing key is a persistent RSA key kept in a Secret, so ac
 
 #### Optional components
 
-`scorpio`, `tm-forum-api` and `contract-management` are part of the profile because a provider that offers TM Forum products needs them; a provider that only protects a plain data service can set them to `false`. Other components are optional and off by default: a local marketplace ([`examples/provider-marketplace.yaml`](../../../../charts/data-space-connector/examples/provider-marketplace.yaml)), the Dataspace Protocol connector ([DSP Integration](../../../DSP_INTEGRATION.md)), and Vault for production identity material ([Production setup for Vault](../../production/VAULT.md)).
+`scorpio`, `tm-forum-api` and `contract-management` are part of the profile because a provider that offers TM Forum products needs them; a provider that only protects a plain data service can set them to `false`. Other components are optional and off by default: a local marketplace ([`examples/provider-marketplace.yaml`](https://github.com/FIWARE/data-space-connector/blob/main/charts/data-space-connector/examples/provider-marketplace.yaml)), the Dataspace Protocol connector ([DSP Integration](../../../DSP_INTEGRATION.md)), and Vault for production identity material ([Production setup for Vault](../../production/VAULT.md)).
 
 #### Install the chart
 
-Install the chart with your values, pinning its version (see the [release notes](../../../release-notes) for what changes between versions):
+Install the chart with your values, pinning its version (see the [release notes](../../../release-notes/11-x.md) for what changes between versions):
 
 ```shell
 helm install provider oci://quay.io/fiware/helm-charts/data-space-connector \
@@ -378,11 +378,11 @@ helm repo add fiware-dsc https://fiware.github.io/data-space-connector
 helm install provider fiware-dsc/data-space-connector --version <version> -n provider --create-namespace -f provider-values.yaml
 ```
 
-See the reference profile [`examples/provider.yaml`](../../../../charts/data-space-connector/examples/provider.yaml) for a complete example.
+See the reference profile [`examples/provider.yaml`](https://github.com/FIWARE/data-space-connector/blob/main/charts/data-space-connector/examples/provider.yaml) for a complete example.
 
 #### Other deployment options
 
-A base example for a provider deployment can be found at [k3s/provider.yaml](../../../../k3s/provider.yaml).
+A base example for a provider deployment can be found at [k3s/provider.yaml](https://github.com/FIWARE/data-space-connector/blob/main/k3s/provider.yaml).
 
 !!! note
 
@@ -392,9 +392,9 @@ For other deployment scenarios, the base `provider.yaml` can be extended with ad
 
 | Overlay | File | Description |
 |---------|------|-------------|
-| **eIDAS / ELSI** | [k3s/provider-eidas.yaml](../../../../k3s/provider-eidas.yaml) | Configuration for deployments compliant with the [ELSI](https://alastria.github.io/did-method-elsi/) trust framework, including [eIDAS 2.0 trust list validation](../../eidas/README.md) via VCVerifier's built-in PKIX chain verification against the EU Trusted Lists |
-| **Gaia-X** | [k3s/provider-gaia-x.yaml](../../../../k3s/provider-gaia-x.yaml) | Configuration for [Gaia-X](https://gaia-x.eu/) compliant deployments |
-| **DSP** | [k3s/dsp-provider.yaml](../../../../k3s/dsp-provider.yaml) | Enables the [Dataspace Protocol (DSP)](https://docs.internationaldataspaces.org/ids-knowledgebase/dataspace-protocol) connector on the provider side |
+| **eIDAS / ELSI** | [k3s/provider-eidas.yaml](https://github.com/FIWARE/data-space-connector/blob/main/k3s/provider-eidas.yaml) | Configuration for deployments compliant with the [ELSI](https://alastria.github.io/did-method-elsi/) trust framework, including [eIDAS 2.0 trust list validation](../../eidas/README.md) via VCVerifier's built-in PKIX chain verification against the EU Trusted Lists |
+| **Gaia-X** | [k3s/provider-gaia-x.yaml](https://github.com/FIWARE/data-space-connector/blob/main/k3s/provider-gaia-x.yaml) | Configuration for [Gaia-X](https://gaia-x.eu/) compliant deployments |
+| **DSP** | [k3s/dsp-provider.yaml](https://github.com/FIWARE/data-space-connector/blob/main/k3s/dsp-provider.yaml) | Enables the [Dataspace Protocol (DSP)](https://docs.internationaldataspaces.org/ids-knowledgebase/dataspace-protocol) connector on the provider side |
 
 For example, to deploy a provider with ELSI compliance:
 

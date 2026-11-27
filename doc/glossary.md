@@ -1,6 +1,6 @@
 # Glossary
 
-Terms and example names used across this documentation and the examples in [`k3s/`](../k3s).
+Terms and example names used across this documentation and the examples in [`k3s/`](https://github.com/FIWARE/data-space-connector/tree/main/k3s).
 
 **Example participants**
 
