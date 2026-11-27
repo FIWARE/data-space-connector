@@ -251,6 +251,10 @@ Rules the tool enforces:
 When a dependency is missing and the user picks `cluster`, the tool shows the upstream
 install command and offers to run it (iteration 2) — it never silently installs.
 
+cert-manager's `cluster` mode references a ClusterIssuer by name; a namespaced `Issuer` is not
+offered. How the modes compile into chart keys is recorded in
+[ADR 0026](../adr/0026-config-tool-infrastructure-modes.md).
+
 ## Round-trip and provenance
 
 Loading an arbitrary `values.yaml` and writing it back without damage is the single property

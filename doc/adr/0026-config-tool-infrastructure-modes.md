@@ -120,6 +120,15 @@ In `bundled` with `prod`, an open `acmeEmail` or `ingressClass` would let the ch
 `nginx`), and the issuer would silently never issue. The error rules `acme-email-for-prod-issuer` and
 `acme-ingress-class-for-prod-issuer` block `generate` in that case ([ADR 0021](0021-config-tool-l2-rules.md)).
 
+### 7. API and Stage 4 screen
+
+`GET /api/infrastructure?chart=&version=` lists the dependencies with their modes, the chart keys each mode may write
+and its questions, a per-ingress question once per `ingresses:` row. It never returns the synthetic foundations, and
+`GET /api/foundations` keeps listing Stage 3's only. The answers travel in the profile, so `PUT /api/profile` validates
+them and `POST /api/render` renders them. Stage 4 shows one card per dependency: the modes as a radio group with their
+notes, the chosen mode's warning and questions, and the keys it writes. Every text is bundle data. An unanswered
+read-only question does not count as open.
+
 ## Consequences
 
 - Stage 4 is bundle data. US-4.2 to US-4.6 add dependencies without new render code.
@@ -129,6 +138,8 @@ In `bundled` with `prod`, an open `acmeEmail` or `ingressClass` would let the ch
   cannot express them, and a per-target inversion would leave even a tool-written file ambiguous. Owned infra leaves
   stay owned and are listed as underived, and the mode comes from the saved profile. Whole-mode inversion is left to
   US-4.6 detection.
+- A role switch to the other chart drops the `infrastructure` map and its open questions, because the dependencies
+  belong to a bundle. The role-change summary lists each dropped dependency.
 - Every `range b.Foundations` site has to choose between the declared and the compiled list. A test pins that Stage 3's
   list does not change.
 - In `external`, the host foundations' `cert-manager.io/common-name` and `alt-names` annotations stay. They are inert
