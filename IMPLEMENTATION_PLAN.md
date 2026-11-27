@@ -51,7 +51,7 @@ requirements therefore keep working without a second engine (ADR 0026).
 
   | Mode | Mode targets | Questions → targets |
   |---|---|---|
-  | `bundled` | `cert-manager.enabled: true`, `cert-manager.crds.enabled: true` (the issuers need the CRDs; `k3s/operators.yaml` sets it), `certManagerResources.enabled: true` | `type` choice `selfsigned`/`prod`, constant default `selfsigned` (the chart default `prod` with `admins@example.com` must never apply silently) → `certManagerResources.type`; `acmeEmail` (when `type=prod`) → `certManagerResources.acmeEmail`; `ingressClass` (when `type=prod`) → `certManagerResources.ingressClass`; `namespace` (when `type=selfsigned`, `readOnly`, default `{{ .target.namespace }}`: a bundled cert-manager runs in the release namespace, where the CA ClusterIssuer finds `ca-secret`) → `certManagerResources.namespace`; per ingress `annotations."cert-manager.io/cluster-issuer"` = `{{ .infra.certManager.type }}-issuer` |
+  | `bundled` | `cert-manager.enabled: true`, `cert-manager.crds.enabled: true` (the issuers need the CRDs; `k3s/operators.yaml` sets it), `certManagerResources.enabled: true` | `type` choice `selfsigned`/`prod`, constant default `selfsigned` (the chart default `prod` with `admins@example.com` must never apply silently) → `certManagerResources.type`; `acmeEmail` (when `type=prod`, new type `email`, no default) → `certManagerResources.acmeEmail`, guarded by the error rule `acme-email-for-prod-issuer` (see below); `ingressClass` (when `type=prod`) → `certManagerResources.ingressClass`; `namespace` (when `type=selfsigned`, `readOnly`, default `{{ .target.namespace }}`: a bundled cert-manager runs in the release namespace, where the CA ClusterIssuer finds `ca-secret`) → `certManagerResources.namespace`; per ingress `annotations."cert-manager.io/cluster-issuer"` = `{{ .infra.certManager.type }}-issuer` |
   | `cluster` | `cert-manager.enabled: false`, `certManagerResources.enabled: false` | exactly one: `issuer` (ClusterIssuer name, DNS-1123 subdomain) → per ingress `annotations."cert-manager.io/cluster-issuer"` (copy) |
   | `external` | `cert-manager.enabled: false`, `certManagerResources.enabled: false` | per ingress `secret.<ingressId>` (type `secretName`, default from the owner target) → `<path>.tls[0].secretName`, `replaces: true` |
 
@@ -60,6 +60,21 @@ requirements therefore keep working without a second engine (ADR 0026).
   ClusterIssuer (the help text says so, and a hand-set `cert-manager.io/issuer` stays an override). In `external`, the
   host foundations' `cert-manager.io/common-name`/`alt-names` annotations stay: they are owned by US-3.4 and inert
   without an issuer annotation. `cert-manager.io/private-key-algorithm` in k3s is not owned.
+- **No silent ACME contact.** An unanswered question emits no key. If `acmeEmail` were left open (or marked *Ask
+  later*) in `bundled` + `prod`, the chart's `admins@example.com` would apply, and ACME refuses example.com contacts,
+  so `prod-issuer` would never register. Two guards, both bundle data or type checks:
+  - a new foundation type `email` (`local@domain`, where the domain is a `TypeDomain` and is not an RFC 2606
+    reserved name: `example.{com,net,org}` or the `.example`/`.test`/`.invalid`/`.localhost` TLDs). A typed address
+    can therefore never be the chart default or another placeholder;
+  - the check rule `acme-email-for-prod-issuer` (severity `error`, stage `infrastructure`, field
+    `infrastructure.certManager.acmeEmail`), which fires when `infrastructure.certManager` equals `bundled`,
+    `infrastructure.certManager.type` equals `prod` and `infrastructure.certManager.acmeEmail` is unset. As an error
+    it blocks `generate` (ADR 0021). The rule reads the resolved answers, so `type`'s default `selfsigned` never
+    triggers it.
+
+  Check rules may therefore address infrastructure fields: `when` and `field` accept the single field-id scheme
+  below, and the bundle compile resolves each id to its synthetic foundation (an unknown dependency or question is a
+  compile error).
 - **Notes are bundle data.** A dependency may carry `clusterWide: true`. Its `bundled` mode must then carry
   `warning` and `doc` (compile check). For cert-manager these are "A cluster can only have one cert-manager…" and
   `doc/deployment-integration/roles/PREREQUISITES.md#installing-the-operators-once`. A mode may carry
@@ -72,8 +87,18 @@ requirements therefore keep working without a second engine (ADR 0026).
   the same `When` gating and an optional `keys` list (exactly one of `key`/`keys`).
 - **Profile.** Answers of inactive modes stay in the profile, so switching back restores them. Only the active mode
   renders. Validation refuses an unknown dependency, a mode the dependency does not offer, and a question id no mode
-  of the dependency declares, and checks each value with its question's type. Open-field ids are
-  `infrastructure.<dep>` (the mode) and `infrastructure.<dep>.<question>`. Still `format: 1`.
+  of the dependency declares, and checks each value with its question's type. Still `format: 1`.
+- **One field-id scheme**, like `answers.<id>` today, used everywhere a field is named: `FieldError`s,
+  open/*Ask later*, check-rule `field`/`when`, and the UI's highlight and finding links.
+  - `infrastructure.<dep>` is the mode and maps to the synthetic `infra.<dep>.mode`;
+  - `infrastructure.<dep>.<question>` is a question and maps to `infra.<dep>.<question>`.
+
+  `model` owns the mapping (constant `InfrastructureFieldPrefix` beside `AnswerFieldPrefix`, and
+  `InfraFieldAnswer(field) (id string, ok bool)` / `InfraAnswerField(id)`), so profile, check, server and UI share
+  one table. `mode` is a reserved question id: a question named `mode` would collide with the synthetic
+  `infra.<dep>.mode` (compile error). `infra.*` is never addressable as `answers.<id>`: `profile.declared` (used by
+  both `validateAnswers` and `isKnownField`) refuses ids under `infra.`, so `answers.infra.certManager.issuer` is
+  neither a valid answer nor a valid open field once `Bundle.Foundation` resolves synthetic ids.
 - **Load.** Owned infra leaves derive flat `infra.*` answers, and `load/seed.go` moves them into
   `profile.Infrastructure`. The mode is derived only when the derived infra answers belong to exactly one mode
   (`issuer` → `cluster`, `secret.*` → `external`, `type`/`cert-manager.enabled: true` → `bundled`). Otherwise it
@@ -102,6 +127,10 @@ Code only, tested against fixture bundles. The shipped bundle does not change ye
   `CompiledTarget` with `When []Condition` and `Replaces bool`, and teach `checkTargetPaths` the exclusivity and
   `replaces` rules from the decisions. Add `Bundle.CompiledFoundations()`, `Bundle.Dependencies()` and
   `Bundle.Dependency(id)`.
+- Add `TypeEmail` to `foundations.go` (pattern and RFC 2606 refusal as in the decisions; `Check` never echoes the
+  value), with table rows for valid addresses, `admins@example.com`, `a@b.test`, a missing `@` and a single-label
+  domain. Add `InfrastructureFieldPrefix`, `InfraFieldAnswer` and `InfraAnswerField` to `checkrules.go`, and let
+  rule fields address them (stage `infrastructure`).
 - Validation errors (one table row each in `internal/model/infrastructure_test.go`, fixture bundles under
   `internal/model/testdata/`):
   - a duplicate dependency, mode or question id;
@@ -113,7 +142,9 @@ Code only, tested against fixture bundles. The shipped bundle does not change ye
   - `replaces` without an unconditional foundation target;
   - `clusterWide` without a `bundled` warning or doc;
   - `development` without `productionDoc`;
-  - a question `when` naming an unknown question.
+  - a question `when` naming an unknown question;
+  - a question with the reserved id `mode`;
+  - a check rule `field`/`when` naming an unknown `infrastructure.<dep>[.<q>]`, or an `answers.infra.*` field.
 
   Also test that `b.Foundations` (the Stage 3 list) is unchanged and that `CompiledFoundations()` contains the synthetic ids.
 - Update the bundle header comment in `config-tool/model/10.16.0/bundle.yaml` with the `infrastructure:` and
@@ -126,15 +157,16 @@ Code only, tested against fixture bundles. The shipped bundle does not change ye
 - `config-tool/internal/profile/format.go`: add `Infrastructure map[string]InfraChoice` with
   `json:"infrastructure,omitempty" yaml:"infrastructure,omitempty"`, where `InfraChoice{Mode string; Answers map[string]any}`
   (`answers` omitempty). It is strictly decoded and marshalled deterministically (sorted keys, as `Answers`).
-- `Profile.Validate` gains `validateInfrastructure(b)`, which uses the field ids
-  `infrastructure.<dep>.mode` and `infrastructure.<dep>.answers.<q>`. It refuses:
+- `Profile.Validate` gains `validateInfrastructure(b)`, which reports with the one field-id scheme of the decisions:
+  `infrastructure.<dep>` for the mode and `infrastructure.<dep>.<q>` for an answer. It refuses:
   - an unknown dependency;
   - a mode the dependency does not offer;
   - a question no mode declares;
   - a value its question's type refuses.
 
-  `validateAnswers` refuses `infra.*` ids. `isKnownField` accepts the open ids `infrastructure.<dep>` and
-  `infrastructure.<dep>.<q>`. Add the helper `Profile.InfraAnswers() map[string]any`, which returns the flat
+  `declared` refuses ids under `infra.`, so `validateAnswers` refuses an `infra.*` answer and `isKnownField`'s
+  `answers.` branch refuses `answers.infra.*`. `isKnownField` accepts `infrastructure.<dep>` and
+  `infrastructure.<dep>.<q>` through `model.InfraFieldAnswer`, the same ids `FieldError` uses. Add the helper `Profile.InfraAnswers() map[string]any`, which returns the flat
   `infra.<dep>.mode`/`infra.<dep>.<q>` view that render and check consume, plus `SetInfraMode` and `SetInfraAnswer`
   (both return a copy and keep the answers of other modes).
 - Check how `ApplyPreset` and the chart switch in `role.go` carry answers over, and carry `infrastructure` over the
@@ -143,7 +175,9 @@ Code only, tested against fixture bundles. The shipped bundle does not change ye
   - the strict decode refuses unknown keys under an entry;
   - save → open round-trips the mode and answers byte-identically;
   - each refusal above;
-  - open-field ids;
+  - open-field ids, and that a refused infrastructure value's `FieldError.Field` equals its open id;
+  - `answers: {infra.certManager.issuer: x}` is refused and `open: [{field: answers.infra.certManager.issuer}]` is
+    not a known field;
   - answers survive a mode switch.
 
   Use a fixture bundle with an `infrastructure:` entry (`internal/profile/testdata`).
@@ -162,6 +196,9 @@ Code only, tested against fixture bundles. The shipped bundle does not change ye
   meant, and the load inversion (`invert.go`) handles conditioned targets. `load/seed.go` moves derived `infra.*`
   answers into `profile.Infrastructure` and derives the mode as described in the decisions.
 - `internal/model/requirements.go` and `internal/requirements`: add `When` gating and `keys`, and list each Secret once.
+- `internal/check/check.go`: `holds` and `value` resolve `infrastructure.<dep>[.<q>]` fields through
+  `model.InfraFieldAnswer` against the resolved answers (which include `p.InfraAnswers()`), and a finding's `field` is
+  that same id. Table rows in `check_test.go` with a fixture rule: `set`/`unset`/`equals` on a mode and on a question.
 - Tests with a fixture bundle (`internal/render/testdata`) holding a three-mode dependency:
   - an unchosen mode emits no key;
   - each mode emits only its keys;
@@ -202,6 +239,12 @@ Code only, tested against fixture bundles. The shipped bundle does not change ye
     `k3s/provider.yaml`. Add exclusion rows for the verifier and DID ingress annotations (US-8.11), and for
     `cert-manager.io/private-key-algorithm`, which is not owned.
   - **Requirements:** `external` lists ten Secrets with `tls.crt`/`tls.key`. `cluster` and `bundled` list none.
+  - **ACME contact (table-driven, `check.Evaluate` + `check.Blocking`):** add the rule `acme-email-for-prod-issuer` to
+    `rules:`. It blocks for `bundled` + `prod` with `acmeEmail` unanswered, and also when the field is marked *Ask
+    later*. It does not block for `bundled` + `prod` with an email, `bundled` + `selfsigned` (or `type` unanswered,
+    which defaults to `selfsigned`), `cluster` or `external`. A further row asserts that no render of `bundled` + `prod`
+    ever emits `certManagerResources.acmeEmail: admins@example.com`, and that the profile refuses
+    `acmeEmail: admins@example.com` with field `infrastructure.certManager.acmeEmail`.
 - Acceptance: `go test ./...` is green and the model test confirms the revision bump.
 
 ### Step 5: Server API and CLI
@@ -219,7 +262,8 @@ Code only, tested against fixture bundles. The shipped bundle does not change ye
   - `/api/render` with each mode returns the mode's keys;
   - `PUT /api/profile` refuses an unknown mode with the field id.
 - CLI: `dsc-config generate -p <profile>` (`internal/cli`) already validates and renders the profile. Add a table test
-  that a profile with each cert-manager mode validates and renders, and that an invalid mode fails with the field id.
+  that a profile with each cert-manager mode validates and renders, that an invalid mode fails with the field id, and
+  that `bundled` + `prod` without `acmeEmail` fails `generate` with the `acme-email-for-prod-issuer` finding.
 - Keep `internal/layering_test.go` green (no `net/http` in the core).
 
 ### Step 6: Stage 4 UI — `ui/src/stages/Infrastructure.tsx`
@@ -248,6 +292,8 @@ Code only, tested against fixture bundles. The shipped bundle does not change ye
   - `external` lists one field per ingress;
   - switching modes hides the previous fields but keeps their values;
   - *Ask later* marks the field open and the rail count follows;
+  - a refused value and a finding (`acme-email-for-prod-issuer`) highlight the same field the *Ask later* control
+    marks, because the UI uses the one field id for all three;
   - a fixture with `development: true` shows the badge and the production link.
 
   Update `Chrome.test.tsx` if the placeholder text was asserted.
@@ -256,7 +302,7 @@ Code only, tested against fixture bundles. The shipped bundle does not change ye
 ### Step 7: Documentation and final verification
 - `config-tool/README.md`: a new "Infrastructure (Stage 4)" section. It covers the `infrastructure:` and `ingresses:`
   grammar, the three modes and their keys for cert-manager (the decision table), `when`, `replaces` and `perIngress`,
-  the `infra.` namespace and the open ids, `GET /api/infrastructure`, and the rule that a never-chosen mode emits no key. Link
+  the `infra.` namespace and the one `infrastructure.<dep>[.<q>]` field-id scheme, the `email` type and the ACME rule, `GET /api/infrastructure`, and the rule that a never-chosen mode emits no key. Link
   ADR 0026.
 - `doc/config-tool/FEATURE_MODEL.md#integration-modes`: one sentence that cert-manager's `cluster` mode references a
   ClusterIssuer, and a link to ADR 0026. `doc/config-tool/USER_JOURNEY.md` stays as it is unless wording drifted.
