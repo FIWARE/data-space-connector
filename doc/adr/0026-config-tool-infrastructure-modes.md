@@ -58,6 +58,13 @@ different values. `Only` counts as a condition on the target's own foundation. S
 A top-level `const` target used to need `requires`, because an ungated constant would always render. A non-empty `When`
 is a gate too, so mode targets are plain `const` targets. An unconditioned top-level `const` is still refused.
 
+A condition compares a string, so it may only name a string-typed answer (a choice, string, hostname, ...); a `when` on a
+`bool` or `credentialTypes` answer is a compile error, because it could never hold.
+
+Requirement rows (Secrets listed for NEXT_STEPS.md) get the same `When` gating and an optional `keys` list (exactly one
+of `key`/`keys`). In `external`, each per-ingress Secret is listed once, with keys `tls.crt` and `tls.key`, and only
+while that mode is chosen.
+
 In `Render`, the `When` check runs before refs and requires. A target of an inactive mode is skipped without marking
 its lists incomplete, so it never drops the TLS blocks of the active render.
 

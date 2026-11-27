@@ -900,7 +900,7 @@ func checkIDNesting(fs []CompiledFoundation) error {
 }
 
 // checkRefs refuses a reference to an undeclared id, a bool or list referenced other than by copy, and a
-// defaultWhen comparing a choice with a value it does not offer; topoOrder refuses a foundation that depends
+// defaultWhen or when comparing a choice with a value it does not offer; topoOrder refuses a foundation that depends
 // on its own answer.
 func checkRefs(fs []CompiledFoundation) error {
 	find := func(id string) (CompiledFoundation, bool) {
@@ -955,7 +955,10 @@ func checkRefs(fs []CompiledFoundation) error {
 				if err := check(i, fmt.Sprintf("targets[%d] when", j), c.ID, true); err != nil {
 					return err
 				}
-				if o, _ := find(c.ID); o.Type == TypeChoice && !slices.Contains(o.optionValues(), c.Equals) {
+				// TargetCondition.Holds compares with a string, so a condition on a bool or a list never holds.
+				if o, _ := find(c.ID); !o.Type.IsString() {
+					return fmt.Errorf("foundations[%d] (%s): targets[%d] when: %s is a %s; a condition compares a string answer", i, f.ID, j, c.ID, o.Type)
+				} else if o.Type == TypeChoice && !slices.Contains(o.optionValues(), c.Equals) {
 					return fmt.Errorf("foundations[%d] (%s): targets[%d] when: %q is not an option of %s", i, f.ID, j, c.Equals, c.ID)
 				}
 			}

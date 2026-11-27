@@ -150,6 +150,18 @@
             questions:
               - {id: kind, type: choice, label: Kind, options: [{value: plain, label: Plain}]}
               - {id: port, type: string, label: Port, when: {question: kind, equals: managed}}
+- name: question when on a bool question
+  err: 'when: infra.db.tls is a bool; a condition compares a string answer'
+  override:
+    infrastructure:
+      - id: db
+        title: DB
+        modes:
+          - id: external
+            label: External
+            questions:
+              - {id: tls, type: bool, label: TLS}
+              - {id: port, type: string, label: Port, when: {question: tls, equals: "true"}, targets: [{path: certManagerResources.port, fn: copy, args: ["{{ .infra.db.port }}"]}]}
 - name: question with the reserved id mode
   err: 'questions[0] (mode): id "mode" is reserved'
   override:
