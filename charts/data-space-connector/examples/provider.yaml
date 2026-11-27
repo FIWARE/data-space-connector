@@ -16,6 +16,7 @@
 
 # --- Identity: did:web, served by did-helper -------------------------------------------------
 
+# --8<-- [start:identity]
 did:
   enabled: true
   config:
@@ -59,8 +60,10 @@ did:
         hosts:
           - <did-domain>
 
+# --8<-- [end:identity]
 # --- Credential issuer: Keycloak ---------------------------------------------------------------
 
+# --8<-- [start:keycloak]
 keycloak:
   enabled: true
   keycloak:
@@ -216,8 +219,10 @@ keycloak:
         "serviceAccountsEnabled": false
       }
 
+# --8<-- [end:keycloak]
 # --- Authentication and authorization ----------------------------------------------------------
 
+# --8<-- [start:auth]
 decentralizedIam:
   enabled: true
   vcAuthentication:
@@ -430,8 +435,10 @@ registration:
       credentialTypes:
         - UserCredential
 
+# --8<-- [end:auth]
 # --- Offers and contracts ----------------------------------------------------------------------
 
+# --8<-- [start:offers]
 # Scorpio stores the TM Forum data. Keep it internal: it is not the public data service.
 scorpio:
   db:
@@ -467,8 +474,10 @@ contract-management:
     quote:
       url: http://tm-forum-api-svc:8080
 
+# --8<-- [end:offers]
 # --- Extra resources -------------------------------------------------------------------------
 
+# --8<-- [start:extra]
 extraManifests:
   # the verifier's token signing key: RSA, kept in a Secret so that tokens stay valid across
   # restarts and replicas
@@ -488,3 +497,4 @@ extraManifests:
       privateKey:
         algorithm: RSA
         size: 2048
+# --8<-- [end:extra]

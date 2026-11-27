@@ -4,7 +4,9 @@ In order to support development and exploration of the FIWARE Data Space Connect
 provided as part of this repo.
 An alternative deployment guide, based on [MicroK8s](https://microk8s.io/) can be found here: https://github.com/cgonzalezITA/DSFiware-hackathon?tab=readme-ov-file#quick-deployment-from-scratch
 
-> **Note:** The Local Deployment is for **learning and development purposes only**. It deploys all the components of a data space together to show how they interact, not from the perspective of any specific role. For deploying the FIWARE DSC in a real environment, refer to the documentation that matches your organization's role in the data space: [Deployment by Role](../roles/README.md).
+!!! note
+
+    The Local Deployment is for **learning and development purposes only**. It deploys all the components of a data space together to show how they interact, not from the perspective of any specific role. For deploying the FIWARE DSC in a real environment, refer to the documentation that matches your organization's role in the data space: [Deployment by Role](../roles/README.md).
 
 ## Requirements
 
@@ -39,9 +41,13 @@ The script does not create a Kubernetes cluster or verify deployment readiness.
 
 ## Quick Start
 
-> :warning: The local deployment uses [k3s](https://k3s.io/) in a docker container and is currently only tested on linux and MacOS.
+!!! warning
 
-> :warning: On Linux hosts, k3s networking needs the ```br_netfilter``` kernel module, which current distributions do not load by default. Without it, the connector does not start up properly. Enable it with ```sudo modprobe br_netfilter```. It is not needed on macOS, where Docker runs in its own Linux VM. See [Stackoverflow](https://stackoverflow.com/questions/48148838/kube-dns-error-reply-from-unexpected-source/48151279#48151279) for more.
+    The local deployment uses [k3s](https://k3s.io/) in a docker container and is currently only tested on linux and MacOS.
+
+!!! warning
+
+    On Linux hosts, k3s networking needs the ```br_netfilter``` kernel module, which current distributions do not load by default. Without it, the connector does not start up properly. Enable it with ```sudo modprobe br_netfilter```. It is not needed on macOS, where Docker runs in its own Linux VM. See [Stackoverflow](https://stackoverflow.com/questions/48148838/kube-dns-error-reply-from-unexpected-source/48151279#48151279) for more.
 
 To start the Data Space, just use:
 
@@ -69,7 +75,7 @@ The locally deployed Data Space consists of 2 Participants, connected through a 
 Every Data Spaces requires a framework that ensures trust between the participants. Depending on the requirements of the
 concrete Data Space,
 this can become a rather complex topic. Various trust-providers exist(
-f.e. [Gaia-X Digital Clearing Houses](https://gaia-x.eu/services-deliverables/digital-clearing-house/)) and could be reused(see [Gaia-X for more information](../../GAIA_X.MD)). The default setup of the connector requires an [EBSI-Trusted Issuers Registry](https://hub.ebsi.eu/api/core/issuers-registry) to provide the list of participants.
+f.e. [Gaia-X Digital Clearing Houses](https://gaia-x.eu/services-deliverables/digital-clearing-house/)) and could be reused(see [Gaia-X for more information](../../GAIA_X.md)). The default setup of the connector requires an [EBSI-Trusted Issuers Registry](https://hub.ebsi.eu/api/core/issuers-registry) to provide the list of participants.
 
 The local Data Spaces comes with the [FIWARE Trusted Issuers List](https://github.com/FIWARE/trusted-issuers-list) as a
 rather simple implementation of that API, providing CRUD functionality
@@ -139,15 +145,19 @@ In order to retrieve an actual credential two ways are available:
   case.
 * Get the credential via http-requests through the `SameDevice-Flow`:
 
-> :warning: The pre-authorized code and the offer expire within 30s for security reasons. Be fast.
+!!! warning
 
-> :bulb: In case you did the demo before, you can use the following snippet to unset the env-vars:
-> ```shell
->           unset ACCESS_TOKEN; unset OFFER_URI; unset PRE_AUTHORIZED_CODE; \
->           unset CREDENTIAL_ACCESS_TOKEN; unset VERIFIABLE_CREDENTIAL; unset HOLDER_DID; \
->           unset VERIFIABLE_PRESENTATION; unset JWT_HEADER; unset PAYLOAD; unset SIGNATURE; unset JWT; \
->           unset VP_TOKEN; unset DATA_SERVICE_ACCESS_TOKEN;
-> ```
+    The pre-authorized code and the offer expire within 30s for security reasons. Be fast.
+
+!!! tip
+
+    In case you did the demo before, you can use the following snippet to unset the env-vars:
+    ```shell
+              unset ACCESS_TOKEN; unset OFFER_URI; unset PRE_AUTHORIZED_CODE; \
+              unset CREDENTIAL_ACCESS_TOKEN; unset VERIFIABLE_CREDENTIAL; unset HOLDER_DID; \
+              unset VERIFIABLE_PRESENTATION; unset JWT_HEADER; unset PAYLOAD; unset SIGNATURE; unset JWT; \
+              unset VP_TOKEN; unset DATA_SERVICE_ACCESS_TOKEN;
+    ```
 
 Get an AccessToken from Keycloak. This logs in with the password grant, which the local environment turns on for the
 `account-console` client: the chart leaves it off, so outside the local environment a user logs in through the browser
@@ -247,11 +257,13 @@ essentially 3 building blocks:
   identity to be used for the local Data Space
 
 After the deployment, the provider can create a policy to allow access to its data. An example policy can be found in
-the [test-resources](../../../it/src/test/resources/policies/energyReport.json)
+the [test-resources](https://github.com/FIWARE/data-space-connector/blob/main/it/src/test/resources/policies/energyReport.json)
 It allows every participant to access entities of type ```EnergyReport```.
 
-> :warning: The PAP and Scorpio APIs are only published to make demo interactions easier.
-> In real environments, they should never be public without any authentication/authorization framework in front of them.
+!!! warning
+
+    The PAP and Scorpio APIs are only published to make demo interactions easier.
+    In real environments, they should never be public without any authentication/authorization framework in front of them.
 
 The policy can be created at the PAP via:
 
@@ -330,9 +342,11 @@ the consumer can access the data as following:
 
 ### Authenticate via OID4VP
 
-> :warning: Those steps assume that interaction with consumer and provider already happend, e.g. a VerifiableCredential
-> is available
-> and policy/entity are created.
+!!! warning
+
+    Those steps assume that interaction with consumer and provider already happend, e.g. a VerifiableCredential
+    is available
+    and policy/entity are created.
 
 The credential needs to be presented for authentication
 through [OID4VP]((https://openid.net/specs/openid-4-verifiable-presentations-1_0.html).
@@ -760,8 +774,10 @@ usually hidden behind a marketplace application, taking care of the concrete TMF
 In addition to the policies, an offering should be created. Similar to the broker access, the local deployment contains a direct
 ingress to the TMForum API for test and demo instrumentation. In production environments, this should never be accessible without an IAM framework in front.
 
-> :warning: This is a very simple demo product. Please check the [TMForum API Documentation](https://www.tmforum.org/oda/open-apis/directory/product-catalog-management-api-TMF620/v5.0.0)
-> for all available options.
+!!! warning
+
+    This is a very simple demo product. Please check the [TMForum API Documentation](https://www.tmforum.org/oda/open-apis/directory/product-catalog-management-api-TMF620/v5.0.0)
+    for all available options.
 
 The offer creation includes multiple steps:
 
@@ -1064,7 +1080,9 @@ In order to prove that not every user can just create a cluster, try the followi
     ./doc/scripts/get_access_token_oid4vp.sh https://mp-data-service.127.0.0.1.nip.io $OPERATOR_CREDENTIAL operator
 ```
 
-> :bulb: For easier access, the identity(in form of the did) of the consumer is available at ```https://did-consumer.127.0.0.1.nip.io/did-material/did.env```.
+!!! tip
+
+    For easier access, the identity(in form of the did) of the consumer is available at ```https://did-consumer.127.0.0.1.nip.io/did-material/did.env```.
 
 3. Export the Fancy Marketplace's did:
 ```shell
@@ -1271,9 +1289,9 @@ with the TMForum-APIs directly.
 ## Holder Verification
 
 All previous steps allowed essentially everyone to use the credentials issued, since the verification does not check if they belong to the holder presenting them.
-However, in a lot of usecases only the one that got the credential issued should be able to use it. Therfor, the [Verifier](../../../README.md#components) can be configured to check that the presenter is actually the lawful holder of the credential.
+However, in a lot of usecases only the one that got the credential issued should be able to use it. Therfor, the [Verifier](https://github.com/FIWARE/data-space-connector/blob/main/README.md#components) can be configured to check that the presenter is actually the lawful holder of the credential.
 
-To try it out, insert your holder did (```echo $HOLDER_DID```) into the `subject` claim mapper of your consumer(e.g. `subject-mapper-lpc` in [consumer.yaml](../../../k3s/consumer.yaml)). Redeploy the connector and then try the following:
+To try it out, insert your holder did (```echo $HOLDER_DID```) into the `subject` claim mapper of your consumer(e.g. `subject-mapper-lpc` in [consumer.yaml](https://github.com/FIWARE/data-space-connector/blob/main/k3s/consumer.yaml)). Redeploy the connector and then try the following:
 
 1. Configure holder verfifcation for a certain scope:
 ```shell
@@ -1349,7 +1367,7 @@ mvn clean deploy -Plocal,eidas
 
 The interaction is the same as the standard local deployment (see [Demo Interactions](#demo-interactions)). The visible difference is the credential format: the JWT's `iss` claim is a `did:elsi` DID and the `x5c` header contains the certificate chain.
 
-See [k3s/provider-eidas.yaml](../../../k3s/provider-eidas.yaml) and [k3s/consumer-eidas.yaml](../../../k3s/consumer-eidas.yaml) for the complete local overlay files.
+See [k3s/provider-eidas.yaml](https://github.com/FIWARE/data-space-connector/blob/main/k3s/provider-eidas.yaml) and [k3s/consumer-eidas.yaml](https://github.com/FIWARE/data-space-connector/blob/main/k3s/consumer-eidas.yaml) for the complete local overlay files.
 
 ## Deployment details
 
@@ -1398,7 +1416,7 @@ more organization-focused once like [did:web](https://w3c-ccg.github.io/did-meth
 ### Deployment
 
 The deployment runs [k3s](https://k3s.io/) in a docker container, started by the [k3s-maven-plugin](https://github.com/kokuwaio/k3s-maven-plugin).
-The same deployment backs the [integration tests](../../../it/src/test). The data space can be deployed into it in two ways,
+The same deployment backs the [integration tests](https://github.com/FIWARE/data-space-connector/tree/main/it/src/test). The data space can be deployed into it in two ways,
 which use the same values files; the CI runs every test scenario with both of them.
 
 **Template and apply (default).** Every chart is rendered with `helm template` and the result is applied with `kubectl`,
@@ -1407,24 +1425,24 @@ the way a GitOps tool deploys a chart. [Maven](https://maven.apache.org/) execut
 1. Download the pinned Helm version to the build folder, e.g. `target/helm/helm`
 2. Render every release into `target/rendered`, with the [helm-maven-plugin](https://github.com/kokuwaio/helm-maven-plugin):
    the operators (Postgres, MongoDB, cert-manager, with their CRDs) and the self-signed CA issuer from
-   [k3s/operators.yaml](../../../k3s/operators.yaml), and the participants (with their CRDs too) with the local values for each of them
-   (e.g. [trust-anchor](../../../k3s/trust-anchor.yaml), [provider](../../../k3s/provider.yaml) and [consumer](../../../k3s/consumer.yaml))
+   [k3s/operators.yaml](https://github.com/FIWARE/data-space-connector/blob/main/k3s/operators.yaml), and the participants (with their CRDs too) with the local values for each of them
+   (e.g. [trust-anchor](https://github.com/FIWARE/data-space-connector/blob/main/k3s/trust-anchor.yaml), [provider](https://github.com/FIWARE/data-space-connector/blob/main/k3s/provider.yaml) and [consumer](https://github.com/FIWARE/data-space-connector/blob/main/k3s/consumer.yaml))
 3. Adjust the render: set the namespace of the APISIX ingress, which its chart leaves out, and run
-   [k3s/ci-post-render.sh](../../../k3s/ci-post-render.sh) (deadlines, and dropping the hooks a fresh install never runs)
+   [k3s/ci-post-render.sh](https://github.com/FIWARE/data-space-connector/blob/main/k3s/ci-post-render.sh) (deadlines, and dropping the hooks a fresh install never runs)
 4. Spin up the cluster and write its kubeconfig, e.g. `target/k3s.yaml`
-5. Apply, in this order and waiting for each step to be ready: the [namespaces](../../../k3s/namespaces), the operators,
-   the CA and issuers, the cluster infrastructure ([k3s/infra](../../../k3s/infra)), the participants' additional
+5. Apply, in this order and waiting for each step to be ready: the [namespaces](https://github.com/FIWARE/data-space-connector/tree/main/k3s/namespaces), the operators,
+   the CA and issuers, the cluster infrastructure ([k3s/infra](https://github.com/FIWARE/data-space-connector/tree/main/k3s/infra)), the participants' additional
    resources, and the participants
 
 **Helm install (`helm-install` profile).** Every chart is installed as a Helm release, the way `helm install` does, so
 hooks run in their phase and order and `lookup` sees existing objects. Add the profile to any deployment, e.g.
 `mvn clean deploy -Plocal,helm-install`. Maven downloads the pinned Helm version, spins up the cluster, and runs
-[k3s/deploy.sh](../../../k3s/deploy.sh), which
+[k3s/deploy.sh](https://github.com/FIWARE/data-space-connector/blob/main/k3s/deploy.sh), which
 
-1. creates the [namespaces](../../../k3s/namespaces), via `kubectl apply`
-2. installs the operators (Postgres, MongoDB, cert-manager) and the self-signed CA issuer as a single Helm release of the [connector chart](../../../charts), with [k3s/operators.yaml](../../../k3s/operators.yaml)
-3. applies the cluster infrastructure ([k3s/infra](../../../k3s/infra)), via `kubectl apply`
-4. installs the participants with `helm upgrade --install`, using the local values for each of them (e.g. [trust-anchor](../../../k3s/trust-anchor.yaml), [provider](../../../k3s/provider.yaml) and [consumer](../../../k3s/consumer.yaml))
+1. creates the [namespaces](https://github.com/FIWARE/data-space-connector/tree/main/k3s/namespaces), via `kubectl apply`
+2. installs the operators (Postgres, MongoDB, cert-manager) and the self-signed CA issuer as a single Helm release of the [connector chart](https://github.com/FIWARE/data-space-connector/tree/main/charts), with [k3s/operators.yaml](https://github.com/FIWARE/data-space-connector/blob/main/k3s/operators.yaml)
+3. applies the cluster infrastructure ([k3s/infra](https://github.com/FIWARE/data-space-connector/tree/main/k3s/infra)), via `kubectl apply`
+4. installs the participants with `helm upgrade --install`, using the local values for each of them (e.g. [trust-anchor](https://github.com/FIWARE/data-space-connector/blob/main/k3s/trust-anchor.yaml), [provider](https://github.com/FIWARE/data-space-connector/blob/main/k3s/provider.yaml) and [consumer](https://github.com/FIWARE/data-space-connector/blob/main/k3s/consumer.yaml))
 5. waits until every Deployment, StatefulSet and DaemonSet of the namespaces that got a release is ready
 
 Running it again against an existing cluster upgrades the releases in place. To list them: `helm list -A`.

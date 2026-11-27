@@ -13,6 +13,7 @@
 
 # --- Identity: did:web, served by did-helper -------------------------------------------------
 
+# --8<-- [start:identity]
 did:
   enabled: true
   config:
@@ -56,8 +57,10 @@ did:
         hosts:
           - <did-domain>
 
+# --8<-- [end:identity]
 # --- Credential issuer: Keycloak ---------------------------------------------------------------
 
+# --8<-- [start:keycloak]
 keycloak:
   enabled: true
   keycloak:
@@ -227,8 +230,10 @@ keycloak:
         "serviceAccountsEnabled": false
       }
 
+# --8<-- [end:keycloak]
 # --- Database --------------------------------------------------------------------------------
 
+# --8<-- [start:database]
 decentralizedIam:
   enabled: true
   vcAuthentication:
@@ -255,11 +260,14 @@ decentralizedIam:
     apisix:
       enabled: false
 
+# --8<-- [end:database]
 # --- Not used by a consumer ------------------------------------------------------------------
 
+# --8<-- [start:disabled]
 scorpio:
   enabled: false
 tm-forum-api:
   enabled: false
 contract-management:
   enabled: false
+# --8<-- [end:disabled]

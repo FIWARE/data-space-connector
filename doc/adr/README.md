@@ -21,4 +21,4 @@ canonical copy; change it here first.
 Design document ADRs 0001-0005 (superseded, kept for history) and 0008 belong to:
 [`../CONSENT_MANAGEMENT.md`](../CONSENT_MANAGEMENT.md). ADR 0006 belongs to
 [`../deployment-integration/eidas/README.md`](../deployment-integration/eidas/README.md). ADR 0007 belongs to
-[`../deployment-integration/local-deployment/LOCAL.MD`](../deployment-integration/local-deployment/LOCAL.MD).
+[`../deployment-integration/local-deployment/LOCAL.md`](../deployment-integration/local-deployment/LOCAL.md).

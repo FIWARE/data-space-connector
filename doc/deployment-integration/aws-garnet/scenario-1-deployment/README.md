@@ -32,7 +32,7 @@ helm install -n ips -f ./yaml/values-dsc-aws-load-balancer-controller-scenario1.
 ```
 
 ### Deployment of AWS Garnet Framework IoT Module
-An AWS CDK project modified from the AWS Garnet Framework main project is available in [this repository](./aws-garnet-iot-module/). The project was modified so ONLY the AWS Garnet Framwrork IoT Module is deployed once the CDK stacks are deployed. To integrate this module to the Context Broker deployed in the Amazon EKS Cluster, 2 main parameters must be set in the `./aws-garnet-iot-module/parameters.ts` file :
+An AWS CDK project modified from the AWS Garnet Framework main project is available in [this repository](https://github.com/FIWARE/data-space-connector/tree/main/doc/deployment-integration/aws-garnet/scenario-1-deployment/aws-garnet-iot-module). The project was modified so ONLY the AWS Garnet Framwrork IoT Module is deployed once the CDK stacks are deployed. To integrate this module to the Context Broker deployed in the Amazon EKS Cluster, 2 main parameters must be set in the `./aws-garnet-iot-module/parameters.ts` file :
 
 ```shell
     // FIWARE DATA SPACE CONNECTOR PARAMETERS
@@ -61,10 +61,10 @@ cdk deploy
 ```
 
 ## Other Resources - Troubleshooting
-Once the Data Space Connector is deployed via the Helm chart in your cluster, additional scripts are also provided in this [repository](../scripts/) to help any troubleshooting of your connector deployment.
+Once the Data Space Connector is deployed via the Helm chart in your cluster, additional scripts are also provided in this [repository](https://github.com/FIWARE/data-space-connector/tree/main/doc/deployment-integration/aws-garnet/scripts) to help any troubleshooting of your connector deployment.
 Two main scripts are provided:
 
-* 1/ Save all pods logs from a EKS cluster namespace using `kubectl` to your local deployment machine under `./podLogs/` [in this repository structure](./podLogs/)
+* 1/ Save all pods logs from a EKS cluster namespace using `kubectl` to your local deployment machine under `./podLogs/` [in this repository structure](https://github.com/FIWARE/data-space-connector/tree/main/doc/deployment-integration/aws-garnet/scenario-1-deployment/podLogs)
 The script `kubectlLogsFromNamespace.sh` [link](../scripts/kubectlLogsFromNamespace.sh) runs a local process in your deployment machine to poll logs from all currently running pods under a namespace from your cluster and save locally for further analysis.
 It can be manually modified to change the desired namespace to be analyzed 
 

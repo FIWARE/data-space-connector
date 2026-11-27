@@ -1,0 +1,40 @@
+name: Docs
+
+# Builds the documentation site in strict mode on pull requests that touch it.
+# This catches what the link check (check.yaml, lychee) cannot see: a broken nav
+# entry, an anchor that does not resolve with the site's slugs, or a snippet
+# include (--8<--) pointing at a file or section that no longer exists.
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'doc/**'
+      - 'mkdocs.yml'
+      - 'charts/data-space-connector/examples/**'
+      - '.github/docs-requirements.txt'
+      - '.github/workflows/docs.yml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build the documentation site
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install MkDocs
+        run: pip install -r .github/docs-requirements.txt
+
+      # --strict turns the build warnings (unknown nav, bad anchors, missing
+      # snippet targets) into errors, so a broken site fails the pull request.
+      - name: Build the site (strict)
+        run: mkdocs build --strict

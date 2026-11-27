@@ -1,6 +1,8 @@
 # Contract negotiation with TMForum
 
-> :warning: Mapping the contract negotiation to Rainbow is deprecated. IDSA Compatibility is now provided through the FIWARE Data Space Connector EDC extension. The following documentation will be updated in the near future.
+!!! warning
+
+    Mapping the contract negotiation to Rainbow is deprecated. IDSA Compatibility is now provided through the FIWARE Data Space Connector EDC extension. The following documentation will be updated in the near future.
 
 Contract Negotiation in the FIWARE Data Space Connector is provided through the [TMForum Quote API](https://www.tmforum.org/oda/open-apis/directory/quote-management-api-TMF648/v4.0). The Quote-API ```is one of the Pre-Ordering Management APIs. The customer Quote API provides a standardized mechanism for placing a customer quote with all the necessary quote parameters.```. It is intended to negotiate service and product acquisition between Customer and Provider(according to the Quote-Object documentation) and therefor well suited for the use-case of Contract Negotiation. 
 
@@ -37,7 +39,9 @@ States:
 
 In order to access a Service by using the Transfer Process Protocol, the following steps need to be taken:
 
-> :warning: The example calls are using the [local deployment](./deployment-integration/local-deployment/LOCAL.MD). Make sure its running before trying them out.
+!!! warning
+
+    The example calls are using the [local deployment](./deployment-integration/local-deployment/LOCAL.md). Make sure its running before trying them out.
 
 ### Preparation 
 
