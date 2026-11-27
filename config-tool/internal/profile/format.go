@@ -64,7 +64,9 @@ type Profile struct {
 	// Answers maps the dotted ids the model bundle declares under foundations: to values of their type, a
 	// scalar or, for a list type such as credentialTypes, a list of mappings kept in the user's order.
 	Answers map[string]any `json:"answers" yaml:"answers"`
-	Open    []OpenQuestion `json:"open" yaml:"open"`
+	// Infrastructure maps Stage 4 dependency ids to their mode and answers; infra.* answers live only here.
+	Infrastructure map[string]InfraChoice `json:"infrastructure,omitempty" yaml:"infrastructure,omitempty"`
+	Open           []OpenQuestion         `json:"open" yaml:"open"`
 	// Source references the loaded values file; nil when nothing was loaded.
 	Source *Source `json:"source,omitempty" yaml:"source,omitempty"`
 	// Secrets is filled from Epic 8 on; until then Validate refuses every entry.
@@ -163,6 +165,7 @@ func (p Profile) Validate(bundles []model.Bundle) []FieldError {
 	errs = append(errs, p.validateOpen(b)...)
 	errs = append(errs, p.Source.validate()...)
 	errs = append(errs, p.validateAnswers(b)...)
+	errs = append(errs, p.validateInfrastructure(b)...)
 	for _, k := range sortedKeys(p.Secrets) {
 		errs = append(errs, FieldError{secretsFieldPrefix + k, "secrets are recorded from Epic 8 on"})
 	}
@@ -260,19 +263,28 @@ func isBaseName(f string) bool {
 	return f != "" && f != "." && f != ".." && !strings.ContainsAny(f, `/\:`) && filepath.Base(f) == f
 }
 
-// isKnownField reports whether an open question may name field: a target key or an answer b declares.
+// isKnownField reports whether an open question may name field: a target key, an answer b declares, or an
+// infrastructure mode or question b compiles.
 func isKnownField(field string, b *model.Bundle) bool {
 	if name, ok := strings.CutPrefix(field, TargetFieldPrefix); ok {
 		return slices.Contains(targetFields, name)
+	}
+	if strings.HasPrefix(field, model.InfrastructureFieldPrefix) {
+		if b == nil {
+			return false
+		}
+		_, ok := b.InfraFieldAnswer(field)
+		return ok
 	}
 	id, ok := strings.CutPrefix(field, answersFieldPrefix)
 	_, declares := declared(b, id)
 	return ok && declares
 }
 
-// declared returns the foundation b declares as id; false when b is nil or does not declare it.
+// declared returns the foundation b declares as id; false when b is nil or does not declare it, and for every
+// infra.* id, which is answered under infrastructure only.
 func declared(b *model.Bundle, id string) (model.CompiledFoundation, bool) {
-	if b == nil {
+	if b == nil || isInfraAnswerID(id) {
 		return model.CompiledFoundation{}, false
 	}
 	return b.Foundation(id)

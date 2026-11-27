@@ -368,9 +368,13 @@ func checkRuleRoots(rules []CompiledRule, keys []string) error {
 }
 
 // checkRecognizedFoundations refuses a rule that answers a foundation with another stage, or with a kind that
-// cannot read its type: toggle for a bool, value for a string type, nothing for a list.
+// cannot read its type: toggle for a bool, value for a string type, nothing for a list. infra.* answers are never
+// back-derived (ADR 0026), so no rule may answer one.
 func checkRecognizedFoundations(rules []CompiledRule, fs []CompiledFoundation) error {
 	for i, r := range rules {
+		if isInfraID(r.Answer) {
+			return fmt.Errorf("recognize[%d]: answer %q lies under %s, which comes from the profile only", i, r.Answer, InfraIDPrefix)
+		}
 		j := slices.IndexFunc(fs, func(f CompiledFoundation) bool { return f.ID == r.Answer })
 		if j < 0 {
 			continue
