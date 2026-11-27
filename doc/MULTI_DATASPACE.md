@@ -1,6 +1,6 @@
 # Multi-dataspace operation
 
-Since chart 11.0.0 the DCP controlplane runs [fdsc-edc](https://github.com/SEAMWARE/fdsc-edc) 2.x.
+Since chart 10.23.0 the DCP controlplane runs [fdsc-edc](https://github.com/SEAMWARE/fdsc-edc) 2.x.
 One connector can then take part in several dataspaces, each through its own DSP profiles and with
 its own identity if needed. This guide describes what that is for, how to see it work in the local
 demo, and how to configure it with the DSC chart. The full key reference is upstream in
@@ -625,7 +625,7 @@ exempt the per-context path above.
 
 ## Migrating from 10.x
 
-The checklist is in the [11.0.0 release notes](./release-notes/11-x.md#warning-required-action-dcp-deployments).
+The checklist is in the [10.23.0 release notes](./release-notes/10-x.md#warning-required-action-dcp-deployments).
 In short: declare a context per DID, add `%s` to the callback, set the two `tmfExtension.*` keys and
 the OAuth2 issuer, create a management client and move every management call to v5beta, and hand
 counterparties the new DSP address.

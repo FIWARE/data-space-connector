@@ -12,11 +12,14 @@ fdsc-edc:
           dspCallback: https://dcp-fancy-marketplace.127.0.0.1.nip.io:443/api/dsp/%s
         # fdsc-edc 2.x participant context (id = DID, reuses the IdentityHub STS client) and the
         # OAuth2 issuer of the v5beta management API. Continuation lines carry the 4 spaces the chart
-        # does not add.
+        # does not add. The consumer drives catalog, negotiation and transfer through the squid proxy,
+        # so it gets the same HTTP timeouts the provider sets in fdsc-edc.common.
         # Two dataspace profiles: declaring one drops the built-in http-dsp-profile-2025-1, so it is
         # declared too. dsp-fiware-ds2 sets its own DCP scopes and TIL; they equal the defaults because
         # k3s has a single trust anchor. Never repeat these scopes in edc.iam.dcp.scopes.*: both are unioned.
-        additionalProperties: "edc.dataspace.profiles.default.name=http-dsp-profile-2025-1\n    \
+        additionalProperties: "edc.http.client.timeout.connect=60\n    \
+          edc.http.client.timeout.read=120\n    \
+          edc.dataspace.profiles.default.name=http-dsp-profile-2025-1\n    \
           edc.dataspace.profiles.default.protocol.version=2025-1\n    \
           edc.dataspace.profiles.default.protocol.binding=HTTPS\n    \
           edc.dataspace.profiles.default.protocol.namespace=https://w3id.org/dspace/2025/1/\n    \

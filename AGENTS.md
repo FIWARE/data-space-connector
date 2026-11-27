@@ -240,13 +240,15 @@ ports 8080 API / 9090 management).
 - The consent-filter plugin source is NOT in this repo; only its tag and
   route config live here.
 
-## fdsc-edc 2.0.0 multi-dataspace (ticket-202)
-- fdsc-edc 2.0.0 runs `controlplane-dcp` as EDC virtual participant contexts,
+## fdsc-edc 2.x multi-dataspace (ticket-202)
+- fdsc-edc 2.x runs `controlplane-dcp` as EDC virtual participant contexts,
   with no legacy mode (no `fdsc.participants.*` means DSP returns 404).
   `controlplane-oid4vc` is unchanged: keep its v3 management API and
   `/api/dsp/2025-1`.
-- The fdsc-edc chart (umbrella pins `0.7.10`; `0.7.11` = appVersion 2.0.0,
-  unpublished as of 2026-11-25) has no keys for the new properties. Set them
+- The fdsc-edc chart (umbrella pins `0.7.10`, appVersion 1.8.7) has no 2.x
+  chart published, so the image is pinned through
+  `fdsc-edc.common.deployment.image.tag: "2.1.1"` -- the oldest 2.x the DSP
+  flows work on. The chart has no keys for the new properties. Set them
   via `fdsc-edc.deployment.dcp.config.additionalProperties`: a string rendered
   without indent, so each continuation line needs exactly 4 leading spaces. A
   per-deployment value replaces the `common` one (mergeOverwrite).
@@ -258,9 +260,10 @@ ports 8080 API / 9090 management).
   SEAMWARE/fdsc-edc `docs/multi-dataspace.md`.
 
 ## Important Files
-- `charts/data-space-connector/Chart.yaml` -- dependency graph (version
-  10.21.2 on main; `11-x.md` documents an 11.0.0 that a bot commit reverted
-  and that was never published).
+- `charts/data-space-connector/Chart.yaml` -- dependency graph (10.22.x on
+  main, 10.23.0 on this branch; `11-x.md` documents an 11.0.0 that a bot
+  commit reverted and that was never published, so 10.x is still the live
+  line).
 - `charts/data-space-connector/values.yaml` -- ~4190-line config surface;
   top-level sections start at these approximate line numbers:
   `decentralizedIam` (26), `scorpio` (291), `keycloak` (420),
@@ -277,5 +280,5 @@ ports 8080 API / 9090 management).
 - `charts/data-space-connector/templates/rainbow-deployment.yaml` --
   simpler deployment with init container pattern.
 - `pom.xml` + `it/` -- integration test harness.
-- `doc/release-notes/11-x.md` -- follow existing format when adding entries.
+- `doc/release-notes/10-x.md` -- follow existing format when adding entries.
 - `doc/deployment-integration/observability/README.md` -- OTEL tracing docs.

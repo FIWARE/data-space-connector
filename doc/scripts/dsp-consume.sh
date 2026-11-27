@@ -45,7 +45,7 @@ ok()   { printf '%s%s%s\n' "$C_G" "$*" "$C_0" >&2; }
 warn() { printf '%s%s%s\n' "$C_Y" "$*" "$C_0" >&2; }
 die()  { printf '%sERROR: %s%s\n' "$C_R" "$*" "$C_0" >&2; exit 1; }
 
-usage() { sed -n '3,29p' "$0" >&2; exit "${1:-0}"; }
+usage() { sed -n '3,28p' "$0" >&2; exit "${1:-0}"; }
 
 case "${1:-}" in -h|--help) usage 0;; esac
 [ "$#" -eq 3 ] || { warn "Expected 3 arguments, got $#."; usage 1; }

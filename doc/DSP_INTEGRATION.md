@@ -942,7 +942,7 @@ The same product now can be negotiated through the Dataspace Protocol. The inter
 
 #### DCP
 
-Since chart 11.0.0 the DCP controlplane runs fdsc-edc 2.x: every management call goes to the v5beta
+Since chart 10.23.0 the DCP controlplane runs fdsc-edc 2.x: every management call goes to the v5beta
 API of one participant context, `<management path>/v5beta/participants/<context id>/...`, and
 carries an OAuth2 token with the `management-api:*` scopes. The context id is the participant's DID.
 The DSP address of the provider names its context and a [profile](./MULTI_DATASPACE.md), and
