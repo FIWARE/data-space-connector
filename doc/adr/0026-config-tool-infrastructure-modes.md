@@ -104,7 +104,9 @@ map. A rule naming an unknown dependency or question is a compile error.
 
 `clusterWide: true` requires the `bundled` mode to carry `warning` and `doc`. `development: true` (suitable for
 development only) requires `productionDoc`. The new type `email` (`local@domain`, refusing the RFC 2606 example and
-test names) checks the ACME contact, so the chart's `admins@example.com` can never be typed in.
+test names) checks the ACME contact, so the chart's `admins@example.com` can never be typed in. The new type
+`resourceName` checks the ClusterIssuer, ingress class and namespace names: the `hostname` pattern, but its error
+names a Kubernetes name, not a host.
 
 ### 6. cert-manager
 

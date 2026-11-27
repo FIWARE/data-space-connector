@@ -466,6 +466,7 @@ func compileQuestion(dep string, m Mode, q Question, when []TargetCondition, top
 		}
 		when = append(slices.Clone(when), TargetCondition{ID: InfraQuestionID(dep, w.Question), Equals: w.Equals})
 	}
+	c.askedWhen(when)
 	for i, t := range q.Targets {
 		ct, err := compileInfraTarget(id, t, when, topLevelKeys)
 		if err != nil {
@@ -513,6 +514,7 @@ func compileIngressQuestion(dep string, q IngressQuestion, r ingressRow, fs []Co
 			return CompiledFoundation{}, fmt.Errorf("replaces: %w", err)
 		}
 	}
+	c.askedWhen(when)
 	t := Target{Path: path, Fn: FnCopy, Args: []any{"{{ ." + id + " }}"}, Requires: r.requires}
 	ct, err := compileInfraTarget(id, t, when, topLevelKeys)
 	if err != nil {
@@ -567,4 +569,20 @@ func checkOptionalDoc(name, doc string) error {
 		return fmt.Errorf("%s: %w", name, err)
 	}
 	return nil
+}
+
+// askedWhen gates f's default on when; the condition ids join its refs, so they resolve before f does.
+func (f *CompiledFoundation) askedWhen(when []TargetCondition) {
+	f.AskedWhen = slices.Clone(when)
+	refs, gate := map[string]bool{}, map[string]bool{}
+	for _, r := range f.Refs {
+		refs[r] = true
+	}
+	for _, r := range f.defaultGate {
+		gate[r] = true
+	}
+	for _, c := range when {
+		refs[c.ID], gate[c.ID] = true, true
+	}
+	f.Refs, f.defaultGate = sortedSet(refs), sortedSet(gate)
 }

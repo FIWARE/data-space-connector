@@ -4,8 +4,8 @@
 #
 # The foundations list (ADR 0020) holds the cross-cutting answers of Stage 3 and the chart keys they reach:
 #   id       dotted answer id (domain.base): the key in the profile's answers, open field answers.<id>
-#   type     string | hostname | domain | did | url | secretName | email, each checked with one pattern; choice, one
-#            of its options;
+#   type     string | hostname | domain | did | url | secretName | resourceName | email, each checked with one
+#            pattern; choice, one of its options;
 #            bool, true or false; credentialTypes, a list of {type, description?}. Only copy writes a bool or a list
 #   group    organization | dataspace | network (default) | platform | egress: the Stage 3 panel that asks it
 #   options  a choice's {value, label, note}; note is optional text shown at the point of choice
@@ -101,7 +101,7 @@
 #   owner  the foundation whose <path>.tls[0].secretName target exists; every such target has a row
 chart: data-space-connector
 version: 10.16.0
-revision: 18
+revision: 19
 topLevelKeys: [
   nameOverride, fullnameOverride, imagePullSecrets, issuance, decentralizedIam, scorpio, elsi,
   keycloak, tm-forum-api, statusListServer, rainbow, contract-management, did, registration,
@@ -471,6 +471,31 @@ rules:
       The loaded file sets keycloak.proxy.spiProxyMappings, so Keycloak ignores the proxy settings and follows only
       those mappings. Add the proxy to the mappings, or remove them.
     doc: doc/deployment-integration/roles/PREREQUISITES.md#outbound-access
+  # An unanswered question writes no key, so the chart's admins@example.com and ingressClass nginx would apply.
+  - id: acme-email-for-prod-issuer
+    severity: error
+    stage: infrastructure
+    field: infrastructure.certManager.acmeEmail
+    when:
+      - {field: infrastructure.certManager, equals: bundled}
+      - {field: infrastructure.certManager.type, equals: prod}
+      - {field: infrastructure.certManager.acmeEmail, unset: true}
+    message: >-
+      Let's Encrypt needs a contact address. Without one, the chart's placeholder applies, which Let's Encrypt
+      refuses, so no certificate is ever issued.
+    doc: doc/deployment-integration/roles/PREREQUISITES.md#cert-manager
+  - id: acme-ingress-class-for-prod-issuer
+    severity: error
+    stage: infrastructure
+    field: infrastructure.certManager.ingressClass
+    when:
+      - {field: infrastructure.certManager, equals: bundled}
+      - {field: infrastructure.certManager.type, equals: prod}
+      - {field: infrastructure.certManager.ingressClass, unset: true}
+    message: >-
+      Let's Encrypt checks each host through the ingress controller. Without its ingress class, the chart assumes
+      nginx, and on a cluster with another controller no certificate is ever issued.
+    doc: doc/deployment-integration/roles/PREREQUISITES.md#cert-manager
 resources:
   answer: resources.profile
   measuredOn: 10.13.2
@@ -630,6 +655,103 @@ mechanisms:
       - whenSet: [decentralizedIam.vcAuthentication.vcverifier.deployment.serverCertificates.caCert.enabled]
       - whenSet: [decentralizedIam.vcAuthentication.vcverifier.deployment.serverCertificates.clientKey.secretName,
                   decentralizedIam.vcAuthentication.vcverifier.deployment.verifier.clientIdentification.certificatePath]
+# The verifier and DID document ingresses are no rows: their TLS certificate is a signing key, owned by US-8.11.
+ingresses:
+  - {id: apisix, label: APISIX, path: decentralizedIam.odrlAuthorization.apisix.ingress, owner: domain.base}
+  - {id: keycloak, label: Keycloak, path: keycloak.ingress, owner: host.keycloak}
+  - {id: statusList, label: Status list, path: statusListServer.ingress, owner: host.statusList}
+  - {id: til, label: Trusted Issuers List, path: decentralizedIam.vcAuthentication.trusted-issuers-list.ingress.til, owner: host.til}
+  - {id: ccs, label: Credentials config, path: decentralizedIam.vcAuthentication.vcverifier.configIngress, owner: host.ccs}
+  - {id: pap, label: Policy administration, path: decentralizedIam.odrlAuthorization.odrl-pap.ingress, owner: host.pap}
+  - {id: scorpio, label: Scorpio, path: scorpio.ingress, owner: host.scorpio}
+  - {id: tmForumApi, label: TMForum API, path: tm-forum-api.ingress, owner: host.tmForumApi}
+  - {id: marketplace, label: Marketplace, path: marketplace.bizEcosystemLogicProxy.ingress, owner: host.marketplace}
+  - {id: dashboard, label: Dashboard, path: fdsc-dashboard.ingress, owner: host.dashboard}
+infrastructure:
+  - id: certManager
+    title: TLS certificates (cert-manager)
+    help: Who issues the TLS certificates of the public hosts.
+    doc: doc/deployment-integration/roles/PREREQUISITES.md#cert-manager
+    clusterWide: true
+    modes:
+      - id: bundled
+        label: Install cert-manager with the connector
+        warning: >-
+          A cluster can only have one cert-manager. Install it with the connector only if no other release or
+          installation runs it.
+        doc: doc/deployment-integration/roles/PREREQUISITES.md#installing-the-operators-once
+        # The issuers are cert-manager resources, so the CRDs come with it (k3s/operators.yaml).
+        targets:
+          - {path: cert-manager.enabled, fn: const, args: [true]}
+          - {path: cert-manager.crds.enabled, fn: const, args: [true]}
+          - {path: certManagerResources.enabled, fn: const, args: [true]}
+        questions:
+          # The chart defaults to prod with admins@example.com, which must never apply silently.
+          - id: type
+            type: choice
+            label: Issuer
+            default: selfsigned
+            options:
+              - value: selfsigned
+                label: Self-signed CA
+                note: For testing only. Browsers and other participants do not trust its certificates.
+              - value: prod
+                label: Let's Encrypt
+                note: Every host has to be reachable from the internet for the HTTP-01 challenge.
+            targets: [{path: certManagerResources.type, fn: copy, args: ["{{ .infra.certManager.type }}"]}]
+          - id: acmeEmail
+            type: email
+            label: ACME contact
+            help: Let's Encrypt sends expiry notices to this address. It refuses example and test domains.
+            when: {question: type, equals: prod}
+            targets: [{path: certManagerResources.acmeEmail, fn: copy, args: ["{{ .infra.certManager.acmeEmail }}"]}]
+          - id: ingressClass
+            type: resourceName
+            label: Ingress class
+            help: >-
+              The ingress class of the controller that serves Let's Encrypt's HTTP-01 challenge, for example nginx
+              or traefik.
+            when: {question: type, equals: prod}
+            targets: [{path: certManagerResources.ingressClass, fn: copy, args: ["{{ .infra.certManager.ingressClass }}"]}]
+          # A bundled cert-manager runs in the release namespace, where the CA ClusterIssuer finds ca-secret.
+          - id: namespace
+            type: resourceName
+            label: Namespace
+            help: The namespace cert-manager runs in, where the self-signed CA's Secret is created.
+            readOnly: true
+            default: "{{ .target.namespace }}"
+            when: {question: type, equals: selfsigned}
+            targets: [{path: certManagerResources.namespace, fn: copy, args: ["{{ .infra.certManager.namespace }}"]}]
+        # <type>-issuer is the ClusterIssuer templates/cert-manager-issuer.yaml creates for that type.
+        perIngress:
+          - {key: 'annotations."cert-manager.io/cluster-issuer"', fn: tpl, args: ["{{ .infra.certManager.type }}-issuer"]}
+      - id: cluster
+        label: Use the cert-manager already in the cluster
+        targets:
+          - {path: cert-manager.enabled, fn: const, args: [false]}
+          - {path: certManagerResources.enabled, fn: const, args: [false]}
+        questions:
+          - id: issuer
+            type: resourceName
+            label: ClusterIssuer
+            help: >-
+              The ClusterIssuer that signs the certificates of every public host. A namespaced Issuer is not
+              offered here.
+        perIngress:
+          - {key: 'annotations."cert-manager.io/cluster-issuer"', fn: copy, args: ["{{ .infra.certManager.issuer }}"]}
+      - id: external
+        label: I provide a TLS Secret per host
+        targets:
+          - {path: cert-manager.enabled, fn: const, args: [false]}
+          - {path: certManagerResources.enabled, fn: const, args: [false]}
+        perIngressQuestion:
+          id: secret
+          type: secretName
+          label: TLS Secret
+          help: The Secret of type kubernetes.io/tls that holds the host's certificate and key.
+          key: 'tls[0].secretName'
+          replaces: true
+          requirement: {kind: secret, keys: [tls.crt, tls.key], purpose: The TLS certificate and key of a public host.}
 foundations:
   - id: org.displayName
     stage: foundations

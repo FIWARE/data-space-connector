@@ -169,9 +169,10 @@ func resolve(b model.Bundle, p profile.Profile) (resolution, error) {
 	return r, nil
 }
 
-// defaults reports whether f's default applies: it has one, its default refs are resolved and DefaultWhen holds.
+// defaults reports whether f's default applies: it has one, its default refs are resolved, and DefaultWhen and
+// AskedWhen hold.
 func defaults(f model.CompiledFoundation, r resolution) bool {
-	if f.DefaultTemplate() == nil || !r.resolved(f.DefaultRefs()) {
+	if f.DefaultTemplate() == nil || !r.resolved(f.DefaultRefs()) || !holdAll(f.AskedWhen, r.answers) {
 		return false
 	}
 	return f.DefaultWhen == nil || f.DefaultWhen.Holds(r.answers)
