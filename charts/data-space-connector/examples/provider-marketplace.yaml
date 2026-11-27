@@ -192,10 +192,6 @@ marketplace:
   bizEcosystemChargingBackend:
     loglevel: info
   bizEcosystemLogicProxy:
-    statefulset:
-      image:
-        # 11.22.0 or later: earlier versions do not build the user's profile from the credential
-        tag: 11.24.0
     purchaseEnabled: true
     dataSpaceEnabled: true
     # replaces the chart's list, which only turns tracing off
