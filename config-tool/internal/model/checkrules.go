@@ -482,8 +482,8 @@ func checkWhen(w RuleWhen, fs []CompiledFoundation, features []Feature) error {
 	case forms > 1:
 		return fmt.Errorf("%s has more than one of equals, unset and set", w.Field)
 	case (w.Unset || w.Set) && !strings.HasPrefix(w.Field, AnswerFieldPrefix) && !strings.HasPrefix(w.Field, InfrastructureFieldPrefix):
-		return fmt.Errorf("unset and set apply to %s<foundation id> only, not %s; %s<dependency>[.<question>] takes them too",
-			AnswerFieldPrefix, w.Field, InfrastructureFieldPrefix)
+		return fmt.Errorf("unset and set apply to %s<foundation id> and %s<dependency>[.<question>] only, not %s",
+			AnswerFieldPrefix, InfrastructureFieldPrefix, w.Field)
 	case w.Unset || w.Set:
 		return nil
 	case w.Equals == "":

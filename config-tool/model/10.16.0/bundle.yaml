@@ -88,7 +88,7 @@
 #                the mode is chosen, so two modes may write one path
 #     questions  {id, type, label, help, doc, options, default, when: {question, equals}, readOnly, targets}: as a
 #                foundation; id is one segment, unique across the modes, never mode; when names a question of the
-#                same dependency by its local id and gates the question and its targets
+#                same mode by its local id and gates the question and its targets
 #     perIngress [{key, fn, args, sep}]: a target below every ingresses row's path, rendered only while the row's
 #                owner resolves
 #     perIngressQuestion {id, type, label, help, doc, key, replaces}: asked once per ingresses row, as

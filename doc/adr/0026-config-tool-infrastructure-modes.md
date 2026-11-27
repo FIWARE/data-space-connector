@@ -49,7 +49,7 @@ declared foundation id may not start with `infra.`.
 
 A compiled target gains `When []TargetCondition`, where `TargetCondition{ID, Equals}` names a compiled answer id. Every
 condition must hold over the resolved answers, and an unset answer never holds. Each target of a mode gets
-`infra.<dep>.mode equals <mode>`, and a question's `when` (a local id) is qualified and added to it.
+`infra.<dep>.mode equals <mode>`, and a question's `when` (the local id of a question in the same mode) is qualified and added to it.
 
 Two targets may write the same leaf only when they are *exclusive*: both carry a condition on the same id with
 different values. `Only` counts as a condition on the target's own foundation. So all three cert-manager modes write

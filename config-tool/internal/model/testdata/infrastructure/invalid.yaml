@@ -126,6 +126,11 @@
   override:
     infrastructure:
       - {id: db, title: DB, modes: [{id: bundled, label: Bundled, development: true}]}
+- name: productionDoc without development
+  err: 'modes[0] (bundled): productionDoc is only allowed on a development mode'
+  override:
+    infrastructure:
+      - {id: db, title: DB, modes: [{id: bundled, label: Bundled, productionDoc: doc/README.md}]}
 - name: doc that is a URL
   err: 'doc: doc "https://example.org" is not a repo-relative path'
   override:
